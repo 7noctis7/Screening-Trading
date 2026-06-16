@@ -260,10 +260,12 @@ function lineChart(series,labels){
   p.appendChild(lineChart([
     {name:'Portefeuille',data:b.portfolio,color:'#3b82f6',w:2},
     {name:'S&P 500',data:b['S&P 500'],color:'#9aa1ab',w:1.3}],d.dates));
+  const MZ=DATA.meta||{};
   p.appendChild($(`<div style="font-size:11px;color:var(--muted);margin-top:-6px">
-    ⓘ Performance volontairement modérée : régime <b style="text-transform:capitalize;color:var(--fg)">${d.regime.cycle}</b>
-    → exposition réduite à ×${d.regime.exposure_multiplier} (dé-risquage automatique). Le portefeuille reste
-    majoritairement en cash entre les signaux, d'où une courbe sous le S&amp;P 500 mais un drawdown contenu.</div>`));
+    ⓘ Backtest <b style="color:var(--fg)">swing</b> sur <b style="color:var(--fg)">${MZ.traded_assets||MZ.universe_size||0} actifs</b>
+    de l'univers (${MZ.universe_size||0} suivis), du ${fmtTS(MZ.period_start).slice(0,10)} au ${fmtTS(MZ.last_bar).slice(0,10)} ·
+    ${(MZ.n_trades||0).toLocaleString('fr-FR')} trades · régime <b style="text-transform:capitalize;color:var(--fg)">${d.regime.cycle}</b>
+    → exposition pilotée ×${d.regime.exposure_multiplier}.</div>`));
   // screener cliquable — table construite en UNE chaîne HTML complète (sinon les <tr> isolés sont supprimés par le navigateur)
   const sc=DATA.screener;
   let rowsHtml='';
@@ -486,15 +488,19 @@ const mkTable=(head,bodyRows)=>$(`<table><thead><tr>${head}</tr></thead><tbody>$
   // collecte
   const g=$('<div class="grid4"></div>');
   [['Provider',d.provider],['Barres collectées',eur(d.total_bars)],
-   ['Symboles',(d.collection||[]).length],['Fondamentaux',d.fundamentals_provider||'—']]
+   ['Symboles collectés',eur(d.symbols_total||(d.collection||[]).length)],['Fondamentaux',d.fundamentals_provider||'—']]
    .forEach(([lab,val])=>g.appendChild($(`<div class="card metric"><div class="label">${lab}</div><div class="val" style="font-size:20px">${val}</div></div>`)));
   p.appendChild(g);
-  const cc=$(`<div class="card"><div class="label" style="margin-bottom:6px">Collecte OHLCV</div>
+  const cc=$(`<div class="card"><div class="banner" style="margin-bottom:6px">
+    <div class="label">Collecte OHLCV — univers complet (${eur((d.collection||[]).length)} symboles)</div></div>
     <div style="color:var(--muted);font-size:12px;margin-bottom:10px">Ordre de fallback : ${(d.fallback_order||[]).join(' → ')||'—'} · cache ${d.cache?'activé':'désactivé'}</div></div>`);
   const colRows=(d.collection||[]).map(r=>`<tr><td class="mono"><b>${r.symbol}</b></td>
+    <td style="color:var(--muted)">${r.asset_class||''}</td>
     <td class="mono" style="text-align:right">${r.bars}</td><td class="mono" style="color:var(--muted)">${dt(r.start)}</td>
     <td class="mono" style="color:var(--muted)">${dt(r.end)}</td><td class="mono" style="text-align:right">${r.last_close}</td></tr>`);
-  cc.appendChild(mkTable('<th>Symbole</th><th style="text-align:right">Barres</th><th>Début</th><th>Fin</th><th style="text-align:right">Dernier cours</th>',colRows));
+  const colWrap=$('<div style="max-height:460px;overflow:auto"></div>');
+  colWrap.appendChild(mkTable('<th>Symbole</th><th>Classe</th><th style="text-align:right">Barres</th><th>Début</th><th>Fin</th><th style="text-align:right">Dernier cours</th>',colRows));
+  cc.appendChild(colWrap);
   p.appendChild(cc);
   // qualité
   const q=d.quality||{},ok=q.ok;

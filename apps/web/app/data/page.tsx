@@ -26,24 +26,30 @@ export default function DataPage() {
         ))}
       </div>
 
-      <section className="card p-4 overflow-x-auto">
-        <h2 className="text-sm uppercase tracking-wide text-muted mb-1">Collecte OHLCV</h2>
+      <section className="card p-4">
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-sm uppercase tracking-wide text-muted">Collecte OHLCV — univers complet</h2>
+          <span className="text-xs text-muted">{(d.collection ?? []).length} symboles</span>
+        </div>
         <p className="text-muted text-xs mb-3">
           Ordre de fallback : {(d.fallback_order ?? []).join(" → ") || "—"} · cache {d.cache ? "activé" : "désactivé"}
         </p>
-        <table className="w-full text-sm mono">
-          <thead className="text-muted text-xs">
-            <tr><th className="text-left font-normal">Symbole</th><th className="text-right font-normal">Barres</th>
-            <th className="text-left font-normal">Début</th><th className="text-left font-normal">Fin</th>
-            <th className="text-right font-normal">Dernier cours</th></tr>
-          </thead>
-          <tbody>{(d.collection ?? []).map((r: any) => (
-            <tr key={r.symbol} className="border-t border-border">
-              <td className="py-1.5">{r.symbol}</td><td className="text-right">{r.bars}</td>
-              <td className="text-muted">{dt(r.start)}</td><td className="text-muted">{dt(r.end)}</td>
-              <td className="text-right">{r.last_close}</td>
-            </tr>))}</tbody>
-        </table>
+        <div className="max-h-[460px] overflow-auto">
+          <table className="w-full text-sm mono">
+            <thead className="text-muted text-xs sticky top-0 bg-surface">
+              <tr><th className="text-left font-normal">Symbole</th><th className="text-left font-normal">Classe</th>
+              <th className="text-right font-normal">Barres</th><th className="text-left font-normal">Début</th>
+              <th className="text-left font-normal">Fin</th><th className="text-right font-normal">Dernier cours</th></tr>
+            </thead>
+            <tbody>{(d.collection ?? []).map((r: any) => (
+              <tr key={r.symbol} className="border-t border-border">
+                <td className="py-1.5">{r.symbol}</td><td className="text-muted font-sans">{r.asset_class}</td>
+                <td className="text-right">{r.bars}</td>
+                <td className="text-muted">{dt(r.start)}</td><td className="text-muted">{dt(r.end)}</td>
+                <td className="text-right">{r.last_close}</td>
+              </tr>))}</tbody>
+          </table>
+        </div>
       </section>
 
       <section className="card p-4">

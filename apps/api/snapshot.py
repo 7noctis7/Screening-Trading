@@ -11,25 +11,40 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from apps.api import payloads as PL
+from packages.backtest.fast_swing import fast_swing_backtest
 from packages.common import load_yaml
 from packages.data import data_providers
-from packages.execution import CostModel, LiveTradingEngine, SimBroker
-from packages.portfolio.sizing import sizers
+from packages.execution import CostModel
 from packages.portfolio import (attribution, correlation_matrix, cluster, expert_review,
                                 monte_carlo, relative_metrics, risk_metrics_fn)
 from packages.portfolio.metrics import returns_from_equity
 from packages.ranking import RankingEngine
 from packages.regime import MacroImpactMap, MacroRegimeClassifier, synthetic_macro
-from packages.risk import RiskEngine, risk_rules
 from packages.storage import MacroStore
-from packages.strategies import strategies
 
 ROOT = Path(__file__).resolve().parents[2]
-_SYMS = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL"]
 _NETWORK_KINDS = {"wikipedia", "ishares_holdings", "nasdaq_trader", "coingecko"}
+_HISTORY_DAYS = 1700        # ~4,6 ans d'historique jusqu'à aujourd'hui
 
 
-def _universe_section() -> dict:
+def _seed_universe() -> list[dict]:
+    """Univers COMPLET dédupliqué (par symbole) à partir des seeds — source unique."""
+    seen: dict[str, dict] = {}
+    for path in sorted((ROOT / "data" / "seed").glob("*.csv")):
+        with path.open(encoding="utf-8") as f:
+            for r in csv.DictReader(f):
+                sym = (r.get("symbol") or "").strip()
+                if sym and sym not in seen:
+                    seen[sym] = {
+                        "symbol": sym, "name": r.get("name") or "",
+                        "asset_class": (r.get("asset_class") or "equity").strip() or "equity",
+                        "venue": r.get("venue") or "", "currency": r.get("currency") or "",
+                        "sector": r.get("sector") or "", "source": path.stem,
+                    }
+    return list(seen.values())
+
+
+def _universe_section(instruments: list[dict]) -> dict:
     """Vue UNIVERS : sources déclarées (offline/réseau), seeds, répartition par classe."""
     cfg = load_yaml(ROOT / "config" / "universe.yaml")
     src_rows = []
@@ -41,27 +56,20 @@ def _universe_section() -> dict:
             "network": kind in _NETWORK_KINDS,
             "detail": s.get("file") or s.get("url") or "",
         })
-    seeds, by_class, by_venue, instruments = [], {}, {}, []
-    seed_dir = ROOT / "data" / "seed"
-    for path in sorted(seed_dir.glob("*.csv")):
+    by_class, by_venue = {}, {}
+    for r in instruments:
+        ac = (r.get("asset_class") or "?").strip() or "?"
+        by_class[ac] = by_class.get(ac, 0) + 1
+        ven = (r.get("venue") or "?").strip() or "?"
+        by_venue[ven] = by_venue.get(ven, 0) + 1
+    seeds = []
+    for path in sorted((ROOT / "data" / "seed").glob("*.csv")):
         with path.open(encoding="utf-8") as f:
-            rows = list(csv.DictReader(f))
-        seeds.append({"file": path.name, "count": len(rows),
+            cnt = sum(1 for _ in csv.DictReader(f))
+        seeds.append({"file": path.name, "count": cnt,
                       "as_of": datetime.fromtimestamp(path.stat().st_mtime,
                                                       timezone.utc).isoformat()})
-        for r in rows:
-            ac = (r.get("asset_class") or "?").strip() or "?"
-            by_class[ac] = by_class.get(ac, 0) + 1
-            ven = (r.get("venue") or "?").strip() or "?"
-            by_venue[ven] = by_venue.get(ven, 0) + 1
-            if r.get("symbol"):
-                instruments.append({
-                    "symbol": r.get("symbol"), "name": r.get("name") or "",
-                    "asset_class": r.get("asset_class") or "", "venue": r.get("venue") or "",
-                    "currency": r.get("currency") or "", "sector": r.get("sector") or "",
-                    "source": path.stem,
-                })
-    instruments.sort(key=lambda r: (r["asset_class"], r["symbol"]))
+    rows = sorted(instruments, key=lambda r: (r["asset_class"], r["symbol"]))
     return {
         "as_of": datetime.now(timezone.utc).isoformat(),
         "rebuild_cadence_days": cfg.get("rebuild_cadence_days"),
@@ -69,12 +77,11 @@ def _universe_section() -> dict:
         "sources_enabled": sum(1 for s in src_rows if s["enabled"]),
         "sources_total": len(src_rows),
         "seeds": seeds,
-        "seed_total": sum(s["count"] for s in seeds),
+        "seed_total": len(instruments),
         "by_asset_class": dict(sorted(by_class.items(), key=lambda kv: -kv[1])),
         "by_venue": dict(sorted(by_venue.items(), key=lambda kv: -kv[1])[:12]),
-        "instruments": instruments,           # UNIVERS COMPLET (pas un échantillon)
-        "instruments_total": len(instruments),
-        "active_symbols": _SYMS,
+        "instruments": rows,                  # UNIVERS COMPLET (pas un échantillon)
+        "instruments_total": len(rows),
     }
 
 
@@ -163,29 +170,32 @@ def _themes_section(start) -> dict:
     }
 
 
-def _data_section(data: dict) -> dict:
+def _data_section(data: dict, acmap: dict[str, str]) -> dict:
     """Vue DONNÉES : collecte (providers, barres, qualité) + couches de base de données."""
     import pandas as pd
 
     from packages.storage.quality import validate_ohlcv
 
+    symbols = list(data)
     collection = []
-    for s in _SYMS:
+    for s in symbols:
         bars = data[s]
         collection.append({
-            "symbol": s, "bars": len(bars),
+            "symbol": s, "asset_class": acmap.get(s, ""), "bars": len(bars),
             "start": bars[0].ts.isoformat(), "end": bars[-1].ts.isoformat(),
             "last_close": round(bars[-1].close, 2),
         })
-    bars = data[_SYMS[0]]
+    first = symbols[0]
+    bars = data[first]
     df = pd.DataFrame(
         [{"open": b.open, "high": b.high, "low": b.low,
           "close": b.close, "volume": b.volume} for b in bars],
         index=pd.DatetimeIndex([b.ts for b in bars]))
-    rep = validate_ohlcv(df, _SYMS[0], "1d", max_gap_ratio=0.5)
+    rep = validate_ohlcv(df, first, "1d", max_gap_ratio=0.5)
     src_cfg = load_yaml(ROOT / "config" / "data_sources.yaml")
     return {
-        "as_of": data[_SYMS[0]][-1].ts.isoformat(),
+        "as_of": data[first][-1].ts.isoformat(),
+        "symbols_total": len(symbols),
         "provider": "synthetic",
         "fallback_order": src_cfg.get("ohlcv", {}).get("fallback_order", []),
         "fundamentals_provider": src_cfg.get("fundamentals", {}).get("provider"),
@@ -208,68 +218,76 @@ def _data_section(data: dict) -> dict:
 
 
 def build_snapshot(seed: int = 7) -> dict:
-    start = datetime(2021, 1, 1, tzinfo=timezone.utc)
-    data = {s: data_providers.create("synthetic", seed=seed + i, drift=0.08).fetch_ohlcv(
-        s, "1d", start, start + timedelta(days=500)) for i, s in enumerate(_SYMS)}
-
-    broker = SimBroker(cash=100_000, costs=CostModel())
-    eng = LiveTradingEngine(
-        # swing trading : achat de repli en tendance → présence en marché et P&L plus
-        # dynamiques que le simple croisement (cf. packages/strategies/swing.py).
-        strategy=strategies.create("swing"),
-        sizer=sizers.create("vol_target", max_capital_frac=0.25, target_annual_vol=0.20),
-        risk_engine=RiskEngine([risk_rules.create("max_positions", max_positions=10),
-                                risk_rules.create("max_exposure_per_asset", max_pct=0.25)]),
-        broker=broker)
+    # --- univers COMPLET + fenêtre jusqu'à AUJOURD'HUI ---
+    instruments = _seed_universe()
+    symbols = [m["symbol"] for m in instruments]
+    acmap = {m["symbol"]: m["asset_class"] for m in instruments}
+    names = {m["symbol"]: m["name"] for m in instruments}
+    end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    start = end - timedelta(days=_HISTORY_DAYS)
+    prov = data_providers.create("synthetic", seed=seed, drift=0.08)
+    data = {s: prov.fetch_ohlcv(s, "1d", start, end) for s in symbols}  # seed/symbole stable
     n = max(len(b) for b in data.values())
-    equity = []
-    for i in range(60, n):
-        eng.step({s: data[s][: i + 1] for s in _SYMS})
-        equity.append(broker.equity())
 
-    # régime macro point-in-time
-    ms = MacroStore(":memory:"); ms.upsert(synthetic_macro(start, months=24))
-    regime = MacroRegimeClassifier(ms).classify(start + timedelta(days=480))
+    # --- backtest swing VECTORISÉ sur TOUT l'univers (positions laissées ouvertes) ---
+    broker, journal, equity, ts_list = fast_swing_backtest(
+        data, cash=100_000, costs=CostModel(), asset_classes=acmap,
+        target_annual_vol=0.20, max_capital_frac=0.06, max_positions=20, max_pct=0.06,
+        close_at_end=False)
+
+    # régime macro point-in-time (couvre toute la fenêtre)
+    months = int(_HISTORY_DAYS / 30) + 4
+    ms = MacroStore(":memory:"); ms.upsert(synthetic_macro(start, months=months))
+    regime = MacroRegimeClassifier(ms).classify(end - timedelta(days=2))
     impact = MacroImpactMap(load_yaml(ROOT / "config" / "macro_impact.yaml"))
     expo = impact.exposure_multiplier(regime)
 
-    # ranking sur le dernier panel
-    panel = {s: data[s] for s in _SYMS}
-    ranker = RankingEngine(load_yaml(ROOT / "config" / "factors.yaml"),
-                           {s: "equity" for s in _SYMS})
-    ranked = ranker.rank(panel, t=n - 1, regime=regime, top_n=10)
+    # ranking / screener sur TOUT l'univers
+    ranker = RankingEngine(load_yaml(ROOT / "config" / "factors.yaml"), acmap)
+    ranked = ranker.rank(data, t=n - 1, regime=regime, top_n=12)
+
+    # benchmarks synthétiques INDÉPENDANTS (rebasés 100) sur la même fenêtre
+    def _series(name, drift, vol):
+        return [b.close for b in data_providers.create(
+            "synthetic", seed=101, drift=drift, annual_vol=vol).fetch_ohlcv(name, "1d", start, end)]
+    bench_px = _series("S&P 500", 0.09, 0.16)
+    benches = {"S&P 500": bench_px, "NASDAQ 100": _series("NASDAQ 100", 0.13, 0.20),
+               "BTC": _series("BTC", 0.25, 0.55)}
 
     # --- analyse de portefeuille (mesures relatives, corrélation, risque, revue) ---
-    bench_px = [b.close for b in data["AAPL"][60:]]
     rel = relative_metrics(equity, bench_px)
     rets = returns_from_equity(equity)
     rm = risk_metrics_fn(rets)
     mc = monte_carlo(rets, seed=1)
-    rets_by = {s: returns_from_equity([b.close for b in data[s][60:]]) for s in _SYMS}
+    # corrélation sur les actifs les plus tradés (matrice lisible)
+    traded = [s for s, _ in _top_traded(journal, 8)] or symbols[:8]
+    rets_by = {s: returns_from_equity([b.close for b in data[s]]) for s in traded}
     syms, corr = correlation_matrix({k: list(v) for k, v in rets_by.items()})
     clusters = cluster(syms, corr, 0.7)
-    attr = attribution.attribute(eng.journal.all(), "strategy")
+    all_trades = journal.all()
+    attr = attribution.attribute(all_trades, "strategy")
     agg = {**PL.metrics_payload(equity), **rel, **rm, **mc}
 
-    marks = {s: data[s][-1].close for s in _SYMS}
-    comp = PL.composition_payload(broker.positions(), marks)
-    benches = {"S&P 500": [b.close for b in data["AAPL"][60:]],
-               "BTC": [b.close for b in data["NVDA"][60:]]}
-    all_trades = eng.journal.all()
+    marks = {s: data[s][-1].close for s in symbols}
+    meta_pos = {s: {"asset_class": acmap.get(s), "name": names.get(s)} for s in symbols}
+    comp = PL.composition_payload(broker.positions(), marks, meta_pos)
     trade_stats = PL.trade_stats_payload(all_trades)
-    # axe temporel réel (horodatage de chaque pas d'equity) — partagé courbe/benchmarks
-    ts_list = [data["AAPL"][i].ts for i in range(60, n)]
-    dates = [ts.isoformat() for ts in ts_list]
+    # 300 trades les plus récents (couvre la récence + de nombreux actifs)
+    recent = sorted(all_trades, key=lambda t: t.entry_ts, reverse=True)[:300]
+    dates = [t.isoformat() for t in ts_list]
     now = datetime.now(timezone.utc)
     last_bar = ts_list[-1]
     return {
         "meta": {
             "generated_at": now.isoformat(),
             "last_bar": last_bar.isoformat(),
+            "period_start": start.isoformat(),
             "delay_minutes": 15,                 # flux différé 15 min (EOD/synthétique)
             "mode": "synthetic",
             "strategy": "swing",
-            "symbols": _SYMS,
+            "universe_size": len(symbols),
+            "traded_assets": len({t.instrument for t in all_trades}),
+            "n_trades": len(all_trades),
         },
         "dashboard": {
             "as_of": last_bar.isoformat(),
@@ -292,10 +310,18 @@ def build_snapshot(seed: int = 7) -> dict:
                 "review": PL.review_payload(expert_review({**agg, **comp["totals"]})),
             },
         },
-        "trades": [PL.trade_payload(t) for t in all_trades[:200]],
+        "trades": [PL.trade_payload(t) for t in recent],
         "open_trades": comp["rows"],
         "trade_stats": trade_stats,
-        "universe": _universe_section(),
-        "data": _data_section(data),
-        "themes": _themes_section(start),
+        "universe": _universe_section(instruments),
+        "data": _data_section(data, acmap),
+        "themes": _themes_section(end - timedelta(days=365)),   # YTD = 12 derniers mois
     }
+
+
+def _top_traded(journal, k: int) -> list[tuple[str, int]]:
+    """k symboles les plus tradés (pour une matrice de corrélation lisible)."""
+    counts: dict[str, int] = {}
+    for t in journal.all():
+        counts[t.instrument] = counts.get(t.instrument, 0) + 1
+    return sorted(counts.items(), key=lambda kv: kv[1], reverse=True)[:k]
