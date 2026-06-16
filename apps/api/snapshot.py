@@ -41,20 +41,29 @@ def _universe_section() -> dict:
             "network": kind in _NETWORK_KINDS,
             "detail": s.get("file") or s.get("url") or "",
         })
-    seeds, by_class, sample = [], {}, []
+    seeds, by_class, by_venue, instruments = [], {}, {}, []
     seed_dir = ROOT / "data" / "seed"
     for path in sorted(seed_dir.glob("*.csv")):
         with path.open(encoding="utf-8") as f:
             rows = list(csv.DictReader(f))
-        seeds.append({"file": path.name, "count": len(rows)})
+        seeds.append({"file": path.name, "count": len(rows),
+                      "as_of": datetime.fromtimestamp(path.stat().st_mtime,
+                                                      timezone.utc).isoformat()})
         for r in rows:
             ac = (r.get("asset_class") or "?").strip() or "?"
             by_class[ac] = by_class.get(ac, 0) + 1
-        if len(sample) < 12 and rows and rows[0].get("symbol"):
-            for r in rows[:2]:
-                sample.append({"symbol": r.get("symbol"), "name": r.get("name"),
-                               "asset_class": r.get("asset_class"), "venue": r.get("venue")})
+            ven = (r.get("venue") or "?").strip() or "?"
+            by_venue[ven] = by_venue.get(ven, 0) + 1
+            if r.get("symbol"):
+                instruments.append({
+                    "symbol": r.get("symbol"), "name": r.get("name") or "",
+                    "asset_class": r.get("asset_class") or "", "venue": r.get("venue") or "",
+                    "currency": r.get("currency") or "", "sector": r.get("sector") or "",
+                    "source": path.stem,
+                })
+    instruments.sort(key=lambda r: (r["asset_class"], r["symbol"]))
     return {
+        "as_of": datetime.now(timezone.utc).isoformat(),
         "rebuild_cadence_days": cfg.get("rebuild_cadence_days"),
         "sources": src_rows,
         "sources_enabled": sum(1 for s in src_rows if s["enabled"]),
@@ -62,20 +71,34 @@ def _universe_section() -> dict:
         "seeds": seeds,
         "seed_total": sum(s["count"] for s in seeds),
         "by_asset_class": dict(sorted(by_class.items(), key=lambda kv: -kv[1])),
-        "sample": sample,
+        "by_venue": dict(sorted(by_venue.items(), key=lambda kv: -kv[1])[:12]),
+        "instruments": instruments,           # UNIVERS COMPLET (pas un échantillon)
+        "instruments_total": len(instruments),
         "active_symbols": _SYMS,
     }
 
 
-_SECTOR_CONSTITUENTS = {
-    "Technologie": ["NVDA", "MSFT", "AAPL", "AVGO", "AMD"],
-    "Énergie": ["XOM", "CVX", "COP", "SLB", "EOG"],
-    "Finance": ["JPM", "BAC", "GS", "MS", "BLK"],
-    "Santé": ["LLY", "UNH", "JNJ", "MRK", "PFE"],
-    "Conso. discrétionnaire": ["AMZN", "TSLA", "HD", "NKE", "MCD"],
-    "Conso. de base": ["PG", "KO", "PEP", "COST", "WMT"],
-    "Industrie": ["CAT", "BA", "GE", "HON", "UPS"],
-    "Services publics": ["NEE", "DUK", "SO", "AEP", "D"],
+# Thèmes structurels (4ᵉ révolution industrielle, K. Schwab) + secteurs classiques.
+# Chaque thème : panier de proxies + biais de drift/vol thématique (synthétique, reproductible).
+_SECTORS = {
+    # --- 4ᵉ révolution industrielle ---
+    "Intelligence artificielle":     {"tickers": ["NVDA", "MSFT", "GOOGL", "PLTR", "SNOW"], "drift": 0.30, "vol": 0.24},
+    "Semi-conducteurs":              {"tickers": ["NVDA", "TSM", "AVGO", "AMD", "ASML"],    "drift": 0.26, "vol": 0.26},
+    "Crypto & Blockchain":           {"tickers": ["COIN", "MSTR", "MARA", "RIOT", "HUT"],   "drift": 0.22, "vol": 0.45},
+    "Cloud & Datacenters":           {"tickers": ["MSFT", "AMZN", "GOOGL", "EQIX", "DLR"],  "drift": 0.19, "vol": 0.18},
+    "Cybersécurité":                 {"tickers": ["CRWD", "PANW", "ZS", "FTNT", "S"],       "drift": 0.17, "vol": 0.22},
+    "Espace & Défense":              {"tickers": ["LMT", "RTX", "BA", "NOC", "RKLB"],       "drift": 0.12, "vol": 0.20},
+    "Robotique & Automatisation":    {"tickers": ["ABB", "ISRG", "ROK", "TER", "FANUY"],    "drift": 0.10, "vol": 0.18},
+    "Véhicules électriques":         {"tickers": ["TSLA", "RIVN", "LCID", "BYDDY", "NIO"],  "drift": 0.04, "vol": 0.40},
+    "Fintech & Paiements":           {"tickers": ["V", "MA", "PYPL", "SQ", "ADYEY"],        "drift": 0.06, "vol": 0.20},
+    "Biotech & Génomique":           {"tickers": ["LLY", "VRTX", "REGN", "CRSP", "MRNA"],   "drift": 0.03, "vol": 0.24},
+    "Énergie propre & Transition":   {"tickers": ["ENPH", "FSLR", "NEE", "PLUG", "BE"],     "drift": -0.04, "vol": 0.30},
+    # --- secteurs GICS classiques ---
+    "Énergie (fossile)":             {"tickers": ["XOM", "CVX", "COP", "SLB", "EOG"],       "drift": 0.09, "vol": 0.18},
+    "Industrie":                     {"tickers": ["CAT", "GE", "HON", "UPS", "DE"],         "drift": 0.06, "vol": 0.16},
+    "Conso. de base":                {"tickers": ["PG", "KO", "PEP", "COST", "WMT"],        "drift": 0.05, "vol": 0.12},
+    "Finance":                       {"tickers": ["JPM", "BAC", "GS", "MS", "BLK"],         "drift": 0.03, "vol": 0.18},
+    "Services publics":              {"tickers": ["DUK", "SO", "AEP", "D", "EXC"],          "drift": 0.01, "vol": 0.12},
 }
 
 
@@ -102,12 +125,11 @@ def _themes_section(start) -> dict:
 
     from packages.data import data_providers
 
-    sectors_in = list(_SECTOR_CONSTITUENTS.items())
-    # drift étalé de baissier à haussier, attribué de façon déterministe aux secteurs
-    drifts = np.linspace(-0.14, 0.24, len(sectors_in))
     out_sectors = []
-    for (sector, tickers), drift in zip(sectors_in, drifts):
-        prov = data_providers.create("synthetic", seed=11, drift=float(drift), annual_vol=0.16)
+    for sector, cfg in _SECTORS.items():
+        tickers = cfg["tickers"]
+        prov = data_providers.create("synthetic", seed=11, drift=float(cfg["drift"]),
+                                     annual_vol=float(cfg.get("vol", 0.18)))
         assets = []
         for sym in tickers:
             bars = prov.fetch_ohlcv(sym, "1d", start, start + timedelta(days=365))
@@ -163,6 +185,7 @@ def _data_section(data: dict) -> dict:
     rep = validate_ohlcv(df, _SYMS[0], "1d", max_gap_ratio=0.5)
     src_cfg = load_yaml(ROOT / "config" / "data_sources.yaml")
     return {
+        "as_of": data[_SYMS[0]][-1].ts.isoformat(),
         "provider": "synthetic",
         "fallback_order": src_cfg.get("ohlcv", {}).get("fallback_order", []),
         "fundamentals_provider": src_cfg.get("fundamentals", {}).get("provider"),
@@ -191,10 +214,12 @@ def build_snapshot(seed: int = 7) -> dict:
 
     broker = SimBroker(cash=100_000, costs=CostModel())
     eng = LiveTradingEngine(
-        strategy=strategies.create("ma_crossover", fast=20, slow=50),
-        sizer=sizers.create("vol_target", max_capital_frac=0.10),
+        # swing trading : achat de repli en tendance → présence en marché et P&L plus
+        # dynamiques que le simple croisement (cf. packages/strategies/swing.py).
+        strategy=strategies.create("swing"),
+        sizer=sizers.create("vol_target", max_capital_frac=0.25, target_annual_vol=0.20),
         risk_engine=RiskEngine([risk_rules.create("max_positions", max_positions=10),
-                                risk_rules.create("max_exposure_per_asset", max_pct=0.10)]),
+                                risk_rules.create("max_exposure_per_asset", max_pct=0.25)]),
         broker=broker)
     n = max(len(b) for b in data.values())
     equity = []
@@ -235,8 +260,19 @@ def build_snapshot(seed: int = 7) -> dict:
     # axe temporel réel (horodatage de chaque pas d'equity) — partagé courbe/benchmarks
     ts_list = [data["AAPL"][i].ts for i in range(60, n)]
     dates = [ts.isoformat() for ts in ts_list]
+    now = datetime.now(timezone.utc)
+    last_bar = ts_list[-1]
     return {
+        "meta": {
+            "generated_at": now.isoformat(),
+            "last_bar": last_bar.isoformat(),
+            "delay_minutes": 15,                 # flux différé 15 min (EOD/synthétique)
+            "mode": "synthetic",
+            "strategy": "swing",
+            "symbols": _SYMS,
+        },
         "dashboard": {
+            "as_of": last_bar.isoformat(),
             "regime": PL.regime_payload(regime, expo),
             "metrics": PL.metrics_payload(equity),
             "equity": PL.equity_series(equity, ts_list),

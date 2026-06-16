@@ -22,67 +22,123 @@ _TEMPLATE = r"""<!doctype html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Quant Terminal — interactif</title>
 <style>
-:root{--bg:#0a0b0d;--surface:#141619;--surface2:#1b1e23;--border:#262a31;--fg:#e6e8eb;
---muted:#9aa1ab;--accent:#3b82f6;--pos:#22c55e;--neg:#ef4444;--warn:#f59e0b;}
+:root{--bg:#08090c;--bg2:#0c0e12;--surface:#121419;--surface2:#171a20;--surface3:#1d212a;
+--border:#23272f;--border2:#2d323c;--fg:#eef0f3;--muted:#9aa1ad;--muted2:#6b7280;
+--accent:#3b82f6;--accent2:#60a5fa;--pos:#22c55e;--neg:#f43f5e;--warn:#f59e0b;
+--shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.25);}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);
-font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',Inter,system-ui,sans-serif}
-.wrap{max-width:880px;margin:0 auto;padding:20px}
-h1{font-size:20px;font-weight:600;letter-spacing:-.02em;margin:0 0 2px}
-.sub{color:var(--muted);font-size:12px;margin-bottom:16px}
-.tabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
-.tab{padding:8px 14px;border-radius:10px;background:var(--surface);border:1px solid var(--border);
-color:var(--muted);cursor:pointer;font-size:13px;transition:all .15s}
+html{scroll-behavior:smooth}
+body{margin:0;background:radial-gradient(1200px 600px at 50% -10%,#10131a 0%,var(--bg) 55%) fixed;
+color:var(--fg);-webkit-font-smoothing:antialiased;letter-spacing:-.01em;
+font-family:'Inter',-apple-system,BlinkMacSystemFont,'SF Pro Text',system-ui,sans-serif}
+::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:6px}
+::-webkit-scrollbar-thumb:hover{background:#3a414d}
+.wrap{max-width:1080px;margin:0 auto;padding:0 20px 48px}
+/* ---- top bar ---- */
+.topbar{position:sticky;top:0;z-index:30;display:flex;justify-content:space-between;align-items:center;
+gap:12px;padding:14px 20px;margin:0 -20px 4px;background:rgba(10,12,16,.72);
+backdrop-filter:saturate(160%) blur(14px);border-bottom:1px solid var(--border)}
+.brand{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:650;letter-spacing:-.02em}
+.brand .logo{width:22px;height:22px;border-radius:7px;background:linear-gradient(135deg,#3b82f6,#22d3ee);
+display:inline-block;box-shadow:0 0 0 1px rgba(255,255,255,.08),0 4px 14px rgba(59,130,246,.45)}
+.brand .tag{font-size:9.5px;font-weight:700;letter-spacing:.12em;color:var(--accent2);
+border:1px solid var(--border2);border-radius:6px;padding:2px 6px;background:var(--surface)}
+.status{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted)}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;
+background:var(--surface);border:1px solid var(--border);font-size:11px;font-weight:500}
+.pulse{width:7px;height:7px;border-radius:50%;background:var(--pos);
+box-shadow:0 0 0 0 rgba(34,197,94,.6);animation:pulse 2s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.5)}70%{box-shadow:0 0 0 7px rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}
+.clock{font-variant-numeric:tabular-nums;color:var(--fg);font-weight:550}
+/* ---- tabs ---- */
+.tabs{position:sticky;top:57px;z-index:20;display:flex;gap:4px;padding:10px 0;margin-bottom:14px;
+flex-wrap:wrap;background:linear-gradient(var(--bg),rgba(8,9,12,.6))}
+.tab{padding:8px 14px;border-radius:10px;background:transparent;border:1px solid transparent;
+color:var(--muted);cursor:pointer;font-size:13px;font-weight:500;transition:all .18s ease}
 .tab:hover{background:var(--surface2);color:var(--fg)}
-.tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.tab.active{background:var(--surface3);color:var(--fg);border-color:var(--border2);box-shadow:var(--shadow)}
+.tab.active::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;
+background:var(--accent);margin-right:7px;vertical-align:middle;box-shadow:0 0 8px var(--accent)}
+/* ---- pages ---- */
 .page{display:none;flex-direction:column;gap:14px}
-.page.active{display:flex}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:18px;
-transition:border-color .2s}
-.card:hover{border-color:#374151}
-.label{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+.page.active{display:flex;animation:fade .35s ease}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.asof{font-size:11px;color:var(--muted2);display:flex;align-items:center;gap:6px;
+padding:2px 0 2px;letter-spacing:.01em}
+.asof b{color:var(--muted);font-weight:550}
+/* ---- cards ---- */
+.card{background:linear-gradient(180deg,var(--surface),var(--bg2));border:1px solid var(--border);
+border-radius:16px;padding:18px;transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}
+.card:hover{border-color:var(--border2);box-shadow:var(--shadow);transform:translateY(-1px)}
+.label{color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600}
 .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-@media(max-width:640px){.grid4{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}
-.metric .val{font-size:26px;margin-top:6px;font-variant-numeric:tabular-nums}
+@media(max-width:760px){.grid4{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}
+.topbar .clock{display:none}}
+.metric .val{font-size:27px;margin-top:6px;font-variant-numeric:tabular-nums;font-weight:620;letter-spacing:-.02em}
 .mono{font-variant-numeric:tabular-nums}
 .pos{color:var(--pos)}.neg{color:var(--neg)}
 .banner{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
-.dot{height:10px;width:10px;border-radius:50%;display:inline-block;margin-right:8px}
+.dot{height:9px;width:9px;border-radius:50%;display:inline-block;margin-right:8px}
 table{width:100%;border-collapse:collapse;font-size:13px}
-th{color:var(--muted);font-size:11px;text-align:left;font-weight:400;padding-bottom:6px}
-td{padding:7px 0;border-top:1px solid var(--border)}
-tr.srow{cursor:pointer;transition:background .12s}
-tr.srow:hover{background:var(--surface2)}
-.facbar{height:6px;border-radius:3px;background:var(--accent);display:inline-block;vertical-align:middle}
+th{color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;text-align:left;
+font-weight:600;padding-bottom:8px}
+td{padding:8px 0;border-top:1px solid var(--border)}
+tbody tr{transition:background .12s}
+tbody tr:hover{background:var(--surface2)}
+tr.srow,tr.srow td{cursor:pointer}
+.facbar{height:7px;border-radius:4px;background:linear-gradient(90deg,var(--accent),var(--accent2));
+display:inline-block;vertical-align:middle;transition:width .5s ease}
 #chartWrap{position:relative}
-#tip{position:absolute;pointer-events:none;background:#000;border:1px solid var(--border);
-border-radius:8px;padding:6px 10px;font-size:12px;opacity:0;transition:opacity .1s;white-space:nowrap;z-index:5}
-.heat td{border:none;text-align:center;color:#fff;font-size:11px;padding:7px;border-radius:4px;
-cursor:default;transition:transform .1s}
-.heat td:hover{transform:scale(1.12)}
+#tip{position:absolute;pointer-events:none;background:rgba(8,9,12,.95);border:1px solid var(--border2);
+border-radius:10px;padding:8px 12px;font-size:12px;opacity:0;transition:opacity .1s;white-space:nowrap;
+z-index:5;box-shadow:var(--shadow)}
+/* ---- heatmap ---- */
+.hm{display:grid;gap:6px}
+.hcell{position:relative;border-radius:10px;padding:12px 10px;cursor:default;min-height:64px;
+display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;
+border:1px solid rgba(255,255,255,.05);transition:transform .12s ease,box-shadow .12s ease}
+.hcell:hover{transform:scale(1.04);box-shadow:var(--shadow);z-index:2}
+.hcell .hn{font-size:11.5px;font-weight:600;line-height:1.15;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.5)}
+.hcell .hv{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.5)}
+.heat td{border:none;text-align:center;color:#fff;font-size:11px;padding:7px;border-radius:4px;cursor:default}
 .heat th{text-align:center;padding:2px;font-size:11px}
-.pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;background:var(--surface2)}
+.pill{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11px;background:var(--surface3);
+border:1px solid var(--border)}
+.search{width:100%;background:var(--bg2);border:1px solid var(--border);border-radius:10px;
+color:var(--fg);font-size:13px;padding:9px 12px;outline:none;transition:border-color .15s}
+.search:focus{border-color:var(--accent)}
+.chip{font-size:11px;padding:4px 10px;border-radius:999px;border:1px solid var(--border);
+background:var(--surface);color:var(--muted);cursor:pointer;transition:all .15s}
+.chip:hover{color:var(--fg);border-color:var(--border2)}
+.chip.on{background:var(--accent);color:#fff;border-color:var(--accent)}
 ul{margin:4px 0 0;padding-left:18px;font-size:13px}li{margin:3px 0}
 .toggle{font-size:12px;color:var(--accent);cursor:pointer;user-select:none}
-</style></head><body><div class="wrap">
-<h1>Quant Terminal</h1><div class="sub">données synthétiques · interactif · passe la souris sur les graphiques</div>
+</style></head><body>
+<div class="topbar">
+  <div class="brand"><span class="logo"></span>Quant Terminal<span class="tag">HEDGE-FUND</span></div>
+  <div class="status">
+    <span class="badge"><span class="pulse"></span><span id="freshBadge">flux différé</span></span>
+    <span class="clock" id="clock">--:--:--</span>
+  </div>
+</div>
+<div class="wrap">
 <div class="tabs">
 <div class="tab active" data-p="dash">Dashboard</div>
-<div class="tab" data-p="pf">Portefeuille &amp; Analyse</div>
-<div class="tab" data-p="pos">Positions</div>
-<div class="tab" data-p="trades">Trades</div>
 <div class="tab" data-p="themes">Thèmes de marché</div>
 <div class="tab" data-p="uni">Univers</div>
-<div class="tab" data-p="data">Données</div></div>
+<div class="tab" data-p="data">Données</div>
+<div class="tab" data-p="pf">Portefeuille &amp; Analyse</div>
+<div class="tab" data-p="pos">Positions</div>
+<div class="tab" data-p="trades">Trades</div></div>
 
 <div class="page active" id="dash"></div>
-<div class="page" id="pf"></div>
-<div class="page" id="pos"></div>
-<div class="page" id="trades"></div>
 <div class="page" id="themes"></div>
 <div class="page" id="uni"></div>
 <div class="page" id="data"></div>
+<div class="page" id="pf"></div>
+<div class="page" id="pos"></div>
+<div class="page" id="trades"></div>
 </div>
 <script>const DATA = __DATA__;</script>
 <script>
@@ -90,13 +146,35 @@ const $=(h)=>{const d=document.createElement('div');d.innerHTML=h.trim();return 
 const pct=(x)=>(x*100).toFixed(1)+'%';
 const eur=(x)=>Math.round(x).toLocaleString('fr-FR');
 const CYC={expansion:'#22c55e',recovery:'#3b82f6',slowdown:'#f59e0b',recession:'#ef4444'};
+const fmtTS=(s)=>{if(!s)return '—';const d=new Date(s);return isNaN(d)?String(s).slice(0,16).replace('T',' '):
+  d.toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});};
 
 // ---- tabs ----
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
   document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
   t.classList.add('active');document.getElementById(t.dataset.p).classList.add('active');
+  window.scrollTo({top:0,behavior:'smooth'});
 });
+
+// ---- horloge live + badge de fraîcheur (flux différé) ----
+(function(){
+  const M=DATA.meta||{};
+  const badge=document.getElementById('freshBadge');
+  if(badge)badge.textContent='flux différé '+(M.delay_minutes||15)+' min';
+  const clk=document.getElementById('clock');
+  function tick(){if(clk)clk.textContent=new Date().toLocaleTimeString('fr-FR')+' UTC+'+(-new Date().getTimezoneOffset()/60);}
+  tick();setInterval(tick,1000);
+})();
+
+// ---- bandeau "données au…" injecté en tête de CHAQUE onglet ----
+const SECTION_ASOF={dash:(DATA.dashboard||{}).as_of,themes:(DATA.themes||{}).as_of,
+  uni:(DATA.universe||{}).as_of,data:(DATA.data||{}).as_of,
+  pf:(DATA.dashboard||{}).as_of,pos:(DATA.dashboard||{}).as_of,trades:(DATA.dashboard||{}).as_of};
+function freshnessChip(pageId){
+  const M=DATA.meta||{},asof=SECTION_ASOF[pageId]||M.last_bar;
+  return $(`<div class="asof">⟳ Données au <b>${fmtTS(asof)}</b> · différé ${M.delay_minutes||15} min · snapshot généré ${fmtTS(M.generated_at)} · mode <b>${M.mode||'synthetic'}</b></div>`);
+}
 
 // ---- compteur animé ----
 function countUp(el,target,suffix,dur=700){
@@ -344,16 +422,20 @@ const mkTable=(head,bodyRows)=>$(`<table><thead><tr>${head}</tr></thead><tbody>$
   p.appendChild(hc);
 })();
 
-// ---- UNIVERS ----
+// ---- UNIVERS (complet, recherchable + filtres) ----
 (function(){
+ try{
   const u=DATA.universe,p=document.getElementById('uni');if(!u)return;
+  const all=u.instruments||[];
   const g=$('<div class="grid4"></div>');
-  [['Sources actives',u.sources_enabled+' / '+u.sources_total],['Instruments seed',eur(u.seed_total)],
-   ['Classes d\'actifs',Object.keys(u.by_asset_class||{}).length],['Rebuild',u.rebuild_cadence_days+' j']]
+  [['Instruments (univers complet)',eur(u.instruments_total||all.length)],
+   ['Classes d\'actifs',Object.keys(u.by_asset_class||{}).length],
+   ['Sources actives',u.sources_enabled+' / '+u.sources_total],
+   ['Rebuild',u.rebuild_cadence_days+' j']]
    .forEach(([lab,val])=>g.appendChild($(`<div class="card metric"><div class="label">${lab}</div><div class="val" style="font-size:22px">${val}</div></div>`)));
   p.appendChild(g);
   // répartition par classe
-  const bc=$(`<div class="card"><div class="label" style="margin-bottom:10px">Répartition par classe d'actifs (seed offline)</div></div>`);
+  const bc=$(`<div class="card"><div class="label" style="margin-bottom:10px">Répartition par classe d'actifs</div></div>`);
   const max=Math.max(1,...Object.values(u.by_asset_class||{}));
   Object.entries(u.by_asset_class||{}).forEach(([k,v])=>{
     bc.appendChild($(`<div style="display:flex;align-items:center;gap:8px;margin:5px 0;font-size:12px">
@@ -362,21 +444,40 @@ const mkTable=(head,bodyRows)=>$(`<table><thead><tr>${head}</tr></thead><tbody>$
       <span class="mono">${v}</span></div>`));
   });
   p.appendChild(bc);
+  // EXPLORATEUR univers complet : recherche + filtres de classe
+  const ex=$(`<div class="card"><div class="banner" style="margin-bottom:12px">
+    <div class="label">Univers complet — explorateur</div>
+    <div id="uCount" style="font-size:11px;color:var(--muted)"></div></div></div>`);
+  const search=$('<input class="search" placeholder="Rechercher un symbole, un nom, une place…" style="margin-bottom:10px">');
+  const classes=['tous',...Object.keys(u.by_asset_class||{})];
+  const chips=$('<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px"></div>');
+  let curClass='tous',curQ='';
+  classes.forEach((c,idx)=>{const ch=$(`<span class="chip${idx===0?' on':''}">${c}</span>`);
+    ch.onclick=()=>{curClass=c;chips.querySelectorAll('.chip').forEach(x=>x.classList.remove('on'));ch.classList.add('on');render();};
+    chips.appendChild(ch);});
+  const tableWrap=$('<div style="max-height:520px;overflow:auto"></div>');
+  ex.appendChild(search);ex.appendChild(chips);ex.appendChild(tableWrap);p.appendChild(ex);
+  function render(){
+    const q=curQ.toLowerCase();
+    const rows=all.filter(r=>(curClass==='tous'||r.asset_class===curClass)&&(!q||
+      (r.symbol+' '+r.name+' '+r.venue+' '+(r.sector||'')).toLowerCase().includes(q))).slice(0,500);
+    const body=rows.map(r=>`<tr><td class="mono"><b>${r.symbol}</b></td><td style="color:var(--muted)">${r.name||''}</td>
+      <td>${r.asset_class||''}</td><td style="color:var(--muted)">${r.venue||''}</td>
+      <td style="color:var(--muted)">${r.sector||r.currency||''}</td></tr>`);
+    tableWrap.innerHTML='';
+    tableWrap.appendChild(mkTable('<th>Symbole</th><th>Nom</th><th>Classe</th><th>Place</th><th>Secteur / Devise</th>',body));
+    ex.querySelector('#uCount').textContent=rows.length+' / '+all.length+' instruments'+(rows.length>=500?' (500 affichés)':'');
+  }
+  search.addEventListener('input',e=>{curQ=e.target.value;render();});
+  render();
   // sources
   const sc=$(`<div class="card"><div class="label" style="margin-bottom:10px">Sources déclaratives (offline + réseau)</div></div>`);
   const srcRows=u.sources.map(s=>`<tr><td><b>${s.id}</b></td><td style="color:var(--muted)">${s.kind}</td>
     <td><span class="pill" style="color:${s.network?'#f59e0b':'#22c55e'}">${s.network?'réseau':'offline'}</span></td>
-    <td><span class="pill" style="color:${s.enabled?'#22c55e':'#9aa1ab'}">${s.enabled?'activée':'désactivée'}</span></td></tr>`);
+    <td><span class="pill" style="color:${s.enabled?'#22c55e':'#9aa1ad'}">${s.enabled?'activée':'désactivée'}</span></td></tr>`);
   sc.appendChild(mkTable('<th>Source</th><th>Type</th><th>Accès</th><th>Statut</th>',srcRows));
   p.appendChild(sc);
-  // échantillon
-  if(u.sample&&u.sample.length){
-    const ec=$(`<div class="card"><div class="label" style="margin-bottom:10px">Échantillon d'instruments</div></div>`);
-    const smp=u.sample.map(r=>`<tr><td class="mono"><b>${r.symbol}</b></td>
-      <td style="color:var(--muted)">${r.name||''}</td><td>${r.asset_class||''}</td><td style="color:var(--muted)">${r.venue||''}</td></tr>`);
-    ec.appendChild(mkTable('<th>Symbole</th><th>Nom</th><th>Classe</th><th>Place</th>',smp));
-    p.appendChild(ec);
-  }
+ }catch(e){console.error('rendu univers:',e);}
 })();
 
 // ---- DONNÉES (collecte + base de données) ----
@@ -410,39 +511,65 @@ const mkTable=(head,bodyRows)=>$(`<table><thead><tr>${head}</tr></thead><tbody>$
   p.appendChild(lc);
 })();
 
-// ---- THÈMES DE MARCHÉ (performance YTD par secteur + meilleurs setups) ----
+// ---- THÈMES DE MARCHÉ (heatmap YTD interactive + meilleurs setups) ----
+const heatColor=(v,m)=>{const t=Math.max(-1,Math.min(1,v/m));
+  return `hsl(${t>=0?150:356} 68% ${(20+Math.abs(t)*24).toFixed(0)}%)`;};
 (function(){
  try{
   const th=DATA.themes,p=document.getElementById('themes');if(!th)return;
-  const STANCE={bullish:['#22c55e','▲ bullish'],bearish:['#ef4444','▼ bearish'],neutral:['#9aa1ab','– neutre']};
-  // résumé bullish / bearish
-  p.appendChild($(`<div class="card banner">
-    <div style="font-size:13px"><span style="color:#22c55e">▲ Bullish :</span> ${th.bullish.join(' · ')||'—'}</div>
-    <div style="font-size:13px"><span style="color:#ef4444">▼ Bearish :</span> ${th.bearish.join(' · ')||'—'}</div></div>`));
-  // barres YTD par secteur
-  const bc=$(`<div class="card"><div class="label" style="margin-bottom:10px">Performance YTD par secteur</div></div>`);
+  const STANCE={bullish:['#22c55e','▲ bullish'],bearish:['#f43f5e','▼ bearish'],neutral:['#9aa1ad','– neutre']};
   const maxAbs=Math.max(0.01,...th.sectors.map(s=>Math.abs(s.ytd)));
+  // KPI
+  const g=$('<div class="grid4"></div>');
+  [['Thèmes suivis',th.sectors.length,''],['Bullish ▲',th.bullish.length,'',  'pos'],
+   ['Bearish ▼',th.bearish.length,'','neg'],['Meilleur thème YTD',pct(th.sectors[0].ytd),'','pos']]
+   .forEach(([lab,val,suf,tone])=>g.appendChild($(`<div class="card metric"><div class="label">${lab}</div>
+     <div class="val ${tone||''}" style="font-size:22px">${val}${suf}</div></div>`)));
+  p.appendChild(g);
+  // HEATMAP interactive (survol = détail)
+  const hc=$(`<div class="card" id="hmWrap" style="position:relative">
+    <div class="banner" style="margin-bottom:12px"><div class="label">Heatmap — performance YTD par thème (survole une case)</div>
+    <div style="font-size:11px;color:var(--muted)">vert = haussier · rouge = baissier · 4ᵉ révolution industrielle + secteurs GICS</div></div></div>`);
+  const hm=$('<div class="hm" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))"></div>');
+  const htip=$('<div id="tip"></div>');
   th.sectors.forEach(s=>{
-    const w=Math.round(Math.abs(s.ytd)/maxAbs*100),col=STANCE[s.stance][0];
-    bc.appendChild($(`<div style="display:flex;align-items:center;gap:8px;margin:6px 0;font-size:12px">
-      <span style="width:150px">${s.sector}</span>
-      <span class="facbar" style="width:${w}%;max-width:360px;background:${col}"></span>
-      <span class="mono" style="color:${col};width:62px;text-align:right">${pct(s.ytd)}</span></div>`));
+    const cell=$(`<div class="hcell" style="background:${heatColor(s.ytd,maxAbs)}">
+      <div class="hn">${s.sector}</div><div class="hv">${pct(s.ytd)}</div></div>`);
+    cell.addEventListener('pointermove',e=>{
+      const r=hc.getBoundingClientRect();
+      htip.style.opacity=1;
+      htip.style.left=Math.min(r.width-230,e.clientX-r.left+14)+'px';
+      htip.style.top=(e.clientY-r.top+14)+'px';
+      htip.innerHTML=`<b>${s.sector}</b> <span style="color:${STANCE[s.stance][0]}">${STANCE[s.stance][1]}</span><br>`
+        +`YTD <b class="mono">${pct(s.ytd)}</b> · momentum <span class="mono">${pct(s.momentum)}</span><br>`
+        +`Top setups : ${s.top_assets.map(a=>'<b>'+a.symbol+'</b> '+pct(a.ytd)).join(' · ')}`;
+    });
+    cell.addEventListener('pointerleave',()=>{htip.style.opacity=0;});
+    hm.appendChild(cell);
   });
-  p.appendChild(bc);
-  // détail par secteur : meilleurs setups
-  const sc=$(`<div class="card"><div class="label" style="margin-bottom:10px">Meilleurs setups par secteur (momentum + tendance vs MM50)</div></div>`);
+  hc.appendChild(hm);hc.appendChild(htip);p.appendChild(hc);
+  // bullish / bearish résumé
+  p.appendChild($(`<div class="card banner">
+    <div style="font-size:13px"><span style="color:#22c55e">▲ Bullish :</span> <span style="color:var(--muted)">${th.bullish.join(' · ')||'—'}</span></div>
+    <div style="font-size:13px"><span style="color:#f43f5e">▼ Bearish :</span> <span style="color:var(--muted)">${th.bearish.join(' · ')||'—'}</span></div></div>`));
+  // meilleurs setups par secteur
+  const sc=$(`<div class="card"><div class="label" style="margin-bottom:10px">Meilleurs setups par thème (momentum + tendance vs MM50)</div></div>`);
   const rows=th.sectors.map(s=>{
     const tops=s.top_assets.map(a=>`<span class="pill" style="margin:0 6px 4px 0;display:inline-block"><b>${a.symbol}</b> ${pct(a.ytd)} · ${a.setup}</span>`).join('');
     return `<tr><td style="white-space:nowrap"><span style="color:${STANCE[s.stance][0]};font-size:11px">${STANCE[s.stance][1]}</span><br><b>${s.sector}</b></td>
       <td class="mono" style="text-align:right;vertical-align:top;color:${STANCE[s.stance][0]}">${pct(s.ytd)}</td>
       <td style="padding-left:12px">${tops}</td></tr>`;
   });
-  sc.appendChild(mkTable('<th>Secteur</th><th style="text-align:right">YTD</th><th style="padding-left:12px">Top actifs / setup</th>',rows));
+  sc.appendChild(mkTable('<th>Thème</th><th style="text-align:right">YTD</th><th style="padding-left:12px">Top actifs / setup</th>',rows));
   p.appendChild(sc);
-  p.appendChild($(`<div style="font-size:11px;color:var(--muted)">Données synthétiques reproductibles. Lecture : privilégier les setups haussiers dans les secteurs bullish ; éviter les contre-tendances dans les secteurs bearish.</div>`));
+  p.appendChild($(`<div style="font-size:11px;color:var(--muted)">Données synthétiques reproductibles. Lecture : privilégier les setups haussiers dans les thèmes bullish ; éviter les contre-tendances dans les thèmes bearish.</div>`));
  }catch(e){console.error('rendu thèmes:',e);}
 })();
+
+// ---- bandeau "données au…" en tête de chaque onglet + ouverture sur le 1er ----
+['dash','themes','uni','data','pf','pos','trades'].forEach(id=>{
+  const pg=document.getElementById(id);if(pg)pg.insertBefore(freshnessChip(id),pg.firstChild);
+});
 </script></body></html>"""
 
 

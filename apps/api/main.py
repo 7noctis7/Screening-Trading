@@ -6,6 +6,8 @@ En offline, les routes renvoient le snapshot synthétique ; en prod, brancher l'
 
 from __future__ import annotations
 
+import time
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -16,18 +18,27 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"],
                    allow_headers=["*"])
 
 _CACHE: dict | None = None
+_CACHE_TS: float = 0.0
+_TTL_S = 900  # 15 min : aligne le rafraîchissement serveur sur le flux différé
 
 
 def _snap() -> dict:
-    global _CACHE
-    if _CACHE is None:
+    """Snapshot caché avec TTL → le polling du front récupère des données fraîches."""
+    global _CACHE, _CACHE_TS
+    if _CACHE is None or (time.time() - _CACHE_TS) > _TTL_S:
         _CACHE = build_snapshot()
+        _CACHE_TS = time.time()
     return _CACHE
 
 
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/api/meta")
+def meta() -> dict:
+    return _snap()["meta"]
 
 
 @app.get("/api/dashboard")

@@ -4,18 +4,21 @@ from apps.api.snapshot import build_snapshot
 
 def test_snapshot_keys_and_json():
     snap = build_snapshot(seed=7)
-    assert set(snap) == {"dashboard", "screener", "portfolio", "trades",
+    assert set(snap) == {"meta", "dashboard", "screener", "portfolio", "trades",
                          "open_trades", "trade_stats", "universe", "data", "themes"}
     assert "regime" in snap["dashboard"] and "metrics" in snap["dashboard"]
     assert "benchmarks" in snap["portfolio"]
+    # méta : fraîcheur + délai différé
+    assert snap["meta"]["delay_minutes"] == 15 and snap["meta"]["generated_at"]
     json.dumps(snap)        # tout le snapshot est JSON-sérialisable (contrat API)
 
 
 def test_snapshot_new_sections():
     snap = build_snapshot(seed=7)
-    # univers : sources + seeds + répartition par classe
+    # univers COMPLET : liste exhaustive + sources + répartition par classe
     uni = snap["universe"]
     assert uni["sources_total"] >= uni["sources_enabled"] >= 1
+    assert uni["instruments_total"] == len(uni["instruments"]) > 100
     assert uni["seed_total"] > 0 and uni["by_asset_class"]
     # données : collecte + qualité + couches DB
     data = snap["data"]
