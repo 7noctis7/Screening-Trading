@@ -76,7 +76,10 @@ border-radius:16px;padding:18px;transition:transform .2s ease,border-color .2s e
 .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media(max-width:760px){.grid4{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}
-.topbar .clock{display:none}}
+.topbar .clock{display:none}.wrap{padding:0 12px 40px}
+.tabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;top:56px}
+.tabs::-webkit-scrollbar{display:none}.tab{white-space:nowrap;flex:0 0 auto}
+h1{font-size:18px}.metric .val{font-size:22px}}
 .metric .val{font-size:27px;margin-top:6px;font-variant-numeric:tabular-nums;font-weight:620;letter-spacing:-.02em}
 .mono{font-variant-numeric:tabular-nums}
 .pos{color:var(--pos)}.neg{color:var(--neg)}
@@ -336,7 +339,7 @@ function lineChart(series,labels,title){
   const rel=a.relative,rm=a.risk;
   const relRows=Object.entries(rel).map(([k,v])=>`<tr><td style="color:var(--muted)">${k}</td><td class="mono" style="text-align:right">${v}</td></tr>`).join('');
   p.appendChild($(`<div class="grid2">
-    <div class="card"><div class="label" style="margin-bottom:8px">Mesures relatives (vs S&amp;P 500)</div>
+    <div class="card"><div class="label" style="margin-bottom:8px">Mesures relatives (vs univers équipondéré)</div>
       <table><tbody>${relRows}</tbody></table></div>
     <div class="card"><div class="label" style="margin-bottom:8px">Risque (FRM)</div>
       <div class="grid2" style="gap:10px">
@@ -345,6 +348,27 @@ function lineChart(series,labels,title){
       <div><div style="color:var(--muted);font-size:12px">Vol</div><div style="font-size:18px">${pct(rm.vol)}</div></div>
       <div><div style="color:var(--muted);font-size:12px">Proba ruine (MC)</div><div style="font-size:18px">${pct(a.monte_carlo.p_ruin)}</div></div>
       </div></div></div>`));
+  // projection Monte Carlo (éventail des trajectoires futures, base 100)
+  const mp=a.mc_projection;
+  if(mp&&mp.steps&&mp.steps.length){
+    const W=860,H=200,padL=44,padR=64,padT=10,padB=22,m=mp.steps.length;
+    const all=mp.p5.concat(mp.p95),lo=Math.min(...all,100),hi=Math.max(...all),rng=(hi-lo)||1;
+    const X=i=>padL+i*(W-padL-padR)/(m-1),Y=v=>(H-padB)-(v-lo)/rng*((H-padB)-padT);
+    const band=mp.p95.map((v,i)=>X(i).toFixed(1)+','+Y(v).toFixed(1)).join(' ')+' '+
+      mp.p5.map((v,i)=>X(m-1-i).toFixed(1)+','+Y(mp.p5[m-1-i]).toFixed(1)).join(' ');
+    const line=(arr,c,w)=>`<polyline points="${arr.map((v,i)=>X(i).toFixed(1)+','+Y(v).toFixed(1)).join(' ')}" fill="none" stroke="${c}" stroke-width="${w}"/>`;
+    let yA='';for(let k=0;k<4;k++){const v=lo+k/3*(hi-lo),y=Y(v);yA+=`<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="1"/><text x="${padL-6}" y="${(y+3).toFixed(1)}" fill="var(--muted)" font-size="10" text-anchor="end">${v.toFixed(0)}</text>`;}
+    const endL=[['p95',mp.p95,'#22c55e'],['médiane',mp.p50,'#3b82f6'],['p5',mp.p5,'#f43f5e']]
+      .map(([n,arr,c])=>`<text x="${W-padR+5}" y="${(Y(arr[m-1])+3).toFixed(1)}" fill="${c}" font-size="11" font-weight="600">${arr[m-1].toFixed(0)}</text>`).join('');
+    p.appendChild($(`<div class="card"><div class="banner" style="margin-bottom:8px">
+      <div class="label">Projection Monte-Carlo — éventail à 1 an (base 100, ${mp.horizon} j ouvrés)</div>
+      <div style="font-size:11px;color:var(--muted)">médiane <b style="color:var(--fg)">${mp.final_p50}</b> · p5 <b style="color:#f43f5e">${mp.final_p5}</b> · p95 <b style="color:#22c55e">${mp.final_p95}</b></div></div>
+      <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="overflow:visible">
+        ${yA}<polygon points="${band}" fill="#3b82f6" fill-opacity="0.14"/>
+        ${line(mp.p25,'#3b82f6',0.8)}${line(mp.p75,'#3b82f6',0.8)}${line(mp.p50,'#3b82f6',2)}${endL}
+      </svg>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">Rééchantillonnage bootstrap des rendements réalisés (1000 trajectoires) → cône d'incertitude de la valeur future du portefeuille.</div></div>`));
+  }
   // heatmap interactive — table construite en UNE chaîne HTML complète
   const co=a.correlation;
   const headHtml='<tr><th></th>'+co.symbols.map(s=>`<th>${s}</th>`).join('')+'</tr>';

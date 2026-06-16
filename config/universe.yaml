@@ -22,6 +22,9 @@ sources:
   - { id: cac40_seed,        kind: static, file: data/seed/cac40.csv,             enabled: true }
   - { id: aex_seed,          kind: static, file: data/seed/aex.csv,               enabled: true }
   - { id: us_megacap,        kind: static, file: data/seed/us_megacap.csv,        enabled: true }
+  - { id: us_extended,       kind: static, file: data/seed/us_extended.csv,       enabled: true }
+  - { id: etf_extra,         kind: static, file: data/seed/etf_extra.csv,         enabled: true }
+  - { id: crypto_extra,      kind: static, file: data/seed/crypto_extra.csv,      enabled: true }
 
   # ---------- INDICES via WIKIPÉDIA (réseau) ----------
   - id: sp500

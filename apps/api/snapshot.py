@@ -16,7 +16,7 @@ from packages.common import load_yaml
 from packages.data import data_providers
 from packages.execution import CostModel
 from packages.portfolio import (attribution, correlation_matrix, cluster, expert_review,
-                                monte_carlo, relative_metrics, risk_metrics_fn)
+                                mc_projection, monte_carlo, relative_metrics, risk_metrics_fn)
 from packages.portfolio.metrics import returns_from_equity
 from packages.ranking import RankingEngine
 from packages.regime import MacroImpactMap, MacroRegimeClassifier, synthetic_macro
@@ -324,6 +324,50 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
     }
 
 
+def _price_db_path() -> "Path | None":
+    """Chemin d'une base de prix réelle, si fournie (env QUANT_PRICE_DB ou data/*.db)."""
+    import os
+    env = os.environ.get("QUANT_PRICE_DB")
+    if env and Path(env).exists():
+        return Path(env)
+    for name in ("YAHOO.db", "market.db"):
+        p = ROOT / "data" / name
+        if p.exists():
+            return p
+    return None
+
+
+def _load_prices(instruments, sector_of, start, end, seed):
+    """Charge l'OHLCV : base RÉELLE (YAHOO.db…) en priorité, sinon synthétique sectorisé
+    (et synthétique en complément pour les symboles absents de la base). Renvoie (data, mode)."""
+    data, n_real = {}, 0
+    db = _price_db_path()
+    prov_db = None
+    if db is not None:
+        try:
+            from packages.data.providers.db_provider import DBPriceProvider
+            prov_db = DBPriceProvider(db)
+        except Exception:  # noqa: BLE001 — base illisible → tout en synthétique
+            prov_db = None
+    for m in instruments:
+        s = m["symbol"]
+        bars = prov_db.fetch_ohlcv(s, "1d", start, end) if prov_db else []
+        if len(bars) >= 250:
+            data[s] = bars
+            n_real += 1
+        else:
+            drift, vol = _SECTOR_DV.get(sector_of[s], (0.07, 0.18))
+            data[s] = data_providers.create(
+                "synthetic", seed=seed, drift=drift, annual_vol=vol).fetch_ohlcv(s, "1d", start, end)
+    if n_real == 0:
+        mode = "synthetic"
+    elif n_real == len(instruments):
+        mode = f"réel ({db.name})"
+    else:
+        mode = f"mixte ({n_real} réels / {len(instruments)} via {db.name})"
+    return data, mode
+
+
 def build_snapshot(seed: int = 7) -> dict:
     # --- univers COMPLET + fenêtre jusqu'à AUJOURD'HUI ---
     instruments = _seed_universe()
@@ -333,13 +377,8 @@ def build_snapshot(seed: int = 7) -> dict:
     sector_of = {m["symbol"]: _sector_of(m) for m in instruments}
     end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     start = end - timedelta(days=_HISTORY_DAYS)
-    # données générées par SECTEUR (drift/vol thématiques) → cohérence positions ↔ secteurs
-    data = {}
-    for m in instruments:
-        s = m["symbol"]
-        drift, vol = _SECTOR_DV.get(sector_of[s], (0.07, 0.18))
-        data[s] = data_providers.create(
-            "synthetic", seed=seed, drift=drift, annual_vol=vol).fetch_ohlcv(s, "1d", start, end)
+    # prix RÉELS (base locale) si disponibles, sinon synthétique sectorisé (cohérence secteurs)
+    data, data_mode = _load_prices(instruments, sector_of, start, end, seed)
     n = max(len(b) for b in data.values())
 
     # --- backtest swing VECTORISÉ sur TOUT l'univers (profil offensif, moyen-long terme,
@@ -413,7 +452,7 @@ def build_snapshot(seed: int = 7) -> dict:
             "last_bar": last_bar.isoformat(),
             "period_start": start.isoformat(),
             "delay_minutes": 15,                 # flux différé 15 min (EOD/synthétique)
-            "mode": "synthetic",
+            "mode": data_mode,
             "strategy": "swing",
             "universe_size": len(symbols),
             "traded_assets": len({t.instrument for t in all_trades}),
@@ -436,6 +475,7 @@ def build_snapshot(seed: int = 7) -> dict:
             "benchmarks": PL.benchmark_comparison(equity, benches),
             "analysis": {
                 "relative": rel, "risk": rm, "monte_carlo": mc,
+                "mc_projection": mc_projection(rets, horizon=252, start_value=100.0, seed=1),
                 "attribution": attr,
                 "correlation": PL.correlation_payload(syms, corr, clusters),
                 "review": PL.review_payload(expert_review({**agg, **comp["totals"]})),
