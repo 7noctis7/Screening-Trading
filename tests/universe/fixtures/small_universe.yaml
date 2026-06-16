@@ -1,0 +1,3 @@
+instruments:
+  - { symbol: AAPL, asset_class: equity, venue: NASDAQ, currency: USD }
+  - { symbol: "^GSPC", asset_class: index, venue: INDEX, currency: USD }

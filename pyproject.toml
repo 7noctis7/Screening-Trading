@@ -1,0 +1,44 @@
+[project]
+name = "quant-trading-system"
+version = "0.0.1"
+description = "Système de screening & trading systématique multi-actifs (institutionnel, OSS)"
+requires-python = ">=3.11"
+dependencies = []  # core n'a AUCUNE dépendance. Les deps sont ajoutées par groupe.
+
+[project.optional-dependencies]
+# Ajout progressif au fil de la roadmap — on n'installe que ce qu'on utilise.
+common = ["pyyaml>=6.0"]
+data = ["yfinance", "ccxt", "finnhub-python", "alpaca-py", "fredapi", "pandas", "duckdb", "pyarrow"]
+quality = ["pandera", "great-expectations", "dvc"]
+indicators = ["TA-Lib", "pandas-ta", "ta"]
+quant = ["statsmodels", "scipy", "numpy", "pandas"]
+backtest = ["vectorbt", "backtesting"]
+portfolio = ["quantstats", "PyPortfolioOpt", "riskfolio-lib", "empyrical"]
+reporting = ["reportlab", "weasyprint"]
+ml = ["xgboost", "lightgbm", "mlflow", "optuna", "scikit-learn"]
+orchestration = ["apscheduler", "prefect"]
+api = ["fastapi", "uvicorn[standard]", "websockets", "sqlalchemy", "alembic"]
+dev = ["pytest", "pytest-cov", "ruff", "mypy", "pre-commit"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["packages"]
