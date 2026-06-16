@@ -66,3 +66,8 @@ def universe() -> dict:
 @app.get("/api/data")
 def data() -> dict:
     return _snap()["data"]
+
+
+@app.get("/api/themes")
+def themes() -> dict:
+    return _snap()["themes"]

@@ -16,13 +16,15 @@ export function EquityChart({ series, height = 240 }: { series: any[]; height?: 
             </linearGradient>
           </defs>
           <CartesianGrid stroke="#262a31" vertical={false} />
-          <XAxis dataKey="t" tick={{ fill: "#9aa1ab", fontSize: 11 }} tickLine={false} axisLine={false} minTickGap={40} />
-          <YAxis tick={{ fill: "#9aa1ab", fontSize: 11 }} tickLine={false} axisLine={false} width={48}
-                 domain={["dataMin", "dataMax"]} />
+          <XAxis dataKey="t" tick={{ fill: "#9aa1ab", fontSize: 11 }} tickLine={false} axisLine={false}
+                 minTickGap={40} tickFormatter={(t) => (typeof t === "string" ? t.slice(0, 10) : `J${t}`)} />
+          <YAxis tick={{ fill: "#9aa1ab", fontSize: 11 }} tickLine={false} axisLine={false} width={56}
+                 domain={["dataMin", "dataMax"]} tickFormatter={(v: number) => v.toLocaleString("fr-FR")} />
           <Tooltip
             contentStyle={{ background: "#000", border: "1px solid #262a31", borderRadius: 8, fontSize: 12 }}
             labelStyle={{ color: "#9aa1ab" }} itemStyle={{ color: "#e6e8eb" }}
-            formatter={(v: number) => [v.toFixed(2), "Equity"]} labelFormatter={(l) => `Point ${l}`} />
+            formatter={(v: number) => [v.toFixed(2), "Equity"]}
+            labelFormatter={(l) => (typeof l === "string" ? l.slice(0, 10) : `Point ${l}`)} />
           <Area type="monotone" dataKey="v" stroke="#3b82f6" strokeWidth={2} fill="url(#eq)" />
         </AreaChart>
       </ResponsiveContainer>

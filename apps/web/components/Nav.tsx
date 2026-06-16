@@ -7,6 +7,7 @@ const LINKS: [string, string][] = [
   ["/portfolio", "Portefeuille & Analyse"],
   ["/positions", "Positions"],
   ["/trades", "Trades"],
+  ["/themes", "Thèmes de marché"],
   ["/universe", "Univers"],
   ["/data", "Données"],
 ];

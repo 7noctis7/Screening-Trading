@@ -72,6 +72,7 @@ ul{margin:4px 0 0;padding-left:18px;font-size:13px}li{margin:3px 0}
 <div class="tab" data-p="pf">Portefeuille &amp; Analyse</div>
 <div class="tab" data-p="pos">Positions</div>
 <div class="tab" data-p="trades">Trades</div>
+<div class="tab" data-p="themes">Thèmes de marché</div>
 <div class="tab" data-p="uni">Univers</div>
 <div class="tab" data-p="data">Données</div></div>
 
@@ -79,6 +80,7 @@ ul{margin:4px 0 0;padding-left:18px;font-size:13px}li{margin:3px 0}
 <div class="page" id="pf"></div>
 <div class="page" id="pos"></div>
 <div class="page" id="trades"></div>
+<div class="page" id="themes"></div>
 <div class="page" id="uni"></div>
 <div class="page" id="data"></div>
 </div>
@@ -105,35 +107,50 @@ function countUp(el,target,suffix,dur=700){
   requestAnimationFrame(step);
 }
 
-// ---- courbe interactive (crosshair + tooltip) ----
+// ---- courbe interactive (axe prix + axe temps, crosshair + tooltip) ----
+const fmtDate=(s)=>{const v=String(s);return /^\d{4}-/.test(v)?v.slice(0,10):('Jour '+v);};
 function lineChart(series,labels){
-  const W=820,H=210,pad=8;
+  const W=820,H=220,padL=44,padR=10,padT=8,padB=22;
   const all=[].concat(...series.map(s=>s.data));
   const lo=Math.min(...all),hi=Math.max(...all),rng=(hi-lo)||1;
   const n=series[0].data.length;
-  const X=i=>pad+i*(W-2*pad)/(n-1), Y=v=>H-pad-(v-lo)/rng*(H-2*pad);
+  const X=i=>padL+i*(W-padL-padR)/(n-1), Y=v=>(H-padB)-(v-lo)/rng*((H-padB)-padT);
   const poly=(d,c,w)=>`<polyline points="${d.map((v,i)=>X(i).toFixed(1)+','+Y(v).toFixed(1)).join(' ')}" fill="none" stroke="${c}" stroke-width="${w}"/>`;
+  // axe Y — échelle de prix / indice (4 graduations + lignes de grille)
+  let yAxis='';
+  for(let k=0;k<4;k++){const v=lo+k/3*(hi-lo),y=Y(v);
+    yAxis+=`<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="1"/>`
+      +`<text x="${padL-6}" y="${(y+3).toFixed(1)}" fill="var(--muted)" font-size="10" text-anchor="end">${v.toFixed(1)}</text>`;
+  }
+  // axe X — horizon temporel (5 graduations datées)
+  let xAxis='';
+  for(let k=0;k<5;k++){const i=Math.round(k/4*(n-1)),x=X(i);
+    xAxis+=`<text x="${x.toFixed(1)}" y="${H-6}" fill="var(--muted)" font-size="10" text-anchor="${k===0?'start':k===4?'end':'middle'}">${fmtDate(labels?labels[i]:i)}</text>`;
+  }
   const wrap=$(`<div id="chartWrap" class="card">
-    <div class="label" style="margin-bottom:8px">Equity ${series.length>1?'vs S&amp;P 500 (rebasé 100)':''}</div>
+    <div class="label" style="margin-bottom:8px">Équity ${series.length>1?'vs S&amp;P 500 (rebasé 100)':''} — survole pour le détail</div>
     <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="overflow:visible">
+      ${yAxis}${xAxis}
       ${series.map(s=>poly(s.data,s.color,s.w)).join('')}
-      <line id="cx" x1="0" y1="${pad}" x2="0" y2="${H-pad}" stroke="#4b5563" stroke-width="1" opacity="0"/>
+      <line id="cx" x1="0" y1="${padT}" x2="0" y2="${H-padB}" stroke="#4b5563" stroke-width="1" opacity="0"/>
       <circle id="cd" r="4" fill="${series[0].color}" opacity="0"/>
-      <rect id="ov" x="0" y="0" width="${W}" height="${H}" fill="transparent"/>
-    </svg><div id="tip"></div></div>`);
+      <rect id="ov" x="${padL}" y="${padT}" width="${W-padL-padR}" height="${H-padT-padB}" fill="transparent"/>
+    </svg><div id="tip"></div>
+    <div style="display:flex;gap:16px;margin-top:8px;font-size:11px;color:var(--muted)">
+      ${series.map(s=>`<span><span style="color:${s.color}">●</span> ${s.name}</span>`).join('')}</div></div>`);
   setTimeout(()=>{
     const svg=wrap.querySelector('svg'),ov=wrap.querySelector('#ov'),
       cx=wrap.querySelector('#cx'),cd=wrap.querySelector('#cd'),tip=wrap.querySelector('#tip');
     ov.addEventListener('pointermove',e=>{
       const r=svg.getBoundingClientRect();
       const px=(e.clientX-r.left)/r.width*W;
-      let i=Math.round((px-pad)/((W-2*pad)/(n-1)));i=Math.max(0,Math.min(n-1,i));
+      let i=Math.round((px-padL)/((W-padL-padR)/(n-1)));i=Math.max(0,Math.min(n-1,i));
       const x=X(i),y=Y(series[0].data[i]);
       cx.setAttribute('x1',x);cx.setAttribute('x2',x);cx.setAttribute('opacity','.6');
       cd.setAttribute('cx',x);cd.setAttribute('cy',y);cd.setAttribute('opacity','1');
       tip.style.opacity=1;
-      tip.style.left=Math.min(r.width-150,(x/W*r.width)+12)+'px';tip.style.top='6px';
-      tip.innerHTML=`<b>${labels?labels[i]:('Jour '+i)}</b><br>`+
+      tip.style.left=Math.min(r.width-170,(x/W*r.width)+12)+'px';tip.style.top='6px';
+      tip.innerHTML=`<b>${fmtDate(labels?labels[i]:i)}</b><br>`+
         series.map(s=>`<span style="color:${s.color}">●</span> ${s.name}: <b>${s.data[i].toFixed(2)}</b>`).join('<br>');
     });
     ov.addEventListener('pointerleave',()=>{cx.setAttribute('opacity','0');cd.setAttribute('opacity','0');tip.style.opacity=0;});
@@ -160,11 +177,15 @@ function lineChart(series,labels){
     g.appendChild(card);countUp(card.querySelector('.val'),suf==='%'?val*100:val,suf);
   });
   p.appendChild(g);
-  // courbe equity vs benchmark
+  // courbe equity vs benchmark (axe temps = dates réelles)
   const b=DATA.portfolio.benchmarks;
   p.appendChild(lineChart([
     {name:'Portefeuille',data:b.portfolio,color:'#3b82f6',w:2},
-    {name:'S&P 500',data:b['S&P 500'],color:'#9aa1ab',w:1.3}]));
+    {name:'S&P 500',data:b['S&P 500'],color:'#9aa1ab',w:1.3}],d.dates));
+  p.appendChild($(`<div style="font-size:11px;color:var(--muted);margin-top:-6px">
+    ⓘ Performance volontairement modérée : régime <b style="text-transform:capitalize;color:var(--fg)">${d.regime.cycle}</b>
+    → exposition réduite à ×${d.regime.exposure_multiplier} (dé-risquage automatique). Le portefeuille reste
+    majoritairement en cash entre les signaux, d'où une courbe sous le S&amp;P 500 mais un drawdown contenu.</div>`));
   // screener cliquable — table construite en UNE chaîne HTML complète (sinon les <tr> isolés sont supprimés par le navigateur)
   const sc=DATA.screener;
   let rowsHtml='';
@@ -387,6 +408,40 @@ const mkTable=(head,bodyRows)=>$(`<table><thead><tr>${head}</tr></thead><tbody>$
     <div style="font-size:13px"><b>${l.name}</b> <span class="pill" style="margin-left:6px">${l.store}</span></div>
     <div style="font-size:12px;color:var(--muted);margin-top:3px">${l.desc}</div></div>`)));
   p.appendChild(lc);
+})();
+
+// ---- THÈMES DE MARCHÉ (performance YTD par secteur + meilleurs setups) ----
+(function(){
+ try{
+  const th=DATA.themes,p=document.getElementById('themes');if(!th)return;
+  const STANCE={bullish:['#22c55e','▲ bullish'],bearish:['#ef4444','▼ bearish'],neutral:['#9aa1ab','– neutre']};
+  // résumé bullish / bearish
+  p.appendChild($(`<div class="card banner">
+    <div style="font-size:13px"><span style="color:#22c55e">▲ Bullish :</span> ${th.bullish.join(' · ')||'—'}</div>
+    <div style="font-size:13px"><span style="color:#ef4444">▼ Bearish :</span> ${th.bearish.join(' · ')||'—'}</div></div>`));
+  // barres YTD par secteur
+  const bc=$(`<div class="card"><div class="label" style="margin-bottom:10px">Performance YTD par secteur</div></div>`);
+  const maxAbs=Math.max(0.01,...th.sectors.map(s=>Math.abs(s.ytd)));
+  th.sectors.forEach(s=>{
+    const w=Math.round(Math.abs(s.ytd)/maxAbs*100),col=STANCE[s.stance][0];
+    bc.appendChild($(`<div style="display:flex;align-items:center;gap:8px;margin:6px 0;font-size:12px">
+      <span style="width:150px">${s.sector}</span>
+      <span class="facbar" style="width:${w}%;max-width:360px;background:${col}"></span>
+      <span class="mono" style="color:${col};width:62px;text-align:right">${pct(s.ytd)}</span></div>`));
+  });
+  p.appendChild(bc);
+  // détail par secteur : meilleurs setups
+  const sc=$(`<div class="card"><div class="label" style="margin-bottom:10px">Meilleurs setups par secteur (momentum + tendance vs MM50)</div></div>`);
+  const rows=th.sectors.map(s=>{
+    const tops=s.top_assets.map(a=>`<span class="pill" style="margin:0 6px 4px 0;display:inline-block"><b>${a.symbol}</b> ${pct(a.ytd)} · ${a.setup}</span>`).join('');
+    return `<tr><td style="white-space:nowrap"><span style="color:${STANCE[s.stance][0]};font-size:11px">${STANCE[s.stance][1]}</span><br><b>${s.sector}</b></td>
+      <td class="mono" style="text-align:right;vertical-align:top;color:${STANCE[s.stance][0]}">${pct(s.ytd)}</td>
+      <td style="padding-left:12px">${tops}</td></tr>`;
+  });
+  sc.appendChild(mkTable('<th>Secteur</th><th style="text-align:right">YTD</th><th style="padding-left:12px">Top actifs / setup</th>',rows));
+  p.appendChild(sc);
+  p.appendChild($(`<div style="font-size:11px;color:var(--muted)">Données synthétiques reproductibles. Lecture : privilégier les setups haussiers dans les secteurs bullish ; éviter les contre-tendances dans les secteurs bearish.</div>`));
+ }catch(e){console.error('rendu thèmes:',e);}
 })();
 </script></body></html>"""
 

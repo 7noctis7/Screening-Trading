@@ -67,6 +67,80 @@ def _universe_section() -> dict:
     }
 
 
+_SECTOR_CONSTITUENTS = {
+    "Technologie": ["NVDA", "MSFT", "AAPL", "AVGO", "AMD"],
+    "Énergie": ["XOM", "CVX", "COP", "SLB", "EOG"],
+    "Finance": ["JPM", "BAC", "GS", "MS", "BLK"],
+    "Santé": ["LLY", "UNH", "JNJ", "MRK", "PFE"],
+    "Conso. discrétionnaire": ["AMZN", "TSLA", "HD", "NKE", "MCD"],
+    "Conso. de base": ["PG", "KO", "PEP", "COST", "WMT"],
+    "Industrie": ["CAT", "BA", "GE", "HON", "UPS"],
+    "Services publics": ["NEE", "DUK", "SO", "AEP", "D"],
+}
+
+
+def _setup_label(mom: float, trend: float) -> str:
+    if mom > 0.05 and trend > 0.02:
+        return "tendance haussière confirmée"
+    if mom > 0.05 and trend <= 0.02:
+        return "momentum naissant"
+    if mom < -0.05 and trend < -0.02:
+        return "tendance baissière"
+    if trend > 0.02 and mom <= 0.05:
+        return "rebond au-dessus de la MM50"
+    return "neutre / range"
+
+
+def _themes_section(start) -> dict:
+    """Thèmes de marché : performance YTD par secteur (bullish/bearish) + meilleurs setups.
+
+    Génère des trajectoires synthétiques (reproductibles) avec un drift différencié par
+    secteur pour produire une dispersion réaliste, puis classe les secteurs par YTD et,
+    dans chaque secteur, les actifs au meilleur setup (momentum + tendance vs MM50).
+    """
+    import numpy as np
+
+    from packages.data import data_providers
+
+    sectors_in = list(_SECTOR_CONSTITUENTS.items())
+    # drift étalé de baissier à haussier, attribué de façon déterministe aux secteurs
+    drifts = np.linspace(-0.14, 0.24, len(sectors_in))
+    out_sectors = []
+    for (sector, tickers), drift in zip(sectors_in, drifts):
+        prov = data_providers.create("synthetic", seed=11, drift=float(drift), annual_vol=0.16)
+        assets = []
+        for sym in tickers:
+            bars = prov.fetch_ohlcv(sym, "1d", start, start + timedelta(days=365))
+            close = np.array([b.close for b in bars], float)
+            if close.size < 60:
+                continue
+            ytd = float(close[-1] / close[0] - 1.0)
+            mom = float(close[-1] / close[-63] - 1.0)            # ~3 mois
+            sma50 = float(close[-50:].mean())
+            trend = float((close[-1] - sma50) / sma50)
+            setup = 0.6 * mom + 0.4 * trend
+            assets.append({"symbol": sym, "ytd": round(ytd, 4), "momentum": round(mom, 4),
+                           "trend": round(trend, 4), "setup_score": round(setup, 4),
+                           "setup": _setup_label(mom, trend)})
+        if not assets:
+            continue
+        ytd_sec = sum(a["ytd"] for a in assets) / len(assets)
+        mom_sec = sum(a["momentum"] for a in assets) / len(assets)
+        stance = "bullish" if ytd_sec > 0.05 else "bearish" if ytd_sec < -0.05 else "neutral"
+        top = sorted(assets, key=lambda a: a["setup_score"], reverse=True)[:3]
+        out_sectors.append({
+            "sector": sector, "ytd": round(ytd_sec, 4), "momentum": round(mom_sec, 4),
+            "stance": stance, "n": len(assets), "top_assets": top,
+        })
+    out_sectors.sort(key=lambda s: s["ytd"], reverse=True)
+    return {
+        "as_of": (start + timedelta(days=365)).isoformat(),
+        "sectors": out_sectors,
+        "bullish": [s["sector"] for s in out_sectors if s["stance"] == "bullish"],
+        "bearish": [s["sector"] for s in out_sectors if s["stance"] == "bearish"],
+    }
+
+
 def _data_section(data: dict) -> dict:
     """Vue DONNÉES : collecte (providers, barres, qualité) + couches de base de données."""
     import pandas as pd
@@ -158,11 +232,15 @@ def build_snapshot(seed: int = 7) -> dict:
                "BTC": [b.close for b in data["NVDA"][60:]]}
     all_trades = eng.journal.all()
     trade_stats = PL.trade_stats_payload(all_trades)
+    # axe temporel réel (horodatage de chaque pas d'equity) — partagé courbe/benchmarks
+    ts_list = [data["AAPL"][i].ts for i in range(60, n)]
+    dates = [ts.isoformat() for ts in ts_list]
     return {
         "dashboard": {
             "regime": PL.regime_payload(regime, expo),
             "metrics": PL.metrics_payload(equity),
-            "equity": PL.equity_series(equity),
+            "equity": PL.equity_series(equity, ts_list),
+            "dates": dates,
             "positions": comp["rows"], "totals": comp["totals"],
             "trade_stats": trade_stats,
         },
@@ -183,4 +261,5 @@ def build_snapshot(seed: int = 7) -> dict:
         "trade_stats": trade_stats,
         "universe": _universe_section(),
         "data": _data_section(data),
+        "themes": _themes_section(start),
     }
