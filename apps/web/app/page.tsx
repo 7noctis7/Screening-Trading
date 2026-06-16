@@ -22,18 +22,22 @@ export default function Dashboard() {
         <MetricCard label="Max DD" value={pct(m.max_drawdown)} tone="neg" />
       </div>
       <EquityChart series={d.equity} />
-      <section className="card p-4">
-        <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Top screener</h2>
+      <section className="card p-4 overflow-x-auto">
+        <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Top screener — multi-actifs (score facteurs + edge ML)</h2>
         <table className="w-full text-sm">
           <thead className="text-muted text-xs">
             <tr><th className="text-left font-normal">#</th><th className="text-left font-normal">Actif</th>
-            <th className="text-right font-normal">Score</th><th className="text-left font-normal pl-4">Raison</th></tr>
+            <th className="text-left font-normal">Secteur</th><th className="text-right font-normal">Score</th>
+            <th className="text-right font-normal">ML</th><th className="text-left font-normal pl-4">Raison</th></tr>
           </thead>
           <tbody className="mono">
-            {s?.rows?.slice(0, 8).map((r: any) => (
+            {s?.rows?.slice(0, 10).map((r: any) => (
               <tr key={r.symbol} className="border-t border-border">
                 <td className="py-1.5 text-muted">{r.rank}</td><td>{r.symbol}</td>
+                <td className="text-muted font-sans text-xs">{r.sector}</td>
                 <td className="text-right">{r.score.toFixed(3)}</td>
+                <td className="text-right" style={{ color: r.ml_score == null ? "#9aa1ab" : r.ml_score >= 0.5 ? "#22c55e" : "#f43f5e" }}>
+                  {r.ml_score == null ? "—" : `${(r.ml_score * 100).toFixed(0)}%`}</td>
                 <td className="pl-4 text-muted font-sans">{r.reason}</td>
               </tr>
             ))}

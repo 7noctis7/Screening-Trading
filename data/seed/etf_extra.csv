@@ -1,0 +1,11 @@
+symbol,name,asset_class,venue,currency,category
+IBIT,,etf,ARCA,USD,
+NDX,,etf,ARCA,USD,
+SPY,,etf,ARCA,USD,
+ARKG,,etf,ARCA,USD,
+TLT,,etf,ARCA,USD,
+PSP,,etf,ARCA,USD,
+PEX,,etf,ARCA,USD,
+BIZD,,etf,ARCA,USD,
+XOVR,,etf,ARCA,USD,
+IPO,,etf,ARCA,USD,

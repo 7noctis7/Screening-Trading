@@ -24,6 +24,11 @@ htmlcov/
 *.parquet
 *.duckdb
 
+# Node / Next.js
+node_modules/
+.next/
+apps/web/package-lock.json
+
 # OS
 .DS_Store
 *~

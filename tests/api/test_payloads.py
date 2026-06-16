@@ -45,3 +45,21 @@ def test_screener_payload_shape():
 def test_metrics_payload_json():
     p = PL.metrics_payload([100, 101, 102, 101, 103])
     assert "sharpe" in p and json.dumps(p)   # sérialisable
+
+
+def test_trade_stats_payload():
+    trades = [
+        SimpleNamespace(pnl_net=100.0, pnl_pct=0.10),
+        SimpleNamespace(pnl_net=-50.0, pnl_pct=-0.05),
+        SimpleNamespace(pnl_net=200.0, pnl_pct=0.20),
+        SimpleNamespace(pnl_net=None, pnl_pct=None),   # trade ouvert : ignoré
+    ]
+    st = PL.trade_stats_payload(trades)
+    assert st["count"] == 3 and st["wins"] == 2 and st["losses"] == 1
+    assert st["pnl_total"] == 250.0
+    assert st["profit_factor"] == 6.0   # 300 gains / 50 pertes
+    assert st["best"] == 200.0 and st["worst"] == -50.0
+
+
+def test_trade_stats_payload_empty():
+    assert PL.trade_stats_payload([]) == {"count": 0}
