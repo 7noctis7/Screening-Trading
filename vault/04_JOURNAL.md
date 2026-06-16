@@ -208,3 +208,11 @@ pour entamer l'implémentation des modules métier.
 **Décidé.** ADR-0021 (excellence opérationnelle).
 
 **Reste roadmap.** Écran backtest + WebSocket live · live réel (feu vert) · allocation PyPortfolioOpt · international macro (FMI/OCDE).
+
+## Session 14 — Front interactif (hover/tooltips) + procédure de test
+**Fait.**
+- **Aperçu interactif autonome** (`apps/web/preview/build_interactive.py` → `interactive.html`) : onglets, courbe d'equity avec crosshair+tooltip au survol, compteurs animés, screener cliquable (barres de facteurs), heatmap de corrélation au survol. Un seul fichier, aucune install.
+- **EquityChart** Recharts (tooltip/crosshair) branché au dashboard Next.js → vrai site interactif.
+- `scripts/check_all.sh` (tests+démos+aperçus) et `TESTING.md` (procédure de test pas-à-pas).
+
+**Note.** Les aperçus *statiques* (dashboard/portfolio.html) restent non interactifs (SVG serveur) ; `interactive.html` et le front Next.js portent l'interactivité.

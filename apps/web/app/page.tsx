@@ -2,6 +2,7 @@
 import { useDashboard, useScreener } from "@/lib/api";
 import { MetricCard } from "@/components/MetricCard";
 import { RegimeBanner } from "@/components/RegimeBanner";
+import { EquityChart } from "@/components/EquityChart";
 
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 
@@ -20,6 +21,7 @@ export default function Dashboard() {
         <MetricCard label="Sortino" value={m.sortino?.toFixed(2)} />
         <MetricCard label="Max DD" value={pct(m.max_drawdown)} tone="neg" />
       </div>
+      <EquityChart series={d.equity} />
       <section className="card p-4">
         <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Top screener</h2>
         <table className="w-full text-sm">
