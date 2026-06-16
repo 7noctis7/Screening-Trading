@@ -136,7 +136,8 @@ ul{margin:4px 0 0;padding-left:18px;font-size:13px}li{margin:3px 0}
 <div class="tab" data-p="data" role="tab" tabindex="0" aria-selected="false">Données</div>
 <div class="tab" data-p="pf" role="tab" tabindex="0" aria-selected="false">Portefeuille &amp; Analyse</div>
 <div class="tab" data-p="pos" role="tab" tabindex="0" aria-selected="false">Positions</div>
-<div class="tab" data-p="trades" role="tab" tabindex="0" aria-selected="false">Trades</div></div>
+<div class="tab" data-p="trades" role="tab" tabindex="0" aria-selected="false">Trades</div>
+<div class="tab" data-p="live" role="tab" tabindex="0" aria-selected="false">Portefeuille réel</div></div>
 
 <div class="page active" id="dash"></div>
 <div class="page" id="themes"></div>
@@ -146,6 +147,7 @@ ul{margin:4px 0 0;padding-left:18px;font-size:13px}li{margin:3px 0}
 <div class="page" id="pf"></div>
 <div class="page" id="pos"></div>
 <div class="page" id="trades"></div>
+<div class="page" id="live"></div>
 </div>
 <script>const DATA = __DATA__;</script>
 <script>
@@ -191,7 +193,8 @@ TABS.forEach((t,i)=>{
 // ---- bandeau "données au…" injecté en tête de CHAQUE onglet ----
 const SECTION_ASOF={dash:(DATA.dashboard||{}).as_of,themes:(DATA.themes||{}).as_of,
   ml:(DATA.dashboard||{}).as_of,uni:(DATA.universe||{}).as_of,data:(DATA.data||{}).as_of,
-  pf:(DATA.dashboard||{}).as_of,pos:(DATA.dashboard||{}).as_of,trades:(DATA.dashboard||{}).as_of};
+  pf:(DATA.dashboard||{}).as_of,pos:(DATA.dashboard||{}).as_of,trades:(DATA.dashboard||{}).as_of,
+  live:(DATA.dashboard||{}).as_of};
 function freshnessChip(pageId){
   const M=DATA.meta||{},asof=SECTION_ASOF[pageId]||M.last_bar;
   return $(`<div class="asof">⟳ Données au <b>${fmtTS(asof)}</b> · différé ${M.delay_minutes||15} min · snapshot généré ${fmtTS(M.generated_at)} · mode <b>${M.mode||'synthetic'}</b></div>`);
@@ -272,12 +275,25 @@ function lineChart(series,labels,title){
  try{
   const d=DATA.dashboard,m=d.metrics,p=document.getElementById('dash');
   const c=CYC[d.regime.cycle]||'#9aa1ab';
+  const vp=d.vix_playbook||{regime:'',color:'#9aa1ad',exposure:1,action:''};
   p.appendChild($(`<div class="card banner">
     <div><span class="dot" style="background:${c}"></span>
     <b style="text-transform:capitalize">${d.regime.cycle}</b>
     <span style="color:var(--muted)">· ${d.regime.risk_mode}</span></div>
     <div class="mono" style="color:var(--muted);font-size:13px">
-    courbe 2s10s ${d.regime.extras.curve_2s10s} · VIX ${(d.regime.vix||0).toFixed(0)} · exposition ×${d.regime.exposure_multiplier}</div></div>`));
+    courbe 2s10s ${d.regime.extras.curve_2s10s} · VIX ${(d.vix||0).toFixed(1)} · exposition ×${vp.exposure}</div></div>`));
+  // Playbook volatilité (VIX) — règles d'exposition
+  p.appendChild($(`<div class="card" style="border-color:${vp.color}40">
+    <div class="banner" style="margin-bottom:6px">
+      <div class="label">Playbook volatilité — VIX <b style="color:${vp.color};font-size:14px">${(d.vix||0).toFixed(1)}</b>
+        <span class="pill" style="color:${vp.color};margin-left:6px">${vp.regime}</span></div>
+      <div style="font-size:11px;color:var(--muted)">exposition pilotée <b style="color:var(--fg)">×${vp.exposure}</b></div></div>
+    <div style="font-size:12.5px;color:var(--muted)">${vp.action}</div>
+    <div style="display:flex;gap:4px;margin-top:8px;font-size:10px">
+      <span class="pill" style="color:#22c55e">&lt;13 risk-on ×1.2</span>
+      <span class="pill" style="color:#3b82f6">13–20 neutre</span>
+      <span class="pill" style="color:#f59e0b">20–30 réduit</span>
+      <span class="pill" style="color:#f43f5e">&gt;30 défensif ×0.3</span></div></div>`));
   const g=$('<div class="grid4"></div>');
   const cards=[['Rendement',m.total_return,'%',m.total_return>=0?'pos':'neg'],
     ['Sharpe',m.sharpe,'',''],['Sortino',m.sortino,'',''],['Max DD',m.max_drawdown,'%','neg']];
@@ -294,10 +310,11 @@ function lineChart(series,labels,title){
   p.appendChild(lineChart(ser,d.dates,'Performance — Portefeuille vs benchmarks (rebasé 100)'));
   const MZ=DATA.meta||{};
   p.appendChild($(`<div style="font-size:11px;color:var(--muted);margin-top:-6px">
-    ⓘ Backtest <b style="color:var(--fg)">swing</b> sur <b style="color:var(--fg)">${MZ.traded_assets||MZ.universe_size||0} actifs</b>
-    de l'univers (${MZ.universe_size||0} suivis), du ${fmtTS(MZ.period_start).slice(0,10)} au ${fmtTS(MZ.last_bar).slice(0,10)} ·
-    ${(MZ.n_trades||0).toLocaleString('fr-FR')} trades · régime <b style="text-transform:capitalize;color:var(--fg)">${d.regime.cycle}</b>
-    → exposition pilotée ×${d.regime.exposure_multiplier}.</div>`));
+    ⓘ Capital initial <b style="color:var(--fg)">${(MZ.initial_capital||10000).toLocaleString('fr-FR')} \$</b> alloué aux
+    <b style="color:var(--fg)">meilleurs setups</b> (tri par force relative, exposition pilotée par le VIX) sur
+    <b style="color:var(--fg)">${MZ.traded_assets||0} actifs</b> de l'univers (${MZ.universe_size||0} suivis),
+    du ${fmtTS(MZ.period_start).slice(0,10)} au ${fmtTS(MZ.last_bar).slice(0,10)} · ${(MZ.n_trades||0).toLocaleString('fr-FR')} trades.
+    Profil <b style="color:var(--fg)">${MZ.profile||''}</b> — objectif : surperformer l'univers équipondéré.</div>`));
   // screener cliquable — table construite en UNE chaîne HTML complète (sinon les <tr> isolés sont supprimés par le navigateur)
   const sc=DATA.screener;
   let rowsHtml='';
@@ -348,26 +365,40 @@ function lineChart(series,labels,title){
       <div><div style="color:var(--muted);font-size:12px">Vol</div><div style="font-size:18px">${pct(rm.vol)}</div></div>
       <div><div style="color:var(--muted);font-size:12px">Proba ruine (MC)</div><div style="font-size:18px">${pct(a.monte_carlo.p_ruin)}</div></div>
       </div></div></div>`));
-  // projection Monte Carlo (éventail des trajectoires futures, base 100)
+  // projection Monte-Carlo INTERACTIVE (survol = percentiles à l'horizon pointé)
   const mp=a.mc_projection;
   if(mp&&mp.steps&&mp.steps.length){
-    const W=860,H=200,padL=44,padR=64,padT=10,padB=22,m=mp.steps.length;
+    const W=860,H=210,padL=46,padR=70,padT=10,padB=22,m=mp.steps.length;
     const all=mp.p5.concat(mp.p95),lo=Math.min(...all,100),hi=Math.max(...all),rng=(hi-lo)||1;
     const X=i=>padL+i*(W-padL-padR)/(m-1),Y=v=>(H-padB)-(v-lo)/rng*((H-padB)-padT);
     const band=mp.p95.map((v,i)=>X(i).toFixed(1)+','+Y(v).toFixed(1)).join(' ')+' '+
       mp.p5.map((v,i)=>X(m-1-i).toFixed(1)+','+Y(mp.p5[m-1-i]).toFixed(1)).join(' ');
+    const band2=mp.p75.map((v,i)=>X(i).toFixed(1)+','+Y(v).toFixed(1)).join(' ')+' '+
+      mp.p25.map((v,i)=>X(m-1-i).toFixed(1)+','+Y(mp.p25[m-1-i]).toFixed(1)).join(' ');
     const line=(arr,c,w)=>`<polyline points="${arr.map((v,i)=>X(i).toFixed(1)+','+Y(v).toFixed(1)).join(' ')}" fill="none" stroke="${c}" stroke-width="${w}"/>`;
     let yA='';for(let k=0;k<4;k++){const v=lo+k/3*(hi-lo),y=Y(v);yA+=`<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="1"/><text x="${padL-6}" y="${(y+3).toFixed(1)}" fill="var(--muted)" font-size="10" text-anchor="end">${v.toFixed(0)}</text>`;}
-    const endL=[['p95',mp.p95,'#22c55e'],['médiane',mp.p50,'#3b82f6'],['p5',mp.p5,'#f43f5e']]
-      .map(([n,arr,c])=>`<text x="${W-padR+5}" y="${(Y(arr[m-1])+3).toFixed(1)}" fill="${c}" font-size="11" font-weight="600">${arr[m-1].toFixed(0)}</text>`).join('');
-    p.appendChild($(`<div class="card"><div class="banner" style="margin-bottom:8px">
-      <div class="label">Projection Monte-Carlo — éventail à 1 an (base 100, ${mp.horizon} j ouvrés)</div>
-      <div style="font-size:11px;color:var(--muted)">médiane <b style="color:var(--fg)">${mp.final_p50}</b> · p5 <b style="color:#f43f5e">${mp.final_p5}</b> · p95 <b style="color:#22c55e">${mp.final_p95}</b></div></div>
+    const endL=[['p95',mp.p95,'#22c55e'],['méd.',mp.p50,'#3b82f6'],['p5',mp.p5,'#f43f5e']]
+      .map(([nm,arr,c])=>`<text x="${W-padR+5}" y="${(Y(arr[m-1])+3).toFixed(1)}" fill="${c}" font-size="11" font-weight="600">${arr[m-1].toFixed(0)}</text>`).join('');
+    const card=$(`<div class="card chartWrap"><div class="banner" style="margin-bottom:8px">
+      <div class="label">Projection Monte-Carlo — éventail à 1 an (base 100, ${mp.horizon} j ouvrés · survole)</div>
+      <div style="font-size:11px;color:var(--muted)">médiane <b style="color:#3b82f6">${mp.final_p50}</b> · p5 <b style="color:#f43f5e">${mp.final_p5}</b> · p95 <b style="color:#22c55e">${mp.final_p95}</b></div></div>
       <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="overflow:visible">
-        ${yA}<polygon points="${band}" fill="#3b82f6" fill-opacity="0.14"/>
-        ${line(mp.p25,'#3b82f6',0.8)}${line(mp.p75,'#3b82f6',0.8)}${line(mp.p50,'#3b82f6',2)}${endL}
-      </svg>
-      <div style="font-size:11px;color:var(--muted);margin-top:6px">Rééchantillonnage bootstrap des rendements réalisés (1000 trajectoires) → cône d'incertitude de la valeur future du portefeuille.</div></div>`));
+        ${yA}<polygon points="${band}" fill="#3b82f6" fill-opacity="0.10"/><polygon points="${band2}" fill="#3b82f6" fill-opacity="0.16"/>
+        ${line(mp.p25,'#3b82f6',0.7)}${line(mp.p75,'#3b82f6',0.7)}${line(mp.p50,'#3b82f6',2)}${endL}
+        <line class="mcx" x1="0" y1="${padT}" x2="0" y2="${H-padB}" stroke="#5b6675" stroke-width="1" opacity="0"/>
+        <rect class="mov" x="0" y="0" width="${W}" height="${H}" fill="transparent" style="cursor:crosshair"/>
+      </svg><div class="tip mctip"></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5">
+        <b style="color:var(--fg)">Comment lire</b> : 1000 futurs simulés par rééchantillonnage des rendements passés (base 100 = aujourd'hui).
+        La <b style="color:#3b82f6">médiane</b> est le scénario central ; la bande foncée = 50 % des cas (p25–p75), la claire = 90 % (p5–p95).
+        Ex. à 1 an : la moitié des trajectoires finissent au-dessus de <b>${mp.final_p50}</b> ; il n'y a ~5 % de chance de faire pire que <b style="color:#f43f5e">${mp.final_p5}</b> ou mieux que <b style="color:#22c55e">${mp.final_p95}</b>. Plus le cône est large, plus l'incertitude est grande.</div></div>`);
+    p.appendChild(card);
+    setTimeout(()=>{const svg=card.querySelector('svg'),ov=card.querySelector('.mov'),cx=card.querySelector('.mcx'),tip=card.querySelector('.mctip');
+      ov.addEventListener('pointermove',e=>{const r=svg.getBoundingClientRect();let i=Math.round(((e.clientX-r.left)/r.width*W-padL)/((W-padL-padR)/(m-1)));i=Math.max(0,Math.min(m-1,i));
+        const x=X(i),px=x/W*r.width,flip=px>r.width*0.62;cx.setAttribute('x1',x);cx.setAttribute('x2',x);cx.setAttribute('opacity','.55');
+        tip.style.opacity=1;tip.style.top='8px';tip.style.left=(flip?Math.max(6,px-tip.offsetWidth-14):px+14)+'px';
+        tip.innerHTML=`<b>Horizon J+${mp.steps[i]}</b><br><span style="color:#22c55e">p95</span> ${mp.p95[i]}<br><span style="color:#3b82f6">médiane</span> ${mp.p50[i]}<br><span style="color:#f43f5e">p5</span> ${mp.p5[i]}`;});
+      ov.addEventListener('pointerleave',()=>{cx.setAttribute('opacity','0');tip.style.opacity=0;});},60);
   }
   // heatmap interactive — table construite en UNE chaîne HTML complète
   const co=a.correlation;
@@ -673,8 +704,47 @@ const heatColor=(v,m)=>{const t=Math.max(-1,Math.min(1,v/m));
  }catch(e){console.error('rendu ml:',e);}
 })();
 
+// ---- PORTEFEUILLE RÉEL (connexion brokers Alpaca / Bitmart) ----
+(function(){
+ try{
+  const L=DATA.live,p=document.getElementById('live');if(!L)return;
+  const dot=L.connected?'#22c55e':'#f59e0b';
+  p.appendChild($(`<div class="card banner">
+    <div><span class="dot" style="background:${dot}"></span>
+      <b>${L.connected?'Connecté':'Non connecté'}</b>
+      <span style="color:var(--muted)">· mode <b style="color:var(--fg)">${L.mode}</b> (paper par défaut, jamais d'ordre réel non confirmé)</span></div>
+    <div style="font-size:11px;color:var(--muted)">${L.target_orders.length} ordres cibles à répliquer</div></div>`));
+  // brokers
+  const bc=$(`<div class="grid2"></div>`);
+  L.brokers.forEach(b=>bc.appendChild($(`<div class="card">
+    <div class="banner" style="margin-bottom:6px"><div class="label">${b.name}</div>
+      <span class="pill" style="color:${b.connected?'#22c55e':'#f59e0b'}">${b.connected?'connecté':'à connecter'}</span></div>
+    <div style="font-size:12px;color:var(--muted)">${b.scope} · ${b.paper?'paper':'live'}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:8px">Clés requises : ${b.env.map(e=>'<span class="pill" style="margin-right:4px">'+e+'</span>').join('')}</div></div>`)));
+  p.appendChild(bc);
+  // ordres cibles (portefeuille modèle à répliquer)
+  const oc=$(`<div class="card"><div class="label" style="margin-bottom:10px">Ordres cibles — portefeuille modèle (${L.target_orders.length})</div></div>`);
+  if(!L.target_orders.length){oc.appendChild($('<p style="color:var(--muted);font-size:13px">Aucune position ouverte à répliquer.</p>'));}
+  else{
+    const rows=L.target_orders.map(o=>`<tr><td><b>${o.symbol}</b></td><td>${o.side}</td>
+      <td style="color:var(--muted)">${o.asset_class}</td>
+      <td><span class="pill">${o.broker}</span></td>
+      <td class="mono" style="text-align:right">${eur(o.weight_value)} \$</td></tr>`);
+    oc.appendChild(mkTable('<th>Actif</th><th>Sens</th><th>Classe</th><th>Broker</th><th style="text-align:right">Montant cible</th>',rows));
+  }
+  p.appendChild(oc);
+  p.appendChild($(`<div class="card" style="border-color:var(--border2)">
+    <div class="label" style="margin-bottom:6px">Brancher le robot</div>
+    <div style="font-size:12px;color:var(--muted);line-height:1.6">
+    1. Définir les clés API en variables d'environnement (Alpaca pour actions/ETF, Bitmart pour crypto).<br>
+    2. Démarrer en <b style="color:var(--fg)">paper trading</b> : le robot réplique les ordres cibles ci-dessus.<br>
+    3. Vérifier l'exécution, le slippage et la réconciliation, PUIS activer le live avec garde-fous risque (kill-switch drawdown).<br>
+    <i>${L.note}</i></div></div>`));
+ }catch(e){console.error('rendu live:',e);}
+})();
+
 // ---- bandeau "données au…" en tête de chaque onglet + ouverture sur le 1er ----
-['dash','themes','ml','uni','data','pf','pos','trades'].forEach(id=>{
+['dash','themes','ml','uni','data','pf','pos','trades','live'].forEach(id=>{
   const pg=document.getElementById(id);if(pg)pg.insertBefore(freshnessChip(id),pg.firstChild);
 });
 </script></body></html>"""

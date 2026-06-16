@@ -1,50 +1,123 @@
-# Système de screening & trading systématique multi-actifs
+# Quant Terminal — Screening & Trading systématique multi-actifs
 
-Plateforme open-source de **screening** et de **trading systématique** (actions, ETF, forex,
-crypto, commodities, indices), de niveau institutionnel. Priorités : **robustesse &
-reproductibilité > maintenabilité > gestion du risque > alpha > produit**.
-Architecture en plugins (« ajouter un fichier, jamais toucher au cœur »), config-driven (YAML),
-**point-in-time partout** (anti-fuite du futur). **Paper trading par défaut.**
+Plateforme **open-source** de **screening** et de **trading systématique** (actions, ETF, forex,
+crypto, commodités, indices) de niveau institutionnel, avec un **terminal web premium** (style
+hedge-fund). Priorités : **robustesse & reproductibilité > maintenabilité > gestion du risque >
+alpha > produit**. Architecture en **plugins** (« ajouter un fichier, jamais toucher au cœur »),
+**config-driven** (YAML), **point-in-time partout** (anti-fuite du futur). **Paper trading par défaut.**
 
 > ⚠️ Aide à la décision — **pas un conseil en investissement**. Risque de perte en capital.
 
-## Installation
-Voir **[INSTALL.md](INSTALL.md)**. Démarrage rapide :
+---
+
+## ✨ Le terminal en un coup d'œil
+
+9 fenêtres : **Dashboard** (perf vs benchmarks, régime, playbook VIX, screener+ML) ·
+**Thèmes de marché** (heatmap YTD par secteur 4ᵉ révolution industrielle) · **Signaux ML** ·
+**Univers** (929 actifs, recherche/filtres) · **Données** (collecte, qualité, base) ·
+**Portefeuille & Analyse** (mesures relatives, risque FRM, **Monte-Carlo interactif**, corrélation,
+revue experte) · **Positions** · **Trades** · **Portefeuille réel** (connexion Alpaca/Bitmart).
+
+- **Capital fictif 10 000 $** alloué aux **meilleurs setups** (force relative), exposition
+  **pilotée par le VIX**, objectif : **surperformer l'univers équipondéré**.
+- **Données réelles** branchables (yfinance / FMP / votre `YAHOO.db`) avec repli synthétique.
+- Une **preview autonome** `apps/web/preview/interactive.html` (un seul fichier, aucune install).
+
+```bash
+python apps/web/preview/build_interactive.py   # génère/ouvre la preview interactive
+```
+
+---
+
+## 🗺️ Architecture (cartographie)
+
+```mermaid
+flowchart TD
+  subgraph SRC["Sources de données"]
+    SEED["Seeds CSV (univers offline)"]; YF["yfinance / FMP"]; YAHOO["YAHOO.db (local, 4+ Go)"]; FRED["FRED / macro"]
+  end
+  subgraph CORE["packages/ — domaine (plugins)"]
+    UNIV["data.universe<br/>builder multi-sources"]
+    PROV["data.providers<br/>synthetic · yfinance · db"]
+    STORE["storage<br/>bronze/silver/gold · feature store · quality"]
+    IND["indicators"]; FUND["fundamentals"]; RANK["ranking (multi-facteur)"]
+    REG["regime (macro point-in-time)"]; STRAT["strategies (swing…)"]
+    SIZE["portfolio.sizing (vol-target)"]; RISK["risk (kill-switch)"]
+    BT["backtest (vectorisé fast_swing)"]; EXEC["execution (Sim · Alpaca paper)"]
+    ML["ml (CV purgée, triple-barrier)"]; PORT["portfolio (VaR/CVaR · Monte-Carlo · attribution · revue)"]
+  end
+  subgraph APP["apps/ — produit"]
+    SNAP["api.snapshot<br/>assemble tout l'état"]
+    API["api.main (FastAPI)<br/>/api/* + cache TTL 15min"]
+    WEB["web (Next.js)"]; PREV["preview/interactive.html"]
+  end
+  SEED --> UNIV; YF --> PROV; YAHOO --> PROV; FRED --> REG
+  UNIV --> SNAP; PROV --> STORE --> SNAP
+  IND & FUND --> RANK --> SNAP
+  REG --> STRAT --> BT --> SNAP
+  SIZE & RISK --> BT
+  ML --> SNAP; PORT --> SNAP; EXEC --> SNAP
+  SNAP --> API --> WEB
+  SNAP --> PREV
+```
+
+**Pipeline** : `données → (régime macro) → screening/ranking + ML → stratégie swing →
+sizing vol-target → risk engine (veto/kill-switch) → backtest vectorisé → portefeuille
+(perf, VaR/CVaR, Monte-Carlo) → API → terminal web`. Mêmes interfaces backtest ↔ paper ↔ live
+(parité). Diagrammes vivants : [`vault/01_ARCHITECTURE.md`](vault/01_ARCHITECTURE.md).
+
+| Dossier | Rôle |
+|---|---|
+| `packages/` | Cœur métier en plugins (indicateurs, stratégies, risque, ML, portefeuille…) |
+| `apps/api/` | FastAPI : `snapshot.py` assemble l'état, `main.py` expose `/api/*` (cache TTL 15 min) |
+| `apps/web/` | Front Next.js + **preview autonome** `interactive.html` |
+| `config/` | YAML (univers, facteurs, risque, macro…) |
+| `data/seed/` | Univers offline (CSV) · `scripts/` ETL & démos · `tests/` miroir · `vault/` mémoire |
+
+---
+
+## 🚀 Démarrage
+
 ```bash
 uv venv && source .venv/bin/activate
 uv pip install -e ".[dev,quant,ml,reporting]"
-pytest -q            # 154 tests
-make demos           # démos offline (données synthétiques)
+pytest -q
+# Terminal autonome (aucune API requise) :
+python apps/web/preview/build_interactive.py    # ouvre apps/web/preview/interactive.html
+# API + front :
+make api        # uvicorn apps.api.main:app --reload   (http://localhost:8000)
+make web        # cd apps/web && npm install && npm run dev (http://localhost:3000)
 ```
 
-## Ce qui est implémenté (13 sessions, 154 tests)
-| Domaine | Contenu |
-|---|---|
-| **Univers & données** | Builder mensuel multi-marchés source-driven (sans doublons) ; providers synthetic/yfinance/FMP via wrappers fallback/cache/rate-limit ; backend SQLite↔DuckDB pluggable |
-| **Stockage** | Medallion bronze/silver/gold ; feature store (anti training/serving skew) ; qualité bloquante (pandera-like) |
-| **Macro & régime** | **Point-in-time (vintages ALFRED)** : MacroStore `as_of`, surprises éco, cartographie macro→actifs, classifieur de cycle |
-| **Screening & ranking** | Indicateurs anti-look-ahead ; fondamental Vernimmen + valo Damodaran (sector-neutral) ; ranking multi-facteur explicable |
-| **Stratégies & risque** | Stratégies plugin (trend/momentum/range/breakout) ; sizing (fixed/vol-target/Kelly bridé) ; risk engine + R:R + **kill-switch** |
-| **Backtest & validation** | Moteur event-driven ; **walk-forward + deflated Sharpe** (anti-surapprentissage) |
-| **ML** | Triple-barrier + meta-labeling ; **CV purgée & embargo** ; frac-diff ; champion/challenger |
-| **Exécution** | SimBroker + **AlpacaBroker** (paper) ; **moteur live (parité backtest↔live)** ; retries idempotents ; réconciliation |
-| **Portefeuille** | Mesures relatives (alpha/beta/IR…) ; VaR/CVaR ; corrélation/clustering ; attribution ; stress/Monte Carlo ; **revue experte CFA/FRM/CPA/CAIA** |
-| **Alertes** | Multi-canal (Telegram/Discord/console), sévérité, throttle, handlers event-bus |
-| **Excellence op** | Drift PSI ; audit trail rejouable ; télémétrie ; backup/restore ; **tear sheets HTML/PDF** |
-| **API & front** | FastAPI (payloads testés) ; front Next.js (Dashboard, Portefeuille, Positions) ; aperçus HTML |
+## 📈 Brancher VOS données réelles (yfinance / FMP / YAHOO.db)
 
-## Architecture
-Monorepo : `packages/` (domaine, plugins) · `apps/` (api, web) · `config/` (YAML) · `tests/`
-(miroir) · `vault/` (mémoire Obsidian = source de vérité) · `scripts/` (démos, ETL).
-Diagrammes Mermaid vivants dans [`vault/01_ARCHITECTURE.md`](vault/01_ARCHITECTURE.md).
+Le projet utilise une **vraie base si elle existe**, sinon le synthétique (cf.
+[`docs/REAL_DATA.md`](docs/REAL_DATA.md)). Avec votre `YAHOO.db` (à garder hors Git) :
 
-## Données réelles
-Clés gratuites dans `.env` (FRED, FMP, Alpaca paper) puis `scripts/verify_real_data.py` /
-`scripts/verify_alpaca.py`. Voir INSTALL.md §6.
+```bash
+# ⚠️ deux commandes SÉPARÉES — remplacez le chemin par le vôtre :
+export QUANT_PRICE_DB="/Users/thierryfanlo/data/YAHOO.db"
+make api          # ou : python apps/web/preview/build_interactive.py
+```
 
-## Garde-fous
-Paper par défaut · aucun ordre réel sans feu vert explicite + capital plafonné + stops ·
-permissions API minimales (jamais retrait) · `.env` jamais committé · kill-switch testé.
+Mettre à jour la base chaque jour (append idempotent, jamais d'écrasement) :
+```bash
+python scripts/ingest_prices.py --since 2015-01-01   # backfill complet
+python scripts/ingest_prices.py --daily              # incrémental quotidien
+```
+
+**Depuis le téléphone** : lancez l'API sur le Mac en réseau local
+(`make api-lan` → `uvicorn … --host 0.0.0.0`), puis ouvrez `http://IP_DU_MAC:8000` /
+le front depuis le navigateur du téléphone (même Wi-Fi). Détails et cron : `docs/REAL_DATA.md`.
+
+## 🛡️ Garde-fous
+Paper par défaut · aucun ordre réel sans feu vert + capital plafonné + stops · permissions API
+minimales (jamais retrait) · `.env`/`*.db` jamais committés · kill-switch drawdown testé.
+
+## 🔭 Pistes d'amélioration & écosystème
+Voir [`docs/ROADMAP.md`](docs/ROADMAP.md) : moteur de backtest vectorisé (vectorbt/qlib),
+charts pro (lightweight-charts/TradingView), exécution crypto (ccxt), data (polygon/tiingo),
+features techniques (pandas-ta), PWA mobile, et durcissement MLOps.
 
 ## Licence
-À définir (MIT recommandé pour un usage personnel open-source).
+MIT recommandé (usage personnel open-source).

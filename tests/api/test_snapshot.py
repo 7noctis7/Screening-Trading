@@ -11,7 +11,8 @@ def _snap():
 def test_snapshot_keys_and_json():
     snap = _snap()
     assert set(snap) == {"meta", "dashboard", "screener", "portfolio", "trades",
-                         "open_trades", "trade_stats", "universe", "data", "themes", "ml"}
+                         "open_trades", "trade_stats", "universe", "data", "themes", "ml", "live"}
+    assert snap["meta"]["initial_capital"] == 10_000
     assert "regime" in snap["dashboard"] and "metrics" in snap["dashboard"]
     assert "benchmarks" in snap["portfolio"]
     # méta : fraîcheur + délai différé
@@ -86,3 +87,22 @@ def test_positions_linked_to_sector_and_ml():
     assert ml["available"] and ml["n_train"] > 1000 and ml["top_conviction"]
     # score ML propagé au screener
     assert any(r.get("ml_score") is not None for r in snap["screener"]["rows"])
+
+
+def test_vix_playbook_and_live():
+    snap = _snap()
+    d = snap["dashboard"]
+    assert d["vix"] > 0 and d["vix_playbook"]["regime"] in {"calme", "normal", "tendu", "panique"}
+    assert d["vix_playbook"]["exposure"] in {1.2, 1.0, 0.6, 0.3}
+    live = snap["live"]
+    assert {b["name"] for b in live["brokers"]} == {"Alpaca", "Bitmart"}
+    assert live["mode"] == "paper" and live["connected"] is False   # pas de clés → non connecté
+    # projection Monte-Carlo : bandes de percentiles ordonnées
+    mp = snap["portfolio"]["analysis"]["mc_projection"]
+    assert mp["final_p5"] <= mp["final_p50"] <= mp["final_p95"]
+
+
+def test_strategy_beats_equal_weight_benchmark():
+    """Profil offensif : le portefeuille bat l'univers équipondéré (buy & hold)."""
+    b = _snap()["portfolio"]["benchmarks"]
+    assert b["portfolio"][-1] > b["Univers (équipondéré)"][-1]

@@ -28,13 +28,26 @@ def _isnan(v) -> bool:
     return v != v
 
 
+def vix_exposure(v: float) -> float:
+    """Multiplicateur d'exposition piloté par le VIX (playbook volatilité).
+    VIX < 13 → risk-on (+20%) · 13–20 → neutre · 20–30 → on réduit · > 30 → défensif (coupe le levier)."""
+    if v < 13:
+        return 1.2
+    if v < 20:
+        return 1.0
+    if v < 30:
+        return 0.6
+    return 0.3
+
+
 def fast_swing_backtest(
     data: dict[str, list], *, cash: float = 100_000.0, costs: CostModel | None = None,
     asset_classes: dict[str, str] | None = None, target_annual_vol: float = 0.20,
     max_capital_frac: float = 0.10, max_positions: int = 20, max_pct: float = 0.10,
     trend: int = 50, slope_lookback: int = 5, rsi_period: int = 14, pullback: float = 45.0,
     exit_level: float = 68.0, atr_period: int = 14, atr_stop: float = 2.5, rr: float = 3.0,
-    close_at_end: bool = True,
+    close_at_end: bool = True, vix: list | None = None, exit_trend: int = 100,
+    rs_lookback: int = 126,
 ):
     """Retourne (broker, journal, equity_curve, timestamps).
 
@@ -47,10 +60,11 @@ def fast_swing_backtest(
     if not symbols:
         return SimBroker(cash=cash, costs=costs), TradeJournal(), [], []
     n = max(len(b) for b in data.values())
-    # 1) indicateurs précalculés UNE fois par actif
-    sma, rsi, atr = {}, {}, {}
+    # 1) indicateurs précalculés UNE fois par actif (MM entrée + MM longue de sortie)
+    sma, sma_x, rsi, atr = {}, {}, {}, {}
     for s in symbols:
         sma[s] = SMA(trend).compute(data[s])
+        sma_x[s] = SMA(exit_trend).compute(data[s])
         rsi[s] = RSI(rsi_period).compute(data[s])
         atr[s] = ATR(atr_period).compute(data[s])
     broker = SimBroker(cash=cash, costs=costs)
@@ -78,46 +92,66 @@ def fast_swing_backtest(
             elif ot["target"] is not None and bar.high >= ot["target"]:
                 exit_px, exit_reason = ot["target"], "target_hit"
             else:
-                r0, r1, sm = rsi[s][t - 1], rsi[s][t], sma[s][t]
-                if not (_isnan(r0) or _isnan(r1) or _isnan(sm)) and \
-                        ((r0 >= exit_level > r1) or bar.close < sm):
-                    exit_px, exit_reason = bar.close, "RSI haut / cassure tendance"
+                smx = sma_x[s][t]                            # on laisse courir : sortie SEULEMENT
+                if not _isnan(smx) and bar.close < smx:      # sur cassure de la MM longue
+                    exit_px, exit_reason = bar.close, "cassure tendance (MM longue)"
             if exit_px is not None:
                 tid += 1
                 _close(broker, journal, s, ot, exit_px, bar.ts, exit_reason, costs, tid,
                        _AC.get(acmap.get(s, "equity"), AssetClass.EQUITY))
                 del open_t[s]
-        for s in symbols:                                   # entrées
-            if s in open_t:
-                continue
-            if len(open_t) >= max_positions:
-                break
-            b = data[s]
-            if t >= len(b) or t < slope_lookback + 1:
-                continue
-            j = t - slope_lookback
-            sm, smj, r0, r1, a = sma[s][t], sma[s][j], rsi[s][t - 1], rsi[s][t], atr[s][t]
-            if any(_isnan(v) for v in (sm, smj, r0, r1, a)):
-                continue
-            bar = b[t]
-            price = bar.close
-            if not (price > sm and sm > smj and r0 < pullback <= r1):  # tendance + repli
-                continue
-            inst_vol = (a / price) * math.sqrt(252) if price > 0 else 0.0
-            if inst_vol <= 0:
-                continue
-            qty = broker.equity() * min(frac_cap, target_annual_vol / inst_vol) / price
-            if qty <= 0:
-                continue
-            before = broker.position(s)
-            broker.submit(Order(s, Side.LONG, qty, OrderType.MARKET, limit_price=price))
-            pos = broker.position(s)
-            if pos is None or pos is before:
-                continue
-            open_t[s] = {"entry_price": pos.avg_price, "qty": qty, "entry_ts": bar.ts,
-                         "stop": price - atr_stop * a, "target": price + rr * atr_stop * a,
-                         "reason": "pullback en tendance", "mfe": 0.0, "mae": 0.0,
-                         "features": {"sma": sm, "rsi": r1, "atr": a, "ref_price": price}}
+        # ENTRÉES : on collecte les candidats éligibles, on les classe par CONVICTION
+        # (force de tendance + momentum), puis on alloue le cash disponible aux MEILLEURS.
+        if len(open_t) < max_positions:
+            vmult = vix_exposure(vix[t]) if vix and t < len(vix) else 1.0
+            cands = []
+            for s in symbols:
+                if s in open_t:
+                    continue
+                b = data[s]
+                if t >= len(b) or t < slope_lookback + 1:
+                    continue
+                j = t - slope_lookback
+                sm, smj, r0, r1, a = sma[s][t], sma[s][j], rsi[s][t - 1], rsi[s][t], atr[s][t]
+                if any(_isnan(v) for v in (sm, smj, r0, r1, a)):
+                    continue
+                price = b[t].close
+                if not (price > sm and sm > smj and r0 < pullback <= r1):   # tendance + repli
+                    continue
+                # conviction = FORCE RELATIVE 6 mois (capte la tendance/drift → surpondère les
+                # leaders) + prime de tendance ; classe les meilleures opportunités.
+                rs = price / b[t - rs_lookback].close - 1.0 if t >= rs_lookback else price / sm - 1.0
+                conviction = rs + 0.5 * (price / sm - 1.0)
+                cands.append((conviction, s, price, a, sm))
+            cands.sort(key=lambda c: c[0], reverse=True)
+            eq = broker.equity()
+            # exposition brute cible pilotée par le VIX (≤ ×1.2 en marché calme, < ×1 en stress)
+            allowed_gross = eq * vmult
+            gross = sum(ot["qty"] * data[sx][min(t, len(data[sx]) - 1)].close
+                        for sx, ot in open_t.items())
+            for _conv, s, price, a, sm in cands:
+                if len(open_t) >= max_positions:
+                    break
+                room = allowed_gross - gross
+                if room < eq * 0.02:                        # plus de marge d'exposition
+                    break
+                inst_vol = (a / price) * math.sqrt(252) if price > 0 else 0.0
+                if inst_vol <= 0:
+                    continue
+                qty = min(eq * min(frac_cap, target_annual_vol / inst_vol), room) / price
+                if qty * price < eq * 0.01:                 # ligne trop petite → on saute
+                    continue
+                before = broker.position(s)
+                broker.submit(Order(s, Side.LONG, qty, OrderType.MARKET, limit_price=price))
+                pos = broker.position(s)
+                if pos is None or pos is before:
+                    continue
+                gross += qty * price                        # consomme la marge d'exposition
+                open_t[s] = {"entry_price": pos.avg_price, "qty": qty, "entry_ts": data[s][t].ts,
+                             "stop": price - atr_stop * a, "target": price + rr * atr_stop * a,
+                             "reason": "pullback en tendance (top conviction)", "mfe": 0.0, "mae": 0.0,
+                             "features": {"sma": sm, "rsi": rsi[s][t], "atr": a, "ref_price": price,
+                                          "conviction": round(_conv, 4)}}
         equity.append(broker.equity())
         ts.append(data[ref][min(t, len(data[ref]) - 1)].ts)
     if close_at_end:                                        # clôture en fin de backtest

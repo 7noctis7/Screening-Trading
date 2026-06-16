@@ -87,3 +87,8 @@ def themes() -> dict:
 @app.get("/api/ml")
 def ml() -> dict:
     return _snap()["ml"]
+
+
+@app.get("/api/live")
+def live() -> dict:
+    return _snap()["live"]

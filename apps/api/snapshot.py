@@ -258,6 +258,61 @@ def _data_section(data: dict, acmap: dict[str, str]) -> dict:
     }
 
 
+def _vix_series(n: int, seed: int = 0) -> list:
+    """Indice de volatilité (VIX) synthétique : retour à la moyenne ~16 + pics occasionnels.
+    Sert au playbook volatilité et à la modulation d'exposition du backtest."""
+    import numpy as np
+    rng = np.random.default_rng(seed + 99)
+    v = [16.0]
+    for _ in range(1, n):
+        x = v[-1] + 0.05 * (15.0 - v[-1]) + rng.normal(0, 1.1)
+        if rng.random() < 0.004:                 # pic de stress
+            x += rng.uniform(8, 22)
+        v.append(min(75.0, max(9.0, x)))
+    return [round(float(x), 2) for x in v]
+
+
+def _vix_playbook(v: float) -> dict:
+    if v < 13:
+        return {"regime": "calme", "color": "#22c55e", "exposure": 1.2,
+                "action": "Marché haussier calme : on pousse l'exposition, prises de profits partielles, protections (puts) peu chères à accumuler."}
+    if v < 20:
+        return {"regime": "normal", "color": "#3b82f6", "exposure": 1.0,
+                "action": "Volatilité normale : exposition cible, on suit les setups et la discipline de risque."}
+    if v < 30:
+        return {"regime": "tendu", "color": "#f59e0b", "exposure": 0.6,
+                "action": "Stress qui monte : on réduit le levier, on resserre les stops, on garde de la poudre sèche."}
+    return {"regime": "panique", "color": "#f43f5e", "exposure": 0.3,
+            "action": "Pic de peur : on coupe le levier (défensif). On prépare des achats sur les actions solides quand le VIX montre des signes de fatigue ; toute spéculation directe sur le VIX se solde vite."}
+
+
+def _live_section(positions: list, acmap: dict) -> dict:
+    """Portefeuille RÉEL : statut de connexion aux brokers (Alpaca actions, Bitmart crypto).
+    Non connecté tant que les clés API ne sont pas fournies → ordres « cibles » à répliquer."""
+    import os
+    alp = bool(os.environ.get("ALPACA_API_KEY") and os.environ.get("ALPACA_API_SECRET"))
+    bit = bool(os.environ.get("BITMART_API_KEY") and os.environ.get("BITMART_API_SECRET"))
+    targets = []
+    for p in positions:
+        is_crypto = acmap.get(p["symbol"]) == "crypto"
+        targets.append({"symbol": p["symbol"], "broker": "Bitmart" if is_crypto else "Alpaca",
+                        "asset_class": acmap.get(p["symbol"], ""), "weight_value": p["current_value"],
+                        "side": p["side"]})
+    return {
+        "connected": alp or bit,
+        "mode": "paper",                          # paper par défaut, JAMAIS d'ordre réel non confirmé
+        "brokers": [
+            {"name": "Alpaca", "scope": "Actions & ETF US", "connected": alp, "paper": True,
+             "env": ["ALPACA_API_KEY", "ALPACA_API_SECRET"]},
+            {"name": "Bitmart", "scope": "Crypto (paires /USDC)", "connected": bit, "paper": False,
+             "env": ["BITMART_API_KEY", "BITMART_API_SECRET"]},
+        ],
+        "target_orders": targets,
+        "note": "Brancher les clés API (variables d'environnement) puis valider en mode paper "
+                "avant tout ordre réel. Les ordres cibles répliquent le portefeuille modèle.",
+    }
+
+
 def _auc(scores, y) -> float | None:
     import numpy as np
     y = np.asarray(y, float)[np.argsort(scores)]
@@ -380,13 +435,15 @@ def build_snapshot(seed: int = 7) -> dict:
     # prix RÉELS (base locale) si disponibles, sinon synthétique sectorisé (cohérence secteurs)
     data, data_mode = _load_prices(instruments, sector_of, start, end, seed)
     n = max(len(b) for b in data.values())
+    vix = _vix_series(n, seed)                    # VIX (playbook volatilité + modulation)
 
-    # --- backtest swing VECTORISÉ sur TOUT l'univers (profil offensif, moyen-long terme,
-    # positions laissées ouvertes). Plus de capital/actif, plus de lignes, on laisse courir. ---
+    # --- backtest swing VECTORISÉ sur TOUT l'univers, capital fictif 10 000 $.
+    # Profil offensif moyen-long terme : on alloue le cash aux MEILLEURS setups (tri par
+    # conviction), exposition modulée par le VIX, positions laissées ouvertes. ---
     broker, journal, equity, ts_list = fast_swing_backtest(
-        data, cash=100_000, costs=CostModel(), asset_classes=acmap,
-        target_annual_vol=0.22, max_capital_frac=0.07, max_positions=20, max_pct=0.09,
-        atr_stop=3.0, rr=4.0, exit_level=78.0, close_at_end=False)
+        data, cash=10_000, costs=CostModel(), asset_classes=acmap,
+        target_annual_vol=0.30, max_capital_frac=0.15, max_positions=20, max_pct=0.20,
+        atr_stop=4.0, rr=6.0, vix=vix, close_at_end=False)
 
     # régime macro point-in-time (couvre toute la fenêtre)
     months = int(_HISTORY_DAYS / 30) + 4
@@ -446,6 +503,7 @@ def build_snapshot(seed: int = 7) -> dict:
         r["sector"] = sector_of.get(r["symbol"], "")
     now = datetime.now(timezone.utc)
     last_bar = ts_list[-1]
+    vix_now = vix[-1]
     return {
         "meta": {
             "generated_at": now.isoformat(),
@@ -454,6 +512,7 @@ def build_snapshot(seed: int = 7) -> dict:
             "delay_minutes": 15,                 # flux différé 15 min (EOD/synthétique)
             "mode": data_mode,
             "strategy": "swing",
+            "initial_capital": 10_000,
             "universe_size": len(symbols),
             "traded_assets": len({t.instrument for t in all_trades}),
             "n_trades": len(all_trades),
@@ -467,6 +526,8 @@ def build_snapshot(seed: int = 7) -> dict:
             "dates": dates,
             "positions": comp["rows"], "totals": comp["totals"],
             "trade_stats": trade_stats,
+            "vix": vix_now, "vix_playbook": _vix_playbook(vix_now),
+            "vix_series": vix[::max(1, n // 240)],   # sous-échantillonné pour le graphe
         },
         "screener": screener,
         "portfolio": {
@@ -488,6 +549,7 @@ def build_snapshot(seed: int = 7) -> dict:
         "data": _data_section(data, acmap),
         "themes": themes,
         "ml": ml,
+        "live": _live_section(comp["rows"], acmap),
     }
 
 
