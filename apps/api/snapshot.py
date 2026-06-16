@@ -286,7 +286,7 @@ def _vix_playbook(v: float) -> dict:
             "action": "Pic de peur : on coupe le levier (défensif). On prépare des achats sur les actions solides quand le VIX montre des signes de fatigue ; toute spéculation directe sur le VIX se solde vite."}
 
 
-def _live_section(positions: list, acmap: dict) -> dict:
+def _live_section(positions: list, acmap: dict, kpis: dict | None = None) -> dict:
     """Portefeuille RÉEL : statut de connexion aux brokers (Alpaca actions, Bitmart crypto).
     Non connecté tant que les clés API ne sont pas fournies → ordres « cibles » à répliquer."""
     import os
@@ -300,6 +300,7 @@ def _live_section(positions: list, acmap: dict) -> dict:
                         "side": p["side"]})
     return {
         "connected": alp or bit,
+        "portfolio": kpis or {},
         "mode": "paper",                          # paper par défaut, JAMAIS d'ordre réel non confirmé
         "brokers": [
             {"name": "Alpaca", "scope": "Actions & ETF US", "connected": alp, "paper": True,
@@ -380,13 +381,16 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
 
 
 def _price_db_path() -> "Path | None":
-    """Chemin d'une base de prix réelle, si fournie (env QUANT_PRICE_DB ou data/*.db)."""
+    """Chemin d'une base de prix réelle. Priorité : env QUANT_PRICE_DB, puis emplacements
+    usuels (data/, Bureau/Desktop) → branche automatiquement votre ~/Desktop/YAHOO.db."""
     import os
     env = os.environ.get("QUANT_PRICE_DB")
     if env and Path(env).exists():
         return Path(env)
-    for name in ("YAHOO.db", "market.db"):
-        p = ROOT / "data" / name
+    home = Path.home()
+    for p in (ROOT / "data" / "YAHOO.db", ROOT / "data" / "market.db",
+              home / "Desktop" / "YAHOO.db", home / "Bureau" / "YAHOO.db",
+              home / "Desktop" / "market.db"):
         if p.exists():
             return p
     return None
@@ -465,26 +469,20 @@ def build_snapshot(seed: int = 7) -> dict:
     bench_px = eqw
     benches = {"Univers (équipondéré)": eqw, "S&P 500": sp}
 
-    # --- analyse de portefeuille (mesures relatives, corrélation, risque, revue) ---
+    # --- analyse de portefeuille (mesures relatives, risque, thèmes, ML) ---
     rel = relative_metrics(equity, bench_px)
     rets = returns_from_equity(equity)
     rm = risk_metrics_fn(rets)
     mc = monte_carlo(rets, seed=1)
-    # corrélation sur les actifs les plus tradés (matrice lisible)
-    traded = [s for s, _ in _top_traded(journal, 8)] or symbols[:8]
-    rets_by = {s: returns_from_equity([b.close for b in data[s]]) for s in traded}
-    syms, corr = correlation_matrix({k: list(v) for k, v in rets_by.items()})
-    clusters = cluster(syms, corr, 0.7)
     all_trades = journal.all()
     attr = attribution.attribute(all_trades, "strategy")
     agg = {**PL.metrics_payload(equity), **rel, **rm, **mc}
-
-    # thèmes calculés depuis les MÊMES données (cohérence) + ML cross-section
-    themes = _themes_section(data, sector_of, end)
+    themes = _themes_section(data, sector_of, end)         # mêmes données (cohérence)
     stance_by = themes.get("stance_by_sector", {})
     ml = _ml_section(data, sector_of, names)
     ml_scores = ml.get("scores", {}) if ml.get("available") else {}
 
+    # SINGLE SOURCE OF TRUTH : les positions ouvertes pilotent positions/trades/corrélation/graphes
     marks = {s: data[s][-1].close for s in symbols}
     meta_pos = {s: {"asset_class": acmap.get(s), "name": names.get(s)} for s in symbols}
     comp = PL.composition_payload(broker.positions(), marks, meta_pos)
@@ -493,6 +491,19 @@ def build_snapshot(seed: int = 7) -> dict:
         r["sector"] = sec
         r["stance"] = stance_by.get(sec, "neutral")
         r["ml_score"] = ml_scores.get(r["symbol"])
+    held = [r["symbol"] for r in comp["rows"]]
+    # corrélation sur LES MÊMES actifs que les positions (cohérence inter-fenêtres)
+    corr_syms = held[:12] if len(held) >= 2 else [s for s, _ in _top_traded(journal, 8)] or symbols[:8]
+    rets_by = {s: returns_from_equity([b.close for b in data[s]]) for s in corr_syms}
+    syms, corr = correlation_matrix({k: list(v) for k, v in rets_by.items()})
+    clusters = cluster(syms, corr, 0.7)
+    # séries OHLC (≈9 mois) des positions ouvertes → graphique technique au clic
+    position_series = {}
+    for r in comp["rows"]:
+        bars = data[r["symbol"]][-190:]
+        position_series[r["symbol"]] = [
+            {"t": b.ts.isoformat()[:10], "o": round(b.open, 2), "h": round(b.high, 2),
+             "l": round(b.low, 2), "c": round(b.close, 2)} for b in bars]
     trade_stats = PL.trade_stats_payload(all_trades)
     # 300 trades les plus récents (couvre la récence + de nombreux actifs)
     recent = sorted(all_trades, key=lambda t: t.entry_ts, reverse=True)[:300]
@@ -504,6 +515,17 @@ def build_snapshot(seed: int = 7) -> dict:
     now = datetime.now(timezone.utc)
     last_bar = ts_list[-1]
     vix_now = vix[-1]
+    init_cap = 10_000
+    pf_value = round(equity[-1], 2)
+    pf_pnl = round(pf_value - init_cap, 2)
+    cash = round(pf_value - comp["totals"]["current_value"], 2)
+    portfolio_kpis = {
+        "value": pf_value, "initial": init_cap, "pnl_abs": pf_pnl,
+        "pnl_pct": round(pf_pnl / init_cap, 4), "cash": cash,
+        "invested": comp["totals"]["current_value"],
+        "exposure_pct": round(comp["totals"]["gross_exposure"] / pf_value, 4) if pf_value else 0.0,
+        "n_positions": len(comp["rows"]),
+    }
     return {
         "meta": {
             "generated_at": now.isoformat(),
@@ -512,7 +534,7 @@ def build_snapshot(seed: int = 7) -> dict:
             "delay_minutes": 15,                 # flux différé 15 min (EOD/synthétique)
             "mode": data_mode,
             "strategy": "swing",
-            "initial_capital": 10_000,
+            "initial_capital": init_cap,
             "universe_size": len(symbols),
             "traded_assets": len({t.instrument for t in all_trades}),
             "n_trades": len(all_trades),
@@ -525,6 +547,8 @@ def build_snapshot(seed: int = 7) -> dict:
             "equity": PL.equity_series(equity, ts_list),
             "dates": dates,
             "positions": comp["rows"], "totals": comp["totals"],
+            "portfolio": portfolio_kpis,
+            "position_series": position_series,
             "trade_stats": trade_stats,
             "vix": vix_now, "vix_playbook": _vix_playbook(vix_now),
             "vix_series": vix[::max(1, n // 240)],   # sous-échantillonné pour le graphe
@@ -549,7 +573,7 @@ def build_snapshot(seed: int = 7) -> dict:
         "data": _data_section(data, acmap),
         "themes": themes,
         "ml": ml,
-        "live": _live_section(comp["rows"], acmap),
+        "live": _live_section(comp["rows"], acmap, portfolio_kpis),
     }
 
 

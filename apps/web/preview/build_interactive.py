@@ -119,6 +119,13 @@ background:var(--surface);color:var(--muted);cursor:pointer;transition:all .15s}
 .chip.on{background:var(--accent);color:#fff;border-color:var(--accent)}
 ul{margin:4px 0 0;padding-left:18px;font-size:13px}li{margin:3px 0}
 .toggle{font-size:12px;color:var(--accent);cursor:pointer;user-select:none}
+.tkr{color:var(--accent2);cursor:pointer;border-bottom:1px dotted var(--border2)}
+.tkr:hover{color:#fff}
+.modal{position:fixed;inset:0;z-index:60;background:rgba(4,5,7,.72);backdrop-filter:blur(6px);
+display:flex;align-items:center;justify-content:center;padding:20px;animation:fade .2s ease}
+.modalbox{width:min(900px,96vw);max-height:92vh;overflow:auto;box-shadow:var(--shadow)}
+.close{cursor:pointer;color:var(--muted);font-size:16px;padding:2px 8px;border-radius:8px}
+.close:hover{background:var(--surface3);color:var(--fg)}
 </style></head><body>
 <div class="topbar">
   <div class="brand"><span class="logo"></span>Quant Terminal<span class="tag">HEDGE-FUND</span></div>
@@ -268,6 +275,81 @@ function lineChart(series,labels,title){
     show(n-1);  // état initial = point le PLUS RÉCENT (toujours visible au chargement)
   },60);
   return wrap;
+}
+
+// ---- graphique TECHNIQUE en chandeliers + indicateurs (modale au clic sur un ticker) ----
+// Autonome (vanilla SVG) — même esprit que TradingView lightweight-charts, sans dépendance.
+function _sma(a,p){const o=Array(a.length).fill(null);let s=0;for(let i=0;i<a.length;i++){s+=a[i];if(i>=p)s-=a[i-p];if(i>=p-1)o[i]=s/p;}return o;}
+function _ema(a,p){const o=Array(a.length).fill(null),k=2/(p+1);let e=a[0];for(let i=0;i<a.length;i++){e=i?a[i]*k+e*(1-k):a[i];if(i>=p-1)o[i]=e;}return o;}
+function _rsi(a,p){const o=Array(a.length).fill(null);let g=0,l=0;for(let i=1;i<a.length;i++){const d=a[i]-a[i-1];const up=Math.max(d,0),dn=Math.max(-d,0);if(i<=p){g+=up;l+=dn;if(i===p){g/=p;l/=p;o[i]=100-100/(1+(l?g/l:99));}}else{g=(g*(p-1)+up)/p;l=(l*(p-1)+dn)/p;o[i]=100-100/(1+(l?g/l:99));}}return o;}
+function _boll(a,p,k){const m=_sma(a,p),u=[],lo=[];for(let i=0;i<a.length;i++){if(m[i]==null){u.push(null);lo.push(null);continue;}let s=0;for(let j=i-p+1;j<=i;j++)s+=(a[j]-m[i])**2;const sd=Math.sqrt(s/p);u.push(m[i]+k*sd);lo.push(m[i]-k*sd);}return{m,u,lo};}
+
+function candleChart(sym,state){
+  const data=(DATA.dashboard.position_series||{})[sym]||[];
+  if(!data.length)return $('<p style="color:var(--muted)">Pas de série disponible.</p>');
+  const closes=data.map(d=>d.c),n=data.length;
+  const W=820,Hp=300,Hr=state.rsi?90:0,gap=Hr?16:0,H=Hp+gap+Hr,padL=46,padR=58,padT=10,padB=20;
+  const ov=[];                                   // overlays prix
+  if(state.ma20)ov.push(['MM20',_sma(closes,20),'#3b82f6']);
+  if(state.ma50)ov.push(['MM50',_sma(closes,50),'#f59e0b']);
+  if(state.ema20)ov.push(['EMA20',_ema(closes,20),'#22d3ee']);
+  let bb=null; if(state.boll){bb=_boll(closes,20,2);ov.push(['BB+',bb.u,'#9aa1ad'],['BB-',bb.lo,'#9aa1ad']);}
+  const hi=Math.max(...data.map(d=>d.h),...ov.flatMap(o=>o[1].filter(v=>v!=null)));
+  const lo=Math.min(...data.map(d=>d.l),...ov.flatMap(o=>o[1].filter(v=>v!=null)));
+  const rng=(hi-lo)||1,cw=(W-padL-padR)/n;
+  const X=i=>padL+i*cw+cw/2, Y=v=>(Hp-padB)-(v-lo)/rng*((Hp-padB)-padT);
+  let yA='';for(let k=0;k<5;k++){const v=lo+k/4*(hi-lo),y=Y(v);yA+=`<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="1"/><text x="${padL-6}" y="${(y+3).toFixed(1)}" fill="var(--muted)" font-size="10" text-anchor="end">${v.toFixed(2)}</text>`;}
+  let candles='';data.forEach((d,i)=>{const up=d.c>=d.o,col=up?'#22c55e':'#f43f5e',x=X(i);
+    candles+=`<line x1="${x.toFixed(1)}" y1="${Y(d.h).toFixed(1)}" x2="${x.toFixed(1)}" y2="${Y(d.l).toFixed(1)}" stroke="${col}" stroke-width="1"/>`
+      +`<rect x="${(x-cw*0.3).toFixed(1)}" y="${Y(Math.max(d.o,d.c)).toFixed(1)}" width="${(cw*0.6).toFixed(1)}" height="${Math.max(1,Math.abs(Y(d.o)-Y(d.c))).toFixed(1)}" fill="${col}"/>`;});
+  const ovl=ov.map(([nm,arr,c])=>`<polyline points="${arr.map((v,i)=>v==null?'':X(i).toFixed(1)+','+Y(v).toFixed(1)).filter(Boolean).join(' ')}" fill="none" stroke="${c}" stroke-width="1.3" opacity="0.9"/>`).join('');
+  let rsiSvg='';
+  if(state.rsi){const r=_rsi(closes,14),y0=Hp+gap,YR=v=>y0+Hr-(v/100)*Hr;
+    rsiSvg=`<line x1="${padL}" y1="${YR(70).toFixed(1)}" x2="${W-padR}" y2="${YR(70).toFixed(1)}" stroke="#f43f5e" stroke-width="0.6" stroke-dasharray="3"/>`
+      +`<line x1="${padL}" y1="${YR(30).toFixed(1)}" x2="${W-padR}" y2="${YR(30).toFixed(1)}" stroke="#22c55e" stroke-width="0.6" stroke-dasharray="3"/>`
+      +`<text x="${padL-6}" y="${(YR(70)+3).toFixed(1)}" fill="var(--muted)" font-size="9" text-anchor="end">70</text>`
+      +`<text x="${padL-6}" y="${(YR(30)+3).toFixed(1)}" fill="var(--muted)" font-size="9" text-anchor="end">30</text>`
+      +`<polyline points="${r.map((v,i)=>v==null?'':X(i).toFixed(1)+','+YR(v).toFixed(1)).filter(Boolean).join(' ')}" fill="none" stroke="#a78bfa" stroke-width="1.2"/>`
+      +`<text x="${padL}" y="${(y0+10).toFixed(1)}" fill="var(--muted)" font-size="9">RSI 14</text>`;}
+  const last=data[n-1],chg=(last.c/data[0].c-1)*100;
+  return $(`<div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+      <div><b style="font-size:15px">${sym}</b> <span class="mono">${last.c}</span>
+        <span class="mono" style="color:${chg>=0?'#22c55e':'#f43f5e'}">${chg>=0?'+':''}${chg.toFixed(1)}% (9 mois)</span></div>
+      <div style="font-size:11px;color:var(--muted)">${ov.map(o=>'<span style="color:'+o[2]+'">●</span> '+o[0]).join(' ')}</div></div>
+    <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="overflow:visible">${yA}${candles}${ovl}${rsiSvg}</svg></div>`);
+}
+function openChart(sym){
+  const state={ma20:true,ma50:false,ema20:false,boll:false,rsi:true};
+  const ov=$('<div class="modal"></div>');
+  const box=$('<div class="modalbox card"></div>');
+  const head=$(`<div class="banner" style="margin-bottom:10px"><div class="label">Graphique technique — ${sym}</div>
+    <span class="close" title="Fermer">✕</span></div>`);
+  const toggles=$('<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>');
+  const body=$('<div></div>');
+  const opts=[['ma20','MM20'],['ma50','MM50'],['ema20','EMA20'],['boll','Bollinger'],['rsi','RSI']];
+  function draw(){body.innerHTML='';body.appendChild(candleChart(sym,state));}
+  opts.forEach(([k,lab])=>{const ch=$(`<span class="chip${state[k]?' on':''}">${lab}</span>`);
+    ch.onclick=()=>{state[k]=!state[k];ch.classList.toggle('on');draw();};toggles.appendChild(ch);});
+  head.querySelector('.close').onclick=()=>ov.remove();
+  ov.onclick=e=>{if(e.target===ov)ov.remove();};
+  document.addEventListener('keydown',function esc(e){if(e.key==='Escape'){ov.remove();document.removeEventListener('keydown',esc);}});
+  box.appendChild(head);box.appendChild(toggles);box.appendChild(body);ov.appendChild(box);
+  document.body.appendChild(ov);draw();
+}
+// délégation : tout symbole .tkr (positions, trades en cours, portefeuille réel) ouvre son graphe
+document.addEventListener('click',e=>{const t=e.target.closest('.tkr');if(t&&t.dataset.sym)openChart(t.dataset.sym);});
+const tkr=(s)=>`<b class="tkr" data-sym="${s}" title="Voir le graphique technique">${s}</b>`;
+// bandeau KPI de valeur de portefeuille (réutilisé Trades + Portefeuille réel)
+function portfolioBar(k){
+  const pos=(k.pnl_abs||0)>=0,col=pos?'#22c55e':'#f43f5e';
+  const cell=(lab,val,c)=>`<div><div class="label">${lab}</div><div class="val" style="font-size:20px;${c?'color:'+c:''}">${val}</div></div>`;
+  return $(`<div class="card"><div class="grid4" style="gap:14px">
+    ${cell('Valeur du portefeuille','$'+eur(k.value||0))}
+    ${cell('Gain / perte',(pos?'+':'')+'$'+eur(k.pnl_abs||0)+' ('+(pos?'+':'')+((k.pnl_pct||0)*100).toFixed(1)+'%)',col)}
+    ${cell('Investi / Cash','$'+eur(k.invested||0)+' / $'+eur(k.cash||0))}
+    ${cell('Exposition',((k.exposure_pct||0)*100).toFixed(0)+'% · '+(k.n_positions||0)+' lignes')}
+    </div><div style="font-size:11px;color:var(--muted);margin-top:8px">Capital initial $${eur(k.initial||10000)} → objectif : surperformer le benchmark. Exposition &gt;100% = levier piloté par le VIX en marché calme.</div></div>`);
 }
 
 // ---- DASHBOARD ----
@@ -438,7 +520,7 @@ function lineChart(series,labels,title){
     let rowsHtml='';
     rows.forEach(r=>{
       const ml=r.ml_score==null?'—':(r.ml_score*100).toFixed(0)+'%';
-      rowsHtml+=`<tr class="srow"><td><b>${r.symbol}</b></td><td>${stanceTag(r.stance,r.sector)}</td>
+      rowsHtml+=`<tr class="srow"><td>${tkr(r.symbol)}</td><td>${stanceTag(r.stance,r.sector)}</td>
         <td class="mono" style="text-align:right">${ml}</td>
         <td class="mono" style="text-align:right">${r.qty.toFixed(2)}</td><td class="mono" style="text-align:right">${r.avg_price}</td>
         <td class="mono" style="text-align:right">${eur(r.current_value)}</td>
@@ -478,12 +560,15 @@ const mkTable=(head,bodyRows)=>$(`<table><thead><tr>${head}</tr></thead><tbody>$
       <div class="val ${tone}" style="font-size:22px">${val}${suf}</div></div>`));
   });
   p.appendChild(g);
+  // bandeau VALEUR DE PORTEFEUILLE (capital, gain/perte, exposition)
+  const k=DATA.dashboard.portfolio||{};
+  p.appendChild(portfolioBar(k));
   // trades en cours
-  const oc=$(`<div class="card"><div class="label" style="margin-bottom:10px">Trades en cours</div></div>`);
+  const oc=$(`<div class="card"><div class="label" style="margin-bottom:10px">Trades en cours (clique un actif pour son graphique)</div></div>`);
   if(!open.length){oc.appendChild($('<p style="color:var(--muted);font-size:13px">Aucun trade ouvert au dernier pas (stratégie à plat).</p>'));}
   else{
     const head='<th>Actif</th><th>Sens</th><th style="text-align:right">Qté</th><th style="text-align:right">PRU</th><th style="text-align:right">Valeur</th><th style="text-align:right">P&amp;L latent</th>';
-    const rows=open.map(r=>`<tr><td><b>${r.symbol}</b></td><td>${r.side}</td>
+    const rows=open.map(r=>`<tr><td>${tkr(r.symbol)}</td><td>${r.side}</td>
       <td class="mono" style="text-align:right">${r.qty}</td><td class="mono" style="text-align:right">${r.avg_price}</td>
       <td class="mono" style="text-align:right">${eur(r.current_value)}</td>
       <td class="mono ${r.pnl_abs>=0?'pos':'neg'}" style="text-align:right">${eur(r.pnl_abs)} (${pct(r.pnl_pct)})</td></tr>`);
@@ -714,6 +799,8 @@ const heatColor=(v,m)=>{const t=Math.max(-1,Math.min(1,v/m));
       <b>${L.connected?'Connecté':'Non connecté'}</b>
       <span style="color:var(--muted)">· mode <b style="color:var(--fg)">${L.mode}</b> (paper par défaut, jamais d'ordre réel non confirmé)</span></div>
     <div style="font-size:11px;color:var(--muted)">${L.target_orders.length} ordres cibles à répliquer</div></div>`));
+  // valeur de portefeuille (mêmes KPI que Trades — single source of truth)
+  if(L.portfolio&&L.portfolio.value)p.appendChild(portfolioBar(L.portfolio));
   // brokers
   const bc=$(`<div class="grid2"></div>`);
   L.brokers.forEach(b=>bc.appendChild($(`<div class="card">
@@ -726,7 +813,7 @@ const heatColor=(v,m)=>{const t=Math.max(-1,Math.min(1,v/m));
   const oc=$(`<div class="card"><div class="label" style="margin-bottom:10px">Ordres cibles — portefeuille modèle (${L.target_orders.length})</div></div>`);
   if(!L.target_orders.length){oc.appendChild($('<p style="color:var(--muted);font-size:13px">Aucune position ouverte à répliquer.</p>'));}
   else{
-    const rows=L.target_orders.map(o=>`<tr><td><b>${o.symbol}</b></td><td>${o.side}</td>
+    const rows=L.target_orders.map(o=>`<tr><td>${tkr(o.symbol)}</td><td>${o.side}</td>
       <td style="color:var(--muted)">${o.asset_class}</td>
       <td><span class="pill">${o.broker}</span></td>
       <td class="mono" style="text-align:right">${eur(o.weight_value)} \$</td></tr>`);

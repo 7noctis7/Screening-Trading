@@ -106,3 +106,16 @@ def test_strategy_beats_equal_weight_benchmark():
     """Profil offensif : le portefeuille bat l'univers équipondéré (buy & hold)."""
     b = _snap()["portfolio"]["benchmarks"]
     assert b["portfolio"][-1] > b["Univers (équipondéré)"][-1]
+
+
+def test_cross_window_coherence():
+    """SINGLE SOURCE OF TRUTH : corrélation et séries OHLC alignées sur les positions."""
+    snap = _snap()
+    held = {p["symbol"] for p in snap["dashboard"]["positions"]}
+    corr = set(snap["portfolio"]["analysis"]["correlation"]["symbols"])
+    assert corr and corr <= held                      # corrélation ⊆ positions ouvertes
+    series = snap["dashboard"]["position_series"]
+    assert set(series) == held and all(len(v) > 50 for v in series.values())  # 1 graphe/position
+    # KPI portefeuille cohérents avec le capital initial
+    k = snap["dashboard"]["portfolio"]
+    assert k["initial"] == 10_000 and round(k["value"] - k["pnl_abs"], 0) == 10_000
