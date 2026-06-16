@@ -1,0 +1,10 @@
+# Features à matérialiser dans la couche GOLD (feature store).
+# Calculées point-in-time depuis SILVER, cohérentes backtest ↔ live.
+indicators:
+  - { name: sma,         params: { period: 20 },  as: sma_20 }
+  - { name: sma,         params: { period: 50 },  as: sma_50 }
+  - { name: ema,         params: { period: 200 }, as: ema_200 }
+  - { name: rsi,         params: { period: 14 },  as: rsi_14 }
+  - { name: atr,         params: { period: 14 },  as: atr_14 }
+  - { name: macd,        params: { fast: 12, slow: 26 }, as: macd }
+  - { name: loglinreg_z, params: { lookback: 120 }, as: loglinreg_z_120 }

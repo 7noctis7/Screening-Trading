@@ -1,0 +1,9 @@
+# Exécution — PAPER par défaut. Réel seulement sur validation explicite + capital plafonné.
+broker: sim            # sim | alpaca (alpaca paper natif via .env)
+paper: true            # JAMAIS false sans feu vert explicite
+retry:
+  attempts: 3
+  backoff_s: 1.0
+reconcile:
+  on_session_end: true
+  alert_on_divergence: true

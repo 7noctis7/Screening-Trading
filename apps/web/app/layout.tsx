@@ -1,0 +1,10 @@
+import "./globals.css";
+import { Providers } from "./providers";
+export const metadata = { title: "Quant Terminal", description: "Screening & trading multi-actifs" };
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="fr" className="dark">
+      <body className="bg-bg text-fg antialiased"><Providers>{children}</Providers></body>
+    </html>
+  );
+}

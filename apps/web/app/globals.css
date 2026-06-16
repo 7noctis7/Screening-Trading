@@ -1,0 +1,5 @@
+@tailwind base; @tailwind components; @tailwind utilities;
+:root { --bg:#0a0b0d; --surface:#141619; --border:#262a31; --fg:#e6e8eb; --muted:#9aa1ab; }
+body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; }
+.mono { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }

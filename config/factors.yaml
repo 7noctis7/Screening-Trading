@@ -1,0 +1,19 @@
+# Pondérations de facteurs (Module 4). Dépendent du régime ET de la classe.
+# Un facteur absent pour une classe = poids nul (jamais une erreur).
+weights:
+  default:
+    momentum: 0.30
+    trend: 0.20
+    value: 0.20
+    quality: 0.20
+    low_vol: 0.10
+  regime_overrides:
+    risk_off:
+      quality: 0.35
+      low_vol: 0.25
+      value: 0.20
+      momentum: 0.10
+      trend: 0.10
+class_applicability:
+  forex:   [momentum, trend]            # pas de value/quality fondamental
+  crypto:  [momentum, trend, low_vol]

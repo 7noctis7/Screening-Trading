@@ -1,0 +1,12 @@
+# Sources de données marché — providers, ordre de fallback, quotas (rate-limit).
+# Le socle daily se met à jour en batch EOD ; intraday seulement si nécessaire.
+ohlcv:
+  fallback_order: [yfinance, finnhub, alpaca]   # 1er qui répond gagne
+  cache: true                                    # mémoïsation + persistance silver
+  rate_limits:                                   # max_calls / period_s par provider
+    yfinance:   { max_calls: 2,   period_s: 1 }
+    finnhub:    { max_calls: 30,  period_s: 60 }
+    alphavantage: { max_calls: 5, period_s: 60 }
+fundamentals:
+  provider: fmp            # fmp | yfinance ; clé via .env (FMP_API_KEY)
+  point_in_time: true      # impératif anti-fuite (états tels que publiés)

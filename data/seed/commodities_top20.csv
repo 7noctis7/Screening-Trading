@@ -1,0 +1,21 @@
+symbol,name,asset_class,venue,currency,sector
+CL=F,WTI Crude Oil,commodity,NYMEX,USD,Energy
+BZ=F,Brent Crude Oil,commodity,ICE,USD,Energy
+NG=F,Natural Gas,commodity,NYMEX,USD,Energy
+HO=F,Heating Oil,commodity,NYMEX,USD,Energy
+RB=F,RBOB Gasoline,commodity,NYMEX,USD,Energy
+GC=F,Gold,commodity,COMEX,USD,Metals
+SI=F,Silver,commodity,COMEX,USD,Metals
+PL=F,Platinum,commodity,NYMEX,USD,Metals
+PA=F,Palladium,commodity,NYMEX,USD,Metals
+HG=F,Copper,commodity,COMEX,USD,Metals
+ALI=F,Aluminum,commodity,COMEX,USD,Metals
+ZC=F,Corn,commodity,CBOT,USD,Agriculture
+ZW=F,Wheat,commodity,CBOT,USD,Agriculture
+ZS=F,Soybeans,commodity,CBOT,USD,Agriculture
+SB=F,Sugar No.11,commodity,ICE,USD,Agriculture
+KC=F,Coffee,commodity,ICE,USD,Agriculture
+CC=F,Cocoa,commodity,ICE,USD,Agriculture
+CT=F,Cotton,commodity,ICE,USD,Agriculture
+LE=F,Live Cattle,commodity,CME,USD,Livestock
+HE=F,Lean Hogs,commodity,CME,USD,Livestock

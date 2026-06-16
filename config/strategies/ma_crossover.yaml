@@ -1,0 +1,7 @@
+# Exemple de stratégie config-driven (la logique viendra en P1, sur feu vert).
+name: ma_crossover
+enabled: false                 # désactivée tant que non backtestée + validée OOS
+favorable_regime: trending
+params:
+  fast: 20
+  slow: 50

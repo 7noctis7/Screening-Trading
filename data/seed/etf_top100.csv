@@ -1,0 +1,102 @@
+symbol,name,asset_class,venue,currency,category
+SPY,SPDR S&P 500,etf,ARCA,USD,Broad-US
+IVV,iShares Core S&P 500,etf,ARCA,USD,Broad-US
+VOO,Vanguard S&P 500,etf,ARCA,USD,Broad-US
+QQQ,Invesco Nasdaq 100,etf,NASDAQ,USD,Broad-US
+VTI,Vanguard Total Market,etf,ARCA,USD,Broad-US
+DIA,SPDR Dow Jones,etf,ARCA,USD,Broad-US
+IWM,iShares Russell 2000,etf,ARCA,USD,Size-SmallCap
+IWB,iShares Russell 1000,etf,ARCA,USD,Size-LargeCap
+XLK,Technology Select Sector,etf,ARCA,USD,Sector-Tech
+XLF,Financial Select Sector,etf,ARCA,USD,Sector-Financials
+XLE,Energy Select Sector,etf,ARCA,USD,Sector-Energy
+XLV,Health Care Select Sector,etf,ARCA,USD,Sector-Health
+XLI,Industrial Select Sector,etf,ARCA,USD,Sector-Industrials
+XLY,Consumer Discretionary Sector,etf,ARCA,USD,Sector-Discretionary
+XLP,Consumer Staples Sector,etf,ARCA,USD,Sector-Staples
+XLU,Utilities Select Sector,etf,ARCA,USD,Sector-Utilities
+XLB,Materials Select Sector,etf,ARCA,USD,Sector-Materials
+XLRE,Real Estate Select Sector,etf,ARCA,USD,Sector-RealEstate
+XLC,Communication Services Sector,etf,ARCA,USD,Sector-Comm
+SMH,VanEck Semiconductor,etf,NASDAQ,USD,Industry-Semis
+SOXX,iShares Semiconductor,etf,NASDAQ,USD,Industry-Semis
+IGV,iShares Software,etf,ARCA,USD,Industry-Software
+HACK,ETFMG Cybersecurity,etf,ARCA,USD,Industry-Cyber
+SKYY,First Trust Cloud,etf,NASDAQ,USD,Industry-Cloud
+XBI,SPDR Biotech,etf,ARCA,USD,Industry-Biotech
+IBB,iShares Biotech,etf,NASDAQ,USD,Industry-Biotech
+ITB,iShares Home Construction,etf,ARCA,USD,Industry-Homebuild
+XHB,SPDR Homebuilders,etf,ARCA,USD,Industry-Homebuild
+KBE,SPDR Bank,etf,ARCA,USD,Industry-Banks
+KRE,SPDR Regional Banking,etf,ARCA,USD,Industry-Banks
+XOP,SPDR Oil & Gas E&P,etf,ARCA,USD,Industry-OilGas
+OIH,VanEck Oil Services,etf,ARCA,USD,Industry-OilServices
+XME,SPDR Metals & Mining,etf,ARCA,USD,Industry-Mining
+GDX,VanEck Gold Miners,etf,ARCA,USD,Industry-GoldMiners
+GDXJ,VanEck Junior Gold Miners,etf,ARCA,USD,Industry-GoldMiners
+URA,Global X Uranium,etf,ARCA,USD,Industry-Uranium
+TAN,Invesco Solar,etf,ARCA,USD,Industry-Solar
+ICLN,iShares Clean Energy,etf,NASDAQ,USD,Industry-CleanEnergy
+LIT,Global X Lithium,etf,ARCA,USD,Industry-Lithium
+BOTZ,Global X Robotics,etf,NASDAQ,USD,Theme-Robotics
+ARKK,ARK Innovation,etf,ARCA,USD,Theme-Innovation
+ARKG,ARK Genomic,etf,ARCA,USD,Theme-Genomics
+FINX,Global X FinTech,etf,NASDAQ,USD,Theme-Fintech
+JETS,US Global Jets,etf,ARCA,USD,Industry-Airlines
+EWJ,iShares MSCI Japan,etf,ARCA,USD,Geo-Japan
+EWG,iShares MSCI Germany,etf,ARCA,USD,Geo-Germany
+EWU,iShares MSCI UK,etf,ARCA,USD,Geo-UK
+EWQ,iShares MSCI France,etf,ARCA,USD,Geo-France
+EWI,iShares MSCI Italy,etf,ARCA,USD,Geo-Italy
+EWP,iShares MSCI Spain,etf,ARCA,USD,Geo-Spain
+EWL,iShares MSCI Switzerland,etf,ARCA,USD,Geo-Switzerland
+EWN,iShares MSCI Netherlands,etf,ARCA,USD,Geo-Netherlands
+EWA,iShares MSCI Australia,etf,ARCA,USD,Geo-Australia
+EWC,iShares MSCI Canada,etf,ARCA,USD,Geo-Canada
+EWZ,iShares MSCI Brazil,etf,ARCA,USD,Geo-Brazil
+EWW,iShares MSCI Mexico,etf,ARCA,USD,Geo-Mexico
+EWY,iShares MSCI South Korea,etf,ARCA,USD,Geo-Korea
+EWT,iShares MSCI Taiwan,etf,ARCA,USD,Geo-Taiwan
+EWH,iShares MSCI Hong Kong,etf,ARCA,USD,Geo-HongKong
+MCHI,iShares MSCI China,etf,NASDAQ,USD,Geo-China
+FXI,iShares China Large-Cap,etf,ARCA,USD,Geo-China
+KWEB,KraneShares China Internet,etf,ARCA,USD,Geo-China
+INDA,iShares MSCI India,etf,NASDAQ,USD,Geo-India
+EWS,iShares MSCI Singapore,etf,ARCA,USD,Geo-Singapore
+EWM,iShares MSCI Malaysia,etf,ARCA,USD,Geo-Malaysia
+THD,iShares MSCI Thailand,etf,ARCA,USD,Geo-Thailand
+EIDO,iShares MSCI Indonesia,etf,ARCA,USD,Geo-Indonesia
+EZA,iShares MSCI South Africa,etf,ARCA,USD,Geo-SouthAfrica
+TUR,iShares MSCI Turkey,etf,NASDAQ,USD,Geo-Turkey
+EWD,iShares MSCI Sweden,etf,ARCA,USD,Geo-Sweden
+EWK,iShares MSCI Belgium,etf,ARCA,USD,Geo-Belgium
+VEA,Vanguard Developed Markets,etf,ARCA,USD,Geo-Developed
+VWO,Vanguard Emerging Markets,etf,ARCA,USD,Geo-Emerging
+EEM,iShares MSCI Emerging Markets,etf,ARCA,USD,Geo-Emerging
+EFA,iShares MSCI EAFE,etf,ARCA,USD,Geo-Developed
+IEFA,iShares Core EAFE,etf,BATS,USD,Geo-Developed
+IEMG,iShares Core Emerging,etf,ARCA,USD,Geo-Emerging
+ACWI,iShares MSCI ACWI,etf,NASDAQ,USD,Geo-World
+VT,Vanguard Total World,etf,ARCA,USD,Geo-World
+VXUS,Vanguard Total Intl,etf,NASDAQ,USD,Geo-ExUS
+VGK,Vanguard FTSE Europe,etf,ARCA,USD,Geo-Europe
+VPL,Vanguard FTSE Pacific,etf,ARCA,USD,Geo-Pacific
+VTV,Vanguard Value,etf,ARCA,USD,Style-Value
+VUG,Vanguard Growth,etf,ARCA,USD,Style-Growth
+MTUM,iShares Momentum Factor,etf,BATS,USD,Factor-Momentum
+QUAL,iShares Quality Factor,etf,BATS,USD,Factor-Quality
+USMV,iShares Min Volatility,etf,BATS,USD,Factor-LowVol
+VLUE,iShares Value Factor,etf,BATS,USD,Factor-Value
+SPLV,Invesco Low Volatility,etf,ARCA,USD,Factor-LowVol
+DVY,iShares Select Dividend,etf,NASDAQ,USD,Factor-Dividend
+SCHD,Schwab US Dividend,etf,ARCA,USD,Factor-Dividend
+GLD,SPDR Gold Shares,etf,ARCA,USD,Commodity-Gold
+SLV,iShares Silver Trust,etf,ARCA,USD,Commodity-Silver
+USO,US Oil Fund,etf,ARCA,USD,Commodity-Oil
+UNG,US Natural Gas Fund,etf,ARCA,USD,Commodity-NatGas
+DBC,Invesco DB Commodity,etf,ARCA,USD,Commodity-Broad
+TLT,iShares 20+ Year Treasury,etf,NASDAQ,USD,Bond-LongTreasury
+IEF,iShares 7-10 Year Treasury,etf,NASDAQ,USD,Bond-MidTreasury
+LQD,iShares Investment Grade Corp,etf,ARCA,USD,Bond-Corporate
+HYG,iShares High Yield Corp,etf,ARCA,USD,Bond-HighYield
+AGG,iShares Core US Aggregate Bond,etf,ARCA,USD,Bond-Aggregate

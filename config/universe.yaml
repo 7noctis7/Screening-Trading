@@ -1,0 +1,117 @@
+# UNIVERS — déclaratif, multi-sources. On déclare des SOURCES, pas des tickers en dur.
+# Le UniverseBuilder enchaîne les sources activées, dédoublonne PAR SYMBOLE
+# (priorité = ordre des sources ci-dessous), produit un snapshot daté.
+#   kind: static          → CSV seed (OFFLINE)
+#   kind: wikipedia        → constituants d'indice via pandas.read_html (RÉSEAU)
+#   kind: ishares_holdings → holdings iShares (Russell via IWB/IWV) (RÉSEAU)
+#   kind: nasdaq_trader    → listings COMPLETS NYSE+Nasdaq (RÉSEAU)
+#   kind: coingecko        → top-N cryptos par market cap (RÉSEAU)
+# NB scraping Wikipédia : `table`/colonnes peuvent devoir être ajustés selon la mise
+# en page courante de la page (vérifier au premier run en ligne).
+
+# Rebuild de l'univers : MENSUEL (snapshot daté point-in-time conservé à chaque build).
+rebuild_cadence_days: 30
+
+sources:
+  # ---------- STATIQUES (offline) ----------
+  - { id: forex_top20,       kind: static, file: data/seed/forex_top20.csv,       enabled: true }
+  - { id: commodities_top20, kind: static, file: data/seed/commodities_top20.csv, enabled: true }
+  - { id: indices_top20,     kind: static, file: data/seed/indices_top20.csv,     enabled: true }
+  - { id: etf_top100,        kind: static, file: data/seed/etf_top100.csv,        enabled: true }
+  - { id: crypto_top100,     kind: static, file: data/seed/crypto_top100.csv,     enabled: true }
+  - { id: cac40_seed,        kind: static, file: data/seed/cac40.csv,             enabled: true }
+  - { id: aex_seed,          kind: static, file: data/seed/aex.csv,               enabled: true }
+
+  # ---------- INDICES via WIKIPÉDIA (réseau) ----------
+  - id: sp500
+    kind: wikipedia
+    url: "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+    table: 0
+    symbol_col: Symbol
+    name_col: Security
+    sector_col: "GICS Sector"
+    venue: "NYSE/NASDAQ"
+    currency: USD
+    dot_to_dash: true
+    enabled: true
+  - id: nasdaq100
+    kind: wikipedia
+    url: "https://en.wikipedia.org/wiki/Nasdaq-100"
+    table: 4
+    symbol_col: Ticker
+    venue: NASDAQ
+    currency: USD
+    enabled: true
+  - id: sbf120
+    kind: wikipedia
+    url: "https://en.wikipedia.org/wiki/SBF_120"
+    table: 0
+    symbol_col: Ticker
+    suffix: ".PA"
+    venue: EPA
+    currency: EUR
+    enabled: true
+  - id: ftse100
+    kind: wikipedia
+    url: "https://en.wikipedia.org/wiki/FTSE_100_Index"
+    table: 4
+    symbol_col: Ticker
+    suffix: ".L"
+    venue: LSE
+    currency: GBP
+    enabled: true
+  - id: ftsemib
+    kind: wikipedia
+    url: "https://en.wikipedia.org/wiki/FTSE_MIB"
+    table: 1
+    symbol_col: Ticker
+    suffix: ".MI"
+    venue: BIT
+    currency: EUR
+    enabled: true
+  - id: nikkei225
+    kind: wikipedia
+    url: "https://en.wikipedia.org/wiki/Nikkei_225"
+    table: 1
+    symbol_col: Code
+    suffix: ".T"
+    venue: TSE
+    currency: JPY
+    enabled: true
+  - id: kospi
+    kind: wikipedia
+    url: "https://en.wikipedia.org/wiki/KOSPI"
+    table: 0
+    symbol_col: Symbol
+    suffix: ".KS"
+    venue: KRX
+    currency: KRW
+    enabled: true
+  - id: csi300
+    kind: wikipedia
+    url: "https://en.wikipedia.org/wiki/CSI_300_Index"
+    table: 0
+    symbol_col: Ticker
+    venue: SSE/SZSE
+    currency: CNY
+    enabled: true
+
+  # ---------- RUSSELL via iShares holdings (réseau) ----------
+  - id: russell1000
+    kind: ishares_holdings
+    url: "https://www.ishares.com/us/products/239707/ishares-russell-1000-etf/1467271812596.ajax?fileType=csv&fileName=IWB_holdings&dataType=fund"
+    venue: "NYSE/NASDAQ"
+    currency: USD
+    enabled: true
+  - id: russell3000
+    kind: ishares_holdings
+    url: "https://www.ishares.com/us/products/239714/ishares-russell-3000-etf/1467271812596.ajax?fileType=csv&fileName=IWV_holdings&dataType=fund"
+    venue: "NYSE/NASDAQ"
+    currency: USD
+    enabled: true
+
+  # ---------- LISTINGS COMPLETS US (réseau) : NYSE + Nasdaq, milliers de titres ----------
+  - { id: us_listings, kind: nasdaq_trader, include_etf: true, enabled: true }
+
+  # ---------- CRYPTO LIVE (réseau) : alternative au seed statique ----------
+  - { id: crypto_live, kind: coingecko, top_n: 100, quote: USDT, exclude_stable: true, enabled: false }

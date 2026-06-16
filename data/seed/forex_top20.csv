@@ -1,0 +1,21 @@
+symbol,name,asset_class,venue,currency,region
+EUR/USD,Euro / US Dollar,forex,FX,USD,Global
+USD/JPY,US Dollar / Japanese Yen,forex,FX,JPY,Global
+GBP/USD,British Pound / US Dollar,forex,FX,USD,Global
+USD/CHF,US Dollar / Swiss Franc,forex,FX,CHF,Global
+AUD/USD,Australian Dollar / US Dollar,forex,FX,USD,Global
+USD/CAD,US Dollar / Canadian Dollar,forex,FX,CAD,Global
+NZD/USD,New Zealand Dollar / US Dollar,forex,FX,USD,Global
+EUR/JPY,Euro / Japanese Yen,forex,FX,JPY,Global
+GBP/JPY,British Pound / Japanese Yen,forex,FX,JPY,Global
+EUR/GBP,Euro / British Pound,forex,FX,GBP,Global
+EUR/CHF,Euro / Swiss Franc,forex,FX,CHF,Global
+AUD/JPY,Australian Dollar / Japanese Yen,forex,FX,JPY,Global
+EUR/AUD,Euro / Australian Dollar,forex,FX,AUD,Global
+USD/CNH,US Dollar / Offshore Yuan,forex,FX,CNH,Asia
+USD/HKD,US Dollar / Hong Kong Dollar,forex,FX,HKD,Asia
+USD/SGD,US Dollar / Singapore Dollar,forex,FX,SGD,Asia
+USD/MXN,US Dollar / Mexican Peso,forex,FX,MXN,Americas
+USD/ZAR,US Dollar / South African Rand,forex,FX,ZAR,Africa
+USD/TRY,US Dollar / Turkish Lira,forex,FX,TRY,EMEA
+USD/KRW,US Dollar / South Korean Won,forex,FX,KRW,Asia

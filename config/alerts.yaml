@@ -1,0 +1,6 @@
+# Alertes multi-canal — sévérité minimale par canal + anti-spam (throttle).
+throttle_ttl_s: 300          # un même type d'alerte au plus toutes les 5 min
+channels:
+  - { type: console,  min_severity: INFO }
+  - { type: telegram, min_severity: WARNING }   # token/chat via .env
+  - { type: discord,  min_severity: CRITICAL }  # webhook via .env

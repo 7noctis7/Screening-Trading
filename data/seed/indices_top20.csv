@@ -1,0 +1,21 @@
+symbol,name,asset_class,venue,currency,region
+^GSPC,S&P 500,index,INDEX,USD,US
+^IXIC,Nasdaq Composite,index,INDEX,USD,US
+^NDX,Nasdaq 100,index,INDEX,USD,US
+^DJI,Dow Jones Industrial Average,index,INDEX,USD,US
+^RUT,Russell 2000,index,INDEX,USD,US
+^FTSE,FTSE 100,index,INDEX,GBP,UK
+^GDAXI,DAX 40,index,INDEX,EUR,Germany
+^FCHI,CAC 40,index,INDEX,EUR,France
+^STOXX50E,Euro Stoxx 50,index,INDEX,EUR,Eurozone
+FTSEMIB.MI,FTSE MIB,index,INDEX,EUR,Italy
+^AEX,AEX,index,INDEX,EUR,Netherlands
+^IBEX,IBEX 35,index,INDEX,EUR,Spain
+^SSMI,Swiss Market Index,index,INDEX,CHF,Switzerland
+^N225,Nikkei 225,index,INDEX,JPY,Japan
+^TOPX,TOPIX,index,INDEX,JPY,Japan
+^HSI,Hang Seng,index,INDEX,HKD,HongKong
+000300.SS,CSI 300,index,INDEX,CNY,China
+^KS11,KOSPI,index,INDEX,KRW,SouthKorea
+^AXJO,S&P/ASX 200,index,INDEX,AUD,Australia
+^NSEI,Nifty 50,index,INDEX,INR,India

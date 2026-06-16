@@ -1,0 +1,16 @@
+# Politique de risque (Module 6 + 7). Couche bloquante à droit de veto.
+# PAPER TRADING par défaut. Pas de leverage par défaut.
+per_trade:
+  max_risk_pct: 0.01          # 1 % du capital risqué par trade max
+  min_reward_risk: 2.0        # R:R minimal accepté à l'entrée
+  stop_required: true         # stop-loss obligatoire (ATR-based)
+portfolio:
+  max_positions: 20
+  max_exposure_per_asset_pct: 0.10
+  max_exposure_per_class_pct: 0.40
+  max_gross_exposure: 1.0     # pas de levier par défaut
+  max_daily_drawdown_pct: 0.05  # au-delà → kill-switch
+sizing:
+  method: vol_target          # fixed_fractional | vol_target | kelly_capped | risk_parity
+  target_annual_vol: 0.15
+  kelly_fraction: 0.25        # Kelly bridé (¼)

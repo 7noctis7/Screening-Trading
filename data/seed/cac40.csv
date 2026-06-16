@@ -1,0 +1,41 @@
+symbol,name,asset_class,venue,currency,sector
+MC.PA,LVMH,equity,EPA,EUR,Consumer Discretionary
+OR.PA,L'Oreal,equity,EPA,EUR,Consumer Staples
+TTE.PA,TotalEnergies,equity,EPA,EUR,Energy
+SAN.PA,Sanofi,equity,EPA,EUR,Health Care
+AIR.PA,Airbus,equity,EPA,EUR,Industrials
+SU.PA,Schneider Electric,equity,EPA,EUR,Industrials
+AI.PA,Air Liquide,equity,EPA,EUR,Materials
+EL.PA,EssilorLuxottica,equity,EPA,EUR,Health Care
+RMS.PA,Hermes,equity,EPA,EUR,Consumer Discretionary
+BNP.PA,BNP Paribas,equity,EPA,EUR,Financials
+SAF.PA,Safran,equity,EPA,EUR,Industrials
+DG.PA,Vinci,equity,EPA,EUR,Industrials
+STLAP.PA,Stellantis,equity,EPA,EUR,Consumer Discretionary
+CS.PA,AXA,equity,EPA,EUR,Financials
+BN.PA,Danone,equity,EPA,EUR,Consumer Staples
+SGO.PA,Saint-Gobain,equity,EPA,EUR,Industrials
+RI.PA,Pernod Ricard,equity,EPA,EUR,Consumer Staples
+KER.PA,Kering,equity,EPA,EUR,Consumer Discretionary
+ACA.PA,Credit Agricole,equity,EPA,EUR,Financials
+ENGI.PA,Engie,equity,EPA,EUR,Utilities
+CAP.PA,Capgemini,equity,EPA,EUR,Information Technology
+ML.PA,Michelin,equity,EPA,EUR,Consumer Discretionary
+ORA.PA,Orange,equity,EPA,EUR,Communication Services
+LR.PA,Legrand,equity,EPA,EUR,Industrials
+DSY.PA,Dassault Systemes,equity,EPA,EUR,Information Technology
+GLE.PA,Societe Generale,equity,EPA,EUR,Financials
+VIE.PA,Veolia,equity,EPA,EUR,Utilities
+PUB.PA,Publicis,equity,EPA,EUR,Communication Services
+HO.PA,Thales,equity,EPA,EUR,Industrials
+RNO.PA,Renault,equity,EPA,EUR,Consumer Discretionary
+STMPA.PA,STMicroelectronics,equity,EPA,EUR,Information Technology
+EN.PA,Bouygues,equity,EPA,EUR,Industrials
+CA.PA,Carrefour,equity,EPA,EUR,Consumer Staples
+ERF.PA,Eurofins Scientific,equity,EPA,EUR,Health Care
+EDEN.PA,Edenred,equity,EPA,EUR,Industrials
+AC.PA,Accor,equity,EPA,EUR,Consumer Discretionary
+MT.AS,ArcelorMittal,equity,AMS,EUR,Materials
+URW.PA,Unibail-Rodamco-Westfield,equity,EPA,EUR,Real Estate
+BVI.PA,Bureau Veritas,equity,EPA,EUR,Industrials
+TEP.PA,Teleperformance,equity,EPA,EUR,Industrials

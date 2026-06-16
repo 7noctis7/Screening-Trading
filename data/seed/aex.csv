@@ -1,0 +1,25 @@
+symbol,name,asset_class,venue,currency,sector
+ASML.AS,ASML Holding,equity,AMS,EUR,Information Technology
+SHELL.AS,Shell,equity,AMS,EUR,Energy
+UNA.AS,Unilever,equity,AMS,EUR,Consumer Staples
+INGA.AS,ING Groep,equity,AMS,EUR,Financials
+ADYEN.AS,Adyen,equity,AMS,EUR,Information Technology
+PRX.AS,Prosus,equity,AMS,EUR,Consumer Discretionary
+HEIA.AS,Heineken,equity,AMS,EUR,Consumer Staples
+WKL.AS,Wolters Kluwer,equity,AMS,EUR,Industrials
+ASM.AS,ASM International,equity,AMS,EUR,Information Technology
+PHIA.AS,Philips,equity,AMS,EUR,Health Care
+DSFIR.AS,DSM-Firmenich,equity,AMS,EUR,Materials
+AD.AS,Ahold Delhaize,equity,AMS,EUR,Consumer Staples
+REN.AS,RELX,equity,AMS,EUR,Industrials
+AKZA.AS,Akzo Nobel,equity,AMS,EUR,Materials
+NN.AS,NN Group,equity,AMS,EUR,Financials
+AGN.AS,Aegon,equity,AMS,EUR,Financials
+KPN.AS,KPN,equity,AMS,EUR,Communication Services
+ABN.AS,ABN AMRO,equity,AMS,EUR,Financials
+RAND.AS,Randstad,equity,AMS,EUR,Industrials
+IMCD.AS,IMCD,equity,AMS,EUR,Materials
+UMG.AS,Universal Music Group,equity,AMS,EUR,Communication Services
+BESI.AS,BE Semiconductor,equity,AMS,EUR,Information Technology
+ASRNL.AS,ASR Nederland,equity,AMS,EUR,Financials
+WHA.AS,Wereldhave,equity,AMS,EUR,Real Estate

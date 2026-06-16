@@ -1,0 +1,21 @@
+# Cartographie de transmission macro → actifs (Module 2). Encodée en règles/poids.
+# Le régime module l'exposition globale et les pondérations de facteurs.
+exposure_by_risk_mode:        # multiplicateur d'exposition globale
+  risk_on: 1.0
+  neutral: 0.7
+  risk_off: 0.4
+exposure_by_cycle:
+  expansion: 1.0
+  recovery: 0.9
+  slowdown: 0.6
+  recession: 0.4
+# Inclinaisons de facteurs selon le régime (additif aux poids du ranking)
+factor_tilts:
+  risk_off:   { quality: +0.10, low_vol: +0.10, momentum: -0.10 }
+  expansion:  { momentum: +0.10, value: +0.05 }
+  recession:  { quality: +0.15, low_vol: +0.10, value: -0.05 }
+# Réaction aux SURPRISES (z): vers quelles classes incliner
+surprise_response:
+  inflation_up:   { commodity: +0.15, equity: -0.05 }   # inflation > attendu
+  growth_up:      { equity: +0.10, commodity: +0.05 }    # croissance > attendu
+  growth_down:    { equity: -0.10 }
