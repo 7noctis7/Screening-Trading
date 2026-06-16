@@ -80,19 +80,15 @@ def main() -> None:
     tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")]
     print(f"   Tables : {len(tables)} → {', '.join(tables[:10])}{' …' if len(tables) > 10 else ''}")
 
-    # --- SCHÉMA DÉTAILLÉ : colonnes + 1 ligne d'exemple par table (pour adapter le lecteur) ---
+    # --- SCHÉMA DÉTAILLÉ : colonnes + 1 ligne d'exemple (INSTANTANÉ, sans COUNT) ---
     print("\n── SCHÉMA DÉTAILLÉ (colle ceci dans le chat) ──")
     for t in tables:
         cols = [c[1] for c in conn.execute(f'PRAGMA table_info("{t}")')]
+        print(f'  TABLE "{t}" : {", ".join(cols)}')
         try:
-            nrows = conn.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0]
-        except sqlite3.Error:
-            nrows = "?"
-        print(f'  TABLE "{t}" ({nrows} lignes) : {", ".join(cols)}')
-        try:
-            sample = conn.execute(f'SELECT * FROM "{t}" LIMIT 1').fetchone()
+            sample = conn.execute(f'SELECT * FROM "{t}" LIMIT 1').fetchone()  # LIMIT 1 = instantané
             if sample:
-                print(f"      ex: {str(sample)[:160]}")
+                print(f"      ex: {str(tuple(sample))[:180]}")
         except sqlite3.Error:
             pass
     print("── fin schéma ──\n")

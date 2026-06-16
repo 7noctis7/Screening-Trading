@@ -18,15 +18,34 @@ from pathlib import Path
 from packages.core.models import Bar
 
 _OHLC = {"open": ["open", "o"], "high": ["high", "h"], "low": ["low", "l"],
-         "close": ["close", "adj_close", "adjclose", "c"], "volume": ["volume", "vol", "v"]}
-_DATE = ["date", "datetime", "timestamp", "ts", "day"]
+         "close": ["close", "adj_close", "adjclose", "adj", "last", "price", "c"],
+         "volume": ["volume", "vol", "v"]}
+_DATE = ["date", "datetime", "timestamp", "dt", "ts", "time", "day", "period"]
 _SYM = ["symbol", "ticker", "sym", "code"]
 
 
+def _strict_sym(cols_lower: dict):
+    """Colonne SYMBOLE textuelle (jamais un id_*) : contient 'symbol', sinon exacte."""
+    for k, orig in cols_lower.items():
+        if "symbol" in k:
+            return orig
+    for c in ("ticker", "sym", "code"):
+        if c in cols_lower and not cols_lower[c].lower().startswith("id"):
+            return cols_lower[c]
+    return None
+
+
 def _pick(cols_lower: dict, candidates: list[str]):
+    # 1) correspondance EXACTE (prioritaire)
     for c in candidates:
         if c in cols_lower:
             return cols_lower[c]
+    # 2) correspondance par SOUS-CHAÎNE (ex. 'tx_ticker_symbol'→symbol, 'id_ticker'→ticker,
+    #    'dt_price'→dt) — gère les schémas à colonnes préfixées (YAHOO.db)
+    for c in candidates:
+        for k, orig in cols_lower.items():
+            if c in k:
+                return orig
     return None
 
 
@@ -54,13 +73,14 @@ class DBPriceProvider:
     def _detect(self, table: str | None) -> None:
         tables = [r[0] for r in self._conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
-        # 1) format LONG : une table avec colonne symbole + date + close
+        # 1) format LONG : une table avec colonne SYMBOLE textuelle + date + close
         for t in ([table] if table else tables):
             if not t:
                 continue
             cl = self._columns(t)
-            if _pick(cl, _SYM) and _pick(cl, _DATE) and _pick(cl, _OHLC["close"]):
-                self._long = (t, _pick(cl, _SYM), _pick(cl, _DATE),
+            sym = _strict_sym(cl)
+            if sym and _pick(cl, _DATE) and _pick(cl, _OHLC["close"]):
+                self._long = (t, sym, _pick(cl, _DATE),
                               {k: _pick(cl, v) for k, v in _OHLC.items()})
                 return
         # 2) format NORMALISÉ : table de prix (date+close+lien) + table méta (symbole→id)
@@ -94,7 +114,7 @@ class DBPriceProvider:
             if t == price_table:
                 continue
             cl = self._columns(t)
-            sym = _pick(cl, _SYM)
+            sym = _strict_sym(cl)
             idc = _pick(cl, self._META_ID) or "rowid"
             if not sym:
                 continue
