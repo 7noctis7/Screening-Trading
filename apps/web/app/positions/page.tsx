@@ -1,5 +1,7 @@
 "use client";
+import { useState } from "react";
 import { usePositions } from "@/lib/api";
+import { TechnicalChart } from "@/components/TechnicalChart";
 
 const eur = (x: number) => x.toLocaleString("fr-FR", { maximumFractionDigits: 0 });
 const SC: Record<string, [string, string]> = {
@@ -8,16 +10,39 @@ const SC: Record<string, [string, string]> = {
 
 export default function Positions() {
   const { data } = usePositions();
+  const [sel, setSel] = useState<string | null>(null);
   if (!data) return <div className="p-8 text-muted">Chargement…</div>;
-  const rows = data.positions ?? [], t = data.totals ?? {};
+  const rows = data.positions ?? [], t = data.totals ?? {}, k = data.portfolio ?? {}, series = data.series ?? {};
   const bull = rows.filter((r: any) => r.stance === "bullish").length;
+  const pos = (k.pnl_abs ?? 0) >= 0;
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-4">
       <h1 className="text-xl font-semibold tracking-tight">Positions</h1>
+
+      <section className="card p-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div><div className="text-muted text-xs uppercase">Valeur portefeuille</div><div className="text-xl mono">${eur(k.value ?? 0)}</div></div>
+          <div><div className="text-muted text-xs uppercase">Gain / perte</div><div className="text-xl mono" style={{ color: pos ? "#22c55e" : "#f43f5e" }}>{pos ? "+" : ""}${eur(k.pnl_abs ?? 0)} ({((k.pnl_pct ?? 0) * 100).toFixed(1)}%)</div></div>
+          <div><div className="text-muted text-xs uppercase">Investi / Cash</div><div className="text-xl mono">${eur(k.invested ?? 0)} / ${eur(k.cash ?? 0)}</div></div>
+          <div><div className="text-muted text-xs uppercase">Exposition</div><div className="text-xl mono">{((k.exposure_pct ?? 0) * 100).toFixed(0)}% · {k.n_positions ?? rows.length} lignes</div></div>
+        </div>
+      </section>
+
+      {sel && series[sel] && (
+        <section className="card p-4">
+          <div className="flex justify-between items-center mb-2">
+            <h2 className="text-sm uppercase tracking-wide text-muted">Graphique technique — {sel}
+              <span className="ml-2 text-xs"><span style={{ color: "#3b82f6" }}>● MM20</span> <span style={{ color: "#f59e0b" }}>● MM50</span></span></h2>
+            <button onClick={() => setSel(null)} className="text-muted hover:text-fg text-sm">✕</button>
+          </div>
+          <TechnicalChart data={series[sel]} />
+        </section>
+      )}
+
       <section className="card p-4 overflow-x-auto">
         {rows.length === 0 ? <p className="text-muted text-sm">Aucune position ouverte.</p> : (
         <>
-        <p className="text-muted text-xs mb-3">{bull}/{rows.length} positions dans des secteurs <span style={{ color: "#22c55e" }}>bullish</span> · le reste = meilleurs setups ailleurs</p>
+        <p className="text-muted text-xs mb-3">{bull}/{rows.length} positions dans des secteurs <span style={{ color: "#22c55e" }}>bullish</span> · clique un actif pour son graphique</p>
         <table className="w-full text-sm mono">
           <thead className="text-muted text-xs">
             <tr><th className="text-left font-normal">Actif</th><th className="text-left font-normal">Secteur / tendance</th>
@@ -25,8 +50,8 @@ export default function Positions() {
             <th className="text-right font-normal">Valeur</th><th className="text-right font-normal">P&amp;L</th></tr>
           </thead>
           <tbody>{rows.map((r: any) => (
-            <tr key={r.symbol} className="border-t border-border">
-              <td className="py-1.5">{r.symbol}</td>
+            <tr key={r.symbol} className="border-t border-border hover:bg-surfaceAlt cursor-pointer" onClick={() => setSel(r.symbol)}>
+              <td className="py-1.5"><span className="text-accent border-b border-dotted border-border">{r.symbol}</span></td>
               <td className="font-sans text-xs">
                 <span style={{ color: (SC[r.stance] ?? SC.neutral)[0] }}>{(SC[r.stance] ?? SC.neutral)[1]}</span>{" "}
                 <span className="text-muted">{r.sector}</span>

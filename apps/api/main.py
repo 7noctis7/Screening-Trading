@@ -58,8 +58,9 @@ def portfolio() -> dict:
 
 @app.get("/api/positions")
 def positions() -> dict:
-    return {"positions": _snap()["dashboard"]["positions"],
-            "totals": _snap()["dashboard"]["totals"]}
+    dash = _snap()["dashboard"]
+    return {"positions": dash["positions"], "totals": dash["totals"],
+            "portfolio": dash["portfolio"], "series": dash["position_series"]}
 
 
 @app.get("/api/trades")

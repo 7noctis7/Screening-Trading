@@ -90,7 +90,7 @@ Test de non-régression : `tests/api/test_snapshot.py::test_cross_window_coheren
 | # | Action | Impact | Effort | Statut |
 |---|---|---|---|---|
 | 1 | **Single source of truth** (corrélation/graphes/KPI = positions ouvertes) | 🔴 élevé | faible | ✅ fait |
-| 2 | **Daily max-loss / kill-switch** câblé dans `fast_swing` | 🔴 élevé | faible | ◻️ |
-| 3 | **Fills next-open** + types d'ordres (Limit/Stop/Trailing) | 🟠 moyen | moyen | ◻️ |
-| 4 | **ccxt (Bitmart) + Alpaca paper** : exécuter les ordres cibles | 🔴 élevé | moyen | ◻️ |
-| 5 | **Unifier la charte** + `lightweight-charts` côté Next.js | 🟠 moyen | faible | ◻️ |
+| 2 | **Daily max-loss / kill-switch** + **trailing stop** câblés dans `fast_swing` | 🔴 élevé | faible | ✅ fait |
+| 3 | **Fills next-open** (anti look-ahead) + trailing | 🟠 moyen | moyen | ✅ fait · Limit/Stop SimBroker ◻️ |
+| 4 | **ccxt (Bitmart) + Alpaca paper** : exécuteur `scripts/run_live.py` (dry-run) | 🔴 élevé | moyen | ✅ fait · clés requises pour le live |
+| 5 | **`lightweight-charts` Next.js** (graphe au clic) | 🟠 moyen | faible | ✅ fait · unification charte ◻️ |

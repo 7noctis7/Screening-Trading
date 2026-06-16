@@ -47,7 +47,8 @@ def fast_swing_backtest(
     trend: int = 50, slope_lookback: int = 5, rsi_period: int = 14, pullback: float = 45.0,
     exit_level: float = 68.0, atr_period: int = 14, atr_stop: float = 2.5, rr: float = 3.0,
     close_at_end: bool = True, vix: list | None = None, exit_trend: int = 100,
-    rs_lookback: int = 126,
+    rs_lookback: int = 126, daily_max_loss: float = 0.0, trail_atr: float = 0.0,
+    next_open_fills: bool = False,
 ):
     """Retourne (broker, journal, equity_curve, timestamps).
 
@@ -74,11 +75,18 @@ def fast_swing_backtest(
     tid = 0
     frac_cap = min(max_capital_frac, max_pct)
     ref = symbols[0]
+    day, day_start_eq, killed = None, cash, False
     for t in range(n):
         for s in symbols:                                   # mark-to-market
             b = data[s]
             if t < len(b):
                 broker.mark(s, b[t].close)
+        # KILL-SWITCH journalier : nouvelle journée → on mémorise l'equity d'ouverture
+        cur_day = data[ref][min(t, len(data[ref]) - 1)].ts.date()
+        if cur_day != day:
+            day, day_start_eq, killed = cur_day, broker.equity(), False
+        if daily_max_loss > 0 and broker.equity() < day_start_eq * (1 - daily_max_loss):
+            killed = True                                   # perte journalière max atteinte → stop entrées
         for s in list(open_t):                              # sorties d'abord
             b = data[s]
             if t >= len(b):
@@ -86,9 +94,15 @@ def fast_swing_backtest(
             bar, ot = b[t], open_t[s]
             ot["mfe"] = max(ot["mfe"], bar.close - ot["entry_price"])
             ot["mae"] = min(ot["mae"], bar.close - ot["entry_price"])
+            ot["hh"] = max(ot.get("hh", ot["entry_price"]), bar.high)
+            # stop effectif = max(stop initial, trailing stop ATR) → on protège les gains
+            eff_stop = ot["stop"]
+            if trail_atr > 0 and not _isnan(atr[s][t]):
+                eff_stop = max(eff_stop, ot["hh"] - trail_atr * atr[s][t])
             exit_px = exit_reason = None
-            if ot["stop"] is not None and bar.low <= ot["stop"]:
-                exit_px, exit_reason = ot["stop"], "stop_hit"
+            if eff_stop is not None and bar.low <= eff_stop:
+                exit_px = eff_stop
+                exit_reason = "trailing_stop" if eff_stop > ot["stop"] + 1e-9 else "stop_hit"
             elif ot["target"] is not None and bar.high >= ot["target"]:
                 exit_px, exit_reason = ot["target"], "target_hit"
             else:
@@ -100,9 +114,8 @@ def fast_swing_backtest(
                 _close(broker, journal, s, ot, exit_px, bar.ts, exit_reason, costs, tid,
                        _AC.get(acmap.get(s, "equity"), AssetClass.EQUITY))
                 del open_t[s]
-        # ENTRÉES : on collecte les candidats éligibles, on les classe par CONVICTION
-        # (force de tendance + momentum), puis on alloue le cash disponible aux MEILLEURS.
-        if len(open_t) < max_positions:
+        # ENTRÉES : candidats éligibles classés par CONVICTION, cash alloué aux MEILLEURS.
+        if len(open_t) < max_positions and not killed:
             vmult = vix_exposure(vix[t]) if vix and t < len(vix) else 1.0
             cands = []
             for s in symbols:
@@ -138,19 +151,27 @@ def fast_swing_backtest(
                 inst_vol = (a / price) * math.sqrt(252) if price > 0 else 0.0
                 if inst_vol <= 0:
                     continue
-                qty = min(eq * min(frac_cap, target_annual_vol / inst_vol), room) / price
-                if qty * price < eq * 0.01:                 # ligne trop petite → on saute
+                # exécution à l'OUVERTURE de la barre suivante (anti look-ahead) si dispo
+                b = data[s]
+                nxt = min(t + 1, len(b) - 1)
+                fillp = b[nxt].open if (next_open_fills and nxt > t) else price
+                fill_ts = b[nxt].ts if (next_open_fills and nxt > t) else b[t].ts
+                qty = min(eq * min(frac_cap, target_annual_vol / inst_vol), room) / fillp
+                if qty * fillp < eq * 0.01:                 # ligne trop petite → on saute
                     continue
                 before = broker.position(s)
-                broker.submit(Order(s, Side.LONG, qty, OrderType.MARKET, limit_price=price))
+                broker.mark(s, fillp)                       # fill au prix d'exécution…
+                broker.submit(Order(s, Side.LONG, qty, OrderType.MARKET, limit_price=fillp))
+                broker.mark(s, b[t].close)                  # …puis on rétablit la clôture (MTM)
                 pos = broker.position(s)
                 if pos is None or pos is before:
                     continue
-                gross += qty * price                        # consomme la marge d'exposition
-                open_t[s] = {"entry_price": pos.avg_price, "qty": qty, "entry_ts": data[s][t].ts,
-                             "stop": price - atr_stop * a, "target": price + rr * atr_stop * a,
-                             "reason": "pullback en tendance (top conviction)", "mfe": 0.0, "mae": 0.0,
-                             "features": {"sma": sm, "rsi": rsi[s][t], "atr": a, "ref_price": price,
+                gross += qty * fillp                        # consomme la marge d'exposition
+                open_t[s] = {"entry_price": pos.avg_price, "qty": qty, "entry_ts": fill_ts,
+                             "stop": fillp - atr_stop * a, "target": fillp + rr * atr_stop * a,
+                             "reason": "pullback en tendance (top conviction)",
+                             "mfe": 0.0, "mae": 0.0, "hh": fillp,
+                             "features": {"sma": sm, "rsi": rsi[s][t], "atr": a, "ref_price": fillp,
                                           "conviction": round(_conv, 4)}}
         equity.append(broker.equity())
         ts.append(data[ref][min(t, len(data[ref]) - 1)].ts)

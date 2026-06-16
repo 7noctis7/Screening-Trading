@@ -447,7 +447,10 @@ def build_snapshot(seed: int = 7) -> dict:
     broker, journal, equity, ts_list = fast_swing_backtest(
         data, cash=10_000, costs=CostModel(), asset_classes=acmap,
         target_annual_vol=0.30, max_capital_frac=0.15, max_positions=20, max_pct=0.20,
-        atr_stop=4.0, rr=6.0, vix=vix, close_at_end=False)
+        atr_stop=4.0, rr=6.0, vix=vix, close_at_end=False,
+        daily_max_loss=0.06,        # kill-switch : stop des entrées si perte du jour > 6%
+        trail_atr=5.0,              # trailing stop ATR : protège les gains, laisse courir
+        next_open_fills=True)       # exécution à l'ouverture suivante (anti look-ahead)
 
     # régime macro point-in-time (couvre toute la fenêtre)
     months = int(_HISTORY_DAYS / 30) + 4
