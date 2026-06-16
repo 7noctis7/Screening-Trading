@@ -115,6 +115,31 @@ def trade_payload(tr) -> dict:
     return {f.name: conv(getattr(tr, f.name)) for f in fields(tr)}
 
 
+def trade_stats_payload(trades) -> dict:
+    """Statistiques agrégées sur les trades CLÔTURÉS (win rate, P&L, profit factor…)."""
+    closed = [t for t in trades if getattr(t, "pnl_net", None) is not None]
+    if not closed:
+        return {"count": 0}
+    pnls = [t.pnl_net for t in closed]
+    wins = [p for p in pnls if p > 0]
+    losses = [p for p in pnls if p <= 0]
+    gross_win = sum(wins)
+    gross_loss = -sum(losses)
+    return {
+        "count": len(closed),
+        "wins": len(wins),
+        "losses": len(losses),
+        "win_rate": round(len(wins) / len(closed), 4),
+        "pnl_total": round(sum(pnls), 2),
+        "avg_win": round(gross_win / len(wins), 2) if wins else 0.0,
+        "avg_loss": round(-gross_loss / len(losses), 2) if losses else 0.0,
+        "profit_factor": round(gross_win / gross_loss, 2) if gross_loss else None,
+        "best": round(max(pnls), 2),
+        "worst": round(min(pnls), 2),
+        "avg_pnl_pct": round(sum(t.pnl_pct or 0 for t in closed) / len(closed), 4),
+    }
+
+
 def _round(v):
     return round(v, 4) if isinstance(v, (int, float)) else v
 

@@ -70,11 +70,17 @@ ul{margin:4px 0 0;padding-left:18px;font-size:13px}li{margin:3px 0}
 <div class="tabs">
 <div class="tab active" data-p="dash">Dashboard</div>
 <div class="tab" data-p="pf">Portefeuille &amp; Analyse</div>
-<div class="tab" data-p="pos">Positions</div></div>
+<div class="tab" data-p="pos">Positions</div>
+<div class="tab" data-p="trades">Trades</div>
+<div class="tab" data-p="uni">Univers</div>
+<div class="tab" data-p="data">Données</div></div>
 
 <div class="page active" id="dash"></div>
 <div class="page" id="pf"></div>
 <div class="page" id="pos"></div>
+<div class="page" id="trades"></div>
+<div class="page" id="uni"></div>
+<div class="page" id="data"></div>
 </div>
 <script>const DATA = __DATA__;</script>
 <script>
@@ -255,6 +261,132 @@ function lineChart(series,labels){
     <span style="color:var(--muted)">Exposition brute ${eur(t.gross_exposure||0)} · nette ${eur(t.net_exposure||0)}</span>
     <span class="mono ${(t.pnl_abs||0)>=0?'pos':'neg'}">P&amp;L ${eur(t.pnl_abs||0)}</span></div>`));
  }catch(e){console.error('rendu positions:',e);}
+})();
+
+const dt=(s)=>s?String(s).slice(0,10):'—';
+// table robuste : on assemble TOUTE la table en une chaîne (le parseur gère tr/td
+// correctement à l'intérieur d'un <table>, contrairement à un <tr> isolé dans un div).
+const mkTable=(head,bodyRows)=>$(`<table><thead><tr>${head}</tr></thead><tbody>${bodyRows.join('')}</tbody></table>`);
+
+// ---- TRADES (historique + en cours) ----
+(function(){
+  const p=document.getElementById('trades'),st=DATA.trade_stats||{},
+    closed=DATA.trades||[],open=DATA.open_trades||[];
+  // bandeau de statistiques
+  const wr=(st.win_rate||0)*100;
+  const cards=[['Trades clôturés',st.count||0,''],['Taux de réussite',wr.toFixed(0),'%'],
+    ['P&L cumulé',eur(st.pnl_total||0),' €','pnl'],['Profit factor',st.profit_factor??'—',''],
+    ['Meilleur',eur(st.best||0),' €','best'],['Pire',eur(st.worst||0),' €','worst']];
+  const g=$('<div class="grid4"></div>');
+  cards.forEach(([lab,val,suf,kind])=>{
+    const tone=kind==='worst'?'neg':kind==='best'?'pos':kind==='pnl'?((st.pnl_total||0)>=0?'pos':'neg'):'';
+    g.appendChild($(`<div class="card metric"><div class="label">${lab}</div>
+      <div class="val ${tone}" style="font-size:22px">${val}${suf}</div></div>`));
+  });
+  p.appendChild(g);
+  // trades en cours
+  const oc=$(`<div class="card"><div class="label" style="margin-bottom:10px">Trades en cours</div></div>`);
+  if(!open.length){oc.appendChild($('<p style="color:var(--muted);font-size:13px">Aucun trade ouvert au dernier pas (stratégie à plat).</p>'));}
+  else{
+    const head='<th>Actif</th><th>Sens</th><th style="text-align:right">Qté</th><th style="text-align:right">PRU</th><th style="text-align:right">Valeur</th><th style="text-align:right">P&amp;L latent</th>';
+    const rows=open.map(r=>`<tr><td><b>${r.symbol}</b></td><td>${r.side}</td>
+      <td class="mono" style="text-align:right">${r.qty}</td><td class="mono" style="text-align:right">${r.avg_price}</td>
+      <td class="mono" style="text-align:right">${eur(r.current_value)}</td>
+      <td class="mono ${r.pnl_abs>=0?'pos':'neg'}" style="text-align:right">${eur(r.pnl_abs)} (${pct(r.pnl_pct)})</td></tr>`);
+    oc.appendChild(mkTable(head,rows));
+  }
+  p.appendChild(oc);
+  // historique
+  const hc=$(`<div class="card"><div class="label" style="margin-bottom:10px">Historique des trades passés (clique une ligne pour le détail)</div></div>`);
+  if(!closed.length){hc.appendChild($('<p style="color:var(--muted);font-size:13px">Aucun trade dans le journal.</p>'));}
+  else{
+    const head='<th>Actif</th><th>Sens</th><th>Entrée</th><th>Sortie</th><th style="text-align:right">P&amp;L</th><th style="text-align:right">%</th><th>Motif sortie</th>';
+    const rows=closed.map(t=>{
+      const win=(t.pnl_net||0)>=0,f=t.features_snapshot||{};
+      const feat=Object.entries(f).map(([k,v])=>k+'='+(typeof v==='number'?v.toFixed(2):v)).join(' · ')||'—';
+      return `<tr class="srow"><td><b>${t.instrument}</b></td><td>${t.side}</td>
+        <td class="mono" style="color:var(--muted)">${dt(t.entry_ts)}</td>
+        <td class="mono" style="color:var(--muted)">${dt(t.exit_ts)}</td>
+        <td class="mono ${win?'pos':'neg'}" style="text-align:right">${eur(t.pnl_net||0)}</td>
+        <td class="mono ${win?'pos':'neg'}" style="text-align:right">${pct(t.pnl_pct||0)}</td>
+        <td style="color:var(--muted)">${t.exit_reason||''}</td></tr>
+        <tr class="det" style="display:none"><td colspan="7" style="border:none;padding-top:0">
+        <div style="font-size:12px;color:var(--muted)">stratégie <b style="color:var(--fg)">${t.strategy||'—'}</b> · entrée ${(t.entry_price||0).toFixed(2)} → sortie ${(t.exit_price||0).toFixed(2)} · qté ${t.qty} · motif entrée « ${t.entry_reason||'—'} »<br>features : ${feat}</div></td></tr>`;
+    });
+    const table=mkTable(head,rows);
+    table.querySelectorAll('tr.srow').forEach(row=>{
+      row.onclick=()=>{const det=row.nextElementSibling;
+        if(det)det.style.display=det.style.display==='none'?'':'none';};
+    });
+    hc.appendChild(table);
+  }
+  p.appendChild(hc);
+})();
+
+// ---- UNIVERS ----
+(function(){
+  const u=DATA.universe,p=document.getElementById('uni');if(!u)return;
+  const g=$('<div class="grid4"></div>');
+  [['Sources actives',u.sources_enabled+' / '+u.sources_total],['Instruments seed',eur(u.seed_total)],
+   ['Classes d\'actifs',Object.keys(u.by_asset_class||{}).length],['Rebuild',u.rebuild_cadence_days+' j']]
+   .forEach(([lab,val])=>g.appendChild($(`<div class="card metric"><div class="label">${lab}</div><div class="val" style="font-size:22px">${val}</div></div>`)));
+  p.appendChild(g);
+  // répartition par classe
+  const bc=$(`<div class="card"><div class="label" style="margin-bottom:10px">Répartition par classe d'actifs (seed offline)</div></div>`);
+  const max=Math.max(1,...Object.values(u.by_asset_class||{}));
+  Object.entries(u.by_asset_class||{}).forEach(([k,v])=>{
+    bc.appendChild($(`<div style="display:flex;align-items:center;gap:8px;margin:5px 0;font-size:12px">
+      <span style="width:90px;color:var(--muted)">${k}</span>
+      <span class="facbar" style="width:${Math.round(v/max*100)}%;max-width:420px"></span>
+      <span class="mono">${v}</span></div>`));
+  });
+  p.appendChild(bc);
+  // sources
+  const sc=$(`<div class="card"><div class="label" style="margin-bottom:10px">Sources déclaratives (offline + réseau)</div></div>`);
+  const srcRows=u.sources.map(s=>`<tr><td><b>${s.id}</b></td><td style="color:var(--muted)">${s.kind}</td>
+    <td><span class="pill" style="color:${s.network?'#f59e0b':'#22c55e'}">${s.network?'réseau':'offline'}</span></td>
+    <td><span class="pill" style="color:${s.enabled?'#22c55e':'#9aa1ab'}">${s.enabled?'activée':'désactivée'}</span></td></tr>`);
+  sc.appendChild(mkTable('<th>Source</th><th>Type</th><th>Accès</th><th>Statut</th>',srcRows));
+  p.appendChild(sc);
+  // échantillon
+  if(u.sample&&u.sample.length){
+    const ec=$(`<div class="card"><div class="label" style="margin-bottom:10px">Échantillon d'instruments</div></div>`);
+    const smp=u.sample.map(r=>`<tr><td class="mono"><b>${r.symbol}</b></td>
+      <td style="color:var(--muted)">${r.name||''}</td><td>${r.asset_class||''}</td><td style="color:var(--muted)">${r.venue||''}</td></tr>`);
+    ec.appendChild(mkTable('<th>Symbole</th><th>Nom</th><th>Classe</th><th>Place</th>',smp));
+    p.appendChild(ec);
+  }
+})();
+
+// ---- DONNÉES (collecte + base de données) ----
+(function(){
+  const d=DATA.data,p=document.getElementById('data');if(!d)return;
+  // collecte
+  const g=$('<div class="grid4"></div>');
+  [['Provider',d.provider],['Barres collectées',eur(d.total_bars)],
+   ['Symboles',(d.collection||[]).length],['Fondamentaux',d.fundamentals_provider||'—']]
+   .forEach(([lab,val])=>g.appendChild($(`<div class="card metric"><div class="label">${lab}</div><div class="val" style="font-size:20px">${val}</div></div>`)));
+  p.appendChild(g);
+  const cc=$(`<div class="card"><div class="label" style="margin-bottom:6px">Collecte OHLCV</div>
+    <div style="color:var(--muted);font-size:12px;margin-bottom:10px">Ordre de fallback : ${(d.fallback_order||[]).join(' → ')||'—'} · cache ${d.cache?'activé':'désactivé'}</div></div>`);
+  const colRows=(d.collection||[]).map(r=>`<tr><td class="mono"><b>${r.symbol}</b></td>
+    <td class="mono" style="text-align:right">${r.bars}</td><td class="mono" style="color:var(--muted)">${dt(r.start)}</td>
+    <td class="mono" style="color:var(--muted)">${dt(r.end)}</td><td class="mono" style="text-align:right">${r.last_close}</td></tr>`);
+  cc.appendChild(mkTable('<th>Symbole</th><th style="text-align:right">Barres</th><th>Début</th><th>Fin</th><th style="text-align:right">Dernier cours</th>',colRows));
+  p.appendChild(cc);
+  // qualité
+  const q=d.quality||{},ok=q.ok;
+  const qc=$(`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <div class="label">Contrôle qualité (${q.symbol||''})</div>
+    <span class="pill" style="color:${ok?'#22c55e':'#ef4444'}">${ok?'✓ conforme':'✗ erreurs'}</span></div>
+    <div style="font-size:12px;color:var(--muted)">${q.n_rows||0} lignes validées · prix>0 · cohérence OHLC · timestamps croissants · trous temporels${(q.warnings||[]).length?(' — '+q.warnings.join('; ')):' : aucun'}${(q.errors||[]).length?(' — ERREURS: '+q.errors.join('; ')):''}</div></div>`);
+  p.appendChild(qc);
+  // base de données (couches)
+  const lc=$(`<div class="card"><div class="label" style="margin-bottom:10px">Base de données — couches médaillon</div></div>`);
+  (d.layers||[]).forEach(l=>lc.appendChild($(`<div style="padding:8px 0;border-top:1px solid var(--border)">
+    <div style="font-size:13px"><b>${l.name}</b> <span class="pill" style="margin-left:6px">${l.store}</span></div>
+    <div style="font-size:12px;color:var(--muted);margin-top:3px">${l.desc}</div></div>`)));
+  p.appendChild(lc);
 })();
 </script></body></html>"""
 

@@ -13,3 +13,6 @@ export const useDashboard = () => useQuery({ queryKey: ["dashboard"], queryFn: (
 export const useScreener = () => useQuery({ queryKey: ["screener"], queryFn: () => get<any>("/api/screener") });
 export const usePortfolio = () => useQuery({ queryKey: ["portfolio"], queryFn: () => get<any>("/api/portfolio") });
 export const usePositions = () => useQuery({ queryKey: ["positions"], queryFn: () => get<any>("/api/positions") });
+export const useTrades = () => useQuery({ queryKey: ["trades"], queryFn: () => get<any>("/api/trades") });
+export const useUniverse = () => useQuery({ queryKey: ["universe"], queryFn: () => get<any>("/api/universe") });
+export const useData = () => useQuery({ queryKey: ["data"], queryFn: () => get<any>("/api/data") });

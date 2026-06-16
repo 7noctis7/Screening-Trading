@@ -53,4 +53,16 @@ def positions() -> dict:
 
 @app.get("/api/trades")
 def trades() -> dict:
-    return {"trades": _snap()["trades"]}
+    snap = _snap()
+    return {"trades": snap["trades"], "open_trades": snap["open_trades"],
+            "stats": snap["trade_stats"]}
+
+
+@app.get("/api/universe")
+def universe() -> dict:
+    return _snap()["universe"]
+
+
+@app.get("/api/data")
+def data() -> dict:
+    return _snap()["data"]
