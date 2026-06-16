@@ -216,3 +216,12 @@ pour entamer l'implémentation des modules métier.
 - `scripts/check_all.sh` (tests+démos+aperçus) et `TESTING.md` (procédure de test pas-à-pas).
 
 **Note.** Les aperçus *statiques* (dashboard/portfolio.html) restent non interactifs (SVG serveur) ; `interactive.html` et le front Next.js portent l'interactivité.
+
+## Session 15 — Correctifs (2026-06-16) : onglets interactifs, lxml, hygiène repo
+**Fait.**
+- **Bug onglets interactifs corrigé** (`build_interactive.py`). Cause racine : le helper `$()` faisait `div.innerHTML='<tr>…'` ; le navigateur **supprime les `<tr>/<td>` posés hors d'un `<table>`**, donc le rendu levait une exception après le Dashboard → onglets **Portefeuille** et **Positions vides**. Fix : chaque table construite en **UNE chaîne HTML complète** (`<table><thead>…<tbody>…</tbody></table>`) injectée d'un coup ; clics du screener **câblés après injection** via `querySelectorAll` + `data-i` (au lieu d'`onclick` sur des nœuds détachés) ; **chaque onglet enveloppé dans un `try/catch`** → une erreur ne peut plus vider les autres. Au passage : corrigé un attribut `class` **dupliqué** dans le bloc Positions (coloration P&L pos/neg cassée). `interactive.html` régénéré + ouvert : les 3 onglets s'affichent.
+- **Dépendance manquante** : `lxml` ajouté à l'extra `data` de `pyproject.toml` (requis par `pd.read_html` dans `wikipedia_source.py`). Tests `test_wikipedia_parser.py` rendus robustes : `pytest.importorskip("pandas"/"lxml")` → **skip propre** si absent au lieu d'échouer.
+- **Hygiène repo** : `.gitignore` (re)créé (absent du dépôt malgré la note S0 — perdu aux uploads) couvrant `__pycache__`, `.env`, artefacts data, `.DS_Store` ; `.DS_Store` déjà suivis retirés (`git rm --cached apps/.DS_Store apps/web/.DS_Store`).
+- **154 tests verts** (aucune régression).
+
+**Décidé.** ADR-0022 (DOM : tables injectées en une chaîne complète + rendu d'onglet isolé par try/catch).

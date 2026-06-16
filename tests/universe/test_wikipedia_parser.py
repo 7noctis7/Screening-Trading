@@ -1,5 +1,11 @@
 """Teste le parser Wikipédia OFFLINE en pointant read_html sur une fixture HTML locale."""
+import pytest
+
 from packages.data.universe import constituent_sources
+
+# `pd.read_html` requiert un parseur HTML (lxml). Absent => skip propre, pas d'échec.
+pytest.importorskip("pandas", reason="pandas requis pour read_html")
+pytest.importorskip("lxml", reason="lxml requis par pandas.read_html (extra 'data')")
 
 FIX = "tests/universe/fixtures/index_table.html"
 

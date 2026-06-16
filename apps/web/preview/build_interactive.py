@@ -137,6 +137,7 @@ function lineChart(series,labels){
 
 // ---- DASHBOARD ----
 (function(){
+ try{
   const d=DATA.dashboard,m=d.metrics,p=document.getElementById('dash');
   const c=CYC[d.regime.cycle]||'#9aa1ab';
   p.appendChild($(`<div class="card banner">
@@ -158,30 +159,39 @@ function lineChart(series,labels){
   p.appendChild(lineChart([
     {name:'Portefeuille',data:b.portfolio,color:'#3b82f6',w:2},
     {name:'S&P 500',data:b['S&P 500'],color:'#9aa1ab',w:1.3}]));
-  // screener cliquable
-  const sc=DATA.screener,box=$(`<div class="card"><div class="label" style="margin-bottom:10px">Top screener (clique une ligne)</div></div>`);
-  const tb=$('<table><thead><tr><th>#</th><th>Actif</th><th style="text-align:right">Score</th><th style="padding-left:14px">Raison</th></tr></thead><tbody></tbody></table>');
-  sc.rows.slice(0,8).forEach(r=>{
-    const tr=$(`<tr class="srow"><td style="color:var(--muted)">${r.rank}</td><td><b>${r.symbol}</b></td>
-      <td class="mono" style="text-align:right">${r.score.toFixed(3)}</td>
-      <td style="padding-left:14px;color:var(--muted)">${r.reason||''}</td></tr>`);
-    const det=$(`<tr style="display:none"><td colspan="4" style="border:none;padding-top:0"></td></tr>`);
-    const cell=det.querySelector('td');
+  // screener cliquable — table construite en UNE chaîne HTML complète (sinon les <tr> isolés sont supprimés par le navigateur)
+  const sc=DATA.screener;
+  let rowsHtml='';
+  sc.rows.slice(0,8).forEach((r,idx)=>{
+    let facHtml='';
     Object.entries(r.factors||{}).forEach(([f,v])=>{
       const w=Math.min(100,Math.abs(v)*120);
-      cell.appendChild($(`<div style="display:flex;align-items:center;gap:8px;margin:3px 0;font-size:12px">
+      facHtml+=`<div style="display:flex;align-items:center;gap:8px;margin:3px 0;font-size:12px">
         <span style="width:90px;color:var(--muted)">${f}</span>
         <span class="facbar" style="width:${w}px;background:${v>=0?'#22c55e':'#ef4444'}"></span>
-        <span class="mono">${v.toFixed(3)}</span></div>`));
+        <span class="mono">${v.toFixed(3)}</span></div>`;
     });
-    tr.onclick=()=>{det.style.display=det.style.display==='none'?'':'none';};
-    tb.querySelector('tbody').appendChild(tr);tb.querySelector('tbody').appendChild(det);
+    rowsHtml+=`<tr class="srow" data-i="${idx}"><td style="color:var(--muted)">${r.rank}</td><td><b>${r.symbol}</b></td>
+      <td class="mono" style="text-align:right">${r.score.toFixed(3)}</td>
+      <td style="padding-left:14px;color:var(--muted)">${r.reason||''}</td></tr>
+      <tr class="sdet" data-i="${idx}" style="display:none"><td colspan="4" style="border:none;padding-top:0">${facHtml}</td></tr>`;
   });
-  box.appendChild(tb);p.appendChild(box);
+  const box=$(`<div class="card"><div class="label" style="margin-bottom:10px">Top screener (clique une ligne)</div>
+    <table><thead><tr><th>#</th><th>Actif</th><th style="text-align:right">Score</th><th style="padding-left:14px">Raison</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>`);
+  p.appendChild(box);
+  // câblage des clics APRÈS injection
+  box.querySelectorAll('tr.srow').forEach(tr=>{
+    tr.addEventListener('click',()=>{
+      const det=box.querySelector('tr.sdet[data-i="'+tr.dataset.i+'"]');
+      if(det)det.style.display=det.style.display==='none'?'':'none';
+    });
+  });
+ }catch(e){console.error('rendu dashboard:',e);}
 })();
 
 // ---- PORTEFEUILLE ----
 (function(){
+ try{
   const a=DATA.portfolio.analysis,p=document.getElementById('pf');if(!a)return;
   const rel=a.relative,rm=a.risk;
   const relRows=Object.entries(rel).map(([k,v])=>`<tr><td style="color:var(--muted)">${k}</td><td class="mono" style="text-align:right">${v}</td></tr>`).join('');
@@ -195,20 +205,21 @@ function lineChart(series,labels){
       <div><div style="color:var(--muted);font-size:12px">Vol</div><div style="font-size:18px">${pct(rm.vol)}</div></div>
       <div><div style="color:var(--muted);font-size:12px">Proba ruine (MC)</div><div style="font-size:18px">${pct(a.monte_carlo.p_ruin)}</div></div>
       </div></div></div>`));
-  // heatmap interactive
-  const co=a.correlation,heat=$(`<div class="card" id="chartWrap"><div class="label" style="margin-bottom:6px">Corrélation (survole une case)</div>
-    <div style="margin-bottom:8px">${co.clusters.map(c=>'<span class="pill" style="margin-right:6px">'+c.join(' · ')+'</span>').join('')}</div></div>`);
-  const ht=$('<table class="heat"></table>');
-  const hd=$('<tr><th></th></tr>');co.symbols.forEach(s=>hd.appendChild($(`<th>${s}</th>`)));ht.appendChild(hd);
+  // heatmap interactive — table construite en UNE chaîne HTML complète
+  const co=a.correlation;
+  const headHtml='<tr><th></th>'+co.symbols.map(s=>`<th>${s}</th>`).join('')+'</tr>';
+  let bodyHtml='';
   co.matrix.forEach((row,i)=>{
-    const tr=$(`<tr><th style="text-align:right;color:var(--muted)">${co.symbols[i]}</th></tr>`);
-    row.forEach((v,j)=>{
-      const r=Math.round(120+100*Math.max(0,v)),bl=Math.round(120+100*Math.max(0,-v));
-      const td=$(`<td style="background:rgb(${r},100,${bl})">${v.toFixed(2)}</td>`);
-      td.title=`${co.symbols[i]} × ${co.symbols[j]} : ${v.toFixed(2)}`;
-      tr.appendChild(td);
-    });ht.appendChild(tr);
-  });heat.appendChild(ht);p.appendChild(heat);
+    bodyHtml+=`<tr><th style="text-align:right;color:var(--muted)">${co.symbols[i]}</th>`+
+      row.map((v,j)=>{
+        const r=Math.round(120+100*Math.max(0,v)),bl=Math.round(120+100*Math.max(0,-v));
+        return `<td style="background:rgb(${r},100,${bl})" title="${co.symbols[i]} × ${co.symbols[j]} : ${v.toFixed(2)}">${v.toFixed(2)}</td>`;
+      }).join('')+'</tr>';
+  });
+  const heat=$(`<div class="card" id="chartWrap"><div class="label" style="margin-bottom:6px">Corrélation (survole une case)</div>
+    <div style="margin-bottom:8px">${co.clusters.map(c=>'<span class="pill" style="margin-right:6px">'+c.join(' · ')+'</span>').join('')}</div>
+    <table class="heat"><thead>${headHtml}</thead><tbody>${bodyHtml}</tbody></table></div>`);
+  p.appendChild(heat);
   // revue experte
   const rv=a.review,sc=rv.health_score,scc=sc>=65?'#22c55e':(sc<45?'#ef4444':'#f59e0b');
   const L=(t,arr,c)=>arr&&arr.length?`<div style="margin-bottom:8px"><div style="color:${c};font-size:12px;font-weight:600">${t}</div><ul>${arr.map(x=>'<li>'+x+'</li>').join('')}</ul></div>`:'';
@@ -218,25 +229,32 @@ function lineChart(series,labels){
     ${L('Forces',rv.strengths,'#22c55e')}${L('Faiblesses',rv.weaknesses,'#f59e0b')}
     ${L('Risques',rv.risks,'#ef4444')}${L('Recommandations',rv.recommendations,'#3b82f6')}
     <div style="color:var(--muted);font-size:11px;font-style:italic;margin-top:6px">${rv.disclaimer}</div></div>`));
+ }catch(e){console.error('rendu portefeuille:',e);}
 })();
 
 // ---- POSITIONS ----
 (function(){
+ try{
   const d=DATA.dashboard,p=document.getElementById('pos'),rows=d.positions||[],t=d.totals||{};
-  const box=$(`<div class="card"><div class="label" style="margin-bottom:10px">Composition</div></div>`);
-  if(!rows.length){box.appendChild($('<p style="color:var(--muted);font-size:13px">Aucune position ouverte au dernier pas (stratégie à plat).</p>'));}
-  else{
-    const tb=$('<table><thead><tr><th>Actif</th><th>Sens</th><th style="text-align:right">Qté</th><th style="text-align:right">PRU</th><th style="text-align:right">Valeur</th><th style="text-align:right">P&amp;L</th></tr></thead><tbody></tbody></table>');
-    rows.forEach(r=>tb.querySelector('tbody').appendChild($(`<tr class="srow"><td><b>${r.symbol}</b></td><td>${r.side}</td>
-      <td class="mono" style="text-align:right">${r.qty}</td><td class="mono" style="text-align:right">${r.avg_price}</td>
-      <td class="mono" style="text-align:right">${eur(r.current_value)}</td>
-      <td class="mono" style="text-align:right" class="${r.pnl_abs>=0?'pos':'neg'}">${eur(r.pnl_abs)} (${pct(r.pnl_pct)})</td></tr>`)));
-    box.appendChild(tb);
+  let inner;
+  if(!rows.length){
+    inner='<p style="color:var(--muted);font-size:13px">Aucune position ouverte au dernier pas (stratégie à plat).</p>';
+  }else{
+    let rowsHtml='';
+    rows.forEach(r=>{
+      rowsHtml+=`<tr class="srow"><td><b>${r.symbol}</b></td><td>${r.side}</td>
+        <td class="mono" style="text-align:right">${r.qty}</td><td class="mono" style="text-align:right">${r.avg_price}</td>
+        <td class="mono" style="text-align:right">${eur(r.current_value)}</td>
+        <td class="mono ${r.pnl_abs>=0?'pos':'neg'}" style="text-align:right">${eur(r.pnl_abs)} (${pct(r.pnl_pct)})</td></tr>`;
+    });
+    inner=`<table><thead><tr><th>Actif</th><th>Sens</th><th style="text-align:right">Qté</th><th style="text-align:right">PRU</th><th style="text-align:right">Valeur</th><th style="text-align:right">P&amp;L</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
   }
+  const box=$(`<div class="card"><div class="label" style="margin-bottom:10px">Composition</div>${inner}</div>`);
   p.appendChild(box);
   p.appendChild($(`<div class="card" style="display:flex;justify-content:space-between;font-size:13px">
     <span style="color:var(--muted)">Exposition brute ${eur(t.gross_exposure||0)} · nette ${eur(t.net_exposure||0)}</span>
     <span class="mono ${(t.pnl_abs||0)>=0?'pos':'neg'}">P&amp;L ${eur(t.pnl_abs||0)}</span></div>`));
+ }catch(e){console.error('rendu positions:',e);}
 })();
 </script></body></html>"""
 

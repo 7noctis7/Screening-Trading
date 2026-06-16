@@ -188,3 +188,22 @@ telemetry.py` (compteurs/gauges/timers → dashboard santé) ; `storage/backup.p
 restauration SQLite native) ; `reporting/tearsheet.py` (tear sheet HTML + **PDF reportlab**).
 Drift branché aux alertes. **Conséquence.** Traçabilité conformité, détection de dérive,
 sauvegardes testées, reporting partageable — le passage prototype → niveau pro.
+
+## ADR-0022 — Rendu DOM : tables en une chaîne complète + onglet isolé par try/catch
+**Date :** session 15 (2026-06-16)
+**Statut :** accepté
+**Contexte.** L'aperçu interactif autonome (`build_interactive.py`) construisait les lignes
+de tableau via un helper `div.innerHTML='<tr>…'`. Le **parseur HTML des navigateurs supprime
+tout `<tr>/<td>` qui n'a pas de `<table>` ancêtre** : le helper renvoyait `null`/un nœud
+incohérent, l'exception remontait et **stoppait tout le script après le Dashboard** → onglets
+Portefeuille et Positions vides.
+**Décision.**
+- Chaque tableau est généré comme **une seule chaîne HTML complète**
+  (`<table><thead>…</thead><tbody>…</tbody></table>`) puis injecté en **un seul** `innerHTML`.
+- Les interactions (clic d'une ligne du screener) sont **câblées après injection** via
+  `querySelectorAll` + attribut `data-i`, jamais par `onclick` sur des nœuds détachés.
+- **Le rendu de chaque onglet est enveloppé dans un `try/catch`** : une erreur isolée ne peut
+  plus vider les autres onglets (résilience d'affichage).
+**Conséquence.** Les 3 onglets s'affichent indépendamment ; un futur bug de données dans un
+onglet dégrade cet onglet seul, pas toute la page. Règle générale pour tout HTML généré :
+ne jamais `innerHTML` un fragment de table orphelin.

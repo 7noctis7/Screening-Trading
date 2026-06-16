@@ -8,7 +8,7 @@ dependencies = []  # core n'a AUCUNE dépendance. Les deps sont ajoutées par gr
 [project.optional-dependencies]
 # Ajout progressif au fil de la roadmap — on n'installe que ce qu'on utilise.
 common = ["pyyaml>=6.0"]
-data = ["yfinance", "ccxt", "finnhub-python", "alpaca-py", "fredapi", "pandas", "duckdb", "pyarrow"]
+data = ["yfinance", "ccxt", "finnhub-python", "alpaca-py", "fredapi", "pandas", "duckdb", "pyarrow", "lxml"]
 quality = ["pandera", "great-expectations", "dvc"]
 indicators = ["TA-Lib", "pandas-ta", "ta"]
 quant = ["statsmodels", "scipy", "numpy", "pandas"]
