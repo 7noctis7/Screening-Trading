@@ -21,6 +21,7 @@ sources:
   - { id: crypto_top100,     kind: static, file: data/seed/crypto_top100.csv,     enabled: true }
   - { id: cac40_seed,        kind: static, file: data/seed/cac40.csv,             enabled: true }
   - { id: aex_seed,          kind: static, file: data/seed/aex.csv,               enabled: true }
+  - { id: us_megacap,        kind: static, file: data/seed/us_megacap.csv,        enabled: true }
 
   # ---------- INDICES via WIKIPÉDIA (réseau) ----------
   - id: sp500
@@ -114,4 +115,6 @@ sources:
   - { id: us_listings, kind: nasdaq_trader, include_etf: true, enabled: true }
 
   # ---------- CRYPTO LIVE (réseau) : alternative au seed statique ----------
-  - { id: crypto_live, kind: coingecko, top_n: 100, quote: USDT, exclude_stable: true, enabled: false }
+  # Activée : utilisée quand le réseau est disponible ; en offline elle est sautée
+  # proprement et le seed statique crypto_top100 prend le relais.
+  - { id: crypto_live, kind: coingecko, top_n: 100, quote: USDC, exclude_stable: true, enabled: true }

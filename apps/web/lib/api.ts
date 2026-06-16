@@ -17,3 +17,4 @@ export const useTrades = () => useQuery({ queryKey: ["trades"], queryFn: () => g
 export const useUniverse = () => useQuery({ queryKey: ["universe"], queryFn: () => get<any>("/api/universe") });
 export const useData = () => useQuery({ queryKey: ["data"], queryFn: () => get<any>("/api/data") });
 export const useThemes = () => useQuery({ queryKey: ["themes"], queryFn: () => get<any>("/api/themes") });
+export const useMl = () => useQuery({ queryKey: ["ml"], queryFn: () => get<any>("/api/ml") });

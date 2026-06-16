@@ -5,11 +5,11 @@ from packages.data.universe import UniverseBuilder
 def test_offline_build_static_only():
     res = UniverseBuilder("config/universe.yaml", allow_network=False).build()
     by = Counter(i.asset_class.value for i in res.instruments)
-    # 7 sources statiques : forex20 + commo20 + indices20 + etf100 + crypto100 + cac40 + aex24
-    assert len(res.instruments) == 325
+    # 8 sources statiques : forex20 + commo20 + indices20 + etf100 + crypto100 + cac40 + aex24 + us_megacap117
+    assert len(res.instruments) == 442
     assert by["etf"] == 101 and by["crypto"] == 100
     assert by["forex"] == 20 and by["commodity"] == 20 and by["index"] == 20
-    assert by["equity"] == 64  # CAC40 (40) + AEX (24)
+    assert by["equity"] == 181  # CAC40 (40) + AEX (24) + US megacap (117)
 
 
 def test_network_sources_skipped_offline():

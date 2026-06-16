@@ -59,6 +59,8 @@ color:var(--muted);cursor:pointer;font-size:13px;font-weight:500;transition:all 
 .tab.active{background:var(--surface3);color:var(--fg);border-color:var(--border2);box-shadow:var(--shadow)}
 .tab.active::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;
 background:var(--accent);margin-right:7px;vertical-align:middle;box-shadow:0 0 8px var(--accent)}
+:focus-visible{outline:2px solid var(--accent2);outline-offset:2px;border-radius:8px}
+.tab:focus-visible{outline-offset:0}
 /* ---- pages ---- */
 .page{display:none;flex-direction:column;gap:14px}
 .page.active{display:flex;animation:fade .35s ease}
@@ -89,8 +91,8 @@ tbody tr:hover{background:var(--surface2)}
 tr.srow,tr.srow td{cursor:pointer}
 .facbar{height:7px;border-radius:4px;background:linear-gradient(90deg,var(--accent),var(--accent2));
 display:inline-block;vertical-align:middle;transition:width .5s ease}
-#chartWrap{position:relative}
-#tip{position:absolute;pointer-events:none;background:rgba(8,9,12,.95);border:1px solid var(--border2);
+#chartWrap,.chartWrap{position:relative}
+#tip,.tip{position:absolute;pointer-events:none;background:rgba(8,9,12,.95);border:1px solid var(--border2);
 border-radius:10px;padding:8px 12px;font-size:12px;opacity:0;transition:opacity .1s;white-space:nowrap;
 z-index:5;box-shadow:var(--shadow)}
 /* ---- heatmap ---- */
@@ -123,17 +125,19 @@ ul{margin:4px 0 0;padding-left:18px;font-size:13px}li{margin:3px 0}
   </div>
 </div>
 <div class="wrap">
-<div class="tabs">
-<div class="tab active" data-p="dash">Dashboard</div>
-<div class="tab" data-p="themes">Thèmes de marché</div>
-<div class="tab" data-p="uni">Univers</div>
-<div class="tab" data-p="data">Données</div>
-<div class="tab" data-p="pf">Portefeuille &amp; Analyse</div>
-<div class="tab" data-p="pos">Positions</div>
-<div class="tab" data-p="trades">Trades</div></div>
+<div class="tabs" role="tablist" aria-label="Sections du terminal">
+<div class="tab active" data-p="dash" role="tab" tabindex="0" aria-selected="true">Dashboard</div>
+<div class="tab" data-p="themes" role="tab" tabindex="0" aria-selected="false">Thèmes de marché</div>
+<div class="tab" data-p="ml" role="tab" tabindex="0" aria-selected="false">Signaux ML</div>
+<div class="tab" data-p="uni" role="tab" tabindex="0" aria-selected="false">Univers</div>
+<div class="tab" data-p="data" role="tab" tabindex="0" aria-selected="false">Données</div>
+<div class="tab" data-p="pf" role="tab" tabindex="0" aria-selected="false">Portefeuille &amp; Analyse</div>
+<div class="tab" data-p="pos" role="tab" tabindex="0" aria-selected="false">Positions</div>
+<div class="tab" data-p="trades" role="tab" tabindex="0" aria-selected="false">Trades</div></div>
 
 <div class="page active" id="dash"></div>
 <div class="page" id="themes"></div>
+<div class="page" id="ml"></div>
 <div class="page" id="uni"></div>
 <div class="page" id="data"></div>
 <div class="page" id="pf"></div>
@@ -148,13 +152,27 @@ const eur=(x)=>Math.round(x).toLocaleString('fr-FR');
 const CYC={expansion:'#22c55e',recovery:'#3b82f6',slowdown:'#f59e0b',recession:'#ef4444'};
 const fmtTS=(s)=>{if(!s)return '—';const d=new Date(s);return isNaN(d)?String(s).slice(0,16).replace('T',' '):
   d.toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});};
+const STANCE_C={bullish:'#22c55e',bearish:'#f43f5e',neutral:'#9aa1ad'};
+const STANCE_I={bullish:'▲',bearish:'▼',neutral:'–'};
+const stanceTag=(st,sec)=>`<span style="color:${STANCE_C[st]||'#9aa1ad'}">${STANCE_I[st]||'–'}</span> <span style="color:var(--muted)">${sec||'—'}</span>`;
 
-// ---- tabs ----
-document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
-  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+// ---- tabs (clic + clavier, ARIA) ----
+const TABS=[...document.querySelectorAll('.tab')];
+function activate(t){
+  TABS.forEach(x=>{x.classList.remove('active');x.setAttribute('aria-selected','false');});
   document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
-  t.classList.add('active');document.getElementById(t.dataset.p).classList.add('active');
+  t.classList.add('active');t.setAttribute('aria-selected','true');
+  document.getElementById(t.dataset.p).classList.add('active');
   window.scrollTo({top:0,behavior:'smooth'});
+}
+TABS.forEach((t,i)=>{
+  t.onclick=()=>activate(t);
+  t.onkeydown=e=>{
+    if(e.key==='Enter'||e.key===' '){e.preventDefault();activate(t);}
+    else if(e.key==='ArrowRight'||e.key==='ArrowLeft'){
+      e.preventDefault();const j=(i+(e.key==='ArrowRight'?1:TABS.length-1))%TABS.length;
+      TABS[j].focus();activate(TABS[j]);}
+  };
 });
 
 // ---- horloge live + badge de fraîcheur (flux différé) ----
@@ -169,7 +187,7 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
 
 // ---- bandeau "données au…" injecté en tête de CHAQUE onglet ----
 const SECTION_ASOF={dash:(DATA.dashboard||{}).as_of,themes:(DATA.themes||{}).as_of,
-  uni:(DATA.universe||{}).as_of,data:(DATA.data||{}).as_of,
+  ml:(DATA.dashboard||{}).as_of,uni:(DATA.universe||{}).as_of,data:(DATA.data||{}).as_of,
   pf:(DATA.dashboard||{}).as_of,pos:(DATA.dashboard||{}).as_of,trades:(DATA.dashboard||{}).as_of};
 function freshnessChip(pageId){
   const M=DATA.meta||{},asof=SECTION_ASOF[pageId]||M.last_bar;
@@ -185,54 +203,64 @@ function countUp(el,target,suffix,dur=700){
   requestAnimationFrame(step);
 }
 
-// ---- courbe interactive (axe prix + axe temps, crosshair + tooltip) ----
+// ---- courbe interactive (axes prix+temps, dégradé, valeurs de fin, crosshair + tooltip) ----
 const fmtDate=(s)=>{const v=String(s);return /^\d{4}-/.test(v)?v.slice(0,10):('Jour '+v);};
-function lineChart(series,labels){
-  const W=820,H=220,padL=44,padR=10,padT=8,padB=22;
+let _chartUID=0;
+function lineChart(series,labels,title){
+  const W=860,H=240,padL=46,padR=64,padT=10,padB=24,uid='c'+(++_chartUID);
   const all=[].concat(...series.map(s=>s.data));
   const lo=Math.min(...all),hi=Math.max(...all),rng=(hi-lo)||1;
   const n=series[0].data.length;
   const X=i=>padL+i*(W-padL-padR)/(n-1), Y=v=>(H-padB)-(v-lo)/rng*((H-padB)-padT);
-  const poly=(d,c,w)=>`<polyline points="${d.map((v,i)=>X(i).toFixed(1)+','+Y(v).toFixed(1)).join(' ')}" fill="none" stroke="${c}" stroke-width="${w}"/>`;
-  // axe Y — échelle de prix / indice (4 graduations + lignes de grille)
+  const poly=(d,c,w)=>`<polyline points="${d.map((v,i)=>X(i).toFixed(1)+','+Y(v).toFixed(1)).join(' ')}" fill="none" stroke="${c}" stroke-width="${w}" stroke-linejoin="round"/>`;
+  // dégradé sous la 1re série (portefeuille)
+  const d0=series[0].data;
+  const area=`<defs><linearGradient id="g${uid}" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="${series[0].color}" stop-opacity=".22"/>
+    <stop offset="100%" stop-color="${series[0].color}" stop-opacity="0"/></linearGradient></defs>
+    <polygon points="${X(0).toFixed(1)},${(H-padB)} ${d0.map((v,i)=>X(i).toFixed(1)+','+Y(v).toFixed(1)).join(' ')} ${X(n-1).toFixed(1)},${(H-padB)}" fill="url(#g${uid})"/>`;
   let yAxis='';
   for(let k=0;k<4;k++){const v=lo+k/3*(hi-lo),y=Y(v);
     yAxis+=`<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="1"/>`
-      +`<text x="${padL-6}" y="${(y+3).toFixed(1)}" fill="var(--muted)" font-size="10" text-anchor="end">${v.toFixed(1)}</text>`;
+      +`<text x="${padL-6}" y="${(y+3).toFixed(1)}" fill="var(--muted)" font-size="10" text-anchor="end">${v.toFixed(0)}</text>`;
   }
-  // axe X — horizon temporel (5 graduations datées)
   let xAxis='';
   for(let k=0;k<5;k++){const i=Math.round(k/4*(n-1)),x=X(i);
     xAxis+=`<text x="${x.toFixed(1)}" y="${H-6}" fill="var(--muted)" font-size="10" text-anchor="${k===0?'start':k===4?'end':'middle'}">${fmtDate(labels?labels[i]:i)}</text>`;
   }
-  const wrap=$(`<div id="chartWrap" class="card">
-    <div class="label" style="margin-bottom:8px">Équity ${series.length>1?'vs S&amp;P 500 (rebasé 100)':''} — survole pour le détail</div>
-    <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="overflow:visible">
-      ${yAxis}${xAxis}
-      ${series.map(s=>poly(s.data,s.color,s.w)).join('')}
-      <line id="cx" x1="0" y1="${padT}" x2="0" y2="${H-padB}" stroke="#4b5563" stroke-width="1" opacity="0"/>
-      <circle id="cd" r="4" fill="${series[0].color}" opacity="0"/>
-      <rect id="ov" x="${padL}" y="${padT}" width="${W-padL-padR}" height="${H-padT-padB}" fill="transparent"/>
-    </svg><div id="tip"></div>
-    <div style="display:flex;gap:16px;margin-top:8px;font-size:11px;color:var(--muted)">
-      ${series.map(s=>`<span><span style="color:${s.color}">●</span> ${s.name}</span>`).join('')}</div></div>`);
+  // valeurs de FIN (dernier point) → toujours visibles, à droite de chaque courbe
+  const endLabels=series.map(s=>{const v=s.data[n-1],y=Y(v);
+    return `<text x="${W-padR+5}" y="${(y+3).toFixed(1)}" fill="${s.color}" font-size="11" font-weight="600">${v.toFixed(1)}</text>`
+      +`<circle cx="${X(n-1).toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="${s.color}"/>`;}).join('');
+  const wrap=$(`<div class="chartWrap card" style="position:relative">
+    <div class="banner" style="margin-bottom:8px"><div class="label">${title||'Performance'}</div>
+      <div style="display:flex;gap:14px;font-size:11px;color:var(--muted)">
+      ${series.map(s=>`<span><span style="color:${s.color}">●</span> ${s.name}</span>`).join('')}</div></div>
+    <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="overflow:visible" preserveAspectRatio="none">
+      ${area}${yAxis}${xAxis}
+      ${series.map(s=>poly(s.data,s.color,s.w)).join('')}${endLabels}
+      <line class="cx" x1="0" y1="${padT}" x2="0" y2="${H-padB}" stroke="#5b6675" stroke-width="1" opacity="0"/>
+      ${series.map(s=>`<circle class="cd cd-${series.indexOf(s)}" r="3.5" fill="${s.color}" opacity="0"/>`).join('')}
+      <rect class="ov" x="0" y="0" width="${W}" height="${H}" fill="transparent" style="cursor:crosshair"/>
+    </svg><div class="tip" id="tip"></div></div>`);
   setTimeout(()=>{
-    const svg=wrap.querySelector('svg'),ov=wrap.querySelector('#ov'),
-      cx=wrap.querySelector('#cx'),cd=wrap.querySelector('#cd'),tip=wrap.querySelector('#tip');
-    ov.addEventListener('pointermove',e=>{
-      const r=svg.getBoundingClientRect();
-      const px=(e.clientX-r.left)/r.width*W;
-      let i=Math.round((px-padL)/((W-padL-padR)/(n-1)));i=Math.max(0,Math.min(n-1,i));
-      const x=X(i),y=Y(series[0].data[i]);
-      cx.setAttribute('x1',x);cx.setAttribute('x2',x);cx.setAttribute('opacity','.6');
-      cd.setAttribute('cx',x);cd.setAttribute('cy',y);cd.setAttribute('opacity','1');
-      tip.style.opacity=1;
-      tip.style.left=Math.min(r.width-170,(x/W*r.width)+12)+'px';tip.style.top='6px';
+    const svg=wrap.querySelector('svg'),ov=wrap.querySelector('.ov'),
+      cx=wrap.querySelector('.cx'),cds=wrap.querySelectorAll('.cd'),tip=wrap.querySelector('.tip');
+    function show(i){
+      i=Math.max(0,Math.min(n-1,i));const x=X(i);
+      cx.setAttribute('x1',x);cx.setAttribute('x2',x);cx.setAttribute('opacity','.55');
+      cds.forEach((cd,k)=>{cd.setAttribute('cx',x);cd.setAttribute('cy',Y(series[k].data[i]));cd.setAttribute('opacity','1');});
+      const r=svg.getBoundingClientRect(),px=x/W*r.width,flip=px>r.width*0.6;
+      tip.style.opacity=1;tip.style.top='8px';
+      tip.style.left=(flip?Math.max(6,px-tip.offsetWidth-14):px+14)+'px';
       tip.innerHTML=`<b>${fmtDate(labels?labels[i]:i)}</b><br>`+
         series.map(s=>`<span style="color:${s.color}">●</span> ${s.name}: <b>${s.data[i].toFixed(2)}</b>`).join('<br>');
-    });
-    ov.addEventListener('pointerleave',()=>{cx.setAttribute('opacity','0');cd.setAttribute('opacity','0');tip.style.opacity=0;});
-  },50);
+    }
+    ov.addEventListener('pointermove',e=>{const r=svg.getBoundingClientRect();
+      show(Math.round(((e.clientX-r.left)/r.width*W-padL)/((W-padL-padR)/(n-1))));});
+    ov.addEventListener('pointerleave',()=>{cx.setAttribute('opacity','0');cds.forEach(cd=>cd.setAttribute('opacity','0'));tip.style.opacity=0;});
+    show(n-1);  // état initial = point le PLUS RÉCENT (toujours visible au chargement)
+  },60);
   return wrap;
 }
 
@@ -255,11 +283,12 @@ function lineChart(series,labels){
     g.appendChild(card);countUp(card.querySelector('.val'),suf==='%'?val*100:val,suf);
   });
   p.appendChild(g);
-  // courbe equity vs benchmark (axe temps = dates réelles)
+  // courbe equity vs benchmarks (axe temps = dates réelles, valeurs de fin visibles)
   const b=DATA.portfolio.benchmarks;
-  p.appendChild(lineChart([
-    {name:'Portefeuille',data:b.portfolio,color:'#3b82f6',w:2},
-    {name:'S&P 500',data:b['S&P 500'],color:'#9aa1ab',w:1.3}],d.dates));
+  const ser=[{name:'Portefeuille',data:b.portfolio,color:'#3b82f6',w:2.2}];
+  if(b['Univers (équipondéré)'])ser.push({name:'Univers (équipondéré)',data:b['Univers (équipondéré)'],color:'#9aa1ad',w:1.4});
+  if(b['S&P 500'])ser.push({name:'S&P 500',data:b['S&P 500'],color:'#5b6675',w:1.2});
+  p.appendChild(lineChart(ser,d.dates,'Performance — Portefeuille vs benchmarks (rebasé 100)'));
   const MZ=DATA.meta||{};
   p.appendChild($(`<div style="font-size:11px;color:var(--muted);margin-top:-6px">
     ⓘ Backtest <b style="color:var(--fg)">swing</b> sur <b style="color:var(--fg)">${MZ.traded_assets||MZ.universe_size||0} actifs</b>
@@ -278,13 +307,17 @@ function lineChart(series,labels){
         <span class="facbar" style="width:${w}px;background:${v>=0?'#22c55e':'#ef4444'}"></span>
         <span class="mono">${v.toFixed(3)}</span></div>`;
     });
+    const ml=r.ml_score==null?'—':(r.ml_score*100).toFixed(0)+'%';
+    const mlc=r.ml_score==null?'var(--muted)':(r.ml_score>=0.5?'#22c55e':'#f43f5e');
     rowsHtml+=`<tr class="srow" data-i="${idx}"><td style="color:var(--muted)">${r.rank}</td><td><b>${r.symbol}</b></td>
+      <td style="color:var(--muted);font-size:11px">${r.sector||''}</td>
       <td class="mono" style="text-align:right">${r.score.toFixed(3)}</td>
+      <td class="mono" style="text-align:right;color:${mlc}">${ml}</td>
       <td style="padding-left:14px;color:var(--muted)">${r.reason||''}</td></tr>
-      <tr class="sdet" data-i="${idx}" style="display:none"><td colspan="4" style="border:none;padding-top:0">${facHtml}</td></tr>`;
+      <tr class="sdet" data-i="${idx}" style="display:none"><td colspan="6" style="border:none;padding-top:0">${facHtml}</td></tr>`;
   });
-  const box=$(`<div class="card"><div class="label" style="margin-bottom:10px">Top screener (clique une ligne)</div>
-    <table><thead><tr><th>#</th><th>Actif</th><th style="text-align:right">Score</th><th style="padding-left:14px">Raison</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>`);
+  const box=$(`<div class="card"><div class="label" style="margin-bottom:10px">Top screener — multi-actifs (score facteurs + edge ML · clique une ligne)</div>
+    <table><thead><tr><th>#</th><th>Actif</th><th>Secteur</th><th style="text-align:right">Score</th><th style="text-align:right">ML</th><th style="padding-left:14px">Raison</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>`);
   p.appendChild(box);
   // câblage des clics APRÈS injection
   box.querySelectorAll('tr.srow').forEach(tr=>{
@@ -349,14 +382,19 @@ function lineChart(series,labels){
   }else{
     let rowsHtml='';
     rows.forEach(r=>{
-      rowsHtml+=`<tr class="srow"><td><b>${r.symbol}</b></td><td>${r.side}</td>
-        <td class="mono" style="text-align:right">${r.qty}</td><td class="mono" style="text-align:right">${r.avg_price}</td>
+      const ml=r.ml_score==null?'—':(r.ml_score*100).toFixed(0)+'%';
+      rowsHtml+=`<tr class="srow"><td><b>${r.symbol}</b></td><td>${stanceTag(r.stance,r.sector)}</td>
+        <td class="mono" style="text-align:right">${ml}</td>
+        <td class="mono" style="text-align:right">${r.qty.toFixed(2)}</td><td class="mono" style="text-align:right">${r.avg_price}</td>
         <td class="mono" style="text-align:right">${eur(r.current_value)}</td>
         <td class="mono ${r.pnl_abs>=0?'pos':'neg'}" style="text-align:right">${eur(r.pnl_abs)} (${pct(r.pnl_pct)})</td></tr>`;
     });
-    inner=`<table><thead><tr><th>Actif</th><th>Sens</th><th style="text-align:right">Qté</th><th style="text-align:right">PRU</th><th style="text-align:right">Valeur</th><th style="text-align:right">P&amp;L</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
+    inner=`<table><thead><tr><th>Actif</th><th>Secteur / tendance</th><th style="text-align:right">ML</th><th style="text-align:right">Qté</th><th style="text-align:right">PRU</th><th style="text-align:right">Valeur</th><th style="text-align:right">P&amp;L</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
   }
-  const box=$(`<div class="card"><div class="label" style="margin-bottom:10px">Composition</div>${inner}</div>`);
+  const nb=rows.length, bull=rows.filter(r=>r.stance==='bullish').length;
+  const box=$(`<div class="card"><div class="banner" style="margin-bottom:10px">
+    <div class="label">Composition — ${nb} positions</div>
+    <div style="font-size:11px;color:var(--muted)">${bull}/${nb} dans des secteurs <span style="color:#22c55e">bullish</span> · le reste = meilleurs setups ailleurs</div></div>${inner}</div>`);
   p.appendChild(box);
   p.appendChild($(`<div class="card" style="display:flex;justify-content:space-between;font-size:13px">
     <span style="color:var(--muted)">Exposition brute ${eur(t.gross_exposure||0)} · nette ${eur(t.net_exposure||0)}</span>
@@ -515,6 +553,15 @@ const mkTable=(head,bodyRows)=>$(`<table><thead><tr>${head}</tr></thead><tbody>$
     <div style="font-size:13px"><b>${l.name}</b> <span class="pill" style="margin-left:6px">${l.store}</span></div>
     <div style="font-size:12px;color:var(--muted);margin-top:3px">${l.desc}</div></div>`)));
   p.appendChild(lc);
+  // cadence de mise à jour
+  p.appendChild($(`<div class="card" style="border-color:var(--border2)">
+    <div class="label" style="margin-bottom:6px">Mise à jour des données</div>
+    <div style="font-size:12px;color:var(--muted)">Batch <b style="color:var(--fg)">EOD quotidien</b> : chaque jour de bourse, la barre du jour
+    est ajoutée à l'historique de <b style="color:var(--fg)">chaque actif</b> (append incrémental, jamais d'écrasement) ;
+    contrôles qualité rejoués avant intégration. Intraday différé ${(DATA.meta||{}).delay_minutes||15} min.
+    Univers rebâti tous les ${(DATA.universe||{}).rebuild_cadence_days||30} j (snapshot daté point-in-time).
+    <i>Démo : série synthétique reproductible regénérée jusqu'à la date du jour ; en production, ordonnanceur
+    (scripts/scheduler.py) + stores DuckDB/Parquet persistants.</i></div></div>`));
 })();
 
 // ---- THÈMES DE MARCHÉ (heatmap YTD interactive + meilleurs setups) ----
@@ -572,8 +619,38 @@ const heatColor=(v,m)=>{const t=Math.max(-1,Math.min(1,v/m));
  }catch(e){console.error('rendu thèmes:',e);}
 })();
 
+// ---- SIGNAUX ML (edge cross-section sur tout l'univers) ----
+(function(){
+ try{
+  const ml=DATA.ml,p=document.getElementById('ml');if(!ml)return;
+  if(!ml.available){p.appendChild($('<div class="card"><p style="color:var(--muted);font-size:13px">Modèle ML indisponible (échantillon insuffisant).</p></div>'));return;}
+  const g=$('<div class="grid4"></div>');
+  [['Modèle',ml.model],['AUC (out-of-time)',ml.auc!=null?ml.auc:'—'],
+   ['Échantillon (train)',eur(ml.n_train)],['Horizon',ml.horizon_days+' j']]
+   .forEach(([lab,val])=>g.appendChild($(`<div class="card metric"><div class="label">${lab}</div><div class="val" style="font-size:20px">${val}</div></div>`)));
+  p.appendChild(g);
+  p.appendChild($(`<div style="font-size:11px;color:var(--muted);margin-top:-4px">Régression logistique entraînée en cross-section sur TOUT l'univers (features : momentum 1m/3m, tendance vs MM50, RSI, volatilité). Score = probabilité de hausse à ~${ml.horizon_days} j. Validation hors-échantillon temporelle (AUC).</div>`));
+  // top conviction
+  const tc=$(`<div class="card"><div class="label" style="margin-bottom:10px">Top convictions ML (proba de hausse la plus élevée)</div></div>`);
+  const rows=ml.top_conviction.map(a=>`<tr><td class="mono"><b>${a.symbol}</b></td><td style="color:var(--muted)">${a.name||''}</td>
+    <td style="color:var(--muted);font-size:11px">${a.sector||''}</td>
+    <td class="mono" style="text-align:right;color:${a.ml_score>=0.5?'#22c55e':'#f43f5e'}">${(a.ml_score*100).toFixed(1)}%</td></tr>`);
+  tc.appendChild(mkTable('<th>Actif</th><th>Nom</th><th>Secteur</th><th style="text-align:right">Proba hausse</th>',rows));
+  p.appendChild(tc);
+  // importance des features
+  const fi=$(`<div class="card"><div class="label" style="margin-bottom:10px">Importance des variables (|poids| standardisés)</div></div>`);
+  const maxw=Math.max(...ml.feature_importance.map(f=>f.weight),0.01);
+  ml.feature_importance.forEach(f=>fi.appendChild($(`<div style="display:flex;align-items:center;gap:8px;margin:6px 0;font-size:12px">
+    <span style="width:140px;color:var(--muted)">${f.feature}</span>
+    <span class="facbar" style="width:${Math.round(f.weight/maxw*100)}%;max-width:360px"></span>
+    <span class="mono">${f.weight.toFixed(3)}</span></div>`)));
+  p.appendChild(fi);
+  p.appendChild($('<div style="font-size:11px;color:var(--muted)">Démonstration sur données synthétiques : l\'edge prédictif est volontairement modeste (marché en grande partie aléatoire). Le score ML enrichit le screener et confirme les setups.</div>'));
+ }catch(e){console.error('rendu ml:',e);}
+})();
+
 // ---- bandeau "données au…" en tête de chaque onglet + ouverture sur le 1er ----
-['dash','themes','uni','data','pf','pos','trades'].forEach(id=>{
+['dash','themes','ml','uni','data','pf','pos','trades'].forEach(id=>{
   const pg=document.getElementById(id);if(pg)pg.insertBefore(freshnessChip(id),pg.firstChild);
 });
 </script></body></html>"""

@@ -82,3 +82,8 @@ def data() -> dict:
 @app.get("/api/themes")
 def themes() -> dict:
     return _snap()["themes"]
+
+
+@app.get("/api/ml")
+def ml() -> dict:
+    return _snap()["ml"]

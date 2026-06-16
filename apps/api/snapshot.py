@@ -88,25 +88,67 @@ def _universe_section(instruments: list[dict]) -> dict:
 # Thèmes structurels (4ᵉ révolution industrielle, K. Schwab) + secteurs classiques.
 # Chaque thème : panier de proxies + biais de drift/vol thématique (synthétique, reproductible).
 _SECTORS = {
-    # --- 4ᵉ révolution industrielle ---
-    "Intelligence artificielle":     {"tickers": ["NVDA", "MSFT", "GOOGL", "PLTR", "SNOW"], "drift": 0.30, "vol": 0.24},
-    "Semi-conducteurs":              {"tickers": ["NVDA", "TSM", "AVGO", "AMD", "ASML"],    "drift": 0.26, "vol": 0.26},
-    "Crypto & Blockchain":           {"tickers": ["COIN", "MSTR", "MARA", "RIOT", "HUT"],   "drift": 0.22, "vol": 0.45},
-    "Cloud & Datacenters":           {"tickers": ["MSFT", "AMZN", "GOOGL", "EQIX", "DLR"],  "drift": 0.19, "vol": 0.18},
-    "Cybersécurité":                 {"tickers": ["CRWD", "PANW", "ZS", "FTNT", "S"],       "drift": 0.17, "vol": 0.22},
-    "Espace & Défense":              {"tickers": ["LMT", "RTX", "BA", "NOC", "RKLB"],       "drift": 0.12, "vol": 0.20},
-    "Robotique & Automatisation":    {"tickers": ["ABB", "ISRG", "ROK", "TER", "FANUY"],    "drift": 0.10, "vol": 0.18},
-    "Véhicules électriques":         {"tickers": ["TSLA", "RIVN", "LCID", "BYDDY", "NIO"],  "drift": 0.04, "vol": 0.40},
-    "Fintech & Paiements":           {"tickers": ["V", "MA", "PYPL", "SQ", "ADYEY"],        "drift": 0.06, "vol": 0.20},
-    "Biotech & Génomique":           {"tickers": ["LLY", "VRTX", "REGN", "CRSP", "MRNA"],   "drift": 0.03, "vol": 0.24},
+    # --- 4ᵉ révolution industrielle --- (drifts ANNUELS modérés → réalistes sur ~4,6 ans)
+    "Intelligence artificielle":     {"tickers": ["NVDA", "MSFT", "GOOGL", "PLTR", "SNOW"], "drift": 0.16, "vol": 0.24},
+    "Semi-conducteurs":              {"tickers": ["NVDA", "TSM", "AVGO", "AMD", "ASML"],    "drift": 0.15, "vol": 0.26},
+    "Crypto & Blockchain":           {"tickers": ["COIN", "MSTR", "MARA", "RIOT", "HUT"],   "drift": 0.14, "vol": 0.45},
+    "Cloud & Datacenters":           {"tickers": ["MSFT", "AMZN", "GOOGL", "EQIX", "DLR"],  "drift": 0.12, "vol": 0.18},
+    "Cybersécurité":                 {"tickers": ["CRWD", "PANW", "ZS", "FTNT", "S"],       "drift": 0.11, "vol": 0.22},
+    "Espace & Défense":              {"tickers": ["LMT", "RTX", "BA", "NOC", "RKLB"],       "drift": 0.08, "vol": 0.20},
+    "Robotique & Automatisation":    {"tickers": ["ABB", "ISRG", "ROK", "TER", "FANUY"],    "drift": 0.07, "vol": 0.18},
+    "Véhicules électriques":         {"tickers": ["TSLA", "RIVN", "LCID", "BYDDY", "NIO"],  "drift": 0.02, "vol": 0.40},
+    "Fintech & Paiements":           {"tickers": ["V", "MA", "PYPL", "SQ", "ADYEY"],        "drift": 0.05, "vol": 0.20},
+    "Biotech & Génomique":           {"tickers": ["LLY", "VRTX", "REGN", "CRSP", "MRNA"],   "drift": 0.02, "vol": 0.24},
     "Énergie propre & Transition":   {"tickers": ["ENPH", "FSLR", "NEE", "PLUG", "BE"],     "drift": -0.04, "vol": 0.30},
     # --- secteurs GICS classiques ---
-    "Énergie (fossile)":             {"tickers": ["XOM", "CVX", "COP", "SLB", "EOG"],       "drift": 0.09, "vol": 0.18},
-    "Industrie":                     {"tickers": ["CAT", "GE", "HON", "UPS", "DE"],         "drift": 0.06, "vol": 0.16},
-    "Conso. de base":                {"tickers": ["PG", "KO", "PEP", "COST", "WMT"],        "drift": 0.05, "vol": 0.12},
+    "Énergie (fossile)":             {"tickers": ["XOM", "CVX", "COP", "SLB", "EOG"],       "drift": 0.06, "vol": 0.18},
+    "Industrie":                     {"tickers": ["CAT", "GE", "HON", "UPS", "DE"],         "drift": 0.05, "vol": 0.16},
+    "Conso. de base":                {"tickers": ["PG", "KO", "PEP", "COST", "WMT"],        "drift": 0.04, "vol": 0.12},
     "Finance":                       {"tickers": ["JPM", "BAC", "GS", "MS", "BLK"],         "drift": 0.03, "vol": 0.18},
     "Services publics":              {"tickers": ["DUK", "SO", "AEP", "D", "EXC"],          "drift": 0.01, "vol": 0.12},
 }
+
+
+# drift/vol par secteur (sert à générer les trajectoires synthétiques cohérentes)
+_SECTOR_DV = {name: (cfg["drift"], cfg.get("vol", 0.18)) for name, cfg in _SECTORS.items()}
+_SECTOR_DV.update({
+    "Santé": (0.08, 0.16), "Conso. discrétionnaire": (0.10, 0.20),
+    "Communication": (0.09, 0.18), "Matériaux": (0.05, 0.20), "Immobilier": (0.02, 0.18),
+    "Actions diverses": (0.06, 0.20), "ETF": (0.07, 0.13), "Indices": (0.07, 0.12),
+    "Forex": (0.00, 0.07), "Commodités": (0.05, 0.20),
+})
+# ticker → thème (4ᵉ révolution) pour étiqueter les actions des seeds européens/US
+_THEME_TICKERS = {t: name for name, cfg in _SECTORS.items() for t in cfg["tickers"]}
+# GICS (anglais, seeds CAC40/AEX) → bucket interne
+_GICS_MAP = {
+    "Information Technology": "Cloud & Datacenters", "Health Care": "Santé",
+    "Financials": "Finance", "Consumer Discretionary": "Conso. discrétionnaire",
+    "Consumer Staples": "Conso. de base", "Industrials": "Industrie",
+    "Energy": "Énergie (fossile)", "Utilities": "Services publics",
+    "Materials": "Matériaux", "Communication Services": "Communication",
+    "Real Estate": "Immobilier",
+}
+
+
+def _sector_of(m: dict) -> str:
+    """Secteur/thème d'un instrument (cohérent entre génération de données et heatmap)."""
+    ac = m.get("asset_class")
+    if ac == "crypto":
+        return "Crypto & Blockchain"
+    if ac == "forex":
+        return "Forex"
+    if ac == "commodity":
+        return "Commodités"
+    if ac == "index":
+        return "Indices"
+    if ac == "etf":
+        return "ETF"
+    if m["symbol"] in _THEME_TICKERS:
+        return _THEME_TICKERS[m["symbol"]]
+    sec = (m.get("sector") or "").strip()
+    if sec in _SECTOR_DV:
+        return sec
+    return _GICS_MAP.get(sec, "Actions diverses")
 
 
 def _setup_label(mom: float, trend: float) -> str:
@@ -121,52 +163,51 @@ def _setup_label(mom: float, trend: float) -> str:
     return "neutre / range"
 
 
-def _themes_section(start) -> dict:
-    """Thèmes de marché : performance YTD par secteur (bullish/bearish) + meilleurs setups.
-
-    Génère des trajectoires synthétiques (reproductibles) avec un drift différencié par
-    secteur pour produire une dispersion réaliste, puis classe les secteurs par YTD et,
-    dans chaque secteur, les actifs au meilleur setup (momentum + tendance vs MM50).
-    """
+def _themes_section(data: dict, sector_of: dict, end) -> dict:
+    """Thèmes de marché calculés depuis les MÊMES données que le trading → cohérence
+    positions ↔ secteurs. YTD = performance sur les 365 derniers jours ; meilleurs
+    setups par secteur (momentum + tendance vs MM50). Seuls les secteurs « investissables »
+    (4ᵉ révolution + GICS, hors forex/indices/etf) alimentent la heatmap d'actifs."""
     import numpy as np
 
-    from packages.data import data_providers
-
-    out_sectors = []
-    for sector, cfg in _SECTORS.items():
-        tickers = cfg["tickers"]
-        prov = data_providers.create("synthetic", seed=11, drift=float(cfg["drift"]),
-                                     annual_vol=float(cfg.get("vol", 0.18)))
+    skip = {"Forex", "Indices", "ETF", "Commodités"}
+    buckets: dict[str, list] = {}
+    for s, bars in data.items():
+        sec = sector_of.get(s, "Actions diverses")
+        if sec in skip:
+            continue
+        buckets.setdefault(sec, []).append((s, bars))
+    out = []
+    for sec, items in buckets.items():
+        if len(items) < 3:
+            continue
         assets = []
-        for sym in tickers:
-            bars = prov.fetch_ohlcv(sym, "1d", start, start + timedelta(days=365))
-            close = np.array([b.close for b in bars], float)
-            if close.size < 60:
+        for s, bars in items:
+            c = np.array([b.close for b in bars], float)
+            if c.size < 380:
                 continue
-            ytd = float(close[-1] / close[0] - 1.0)
-            mom = float(close[-1] / close[-63] - 1.0)            # ~3 mois
-            sma50 = float(close[-50:].mean())
-            trend = float((close[-1] - sma50) / sma50)
-            setup = 0.6 * mom + 0.4 * trend
-            assets.append({"symbol": sym, "ytd": round(ytd, 4), "momentum": round(mom, 4),
-                           "trend": round(trend, 4), "setup_score": round(setup, 4),
+            ytd = float(c[-1] / c[-252] - 1.0)                   # 12 derniers mois
+            mom = float(c[-1] / c[-63] - 1.0)                    # ~3 mois
+            sma50 = float(c[-50:].mean())
+            trend = float((c[-1] - sma50) / sma50)
+            assets.append({"symbol": s, "ytd": round(ytd, 4), "momentum": round(mom, 4),
+                           "trend": round(trend, 4), "setup_score": round(0.6 * mom + 0.4 * trend, 4),
                            "setup": _setup_label(mom, trend)})
-        if not assets:
+        if len(assets) < 3:
             continue
         ytd_sec = sum(a["ytd"] for a in assets) / len(assets)
         mom_sec = sum(a["momentum"] for a in assets) / len(assets)
         stance = "bullish" if ytd_sec > 0.05 else "bearish" if ytd_sec < -0.05 else "neutral"
-        top = sorted(assets, key=lambda a: a["setup_score"], reverse=True)[:3]
-        out_sectors.append({
-            "sector": sector, "ytd": round(ytd_sec, 4), "momentum": round(mom_sec, 4),
-            "stance": stance, "n": len(assets), "top_assets": top,
-        })
-    out_sectors.sort(key=lambda s: s["ytd"], reverse=True)
+        top = sorted(assets, key=lambda a: a["setup_score"], reverse=True)[:4]
+        out.append({"sector": sec, "ytd": round(ytd_sec, 4), "momentum": round(mom_sec, 4),
+                    "stance": stance, "n": len(assets), "top_assets": top})
+    out.sort(key=lambda s: s["ytd"], reverse=True)
     return {
-        "as_of": (start + timedelta(days=365)).isoformat(),
-        "sectors": out_sectors,
-        "bullish": [s["sector"] for s in out_sectors if s["stance"] == "bullish"],
-        "bearish": [s["sector"] for s in out_sectors if s["stance"] == "bearish"],
+        "as_of": end.isoformat(),
+        "sectors": out,
+        "bullish": [s["sector"] for s in out if s["stance"] == "bullish"],
+        "bearish": [s["sector"] for s in out if s["stance"] == "bearish"],
+        "stance_by_sector": {s["sector"]: s["stance"] for s in out},
     }
 
 
@@ -217,23 +258,96 @@ def _data_section(data: dict, acmap: dict[str, str]) -> dict:
     }
 
 
+def _auc(scores, y) -> float | None:
+    import numpy as np
+    y = np.asarray(y, float)[np.argsort(scores)]
+    n_pos, n = y.sum(), len(y)
+    n_neg = n - n_pos
+    if n_pos == 0 or n_neg == 0:
+        return None
+    ranks = np.arange(1, n + 1)
+    return float((ranks[y == 1].sum() - n_pos * (n_pos + 1) / 2) / (n_pos * n_neg))
+
+
+def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
+    """Score ML d'edge (proba de hausse à ~1 mois) entraîné en CROSS-SECTION sur TOUT
+    l'univers (régression logistique numpy pure, sans dépendance). Holdout temporel + AUC."""
+    import numpy as np
+
+    from packages.indicators.momentum import RSI
+    from packages.indicators.trend import SMA
+    from packages.indicators.volatility import ATR
+    from packages.ml.model import LogitModel
+
+    H = 21  # horizon ~1 mois (profil moyen-long terme)
+
+    def feats(c, sma, rsi, atr, t):
+        if t < 60 or t >= len(c) or sma[t] != sma[t] or rsi[t] != rsi[t] or atr[t] != atr[t]:
+            return None
+        return [c[t] / c[t - 20] - 1, c[t] / c[t - 60] - 1,
+                (c[t] - sma[t]) / sma[t], rsi[t] / 100.0, atr[t] / c[t]]
+
+    X, y, Xh, yh, last = [], [], [], [], {}
+    for s, bars in data.items():
+        c = np.array([b.close for b in bars], float)
+        ncl = len(c)
+        if ncl < 90 + H:
+            continue
+        sma, rsi, atr = SMA(50).compute(bars), RSI(14).compute(bars), ATR(14).compute(bars)
+        split = ncl - 252                       # 1 an de holdout out-of-time
+        for t in range(60, ncl - H, 5):
+            f = feats(c, sma, rsi, atr, t)
+            if f is None:
+                continue
+            lab = 1.0 if c[t + H] > c[t] else 0.0
+            (X if t < split else Xh).append(f)
+            (y if t < split else yh).append(lab)
+        fl = feats(c, sma, rsi, atr, ncl - 1)
+        if fl is not None:
+            last[s] = fl
+    if len(X) < 200:
+        return {"available": False}
+    model = LogitModel(epochs=400).fit(np.array(X), np.array(y))
+    auc = _auc(model.predict_proba(np.array(Xh)), yh) if len(yh) > 50 else None
+    probs = {s: float(model.predict_proba([f])[0]) for s, f in last.items()}
+    top = sorted(probs.items(), key=lambda kv: kv[1], reverse=True)[:15]
+    fn = ["momentum 1 mois", "momentum 3 mois", "tendance vs MM50", "RSI", "volatilité (ATR)"]
+    imp = sorted(zip(fn, [abs(float(w)) for w in model.w]), key=lambda kv: -kv[1])
+    return {
+        "available": True, "model": "régression logistique (numpy)", "horizon_days": H,
+        "n_train": len(X), "n_holdout": len(yh), "auc": round(auc, 3) if auc else None,
+        "feature_importance": [{"feature": f, "weight": round(w, 3)} for f, w in imp],
+        "top_conviction": [{"symbol": s, "name": names.get(s, ""),
+                            "sector": sector_of.get(s, ""), "ml_score": round(p, 3)}
+                           for s, p in top],
+        "scores": {s: round(p, 3) for s, p in probs.items()},
+    }
+
+
 def build_snapshot(seed: int = 7) -> dict:
     # --- univers COMPLET + fenêtre jusqu'à AUJOURD'HUI ---
     instruments = _seed_universe()
     symbols = [m["symbol"] for m in instruments]
     acmap = {m["symbol"]: m["asset_class"] for m in instruments}
     names = {m["symbol"]: m["name"] for m in instruments}
+    sector_of = {m["symbol"]: _sector_of(m) for m in instruments}
     end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     start = end - timedelta(days=_HISTORY_DAYS)
-    prov = data_providers.create("synthetic", seed=seed, drift=0.08)
-    data = {s: prov.fetch_ohlcv(s, "1d", start, end) for s in symbols}  # seed/symbole stable
+    # données générées par SECTEUR (drift/vol thématiques) → cohérence positions ↔ secteurs
+    data = {}
+    for m in instruments:
+        s = m["symbol"]
+        drift, vol = _SECTOR_DV.get(sector_of[s], (0.07, 0.18))
+        data[s] = data_providers.create(
+            "synthetic", seed=seed, drift=drift, annual_vol=vol).fetch_ohlcv(s, "1d", start, end)
     n = max(len(b) for b in data.values())
 
-    # --- backtest swing VECTORISÉ sur TOUT l'univers (positions laissées ouvertes) ---
+    # --- backtest swing VECTORISÉ sur TOUT l'univers (profil offensif, moyen-long terme,
+    # positions laissées ouvertes). Plus de capital/actif, plus de lignes, on laisse courir. ---
     broker, journal, equity, ts_list = fast_swing_backtest(
         data, cash=100_000, costs=CostModel(), asset_classes=acmap,
-        target_annual_vol=0.20, max_capital_frac=0.06, max_positions=20, max_pct=0.06,
-        close_at_end=False)
+        target_annual_vol=0.22, max_capital_frac=0.07, max_positions=20, max_pct=0.09,
+        atr_stop=3.0, rr=4.0, exit_level=78.0, close_at_end=False)
 
     # régime macro point-in-time (couvre toute la fenêtre)
     months = int(_HISTORY_DAYS / 30) + 4
@@ -246,13 +360,14 @@ def build_snapshot(seed: int = 7) -> dict:
     ranker = RankingEngine(load_yaml(ROOT / "config" / "factors.yaml"), acmap)
     ranked = ranker.rank(data, t=n - 1, regime=regime, top_n=12)
 
-    # benchmarks synthétiques INDÉPENDANTS (rebasés 100) sur la même fenêtre
-    def _series(name, drift, vol):
-        return [b.close for b in data_providers.create(
-            "synthetic", seed=101, drift=drift, annual_vol=vol).fetch_ohlcv(name, "1d", start, end)]
-    bench_px = _series("S&P 500", 0.09, 0.16)
-    benches = {"S&P 500": bench_px, "NASDAQ 100": _series("NASDAQ 100", 0.13, 0.20),
-               "BTC": _series("BTC", 0.25, 0.55)}
+    # benchmark JUSTE = univers équipondéré (buy & hold) → mesure l'alpha actif du swing.
+    # + S&P 500 synthétique en référence marché. Tous rebasés 100 pour superposition.
+    norm = [[b.close / d0[0].close for b in d0] for d0 in (data[s] for s in symbols)]
+    eqw = [sum(col) / len(col) * 100 for col in zip(*norm)]
+    sp = [b.close for b in data_providers.create(
+        "synthetic", seed=101, drift=0.09, annual_vol=0.16).fetch_ohlcv("S&P 500", "1d", start, end)]
+    bench_px = eqw
+    benches = {"Univers (équipondéré)": eqw, "S&P 500": sp}
 
     # --- analyse de portefeuille (mesures relatives, corrélation, risque, revue) ---
     rel = relative_metrics(equity, bench_px)
@@ -268,13 +383,28 @@ def build_snapshot(seed: int = 7) -> dict:
     attr = attribution.attribute(all_trades, "strategy")
     agg = {**PL.metrics_payload(equity), **rel, **rm, **mc}
 
+    # thèmes calculés depuis les MÊMES données (cohérence) + ML cross-section
+    themes = _themes_section(data, sector_of, end)
+    stance_by = themes.get("stance_by_sector", {})
+    ml = _ml_section(data, sector_of, names)
+    ml_scores = ml.get("scores", {}) if ml.get("available") else {}
+
     marks = {s: data[s][-1].close for s in symbols}
     meta_pos = {s: {"asset_class": acmap.get(s), "name": names.get(s)} for s in symbols}
     comp = PL.composition_payload(broker.positions(), marks, meta_pos)
+    for r in comp["rows"]:                       # liaison position ↔ secteur/thème + ML
+        sec = sector_of.get(r["symbol"], "")
+        r["sector"] = sec
+        r["stance"] = stance_by.get(sec, "neutral")
+        r["ml_score"] = ml_scores.get(r["symbol"])
     trade_stats = PL.trade_stats_payload(all_trades)
     # 300 trades les plus récents (couvre la récence + de nombreux actifs)
     recent = sorted(all_trades, key=lambda t: t.entry_ts, reverse=True)[:300]
     dates = [t.isoformat() for t in ts_list]
+    screener = PL.screener_payload(ranked, regime.ts)
+    for r in screener["rows"]:                    # enrichit le screener du score ML + secteur
+        r["ml_score"] = ml_scores.get(r["symbol"])
+        r["sector"] = sector_of.get(r["symbol"], "")
     now = datetime.now(timezone.utc)
     last_bar = ts_list[-1]
     return {
@@ -288,6 +418,7 @@ def build_snapshot(seed: int = 7) -> dict:
             "universe_size": len(symbols),
             "traded_assets": len({t.instrument for t in all_trades}),
             "n_trades": len(all_trades),
+            "profile": "offensif · moyen-long terme",
         },
         "dashboard": {
             "as_of": last_bar.isoformat(),
@@ -298,7 +429,7 @@ def build_snapshot(seed: int = 7) -> dict:
             "positions": comp["rows"], "totals": comp["totals"],
             "trade_stats": trade_stats,
         },
-        "screener": PL.screener_payload(ranked, regime.ts),
+        "screener": screener,
         "portfolio": {
             **comp,
             "metrics": PL.metrics_payload(equity),
@@ -315,7 +446,8 @@ def build_snapshot(seed: int = 7) -> dict:
         "trade_stats": trade_stats,
         "universe": _universe_section(instruments),
         "data": _data_section(data, acmap),
-        "themes": _themes_section(end - timedelta(days=365)),   # YTD = 12 derniers mois
+        "themes": themes,
+        "ml": ml,
     }
 
 

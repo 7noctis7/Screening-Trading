@@ -1,0 +1,118 @@
+symbol,name,asset_class,venue,currency,sector
+PLTR,Palantir,equity,NASDAQ/NYSE,USD,Intelligence artificielle
+MSFT,Microsoft,equity,NASDAQ/NYSE,USD,Intelligence artificielle
+GOOGL,Alphabet A,equity,NASDAQ/NYSE,USD,Intelligence artificielle
+GOOG,Alphabet C,equity,NASDAQ/NYSE,USD,Intelligence artificielle
+META,Meta Platforms,equity,NASDAQ/NYSE,USD,Intelligence artificielle
+SNOW,Snowflake,equity,NASDAQ/NYSE,USD,Intelligence artificielle
+AI,C3.ai,equity,NASDAQ/NYSE,USD,Intelligence artificielle
+CRM,Salesforce,equity,NASDAQ/NYSE,USD,Cloud & Datacenters
+ORCL,Oracle,equity,NASDAQ/NYSE,USD,Cloud & Datacenters
+ADBE,Adobe,equity,NASDAQ/NYSE,USD,Cloud & Datacenters
+NOW,ServiceNow,equity,NASDAQ/NYSE,USD,Cloud & Datacenters
+DDOG,Datadog,equity,NASDAQ/NYSE,USD,Cloud & Datacenters
+MDB,MongoDB,equity,NASDAQ/NYSE,USD,Cloud & Datacenters
+AMZN,Amazon,equity,NASDAQ/NYSE,USD,Cloud & Datacenters
+AAPL,Apple,equity,NASDAQ/NYSE,USD,Cloud & Datacenters
+INTU,Intuit,equity,NASDAQ/NYSE,USD,Cloud & Datacenters
+PANW,Palo Alto Networks,equity,NASDAQ/NYSE,USD,Cybersécurité
+CRWD,CrowdStrike,equity,NASDAQ/NYSE,USD,Cybersécurité
+ZS,Zscaler,equity,NASDAQ/NYSE,USD,Cybersécurité
+FTNT,Fortinet,equity,NASDAQ/NYSE,USD,Cybersécurité
+NET,Cloudflare,equity,NASDAQ/NYSE,USD,Cybersécurité
+S,SentinelOne,equity,NASDAQ/NYSE,USD,Cybersécurité
+OKTA,Okta,equity,NASDAQ/NYSE,USD,Cybersécurité
+NVDA,Nvidia,equity,NASDAQ/NYSE,USD,Semi-conducteurs
+AMD,AMD,equity,NASDAQ/NYSE,USD,Semi-conducteurs
+AVGO,Broadcom,equity,NASDAQ/NYSE,USD,Semi-conducteurs
+TSM,TSMC,equity,NASDAQ/NYSE,USD,Semi-conducteurs
+ASML,ASML,equity,NASDAQ/NYSE,USD,Semi-conducteurs
+MU,Micron,equity,NASDAQ/NYSE,USD,Semi-conducteurs
+QCOM,Qualcomm,equity,NASDAQ/NYSE,USD,Semi-conducteurs
+INTC,Intel,equity,NASDAQ/NYSE,USD,Semi-conducteurs
+TXN,Texas Instruments,equity,NASDAQ/NYSE,USD,Semi-conducteurs
+AMAT,Applied Materials,equity,NASDAQ/NYSE,USD,Semi-conducteurs
+LRCX,Lam Research,equity,NASDAQ/NYSE,USD,Semi-conducteurs
+KLAC,KLA,equity,NASDAQ/NYSE,USD,Semi-conducteurs
+ARM,Arm Holdings,equity,NASDAQ/NYSE,USD,Semi-conducteurs
+MRVL,Marvell,equity,NASDAQ/NYSE,USD,Semi-conducteurs
+SMCI,Super Micro,equity,NASDAQ/NYSE,USD,Semi-conducteurs
+TSLA,Tesla,equity,NASDAQ/NYSE,USD,Véhicules électriques
+RIVN,Rivian,equity,NASDAQ/NYSE,USD,Véhicules électriques
+LCID,Lucid,equity,NASDAQ/NYSE,USD,Véhicules électriques
+NIO,NIO,equity,NASDAQ/NYSE,USD,Véhicules électriques
+V,Visa,equity,NASDAQ/NYSE,USD,Fintech & Paiements
+MA,Mastercard,equity,NASDAQ/NYSE,USD,Fintech & Paiements
+PYPL,PayPal,equity,NASDAQ/NYSE,USD,Fintech & Paiements
+SQ,Block,equity,NASDAQ/NYSE,USD,Fintech & Paiements
+HOOD,Robinhood,equity,NASDAQ/NYSE,USD,Fintech & Paiements
+AXP,American Express,equity,NASDAQ/NYSE,USD,Fintech & Paiements
+COIN,Coinbase,equity,NASDAQ/NYSE,USD,Crypto & Blockchain
+MSTR,MicroStrategy,equity,NASDAQ/NYSE,USD,Crypto & Blockchain
+MARA,Marathon Digital,equity,NASDAQ/NYSE,USD,Crypto & Blockchain
+RIOT,Riot Platforms,equity,NASDAQ/NYSE,USD,Crypto & Blockchain
+JPM,JPMorgan,equity,NASDAQ/NYSE,USD,Finance
+BAC,Bank of America,equity,NASDAQ/NYSE,USD,Finance
+WFC,Wells Fargo,equity,NASDAQ/NYSE,USD,Finance
+GS,Goldman Sachs,equity,NASDAQ/NYSE,USD,Finance
+MS,Morgan Stanley,equity,NASDAQ/NYSE,USD,Finance
+C,Citigroup,equity,NASDAQ/NYSE,USD,Finance
+BLK,BlackRock,equity,NASDAQ/NYSE,USD,Finance
+SCHW,Charles Schwab,equity,NASDAQ/NYSE,USD,Finance
+LLY,Eli Lilly,equity,NASDAQ/NYSE,USD,Biotech & Génomique
+MRK,Merck,equity,NASDAQ/NYSE,USD,Biotech & Génomique
+PFE,Pfizer,equity,NASDAQ/NYSE,USD,Biotech & Génomique
+AMGN,Amgen,equity,NASDAQ/NYSE,USD,Biotech & Génomique
+VRTX,Vertex,equity,NASDAQ/NYSE,USD,Biotech & Génomique
+REGN,Regeneron,equity,NASDAQ/NYSE,USD,Biotech & Génomique
+MRNA,Moderna,equity,NASDAQ/NYSE,USD,Biotech & Génomique
+GILD,Gilead,equity,NASDAQ/NYSE,USD,Biotech & Génomique
+CRSP,CRISPR Tx,equity,NASDAQ/NYSE,USD,Biotech & Génomique
+UNH,UnitedHealth,equity,NASDAQ/NYSE,USD,Santé
+JNJ,Johnson & Johnson,equity,NASDAQ/NYSE,USD,Santé
+ABBV,AbbVie,equity,NASDAQ/NYSE,USD,Santé
+TMO,Thermo Fisher,equity,NASDAQ/NYSE,USD,Santé
+DHR,Danaher,equity,NASDAQ/NYSE,USD,Santé
+ISRG,Intuitive Surgical,equity,NASDAQ/NYSE,USD,Robotique & Automatisation
+PG,Procter & Gamble,equity,NASDAQ/NYSE,USD,Conso. de base
+KO,Coca-Cola,equity,NASDAQ/NYSE,USD,Conso. de base
+PEP,PepsiCo,equity,NASDAQ/NYSE,USD,Conso. de base
+COST,Costco,equity,NASDAQ/NYSE,USD,Conso. de base
+WMT,Walmart,equity,NASDAQ/NYSE,USD,Conso. de base
+MCD,McDonald's,equity,NASDAQ/NYSE,USD,Conso. discrétionnaire
+SBUX,Starbucks,equity,NASDAQ/NYSE,USD,Conso. discrétionnaire
+NKE,Nike,equity,NASDAQ/NYSE,USD,Conso. discrétionnaire
+HD,Home Depot,equity,NASDAQ/NYSE,USD,Conso. discrétionnaire
+LOW,Lowe's,equity,NASDAQ/NYSE,USD,Conso. discrétionnaire
+DIS,Walt Disney,equity,NASDAQ/NYSE,USD,Conso. discrétionnaire
+XOM,ExxonMobil,equity,NASDAQ/NYSE,USD,Énergie (fossile)
+CVX,Chevron,equity,NASDAQ/NYSE,USD,Énergie (fossile)
+COP,ConocoPhillips,equity,NASDAQ/NYSE,USD,Énergie (fossile)
+SLB,SLB,equity,NASDAQ/NYSE,USD,Énergie (fossile)
+EOG,EOG Resources,equity,NASDAQ/NYSE,USD,Énergie (fossile)
+OXY,Occidental,equity,NASDAQ/NYSE,USD,Énergie (fossile)
+NEE,NextEra Energy,equity,NASDAQ/NYSE,USD,Énergie propre & Transition
+ENPH,Enphase,equity,NASDAQ/NYSE,USD,Énergie propre & Transition
+FSLR,First Solar,equity,NASDAQ/NYSE,USD,Énergie propre & Transition
+PLUG,Plug Power,equity,NASDAQ/NYSE,USD,Énergie propre & Transition
+CAT,Caterpillar,equity,NASDAQ/NYSE,USD,Industrie
+GE,GE Aerospace,equity,NASDAQ/NYSE,USD,Industrie
+HON,Honeywell,equity,NASDAQ/NYSE,USD,Industrie
+UPS,UPS,equity,NASDAQ/NYSE,USD,Industrie
+DE,Deere,equity,NASDAQ/NYSE,USD,Industrie
+BA,Boeing,equity,NASDAQ/NYSE,USD,Espace & Défense
+LMT,Lockheed Martin,equity,NASDAQ/NYSE,USD,Espace & Défense
+RTX,RTX,equity,NASDAQ/NYSE,USD,Espace & Défense
+NOC,Northrop Grumman,equity,NASDAQ/NYSE,USD,Espace & Défense
+GD,General Dynamics,equity,NASDAQ/NYSE,USD,Espace & Défense
+RKLB,Rocket Lab,equity,NASDAQ/NYSE,USD,Espace & Défense
+NFLX,Netflix,equity,NASDAQ/NYSE,USD,Communication
+CMCSA,Comcast,equity,NASDAQ/NYSE,USD,Communication
+T,AT&T,equity,NASDAQ/NYSE,USD,Communication
+VZ,Verizon,equity,NASDAQ/NYSE,USD,Communication
+TMUS,T-Mobile,equity,NASDAQ/NYSE,USD,Communication
+DUK,Duke Energy,equity,NASDAQ/NYSE,USD,Services publics
+SO,Southern Co,equity,NASDAQ/NYSE,USD,Services publics
+AEP,American Electric,equity,NASDAQ/NYSE,USD,Services publics
+D,Dominion,equity,NASDAQ/NYSE,USD,Services publics
+EXC,Exelon,equity,NASDAQ/NYSE,USD,Services publics

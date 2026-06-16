@@ -11,7 +11,7 @@ def _snap():
 def test_snapshot_keys_and_json():
     snap = _snap()
     assert set(snap) == {"meta", "dashboard", "screener", "portfolio", "trades",
-                         "open_trades", "trade_stats", "universe", "data", "themes"}
+                         "open_trades", "trade_stats", "universe", "data", "themes", "ml"}
     assert "regime" in snap["dashboard"] and "metrics" in snap["dashboard"]
     assert "benchmarks" in snap["portfolio"]
     # méta : fraîcheur + délai différé
@@ -65,3 +65,24 @@ def test_snapshot_dates_and_themes():
     assert ytds == sorted(ytds, reverse=True)
     assert all(s["stance"] in {"bullish", "bearish", "neutral"} for s in th["sectors"])
     assert all(s["top_assets"] for s in th["sectors"])
+
+
+def test_universe_has_us_equities_and_usdc():
+    """L'univers offline inclut des actions US (PLTR cherchable) et les cryptos en USDC."""
+    uni = _snap()["universe"]
+    syms = {i["symbol"] for i in uni["instruments"]}
+    assert "PLTR" in syms and "NVDA" in syms          # actions US présentes
+    crypto = [i["symbol"] for i in uni["instruments"] if i["asset_class"] == "crypto"]
+    assert crypto and all("/USDC" in s for s in crypto)   # paires en USDC, plus d'USDT
+    assert not any("/USDT" in s for s in syms)
+
+
+def test_positions_linked_to_sector_and_ml():
+    """Chaque position porte son secteur/stance ; le ML score l'univers (cross-section)."""
+    snap = _snap()
+    for p in snap["dashboard"]["positions"]:
+        assert "sector" in p and p["stance"] in {"bullish", "bearish", "neutral"}
+    ml = snap["ml"]
+    assert ml["available"] and ml["n_train"] > 1000 and ml["top_conviction"]
+    # score ML propagé au screener
+    assert any(r.get("ml_score") is not None for r in snap["screener"]["rows"])

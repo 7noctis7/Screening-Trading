@@ -4,12 +4,13 @@ import { usePathname } from "next/navigation";
 
 const LINKS: [string, string][] = [
   ["/", "Dashboard"],
+  ["/themes", "Thèmes de marché"],
+  ["/ml", "Signaux ML"],
+  ["/universe", "Univers"],
+  ["/data", "Données"],
   ["/portfolio", "Portefeuille & Analyse"],
   ["/positions", "Positions"],
   ["/trades", "Trades"],
-  ["/themes", "Thèmes de marché"],
-  ["/universe", "Univers"],
-  ["/data", "Données"],
 ];
 
 export function Nav() {
