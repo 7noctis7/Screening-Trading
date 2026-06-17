@@ -19,8 +19,15 @@ alpha > produit**. Architecture en **plugins** (« ajouter un fichier, jamais to
 revue experte) · **Positions** · **Trades** · **Portefeuille réel** (connexion Alpaca/Bitmart).
 
 - **Capital fictif 10 000 $** alloué aux **meilleurs setups** (force relative), exposition
-  **pilotée par le VIX**, objectif : **surperformer l'univers équipondéré**.
-- **Données réelles** branchables (yfinance / FMP / votre `YAHOO.db`) avec repli synthétique.
+  **pilotée par le VIX** (1.0 / 0.7 / 0.4, **sans levier**), objectif : **surperformer l'univers équipondéré**.
+- **Données réelles** branchables (yfinance / FMP / votre `YAHOO.db`, ~4 Go) avec repli synthétique —
+  le build affiche le **MODE DES DONNÉES** (réel / mixte / synthétique).
+- **ML** : Gradient Boosting (sklearn) ou logit numpy, **CV purgée + embargo** (López de Prado),
+  triple-barrier — aucune fuite du futur.
+- **Graphiques chandeliers** au clic (volumes, MA20/50/100/200, EMA, Bollinger, RSI, timeframe D/W/M,
+  marqueurs achat/vente ▲▼) · **tables triables** · **$ partout** · cash ≥ 0.
+- **Exécuteur paper** (`make live` / `make live-go`) : réplique l'allocation cible (poids × capital)
+  vers **Alpaca (paper)** et **Bitmart (crypto)** — **dry-run par défaut**.
 - Une **preview autonome** `apps/web/preview/interactive.html` (un seul fichier, aucune install).
 
 ```bash
@@ -109,6 +116,14 @@ python scripts/ingest_prices.py --daily              # incrémental quotidien
 **Depuis le téléphone** : lancez l'API sur le Mac en réseau local
 (`make api-lan` → `uvicorn … --host 0.0.0.0`), puis ouvrez `http://IP_DU_MAC:8000` /
 le front depuis le navigateur du téléphone (même Wi-Fi). Détails et cron : `docs/REAL_DATA.md`.
+
+## 🤖 Répliquer l'allocation en paper (Alpaca + Bitmart)
+```bash
+make live          # APERÇU (dry-run) : affiche les ordres cibles, n'envoie RIEN
+make live-go       # EXÉCUTE en paper (clés API .env requises) — Alpaca reste en paper
+```
+Routage : actions/ETF → **Alpaca (paper)** · crypto → **Bitmart** (ccxt). Le mode réel exige
+`--live --yes` ET des clés API présentes. Clés dans `.env` (jamais committées).
 
 ## 🛡️ Garde-fous
 Paper par défaut · aucun ordre réel sans feu vert + capital plafonné + stops · permissions API
