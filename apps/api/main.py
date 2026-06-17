@@ -150,6 +150,21 @@ def investors() -> dict:
     return _snap()["investors"]
 
 
+_MACRO: dict | None = None
+_MACRO_TS: float = 0.0
+
+
+@app.get("/api/macro")
+def macro() -> dict:
+    """Données macro chiffrées (FRED) — cache 6 h (séries publiées quotidiennement au plus)."""
+    global _MACRO, _MACRO_TS
+    if _MACRO is None or (time.time() - _MACRO_TS) > 21600:
+        from packages.macro import macro_snapshot
+        _MACRO = macro_snapshot()
+        _MACRO_TS = time.time()
+    return _MACRO
+
+
 @app.get("/api/ai/status")
 def ai_status() -> dict:
     """Disponibilité d'un LLM local (LM Studio / Ollama)."""

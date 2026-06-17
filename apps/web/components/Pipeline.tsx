@@ -5,16 +5,17 @@ import Link from "next/link";
 export const STEPS: { n: number; key: string; page: string; title: string; desc: string }[] = [
   { n: 1, key: "data", page: "/data", title: "Données", desc: "Prix réels (YAHOO.db), contrôle qualité & couverture." },
   { n: 2, key: "universe", page: "/universe", title: "Univers", desc: "Les ~929 actifs investissables (actions, ETF, crypto, forex, commodités)." },
-  { n: 3, key: "themes", page: "/themes", title: "Thèmes de marché", desc: "Rotation sectorielle (performance YTD) — où va l'argent." },
-  { n: 4, key: "fundamentals", page: "/fundamentals", title: "Fondamentaux", desc: "Valeur, qualité, DCF, Piotroski, Altman — pour les actions/ETF." },
-  { n: 5, key: "investors", page: "/investors", title: "Doctrines investisseurs", desc: "Scores Graham / Fisher / Thiel / Schwab (4ᵉ révolution industrielle)." },
-  { n: 6, key: "ml", page: "/ml", title: "Signaux ML", desc: "Probabilité de hausse à ~1 mois (modèle validé sans fuite)." },
-  { n: 7, key: "sentiment", page: "/sentiment", title: "Sentiment & news", desc: "Humeur & actualité (macro + par actif)." },
-  { n: 8, key: "conviction", page: "/conviction", title: "Conviction", desc: "FUSION (technique+ML+fondamental+sentiment+investisseurs) → note + allocation." },
-  { n: 9, key: "screener", page: "/", title: "Dashboard", desc: "Synthèse : performance, régime macro, playbook VIX, top screener." },
-  { n: 10, key: "portfolio", page: "/positions", title: "Sélection & portefeuille", desc: "La STRATÉGIE swing (suivi de tendance, backtestée) décide des positions + sizing." },
-  { n: 11, key: "risk", page: "/risk", title: "Risque", desc: "VaR/EVT/GARCH, limites, stress-tests, allocation optimale." },
-  { n: 12, key: "live", page: "/live", title: "Exécution", desc: "Réplication chez le broker (Alpaca/Bitmart), positions réelles, coûts." },
+  { n: 3, key: "macro", page: "/macro", title: "Macro", desc: "Contexte économique chiffré (FRED) : croissance, inflation, taux, courbe, VIX." },
+  { n: 4, key: "themes", page: "/themes", title: "Thèmes de marché", desc: "Rotation sectorielle (performance YTD) — où va l'argent." },
+  { n: 5, key: "fundamentals", page: "/fundamentals", title: "Fondamentaux", desc: "Valeur, qualité, DCF, Piotroski, Altman — pour les actions/ETF." },
+  { n: 6, key: "investors", page: "/investors", title: "Doctrines investisseurs", desc: "Scores Graham / Fisher / Thiel / Schwab (4ᵉ révolution industrielle)." },
+  { n: 7, key: "ml", page: "/ml", title: "Signaux ML", desc: "Probabilité de hausse à ~1 mois (modèle validé sans fuite)." },
+  { n: 8, key: "sentiment", page: "/sentiment", title: "Sentiment & news", desc: "Humeur & actualité (macro + par actif)." },
+  { n: 9, key: "conviction", page: "/conviction", title: "Conviction", desc: "FUSION (technique+ML+fondamental+sentiment+investisseurs) → note + allocation." },
+  { n: 10, key: "screener", page: "/", title: "Dashboard", desc: "Synthèse : performance, régime macro, playbook VIX, top screener." },
+  { n: 11, key: "portfolio", page: "/positions", title: "Sélection & portefeuille", desc: "La STRATÉGIE swing (suivi de tendance, backtestée) décide des positions + sizing." },
+  { n: 12, key: "risk", page: "/risk", title: "Risque", desc: "VaR/EVT/GARCH, limites, stress-tests, allocation optimale." },
+  { n: 13, key: "live", page: "/live", title: "Exécution", desc: "Réplication chez le broker (Alpaca/Bitmart), positions réelles, coûts." },
 ];
 const N = STEPS.length;
 
