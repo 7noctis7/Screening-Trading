@@ -797,6 +797,16 @@ def build_snapshot(seed: int = 7) -> dict:
         w_by_class[ac] = w_by_class.get(ac, 0.0) + r["current_value"] / invested_now
     stress = {"scenarios": scenario_analysis(w_by_class),
               "hedge": hedge_suggestion(w_by_class, target_max_loss=-0.15)}
+
+    # --- RISQUE AVANCÉ (VaR Cornish-Fisher, EWMA) + ALLOCATION OPTIMALE (HRP/min-var) ---
+    from packages.portfolio.optimize import hrp_weights, min_variance_weights
+    from packages.portfolio.risk_advanced import cornish_fisher_var, ewma_vol
+    rm["var_cornish_fisher_95"] = cornish_fisher_var(rets, 0.95)
+    rm["vol_ewma"] = ewma_vol(rets)
+    cur_w = [w_by_name.get(s, 0.0) for s in cb_syms]
+    optimal = {"symbols": cb_syms, "current": [round(x, 4) for x in cur_w],
+               "hrp": [round(x, 4) for x in hrp_weights(cov)],
+               "min_variance": [round(x, 4) for x in min_variance_weights(cov)]}
     # séries OHLCV (historique LONG : daily/weekly/monthly agrégés côté front) + marqueurs trades
     open_info = getattr(broker, "open_positions_info", {})
     by_sym_trades = {}
@@ -889,6 +899,7 @@ def build_snapshot(seed: int = 7) -> dict:
                 "risk_budget": risk_budget,
                 "limits": limits,
                 "stress": stress,
+                "optimal_allocation": optimal,
                 "review": PL.review_payload(expert_review({**agg, **comp["totals"]})),
             },
         },
