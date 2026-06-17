@@ -25,3 +25,4 @@ export const useThemes = () => q("themes", "/api/themes");
 export const useMl = () => q("ml", "/api/ml", 60000);
 export const useSentiment = () => q("sentiment", "/api/sentiment", 60000);
 export const useFundamentals = () => q("fundamentals", "/api/fundamentals", 60000);
+export const useLive = () => q("live", "/api/live", 30000);

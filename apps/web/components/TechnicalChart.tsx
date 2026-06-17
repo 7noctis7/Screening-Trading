@@ -59,6 +59,7 @@ const MAS: { p: number; color: string }[] = [
 export function TechnicalChart({ data, markers = [], height = 360 }:
   { data: Bar[]; markers?: Marker[]; height?: number }) {
   const ref = useRef<HTMLDivElement>(null);
+  const legendRef = useRef<HTMLDivElement>(null);
   const [tf, setTf] = useState<TF>("D");
   const [showVol, setShowVol] = useState(true);
   const { bars, dateToTime } = useMemo(() => aggregate(data ?? [], tf), [data, tf]);
@@ -111,7 +112,31 @@ export function TechnicalChart({ data, markers = [], height = 360 }:
           .filter(Boolean)
           .sort((a: any, b: any) => (a.time < b.time ? -1 : 1));
         if (mk.length) candles.setMarkers(mk as any);
+        // ligne de prix d'entrée (1er achat visible) — repère "ligne d'info"
+        const firstBuy = markers.find((m) => m.side === "buy" && m.price);
+        if (firstBuy?.price) {
+          candles.createPriceLine({
+            price: firstBuy.price, color: "#22c55e", lineWidth: 1, lineStyle: 2,
+            axisLabelVisible: true, title: "PRU",
+          });
+        }
       }
+
+      // ligne d'info : lecture O/H/L/C + variation au survol (crosshair)
+      const fmt = (n: number) => n.toLocaleString("fr-FR", { maximumFractionDigits: 2 });
+      const setLegend = (b: any) => {
+        if (!legendRef.current || !b) return;
+        const up = b.close >= b.open;
+        const chg = ((b.close / b.open - 1) * 100).toFixed(2);
+        legendRef.current.innerHTML =
+          `<b>${b.time ?? ""}</b> &nbsp; O ${fmt(b.open)} · H ${fmt(b.high)} · B ${fmt(b.low)} · ` +
+          `C <span style="color:${up ? "#22c55e" : "#f43f5e"}">${fmt(b.close)} (${up ? "+" : ""}${chg}%)</span>`;
+      };
+      setLegend(bars[bars.length - 1] && { ...bars[bars.length - 1], time: bars[bars.length - 1].t });
+      chart.subscribeCrosshairMove((param: any) => {
+        const d = param?.seriesData?.get(candles);
+        if (d) setLegend({ ...d, time: param.time });
+      });
       chart.timeScale().fitContent();
     })();
     return () => { disposed = true; if (chart) chart.remove(); };
@@ -138,6 +163,7 @@ export function TechnicalChart({ data, markers = [], height = 360 }:
           ))}
         </span>
       </div>
+      <div ref={legendRef} className="text-xs mono text-muted mb-1" style={{ minHeight: 16 }} />
       <div ref={ref} className="w-full" style={{ minHeight: height }} />
     </div>
   );
