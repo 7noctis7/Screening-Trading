@@ -1035,8 +1035,10 @@ def build_snapshot(seed: int = 7) -> dict:
     eqw = [sum(col) / len(col) * 100 for col in zip(*norm)]
     sp = [b.close for b in data_providers.create(
         "synthetic", seed=101, drift=0.09, annual_vol=0.16).fetch_ohlcv("S&P 500", "1d", start, end)]
+    ndx = [b.close for b in data_providers.create(
+        "synthetic", seed=202, drift=0.13, annual_vol=0.22).fetch_ohlcv("Nasdaq 100", "1d", start, end)]
     bench_px = eqw
-    benches = {"Univers (équipondéré)": eqw, "S&P 500": sp}
+    benches = {"Univers (équipondéré)": eqw, "S&P 500": sp, "Nasdaq 100": ndx}
     # backtest MULTI-STRATÉGIE sur l'indice équipondéré (tendance/momentum/retour moyenne + ensemble)
     from packages.backtest.multi_strategy import run_multi_strategy
     multi_strategy = run_multi_strategy(eqw)
@@ -1217,6 +1219,7 @@ def build_snapshot(seed: int = 7) -> dict:
             "regime": PL.regime_payload(regime, expo),
             "metrics": PL.metrics_payload(equity),
             "equity": PL.equity_series(equity, ts_list),
+            "benchmarks": _bench_series({"S&P 500": sp, "Nasdaq 100": ndx}, dates, init_cap),
             "dates": dates,
             "positions": comp["rows"], "totals": comp["totals"],
             "portfolio": portfolio_kpis,
@@ -1271,6 +1274,19 @@ def _earnings_risk(held: list) -> list[dict]:
         return flag_positions(list(held)[:25], within=7)
     except Exception:  # noqa: BLE001
         return []
+
+
+def _bench_series(benches: dict, dates: list, init_cap: float) -> dict:
+    """Rebasera chaque benchmark sur le capital initial, aligné sur les dates de l'equity (overlay)."""
+    out = {}
+    for name, px in benches.items():
+        if not px:
+            continue
+        L = min(len(px), len(dates))
+        base = px[len(px) - L] or 1.0
+        out[name] = [{"t": dates[len(dates) - L + i],
+                      "v": round(init_cap * px[len(px) - L + i] / base, 2)} for i in range(L)]
+    return out
 
 
 def _top_traded(journal, k: int) -> list[tuple[str, int]]:
