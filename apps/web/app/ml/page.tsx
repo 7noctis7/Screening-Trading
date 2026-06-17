@@ -9,7 +9,7 @@ export default function Ml() {
   if (!ml) return <PageSkeleton />;
   if (!ml.available)
     return <main className="max-w-3xl mx-auto p-6"><EmptyState title="Modèle ML indisponible" hint="Échantillon insuffisant pour entraîner le modèle." /></main>;
-  const cal = ml.calibration, drift = ml.drift;
+  const cal = ml.calibration, drift = ml.drift, conf = ml.conformal;
   const cards: [string, string][] = [
     ["Modèle", ml.model],
     ["AUC (out-of-time)", ml.auc != null ? String(ml.auc) : "—"],
@@ -74,6 +74,13 @@ export default function Ml() {
                 <div className="text-lg" style={{ color: cal.brier_calibrated <= cal.brier_raw ? "#22c55e" : "#f59e0b" }}>{cal.brier_calibrated}</div></div>
             </div>
             <p className="text-muted2 text-xs mt-2 font-sans">Plus bas = mieux. La calibration (Platt) aligne la proba prédite sur la fréquence observée.</p>
+            {conf?.available && (
+              <div className="mt-3 pt-3 border-t border-border text-sm">
+                <div className="text-muted text-xs uppercase tracking-wide mb-1">Conformal prediction</div>
+                <div className="mono">couverture <b style={{ color: conf.empirical_coverage >= conf.target_coverage - 0.03 ? "#22c55e" : "#f59e0b" }}>{(conf.empirical_coverage * 100).toFixed(0)}%</b>
+                  <span className="text-muted"> (cible {(conf.target_coverage * 100).toFixed(0)}%) · taille moy. d'ensemble {conf.avg_set_size}</span></div>
+              </div>
+            )}
           </section>
         )}
         {drift?.available && (
