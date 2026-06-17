@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import numpy as np
 
-COMPONENTS = ("trend", "ml", "fundamental", "sentiment")
+COMPONENTS = ("trend", "ml", "fundamental", "sentiment", "investor")
 
 
 def _zmap(signals: dict, comp: str) -> dict:

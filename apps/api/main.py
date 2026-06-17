@@ -145,6 +145,11 @@ def conviction() -> dict:
     return _snap()["conviction"]
 
 
+@app.get("/api/investors")
+def investors() -> dict:
+    return _snap()["investors"]
+
+
 @app.get("/api/ai/status")
 def ai_status() -> dict:
     """Disponibilité d'un LLM local (LM Studio / Ollama)."""
