@@ -5,6 +5,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { LiveBadge } from "@/components/LiveBadge";
 
 const LINKS: [string, string][] = [
+  ["/accueil", "Accueil"],
   ["/", "Dashboard"],
   ["/themes", "Thèmes de marché"],
   ["/ml", "Signaux ML"],
@@ -16,6 +17,7 @@ const LINKS: [string, string][] = [
   ["/risk", "Risque"],
   ["/positions", "Positions"],
   ["/trades", "Trades"],
+  ["/live", "Portefeuille réel"],
 ];
 
 export function Nav() {
