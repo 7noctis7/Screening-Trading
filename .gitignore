@@ -40,3 +40,6 @@ apps/web/preview/sw.js
 
 # exports (tear sheets, rapports)
 out/
+
+# logs runtime
+logs/

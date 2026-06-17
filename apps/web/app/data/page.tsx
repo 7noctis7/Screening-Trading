@@ -2,7 +2,7 @@
 import { useData } from "@/lib/api";
 import { PageSkeleton } from "@/components/ui";
 
-const nb = (x: number) => x.toLocaleString("fr-FR");
+const nb = (x?: number) => (x ?? 0).toLocaleString("fr-FR");
 const dt = (s?: string) => (s ? String(s).slice(0, 10) : "—");
 
 export default function DataPage() {

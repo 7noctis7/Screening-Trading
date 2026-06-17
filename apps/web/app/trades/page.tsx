@@ -4,7 +4,7 @@ import { useTrades } from "@/lib/api";
 import { TechnicalChart } from "@/components/TechnicalChart";
 import { PageSkeleton } from "@/components/ui";
 
-const eur = (x: number) => Math.round(x).toLocaleString("fr-FR");
+const eur = (x?: number) => Math.round(x ?? 0).toLocaleString("fr-FR");
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 const dt = (s?: string) => (s ? String(s).slice(0, 10) : "—");
 

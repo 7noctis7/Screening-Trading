@@ -39,8 +39,23 @@ export default function Sentiment() {
         </div>
       </section>
 
+      {(s.market_news ?? []).length > 0 && (
+        <section className="card p-4">
+          <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Actualité marché</h2>
+          <ul className="space-y-1.5 text-sm">
+            {s.market_news.map((h: any, i: number) => (
+              <li key={i} className="flex gap-2">
+                <span style={{ color: h.score > 0 ? "#22c55e" : h.score < 0 ? "#f43f5e" : "#9aa1ad" }}>
+                  {h.score > 0 ? "▲" : h.score < 0 ? "▼" : "–"}</span>
+                {h.link ? <a href={h.link} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">{h.title}</a> : <span>{h.title}</span>}
+              </li>))}
+          </ul>
+        </section>
+      )}
+
       <section className="card p-4 overflow-x-auto">
-        <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Sentiment par position</h2>
+        <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Sentiment par position
+          <span className="ml-2 text-xs normal-case font-normal">(liens d'articles par actif : lance l'API avec <code className="mono">QUANT_NEWS=1</code>)</span></h2>
         <table className="w-full text-sm">
           <thead className="text-muted text-xs">
             <tr><th className="text-left font-normal">Actif</th><th className="text-left font-normal">Sentiment</th>

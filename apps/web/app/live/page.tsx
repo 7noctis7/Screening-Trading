@@ -2,7 +2,7 @@
 import { useLive } from "@/lib/api";
 import { PageSkeleton } from "@/components/ui";
 
-const eur = (x: number) => Math.round(x).toLocaleString("fr-FR");
+const eur = (x?: number) => Math.round(x ?? 0).toLocaleString("fr-FR");
 
 export default function Live() {
   const { data: l } = useLive();

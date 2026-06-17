@@ -648,11 +648,22 @@ def _sentiment_section(held: list, names: dict, sector_of: dict, data: dict) -> 
                      "headlines": heads[:5]})
     mood = round(sum(r["score"] for r in rows) / len(rows), 4) if rows else 0.0
     has_news = any(r["n_news"] for r in rows)
+    # Fil d'actualité marché (RSS gratuit, rapide) — toujours tenté → des liens même sans QUANT_NEWS
+    market_news = []
+    try:
+        from packages.sentiment.rss import fetch_headlines
+        for h in fetch_headlines(limit=12, timeout=3.0):
+            sc = S.analyze([h["title"]])[0]
+            market_news.append({"title": h["title"], "link": h.get("link", ""),
+                                "label": sc["label"], "score": sc["score"]})
+    except Exception:  # noqa: BLE001
+        pass
     return {
         "available": bool(rows),
-        "engine": S.engine_name() if has_news else "momentum 63 j (repli hors-ligne)",
-        "source": "news RSS" if has_news else "dérivé du momentum (activez QUANT_NEWS=1 pour les news)",
+        "engine": S.engine_name() if (has_news or market_news) else "momentum 63 j (repli hors-ligne)",
+        "source": "news RSS" if (has_news or market_news) else "dérivé du momentum (QUANT_NEWS=1 pour les news par actif)",
         "market_mood": mood, "market_label": S.label_of(mood), "rows": rows,
+        "market_news": market_news,
     }
 
 
@@ -680,7 +691,7 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
 
     prov, src = _fund_provider()
     # cap : FMP free tier limité (≈250 appels/j, 4 appels/actif) → 40 ; synthétique → large
-    cap = 40 if src.startswith("FMP") else 180
+    cap = 40 if src.startswith("FMP") else 400
     eq = [s for s in symbols if acmap.get(s) in ("equity", "etf")][:cap]
     if not eq:
         return {"available": False}
@@ -695,18 +706,27 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
             if f is None:
                 continue
             mos = valuation.margin_of_safety(f)
-            try:                                      # Piotroski complet (YoY) si historique dispo
+            try:                                      # exercice N-1 (Piotroski + croissances YoY)
                 prev = getattr(provider, "get_prior", None)
                 prev = prev(s) if callable(prev) else degrade_prior(f)
                 fs = piotroski_full(f, prev)
             except Exception:  # noqa: BLE001
-                fs = f_score(f)
+                prev, fs = None, f_score(f)
+            mcap = valuation.market_cap(f)
+            ps = mcap / f.revenue if f.revenue else None          # price-to-sales
+            rev_g = (f.revenue / prev.revenue - 1) if (prev and prev.revenue) else None
+            eps_g = (f.net_income / prev.net_income - 1) if (prev and prev.net_income > 0) else None
             out.append({
                 "symbol": s, "name": names.get(s, ""), "sector": sector_of.get(s, ""),
                 "per": round(valuation.per(f), 1), "ev_ebitda": round(valuation.ev_ebitda(f), 1),
-                "pb": round(valuation.price_to_book(f), 2), "roe": round(ratios.roe(f), 3),
+                "pb": round(valuation.price_to_book(f), 2),
+                "ps": None if ps is None else round(ps, 2),
+                "roe": round(ratios.roe(f), 3),
                 "roic": round(ratios.roic(f), 3), "gross_margin": round(ratios.gross_margin(f), 3),
+                "net_margin": round(ratios.net_margin(f), 3),
                 "fcf_yield": round(valuation.fcf_yield(f), 3),
+                "rev_growth": None if rev_g is None else round(rev_g, 3),
+                "earnings_growth": None if eps_g is None else round(eps_g, 3),
                 "margin_of_safety": None if mos != mos else round(mos, 3),
                 "f_score": fs, "f_score_label": f_score_label(fs),
                 "altman_z": altman_z(f)["z"], "altman_zone": altman_z(f)["zone"],

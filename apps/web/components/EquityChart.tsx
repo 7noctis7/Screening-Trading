@@ -32,7 +32,7 @@ export function EquityChart({ series, height = 260 }: { series: any[]; height?: 
           <Tooltip
             contentStyle={{ background: "var(--surface)", border: "1px solid var(--border2)", borderRadius: 10, fontSize: 12 }}
             labelStyle={{ color: "var(--muted)" }} itemStyle={{ color: "var(--fg)" }}
-            formatter={(v: number) => [`${v.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} $`, "Equity"]}
+            formatter={(v: number) => [`${(v ?? 0).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} $`, "Equity"]}
             labelFormatter={(l) => (typeof l === "string" ? l.slice(0, 10) : `Point ${l}`)} />
           <Area type="monotone" dataKey="v" stroke="var(--accent)" strokeWidth={2} fill="url(#eq)" isAnimationActive={false} />
         </AreaChart>
