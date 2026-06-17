@@ -12,7 +12,7 @@ export default function Positions() {
   const { data } = usePositions();
   const [sel, setSel] = useState<string | null>(null);
   if (!data) return <div className="p-8 text-muted">Chargement…</div>;
-  const rows = data.positions ?? [], t = data.totals ?? {}, k = data.portfolio ?? {}, series = data.series ?? {};
+  const rows = data.positions ?? [], t = data.totals ?? {}, k = data.portfolio ?? {}, series = data.series ?? {}, markers = data.markers ?? {};
   const bull = rows.filter((r: any) => r.stance === "bullish").length;
   const pos = (k.pnl_abs ?? 0) >= 0;
   return (
@@ -32,10 +32,10 @@ export default function Positions() {
         <section className="card p-4">
           <div className="flex justify-between items-center mb-2">
             <h2 className="text-sm uppercase tracking-wide text-muted">Graphique technique — {sel}
-              <span className="ml-2 text-xs"><span style={{ color: "#3b82f6" }}>● MM20</span> <span style={{ color: "#f59e0b" }}>● MM50</span></span></h2>
+              <span className="ml-2 text-xs"><span style={{ color: "#22c55e" }}>▲ achat</span> <span style={{ color: "#f43f5e" }}>▼ vente</span></span></h2>
             <button onClick={() => setSel(null)} className="text-muted hover:text-fg text-sm">✕</button>
           </div>
-          <TechnicalChart data={series[sel]} />
+          <TechnicalChart data={series[sel]} markers={markers[sel] ?? []} />
         </section>
       )}
 
