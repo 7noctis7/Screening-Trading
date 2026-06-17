@@ -26,9 +26,15 @@ html { scroll-behavior: smooth; }
 /* Photo taureau/ours en ARRIÈRE-PLAN de tout le site (dépose apps/web/public/hero.jpg).
    Couche la plus basse ; si le fichier est absent, le dégradé du body prend le relais. */
 html::before {
-  content:""; position:fixed; inset:0; z-index:-3; pointer-events:none;
-  background:url('/hero.jpg') center/cover no-repeat fixed;
-  opacity:.5;
+  content:""; position:fixed; inset:-4%; z-index:-3; pointer-events:none;
+  background:url('/hero.jpg') center/cover no-repeat;
+  opacity:.55; will-change:transform;
+  animation:kenburns 40s ease-in-out infinite alternate;   /* zoom/pan lent = vivant, fluide */
+}
+@keyframes kenburns {
+  0%   { transform:scale(1.04) translate3d(0,0,0); }
+  50%  { transform:scale(1.12) translate3d(-1.5%,-1%,0); }
+  100% { transform:scale(1.06) translate3d(1.5%,1%,0); }
 }
 body {
   margin:0; color:var(--fg); position:relative; min-height:100vh;
