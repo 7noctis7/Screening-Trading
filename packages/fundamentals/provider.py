@@ -21,6 +21,19 @@ class FundamentalsProvider(Protocol):
     def get(self, symbol: str, as_of: datetime | None = None) -> Financials | None: ...
 
 
+def degrade_prior(f: Financials, factor: float = 0.90) -> Financials:
+    """Construit un exercice N-1 plausible (légèrement dégradé) → calcul des variations YoY.
+
+    Sert au Piotroski complet quand le provider ne fournit pas l'historique (synthétique).
+    """
+    from dataclasses import replace
+    return replace(f, revenue=f.revenue * factor, gross_profit=f.gross_profit * factor * 0.97,
+                   ebit=f.ebit * factor * 0.95, ebitda=f.ebitda * factor * 0.96,
+                   net_income=f.net_income * factor * 0.92, fcf=f.fcf * factor * 0.9,
+                   total_equity=f.total_equity * 0.96, total_debt=f.total_debt * 1.05,
+                   shares=f.shares * 0.995)
+
+
 class SyntheticFundamentalsProvider:
     """Fondamentaux déterministes par symbole (hashlib, jamais hash() builtin)."""
 
