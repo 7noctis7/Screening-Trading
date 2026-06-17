@@ -581,6 +581,21 @@ function portfolioBar(k){
       <span style="color:${lim.ok?'#22c55e':'#f59e0b'}">${lim.ok?'conforme':lim.breaches.length+' dépassement(s)'}</span></div></div>
       ${br?'<div style="margin-top:8px">'+br+'</div>':''}</div>`));
   }
+  // allocation optimale suggérée (HRP / min-variance / risk parity)
+  const op=a.optimal_allocation;
+  if(op&&op.symbols&&op.symbols.length){
+    const orows=op.symbols.map((s,i)=>`<tr><td class="mono">${s}</td>
+      <td class="mono" style="text-align:right;color:var(--muted)">${(op.current[i]*100).toFixed(1)}%</td>
+      <td class="mono" style="text-align:right;color:#3b82f6">${(op.hrp[i]*100).toFixed(1)}%</td>
+      <td class="mono" style="text-align:right;color:#60a5fa">${(op.min_variance[i]*100).toFixed(1)}%</td>
+      <td class="mono" style="text-align:right;color:#a855f7">${((op.risk_parity?op.risk_parity[i]:0)*100).toFixed(1)}%</td></tr>`).join('');
+    p.appendChild($(`<div class="card"><div class="label" style="margin-bottom:8px">Allocation optimale suggérée</div>
+      <table style="width:100%;font-size:13px"><thead><tr><th style="text-align:left">Actif</th>
+      <th style="text-align:right">Actuelle</th><th style="text-align:right">HRP</th>
+      <th style="text-align:right">Min-var</th><th style="text-align:right">Risk parity</th></tr></thead>
+      <tbody>${orows}</tbody></table>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">HRP (López de Prado), min-variance &amp; risk parity (ERC) — robustes sans inversion instable de la covariance.</div></div>`));
+  }
   // stress-tests macro + couverture
   const st=a.stress;
   if(st&&st.scenarios&&st.scenarios.length){
