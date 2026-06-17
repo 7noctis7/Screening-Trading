@@ -483,6 +483,22 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
     except Exception:  # noqa: BLE001
         pass
 
+    # CONFORMAL PREDICTION (LAC) : couverture garantie 1−α (split calib/test).
+    conformal = {"available": False}
+    try:
+        from packages.ml.conformal import evaluate as conformal_eval
+        cut = int(len(X) * 0.8)
+        mid = int(len(X) * 0.6)
+        if mid > 100 and len(X) - cut > 50:
+            mcf, _ = _ml_model()
+            mcf.fit(X[:mid], y[:mid])
+            p_cal = np.asarray(mcf.predict_proba(X[mid:cut]), float)
+            p_te = np.asarray(mcf.predict_proba(X[cut:]), float)
+            conformal = {"available": True,
+                         **conformal_eval(p_cal, y[mid:cut], p_te, y[cut:], alpha=0.1)}
+    except Exception:  # noqa: BLE001
+        pass
+
     # DRIFT des features (PSI) : 1re moitié (référence) vs 2nde moitié (actuel).
     drift = {"available": False}
     try:
@@ -515,6 +531,7 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
                            for s, p in top],
         "scores": {s: round(p, 3) for s, p in probs.items()},
         "calibration": calibration,
+        "conformal": conformal,
         "drift": drift,
     }
 

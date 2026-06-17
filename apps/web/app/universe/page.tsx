@@ -1,21 +1,26 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useUniverse } from "@/lib/api";
 import { PageSkeleton } from "@/components/ui";
 
 const nb = (x: number) => x.toLocaleString("fr-FR");
+const ROW_H = 33;            // hauteur de ligne fixe (virtualisation)
+const VIEW_H = 520;          // hauteur de la fenêtre de défilement
+const BUFFER = 8;            // lignes hors écran pré-rendues
 
 export default function Universe() {
   const { data: u } = useUniverse();
   const [q, setQ] = useState("");
   const [cls, setCls] = useState("tous");
+  const [scrollTop, setScrollTop] = useState(0);
+  const scroller = useRef<HTMLDivElement>(null);
   const all = u?.instruments ?? [];
   const filtered = useMemo(() => {
     const s = q.toLowerCase();
     return all.filter((r: any) =>
       (cls === "tous" || r.asset_class === cls) &&
       (!s || `${r.symbol} ${r.name} ${r.venue} ${r.sector ?? ""}`.toLowerCase().includes(s))
-    ).slice(0, 500);
+    );
   }, [all, q, cls]);
   if (!u) return <PageSkeleton />;
   const byClass: [string, number][] = Object.entries(u.by_asset_class ?? {});
@@ -27,6 +32,12 @@ export default function Universe() {
     ["Sources actives", `${u.sources_enabled} / ${u.sources_total}`],
     ["Rebuild", `${u.rebuild_cadence_days} j`],
   ];
+  // fenêtre virtualisée : on ne rend que les lignes visibles (+ buffer)
+  const n = filtered.length;
+  const start = Math.max(0, Math.floor(scrollTop / ROW_H) - BUFFER);
+  const end = Math.min(n, start + Math.ceil(VIEW_H / ROW_H) + 2 * BUFFER);
+  const visible = filtered.slice(start, end);
+
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-4">
       <h1 className="text-xl font-semibold tracking-tight">Univers</h1>
@@ -55,33 +66,40 @@ export default function Universe() {
       <section className="card p-4">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm uppercase tracking-wide text-muted">Univers complet — explorateur</h2>
-          <span className="text-xs text-muted">{filtered.length} / {all.length}{filtered.length >= 500 ? " (500 affichés)" : ""}</span>
+          <span className="text-xs text-muted">{nb(n)} / {nb(all.length)} (virtualisé)</span>
         </div>
-        <input value={q} onChange={(e) => setQ(e.target.value)}
+        <input value={q} onChange={(e) => { setQ(e.target.value); if (scroller.current) scroller.current.scrollTop = 0; setScrollTop(0); }}
           placeholder="Rechercher un symbole, un nom, une place…"
           className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-accent mb-3" />
         <div className="flex gap-1.5 flex-wrap mb-3">
           {classes.map((c) => (
-            <button key={c} onClick={() => setCls(c)}
+            <button key={c} onClick={() => { setCls(c); setScrollTop(0); if (scroller.current) scroller.current.scrollTop = 0; }}
               className={`text-xs px-2.5 py-1 rounded-full border ${cls === c ? "bg-accent text-white border-accent" : "border-border text-muted hover:text-fg"}`}>
               {c}
             </button>
           ))}
         </div>
-        <div className="max-h-[520px] overflow-auto">
-          <table className="w-full text-sm">
-            <thead className="text-muted text-xs sticky top-0 bg-surface">
-              <tr><th className="text-left font-normal">Symbole</th><th className="text-left font-normal">Nom</th>
-              <th className="text-left font-normal">Classe</th><th className="text-left font-normal">Place</th>
-              <th className="text-left font-normal">Secteur / Devise</th></tr>
-            </thead>
-            <tbody>{filtered.map((r: any, i: number) => (
-              <tr key={`${r.symbol}-${i}`} className="border-t border-border">
-                <td className="py-1.5 mono">{r.symbol}</td><td className="text-muted">{r.name}</td>
-                <td>{r.asset_class}</td><td className="text-muted">{r.venue}</td>
-                <td className="text-muted">{r.sector || r.currency}</td>
-              </tr>))}</tbody>
-          </table>
+        {/* en-tête fixe + corps virtualisé (gère 900+ lignes sans ralentir) */}
+        <div className="grid grid-cols-5 gap-2 text-muted text-xs px-1 pb-1 border-b border-border">
+          <span>Symbole</span><span>Nom</span><span>Classe</span><span>Place</span><span>Secteur / Devise</span>
+        </div>
+        <div ref={scroller} onScroll={(e) => setScrollTop((e.target as HTMLDivElement).scrollTop)}
+          style={{ height: VIEW_H, overflow: "auto" }}>
+          <div style={{ height: n * ROW_H, position: "relative" }}>
+            <div style={{ transform: `translateY(${start * ROW_H}px)` }}>
+              {visible.map((r: any, i: number) => (
+                <div key={`${r.symbol}-${start + i}`}
+                  className="grid grid-cols-5 gap-2 text-sm border-b border-border items-center"
+                  style={{ height: ROW_H }}>
+                  <span className="mono">{r.symbol}</span>
+                  <span className="text-muted truncate">{r.name}</span>
+                  <span>{r.asset_class}</span>
+                  <span className="text-muted">{r.venue}</span>
+                  <span className="text-muted truncate">{r.sector || r.currency}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </section>
 
