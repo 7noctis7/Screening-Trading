@@ -1,13 +1,15 @@
 "use client";
 import { useMl } from "@/lib/api";
+import { PageSkeleton, EmptyState } from "@/components/ui";
 
 const nb = (x: number) => x.toLocaleString("fr-FR");
 
 export default function Ml() {
   const { data: ml } = useMl();
-  if (!ml) return <div className="p-8 text-muted">Chargement…</div>;
+  if (!ml) return <PageSkeleton />;
   if (!ml.available)
-    return <main className="max-w-3xl mx-auto p-6"><div className="card p-4 text-muted text-sm">Modèle ML indisponible (échantillon insuffisant).</div></main>;
+    return <main className="max-w-3xl mx-auto p-6"><EmptyState title="Modèle ML indisponible" hint="Échantillon insuffisant pour entraîner le modèle." /></main>;
+  const cal = ml.calibration, drift = ml.drift;
   const cards: [string, string][] = [
     ["Modèle", ml.model],
     ["AUC (out-of-time)", ml.auc != null ? String(ml.auc) : "—"],
@@ -61,6 +63,37 @@ export default function Ml() {
           ))}
         </div>
       </section>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {cal?.available && (
+          <section className="card p-4">
+            <h2 className="text-sm uppercase tracking-wide text-muted mb-2">Calibration des probabilités</h2>
+            <div className="grid grid-cols-2 gap-3 mono text-sm">
+              <div><div className="text-muted text-xs">Brier (brut)</div><div className="text-lg">{cal.brier_raw}</div></div>
+              <div><div className="text-muted text-xs">Brier (calibré)</div>
+                <div className="text-lg" style={{ color: cal.brier_calibrated <= cal.brier_raw ? "#22c55e" : "#f59e0b" }}>{cal.brier_calibrated}</div></div>
+            </div>
+            <p className="text-muted2 text-xs mt-2 font-sans">Plus bas = mieux. La calibration (Platt) aligne la proba prédite sur la fréquence observée.</p>
+          </section>
+        )}
+        {drift?.available && (
+          <section className="card p-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm uppercase tracking-wide text-muted">Drift des features (PSI)</h2>
+              <span className="text-xs" style={{ color: drift.drift_detected ? "#f59e0b" : "#22c55e" }}>
+                {drift.drift_detected ? `${drift.flagged.length} dérive(s) forte(s)` : "stable"}</span>
+            </div>
+            <table className="w-full text-sm mt-2"><tbody>
+              {Object.entries(drift.by_feature ?? {}).map(([f, d]: any) => (
+                <tr key={f} className="border-t border-border">
+                  <td className="py-1 text-muted">{f}</td>
+                  <td className="text-right mono">{d.psi}</td>
+                  <td className="text-right text-xs" style={{ color: d.status === "fort" ? "#f43f5e" : d.status === "modéré" ? "#f59e0b" : "#22c55e" }}>{d.status}</td>
+                </tr>))}
+            </tbody></table>
+          </section>
+        )}
+      </div>
     </main>
   );
 }

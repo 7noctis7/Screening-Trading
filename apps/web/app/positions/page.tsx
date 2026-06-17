@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { usePositions, useSentiment } from "@/lib/api";
 import { TechnicalChart } from "@/components/TechnicalChart";
+import { PageSkeleton } from "@/components/ui";
 
 const eur = (x: number) => x.toLocaleString("fr-FR", { maximumFractionDigits: 0 });
 const SC: Record<string, [string, string]> = {
@@ -12,7 +13,7 @@ export default function Positions() {
   const { data } = usePositions();
   const { data: sent } = useSentiment();
   const [sel, setSel] = useState<string | null>(null);
-  if (!data) return <div className="p-8 text-muted">Chargement…</div>;
+  if (!data) return <PageSkeleton />;
   const sentBy: Record<string, number> = {};
   (sent?.rows ?? []).forEach((r: any) => (sentBy[r.symbol] = r.score));
   const rows = data.positions ?? [], t = data.totals ?? {}, k = data.portfolio ?? {}, series = data.series ?? {}, markers = data.markers ?? {};

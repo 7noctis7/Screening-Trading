@@ -1,6 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { useUniverse } from "@/lib/api";
+import { PageSkeleton } from "@/components/ui";
 
 const nb = (x: number) => x.toLocaleString("fr-FR");
 
@@ -16,7 +17,7 @@ export default function Universe() {
       (!s || `${r.symbol} ${r.name} ${r.venue} ${r.sector ?? ""}`.toLowerCase().includes(s))
     ).slice(0, 500);
   }, [all, q, cls]);
-  if (!u) return <div className="p-8 text-muted">Chargement…</div>;
+  if (!u) return <PageSkeleton />;
   const byClass: [string, number][] = Object.entries(u.by_asset_class ?? {});
   const max = Math.max(1, ...byClass.map(([, v]) => v));
   const classes = ["tous", ...byClass.map(([k]) => k)];

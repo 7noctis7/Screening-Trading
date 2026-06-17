@@ -1,5 +1,6 @@
 "use client";
 import { useSentiment } from "@/lib/api";
+import { PageSkeleton, EmptyState } from "@/components/ui";
 
 const SC: Record<string, [string, string]> = {
   bullish: ["#22c55e", "▲"], bearish: ["#f43f5e", "▼"], neutral: ["#9aa1ad", "–"],
@@ -13,9 +14,9 @@ const tag = (label: string, sector?: string) => {
 
 export default function Sentiment() {
   const { data: s } = useSentiment();
-  if (!s) return <div className="p-8 text-muted">Chargement…</div>;
+  if (!s) return <PageSkeleton />;
   if (!s.available)
-    return <main className="max-w-3xl mx-auto p-6"><div className="card p-4 text-muted text-sm">Aucune donnée de sentiment.</div></main>;
+    return <main className="max-w-3xl mx-auto p-6"><EmptyState title="Aucune donnée de sentiment" /></main>;
   const mood: number = s.market_mood ?? 0;
   const moodPct = Math.round(((mood + 1) / 2) * 100);
   const rows = s.rows ?? [];
