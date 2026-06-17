@@ -37,6 +37,30 @@ export default function Portfolio() {
         </section>
       </div>
 
+      {/* Modèles de risque : GARCH, backtest VaR (Kupiec), risque factoriel (ACP) */}
+      {(rm.garch?.available || rm.var_backtest || rm.factor_risk?.available) && (
+        <section className="card p-4">
+          <h2 className="text-sm uppercase tracking-wide text-muted mb-2">Modèles de risque</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+            {rm.garch?.available && (
+              <div><div className="text-muted text-xs">Vol prévue (GARCH 1,1)</div>
+                <div className="text-lg mono">{pct(rm.garch.forecast_vol)}</div>
+                <div className="text-muted2 text-xs">persistance {rm.garch.persistence}</div></div>
+            )}
+            {rm.var_backtest && (
+              <div><div className="text-muted text-xs">Backtest VaR (Kupiec)</div>
+                <div className="text-lg mono" style={{ color: rm.var_backtest.pass ? "#22c55e" : "#f43f5e" }}>{rm.var_backtest.pass ? "validé" : "rejeté"}</div>
+                <div className="text-muted2 text-xs">{rm.var_backtest.breaches}/{rm.var_backtest.n} dépass. (p={rm.var_backtest.p_value})</div></div>
+            )}
+            {rm.factor_risk?.available && (
+              <div><div className="text-muted text-xs">Risque systématique (ACP)</div>
+                <div className="text-lg mono">{pct(rm.factor_risk.systematic_pct)}</div>
+                <div className="text-muted2 text-xs">{rm.factor_risk.effective_factors} facteurs effectifs</div></div>
+            )}
+          </div>
+        </section>
+      )}
+
       {/* Limites de concentration */}
       {lim && (
         <section className="card p-4">
