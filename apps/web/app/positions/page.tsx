@@ -25,6 +25,14 @@ export default function Positions() {
       <h1 className="text-xl font-semibold tracking-tight">Positions <span className="text-xs font-normal px-2 py-0.5 rounded-full align-middle" style={{ background: "color-mix(in srgb, var(--warn) 18%, transparent)", color: "var(--warn)" }}>FICTIF · démo 10 000 $</span></h1>
       <p className="text-muted text-xs">Portefeuille de démonstration (modèle). Pour tes positions réelles → onglet <b>Portefeuille réel</b>.</p>
       <StepBanner active="portfolio" />
+      {(data.earnings_risk ?? []).length > 0 && (
+        <div className="card p-3 text-sm" style={{ borderColor: "color-mix(in srgb, var(--warn) 50%, transparent)" }}>
+          ⚠️ <b>Risque binaire « earnings »</b> — résultats imminents :{" "}
+          {data.earnings_risk.map((e: any, i: number) => (
+            <span key={e.symbol} className="mono">{i ? " · " : ""}{e.symbol} (J−{e.days})</span>
+          ))}. Best practice : réduire/couper avant l'annonce (le backtest PEAD montre un edge négatif à travers les résultats).
+        </div>
+      )}
 
       <section className="card p-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

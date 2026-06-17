@@ -1178,6 +1178,7 @@ def build_snapshot(seed: int = 7) -> dict:
             "portfolio": portfolio_kpis,
             "position_series": position_series,
             "position_markers": position_markers,
+            "earnings_risk": _earnings_risk(held),
             "trade_stats": trade_stats,
             "vix": vix_now, "vix_playbook": _vix_playbook(vix_now),
             "vix_series": vix[::max(1, n // 240)],   # sous-échantillonné pour le graphe
@@ -1213,6 +1214,18 @@ def build_snapshot(seed: int = 7) -> dict:
         "conviction": conviction_sec,
         "live": _live_with_rebalance(comp["rows"], acmap, portfolio_kpis, w_by_name),
     }
+
+
+def _earnings_risk(held: list) -> list[dict]:
+    """Positions détenues dont les résultats sont imminents (risque binaire). Gate QUANT_EARNINGS=1."""
+    import os
+    if os.environ.get("QUANT_EARNINGS") != "1" or not held:
+        return []
+    try:
+        from packages.strategies.earnings_blackout import flag_positions
+        return flag_positions(list(held)[:25], within=7)
+    except Exception:  # noqa: BLE001
+        return []
 
 
 def _top_traded(journal, k: int) -> list[tuple[str, int]]:
