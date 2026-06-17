@@ -506,6 +506,25 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
     except Exception:  # noqa: BLE001
         pass
 
+    # META-LABELING : un 2e modèle filtre les faux positifs du primaire → précision ↑.
+    meta = {"available": False}
+    try:
+        from packages.ml.meta import evaluate as meta_eval
+        from packages.ml.meta import meta_labels
+        a0, a1, a2 = int(len(X) * 0.5), int(len(X) * 0.75), len(X)
+        if a0 > 100 and a2 - a1 > 50:
+            mp, _ = _ml_model(); mp.fit(X[:a0], y[:a0])               # primaire
+            pm = np.asarray(mp.predict_proba(X[a0:a1]), float)        # proba primaire (méta-train)
+            ml_lbl = meta_labels(pm, y[a0:a1])
+            Xm = np.column_stack([X[a0:a1], pm])
+            if len(set(ml_lbl)) > 1:
+                mm, _ = _ml_model(); mm.fit(Xm, ml_lbl)              # méta-modèle
+                pte = np.asarray(mp.predict_proba(X[a1:a2]), float)
+                mte = np.asarray(mm.predict_proba(np.column_stack([X[a1:a2], pte])), float)
+                meta = {"available": True, **meta_eval(pte, mte, y[a1:a2])}
+    except Exception:  # noqa: BLE001
+        pass
+
     # WALK-FORWARD (ancré) : robustesse temporelle de l'edge (AUC moyenne ± écart-type).
     walk_forward = {"available": False}
     try:
@@ -561,6 +580,7 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
         "calibration": calibration,
         "conformal": conformal,
         "walk_forward": walk_forward,
+        "meta_labeling": meta,
         "drift": drift,
     }
 
@@ -890,6 +910,17 @@ def build_snapshot(seed: int = 7) -> dict:
     nobs = len(rets)
     rm["psr"] = probabilistic_sharpe_ratio(sr, nobs, sr_benchmark=0.0)
     rm["dsr"] = deflated_sharpe_ratio(sr, nobs, n_trials=20)   # ~20 configs essayées
+
+    # EVT (risque de queue extrême) + risque de LIQUIDITÉ
+    from packages.portfolio.evt import evt_var_es
+    from packages.portfolio.liquidity import portfolio_liquidity
+    rm["evt"] = evt_var_es(rets, alpha=0.999)
+    liq_positions = []
+    for r in comp["rows"]:
+        bars = data.get(r["symbol"], [])[-20:]
+        adv = (sum(b.close * b.volume for b in bars) / len(bars)) if bars else 0.0
+        liq_positions.append({"symbol": r["symbol"], "value": r["current_value"], "adv": adv})
+    rm["liquidity"] = portfolio_liquidity(liq_positions, participation=0.10)
     # séries OHLCV (historique LONG : daily/weekly/monthly agrégés côté front) + marqueurs trades
     open_info = getattr(broker, "open_positions_info", {})
     by_sym_trades = {}

@@ -9,7 +9,7 @@ export default function Ml() {
   if (!ml) return <PageSkeleton />;
   if (!ml.available)
     return <main className="max-w-3xl mx-auto p-6"><EmptyState title="Modèle ML indisponible" hint="Échantillon insuffisant pour entraîner le modèle." /></main>;
-  const cal = ml.calibration, drift = ml.drift, conf = ml.conformal, wf = ml.walk_forward;
+  const cal = ml.calibration, drift = ml.drift, conf = ml.conformal, wf = ml.walk_forward, meta = ml.meta_labeling;
   const cards: [string, string][] = [
     ["Modèle", ml.model],
     ["AUC (out-of-time)", ml.auc != null ? String(ml.auc) : "—"],
@@ -82,6 +82,18 @@ export default function Ml() {
                   <span className="text-muted"> (cible {(conf.target_coverage * 100).toFixed(0)}%) · taille moy. d'ensemble {conf.avg_set_size}</span></div>
               </div>
             )}
+          </section>
+        )}
+        {meta?.available && (
+          <section className="card p-4">
+            <h2 className="text-sm uppercase tracking-wide text-muted mb-2">Meta-labeling (filtre des faux positifs)</h2>
+            <div className="grid grid-cols-2 gap-3 mono text-sm">
+              <div><div className="text-muted text-xs">Précision primaire</div><div className="text-lg">{(meta.precision_primary * 100).toFixed(1)}%</div>
+                <div className="text-muted2 text-xs">{meta.signals_primary} signaux</div></div>
+              <div><div className="text-muted text-xs">Précision + méta</div>
+                <div className="text-lg" style={{ color: meta.precision_gain >= 0 ? "#22c55e" : "#f59e0b" }}>{(meta.precision_meta * 100).toFixed(1)}%</div>
+                <div className="text-muted2 text-xs">{meta.signals_meta} signaux ({meta.precision_gain >= 0 ? "+" : ""}{(meta.precision_gain * 100).toFixed(1)} pt)</div></div>
+            </div>
           </section>
         )}
         {drift?.available && (
