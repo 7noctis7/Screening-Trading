@@ -353,10 +353,17 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None) -> dic
 def _live_with_rebalance(positions: list, acmap: dict, kpis: dict | None,
                          current_weights: dict[str, float]) -> dict:
     """_live_section + aperçu de la BANDE DE NON-TRADING (réduit le churn)."""
+    from packages.execution.algos import twap_schedule
     from packages.portfolio.rebalance import apply_no_trade_band
     live = _live_section(positions, acmap, kpis)
     targets = {o["symbol"]: o["weight_pct"] for o in live["target_orders"]}
     live["rebalance"] = apply_no_trade_band(targets, current_weights, band=0.02)
+    # plan d'exécution TWAP (exemple) sur le plus gros ordre cible → anti-impact marché
+    top = max(live["target_orders"], key=lambda o: o["weight_pct"], default=None)
+    if top:
+        live["execution"] = {"algo": "TWAP", "slices": 5, "symbol": top["symbol"],
+                             "weight_pct": top["weight_pct"],
+                             "schedule_pct": twap_schedule(top["weight_pct"], 5)}
     return live
 
 
@@ -585,6 +592,7 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
     (marge de sécurité) et score composite value+quality. Equities/ETF uniquement.
     FMP si `FMP_API_KEY`, sinon fondamentaux synthétiques déterministes (offline-safe)."""
     from packages.fundamentals import ratios, valuation
+    from packages.fundamentals.scoring import f_score, f_score_label
 
     eq = [s for s in symbols if acmap.get(s) in ("equity", "etf")][:40]
     if not eq:
@@ -606,6 +614,7 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
             "roic": round(ratios.roic(f), 3), "gross_margin": round(ratios.gross_margin(f), 3),
             "fcf_yield": round(valuation.fcf_yield(f), 3),
             "margin_of_safety": None if mos != mos else round(mos, 3),
+            "f_score": f_score(f), "f_score_label": f_score_label(f_score(f)),
             "_val": (valuation.earnings_yield(f) + valuation.fcf_yield(f)),
             "_qual": (ratios.roic(f) + ratios.gross_margin(f) + ratios.fcf_conversion(f)),
         })
@@ -626,6 +635,14 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
                        else "SELL" if (score < 35 or (mos is not None and mos < -0.20))
                        else "HOLD")
         del r["_val"], r["_qual"]
+    # rang sectoriel relatif (1 = meilleur de son secteur) — valorisation sector-neutral
+    from collections import defaultdict
+    by_sec: dict = defaultdict(list)
+    for r in rows:
+        by_sec[r["sector"]].append(r)
+    for sec_rows in by_sec.values():
+        for rank, r in enumerate(sorted(sec_rows, key=lambda x: x["score"], reverse=True), 1):
+            r["sector_rank"] = f"{rank}/{len(sec_rows)}"
     rows.sort(key=lambda r: r["score"], reverse=True)
     buys = sum(1 for r in rows if r["rating"] == "BUY")
     return {"available": True, "source": src, "n": len(rows), "buys": buys, "rows": rows,
