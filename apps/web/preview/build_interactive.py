@@ -495,6 +495,20 @@ function portfolioBar(k){
       <div><div style="color:var(--muted);font-size:12px">Vol</div><div style="font-size:18px">${pct(rm.vol)}</div></div>
       <div><div style="color:var(--muted);font-size:12px">Proba ruine (MC)</div><div style="font-size:18px">${pct(a.monte_carlo.p_ruin)}</div></div>
       </div></div></div>`));
+  // modèles de risque avancés (GARCH, backtest VaR Kupiec, ACP, Sharpe déflaté)
+  (function(){
+    const g=rm.garch,vb=rm.var_backtest,fr=rm.factor_risk;
+    if(!(g||vb||fr||rm.psr!=null))return;
+    const cells=[];
+    if(rm.var_cornish_fisher_95!=null)cells.push(['VaR Cornish-Fisher',pct(rm.var_cornish_fisher_95)]);
+    if(g&&g.available)cells.push(['Vol prévue (GARCH)',pct(g.forecast_vol)]);
+    if(vb)cells.push(['Backtest VaR (Kupiec)',vb.pass?'validé':'rejeté']);
+    if(fr&&fr.available)cells.push(['Risque systématique',pct(fr.systematic_pct)]);
+    if(rm.psr!=null)cells.push(['Sharpe probabiliste',pct(rm.psr)]);
+    if(rm.dsr!=null)cells.push(['Sharpe déflaté',pct(rm.dsr)]);
+    const inner=cells.map(([l,v])=>`<div><div style="color:var(--muted);font-size:12px">${l}</div><div style="font-size:18px">${v}</div></div>`).join('');
+    p.appendChild($(`<div class="card"><div class="label" style="margin-bottom:8px">Modèles de risque</div><div class="grid4" style="gap:10px">${inner}</div></div>`));
+  })();
   // projection Monte-Carlo INTERACTIVE (survol = percentiles à l'horizon pointé)
   const mp=a.mc_projection;
   if(mp&&mp.steps&&mp.steps.length){
@@ -895,6 +909,18 @@ const heatColor=(v,m)=>{const t=Math.max(-1,Math.min(1,v/m));
     <span class="facbar" style="width:${Math.round(f.weight/maxw*100)}%;max-width:360px"></span>
     <span class="mono">${f.weight.toFixed(3)}</span></div>`)));
   p.appendChild(fi);
+  // validation & robustesse (calibration, conformal, walk-forward, drift)
+  const cal=ml.calibration,cf=ml.conformal,wf=ml.walk_forward,dr=ml.drift;
+  if((cal&&cal.available)||(cf&&cf.available)||(wf&&wf.available)||(dr&&dr.available)){
+    const vc=$(`<div class="card"><div class="label" style="margin-bottom:10px">Validation & robustesse</div></div>`);
+    const grid=$('<div class="grid4"></div>');
+    if(wf&&wf.available)grid.appendChild($(`<div class="card metric"><div class="label">AUC walk-forward</div><div class="val" style="font-size:18px">${wf.auc_mean} ± ${wf.auc_std}</div></div>`));
+    if(cal&&cal.available)grid.appendChild($(`<div class="card metric"><div class="label">Brier (calibré)</div><div class="val" style="font-size:18px;color:${cal.brier_calibrated<=cal.brier_raw?'#22c55e':'#f59e0b'}">${cal.brier_calibrated}</div></div>`));
+    if(cf&&cf.available)grid.appendChild($(`<div class="card metric"><div class="label">Couverture conformal</div><div class="val" style="font-size:18px">${(cf.empirical_coverage*100).toFixed(0)}%<span style="font-size:11px;color:var(--muted)"> /${(cf.target_coverage*100).toFixed(0)}%</span></div></div>`));
+    if(dr&&dr.available)grid.appendChild($(`<div class="card metric"><div class="label">Drift features (PSI)</div><div class="val" style="font-size:18px;color:${dr.drift_detected?'#f59e0b':'#22c55e'}">${dr.drift_detected?dr.flagged.length+' forte(s)':'stable'}</div></div>`));
+    vc.appendChild(grid);
+    p.appendChild(vc);
+  }
   p.appendChild($('<div style="font-size:11px;color:var(--muted)">Démonstration sur données synthétiques : l\'edge prédictif est volontairement modeste (marché en grande partie aléatoire). Le score ML enrichit le screener et confirme les setups.</div>'));
  }catch(e){console.error('rendu ml:',e);}
 })();
