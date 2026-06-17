@@ -324,6 +324,33 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None) -> dic
     import os
     alp = bool(os.environ.get("ALPACA_API_KEY") and os.environ.get("ALPACA_API_SECRET"))
     bit = bool(os.environ.get("BITMART_API_KEY") and os.environ.get("BITMART_API_SECRET"))
+    # --- DONNÉES RÉELLES DU BROKER (uniquement si connecté ; best-effort, jamais bloquant) ---
+    real = {"connected": False, "equity": 0.0, "positions": []}
+    if alp:
+        try:
+            from packages.execution.alpaca_broker import AlpacaBroker
+            b = AlpacaBroker(paper=True)
+            real["equity"] += float(b.equity())
+            for p in b.positions():
+                real["positions"].append({"symbol": p.instrument, "broker": "Alpaca",
+                                          "side": p.side.value if hasattr(p.side, "value") else str(p.side),
+                                          "qty": round(p.qty, 4), "avg_price": round(p.avg_price, 2)})
+            real["connected"] = True
+        except Exception:  # noqa: BLE001
+            pass
+    if bit:
+        try:
+            from packages.execution.bitmart_broker import BitmartBroker
+            b = BitmartBroker(dry_run=False)
+            real["equity"] += float(b.equity())
+            for p in b.positions():
+                real["positions"].append({"symbol": p.instrument, "broker": "Bitmart",
+                                          "side": p.side.value if hasattr(p.side, "value") else str(p.side),
+                                          "qty": round(p.qty, 4), "avg_price": round(p.avg_price, 2)})
+            real["connected"] = True
+        except Exception:  # noqa: BLE001
+            pass
+    real["equity"] = round(real["equity"], 2)
     tot = sum(p["current_value"] for p in positions) or 1.0
     targets = []
     for p in positions:
@@ -334,8 +361,7 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None) -> dic
                         "side": p["side"]})
     return {
         "connected": alp or bit,
-        # KPI réels seulement si un compte est connecté (sinon le portefeuille réel est vide)
-        "portfolio": (kpis or {}) if (alp or bit) else {},
+        "real": real,                              # positions/equity RÉELLES du broker (vide si non connecté)
         "model_weights_only": not (alp or bit),
         "mode": "paper",                          # paper par défaut, JAMAIS d'ordre réel non confirmé
         "brokers": [
@@ -648,10 +674,12 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
     from packages.fundamentals.provider import degrade_prior
     from packages.fundamentals.scoring import altman_z, f_score, f_score_label, piotroski_full
 
-    eq = [s for s in symbols if acmap.get(s) in ("equity", "etf")][:40]
+    prov, src = _fund_provider()
+    # cap : FMP free tier limité (≈250 appels/j, 4 appels/actif) → 40 ; synthétique → large
+    cap = 40 if src.startswith("FMP") else 180
+    eq = [s for s in symbols if acmap.get(s) in ("equity", "etf")][:cap]
     if not eq:
         return {"available": False}
-    prov, src = _fund_provider()
 
     def _rows_for(provider):
         out = []

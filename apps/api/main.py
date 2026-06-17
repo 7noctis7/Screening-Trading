@@ -106,3 +106,36 @@ def ml() -> dict:
 @app.get("/api/live")
 def live() -> dict:
     return _snap()["live"]
+
+
+@app.get("/api/ai/status")
+def ai_status() -> dict:
+    """Disponibilité d'un LLM local (LM Studio / Ollama)."""
+    from packages.llm import available
+    return {"available": available()}
+
+
+@app.get("/api/ai/commentary")
+def ai_commentary() -> dict:
+    """Commentaire IA en langage naturel sur l'état du portefeuille (LLM local uniquement)."""
+    from packages.llm import complete
+    s = _snap()
+    d, p = s["dashboard"], s["portfolio"]
+    rm = p.get("analysis", {}).get("risk", {})
+    k = d.get("portfolio", {})
+    top = ", ".join(f"{r['symbol']} ({r.get('score', 0):.2f})" for r in s["screener"]["rows"][:5])
+    reg = d.get("regime", {})
+    facts = (
+        f"Portefeuille (démo): {k.get('value', 0):.0f} $, P&L {k.get('pnl_pct', 0)*100:.1f}%, "
+        f"{k.get('n_positions', 0)} positions, exposition {k.get('exposure_pct', 0)*100:.0f}%.\n"
+        f"Régime: {reg.get('cycle', '?')} / {reg.get('risk_mode', '?')}, VIX {d.get('vix', 0):.0f}.\n"
+        f"Risque: VaR95 {rm.get('var_95', 0)*100:.1f}%, vol {rm.get('vol', 0)*100:.1f}%, "
+        f"Sharpe déflaté {rm.get('dsr', 0)}.\n"
+        f"Top screener: {top}."
+    )
+    system = ("Tu es un analyste quant senior. Commente en français, en 4-6 phrases claires et "
+              "actionnables, l'état du portefeuille ci-dessous (risque, régime, idées). "
+              "Pas de conseil personnalisé, ton factuel et prudent.")
+    res = complete(facts, system=system, max_tokens=350)
+    return {"available": res.get("available", False), "text": res.get("text", ""),
+            "reason": res.get("reason", "")}

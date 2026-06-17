@@ -26,7 +26,8 @@ export default function Trades() {
   ];
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-4">
-      <h1 className="text-xl font-semibold tracking-tight">Trades</h1>
+      <h1 className="text-xl font-semibold tracking-tight">Trades <span className="text-xs font-normal px-2 py-0.5 rounded-full align-middle" style={{ background: "color-mix(in srgb, var(--warn) 18%, transparent)", color: "var(--warn)" }}>FICTIF · démo</span></h1>
+      <p className="text-muted text-xs">Journal du portefeuille de démonstration (backtest). Tes ordres réels passent par l'onglet <b>Portefeuille réel</b>.</p>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         {cards.map(([lab, val, tone]) => (
           <div key={lab} className="card p-4">
