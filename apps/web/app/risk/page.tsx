@@ -45,6 +45,22 @@ export default function Risk() {
         <p className="text-muted2 text-xs mt-2">EVT = théorie des valeurs extrêmes (Peaks-Over-Threshold + GPD) pour le risque de queue ; liquidité estimée via l'ADV (participation 10 %).</p>
       </section>
 
+      {rm.fragility?.available && (
+        <section className="card p-4">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h2 className="text-sm uppercase tracking-wide text-muted">Fragilité (Taleb · Incerto)</h2>
+            <span className="text-xs mono" style={{ color: rm.fragility.fragile ? "#f43f5e" : "#22c55e" }}>{rm.fragility.verdict}</span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-2 text-sm mono">
+            <div><div className="text-muted text-xs">Asymétrie (skew)</div><div className="text-lg" style={{ color: rm.fragility.skew >= 0 ? "#22c55e" : "#f43f5e" }}>{rm.fragility.skew}</div></div>
+            <div><div className="text-muted text-xs">Excès de kurtosis</div><div className="text-lg" style={{ color: rm.fragility.excess_kurtosis > 3 ? "#f43f5e" : undefined }}>{rm.fragility.excess_kurtosis}</div></div>
+            <div><div className="text-muted text-xs">Ratio de queue (CVaR/VaR)</div><div className="text-lg">{rm.fragility.tail_ratio}</div></div>
+            <div><div className="text-muted text-xs">Pire jour</div><div className="text-lg" style={{ color: "#f43f5e" }}>{pct(rm.fragility.worst_day)}</div></div>
+          </div>
+          <p className="text-muted2 text-xs mt-2">Principes : le risque vit dans les <b>queues</b> (kurtosis, pire jour), pas la vol moyenne ; viser une <b>convexité</b> (skew ≥ 0) ; approche <b>barbell</b> (très sûr + très risqué) ; <b>éviter la ruine</b> avant tout. Asymétrie négative + kurtosis élevé = profil fragile à couvrir (stops, hedging, exposition réduite).</p>
+        </section>
+      )}
+
       {(vb || fr?.available) && (
         <section className="card p-4">
           <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Validation & structure</h2>
