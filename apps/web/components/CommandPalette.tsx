@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 const PAGES: [string, string][] = [
   ["/accueil", "Accueil"], ["/", "Dashboard"], ["/data", "Données"], ["/universe", "Univers"],
   ["/themes", "Thèmes de marché"], ["/fundamentals", "Fondamentaux"], ["/ml", "Signaux ML"],
-  ["/sentiment", "Sentiment & news"], ["/portfolio", "Portefeuille & Analyse"], ["/risk", "Risque"],
+  ["/sentiment", "Sentiment & news"], ["/conviction", "Conviction"],
+  ["/portfolio", "Portefeuille & Analyse"], ["/risk", "Risque"],
   ["/positions", "Positions"], ["/trades", "Trades"], ["/live", "Portefeuille réel"],
 ];
 
