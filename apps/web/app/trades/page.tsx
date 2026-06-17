@@ -1,5 +1,7 @@
 "use client";
+import { useState } from "react";
 import { useTrades } from "@/lib/api";
+import { TechnicalChart } from "@/components/TechnicalChart";
 
 const eur = (x: number) => Math.round(x).toLocaleString("fr-FR");
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
@@ -7,8 +9,11 @@ const dt = (s?: string) => (s ? String(s).slice(0, 10) : "—");
 
 export default function Trades() {
   const { data } = useTrades();
+  const [sel, setSel] = useState<string | null>(null);
   if (!data) return <div className="p-8 text-muted">Chargement…</div>;
   const st = data.stats ?? {}, closed = data.trades ?? [], open = data.open_trades ?? [];
+  const series = data.series ?? {}, markers = data.markers ?? {};
+  const pick = (sym: string) => setSel(series[sym] ? sym : null);
   const cards: [string, string, string][] = [
     ["Trades clôturés", String(st.count ?? 0), ""],
     ["Taux de réussite", `${((st.win_rate ?? 0) * 100).toFixed(0)}%`, ""],
@@ -29,8 +34,19 @@ export default function Trades() {
         ))}
       </div>
 
+      {sel && series[sel] && (
+        <section className="card p-4">
+          <div className="flex justify-between items-center mb-2">
+            <h2 className="text-sm uppercase tracking-wide text-muted">Graphique technique — {sel}
+              <span className="ml-2 text-xs"><span style={{ color: "#22c55e" }}>▲ achat</span> <span style={{ color: "#f43f5e" }}>▼ vente</span></span></h2>
+            <button onClick={() => setSel(null)} className="text-muted hover:text-fg text-sm">✕</button>
+          </div>
+          <TechnicalChart data={series[sel]} markers={markers[sel] ?? []} />
+        </section>
+      )}
+
       <section className="card p-4 overflow-x-auto">
-        <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Trades en cours</h2>
+        <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Trades en cours <span className="text-xs normal-case">· clique un actif pour son graphique</span></h2>
         {open.length === 0 ? <p className="text-muted text-sm">Aucun trade ouvert au dernier pas (stratégie à plat).</p> : (
           <table className="w-full text-sm mono">
             <thead className="text-muted text-xs">
@@ -39,8 +55,9 @@ export default function Trades() {
               <th className="text-right font-normal">Valeur</th><th className="text-right font-normal">P&amp;L latent</th></tr>
             </thead>
             <tbody>{open.map((r: any) => (
-              <tr key={r.symbol} className="border-t border-border">
-                <td className="py-1.5">{r.symbol}</td><td>{r.side}</td>
+              <tr key={r.symbol} onClick={() => pick(r.symbol)}
+                className={`border-t border-border ${series[r.symbol] ? "cursor-pointer hover:bg-surfaceAlt" : ""}`}>
+                <td className="py-1.5"><span className={series[r.symbol] ? "text-accent border-b border-dotted border-border" : ""}>{r.symbol}</span></td><td>{r.side}</td>
                 <td className="text-right">{r.qty}</td><td className="text-right">{r.avg_price}</td>
                 <td className="text-right">{eur(r.current_value)}</td>
                 <td className="text-right" style={{ color: r.pnl_abs >= 0 ? "#22c55e" : "#ef4444" }}>{eur(r.pnl_abs)} ({pct(r.pnl_pct)})</td>
@@ -62,8 +79,9 @@ export default function Trades() {
             <tbody>{closed.map((t: any) => {
               const win = (t.pnl_net ?? 0) >= 0;
               return (
-                <tr key={t.id} className="border-t border-border">
-                  <td className="py-1.5">{t.instrument}</td><td>{t.side}</td>
+                <tr key={t.id} onClick={() => pick(t.instrument)}
+                  className={`border-t border-border ${series[t.instrument] ? "cursor-pointer hover:bg-surfaceAlt" : ""}`}>
+                  <td className="py-1.5"><span className={series[t.instrument] ? "text-accent border-b border-dotted border-border" : ""}>{t.instrument}</span></td><td>{t.side}</td>
                   <td className="text-muted">{dt(t.entry_ts)}</td><td className="text-muted">{dt(t.exit_ts)}</td>
                   <td className="text-right" style={{ color: win ? "#22c55e" : "#ef4444" }}>{eur(t.pnl_net ?? 0)}</td>
                   <td className="text-right" style={{ color: win ? "#22c55e" : "#ef4444" }}>{pct(t.pnl_pct ?? 0)}</td>
