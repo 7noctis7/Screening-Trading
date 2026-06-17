@@ -23,16 +23,27 @@
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
+/* Photo taureau/ours en ARRIÈRE-PLAN de tout le site (dépose apps/web/public/hero.jpg).
+   Couche la plus basse ; si le fichier est absent, le dégradé du body prend le relais. */
+html::before {
+  content:""; position:fixed; inset:0; z-index:-3; pointer-events:none;
+  background:url('/hero.jpg') center/cover no-repeat fixed;
+  opacity:.5;
+}
 body {
   margin:0; color:var(--fg); position:relative; min-height:100vh;
-  background:radial-gradient(1200px 620px at 50% -12%, var(--bg2) 0%, var(--bg) 58%) fixed;
+  /* voile sombre semi-transparent → la photo (html::before) transparaît, texte lisible */
+  background:
+    radial-gradient(1200px 620px at 50% -12%,
+      color-mix(in srgb, var(--bg2) 70%, transparent) 0%,
+      color-mix(in srgb, var(--bg) 86%, transparent) 58%) fixed;
   font-family:-apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif;
   -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; letter-spacing:-.01em;
   transition:background-color .3s ease, color .3s ease;
 }
-/* Fond animé « marché vivant » : halos cyan/teal/vert qui dérivent lentement (déférence) */
+/* Halos cyan/teal/vert qui dérivent (par-dessus la photo, sous le contenu) */
 body::before {
-  content:""; position:fixed; inset:0; z-index:-1; pointer-events:none;
+  content:""; position:fixed; inset:0; z-index:-2; pointer-events:none;
   background:
     radial-gradient(620px 420px at 16% 18%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%),
     radial-gradient(560px 380px at 84% 26%, color-mix(in srgb, var(--accent2) 14%, transparent), transparent 70%),
@@ -44,7 +55,7 @@ body::before {
   50% { transform:translate3d(0,-18px,0) scale(1.05); opacity:1; }
   100% { transform:translate3d(0,12px,0) scale(1.02); opacity:.9; }
 }
-/* Pour utiliser TA photo en fond : dépose-la dans apps/web/public/hero.jpg → la classe .hero-photo l'affiche. */
+/* Hero d'Accueil : même photo, plus présente */
 .hero-photo {
   background-image:linear-gradient(180deg, rgba(4,7,10,.35), rgba(4,7,10,.85)), url('/hero.jpg');
   background-size:cover; background-position:center;
