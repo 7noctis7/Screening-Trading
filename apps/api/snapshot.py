@@ -86,9 +86,9 @@ def _universe_section(instruments: list[dict]) -> dict:
         })
     by_class, by_venue = {}, {}
     for r in instruments:
-        ac = (r.get("asset_class") or "?").strip() or "?"
+        ac = (str(r.get("asset_class") or "?")).strip() or "?"
         by_class[ac] = by_class.get(ac, 0) + 1
-        ven = (r.get("venue") or "?").strip() or "?"
+        ven = (str(r.get("venue") or "?")).strip() or "?"
         by_venue[ven] = by_venue.get(ven, 0) + 1
     seeds = []
     for path in sorted((ROOT / "data" / "seed").glob("*.csv")):

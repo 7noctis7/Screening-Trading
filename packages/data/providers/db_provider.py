@@ -137,25 +137,33 @@ class DBPriceProvider:
             return []
         t, sym, _ = meta
         cl = self._columns(t)
-        name = _pick(cl, ["name", "fullname", "longname", "label"])
-        sector = _pick(cl, ["sector", "industry", "gics"])
-        cur = _pick(cl, ["currency", "ccy", "devise"])
-        exch = _pick(cl, ["exchange", "venue", "market", "mic"])
+        # colonnes TEXTE seulement (jamais les colonnes id_*, qui sont des entiers)
+        def _txt(cands):
+            for c in cands:
+                for k, orig in cl.items():
+                    if c in k and not k.startswith("id"):
+                        return orig
+            return None
+        name = _txt(["name", "fullname", "longname", "label"])
+        sector = _txt(["sector", "industry", "gics"])
+        cur = _txt(["currency", "ccy", "devise"])
+        exch = _txt(["exchange", "venue", "market", "mic"])
         cols = ", ".join(f'"{c}"' for c in (sym, name, sector, cur, exch) if c)
         try:
             rows = self._conn.execute(f'SELECT {cols} FROM "{t}"').fetchall()
         except sqlite3.Error:
             return []
+        st = lambda v: str(v) if v is not None else ""   # noqa: E731 — tout en str
         out = []
         for r in rows:
             d = dict(r) if hasattr(r, "keys") else {}
             s = d.get(sym) or (r[0] if r else None)
             if not s:
                 continue
-            out.append({"symbol": str(s), "name": (d.get(name) or "") if name else "",
-                        "sector": (d.get(sector) or "") if sector else "",
-                        "currency": (d.get(cur) or "") if cur else "",
-                        "venue": (d.get(exch) or "") if exch else ""})
+            out.append({"symbol": str(s), "name": st(d.get(name)) if name else "",
+                        "sector": st(d.get(sector)) if sector else "",
+                        "currency": st(d.get(cur)) if cur else "",
+                        "venue": st(d.get(exch)) if exch else ""})
         return out
 
     @property
