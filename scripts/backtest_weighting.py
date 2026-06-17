@@ -45,6 +45,14 @@ def main() -> None:
             continue
         print(f"  {name:22s} {m['cagr']*100:7.1f}% {m['sharpe']:7.2f} {m['dsr']*100:11.0f}% "
               f"{m['max_drawdown']*100:7.1f}% {m['turnover_annual']:11.2f}×")
+    fr = r.get("leverage_frontier", [])
+    if fr:
+        print(f"\n  Frontière de LEVIER (meilleur schéma : {r['best_scheme']}) — le vrai prix du rendement :")
+        print(f"    {'levier':>7s} {'CAGR':>8s} {'maxDD':>8s}   ruine ?")
+        for f in fr:
+            print(f"    {f['leverage']:6.1f}× {f['cagr']*100:7.1f}% {f['max_drawdown']*100:7.1f}%   "
+                  f"{'⚠️ OUI' if f['ruin'] else 'non'}")
+        print("    → viser un CAGR élevé exige du levier → drawdowns profonds et risque de ruine. À doser selon TA tolérance.")
     print("\n→ Cherche le meilleur Sharpe / la plus faible perte max au turnover le plus bas. "
           "La bande de non-trading (--band) réduit le turnover ; --step 63 = trimestriel.")
     out = ROOT / "out"; out.mkdir(exist_ok=True)

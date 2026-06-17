@@ -40,6 +40,27 @@ def _bandify(target: np.ndarray, prev: np.ndarray, band: float) -> np.ndarray:
     return w / s if s > 0 else target
 
 
+def leverage_frontier(period_rets: list[float], per_year: float,
+                      levels=(1.0, 1.5, 2.0, 2.5, 3.0, 4.0), borrow: float = 0.05) -> list[dict]:
+    """Frontière de levier : CAGR vs max drawdown vs RUINE pour différents multiplicateurs.
+
+    Honnête : applique le levier aux rendements réalisés, déduit un coût d'emprunt sur la part
+    empruntée, et signale la **ruine** (l'equity touche 0 = tout perdu). Montre le vrai prix du levier.
+    """
+    r = np.asarray(period_rets, dtype=float)
+    out = []
+    for L in levels:
+        rl = L * r - (L - 1) * borrow / per_year          # rendement levier net du coût d'emprunt
+        eq = np.cumprod(1 + rl)
+        ruin = bool(np.min(np.concatenate([[1.0], eq])) <= 0) or bool((1 + rl).min() <= 0)
+        total = float(eq[-1] - 1) if not ruin else -1.0
+        cagr = (1 + total) ** (per_year / r.size) - 1 if total > -1 else -1.0
+        mdd = float((eq / np.maximum.accumulate(eq) - 1).min())
+        out.append({"leverage": L, "cagr": round(cagr, 4), "max_drawdown": round(mdd, 4),
+                    "ruin": ruin})
+    return out
+
+
 def weighting_backtest(data: dict, step: int = 21, lookback_cov: int = 126, max_assets: int = 120,
                        cost_bps: float = 10.0, band: float = 0.0) -> dict:
     """Compare les schémas de pondération (même univers). Renvoie métriques + turnover par schéma."""
@@ -86,4 +107,8 @@ def weighting_backtest(data: dict, step: int = 21, lookback_cov: int = 126, max_
         m = _metrics(out[name]["rets"], py, n_trials=4)
         m["turnover_annual"] = round(out[name]["turn"] / rebs * py, 2)
         res["schemes"][name] = m
+    # frontière de levier sur le meilleur schéma (Sharpe le plus élevé)
+    best = max(res["schemes"], key=lambda k: res["schemes"][k].get("sharpe", 0))
+    res["best_scheme"] = best
+    res["leverage_frontier"] = leverage_frontier(out[best]["rets"], py)
     return res
