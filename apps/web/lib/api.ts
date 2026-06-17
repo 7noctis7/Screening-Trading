@@ -19,3 +19,4 @@ export const useData = () => useQuery({ queryKey: ["data"], queryFn: () => get<a
 export const useThemes = () => useQuery({ queryKey: ["themes"], queryFn: () => get<any>("/api/themes") });
 export const useMl = () => useQuery({ queryKey: ["ml"], queryFn: () => get<any>("/api/ml") });
 export const useSentiment = () => useQuery({ queryKey: ["sentiment"], queryFn: () => get<any>("/api/sentiment") });
+export const useFundamentals = () => useQuery({ queryKey: ["fundamentals"], queryFn: () => get<any>("/api/fundamentals") });

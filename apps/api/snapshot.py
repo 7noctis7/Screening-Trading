@@ -550,6 +550,72 @@ def _sentiment_section(held: list, names: dict, sector_of: dict, data: dict) -> 
     }
 
 
+def _fund_provider():
+    """Provider fondamentaux : FMP si clé présente (free tier), sinon synthétique déterministe."""
+    import os
+    if os.environ.get("FMP_API_KEY"):
+        try:
+            from packages.fundamentals.fmp_provider import FMPFundamentalsProvider
+            return FMPFundamentalsProvider(), "FMP (free tier)"
+        except Exception:  # noqa: BLE001
+            pass
+    from packages.fundamentals.provider import SyntheticFundamentalsProvider
+    return SyntheticFundamentalsProvider(), "synthétique"
+
+
+def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: dict) -> dict:
+    """Analyse FONDAMENTALE : ratios (PER, EV/EBITDA, P/B, ROE/ROIC, marges), valorisation DCF
+    (marge de sécurité) et score composite value+quality. Equities/ETF uniquement.
+    FMP si `FMP_API_KEY`, sinon fondamentaux synthétiques déterministes (offline-safe)."""
+    from packages.fundamentals import ratios, valuation
+
+    eq = [s for s in symbols if acmap.get(s) in ("equity", "etf")][:40]
+    if not eq:
+        return {"available": False}
+    prov, src = _fund_provider()
+    rows = []
+    for s in eq:
+        try:
+            f = prov.get(s)
+        except Exception:  # noqa: BLE001
+            f = None
+        if f is None:
+            continue
+        mos = valuation.margin_of_safety(f)
+        rows.append({
+            "symbol": s, "name": names.get(s, ""), "sector": sector_of.get(s, ""),
+            "per": round(valuation.per(f), 1), "ev_ebitda": round(valuation.ev_ebitda(f), 1),
+            "pb": round(valuation.price_to_book(f), 2), "roe": round(ratios.roe(f), 3),
+            "roic": round(ratios.roic(f), 3), "gross_margin": round(ratios.gross_margin(f), 3),
+            "fcf_yield": round(valuation.fcf_yield(f), 3),
+            "margin_of_safety": None if mos != mos else round(mos, 3),
+            "_val": (valuation.earnings_yield(f) + valuation.fcf_yield(f)),
+            "_qual": (ratios.roic(f) + ratios.gross_margin(f) + ratios.fcf_conversion(f)),
+        })
+    if not rows:
+        return {"available": False}
+
+    # score composite 0-100 = rang percentile (value 50 % + quality 50 %)
+    def _pctl(key):
+        order = sorted(rows, key=lambda r: r[key])
+        n = len(order)
+        return {r["symbol"]: (i + 1) / n for i, r in enumerate(order)}
+    pv, pq = _pctl("_val"), _pctl("_qual")
+    for r in rows:
+        score = round((pv[r["symbol"]] * 0.5 + pq[r["symbol"]] * 0.5) * 100, 1)
+        r["score"] = score
+        mos = r["margin_of_safety"]
+        r["rating"] = ("BUY" if (mos is not None and mos > 0.20 and score >= 50)
+                       else "SELL" if (score < 35 or (mos is not None and mos < -0.20))
+                       else "HOLD")
+        del r["_val"], r["_qual"]
+    rows.sort(key=lambda r: r["score"], reverse=True)
+    buys = sum(1 for r in rows if r["rating"] == "BUY")
+    return {"available": True, "source": src, "n": len(rows), "buys": buys, "rows": rows,
+            "method": "Score = rang percentile value (earnings+FCF yield) 50 % + quality "
+                      "(ROIC+marge+conversion FCF) 50 % · DCF FCFF pour la marge de sécurité."}
+
+
 def _price_db_path() -> "Path | None":
     """Chemin d'une base de prix réelle. Priorité : env QUANT_PRICE_DB, puis emplacements
     usuels (data/, Bureau/Desktop) → branche automatiquement votre ~/Desktop/YAHOO.db."""
@@ -834,6 +900,9 @@ def build_snapshot(seed: int = 7) -> dict:
         "themes": themes,
         "ml": ml,
         "sentiment": _sentiment_section(held, names, sector_of, data),
+        "fundamentals": _fundamentals_section(
+            list(dict.fromkeys(held + [r["symbol"] for r in screener["rows"]] + symbols)),
+            acmap, names, sector_of),
         "live": _live_with_rebalance(comp["rows"], acmap, portfolio_kpis, w_by_name),
     }
 

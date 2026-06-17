@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 // Palette de commandes ⌘K / Ctrl+K — navigation rapide + filtre clavier (UX pro).
 const PAGES: [string, string][] = [
   ["/", "Dashboard"], ["/themes", "Thèmes de marché"], ["/ml", "Signaux ML"],
-  ["/sentiment", "Sentiment & news"], ["/universe", "Univers"], ["/data", "Données"],
+  ["/fundamentals", "Fondamentaux"], ["/sentiment", "Sentiment & news"],
+  ["/universe", "Univers"], ["/data", "Données"],
   ["/portfolio", "Portefeuille & Analyse"], ["/positions", "Positions"], ["/trades", "Trades"],
 ];
 

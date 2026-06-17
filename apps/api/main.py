@@ -78,6 +78,11 @@ def sentiment() -> dict:
     return _snap()["sentiment"]
 
 
+@app.get("/api/fundamentals")
+def fundamentals() -> dict:
+    return _snap()["fundamentals"]
+
+
 @app.get("/api/universe")
 def universe() -> dict:
     return _snap()["universe"]

@@ -146,6 +146,7 @@ display:flex;align-items:center;justify-content:center;padding:20px;animation:fa
 <div class="tab" data-p="themes" role="tab" tabindex="0" aria-selected="false">Thèmes de marché</div>
 <div class="tab" data-p="ml" role="tab" tabindex="0" aria-selected="false">Signaux ML</div>
 <div class="tab" data-p="sent" role="tab" tabindex="0" aria-selected="false">Sentiment &amp; news</div>
+<div class="tab" data-p="fund" role="tab" tabindex="0" aria-selected="false">Fondamentaux</div>
 <div class="tab" data-p="uni" role="tab" tabindex="0" aria-selected="false">Univers</div>
 <div class="tab" data-p="data" role="tab" tabindex="0" aria-selected="false">Données</div>
 <div class="tab" data-p="pf" role="tab" tabindex="0" aria-selected="false">Portefeuille &amp; Analyse</div>
@@ -157,6 +158,7 @@ display:flex;align-items:center;justify-content:center;padding:20px;animation:fa
 <div class="page" id="themes"></div>
 <div class="page" id="ml"></div>
 <div class="page" id="sent"></div>
+<div class="page" id="fund"></div>
 <div class="page" id="uni"></div>
 <div class="page" id="data"></div>
 <div class="page" id="pf"></div>
@@ -985,8 +987,34 @@ if('serviceWorker' in navigator){window.addEventListener('load',()=>{
   p.appendChild(c);
 })();
 
+// ---- Fondamentaux ----
+(function(){
+  const p=document.getElementById('fund');if(!p)return;
+  const F=DATA.fundamentals||{};
+  if(!F.available){p.appendChild($(`<div class="card"><div class="label">Fondamentaux</div>
+    <p style="color:var(--muted)">Aucun fondamental disponible.</p></div>`));return;}
+  const RC={BUY:'#22c55e',HOLD:'#9aa1ad',SELL:'#f43f5e'};
+  const pp=(x)=>x==null?'—':(x*100).toFixed(0)+'%';
+  p.appendChild($(`<div class="card"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:center">
+    <div class="label">Analyse fondamentale — source ${F.source}</div>
+    <div class="mono" style="font-size:12px;color:var(--muted)">${F.n} titres · <span style="color:#22c55e">${F.buys} BUY</span></div></div>
+    <p style="color:var(--muted);font-size:11.5px;margin-top:6px">${F.method}</p></div>`));
+  const rows=(F.rows||[]).map(r=>`<tr><td>${r.symbol}</td>
+    <td style="color:var(--muted);font-size:11px">${r.sector||'—'}</td>
+    <td class="mono" data-sort="${r.per}" style="text-align:right">${r.per}</td>
+    <td class="mono" data-sort="${r.pb}" style="text-align:right">${r.pb}</td>
+    <td class="mono" data-sort="${r.roe}" style="text-align:right">${pp(r.roe)}</td>
+    <td class="mono" data-sort="${r.fcf_yield}" style="text-align:right">${pp(r.fcf_yield)}</td>
+    <td class="mono" data-sort="${r.margin_of_safety==null?-999:r.margin_of_safety}" style="text-align:right;color:${r.margin_of_safety==null?'var(--muted)':r.margin_of_safety>0?'#22c55e':'#f43f5e'}">${r.margin_of_safety==null?'—':(r.margin_of_safety*100).toFixed(0)+'%'}</td>
+    <td class="mono" data-sort="${r.score}" style="text-align:right">${r.score}</td>
+    <td style="text-align:right;font-weight:600;color:${RC[r.rating]}">${r.rating}</td></tr>`);
+  const c=$(`<div class="card"><div class="label" style="margin-bottom:8px">Score value + quality · DCF</div></div>`);
+  c.appendChild(mkTable('<th>Actif</th><th>Secteur</th><th style="text-align:right">PER</th><th style="text-align:right">P/B</th><th style="text-align:right">ROE</th><th style="text-align:right">FCF yld</th><th style="text-align:right">Marge sécu.</th><th style="text-align:right">Score</th><th style="text-align:right">Reco</th>',rows));
+  p.appendChild(c);
+})();
+
 // ---- bandeau "données au…" en tête de chaque onglet + ouverture sur le 1er ----
-['dash','themes','ml','sent','uni','data','pf','pos','trades','live'].forEach(id=>{
+['dash','themes','ml','sent','fund','uni','data','pf','pos','trades','live'].forEach(id=>{
   const pg=document.getElementById(id);if(pg)pg.insertBefore(freshnessChip(id),pg.firstChild);
 });
 </script></body></html>"""
