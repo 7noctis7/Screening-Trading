@@ -1071,6 +1071,12 @@ def build_snapshot(seed: int = 7) -> dict:
                "hrp": [round(x, 4) for x in hrp_weights(cov)],
                "min_variance": [round(x, 4) for x in min_variance_weights(cov)],
                "risk_parity": [round(x, 4) for x in equal_risk_contribution(cov)]}
+    # allocation RECOMMANDÉE : risk-parity + bande de non-trading + exposition pilotée par DD-cible
+    import os as _os
+    from packages.portfolio.construction import build_target
+    _dd = float(_os.environ.get("QUANT_DD_TARGET", "0.25"))
+    recommended = build_target(cb_syms, cov, {s: w_by_name.get(s, 0.0) for s in cb_syms},
+                               dd_target=_dd, band=0.03, max_gross=1.0)
 
     # Sharpe probabiliste & DÉFLATÉ (garde-fou surapprentissage / essais multiples)
     from packages.portfolio.psr import deflated_sharpe_ratio, probabilistic_sharpe_ratio
@@ -1190,6 +1196,7 @@ def build_snapshot(seed: int = 7) -> dict:
                 "limits": limits,
                 "stress": stress,
                 "optimal_allocation": optimal,
+                "recommended_allocation": recommended,
                 "review": PL.review_payload(expert_review({**agg, **comp["totals"]})),
                 "multi_strategy": multi_strategy,
             },
