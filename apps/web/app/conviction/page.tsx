@@ -28,6 +28,34 @@ export default function Conviction() {
     <main className="max-w-6xl mx-auto p-6 space-y-4">
       <h1 className="text-xl font-semibold tracking-tight">Conviction — signaux fusionnés</h1>
       <StepBanner active="screener" />
+      {c.backtest?.available && (
+        <section className="card p-4">
+          <h2 className="text-sm uppercase tracking-wide text-muted mb-1">Backtest point-in-time — conviction vs équipondéré</h2>
+          <p className="text-muted2 text-xs mb-3">Poids calculés uniquement avec le passé (anti-fuite), rendements réalisés ensuite. {c.backtest.n_rebalances} rebalancements ({c.backtest.step_days} j).</p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-muted text-xs"><tr>
+                <th className="text-left font-normal">Stratégie</th>
+                <th className="text-right font-normal">Rendement</th><th className="text-right font-normal">Annualisé</th>
+                <th className="text-right font-normal">Sharpe</th><th className="text-right font-normal">Sharpe déflaté</th>
+                <th className="text-right font-normal">Max DD</th></tr></thead>
+              <tbody className="mono">
+                {[["Conviction", c.backtest.strategy, "#22d3ee"], ["Équipondéré (bench)", c.backtest.benchmark, "#9aa1ab"]].map(([lab, s, col]: any) => (
+                  <tr key={lab} className="border-t border-border">
+                    <td className="py-1.5 font-sans" style={{ color: col }}>{lab}</td>
+                    <td className="text-right">{(s.total_return * 100).toFixed(1)}%</td>
+                    <td className="text-right">{(s.annualized * 100).toFixed(1)}%</td>
+                    <td className="text-right">{s.sharpe}</td>
+                    <td className="text-right" style={{ color: s.dsr >= 0.9 ? "#22c55e" : undefined }}>{(s.dsr * 100).toFixed(0)}%</td>
+                    <td className="text-right" style={{ color: "#f43f5e" }}>{(s.max_drawdown * 100).toFixed(1)}%</td>
+                  </tr>))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-sm mt-2">Alpha annualisé : <b style={{ color: c.backtest.alpha >= 0 ? "#22c55e" : "#f43f5e" }}>{(c.backtest.alpha * 100).toFixed(1)}%</b>
+            <span className="text-muted"> · turnover {c.backtest.turnover_annual}×/an. Le <b>Sharpe déflaté</b> (proba que l'edge soit réel après essais multiples) est le juge de paix.</span></p>
+        </section>
+      )}
       <div className="card p-4 text-sm">
         <b>La synthèse de toutes les fenêtres en une seule note.</b>
         <p className="text-muted mt-1">{c.method}</p>

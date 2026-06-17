@@ -112,6 +112,9 @@ table { border-collapse:collapse; width:100%; }
 thead th { font-weight:600; letter-spacing:.04em; text-transform:uppercase; font-size:10.5px;
   color:var(--muted2); padding:6px 10px; border-bottom:1px solid var(--border); position:sticky; }
 tbody td { padding:8px 10px; border-top:1px solid var(--border); font-size:13px; }
+/* tableau dense : tout voir d'un coup, sans scroll horizontal */
+.dense th { padding:4px 6px; font-size:9.5px; }
+.dense td { padding:3px 6px; font-size:11.5px; }
 tbody tr { transition:background-color .14s ease; }
 tbody tr:hover { background:color-mix(in srgb, var(--surface2) 70%, transparent); }
 
