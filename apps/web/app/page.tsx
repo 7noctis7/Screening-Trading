@@ -1,7 +1,9 @@
 "use client";
-import { useDashboard, useScreener } from "@/lib/api";
+import { useDashboard, useScreener, useSentiment } from "@/lib/api";
 import { MetricCard } from "@/components/MetricCard";
 import { RegimeBanner } from "@/components/RegimeBanner";
+import { VixPlaybook } from "@/components/VixPlaybook";
+import { SentimentBanner } from "@/components/SentimentBanner";
 import { EquityChart } from "@/components/EquityChart";
 
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
@@ -9,12 +11,15 @@ const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 export default function Dashboard() {
   const { data: d } = useDashboard();
   const { data: s } = useScreener();
+  const { data: sent } = useSentiment();
   if (!d) return <div className="p-8 text-muted">Chargement…</div>;
   const m = d.metrics;
   return (
     <main className="max-w-6xl mx-auto p-6 space-y-4">
       <h1 className="text-xl font-semibold tracking-tight">Quant Terminal</h1>
       <RegimeBanner regime={d.regime} />
+      <SentimentBanner sentiment={sent} />
+      <VixPlaybook vix={d.vix} playbook={d.vix_playbook} series={d.vix_series} />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <MetricCard label="Rendement" value={pct(m.total_return)} tone={m.total_return >= 0 ? "pos" : "neg"} />
         <MetricCard label="Sharpe" value={m.sharpe?.toFixed(2)} />
