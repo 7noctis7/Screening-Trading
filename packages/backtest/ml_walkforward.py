@@ -55,10 +55,21 @@ def _metrics(period_rets: list[float], per_year: float, n_trials: int) -> dict:
             "dsr": deflated_sharpe_ratio(sr_p, r.size, n_trials=n_trials)}
 
 
+def _spearman(a: np.ndarray, b: np.ndarray) -> float:
+    """Corrélation de rang (Spearman) — robuste, pour l'Information Coefficient."""
+    if a.size < 3:
+        return 0.0
+    ra = np.argsort(np.argsort(a)).astype(float)
+    rb = np.argsort(np.argsort(b)).astype(float)
+    ra -= ra.mean(); rb -= rb.mean()
+    d = (ra.std() * rb.std())
+    return float((ra * rb).mean() / d) if d else 0.0
+
+
 def ml_walkforward(data: dict, step: int = 21, H: int = 21, lookback: int = 63,
                    top_n: int = 15, max_weight: float = 0.20, max_assets: int = 150,
-                   max_train: int = 8000, seed: int = 0) -> dict:
-    """Backtest comparatif (ML walk-forward). Renvoie 3 courbes + métriques."""
+                   max_train: int = 8000, cost_bps: float = 10.0, seed: int = 0) -> dict:
+    """Backtest comparatif (ML walk-forward). Renvoie 3 courbes + métriques + IC + net de frais."""
     syms = [s for s, b in data.items() if b and len(b) > lookback + H + 2 * step][:max_assets]
     if len(syms) < 8:
         return {"available": False}
@@ -68,9 +79,12 @@ def ml_walkforward(data: dict, step: int = 21, H: int = 21, lookback: int = 63,
     rng = np.random.default_rng(seed)
     start = max(lookback, 60)
     ml_r, tech_r, bench_r = [], [], []
+    ml_r_net, ic_tech, ic_ml = [], [], []
     prev_ml = np.zeros(len(syms))
+    prev_tech = np.zeros(len(syms))
     turn = 0.0
     rebs = 0
+    cost = cost_bps / 1e4
     for t in range(start, L - 1, step):
         # 1) jeu d'entraînement : labels réalisés (u + H <= t) → AUCUNE fuite
         us = list(range(lookback, t - H, 5))
@@ -107,15 +121,26 @@ def ml_walkforward(data: dict, step: int = 21, H: int = 21, lookback: int = 63,
             return w
 
         w_ml, w_tech = _alloc(conv_ml), _alloc(conv_tech)
+        to_ml = float(np.abs(w_ml - prev_ml).sum())
         ml_r.append(float((w_ml * fwd).sum()))
+        ml_r_net.append(float((w_ml * fwd).sum()) - to_ml * cost)   # net de frais
         tech_r.append(float((w_tech * fwd).sum()))
         bench_r.append(float(fwd.mean()))
-        turn += float(np.abs(w_ml - prev_ml).sum()); prev_ml = w_ml
+        ic_tech.append(_spearman(conv_tech, fwd))                   # pouvoir prédictif du signal
+        ic_ml.append(_spearman(p_ml, fwd))
+        turn += to_ml; prev_ml = w_ml; prev_tech = w_tech
         rebs += 1
     if rebs < 3:
         return {"available": False}
     py = 252.0 / step
+
+    def _ic(xs):
+        a = np.asarray(xs, dtype=float)
+        m, s = float(a.mean()), float(a.std())
+        return {"ic_mean": round(m, 4), "ic_tstat": round(m / s * np.sqrt(a.size), 2) if s else 0.0}
+
     return {"available": True, "n_rebalances": rebs, "step_days": step, "n_assets": len(syms),
-            "ml": _metrics(ml_r, py, n_trials=30), "tech": _metrics(tech_r, py, n_trials=15),
-            "benchmark": _metrics(bench_r, py, n_trials=1),
-            "turnover_annual": round(turn / rebs * py, 2)}
+            "ml": _metrics(ml_r, py, n_trials=30), "ml_net": _metrics(ml_r_net, py, n_trials=30),
+            "tech": _metrics(tech_r, py, n_trials=15), "benchmark": _metrics(bench_r, py, n_trials=1),
+            "turnover_annual": round(turn / rebs * py, 2),
+            "ic_tech": _ic(ic_tech), "ic_ml": _ic(ic_ml), "cost_bps": cost_bps}
