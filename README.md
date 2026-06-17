@@ -104,6 +104,35 @@ make api        # uvicorn apps.api.main:app --reload   (http://localhost:8000)
 make web        # cd apps/web && npm install && npm run dev (http://localhost:3000)
 ```
 
+## 🖥️ Se connecter en local (2 fenêtres de terminal)
+
+Le terminal complet (API + front) tourne avec **deux fenêtres de terminal ouvertes en même temps** :
+l'une fait tourner le backend, l'autre le site. Laisse les deux ouvertes pendant que tu travailles.
+
+**Fenêtre 1 — le backend (API FastAPI)** → sert les données sur `http://localhost:8000`
+```bash
+cd ~/Screening-Trading
+source .venv/bin/activate
+export QUANT_PRICE_DB="$HOME/Desktop/YAHOO.db"   # ta base réelle (adapte le chemin)
+export FRED_API_KEY="ta_cle_fred"               # page Macro chiffrée (le FMI marche sans clé)
+export QUANT_FUND=yf                             # fondamentaux réels via yfinance (767 actifs)
+export QUANT_NEWS=1                              # news RSS réelles
+make api
+```
+
+**Fenêtre 2 — le front (site Next.js)** → l'interface sur `http://localhost:3000`
+```bash
+cd ~/Screening-Trading/apps/web
+npm install     # la 1ʳᵉ fois seulement
+npm run dev
+```
+
+Puis ouvre **`http://localhost:3000`** dans ton navigateur (`Cmd+Shift+R` pour forcer le rechargement
+après un `git pull`). La fenêtre 1 doit rester lancée : le site interroge l'API en continu.
+
+> 💡 **Sans rien installer** : `python apps/web/preview/build_interactive.py` génère un fichier
+> autonome `apps/web/preview/interactive.html` à ouvrir directement (aucune des 2 fenêtres requise).
+
 ## 📈 Brancher VOS données réelles (yfinance / FMP / YAHOO.db)
 
 Le projet utilise une **vraie base si elle existe**, sinon le synthétique (cf.
