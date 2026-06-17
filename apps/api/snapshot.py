@@ -354,10 +354,18 @@ def _live_with_rebalance(positions: list, acmap: dict, kpis: dict | None,
                          current_weights: dict[str, float]) -> dict:
     """_live_section + aperçu de la BANDE DE NON-TRADING (réduit le churn)."""
     from packages.execution.algos import twap_schedule
+    from packages.execution.reconciliation import reconcile
+    from packages.execution.tca import decompose_cost
     from packages.portfolio.rebalance import apply_no_trade_band
     live = _live_section(positions, acmap, kpis)
     targets = {o["symbol"]: o["weight_pct"] for o in live["target_orders"]}
     live["rebalance"] = apply_no_trade_band(targets, current_weights, band=0.02)
+    # réconciliation cible ↔ positions + TCA (coût d'exécution estimé)
+    equity = (kpis or {}).get("value", 0.0) or sum(p["current_value"] for p in positions)
+    cur_vals = {p["symbol"]: p["current_value"] for p in positions}
+    rec = reconcile(targets, cur_vals, equity)
+    rec["tca"] = decompose_cost(rec["drift_usd"])      # coût attendu pour rééquilibrer le drift
+    live["reconciliation"] = rec
     # plan d'exécution TWAP (exemple) sur le plus gros ordre cible → anti-impact marché
     top = max(live["target_orders"], key=lambda o: o["weight_pct"], default=None)
     if top:
@@ -629,7 +637,8 @@ def _fund_provider():
     return SyntheticFundamentalsProvider(), "synthétique"
 
 
-def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: dict) -> dict:
+def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: dict,
+                          data: dict | None = None) -> dict:
     """Analyse FONDAMENTALE : ratios (PER, EV/EBITDA, P/B, ROE/ROIC, marges), valorisation DCF
     (marge de sécurité) et score composite value+quality. Equities/ETF uniquement.
     FMP si `FMP_API_KEY`, sinon fondamentaux synthétiques déterministes (offline-safe)."""
@@ -665,6 +674,7 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
             "margin_of_safety": None if mos != mos else round(mos, 3),
             "f_score": fs, "f_score_label": f_score_label(fs),
             "altman_z": altman_z(f)["z"], "altman_zone": altman_z(f)["zone"],
+            "per_raw": valuation.per(f),
             "_val": (valuation.earnings_yield(f) + valuation.fcf_yield(f)),
             "_qual": (ratios.roic(f) + ratios.gross_margin(f) + ratios.fcf_conversion(f)),
         })
@@ -693,7 +703,24 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
     for sec_rows in by_sec.values():
         for rank, r in enumerate(sorted(sec_rows, key=lambda x: x["score"], reverse=True), 1):
             r["sector_rank"] = f"{rank}/{len(sec_rows)}"
-    rows.sort(key=lambda r: r["score"], reverse=True)
+    # NOTE TECHNIQUE + premium/discount sectoriel (PER vs médiane secteur) + note combinée
+    from statistics import median
+
+    from packages.indicators.technical_score import technical_rating
+    sec_pers: dict = {}
+    for r in rows:
+        sec_pers.setdefault(r["sector"], []).append(r["per_raw"])
+    sec_med = {s: median([p for p in v if p > 0]) if any(p > 0 for p in v) else 0.0
+               for s, v in sec_pers.items()}
+    for r in rows:
+        tech = technical_rating([b.close for b in (data or {}).get(r["symbol"], [])])
+        r["tech_score"] = tech["score"]
+        r["tech_label"] = tech["label"]
+        med = sec_med.get(r["sector"], 0.0)
+        r["sector_premium"] = round(r["per_raw"] / med - 1.0, 3) if med > 0 and r["per_raw"] > 0 else None
+        r["combined_score"] = round(0.6 * r["score"] + 0.4 * r["tech_score"], 1)  # fond. + technique
+        del r["per_raw"]
+    rows.sort(key=lambda r: r["combined_score"], reverse=True)
     buys = sum(1 for r in rows if r["rating"] == "BUY")
     return {"available": True, "source": src, "n": len(rows), "buys": buys, "rows": rows,
             "method": "Score = rang percentile value (earnings+FCF yield) 50 % + quality "
@@ -1028,7 +1055,7 @@ def build_snapshot(seed: int = 7) -> dict:
         "sentiment": _sentiment_section(held, names, sector_of, data),
         "fundamentals": _fundamentals_section(
             list(dict.fromkeys(held + [r["symbol"] for r in screener["rows"]] + symbols)),
-            acmap, names, sector_of),
+            acmap, names, sector_of, data),
         "live": _live_with_rebalance(comp["rows"], acmap, portfolio_kpis, w_by_name),
     }
 
