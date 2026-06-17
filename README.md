@@ -15,12 +15,15 @@ alpha > produit**. Architecture en **plugins** (« ajouter un fichier, jamais to
 10 fenêtres : **Dashboard** (perf vs benchmarks, régime, playbook VIX, screener+ML) ·
 **Thèmes de marché** (heatmap YTD par secteur 4ᵉ révolution industrielle) · **Signaux ML** ·
 **Sentiment & news** (FinBERT optionnel / lexique / repli momentum, news RSS gratuites) ·
-**Univers** (929 actifs, recherche/filtres) · **Données** (collecte, qualité, base) ·
-**Portefeuille & Analyse** (mesures relatives, risque FRM, **Monte-Carlo interactif**, corrélation,
-revue experte) · **Positions** · **Trades** · **Portefeuille réel** (connexion Alpaca/Bitmart).
+**Fondamentaux** (DCF, ratios, Piotroski, Altman Z, note technique + combinée) ·
+**Univers** (929 actifs, recherche/filtres, table virtualisée) · **Données** (collecte, qualité, couverture) ·
+**Portefeuille & Analyse** (Monte-Carlo, attribution, revue experte) · **Risque** (VaR/EVT/GARCH,
+backtest VaR, ACP, budget de risque, limites, stress, allocation HRP/ERC, multi-stratégie) ·
+**Positions** · **Trades** · **Portefeuille réel** (Alpaca/Bitmart, réconciliation, TCA).
 
+> 🧭 Carte complète des modules : [`docs/MODULES.md`](docs/MODULES.md).
 > 📱 **Installable (PWA)** : la preview génère `manifest.webmanifest` + `sw.js` → « Ajouter à
-> l'écran d'accueil » sur téléphone = vraie app, utilisable **hors-ligne**.
+> l'écran d'accueil » sur téléphone = vraie app, utilisable **hors-ligne**. ⌘K · mode live · thème clair/sombre.
 > 🤗 **Démo publique gratuite** : déployable en un Space HuggingFace (`deploy/hf_space/`).
 
 - **Capital fictif 10 000 $** alloué aux **meilleurs setups** (force relative), exposition
