@@ -37,6 +37,29 @@ export default function Trades() {
         ))}
       </div>
 
+      {st.cost_assumptions?.length > 0 && (
+        <details className="card p-4">
+          <summary className="text-sm uppercase tracking-wide text-muted cursor-pointer">Hypothèses de coûts par classe d'actifs (bps)</summary>
+          <div className="overflow-x-auto mt-3">
+            <table className="w-full text-sm">
+              <thead className="text-muted text-xs"><tr>
+                <th className="text-left font-normal">Classe</th>
+                <th className="text-right font-normal">Frais</th>
+                <th className="text-right font-normal">Slippage</th>
+                <th className="text-right font-normal">Aller-retour</th></tr></thead>
+              <tbody className="mono">{st.cost_assumptions.map((c: any) => (
+                <tr key={c.asset_class} className="border-t border-border">
+                  <td className="py-1.5 font-sans">{c.asset_class}</td>
+                  <td className="text-right">{c.fee_bps}</td>
+                  <td className="text-right">{c.slippage_bps}</td>
+                  <td className="text-right"><b>{c.round_trip_bps}</b></td>
+                </tr>))}</tbody>
+            </table>
+          </div>
+          <p className="text-muted2 text-xs mt-2">Coûts prudents (retail), appliqués dès le backtest et la TCA. Crypto/forex ont des spreads plus larges que les actions liquides.</p>
+        </details>
+      )}
+
       {sel && series[sel] && (
         <section className="card p-4">
           <div className="flex justify-between items-center mb-2">

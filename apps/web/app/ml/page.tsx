@@ -23,6 +23,13 @@ export default function Ml() {
     <main className="max-w-5xl mx-auto p-6 space-y-4">
       <h1 className="text-xl font-semibold tracking-tight">Signaux ML</h1>
       <StepBanner active="ml" />
+      {ml.edge_message && (
+        <div className="card p-3 text-sm flex items-start gap-2"
+          style={{ borderColor: ml.edge_ok ? "var(--pos)" : "var(--warn)" }}>
+          <span>{ml.edge_ok ? "✅" : "⚠️"}</span>
+          <span><b>Garde-fou edge :</b> <span className="text-muted">{ml.edge_message}</span></span>
+        </div>
+      )}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {cards.map(([lab, val]) => (
           <div key={lab} className="card p-4">
@@ -32,9 +39,10 @@ export default function Ml() {
         ))}
       </div>
       <p className="text-muted text-xs">
-        Régression logistique entraînée en cross-section sur tout l'univers (momentum 1m/3m,
-        tendance vs MM50, RSI, volatilité). Score = probabilité de hausse à ~{ml.horizon_days} jours,
-        validée hors-échantillon (AUC). Démonstration synthétique : edge volontairement modeste.
+        Entraîné en cross-section sur tout l'univers (8 features point-in-time : momentum 1m/3m,
+        tendance vs MM50, RSI, volatilité, momentum ajusté du risque, distance au plus-haut 52 sem.,
+        reversal 5 j). Score = probabilité de hausse à ~{ml.horizon_days} jours, validée
+        hors-échantillon (AUC). Démonstration synthétique : edge volontairement modeste.
       </p>
 
       <section className="card p-4 overflow-x-auto">

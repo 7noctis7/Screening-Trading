@@ -471,8 +471,13 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
     def feats(c, sma, rsi, atr, t):
         if t < 60 or t >= len(c) or sma[t] != sma[t] or rsi[t] != rsi[t] or atr[t] != atr[t]:
             return None
+        vol = atr[t] / c[t] if c[t] else 0.0
+        hi52 = c[max(0, t - 252):t + 1].max()                  # plus-haut 52 sem. (point-in-time)
         return [c[t] / c[t - 20] - 1, c[t] / c[t - 60] - 1,
-                (c[t] - sma[t]) / sma[t], rsi[t] / 100.0, atr[t] / c[t]]
+                (c[t] - sma[t]) / sma[t], rsi[t] / 100.0, vol,
+                (c[t] / c[t - 60] - 1) / (vol + 1e-6),          # momentum ajusté du risque
+                c[t] / hi52 - 1 if hi52 else 0.0,               # distance au plus-haut 52 sem.
+                -(c[t] / c[t - 5] - 1)]                         # reversal court terme (5 j)
 
     X, y, T0, T1, last = [], [], [], [], {}    # T0/T1 = fenêtre du label (pour la purge)
     for s, bars in data.items():
@@ -516,7 +521,8 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
     cv_auc = round(float(np.mean(aucs)), 3) if aucs else None
 
     model.fit(X, y)                              # modèle final sur tout l'échantillon
-    fn = ["momentum 1 mois", "momentum 3 mois", "tendance vs MM50", "RSI", "volatilité (ATR)"]
+    fn = ["momentum 1 mois", "momentum 3 mois", "tendance vs MM50", "RSI", "volatilité (ATR)",
+          "momentum ajusté risque", "distance plus-haut 52 sem.", "reversal 5 j"]
     imp = _feat_importance(model, fn, X, y)
     mx = max((v for _, v in imp), default=1.0) or 1.0
     probs = {s: float(model.predict_proba([f])[0]) for s, f in last.items()}
@@ -623,9 +629,15 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
     except Exception:  # noqa: BLE001
         pass
 
+    # GARDE-FOU edge : un AUC OOS ≤ 0.52 = pas d'edge prédictif exploitable (le score reste
+    # affiché mais ne doit PAS piloter de sizing agressif). Discipline anti-surapprentissage.
+    edge_ok = bool(cv_auc is not None and cv_auc >= 0.52)
+    edge_msg = ("Edge OOS détecté (AUC ≥ 0.52) — utilisable avec prudence." if edge_ok
+                else "Pas d'edge OOS prouvé (AUC ≤ 0.52) : score indicatif, ne pas surpondérer.")
     return {
         "available": True, "model": model_name, "horizon_days": H,
         "validation": f"CV purgée + embargo (k={n_splits})",
+        "edge_ok": edge_ok, "edge_message": edge_msg, "auc_floor": 0.52,
         "n_train": int(len(X)), "n_splits": len(aucs), "auc": cv_auc,
         "feature_importance": [{"feature": f, "weight": round(v / mx, 3)} for f, v in imp],
         "top_conviction": [{"symbol": s, "name": names.get(s, ""),
@@ -1057,6 +1069,9 @@ def build_snapshot(seed: int = 7) -> dict:
     rel = relative_metrics(equity, bench_px)
     rets = returns_from_equity(equity)
     rm = risk_metrics_fn(rets)
+    # VaR multi-horizon (mise à l'échelle racine-du-temps) : 1 j / 10 j (Bâle) / 21 j (1 mois)
+    _v1 = rm.get("var_95", 0.0)
+    rm["var_horizons"] = [{"days": h, "var_95": round(_v1 * (h ** 0.5), 4)} for h in (1, 10, 21)]
     mc = monte_carlo(rets, seed=1)
     all_trades = journal.all()
     attr = attribution.attribute(all_trades, "strategy")
@@ -1179,6 +1194,8 @@ def build_snapshot(seed: int = 7) -> dict:
     from packages.portfolio.capacity import turnover
     avg_eq = sum(equity) / len(equity) if equity else 0.0
     trade_stats["turnover"] = turnover(all_trades, avg_eq, len(ts_list))
+    from packages.execution.costs import cost_assumptions
+    trade_stats["cost_assumptions"] = cost_assumptions()   # transparence : coûts par classe (bps)
     # 300 trades les plus récents (couvre la récence + de nombreux actifs)
     recent = sorted(all_trades, key=lambda t: t.entry_ts, reverse=True)[:300]
     dates = [t.isoformat() for t in ts_list]

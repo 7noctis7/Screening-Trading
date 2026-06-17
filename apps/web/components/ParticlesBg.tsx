@@ -31,8 +31,9 @@ export function ParticlesBg() {
       cv.width = w * dpr; cv.height = h * dpr;
       cv.style.width = w + "px"; cv.style.height = h + "px";
       c.setTransform(dpr, 0, 0, dpr, 0, 0);
-      // densité proportionnelle à la surface (plafonnée pour rester léger)
-      const n = Math.min(90, Math.round((w * h) / 22000));
+      // densité proportionnelle à la surface (plafonnée ; allégée sur mobile pour la fluidité)
+      const cap = w < 768 ? 36 : 90;
+      const n = Math.min(cap, Math.round((w * h) / 22000));
       pts = Array.from({ length: n }, () => ({
         x: Math.random() * w, y: Math.random() * h,
         vx: (Math.random() - 0.5) * 0.28, vy: (Math.random() - 0.5) * 0.28,
@@ -74,10 +75,21 @@ export function ParticlesBg() {
       if (!reduced) raf = requestAnimationFrame(frame);
     }
 
+    // coupe l'animation quand l'onglet est masqué (économise CPU/batterie)
+    const onVis = () => {
+      if (document.hidden) { cancelAnimationFrame(raf); raf = 0; }
+      else if (!reduced && !raf) { raf = requestAnimationFrame(frame); }
+    };
+
     resize();
     frame();
     window.addEventListener("resize", resize);
-    return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", resize); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", resize);
+      document.removeEventListener("visibilitychange", onVis);
+    };
   }, []);
 
   return (
