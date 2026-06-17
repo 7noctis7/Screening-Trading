@@ -18,15 +18,34 @@ from pathlib import Path
 from packages.core.models import Bar
 
 _OHLC = {"open": ["open", "o"], "high": ["high", "h"], "low": ["low", "l"],
-         "close": ["close", "adj_close", "adjclose", "c"], "volume": ["volume", "vol", "v"]}
-_DATE = ["date", "datetime", "timestamp", "ts", "day"]
+         "close": ["close", "adj_close", "adjclose", "adj", "last", "price", "c"],
+         "volume": ["volume", "vol", "v"]}
+_DATE = ["date", "datetime", "timestamp", "dt", "ts", "time", "day", "period"]
 _SYM = ["symbol", "ticker", "sym", "code"]
 
 
+def _strict_sym(cols_lower: dict):
+    """Colonne SYMBOLE textuelle (jamais un id_*) : contient 'symbol', sinon exacte."""
+    for k, orig in cols_lower.items():
+        if "symbol" in k:
+            return orig
+    for c in ("ticker", "sym", "code"):
+        if c in cols_lower and not cols_lower[c].lower().startswith("id"):
+            return cols_lower[c]
+    return None
+
+
 def _pick(cols_lower: dict, candidates: list[str]):
+    # 1) correspondance EXACTE (prioritaire)
     for c in candidates:
         if c in cols_lower:
             return cols_lower[c]
+    # 2) correspondance par SOUS-CHAÎNE (ex. 'tx_ticker_symbol'→symbol, 'id_ticker'→ticker,
+    #    'dt_price'→dt) — gère les schémas à colonnes préfixées (YAHOO.db)
+    for c in candidates:
+        for k, orig in cols_lower.items():
+            if c in k:
+                return orig
     return None
 
 
@@ -38,6 +57,7 @@ class DBPriceProvider:
         self._conn = sqlite3.connect(f"file:{self.path}?mode=ro", uri=True)
         self._conn.row_factory = sqlite3.Row
         self._long = None       # (table, symcol, datecol, {ohlc->col})
+        self._norm = None       # (price_table, link_col, datecol, {ohlc}, {SYMBOLE->id})
         self._per_ticker = set()
         self._detect(table)
 
@@ -45,32 +65,93 @@ class DBPriceProvider:
         cur = self._conn.execute(f'PRAGMA table_info("{table}")')
         return {r[1].lower(): r[1] for r in cur.fetchall()}
 
+    _LINK = ["ticker_id", "tickerid", "sec_id", "secid", "instrument_id", "id",
+             "ticker", "symbol", "code"]
+    _META_ID = ["id", "ticker_id", "tickerid", "sec_id", "secid", "rowid"]
+    _DAILY_HINTS = ("1d", "_d", "daily", "eod", "day")
+
     def _detect(self, table: str | None) -> None:
         tables = [r[0] for r in self._conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
-        cands = [table] if table else tables
-        for t in cands:
+        # 1) format LONG : une table avec colonne SYMBOLE textuelle + date + close
+        for t in ([table] if table else tables):
             if not t:
                 continue
             cl = self._columns(t)
-            sym = _pick(cl, _SYM)
-            dat = _pick(cl, _DATE)
-            ohlc = {k: _pick(cl, v) for k, v in _OHLC.items()}
-            if dat and ohlc["close"] and sym:
-                self._long = (t, sym, dat, ohlc)
+            sym = _strict_sym(cl)
+            if sym and _pick(cl, _DATE) and _pick(cl, _OHLC["close"]):
+                self._long = (t, sym, _pick(cl, _DATE),
+                              {k: _pick(cl, v) for k, v in _OHLC.items()})
+                return
+        # 2) format NORMALISÉ : table de prix (date+close+lien) + table méta (symbole→id)
+        price = []
+        for t in tables:
+            cl = self._columns(t)
+            dat, cls = _pick(cl, _DATE), _pick(cl, _OHLC["close"])
+            if dat and cls:
+                price.append((t, cl, dat, _pick(cl, self._LINK)))
+        price = [p for p in price if p[3]]
+        if price:
+            # table JOURNALIÈRE préférée par le NOM (P_1D…), sans COUNT(*) (lent sur gros volumes)
+            price.sort(key=lambda p: ("1d" in p[0].lower() or "1day" in p[0].lower(),
+                                      any(h in p[0].lower() for h in self._DAILY_HINTS)),
+                       reverse=True)
+            pt, cl, dat, link = price[0]
+            sym2id = self._symbol_map(tables, pt)
+            if sym2id is not None or link.lower() in ("ticker", "symbol", "code"):
+                self._norm = (pt, link, dat, {k: _pick(cl, v) for k, v in _OHLC.items()},
+                              sym2id or {})
                 return
         self._per_ticker = set(tables)     # sinon : suppose une table par ticker
 
+    def _count(self, table: str) -> int:
+        try:
+            return self._conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
+        except sqlite3.Error:
+            return 0
+
+    def _symbol_map(self, tables, price_table) -> dict | None:
+        """Construit SYMBOLE(maj) → identifiant depuis une table méta (Ticker/symbols…)."""
+        for t in tables:
+            if t == price_table:
+                continue
+            cl = self._columns(t)
+            sym = _strict_sym(cl)
+            idc = _pick(cl, self._META_ID) or "rowid"
+            if not sym:
+                continue
+            try:
+                rows = self._conn.execute(f'SELECT "{idc}","{sym}" FROM "{t}"').fetchall()
+            except sqlite3.Error:
+                continue
+            m = {str(r[1]).upper(): r[0] for r in rows if r[1] is not None}
+            if m:
+                return m
+        return None
+
     @property
     def schema(self) -> str:
-        return f"long:{self._long[0]}" if self._long else f"per-ticker({len(self._per_ticker)} tables)"
+        if self._long:
+            return f"long:{self._long[0]}"
+        if self._norm:
+            return f"normalisé:{self._norm[0]} (lien {self._norm[1]}, {len(self._norm[4])} tickers)"
+        return f"per-ticker({len(self._per_ticker)} tables)"
+
+    def _link_value(self, symbol: str):
+        if not self._norm:
+            return None
+        pt, link, _, _, sym2id = self._norm
+        if sym2id:
+            return sym2id.get(symbol.upper())
+        return symbol            # le lien EST déjà le symbole
 
     def supports(self, symbol: str) -> bool:
         if self._long:
             t, sym, _, _ = self._long
-            r = self._conn.execute(
-                f'SELECT 1 FROM "{t}" WHERE "{sym}"=? LIMIT 1', (symbol,)).fetchone()
-            return r is not None
+            return self._conn.execute(
+                f'SELECT 1 FROM "{t}" WHERE "{sym}"=? LIMIT 1', (symbol,)).fetchone() is not None
+        if self._norm:
+            return self._link_value(symbol) is not None
         return symbol in self._per_ticker
 
     @staticmethod
@@ -91,6 +172,14 @@ class DBPriceProvider:
                 q = (f'SELECT {self._select(dat, o)} FROM "{t}" WHERE "{sym}"=? '
                      f'AND "{dat}">=? AND "{dat}"<=? ORDER BY "{dat}"')
                 rows = self._conn.execute(q, (symbol, s, e)).fetchall()
+            elif self._norm:
+                pt, link, dat, o, _ = self._norm
+                lv = self._link_value(symbol)
+                if lv is None:
+                    return []
+                q = (f'SELECT {self._select(dat, o)} FROM "{pt}" WHERE "{link}"=? '
+                     f'AND "{dat}">=? AND "{dat}"<=? ORDER BY "{dat}"')
+                rows = self._conn.execute(q, (lv, s, e)).fetchall()
             elif symbol in self._per_ticker:
                 cl = self._columns(symbol)
                 dat = _pick(cl, _DATE)
