@@ -652,34 +652,43 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
     if not eq:
         return {"available": False}
     prov, src = _fund_provider()
-    rows = []
-    for s in eq:
-        try:
-            f = prov.get(s)
-        except Exception:  # noqa: BLE001
-            f = None
-        if f is None:
-            continue
-        mos = valuation.margin_of_safety(f)
-        try:                                          # Piotroski complet (YoY) si historique dispo
-            prev = getattr(prov, "get_prior", None)
-            prev = prev(s) if callable(prev) else degrade_prior(f)
-            fs = piotroski_full(f, prev)
-        except Exception:  # noqa: BLE001
-            fs = f_score(f)
-        rows.append({
-            "symbol": s, "name": names.get(s, ""), "sector": sector_of.get(s, ""),
-            "per": round(valuation.per(f), 1), "ev_ebitda": round(valuation.ev_ebitda(f), 1),
-            "pb": round(valuation.price_to_book(f), 2), "roe": round(ratios.roe(f), 3),
-            "roic": round(ratios.roic(f), 3), "gross_margin": round(ratios.gross_margin(f), 3),
-            "fcf_yield": round(valuation.fcf_yield(f), 3),
-            "margin_of_safety": None if mos != mos else round(mos, 3),
-            "f_score": fs, "f_score_label": f_score_label(fs),
-            "altman_z": altman_z(f)["z"], "altman_zone": altman_z(f)["zone"],
-            "per_raw": valuation.per(f),
-            "_val": (valuation.earnings_yield(f) + valuation.fcf_yield(f)),
-            "_qual": (ratios.roic(f) + ratios.gross_margin(f) + ratios.fcf_conversion(f)),
-        })
+
+    def _rows_for(provider):
+        out = []
+        for s in eq:
+            try:
+                f = provider.get(s)
+            except Exception:  # noqa: BLE001
+                f = None
+            if f is None:
+                continue
+            mos = valuation.margin_of_safety(f)
+            try:                                      # Piotroski complet (YoY) si historique dispo
+                prev = getattr(provider, "get_prior", None)
+                prev = prev(s) if callable(prev) else degrade_prior(f)
+                fs = piotroski_full(f, prev)
+            except Exception:  # noqa: BLE001
+                fs = f_score(f)
+            out.append({
+                "symbol": s, "name": names.get(s, ""), "sector": sector_of.get(s, ""),
+                "per": round(valuation.per(f), 1), "ev_ebitda": round(valuation.ev_ebitda(f), 1),
+                "pb": round(valuation.price_to_book(f), 2), "roe": round(ratios.roe(f), 3),
+                "roic": round(ratios.roic(f), 3), "gross_margin": round(ratios.gross_margin(f), 3),
+                "fcf_yield": round(valuation.fcf_yield(f), 3),
+                "margin_of_safety": None if mos != mos else round(mos, 3),
+                "f_score": fs, "f_score_label": f_score_label(fs),
+                "altman_z": altman_z(f)["z"], "altman_zone": altman_z(f)["zone"],
+                "per_raw": valuation.per(f),
+                "_val": (valuation.earnings_yield(f) + valuation.fcf_yield(f)),
+                "_qual": (ratios.roic(f) + ratios.gross_margin(f) + ratios.fcf_conversion(f)),
+            })
+        return out
+
+    rows = _rows_for(prov)
+    if len(rows) < 5 and src.startswith("FMP"):     # clé FMP absente/invalide → repli synthétique
+        from packages.fundamentals.provider import SyntheticFundamentalsProvider
+        prov, src = SyntheticFundamentalsProvider(), "synthétique (repli FMP)"
+        rows = _rows_for(prov)
     if not rows:
         return {"available": False}
 
