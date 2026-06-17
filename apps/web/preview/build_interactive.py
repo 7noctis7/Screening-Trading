@@ -1063,10 +1063,11 @@ if('serviceWorker' in navigator){window.addEventListener('load',()=>{
     <td class="mono" data-sort="${r.fcf_yield}" style="text-align:right">${pp(r.fcf_yield)}</td>
     <td class="mono" data-sort="${r.margin_of_safety==null?-999:r.margin_of_safety}" style="text-align:right;color:${r.margin_of_safety==null?'var(--muted)':r.margin_of_safety>0?'#22c55e':'#f43f5e'}">${r.margin_of_safety==null?'—':(r.margin_of_safety*100).toFixed(0)+'%'}</td>
     <td class="mono" data-sort="${r.f_score}" style="text-align:right;color:${r.f_score>=7?'#22c55e':r.f_score>=4?'#f59e0b':'#f43f5e'}">${r.f_score}/9</td>
-    <td class="mono" data-sort="${r.score}" style="text-align:right">${r.score}</td>
+    <td class="mono" data-sort="${r.tech_score}" style="text-align:right;color:${r.tech_label==='haussier'?'#22c55e':r.tech_label==='baissier'?'#f43f5e':'#9aa1ad'}">${r.tech_score}</td>
+    <td class="mono" data-sort="${r.combined_score}" style="text-align:right">${r.combined_score}</td>
     <td style="text-align:right;font-weight:600;color:${RC[r.rating]}">${r.rating}</td></tr>`);
   const c=$(`<div class="card"><div class="label" style="margin-bottom:8px">Score value + quality · DCF</div></div>`);
-  c.appendChild(mkTable('<th>Actif</th><th>Secteur</th><th style="text-align:right">PER</th><th style="text-align:right">P/B</th><th style="text-align:right">ROE</th><th style="text-align:right">FCF yld</th><th style="text-align:right">Marge sécu.</th><th style="text-align:right">F-score</th><th style="text-align:right">Score</th><th style="text-align:right">Reco</th>',rows));
+  c.appendChild(mkTable('<th>Actif</th><th>Secteur</th><th style="text-align:right">PER</th><th style="text-align:right">P/B</th><th style="text-align:right">ROE</th><th style="text-align:right">FCF yld</th><th style="text-align:right">Marge sécu.</th><th style="text-align:right">F-score</th><th style="text-align:right">Tech</th><th style="text-align:right">Fond+Tech</th><th style="text-align:right">Reco</th>',rows));
   p.appendChild(c);
 })();
 

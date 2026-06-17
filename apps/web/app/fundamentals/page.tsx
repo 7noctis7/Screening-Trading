@@ -27,8 +27,8 @@ export default function Fundamentals() {
       </div>
       <div className="flex items-center justify-between">
         <p className="text-muted text-xs">{f.method}</p>
-        <button onClick={() => downloadCsv("fondamentaux", ["Actif", "Secteur", "PER", "EV/EBITDA", "P/B", "ROE", "FCF yield", "Marge securite", "F-score", "Altman Z", "Score", "Reco"],
-          rows.map((r: any) => [r.symbol, r.sector, r.per, r.ev_ebitda, r.pb, r.roe, r.fcf_yield, r.margin_of_safety, r.f_score, r.altman_z, r.score, r.rating]))}
+        <button onClick={() => downloadCsv("fondamentaux", ["Actif", "Secteur", "PER", "EV/EBITDA", "P/B", "ROE", "FCF yield", "Marge securite", "F-score", "Altman Z", "Tech", "Fond+Tech", "Reco"],
+          rows.map((r: any) => [r.symbol, r.sector, r.per, r.ev_ebitda, r.pb, r.roe, r.fcf_yield, r.margin_of_safety, r.f_score, r.altman_z, r.tech_score, r.combined_score, r.rating]))}
           className="text-xs px-3 py-1.5 rounded-lg border border-border text-muted hover:text-fg hover:bg-surfaceAlt whitespace-nowrap">⬇ Export CSV</button>
       </div>
       <section className="card p-4 overflow-x-auto">
@@ -39,8 +39,8 @@ export default function Fundamentals() {
             <th className="text-right font-normal">P/B</th><th className="text-right font-normal">ROE</th>
             <th className="text-right font-normal">Marge brute</th><th className="text-right font-normal">FCF yield</th>
             <th className="text-right font-normal">Marge sécu.</th><th className="text-right font-normal">F-score</th>
-            <th className="text-right font-normal">Altman Z</th><th className="text-right font-normal">Rang sect.</th>
-            <th className="text-right font-normal">Score</th><th className="text-right font-normal">Reco</th></tr>
+            <th className="text-right font-normal">Altman Z</th><th className="text-right font-normal">Tech</th>
+            <th className="text-right font-normal">Fond.+Tech</th><th className="text-right font-normal">Reco</th></tr>
           </thead>
           <tbody>{rows.map((r: any) => (
             <tr key={r.symbol} className="border-t border-border">
@@ -52,8 +52,8 @@ export default function Fundamentals() {
                 {r.margin_of_safety == null ? "—" : `${(r.margin_of_safety * 100).toFixed(0)}%`}</td>
               <td className="text-right" style={{ color: r.f_score >= 7 ? "#22c55e" : r.f_score >= 4 ? "#f59e0b" : "#f43f5e" }}>{r.f_score}/9</td>
               <td className="text-right" style={{ color: r.altman_zone === "sûr" ? "#22c55e" : r.altman_zone === "gris" ? "#f59e0b" : "#f43f5e" }}>{r.altman_z}</td>
-              <td className="text-right text-muted">{r.sector_rank ?? "—"}</td>
-              <td className="text-right">{r.score}</td>
+              <td className="text-right" style={{ color: r.tech_label === "haussier" ? "#22c55e" : r.tech_label === "baissier" ? "#f43f5e" : "#9aa1ad" }}>{r.tech_score}</td>
+              <td className="text-right font-medium">{r.combined_score}</td>
               <td className="text-right font-sans font-medium" style={{ color: RC[r.rating] }}>{r.rating}</td>
             </tr>))}</tbody>
         </table>
