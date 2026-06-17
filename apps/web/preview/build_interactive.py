@@ -458,6 +458,7 @@ function portfolioBar(k){
   const box=$(`<div class="card"><div class="label" style="margin-bottom:10px">Top screener — multi-actifs (score facteurs + edge ML · clique une ligne)</div>
     <table><thead><tr><th>#</th><th>Actif</th><th>Secteur</th><th style="text-align:right">Score</th><th style="text-align:right">ML</th><th style="padding-left:14px">Raison</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>`);
   p.appendChild(box);
+  makeSortable(box.querySelector('table'));   // screener triable (par paires ligne+détail)
   // câblage des clics APRÈS injection
   box.querySelectorAll('tr.srow').forEach(tr=>{
     tr.addEventListener('click',()=>{
@@ -579,12 +580,18 @@ function makeSortable(table){
   ths.forEach((th,ci)=>{th.style.cursor='pointer';th.title='Trier cette colonne';let asc=false;
     const base=th.innerHTML;
     th.onclick=()=>{
-      asc=!asc;const tb=table.querySelector('tbody');const rows=[...tb.querySelectorAll(':scope>tr')];
+      asc=!asc;const tb=table.querySelector('tbody');
+      // groupe chaque ligne principale avec ses lignes de détail (det/sdet) → tri par PAIRES
+      const groups=[];let cur=null;
+      [...tb.children].forEach(tr=>{
+        if((tr.classList.contains('det')||tr.classList.contains('sdet'))&&cur)cur.push(tr);
+        else{cur=[tr];groups.push(cur);}
+      });
       const num=s=>{const x=parseFloat(String(s).replace(/\s/g,'').replace(/[^0-9.\-]/g,''));return isNaN(x)?null:x;};
-      rows.sort((a,b)=>{const x=(a.children[ci]?.textContent||'').trim(),y=(b.children[ci]?.textContent||'').trim();
+      groups.sort((A,B)=>{const x=(A[0].children[ci]?.textContent||'').trim(),y=(B[0].children[ci]?.textContent||'').trim();
         const nx=num(x),ny=num(y);const c=(nx!=null&&ny!=null)?nx-ny:x.localeCompare(y,'fr',{numeric:true});
         return asc?c:-c;});
-      rows.forEach(r=>tb.appendChild(r));
+      groups.forEach(g=>g.forEach(tr=>tb.appendChild(tr)));
       ths.forEach(h=>{h.innerHTML=h===th?base:h.innerHTML.replace(/ [▲▼]$/,'');});
       th.innerHTML=base+(asc?' ▲':' ▼');
     };
@@ -592,8 +599,7 @@ function makeSortable(table){
 }
 function mkTable(head,bodyRows){
   const t=$(`<table><thead><tr>${head}</tr></thead><tbody>${bodyRows.join('')}</tbody></table>`);
-  // pas de tri sur les tables à lignes de détail dépliables (screener/historique)
-  if(!t.querySelector('tbody tr.det, tbody tr.sdet'))makeSortable(t);
+  makeSortable(t);    // triable partout (gère aussi les tables à lignes dépliables)
   return t;
 }
 
