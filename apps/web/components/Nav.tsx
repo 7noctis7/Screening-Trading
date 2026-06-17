@@ -9,6 +9,7 @@ const LINKS: [string, string][] = [
   ["/accueil", "Accueil"],
   ["/data", "Données"],
   ["/universe", "Univers"],
+  ["/macro", "Macro"],
   ["/themes", "Thèmes de marché"],
   ["/fundamentals", "Fondamentaux"],
   ["/investors", "Investisseurs"],
