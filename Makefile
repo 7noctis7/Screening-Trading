@@ -1,4 +1,4 @@
-.PHONY: install setup test lint demos api api-lan web preview interactive ingest daily cron tearsheet live live-go clean
+.PHONY: install setup test lint demos api api-lan web preview interactive ingest daily cron tearsheet backtest-ml live live-go clean
 PYTHON ?= python3      ## sur macOS c'est python3 (surchargeable : make api PYTHON=python)
 install:          ## installe les dépendances (uv)
 	uv venv && uv pip install -e ".[dev,data,quant,api,ml]"
@@ -30,6 +30,8 @@ cron:             ## maj quotidienne complète (prix + terminal) — à mettre e
 	bash scripts/cron_daily.sh
 tearsheet:        ## exporte un tear sheet de performance (out/tearsheet.html + .pdf si reportlab)
 	$(PYTHON) scripts/export_tearsheet.py
+backtest-ml:      ## backtest ML walk-forward point-in-time (conviction+ML vs technique vs bench)
+	$(PYTHON) scripts/backtest_ml.py
 live:             ## APERÇU des ordres à répliquer (dry-run, aucun ordre envoyé)
 	$(PYTHON) scripts/run_live.py --equity 10000
 live-go:          ## EXÉCUTE en paper (Alpaca paper + Bitmart) — clés API requises
