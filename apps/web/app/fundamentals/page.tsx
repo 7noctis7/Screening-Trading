@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useFundamentals } from "@/lib/api";
 import { PageSkeleton, EmptyState } from "@/components/ui";
+import { downloadCsv } from "@/lib/csv";
 
 const RC: Record<string, string> = { BUY: "#22c55e", HOLD: "#9aa1ad", SELL: "#f43f5e" };
 const pct = (x?: number) => (x == null ? "—" : `${(x * 100).toFixed(0)}%`);
@@ -24,7 +25,12 @@ export default function Fundamentals() {
         <div className="card p-4 flex items-center"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filtrer un titre…"
           className="w-full bg-transparent text-sm outline-none border border-border rounded-lg px-3 py-2" /></div>
       </div>
-      <p className="text-muted text-xs">{f.method}</p>
+      <div className="flex items-center justify-between">
+        <p className="text-muted text-xs">{f.method}</p>
+        <button onClick={() => downloadCsv("fondamentaux", ["Actif", "Secteur", "PER", "EV/EBITDA", "P/B", "ROE", "FCF yield", "Marge securite", "F-score", "Altman Z", "Score", "Reco"],
+          rows.map((r: any) => [r.symbol, r.sector, r.per, r.ev_ebitda, r.pb, r.roe, r.fcf_yield, r.margin_of_safety, r.f_score, r.altman_z, r.score, r.rating]))}
+          className="text-xs px-3 py-1.5 rounded-lg border border-border text-muted hover:text-fg hover:bg-surfaceAlt whitespace-nowrap">⬇ Export CSV</button>
+      </div>
       <section className="card p-4 overflow-x-auto">
         <table className="w-full text-sm mono">
           <thead className="text-muted text-xs">

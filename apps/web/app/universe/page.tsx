@@ -2,6 +2,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useUniverse } from "@/lib/api";
 import { PageSkeleton } from "@/components/ui";
+import { downloadCsv } from "@/lib/csv";
 
 const nb = (x: number) => x.toLocaleString("fr-FR");
 const ROW_H = 33;            // hauteur de ligne fixe (virtualisation)
@@ -66,7 +67,12 @@ export default function Universe() {
       <section className="card p-4">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm uppercase tracking-wide text-muted">Univers complet — explorateur</h2>
-          <span className="text-xs text-muted">{nb(n)} / {nb(all.length)} (virtualisé)</span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-muted">{nb(n)} / {nb(all.length)} (virtualisé)</span>
+            <button onClick={() => downloadCsv("univers", ["Symbole", "Nom", "Classe", "Place", "Secteur/Devise"],
+              filtered.map((r: any) => [r.symbol, r.name, r.asset_class, r.venue, r.sector || r.currency]))}
+              className="text-xs px-3 py-1.5 rounded-lg border border-border text-muted hover:text-fg hover:bg-surfaceAlt whitespace-nowrap">⬇ Export CSV</button>
+          </div>
         </div>
         <input value={q} onChange={(e) => { setQ(e.target.value); if (scroller.current) scroller.current.scrollTop = 0; setScrollTop(0); }}
           placeholder="Rechercher un symbole, un nom, une place…"
