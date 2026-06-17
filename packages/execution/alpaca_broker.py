@@ -54,6 +54,17 @@ class AlpacaBroker:
         order.status = order_status_from_alpaca(res)
         return order
 
+    def submit_notional(self, symbol: str, side: Side, notional: float):
+        """Ordre marché par MONTANT $ (Alpaca gère le fractionnement) — pratique pour répliquer
+        une allocation cible en %. Reste en paper si paper=True."""
+        from alpaca.trading.requests import MarketOrderRequest
+        from alpaca.trading.enums import OrderSide, TimeInForce
+        req = MarketOrderRequest(
+            symbol=symbol, notional=round(notional, 2),
+            side=OrderSide.BUY if side is Side.LONG else OrderSide.SELL,
+            time_in_force=TimeInForce.DAY)
+        return self._client.submit_order(req)
+
     def positions(self) -> list[Position]:
         return [position_from_alpaca(p) for p in self._client.get_all_positions()]
 

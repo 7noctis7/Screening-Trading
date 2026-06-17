@@ -52,6 +52,15 @@ class BitmartBroker:
             order.status = OrderStatus.REJECTED
         return order
 
+    def last_price(self, symbol: str) -> float:
+        """Dernier prix (ccxt) pour dimensionner un ordre ; 0.0 si indisponible/dry-run."""
+        if self.dry_run or not (self._key and self._secret):
+            return 0.0
+        try:
+            return float(self._client().fetch_ticker(symbol).get("last") or 0.0)
+        except Exception:  # noqa: BLE001
+            return 0.0
+
     def positions(self) -> list[Position]:
         if self.dry_run or not (self._key and self._secret):
             return []
