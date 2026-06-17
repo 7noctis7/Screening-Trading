@@ -9,12 +9,13 @@ export default function Ml() {
   if (!ml) return <PageSkeleton />;
   if (!ml.available)
     return <main className="max-w-3xl mx-auto p-6"><EmptyState title="Modèle ML indisponible" hint="Échantillon insuffisant pour entraîner le modèle." /></main>;
-  const cal = ml.calibration, drift = ml.drift, conf = ml.conformal;
+  const cal = ml.calibration, drift = ml.drift, conf = ml.conformal, wf = ml.walk_forward;
   const cards: [string, string][] = [
     ["Modèle", ml.model],
     ["AUC (out-of-time)", ml.auc != null ? String(ml.auc) : "—"],
     ["Échantillon (train)", nb(ml.n_train)],
     ["Horizon", `${ml.horizon_days} j`],
+    ...(wf?.available ? [["AUC walk-forward", `${wf.auc_mean} ± ${wf.auc_std}`] as [string, string]] : []),
   ];
   const maxw = Math.max(0.01, ...ml.feature_importance.map((f: any) => f.weight));
   return (

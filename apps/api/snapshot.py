@@ -506,6 +506,27 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
     except Exception:  # noqa: BLE001
         pass
 
+    # WALK-FORWARD (ancré) : robustesse temporelle de l'edge (AUC moyenne ± écart-type).
+    walk_forward = {"available": False}
+    try:
+        from packages.backtest.walk_forward import walk_forward_splits
+        wf_aucs = []
+        for tr, te in walk_forward_splits(len(X), n_splits=5, train_frac=0.5, anchored=True):
+            if len(set(y[list(te)])) < 2:
+                continue
+            mw, _ = _ml_model()
+            mw.fit(X[list(tr)], y[list(tr)])
+            a = _auc(mw.predict_proba(X[list(te)]), y[list(te)])
+            if a is not None:
+                wf_aucs.append(a)
+        if wf_aucs:
+            walk_forward = {"available": True, "folds": len(wf_aucs),
+                            "auc_mean": round(float(np.mean(wf_aucs)), 3),
+                            "auc_std": round(float(np.std(wf_aucs)), 3),
+                            "aucs": [round(a, 3) for a in wf_aucs]}
+    except Exception:  # noqa: BLE001
+        pass
+
     # DRIFT des features (PSI) : 1re moitié (référence) vs 2nde moitié (actuel).
     drift = {"available": False}
     try:
@@ -539,6 +560,7 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
         "scores": {s: round(p, 3) for s, p in probs.items()},
         "calibration": calibration,
         "conformal": conformal,
+        "walk_forward": walk_forward,
         "drift": drift,
     }
 
