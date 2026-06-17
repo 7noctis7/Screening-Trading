@@ -687,7 +687,12 @@ def _sentiment_section(held: list, names: dict, sector_of: dict, data: dict) -> 
 
 
 def _fund_provider():
-    """Provider fondamentaux : FMP si clé présente (free tier), sinon synthétique déterministe."""
+    """Provider fondamentaux. Priorité : FMP (clé) → yfinance (QUANT_FUND=yf, réel gratuit) → synthétique.
+
+    - **FMP** : réel, free tier limité (~40 actifs).
+    - **yfinance** : réel, GRATUIT sans clé, mais plus lent (1 requête/actif) → sous-ensemble.
+    - **synthétique** : fondamentaux FABRIQUÉS (déterministes) → pour la démo/UI, PAS pour décider.
+    """
     import os
     if os.environ.get("FMP_API_KEY"):
         try:
@@ -695,8 +700,14 @@ def _fund_provider():
             return FMPFundamentalsProvider(), "FMP (free tier)"
         except Exception:  # noqa: BLE001
             pass
+    if os.environ.get("QUANT_FUND") == "yf":
+        try:
+            from packages.fundamentals.yfinance_provider import YFinanceFundamentalsProvider
+            return YFinanceFundamentalsProvider(), "yfinance (réel, gratuit)"
+        except Exception:  # noqa: BLE001
+            pass
     from packages.fundamentals.provider import SyntheticFundamentalsProvider
-    return SyntheticFundamentalsProvider(), "synthétique"
+    return SyntheticFundamentalsProvider(), "synthétique (démo)"
 
 
 def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: dict,
@@ -710,9 +721,9 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
 
     prov, src = _fund_provider()
     all_eq = [s for s in symbols if acmap.get(s) in ("equity", "etf")]
-    # cap : FMP free tier limité (≈250 appels/j, 4 appels/actif) → 40 ; synthétique → tout l'univers
-    cap = 40 if src.startswith("FMP") else 2000
-    capped = src.startswith("FMP") and len(all_eq) > cap
+    # cap : FMP free tier ≈40 ; yfinance réel mais lent ≈80 ; synthétique → tout l'univers
+    cap = 40 if src.startswith("FMP") else (80 if src.startswith("yfinance") else 2000)
+    capped = (src.startswith("FMP") or src.startswith("yfinance")) and len(all_eq) > cap
     eq = all_eq[:cap]
     if not eq:
         return {"available": False}
