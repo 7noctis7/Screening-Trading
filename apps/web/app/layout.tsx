@@ -1,6 +1,7 @@
 import "./globals.css";
 import { Providers } from "./providers";
 import { Nav } from "@/components/Nav";
+import { CommandPalette } from "@/components/CommandPalette";
 export const metadata = { title: "Quant Terminal", description: "Screening & trading multi-actifs" };
 
 // Anti-flash : applique le thème mémorisé (sombre par défaut) avant l'hydratation.
@@ -12,7 +13,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="fr" className="dark" suppressHydrationWarning>
       <head><script dangerouslySetInnerHTML={{ __html: themeInit }} /></head>
-      <body className="bg-bg text-fg antialiased"><Providers><Nav />{children}</Providers></body>
+      <body className="bg-bg text-fg antialiased"><Providers><Nav /><CommandPalette />{children}</Providers></body>
     </html>
   );
 }

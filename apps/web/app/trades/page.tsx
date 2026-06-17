@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useTrades } from "@/lib/api";
 import { TechnicalChart } from "@/components/TechnicalChart";
+import { PageSkeleton } from "@/components/ui";
 
 const eur = (x: number) => Math.round(x).toLocaleString("fr-FR");
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
@@ -10,8 +11,9 @@ const dt = (s?: string) => (s ? String(s).slice(0, 10) : "—");
 export default function Trades() {
   const { data } = useTrades();
   const [sel, setSel] = useState<string | null>(null);
-  if (!data) return <div className="p-8 text-muted">Chargement…</div>;
+  if (!data) return <PageSkeleton />;
   const st = data.stats ?? {}, closed = data.trades ?? [], open = data.open_trades ?? [];
+  const turn = st.turnover ?? {};
   const series = data.series ?? {}, markers = data.markers ?? {};
   const pick = (sym: string) => setSel(series[sym] ? sym : null);
   const cards: [string, string, string][] = [
@@ -20,7 +22,7 @@ export default function Trades() {
     ["P&L cumulé", `${eur(st.pnl_total ?? 0)} €`, (st.pnl_total ?? 0) >= 0 ? "pos" : "neg"],
     ["Profit factor", String(st.profit_factor ?? "—"), ""],
     ["Meilleur", `${eur(st.best ?? 0)} €`, "pos"],
-    ["Pire", `${eur(st.worst ?? 0)} €`, "neg"],
+    ["Turnover annualisé", turn.annualized != null ? `${turn.annualized.toFixed(2)}×` : "—", ""],
   ];
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-4">

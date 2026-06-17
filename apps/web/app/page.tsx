@@ -5,6 +5,7 @@ import { RegimeBanner } from "@/components/RegimeBanner";
 import { VixPlaybook } from "@/components/VixPlaybook";
 import { SentimentBanner } from "@/components/SentimentBanner";
 import { EquityChart } from "@/components/EquityChart";
+import { PageSkeleton } from "@/components/ui";
 
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 
@@ -12,7 +13,7 @@ export default function Dashboard() {
   const { data: d } = useDashboard();
   const { data: s } = useScreener();
   const { data: sent } = useSentiment();
-  if (!d) return <div className="p-8 text-muted">Chargement…</div>;
+  if (!d) return <PageSkeleton />;
   const m = d.metrics;
   return (
     <main className="max-w-6xl mx-auto p-6 space-y-4">

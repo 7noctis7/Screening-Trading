@@ -1,5 +1,6 @@
 "use client";
 import { useThemes } from "@/lib/api";
+import { PageSkeleton } from "@/components/ui";
 
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 const STANCE: Record<string, [string, string]> = {
@@ -10,7 +11,7 @@ const STANCE: Record<string, [string, string]> = {
 
 export default function Themes() {
   const { data: th } = useThemes();
-  if (!th) return <div className="p-8 text-muted">Chargement…</div>;
+  if (!th) return <PageSkeleton />;
   const sectors = th.sectors ?? [];
   const maxAbs = Math.max(0.01, ...sectors.map((s: any) => Math.abs(s.ytd)));
   return (

@@ -41,6 +41,7 @@ export function Nav() {
             </Link>
           );
         })}
+        <span className="ml-auto hidden md:inline text-[11px] text-muted2 mono px-2 py-1 rounded-md border border-border">⌘K</span>
         <ThemeToggle />
       </div>
     </nav>

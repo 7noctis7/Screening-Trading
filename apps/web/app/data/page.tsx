@@ -1,13 +1,16 @@
 "use client";
 import { useData } from "@/lib/api";
+import { PageSkeleton } from "@/components/ui";
 
 const nb = (x: number) => x.toLocaleString("fr-FR");
 const dt = (s?: string) => (s ? String(s).slice(0, 10) : "—");
 
 export default function DataPage() {
   const { data: d } = useData();
-  if (!d) return <div className="p-8 text-muted">Chargement…</div>;
+  if (!d) return <PageSkeleton />;
   const q = d.quality ?? {};
+  const h = d.health ?? {};
+  const scoreColor = h.score >= 80 ? "#22c55e" : h.score >= 60 ? "#f59e0b" : "#f43f5e";
   const cards: [string, string][] = [
     ["Provider", d.provider],
     ["Barres collectées", nb(d.total_bars)],
@@ -25,6 +28,34 @@ export default function DataPage() {
           </div>
         ))}
       </div>
+
+      {/* Santé & couverture des données */}
+      {h.score != null && (
+        <section className="card p-4">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h2 className="text-sm uppercase tracking-wide text-muted">Santé &amp; couverture des données</h2>
+            <span className="mono text-sm">Score qualité <b style={{ color: scoreColor }}>{h.score}/100</b>
+              <span className="text-muted text-xs"> · {h.complete}/{h.n_series} séries complètes · {h.outliers} outliers · {h.n_bad} valeurs invalides</span>
+            </span>
+          </div>
+          <div className="overflow-x-auto mt-3">
+            <table className="w-full text-sm mono">
+              <thead className="text-muted text-xs">
+                <tr><th className="text-left font-normal">Classe</th><th className="text-right font-normal">Séries</th>
+                <th className="text-right font-normal">Complètes</th><th className="text-right font-normal">% complet</th>
+                <th className="text-right font-normal">Barres moy.</th></tr>
+              </thead>
+              <tbody>{(h.coverage ?? []).map((c: any) => (
+                <tr key={c.asset_class} className="border-t border-border">
+                  <td className="py-1.5 font-sans">{c.asset_class}</td>
+                  <td className="text-right">{c.n}</td><td className="text-right">{c.complete}</td>
+                  <td className="text-right" style={{ color: c.complete_pct >= 0.8 ? "#22c55e" : c.complete_pct >= 0.5 ? "#f59e0b" : "#f43f5e" }}>{(c.complete_pct * 100).toFixed(0)}%</td>
+                  <td className="text-right">{c.avg_bars}</td>
+                </tr>))}</tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       <section className="card p-4">
         <div className="flex items-center justify-between mb-1">
