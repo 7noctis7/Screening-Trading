@@ -854,12 +854,15 @@ def _conviction_section(held: list, screener: dict, ml_scores: dict, sentiment: 
         return {"available": False}
     ranked = conviction_rank(signals)
     w = conviction_weights(ranked, vol, top_n=15, max_weight=0.20)
+    # backtest POINT-IN-TIME (technique, sans fuite) : conviction vs équipondéré
+    from packages.backtest.conviction_backtest import conviction_backtest
+    backtest = conviction_backtest(data)
     rows = [{"symbol": r["symbol"], "name": names.get(r["symbol"], ""),
              "sector": sector_of.get(r["symbol"], ""), "conviction": r["conviction"],
              **{k: r["components"].get(k) for k in ("trend", "ml", "fundamental", "sentiment")},
              "target_weight": w.get(r["symbol"], 0.0)}
             for r in ranked[:25]]
-    return {"available": True, "rows": rows,
+    return {"available": True, "rows": rows, "backtest": backtest,
             "method": "Note = moyenne des z-scores (poids égaux) de : momentum 3 m, proba ML, "
                       "qualité fondamentale, sentiment. Allocation = conviction × inverse-vol, "
                       "plafonnée à 20 %. Discipline anti-surapprentissage (pas de poids optimisés)."}

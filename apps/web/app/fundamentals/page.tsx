@@ -19,11 +19,9 @@ export default function Fundamentals() {
     { key: "sector", label: "Secteur", render: (v) => <span className="text-muted text-xs">{v}</span> },
     { key: "per", label: "PER", num: true },
     { key: "ps", label: "P/S", num: true, render: (v) => (v == null ? "—" : v) },
-    { key: "ev_ebitda", label: "EV/EBITDA", num: true },
     { key: "pb", label: "P/B", num: true },
     { key: "roe", label: "ROE", num: true, render: pp, csv: (v) => v },
-    { key: "net_margin", label: "Marge nette", num: true, render: pp, csv: (v) => v },
-    { key: "gross_margin", label: "Marge brute", num: true, render: pp, csv: (v) => v },
+    { key: "net_margin", label: "M. nette", num: true, render: pp, csv: (v) => v },
     { key: "rev_growth", label: "Croiss. CA", num: true, csv: (v) => v,
       render: (v) => (v == null ? "—" : <span style={{ color: colorPct(v) }}>{(v * 100).toFixed(0)}%</span>) },
     { key: "earnings_growth", label: "Croiss. bénéf.", num: true, csv: (v) => v,
@@ -43,7 +41,7 @@ export default function Fundamentals() {
   ];
 
   return (
-    <main className="max-w-6xl mx-auto p-6 space-y-4">
+    <main className="max-w-[1500px] mx-auto p-5 space-y-4">
       <h1 className="text-xl font-semibold tracking-tight">Analyse fondamentale</h1>
       <StepBanner active="fundamentals" />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -60,7 +58,7 @@ export default function Fundamentals() {
       )}
       <p className="text-muted text-xs">{f.method} · Seuls les <b>actions/ETF</b> ont des fondamentaux (crypto/forex/commodités exclus). <b>Clique un en-tête de colonne pour trier</b> (▲/▼), filtre, exporte en CSV.</p>
       <section className="card p-4">
-        <SortableTable rows={f.rows} cols={cols} filterKeys={["symbol", "sector"]} csvName="fondamentaux"
+        <SortableTable rows={f.rows} cols={cols} filterKeys={["symbol", "sector"]} csvName="fondamentaux" dense
           initialSort={{ key: "combined_score", dir: "desc" }} />
       </section>
     </main>

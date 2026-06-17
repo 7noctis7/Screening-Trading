@@ -12,9 +12,9 @@ export type Col = {
 };
 
 // Tableau réutilisable : tri par colonne (clic en-tête) + filtre texte + export CSV.
-export function SortableTable({ rows, cols, filterKeys, csvName, initialSort, pageSize = 0 }:
+export function SortableTable({ rows, cols, filterKeys, csvName, initialSort, pageSize = 0, dense = false }:
   { rows: any[]; cols: Col[]; filterKeys?: string[]; csvName?: string;
-    initialSort?: { key: string; dir: "asc" | "desc" }; pageSize?: number }) {
+    initialSort?: { key: string; dir: "asc" | "desc" }; pageSize?: number; dense?: boolean }) {
   const [q, setQ] = useState("");
   const [sort, setSort] = useState(initialSort ?? { key: cols[0].key, dir: "asc" as "asc" | "desc" });
 
@@ -52,7 +52,7 @@ export function SortableTable({ rows, cols, filterKeys, csvName, initialSort, pa
         )}
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className={`w-full ${dense ? "dense text-xs" : "text-sm"}`}>
           <thead>
             <tr>{cols.map((c) => (
               <th key={c.key} onClick={() => toggle(c.key)} title="Trier"
