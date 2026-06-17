@@ -14,11 +14,11 @@
   --shadow:0 1px 2px rgba(16,24,40,.06),0 8px 24px rgba(16,24,40,.08);
 }
 .dark {
-  /* ---- thème SOMBRE (cyan/teal/vert néon sur quasi-noir) ---- */
-  --bg:#04070a; --bg2:#070b10; --surface:#0c1116; --surface2:#101820; --surface3:#142029;
-  --border:#1b2630; --border2:#26343f; --fg:#eaf2f4; --muted:#8fa3ad; --muted2:#5d6f78;
+  /* ---- thème SOMBRE (cyan/teal/vert néon sur bleu nuit teinté, moins dur que le noir pur) ---- */
+  --bg:#0a1118; --bg2:#0e1721; --surface:#121c26; --surface2:#16212d; --surface3:#1b2935;
+  --border:#22303c; --border2:#2e3f4d; --fg:#eaf2f4; --muted:#93a7b1; --muted2:#637580;
   --accent:#22d3ee; --accent2:#5eead4; --pos:#22c55e; --neg:#f43f5e; --warn:#f59e0b;
-  --shadow:0 1px 2px rgba(0,0,0,.5),0 10px 30px rgba(0,0,0,.35);
+  --shadow:0 1px 2px rgba(0,0,0,.45),0 10px 30px rgba(0,0,0,.3);
 }
 
 * { box-sizing: border-box; }
@@ -27,11 +27,14 @@ html { scroll-behavior: smooth; }
    Couche la plus basse ; si le fichier est absent, le dégradé du body prend le relais. */
 html::before {
   content:""; position:fixed; inset:0; z-index:-3; pointer-events:none;
-  /* photo plus PETITE et centrée (pas plein cadre), très discrète */
+  /* photo taureau/ours PLUS GRANDE et centrée, fondue en douceur sur le fond (pas de bord net) */
   background:url('/hero.jpg') no-repeat;
-  background-position:center 22%;
-  background-size:min(1100px, 82%) auto;
-  opacity:.2; filter:blur(0.5px) saturate(1.08); will-change:transform;
+  background-position:center 20%;
+  background-size:min(1500px, 96%) auto;
+  opacity:.26; filter:blur(0.5px) saturate(1.12) contrast(1.04); will-change:transform;
+  /* dégradé radial en masque → les bords de la photo se fondent au lieu de couper net */
+  mask-image:radial-gradient(ellipse 62% 58% at 50% 30%, #000 38%, transparent 82%);
+  -webkit-mask-image:radial-gradient(ellipse 62% 58% at 50% 30%, #000 38%, transparent 82%);
   animation:kenburns 52s ease-in-out infinite alternate;   /* mouvement quasi imperceptible */
 }
 /* Grille « tech / blockchain » très fine en surimpression (profondeur, modernité) */
@@ -54,9 +57,9 @@ body {
   margin:0; color:var(--fg); position:relative; min-height:100vh;
   /* voile sombre + vignettage → la photo reste très discrète, contenu net (qualité Apple) */
   background:
-    radial-gradient(1300px 700px at 50% -10%,
-      color-mix(in srgb, var(--bg2) 86%, transparent) 0%,
-      color-mix(in srgb, var(--bg) 94%, transparent) 55%,
+    radial-gradient(1400px 780px at 50% -6%,
+      color-mix(in srgb, var(--bg2) 70%, transparent) 0%,
+      color-mix(in srgb, var(--bg) 82%, transparent) 52%,
       var(--bg) 100%) fixed;
   font-family:-apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif;
   -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; letter-spacing:-.01em;
