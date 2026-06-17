@@ -614,7 +614,8 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
     (marge de sécurité) et score composite value+quality. Equities/ETF uniquement.
     FMP si `FMP_API_KEY`, sinon fondamentaux synthétiques déterministes (offline-safe)."""
     from packages.fundamentals import ratios, valuation
-    from packages.fundamentals.scoring import f_score, f_score_label
+    from packages.fundamentals.provider import degrade_prior
+    from packages.fundamentals.scoring import f_score, f_score_label, piotroski_full
 
     eq = [s for s in symbols if acmap.get(s) in ("equity", "etf")][:40]
     if not eq:
@@ -629,6 +630,12 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
         if f is None:
             continue
         mos = valuation.margin_of_safety(f)
+        try:                                          # Piotroski complet (YoY) si historique dispo
+            prev = getattr(prov, "get_prior", None)
+            prev = prev(s) if callable(prev) else degrade_prior(f)
+            fs = piotroski_full(f, prev)
+        except Exception:  # noqa: BLE001
+            fs = f_score(f)
         rows.append({
             "symbol": s, "name": names.get(s, ""), "sector": sector_of.get(s, ""),
             "per": round(valuation.per(f), 1), "ev_ebitda": round(valuation.ev_ebitda(f), 1),
@@ -636,7 +643,7 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
             "roic": round(ratios.roic(f), 3), "gross_margin": round(ratios.gross_margin(f), 3),
             "fcf_yield": round(valuation.fcf_yield(f), 3),
             "margin_of_safety": None if mos != mos else round(mos, 3),
-            "f_score": f_score(f), "f_score_label": f_score_label(f_score(f)),
+            "f_score": fs, "f_score_label": f_score_label(fs),
             "_val": (valuation.earnings_yield(f) + valuation.fcf_yield(f)),
             "_qual": (ratios.roic(f) + ratios.gross_margin(f) + ratios.fcf_conversion(f)),
         })

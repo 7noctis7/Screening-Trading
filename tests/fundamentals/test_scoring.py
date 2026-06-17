@@ -25,3 +25,11 @@ def test_solid_high_score():
 def test_weak_low_score():
     s = f_score(_weak())
     assert s <= 3 and f_score_label(s) == "fragile"
+
+
+def test_piotroski_full_improving_company():
+    from packages.fundamentals.provider import degrade_prior
+    from packages.fundamentals.scoring import piotroski_full
+    curr = _solid()
+    prev = degrade_prior(curr)        # N-1 dégradé → l'entreprise s'améliore
+    assert piotroski_full(curr, prev) >= 6
