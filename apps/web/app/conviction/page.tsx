@@ -56,6 +56,35 @@ export default function Conviction() {
             <span className="text-muted"> · turnover {c.backtest.turnover_annual}×/an. Le <b>Sharpe déflaté</b> (proba que l'edge soit réel après essais multiples) est le juge de paix.</span></p>
         </section>
       )}
+      {c.lens_backtest?.available && (
+        <section className="card p-4">
+          <h2 className="text-sm uppercase tracking-wide text-muted mb-1">Top 10 par lentille — quelle catégorie a le mieux performé&nbsp;?</h2>
+          <p className="text-muted2 text-xs mb-3">Panier <b>équipondéré des 10 meilleurs</b> de chaque lentille, rejoué sur l'historique (rebalancement {c.lens_backtest.step_days} j, rendements réalisés).</p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-muted text-xs"><tr>
+                <th className="text-left font-normal">Lentille (top 10)</th>
+                <th className="text-right font-normal">Rendement</th><th className="text-right font-normal">Annualisé</th>
+                <th className="text-right font-normal">Sharpe</th><th className="text-right font-normal">Sharpe déflaté</th>
+                <th className="text-right font-normal">Max DD</th></tr></thead>
+              <tbody className="mono">
+                {Object.entries(c.lens_backtest.lenses)
+                  .sort((a: any, b: any) => b[1].annualized - a[1].annualized)
+                  .map(([lab, s]: any) => (
+                    <tr key={lab} className="border-t border-border">
+                      <td className="py-1.5 font-sans">{lab}</td>
+                      <td className="text-right">{(s.total_return * 100).toFixed(1)}%</td>
+                      <td className="text-right">{(s.annualized * 100).toFixed(1)}%</td>
+                      <td className="text-right">{s.sharpe}</td>
+                      <td className="text-right" style={{ color: s.dsr >= 0.9 ? "#22c55e" : undefined }}>{(s.dsr * 100).toFixed(0)}%</td>
+                      <td className="text-right" style={{ color: "#f43f5e" }}>{(s.max_drawdown * 100).toFixed(1)}%</td>
+                    </tr>))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-muted2 text-xs mt-2">⚠️ Sélection figée sur le snapshot courant. <b>Fondamentaux</b> et <b>Investisseurs</b> sont neutres vis-à-vis des prix (factor sleeve, sans fuite) ; <b>Signaux ML</b> et <b>Toutes catégories</b> encodent le momentum récent → à lire comme <b>indicatif</b>. Le Sharpe déflaté reste le juge de paix.</p>
+        </section>
+      )}
       <div className="card p-4 text-sm">
         <b>La synthèse de toutes les fenêtres en une seule note.</b>
         <p className="text-muted mt-1">{c.method}</p>
