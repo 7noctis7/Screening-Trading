@@ -3,6 +3,15 @@
 Recommandations priorisées pour faire évoluer le projet, avec les bibliothèques /
 dépôts open-source pertinents à intégrer.
 
+## ✅ Déjà livré (itération sentiment + mobile + démo)
+- **Sentiment & news** : `packages/sentiment/` — lexique finance (stdlib, toujours dispo),
+  **FinBERT** optionnel (`ProsusAI/finbert`), lecteur **RSS** gratuit ; onglet dédié dans le
+  terminal (repli momentum hors-ligne, activable en news réelles via `QUANT_NEWS=1`).
+- **PWA mobile** : `manifest.webmanifest` + `sw.js` générés → app installable, hors-ligne.
+- **Bridge pandas-ta** : `packages/indicators/extended.py` (repli RSI maison si absent).
+- **Adaptateur vectorbt** : `packages/backtest/vectorbt_adapter.py` (repli numpy si absent).
+- **Démo HuggingFace Space** (gratuite) : `deploy/hf_space/` (Gradio).
+
 ## P0 — Fiabiliser le passage en réel
 - **Exécution crypto réelle** : [`ccxt`](https://github.com/ccxt/ccxt) (Bitmart + 100 exchanges,
   API unifiée) pour le broker crypto, en miroir d'`AlpacaBroker` (actions). Garder paper par défaut.

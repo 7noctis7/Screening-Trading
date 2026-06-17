@@ -472,6 +472,37 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
     }
 
 
+def _sentiment_section(held: list, names: dict, sector_of: dict, data: dict) -> dict:
+    """Sentiment / news par position. News RSS réelles si `QUANT_NEWS=1` (FinBERT si dispo),
+    sinon **repli hors-ligne** déterministe dérivé du momentum 63 jours (cohérent, jamais vide)."""
+    import os
+
+    from packages import sentiment as S
+
+    use_news = os.environ.get("QUANT_NEWS") == "1"
+    rows: list[dict] = []
+    for s in (held or [])[:30]:
+        score, n, heads = 0.0, 0, []
+        if use_news:
+            r = S.news_sentiment(s)
+            score, n, heads = r["score"], r["n"], r["headlines"]
+        if n == 0:                                  # repli momentum (hors-ligne)
+            bars = data.get(s)
+            if bars and len(bars) > 64:
+                score = round(max(-1.0, min(1.0, (bars[-1].close / bars[-64].close - 1) * 3.0)), 4)
+        rows.append({"symbol": s, "name": names.get(s, ""), "sector": sector_of.get(s, ""),
+                     "score": score, "label": S.label_of(score), "n_news": n,
+                     "headlines": heads[:5]})
+    mood = round(sum(r["score"] for r in rows) / len(rows), 4) if rows else 0.0
+    has_news = any(r["n_news"] for r in rows)
+    return {
+        "available": bool(rows),
+        "engine": S.engine_name() if has_news else "momentum 63 j (repli hors-ligne)",
+        "source": "news RSS" if has_news else "dérivé du momentum (activez QUANT_NEWS=1 pour les news)",
+        "market_mood": mood, "market_label": S.label_of(mood), "rows": rows,
+    }
+
+
 def _price_db_path() -> "Path | None":
     """Chemin d'une base de prix réelle. Priorité : env QUANT_PRICE_DB, puis emplacements
     usuels (data/, Bureau/Desktop) → branche automatiquement votre ~/Desktop/YAHOO.db."""
@@ -710,6 +741,7 @@ def build_snapshot(seed: int = 7) -> dict:
         "data": _data_section(data, acmap, len(full_universe)),
         "themes": themes,
         "ml": ml,
+        "sentiment": _sentiment_section(held, names, sector_of, data),
         "live": _live_section(comp["rows"], acmap, portfolio_kpis),
     }
 

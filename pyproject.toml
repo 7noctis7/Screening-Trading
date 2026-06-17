@@ -16,6 +16,8 @@ backtest = ["vectorbt", "backtesting"]
 portfolio = ["quantstats", "PyPortfolioOpt", "riskfolio-lib", "empyrical"]
 reporting = ["reportlab", "weasyprint"]
 ml = ["xgboost", "lightgbm", "mlflow", "optuna", "scikit-learn"]
+sentiment = ["transformers", "torch"]   # FinBERT optionnel ; sinon lexique stdlib (RSS sans dépendance)
+space = ["gradio>=4.0"]                  # démo publique HuggingFace Space (gratuit)
 orchestration = ["apscheduler", "prefect"]
 api = ["fastapi", "uvicorn[standard]", "websockets", "sqlalchemy", "alembic"]
 dev = ["pytest", "pytest-cov", "ruff", "mypy", "pre-commit"]
