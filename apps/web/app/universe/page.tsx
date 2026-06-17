@@ -4,7 +4,7 @@ import { useUniverse } from "@/lib/api";
 import { PageSkeleton } from "@/components/ui";
 import { downloadCsv } from "@/lib/csv";
 
-const nb = (x: number) => x.toLocaleString("fr-FR");
+const nb = (x?: number) => (x ?? 0).toLocaleString("fr-FR");
 const ROW_H = 33;            // hauteur de ligne fixe (virtualisation)
 const VIEW_H = 520;          // hauteur de la fenêtre de défilement
 const BUFFER = 8;            // lignes hors écran pré-rendues

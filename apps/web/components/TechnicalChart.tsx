@@ -61,7 +61,10 @@ export function TechnicalChart({ data, markers = [], height = 360 }:
   const ref = useRef<HTMLDivElement>(null);
   const legendRef = useRef<HTMLDivElement>(null);
   const [tf, setTf] = useState<TF>("D");
-  const [showVol, setShowVol] = useState(true);
+  const [vis, setVis] = useState<Record<string, boolean>>({
+    vol: true, ma20: true, ma50: true, ma100: false, ma200: true, boll: false, rsi: false,
+  });
+  const showVol = vis.vol;
   const { bars, dateToTime } = useMemo(() => aggregate(data ?? [], tf), [data, tf]);
 
   useEffect(() => {
@@ -94,10 +97,38 @@ export function TechnicalChart({ data, markers = [], height = 360 }:
 
       const closes = bars.map((d) => d.c);
       for (const { p, color } of MAS) {
-        if (closes.length <= p) continue;
+        if (!vis[`ma${p}`] || closes.length <= p) continue;
         const vals = sma(closes, p);
         const s = chart.addLineSeries({ color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
         s.setData(bars.map((d, i) => ({ time: d.t, value: vals[i] })).filter((x: any) => x.value != null));
+      }
+      // Bandes de Bollinger (20, 2σ)
+      if (vis.boll && closes.length > 20) {
+        const mid = sma(closes, 20);
+        const band = (mult: number) => closes.map((_, i) => {
+          if (i < 19 || mid[i] == null) return undefined;
+          const win = closes.slice(i - 19, i + 1);
+          const m = mid[i] as number;
+          const sd = Math.sqrt(win.reduce((a, x) => a + (x - m) ** 2, 0) / 20);
+          return m + mult * sd;
+        });
+        for (const [vals, c] of [[band(2), "rgba(34,211,238,.5)"], [band(-2), "rgba(34,211,238,.5)"]] as const) {
+          const s = chart.addLineSeries({ color: c, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+          s.setData(bars.map((d, i) => ({ time: d.t, value: vals[i] })).filter((x: any) => x.value != null));
+        }
+      }
+      // RSI(14) dans un panneau bas
+      if (vis.rsi && closes.length > 15) {
+        const rsi: (number | undefined)[] = [];
+        for (let i = 0; i < closes.length; i++) {
+          if (i < 14) { rsi.push(undefined); continue; }
+          let g = 0, l = 0;
+          for (let j = i - 13; j <= i; j++) { const d = closes[j] - closes[j - 1]; if (d > 0) g += d; else l -= d; }
+          rsi.push(l === 0 ? 100 : 100 - 100 / (1 + (g / 14) / (l / 14)));
+        }
+        const s = chart.addLineSeries({ color: "#a855f7", lineWidth: 1, priceScaleId: "rsi", lastValueVisible: false });
+        s.priceScale().applyOptions({ scaleMargins: { top: 0.86, bottom: 0 } });
+        s.setData(bars.map((d, i) => ({ time: d.t, value: rsi[i] })).filter((x: any) => x.value != null));
       }
 
       if (markers.length) {
@@ -123,7 +154,7 @@ export function TechnicalChart({ data, markers = [], height = 360 }:
       }
 
       // ligne d'info : lecture O/H/L/C + variation au survol (crosshair)
-      const fmt = (n: number) => n.toLocaleString("fr-FR", { maximumFractionDigits: 2 });
+      const fmt = (n: number) => (n ?? 0).toLocaleString("fr-FR", { maximumFractionDigits: 2 });
       const setLegend = (b: any) => {
         if (!legendRef.current || !b) return;
         const up = b.close >= b.open;
@@ -140,7 +171,7 @@ export function TechnicalChart({ data, markers = [], height = 360 }:
       chart.timeScale().fitContent();
     })();
     return () => { disposed = true; if (chart) chart.remove(); };
-  }, [bars, dateToTime, markers, height, showVol]);
+  }, [bars, dateToTime, markers, height, vis]);
 
   return (
     <div>
@@ -153,15 +184,19 @@ export function TechnicalChart({ data, markers = [], height = 360 }:
             </button>
           ))}
         </div>
-        <button onClick={() => setShowVol((v) => !v)}
-          className={`px-3 py-1 text-xs rounded-lg border border-border ${showVol ? "text-fg" : "text-muted"}`}>
-          Volume
-        </button>
-        <span className="text-xs ml-auto">
-          {MAS.map((m) => (
-            <span key={m.p} className="ml-2" style={{ color: m.color }}>● MM{m.p}</span>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {([
+            ["ma20", "MM20", "#3b82f6"], ["ma50", "MM50", "#f59e0b"],
+            ["ma100", "MM100", "#a855f7"], ["ma200", "MM200", "#ef4444"],
+            ["boll", "Bollinger", "#22d3ee"], ["rsi", "RSI", "#a855f7"], ["vol", "Volume", "#9aa1ab"],
+          ] as const).map(([k, label, color]) => (
+            <button key={k} onClick={() => setVis((s) => ({ ...s, [k]: !s[k] }))}
+              className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${vis[k] ? "text-fg" : "text-muted"}`}
+              style={{ borderColor: vis[k] ? color : "var(--border)", background: vis[k] ? "color-mix(in srgb,"+color+" 14%, transparent)" : "transparent" }}>
+              {label}
+            </button>
           ))}
-        </span>
+        </div>
       </div>
       <div ref={legendRef} className="text-xs mono text-muted mb-1" style={{ minHeight: 16 }} />
       <div ref={ref} className="w-full" style={{ minHeight: height }} />

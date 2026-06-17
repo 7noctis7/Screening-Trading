@@ -4,7 +4,7 @@ import { usePositions, useSentiment } from "@/lib/api";
 import { TechnicalChart } from "@/components/TechnicalChart";
 import { PageSkeleton } from "@/components/ui";
 
-const eur = (x: number) => x.toLocaleString("fr-FR", { maximumFractionDigits: 0 });
+const eur = (x?: number) => (x ?? 0).toLocaleString("fr-FR", { maximumFractionDigits: 0 });
 const SC: Record<string, [string, string]> = {
   bullish: ["#22c55e", "▲"], bearish: ["#f43f5e", "▼"], neutral: ["#9aa1ad", "–"],
 };

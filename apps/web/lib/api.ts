@@ -1,5 +1,5 @@
 // Client API — le front consomme l'API, AUCUNE logique de trading ici.
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -9,10 +9,16 @@ async function get<T>(path: string): Promise<T> {
   return r.json();
 }
 
-// Auto-rafraîchissement (mode "live" par polling) — TTL serveur 15 min, UI réactive.
+// Navigation instantanée : données fraîches gardées en cache (staleTime), pas de "vide" au
+// changement d'onglet (placeholderData), refetch en arrière-plan. TTL serveur 15 min.
 const LIVE = 30000;
 const q = (key: string, path: string, ms: number = LIVE) =>
-  useQuery({ queryKey: [key], queryFn: () => get<any>(path), refetchInterval: ms, refetchOnWindowFocus: true });
+  useQuery({
+    queryKey: [key], queryFn: () => get<any>(path),
+    refetchInterval: ms, refetchOnWindowFocus: false,
+    staleTime: Math.min(ms, 30000), gcTime: 600000,
+    placeholderData: keepPreviousData,
+  });
 
 export const useDashboard = () => q("dashboard", "/api/dashboard", 15000);
 export const useScreener = () => q("screener", "/api/screener");

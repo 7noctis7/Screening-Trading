@@ -2,7 +2,7 @@
 import { useMl } from "@/lib/api";
 import { PageSkeleton, EmptyState } from "@/components/ui";
 
-const nb = (x: number) => x.toLocaleString("fr-FR");
+const nb = (x?: number) => (x ?? 0).toLocaleString("fr-FR");
 
 export default function Ml() {
   const { data: ml } = useMl();
