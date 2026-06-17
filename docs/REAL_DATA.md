@@ -128,3 +128,40 @@ Oui, c'est pertinent **et déjà en place** :
 C'est complémentaire du backtest (passé) : le MC donne la **distribution** des futurs possibles,
 indispensable pour un profil offensif (dimensionnement, tolérance au drawdown, proba d'atteindre
 un objectif).
+
+---
+
+## 7. Automatisation quotidienne (cron / launchd)
+
+Mise à jour automatique des prix + régénération du terminal, chaque jour de bourse :
+
+```bash
+make cron          # exécute scripts/cron_daily.sh (idempotent : append, jamais d'écrasement)
+```
+
+**crontab** (Linux/macOS) — tous les jours de semaine à 22h30 (après clôture US) :
+```cron
+30 22 * * 1-5 /Users/thierryfanlo/Screening-Trading/scripts/cron_daily.sh >> /tmp/quant_daily.log 2>&1
+```
+
+**launchd** (macOS, recommandé) — `~/Library/LaunchAgents/com.quant.daily.plist` :
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.quant.daily</string>
+  <key>ProgramArguments</key>
+  <array><string>/Users/thierryfanlo/Screening-Trading/scripts/cron_daily.sh</string></array>
+  <key>StartCalendarInterval</key><dict><key>Hour</key><integer>22</integer><key>Minute</key><integer>30</integer></dict>
+  <key>StandardOutPath</key><string>/tmp/quant_daily.log</string>
+  <key>StandardErrorPath</key><string>/tmp/quant_daily.err</string>
+</dict></plist>
+```
+Activation : `launchctl load ~/Library/LaunchAgents/com.quant.daily.plist`.
+
+## 8. Tear sheet de performance (HTML + PDF)
+
+Rapport de performance autonome (métriques clés + courbe d'equity) :
+```bash
+make tearsheet     # → out/tearsheet.html (toujours) + out/tearsheet.pdf (si reportlab installé)
+```
