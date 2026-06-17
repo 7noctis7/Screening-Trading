@@ -2,9 +2,18 @@
 
 /* ============================================================================
    Design system — niveau Apple (clarté · déférence · profondeur).
-   Vert/rouge réservés au P&L et au risque. L'UI s'efface, le contenu prime.
+   Thème pilotable : variables CSS, clair par défaut sur :root, sombre sur .dark.
+   Vert/rouge réservés au P&L et au risque (constants entre thèmes = repère stable).
    ============================================================================ */
 :root {
+  /* ---- thème CLAIR ---- */
+  --bg:#f5f6f8; --bg2:#eef0f3; --surface:#ffffff; --surface2:#f7f8fa; --surface3:#eef0f3;
+  --border:#e3e6ec; --border2:#d3d8e0; --fg:#0c0e12; --muted:#5b6472; --muted2:#8a92a0;
+  --accent:#2563eb; --accent2:#3b82f6; --pos:#16a34a; --neg:#dc2626; --warn:#d97706;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 8px 24px rgba(16,24,40,.08);
+}
+.dark {
+  /* ---- thème SOMBRE ---- */
   --bg:#08090c; --bg2:#0c0e12; --surface:#141619; --surface2:#171a20; --surface3:#1d212a;
   --border:#23272f; --border2:#2d323c; --fg:#eef0f3; --muted:#9aa1ab; --muted2:#6b7280;
   --accent:#3b82f6; --accent2:#60a5fa; --pos:#22c55e; --neg:#f43f5e; --warn:#f59e0b;
@@ -15,15 +24,16 @@
 html { scroll-behavior: smooth; }
 body {
   margin:0; color:var(--fg);
-  background:radial-gradient(1200px 600px at 50% -10%, #10131a 0%, var(--bg) 55%) fixed;
+  background:radial-gradient(1200px 600px at 50% -10%, var(--bg2) 0%, var(--bg) 55%) fixed;
   font-family:-apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif;
   -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; letter-spacing:-.01em;
+  transition:background-color .3s ease, color .3s ease;
 }
 
 /* Scrollbar discrète (déférence) */
 ::-webkit-scrollbar { width:9px; height:9px; }
 ::-webkit-scrollbar-thumb { background:var(--border2); border-radius:6px; }
-::-webkit-scrollbar-thumb:hover { background:#3a414d; }
+::-webkit-scrollbar-thumb:hover { background:var(--muted2); }
 
 /* Focus visible net (clarté / accessibilité) */
 :focus-visible { outline:2px solid var(--accent2); outline-offset:2px; border-radius:8px; }
@@ -39,11 +49,9 @@ body {
 /* Chiffres alignés (lisibilité financière) */
 .mono { font-variant-numeric:tabular-nums; font-feature-settings:"tnum"; font-family:"SF Mono","JetBrains Mono",monospace; }
 
-/* Titres de section homogènes */
 h1 { letter-spacing:-.02em; }
 h2 { letter-spacing:-.01em; }
 
-/* Tables : lignes respirantes, en-tête discret, survol doux */
 table { border-collapse:collapse; }
 thead th { font-weight:500; letter-spacing:.02em; }
 tbody tr { transition:background-color .15s ease; }
@@ -57,6 +65,5 @@ main { animation:fade .35s ease; }
   *, *::before, *::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; }
 }
 
-/* Liens d'accent cohérents */
 a { color:inherit; }
 .text-accent { color:var(--accent2); }
