@@ -7,7 +7,7 @@ const PAGES: [string, string][] = [
   ["/", "Dashboard"], ["/themes", "Thèmes de marché"], ["/ml", "Signaux ML"],
   ["/fundamentals", "Fondamentaux"], ["/sentiment", "Sentiment & news"],
   ["/universe", "Univers"], ["/data", "Données"],
-  ["/portfolio", "Portefeuille & Analyse"], ["/positions", "Positions"], ["/trades", "Trades"],
+  ["/portfolio", "Portefeuille & Analyse"], ["/risk", "Risque"], ["/positions", "Positions"], ["/trades", "Trades"],
 ];
 
 export function CommandPalette() {
