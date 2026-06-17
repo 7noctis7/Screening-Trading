@@ -261,9 +261,12 @@ def _data_section(data: dict, acmap: dict[str, str], universe_total: int = 0) ->
           "close": b.close, "volume": b.volume} for b in bars],
         index=pd.DatetimeIndex([b.ts for b in bars]))
     rep = validate_ohlcv(df, first, "1d", max_gap_ratio=0.5)
+    from packages.storage.data_health import health_report
+    health = health_report(data, acmap)
     src_cfg = load_yaml(ROOT / "config" / "data_sources.yaml")
     return {
         "as_of": data[first][-1].ts.isoformat(),
+        "health": health,
         "symbols_total": len(symbols),
         "universe_total": universe_total or len(symbols),   # total disponible (29k si YAHOO.db)
         "provider": "synthetic",
@@ -345,6 +348,16 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None) -> dic
         "note": "Brancher les clés API (variables d'environnement) puis valider en mode paper "
                 "avant tout ordre réel. Les ordres cibles répliquent le portefeuille modèle.",
     }
+
+
+def _live_with_rebalance(positions: list, acmap: dict, kpis: dict | None,
+                         current_weights: dict[str, float]) -> dict:
+    """_live_section + aperçu de la BANDE DE NON-TRADING (réduit le churn)."""
+    from packages.portfolio.rebalance import apply_no_trade_band
+    live = _live_section(positions, acmap, kpis)
+    targets = {o["symbol"]: o["weight_pct"] for o in live["target_orders"]}
+    live["rebalance"] = apply_no_trade_band(targets, current_weights, band=0.02)
+    return live
 
 
 def _auc(scores, y) -> float | None:
@@ -449,6 +462,38 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
     probs = {s: float(model.predict_proba([f])[0]) for s, f in last.items()}
     top = sorted(probs.items(), key=lambda kv: kv[1], reverse=True)[:15]
 
+    # CALIBRATION (Platt) + Brier : un score 0.8 doit se réaliser ~80 % du temps.
+    # Validation temporelle : 80 % entraînement / 20 % test (X déjà trié par T0).
+    calibration = {"available": False}
+    try:
+        from packages.ml.calibration import PlattCalibrator, brier_score, reliability_curve
+        cut = int(len(X) * 0.8)
+        if cut > 100 and len(X) - cut > 50:
+            mcal, _ = _ml_model()
+            mcal.fit(X[:cut], y[:cut])
+            p_te = np.asarray(mcal.predict_proba(X[cut:]), float)
+            cal = PlattCalibrator().fit(p_te, y[cut:])
+            p_cal = cal.transform(p_te)
+            calibration = {
+                "available": True,
+                "brier_raw": brier_score(y[cut:], p_te),
+                "brier_calibrated": brier_score(y[cut:], p_cal),
+                "reliability": reliability_curve(y[cut:], p_cal, bins=8),
+            }
+    except Exception:  # noqa: BLE001
+        pass
+
+    # DRIFT des features (PSI) : 1re moitié (référence) vs 2nde moitié (actuel).
+    drift = {"available": False}
+    try:
+        from packages.ml.drift import feature_drift
+        half = len(X) // 2
+        if half > 50:
+            d = feature_drift(X[:half], X[half:], fn)
+            drift = {"available": True, **d}
+    except Exception:  # noqa: BLE001
+        pass
+
     try:                                        # suivi d'expérience mlflow (optionnel)
         import mlflow
         mlflow.set_experiment("quant-terminal-ml")
@@ -469,6 +514,8 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
                             "sector": sector_of.get(s, ""), "ml_score": round(p, 3)}
                            for s, p in top],
         "scores": {s: round(p, 3) for s, p in probs.items()},
+        "calibration": calibration,
+        "drift": drift,
     }
 
 
@@ -660,6 +707,21 @@ def build_snapshot(seed: int = 7) -> dict:
     rets_by = {s: returns_from_equity([b.close for b in data[s]]) for s in corr_syms}
     syms, corr = correlation_matrix({k: list(v) for k, v in rets_by.items()})
     clusters = cluster(syms, corr, 0.7)
+
+    # --- BUDGET DE RISQUE + LIMITES DE CONCENTRATION (best practice buy-side) ---
+    from packages.portfolio.risk_budget import covariance, risk_contributions
+    from packages.risk.limits import concentration_report
+    invested_now = comp["totals"]["current_value"] or 1.0
+    w_by_name = {r["symbol"]: r["current_value"] / invested_now for r in comp["rows"]}
+    w_by_sector: dict[str, float] = {}
+    for r in comp["rows"]:
+        w_by_sector[r["sector"]] = w_by_sector.get(r["sector"], 0.0) + r["current_value"] / invested_now
+    cb_syms, cov = covariance({s: list(rets_by[s]) for s in syms})  # mêmes actifs que corr
+    rb = risk_contributions([w_by_name.get(s, 0.0) for s in cb_syms], cov)
+    risk_budget = {"symbols": cb_syms, "contrib_pct": rb["contrib_pct"],
+                   "portfolio_vol": rb["portfolio_vol"],
+                   "diversification_ratio": rb["diversification_ratio"]}
+    limits = concentration_report(w_by_name, w_by_sector, max_name=0.20, max_sector=0.40)
     # séries OHLCV (historique LONG : daily/weekly/monthly agrégés côté front) + marqueurs trades
     open_info = getattr(broker, "open_positions_info", {})
     by_sym_trades = {}
@@ -685,6 +747,10 @@ def build_snapshot(seed: int = 7) -> dict:
                 marks.append({"t": tr.exit_ts.isoformat()[:10], "side": "sell", "price": round(tr.exit_price, 4)})
         position_markers[s] = marks
     trade_stats = PL.trade_stats_payload(all_trades)
+    # turnover annualisé + capacité (best practice : friction & soutenabilité)
+    from packages.portfolio.capacity import turnover
+    avg_eq = sum(equity) / len(equity) if equity else 0.0
+    trade_stats["turnover"] = turnover(all_trades, avg_eq, len(ts_list))
     # 300 trades les plus récents (couvre la récence + de nombreux actifs)
     recent = sorted(all_trades, key=lambda t: t.entry_ts, reverse=True)[:300]
     dates = [t.isoformat() for t in ts_list]
@@ -745,6 +811,8 @@ def build_snapshot(seed: int = 7) -> dict:
                 "mc_projection": mc_projection(rets, horizon=252, start_value=100.0, seed=1),
                 "attribution": attr,
                 "correlation": PL.correlation_payload(syms, corr, clusters),
+                "risk_budget": risk_budget,
+                "limits": limits,
                 "review": PL.review_payload(expert_review({**agg, **comp["totals"]})),
             },
         },
@@ -756,7 +824,7 @@ def build_snapshot(seed: int = 7) -> dict:
         "themes": themes,
         "ml": ml,
         "sentiment": _sentiment_section(held, names, sector_of, data),
-        "live": _live_section(comp["rows"], acmap, portfolio_kpis),
+        "live": _live_with_rebalance(comp["rows"], acmap, portfolio_kpis, w_by_name),
     }
 
 
