@@ -15,15 +15,19 @@ export default function Universe() {
   const [q, setQ] = useState("");
   const [cls, setCls] = useState("tous");
   const [scrollTop, setScrollTop] = useState(0);
+  const [sort, setSort] = useState<{ k: string; d: "asc" | "desc" }>({ k: "symbol", d: "asc" });
   const scroller = useRef<HTMLDivElement>(null);
   const all = u?.instruments ?? [];
   const filtered = useMemo(() => {
     const s = q.toLowerCase();
-    return all.filter((r: any) =>
+    const f = all.filter((r: any) =>
       (cls === "tous" || r.asset_class === cls) &&
-      (!s || `${r.symbol} ${r.name} ${r.venue} ${r.sector ?? ""}`.toLowerCase().includes(s))
-    );
-  }, [all, q, cls]);
+      (!s || `${r.symbol} ${r.name} ${r.venue} ${r.sector ?? ""}`.toLowerCase().includes(s)));
+    const key = sort.k === "sector" ? (r: any) => r.sector || r.currency || "" : (r: any) => r[sort.k] ?? "";
+    return [...f].sort((a, b) => String(key(a)).localeCompare(String(key(b))) * (sort.d === "asc" ? 1 : -1));
+  }, [all, q, cls, sort]);
+  const toggleSort = (k: string) =>
+    setSort((s) => (s.k === k ? { k, d: s.d === "asc" ? "desc" : "asc" } : { k, d: "asc" }));
   if (!u) return <PageSkeleton />;
   const byClass: [string, number][] = Object.entries(u.by_asset_class ?? {});
   const max = Math.max(1, ...byClass.map(([, v]) => v));
@@ -88,8 +92,12 @@ export default function Universe() {
           ))}
         </div>
         {/* en-tête fixe + corps virtualisé (gère 900+ lignes sans ralentir) */}
-        <div className="grid grid-cols-5 gap-2 text-muted text-xs px-1 pb-1 border-b border-border">
-          <span>Symbole</span><span>Nom</span><span>Classe</span><span>Place</span><span>Secteur / Devise</span>
+        <div className="grid grid-cols-5 gap-2 text-muted text-xs px-1 pb-1 border-b border-border select-none">
+          {([["symbol", "Symbole"], ["name", "Nom"], ["asset_class", "Classe"], ["venue", "Place"], ["sector", "Secteur / Devise"]] as const).map(([k, lab]) => (
+            <span key={k} onClick={() => toggleSort(k)} className="cursor-pointer hover:text-fg">
+              {lab}{sort.k === k ? <span style={{ color: "var(--accent2)" }}>{sort.d === "asc" ? " ▲" : " ▼"}</span> : <span style={{ opacity: 0.35 }}> ↕</span>}
+            </span>
+          ))}
         </div>
         <div ref={scroller} onScroll={(e) => setScrollTop((e.target as HTMLDivElement).scrollTop)}
           style={{ height: VIEW_H, overflow: "auto" }}>

@@ -29,7 +29,7 @@ export default function Dashboard() {
         <MetricCard label="Sortino" value={m.sortino?.toFixed(2)} />
         <MetricCard label="Max DD" value={pct(m.max_drawdown)} tone="neg" />
       </div>
-      <EquityChart series={d.equity} />
+      <EquityChart series={d.equity} benchmarks={d.benchmarks} />
       <section className="card p-4 overflow-x-auto">
         <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Top screener — multi-actifs (score facteurs + edge ML)</h2>
         <table className="w-full text-sm">
