@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { usePositions } from "@/lib/api";
+import { usePositions, useSentiment } from "@/lib/api";
 import { TechnicalChart } from "@/components/TechnicalChart";
 
 const eur = (x: number) => x.toLocaleString("fr-FR", { maximumFractionDigits: 0 });
@@ -10,8 +10,11 @@ const SC: Record<string, [string, string]> = {
 
 export default function Positions() {
   const { data } = usePositions();
+  const { data: sent } = useSentiment();
   const [sel, setSel] = useState<string | null>(null);
   if (!data) return <div className="p-8 text-muted">Chargement…</div>;
+  const sentBy: Record<string, number> = {};
+  (sent?.rows ?? []).forEach((r: any) => (sentBy[r.symbol] = r.score));
   const rows = data.positions ?? [], t = data.totals ?? {}, k = data.portfolio ?? {}, series = data.series ?? {}, markers = data.markers ?? {};
   const bull = rows.filter((r: any) => r.stance === "bullish").length;
   const pos = (k.pnl_abs ?? 0) >= 0;
@@ -46,7 +49,8 @@ export default function Positions() {
         <table className="w-full text-sm mono">
           <thead className="text-muted text-xs">
             <tr><th className="text-left font-normal">Actif</th><th className="text-left font-normal">Secteur / tendance</th>
-            <th className="text-right font-normal">ML</th><th className="text-right font-normal">Qté</th><th className="text-right font-normal">PRU</th>
+            <th className="text-right font-normal">ML</th><th className="text-right font-normal">Sentiment</th>
+            <th className="text-right font-normal">Qté</th><th className="text-right font-normal">PRU</th>
             <th className="text-right font-normal">Valeur</th><th className="text-right font-normal">P&amp;L</th></tr>
           </thead>
           <tbody>{rows.map((r: any) => (
@@ -57,6 +61,9 @@ export default function Positions() {
                 <span className="text-muted">{r.sector}</span>
               </td>
               <td className="text-right">{r.ml_score == null ? "—" : `${(r.ml_score * 100).toFixed(0)}%`}</td>
+              <td className="text-right">{sentBy[r.symbol] == null ? "—" :
+                <span style={{ color: sentBy[r.symbol] > 0.05 ? "#22c55e" : sentBy[r.symbol] < -0.05 ? "#f43f5e" : "#9aa1ad" }}>
+                  {sentBy[r.symbol] > 0.05 ? "▲" : sentBy[r.symbol] < -0.05 ? "▼" : "–"} {sentBy[r.symbol].toFixed(2)}</span>}</td>
               <td className="text-right">{typeof r.qty === "number" ? r.qty.toFixed(2) : r.qty}</td><td className="text-right">{r.avg_price}</td>
               <td className="text-right">{eur(r.current_value)}</td>
               <td className="text-right" style={{ color: r.pnl_abs >= 0 ? "#22c55e" : "#ef4444" }}>
