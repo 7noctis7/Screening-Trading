@@ -17,14 +17,31 @@ import sqlite3
 from pathlib import Path
 
 _OHLC = {"open": ["open", "o"], "high": ["high", "h"], "low": ["low", "l"],
-         "close": ["close", "adj_close", "adjclose", "c"], "volume": ["volume", "vol", "v"]}
-_DATE = ["date", "datetime", "timestamp", "ts", "day"]
+         "close": ["close", "adj_close", "adjclose", "adj", "last", "price", "c"],
+         "volume": ["volume", "vol", "v"]}
+_DATE = ["date", "datetime", "timestamp", "dt", "ts", "time", "day", "period"]
 _SYM = ["symbol", "ticker", "sym", "code"]
+_LINK = ["ticker_id", "tickerid", "sec_id", "secid", "instrument_id", "id", "ticker", "symbol", "code"]
+_META_ID = ["id", "ticker_id", "tickerid", "sec_id", "secid", "rowid"]
 
 
 def _pick(cols, cands):
-    for c in cands:
+    for c in cands:                       # exact
         if c in cols:
+            return cols[c]
+    for c in cands:                       # sous-chaîne (colonnes préfixées)
+        for k, orig in cols.items():
+            if c in k:
+                return orig
+    return None
+
+
+def _strict_sym(cols):
+    for k, orig in cols.items():
+        if "symbol" in k:
+            return orig
+    for c in ("ticker", "sym", "code"):
+        if c in cols and not cols[c].lower().startswith("id"):
             return cols[c]
     return None
 
@@ -93,15 +110,49 @@ def main() -> None:
             pass
     print("── fin schéma ──\n")
 
-    # format long (table avec colonne symbole) ?
-    long = None
+    # détection (même logique que le lecteur du robot) : long / normalisé / per-ticker
+    long = norm = None
     for t in tables:
         cl = _columns(conn, t)
-        if _pick(cl, _SYM) and _pick(cl, _DATE) and _pick(cl, _OHLC["close"]):
-            long = (t, _pick(cl, _SYM), _pick(cl, _DATE),
-                    {k: _pick(cl, v) for k, v in _OHLC.items()})
+        sym = _strict_sym(cl)
+        if sym and _pick(cl, _DATE) and _pick(cl, _OHLC["close"]):
+            long = (t, sym, _pick(cl, _DATE), {k: _pick(cl, v) for k, v in _OHLC.items()})
             break
-    print(f"   Schéma : {'format LONG (table ' + long[0] + ')' if long else 'une table par ticker'}")
+    if not long:
+        prices = []
+        for t in tables:
+            cl = _columns(conn, t)
+            if _pick(cl, _DATE) and _pick(cl, _OHLC["close"]) and _pick(cl, _LINK):
+                prices.append((t, cl, _pick(cl, _DATE), _pick(cl, _LINK)))
+        if prices:
+            prices.sort(key=lambda p: ("1d" in p[0].lower(),
+                                       any(h in p[0].lower() for h in ("daily", "eod", "day"))),
+                        reverse=True)
+            pt, cl, dat, link = prices[0]
+            sym2id, meta = {}, None
+            for mt in tables:
+                if mt == pt:
+                    continue
+                mc = _columns(conn, mt); ms = _strict_sym(mc); mid = _pick(mc, _META_ID)
+                if ms and mid:
+                    sym2id = {str(r[1]).upper(): r[0]
+                              for r in conn.execute(f'SELECT "{mid}","{ms}" FROM "{mt}"') if r[1]}
+                    meta = mt
+                    break
+            o = {k: _pick(cl, v) for k, v in _OHLC.items()}
+            norm = (pt, link, dat, o, sym2id, meta)
+    schema = (f"format LONG ({long[0]})" if long else
+              f"normalisé (prix {norm[0]} · lien {norm[1]} · méta {norm[5]} · {len(norm[4])} tickers)"
+              if norm else "une table par ticker")
+    print(f"   Schéma détecté : {schema}")
+
+    # contrôle d'INDEX (crucial pour la vitesse : sans index, chaque requête scanne tout P_1D)
+    if norm:
+        idx = [r[1] for r in conn.execute(f'PRAGMA index_list("{norm[0]}")')]
+        has = bool(idx)
+        print(f"   Index sur {norm[0]} : {'oui' if has else 'AUCUN → lecture lente !'}")
+        if not has:
+            print(f"      ⚡ Créez-le UNE fois (gros gain de vitesse) :  python3 scripts/index_db.py")
 
     found = 0
     for s in a.symbols:
@@ -109,13 +160,14 @@ def main() -> None:
         try:
             if long:
                 t, sym, dat, o = long
-                rows = conn.execute(
-                    f'SELECT "{dat}","{o["close"]}" FROM "{t}" WHERE "{sym}"=? ORDER BY "{dat}"',
-                    (s,)).fetchall()
-            elif s in tables:
-                cl = _columns(conn, s); dat = _pick(cl, _DATE); c = _pick(cl, _OHLC["close"])
-                if dat and c:
-                    rows = conn.execute(f'SELECT "{dat}","{c}" FROM "{s}" ORDER BY "{dat}"').fetchall()
+                rows = conn.execute(f'SELECT "{dat}","{o["close"]}" FROM "{t}" WHERE "{sym}"=? '
+                                    f'ORDER BY "{dat}" LIMIT 100000', (s,)).fetchall()
+            elif norm:
+                pt, link, dat, o, sym2id, _ = norm
+                lv = sym2id.get(s.upper())
+                if lv is not None:
+                    rows = conn.execute(f'SELECT "{dat}","{o["close"]}" FROM "{pt}" WHERE "{link}"=? '
+                                        f'ORDER BY "{dat}" LIMIT 100000', (lv,)).fetchall()
         except sqlite3.Error:
             rows = []
         if rows:
@@ -125,9 +177,9 @@ def main() -> None:
         else:
             print(f"   • {s:14s} (absent)")
     print(f"\n{found}/{len(a.symbols)} symboles trouvés.")
-    print("\n➡️  Pour connecter DÉFINITIVEMENT cette base (zsh) :")
-    print(f'   echo \'export QUANT_PRICE_DB="{db}"\' >> ~/.zshrc && source ~/.zshrc')
-    print("   puis :  make api   (ou)   python3 apps/web/preview/build_interactive.py")
+    if found:
+        print("✅ Connexion OK : le robot utilisera ces données réelles (mode réel/mixte).")
+    print("\n➡️  Base déjà connectée définitivement via ~/.zshrc. Lancez :  make interactive")
 
 
 if __name__ == "__main__":

@@ -92,8 +92,10 @@ class DBPriceProvider:
                 price.append((t, cl, dat, _pick(cl, self._LINK)))
         price = [p for p in price if p[3]]
         if price:
-            price.sort(key=lambda p: (any(h in p[0].lower() for h in self._DAILY_HINTS),
-                                      self._count(p[0])), reverse=True)
+            # table JOURNALIÈRE préférée par le NOM (P_1D…), sans COUNT(*) (lent sur gros volumes)
+            price.sort(key=lambda p: ("1d" in p[0].lower() or "1day" in p[0].lower(),
+                                      any(h in p[0].lower() for h in self._DAILY_HINTS)),
+                       reverse=True)
             pt, cl, dat, link = price[0]
             sym2id = self._symbol_map(tables, pt)
             if sym2id is not None or link.lower() in ("ticker", "symbol", "code"):
