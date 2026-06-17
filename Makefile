@@ -24,5 +24,9 @@ ingest:           ## backfill des prix réels (yfinance) → data/market.db
 	$(PYTHON) scripts/ingest_prices.py --since 2015-01-01
 daily:            ## mise à jour incrémentale quotidienne des prix réels
 	$(PYTHON) scripts/ingest_prices.py --daily
+live:             ## APERÇU des ordres à répliquer (dry-run, aucun ordre envoyé)
+	$(PYTHON) scripts/run_live.py --equity 10000
+live-go:          ## EXÉCUTE en paper (Alpaca paper + Bitmart) — clés API requises
+	$(PYTHON) scripts/run_live.py --live --yes
 clean:
 	find . -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null; rm -rf out

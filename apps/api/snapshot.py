@@ -44,6 +44,34 @@ def _seed_universe() -> list[dict]:
     return list(seen.values())
 
 
+def _db_full_universe() -> list[dict] | None:
+    """Univers EXHAUSTIF depuis YAHOO.db (tous les tickers), si la base est branchée."""
+    db = _price_db_path()
+    if db is None:
+        return None
+    try:
+        from packages.data.providers.db_provider import DBPriceProvider
+        rows = DBPriceProvider(db).universe()
+    except Exception:  # noqa: BLE001
+        return None
+    if not rows:
+        return None
+    out = []
+    for r in rows:
+        s = r["symbol"]
+        su = s.upper()
+        ac = ("crypto" if (su.endswith("USDC") or su.endswith("USDT") or "/USD" in su or "-USD" in su)
+              else "forex" if ("/" in s and len(s) <= 7 and "USD" in su)
+              else "commodity" if "=F" in su
+              else "index" if su.startswith("^")
+              else "etf" if (r.get("sector") or "").lower() in ("etf", "fund")
+              else "equity")
+        out.append({"symbol": s, "name": r.get("name", ""), "asset_class": ac,
+                    "venue": r.get("venue", ""), "currency": r.get("currency", ""),
+                    "sector": r.get("sector", ""), "source": "YAHOO.db"})
+    return out
+
+
 def _universe_section(instruments: list[dict]) -> dict:
     """Vue UNIVERS : sources déclarées (offline/réseau), seeds, répartition par classe."""
     cfg = load_yaml(ROOT / "config" / "universe.yaml")
@@ -58,9 +86,9 @@ def _universe_section(instruments: list[dict]) -> dict:
         })
     by_class, by_venue = {}, {}
     for r in instruments:
-        ac = (r.get("asset_class") or "?").strip() or "?"
+        ac = (str(r.get("asset_class") or "?")).strip() or "?"
         by_class[ac] = by_class.get(ac, 0) + 1
-        ven = (r.get("venue") or "?").strip() or "?"
+        ven = (str(r.get("venue") or "?")).strip() or "?"
         by_venue[ven] = by_venue.get(ven, 0) + 1
     seeds = []
     for path in sorted((ROOT / "data" / "seed").glob("*.csv")):
@@ -211,7 +239,7 @@ def _themes_section(data: dict, sector_of: dict, end) -> dict:
     }
 
 
-def _data_section(data: dict, acmap: dict[str, str]) -> dict:
+def _data_section(data: dict, acmap: dict[str, str], universe_total: int = 0) -> dict:
     """Vue DONNÉES : collecte (providers, barres, qualité) + couches de base de données."""
     import pandas as pd
 
@@ -237,6 +265,7 @@ def _data_section(data: dict, acmap: dict[str, str]) -> dict:
     return {
         "as_of": data[first][-1].ts.isoformat(),
         "symbols_total": len(symbols),
+        "universe_total": universe_total or len(symbols),   # total disponible (29k si YAHOO.db)
         "provider": "synthetic",
         "fallback_order": src_cfg.get("ohlcv", {}).get("fallback_order", []),
         "fundamentals_provider": src_cfg.get("fundamentals", {}).get("provider"),
@@ -292,15 +321,19 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None) -> dic
     import os
     alp = bool(os.environ.get("ALPACA_API_KEY") and os.environ.get("ALPACA_API_SECRET"))
     bit = bool(os.environ.get("BITMART_API_KEY") and os.environ.get("BITMART_API_SECRET"))
+    tot = sum(p["current_value"] for p in positions) or 1.0
     targets = []
     for p in positions:
         is_crypto = acmap.get(p["symbol"]) == "crypto"
         targets.append({"symbol": p["symbol"], "broker": "Bitmart" if is_crypto else "Alpaca",
-                        "asset_class": acmap.get(p["symbol"], ""), "weight_value": p["current_value"],
+                        "asset_class": acmap.get(p["symbol"], ""),
+                        "weight_pct": round(p["current_value"] / tot, 4),  # allocation cible (%)
                         "side": p["side"]})
     return {
         "connected": alp or bit,
-        "portfolio": kpis or {},
+        # KPI réels seulement si un compte est connecté (sinon le portefeuille réel est vide)
+        "portfolio": (kpis or {}) if (alp or bit) else {},
+        "model_weights_only": not (alp or bit),
         "mode": "paper",                          # paper par défaut, JAMAIS d'ordre réel non confirmé
         "brokers": [
             {"name": "Alpaca", "scope": "Actions & ETF US", "connected": alp, "paper": True,
@@ -325,15 +358,40 @@ def _auc(scores, y) -> float | None:
     return float((ranks[y == 1].sum() - n_pos * (n_pos + 1) / 2) / (n_pos * n_neg))
 
 
+def _ml_model():
+    """Modèle d'edge : Gradient Boosting (sklearn) si disponible, sinon régression
+    logistique numpy pure (toujours fonctionnel, sans dépendance)."""
+    try:
+        from packages.ml.model import SklearnModel
+        return SklearnModel(), "Gradient Boosting (sklearn)"
+    except Exception:  # noqa: BLE001
+        from packages.ml.model import LogitModel
+        return LogitModel(epochs=400), "régression logistique (numpy)"
+
+
+def _feat_importance(model, names, X, y):
+    """Importance des variables : native (arbres) sinon |poids| (logit) sinon permutation."""
+    import numpy as np
+    clf = getattr(getattr(model, "pipe", None), "named_steps", {}).get("clf") if hasattr(model, "pipe") else None
+    if clf is not None and hasattr(clf, "feature_importances_"):
+        vals = [float(v) for v in clf.feature_importances_]
+    elif hasattr(model, "w") and model.w is not None:
+        vals = [abs(float(v)) for v in model.w]
+    else:
+        vals = [1.0] * len(names)
+    return sorted(zip(names, vals), key=lambda kv: -kv[1])
+
+
 def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
     """Score ML d'edge (proba de hausse à ~1 mois) entraîné en CROSS-SECTION sur TOUT
-    l'univers (régression logistique numpy pure, sans dépendance). Holdout temporel + AUC."""
+    l'univers. Validation par CV PURGÉE + EMBARGO (López de Prado) ; GBM si dispo, sinon logit.
+    Suivi mlflow optionnel. Anti look-ahead : features point-in-time, labels purgés."""
     import numpy as np
 
     from packages.indicators.momentum import RSI
     from packages.indicators.trend import SMA
     from packages.indicators.volatility import ATR
-    from packages.ml.model import LogitModel
+    from packages.ml.cv import PurgedKFold
 
     H = 21  # horizon ~1 mois (profil moyen-long terme)
 
@@ -343,36 +401,70 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
         return [c[t] / c[t - 20] - 1, c[t] / c[t - 60] - 1,
                 (c[t] - sma[t]) / sma[t], rsi[t] / 100.0, atr[t] / c[t]]
 
-    X, y, Xh, yh, last = [], [], [], [], {}
+    X, y, T0, T1, last = [], [], [], [], {}    # T0/T1 = fenêtre du label (pour la purge)
     for s, bars in data.items():
         c = np.array([b.close for b in bars], float)
         ncl = len(c)
         if ncl < 90 + H:
             continue
         sma, rsi, atr = SMA(50).compute(bars), RSI(14).compute(bars), ATR(14).compute(bars)
-        split = ncl - 252                       # 1 an de holdout out-of-time
         for t in range(60, ncl - H, 5):
             f = feats(c, sma, rsi, atr, t)
             if f is None:
                 continue
-            lab = 1.0 if c[t + H] > c[t] else 0.0
-            (X if t < split else Xh).append(f)
-            (y if t < split else yh).append(lab)
+            X.append(f); y.append(1.0 if c[t + H] > c[t] else 0.0)
+            T0.append(t); T1.append(t + H)     # le label couvre [t, t+H] → purge des chevauchements
         fl = feats(c, sma, rsi, atr, ncl - 1)
         if fl is not None:
             last[s] = fl
-    if len(X) < 200:
+    if len(X) < 500:
         return {"available": False}
-    model = LogitModel(epochs=400).fit(np.array(X), np.array(y))
-    auc = _auc(model.predict_proba(np.array(Xh)), yh) if len(yh) > 50 else None
+    X, y, T0, T1 = np.array(X), np.array(y), np.array(T0), np.array(T1)
+    if len(X) > 60000:                          # borne le coût (sous-échantillon reproductible)
+        idx = np.random.default_rng(0).choice(len(X), 60000, replace=False)
+        X, y, T0, T1 = X[idx], y[idx], T0[idx], T1[idx]
+    order = np.argsort(T0, kind="stable")       # TRI temporel requis par la CV purgée
+    X, y, T0, T1 = X[order], y[order], T0[order], T1[order]
+    model, model_name = _ml_model()
+
+    # CV PURGÉE + EMBARGO : AUC out-of-sample honnête (labels chevauchants neutralisés)
+    aucs, n_splits = [], 5
+    try:
+        for tr, te in PurgedKFold(n_splits=n_splits, embargo_pct=0.01).split(T0, T1):
+            if len(tr) < 100 or len(te) < 30 or len(set(y[te])) < 2:
+                continue
+            m, _ = _ml_model()
+            m.fit(X[tr], y[tr])
+            a = _auc(m.predict_proba(X[te]), y[te])
+            if a is not None:
+                aucs.append(a)
+    except Exception:  # noqa: BLE001 — CV indisponible → on continue sans
+        pass
+    cv_auc = round(float(np.mean(aucs)), 3) if aucs else None
+
+    model.fit(X, y)                              # modèle final sur tout l'échantillon
+    fn = ["momentum 1 mois", "momentum 3 mois", "tendance vs MM50", "RSI", "volatilité (ATR)"]
+    imp = _feat_importance(model, fn, X, y)
+    mx = max((v for _, v in imp), default=1.0) or 1.0
     probs = {s: float(model.predict_proba([f])[0]) for s, f in last.items()}
     top = sorted(probs.items(), key=lambda kv: kv[1], reverse=True)[:15]
-    fn = ["momentum 1 mois", "momentum 3 mois", "tendance vs MM50", "RSI", "volatilité (ATR)"]
-    imp = sorted(zip(fn, [abs(float(w)) for w in model.w]), key=lambda kv: -kv[1])
+
+    try:                                        # suivi d'expérience mlflow (optionnel)
+        import mlflow
+        mlflow.set_experiment("quant-terminal-ml")
+        with mlflow.start_run(run_name="edge_cross_section"):
+            mlflow.log_params({"model": model_name, "horizon": H, "n_splits": n_splits,
+                               "n_samples": len(X)})
+            if cv_auc is not None:
+                mlflow.log_metric("cv_auc_purged", cv_auc)
+    except Exception:  # noqa: BLE001
+        pass
+
     return {
-        "available": True, "model": "régression logistique (numpy)", "horizon_days": H,
-        "n_train": len(X), "n_holdout": len(yh), "auc": round(auc, 3) if auc else None,
-        "feature_importance": [{"feature": f, "weight": round(w, 3)} for f, w in imp],
+        "available": True, "model": model_name, "horizon_days": H,
+        "validation": f"CV purgée + embargo (k={n_splits})",
+        "n_train": int(len(X)), "n_splits": len(aucs), "auc": cv_auc,
+        "feature_importance": [{"feature": f, "weight": round(v / mx, 3)} for f, v in imp],
         "top_conviction": [{"symbol": s, "name": names.get(s, ""),
                             "sector": sector_of.get(s, ""), "ml_score": round(p, 3)}
                            for s, p in top],
@@ -396,6 +488,23 @@ def _price_db_path() -> "Path | None":
     return None
 
 
+def _yahoo_aliases(sym: str, ac: str) -> list[str]:
+    """Variantes de symbole au format Yahoo (pour retrouver crypto/forex dans YAHOO.db).
+    BTC/USDC → BTC-USD · ETH/USDC → ETH-USD · EUR/USD → EURUSD=X · USD/JPY → JPY=X."""
+    out = [sym]
+    if ac == "crypto" and "/" in sym:
+        base = sym.split("/")[0]
+        out += [f"{base}-USD", f"{base}USD", f"{base}-USDC", base]
+    elif ac == "forex" and "/" in sym:
+        a, b = sym.split("/")[:2]
+        out += [f"{a}{b}=X", f"{b}=X" if a == "USD" else f"{a}{b}=X"]
+    elif ac == "commodity":
+        out += [f"{sym}=F"]
+    elif ac == "index":
+        out += [f"^{sym}"]
+    return list(dict.fromkeys(out))   # dédupliqué, ordre préservé
+
+
 def _load_prices(instruments, sector_of, start, end, seed):
     """Charge l'OHLCV : base RÉELLE (YAHOO.db…) en priorité, sinon synthétique sectorisé
     (et synthétique en complément pour les symboles absents de la base). Renvoie (data, mode)."""
@@ -410,7 +519,12 @@ def _load_prices(instruments, sector_of, start, end, seed):
             prov_db = None
     for m in instruments:
         s = m["symbol"]
-        bars = prov_db.fetch_ohlcv(s, "1d", start, end) if prov_db else []
+        bars = []
+        if prov_db:                                  # essaie le symbole + ses alias Yahoo
+            for alias in _yahoo_aliases(s, m.get("asset_class", "equity")):
+                bars = prov_db.fetch_ohlcv(alias, "1d", start, end)
+                if len(bars) >= 250:
+                    break
         if len(bars) >= 250:
             data[s] = bars
             n_real += 1
@@ -440,6 +554,7 @@ def build_snapshot(seed: int = 7) -> dict:
     data, data_mode = _load_prices(instruments, sector_of, start, end, seed)
     n = max(len(b) for b in data.values())
     vix = _vix_series(n, seed)                    # VIX (playbook volatilité + modulation)
+    full_universe = _db_full_universe() or instruments   # univers EXHAUSTIF (29k tickers si DB)
 
     # --- backtest swing VECTORISÉ sur TOUT l'univers, capital fictif 10 000 $.
     # Profil offensif moyen-long terme : on alloue le cash aux MEILLEURS setups (tri par
@@ -500,13 +615,30 @@ def build_snapshot(seed: int = 7) -> dict:
     rets_by = {s: returns_from_equity([b.close for b in data[s]]) for s in corr_syms}
     syms, corr = correlation_matrix({k: list(v) for k, v in rets_by.items()})
     clusters = cluster(syms, corr, 0.7)
-    # séries OHLC (≈9 mois) des positions ouvertes → graphique technique au clic
-    position_series = {}
+    # séries OHLCV (historique LONG : daily/weekly/monthly agrégés côté front) + marqueurs trades
+    open_info = getattr(broker, "open_positions_info", {})
+    by_sym_trades = {}
+    for t in all_trades:
+        by_sym_trades.setdefault(t.instrument, []).append(t)
+    position_series, position_markers = {}, {}
     for r in comp["rows"]:
-        bars = data[r["symbol"]][-190:]
-        position_series[r["symbol"]] = [
-            {"t": b.ts.isoformat()[:10], "o": round(b.open, 2), "h": round(b.high, 2),
-             "l": round(b.low, 2), "c": round(b.close, 2)} for b in bars]
+        s = r["symbol"]
+        bars = data[s][-1000:]                         # ~4 ans de daily → agrégeable W/M
+        start_t = bars[0].ts
+        position_series[s] = [
+            {"t": b.ts.isoformat()[:10], "o": round(b.open, 4), "h": round(b.high, 4),
+             "l": round(b.low, 4), "c": round(b.close, 4), "v": round(b.volume, 0)} for b in bars]
+        marks = []
+        oi = open_info.get(s)
+        if oi and oi["entry_ts"] >= start_t:
+            marks.append({"t": oi["entry_ts"].isoformat()[:10], "side": "buy",
+                          "price": round(oi["entry_price"], 4)})
+        for tr in by_sym_trades.get(s, []):            # achats/ventes clôturés visibles
+            if tr.entry_ts >= start_t:
+                marks.append({"t": tr.entry_ts.isoformat()[:10], "side": "buy", "price": round(tr.entry_price, 4)})
+            if tr.exit_ts and tr.exit_ts >= start_t:
+                marks.append({"t": tr.exit_ts.isoformat()[:10], "side": "sell", "price": round(tr.exit_price, 4)})
+        position_markers[s] = marks
     trade_stats = PL.trade_stats_payload(all_trades)
     # 300 trades les plus récents (couvre la récence + de nombreux actifs)
     recent = sorted(all_trades, key=lambda t: t.entry_ts, reverse=True)[:300]
@@ -521,12 +653,13 @@ def build_snapshot(seed: int = 7) -> dict:
     init_cap = 10_000
     pf_value = round(equity[-1], 2)
     pf_pnl = round(pf_value - init_cap, 2)
-    cash = round(pf_value - comp["totals"]["current_value"], 2)
+    invested = comp["totals"]["current_value"]
+    cash = round(max(0.0, pf_value - invested), 2)         # jamais négatif (pas de levier)
     portfolio_kpis = {
         "value": pf_value, "initial": init_cap, "pnl_abs": pf_pnl,
         "pnl_pct": round(pf_pnl / init_cap, 4), "cash": cash,
-        "invested": comp["totals"]["current_value"],
-        "exposure_pct": round(comp["totals"]["gross_exposure"] / pf_value, 4) if pf_value else 0.0,
+        "invested": round(invested, 2),
+        "exposure_pct": round(min(1.0, invested / pf_value), 4) if pf_value else 0.0,
         "n_positions": len(comp["rows"]),
     }
     return {
@@ -552,6 +685,7 @@ def build_snapshot(seed: int = 7) -> dict:
             "positions": comp["rows"], "totals": comp["totals"],
             "portfolio": portfolio_kpis,
             "position_series": position_series,
+            "position_markers": position_markers,
             "trade_stats": trade_stats,
             "vix": vix_now, "vix_playbook": _vix_playbook(vix_now),
             "vix_series": vix[::max(1, n // 240)],   # sous-échantillonné pour le graphe
@@ -572,8 +706,8 @@ def build_snapshot(seed: int = 7) -> dict:
         "trades": [PL.trade_payload(t) for t in recent],
         "open_trades": comp["rows"],
         "trade_stats": trade_stats,
-        "universe": _universe_section(instruments),
-        "data": _data_section(data, acmap),
+        "universe": _universe_section(full_universe),
+        "data": _data_section(data, acmap, len(full_universe)),
         "themes": themes,
         "ml": ml,
         "live": _live_section(comp["rows"], acmap, portfolio_kpis),

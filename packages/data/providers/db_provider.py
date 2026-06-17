@@ -126,8 +126,45 @@ class DBPriceProvider:
                 continue
             m = {str(r[1]).upper(): r[0] for r in rows if r[1] is not None}
             if m:
+                self._meta = (t, sym, idc)        # mémorise la table méta (pour universe())
                 return m
         return None
+
+    def universe(self) -> list[dict]:
+        """Liste COMPLÈTE des instruments de la base (symbole, nom, secteur, devise, place)."""
+        meta = getattr(self, "_meta", None)
+        if not meta:
+            return []
+        t, sym, _ = meta
+        cl = self._columns(t)
+        # colonnes TEXTE seulement (jamais les colonnes id_*, qui sont des entiers)
+        def _txt(cands):
+            for c in cands:
+                for k, orig in cl.items():
+                    if c in k and not k.startswith("id"):
+                        return orig
+            return None
+        name = _txt(["name", "fullname", "longname", "label"])
+        sector = _txt(["sector", "industry", "gics"])
+        cur = _txt(["currency", "ccy", "devise"])
+        exch = _txt(["exchange", "venue", "market", "mic"])
+        cols = ", ".join(f'"{c}"' for c in (sym, name, sector, cur, exch) if c)
+        try:
+            rows = self._conn.execute(f'SELECT {cols} FROM "{t}"').fetchall()
+        except sqlite3.Error:
+            return []
+        st = lambda v: str(v) if v is not None else ""   # noqa: E731 — tout en str
+        out = []
+        for r in rows:
+            d = dict(r) if hasattr(r, "keys") else {}
+            s = d.get(sym) or (r[0] if r else None)
+            if not s:
+                continue
+            out.append({"symbol": str(s), "name": st(d.get(name)) if name else "",
+                        "sector": st(d.get(sector)) if sector else "",
+                        "currency": st(d.get(cur)) if cur else "",
+                        "venue": st(d.get(exch)) if exch else ""})
+        return out
 
     @property
     def schema(self) -> str:

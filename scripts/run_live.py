@@ -25,45 +25,62 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Réplique le portefeuille modèle (dry-run par défaut)")
     ap.add_argument("--live", action="store_true", help="envoyer réellement (sinon dry-run)")
     ap.add_argument("--yes", action="store_true", help="confirmation obligatoire pour le mode --live")
+    ap.add_argument("--equity", type=float, default=None,
+                    help="capital à allouer (dry-run) ; en live = equity réelle du broker")
     a = ap.parse_args()
 
     from apps.api.snapshot import build_snapshot
     from packages.core.models import Order, OrderType, Side
 
-    snap = build_snapshot()
-    targets = snap["live"]["target_orders"]
-    kpis = snap["live"]["portfolio"]
+    targets = build_snapshot()["live"]["target_orders"]   # poids cibles (% du portefeuille)
     dry = not (a.live and a.yes)
-    print(f"Portefeuille modèle : {kpis.get('value')} $ · {len(targets)} lignes · "
-          f"mode {'DRY-RUN (aucun ordre envoyé)' if dry else 'LIVE'}")
     if a.live and not a.yes:
-        print("⚠️  --live exige --yes (confirmation). Abandon."); return
+        print("⚠️  --live exige --yes (confirmation explicite). Abandon."); return
 
-    # brokers (instanciés à la demande, sûrs)
     alpaca = bitmart = None
     if not dry:
         from packages.execution.bitmart_broker import BitmartBroker
         bitmart = BitmartBroker(dry_run=False)
         try:
             from packages.execution.alpaca_broker import AlpacaBroker
-            alpaca = AlpacaBroker(paper=True)        # TOUJOURS paper
+            alpaca = AlpacaBroker(paper=True)             # actions TOUJOURS en paper
         except Exception as e:  # noqa: BLE001
-            print(f"Alpaca indisponible ({str(e)[:60]}) → actions en dry-run")
+            print(f"Alpaca indisponible ({str(e)[:60]}) → actions ignorées")
+
+    # capital de référence : equity réelle des brokers (live) sinon --equity (ou 10 000 en aperçu)
+    equity = a.equity or ((alpaca.equity() if alpaca else 0.0) + (bitmart.equity() if bitmart else 0.0)
+                          if not dry else 0.0) or a.equity or 10_000.0
+    print(f"Réplication de {len(targets)} positions cibles · capital {equity:,.0f} $ · "
+          f"mode {'DRY-RUN (aucun ordre)' if dry else 'LIVE (paper)'}")
+    print(f"  {'SENS':4s} {'ACTIF':14s} {'BROKER':8s} {'POIDS':>7s} {'MONTANT':>10s}  statut")
 
     sent = 0
-    for o in targets:
+    for o in sorted(targets, key=lambda x: -x["weight_pct"]):
+        notional = o["weight_pct"] * equity
+        side = Side.LONG if o["side"] == "long" else Side.SHORT
         broker = bitmart if o["broker"] == "Bitmart" else alpaca
-        line = f"  {o['side'].upper():4s} {o['symbol']:14s} {o['broker']:8s} ~{o['weight_value']:>8.0f} $"
+        line = f"  {o['side'].upper():4s} {o['symbol']:14s} {o['broker']:8s} {o['weight_pct']*100:6.1f}% {notional:9.0f}$"
         if dry or broker is None:
-            print(("DRY  " if dry else "SKIP ") + line)
+            print(line + "  " + ("aperçu" if dry else "broker absent"))
             continue
-        order = Order(o["symbol"], Side.LONG if o["side"] == "long" else Side.SHORT,
-                      qty=0.0, order_type=OrderType.MARKET)   # qty calculée par le broker réel
-        res = broker.submit(order)
-        print(f"SENT {line} → {getattr(res, 'status', '?')}")
-        sent += 1
-    print(f"Terminé : {sent} ordres envoyés." if not dry else
-          "Aperçu terminé (dry-run). Relancer avec --live --yes pour exécuter.")
+        try:
+            if o["broker"] == "Alpaca":
+                broker.submit_notional(o["symbol"], side, notional)   # ordre par montant $
+                status = "envoyé (paper)"
+            else:
+                px = bitmart.last_price(o["symbol"])
+                qty = notional / px if px > 0 else 0.0
+                if qty <= 0:
+                    status = "prix indisponible — sauté"
+                else:
+                    broker.submit(Order(o["symbol"], side, qty, OrderType.MARKET))
+                    status = f"envoyé qty={qty:.4f}"
+            sent += 1
+        except Exception as e:  # noqa: BLE001
+            status = f"échec ({str(e)[:40]})"
+        print(line + "  " + status)
+    print(f"\nTerminé : {sent} ordres envoyés (paper)." if not dry else
+          "\nAperçu (dry-run). Pour exécuter en paper : python3 scripts/run_live.py --live --yes")
 
 
 if __name__ == "__main__":
