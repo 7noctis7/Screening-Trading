@@ -27,6 +27,8 @@ logging.basicConfig(
               logging.StreamHandler()],
 )
 log = logging.getLogger("quant.api")
+for _noisy in ("watchfiles", "watchfiles.main"):   # silence le rechargeur (logs propres)
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
 
 app = FastAPI(title="Quant Trading API", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"],
