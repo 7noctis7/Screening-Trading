@@ -4,15 +4,16 @@ import { usePathname } from "next/navigation";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LiveBadge } from "@/components/LiveBadge";
 
+// Ordre = flux logique : données → analyses → risque → exécution
 const LINKS: [string, string][] = [
   ["/accueil", "Accueil"],
   ["/", "Dashboard"],
-  ["/themes", "Thèmes de marché"],
-  ["/ml", "Signaux ML"],
-  ["/fundamentals", "Fondamentaux"],
-  ["/sentiment", "Sentiment & news"],
-  ["/universe", "Univers"],
   ["/data", "Données"],
+  ["/universe", "Univers"],
+  ["/themes", "Thèmes de marché"],
+  ["/fundamentals", "Fondamentaux"],
+  ["/ml", "Signaux ML"],
+  ["/sentiment", "Sentiment & news"],
   ["/portfolio", "Portefeuille & Analyse"],
   ["/risk", "Risque"],
   ["/positions", "Positions"],
@@ -28,7 +29,7 @@ export function Nav() {
       <div className="max-w-6xl mx-auto px-6 py-3 flex flex-wrap gap-1.5 items-center">
         <span className="flex items-center gap-2 text-sm font-semibold tracking-tight mr-3">
           <span className="inline-block w-[18px] h-[18px] rounded-md"
-            style={{ background: "linear-gradient(135deg,#3b82f6,#22d3ee)", boxShadow: "0 0 0 1px rgba(255,255,255,.08),0 4px 14px rgba(59,130,246,.45)" }} />
+            style={{ background: "linear-gradient(135deg,#22d3ee,#5eead4 55%,#22c55e)", boxShadow: "0 0 0 1px rgba(255,255,255,.08),0 4px 16px rgba(34,211,238,.5)" }} />
           Quant Terminal
         </span>
         {LINKS.map(([href, label]) => {

@@ -7,27 +7,47 @@
    ============================================================================ */
 :root {
   /* ---- thème CLAIR ---- */
-  --bg:#f5f6f8; --bg2:#eef0f3; --surface:#ffffff; --surface2:#f7f8fa; --surface3:#eef0f3;
-  --border:#e3e6ec; --border2:#d3d8e0; --fg:#0c0e12; --muted:#5b6472; --muted2:#8a92a0;
-  --accent:#2563eb; --accent2:#3b82f6; --pos:#16a34a; --neg:#dc2626; --warn:#d97706;
+  /* ---- thème CLAIR (accents cyan/teal de la charte « bull & bear » néon) ---- */
+  --bg:#f4f7f8; --bg2:#eaf0f1; --surface:#ffffff; --surface2:#f5f8f9; --surface3:#e9eff1;
+  --border:#dde6e8; --border2:#cbd8db; --fg:#0a0f12; --muted:#52616a; --muted2:#86949b;
+  --accent:#0891b2; --accent2:#06b6d4; --pos:#16a34a; --neg:#dc2626; --warn:#d97706;
   --shadow:0 1px 2px rgba(16,24,40,.06),0 8px 24px rgba(16,24,40,.08);
 }
 .dark {
-  /* ---- thème SOMBRE ---- */
-  --bg:#08090c; --bg2:#0c0e12; --surface:#141619; --surface2:#171a20; --surface3:#1d212a;
-  --border:#23272f; --border2:#2d323c; --fg:#eef0f3; --muted:#9aa1ab; --muted2:#6b7280;
-  --accent:#3b82f6; --accent2:#60a5fa; --pos:#22c55e; --neg:#f43f5e; --warn:#f59e0b;
-  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.25);
+  /* ---- thème SOMBRE (cyan/teal/vert néon sur quasi-noir) ---- */
+  --bg:#04070a; --bg2:#070b10; --surface:#0c1116; --surface2:#101820; --surface3:#142029;
+  --border:#1b2630; --border2:#26343f; --fg:#eaf2f4; --muted:#8fa3ad; --muted2:#5d6f78;
+  --accent:#22d3ee; --accent2:#5eead4; --pos:#22c55e; --neg:#f43f5e; --warn:#f59e0b;
+  --shadow:0 1px 2px rgba(0,0,0,.5),0 10px 30px rgba(0,0,0,.35);
 }
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 body {
-  margin:0; color:var(--fg);
-  background:radial-gradient(1200px 600px at 50% -10%, var(--bg2) 0%, var(--bg) 55%) fixed;
+  margin:0; color:var(--fg); position:relative; min-height:100vh;
+  background:radial-gradient(1200px 620px at 50% -12%, var(--bg2) 0%, var(--bg) 58%) fixed;
   font-family:-apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif;
   -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; letter-spacing:-.01em;
   transition:background-color .3s ease, color .3s ease;
+}
+/* Fond animé « marché vivant » : halos cyan/teal/vert qui dérivent lentement (déférence) */
+body::before {
+  content:""; position:fixed; inset:0; z-index:-1; pointer-events:none;
+  background:
+    radial-gradient(620px 420px at 16% 18%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%),
+    radial-gradient(560px 380px at 84% 26%, color-mix(in srgb, var(--accent2) 14%, transparent), transparent 70%),
+    radial-gradient(640px 460px at 60% 92%, color-mix(in srgb, var(--pos) 10%, transparent), transparent 72%);
+  animation:drift 26s ease-in-out infinite alternate;
+}
+@keyframes drift {
+  0% { transform:translate3d(0,0,0) scale(1); opacity:.85; }
+  50% { transform:translate3d(0,-18px,0) scale(1.05); opacity:1; }
+  100% { transform:translate3d(0,12px,0) scale(1.02); opacity:.9; }
+}
+/* Pour utiliser TA photo en fond : dépose-la dans apps/web/public/hero.jpg → la classe .hero-photo l'affiche. */
+.hero-photo {
+  background-image:linear-gradient(180deg, rgba(4,7,10,.35), rgba(4,7,10,.85)), url('/hero.jpg');
+  background-size:cover; background-position:center;
 }
 
 /* Scrollbar discrète (déférence) */

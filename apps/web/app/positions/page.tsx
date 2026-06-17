@@ -21,7 +21,8 @@ export default function Positions() {
   const pos = (k.pnl_abs ?? 0) >= 0;
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-4">
-      <h1 className="text-xl font-semibold tracking-tight">Positions</h1>
+      <h1 className="text-xl font-semibold tracking-tight">Positions <span className="text-xs font-normal px-2 py-0.5 rounded-full align-middle" style={{ background: "color-mix(in srgb, var(--warn) 18%, transparent)", color: "var(--warn)" }}>FICTIF · démo 10 000 $</span></h1>
+      <p className="text-muted text-xs">Portefeuille de démonstration (modèle). Pour tes positions réelles → onglet <b>Portefeuille réel</b>.</p>
 
       <section className="card p-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

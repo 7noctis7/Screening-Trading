@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { AICommentary } from "@/components/AICommentary";
 
 // Page d'accueil : présentation, rôle de chaque fenêtre, et glossaire/méthodologie déroulant.
 
@@ -30,19 +31,29 @@ function G({ term, children }: { term: string; children: React.ReactNode }) {
 export default function Accueil() {
   return (
     <main className="max-w-4xl mx-auto p-6 space-y-6">
-      <section className="card p-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Quant Terminal</h1>
-        <p className="text-muted mt-2">
-          Terminal de <b>screening</b> et de <b>trading systématique</b> multi-actifs (actions, ETF, forex, crypto,
-          commodités), de niveau hedge-fund. Données réelles, ML anti-fuite, gestion du risque institutionnelle,
-          exécution paper. <b>Aide à la décision — pas un conseil en investissement.</b>
-        </p>
-        <div className="flex gap-2 mt-3 text-xs flex-wrap">
-          <span className="px-2 py-1 rounded-full" style={{ background: "var(--surface3)" }}>Paper par défaut</span>
-          <span className="px-2 py-1 rounded-full" style={{ background: "var(--surface3)" }}>Point-in-time (anti-fuite)</span>
-          <span className="px-2 py-1 rounded-full" style={{ background: "var(--surface3)" }}>⌘K pour naviguer</span>
+      <section className="card hero-photo p-8 md:p-10 relative overflow-hidden">
+        <div className="relative z-10">
+          <div className="text-[11px] font-semibold tracking-[0.18em] uppercase"
+            style={{ color: "var(--accent2)" }}>Hedge-fund grade · open source</div>
+          <h1 className="text-3xl md:text-4xl font-bold tracking-tight mt-2"
+            style={{ background: "linear-gradient(100deg,#22d3ee,#5eead4 45%,#22c55e)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>
+            Quant Terminal
+          </h1>
+          <p className="mt-3 max-w-2xl" style={{ color: "var(--muted)" }}>
+            Screening &amp; trading systématique multi-actifs (actions, ETF, forex, crypto, commodités).
+            Données réelles, ML anti-fuite, risque institutionnel, exécution paper.
+            <b className="text-fg"> Aide à la décision — pas un conseil en investissement.</b>
+          </p>
+          <div className="flex gap-2 mt-4 text-xs flex-wrap">
+            {["Paper par défaut", "Point-in-time (anti-fuite)", "⌘K pour naviguer", "IA locale (LM Studio)"].map((t) => (
+              <span key={t} className="px-2.5 py-1 rounded-full border"
+                style={{ background: "color-mix(in srgb, var(--accent) 12%, transparent)", borderColor: "color-mix(in srgb, var(--accent) 35%, transparent)" }}>{t}</span>
+            ))}
+          </div>
         </div>
       </section>
+
+      <AICommentary />
 
       <section>
         <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Les fenêtres</h2>
