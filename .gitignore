@@ -37,3 +37,6 @@ apps/web/package-lock.json
 apps/web/preview/interactive.html
 apps/web/preview/manifest.webmanifest
 apps/web/preview/sw.js
+
+# exports (tear sheets, rapports)
+out/

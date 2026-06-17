@@ -1,4 +1,4 @@
-.PHONY: install test lint demos api api-lan web preview interactive ingest daily clean
+.PHONY: install test lint demos api api-lan web preview interactive ingest daily cron tearsheet live live-go clean
 PYTHON ?= python3      ## sur macOS c'est python3 (surchargeable : make api PYTHON=python)
 install:          ## installe les dépendances (uv)
 	uv venv && uv pip install -e ".[dev,data,quant,api,ml]"
@@ -24,6 +24,10 @@ ingest:           ## backfill des prix réels (yfinance) → data/market.db
 	$(PYTHON) scripts/ingest_prices.py --since 2015-01-01
 daily:            ## mise à jour incrémentale quotidienne des prix réels
 	$(PYTHON) scripts/ingest_prices.py --daily
+cron:             ## maj quotidienne complète (prix + terminal) — à mettre en crontab/launchd
+	bash scripts/cron_daily.sh
+tearsheet:        ## exporte un tear sheet de performance (out/tearsheet.html + .pdf si reportlab)
+	$(PYTHON) scripts/export_tearsheet.py
 live:             ## APERÇU des ordres à répliquer (dry-run, aucun ordre envoyé)
 	$(PYTHON) scripts/run_live.py --equity 10000
 live-go:          ## EXÉCUTE en paper (Alpaca paper + Bitmart) — clés API requises

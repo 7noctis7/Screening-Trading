@@ -520,20 +520,34 @@ def _price_db_path() -> "Path | None":
 
 
 def _yahoo_aliases(sym: str, ac: str) -> list[str]:
-    """Variantes de symbole au format Yahoo (pour retrouver crypto/forex dans YAHOO.db).
-    BTC/USDC → BTC-USD · ETH/USDC → ETH-USD · EUR/USD → EURUSD=X · USD/JPY → JPY=X."""
+    """Variantes de symbole au format Yahoo (pour retrouver crypto/forex/indices/commodités
+    dans YAHOO.db). Objectif : maximiser la part de données RÉELLES.
+    BTC/USDC → BTC-USD · EUR/USD → EURUSD=X · S&P 500 → ^GSPC · Gold → GC=F · BRK.B ↔ BRK-B."""
+    _IDX = {"S&P 500": "^GSPC", "SP500": "^GSPC", "Nasdaq": "^IXIC", "Nasdaq 100": "^NDX",
+            "Dow Jones": "^DJI", "Dow": "^DJI", "Russell 2000": "^RUT", "VIX": "^VIX",
+            "FTSE 100": "^FTSE", "DAX": "^GDAXI", "CAC 40": "^FCHI", "Nikkei 225": "^N225"}
+    _COMM = {"Gold": "GC=F", "Silver": "SI=F", "Crude Oil": "CL=F", "WTI": "CL=F",
+             "Brent": "BZ=F", "Natural Gas": "NG=F", "Copper": "HG=F", "Corn": "ZC=F",
+             "Wheat": "ZW=F"}
     out = [sym]
-    if ac == "crypto" and "/" in sym:
-        base = sym.split("/")[0]
-        out += [f"{base}-USD", f"{base}USD", f"{base}-USDC", base]
+    if ac == "crypto":
+        base = sym.split("/")[0] if "/" in sym else sym.replace("-USD", "").replace("USD", "")
+        out += [f"{base}-USD", f"{base}USD", f"{base}-USDC", f"{base}-USDT", f"{base}USDT", base]
     elif ac == "forex" and "/" in sym:
         a, b = sym.split("/")[:2]
-        out += [f"{a}{b}=X", f"{b}=X" if a == "USD" else f"{a}{b}=X"]
+        out += [f"{a}{b}=X", f"{b}=X" if a == "USD" else f"{a}=X", f"{a}{b}"]
     elif ac == "commodity":
-        out += [f"{sym}=F"]
+        out += [_COMM.get(sym, ""), f"{sym}=F"]
     elif ac == "index":
-        out += [f"^{sym}"]
-    return list(dict.fromkeys(out))   # dédupliqué, ordre préservé
+        out += [_IDX.get(sym, ""), f"^{sym}", sym.replace(" ", "")]
+    elif ac in ("equity", "etf"):
+        # convention Yahoo : classes d'actions notées avec '-' (BRK.B → BRK-B) et inversement
+        if "." in sym:
+            out.append(sym.replace(".", "-"))
+        if "-" in sym:
+            out.append(sym.replace("-", "."))
+        out.append(sym.upper())
+    return [s for s in dict.fromkeys(out) if s]   # dédupliqué, ordre préservé, sans vide
 
 
 def _load_prices(instruments, sector_of, start, end, seed):
