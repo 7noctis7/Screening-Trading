@@ -35,3 +35,5 @@ apps/web/package-lock.json
 
 # artefact généré (régénéré via make interactive)
 apps/web/preview/interactive.html
+apps/web/preview/manifest.webmanifest
+apps/web/preview/sw.js

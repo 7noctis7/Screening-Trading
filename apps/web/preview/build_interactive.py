@@ -19,8 +19,14 @@ sys.path.insert(0, str(ROOT))
 from apps.api.snapshot import build_snapshot  # noqa: E402
 
 _TEMPLATE = r"""<!doctype html><html lang="fr"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Quant Terminal — interactif</title>
+<meta name="theme-color" content="#08090c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Quant Terminal">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2308090c'/%3E%3Crect x='16' y='16' width='32' height='32' rx='9' fill='url(%23g)'/%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop stop-color='%233b82f6'/%3E%3Cstop offset='1' stop-color='%2322d3ee'/%3E%3C/linearGradient%3E%3C/defs%3E%3C/svg%3E">
 <style>
 :root{--bg:#08090c;--bg2:#0c0e12;--surface:#121419;--surface2:#171a20;--surface3:#1d212a;
 --border:#23272f;--border2:#2d323c;--fg:#eef0f3;--muted:#9aa1ad;--muted2:#6b7280;
@@ -139,6 +145,7 @@ display:flex;align-items:center;justify-content:center;padding:20px;animation:fa
 <div class="tab active" data-p="dash" role="tab" tabindex="0" aria-selected="true">Dashboard</div>
 <div class="tab" data-p="themes" role="tab" tabindex="0" aria-selected="false">Thèmes de marché</div>
 <div class="tab" data-p="ml" role="tab" tabindex="0" aria-selected="false">Signaux ML</div>
+<div class="tab" data-p="sent" role="tab" tabindex="0" aria-selected="false">Sentiment &amp; news</div>
 <div class="tab" data-p="uni" role="tab" tabindex="0" aria-selected="false">Univers</div>
 <div class="tab" data-p="data" role="tab" tabindex="0" aria-selected="false">Données</div>
 <div class="tab" data-p="pf" role="tab" tabindex="0" aria-selected="false">Portefeuille &amp; Analyse</div>
@@ -149,6 +156,7 @@ display:flex;align-items:center;justify-content:center;padding:20px;animation:fa
 <div class="page active" id="dash"></div>
 <div class="page" id="themes"></div>
 <div class="page" id="ml"></div>
+<div class="page" id="sent"></div>
 <div class="page" id="uni"></div>
 <div class="page" id="data"></div>
 <div class="page" id="pf"></div>
@@ -906,11 +914,72 @@ BITMART_API_MEMO=xxxxxxxx</pre>
  }catch(e){console.error('rendu live:',e);}
 })();
 
+// ---- PWA : service worker (mode hors-ligne, « ajouter à l'écran d'accueil ») ----
+if('serviceWorker' in navigator){window.addEventListener('load',()=>{
+  navigator.serviceWorker.register('sw.js').catch(()=>{});});}
+
+// ---- Sentiment & news ----
+(function(){
+  const p=document.getElementById('sent');if(!p)return;
+  const S=DATA.sentiment||{};
+  if(!S.available){p.appendChild($(`<div class="card"><div class="label">Sentiment</div>
+    <p style="color:var(--muted)">Aucune donnée de sentiment.</p></div>`));return;}
+  const moodPct=Math.round(((S.market_mood||0)+1)/2*100);
+  const head=$(`<div class="card">
+    <div class="label">Humeur de marché (positions)</div>
+    <div style="display:flex;align-items:center;gap:14px;margin-top:8px">
+      <div style="font-size:26px;font-weight:700">${stanceTag(S.market_label,'')}</div>
+      <div style="flex:1">
+        <div style="height:10px;border-radius:6px;background:var(--surface3);overflow:hidden">
+          <div style="height:100%;width:${moodPct}%;background:linear-gradient(90deg,#f43f5e,#9aa1ad,#22c55e)"></div></div>
+        <div class="asof" style="margin-top:6px">score moyen <b>${(S.market_mood||0).toFixed(2)}</b> ·
+          moteur <b>${S.engine||'—'}</b> · source <b>${S.source||'—'}</b></div>
+      </div>
+    </div></div>`);
+  p.appendChild(head);
+  const rows=(S.rows||[]).map(r=>{
+    const hl=(r.headlines||[]).map(h=>h.link?`<a href="${h.link}" target="_blank" rel="noopener" style="color:var(--accent2)">${h.title}</a>`:h.title).join(' · ')||'<span style="color:var(--muted2)">—</span>';
+    return `<tr><td>${r.symbol}</td><td style="color:var(--muted)">${stanceTag(r.label,r.sector)}</td>
+      <td class="mono" data-sort="${r.score}" style="text-align:right;color:${r.score>0?'var(--pos)':r.score<0?'var(--neg)':'var(--muted)'}">${(r.score||0).toFixed(2)}</td>
+      <td class="mono" style="text-align:right">${r.n_news||0}</td>
+      <td style="font-size:11.5px">${hl}</td></tr>`;
+  });
+  const c=$(`<div class="card"><div class="label">Sentiment par position</div></div>`);
+  c.appendChild(mkTable('<th>Actif</th><th>Sentiment</th><th style="text-align:right">Score</th><th style="text-align:right">News</th><th>Titres</th>',rows));
+  p.appendChild(c);
+})();
+
 // ---- bandeau "données au…" en tête de chaque onglet + ouverture sur le 1er ----
-['dash','themes','ml','uni','data','pf','pos','trades','live'].forEach(id=>{
+['dash','themes','ml','sent','uni','data','pf','pos','trades','live'].forEach(id=>{
   const pg=document.getElementById(id);if(pg)pg.insertBefore(freshnessChip(id),pg.firstChild);
 });
 </script></body></html>"""
+
+
+# --- PWA : manifest + service worker (générés à côté de interactive.html) ---
+_ICON = ("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E"
+         "%3Crect width='512' height='512' rx='112' fill='%2308090c'/%3E%3Crect x='128' y='128' "
+         "width='256' height='256' rx='72' fill='url(%23g)'/%3E%3Cdefs%3E%3ClinearGradient id='g' "
+         "x1='0' y1='0' x2='1' y2='1'%3E%3Cstop stop-color='%233b82f6'/%3E%3Cstop offset='1' "
+         "stop-color='%2322d3ee'/%3E%3C/linearGradient%3E%3C/defs%3E%3C/svg%3E")
+_MANIFEST = {
+    "name": "Quant Terminal", "short_name": "Quant", "start_url": "interactive.html",
+    "scope": ".", "display": "standalone", "orientation": "any",
+    "background_color": "#08090c", "theme_color": "#08090c",
+    "description": "Terminal quant : screening & trading systématique multi-actifs.",
+    "icons": [{"src": _ICON, "sizes": "512x512", "type": "image/svg+xml", "purpose": "any maskable"}],
+}
+# Cache-first sur la coquille → ouverture instantanée + usage hors-ligne sur téléphone.
+_SW = """const C='quant-terminal-v1';const A=['interactive.html','manifest.webmanifest'];
+self.addEventListener('install',e=>{self.skipWaiting();
+  e.waitUntil(caches.open(C).then(c=>c.addAll(A).catch(()=>{})));});
+self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>
+  Promise.all(ks.filter(k=>k!==C).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
+self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;
+  e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(resp=>{
+    const cp=resp.clone();caches.open(C).then(c=>c.put(e.request,cp).catch(()=>{}));return resp;
+  }).catch(()=>caches.match('interactive.html'))));});
+"""
 
 
 def build() -> tuple[str, dict]:
@@ -919,10 +988,13 @@ def build() -> tuple[str, dict]:
 
 
 if __name__ == "__main__":
-    out = Path(__file__).resolve().parent / "interactive.html"
+    here = Path(__file__).resolve().parent
+    out = here / "interactive.html"
     html, meta = build()
     out.write_text(html, encoding="utf-8")
-    print(f"écrit : {out}")
+    (here / "manifest.webmanifest").write_text(json.dumps(_MANIFEST, ensure_ascii=False), encoding="utf-8")
+    (here / "sw.js").write_text(_SW, encoding="utf-8")
+    print(f"écrit : {out}  (+ manifest.webmanifest, sw.js — PWA installable)")
     print(f"  → MODE DES DONNÉES : {meta.get('mode')}   "
           f"(univers {meta.get('universe_size')} · tradés {meta.get('traded_assets')})")
     if meta.get("mode") == "synthetic":

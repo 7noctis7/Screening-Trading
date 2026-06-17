@@ -12,11 +12,16 @@ alpha > produit**. Architecture en **plugins** (« ajouter un fichier, jamais to
 
 ## ✨ Le terminal en un coup d'œil
 
-9 fenêtres : **Dashboard** (perf vs benchmarks, régime, playbook VIX, screener+ML) ·
+10 fenêtres : **Dashboard** (perf vs benchmarks, régime, playbook VIX, screener+ML) ·
 **Thèmes de marché** (heatmap YTD par secteur 4ᵉ révolution industrielle) · **Signaux ML** ·
+**Sentiment & news** (FinBERT optionnel / lexique / repli momentum, news RSS gratuites) ·
 **Univers** (929 actifs, recherche/filtres) · **Données** (collecte, qualité, base) ·
 **Portefeuille & Analyse** (mesures relatives, risque FRM, **Monte-Carlo interactif**, corrélation,
 revue experte) · **Positions** · **Trades** · **Portefeuille réel** (connexion Alpaca/Bitmart).
+
+> 📱 **Installable (PWA)** : la preview génère `manifest.webmanifest` + `sw.js` → « Ajouter à
+> l'écran d'accueil » sur téléphone = vraie app, utilisable **hors-ligne**.
+> 🤗 **Démo publique gratuite** : déployable en un Space HuggingFace (`deploy/hf_space/`).
 
 - **Capital fictif 10 000 $** alloué aux **meilleurs setups** (force relative), exposition
   **pilotée par le VIX** (1.0 / 0.7 / 0.4, **sans levier**), objectif : **surperformer l'univers équipondéré**.
