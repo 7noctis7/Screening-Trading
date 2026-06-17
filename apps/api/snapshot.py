@@ -808,6 +808,9 @@ def build_snapshot(seed: int = 7) -> dict:
         "synthetic", seed=101, drift=0.09, annual_vol=0.16).fetch_ohlcv("S&P 500", "1d", start, end)]
     bench_px = eqw
     benches = {"Univers (équipondéré)": eqw, "S&P 500": sp}
+    # backtest MULTI-STRATÉGIE sur l'indice équipondéré (tendance/momentum/retour moyenne + ensemble)
+    from packages.backtest.multi_strategy import run_multi_strategy
+    multi_strategy = run_multi_strategy(eqw)
 
     # --- analyse de portefeuille (mesures relatives, risque, thèmes, ML) ---
     rel = relative_metrics(equity, bench_px)
@@ -981,6 +984,7 @@ def build_snapshot(seed: int = 7) -> dict:
                 "stress": stress,
                 "optimal_allocation": optimal,
                 "review": PL.review_payload(expert_review({**agg, **comp["totals"]})),
+                "multi_strategy": multi_strategy,
             },
         },
         "trades": [PL.trade_payload(t) for t in recent],

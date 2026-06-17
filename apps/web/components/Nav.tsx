@@ -12,6 +12,7 @@ const LINKS: [string, string][] = [
   ["/universe", "Univers"],
   ["/data", "Données"],
   ["/portfolio", "Portefeuille & Analyse"],
+  ["/risk", "Risque"],
   ["/positions", "Positions"],
   ["/trades", "Trades"],
 ];

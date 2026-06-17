@@ -581,6 +581,21 @@ function portfolioBar(k){
       <span style="color:${lim.ok?'#22c55e':'#f59e0b'}">${lim.ok?'conforme':lim.breaches.length+' dépassement(s)'}</span></div></div>
       ${br?'<div style="margin-top:8px">'+br+'</div>':''}</div>`));
   }
+  // backtest multi-stratégie (indice équipondéré)
+  const ms=a.multi_strategy;
+  if(ms&&ms.available){
+    const mrows=[...ms.strategies,ms.combined].map(s=>`<tr><td>${s.name}</td>
+      <td class="mono" style="text-align:right;color:${s.total_return>=0?'#22c55e':'#f43f5e'}">${(s.total_return*100).toFixed(1)}%</td>
+      <td class="mono" style="text-align:right">${s.sharpe}</td>
+      <td class="mono" style="text-align:right;color:#f43f5e">${(s.max_drawdown*100).toFixed(1)}%</td>
+      <td class="mono" style="text-align:right;color:var(--muted)">${(s.exposure*100).toFixed(0)}%</td></tr>`).join('');
+    p.appendChild($(`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center">
+      <div class="label">Backtest multi-stratégie (indice équipondéré)</div>
+      <div style="font-size:12px;color:var(--muted)">meilleure : <b style="color:var(--fg)">${ms.best}</b></div></div>
+      <table style="width:100%;font-size:13px;margin-top:8px"><thead><tr><th style="text-align:left">Stratégie</th>
+      <th style="text-align:right">Rendement</th><th style="text-align:right">Sharpe</th>
+      <th style="text-align:right">Max DD</th><th style="text-align:right">Expo.</th></tr></thead><tbody>${mrows}</tbody></table></div>`));
+  }
   // allocation optimale suggérée (HRP / min-variance / risk parity)
   const op=a.optimal_allocation;
   if(op&&op.symbols&&op.symbols.length){
