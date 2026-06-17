@@ -54,8 +54,8 @@ export default function Fundamentals() {
       </div>
       {f.capped && (
         <div className="card p-3 text-xs" style={{ borderColor: "color-mix(in srgb, var(--warn) 40%, transparent)" }}>
-          ⚠️ Seulement <b>{f.n}</b> titres analysés sur {f.total_equities} : tu as une <b>clé FMP</b> active (plafond du free tier ≈ 40).
-          Pour analyser <b>tout l'univers</b>, retire <code className="mono">FMP_API_KEY</code> du <code className="mono">.env</code> (mode synthétique) et relance l'API.
+          ⚠️ <b>{f.n}</b> titres analysés sur {f.total_equities} : la source <b>{f.source}</b> est limitée (FMP free tier ≈40, yfinance ≈80 car réel & plus lent).
+          Pour <b>tout l'univers</b> : retire <code className="mono">FMP_API_KEY</code>/<code className="mono">QUANT_FUND</code> du <code className="mono">.env</code> (mode synthétique de démo) — ou garde la source réelle sur ce sous-ensemble pertinent.
         </div>
       )}
       <p className="text-muted text-xs">{f.method} · Seuls les <b>actions/ETF</b> ont des fondamentaux (crypto/forex/commodités exclus). <b>Clique un en-tête de colonne pour trier</b> (▲/▼), filtre, exporte en CSV.</p>
