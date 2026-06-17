@@ -32,3 +32,6 @@ apps/web/package-lock.json
 # OS
 .DS_Store
 *~
+
+# artefact généré (régénéré via make interactive)
+apps/web/preview/interactive.html

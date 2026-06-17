@@ -44,6 +44,34 @@ def _seed_universe() -> list[dict]:
     return list(seen.values())
 
 
+def _db_full_universe() -> list[dict] | None:
+    """Univers EXHAUSTIF depuis YAHOO.db (tous les tickers), si la base est branchée."""
+    db = _price_db_path()
+    if db is None:
+        return None
+    try:
+        from packages.data.providers.db_provider import DBPriceProvider
+        rows = DBPriceProvider(db).universe()
+    except Exception:  # noqa: BLE001
+        return None
+    if not rows:
+        return None
+    out = []
+    for r in rows:
+        s = r["symbol"]
+        su = s.upper()
+        ac = ("crypto" if (su.endswith("USDC") or su.endswith("USDT") or "/USD" in su or "-USD" in su)
+              else "forex" if ("/" in s and len(s) <= 7 and "USD" in su)
+              else "commodity" if "=F" in su
+              else "index" if su.startswith("^")
+              else "etf" if (r.get("sector") or "").lower() in ("etf", "fund")
+              else "equity")
+        out.append({"symbol": s, "name": r.get("name", ""), "asset_class": ac,
+                    "venue": r.get("venue", ""), "currency": r.get("currency", ""),
+                    "sector": r.get("sector", ""), "source": "YAHOO.db"})
+    return out
+
+
 def _universe_section(instruments: list[dict]) -> dict:
     """Vue UNIVERS : sources déclarées (offline/réseau), seeds, répartition par classe."""
     cfg = load_yaml(ROOT / "config" / "universe.yaml")
@@ -211,7 +239,7 @@ def _themes_section(data: dict, sector_of: dict, end) -> dict:
     }
 
 
-def _data_section(data: dict, acmap: dict[str, str]) -> dict:
+def _data_section(data: dict, acmap: dict[str, str], universe_total: int = 0) -> dict:
     """Vue DONNÉES : collecte (providers, barres, qualité) + couches de base de données."""
     import pandas as pd
 
@@ -237,6 +265,7 @@ def _data_section(data: dict, acmap: dict[str, str]) -> dict:
     return {
         "as_of": data[first][-1].ts.isoformat(),
         "symbols_total": len(symbols),
+        "universe_total": universe_total or len(symbols),   # total disponible (29k si YAHOO.db)
         "provider": "synthetic",
         "fallback_order": src_cfg.get("ohlcv", {}).get("fallback_order", []),
         "fundamentals_provider": src_cfg.get("fundamentals", {}).get("provider"),
@@ -444,6 +473,7 @@ def build_snapshot(seed: int = 7) -> dict:
     data, data_mode = _load_prices(instruments, sector_of, start, end, seed)
     n = max(len(b) for b in data.values())
     vix = _vix_series(n, seed)                    # VIX (playbook volatilité + modulation)
+    full_universe = _db_full_universe() or instruments   # univers EXHAUSTIF (29k tickers si DB)
 
     # --- backtest swing VECTORISÉ sur TOUT l'univers, capital fictif 10 000 $.
     # Profil offensif moyen-long terme : on alloue le cash aux MEILLEURS setups (tri par
@@ -595,8 +625,8 @@ def build_snapshot(seed: int = 7) -> dict:
         "trades": [PL.trade_payload(t) for t in recent],
         "open_trades": comp["rows"],
         "trade_stats": trade_stats,
-        "universe": _universe_section(instruments),
-        "data": _data_section(data, acmap),
+        "universe": _universe_section(full_universe),
+        "data": _data_section(data, acmap, len(full_universe)),
         "themes": themes,
         "ml": ml,
         "live": _live_section(comp["rows"], acmap, portfolio_kpis),

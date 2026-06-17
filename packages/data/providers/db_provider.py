@@ -126,8 +126,37 @@ class DBPriceProvider:
                 continue
             m = {str(r[1]).upper(): r[0] for r in rows if r[1] is not None}
             if m:
+                self._meta = (t, sym, idc)        # mémorise la table méta (pour universe())
                 return m
         return None
+
+    def universe(self) -> list[dict]:
+        """Liste COMPLÈTE des instruments de la base (symbole, nom, secteur, devise, place)."""
+        meta = getattr(self, "_meta", None)
+        if not meta:
+            return []
+        t, sym, _ = meta
+        cl = self._columns(t)
+        name = _pick(cl, ["name", "fullname", "longname", "label"])
+        sector = _pick(cl, ["sector", "industry", "gics"])
+        cur = _pick(cl, ["currency", "ccy", "devise"])
+        exch = _pick(cl, ["exchange", "venue", "market", "mic"])
+        cols = ", ".join(f'"{c}"' for c in (sym, name, sector, cur, exch) if c)
+        try:
+            rows = self._conn.execute(f'SELECT {cols} FROM "{t}"').fetchall()
+        except sqlite3.Error:
+            return []
+        out = []
+        for r in rows:
+            d = dict(r) if hasattr(r, "keys") else {}
+            s = d.get(sym) or (r[0] if r else None)
+            if not s:
+                continue
+            out.append({"symbol": str(s), "name": (d.get(name) or "") if name else "",
+                        "sector": (d.get(sector) or "") if sector else "",
+                        "currency": (d.get(cur) or "") if cur else "",
+                        "venue": (d.get(exch) or "") if exch else ""})
+        return out
 
     @property
     def schema(self) -> str:

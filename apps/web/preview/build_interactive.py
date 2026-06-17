@@ -304,6 +304,8 @@ function candleChart(sym,state){
   const ov=[];
   if(state.ma20)ov.push(['MM20',_sma(closes,20),'#3b82f6']);
   if(state.ma50)ov.push(['MM50',_sma(closes,50),'#f59e0b']);
+  if(state.ma100)ov.push(['MM100',_sma(closes,100),'#a78bfa']);
+  if(state.ma200)ov.push(['MM200',_sma(closes,200),'#e879f9']);
   if(state.ema20)ov.push(['EMA20',_ema(closes,20),'#22d3ee']);
   if(state.boll){const bb=_boll(closes,20,2);ov.push(['BB+',bb.u,'#9aa1ad'],['BB-',bb.lo,'#9aa1ad']);}
   const hi=Math.max(...data.map(d=>d.h),...ov.flatMap(o=>o[1].filter(v=>v!=null)));
@@ -350,7 +352,7 @@ function candleChart(sym,state){
     <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="overflow:visible">${yA}${vol}${candles}${ovl}${marks}${rsiSvg}${xA}</svg></div>`);
 }
 function openChart(sym){
-  const state={tf:'D',vol:true,ma20:true,ma50:true,ema20:false,boll:false,rsi:true};
+  const state={tf:'D',vol:true,ma20:true,ma50:true,ma100:false,ma200:false,ema20:false,boll:false,rsi:true};
   const ov=$('<div class="modal"></div>');
   const box=$('<div class="modalbox card"></div>');
   const head=$(`<div class="banner" style="margin-bottom:10px"><div class="label">Graphique technique — ${sym}</div>
@@ -363,7 +365,7 @@ function openChart(sym){
     const ch=$(`<span class="chip${state.tf===k?' on':''}">${lab}</span>`);
     ch.onclick=()=>{state.tf=k;tfbar.querySelectorAll('.chip').forEach(x=>x.classList.remove('on'));ch.classList.add('on');draw();};
     tfbar.appendChild(ch);});
-  [['vol','Volume'],['ma20','MM20'],['ma50','MM50'],['ema20','EMA20'],['boll','Bollinger'],['rsi','RSI']].forEach(([k,lab])=>{
+  [['vol','Volume'],['ma20','MM20'],['ma50','MM50'],['ma100','MM100'],['ma200','MM200'],['ema20','EMA20'],['boll','Bollinger'],['rsi','RSI']].forEach(([k,lab])=>{
     const ch=$(`<span class="chip${state[k]?' on':''}">${lab}</span>`);
     ch.onclick=()=>{state[k]=!state[k];ch.classList.toggle('on');draw();};toggles.appendChild(ch);});
   head.querySelector('.close').onclick=()=>ov.remove();
@@ -905,12 +907,19 @@ BITMART_API_MEMO=xxxxxxxx</pre>
 </script></body></html>"""
 
 
-def build() -> str:
+def build() -> tuple[str, dict]:
     snap = build_snapshot()
-    return _TEMPLATE.replace("__DATA__", json.dumps(snap))
+    return _TEMPLATE.replace("__DATA__", json.dumps(snap)), snap["meta"]
 
 
 if __name__ == "__main__":
     out = Path(__file__).resolve().parent / "interactive.html"
-    out.write_text(build(), encoding="utf-8")
+    html, meta = build()
+    out.write_text(html, encoding="utf-8")
     print(f"écrit : {out}")
+    print(f"  → MODE DES DONNÉES : {meta.get('mode')}   "
+          f"(univers {meta.get('universe_size')} · tradés {meta.get('traded_assets')})")
+    if meta.get("mode") == "synthetic":
+        print("  ⚠️  Toujours synthétique : vérifiez  echo $QUANT_PRICE_DB  (doit pointer YAHOO.db)")
+    else:
+        print("  ✅ Données RÉELLES utilisées (YAHOO.db).")
