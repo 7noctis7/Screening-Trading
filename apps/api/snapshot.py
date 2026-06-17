@@ -10,6 +10,10 @@ import csv
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from packages.common.env import load_env as _load_env
+
+_load_env()   # charge .env (clés brokers, FMP, QUANT_PRICE_DB, QUANT_NEWS, LLM_*) au plus tôt
+
 from apps.api import payloads as PL
 from packages.backtest.fast_swing import fast_swing_backtest
 from packages.common import load_yaml
