@@ -68,7 +68,14 @@ def positions() -> dict:
 def trades() -> dict:
     snap = _snap()
     return {"trades": snap["trades"], "open_trades": snap["open_trades"],
-            "stats": snap["trade_stats"]}
+            "stats": snap["trade_stats"],
+            "series": snap["dashboard"]["position_series"],
+            "markers": snap["dashboard"]["position_markers"]}
+
+
+@app.get("/api/sentiment")
+def sentiment() -> dict:
+    return _snap()["sentiment"]
 
 
 @app.get("/api/universe")

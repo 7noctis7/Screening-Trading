@@ -6,6 +6,7 @@ const LINKS: [string, string][] = [
   ["/", "Dashboard"],
   ["/themes", "Thèmes de marché"],
   ["/ml", "Signaux ML"],
+  ["/sentiment", "Sentiment & news"],
   ["/universe", "Univers"],
   ["/data", "Données"],
   ["/portfolio", "Portefeuille & Analyse"],
