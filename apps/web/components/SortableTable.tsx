@@ -55,10 +55,12 @@ export function SortableTable({ rows, cols, filterKeys, csvName, initialSort, pa
         <table className="w-full text-sm">
           <thead>
             <tr>{cols.map((c) => (
-              <th key={c.key} onClick={() => toggle(c.key)}
+              <th key={c.key} onClick={() => toggle(c.key)} title="Trier"
                 className="cursor-pointer select-none whitespace-nowrap hover:text-fg"
                 style={{ textAlign: c.align ?? (c.num ? "right" : "left") }}>
-                {c.label}{sort.key === c.key ? (sort.dir === "asc" ? " ▲" : " ▼") : ""}
+                {c.label}{sort.key === c.key
+                  ? <span style={{ color: "var(--accent2)" }}>{sort.dir === "asc" ? " ▲" : " ▼"}</span>
+                  : <span style={{ opacity: 0.35 }}> ↕</span>}
               </th>))}</tr>
           </thead>
           <tbody>{shown.map((row, i) => (

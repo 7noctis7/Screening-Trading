@@ -690,9 +690,11 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
     from packages.fundamentals.scoring import altman_z, f_score, f_score_label, piotroski_full
 
     prov, src = _fund_provider()
-    # cap : FMP free tier limité (≈250 appels/j, 4 appels/actif) → 40 ; synthétique → large
-    cap = 40 if src.startswith("FMP") else 400
-    eq = [s for s in symbols if acmap.get(s) in ("equity", "etf")][:cap]
+    all_eq = [s for s in symbols if acmap.get(s) in ("equity", "etf")]
+    # cap : FMP free tier limité (≈250 appels/j, 4 appels/actif) → 40 ; synthétique → tout l'univers
+    cap = 40 if src.startswith("FMP") else 2000
+    capped = src.startswith("FMP") and len(all_eq) > cap
+    eq = all_eq[:cap]
     if not eq:
         return {"available": False}
 
@@ -786,6 +788,7 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
     rows.sort(key=lambda r: r["combined_score"], reverse=True)
     buys = sum(1 for r in rows if r["rating"] == "BUY")
     return {"available": True, "source": src, "n": len(rows), "buys": buys, "rows": rows,
+            "total_equities": len(all_eq), "capped": capped,
             "method": "Score = rang percentile value (earnings+FCF yield) 50 % + quality "
                       "(ROIC+marge+conversion FCF) 50 % · DCF FCFF pour la marge de sécurité."}
 

@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { AICommentary } from "@/components/AICommentary";
+import { PipelineFull } from "@/components/Pipeline";
 
 // Page d'accueil : présentation, rôle de chaque fenêtre, et glossaire/méthodologie déroulant.
 
@@ -54,6 +55,8 @@ export default function Accueil() {
       </section>
 
       <AICommentary />
+
+      <PipelineFull />
 
       <section>
         <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Les fenêtres</h2>

@@ -2,6 +2,7 @@
 import { useFundamentals } from "@/lib/api";
 import { PageSkeleton, EmptyState } from "@/components/ui";
 import { SortableTable, type Col } from "@/components/SortableTable";
+import { StepBanner } from "@/components/Pipeline";
 
 const RC: Record<string, string> = { BUY: "#22c55e", HOLD: "#9aa1ad", SELL: "#f43f5e" };
 const pp = (x?: number) => (x == null ? "—" : `${(x * 100).toFixed(0)}%`);
@@ -44,13 +45,20 @@ export default function Fundamentals() {
   return (
     <main className="max-w-6xl mx-auto p-6 space-y-4">
       <h1 className="text-xl font-semibold tracking-tight">Analyse fondamentale</h1>
+      <StepBanner active="fundamentals" />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="card p-4"><div className="text-muted text-xs uppercase">Source</div><div className="text-lg mt-1">{f.source}</div></div>
-        <div className="card p-4"><div className="text-muted text-xs uppercase">Titres analysés</div><div className="text-lg mono mt-1">{f.n}</div></div>
+        <div className="card p-4"><div className="text-muted text-xs uppercase">Titres analysés</div><div className="text-lg mono mt-1">{f.n}{f.total_equities ? <span className="text-muted text-sm"> / {f.total_equities}</span> : null}</div></div>
         <div className="card p-4"><div className="text-muted text-xs uppercase">Signaux BUY</div><div className="text-lg mono mt-1" style={{ color: "#22c55e" }}>{f.buys}</div></div>
-        <div className="card p-4"><div className="text-muted text-xs uppercase">Tri</div><div className="text-sm mt-1 text-muted">clique un en-tête</div></div>
+        <div className="card p-4"><div className="text-muted text-xs uppercase">Reco SELL</div><div className="text-lg mono mt-1" style={{ color: "#f43f5e" }}>{(f.rows ?? []).filter((r: any) => r.rating === "SELL").length}</div></div>
       </div>
-      <p className="text-muted text-xs">{f.method} · Seuls les <b>actions/ETF</b> ont des fondamentaux (crypto/forex/commodités exclus). Trie en cliquant les colonnes, filtre, exporte en CSV.</p>
+      {f.capped && (
+        <div className="card p-3 text-xs" style={{ borderColor: "color-mix(in srgb, var(--warn) 40%, transparent)" }}>
+          ⚠️ Seulement <b>{f.n}</b> titres analysés sur {f.total_equities} : tu as une <b>clé FMP</b> active (plafond du free tier ≈ 40).
+          Pour analyser <b>tout l'univers</b>, retire <code className="mono">FMP_API_KEY</code> du <code className="mono">.env</code> (mode synthétique) et relance l'API.
+        </div>
+      )}
+      <p className="text-muted text-xs">{f.method} · Seuls les <b>actions/ETF</b> ont des fondamentaux (crypto/forex/commodités exclus). <b>Clique un en-tête de colonne pour trier</b> (▲/▼), filtre, exporte en CSV.</p>
       <section className="card p-4">
         <SortableTable rows={f.rows} cols={cols} filterKeys={["symbol", "sector"]} csvName="fondamentaux"
           initialSort={{ key: "combined_score", dir: "desc" }} />

@@ -42,7 +42,7 @@ def _default_model() -> str:
 
 
 def complete(prompt: str, system: str = "", temperature: float = 0.3,
-             max_tokens: int = 400) -> dict:
+             max_tokens: int = 1100) -> dict:
     """Chat completion. Renvoie {available, text} ; available=False si serveur injoignable."""
     msgs = ([{"role": "system", "content": system}] if system else []) + \
            [{"role": "user", "content": prompt}]
@@ -53,6 +53,9 @@ def complete(prompt: str, system: str = "", temperature: float = 0.3,
                                      headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=_TIMEOUT) as r:  # noqa: S310
             data = json.loads(r.read().decode())
-        return {"available": True, "text": data["choices"][0]["message"]["content"].strip()}
+        msg = data["choices"][0].get("message", {})
+        # modèles « raisonneurs » (gemma, etc.) : si content vide, récupérer reasoning_content
+        txt = (msg.get("content") or "").strip() or (msg.get("reasoning_content") or "").strip()
+        return {"available": True, "text": txt}
     except Exception as e:  # noqa: BLE001
         return {"available": False, "text": "", "reason": str(e)[:120]}

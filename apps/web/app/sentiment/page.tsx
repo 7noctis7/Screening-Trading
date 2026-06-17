@@ -1,4 +1,5 @@
 "use client";
+import { StepBanner } from "@/components/Pipeline";
 import { useSentiment } from "@/lib/api";
 import { PageSkeleton, EmptyState } from "@/components/ui";
 
@@ -23,6 +24,7 @@ export default function Sentiment() {
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-4">
       <h1 className="text-xl font-semibold tracking-tight">Sentiment &amp; news</h1>
+      <StepBanner active="sentiment" />
 
       <section className="card p-4">
         <div className="text-muted text-xs uppercase tracking-wide">Humeur de marché (positions)</div>

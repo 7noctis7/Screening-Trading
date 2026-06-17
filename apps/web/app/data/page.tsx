@@ -1,4 +1,5 @@
 "use client";
+import { StepBanner } from "@/components/Pipeline";
 import { useData } from "@/lib/api";
 import { PageSkeleton } from "@/components/ui";
 
@@ -20,6 +21,7 @@ export default function DataPage() {
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-4">
       <h1 className="text-xl font-semibold tracking-tight">Données</h1>
+      <StepBanner active="data" />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {cards.map(([lab, val]) => (
           <div key={lab} className="card p-4">

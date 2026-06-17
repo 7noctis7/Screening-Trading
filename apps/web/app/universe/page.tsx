@@ -1,4 +1,5 @@
 "use client";
+import { StepBanner } from "@/components/Pipeline";
 import { useMemo, useRef, useState } from "react";
 import { useUniverse } from "@/lib/api";
 import { PageSkeleton } from "@/components/ui";
@@ -42,6 +43,7 @@ export default function Universe() {
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-4">
       <h1 className="text-xl font-semibold tracking-tight">Univers</h1>
+      <StepBanner active="universe" />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {cards.map(([lab, val]) => (
           <div key={lab} className="card p-4">

@@ -1,4 +1,5 @@
 "use client";
+import { StepBanner } from "@/components/Pipeline";
 import { usePortfolio } from "@/lib/api";
 import { PageSkeleton } from "@/components/ui";
 
@@ -21,6 +22,7 @@ export default function Risk() {
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-4">
       <h1 className="text-xl font-semibold tracking-tight">Risque — vue institutionnelle</h1>
+      <StepBanner active="risk" />
 
       <section className="card p-4">
         <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Mesures de risque</h2>
