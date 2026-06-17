@@ -13,7 +13,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="fr" className="dark" suppressHydrationWarning>
       <head><script dangerouslySetInnerHTML={{ __html: themeInit }} /></head>
-      <body className="bg-bg text-fg antialiased"><Providers><Nav /><CommandPalette />{children}</Providers></body>
+      <body className="text-fg antialiased"><Providers><Nav /><CommandPalette />{children}</Providers></body>
     </html>
   );
 }
