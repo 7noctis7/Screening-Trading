@@ -165,9 +165,9 @@ def ai_commentary() -> dict:
         f"Sharpe déflaté {rm.get('dsr', 0)}.\n"
         f"Top screener: {top}."
     )
-    system = ("Tu es un analyste quant senior. Commente en français, en 4-6 phrases claires et "
-              "actionnables, l'état du portefeuille ci-dessous (risque, régime, idées). "
-              "Pas de conseil personnalisé, ton factuel et prudent.")
-    res = complete(facts, system=system, max_tokens=350)
+    system = ("Tu es un analyste quant senior. Réponds DIRECTEMENT en français, 4-6 phrases "
+              "claires et actionnables, sans afficher ton raisonnement. Commente l'état du "
+              "portefeuille (risque, régime, idées). Ton factuel et prudent, pas de conseil personnalisé.")
+    res = complete(facts, system=system, max_tokens=1100)
     return {"available": res.get("available", False), "text": res.get("text", ""),
             "reason": res.get("reason", "")}

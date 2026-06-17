@@ -1,4 +1,5 @@
 "use client";
+import { StepBanner } from "@/components/Pipeline";
 import { useDashboard, useScreener, useSentiment } from "@/lib/api";
 import { MetricCard } from "@/components/MetricCard";
 import { RegimeBanner } from "@/components/RegimeBanner";
@@ -18,6 +19,7 @@ export default function Dashboard() {
   return (
     <main className="max-w-6xl mx-auto p-6 space-y-4">
       <h1 className="text-xl font-semibold tracking-tight">Quant Terminal</h1>
+      <StepBanner active="screener" />
       <RegimeBanner regime={d.regime} />
       <SentimentBanner sentiment={sent} />
       <VixPlaybook vix={d.vix} playbook={d.vix_playbook} series={d.vix_series} />

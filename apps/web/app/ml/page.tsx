@@ -1,4 +1,5 @@
 "use client";
+import { StepBanner } from "@/components/Pipeline";
 import { useMl } from "@/lib/api";
 import { PageSkeleton, EmptyState } from "@/components/ui";
 
@@ -21,6 +22,7 @@ export default function Ml() {
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-4">
       <h1 className="text-xl font-semibold tracking-tight">Signaux ML</h1>
+      <StepBanner active="ml" />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {cards.map(([lab, val]) => (
           <div key={lab} className="card p-4">

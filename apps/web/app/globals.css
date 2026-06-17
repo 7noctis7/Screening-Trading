@@ -26,10 +26,24 @@ html { scroll-behavior: smooth; }
 /* Photo taureau/ours en ARRIÈRE-PLAN de tout le site (dépose apps/web/public/hero.jpg).
    Couche la plus basse ; si le fichier est absent, le dégradé du body prend le relais. */
 html::before {
-  content:""; position:fixed; inset:-4%; z-index:-3; pointer-events:none;
-  background:url('/hero.jpg') center/cover no-repeat;
-  opacity:.16; filter:blur(2px) saturate(1.05); will-change:transform;  /* discret, premium */
-  animation:kenburns 48s ease-in-out infinite alternate;   /* zoom/pan très lent = vivant, fluide */
+  content:""; position:fixed; inset:0; z-index:-3; pointer-events:none;
+  /* photo plus PETITE et centrée (pas plein cadre), très discrète */
+  background:url('/hero.jpg') no-repeat;
+  background-position:center 24%;
+  background-size:min(780px, 64%) auto;
+  opacity:.11; filter:blur(1px) saturate(1.05); will-change:transform;
+  animation:kenburns 52s ease-in-out infinite alternate;   /* mouvement quasi imperceptible */
+}
+/* Grille « tech / blockchain » très fine en surimpression (profondeur, modernité) */
+html::after {
+  content:""; position:fixed; inset:0; z-index:-3; pointer-events:none;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--accent) 7%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--accent) 7%, transparent) 1px, transparent 1px);
+  background-size:46px 46px;
+  mask-image:radial-gradient(circle at 50% 35%, #000 0%, transparent 72%);
+  -webkit-mask-image:radial-gradient(circle at 50% 35%, #000 0%, transparent 72%);
+  opacity:.5;
 }
 @keyframes kenburns {
   0%   { transform:scale(1.04) translate3d(0,0,0); }

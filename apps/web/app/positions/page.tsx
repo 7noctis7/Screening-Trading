@@ -1,4 +1,5 @@
 "use client";
+import { StepBanner } from "@/components/Pipeline";
 import { useState } from "react";
 import { usePositions, useSentiment } from "@/lib/api";
 import { TechnicalChart } from "@/components/TechnicalChart";
@@ -23,6 +24,7 @@ export default function Positions() {
     <main className="max-w-5xl mx-auto p-6 space-y-4">
       <h1 className="text-xl font-semibold tracking-tight">Positions <span className="text-xs font-normal px-2 py-0.5 rounded-full align-middle" style={{ background: "color-mix(in srgb, var(--warn) 18%, transparent)", color: "var(--warn)" }}>FICTIF · démo 10 000 $</span></h1>
       <p className="text-muted text-xs">Portefeuille de démonstration (modèle). Pour tes positions réelles → onglet <b>Portefeuille réel</b>.</p>
+      <StepBanner active="portfolio" />
 
       <section className="card p-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
