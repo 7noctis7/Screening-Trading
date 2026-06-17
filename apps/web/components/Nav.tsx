@@ -14,6 +14,7 @@ const LINKS: [string, string][] = [
   ["/fundamentals", "Fondamentaux"],
   ["/ml", "Signaux ML"],
   ["/sentiment", "Sentiment & news"],
+  ["/conviction", "Conviction"],
   ["/portfolio", "Portefeuille & Analyse"],
   ["/risk", "Risque"],
   ["/positions", "Positions"],

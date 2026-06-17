@@ -793,6 +793,48 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
                       "(ROIC+marge+conversion FCF) 50 % · DCF FCFF pour la marge de sécurité."}
 
 
+def _conviction_section(held: list, screener: dict, ml_scores: dict, sentiment: dict,
+                        fundamentals: dict, data: dict, sector_of: dict, names: dict) -> dict:
+    """Fusionne toutes les lentilles en une NOTE DE CONVICTION + allocation pilotée par conviction
+    et contrôlée par le risque (inverse-vol, plafonnée). Best practice multi-facteurs, poids égaux."""
+    from packages.strategies.conviction import conviction_rank, conviction_weights
+
+    fund_by = {r["symbol"]: r.get("combined_score") for r in fundamentals.get("rows", [])}
+    sent_by = {r["symbol"]: r.get("score") for r in sentiment.get("rows", [])}
+    cand = list(dict.fromkeys(list(held) + [r["symbol"] for r in screener.get("rows", [])]
+                              + list(ml_scores)))[:40]
+    signals: dict[str, dict] = {}
+    vol: dict[str, float] = {}
+    for s in cand:
+        bars = data.get(s)
+        if not bars or len(bars) < 80:
+            continue
+        c = [b.close for b in bars]
+        trend = c[-1] / c[-63] - 1 if len(c) > 63 else 0.0          # momentum 3 mois (point-in-time)
+        rets = [c[i] / c[i - 1] - 1 for i in range(1, len(c))][-252:]
+        import numpy as _np
+        vol[s] = float(_np.std(rets) * (252 ** 0.5)) if rets else 0.0
+        signals[s] = {
+            "trend": trend,
+            "ml": ml_scores.get(s),
+            "fundamental": (fund_by.get(s) / 100.0) if fund_by.get(s) is not None else None,
+            "sentiment": sent_by.get(s),
+        }
+    if len(signals) < 3:
+        return {"available": False}
+    ranked = conviction_rank(signals)
+    w = conviction_weights(ranked, vol, top_n=15, max_weight=0.20)
+    rows = [{"symbol": r["symbol"], "name": names.get(r["symbol"], ""),
+             "sector": sector_of.get(r["symbol"], ""), "conviction": r["conviction"],
+             **{k: r["components"].get(k) for k in ("trend", "ml", "fundamental", "sentiment")},
+             "target_weight": w.get(r["symbol"], 0.0)}
+            for r in ranked[:25]]
+    return {"available": True, "rows": rows,
+            "method": "Note = moyenne des z-scores (poids égaux) de : momentum 3 m, proba ML, "
+                      "qualité fondamentale, sentiment. Allocation = conviction × inverse-vol, "
+                      "plafonnée à 20 %. Discipline anti-surapprentissage (pas de poids optimisés)."}
+
+
 def _price_db_path() -> "Path | None":
     """Chemin d'une base de prix réelle. Priorité : env QUANT_PRICE_DB, puis emplacements
     usuels (data/, Bureau/Desktop) → branche automatiquement votre ~/Desktop/YAHOO.db."""
@@ -1065,6 +1107,14 @@ def build_snapshot(seed: int = 7) -> dict:
         "exposure_pct": round(min(1.0, invested / pf_value), 4) if pf_value else 0.0,
         "n_positions": len(comp["rows"]),
     }
+
+    # --- NOTE DE CONVICTION : fusion des lentilles (best practice multi-facteurs) ---
+    sentiment_sec = _sentiment_section(held, names, sector_of, data)
+    fundamentals_sec = _fundamentals_section(
+        list(dict.fromkeys(held + [r["symbol"] for r in screener["rows"]] + symbols)),
+        acmap, names, sector_of, data)
+    conviction_sec = _conviction_section(
+        held, screener, ml_scores, sentiment_sec, fundamentals_sec, data, sector_of, names)
     return {
         "meta": {
             "generated_at": now.isoformat(),
@@ -1118,10 +1168,9 @@ def build_snapshot(seed: int = 7) -> dict:
         "data": _data_section(data, acmap, len(full_universe)),
         "themes": themes,
         "ml": ml,
-        "sentiment": _sentiment_section(held, names, sector_of, data),
-        "fundamentals": _fundamentals_section(
-            list(dict.fromkeys(held + [r["symbol"] for r in screener["rows"]] + symbols)),
-            acmap, names, sector_of, data),
+        "sentiment": sentiment_sec,
+        "fundamentals": fundamentals_sec,
+        "conviction": conviction_sec,
         "live": _live_with_rebalance(comp["rows"], acmap, portfolio_kpis, w_by_name),
     }
 

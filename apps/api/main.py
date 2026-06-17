@@ -140,6 +140,11 @@ def live() -> dict:
     return _snap()["live"]
 
 
+@app.get("/api/conviction")
+def conviction() -> dict:
+    return _snap()["conviction"]
+
+
 @app.get("/api/ai/status")
 def ai_status() -> dict:
     """Disponibilité d'un LLM local (LM Studio / Ollama)."""
