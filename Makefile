@@ -1,7 +1,9 @@
-.PHONY: install test lint demos api api-lan web preview interactive ingest daily cron tearsheet live live-go clean
+.PHONY: install setup test lint demos api api-lan web preview interactive ingest daily cron tearsheet live live-go clean
 PYTHON ?= python3      ## sur macOS c'est python3 (surchargeable : make api PYTHON=python)
 install:          ## installe les dépendances (uv)
 	uv venv && uv pip install -e ".[dev,data,quant,api,ml]"
+setup:            ## installation locale guidée (venv, détection YAHOO.db, build, cron) — 1 commande
+	bash scripts/setup_local.sh
 test:             ## lance la suite de tests
 	$(PYTHON) -m pytest -q
 lint:             ## ruff + mypy
