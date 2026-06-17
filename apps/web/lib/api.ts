@@ -33,3 +33,4 @@ export const useSentiment = () => q("sentiment", "/api/sentiment", 60000);
 export const useFundamentals = () => q("fundamentals", "/api/fundamentals", 60000);
 export const useLive = () => q("live", "/api/live", 30000);
 export const useConviction = () => q("conviction", "/api/conviction", 60000);
+export const useInvestors = () => q("investors", "/api/investors", 60000);

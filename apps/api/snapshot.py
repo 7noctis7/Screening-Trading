@@ -824,13 +824,15 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
 
 
 def _conviction_section(held: list, screener: dict, ml_scores: dict, sentiment: dict,
-                        fundamentals: dict, data: dict, sector_of: dict, names: dict) -> dict:
+                        fundamentals: dict, investors: dict, data: dict, sector_of: dict,
+                        names: dict) -> dict:
     """Fusionne toutes les lentilles en une NOTE DE CONVICTION + allocation pilotée par conviction
     et contrôlée par le risque (inverse-vol, plafonnée). Best practice multi-facteurs, poids égaux."""
     from packages.strategies.conviction import conviction_rank, conviction_weights
 
     fund_by = {r["symbol"]: r.get("combined_score") for r in fundamentals.get("rows", [])}
     sent_by = {r["symbol"]: r.get("score") for r in sentiment.get("rows", [])}
+    inv_by = {r["symbol"]: r.get("overall") for r in investors.get("rows", [])}
     cand = list(dict.fromkeys(list(held) + [r["symbol"] for r in screener.get("rows", [])]
                               + list(ml_scores)))[:40]
     signals: dict[str, dict] = {}
@@ -849,6 +851,7 @@ def _conviction_section(held: list, screener: dict, ml_scores: dict, sentiment: 
             "ml": ml_scores.get(s),
             "fundamental": (fund_by.get(s) / 100.0) if fund_by.get(s) is not None else None,
             "sentiment": sent_by.get(s),
+            "investor": (inv_by.get(s) / 100.0) if inv_by.get(s) is not None else None,
         }
     if len(signals) < 3:
         return {"available": False}
@@ -859,13 +862,42 @@ def _conviction_section(held: list, screener: dict, ml_scores: dict, sentiment: 
     backtest = conviction_backtest(data)
     rows = [{"symbol": r["symbol"], "name": names.get(r["symbol"], ""),
              "sector": sector_of.get(r["symbol"], ""), "conviction": r["conviction"],
-             **{k: r["components"].get(k) for k in ("trend", "ml", "fundamental", "sentiment")},
+             **{k: r["components"].get(k) for k in ("trend", "ml", "fundamental", "sentiment", "investor")},
              "target_weight": w.get(r["symbol"], 0.0)}
             for r in ranked[:25]]
     return {"available": True, "rows": rows, "backtest": backtest,
             "method": "Note = moyenne des z-scores (poids égaux) de : momentum 3 m, proba ML, "
                       "qualité fondamentale, sentiment. Allocation = conviction × inverse-vol, "
                       "plafonnée à 20 %. Discipline anti-surapprentissage (pas de poids optimisés)."}
+
+
+def _investor_section(symbols: list, acmap: dict, names: dict, sector_of: dict) -> dict:
+    """Ranking « grands investisseurs » (Graham/Fisher/Thiel/Schwab). Actions/ETF uniquement."""
+    from packages.fundamentals.investor_scores import investor_scores
+    from packages.fundamentals.provider import degrade_prior
+
+    prov, src = _fund_provider()
+    cap = 40 if src.startswith("FMP") else (80 if src.startswith("yfinance") else 2000)
+    eq = [s for s in symbols if acmap.get(s) in ("equity", "etf")][:cap]
+    rows = []
+    for s in eq:
+        try:
+            f = prov.get(s)
+        except Exception:  # noqa: BLE001
+            f = None
+        if f is None:
+            continue
+        sec = sector_of.get(s, "")
+        prev = degrade_prior(f)
+        sc = investor_scores(f, sec, prev)
+        rows.append({"symbol": s, "name": names.get(s, ""), "sector": sec, **sc})
+    if not rows:
+        return {"available": False}
+    rows.sort(key=lambda r: r["overall"], reverse=True)
+    return {"available": True, "source": src, "n": len(rows), "rows": rows,
+            "method": "Scores 0-100 par doctrine (% de critères respectés) : Graham (value défensive), "
+                      "Fisher (qualité-croissance), Thiel (moat/monopole), Schwab (4ᵉ révolution). "
+                      "Overall = moyenne des 4."}
 
 
 def _price_db_path() -> "Path | None":
@@ -1149,11 +1181,12 @@ def build_snapshot(seed: int = 7) -> dict:
 
     # --- NOTE DE CONVICTION : fusion des lentilles (best practice multi-facteurs) ---
     sentiment_sec = _sentiment_section(held, names, sector_of, data)
-    fundamentals_sec = _fundamentals_section(
-        list(dict.fromkeys(held + [r["symbol"] for r in screener["rows"]] + symbols)),
-        acmap, names, sector_of, data)
+    _cand_eq = list(dict.fromkeys(held + [r["symbol"] for r in screener["rows"]] + symbols))
+    fundamentals_sec = _fundamentals_section(_cand_eq, acmap, names, sector_of, data)
+    investors_sec = _investor_section(_cand_eq, acmap, names, sector_of)
     conviction_sec = _conviction_section(
-        held, screener, ml_scores, sentiment_sec, fundamentals_sec, data, sector_of, names)
+        held, screener, ml_scores, sentiment_sec, fundamentals_sec, investors_sec,
+        data, sector_of, names)
     return {
         "meta": {
             "generated_at": now.isoformat(),
@@ -1211,6 +1244,7 @@ def build_snapshot(seed: int = 7) -> dict:
         "ml": ml,
         "sentiment": sentiment_sec,
         "fundamentals": fundamentals_sec,
+        "investors": investors_sec,
         "conviction": conviction_sec,
         "live": _live_with_rebalance(comp["rows"], acmap, portfolio_kpis, w_by_name),
     }
