@@ -20,3 +20,10 @@ def test_ivp_favors_low_variance():
 
 def test_single_asset():
     assert hrp_weights([[0.04]]) == [1.0]
+
+
+def test_erc_weights_valid():
+    from packages.portfolio.optimize import equal_risk_contribution
+    w = equal_risk_contribution([[0.04, 0.0, 0.0], [0.0, 0.09, 0.0], [0.0, 0.0, 0.16]])
+    assert abs(sum(w) - 1.0) < 1e-6 and all(x > 0 for x in w)
+    assert w[0] > w[2]      # actif moins risqué → plus de poids (parité du risque)

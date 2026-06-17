@@ -36,6 +36,24 @@ def _assets(f: Financials) -> float:
     return max(1e-9, f.total_equity + f.total_debt)
 
 
+def altman_z(f: Financials) -> dict:
+    """Score Z d'Altman (risque de faillite) — version approchée sur fondamentaux disponibles.
+
+    Z = 1.2·X1 + 1.4·X2 + 3.3·X3 + 0.6·X4 + 1.0·X5
+    (X1≈cash/actif, X2≈capitaux propres/actif [proxy bénéfices non distribués],
+     X3=EBIT/actif, X4=capitalisation/dette, X5=CA/actif). Z>2.99 sûr · <1.81 détresse.
+    """
+    ta = _assets(f)
+    x1 = f.cash / ta
+    x2 = f.total_equity / ta
+    x3 = f.ebit / ta
+    x4 = (f.price * f.shares) / max(1e-9, f.total_debt)
+    x5 = f.revenue / ta
+    z = 1.2 * x1 + 1.4 * x2 + 3.3 * x3 + 0.6 * x4 + 1.0 * x5
+    zone = "sûr" if z > 2.99 else ("gris" if z >= 1.81 else "détresse")
+    return {"z": round(z, 2), "zone": zone}
+
+
 def piotroski_full(curr: Financials, prev: Financials) -> int:
     """Piotroski F-score complet (0-9) avec variations annuelles (curr vs prev)."""
     roa_c = curr.net_income / _assets(curr)

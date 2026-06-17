@@ -35,6 +35,24 @@ def min_variance_weights(cov) -> list[float]:
         return [1.0 / n] * n
 
 
+def equal_risk_contribution(cov, iters: int = 500) -> list[float]:
+    """Risk parity (ERC) : chaque actif contribue également au risque (algo itératif, long-only)."""
+    C = np.asarray(cov, dtype=float)
+    n = C.shape[0]
+    if n == 0:
+        return []
+    if n == 1:
+        return [1.0]
+    w = np.ones(n) / n
+    for _ in range(iters):
+        rc = w * (C @ w)                       # contributions au risque
+        target = rc.mean()
+        grad = rc - target
+        w = np.clip(w - 0.01 * grad, 1e-6, None)
+        w /= w.sum()
+    return w.tolist()
+
+
 def _seriation(corr: np.ndarray) -> list[int]:
     """Ordre quasi-diagonal : seriation gloutonne par plus forte corrélation (proxy linkage)."""
     n = corr.shape[0]
