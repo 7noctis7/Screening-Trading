@@ -358,15 +358,40 @@ def _auc(scores, y) -> float | None:
     return float((ranks[y == 1].sum() - n_pos * (n_pos + 1) / 2) / (n_pos * n_neg))
 
 
+def _ml_model():
+    """Modèle d'edge : Gradient Boosting (sklearn) si disponible, sinon régression
+    logistique numpy pure (toujours fonctionnel, sans dépendance)."""
+    try:
+        from packages.ml.model import SklearnModel
+        return SklearnModel(), "Gradient Boosting (sklearn)"
+    except Exception:  # noqa: BLE001
+        from packages.ml.model import LogitModel
+        return LogitModel(epochs=400), "régression logistique (numpy)"
+
+
+def _feat_importance(model, names, X, y):
+    """Importance des variables : native (arbres) sinon |poids| (logit) sinon permutation."""
+    import numpy as np
+    clf = getattr(getattr(model, "pipe", None), "named_steps", {}).get("clf") if hasattr(model, "pipe") else None
+    if clf is not None and hasattr(clf, "feature_importances_"):
+        vals = [float(v) for v in clf.feature_importances_]
+    elif hasattr(model, "w") and model.w is not None:
+        vals = [abs(float(v)) for v in model.w]
+    else:
+        vals = [1.0] * len(names)
+    return sorted(zip(names, vals), key=lambda kv: -kv[1])
+
+
 def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
     """Score ML d'edge (proba de hausse à ~1 mois) entraîné en CROSS-SECTION sur TOUT
-    l'univers (régression logistique numpy pure, sans dépendance). Holdout temporel + AUC."""
+    l'univers. Validation par CV PURGÉE + EMBARGO (López de Prado) ; GBM si dispo, sinon logit.
+    Suivi mlflow optionnel. Anti look-ahead : features point-in-time, labels purgés."""
     import numpy as np
 
     from packages.indicators.momentum import RSI
     from packages.indicators.trend import SMA
     from packages.indicators.volatility import ATR
-    from packages.ml.model import LogitModel
+    from packages.ml.cv import PurgedKFold
 
     H = 21  # horizon ~1 mois (profil moyen-long terme)
 
@@ -376,36 +401,70 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
         return [c[t] / c[t - 20] - 1, c[t] / c[t - 60] - 1,
                 (c[t] - sma[t]) / sma[t], rsi[t] / 100.0, atr[t] / c[t]]
 
-    X, y, Xh, yh, last = [], [], [], [], {}
+    X, y, T0, T1, last = [], [], [], [], {}    # T0/T1 = fenêtre du label (pour la purge)
     for s, bars in data.items():
         c = np.array([b.close for b in bars], float)
         ncl = len(c)
         if ncl < 90 + H:
             continue
         sma, rsi, atr = SMA(50).compute(bars), RSI(14).compute(bars), ATR(14).compute(bars)
-        split = ncl - 252                       # 1 an de holdout out-of-time
         for t in range(60, ncl - H, 5):
             f = feats(c, sma, rsi, atr, t)
             if f is None:
                 continue
-            lab = 1.0 if c[t + H] > c[t] else 0.0
-            (X if t < split else Xh).append(f)
-            (y if t < split else yh).append(lab)
+            X.append(f); y.append(1.0 if c[t + H] > c[t] else 0.0)
+            T0.append(t); T1.append(t + H)     # le label couvre [t, t+H] → purge des chevauchements
         fl = feats(c, sma, rsi, atr, ncl - 1)
         if fl is not None:
             last[s] = fl
-    if len(X) < 200:
+    if len(X) < 500:
         return {"available": False}
-    model = LogitModel(epochs=400).fit(np.array(X), np.array(y))
-    auc = _auc(model.predict_proba(np.array(Xh)), yh) if len(yh) > 50 else None
+    X, y, T0, T1 = np.array(X), np.array(y), np.array(T0), np.array(T1)
+    if len(X) > 60000:                          # borne le coût (sous-échantillon reproductible)
+        idx = np.random.default_rng(0).choice(len(X), 60000, replace=False)
+        X, y, T0, T1 = X[idx], y[idx], T0[idx], T1[idx]
+    order = np.argsort(T0, kind="stable")       # TRI temporel requis par la CV purgée
+    X, y, T0, T1 = X[order], y[order], T0[order], T1[order]
+    model, model_name = _ml_model()
+
+    # CV PURGÉE + EMBARGO : AUC out-of-sample honnête (labels chevauchants neutralisés)
+    aucs, n_splits = [], 5
+    try:
+        for tr, te in PurgedKFold(n_splits=n_splits, embargo_pct=0.01).split(T0, T1):
+            if len(tr) < 100 or len(te) < 30 or len(set(y[te])) < 2:
+                continue
+            m, _ = _ml_model()
+            m.fit(X[tr], y[tr])
+            a = _auc(m.predict_proba(X[te]), y[te])
+            if a is not None:
+                aucs.append(a)
+    except Exception:  # noqa: BLE001 — CV indisponible → on continue sans
+        pass
+    cv_auc = round(float(np.mean(aucs)), 3) if aucs else None
+
+    model.fit(X, y)                              # modèle final sur tout l'échantillon
+    fn = ["momentum 1 mois", "momentum 3 mois", "tendance vs MM50", "RSI", "volatilité (ATR)"]
+    imp = _feat_importance(model, fn, X, y)
+    mx = max((v for _, v in imp), default=1.0) or 1.0
     probs = {s: float(model.predict_proba([f])[0]) for s, f in last.items()}
     top = sorted(probs.items(), key=lambda kv: kv[1], reverse=True)[:15]
-    fn = ["momentum 1 mois", "momentum 3 mois", "tendance vs MM50", "RSI", "volatilité (ATR)"]
-    imp = sorted(zip(fn, [abs(float(w)) for w in model.w]), key=lambda kv: -kv[1])
+
+    try:                                        # suivi d'expérience mlflow (optionnel)
+        import mlflow
+        mlflow.set_experiment("quant-terminal-ml")
+        with mlflow.start_run(run_name="edge_cross_section"):
+            mlflow.log_params({"model": model_name, "horizon": H, "n_splits": n_splits,
+                               "n_samples": len(X)})
+            if cv_auc is not None:
+                mlflow.log_metric("cv_auc_purged", cv_auc)
+    except Exception:  # noqa: BLE001
+        pass
+
     return {
-        "available": True, "model": "régression logistique (numpy)", "horizon_days": H,
-        "n_train": len(X), "n_holdout": len(yh), "auc": round(auc, 3) if auc else None,
-        "feature_importance": [{"feature": f, "weight": round(w, 3)} for f, w in imp],
+        "available": True, "model": model_name, "horizon_days": H,
+        "validation": f"CV purgée + embargo (k={n_splits})",
+        "n_train": int(len(X)), "n_splits": len(aucs), "auc": cv_auc,
+        "feature_importance": [{"feature": f, "weight": round(v / mx, 3)} for f, v in imp],
         "top_conviction": [{"symbol": s, "name": names.get(s, ""),
                             "sector": sector_of.get(s, ""), "ml_score": round(p, 3)}
                            for s, p in top],
@@ -429,6 +488,23 @@ def _price_db_path() -> "Path | None":
     return None
 
 
+def _yahoo_aliases(sym: str, ac: str) -> list[str]:
+    """Variantes de symbole au format Yahoo (pour retrouver crypto/forex dans YAHOO.db).
+    BTC/USDC → BTC-USD · ETH/USDC → ETH-USD · EUR/USD → EURUSD=X · USD/JPY → JPY=X."""
+    out = [sym]
+    if ac == "crypto" and "/" in sym:
+        base = sym.split("/")[0]
+        out += [f"{base}-USD", f"{base}USD", f"{base}-USDC", base]
+    elif ac == "forex" and "/" in sym:
+        a, b = sym.split("/")[:2]
+        out += [f"{a}{b}=X", f"{b}=X" if a == "USD" else f"{a}{b}=X"]
+    elif ac == "commodity":
+        out += [f"{sym}=F"]
+    elif ac == "index":
+        out += [f"^{sym}"]
+    return list(dict.fromkeys(out))   # dédupliqué, ordre préservé
+
+
 def _load_prices(instruments, sector_of, start, end, seed):
     """Charge l'OHLCV : base RÉELLE (YAHOO.db…) en priorité, sinon synthétique sectorisé
     (et synthétique en complément pour les symboles absents de la base). Renvoie (data, mode)."""
@@ -443,7 +519,12 @@ def _load_prices(instruments, sector_of, start, end, seed):
             prov_db = None
     for m in instruments:
         s = m["symbol"]
-        bars = prov_db.fetch_ohlcv(s, "1d", start, end) if prov_db else []
+        bars = []
+        if prov_db:                                  # essaie le symbole + ses alias Yahoo
+            for alias in _yahoo_aliases(s, m.get("asset_class", "equity")):
+                bars = prov_db.fetch_ohlcv(alias, "1d", start, end)
+                if len(bars) >= 250:
+                    break
         if len(bars) >= 250:
             data[s] = bars
             n_real += 1

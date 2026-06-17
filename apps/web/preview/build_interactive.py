@@ -823,11 +823,11 @@ const heatColor=(v,m)=>{const t=Math.max(-1,Math.min(1,v/m));
   const ml=DATA.ml,p=document.getElementById('ml');if(!ml)return;
   if(!ml.available){p.appendChild($('<div class="card"><p style="color:var(--muted);font-size:13px">Modèle ML indisponible (échantillon insuffisant).</p></div>'));return;}
   const g=$('<div class="grid4"></div>');
-  [['Modèle',ml.model],['AUC (out-of-time)',ml.auc!=null?ml.auc:'—'],
+  [['Modèle',ml.model],['AUC (CV purgée)',ml.auc!=null?ml.auc:'—'],
    ['Échantillon (train)',eur(ml.n_train)],['Horizon',ml.horizon_days+' j']]
    .forEach(([lab,val])=>g.appendChild($(`<div class="card metric"><div class="label">${lab}</div><div class="val" style="font-size:20px">${val}</div></div>`)));
   p.appendChild(g);
-  p.appendChild($(`<div style="font-size:11px;color:var(--muted);margin-top:-4px">Régression logistique entraînée en cross-section sur TOUT l'univers (features : momentum 1m/3m, tendance vs MM50, RSI, volatilité). Score = probabilité de hausse à ~${ml.horizon_days} j. Validation hors-échantillon temporelle (AUC).</div>`));
+  p.appendChild($(`<div style="font-size:11px;color:var(--muted);margin-top:-4px"><b style="color:var(--fg)">${ml.model}</b> entraîné en cross-section sur TOUT l'univers (features : momentum 1m/3m, tendance vs MM50, RSI, volatilité). Score = probabilité de hausse à ~${ml.horizon_days} j. Validation : <b style="color:var(--fg)">${ml.validation||'CV purgée + embargo'}</b> (López de Prado, anti-fuite des labels chevauchants).</div>`));
   // top conviction
   const tc=$(`<div class="card"><div class="label" style="margin-bottom:10px">Top convictions ML (proba de hausse la plus élevée)</div></div>`);
   const rows=ml.top_conviction.map(a=>`<tr><td class="mono"><b>${a.symbol}</b></td><td style="color:var(--muted)">${a.name||''}</td>
