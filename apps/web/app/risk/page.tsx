@@ -34,7 +34,12 @@ export default function Risk() {
           <Stat label="Proba ruine (MC)" value={pct(a.monte_carlo?.p_ruin)} />
           <Stat label="Sharpe probabiliste" value={pct(rm.psr)} />
           <Stat label="Sharpe déflaté" value={pct(rm.dsr)} tone={rm.dsr >= 0.9 ? "#22c55e" : undefined} />
+          {rm.evt?.available && <Stat label="VaR 99.9% (EVT)" value={pct(rm.evt.var)} tone="#f43f5e" />}
+          {rm.evt?.available && <Stat label="ES 99.9% (EVT)" value={pct(rm.evt.es)} tone="#f43f5e" />}
+          {rm.liquidity?.available && <Stat label="Liquidation (jours pond.)" value={String(rm.liquidity.weighted_days)} />}
+          {rm.liquidity?.available && <Stat label="Part illiquide" value={pct(rm.liquidity.illiquid_pct)} tone={rm.liquidity.illiquid_pct > 0.2 ? "#f59e0b" : undefined} />}
         </div>
+        <p className="text-muted2 text-xs mt-2">EVT = théorie des valeurs extrêmes (Peaks-Over-Threshold + GPD) pour le risque de queue ; liquidité estimée via l'ADV (participation 10 %).</p>
       </section>
 
       {(vb || fr?.available) && (

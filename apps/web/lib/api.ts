@@ -9,14 +9,19 @@ async function get<T>(path: string): Promise<T> {
   return r.json();
 }
 
-export const useDashboard = () => useQuery({ queryKey: ["dashboard"], queryFn: () => get<any>("/api/dashboard"), refetchInterval: 15000 });
-export const useScreener = () => useQuery({ queryKey: ["screener"], queryFn: () => get<any>("/api/screener") });
-export const usePortfolio = () => useQuery({ queryKey: ["portfolio"], queryFn: () => get<any>("/api/portfolio") });
-export const usePositions = () => useQuery({ queryKey: ["positions"], queryFn: () => get<any>("/api/positions") });
-export const useTrades = () => useQuery({ queryKey: ["trades"], queryFn: () => get<any>("/api/trades") });
-export const useUniverse = () => useQuery({ queryKey: ["universe"], queryFn: () => get<any>("/api/universe") });
-export const useData = () => useQuery({ queryKey: ["data"], queryFn: () => get<any>("/api/data") });
-export const useThemes = () => useQuery({ queryKey: ["themes"], queryFn: () => get<any>("/api/themes") });
-export const useMl = () => useQuery({ queryKey: ["ml"], queryFn: () => get<any>("/api/ml") });
-export const useSentiment = () => useQuery({ queryKey: ["sentiment"], queryFn: () => get<any>("/api/sentiment") });
-export const useFundamentals = () => useQuery({ queryKey: ["fundamentals"], queryFn: () => get<any>("/api/fundamentals") });
+// Auto-rafraîchissement (mode "live" par polling) — TTL serveur 15 min, UI réactive.
+const LIVE = 30000;
+const q = (key: string, path: string, ms: number = LIVE) =>
+  useQuery({ queryKey: [key], queryFn: () => get<any>(path), refetchInterval: ms, refetchOnWindowFocus: true });
+
+export const useDashboard = () => q("dashboard", "/api/dashboard", 15000);
+export const useScreener = () => q("screener", "/api/screener");
+export const usePortfolio = () => q("portfolio", "/api/portfolio");
+export const usePositions = () => q("positions", "/api/positions");
+export const useTrades = () => q("trades", "/api/trades");
+export const useUniverse = () => q("universe", "/api/universe", 120000);
+export const useData = () => q("data", "/api/data");
+export const useThemes = () => q("themes", "/api/themes");
+export const useMl = () => q("ml", "/api/ml", 60000);
+export const useSentiment = () => q("sentiment", "/api/sentiment", 60000);
+export const useFundamentals = () => q("fundamentals", "/api/fundamentals", 60000);
