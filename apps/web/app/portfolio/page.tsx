@@ -10,7 +10,7 @@ export default function Portfolio() {
   const { data } = usePortfolio();
   if (!data) return <PageSkeleton />;
   const a = data.analysis, rel = a?.relative ?? {}, rm = a?.risk ?? {};
-  const rb = a?.risk_budget, lim = a?.limits;
+  const rb = a?.risk_budget, lim = a?.limits, stress = a?.stress;
   const maxc = Math.max(0.01, ...(rb?.contrib_pct ?? [0]));
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-4">
@@ -73,6 +73,36 @@ export default function Portfolio() {
               </div>
             ))}
           </div>
+        </section>
+      )}
+
+      {/* Stress-tests macro + couverture */}
+      {stress?.scenarios?.length > 0 && (
+        <section className="card p-4">
+          <h2 className="text-sm uppercase tracking-wide text-muted mb-2">Stress-tests macro</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-muted text-xs">
+                <tr><th className="text-left font-normal">Scénario</th>
+                <th className="text-right font-normal">Impact P&amp;L</th>
+                <th className="text-right font-normal">Valeur après choc</th></tr>
+              </thead>
+              <tbody>{stress.scenarios.map((s: any) => (
+                <tr key={s.name} className="border-t border-border">
+                  <td className="py-1.5">{s.name}</td>
+                  <td className="text-right mono" style={{ color: s.pnl_pct >= 0 ? "#22c55e" : "#f43f5e" }}>{(s.pnl_pct * 100).toFixed(1)}%</td>
+                  <td className="text-right mono text-muted">{((1 + s.pnl_pct) * 100).toFixed(0)}%</td>
+                </tr>))}</tbody>
+            </table>
+          </div>
+          {stress.hedge && (
+            <div className="mt-3 text-xs p-3 rounded-lg" style={{ background: "var(--surface3)" }}>
+              <b>Couverture</b> — pire scénario : <span className="mono" style={{ color: "#f43f5e" }}>{(stress.hedge.worst_pnl_pct * 100).toFixed(1)}%</span> ({stress.hedge.worst_scenario}).{" "}
+              {stress.hedge.needed
+                ? <>Suggestion : short indiciel ≈ <b className="mono">{(stress.hedge.hedge_pct * 100).toFixed(1)}%</b> du portefeuille pour viser ≤ {(stress.hedge.target_max_loss * 100).toFixed(0)}% — {stress.hedge.rationale}.</>
+                : <>{stress.hedge.rationale} (seuil {(stress.hedge.target_max_loss * 100).toFixed(0)}%).</>}
+            </div>
+          )}
         </section>
       )}
 
