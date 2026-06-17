@@ -1,4 +1,4 @@
-.PHONY: install setup test lint demos api api-lan web preview interactive ingest daily cron tearsheet backtest-ml backtest-weighting backtest-earnings live live-go clean
+.PHONY: install setup test lint demos api api-lan web preview interactive ingest daily cron tearsheet backtest-ml backtest-weighting backtest-earnings backtest-breakout live live-go clean
 PYTHON ?= python3      ## sur macOS c'est python3 (surchargeable : make api PYTHON=python)
 install:          ## installe les dépendances (uv)
 	uv venv && uv pip install -e ".[dev,data,quant,api,ml]"
@@ -36,6 +36,8 @@ backtest-weighting:  ## compare equipondere/inverse-vol/min-var/risk-parity (net
 	$(PYTHON) scripts/backtest_weighting.py
 backtest-earnings:   ## backtest PEAD (earnings drift, dates via yfinance)
 	$(PYTHON) scripts/backtest_earnings.py
+backtest-breakout:   ## backtest cassures Donchian + measure rule (Bulkowski)
+	$(PYTHON) scripts/backtest_breakout.py
 live:             ## APERÇU des ordres à répliquer (dry-run, aucun ordre envoyé)
 	$(PYTHON) scripts/run_live.py --equity 10000
 live-go:          ## EXÉCUTE en paper (Alpaca paper + Bitmart) — clés API requises
