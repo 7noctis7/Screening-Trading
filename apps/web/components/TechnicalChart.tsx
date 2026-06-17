@@ -86,23 +86,32 @@ export function TechnicalChart({ data, markers = [], height = 360 }:
       });
       candles.setData(bars.map((d) => ({ time: d.t, open: d.o, high: d.h, low: d.l, close: d.c })));
 
-      if (showVol) {
+      const closes = bars.map((d) => d.c);
+      const tOf = (i: number) => bars[i].t;
+      // --- panneaux bas EMPILÉS sans chevauchement (volume / RSI / MACD) ---
+      const PANE = 0.17;                                   // hauteur d'un sous-panneau
+      const subs = ["vol", "rsi", "macd"].filter((k) => vis[k] && closes.length > 26);
+      const mainBottom = subs.length * PANE;
+      candles.priceScale().applyOptions({ scaleMargins: { top: 0.05, bottom: Math.min(0.6, mainBottom) || 0.05 } });
+      const paneMargins = (k: string) => {
+        const j = subs.indexOf(k);                         // 0 = le plus bas
+        return { top: 1 - (j + 1) * PANE, bottom: j * PANE };
+      };
+
+      if (vis.vol && closes.length > 1) {
         const vol = chart.addHistogramSeries({ priceScaleId: "vol", priceFormat: { type: "volume" } });
-        vol.priceScale().applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
-        vol.setData(bars.map((d) => ({
-          time: d.t, value: d.v ?? 0,
-          color: d.c >= d.o ? "rgba(34,197,94,.5)" : "rgba(244,63,94,.5)",
-        })));
+        vol.priceScale().applyOptions({ scaleMargins: paneMargins("vol") });
+        vol.setData(bars.map((d) => ({ time: d.t, value: d.v ?? 0,
+          color: d.c >= d.o ? "rgba(34,197,94,.5)" : "rgba(244,63,94,.5)" })));
       }
 
-      const closes = bars.map((d) => d.c);
       for (const { p, color } of MAS) {
         if (!vis[`ma${p}`] || closes.length <= p) continue;
         const vals = sma(closes, p);
         const s = chart.addLineSeries({ color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
         s.setData(bars.map((d, i) => ({ time: d.t, value: vals[i] })).filter((x: any) => x.value != null));
       }
-      // Bandes de Bollinger (20, 2σ)
+      // Bandes de Bollinger (20, 2σ) — overlay sur le prix
       if (vis.boll && closes.length > 20) {
         const mid = sma(closes, 20);
         const band = (mult: number) => closes.map((_, i) => {
@@ -112,12 +121,12 @@ export function TechnicalChart({ data, markers = [], height = 360 }:
           const sd = Math.sqrt(win.reduce((a, x) => a + (x - m) ** 2, 0) / 20);
           return m + mult * sd;
         });
-        for (const [vals, c] of [[band(2), "rgba(34,211,238,.5)"], [band(-2), "rgba(34,211,238,.5)"]] as const) {
-          const s = chart.addLineSeries({ color: c, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
-          s.setData(bars.map((d, i) => ({ time: d.t, value: vals[i] })).filter((x: any) => x.value != null));
+        for (const mult of [2, -2]) {
+          const s = chart.addLineSeries({ color: "rgba(34,211,238,.5)", lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+          s.setData(bars.map((d, i) => ({ time: d.t, value: band(mult)[i] })).filter((x: any) => x.value != null));
         }
       }
-      // RSI(14) dans un panneau bas
+      // RSI(14) — panneau propre
       if (vis.rsi && closes.length > 15) {
         const rsi: (number | undefined)[] = [];
         for (let i = 0; i < closes.length; i++) {
@@ -127,9 +136,42 @@ export function TechnicalChart({ data, markers = [], height = 360 }:
           rsi.push(l === 0 ? 100 : 100 - 100 / (1 + (g / 14) / (l / 14)));
         }
         const s = chart.addLineSeries({ color: "#a855f7", lineWidth: 1, priceScaleId: "rsi", lastValueVisible: false });
-        s.priceScale().applyOptions({ scaleMargins: { top: 0.86, bottom: 0 } });
+        s.priceScale().applyOptions({ scaleMargins: paneMargins("rsi") });
         s.setData(bars.map((d, i) => ({ time: d.t, value: rsi[i] })).filter((x: any) => x.value != null));
       }
+      // MACD (12,26,9) — panneau propre : ligne MACD + signal
+      if (vis.macd && closes.length > 26) {
+        const ema = (arr: number[], p: number) => {
+          const k = 2 / (p + 1); const out: number[] = []; let e = arr[0];
+          arr.forEach((v, i) => { e = i ? v * k + e * (1 - k) : v; out.push(e); }); return out;
+        };
+        const e12 = ema(closes, 12), e26 = ema(closes, 26);
+        const macd = closes.map((_, i) => e12[i] - e26[i]);
+        const sig = ema(macd, 9);
+        const mLine = chart.addLineSeries({ color: "#22d3ee", lineWidth: 1, priceScaleId: "macd", lastValueVisible: false });
+        const sLine = chart.addLineSeries({ color: "#f59e0b", lineWidth: 1, priceScaleId: "macd", lastValueVisible: false });
+        mLine.priceScale().applyOptions({ scaleMargins: paneMargins("macd") });
+        mLine.setData(bars.map((d, i) => ({ time: d.t, value: macd[i] })));
+        sLine.setData(bars.map((d, i) => ({ time: d.t, value: sig[i] })));
+      }
+      // Fibonacci (retracement sur toute la fenêtre) — lignes de prix
+      if (vis.fib && closes.length > 2) {
+        const hi = Math.max(...bars.map((d) => d.h)), lo = Math.min(...bars.map((d) => d.l));
+        for (const lvl of [0, 0.25, 0.5, 0.618, 0.75, 0.886, 1]) {
+          candles.createPriceLine({ price: hi - (hi - lo) * lvl, color: "rgba(245,158,11,.5)",
+            lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: `Fib ${lvl}` });
+        }
+      }
+      // FRVP (profil de volume, simplifié) : POC = prix au volume max sur la fenêtre
+      if (vis.frvp && closes.length > 5) {
+        const lo = Math.min(...bars.map((d) => d.l)), hi = Math.max(...bars.map((d) => d.h));
+        const nb = 24, step = (hi - lo) / nb || 1; const buckets = new Array(nb).fill(0);
+        bars.forEach((d) => { const b = Math.min(nb - 1, Math.max(0, Math.floor((d.c - lo) / step))); buckets[b] += d.v ?? 0; });
+        const poc = lo + (buckets.indexOf(Math.max(...buckets)) + 0.5) * step;
+        candles.createPriceLine({ price: poc, color: "#5eead4", lineWidth: 2, lineStyle: 0,
+          axisLabelVisible: true, title: "POC" });
+      }
+      void tOf;
 
       if (markers.length) {
         const mk = markers
@@ -188,7 +230,8 @@ export function TechnicalChart({ data, markers = [], height = 360 }:
           {([
             ["ma20", "MM20", "#3b82f6"], ["ma50", "MM50", "#f59e0b"],
             ["ma100", "MM100", "#a855f7"], ["ma200", "MM200", "#ef4444"],
-            ["boll", "Bollinger", "#22d3ee"], ["rsi", "RSI", "#a855f7"], ["vol", "Volume", "#9aa1ab"],
+            ["boll", "Bollinger", "#22d3ee"], ["rsi", "RSI", "#a855f7"], ["macd", "MACD", "#22d3ee"],
+            ["fib", "Fibonacci", "#f59e0b"], ["frvp", "FRVP (POC)", "#5eead4"], ["vol", "Volume", "#9aa1ab"],
           ] as const).map(([k, label, color]) => (
             <button key={k} onClick={() => setVis((s) => ({ ...s, [k]: !s[k] }))}
               className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${vis[k] ? "text-fg" : "text-muted"}`}

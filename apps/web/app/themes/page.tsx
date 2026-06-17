@@ -1,6 +1,7 @@
 "use client";
 import { useThemes } from "@/lib/api";
 import { PageSkeleton } from "@/components/ui";
+import { StepBanner } from "@/components/Pipeline";
 
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 const STANCE: Record<string, [string, string]> = {
@@ -17,6 +18,8 @@ export default function Themes() {
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-4">
       <h1 className="text-xl font-semibold tracking-tight">Thèmes de marché</h1>
+      <StepBanner active="themes" />
+      <p className="text-muted text-xs">Performance par secteur (depuis le début de l'année) = rotation du marché : quels thèmes portent, lesquels sous-performent. Sert de filtre macro/sectoriel en amont de la sélection.</p>
 
       <div className="card p-4 flex flex-wrap justify-between gap-2 text-sm">
         <div><span style={{ color: "#22c55e" }}>▲ Bullish :</span> {(th.bullish ?? []).join(" · ") || "—"}</div>

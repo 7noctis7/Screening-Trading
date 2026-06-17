@@ -29,9 +29,9 @@ html::before {
   content:""; position:fixed; inset:0; z-index:-3; pointer-events:none;
   /* photo plus PETITE et centrée (pas plein cadre), très discrète */
   background:url('/hero.jpg') no-repeat;
-  background-position:center 24%;
-  background-size:min(780px, 64%) auto;
-  opacity:.11; filter:blur(1px) saturate(1.05); will-change:transform;
+  background-position:center 22%;
+  background-size:min(1100px, 82%) auto;
+  opacity:.2; filter:blur(0.5px) saturate(1.08); will-change:transform;
   animation:kenburns 52s ease-in-out infinite alternate;   /* mouvement quasi imperceptible */
 }
 /* Grille « tech / blockchain » très fine en surimpression (profondeur, modernité) */
