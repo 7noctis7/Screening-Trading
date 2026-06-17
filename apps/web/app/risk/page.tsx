@@ -18,6 +18,7 @@ export default function Risk() {
   const a = data.analysis ?? {};
   const rm = a.risk ?? {}, rb = a.risk_budget, lim = a.limits, stress = a.stress;
   const opt = a.optimal_allocation, ms = a.multi_strategy, g = rm.garch, vb = rm.var_backtest, fr = rm.factor_risk;
+  const reco = a.recommended_allocation;
   const maxc = Math.max(0.01, ...(rb?.contrib_pct ?? [0]));
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-4">
@@ -57,6 +58,27 @@ export default function Risk() {
             {g?.available && <div><div className="text-muted text-xs">GARCH persistance</div>
               <div className="text-lg mono">{g.persistence}</div>
               <div className="text-muted2 text-xs">α={g.alpha} · β={g.beta}</div></div>}
+          </div>
+        </section>
+      )}
+
+      {reco?.available && (
+        <section className="card p-4" style={{ borderColor: "color-mix(in srgb, var(--accent) 40%, transparent)" }}>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h2 className="text-sm uppercase tracking-wide text-muted">⭐ Allocation recommandée — risk-parity · DD-cible</h2>
+            <span className="text-xs mono">DD-cible {(reco.dd_target * 100).toFixed(0)}% · vol-cible {pct(reco.target_vol)} · exposition <b>{pct(reco.gross_exposure)}</b> · cash {pct(reco.cash_pct)}</span>
+          </div>
+          <p className="text-muted2 text-xs mt-1">{reco.note} Pilote l'exposition via <code className="mono">QUANT_DD_TARGET</code> (ex. 0.25). Bande {(reco.band * 100).toFixed(0)}%.</p>
+          <div className="overflow-x-auto mt-2">
+            <table className="w-full text-sm mono"><thead className="text-muted text-xs">
+              <tr><th className="text-left font-normal">Actif</th><th className="text-right font-normal">Actuelle</th>
+              <th className="text-right font-normal">Risk-parity</th><th className="text-right font-normal">Cible (DD {(reco.dd_target * 100).toFixed(0)}%)</th></tr></thead>
+              <tbody>{reco.rows.map((r: any) => (
+                <tr key={r.symbol} className="border-t border-border"><td className="py-1.5">{r.symbol}</td>
+                  <td className="text-right text-muted">{(r.current * 100).toFixed(1)}%</td>
+                  <td className="text-right">{(r.risk_parity * 100).toFixed(1)}%</td>
+                  <td className="text-right" style={{ color: "var(--accent2)" }}>{(r.target * 100).toFixed(1)}%</td></tr>))}</tbody>
+            </table>
           </div>
         </section>
       )}
