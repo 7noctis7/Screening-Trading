@@ -284,57 +284,92 @@ function _ema(a,p){const o=Array(a.length).fill(null),k=2/(p+1);let e=a[0];for(l
 function _rsi(a,p){const o=Array(a.length).fill(null);let g=0,l=0;for(let i=1;i<a.length;i++){const d=a[i]-a[i-1];const up=Math.max(d,0),dn=Math.max(-d,0);if(i<=p){g+=up;l+=dn;if(i===p){g/=p;l/=p;o[i]=100-100/(1+(l?g/l:99));}}else{g=(g*(p-1)+up)/p;l=(l*(p-1)+dn)/p;o[i]=100-100/(1+(l?g/l:99));}}return o;}
 function _boll(a,p,k){const m=_sma(a,p),u=[],lo=[];for(let i=0;i<a.length;i++){if(m[i]==null){u.push(null);lo.push(null);continue;}let s=0;for(let j=i-p+1;j<=i;j++)s+=(a[j]-m[i])**2;const sd=Math.sqrt(s/p);u.push(m[i]+k*sd);lo.push(m[i]-k*sd);}return{m,u,lo};}
 
+// agrège un historique daily en weekly/monthly (o=1er, h=max, l=min, c=dernier, v=somme)
+function _agg(data,tf){
+  if(tf==='D')return data;
+  const wk=(s)=>{const d=new Date(s);d.setDate(d.getDate()-((d.getDay()+6)%7));return d.toISOString().slice(0,10);};
+  const key=tf==='M'?(d=>d.t.slice(0,7)):(d=>wk(d.t));
+  const out=[],m={};
+  data.forEach(d=>{const k=key(d);if(!m[k]){m[k]={t:d.t,o:d.o,h:d.h,l:d.l,c:d.c,v:d.v||0};out.push(m[k]);}
+    else{const b=m[k];b.h=Math.max(b.h,d.h);b.l=Math.min(b.l,d.l);b.c=d.c;b.t=d.t;b.v+=d.v||0;}});
+  return out;
+}
 function candleChart(sym,state){
-  const data=(DATA.dashboard.position_series||{})[sym]||[];
+  let data=_agg((DATA.dashboard.position_series||{})[sym]||[], state.tf);
   if(!data.length)return $('<p style="color:var(--muted)">Pas de série disponible.</p>');
+  const cap={D:200,W:200,M:160}[state.tf]||200; if(data.length>cap)data=data.slice(-cap);
   const closes=data.map(d=>d.c),n=data.length;
-  const W=820,Hp=300,Hr=state.rsi?90:0,gap=Hr?16:0,H=Hp+gap+Hr,padL=46,padR=58,padT=10,padB=20;
-  const ov=[];                                   // overlays prix
+  const W=860,padL=52,padR=60,padT=10,hp=260,hv=state.vol?56:0,g1=hv?8:0,
+    hr=state.rsi?80:0,g2=hr?8:0,xb=20,H=padT+hp+g1+hv+g2+hr+xb;
+  const ov=[];
   if(state.ma20)ov.push(['MM20',_sma(closes,20),'#3b82f6']);
   if(state.ma50)ov.push(['MM50',_sma(closes,50),'#f59e0b']);
   if(state.ema20)ov.push(['EMA20',_ema(closes,20),'#22d3ee']);
-  let bb=null; if(state.boll){bb=_boll(closes,20,2);ov.push(['BB+',bb.u,'#9aa1ad'],['BB-',bb.lo,'#9aa1ad']);}
+  if(state.boll){const bb=_boll(closes,20,2);ov.push(['BB+',bb.u,'#9aa1ad'],['BB-',bb.lo,'#9aa1ad']);}
   const hi=Math.max(...data.map(d=>d.h),...ov.flatMap(o=>o[1].filter(v=>v!=null)));
   const lo=Math.min(...data.map(d=>d.l),...ov.flatMap(o=>o[1].filter(v=>v!=null)));
-  const rng=(hi-lo)||1,cw=(W-padL-padR)/n;
-  const X=i=>padL+i*cw+cw/2, Y=v=>(Hp-padB)-(v-lo)/rng*((Hp-padB)-padT);
-  let yA='';for(let k=0;k<5;k++){const v=lo+k/4*(hi-lo),y=Y(v);yA+=`<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="1"/><text x="${padL-6}" y="${(y+3).toFixed(1)}" fill="var(--muted)" font-size="10" text-anchor="end">${v.toFixed(2)}</text>`;}
+  const rng=(hi-lo)||1,cw=(W-padL-padR)/n,pb=padT+hp;
+  const X=i=>padL+i*cw+cw/2, Y=v=>pb-(v-lo)/rng*(hp-8);
+  // axe Y prix (échelle de montant)
+  let yA='';for(let k=0;k<5;k++){const v=lo+k/4*(hi-lo),y=Y(v);
+    yA+=`<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="1"/><text x="${padL-6}" y="${(y+3).toFixed(1)}" fill="var(--muted)" font-size="10" text-anchor="end">${v.toFixed(2)}</text>`;}
+  // chandeliers
   let candles='';data.forEach((d,i)=>{const up=d.c>=d.o,col=up?'#22c55e':'#f43f5e',x=X(i);
     candles+=`<line x1="${x.toFixed(1)}" y1="${Y(d.h).toFixed(1)}" x2="${x.toFixed(1)}" y2="${Y(d.l).toFixed(1)}" stroke="${col}" stroke-width="1"/>`
-      +`<rect x="${(x-cw*0.3).toFixed(1)}" y="${Y(Math.max(d.o,d.c)).toFixed(1)}" width="${(cw*0.6).toFixed(1)}" height="${Math.max(1,Math.abs(Y(d.o)-Y(d.c))).toFixed(1)}" fill="${col}"/>`;});
-  const ovl=ov.map(([nm,arr,c])=>`<polyline points="${arr.map((v,i)=>v==null?'':X(i).toFixed(1)+','+Y(v).toFixed(1)).filter(Boolean).join(' ')}" fill="none" stroke="${c}" stroke-width="1.3" opacity="0.9"/>`).join('');
-  let rsiSvg='';
-  if(state.rsi){const r=_rsi(closes,14),y0=Hp+gap,YR=v=>y0+Hr-(v/100)*Hr;
+      +`<rect x="${(x-cw*0.32).toFixed(1)}" y="${Y(Math.max(d.o,d.c)).toFixed(1)}" width="${Math.max(1,cw*0.64).toFixed(1)}" height="${Math.max(1,Math.abs(Y(d.o)-Y(d.c))).toFixed(1)}" fill="${col}"/>`;});
+  const ovl=ov.map(o=>`<polyline points="${o[1].map((v,i)=>v==null?'':X(i).toFixed(1)+','+Y(v).toFixed(1)).filter(Boolean).join(' ')}" fill="none" stroke="${o[2]}" stroke-width="1.3" opacity="0.9"/>`).join('');
+  // MARQUEURS achat/vente (▲ vert sous le plus bas, ▼ rouge au-dessus du plus haut)
+  const idxByDate=t=>{for(let i=0;i<n;i++)if(data[i].t>=t)return i;return n-1;};
+  let marks='';
+  ((DATA.dashboard.position_markers||{})[sym]||[]).forEach(mk=>{
+    if(mk.t<data[0].t)return;const i=idxByDate(mk.t),x=X(i);
+    if(mk.side==='buy'){const y=Y(data[i].l)+12;marks+=`<polygon points="${x},${(y-7).toFixed(1)} ${(x-4).toFixed(1)},${y.toFixed(1)} ${(x+4).toFixed(1)},${y.toFixed(1)}" fill="#22c55e"/>`;}
+    else{const y=Y(data[i].h)-12;marks+=`<polygon points="${x},${(y+7).toFixed(1)} ${(x-4).toFixed(1)},${y.toFixed(1)} ${(x+4).toFixed(1)},${y.toFixed(1)}" fill="#f43f5e"/>`;}
+  });
+  // volumes
+  let vol='';if(state.vol){const vbot=pb+g1+hv,maxv=Math.max(...data.map(d=>d.v||0),1);
+    data.forEach((d,i)=>{const x=X(i),hh=(d.v||0)/maxv*(hv-4);
+      vol+=`<rect x="${(x-cw*0.32).toFixed(1)}" y="${(vbot-hh).toFixed(1)}" width="${Math.max(1,cw*0.64).toFixed(1)}" height="${hh.toFixed(1)}" fill="${d.c>=d.o?'#22c55e':'#f43f5e'}" opacity="0.5"/>`;});
+    vol+=`<text x="${padL}" y="${(pb+g1+10).toFixed(1)}" fill="var(--muted)" font-size="9">Volume</text>`;}
+  // RSI
+  let rsiSvg='';if(state.rsi){const r=_rsi(closes,14),rtop=pb+g1+hv+g2,rbot=rtop+hr,YR=v=>rbot-(v/100)*hr;
     rsiSvg=`<line x1="${padL}" y1="${YR(70).toFixed(1)}" x2="${W-padR}" y2="${YR(70).toFixed(1)}" stroke="#f43f5e" stroke-width="0.6" stroke-dasharray="3"/>`
       +`<line x1="${padL}" y1="${YR(30).toFixed(1)}" x2="${W-padR}" y2="${YR(30).toFixed(1)}" stroke="#22c55e" stroke-width="0.6" stroke-dasharray="3"/>`
-      +`<text x="${padL-6}" y="${(YR(70)+3).toFixed(1)}" fill="var(--muted)" font-size="9" text-anchor="end">70</text>`
-      +`<text x="${padL-6}" y="${(YR(30)+3).toFixed(1)}" fill="var(--muted)" font-size="9" text-anchor="end">30</text>`
       +`<polyline points="${r.map((v,i)=>v==null?'':X(i).toFixed(1)+','+YR(v).toFixed(1)).filter(Boolean).join(' ')}" fill="none" stroke="#a78bfa" stroke-width="1.2"/>`
-      +`<text x="${padL}" y="${(y0+10).toFixed(1)}" fill="var(--muted)" font-size="9">RSI 14</text>`;}
+      +`<text x="${padL}" y="${(rtop+10).toFixed(1)}" fill="var(--muted)" font-size="9">RSI 14</text>`;}
+  // axe X (échelle de temps)
+  let xA='';for(let k=0;k<6;k++){const i=Math.round(k/5*(n-1)),x=X(i);
+    xA+=`<text x="${x.toFixed(1)}" y="${H-6}" fill="var(--muted)" font-size="9" text-anchor="${k===0?'start':k===5?'end':'middle'}">${data[i].t}</text>`;}
   const last=data[n-1],chg=(last.c/data[0].c-1)*100;
   return $(`<div>
     <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
       <div><b style="font-size:15px">${sym}</b> <span class="mono">${last.c}</span>
-        <span class="mono" style="color:${chg>=0?'#22c55e':'#f43f5e'}">${chg>=0?'+':''}${chg.toFixed(1)}% (9 mois)</span></div>
-      <div style="font-size:11px;color:var(--muted)">${ov.map(o=>'<span style="color:'+o[2]+'">●</span> '+o[0]).join(' ')}</div></div>
-    <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="overflow:visible">${yA}${candles}${ovl}${rsiSvg}</svg></div>`);
+        <span class="mono" style="color:${chg>=0?'#22c55e':'#f43f5e'}">${chg>=0?'+':''}${chg.toFixed(1)}%</span>
+        <span style="color:var(--muted);font-size:11px">${data[0].t} → ${last.t}</span></div>
+      <div style="font-size:11px;color:var(--muted)">▲ achat · ▼ vente · ${ov.map(o=>'<span style="color:'+o[2]+'">●</span> '+o[0]).join(' ')}</div></div>
+    <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="overflow:visible">${yA}${vol}${candles}${ovl}${marks}${rsiSvg}${xA}</svg></div>`);
 }
 function openChart(sym){
-  const state={ma20:true,ma50:false,ema20:false,boll:false,rsi:true};
+  const state={tf:'D',vol:true,ma20:true,ma50:true,ema20:false,boll:false,rsi:true};
   const ov=$('<div class="modal"></div>');
   const box=$('<div class="modalbox card"></div>');
   const head=$(`<div class="banner" style="margin-bottom:10px"><div class="label">Graphique technique — ${sym}</div>
-    <span class="close" title="Fermer">✕</span></div>`);
+    <span class="close" title="Fermer (Échap)">✕</span></div>`);
+  const tfbar=$('<div style="display:flex;gap:6px;margin-bottom:8px"></div>');
   const toggles=$('<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>');
   const body=$('<div></div>');
-  const opts=[['ma20','MM20'],['ma50','MM50'],['ema20','EMA20'],['boll','Bollinger'],['rsi','RSI']];
   function draw(){body.innerHTML='';body.appendChild(candleChart(sym,state));}
-  opts.forEach(([k,lab])=>{const ch=$(`<span class="chip${state[k]?' on':''}">${lab}</span>`);
+  [['D','Daily'],['W','Weekly'],['M','Monthly']].forEach(([k,lab])=>{
+    const ch=$(`<span class="chip${state.tf===k?' on':''}">${lab}</span>`);
+    ch.onclick=()=>{state.tf=k;tfbar.querySelectorAll('.chip').forEach(x=>x.classList.remove('on'));ch.classList.add('on');draw();};
+    tfbar.appendChild(ch);});
+  [['vol','Volume'],['ma20','MM20'],['ma50','MM50'],['ema20','EMA20'],['boll','Bollinger'],['rsi','RSI']].forEach(([k,lab])=>{
+    const ch=$(`<span class="chip${state[k]?' on':''}">${lab}</span>`);
     ch.onclick=()=>{state[k]=!state[k];ch.classList.toggle('on');draw();};toggles.appendChild(ch);});
   head.querySelector('.close').onclick=()=>ov.remove();
   ov.onclick=e=>{if(e.target===ov)ov.remove();};
   document.addEventListener('keydown',function esc(e){if(e.key==='Escape'){ov.remove();document.removeEventListener('keydown',esc);}});
-  box.appendChild(head);box.appendChild(toggles);box.appendChild(body);ov.appendChild(box);
+  box.appendChild(head);box.appendChild(tfbar);box.appendChild(toggles);box.appendChild(body);ov.appendChild(box);
   document.body.appendChild(ov);draw();
 }
 // délégation : tout symbole .tkr (positions, trades en cours, portefeuille réel) ouvre son graphe
@@ -513,25 +548,19 @@ function portfolioBar(k){
 (function(){
  try{
   const d=DATA.dashboard,p=document.getElementById('pos'),rows=d.positions||[],t=d.totals||{};
-  let inner;
-  if(!rows.length){
-    inner='<p style="color:var(--muted);font-size:13px">Aucune position ouverte au dernier pas (stratégie à plat).</p>';
-  }else{
-    let rowsHtml='';
-    rows.forEach(r=>{
-      const ml=r.ml_score==null?'—':(r.ml_score*100).toFixed(0)+'%';
-      rowsHtml+=`<tr class="srow"><td>${tkr(r.symbol)}</td><td>${stanceTag(r.stance,r.sector)}</td>
-        <td class="mono" style="text-align:right">${ml}</td>
-        <td class="mono" style="text-align:right">${r.qty.toFixed(2)}</td><td class="mono" style="text-align:right">${r.avg_price}</td>
-        <td class="mono" style="text-align:right">${eur(r.current_value)}</td>
-        <td class="mono ${r.pnl_abs>=0?'pos':'neg'}" style="text-align:right">${eur(r.pnl_abs)} (${pct(r.pnl_pct)})</td></tr>`;
-    });
-    inner=`<table><thead><tr><th>Actif</th><th>Secteur / tendance</th><th style="text-align:right">ML</th><th style="text-align:right">Qté</th><th style="text-align:right">PRU</th><th style="text-align:right">Valeur</th><th style="text-align:right">P&amp;L</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
-  }
   const nb=rows.length, bull=rows.filter(r=>r.stance==='bullish').length;
   const box=$(`<div class="card"><div class="banner" style="margin-bottom:10px">
-    <div class="label">Composition — ${nb} positions</div>
-    <div style="font-size:11px;color:var(--muted)">${bull}/${nb} dans des secteurs <span style="color:#22c55e">bullish</span> · le reste = meilleurs setups ailleurs</div></div>${inner}</div>`);
+    <div class="label">Composition — ${nb} positions (clique un en-tête pour trier, un actif pour son graphique)</div>
+    <div style="font-size:11px;color:var(--muted)">${bull}/${nb} dans des secteurs <span style="color:#22c55e">bullish</span> · le reste = meilleurs setups ailleurs</div></div>`);
+  if(!rows.length){box.appendChild($('<p style="color:var(--muted);font-size:13px">Aucune position ouverte au dernier pas (stratégie à plat).</p>'));}
+  else{
+    const body=rows.map(r=>`<tr><td>${tkr(r.symbol)}</td><td>${stanceTag(r.stance,r.sector)}</td>
+      <td class="mono" style="text-align:right">${r.ml_score==null?'—':(r.ml_score*100).toFixed(0)+'%'}</td>
+      <td class="mono" style="text-align:right">${r.qty.toFixed(2)}</td><td class="mono" style="text-align:right">${r.avg_price}</td>
+      <td class="mono" style="text-align:right">${eur(r.current_value)}</td>
+      <td class="mono ${r.pnl_abs>=0?'pos':'neg'}" style="text-align:right">${eur(r.pnl_abs)} (${pct(r.pnl_pct)})</td></tr>`);
+    box.appendChild(mkTable('<th>Actif</th><th>Secteur / tendance</th><th style="text-align:right">ML</th><th style="text-align:right">Qté</th><th style="text-align:right">PRU</th><th style="text-align:right">Valeur</th><th style="text-align:right">P&amp;L</th>',body));
+  }
   p.appendChild(box);
   p.appendChild($(`<div class="card" style="display:flex;justify-content:space-between;font-size:13px">
     <span style="color:var(--muted)">Exposition brute ${eur(t.gross_exposure||0)} · nette ${eur(t.net_exposure||0)}</span>
@@ -542,7 +571,29 @@ function portfolioBar(k){
 const dt=(s)=>s?String(s).slice(0,10):'—';
 // table robuste : on assemble TOUTE la table en une chaîne (le parseur gère tr/td
 // correctement à l'intérieur d'un <table>, contrairement à un <tr> isolé dans un div).
-const mkTable=(head,bodyRows)=>$(`<table><thead><tr>${head}</tr></thead><tbody>${bodyRows.join('')}</tbody></table>`);
+// tri générique : clic sur un en-tête trie le tableau (numérique ou texte, asc/desc)
+function makeSortable(table){
+  const ths=[...table.querySelectorAll('thead th')];
+  ths.forEach((th,ci)=>{th.style.cursor='pointer';th.title='Trier cette colonne';let asc=false;
+    const base=th.innerHTML;
+    th.onclick=()=>{
+      asc=!asc;const tb=table.querySelector('tbody');const rows=[...tb.querySelectorAll(':scope>tr')];
+      const num=s=>{const x=parseFloat(String(s).replace(/\s/g,'').replace(/[^0-9.\-]/g,''));return isNaN(x)?null:x;};
+      rows.sort((a,b)=>{const x=(a.children[ci]?.textContent||'').trim(),y=(b.children[ci]?.textContent||'').trim();
+        const nx=num(x),ny=num(y);const c=(nx!=null&&ny!=null)?nx-ny:x.localeCompare(y,'fr',{numeric:true});
+        return asc?c:-c;});
+      rows.forEach(r=>tb.appendChild(r));
+      ths.forEach(h=>{h.innerHTML=h===th?base:h.innerHTML.replace(/ [▲▼]$/,'');});
+      th.innerHTML=base+(asc?' ▲':' ▼');
+    };
+  });
+}
+function mkTable(head,bodyRows){
+  const t=$(`<table><thead><tr>${head}</tr></thead><tbody>${bodyRows.join('')}</tbody></table>`);
+  // pas de tri sur les tables à lignes de détail dépliables (screener/historique)
+  if(!t.querySelector('tbody tr.det, tbody tr.sdet'))makeSortable(t);
+  return t;
+}
 
 // ---- TRADES (historique + en cours) ----
 (function(){

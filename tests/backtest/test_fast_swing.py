@@ -12,8 +12,9 @@ def _series(sym, prices):
 
 
 def test_vix_exposure_playbook():
-    assert vix_exposure(10) == 1.2 and vix_exposure(16) == 1.0
-    assert vix_exposure(25) == 0.6 and vix_exposure(40) == 0.3
+    # sans levier : ≤ 100% (calme=1.0), réduit en stress
+    assert vix_exposure(10) == 1.0 and vix_exposure(16) == 1.0
+    assert vix_exposure(25) == 0.7 and vix_exposure(40) == 0.4
 
 
 def test_backtest_runs_with_risk_controls():

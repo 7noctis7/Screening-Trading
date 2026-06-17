@@ -504,13 +504,30 @@ def build_snapshot(seed: int = 7) -> dict:
     rets_by = {s: returns_from_equity([b.close for b in data[s]]) for s in corr_syms}
     syms, corr = correlation_matrix({k: list(v) for k, v in rets_by.items()})
     clusters = cluster(syms, corr, 0.7)
-    # séries OHLC (≈9 mois) des positions ouvertes → graphique technique au clic
-    position_series = {}
+    # séries OHLCV (historique LONG : daily/weekly/monthly agrégés côté front) + marqueurs trades
+    open_info = getattr(broker, "open_positions_info", {})
+    by_sym_trades = {}
+    for t in all_trades:
+        by_sym_trades.setdefault(t.instrument, []).append(t)
+    position_series, position_markers = {}, {}
     for r in comp["rows"]:
-        bars = data[r["symbol"]][-190:]
-        position_series[r["symbol"]] = [
-            {"t": b.ts.isoformat()[:10], "o": round(b.open, 2), "h": round(b.high, 2),
-             "l": round(b.low, 2), "c": round(b.close, 2)} for b in bars]
+        s = r["symbol"]
+        bars = data[s][-1000:]                         # ~4 ans de daily → agrégeable W/M
+        start_t = bars[0].ts
+        position_series[s] = [
+            {"t": b.ts.isoformat()[:10], "o": round(b.open, 4), "h": round(b.high, 4),
+             "l": round(b.low, 4), "c": round(b.close, 4), "v": round(b.volume, 0)} for b in bars]
+        marks = []
+        oi = open_info.get(s)
+        if oi and oi["entry_ts"] >= start_t:
+            marks.append({"t": oi["entry_ts"].isoformat()[:10], "side": "buy",
+                          "price": round(oi["entry_price"], 4)})
+        for tr in by_sym_trades.get(s, []):            # achats/ventes clôturés visibles
+            if tr.entry_ts >= start_t:
+                marks.append({"t": tr.entry_ts.isoformat()[:10], "side": "buy", "price": round(tr.entry_price, 4)})
+            if tr.exit_ts and tr.exit_ts >= start_t:
+                marks.append({"t": tr.exit_ts.isoformat()[:10], "side": "sell", "price": round(tr.exit_price, 4)})
+        position_markers[s] = marks
     trade_stats = PL.trade_stats_payload(all_trades)
     # 300 trades les plus récents (couvre la récence + de nombreux actifs)
     recent = sorted(all_trades, key=lambda t: t.entry_ts, reverse=True)[:300]
@@ -557,6 +574,7 @@ def build_snapshot(seed: int = 7) -> dict:
             "positions": comp["rows"], "totals": comp["totals"],
             "portfolio": portfolio_kpis,
             "position_series": position_series,
+            "position_markers": position_markers,
             "trade_stats": trade_stats,
             "vix": vix_now, "vix_playbook": _vix_playbook(vix_now),
             "vix_series": vix[::max(1, n // 240)],   # sous-échantillonné pour le graphe
