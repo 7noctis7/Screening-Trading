@@ -1,5 +1,62 @@
 @tailwind base; @tailwind components; @tailwind utilities;
-:root { --bg:#0a0b0d; --surface:#141619; --border:#262a31; --fg:#e6e8eb; --muted:#9aa1ab; }
-body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif; }
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; }
-.mono { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+/* ============================================================================
+   Design system — niveau Apple (clarté · déférence · profondeur).
+   Vert/rouge réservés au P&L et au risque. L'UI s'efface, le contenu prime.
+   ============================================================================ */
+:root {
+  --bg:#08090c; --bg2:#0c0e12; --surface:#141619; --surface2:#171a20; --surface3:#1d212a;
+  --border:#23272f; --border2:#2d323c; --fg:#eef0f3; --muted:#9aa1ab; --muted2:#6b7280;
+  --accent:#3b82f6; --accent2:#60a5fa; --pos:#22c55e; --neg:#f43f5e; --warn:#f59e0b;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.25);
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin:0; color:var(--fg);
+  background:radial-gradient(1200px 600px at 50% -10%, #10131a 0%, var(--bg) 55%) fixed;
+  font-family:-apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif;
+  -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; letter-spacing:-.01em;
+}
+
+/* Scrollbar discrète (déférence) */
+::-webkit-scrollbar { width:9px; height:9px; }
+::-webkit-scrollbar-thumb { background:var(--border2); border-radius:6px; }
+::-webkit-scrollbar-thumb:hover { background:#3a414d; }
+
+/* Focus visible net (clarté / accessibilité) */
+:focus-visible { outline:2px solid var(--accent2); outline-offset:2px; border-radius:8px; }
+
+/* Cartes : profondeur subtile + élévation au survol */
+.card {
+  background:linear-gradient(180deg, var(--surface), var(--bg2));
+  border:1px solid var(--border); border-radius:16px;
+  transition:transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+}
+.card:hover { border-color:var(--border2); box-shadow:var(--shadow); transform:translateY(-1px); }
+
+/* Chiffres alignés (lisibilité financière) */
+.mono { font-variant-numeric:tabular-nums; font-feature-settings:"tnum"; font-family:"SF Mono","JetBrains Mono",monospace; }
+
+/* Titres de section homogènes */
+h1 { letter-spacing:-.02em; }
+h2 { letter-spacing:-.01em; }
+
+/* Tables : lignes respirantes, en-tête discret, survol doux */
+table { border-collapse:collapse; }
+thead th { font-weight:500; letter-spacing:.02em; }
+tbody tr { transition:background-color .15s ease; }
+
+/* Apparition douce des pages (profondeur / motion) */
+main { animation:fade .35s ease; }
+@keyframes fade { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+
+/* Respecter la préférence "réduire les animations" */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; }
+}
+
+/* Liens d'accent cohérents */
+a { color:inherit; }
+.text-accent { color:var(--accent2); }
