@@ -1,71 +1,80 @@
 "use client";
 import { useLive } from "@/lib/api";
 import { PageSkeleton } from "@/components/ui";
+import { StepBanner } from "@/components/Pipeline";
 
 const eur = (x?: number) => Math.round(x ?? 0).toLocaleString("fr-FR");
 
-export default function Live() {
-  const { data: l } = useLive();
-  if (!l) return <PageSkeleton />;
-  const brokers = l.brokers ?? [], real = l.real ?? { connected: false, equity: 0, positions: [] };
+function BrokerCard({ b }: { b: any }) {
+  const ok = b?.ok, configured = b?.configured;
+  const color = ok ? "#22c55e" : configured ? "#f43f5e" : "#9aa1ad";
   return (
-    <main className="max-w-5xl mx-auto p-6 space-y-4">
-      <h1 className="text-xl font-semibold tracking-tight">Portefeuille réel</h1>
-      <p className="text-muted text-sm">Cette page n'affiche que tes <b>données réelles</b> Alpaca / Bitmart. Rien de fictif ici.</p>
-
-      {/* Statut */}
-      <div className="card p-4" style={{ borderColor: real.connected ? "#22c55e" : "#f59e0b" }}>
-        <div className="flex items-center gap-2">
-          <span className="inline-block w-2 h-2 rounded-full" style={{ background: real.connected ? "#22c55e" : "#f59e0b" }} />
-          <b>{real.connected ? "Broker connecté — données réelles" : "Aucun broker connecté"}</b>
-          <span className="text-muted text-sm">· mode <b style={{ color: "#22c55e" }}>paper</b> par défaut</span>
-        </div>
+    <div className="card p-4" style={{ borderColor: `color-mix(in srgb, ${color} 45%, transparent)` }}>
+      <div className="flex items-center justify-between">
+        <b>{b.name}</b>
+        <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "var(--surface3)", color }}>
+          {ok ? "connecté ✓" : configured ? "erreur" : "non configuré"}
+        </span>
       </div>
-
-      {/* Brokers */}
-      <section className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {brokers.map((b: any) => (
-          <div key={b.name} className="card p-4">
-            <div className="flex items-center justify-between">
-              <div><b>{b.name}</b> <span className="text-muted text-xs">· {b.scope}</span></div>
-              <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "var(--surface3)", color: b.connected ? "#22c55e" : "#9aa1ad" }}>
-                {b.connected ? "connecté" : "non connecté"}{b.paper ? " · paper" : ""}
-              </span>
-            </div>
-            <div className="text-muted2 text-xs mt-2 mono">{b.env.join("  ·  ")}</div>
-          </div>
-        ))}
-      </section>
-
-      {real.connected ? (
-        <section className="card p-4 overflow-x-auto">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-sm uppercase tracking-wide text-muted">Tes positions réelles</h2>
-            <span className="mono text-sm">Equity : <b>{eur(real.equity)} $</b></span>
-          </div>
-          {real.positions.length === 0 ? (
-            <p className="text-muted text-sm">Aucune position ouverte chez le broker.</p>
+      {ok ? (
+        <>
+          <div className="mono text-lg mt-2">{eur(b.equity)} $ <span className="text-muted text-xs">equity</span></div>
+          {b.positions.length === 0 ? (
+            <p className="text-muted text-sm mt-2">Aucune position ouverte chez {b.name}.</p>
           ) : (
-            <table className="text-sm mono">
-              <thead><tr><th>Actif</th><th>Broker</th><th>Sens</th><th style={{ textAlign: "right" }}>Qté</th><th style={{ textAlign: "right" }}>PRU</th></tr></thead>
-              <tbody>{real.positions.map((p: any, i: number) => (
-                <tr key={`${p.symbol}-${i}`}><td>{p.symbol}</td><td className="text-muted">{p.broker}</td>
+            <table className="text-sm mono mt-2 w-full">
+              <thead><tr><th>Actif</th><th>Sens</th><th style={{ textAlign: "right" }}>Qté</th><th style={{ textAlign: "right" }}>PRU</th></tr></thead>
+              <tbody>{b.positions.map((p: any, i: number) => (
+                <tr key={i}><td>{p.symbol}</td>
                   <td style={{ color: p.side === "long" ? "#22c55e" : "#f43f5e" }}>{p.side}</td>
                   <td style={{ textAlign: "right" }}>{p.qty}</td><td style={{ textAlign: "right" }}>{p.avg_price}</td></tr>))}</tbody>
             </table>
           )}
-        </section>
+        </>
       ) : (
-        <section className="card p-4">
-          <h2 className="text-sm uppercase tracking-wide text-muted mb-2">Connecter tes comptes</h2>
-          <ol className="text-sm space-y-1.5 list-decimal pl-5">
-            <li>Crée un fichier <code className="mono">.env</code> à la racine du projet (jamais committé).</li>
-            <li>Ajoute tes clés (voir <code className="mono">.env.example</code>).</li>
-            <li>Relance l'API : <code className="mono">make api</code> → tes positions réelles apparaîtront ici.</li>
-          </ol>
-          <p className="text-muted2 text-xs mt-2">Pour répliquer le portefeuille modèle en paper : <code className="mono">make live</code> (aperçu) puis <code className="mono">make live-go</code> (exécution paper). Alpaca reste paper ; Bitmart protégé par dry-run.</p>
-        </section>
+        <p className="text-xs mt-2" style={{ color }}>
+          {configured ? <>⚠️ Connexion échouée : <span className="mono">{b.error}</span></> : <>Renseigne les clés dans <code className="mono">.env</code> puis relance l'API.</>}
+        </p>
       )}
+    </div>
+  );
+}
+
+export default function Live() {
+  const { data: l } = useLive();
+  if (!l) return <PageSkeleton />;
+  const real = l.real ?? {};
+  const a = real.alpaca, b = real.bitmart;
+  return (
+    <main className="max-w-5xl mx-auto p-6 space-y-4">
+      <h1 className="text-xl font-semibold tracking-tight">Portefeuille réel</h1>
+      <StepBanner active="live" />
+      <p className="text-muted text-xs">Données <b>réelles</b> de tes comptes Alpaca / Bitmart uniquement (aucun fictif). KPI &amp; positions séparés par broker.</p>
+
+      {/* KPI globaux */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="card p-4"><div className="text-muted text-xs uppercase">Equity totale</div><div className="text-xl mono mt-1">{eur(real.equity)} $</div></div>
+        <div className="card p-4"><div className="text-muted text-xs uppercase">Alpaca</div><div className="text-lg mono mt-1">{eur(a?.equity)} $</div></div>
+        <div className="card p-4"><div className="text-muted text-xs uppercase">Bitmart</div><div className="text-lg mono mt-1">{eur(b?.equity)} $</div></div>
+        <div className="card p-4"><div className="text-muted text-xs uppercase">Positions réelles</div><div className="text-lg mono mt-1">{(real.positions ?? []).length}</div></div>
+      </div>
+
+      {/* Détail par broker + diagnostic */}
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {a && <BrokerCard b={a} />}
+        {b && <BrokerCard b={b} />}
+      </section>
+
+      {/* Diagnostic / "comment être sûr que ça marche" */}
+      <section className="card p-4 text-sm">
+        <h2 className="text-sm uppercase tracking-wide text-muted mb-2">Diagnostic</h2>
+        <ul className="text-muted space-y-1 list-disc pl-5">
+          <li><b>connecté ✓</b> = l'API a bien lu ton compte (même sans position ouverte).</li>
+          <li><b>erreur</b> = clés présentes mais l'appel a échoué → le message exact est affiché (souvent : permissions API, IP non autorisée, ou Bitmart « spot » vs « futures »).</li>
+          <li><b>non configuré</b> = clés absentes du <code className="mono">.env</code>.</li>
+          <li>« Aucune position » est <b>normal</b> si tu n'as pas encore passé d'ordre — répliquer le modèle en paper : <code className="mono">make live</code> (aperçu) puis <code className="mono">make live-go</code>.</li>
+        </ul>
+      </section>
     </main>
   );
 }

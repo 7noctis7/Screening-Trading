@@ -7,7 +7,6 @@ import { LiveBadge } from "@/components/LiveBadge";
 // Ordre = flux logique : données → analyses → risque → exécution
 const LINKS: [string, string][] = [
   ["/accueil", "Accueil"],
-  ["/", "Dashboard"],
   ["/data", "Données"],
   ["/universe", "Univers"],
   ["/themes", "Thèmes de marché"],
@@ -15,6 +14,7 @@ const LINKS: [string, string][] = [
   ["/ml", "Signaux ML"],
   ["/sentiment", "Sentiment & news"],
   ["/conviction", "Conviction"],
+  ["/", "Dashboard"],
   ["/portfolio", "Portefeuille & Analyse"],
   ["/risk", "Risque"],
   ["/positions", "Positions"],

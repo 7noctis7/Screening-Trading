@@ -1,20 +1,22 @@
 "use client";
 import Link from "next/link";
 
-// Pipeline du raisonnement : de la donnée brute au portefeuille. Sert à rendre le process clair.
+// Pipeline du raisonnement : de la donnée brute au portefeuille (ordre = déroulé du process).
 export const STEPS: { n: number; key: string; page: string; title: string; desc: string }[] = [
   { n: 1, key: "data", page: "/data", title: "Données", desc: "Prix réels (YAHOO.db), contrôle qualité & couverture." },
   { n: 2, key: "universe", page: "/universe", title: "Univers", desc: "Les ~929 actifs investissables (actions, ETF, crypto, forex, commodités)." },
-  { n: 3, key: "screener", page: "/", title: "Screening", desc: "Classement multi-facteur (momentum, tendance, faible vol…) — des idées." },
-  { n: 4, key: "ml", page: "/ml", title: "Signaux ML", desc: "Probabilité de hausse à ~1 mois (modèle validé sans fuite)." },
-  { n: 5, key: "fundamentals", page: "/fundamentals", title: "Fondamentaux", desc: "Valeur, qualité, DCF, Piotroski, Altman — pour les actions/ETF." },
-  { n: 6, key: "sentiment", page: "/sentiment", title: "Sentiment", desc: "Humeur & news par actif (FinBERT/lexique/momentum)." },
-  { n: 7, key: "portfolio", page: "/positions", title: "Sélection & portefeuille", desc: "La STRATÉGIE swing (suivi de tendance, backtestée) décide des positions + sizing vol-target." },
-  { n: 8, key: "risk", page: "/risk", title: "Risque", desc: "VaR/EVT/GARCH, limites, stress-tests, allocation optimale." },
-  { n: 9, key: "live", page: "/live", title: "Exécution", desc: "Réplication chez le broker (Alpaca/Bitmart), réconciliation, coûts." },
+  { n: 3, key: "themes", page: "/themes", title: "Thèmes de marché", desc: "Rotation sectorielle (performance YTD) — où va l'argent." },
+  { n: 4, key: "fundamentals", page: "/fundamentals", title: "Fondamentaux", desc: "Valeur, qualité, DCF, Piotroski, Altman — pour les actions/ETF." },
+  { n: 5, key: "ml", page: "/ml", title: "Signaux ML", desc: "Probabilité de hausse à ~1 mois (modèle validé sans fuite)." },
+  { n: 6, key: "sentiment", page: "/sentiment", title: "Sentiment & news", desc: "Humeur & actualité (macro + par actif)." },
+  { n: 7, key: "conviction", page: "/conviction", title: "Conviction", desc: "FUSION des signaux ci-dessus en une note unique + allocation risk-aware." },
+  { n: 8, key: "screener", page: "/", title: "Dashboard", desc: "Synthèse : performance, régime macro, playbook VIX, top screener." },
+  { n: 9, key: "portfolio", page: "/positions", title: "Sélection & portefeuille", desc: "La STRATÉGIE swing (suivi de tendance, backtestée) décide des positions + sizing." },
+  { n: 10, key: "risk", page: "/risk", title: "Risque", desc: "VaR/EVT/GARCH, limites, stress-tests, allocation optimale." },
+  { n: 11, key: "live", page: "/live", title: "Exécution", desc: "Réplication chez le broker (Alpaca/Bitmart), positions réelles, coûts." },
 ];
+const N = STEPS.length;
 
-// Bandeau compact « tu es ici » en haut d'une fenêtre.
 export function StepBanner({ active }: { active: string }) {
   const cur = STEPS.find((s) => s.key === active);
   if (!cur) return null;
@@ -23,7 +25,7 @@ export function StepBanner({ active }: { active: string }) {
       <span className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-full mono text-xs font-semibold"
         style={{ background: "color-mix(in srgb, var(--accent) 18%, transparent)", color: "var(--accent2)" }}>{cur.n}</span>
       <div className="flex-1">
-        <b>Étape {cur.n}/9 — {cur.title}</b>
+        <b>Étape {cur.n}/{N} — {cur.title}</b>
         <span className="text-muted"> · {cur.desc}</span>
       </div>
       <Link href="/accueil" className="text-xs text-accent shrink-0 hidden sm:inline">voir le process →</Link>
@@ -31,7 +33,6 @@ export function StepBanner({ active }: { active: string }) {
   );
 }
 
-// Schéma complet (page Accueil).
 export function PipelineFull() {
   return (
     <section className="space-y-3">
@@ -51,12 +52,10 @@ export function PipelineFull() {
       <div className="card p-4 text-sm" style={{ borderColor: "color-mix(in srgb, var(--warn) 40%, transparent)" }}>
         <b>💡 Pourquoi les actifs détenus ≠ le top du screener / ML ?</b>
         <p className="text-muted mt-1.5">
-          C'est normal et voulu. Le <b>portefeuille</b> (Positions/Trades) est constitué par <b>une seule stratégie : le
-          swing trend-following backtesté</b> — c'est le <b>décideur final</b> (elle entre quand une tendance se confirme,
-          dimensionne selon la volatilité et coupe avec un stop). Le <b>Screening</b>, les <b>Signaux ML</b>, les
-          <b> Fondamentaux</b> et le <b>Sentiment</b> sont des <b>lentilles d'analyse complémentaires</b> : elles éclairent
-          le contexte et fournissent des idées, mais ne dictent pas 1:1 la sélection. Deux outils différents → deux listes
-          différentes, c'est attendu.
+          Le <b>portefeuille</b> (Positions/Trades) est constitué par <b>une seule stratégie : le swing trend-following
+          backtesté</b> — le <b>décideur final</b>. Le Screening, le ML, les Fondamentaux et le Sentiment sont des
+          <b> lentilles d'analyse</b> fusionnées dans la <Link href="/conviction" className="text-accent">note de conviction</Link>,
+          qui propose une allocation alternative risk-aware. Deux logiques → deux listes, c'est normal.
         </p>
       </div>
     </section>

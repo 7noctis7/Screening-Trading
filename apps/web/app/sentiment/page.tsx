@@ -41,6 +41,20 @@ export default function Sentiment() {
         </div>
       </section>
 
+      {(s.macro_news ?? []).length > 0 && (
+        <section className="card p-4">
+          <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Macro & banques centrales (FED · BCE · FMI · économie)</h2>
+          <ul className="space-y-1.5 text-sm">
+            {s.macro_news.map((h: any, i: number) => (
+              <li key={i} className="flex gap-2">
+                <span style={{ color: h.score > 0 ? "#22c55e" : h.score < 0 ? "#f43f5e" : "#9aa1ad" }}>
+                  {h.score > 0 ? "▲" : h.score < 0 ? "▼" : "–"}</span>
+                {h.link ? <a href={h.link} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">{h.title}</a> : <span>{h.title}</span>}
+              </li>))}
+          </ul>
+        </section>
+      )}
+
       {(s.market_news ?? []).length > 0 && (
         <section className="card p-4">
           <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Actualité marché</h2>

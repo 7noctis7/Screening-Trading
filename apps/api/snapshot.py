@@ -328,33 +328,48 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None) -> dic
     import os
     alp = bool(os.environ.get("ALPACA_API_KEY") and os.environ.get("ALPACA_API_SECRET"))
     bit = bool(os.environ.get("BITMART_API_KEY") and os.environ.get("BITMART_API_SECRET"))
-    # --- DONNÉES RÉELLES DU BROKER (uniquement si connecté ; best-effort, jamais bloquant) ---
-    real = {"connected": False, "equity": 0.0, "positions": []}
-    if alp:
+    # --- DONNÉES RÉELLES PAR BROKER (séparées, avec diagnostic d'erreur) ---
+    def _alpaca():
+        d = {"name": "Alpaca", "configured": alp, "ok": False, "equity": 0.0, "positions": [], "error": None}
+        if not alp:
+            d["error"] = "clés absentes (.env)"; return d
         try:
             from packages.execution.alpaca_broker import AlpacaBroker
             b = AlpacaBroker(paper=True)
-            real["equity"] += float(b.equity())
-            for p in b.positions():
-                real["positions"].append({"symbol": p.instrument, "broker": "Alpaca",
-                                          "side": p.side.value if hasattr(p.side, "value") else str(p.side),
-                                          "qty": round(p.qty, 4), "avg_price": round(p.avg_price, 2)})
-            real["connected"] = True
-        except Exception:  # noqa: BLE001
-            pass
-    if bit:
+            d["equity"] = round(float(b.equity()), 2)
+            d["positions"] = [{"symbol": p.instrument, "broker": "Alpaca",
+                               "side": p.side.value if hasattr(p.side, "value") else str(p.side),
+                               "qty": round(p.qty, 4), "avg_price": round(p.avg_price, 2)}
+                              for p in b.positions()]
+            d["ok"] = True
+        except Exception as e:  # noqa: BLE001
+            d["error"] = str(e)[:160]
+        return d
+
+    def _bitmart():
+        d = {"name": "Bitmart", "configured": bit, "ok": False, "equity": 0.0, "positions": [], "error": None}
+        if not bit:
+            d["error"] = "clés absentes (.env)"; return d
         try:
             from packages.execution.bitmart_broker import BitmartBroker
             b = BitmartBroker(dry_run=False)
-            real["equity"] += float(b.equity())
-            for p in b.positions():
-                real["positions"].append({"symbol": p.instrument, "broker": "Bitmart",
-                                          "side": p.side.value if hasattr(p.side, "value") else str(p.side),
-                                          "qty": round(p.qty, 4), "avg_price": round(p.avg_price, 2)})
-            real["connected"] = True
-        except Exception:  # noqa: BLE001
-            pass
-    real["equity"] = round(real["equity"], 2)
+            d["equity"] = round(float(b.equity()), 2)
+            d["positions"] = [{"symbol": p.instrument, "broker": "Bitmart",
+                               "side": p.side.value if hasattr(p.side, "value") else str(p.side),
+                               "qty": round(p.qty, 4), "avg_price": round(p.avg_price, 2)}
+                              for p in b.positions()]
+            d["ok"] = True
+        except Exception as e:  # noqa: BLE001
+            d["error"] = str(e)[:160]
+        return d
+
+    a_d, b_d = _alpaca(), _bitmart()
+    real = {
+        "connected": a_d["ok"] or b_d["ok"],
+        "equity": round(a_d["equity"] + b_d["equity"], 2),
+        "positions": a_d["positions"] + b_d["positions"],
+        "alpaca": a_d, "bitmart": b_d,
+    }
     tot = sum(p["current_value"] for p in positions) or 1.0
     targets = []
     for p in positions:
@@ -648,14 +663,18 @@ def _sentiment_section(held: list, names: dict, sector_of: dict, data: dict) -> 
                      "headlines": heads[:5]})
     mood = round(sum(r["score"] for r in rows) / len(rows), 4) if rows else 0.0
     has_news = any(r["n_news"] for r in rows)
-    # Fil d'actualité marché (RSS gratuit, rapide) — toujours tenté → des liens même sans QUANT_NEWS
-    market_news = []
+    # Fils d'actualité (RSS gratuit) — marché + MACRO (FED/BCE/FMI/économie). Toujours tentés.
+    market_news, macro_news = [], []
     try:
-        from packages.sentiment.rss import fetch_headlines
+        from packages.sentiment.rss import MACRO_FEEDS, fetch_headlines
         for h in fetch_headlines(limit=12, timeout=3.0):
             sc = S.analyze([h["title"]])[0]
             market_news.append({"title": h["title"], "link": h.get("link", ""),
                                 "label": sc["label"], "score": sc["score"]})
+        for h in fetch_headlines(MACRO_FEEDS, limit=12, timeout=3.0):
+            sc = S.analyze([h["title"]])[0]
+            macro_news.append({"title": h["title"], "link": h.get("link", ""),
+                               "label": sc["label"], "score": sc["score"]})
     except Exception:  # noqa: BLE001
         pass
     return {
@@ -663,7 +682,7 @@ def _sentiment_section(held: list, names: dict, sector_of: dict, data: dict) -> 
         "engine": S.engine_name() if (has_news or market_news) else "momentum 63 j (repli hors-ligne)",
         "source": "news RSS" if (has_news or market_news) else "dérivé du momentum (QUANT_NEWS=1 pour les news par actif)",
         "market_mood": mood, "market_label": S.label_of(mood), "rows": rows,
-        "market_news": market_news,
+        "market_news": market_news, "macro_news": macro_news,
     }
 
 

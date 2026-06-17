@@ -77,7 +77,7 @@ export default function Trades() {
               <tr><th className="text-left font-normal">Actif</th><th className="text-left font-normal">Sens</th>
               <th className="text-left font-normal">Entrée</th><th className="text-left font-normal">Sortie</th>
               <th className="text-right font-normal">P&amp;L</th><th className="text-right font-normal">%</th>
-              <th className="text-left font-normal pl-4">Motif sortie</th></tr>
+              <th className="text-left font-normal pl-4">Motif entrée</th><th className="text-left font-normal pl-4">Motif sortie</th></tr>
             </thead>
             <tbody>{closed.map((t: any) => {
               const win = (t.pnl_net ?? 0) >= 0;
@@ -88,6 +88,7 @@ export default function Trades() {
                   <td className="text-muted">{dt(t.entry_ts)}</td><td className="text-muted">{dt(t.exit_ts)}</td>
                   <td className="text-right" style={{ color: win ? "#22c55e" : "#ef4444" }}>{eur(t.pnl_net ?? 0)}</td>
                   <td className="text-right" style={{ color: win ? "#22c55e" : "#ef4444" }}>{pct(t.pnl_pct ?? 0)}</td>
+                  <td className="pl-4 text-muted font-sans">{t.entry_reason || "—"}</td>
                   <td className="pl-4 text-muted font-sans">{t.exit_reason}</td>
                 </tr>);
             })}</tbody>

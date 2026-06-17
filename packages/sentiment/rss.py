@@ -16,6 +16,14 @@ DEFAULT_FEEDS = [
     "https://www.investing.com/rss/news_25.rss",
 ]
 
+# Macro & banques centrales (décisions FED/BCE/FMI, économie) — flux RSS publics gratuits.
+MACRO_FEEDS = [
+    "https://www.federalreserve.gov/feeds/press_all.xml",       # FED (communiqués)
+    "https://www.ecb.europa.eu/rss/press.xml",                  # BCE
+    "https://www.imf.org/en/News/RSS?Language=ENG&Series=News",  # FMI
+    "https://www.investing.com/rss/news_95.rss",                # économie / banques centrales
+]
+
 
 def yahoo_feed(symbol: str) -> str:
     """Flux RSS Yahoo Finance par ticker (titres spécifiques à un actif)."""
