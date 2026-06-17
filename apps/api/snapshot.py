@@ -891,8 +891,10 @@ def _investor_section(symbols: list, acmap: dict, names: dict, sector_of: dict) 
             if f is None:
                 continue
             sec = sector_of.get(s, "")
+            gp = getattr(provider, "get_prior", None)
+            prev = gp(s) if callable(gp) else degrade_prior(f)
             out.append({"symbol": s, "name": names.get(s, ""), "sector": sec,
-                        **investor_scores(f, sec, degrade_prior(f))})
+                        **investor_scores(f, sec, prev)})
         return out
 
     rows = _rows(prov, all_eq[:cap])

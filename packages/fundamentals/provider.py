@@ -57,3 +57,23 @@ class SyntheticFundamentalsProvider:
             ebitda=ebitda, net_income=revenue * net_m, total_equity=equity,
             total_debt=debt, cash=revenue * 0.1 * r, fcf=revenue * net_m * (0.7 + 0.5 * r),
             interest_expense=debt * 0.04)
+
+    def get_prior(self, symbol: str, as_of: datetime | None = None) -> Financials:
+        """Exercice N-1 avec une croissance PROPRE à chaque société (déterministe) → la croissance
+        CA/bénéfices varie d'un titre à l'autre (corrige le taux constant)."""
+        from dataclasses import replace
+        f = self.get(symbol)
+        h = int(hashlib.sha256((symbol + "|prev").encode()).hexdigest()[:8], 16)
+        g_rev = -0.10 + (h % 60) / 100.0            # croissance CA ∈ [-10 %, +49 %], par titre
+        g_ni = -0.25 + ((h >> 6) % 95) / 100.0      # croissance bénéfices ∈ [-25 %, +69 %]
+        g_gm = ((h >> 12) % 8) / 100.0              # amélioration de marge brute (0-7 pts)
+        gm_now = f.gross_profit / f.revenue if f.revenue else 0.3
+        denr, denn = (1 + g_rev) or 1.0, (1 + g_ni) or 1.0
+        prev_rev = f.revenue / denr
+        prev_ni = f.net_income / denn if (f.net_income > 0 and denn > 0) else f.net_income * 1.05
+        return replace(
+            f, revenue=prev_rev, gross_profit=prev_rev * max(0.05, gm_now - g_gm),
+            ebit=f.ebit / denr, ebitda=f.ebitda / denr, net_income=prev_ni,
+            total_equity=f.total_equity * 0.95, total_debt=f.total_debt * 1.04,
+            cash=f.cash * 0.9, fcf=(f.fcf / denn if (f.fcf > 0 and denn > 0) else f.fcf * 1.05),
+            shares=f.shares * 0.99)

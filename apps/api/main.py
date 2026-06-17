@@ -160,7 +160,8 @@ def macro() -> dict:
     global _MACRO, _MACRO_TS
     if _MACRO is None or (time.time() - _MACRO_TS) > 21600:
         from packages.macro import macro_snapshot
-        _MACRO = macro_snapshot()
+        from packages.macro.imf import imf_projections
+        _MACRO = {"fred": macro_snapshot(), "imf": imf_projections()}
         _MACRO_TS = time.time()
     return _MACRO
 
