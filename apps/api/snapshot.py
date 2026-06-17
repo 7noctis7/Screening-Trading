@@ -722,6 +722,15 @@ def build_snapshot(seed: int = 7) -> dict:
                    "portfolio_vol": rb["portfolio_vol"],
                    "diversification_ratio": rb["diversification_ratio"]}
     limits = concentration_report(w_by_name, w_by_sector, max_name=0.20, max_sector=0.40)
+
+    # --- STRESS-TESTS MACRO + COUVERTURE (axe 11) ---
+    from packages.portfolio.scenarios import hedge_suggestion, scenario_analysis
+    w_by_class: dict[str, float] = {}
+    for r in comp["rows"]:
+        ac = acmap.get(r["symbol"], "equity")
+        w_by_class[ac] = w_by_class.get(ac, 0.0) + r["current_value"] / invested_now
+    stress = {"scenarios": scenario_analysis(w_by_class),
+              "hedge": hedge_suggestion(w_by_class, target_max_loss=-0.15)}
     # séries OHLCV (historique LONG : daily/weekly/monthly agrégés côté front) + marqueurs trades
     open_info = getattr(broker, "open_positions_info", {})
     by_sym_trades = {}
@@ -813,6 +822,7 @@ def build_snapshot(seed: int = 7) -> dict:
                 "correlation": PL.correlation_payload(syms, corr, clusters),
                 "risk_budget": risk_budget,
                 "limits": limits,
+                "stress": stress,
                 "review": PL.review_payload(expert_review({**agg, **comp["totals"]})),
             },
         },

@@ -543,6 +543,42 @@ function portfolioBar(k){
     <div style="margin-bottom:8px">${co.clusters.map(c=>'<span class="pill" style="margin-right:6px">'+c.join(' · ')+'</span>').join('')}</div>
     <table class="heat"><thead>${headHtml}</thead><tbody>${bodyHtml}</tbody></table></div>`);
   p.appendChild(heat);
+  // budget de risque + limites de concentration
+  const rb=a.risk_budget,lim=a.limits;
+  if(rb&&rb.symbols&&rb.symbols.length){
+    const mx=Math.max(0.01,...rb.contrib_pct);
+    const bars=rb.symbols.map((s,i)=>`<div style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:6px">
+      <span class="mono" style="width:64px">${s}</span>
+      <span style="height:8px;border-radius:4px;background:var(--accent);width:${Math.round(rb.contrib_pct[i]/mx*100)}%;max-width:360px"></span>
+      <span class="mono" style="color:var(--muted)">${(rb.contrib_pct[i]*100).toFixed(1)}%</span></div>`).join('');
+    p.appendChild($(`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center">
+      <div class="label">Budget de risque (contribution à la vol)</div>
+      <div class="mono" style="font-size:12px;color:var(--muted)">vol ${pct(rb.portfolio_vol)} · diversif ×${rb.diversification_ratio}</div></div>
+      <div style="margin-top:10px">${bars}</div></div>`));
+  }
+  if(lim){
+    const br=lim.breaches.map(b=>`<div style="display:flex;justify-content:space-between;color:var(--warn);font-size:12px">
+      <span>⚠️ ${b.type} — ${b.label}</span><span class="mono">${(b.weight*100).toFixed(1)}% &gt; ${(b.limit*100).toFixed(0)}%</span></div>`).join('');
+    p.appendChild($(`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center">
+      <div class="label">Concentration &amp; limites</div>
+      <div class="mono" style="font-size:12px">HHI ${lim.hhi} · N eff. ${lim.effective_n} ·
+      <span style="color:${lim.ok?'#22c55e':'#f59e0b'}">${lim.ok?'conforme':lim.breaches.length+' dépassement(s)'}</span></div></div>
+      ${br?'<div style="margin-top:8px">'+br+'</div>':''}</div>`));
+  }
+  // stress-tests macro + couverture
+  const st=a.stress;
+  if(st&&st.scenarios&&st.scenarios.length){
+    const rows=st.scenarios.map(s=>`<tr><td>${s.name}</td>
+      <td class="mono" style="text-align:right;color:${s.pnl_pct>=0?'#22c55e':'#f43f5e'}">${(s.pnl_pct*100).toFixed(1)}%</td>
+      <td class="mono" style="text-align:right;color:var(--muted)">${((1+s.pnl_pct)*100).toFixed(0)}%</td></tr>`).join('');
+    const h=st.hedge;
+    const hedge=h?`<div style="margin-top:10px;font-size:12px;background:var(--surface3);border-radius:10px;padding:10px">
+      <b>Couverture</b> — pire scénario : <span class="mono" style="color:#f43f5e">${(h.worst_pnl_pct*100).toFixed(1)}%</span> (${h.worst_scenario}). ${h.needed?('Suggestion : short indiciel ≈ <b class="mono">'+(h.hedge_pct*100).toFixed(1)+'%</b> pour viser ≤ '+(h.target_max_loss*100).toFixed(0)+'%.'):(h.rationale+'.')}</div>`:'';
+    p.appendChild($(`<div class="card"><div class="label" style="margin-bottom:8px">Stress-tests macro</div>
+      <table style="width:100%;font-size:13px"><thead><tr><th style="text-align:left">Scénario</th>
+      <th style="text-align:right">Impact P&amp;L</th><th style="text-align:right">Valeur après choc</th></tr></thead>
+      <tbody>${rows}</tbody></table>${hedge}</div>`));
+  }
   // revue experte
   const rv=a.review,sc=rv.health_score,scc=sc>=65?'#22c55e':(sc<45?'#ef4444':'#f59e0b');
   const L=(t,arr,c)=>arr&&arr.length?`<div style="margin-bottom:8px"><div style="color:${c};font-size:12px;font-weight:600">${t}</div><ul>${arr.map(x=>'<li>'+x+'</li>').join('')}</ul></div>`:'';
