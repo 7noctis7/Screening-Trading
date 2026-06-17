@@ -40,3 +40,12 @@ def test_pca_risk_systematic():
     data = {f"A{i}": (common + rng.normal(0, 0.002, 200)).tolist() for i in range(4)}
     r = pca_risk(data)
     assert r["available"] and r["systematic_pct"] > 0.7   # 1 facteur commun domine
+
+
+def test_christoffersen_independence():
+    from packages.portfolio.var_backtest import christoffersen_independence
+    import numpy as np
+    rng = np.random.default_rng(0)
+    indep = [int(x) for x in (rng.random(500) < 0.05)]   # dépassements aléatoires (indép.)
+    r = christoffersen_independence(indep)
+    assert 0 <= r["p_value"] <= 1

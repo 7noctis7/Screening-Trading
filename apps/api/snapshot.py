@@ -615,7 +615,7 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
     FMP si `FMP_API_KEY`, sinon fondamentaux synthétiques déterministes (offline-safe)."""
     from packages.fundamentals import ratios, valuation
     from packages.fundamentals.provider import degrade_prior
-    from packages.fundamentals.scoring import f_score, f_score_label, piotroski_full
+    from packages.fundamentals.scoring import altman_z, f_score, f_score_label, piotroski_full
 
     eq = [s for s in symbols if acmap.get(s) in ("equity", "etf")][:40]
     if not eq:
@@ -644,6 +644,7 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
             "fcf_yield": round(valuation.fcf_yield(f), 3),
             "margin_of_safety": None if mos != mos else round(mos, 3),
             "f_score": fs, "f_score_label": f_score_label(fs),
+            "altman_z": altman_z(f)["z"], "altman_zone": altman_z(f)["zone"],
             "_val": (valuation.earnings_yield(f) + valuation.fcf_yield(f)),
             "_qual": (ratios.roic(f) + ratios.gross_margin(f) + ratios.fcf_conversion(f)),
         })
@@ -873,10 +874,19 @@ def build_snapshot(seed: int = 7) -> dict:
     rm["garch"] = fit_garch(rets)
     rm["var_backtest"] = backtest_var(rets, rm.get("var_95", 0.0), alpha=0.95)
     rm["factor_risk"] = pca_risk({s: list(rets_by[s]) for s in syms})
+    from packages.portfolio.optimize import equal_risk_contribution
     cur_w = [w_by_name.get(s, 0.0) for s in cb_syms]
     optimal = {"symbols": cb_syms, "current": [round(x, 4) for x in cur_w],
                "hrp": [round(x, 4) for x in hrp_weights(cov)],
-               "min_variance": [round(x, 4) for x in min_variance_weights(cov)]}
+               "min_variance": [round(x, 4) for x in min_variance_weights(cov)],
+               "risk_parity": [round(x, 4) for x in equal_risk_contribution(cov)]}
+
+    # Sharpe probabiliste & DÉFLATÉ (garde-fou surapprentissage / essais multiples)
+    from packages.portfolio.psr import deflated_sharpe_ratio, probabilistic_sharpe_ratio
+    sr = rm.get("sharpe", 0.0) / (252 ** 0.5) if rm.get("sharpe") else 0.0   # Sharpe journalier
+    nobs = len(rets)
+    rm["psr"] = probabilistic_sharpe_ratio(sr, nobs, sr_benchmark=0.0)
+    rm["dsr"] = deflated_sharpe_ratio(sr, nobs, n_trials=20)   # ~20 configs essayées
     # séries OHLCV (historique LONG : daily/weekly/monthly agrégés côté front) + marqueurs trades
     open_info = getattr(broker, "open_positions_info", {})
     by_sym_trades = {}

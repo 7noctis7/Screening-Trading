@@ -37,7 +37,31 @@ def kupiec_pof(n: int, breaches: int, alpha: float = 0.95) -> dict:
             "p_value": round(pval, 4), "pass": pval > 0.05}
 
 
+def christoffersen_independence(breaches: list[int]) -> dict:
+    """Test d'indépendance des dépassements (ne doivent pas se regrouper dans le temps)."""
+    n00 = n01 = n10 = n11 = 0
+    for a, b in zip(breaches[:-1], breaches[1:]):
+        if a == 0 and b == 0: n00 += 1
+        elif a == 0 and b == 1: n01 += 1
+        elif a == 1 and b == 0: n10 += 1
+        else: n11 += 1
+    eps = 1e-12
+    p01 = n01 / max(1, n00 + n01)
+    p11 = n11 / max(1, n10 + n11)
+    p = (n01 + n11) / max(1, n00 + n01 + n10 + n11)
+    import math
+    ll0 = (n00 + n10) * math.log(max(1 - p, eps)) + (n01 + n11) * math.log(max(p, eps))
+    ll1 = (n00 * math.log(max(1 - p01, eps)) + n01 * math.log(max(p01, eps))
+           + n10 * math.log(max(1 - p11, eps)) + n11 * math.log(max(p11, eps)))
+    lr = -2 * (ll0 - ll1)
+    return {"lr_stat": round(lr, 3), "p_value": round(_chi2_sf_df1(lr), 4),
+            "independent": _chi2_sf_df1(lr) > 0.05}
+
+
 def backtest_var(returns, var: float, alpha: float = 0.95) -> dict:
-    """Backtest complet d'un niveau de VaR fixe sur une série de rendements."""
+    """Backtest complet (Kupiec POF + Christoffersen indépendance) d'un niveau de VaR fixe."""
     b = var_breaches(returns, var)
-    return {"var": round(abs(var), 6), "alpha": alpha, **kupiec_pof(len(b), sum(b), alpha)}
+    pof = kupiec_pof(len(b), sum(b), alpha)
+    indep = christoffersen_independence(b)
+    return {"var": round(abs(var), 6), "alpha": alpha, **pof,
+            "independent": indep["independent"], "indep_p_value": indep["p_value"]}

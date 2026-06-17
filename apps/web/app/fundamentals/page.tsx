@@ -33,8 +33,8 @@ export default function Fundamentals() {
             <th className="text-right font-normal">P/B</th><th className="text-right font-normal">ROE</th>
             <th className="text-right font-normal">Marge brute</th><th className="text-right font-normal">FCF yield</th>
             <th className="text-right font-normal">Marge sécu.</th><th className="text-right font-normal">F-score</th>
-            <th className="text-right font-normal">Rang sect.</th><th className="text-right font-normal">Score</th>
-            <th className="text-right font-normal">Reco</th></tr>
+            <th className="text-right font-normal">Altman Z</th><th className="text-right font-normal">Rang sect.</th>
+            <th className="text-right font-normal">Score</th><th className="text-right font-normal">Reco</th></tr>
           </thead>
           <tbody>{rows.map((r: any) => (
             <tr key={r.symbol} className="border-t border-border">
@@ -45,6 +45,7 @@ export default function Fundamentals() {
               <td className="text-right" style={{ color: r.margin_of_safety == null ? "#9aa1ad" : r.margin_of_safety > 0 ? "#22c55e" : "#f43f5e" }}>
                 {r.margin_of_safety == null ? "—" : `${(r.margin_of_safety * 100).toFixed(0)}%`}</td>
               <td className="text-right" style={{ color: r.f_score >= 7 ? "#22c55e" : r.f_score >= 4 ? "#f59e0b" : "#f43f5e" }}>{r.f_score}/9</td>
+              <td className="text-right" style={{ color: r.altman_zone === "sûr" ? "#22c55e" : r.altman_zone === "gris" ? "#f59e0b" : "#f43f5e" }}>{r.altman_z}</td>
               <td className="text-right text-muted">{r.sector_rank ?? "—"}</td>
               <td className="text-right">{r.score}</td>
               <td className="text-right font-sans font-medium" style={{ color: RC[r.rating] }}>{r.rating}</td>

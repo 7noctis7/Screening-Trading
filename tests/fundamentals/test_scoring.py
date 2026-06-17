@@ -33,3 +33,9 @@ def test_piotroski_full_improving_company():
     curr = _solid()
     prev = degrade_prior(curr)        # N-1 dégradé → l'entreprise s'améliore
     assert piotroski_full(curr, prev) >= 6
+
+
+def test_altman_z_zones():
+    from packages.fundamentals.scoring import altman_z
+    assert altman_z(_solid())["zone"] in ("sûr", "gris")
+    assert altman_z(_weak())["z"] < altman_z(_solid())["z"]
