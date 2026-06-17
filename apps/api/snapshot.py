@@ -728,9 +728,9 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
     if not eq:
         return {"available": False}
 
-    def _rows_for(provider):
+    def _rows_for(provider, universe):
         out = []
-        for s in eq:
+        for s in universe:
             try:
                 f = provider.get(s)
             except Exception:  # noqa: BLE001
@@ -768,11 +768,12 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
             })
         return out
 
-    rows = _rows_for(prov)
+    rows = _rows_for(prov, eq)
     if len(rows) < 5 and src.startswith("FMP"):     # clé FMP absente/invalide → repli synthétique
         from packages.fundamentals.provider import SyntheticFundamentalsProvider
         prov, src = SyntheticFundamentalsProvider(), "synthétique (repli FMP)"
-        rows = _rows_for(prov)
+        eq, cap, capped = all_eq, len(all_eq), False   # repli → TOUT l'univers (plus de plafond 40)
+        rows = _rows_for(prov, eq)
     if not rows:
         return {"available": False}
 
@@ -877,20 +878,28 @@ def _investor_section(symbols: list, acmap: dict, names: dict, sector_of: dict) 
     from packages.fundamentals.provider import degrade_prior
 
     prov, src = _fund_provider()
+    all_eq = [s for s in symbols if acmap.get(s) in ("equity", "etf")]
     cap = 40 if src.startswith("FMP") else (80 if src.startswith("yfinance") else 2000)
-    eq = [s for s in symbols if acmap.get(s) in ("equity", "etf")][:cap]
-    rows = []
-    for s in eq:
-        try:
-            f = prov.get(s)
-        except Exception:  # noqa: BLE001
-            f = None
-        if f is None:
-            continue
-        sec = sector_of.get(s, "")
-        prev = degrade_prior(f)
-        sc = investor_scores(f, sec, prev)
-        rows.append({"symbol": s, "name": names.get(s, ""), "sector": sec, **sc})
+
+    def _rows(provider, universe):
+        out = []
+        for s in universe:
+            try:
+                f = provider.get(s)
+            except Exception:  # noqa: BLE001
+                f = None
+            if f is None:
+                continue
+            sec = sector_of.get(s, "")
+            out.append({"symbol": s, "name": names.get(s, ""), "sector": sec,
+                        **investor_scores(f, sec, degrade_prior(f))})
+        return out
+
+    rows = _rows(prov, all_eq[:cap])
+    if len(rows) < 5 and src.startswith("FMP"):     # repli synthétique → TOUT l'univers
+        from packages.fundamentals.provider import SyntheticFundamentalsProvider
+        prov, src = SyntheticFundamentalsProvider(), "synthétique (repli FMP)"
+        rows = _rows(prov, all_eq)
     if not rows:
         return {"available": False}
     rows.sort(key=lambda r: r["overall"], reverse=True)
@@ -1121,6 +1130,8 @@ def build_snapshot(seed: int = 7) -> dict:
     from packages.portfolio.evt import evt_var_es
     from packages.portfolio.liquidity import portfolio_liquidity
     rm["evt"] = evt_var_es(rets, alpha=0.999)
+    from packages.portfolio.fragility import fragility as _fragility
+    rm["fragility"] = _fragility(rets)            # Taleb : exposition aux extrêmes
     liq_positions = []
     for r in comp["rows"]:
         bars = data.get(r["symbol"], [])[-20:]
