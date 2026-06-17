@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const LINKS: [string, string][] = [
   ["/", "Dashboard"],
@@ -40,6 +41,7 @@ export function Nav() {
             </Link>
           );
         })}
+        <ThemeToggle />
       </div>
     </nav>
   );
