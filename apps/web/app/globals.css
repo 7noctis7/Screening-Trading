@@ -52,9 +52,32 @@ body {
 h1 { letter-spacing:-.02em; }
 h2 { letter-spacing:-.01em; }
 
-table { border-collapse:collapse; }
-thead th { font-weight:500; letter-spacing:.02em; }
-tbody tr { transition:background-color .15s ease; }
+/* Cartes : respiration par défaut (padding homogène même sans util) */
+.card { padding:18px; }
+
+/* Tables : lisibilité financière (en-tête discret, lignes aérées, survol doux) */
+table { border-collapse:collapse; width:100%; }
+thead th { font-weight:600; letter-spacing:.04em; text-transform:uppercase; font-size:10.5px;
+  color:var(--muted2); padding:6px 10px; border-bottom:1px solid var(--border); position:sticky; }
+tbody td { padding:8px 10px; border-top:1px solid var(--border); font-size:13px; }
+tbody tr { transition:background-color .14s ease; }
+tbody tr:hover { background:color-mix(in srgb, var(--surface2) 70%, transparent); }
+
+/* Champs & boutons — style cohérent, focus net, transitions */
+input, select, button { font:inherit; color:inherit; }
+input[type=text], input:not([type]) {
+  background:var(--surface); border:1px solid var(--border); border-radius:10px;
+  padding:8px 12px; transition:border-color .15s ease, box-shadow .15s ease; }
+input:focus { border-color:var(--accent); box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); outline:none; }
+button { cursor:pointer; transition:background-color .15s ease, color .15s ease, border-color .15s ease, transform .1s ease; }
+button:active { transform:translateY(1px); }
+
+/* Sélection de texte aux couleurs de la marque */
+::selection { background:color-mix(in srgb, var(--accent) 35%, transparent); }
+
+/* Titres — hiérarchie nette */
+h1 { font-size:22px; font-weight:680; }
+h2 { font-size:13px; font-weight:600; }
 
 /* Apparition douce des pages (profondeur / motion) */
 main { animation:fade .35s ease; }
