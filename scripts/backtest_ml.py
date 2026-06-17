@@ -47,10 +47,16 @@ def main() -> None:
 
     print(f"\n{res['n_rebalances']} rebalancements · {res['n_assets']} actifs · pas {res['step_days']} j "
           f"· turnover {res['turnover_annual']}×/an\n")
-    print(line("Conviction + ML", res["ml"]))
+    print(line("Conviction + ML (brut)", res["ml"]))
+    print(line(f"Conviction + ML (net {res['cost_bps']:.0f}bps)", res["ml_net"]))
     print(line("Conviction technique", res["tech"]))
     print(line("Équipondéré (benchmark)", res["benchmark"]))
-    print("\n→ Le Sharpe déflaté est le juge : >0 et supérieur au bench = edge crédible (après essais multiples).")
+    it, im = res["ic_tech"], res["ic_ml"]
+    print(f"\n  Information Coefficient (pouvoir prédictif du signal) :")
+    print(f"    technique : IC {it['ic_mean']:+.3f} (t={it['ic_tstat']:+.1f})   "
+          f"ML : IC {im['ic_mean']:+.3f} (t={im['ic_tstat']:+.1f})")
+    print("    Repère : |IC|~0 = aucun pouvoir prédictif ; |t|>2 = significatif. Un bon facteur fait IC 0.03–0.06.")
+    print("\n→ Sharpe déflaté >0 ET > bench = edge crédible. IC≈0 ⇒ signal sans info ⇒ ne pas déployer.")
 
     out = ROOT / "out"; out.mkdir(exist_ok=True)
     (out / "backtest_ml.json").write_text(json.dumps(res, indent=2), encoding="utf-8")
