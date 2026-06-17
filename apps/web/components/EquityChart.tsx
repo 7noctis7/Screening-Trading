@@ -1,6 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
-import { Area, AreaChart, CartesianGrid, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 // Courbe d'equity + benchmarks (S&P 500, Nasdaq) toggleables. Axes lisibles, crosshair au survol.
 const MOIS = ["jan", "fév", "mar", "avr", "mai", "juin", "juil", "août", "sep", "oct", "nov", "déc"];
@@ -41,7 +41,7 @@ export function EquityChart({ series, benchmarks, height = 260 }:
         </div>
       </div>
       <ResponsiveContainer width="100%" height={height}>
-        <AreaChart data={data} margin={{ top: 6, right: 10, left: 0, bottom: 0 }}>
+        <ComposedChart data={data} margin={{ top: 6, right: 10, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id="eq" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.35} />
@@ -62,7 +62,7 @@ export function EquityChart({ series, benchmarks, height = 260 }:
           {names.filter((n) => on[n]).map((n) => (
             <Line key={n} type="monotone" dataKey={n} name={n} stroke={BCOL[n]} strokeWidth={1.4} dot={false} isAnimationActive={false} connectNulls />
           ))}
-        </AreaChart>
+        </ComposedChart>
       </ResponsiveContainer>
     </div>
   );

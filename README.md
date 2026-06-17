@@ -166,6 +166,10 @@ Routage : actions/ETF → **Alpaca (paper)** · crypto → **Bitmart** (ccxt). L
 Paper par défaut · aucun ordre réel sans feu vert + capital plafonné + stops · permissions API
 minimales (jamais retrait) · `.env`/`*.db` jamais committés · kill-switch drawdown testé.
 
+## 🔍 Audit du site (UI/UX, ML, finance, trading, data, risque)
+Audit transversal honnête, noté /20 par critère avec axes de correction priorisés :
+[`docs/AUDIT_SITE.md`](docs/AUDIT_SITE.md).
+
 ## 🔭 Pistes d'amélioration & écosystème
 Voir [`docs/ROADMAP.md`](docs/ROADMAP.md) : moteur de backtest vectorisé (vectorbt/qlib),
 charts pro (lightweight-charts/TradingView), exécution crypto (ccxt), data (polygon/tiingo),

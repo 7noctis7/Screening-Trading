@@ -859,14 +859,22 @@ def _conviction_section(held: list, screener: dict, ml_scores: dict, sentiment: 
     ranked = conviction_rank(signals)
     w = conviction_weights(ranked, vol, top_n=15, max_weight=0.20)
     # backtest POINT-IN-TIME (technique, sans fuite) : conviction vs équipondéré
-    from packages.backtest.conviction_backtest import conviction_backtest
+    from packages.backtest.conviction_backtest import conviction_backtest, multi_lens_backtest
     backtest = conviction_backtest(data)
+    # comparaison des top-10 par LENTILLE (fondamentaux / investisseurs / ML / toutes catégories)
+    lens_backtest = multi_lens_backtest(data, {
+        "Fondamentaux": fund_by,
+        "Investisseurs": inv_by,
+        "Signaux ML": ml_scores,
+        "Toutes catégories": {r["symbol"]: r["conviction"] for r in ranked},
+    }, top_n=10)
     rows = [{"symbol": r["symbol"], "name": names.get(r["symbol"], ""),
              "sector": sector_of.get(r["symbol"], ""), "conviction": r["conviction"],
              **{k: r["components"].get(k) for k in ("trend", "ml", "fundamental", "sentiment", "investor")},
              "target_weight": w.get(r["symbol"], 0.0)}
             for r in ranked[:25]]
     return {"available": True, "rows": rows, "backtest": backtest,
+            "lens_backtest": lens_backtest,
             "method": "Note = moyenne des z-scores (poids égaux) de : momentum 3 m, proba ML, "
                       "qualité fondamentale, sentiment. Allocation = conviction × inverse-vol, "
                       "plafonnée à 20 %. Discipline anti-surapprentissage (pas de poids optimisés)."}
