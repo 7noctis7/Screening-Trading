@@ -94,6 +94,13 @@ export default function Ml() {
                 <div className="text-lg" style={{ color: meta.precision_gain >= 0 ? "#22c55e" : "#f59e0b" }}>{(meta.precision_meta * 100).toFixed(1)}%</div>
                 <div className="text-muted2 text-xs">{meta.signals_meta} signaux ({meta.precision_gain >= 0 ? "+" : ""}{(meta.precision_gain * 100).toFixed(1)} pt)</div></div>
             </div>
+            {meta.sizing?.available && (
+              <div className="mt-3 pt-3 border-t border-border text-sm">
+                <div className="text-muted text-xs uppercase tracking-wide mb-1">Sizing piloté par la confiance</div>
+                <div className="mono">ratio d'info <b style={{ color: meta.sizing.ir_sized >= meta.sizing.ir_naive ? "#22c55e" : "#f59e0b" }}>{meta.sizing.ir_sized}</b>
+                  <span className="text-muted"> vs binaire {meta.sizing.ir_naive} · taille moy. {(meta.sizing.avg_size * 100).toFixed(0)}%</span></div>
+              </div>
+            )}
           </section>
         )}
         {drift?.available && (

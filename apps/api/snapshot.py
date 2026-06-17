@@ -529,7 +529,9 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
                 mm, _ = _ml_model(); mm.fit(Xm, ml_lbl)              # méta-modèle
                 pte = np.asarray(mp.predict_proba(X[a1:a2]), float)
                 mte = np.asarray(mm.predict_proba(np.column_stack([X[a1:a2], pte])), float)
-                meta = {"available": True, **meta_eval(pte, mte, y[a1:a2])}
+                from packages.ml.sizing import evaluate_sizing
+                meta = {"available": True, **meta_eval(pte, mte, y[a1:a2]),
+                        "sizing": evaluate_sizing(pte, y[a1:a2], mte)}
     except Exception:  # noqa: BLE001
         pass
 
