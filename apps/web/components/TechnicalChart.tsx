@@ -138,6 +138,9 @@ export function TechnicalChart({ data, markers = [], height = 360 }:
         const s = chart.addLineSeries({ color: "#a855f7", lineWidth: 1, priceScaleId: "rsi", lastValueVisible: false });
         s.priceScale().applyOptions({ scaleMargins: paneMargins("rsi") });
         s.setData(bars.map((d, i) => ({ time: d.t, value: rsi[i] })).filter((x: any) => x.value != null));
+        // zones de surachat/survente : 70 en rouge, 30 en vert
+        s.createPriceLine({ price: 70, color: "#f43f5e", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "70" });
+        s.createPriceLine({ price: 30, color: "#22c55e", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "30" });
       }
       // MACD (12,26,9) — panneau propre : ligne MACD + signal
       if (vis.macd && closes.length > 26) {
@@ -154,22 +157,45 @@ export function TechnicalChart({ data, markers = [], height = 360 }:
         mLine.setData(bars.map((d, i) => ({ time: d.t, value: macd[i] })));
         sLine.setData(bars.map((d, i) => ({ time: d.t, value: sig[i] })));
       }
-      // Fibonacci (retracement sur toute la fenêtre) — lignes de prix
+      // Fibonacci (retracement sur toute la fenêtre) — lignes de prix.
+      // 0.25 vert · 0.5 neutre · 0.618 & 0.75 bleu · 0.886 rouge (0 et 1 masqués).
       if (vis.fib && closes.length > 2) {
         const hi = Math.max(...bars.map((d) => d.h)), lo = Math.min(...bars.map((d) => d.l));
-        for (const lvl of [0, 0.25, 0.5, 0.618, 0.75, 0.886, 1]) {
-          candles.createPriceLine({ price: hi - (hi - lo) * lvl, color: "rgba(245,158,11,.5)",
+        const FIB: { lvl: number; color: string }[] = [
+          { lvl: 0.25, color: "#22c55e" }, { lvl: 0.5, color: "rgba(245,158,11,.45)" },
+          { lvl: 0.618, color: "#3b82f6" }, { lvl: 0.75, color: "#3b82f6" },
+          { lvl: 0.886, color: "#f43f5e" },
+        ];
+        for (const { lvl, color } of FIB) {
+          candles.createPriceLine({ price: hi - (hi - lo) * lvl, color,
             lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: `Fib ${lvl}` });
         }
       }
-      // FRVP (profil de volume, simplifié) : POC = prix au volume max sur la fenêtre
+      // FRVP (profil de volume, simplifié) : POC = prix au volume max ; VaL/VaH = bornes de
+      // la « value area » (70 % du volume autour du POC), tracées en bleu clair.
       if (vis.frvp && closes.length > 5) {
         const lo = Math.min(...bars.map((d) => d.l)), hi = Math.max(...bars.map((d) => d.h));
         const nb = 24, step = (hi - lo) / nb || 1; const buckets = new Array(nb).fill(0);
         bars.forEach((d) => { const b = Math.min(nb - 1, Math.max(0, Math.floor((d.c - lo) / step))); buckets[b] += d.v ?? 0; });
-        const poc = lo + (buckets.indexOf(Math.max(...buckets)) + 0.5) * step;
+        const pocIdx = buckets.indexOf(Math.max(...buckets));
+        const poc = lo + (pocIdx + 0.5) * step;
         candles.createPriceLine({ price: poc, color: "#5eead4", lineWidth: 2, lineStyle: 0,
           axisLabelVisible: true, title: "POC" });
+        // value area : expansion bidirectionnelle depuis le POC jusqu'à 70 % du volume
+        const total = buckets.reduce((a, b) => a + b, 0);
+        if (total > 0) {
+          let loI = pocIdx, hiI = pocIdx, acc = buckets[pocIdx];
+          while (acc < total * 0.7 && (loI > 0 || hiI < nb - 1)) {
+            const below = loI > 0 ? buckets[loI - 1] : -1;
+            const above = hiI < nb - 1 ? buckets[hiI + 1] : -1;
+            if (above >= below) { hiI++; acc += above; } else { loI--; acc += below; }
+          }
+          const vaL = lo + loI * step, vaH = lo + (hiI + 1) * step;
+          candles.createPriceLine({ price: vaH, color: "#7dd3fc", lineWidth: 1, lineStyle: 2,
+            axisLabelVisible: true, title: "VaH" });
+          candles.createPriceLine({ price: vaL, color: "#7dd3fc", lineWidth: 1, lineStyle: 2,
+            axisLabelVisible: true, title: "VaL" });
+        }
       }
       void tOf;
 
