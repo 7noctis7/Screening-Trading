@@ -10,7 +10,7 @@ export default function Portfolio() {
   const { data } = usePortfolio();
   if (!data) return <PageSkeleton />;
   const a = data.analysis, rel = a?.relative ?? {}, rm = a?.risk ?? {};
-  const rb = a?.risk_budget, lim = a?.limits, stress = a?.stress;
+  const rb = a?.risk_budget, lim = a?.limits, stress = a?.stress, opt = a?.optimal_allocation;
   const maxc = Math.max(0.01, ...(rb?.contrib_pct ?? [0]));
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-4">
@@ -31,6 +31,8 @@ export default function Portfolio() {
             <div><div className="text-muted text-xs">CVaR 95%</div><div className="text-lg">{pct(rm.cvar_95 ?? 0)}</div></div>
             <div><div className="text-muted text-xs">Vol</div><div className="text-lg">{pct(rm.vol ?? 0)}</div></div>
             <div><div className="text-muted text-xs">Proba ruine</div><div className="text-lg">{pct(a?.monte_carlo?.p_ruin ?? 0)}</div></div>
+            <div><div className="text-muted text-xs">VaR Cornish-Fisher 95%</div><div className="text-lg">{pct(rm.var_cornish_fisher_95 ?? 0)}</div></div>
+            <div><div className="text-muted text-xs">Vol EWMA</div><div className="text-lg">{pct(rm.vol_ewma ?? 0)}</div></div>
           </div>
         </section>
       </div>
@@ -103,6 +105,27 @@ export default function Portfolio() {
                 : <>{stress.hedge.rationale} (seuil {(stress.hedge.target_max_loss * 100).toFixed(0)}%).</>}
             </div>
           )}
+        </section>
+      )}
+
+      {/* Allocation optimale suggérée (HRP / min-variance vs actuelle) */}
+      {opt?.symbols?.length > 0 && (
+        <section className="card p-4 overflow-x-auto">
+          <h2 className="text-sm uppercase tracking-wide text-muted mb-2">Allocation optimale suggérée</h2>
+          <table className="w-full text-sm mono">
+            <thead className="text-muted text-xs">
+              <tr><th className="text-left font-normal">Actif</th><th className="text-right font-normal">Actuelle</th>
+              <th className="text-right font-normal">HRP</th><th className="text-right font-normal">Min-variance</th></tr>
+            </thead>
+            <tbody>{opt.symbols.map((s: string, i: number) => (
+              <tr key={s} className="border-t border-border">
+                <td className="py-1.5">{s}</td>
+                <td className="text-right text-muted">{(opt.current[i] * 100).toFixed(1)}%</td>
+                <td className="text-right" style={{ color: "#3b82f6" }}>{(opt.hrp[i] * 100).toFixed(1)}%</td>
+                <td className="text-right" style={{ color: "#60a5fa" }}>{(opt.min_variance[i] * 100).toFixed(1)}%</td>
+              </tr>))}</tbody>
+          </table>
+          <p className="text-muted2 text-xs mt-2">HRP (hierarchical risk parity, López de Prado) &amp; min-variance — robustes sans inversion instable de la covariance.</p>
         </section>
       )}
 
