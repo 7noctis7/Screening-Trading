@@ -42,6 +42,17 @@ export default function Risk() {
           {rm.liquidity?.available && <Stat label="Liquidation (jours pond.)" value={String(rm.liquidity.weighted_days)} />}
           {rm.liquidity?.available && <Stat label="Part illiquide" value={pct(rm.liquidity.illiquid_pct)} tone={rm.liquidity.illiquid_pct > 0.2 ? "#f59e0b" : undefined} />}
         </div>
+        {rm.var_horizons?.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
+            <span className="text-muted text-xs uppercase tracking-wide">VaR 95% multi-horizon</span>
+            {rm.var_horizons.map((h: any) => (
+              <span key={h.days} className="mono">
+                <span className="text-muted">{h.days} j :</span> <b style={{ color: "#f43f5e" }}>{pct(h.var_95)}</b>
+              </span>
+            ))}
+            <span className="text-muted2 text-xs">(mise à l'échelle racine-du-temps ; 10 j = horizon Bâle)</span>
+          </div>
+        )}
         <p className="text-muted2 text-xs mt-2">EVT = théorie des valeurs extrêmes (Peaks-Over-Threshold + GPD) pour le risque de queue ; liquidité estimée via l'ADV (participation 10 %).</p>
       </section>
 

@@ -18,6 +18,17 @@
 
 **Global ≈ 16,3/20 vs référence institutionnelle · ≈ 19/20 en retail gratuit.**
 
+> ✅ **Améliorations livrées le 2026-06-17 (cette itération)** :
+> **UI/UX** — particules en pause quand l'onglet est masqué + densité réduite sur mobile,
+> compteurs animés (count-up) sur les KPI, progressive disclosure (`<details>`) sur les
+> hypothèses de coûts. **ML** — 8 features point-in-time (ajout : momentum ajusté du risque,
+> distance au plus-haut 52 sem., reversal 5 j) + **garde-fou edge** (bannière si AUC OOS ≤ 0.52).
+> **Risque** — VaR 95% **multi-horizon** (1 j / 10 j Bâle / 21 j, racine-du-temps).
+> **Trading/Finance** — **modèle de coûts par classe d'actifs** (actions/ETF/crypto/forex/
+> commodités/indices) appliqué dès le backtest/TCA + table d'hypothèses dans l'UI.
+> Les items restants (factoriel Barra, tick temps réel, fondamentaux PIT complets, activation
+> du cron côté Mac) relèvent de l'infra/données payantes ou d'une action utilisateur.
+
 ---
 
 ## 1. 🎨 UI/UX design — 18/20
