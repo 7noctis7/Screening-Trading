@@ -292,15 +292,19 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None) -> dic
     import os
     alp = bool(os.environ.get("ALPACA_API_KEY") and os.environ.get("ALPACA_API_SECRET"))
     bit = bool(os.environ.get("BITMART_API_KEY") and os.environ.get("BITMART_API_SECRET"))
+    tot = sum(p["current_value"] for p in positions) or 1.0
     targets = []
     for p in positions:
         is_crypto = acmap.get(p["symbol"]) == "crypto"
         targets.append({"symbol": p["symbol"], "broker": "Bitmart" if is_crypto else "Alpaca",
-                        "asset_class": acmap.get(p["symbol"], ""), "weight_value": p["current_value"],
+                        "asset_class": acmap.get(p["symbol"], ""),
+                        "weight_pct": round(p["current_value"] / tot, 4),  # allocation cible (%)
                         "side": p["side"]})
     return {
         "connected": alp or bit,
-        "portfolio": kpis or {},
+        # KPI réels seulement si un compte est connecté (sinon le portefeuille réel est vide)
+        "portfolio": (kpis or {}) if (alp or bit) else {},
+        "model_weights_only": not (alp or bit),
         "mode": "paper",                          # paper par défaut, JAMAIS d'ordre réel non confirmé
         "brokers": [
             {"name": "Alpaca", "scope": "Actions & ETF US", "connected": alp, "paper": True,
@@ -521,12 +525,13 @@ def build_snapshot(seed: int = 7) -> dict:
     init_cap = 10_000
     pf_value = round(equity[-1], 2)
     pf_pnl = round(pf_value - init_cap, 2)
-    cash = round(pf_value - comp["totals"]["current_value"], 2)
+    invested = comp["totals"]["current_value"]
+    cash = round(max(0.0, pf_value - invested), 2)         # jamais négatif (pas de levier)
     portfolio_kpis = {
         "value": pf_value, "initial": init_cap, "pnl_abs": pf_pnl,
         "pnl_pct": round(pf_pnl / init_cap, 4), "cash": cash,
-        "invested": comp["totals"]["current_value"],
-        "exposure_pct": round(comp["totals"]["gross_exposure"] / pf_value, 4) if pf_value else 0.0,
+        "invested": round(invested, 2),
+        "exposure_pct": round(min(1.0, invested / pf_value), 4) if pf_value else 0.0,
         "n_positions": len(comp["rows"]),
     }
     return {

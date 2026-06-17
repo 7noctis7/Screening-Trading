@@ -143,7 +143,7 @@ display:flex;align-items:center;justify-content:center;padding:20px;animation:fa
 <div class="tab" data-p="data" role="tab" tabindex="0" aria-selected="false">Données</div>
 <div class="tab" data-p="pf" role="tab" tabindex="0" aria-selected="false">Portefeuille &amp; Analyse</div>
 <div class="tab" data-p="pos" role="tab" tabindex="0" aria-selected="false">Positions</div>
-<div class="tab" data-p="trades" role="tab" tabindex="0" aria-selected="false">Trades</div>
+<div class="tab" data-p="trades" role="tab" tabindex="0" aria-selected="false">Trades (fictif)</div>
 <div class="tab" data-p="live" role="tab" tabindex="0" aria-selected="false">Portefeuille réel</div></div>
 
 <div class="page active" id="dash"></div>
@@ -349,7 +349,7 @@ function portfolioBar(k){
     ${cell('Gain / perte',(pos?'+':'')+'$'+eur(k.pnl_abs||0)+' ('+(pos?'+':'')+((k.pnl_pct||0)*100).toFixed(1)+'%)',col)}
     ${cell('Investi / Cash','$'+eur(k.invested||0)+' / $'+eur(k.cash||0))}
     ${cell('Exposition',((k.exposure_pct||0)*100).toFixed(0)+'% · '+(k.n_positions||0)+' lignes')}
-    </div><div style="font-size:11px;color:var(--muted);margin-top:8px">Capital initial $${eur(k.initial||10000)} → objectif : surperformer le benchmark. Exposition &gt;100% = levier piloté par le VIX en marché calme.</div></div>`);
+    </div><div style="font-size:11px;color:var(--muted);margin-top:8px">Capital initial $${eur(k.initial||10000)} → objectif : surperformer le benchmark. Sans levier (exposition ≤ 100%, cash ≥ 0).</div></div>`);
 }
 
 // ---- DASHBOARD ----
@@ -551,8 +551,8 @@ const mkTable=(head,bodyRows)=>$(`<table><thead><tr>${head}</tr></thead><tbody>$
   // bandeau de statistiques
   const wr=(st.win_rate||0)*100;
   const cards=[['Trades clôturés',st.count||0,''],['Taux de réussite',wr.toFixed(0),'%'],
-    ['P&L cumulé',eur(st.pnl_total||0),' €','pnl'],['Profit factor',st.profit_factor??'—',''],
-    ['Meilleur',eur(st.best||0),' €','best'],['Pire',eur(st.worst||0),' €','worst']];
+    ['P&L réalisé (clôturés)','$'+eur(st.pnl_total||0),'','pnl'],['Profit factor',st.profit_factor??'—',''],
+    ['Meilleur','$'+eur(st.best||0),'','best'],['Pire','$'+eur(st.worst||0),'','worst']];
   const g=$('<div class="grid4"></div>');
   cards.forEach(([lab,val,suf,kind])=>{
     const tone=kind==='worst'?'neg':kind==='best'?'pos':kind==='pnl'?((st.pnl_total||0)>=0?'pos':'neg'):'';
@@ -563,6 +563,11 @@ const mkTable=(head,bodyRows)=>$(`<table><thead><tr>${head}</tr></thead><tbody>$
   // bandeau VALEUR DE PORTEFEUILLE (capital, gain/perte, exposition)
   const k=DATA.dashboard.portfolio||{};
   p.appendChild(portfolioBar(k));
+  const latent=Math.round((k.pnl_abs||0)-(st.pnl_total||0));
+  p.appendChild($(`<div style="font-size:11px;color:var(--muted);margin-top:-6px">
+    ⓘ <b style="color:var(--fg)">P&L réalisé</b> (trades clôturés) $${eur(st.pnl_total||0)}
+    + <b style="color:var(--fg)">P&L latent</b> (positions ouvertes) $${eur(latent)}
+    = <b style="color:var(--fg)">gain total</b> $${eur(k.pnl_abs||0)}. Démo synthétique (« fictif »).</div>`));
   // trades en cours
   const oc=$(`<div class="card"><div class="label" style="margin-bottom:10px">Trades en cours (clique un actif pour son graphique)</div></div>`);
   if(!open.length){oc.appendChild($('<p style="color:var(--muted);font-size:13px">Aucun trade ouvert au dernier pas (stratégie à plat).</p>'));}
@@ -796,11 +801,16 @@ const heatColor=(v,m)=>{const t=Math.max(-1,Math.min(1,v/m));
   const dot=L.connected?'#22c55e':'#f59e0b';
   p.appendChild($(`<div class="card banner">
     <div><span class="dot" style="background:${dot}"></span>
-      <b>${L.connected?'Connecté':'Non connecté'}</b>
-      <span style="color:var(--muted)">· mode <b style="color:var(--fg)">${L.mode}</b> (paper par défaut, jamais d'ordre réel non confirmé)</span></div>
-    <div style="font-size:11px;color:var(--muted)">${L.target_orders.length} ordres cibles à répliquer</div></div>`));
-  // valeur de portefeuille (mêmes KPI que Trades — single source of truth)
-  if(L.portfolio&&L.portfolio.value)p.appendChild(portfolioBar(L.portfolio));
+      <b>${L.connected?'Compte connecté':'Aucun compte connecté'}</b>
+      <span style="color:var(--muted)">· mode <b style="color:var(--fg)">${L.mode}</b> (paper par défaut, jamais d'ordre réel non confirmé)</span></div></div>`));
+  // KPI RÉELS uniquement si un compte est connecté (sinon portefeuille réel = vide)
+  if(L.connected&&L.portfolio&&L.portfolio.value){p.appendChild(portfolioBar(L.portfolio));}
+  else{p.appendChild($(`<div class="card"><div class="grid4">
+    <div><div class="label">Valeur du compte</div><div class="val" style="font-size:20px">—</div></div>
+    <div><div class="label">Gain / perte</div><div class="val" style="font-size:20px">—</div></div>
+    <div><div class="label">Positions réelles</div><div class="val" style="font-size:20px">0</div></div>
+    <div><div class="label">Statut</div><div class="val" style="font-size:14px;color:#f59e0b">à connecter</div></div>
+    </div><div style="font-size:11px;color:var(--muted);margin-top:8px">Connectez Alpaca / Bitmart pour voir ici votre VRAI portefeuille (valeur, P&L, positions). Aucun montant fictif n'est affiché.</div></div>`));}
   // brokers
   const bc=$(`<div class="grid2"></div>`);
   L.brokers.forEach(b=>bc.appendChild($(`<div class="card">
@@ -809,24 +819,31 @@ const heatColor=(v,m)=>{const t=Math.max(-1,Math.min(1,v/m));
     <div style="font-size:12px;color:var(--muted)">${b.scope} · ${b.paper?'paper':'live'}</div>
     <div style="font-size:11px;color:var(--muted);margin-top:8px">Clés requises : ${b.env.map(e=>'<span class="pill" style="margin-right:4px">'+e+'</span>').join('')}</div></div>`)));
   p.appendChild(bc);
-  // ordres cibles (portefeuille modèle à répliquer)
-  const oc=$(`<div class="card"><div class="label" style="margin-bottom:10px">Ordres cibles — portefeuille modèle (${L.target_orders.length})</div></div>`);
-  if(!L.target_orders.length){oc.appendChild($('<p style="color:var(--muted);font-size:13px">Aucune position ouverte à répliquer.</p>'));}
+  // OÙ METTRE VOS CLÉS API
+  p.appendChild($(`<div class="card" style="border-color:var(--accent)">
+    <div class="label" style="margin-bottom:8px">🔑 Où indiquer vos clés API</div>
+    <div style="font-size:12px;color:var(--muted);line-height:1.7">
+    Créez un fichier <b style="color:var(--fg)">.env</b> à la racine du projet (jamais committé) :
+    <pre style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px;margin:8px 0;font-size:11px;color:var(--fg);overflow:auto">ALPACA_API_KEY=xxxxxxxx
+ALPACA_API_SECRET=xxxxxxxx
+BITMART_API_KEY=xxxxxxxx
+BITMART_API_SECRET=xxxxxxxx
+BITMART_API_MEMO=xxxxxxxx</pre>
+    ou via le terminal : <span class="pill">export ALPACA_API_KEY="..."</span> dans <b style="color:var(--fg)">~/.zshrc</b>.<br>
+    Puis : aperçu sûr <span class="pill">python3 scripts/run_live.py</span> (dry-run) ·
+    exécution paper <span class="pill">python3 scripts/run_live.py --live --yes</span>.
+    Permissions API minimales (jamais de retrait).</div></div>`));
+  // allocation cible (POIDS %, pas de montant fictif) — à dimensionner sur votre capital réel
+  const oc=$(`<div class="card"><div class="label" style="margin-bottom:10px">Allocation cible du modèle — ${L.target_orders.length} lignes (% du portefeuille, à appliquer à votre capital réel)</div></div>`);
+  if(!L.target_orders.length){oc.appendChild($('<p style="color:var(--muted);font-size:13px">Aucune position cible.</p>'));}
   else{
     const rows=L.target_orders.map(o=>`<tr><td>${tkr(o.symbol)}</td><td>${o.side}</td>
       <td style="color:var(--muted)">${o.asset_class}</td>
       <td><span class="pill">${o.broker}</span></td>
-      <td class="mono" style="text-align:right">${eur(o.weight_value)} \$</td></tr>`);
-    oc.appendChild(mkTable('<th>Actif</th><th>Sens</th><th>Classe</th><th>Broker</th><th style="text-align:right">Montant cible</th>',rows));
+      <td class="mono" style="text-align:right">${pct(o.weight_pct||0)}</td></tr>`);
+    oc.appendChild(mkTable('<th>Actif</th><th>Sens</th><th>Classe</th><th>Broker</th><th style="text-align:right">Poids cible</th>',rows));
   }
   p.appendChild(oc);
-  p.appendChild($(`<div class="card" style="border-color:var(--border2)">
-    <div class="label" style="margin-bottom:6px">Brancher le robot</div>
-    <div style="font-size:12px;color:var(--muted);line-height:1.6">
-    1. Définir les clés API en variables d'environnement (Alpaca pour actions/ETF, Bitmart pour crypto).<br>
-    2. Démarrer en <b style="color:var(--fg)">paper trading</b> : le robot réplique les ordres cibles ci-dessus.<br>
-    3. Vérifier l'exécution, le slippage et la réconciliation, PUIS activer le live avec garde-fous risque (kill-switch drawdown).<br>
-    <i>${L.note}</i></div></div>`));
  }catch(e){console.error('rendu live:',e);}
 })();
 

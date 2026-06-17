@@ -29,15 +29,13 @@ def _isnan(v) -> bool:
 
 
 def vix_exposure(v: float) -> float:
-    """Multiplicateur d'exposition piloté par le VIX (playbook volatilité).
-    VIX < 13 → risk-on (+20%) · 13–20 → neutre · 20–30 → on réduit · > 30 → défensif (coupe le levier)."""
-    if v < 13:
-        return 1.2
+    """Multiplicateur d'exposition piloté par le VIX (playbook volatilité), SANS levier (≤ 100%).
+    VIX < 20 → pleinement investi (×1.0) · 20–30 → on réduit (×0.7) · > 30 → défensif (×0.4)."""
     if v < 20:
         return 1.0
     if v < 30:
-        return 0.6
-    return 0.3
+        return 0.7
+    return 0.4
 
 
 def fast_swing_backtest(
@@ -181,6 +179,10 @@ def fast_swing_backtest(
             tid += 1
             _close(broker, journal, s, open_t[s], b[-1].close, b[-1].ts, "end_of_backtest",
                    costs, tid, _AC.get(acmap.get(s, "equity"), AssetClass.EQUITY))
+    # infos d'entrée des positions ENCORE ouvertes (pour marquer l'achat sur le graphe)
+    broker.open_positions_info = {s: {"entry_ts": ot["entry_ts"], "entry_price": ot["entry_price"],
+                                      "stop": ot["stop"], "target": ot["target"]}
+                                  for s, ot in open_t.items()}
     return broker, journal, equity, ts
 
 
