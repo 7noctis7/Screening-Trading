@@ -30,7 +30,7 @@ def _cov_annual(win: np.ndarray) -> np.ndarray:
 
 def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict | None = None,
                     swing_equity: list | None = None, dd_target: float = 0.25, band: float = 0.03,
-                    step: int = 21, lookback: int = 120, top_k: int = 20, k_dd: float = 2.5,
+                    step: int = 21, lookback: int = 120, top_k: int = 30, k_dd: float = 2.5,
                     blackout_move: float = 0.12) -> dict:
     syms = [s for s, b in data.items() if b and len(b) > lookback + 2 * step]
     if len(syms) < 5:
