@@ -476,7 +476,7 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
 
     H = 21  # horizon ~1 mois (profil moyen-long terme)
 
-    def feats(c, sma, rsi, atr, t):
+    def feats(c, sma, rsi, atr, rets_c, t):
         if t < 60 or t >= len(c) or sma[t] != sma[t] or rsi[t] != rsi[t] or atr[t] != atr[t]:
             return None
         vol = atr[t] / c[t] if c[t] else 0.0
@@ -486,12 +486,19 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
         win = c[max(1, t - 10):t + 1]
         rr = win[1:] / win[:-1] - 1 if len(win) > 1 else None
         gap = float(rr[abs(rr).argmax()]) if rr is not None and len(rr) else 0.0
+        # Ticket #6 : RÉGIME de volatilité conditionnel (percentile de la vol court terme vs sa
+        # propre histoire, point-in-time) → le modèle apprend des relations DIFFÉRENTES par régime.
+        rv = rets_c[max(0, t - 20):t]
+        cur_v = float(rv.std()) if rv.size > 3 else 0.0
+        hist = rets_c[max(0, t - 252):t]
+        reg = float((np.abs(hist) < cur_v).mean()) if hist.size > 20 else 0.5   # ∈ [0,1]
         return [c[t] / c[t - 20] - 1, c[t] / c[t - 60] - 1,
                 (c[t] - sma[t]) / sma[t], rsi[t] / 100.0, vol,
                 (c[t] / c[t - 60] - 1) / (vol + 1e-6),          # momentum ajusté du risque
                 c[t] / hi52 - 1 if hi52 else 0.0,               # distance au plus-haut 52 sem.
                 -(c[t] / c[t - 5] - 1),                         # reversal court terme (5 j)
-                gap]                                            # dérive post-choc (proxy PEAD)
+                gap,                                            # dérive post-choc (proxy PEAD)
+                reg]                                            # régime de volatilité (percentile)
 
     X, y, T0, T1, last = [], [], [], [], {}    # T0/T1 = fenêtre du label (pour la purge)
     for s, bars in data.items():
@@ -500,13 +507,15 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
         if ncl < 90 + H:
             continue
         sma, rsi, atr = SMA(50).compute(bars), RSI(14).compute(bars), ATR(14).compute(bars)
+        rets_c = np.diff(c) / c[:-1] if ncl > 1 else np.zeros(0)   # pour le régime de vol
+        rets_c = np.concatenate([[0.0], rets_c])                   # aligné sur les index de c
         for t in range(60, ncl - H, 5):
-            f = feats(c, sma, rsi, atr, t)
+            f = feats(c, sma, rsi, atr, rets_c, t)
             if f is None:
                 continue
             X.append(f); y.append(1.0 if c[t + H] > c[t] else 0.0)
             T0.append(t); T1.append(t + H)     # le label couvre [t, t+H] → purge des chevauchements
-        fl = feats(c, sma, rsi, atr, ncl - 1)
+        fl = feats(c, sma, rsi, atr, rets_c, ncl - 1)
         if fl is not None:
             last[s] = fl
     if len(X) < 500:
@@ -534,10 +543,22 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
         pass
     cv_auc = round(float(np.mean(aucs)), 3) if aucs else None
 
-    model.fit(X, y)                              # modèle final sur tout l'échantillon
     fn = ["momentum 1 mois", "momentum 3 mois", "tendance vs MM50", "RSI", "volatilité (ATR)",
           "momentum ajusté risque", "distance plus-haut 52 sem.", "reversal 5 j",
-          "dérive post-choc (PEAD)"]
+          "dérive post-choc (PEAD)", "régime de volatilité"]
+    # Ticket #2 (Huang/Musk) : serving DÉCOUPLÉ de l'entraînement. On charge le modèle final depuis
+    # un artefact (produit hors-ligne par `make train` / cron) s'il est frais ; sinon on entraîne
+    # inline et on le persiste. Fini le réentraînement complet à chaque requête web.
+    from packages.ml import artifact as _art
+    _sig = (len(X), X.shape[1], len(last), int(T1.max()) if len(T1) else 0)
+    _cached = _art.load(_sig)
+    if _cached is not None:
+        model = _cached[0]
+        _served = "artefact (cron)"
+    else:
+        model.fit(X, y)                          # entraînement inline (repli sûr)
+        _art.save(_sig, model, {"fn": fn})
+        _served = "inline"
     imp = _feat_importance(model, fn, X, y)
     mx = max((v for _, v in imp), default=1.0) or 1.0
     probs = {s: float(model.predict_proba([f])[0]) for s, f in last.items()}
@@ -651,7 +672,7 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
                 else "Pas d'edge OOS prouvé (AUC ≤ 0.52) : score indicatif, ne pas surpondérer.")
     return {
         "available": True, "model": model_name, "horizon_days": H,
-        "validation": f"CV purgée + embargo (k={n_splits})",
+        "validation": f"CV purgée + embargo (k={n_splits})", "served_from": _served,
         "edge_ok": edge_ok, "edge_message": edge_msg, "auc_floor": 0.52,
         "n_train": int(len(X)), "n_splits": len(aucs), "auc": cv_auc,
         "feature_importance": [{"feature": f, "weight": round(v / mx, 3)} for f, v in imp],
