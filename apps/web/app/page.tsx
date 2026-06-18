@@ -1,4 +1,5 @@
 "use client";
+import { useMemo, useState } from "react";
 import { StepBanner } from "@/components/Pipeline";
 import { useDashboard, useScreener, useSentiment } from "@/lib/api";
 import { MetricCard } from "@/components/MetricCard";
@@ -9,13 +10,50 @@ import { EquityChart } from "@/components/EquityChart";
 import { PageSkeleton } from "@/components/ui";
 
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
+const PERIODS: [string, number][] = [["1A", 1], ["2A", 2], ["3A", 3], ["5A", 5], ["Tout", 0]];
+
+// Recalcule les métriques sur la fenêtre sélectionnée (annualisé, base 252 j).
+function statsFrom(eq: { t: string; v: number }[]) {
+  if (eq.length < 2) return null;
+  const v = eq.map((p) => p.v);
+  const r: number[] = [];
+  for (let i = 1; i < v.length; i++) if (v[i - 1] > 0) r.push(v[i] / v[i - 1] - 1);
+  const mean = r.reduce((a, b) => a + b, 0) / (r.length || 1);
+  const sd = Math.sqrt(r.reduce((a, b) => a + (b - mean) ** 2, 0) / (r.length || 1));
+  const dn = r.filter((x) => x < 0);
+  const dsd = Math.sqrt(dn.reduce((a, b) => a + b * b, 0) / (dn.length || 1));
+  let peak = v[0], mdd = 0;
+  for (const x of v) { peak = Math.max(peak, x); mdd = Math.min(mdd, x / peak - 1); }
+  return {
+    total_return: v[v.length - 1] / v[0] - 1,
+    sharpe: sd > 0 ? (mean / sd) * Math.sqrt(252) : 0,
+    sortino: dsd > 0 ? (mean / dsd) * Math.sqrt(252) : 0,
+    max_drawdown: mdd,
+  };
+}
 
 export default function Dashboard() {
   const { data: d } = useDashboard();
   const { data: s } = useScreener();
   const { data: sent } = useSentiment();
+  const [years, setYears] = useState(0);   // 0 = tout
+  const eqFull: { t: string; v: number }[] = d?.equity ?? [];
+  const sliced = useMemo(() => {
+    if (!years || !eqFull.length) return eqFull;
+    const last = new Date(eqFull[eqFull.length - 1].t);
+    const cut = new Date(last); cut.setFullYear(cut.getFullYear() - years);
+    return eqFull.filter((p) => new Date(p.t) >= cut);
+  }, [eqFull, years]);
+  const benchSliced = useMemo(() => {
+    if (!years || !d?.benchmarks) return d?.benchmarks;
+    const cutT = sliced[0]?.t;
+    const out: Record<string, any[]> = {};
+    for (const [k, arr] of Object.entries(d.benchmarks as Record<string, any[]>))
+      out[k] = arr.filter((p) => p.t >= cutT);
+    return out;
+  }, [d?.benchmarks, sliced, years]);
   if (!d) return <PageSkeleton />;
-  const m = d.metrics;
+  const m = (years ? statsFrom(sliced) : d.metrics) ?? d.metrics;
   return (
     <main className="max-w-6xl mx-auto p-6 space-y-4">
       <h1 className="text-xl font-semibold tracking-tight">Quant Terminal
@@ -26,13 +64,25 @@ export default function Dashboard() {
       <RegimeBanner regime={d.regime} />
       <SentimentBanner sentiment={sent} />
       <VixPlaybook vix={d.vix} playbook={d.vix_playbook} series={d.vix_series} />
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className="text-xs text-muted uppercase tracking-wide mr-1">Période</span>
+        {PERIODS.map(([lab, y]) => (
+          <button key={lab} onClick={() => setYears(y)}
+            className="px-2.5 py-1 text-xs rounded-full border transition-colors"
+            style={{ borderColor: years === y ? "var(--accent)" : "var(--border)",
+                     color: years === y ? "var(--fg)" : "var(--muted)",
+                     background: years === y ? "color-mix(in srgb, var(--accent) 14%, transparent)" : "transparent" }}>
+            {lab}
+          </button>
+        ))}
+      </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <MetricCard label="Rendement" value={pct(m.total_return)} tone={m.total_return >= 0 ? "pos" : "neg"} />
         <MetricCard label="Sharpe" value={m.sharpe?.toFixed(2)} />
         <MetricCard label="Sortino" value={m.sortino?.toFixed(2)} />
         <MetricCard label="Max DD" value={pct(m.max_drawdown)} tone="neg" />
       </div>
-      <EquityChart series={d.equity} benchmarks={d.benchmarks} />
+      <EquityChart series={sliced} benchmarks={benchSliced} />
       <section className="card p-4 overflow-x-auto">
         <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Top screener — multi-actifs (score facteurs + edge ML)</h2>
         <table className="w-full text-sm">

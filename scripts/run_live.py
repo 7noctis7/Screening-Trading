@@ -59,21 +59,25 @@ def main() -> None:
         notional = o["weight_pct"] * equity
         side = Side.LONG if o["side"] == "long" else Side.SHORT
         broker = bitmart if o["broker"] == "Bitmart" else alpaca
-        line = f"  {o['side'].upper():4s} {o['symbol']:14s} {o['broker']:8s} {o['weight_pct']*100:6.1f}% {notional:9.0f}$"
+        bsym = o.get("broker_symbol", o["symbol"])            # symbole côté broker (mapping)
+        line = f"  {o['side'].upper():4s} {bsym:14s} {o['broker']:8s} {o['weight_pct']*100:6.1f}% {notional:9.0f}$"
+        if o.get("tradeable") is False:                       # non négociable → jamais envoyé
+            print(line + "  non négociable (sauté)")
+            continue
         if dry or broker is None:
             print(line + "  " + ("aperçu" if dry else "broker absent"))
             continue
         try:
             if o["broker"] == "Alpaca":
-                broker.submit_notional(o["symbol"], side, notional)   # ordre par montant $
+                broker.submit_notional(bsym, side, notional)   # ordre par montant $
                 status = "envoyé (paper)"
             else:
-                px = bitmart.last_price(o["symbol"])
+                px = bitmart.last_price(bsym)
                 qty = notional / px if px > 0 else 0.0
                 if qty <= 0:
                     status = "prix indisponible — sauté"
                 else:
-                    broker.submit(Order(o["symbol"], side, qty, OrderType.MARKET))
+                    broker.submit(Order(bsym, side, qty, OrderType.MARKET))
                     status = f"envoyé qty={qty:.4f}"
             sent += 1
         except Exception as e:  # noqa: BLE001

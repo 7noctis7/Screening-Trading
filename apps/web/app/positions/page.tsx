@@ -6,9 +6,6 @@ import { TechnicalChart } from "@/components/TechnicalChart";
 import { PageSkeleton } from "@/components/ui";
 
 const eur = (x?: number) => (x ?? 0).toLocaleString("fr-FR", { maximumFractionDigits: 0 });
-const SC: Record<string, [string, string]> = {
-  bullish: ["#22c55e", "▲"], bearish: ["#f43f5e", "▼"], neutral: ["#9aa1ad", "–"],
-};
 
 export default function Positions() {
   const { data } = usePositions();
@@ -17,37 +14,33 @@ export default function Positions() {
   if (!data) return <PageSkeleton />;
   const sentBy: Record<string, number> = {};
   (sent?.rows ?? []).forEach((r: any) => (sentBy[r.symbol] = r.score));
-  const rows = data.positions ?? [], t = data.totals ?? {}, k = data.portfolio ?? {}, series = data.series ?? {}, markers = data.markers ?? {};
-  const bull = rows.filter((r: any) => r.stance === "bullish").length;
-  const pos = (k.pnl_abs ?? 0) >= 0;
+  const alloc = data.preset_allocation ?? [];
+  const series = data.series ?? {}, markers = data.markers ?? {};
+  const exposure = alloc.reduce((a: number, r: any) => a + (r.weight ?? 0), 0);
+  const invested = alloc.reduce((a: number, r: any) => a + (r.notional ?? 0), 0);
+  const cap = data.portfolio?.initial ?? 10000;
+  const nTrad = alloc.filter((r: any) => r.tradeable).length;
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-4">
-      <h1 className="text-xl font-semibold tracking-tight">Positions <span className="text-xs font-normal px-2 py-0.5 rounded-full align-middle" style={{ background: "color-mix(in srgb, var(--warn) 18%, transparent)", color: "var(--warn)" }}>FICTIF · démo 10 000 $</span></h1>
-      <p className="text-muted text-xs">Portefeuille de démonstration (modèle). Pour tes positions réelles → onglet <b>Portefeuille réel</b>.</p>
+      <h1 className="text-xl font-semibold tracking-tight">Positions
+        <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full align-middle"
+          style={{ background: "color-mix(in srgb, var(--accent) 16%, transparent)", color: "var(--accent2)" }}>PRESET · production</span></h1>
+      <p className="text-muted text-xs">Allocation cible du <b>preset</b> (risk-parity + DD-target, plafonnée 10 %/ligne) — cohérente avec le Dashboard et le <b>Portefeuille réel</b>. Univers restreint aux actifs <b>négociables</b> (Alpaca US / Bitmart crypto).</p>
       <StepBanner active="portfolio" />
-      {(data.earnings_risk ?? []).length > 0 && (
-        <div className="card p-3 text-sm" style={{ borderColor: "color-mix(in srgb, var(--warn) 50%, transparent)" }}>
-          ⚠️ <b>Risque binaire « earnings »</b> — résultats imminents :{" "}
-          {data.earnings_risk.map((e: any, i: number) => (
-            <span key={e.symbol} className="mono">{i ? " · " : ""}{e.symbol} (J−{e.days})</span>
-          ))}. Best practice : réduire/couper avant l'annonce (le backtest PEAD montre un edge négatif à travers les résultats).
-        </div>
-      )}
 
       <section className="card p-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div><div className="text-muted text-xs uppercase">Valeur portefeuille</div><div className="text-xl mono">${eur(k.value ?? 0)}</div></div>
-          <div><div className="text-muted text-xs uppercase">Gain / perte</div><div className="text-xl mono" style={{ color: pos ? "#22c55e" : "#f43f5e" }}>{pos ? "+" : ""}${eur(k.pnl_abs ?? 0)} ({((k.pnl_pct ?? 0) * 100).toFixed(1)}%)</div></div>
-          <div><div className="text-muted text-xs uppercase">Investi / Cash</div><div className="text-xl mono">${eur(k.invested ?? 0)} / ${eur(k.cash ?? 0)}</div></div>
-          <div><div className="text-muted text-xs uppercase">Exposition</div><div className="text-xl mono">{((k.exposure_pct ?? 0) * 100).toFixed(0)}% · {k.n_positions ?? rows.length} lignes</div></div>
+          <div><div className="text-muted text-xs uppercase">Capital</div><div className="text-xl mono">${eur(cap)}</div></div>
+          <div><div className="text-muted text-xs uppercase">Investi / Cash</div><div className="text-xl mono">${eur(invested)} / ${eur(cap - invested)}</div></div>
+          <div><div className="text-muted text-xs uppercase">Exposition</div><div className="text-xl mono">{(exposure * 100).toFixed(0)}% · {alloc.length} lignes</div></div>
+          <div><div className="text-muted text-xs uppercase">Négociables</div><div className="text-xl mono">{nTrad}/{alloc.length}</div></div>
         </div>
       </section>
 
       {sel && series[sel] && (
         <section className="card p-4">
           <div className="flex justify-between items-center mb-2">
-            <h2 className="text-sm uppercase tracking-wide text-muted">Graphique technique — {sel}
-              <span className="ml-2 text-xs"><span style={{ color: "#22c55e" }}>▲ achat</span> <span style={{ color: "#f43f5e" }}>▼ vente</span></span></h2>
+            <h2 className="text-sm uppercase tracking-wide text-muted">Graphique technique — {sel}</h2>
             <button onClick={() => setSel(null)} className="text-muted hover:text-fg text-sm">✕</button>
           </div>
           <TechnicalChart data={series[sel]} markers={markers[sel] ?? []} />
@@ -55,40 +48,34 @@ export default function Positions() {
       )}
 
       <section className="card p-4 overflow-x-auto">
-        {rows.length === 0 ? <p className="text-muted text-sm">Aucune position ouverte.</p> : (
+        {alloc.length === 0 ? <p className="text-muted text-sm">Allocation indisponible.</p> : (
         <>
-        <p className="text-muted text-xs mb-3">{bull}/{rows.length} positions dans des secteurs <span style={{ color: "#22c55e" }}>bullish</span> · clique un actif pour son graphique</p>
+        <p className="text-muted text-xs mb-3">Clique un actif pour son graphique (si données dispo).</p>
         <table className="w-full text-sm mono">
           <thead className="text-muted text-xs">
-            <tr><th className="text-left font-normal">Actif</th><th className="text-left font-normal">Secteur / tendance</th>
-            <th className="text-right font-normal">ML</th><th className="text-right font-normal">Sentiment</th>
-            <th className="text-right font-normal">Qté</th><th className="text-right font-normal">PRU</th>
-            <th className="text-right font-normal">Valeur</th><th className="text-right font-normal">P&amp;L</th></tr>
+            <tr><th className="text-left font-normal">Actif</th><th className="text-left font-normal">Secteur</th>
+            <th className="text-left font-normal">Broker</th><th className="text-right font-normal">Sentiment</th>
+            <th className="text-right font-normal">Poids</th><th className="text-right font-normal">Notionnel</th>
+            <th className="text-right font-normal">Prix</th><th className="text-right font-normal">Qté</th></tr>
           </thead>
-          <tbody>{rows.map((r: any) => (
+          <tbody>{alloc.map((r: any) => (
             <tr key={r.symbol} className="border-t border-border hover:bg-surfaceAlt cursor-pointer" onClick={() => setSel(r.symbol)}>
-              <td className="py-1.5"><span className="text-accent border-b border-dotted border-border">{r.symbol}</span></td>
-              <td className="font-sans text-xs">
-                <span style={{ color: (SC[r.stance] ?? SC.neutral)[0] }}>{(SC[r.stance] ?? SC.neutral)[1]}</span>{" "}
-                <span className="text-muted">{r.sector}</span>
-              </td>
-              <td className="text-right">{r.ml_score == null ? "—" : `${(r.ml_score * 100).toFixed(0)}%`}</td>
+              <td className="py-1.5"><span className="text-accent border-b border-dotted border-border">{r.symbol}</span>
+                {!r.tradeable && <span className="ml-1 text-[10px]" style={{ color: "var(--warn)" }}>⚠︎</span>}</td>
+              <td className="font-sans text-xs text-muted">{r.sector || r.asset_class}</td>
+              <td className="font-sans text-xs">{r.broker}{r.broker_symbol !== r.symbol ? ` (${r.broker_symbol})` : ""}</td>
               <td className="text-right">{sentBy[r.symbol] == null ? "—" :
                 <span style={{ color: sentBy[r.symbol] > 0.05 ? "#22c55e" : sentBy[r.symbol] < -0.05 ? "#f43f5e" : "#9aa1ad" }}>
-                  {sentBy[r.symbol] > 0.05 ? "▲" : sentBy[r.symbol] < -0.05 ? "▼" : "–"} {sentBy[r.symbol].toFixed(2)}</span>}</td>
-              <td className="text-right">{typeof r.qty === "number" ? r.qty.toFixed(2) : r.qty}</td><td className="text-right">{r.avg_price}</td>
-              <td className="text-right">{eur(r.current_value)}</td>
-              <td className="text-right" style={{ color: r.pnl_abs >= 0 ? "#22c55e" : "#ef4444" }}>
-                {eur(r.pnl_abs)} ({(r.pnl_pct * 100).toFixed(1)}%)</td>
+                  {sentBy[r.symbol].toFixed(2)}</span>}</td>
+              <td className="text-right">{(r.weight * 100).toFixed(1)}%</td>
+              <td className="text-right">${eur(r.notional)}</td>
+              <td className="text-right">{r.price}</td>
+              <td className="text-right">{typeof r.qty === "number" ? r.qty.toFixed(3) : r.qty}</td>
             </tr>))}</tbody>
         </table>
         </>)}
       </section>
-      <div className="card p-4 flex justify-between text-sm">
-        <span className="text-muted">Exposition brute {eur(t.gross_exposure ?? 0)} · nette {eur(t.net_exposure ?? 0)}</span>
-        <span className="mono" style={{ color: (t.pnl_abs ?? 0) >= 0 ? "#22c55e" : "#ef4444" }}>
-          P&amp;L total {eur(t.pnl_abs ?? 0)}</span>
-      </div>
+      <p className="text-muted2 text-xs">Allocation cible (avant exécution) — pas de P&L tant que les ordres ne sont pas passés en paper. Exécution : onglet <b>Portefeuille réel</b> ou <code className="mono">make live</code>.</p>
     </main>
   );
 }
