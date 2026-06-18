@@ -48,12 +48,23 @@ _COST_BY_CLASS: dict[str, dict[str, float]] = {
 def market_impact_bps(notional: float, adv_usd: float, coef: float = 10.0) -> float:
     """Impact de marché NON-LINÉAIRE (loi en racine carrée, Almgren) : coef·√(notional/ADV), en bps.
 
-    C'est ce qui détruit l'alpha sur les actifs illiquides (small-caps, crypto de niche) : doubler
-    la taille ne double pas l'impact, il croît en √. coef≈10 bps pour 100 % d'ADV (prudent).
+    Doubler la taille ne double pas l'impact, il croît en √. coef≈10 bps pour 100 % d'ADV (prudent).
     """
     if adv_usd <= 0 or notional <= 0:
         return 0.0
     return coef * (abs(notional) / adv_usd) ** 0.5
+
+
+def stochastic_slippage_bps(base_slippage_bps: float, vol_ratio: float = 1.0,
+                            beta: float = 1.5, cap: float = 8.0) -> float:
+    """Slippage STOCHASTIQUE conditionnel à la volatilité du carnet (Griffin : le spread explose
+    sur un choc d'actualité). slippage = base · (1 + β·max(0, vol_ratio − 1)), borné par `cap`×base.
+
+    vol_ratio = vol réalisée récente / vol normale (≈ VIX/VIX_médian). En régime calme vol_ratio≈1
+    → slippage = base ; sur un pic de news vol_ratio=3 → slippage ≈ base·(1+β·2).
+    """
+    mult = 1.0 + beta * max(0.0, vol_ratio - 1.0)
+    return base_slippage_bps * min(cap, mult)
 
 
 def cost_assumptions() -> list[dict]:

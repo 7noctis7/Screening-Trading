@@ -1,0 +1,21 @@
+symbol,name,asset_class,venue,currency,sector
+USD/TRY,Dollar / Turkish Lira,forex,FX,TRY,Forex
+USD/ZAR,Dollar / South African Rand,forex,FX,ZAR,Forex
+USD/MXN,Dollar / Mexican Peso,forex,FX,MXN,Forex
+USD/BRL,Dollar / Brazilian Real,forex,FX,BRL,Forex
+USD/INR,Dollar / Indian Rupee,forex,FX,INR,Forex
+USD/IDR,Dollar / Indonesian Rupiah,forex,FX,IDR,Forex
+USD/PLN,Dollar / Polish Zloty,forex,FX,PLN,Forex
+USD/HUF,Dollar / Hungarian Forint,forex,FX,HUF,Forex
+USD/THB,Dollar / Thai Baht,forex,FX,THB,Forex
+USD/CLP,Dollar / Chilean Peso,forex,FX,CLP,Forex
+USD/COP,Dollar / Colombian Peso,forex,FX,COP,Forex
+USD/PHP,Dollar / Philippine Peso,forex,FX,PHP,Forex
+EUR/TRY,Euro / Turkish Lira,forex,FX,TRY,Forex
+EUR/PLN,Euro / Polish Zloty,forex,FX,PLN,Forex
+EUR/HUF,Euro / Hungarian Forint,forex,FX,HUF,Forex
+USD/SGD,Dollar / Singapore Dollar,forex,FX,SGD,Forex
+USD/NOK,Dollar / Norwegian Krone,forex,FX,NOK,Forex
+USD/SEK,Dollar / Swedish Krona,forex,FX,SEK,Forex
+USD/KRW,Dollar / Korean Won,forex,FX,KRW,Forex
+USD/TWD,Dollar / Taiwan Dollar,forex,FX,TWD,Forex

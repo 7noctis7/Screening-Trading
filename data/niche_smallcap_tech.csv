@@ -1,0 +1,21 @@
+symbol,name,asset_class,venue,currency,sector
+SMCI,Super Micro Computer,equity,NASDAQ,USD,Information Technology
+IONQ,IonQ,equity,NYSE,USD,Information Technology
+RGTI,Rigetti Computing,equity,NASDAQ,USD,Information Technology
+BBAI,BigBear.ai,equity,NYSE,USD,Information Technology
+AEHR,Aehr Test Systems,equity,NASDAQ,USD,Information Technology
+NN,NextNav,equity,NASDAQ,USD,Information Technology
+LASR,nLight,equity,NASDAQ,USD,Information Technology
+KOPN,Kopin,equity,NASDAQ,USD,Information Technology
+VUZI,Vuzix,equity,NASDAQ,USD,Information Technology
+MVIS,MicroVision,equity,NASDAQ,USD,Information Technology
+OUST,Ouster,equity,NYSE,USD,Information Technology
+INDI,indie Semiconductor,equity,NASDAQ,USD,Information Technology
+NVTS,Navitas Semiconductor,equity,NASDAQ,USD,Information Technology
+ARQQ,Arqit Quantum,equity,NASDAQ,USD,Information Technology
+PRSO,Peraso,equity,NASDAQ,USD,Information Technology
+WKEY,WISeKey,equity,NASDAQ,USD,Information Technology
+SOUN,SoundHound AI,equity,NASDAQ,USD,Information Technology
+AIRG,Airgain,equity,NASDAQ,USD,Information Technology
+DMRC,Digimarc,equity,NASDAQ,USD,Information Technology
+EVLV,Evolv Technologies,equity,NASDAQ,USD,Industrials
