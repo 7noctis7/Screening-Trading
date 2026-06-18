@@ -159,6 +159,10 @@ make calibrate-preset                             # meilleure combo (DD × top-K
 make preset-report                                # rapport HTML (courbes + drawdowns) → out/preset_report.html
 ```
 
+> **Screen d'exploitabilité d'une niche** (ticket #4) : avant de t'engager sur un micro-marché,
+> `make screen-niche` note son **exploitabilité 0-100** (autocorr · variance-ratio · dispersion ·
+> DSR momentum). Score bas = marché efficient, ne pas s'engager. Combine avec `QUANT_UNIVERSE`.
+
 > **Biais du survivant** : l'univers ne contient que les titres *encore cotés*. Pour des backtests
 > longs honnêtes, déposer `data/delisted.csv` (cf. `data/delisted.csv.example`) — l'audit s'affiche
 > sur la page Données. Allocation **Black-Litterman** (vues = conviction) et **régime de volatilité**
