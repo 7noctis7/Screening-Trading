@@ -1151,12 +1151,29 @@ def build_snapshot(seed: int = 7) -> dict:
                "hrp": [round(x, 4) for x in hrp_weights(cov)],
                "min_variance": [round(x, 4) for x in min_variance_weights(cov)],
                "risk_parity": [round(x, 4) for x in equal_risk_contribution(cov)]}
+    # skfolio (optionnel, qualité recherche) : max-diversification si la lib est installée
+    try:
+        import numpy as _np
+        from packages.portfolio.skfolio_adapter import skfolio_available, skfolio_weights
+        if skfolio_available() and len(cb_syms) >= 3:
+            _ml = min(len(rets_by[s]) for s in cb_syms)
+            if _ml >= 30:
+                _mat = _np.array([list(rets_by[s])[-_ml:] for s in cb_syms]).T
+                _sk = skfolio_weights(_mat, "max_diversification")
+                if _sk and len(_sk) == len(cb_syms):
+                    optimal["skfolio_maxdiv"] = _sk
+    except Exception:  # noqa: BLE001
+        pass
     # allocation RECOMMANDÉE : risk-parity + bande de non-trading + exposition pilotée par DD-cible
     import os as _os
-    from packages.portfolio.construction import build_target
+    from packages.portfolio.construction import build_target, vol_target_from_drawdown
     _dd = float(_os.environ.get("QUANT_DD_TARGET", "0.25"))
     recommended = build_target(cb_syms, cov, {s: w_by_name.get(s, 0.0) for s in cb_syms},
                                dd_target=_dd, band=0.03, max_gross=1.0)
+    # overlay VOLATILITÉ GÉRÉE (Moreira-Muir) sur les rendements de la stratégie
+    from packages.portfolio.vol_managed import vol_managed_backtest
+    rm["vol_managed"] = vol_managed_backtest(rets, target_vol=vol_target_from_drawdown(_dd),
+                                             window=20, max_leverage=1.0)
 
     # Sharpe probabiliste & DÉFLATÉ (garde-fou surapprentissage / essais multiples)
     from packages.portfolio.psr import deflated_sharpe_ratio, probabilistic_sharpe_ratio
