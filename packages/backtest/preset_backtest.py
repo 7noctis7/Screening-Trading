@@ -113,7 +113,8 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
 
 def preset_latest_weights(data: dict, quality: dict | None = None, asset_classes: dict | None = None,
                           dd_target: float = 0.35, band: float = 0.03, lookback: int = 120,
-                          top_k: int = 30, k_dd: float = 2.5, blackout_move: float = 0.12) -> dict:
+                          top_k: int = 30, k_dd: float = 2.5, blackout_move: float = 0.12,
+                          max_weight: float = 0.10, min_names: int = 12) -> dict:
     """Poids cibles ACTUELS du preset (dernière barre) — pilote la PRODUCTION (make live).
 
     Même logique que le backtest (qualité top-K -> risk-parity ERC -> DD-target -> blackout), mais
@@ -137,9 +138,26 @@ def preset_latest_weights(data: dict, quality: dict | None = None, asset_classes
     cov = _cov_annual(win)
     w = np.asarray(equal_risk_contribution(cov), float)
     last2 = A[:, t] / A[:, t - 2] - 1
-    w = np.where(np.abs(last2) > blackout_move, 0.0, w)
+    w_bl = np.where(np.abs(last2) > blackout_move, 0.0, w)
+    # n'applique le blackout que s'il laisse un portefeuille DIVERSIFIÉ (sinon on garde tout l'ERC)
+    if int((w_bl > 0).sum()) >= min_names:
+        w = w_bl
     ssum = w.sum()
     w = w / ssum if ssum > 0 else w
+    # PLAFOND DE CONCENTRATION : aucune position > max_weight (anti-sur-concentration), itéré
+    for _ in range(3):
+        over = w > max_weight
+        if not over.any():
+            break
+        excess = (w[over] - max_weight).sum()
+        w[over] = max_weight
+        free = ~over & (w > 0)
+        if free.any():
+            w[free] += excess * w[free] / w[free].sum()
+        else:
+            break
+    s2 = w.sum()
+    w = w / s2 if s2 > 0 else w
     tgt_vol = max(0.0, abs(dd_target)) / k_dd
     pv = float(np.sqrt(max(0.0, w @ cov @ w)))
     gross = 0.0 if pv <= 0 else min(1.0, tgt_vol / pv)
