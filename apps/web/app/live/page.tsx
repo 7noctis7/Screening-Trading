@@ -5,30 +5,55 @@ import { StepBanner } from "@/components/Pipeline";
 
 const eur = (x?: number) => Math.round(x ?? 0).toLocaleString("fr-FR");
 
-function BrokerCard({ b }: { b: any }) {
+function BrokerCard({ b, accent }: { b: any; accent: string }) {
   const ok = b?.ok, configured = b?.configured;
   const color = ok ? "#22c55e" : configured ? "#f43f5e" : "#9aa1ad";
+  const pos = (b?.positions ?? []).map((p: any) => ({ ...p, val: (p.qty || 0) * (p.avg_price || 0) }));
+  const tot = pos.reduce((a: number, p: any) => a + p.val, 0) || 1;
+  const invested = pos.reduce((a: number, p: any) => a + p.val, 0);
+  const cash = Math.max(0, (b?.equity ?? 0) - invested);
   return (
     <div className="card p-4" style={{ borderColor: `color-mix(in srgb, ${color} 45%, transparent)` }}>
       <div className="flex items-center justify-between">
-        <b>{b.name}</b>
+        <b style={{ color: accent }}>{b.name}</b>
         <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "var(--surface3)", color }}>
           {ok ? "connecté ✓" : configured ? "erreur" : "non configuré"}
         </span>
       </div>
       {ok ? (
         <>
-          <div className="mono text-lg mt-2">{eur(b.equity)} $ <span className="text-muted text-xs">equity</span></div>
-          {b.positions.length === 0 ? (
-            <p className="text-muted text-sm mt-2">Aucune position ouverte chez {b.name}.</p>
+          <div className="grid grid-cols-3 gap-2 mt-3">
+            <div><div className="text-muted text-[10px] uppercase">Equity</div><div className="mono text-base">{eur(b.equity)} $</div></div>
+            <div><div className="text-muted text-[10px] uppercase">Investi</div><div className="mono text-base">{eur(invested)} $</div></div>
+            <div><div className="text-muted text-[10px] uppercase">Positions</div><div className="mono text-base">{pos.length}</div></div>
+          </div>
+          {pos.length === 0 ? (
+            <p className="text-muted text-sm mt-3">Aucune position ouverte chez {b.name}.</p>
           ) : (
-            <table className="text-sm mono mt-2 w-full">
-              <thead><tr><th>Actif</th><th>Sens</th><th style={{ textAlign: "right" }}>Qté</th><th style={{ textAlign: "right" }}>PRU</th></tr></thead>
-              <tbody>{b.positions.map((p: any, i: number) => (
-                <tr key={i}><td>{p.symbol}</td>
-                  <td style={{ color: p.side === "long" ? "#22c55e" : "#f43f5e" }}>{p.side}</td>
-                  <td style={{ textAlign: "right" }}>{p.qty}</td><td style={{ textAlign: "right" }}>{p.avg_price}</td></tr>))}</tbody>
-            </table>
+            <>
+              {/* barres d'allocation (poids par position) */}
+              <div className="mt-3 space-y-1.5">
+                {pos.sort((x: any, y: any) => y.val - x.val).slice(0, 10).map((p: any, i: number) => (
+                  <div key={i} className="flex items-center gap-2 text-xs">
+                    <span className="mono w-24 truncate">{p.symbol}</span>
+                    <div className="flex-1 h-2 rounded-full" style={{ background: "var(--surface3)" }}>
+                      <div style={{ width: `${(p.val / tot) * 100}%`, height: "100%", borderRadius: 999,
+                        background: `linear-gradient(90deg, ${accent}, color-mix(in srgb, ${accent} 50%, #22c55e))` }} />
+                    </div>
+                    <span className="mono w-12 text-right text-muted">{((p.val / tot) * 100).toFixed(0)}%</span>
+                  </div>
+                ))}
+              </div>
+              <table className="text-sm mono mt-3 w-full">
+                <thead className="text-muted text-xs"><tr><th className="text-left font-normal">Actif</th><th className="text-left font-normal">Sens</th>
+                  <th className="text-right font-normal">Qté</th><th className="text-right font-normal">PRU</th><th className="text-right font-normal">Valeur</th></tr></thead>
+                <tbody>{pos.map((p: any, i: number) => (
+                  <tr key={i} className="border-t border-border"><td className="py-1">{p.symbol}</td>
+                    <td style={{ color: p.side === "long" ? "#22c55e" : "#f43f5e" }}>{p.side}</td>
+                    <td className="text-right">{p.qty}</td><td className="text-right">{p.avg_price}</td>
+                    <td className="text-right">{eur(p.val)} $</td></tr>))}</tbody>
+              </table>
+            </>
           )}
         </>
       ) : (
@@ -51,7 +76,7 @@ export default function Live() {
       <StepBanner active="live" />
       <p className="text-muted text-xs">Données <b>réelles</b> de tes comptes Alpaca / Bitmart uniquement (aucun fictif). KPI &amp; positions séparés par broker.</p>
       <div className="card p-3 text-xs" style={{ borderColor: "color-mix(in srgb, var(--accent) 35%, transparent)" }}>
-        ℹ️ <b>Le preset ne sélectionne que des actions/ETF</b> (qualité fondamentale) → tous les ordres vont chez <b>Alpaca</b> ; <b>Bitmart reste inactif</b> tant qu'aucune crypto n'est retenue. Trading <b>SPOT uniquement</b> (jamais de futures/levier) : un solde sur ton portefeuille <b>futures</b> Bitmart n'est <b>pas</b> utilisé.
+        ℹ️ <b>Comptes distincts</b> : actions/ETF → <b>Alpaca</b> (dimensionnées sur ton capital Alpaca) · crypto → <b>Bitmart</b> (dimensionnée sur ton capital Bitmart, sleeve risk-parity si <code className="mono">QUANT_CRYPTO_PCT</code> &gt; 0). Trading <b>SPOT uniquement</b> (jamais de futures/levier).
       </div>
 
       {/* KPI globaux */}
@@ -64,8 +89,8 @@ export default function Live() {
 
       {/* Détail par broker + diagnostic */}
       <section className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {a && <BrokerCard b={a} />}
-        {b && <BrokerCard b={b} />}
+        {a && <BrokerCard b={a} accent="#3b82f6" />}
+        {b && <BrokerCard b={b} accent="#f59e0b" />}
       </section>
 
       {/* Diagnostic / "comment être sûr que ça marche" */}

@@ -47,16 +47,17 @@ def main() -> None:
         except Exception as e:  # noqa: BLE001
             print(f"Alpaca indisponible ({str(e)[:60]}) → actions ignorées")
 
-    # capital de référence : equity réelle des brokers (live) sinon --equity (ou 10 000 en aperçu)
-    equity = a.equity or ((alpaca.equity() if alpaca else 0.0) + (bitmart.equity() if bitmart else 0.0)
-                          if not dry else 0.0) or a.equity or 10_000.0
-    print(f"Réplication de {len(targets)} positions cibles · capital {equity:,.0f} $ · "
+    # CAPITAL PAR COMPTE (comptes distincts) : actions ← Alpaca, crypto ← Bitmart.
+    alp_cap = (alpaca.equity() if (alpaca and not dry) else 0.0) or a.equity or 10_000.0
+    bit_cap = (bitmart.equity() if (bitmart and not dry) else 0.0) or 0.0
+    print(f"Réplication · capital Alpaca {alp_cap:,.0f} $ · Bitmart {bit_cap:,.0f} $ · "
           f"mode {'DRY-RUN (aucun ordre)' if dry else 'LIVE (paper)'}")
     print(f"  {'SENS':4s} {'ACTIF':14s} {'BROKER':8s} {'POIDS':>7s} {'MONTANT':>10s}  statut")
 
     sent = 0
     for o in sorted(targets, key=lambda x: -x["weight_pct"]):
-        notional = o["weight_pct"] * equity
+        cap = bit_cap if o.get("capital") == "bitmart" else alp_cap
+        notional = o["weight_pct"] * cap
         side = Side.LONG if o["side"] == "long" else Side.SHORT
         broker = bitmart if o["broker"] == "Bitmart" else alpaca
         bsym = o.get("broker_symbol", o["symbol"])            # symbole côté broker (mapping)

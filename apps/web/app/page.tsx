@@ -24,8 +24,10 @@ function statsFrom(eq: { t: string; v: number }[]) {
   const dsd = Math.sqrt(dn.reduce((a, b) => a + b * b, 0) / (dn.length || 1));
   let peak = v[0], mdd = 0;
   for (const x of v) { peak = Math.max(peak, x); mdd = Math.min(mdd, x / peak - 1); }
+  const total = v[v.length - 1] / v[0] - 1;
+  const cagr = r.length > 1 ? Math.pow(1 + total, 252 / r.length) - 1 : total;
   return {
-    total_return: v[v.length - 1] / v[0] - 1,
+    total_return: total, cagr,
     sharpe: sd > 0 ? (mean / sd) * Math.sqrt(252) : 0,
     sortino: dsd > 0 ? (mean / dsd) * Math.sqrt(252) : 0,
     max_drawdown: mdd,
@@ -61,7 +63,7 @@ export default function Dashboard() {
     return out;
   }, [d?.benchmarks, sliced, years]);
   if (!d) return <PageSkeleton />;
-  const m = (years ? statsFrom(sliced) : d.metrics) ?? d.metrics;
+  const m = statsFrom(sliced) ?? d.metrics;
   return (
     <main className="max-w-6xl mx-auto p-6 space-y-4">
       <h1 className="text-xl font-semibold tracking-tight">Quant Terminal
@@ -84,8 +86,9 @@ export default function Dashboard() {
           </button>
         ))}
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <MetricCard label="Rendement" value={pct(m.total_return)} tone={m.total_return >= 0 ? "pos" : "neg"} />
+        <MetricCard label="CAGR" value={pct(m.cagr ?? 0)} tone={(m.cagr ?? 0) >= 0 ? "pos" : "neg"} />
         <MetricCard label="Sharpe" value={m.sharpe?.toFixed(2)} />
         <MetricCard label="Sortino" value={m.sortino?.toFixed(2)} />
         <MetricCard label="Max DD" value={pct(m.max_drawdown)} tone="neg" />

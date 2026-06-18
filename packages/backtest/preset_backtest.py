@@ -173,17 +173,20 @@ def preset_equity_daily(data: dict, quality: dict | None = None, asset_classes: 
     """Courbe d'equity QUOTIDIENNE du preset (pour le dashboard) : rebalancement tous les `step`
     jours, accumulation des rendements quotidiens entre deux rebalancements. Renvoie
     {equity:[$], dates:[iso], available}. Même logique que le backtest (anti-fuite)."""
-    from packages.backtest.preset_backtest import preset_latest_weights  # noqa: F401 (cohérence)
     syms = [s for s, b in data.items() if b and len(b) > lookback + step]
     if len(syms) < 5:
         return {"available": False}
-    L = min(len(data[s]) for s in syms)
-    M = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in syms}
-    ref = max(syms, key=lambda s: len(data[s]))
-    dts = [b.ts.isoformat() for b in data[ref]][-L:]
     quality = quality or {}
     q = {s: quality.get(s) for s in syms if quality.get(s) is not None}
     universe = (sorted(q, key=lambda s: q[s], reverse=True)[:top_k] if len(q) >= 5 else syms[:top_k])
+    # COURBE LONGUE : on écarte les titres à historique court (IPO récentes) qui tronqueraient
+    # toute la courbe au plus court → la fenêtre commune remonte aussi loin que les valeurs établies.
+    lmax = max(len(data[s]) for s in universe)
+    universe = [s for s in universe if len(data[s]) >= 0.6 * lmax] or universe
+    L = min(len(data[s]) for s in universe)
+    M = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in universe}
+    ref = max(universe, key=lambda s: len(data[s]))
+    dts = [b.ts.isoformat() for b in data[ref]][-L:]
     A = np.asarray([M[s] for s in universe])
     rets = A[:, 1:] / A[:, :-1] - 1
     tgt_vol = max(0.0, abs(dd_target)) / k_dd
