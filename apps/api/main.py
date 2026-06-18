@@ -49,18 +49,82 @@ async def _log_requests(request: Request, call_next):
     log.log(lvl, "%s %s → %s (%.0f ms)", request.method, request.url.path, resp.status_code, dt)
     return resp
 
+import pickle
+import threading
+
 _CACHE: dict | None = None
 _CACHE_TS: float = 0.0
 _TTL_S = 900  # 15 min : aligne le rafraîchissement serveur sur le flux différé
+_BUILDING = False
+_BUILD_LOCK = threading.Lock()
+_SNAP_FILE = Path(__file__).resolve().parents[2] / ".cache" / "snapshot.pkl"
+
+
+def _load_disk() -> tuple[dict | None, float]:
+    try:
+        with _SNAP_FILE.open("rb") as f:
+            d = pickle.load(f)  # noqa: S301 — artefact local de confiance
+        return d["snap"], float(d["ts"])
+    except Exception:  # noqa: BLE001
+        return None, 0.0
+
+
+def _persist(snap: dict, ts: float) -> None:
+    try:
+        _SNAP_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with _SNAP_FILE.open("wb") as f:
+            pickle.dump({"snap": snap, "ts": ts}, f)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _rebuild() -> None:
+    """Reconstruit le snapshot en arrière-plan et remplace le cache (+ persiste)."""
+    global _CACHE, _CACHE_TS, _BUILDING
+    try:
+        s = build_snapshot()
+        ts = time.time()
+        _CACHE, _CACHE_TS = s, ts
+        _persist(s, ts)
+        log.info("snapshot rebuilt (%.0fs ttl)", _TTL_S)
+    except Exception as e:  # noqa: BLE001
+        log.exception("snapshot rebuild failed: %s", e)
+    finally:
+        _BUILDING = False
 
 
 def _snap() -> dict:
-    """Snapshot caché avec TTL → le polling du front récupère des données fraîches."""
-    global _CACHE, _CACHE_TS
-    if _CACHE is None or (time.time() - _CACHE_TS) > _TTL_S:
+    """Snapshot servi INSTANTANÉMENT depuis le cache (mémoire→disque), rafraîchi en arrière-plan
+    (stale-while-revalidate) → plus jamais d'attente d'1-2 min après un redémarrage."""
+    global _CACHE, _CACHE_TS, _BUILDING
+    if _CACHE is None:                                   # 1er accès du process : tente le disque
+        s, ts = _load_disk()
+        if s is not None:
+            _CACHE, _CACHE_TS = s, ts
+    if _CACHE is None:                                   # aucun cache → build synchrone (1re fois)
         _CACHE = build_snapshot()
         _CACHE_TS = time.time()
+        _persist(_CACHE, _CACHE_TS)
+        return _CACHE
+    if (time.time() - _CACHE_TS) > _TTL_S and not _BUILDING:   # périmé → refresh en fond, sert l'ancien
+        with _BUILD_LOCK:
+            if not _BUILDING:
+                _BUILDING = True
+                threading.Thread(target=_rebuild, daemon=True).start()
     return _CACHE
+
+
+@app.on_event("startup")
+def _warm() -> None:
+    """Au démarrage : charge le dernier snapshot du disque (service instantané) et déclenche un
+    rafraîchissement en arrière-plan → le 1er chargement du site est immédiat."""
+    global _CACHE, _CACHE_TS, _BUILDING
+    s, ts = _load_disk()
+    if s is not None:
+        _CACHE, _CACHE_TS = s, ts
+    if not _BUILDING:
+        _BUILDING = True
+        threading.Thread(target=_rebuild, daemon=True).start()
 
 
 @app.get("/health")
