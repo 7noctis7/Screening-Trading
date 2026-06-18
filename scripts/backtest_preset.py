@@ -30,6 +30,11 @@ def main() -> None:
     print("Construction du snapshot (peut prendre 1-2 min sur la vraie base)…")
     s = build_snapshot()
     print(f"\nMode des données : {s['meta']['mode']} · univers {s['meta']['universe_size']}")
+    if s["meta"].get("data_synthetic") and __import__("os").environ.get("QUANT_ALLOW_SYNTHETIC") != "1":
+        print("\n⛔ DONNÉES SYNTHÉTIQUES (factices) — backtest INUTILE et trompeur.")
+        print("   Branche tes vraies données : export QUANT_PRICE_DB=\"$HOME/Desktop/YAHOO.db\"")
+        print("   (ou QUANT_ALLOW_SYNTHETIC=1 pour forcer la démo, à tes risques).")
+        return
 
     a = s["portfolio"]["analysis"]
     pb = (a.get("recommended_allocation") or {}).get("preset_backtest") or {}

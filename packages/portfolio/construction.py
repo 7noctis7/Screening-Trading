@@ -21,6 +21,16 @@ def vol_target_from_drawdown(dd_target: float, k: float = 2.5) -> float:
     return max(0.0, abs(dd_target)) / k
 
 
+def tail_adjusted_dd_target(dd_target: float, tail_ratio: float | None,
+                            gaussian_ref: float = 1.29) -> float:
+    """Ticket #5 (Simons) : durcit le DD-cible quand les queues sont ÉPAISSES (tail_ratio = CVaR/VaR
+    > référence gaussienne ≈ 1.29) → on dimensionne sur le risque de queue, pas la vol gaussienne.
+    Renvoie le DD-cible effectif (≤ dd_target)."""
+    if not tail_ratio or tail_ratio <= gaussian_ref:
+        return dd_target
+    return dd_target * (gaussian_ref / tail_ratio)
+
+
 def build_target(symbols: list[str], cov, current_weights: dict[str, float] | None = None,
                  dd_target: float = 0.25, band: float = 0.03, max_gross: float = 1.0) -> dict:
     """Allocation cible risk-parity, exposition pilotée par le drawdown-cible, bande de non-trading.

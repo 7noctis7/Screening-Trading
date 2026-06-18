@@ -32,9 +32,17 @@ _HISTORY_DAYS = 1700        # ~4,6 ans d'historique jusqu'à aujourd'hui
 
 
 def _seed_universe() -> list[dict]:
-    """Univers COMPLET dédupliqué (par symbole) à partir des seeds — source unique."""
+    """Univers COMPLET dédupliqué (par symbole) à partir des seeds — source unique.
+
+    Ticket #4 (Thiel, micro-marché) : `QUANT_UNIVERSE=/chemin/niche.csv` restreint l'univers à un
+    micro-marché choisi (mêmes colonnes que les seeds) → on domine une niche avant de scaler.
+    """
+    import os
     seen: dict[str, dict] = {}
-    for path in sorted((ROOT / "data" / "seed").glob("*.csv")):
+    custom = os.environ.get("QUANT_UNIVERSE")
+    paths = [Path(custom)] if custom and Path(custom).exists() else \
+        sorted((ROOT / "data" / "seed").glob("*.csv"))
+    for path in paths:
         with path.open(encoding="utf-8") as f:
             for r in csv.DictReader(f):
                 sym = (r.get("symbol") or "").strip()
@@ -1166,10 +1174,24 @@ def build_snapshot(seed: int = 7) -> dict:
         pass
     # allocation RECOMMANDÉE : risk-parity + bande de non-trading + exposition pilotée par DD-cible
     import os as _os
-    from packages.portfolio.construction import build_target, vol_target_from_drawdown
+    from packages.portfolio.construction import (build_target, tail_adjusted_dd_target,
+                                                 vol_target_from_drawdown)
     _dd = float(_os.environ.get("QUANT_DD_TARGET", "0.25"))
+    # ticket #5 : durcit le DD-cible si les queues sont épaisses (CVaR/VaR > gaussien)
+    _tail = (rm.get("cvar_95", 0.0) / rm["var_95"]) if rm.get("var_95") else None
+    _dd_eff = tail_adjusted_dd_target(_dd, _tail)
     recommended = build_target(cb_syms, cov, {s: w_by_name.get(s, 0.0) for s in cb_syms},
-                               dd_target=_dd, band=0.03, max_gross=1.0)
+                               dd_target=_dd_eff, band=0.03, max_gross=1.0)
+    recommended["dd_target_nominal"] = _dd
+    recommended["dd_target_tail_adjusted"] = round(_dd_eff, 4)
+    recommended["tail_ratio"] = round(_tail, 3) if _tail else None
+    # ticket #7 : edge gate — sans edge OOS prouvé (DSR/AUC), les signaux ne pilotent PAS l'allocation
+    _edge_proven = bool(ml.get("edge_ok")) and (rm.get("dsr", 0.0) or 0.0) >= 0.90
+    recommended["edge_proven"] = _edge_proven
+    recommended["edge_note"] = ("Edge OOS prouvé : les signaux peuvent incliner l'allocation."
+                                if _edge_proven else
+                                "Aucun edge OOS prouvé (DSR≈0) → allocation 100 % pilotée par le "
+                                "RISQUE (risk-parity), les signaux ne surpondèrent rien.")
     # overlay VOLATILITÉ GÉRÉE (Moreira-Muir) sur les rendements de la stratégie
     from packages.portfolio.vol_managed import vol_managed_backtest
     rm["vol_managed"] = vol_managed_backtest(rets, target_vol=vol_target_from_drawdown(_dd),
@@ -1270,10 +1292,13 @@ def build_snapshot(seed: int = 7) -> dict:
     try:
         import numpy as _np2
         from packages.portfolio.black_litterman import black_litterman, views_from_scores
-        _conv = {r["symbol"]: r.get("conviction") for r in conviction_sec.get("rows", [])}
-        _scores = [_conv.get(s) if _conv.get(s) is not None else float("nan") for s in cb_syms]
-        _P, _Q = views_from_scores(_scores)
         _wm = _np2.array([1.0 / len(cb_syms)] * len(cb_syms))
+        if _edge_proven:                         # ticket #7 : vues seulement si edge prouvé
+            _conv = {r["symbol"]: r.get("conviction") for r in conviction_sec.get("rows", [])}
+            _scores = [_conv.get(s) if _conv.get(s) is not None else float("nan") for s in cb_syms]
+            _P, _Q = views_from_scores(_scores)
+        else:                                    # sinon : prior pur (aucune vue) = risk-parity-like
+            _P, _Q = _np2.zeros((0, len(cb_syms))), _np2.zeros(0)
         optimal["black_litterman"] = black_litterman(cov, _wm, _P, _Q)["weights"]
     except Exception:  # noqa: BLE001
         pass
@@ -1291,6 +1316,10 @@ def build_snapshot(seed: int = 7) -> dict:
             "period_start": start.isoformat(),
             "delay_minutes": 15,                 # flux différé 15 min (EOD/synthétique)
             "mode": data_mode,
+            "data_synthetic": data_mode.startswith("synthetic"),
+            "data_warning": ("⚠️ DONNÉES FACTICES (synthétiques) — démo UI uniquement, NE PAS "
+                             "décider ni backtester dessus. Branche QUANT_PRICE_DB."
+                             if data_mode.startswith("synthetic") else None),
             "strategy": "swing",
             "initial_capital": init_cap,
             "universe_size": len(symbols),
