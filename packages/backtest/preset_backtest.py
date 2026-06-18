@@ -81,17 +81,24 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
         return {"available": False}
 
     per_year = 252.0 / step
+
+    def _cum(series: list) -> list:
+        e = np.cumprod(1 + np.asarray(series, dtype=float))
+        return [1.0] + [round(float(x), 4) for x in e]
+
     out = {"available": True, "step_days": step, "top_k": len(universe),
            "preset": _stats(port, per_year),
            "turnover_annual": round(turn / len(port) * per_year, 2),
            "dd_target": dd_target, "band": band, "target_vol": round(tgt_vol, 4),
-           "avg_gross": round(float(np.mean(gross_hist)) if gross_hist else 0.0, 4)}
+           "avg_gross": round(float(np.mean(gross_hist)) if gross_hist else 0.0, 4),
+           "curves": {"preset": _cum(port)}}
 
     # bench équipondéré sur le MÊME univers (apples-to-apples : isole l'apport de la construction
     # risk-parity + DD-target + blackout + band vs un simple équipondéré plein-investi)
     bench = [float((A[:, min(t + step, L - 1)] / A[:, t] - 1).mean())
              for t in range(start, L - 1, step)]
     out["benchmark"] = _stats(bench, per_year)
+    out["curves"]["benchmark"] = _cum(bench)
 
     # swing (depuis sa courbe d'equity), ré-échantillonné sur la même grille
     if swing_equity and len(swing_equity) >= L:
@@ -100,4 +107,5 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
         sr = [eq[b] / eq[a] - 1 for a, b in zip(grid[:-1], grid[1:]) if eq[a] > 0]
         if len(sr) >= 3:
             out["swing"] = _stats(sr, per_year)
+            out["curves"]["swing"] = _cum(sr)
     return out
