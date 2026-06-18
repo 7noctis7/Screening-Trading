@@ -382,9 +382,15 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
         "alpaca": a_d, "bitmart": b_d,
     }
     if target_weights:                            # allocation PRESET (production best-practice)
-        targets = [{"symbol": s, "broker": "Bitmart" if acmap.get(s) == "crypto" else "Alpaca",
-                    "asset_class": acmap.get(s, ""), "weight_pct": round(w, 4), "side": "long"}
-                   for s, w in sorted(target_weights.items(), key=lambda kv: -kv[1]) if w > 0]
+        from packages.execution.routing import route as _route
+        targets = []
+        for s, w in sorted(target_weights.items(), key=lambda kv: -kv[1]):
+            if w <= 0:
+                continue
+            r = _route(s, acmap.get(s, "equity"))
+            targets.append({"symbol": s, "broker": r["broker"], "broker_symbol": r["broker_symbol"],
+                            "asset_class": acmap.get(s, ""), "weight_pct": round(w, 4),
+                            "side": "long", "tradeable": r["tradeable"]})
     else:                                         # repli : poids du portefeuille modèle (swing)
         tot = sum(p["current_value"] for p in positions) or 1.0
         targets = [{"symbol": p["symbol"], "broker": "Bitmart" if acmap.get(p["symbol"]) == "crypto" else "Alpaca",
@@ -1322,15 +1328,23 @@ def build_snapshot(seed: int = 7) -> dict:
     # Backtest point-in-time, comparé au swing actuel et à l'équipondéré.
     from packages.backtest.preset_backtest import preset_backtest
     _quality = {r["symbol"]: r.get("combined_score") for r in fundamentals_sec.get("rows", [])}
-    preset_bt = preset_backtest(data, _quality, asset_classes=acmap, swing_equity=equity,
+    # UNIVERS NÉGOCIABLE : on restreint la production aux instruments que les brokers peuvent trader
+    # (actions US + ETF via Alpaca, crypto via Bitmart) → Dashboard, Positions et ordres COHÉRENTS
+    # et exécutables (plus d'actions .AS/.PA impossibles chez Alpaca).
+    from packages.execution.routing import is_tradeable, route
+    _tradeable_data = {s: b for s, b in data.items() if is_tradeable(s, acmap.get(s, "equity"))}
+    if len(_tradeable_data) < 30:                        # garde-fou : si trop peu, on garde tout
+        _tradeable_data = data
+    preset_bt = preset_backtest(_tradeable_data, _quality, asset_classes=acmap, swing_equity=equity,
                                 dd_target=_dd, band=0.03)
     recommended["preset_backtest"] = preset_bt          # rattaché à l'allocation recommandée affichée
     # ALLOCATION DE PRODUCTION = poids ACTUELS du preset (ce que make live réplique en paper)
     from packages.backtest.preset_backtest import preset_latest_weights
-    _preset_weights = preset_latest_weights(data, _quality, asset_classes=acmap, dd_target=_dd, band=0.03)
+    _preset_weights = preset_latest_weights(_tradeable_data, _quality, asset_classes=acmap,
+                                            dd_target=_dd, band=0.03)
     # Courbe d'equity QUOTIDIENNE du preset → c'est ELLE qui pilote le dashboard (le swing est legacy)
     from packages.backtest.preset_backtest import preset_equity_daily
-    _pe = preset_equity_daily(data, _quality, asset_classes=acmap, dd_target=_dd, init_cap=init_cap)
+    _pe = preset_equity_daily(_tradeable_data, _quality, asset_classes=acmap, dd_target=_dd, init_cap=init_cap)
     if _pe.get("available"):
         _dash_metrics = PL.metrics_payload(_pe["equity"])
         _dash_equity = [{"t": d, "v": v} for d, v in zip(_pe["dates"], _pe["equity"])]
@@ -1339,6 +1353,19 @@ def build_snapshot(seed: int = 7) -> dict:
         _dash_metrics = PL.metrics_payload(equity)
         _dash_equity = PL.equity_series(equity, ts_list)
         _dash_dates = dates
+    # Allocation PRESET détaillée (pour la page Positions) = ce que le système détient réellement
+    _preset_alloc = []
+    for s, w in sorted(_preset_weights.items(), key=lambda kv: -kv[1]):
+        if w <= 0:
+            continue
+        r = route(s, acmap.get(s, "equity"))
+        px = data[s][-1].close if data.get(s) else 0.0
+        notion = round(w * init_cap, 2)
+        _preset_alloc.append({"symbol": s, "sector": sector_of.get(s, ""),
+                              "asset_class": acmap.get(s, ""), "broker": r["broker"],
+                              "broker_symbol": r["broker_symbol"], "tradeable": r["tradeable"],
+                              "weight": round(w, 4), "notional": notion, "price": round(px, 2),
+                              "qty": round(notion / px, 4) if px else 0.0})
     # BLACK-LITTERMAN : prior équipondéré + vues = conviction z-scorée → poids postérieurs
     try:
         import numpy as _np2
@@ -1387,6 +1414,7 @@ def build_snapshot(seed: int = 7) -> dict:
             "benchmarks": _bench_series({"S&P 500": sp, "Nasdaq 100": ndx}, _dash_dates, init_cap),
             "dates": _dash_dates,
             "positions": comp["rows"], "totals": comp["totals"],
+            "preset_allocation": _preset_alloc,        # allocation PRESET (production) → page Positions
             "portfolio": portfolio_kpis,
             "position_series": position_series,
             "position_markers": position_markers,
