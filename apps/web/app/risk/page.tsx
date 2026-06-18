@@ -56,6 +56,30 @@ export default function Risk() {
         <p className="text-muted2 text-xs mt-2">EVT = théorie des valeurs extrêmes (Peaks-Over-Threshold + GPD) pour le risque de queue ; liquidité estimée via l'ADV (participation 10 %).</p>
       </section>
 
+      {rm.vol_managed?.available && (
+        <section className="card p-4 overflow-x-auto">
+          <h2 className="text-sm uppercase tracking-wide text-muted mb-1">Volatilité gérée (Moreira-Muir) — overlay</h2>
+          <p className="text-muted2 text-xs mb-3">Exposition ∝ vol-cible ({pct(rm.vol_managed.target_vol)}) / vol réalisée récente (connue à t−1, anti-fuite). Exposition moyenne {pct(rm.vol_managed.avg_exposure)} · sans levier.</p>
+          <table className="w-full text-sm">
+            <thead className="text-muted text-xs"><tr>
+              <th className="text-left font-normal">Série</th>
+              <th className="text-right font-normal">CAGR</th><th className="text-right font-normal">Vol</th>
+              <th className="text-right font-normal">Sharpe</th><th className="text-right font-normal">Max DD</th></tr></thead>
+            <tbody className="mono">
+              {[["Brute", rm.vol_managed.raw, "#9aa1ab"], ["Vol. gérée", rm.vol_managed.managed, "#22d3ee"]].map(([lab, st, col]: any) => (
+                <tr key={lab} className="border-t border-border">
+                  <td className="py-1.5 font-sans" style={{ color: col }}>{lab}</td>
+                  <td className="text-right">{(st.cagr * 100).toFixed(1)}%</td>
+                  <td className="text-right">{(st.vol * 100).toFixed(1)}%</td>
+                  <td className="text-right"><b>{st.sharpe}</b></td>
+                  <td className="text-right" style={{ color: "#f43f5e" }}>{(st.max_drawdown * 100).toFixed(1)}%</td>
+                </tr>))}
+            </tbody>
+          </table>
+          <p className="text-muted2 text-xs mt-2">Gain Sharpe {rm.vol_managed.sharpe_gain >= 0 ? "+" : ""}{rm.vol_managed.sharpe_gain} · Δ CAGR {(rm.vol_managed.cagr_gain * 100).toFixed(1)} pts · DD {(rm.vol_managed.dd_reduction * 100).toFixed(1)} pts. ⚠️ Le bénéfice de Moreira-Muir vient du <b>clustering de volatilité</b> des marchés réels ; sur données synthétiques (quasi-IID) il est marginal voire nul. Recherche : Moreira &amp; Muir, <i>Volatility-Managed Portfolios</i> (JF 2017).</p>
+        </section>
+      )}
+
       {rm.fragility?.available && (
         <section className="card p-4">
           <div className="flex items-center justify-between flex-wrap gap-2">
