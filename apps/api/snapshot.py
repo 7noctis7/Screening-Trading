@@ -1239,6 +1239,13 @@ def build_snapshot(seed: int = 7) -> dict:
     conviction_sec = _conviction_section(
         held, screener, ml_scores, sentiment_sec, fundamentals_sec, investors_sec,
         data, sector_of, names)
+    # --- PRESET « best practice » : qualité + risk-parity + DD-target + blackout + no-trade band ---
+    # Backtest point-in-time, comparé au swing actuel et à l'équipondéré.
+    from packages.backtest.preset_backtest import preset_backtest
+    _quality = {r["symbol"]: r.get("combined_score") for r in fundamentals_sec.get("rows", [])}
+    preset_bt = preset_backtest(data, _quality, asset_classes=acmap, swing_equity=equity,
+                                dd_target=_dd, band=0.03)
+    recommended["preset_backtest"] = preset_bt          # rattaché à l'allocation recommandée affichée
     return {
         "meta": {
             "generated_at": now.isoformat(),
