@@ -292,10 +292,16 @@ def preset_trade_log(data: dict, quality: dict | None = None, asset_classes: dic
         for i, sym in enumerate(universe):
             d = float(w[i] - prev[i])
             if abs(d) > 0.005:                      # variation matérielle (>0.5 %)
+                if prev[i] <= 1e-4:
+                    reason = "entrée (univers qualité, risk-parity)"
+                elif w[i] <= 1e-4:
+                    reason = "sortie (hors univers / blackout)"
+                else:
+                    reason = "renforcement (risk-parity)" if d > 0 else "allègement (DD-target/risk-parity)"
                 trades.append({"date": dts[t], "symbol": sym,
                                "side": "BUY" if d > 0 else "SELL",
                                "from": round(float(prev[i]), 4), "to": round(float(w[i]), 4),
-                               "notional": round(abs(d) * init_cap, 2)})
+                               "notional": round(abs(d) * init_cap, 2), "reason": reason})
         prev = w
     if not trades:
         return {"available": False}

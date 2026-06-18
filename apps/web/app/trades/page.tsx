@@ -74,7 +74,7 @@ export default function Trades() {
             <thead className="text-muted text-xs">
               <tr><th className="text-left font-normal">Date</th><th className="text-left font-normal">Actif</th>
               <th className="text-left font-normal">Sens</th><th className="text-right font-normal">Poids avant→après</th>
-              <th className="text-right font-normal">Notionnel</th></tr>
+              <th className="text-right font-normal">Notionnel</th><th className="text-left font-normal pl-4">Motif</th></tr>
             </thead>
             <tbody>{ptrades.map((t: any, i: number) => (
               <tr key={i} onClick={() => pick(t.symbol)}
@@ -84,6 +84,7 @@ export default function Trades() {
                 <td style={{ color: t.side === "BUY" ? "#22c55e" : "#f43f5e" }}>{t.side === "BUY" ? "▲ achat" : "▼ vente"}</td>
                 <td className="text-right text-muted">{(t.from * 100).toFixed(1)}% → {(t.to * 100).toFixed(1)}%</td>
                 <td className="text-right">${eur(t.notional)}</td>
+                <td className="pl-4 text-muted font-sans text-xs">{t.reason || "—"}</td>
               </tr>))}</tbody>
           </table>
         )}
@@ -98,8 +99,9 @@ export default function Trades() {
             <thead className="text-muted text-xs"><tr>
               <th className="text-left font-normal">Actif</th><th className="text-left font-normal">Entrée</th>
               <th className="text-left font-normal">Sortie</th><th className="text-right font-normal">P&amp;L</th>
-              <th className="text-right font-normal">%</th></tr></thead>
-            <tbody>{closed.slice(0, 50).map((t: any) => {
+              <th className="text-right font-normal">%</th><th className="text-left font-normal pl-3">Motif entrée</th>
+              <th className="text-left font-normal pl-3">Motif sortie</th></tr></thead>
+            <tbody>{closed.slice(0, 80).map((t: any) => {
               const win = (t.pnl_net ?? 0) >= 0;
               return (
                 <tr key={t.id} className="border-t border-border">
@@ -107,6 +109,8 @@ export default function Trades() {
                   <td className="text-muted">{dt(t.exit_ts)}</td>
                   <td className="text-right" style={{ color: win ? "#22c55e" : "#ef4444" }}>{eur(t.pnl_net ?? 0)}</td>
                   <td className="text-right" style={{ color: win ? "#22c55e" : "#ef4444" }}>{pct(t.pnl_pct ?? 0)}</td>
+                  <td className="pl-3 text-muted font-sans text-xs">{t.entry_reason || "—"}</td>
+                  <td className="pl-3 text-muted font-sans text-xs">{t.exit_reason || "—"}</td>
                 </tr>);
             })}</tbody>
           </table>

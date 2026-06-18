@@ -93,17 +93,20 @@ def positions() -> dict:
     dash = _snap()["dashboard"]
     return {"positions": dash["positions"], "totals": dash["totals"],
             "preset_allocation": dash.get("preset_allocation", []),
-            "portfolio": dash["portfolio"], "series": dash["position_series"],
+            "alloc_capital": dash.get("alloc_capital", {}),
+            "portfolio": dash["portfolio"],
+            "series": {**dash.get("chart_series", {}), **dash["position_series"]},
             "markers": dash["position_markers"]}
 
 
 @app.get("/api/trades")
 def trades() -> dict:
     snap = _snap()
+    d = snap["dashboard"]
     return {"trades": snap["trades"], "open_trades": snap["open_trades"],
             "stats": snap["trade_stats"], "preset_trades": snap.get("preset_trades", {}),
-            "series": snap["dashboard"]["position_series"],
-            "markers": snap["dashboard"]["position_markers"]}
+            "series": {**d.get("chart_series", {}), **d["position_series"]},
+            "markers": d["position_markers"]}
 
 
 @app.get("/api/sentiment")
@@ -138,7 +141,8 @@ def ml() -> dict:
 
 @app.get("/api/live")
 def live() -> dict:
-    return _snap()["live"]
+    snap = _snap()
+    return {**snap["live"], "series": snap["dashboard"].get("chart_series", {})}
 
 
 @app.get("/api/conviction")

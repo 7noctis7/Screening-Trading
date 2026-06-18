@@ -16,9 +16,10 @@ export default function Positions() {
   (sent?.rows ?? []).forEach((r: any) => (sentBy[r.symbol] = r.score));
   const alloc = data.preset_allocation ?? [];
   const series = data.series ?? {}, markers = data.markers ?? {};
-  const exposure = alloc.reduce((a: number, r: any) => a + (r.weight ?? 0), 0);
   const invested = alloc.reduce((a: number, r: any) => a + (r.notional ?? 0), 0);
-  const cap = data.portfolio?.initial ?? 10000;
+  // capital = base réelle par compte (Alpaca + Bitmart) ; repli sur l'initial démo
+  const cap = data.alloc_capital?.total || data.portfolio?.initial || 10000;
+  const exposure = cap > 0 ? invested / cap : 0;
   const nTrad = alloc.filter((r: any) => r.tradeable).length;
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-4">
@@ -30,7 +31,9 @@ export default function Positions() {
 
       <section className="card p-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div><div className="text-muted text-xs uppercase">Capital</div><div className="text-xl mono">${eur(cap)}</div></div>
+          <div><div className="text-muted text-xs uppercase">Capital (Alpaca + Bitmart)</div>
+            <div className="text-xl mono">${eur(cap)}</div>
+            <div className="text-muted2 text-[11px] mono">A ${eur(data.alloc_capital?.alpaca)} · B ${eur(data.alloc_capital?.bitmart)}</div></div>
           <div><div className="text-muted text-xs uppercase">Investi / Cash</div><div className="text-xl mono">${eur(invested)} / ${eur(cap - invested)}</div></div>
           <div><div className="text-muted text-xs uppercase">Exposition</div><div className="text-xl mono">{(exposure * 100).toFixed(0)}% · {alloc.length} lignes</div></div>
           <div><div className="text-muted text-xs uppercase">Négociables</div><div className="text-xl mono">{nTrad}/{alloc.length}</div></div>

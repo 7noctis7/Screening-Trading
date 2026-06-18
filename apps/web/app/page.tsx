@@ -94,6 +94,32 @@ export default function Dashboard() {
         <MetricCard label="Max DD" value={pct(m.max_drawdown)} tone="neg" />
       </div>
       <EquityChart series={chartEquity} benchmarks={chartBench} />
+
+      {/* Comparaison KPI : portefeuille vs benchmarks, sur la période choisie */}
+      <section className="card p-4 overflow-x-auto">
+        <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Comparaison vs benchmarks ({PERIODS.find(([, y]) => y === years)?.[0] ?? "Tout"})</h2>
+        <table className="w-full text-sm">
+          <thead className="text-muted text-xs"><tr>
+            <th className="text-left font-normal">Série</th>
+            <th className="text-right font-normal">Rendement</th><th className="text-right font-normal">CAGR</th>
+            <th className="text-right font-normal">Sharpe</th><th className="text-right font-normal">Sortino</th>
+            <th className="text-right font-normal">Max DD</th></tr></thead>
+          <tbody className="mono">
+            {([["Portefeuille (preset)", m, "#22d3ee"],
+               ...Object.entries(chartBench ?? {}).map(([n, arr]) => [n, statsFrom(arr as any), n === "S&P 500" ? "#f59e0b" : "#a855f7"])] as any[])
+              .filter((row) => row[1]).map(([name, st, col]: any) => (
+                <tr key={name} className="border-t border-border">
+                  <td className="py-1.5 font-sans" style={{ color: col }}>{name}</td>
+                  <td className="text-right">{(st.total_return * 100).toFixed(1)}%</td>
+                  <td className="text-right">{((st.cagr ?? 0) * 100).toFixed(1)}%</td>
+                  <td className="text-right">{st.sharpe?.toFixed(2)}</td>
+                  <td className="text-right">{st.sortino?.toFixed(2)}</td>
+                  <td className="text-right" style={{ color: "#f43f5e" }}>{(st.max_drawdown * 100).toFixed(1)}%</td>
+                </tr>))}
+          </tbody>
+        </table>
+        <p className="text-muted2 text-xs mt-2">Indices RÉELS (^GSPC / ^NDX) rebasés à 10 000 $ au début de la période. KPI recalculés sur la fenêtre sélectionnée.</p>
+      </section>
       <section className="card p-4 overflow-x-auto">
         <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Top screener — multi-actifs (score facteurs + edge ML)</h2>
         <table className="w-full text-sm">
