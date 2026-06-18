@@ -1,4 +1,4 @@
-.PHONY: install setup test lint demos api api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-preset preset-report calibrate-preset live live-go clean
+.PHONY: install setup test lint demos api api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-preset preset-report calibrate-preset live live-go clean
 PYTHON ?= python3      ## sur macOS c'est python3 (surchargeable : make api PYTHON=python)
 install:          ## installe les dépendances (uv)
 	uv venv && uv pip install -e ".[dev,data,quant,api,ml]"
@@ -34,6 +34,8 @@ cron-uninstall:   ## désactive la maj quotidienne automatique
 	bash scripts/install_cron.sh --uninstall
 tearsheet:        ## exporte un tear sheet de performance (out/tearsheet.html + .pdf si reportlab)
 	$(PYTHON) scripts/export_tearsheet.py
+train:            ## entraîne le modèle ML hors-ligne → models/ (serving découplé, ticket #2)
+	$(PYTHON) scripts/train_model.py
 backtest-ml:      ## backtest ML walk-forward point-in-time (conviction+ML vs technique vs bench)
 	$(PYTHON) scripts/backtest_ml.py
 backtest-weighting:  ## compare equipondere/inverse-vol/min-var/risk-parity (net de frais)

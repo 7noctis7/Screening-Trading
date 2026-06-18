@@ -164,6 +164,11 @@ make preset-report                                # rapport HTML (courbes + draw
 > sur la page Données. Allocation **Black-Litterman** (vues = conviction) et **régime de volatilité**
 > (calme/normal/stress) exposés dans Portefeuille / Risque.
 
+**Entraîner le modèle ML hors-ligne** (serving découplé — l'API charge l'artefact, ne réentraîne plus) :
+```bash
+make train         # → models/ (lancé aussi par le cron quotidien)
+```
+
 **Automatiser la maj quotidienne en une commande** (macOS launchd / Linux crontab, 22h30 lun-ven) :
 ```bash
 make cron-install      # active la tâche planifiée (logs : /tmp/quant_daily.log)
