@@ -1338,6 +1338,10 @@ def build_snapshot(seed: int = 7) -> dict:
     preset_bt = preset_backtest(_tradeable_data, _quality, asset_classes=acmap, swing_equity=equity,
                                 dd_target=_dd, band=0.03)
     recommended["preset_backtest"] = preset_bt          # rattaché à l'allocation recommandée affichée
+    # JOURNAL DES TRADES DU PRESET (rebalancements) → page Trades (remplace le swing legacy)
+    from packages.backtest.preset_backtest import preset_trade_log
+    _preset_trades = preset_trade_log(_tradeable_data, _quality, asset_classes=acmap,
+                                      dd_target=_dd, band=0.03, init_cap=init_cap)
     # ALLOCATION DE PRODUCTION = poids ACTUELS du preset (ce que make live réplique en paper)
     from packages.backtest.preset_backtest import preset_latest_weights
     _preset_weights = preset_latest_weights(_tradeable_data, _quality, asset_classes=acmap,
@@ -1445,6 +1449,7 @@ def build_snapshot(seed: int = 7) -> dict:
         "trades": [PL.trade_payload(t) for t in recent],
         "open_trades": comp["rows"],
         "trade_stats": trade_stats,
+        "preset_trades": _preset_trades,           # journal des rebalancements du preset (production)
         "universe": _universe_section(full_universe),
         "data": {**_data_section(data, acmap, len(full_universe)),
                  **({"survivorship": data_sec_extra} if data_sec_extra else {})},
