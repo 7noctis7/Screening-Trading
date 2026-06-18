@@ -1090,6 +1090,33 @@ def _load_prices(instruments, sector_of, start, end, seed):
     return data, mode
 
 
+def _index_closes(aliases: list[str], start, end, fallback: list[float]) -> tuple[list[float], bool]:
+    """Closes RÉELS d'un indice (essaie les alias dans YAHOO.db puis yfinance). Sinon `fallback`
+    synthétique. Renvoie (closes, is_real)."""
+    db = _price_db_path()
+    if db is not None:
+        try:
+            from packages.data.providers.db_provider import DBPriceProvider
+            prov = DBPriceProvider(db)
+            for a in aliases:
+                bars = prov.fetch_ohlcv(a, "1d", start, end)
+                if len(bars) >= 250:
+                    return [b.close for b in bars], True
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        from packages.common.net import online
+        if online():
+            import yfinance as yf
+            for a in aliases:
+                df = yf.Ticker(a).history(start=start.date().isoformat(), end=end.date().isoformat())
+                if len(df) >= 250:
+                    return [float(x) for x in df["Close"].tolist()], True
+    except Exception:  # noqa: BLE001
+        pass
+    return fallback, False
+
+
 def build_snapshot(seed: int = 7) -> dict:
     # --- univers COMPLET + fenêtre jusqu'à AUJOURD'HUI ---
     instruments = _seed_universe()
@@ -1102,7 +1129,12 @@ def build_snapshot(seed: int = 7) -> dict:
     # prix RÉELS (base locale) si disponibles, sinon synthétique sectorisé (cohérence secteurs)
     data, data_mode = _load_prices(instruments, sector_of, start, end, seed)
     n = max(len(b) for b in data.values())
-    vix = _vix_series(n, seed)                    # VIX (playbook volatilité + modulation)
+    # VIX RÉEL (^VIX) si dispo (base/yfinance), aligné sur n barres ; sinon synthétique.
+    _vix_real, _vix_is_real = _index_closes(["^VIX", "VIX"], start, end, [])
+    if _vix_is_real and len(_vix_real) >= 50:
+        vix = _vix_real[-n:] if len(_vix_real) >= n else [_vix_real[0]] * (n - len(_vix_real)) + _vix_real
+    else:
+        vix = _vix_series(n, seed)                # repli synthétique (playbook volatilité + modulation)
     full_universe = _db_full_universe() or instruments   # univers EXHAUSTIF (29k tickers si DB)
 
     # --- backtest swing VECTORISÉ sur TOUT l'univers, capital fictif 10 000 $.
@@ -1131,10 +1163,12 @@ def build_snapshot(seed: int = 7) -> dict:
     # + S&P 500 synthétique en référence marché. Tous rebasés 100 pour superposition.
     norm = [[b.close / d0[0].close for b in d0] for d0 in (data[s] for s in symbols)]
     eqw = [sum(col) / len(col) * 100 for col in zip(*norm)]
-    sp = [b.close for b in data_providers.create(
+    _sp_syn = [b.close for b in data_providers.create(
         "synthetic", seed=101, drift=0.09, annual_vol=0.16).fetch_ohlcv("S&P 500", "1d", start, end)]
-    ndx = [b.close for b in data_providers.create(
+    _ndx_syn = [b.close for b in data_providers.create(
         "synthetic", seed=202, drift=0.13, annual_vol=0.22).fetch_ohlcv("Nasdaq 100", "1d", start, end)]
+    sp, _sp_real = _index_closes(["^GSPC", "SPX", "SPY"], start, end, _sp_syn)        # VRAI S&P 500
+    ndx, _ndx_real = _index_closes(["^NDX", "^IXIC", "QQQ"], start, end, _ndx_syn)    # VRAI Nasdaq 100
     bench_px = eqw
     benches = {"Univers (équipondéré)": eqw, "S&P 500": sp, "Nasdaq 100": ndx}
     # backtest MULTI-STRATÉGIE sur l'indice équipondéré (tendance/momentum/retour moyenne + ensemble)
