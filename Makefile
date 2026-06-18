@@ -1,4 +1,4 @@
-.PHONY: install setup test lint demos api api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset preset-report calibrate-preset screen-niche live live-go clean
+.PHONY: install setup test lint demos api api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset preset-report calibrate-preset screen-niche list-db live live-go clean
 PYTHON ?= python3      ## sur macOS c'est python3 (surchargeable : make api PYTHON=python)
 install:          ## installe les dépendances (uv)
 	uv venv && uv pip install -e ".[dev,data,quant,api,ml]"
@@ -54,6 +54,8 @@ calibrate-preset:    ## calibre le preset (DD × top-K × bande) par Sharpe déf
 	$(PYTHON) scripts/calibrate_preset.py
 screen-niche:        ## audit d'exploitabilité d'un univers/niche (score 0-100) avant de s'engager
 	$(PYTHON) scripts/screen_niche.py
+list-db:             ## liste ce que contient YAHOO.db (classes/secteurs) → pour bâtir une vraie niche
+	$(PYTHON) scripts/build_niche.py
 live:             ## APERÇU des ordres à répliquer (dry-run, aucun ordre envoyé)
 	$(PYTHON) scripts/run_live.py --equity 10000
 live-go:          ## EXÉCUTE en paper (Alpaca paper + Bitmart) — clés API requises
