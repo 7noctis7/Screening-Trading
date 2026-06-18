@@ -80,6 +80,26 @@ export default function Risk() {
         </section>
       )}
 
+      {rm.vol_regime?.available && (
+        <section className="card p-4">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h2 className="text-sm uppercase tracking-wide text-muted">Régime de volatilité</h2>
+            <span className="text-xs mono px-2 py-0.5 rounded-full" style={{
+              background: `color-mix(in srgb, ${rm.vol_regime.state === "stress" ? "#f43f5e" : rm.vol_regime.state === "calme" ? "#22c55e" : "#f59e0b"} 18%, transparent)`,
+              color: rm.vol_regime.state === "stress" ? "#f43f5e" : rm.vol_regime.state === "calme" ? "#22c55e" : "#f59e0b" }}>
+              {rm.vol_regime.state.toUpperCase()} · exposition ×{rm.vol_regime.exposure_multiplier}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-2 text-sm mono">
+            <div><div className="text-muted text-xs">Vol réalisée</div><div className="text-lg">{pct(rm.vol_regime.current_vol)}</div></div>
+            <div><div className="text-muted text-xs">Percentile historique</div><div className="text-lg">{pct(rm.vol_regime.percentile)}</div></div>
+            <div><div className="text-muted text-xs">Seuil calme &lt;</div><div className="text-lg">{pct(rm.vol_regime.thresholds["calme<"])}</div></div>
+            <div><div className="text-muted text-xs">Seuil stress &gt;</div><div className="text-lg">{pct(rm.vol_regime.thresholds["stress>"])}</div></div>
+          </div>
+          <p className="text-muted2 text-xs mt-2">{rm.vol_regime.note} · méthode : {rm.vol_regime.method}.</p>
+        </section>
+      )}
+
       {rm.fragility?.available && (
         <section className="card p-4">
           <div className="flex items-center justify-between flex-wrap gap-2">
