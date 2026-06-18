@@ -101,7 +101,7 @@ def positions() -> dict:
 def trades() -> dict:
     snap = _snap()
     return {"trades": snap["trades"], "open_trades": snap["open_trades"],
-            "stats": snap["trade_stats"],
+            "stats": snap["trade_stats"], "preset_trades": snap.get("preset_trades", {}),
             "series": snap["dashboard"]["position_series"],
             "markers": snap["dashboard"]["position_markers"]}
 

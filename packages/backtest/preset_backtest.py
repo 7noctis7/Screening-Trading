@@ -225,3 +225,78 @@ def preset_equity_daily(data: dict, quality: dict | None = None, asset_classes: 
     if len(eq) < 30:
         return {"available": False}
     return {"available": True, "equity": [round(x, 2) for x in eq], "dates": out_dates}
+
+
+def _weights_at(A, rets, t, lookback, blackout_move, max_weight, min_names, tgt_vol):
+    """Poids du preset au temps t (ERC + blackout diversifié + plafond + DD-target)."""
+    win = rets[:, max(0, t - lookback):t]
+    if win.shape[1] < 20:
+        return None
+    cov = _cov_annual(win)
+    w = np.asarray(equal_risk_contribution(cov), float)
+    last2 = A[:, t] / A[:, t - 2] - 1
+    w_bl = np.where(np.abs(last2) > blackout_move, 0.0, w)
+    if int((w_bl > 0).sum()) >= min_names:
+        w = w_bl
+    s1 = w.sum(); w = w / s1 if s1 > 0 else w
+    for _ in range(3):
+        over = w > max_weight
+        if not over.any():
+            break
+        exc = (w[over] - max_weight).sum(); w[over] = max_weight
+        free = ~over & (w > 0)
+        if free.any():
+            w[free] += exc * w[free] / w[free].sum()
+        else:
+            break
+    s2 = w.sum(); w = w / s2 if s2 > 0 else w
+    pv = float(np.sqrt(max(0.0, w @ cov @ w)))
+    gross = 0.0 if pv <= 0 else min(1.0, tgt_vol / pv)
+    return w * gross
+
+
+def preset_trade_log(data: dict, quality: dict | None = None, asset_classes: dict | None = None,
+                     dd_target: float = 0.35, band: float = 0.03, step: int = 21, lookback: int = 120,
+                     top_k: int = 30, k_dd: float = 2.5, blackout_move: float = 0.12,
+                     max_weight: float = 0.10, min_names: int = 12, init_cap: float = 10000.0,
+                     max_trades: int = 150) -> dict:
+    """Journal des TRADES du preset : à chaque rebalancement, variations de poids → achats/ventes
+    (date, symbole, sens, poids avant/après, notionnel ≈ Δpoids × capital). Net du turnover."""
+    syms = [s for s, b in data.items() if b and len(b) > lookback + step]
+    if len(syms) < 5:
+        return {"available": False}
+    L = min(len(data[s]) for s in syms)
+    M = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in syms}
+    ref = max(syms, key=lambda s: len(data[s]))
+    dts = [b.ts.isoformat()[:10] for b in data[ref]][-L:]
+    quality = quality or {}
+    q = {s: quality.get(s) for s in syms if quality.get(s) is not None}
+    universe = (sorted(q, key=lambda s: q[s], reverse=True)[:top_k] if len(q) >= 5 else syms[:top_k])
+    A = np.asarray([M[s] for s in universe])
+    rets = A[:, 1:] / A[:, :-1] - 1
+    tgt_vol = max(0.0, abs(dd_target)) / k_dd
+    start = max(lookback, 50)
+    prev = np.zeros(len(universe))
+    trades, turn, rebs = [], 0.0, 0
+    for t in range(start, L - 1, step):
+        w = _weights_at(A, rets, t, lookback, blackout_move, max_weight, min_names, tgt_vol)
+        if w is None:
+            continue
+        if band > 0 and prev.sum() > 0:
+            w = np.where(np.abs(w - prev) < band, prev, w)
+        rebs += 1
+        turn += float(np.abs(w - prev).sum())
+        for i, sym in enumerate(universe):
+            d = float(w[i] - prev[i])
+            if abs(d) > 0.005:                      # variation matérielle (>0.5 %)
+                trades.append({"date": dts[t], "symbol": sym,
+                               "side": "BUY" if d > 0 else "SELL",
+                               "from": round(float(prev[i]), 4), "to": round(float(w[i]), 4),
+                               "notional": round(abs(d) * init_cap, 2)})
+        prev = w
+    if not trades:
+        return {"available": False}
+    trades = sorted(trades, key=lambda x: x["date"], reverse=True)[:max_trades]
+    per_year = 252.0 / step
+    return {"available": True, "trades": trades, "n_rebalances": rebs,
+            "turnover_annual": round(turn / rebs * per_year, 2) if rebs else 0.0}
