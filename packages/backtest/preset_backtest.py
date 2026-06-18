@@ -109,3 +109,39 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
             out["swing"] = _stats(sr, per_year)
             out["curves"]["swing"] = _cum(sr)
     return out
+
+
+def preset_latest_weights(data: dict, quality: dict | None = None, asset_classes: dict | None = None,
+                          dd_target: float = 0.35, band: float = 0.03, lookback: int = 120,
+                          top_k: int = 30, k_dd: float = 2.5, blackout_move: float = 0.12) -> dict:
+    """Poids cibles ACTUELS du preset (dernière barre) — pilote la PRODUCTION (make live).
+
+    Même logique que le backtest (qualité top-K -> risk-parity ERC -> DD-target -> blackout), mais
+    calculée au dernier point seulement. Renvoie {symbol: poids} (somme <= 1, le reste en cash).
+    """
+    syms = [s for s, b in data.items() if b and len(b) > lookback]
+    if len(syms) < 5:
+        return {}
+    L = min(len(data[s]) for s in syms)
+    M = {s: np.asarray([x.close for x in data[s]][-L:], float) for s in syms}
+    quality = quality or {}
+    q = {s: quality.get(s) for s in syms if quality.get(s) is not None}
+    universe = (sorted(q, key=lambda s: q[s], reverse=True)[:top_k]
+                if len(q) >= 5 else syms[:top_k])
+    A = np.asarray([M[s] for s in universe])
+    rets = A[:, 1:] / A[:, :-1] - 1
+    t = L - 1
+    win = rets[:, max(0, t - lookback):t]
+    if win.shape[1] < 20:
+        return {}
+    cov = _cov_annual(win)
+    w = np.asarray(equal_risk_contribution(cov), float)
+    last2 = A[:, t] / A[:, t - 2] - 1
+    w = np.where(np.abs(last2) > blackout_move, 0.0, w)
+    ssum = w.sum()
+    w = w / ssum if ssum > 0 else w
+    tgt_vol = max(0.0, abs(dd_target)) / k_dd
+    pv = float(np.sqrt(max(0.0, w @ cov @ w)))
+    gross = 0.0 if pv <= 0 else min(1.0, tgt_vol / pv)
+    w = w * gross
+    return {universe[i]: round(float(w[i]), 4) for i in range(len(universe)) if w[i] > 1e-4}
