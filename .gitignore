@@ -43,3 +43,5 @@ out/
 
 # logs runtime
 logs/
+
+/.cache/

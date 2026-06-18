@@ -473,11 +473,17 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
             return None
         vol = atr[t] / c[t] if c[t] else 0.0
         hi52 = c[max(0, t - 252):t + 1].max()                  # plus-haut 52 sem. (point-in-time)
+        # Proxy PEAD (post-earnings drift) SANS donnée payante : plus gros choc quotidien des
+        # 10 derniers jours (signé). Bernard & Thomas : le cours dérive dans le sens du choc.
+        win = c[max(1, t - 10):t + 1]
+        rr = win[1:] / win[:-1] - 1 if len(win) > 1 else None
+        gap = float(rr[abs(rr).argmax()]) if rr is not None and len(rr) else 0.0
         return [c[t] / c[t - 20] - 1, c[t] / c[t - 60] - 1,
                 (c[t] - sma[t]) / sma[t], rsi[t] / 100.0, vol,
                 (c[t] / c[t - 60] - 1) / (vol + 1e-6),          # momentum ajusté du risque
                 c[t] / hi52 - 1 if hi52 else 0.0,               # distance au plus-haut 52 sem.
-                -(c[t] / c[t - 5] - 1)]                         # reversal court terme (5 j)
+                -(c[t] / c[t - 5] - 1),                         # reversal court terme (5 j)
+                gap]                                            # dérive post-choc (proxy PEAD)
 
     X, y, T0, T1, last = [], [], [], [], {}    # T0/T1 = fenêtre du label (pour la purge)
     for s, bars in data.items():
@@ -522,7 +528,8 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
 
     model.fit(X, y)                              # modèle final sur tout l'échantillon
     fn = ["momentum 1 mois", "momentum 3 mois", "tendance vs MM50", "RSI", "volatilité (ATR)",
-          "momentum ajusté risque", "distance plus-haut 52 sem.", "reversal 5 j"]
+          "momentum ajusté risque", "distance plus-haut 52 sem.", "reversal 5 j",
+          "dérive post-choc (PEAD)"]
     imp = _feat_importance(model, fn, X, y)
     mx = max((v for _, v in imp), default=1.0) or 1.0
     probs = {s: float(model.predict_proba([f])[0]) for s, f in last.items()}
@@ -699,23 +706,28 @@ def _sentiment_section(held: list, names: dict, sector_of: dict, data: dict) -> 
 
 
 def _fund_provider():
-    """Provider fondamentaux. Priorité : FMP (clé) → yfinance (QUANT_FUND=yf, réel gratuit) → synthétique.
+    """Provider fondamentaux. Priorité : FMP (clé) → **yfinance par défaut si en ligne** → synthétique.
 
-    - **FMP** : réel, free tier limité (~40 actifs).
-    - **yfinance** : réel, GRATUIT sans clé, mais plus lent (1 requête/actif) → sous-ensemble.
-    - **synthétique** : fondamentaux FABRIQUÉS (déterministes) → pour la démo/UI, PAS pour décider.
+    - **FMP** : réel, free tier limité (~40 actifs) — si `FMP_API_KEY`.
+    - **yfinance** : réel, GRATUIT sans clé — utilisé **par défaut** quand le réseau répond
+      (désactivable avec `QUANT_FUND=synthetic` pour forcer l'offline/démo).
+    - **synthétique** : fondamentaux FABRIQUÉS (déterministes) → repli hors-ligne, PAS pour décider.
     """
     import os
-    if os.environ.get("FMP_API_KEY"):
+    mode = os.environ.get("QUANT_FUND", "").lower()
+    if os.environ.get("FMP_API_KEY") and mode != "synthetic":
         try:
             from packages.fundamentals.fmp_provider import FMPFundamentalsProvider
             return FMPFundamentalsProvider(), "FMP (free tier)"
         except Exception:  # noqa: BLE001
             pass
-    if os.environ.get("QUANT_FUND") == "yf":
+    # yfinance par défaut (réel, gratuit) sauf demande explicite de synthétique ; garde-fou réseau.
+    if mode != "synthetic":
         try:
-            from packages.fundamentals.yfinance_provider import YFinanceFundamentalsProvider
-            return YFinanceFundamentalsProvider(), "yfinance (réel, gratuit)"
+            from packages.common.net import online
+            if mode == "yf" or online():
+                from packages.fundamentals.yfinance_provider import YFinanceFundamentalsProvider
+                return YFinanceFundamentalsProvider(), "yfinance (réel, gratuit)"
         except Exception:  # noqa: BLE001
             pass
     from packages.fundamentals.provider import SyntheticFundamentalsProvider

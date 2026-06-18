@@ -1,4 +1,4 @@
-.PHONY: install setup test lint demos api api-lan web preview interactive ingest daily cron tearsheet backtest-ml backtest-weighting backtest-earnings backtest-breakout live live-go clean
+.PHONY: install setup test lint demos api api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet backtest-ml backtest-weighting backtest-earnings backtest-breakout live live-go clean
 PYTHON ?= python3      ## sur macOS c'est python3 (surchargeable : make api PYTHON=python)
 install:          ## installe les dépendances (uv)
 	uv venv && uv pip install -e ".[dev,data,quant,api,ml]"
@@ -28,6 +28,10 @@ daily:            ## mise à jour incrémentale quotidienne des prix réels
 	$(PYTHON) scripts/ingest_prices.py --daily
 cron:             ## maj quotidienne complète (prix + terminal) — à mettre en crontab/launchd
 	bash scripts/cron_daily.sh
+cron-install:     ## ACTIVE la maj quotidienne auto (macOS launchd / Linux crontab) — 1 commande
+	bash scripts/install_cron.sh
+cron-uninstall:   ## désactive la maj quotidienne automatique
+	bash scripts/install_cron.sh --uninstall
 tearsheet:        ## exporte un tear sheet de performance (out/tearsheet.html + .pdf si reportlab)
 	$(PYTHON) scripts/export_tearsheet.py
 backtest-ml:      ## backtest ML walk-forward point-in-time (conviction+ML vs technique vs bench)
