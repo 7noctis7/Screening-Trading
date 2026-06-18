@@ -9,20 +9,42 @@ from __future__ import annotations
 
 import re
 
-# Lexique finance condensé (poids 1.0 par défaut). Minuscule, sans ponctuation.
+# Lexique finance (inspiré Loughran-McDonald — sous-ensemble étendu). Minuscule, sans ponctuation.
 _POS = {
+    # marché / prix
     "beat", "beats", "surge", "surges", "soar", "soars", "rally", "rallies", "gain", "gains",
-    "jump", "jumps", "record", "upgrade", "upgraded", "outperform", "bullish", "growth",
-    "profit", "profits", "strong", "boost", "boosted", "rise", "rises", "rose", "top", "tops",
-    "exceed", "exceeds", "win", "wins", "approval", "approved", "expansion", "buyback",
-    "dividend", "raise", "raised", "optimistic", "momentum", "breakout", "rebound",
+    "jump", "jumps", "record", "upgrade", "upgraded", "outperform", "outperforms", "bullish",
+    "growth", "profit", "profits", "profitable", "strong", "stronger", "strongest", "boost",
+    "boosted", "rise", "rises", "rose", "top", "tops", "exceed", "exceeds", "exceeded", "win",
+    "wins", "won", "approval", "approved", "expansion", "expand", "buyback", "dividend", "raise",
+    "raised", "raises", "optimistic", "momentum", "breakout", "rebound", "rebounds",
+    # Loughran-McDonald « positive » (extrait)
+    "able", "advantage", "advantages", "achieve", "achieved", "achievement", "attractive",
+    "benefit", "benefits", "beneficial", "best", "better", "breakthrough", "improve", "improved",
+    "improvement", "improving", "efficient", "efficiency", "excellent", "favorable", "gaining",
+    "great", "greater", "highest", "innovative", "innovation", "leading", "leadership", "positive",
+    "progress", "rewarding", "robust", "solid", "succeed", "success", "successful", "superior",
+    "surpass", "surpassed", "upbeat", "upside", "upward", "accelerate", "accelerated", "outpace",
+    "resilient", "resilience", "tailwind", "tailwinds", "beating", "beaten", "expanded",
 }
 _NEG = {
+    # marché / prix
     "miss", "misses", "missed", "plunge", "plunges", "slump", "slumps", "fall", "falls", "fell",
     "drop", "drops", "crash", "crashes", "downgrade", "downgraded", "underperform", "bearish",
-    "loss", "losses", "weak", "warning", "warns", "cut", "cuts", "decline", "declines",
-    "lawsuit", "probe", "bankruptcy", "default", "recession", "fraud", "selloff", "sell-off",
-    "layoff", "layoffs", "fear", "fears", "risk", "risks", "slowdown", "deficit", "concern",
+    "loss", "losses", "weak", "weaker", "weakest", "warning", "warns", "warn", "cut", "cuts",
+    "decline", "declines", "declined", "lawsuit", "probe", "bankruptcy", "default", "recession",
+    "fraud", "selloff", "sell-off", "layoff", "layoffs", "fear", "fears", "risk", "risks",
+    "slowdown", "deficit", "concern", "concerns",
+    # Loughran-McDonald « negative » (extrait)
+    "adverse", "adversely", "against", "bad", "breach", "breaches", "crisis", "critical",
+    "damage", "damages", "deteriorate", "deteriorating", "difficult", "difficulties", "disappoint",
+    "disappointing", "disappointed", "downturn", "doubt", "doubts", "fail", "fails", "failed",
+    "failure", "negative", "penalty", "penalties", "plummet", "plummets", "poor", "pressure",
+    "pressured", "litigation", "investigation", "delay", "delays", "delayed", "shortfall",
+    "shortfalls", "struggle", "struggles", "struggling", "sue", "sued", "suspend", "suspended",
+    "trouble", "troubled", "uncertainty", "uncertain", "volatile", "volatility", "weakness",
+    "worse", "worsen", "worsening", "worst", "halt", "halted", "headwind", "headwinds",
+    "impairment", "writedown", "write-down", "restructuring", "dilution", "dilutive", "subpoena",
 }
 _NEGATORS = {"no", "not", "never", "without", "n't", "nt", "neither", "nor", "hardly", "barely"}
 _CONTRAST = {"but", "however", "despite", "although", "though", "yet", "nonetheless"}

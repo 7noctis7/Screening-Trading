@@ -1,4 +1,4 @@
-.PHONY: install setup test lint demos api api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-preset preset-report calibrate-preset screen-niche live live-go clean
+.PHONY: install setup test lint demos api api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset preset-report calibrate-preset screen-niche live live-go clean
 PYTHON ?= python3      ## sur macOS c'est python3 (surchargeable : make api PYTHON=python)
 install:          ## installe les dépendances (uv)
 	uv venv && uv pip install -e ".[dev,data,quant,api,ml]"
@@ -44,6 +44,8 @@ backtest-earnings:   ## backtest PEAD (earnings drift, dates via yfinance)
 	$(PYTHON) scripts/backtest_earnings.py
 backtest-breakout:   ## backtest cassures Donchian + measure rule (Bulkowski)
 	$(PYTHON) scripts/backtest_breakout.py
+backtest-sentiment:  ## event-study : le signal sentiment a-t-il un edge ? (data/news.csv requis)
+	$(PYTHON) scripts/backtest_sentiment.py
 backtest-preset:     ## backtest walk-forward du preset best-practice + overlay vol gérée (tes données)
 	$(PYTHON) scripts/backtest_preset.py
 preset-report:       ## rapport HTML autonome du backtest preset (courbes + drawdowns) → out/preset_report.html
