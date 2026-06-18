@@ -1,0 +1,21 @@
+symbol,name,asset_class,venue,currency,sector
+MATIC/USDT,Polygon,crypto,BINANCE,USDT,Crypto
+LINK/USDT,Chainlink,crypto,BINANCE,USDT,Crypto
+ATOM/USDT,Cosmos,crypto,BINANCE,USDT,Crypto
+NEAR/USDT,NEAR Protocol,crypto,BINANCE,USDT,Crypto
+INJ/USDT,Injective,crypto,BINANCE,USDT,Crypto
+RUNE/USDT,THORChain,crypto,BINANCE,USDT,Crypto
+FTM/USDT,Fantom,crypto,BINANCE,USDT,Crypto
+ALGO/USDT,Algorand,crypto,BINANCE,USDT,Crypto
+GRT/USDT,The Graph,crypto,BINANCE,USDT,Crypto
+SAND/USDT,The Sandbox,crypto,BINANCE,USDT,Crypto
+AAVE/USDT,Aave,crypto,BINANCE,USDT,Crypto
+LDO/USDT,Lido DAO,crypto,BINANCE,USDT,Crypto
+IMX/USDT,Immutable,crypto,BINANCE,USDT,Crypto
+STX/USDT,Stacks,crypto,BINANCE,USDT,Crypto
+TIA/USDT,Celestia,crypto,BINANCE,USDT,Crypto
+SEI/USDT,Sei,crypto,BINANCE,USDT,Crypto
+SUI/USDT,Sui,crypto,BINANCE,USDT,Crypto
+APT/USDT,Aptos,crypto,BINANCE,USDT,Crypto
+RNDR/USDT,Render,crypto,BINANCE,USDT,Crypto
+FET/USDT,Fetch.ai,crypto,BINANCE,USDT,Crypto
