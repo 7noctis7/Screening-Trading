@@ -1117,6 +1117,28 @@ def _index_closes(aliases: list[str], start, end, fallback: list[float]) -> tupl
     return fallback, False
 
 
+def _curve_stats(eq: list[float]) -> dict:
+    """KPIs d'une courbe d'equity : CAGR, Sharpe, Sortino, maxDD, win-rate, profit factor."""
+    import numpy as _np
+    e = _np.asarray(eq, dtype=float)
+    if e.size < 30:
+        return {"available": False}
+    r = e[1:] / e[:-1] - 1
+    total = float(e[-1] / e[0] - 1)
+    cagr = float((1 + total) ** (252.0 / len(r)) - 1) if total > -1 else -1.0
+    sd = float(r.std())
+    dn = r[r < 0]
+    dsd = float((dn ** 2).mean() ** 0.5) if dn.size else 0.0
+    peak = _np.maximum.accumulate(e)
+    mdd = float((e / peak - 1).min())
+    gains, losses = float(r[r > 0].sum()), float(-r[r < 0].sum())
+    return {"available": True, "cagr": round(cagr, 4), "total_return": round(total, 4),
+            "sharpe": round(r.mean() / sd * (252 ** 0.5), 2) if sd > 0 else 0.0,
+            "sortino": round(r.mean() / dsd * (252 ** 0.5), 2) if dsd > 0 else 0.0,
+            "max_drawdown": round(mdd, 4), "win_rate": round(float((r > 0).mean()), 3),
+            "profit_factor": round(gains / losses, 2) if losses > 0 else 0.0}
+
+
 def build_snapshot(seed: int = 7) -> dict:
     # --- univers COMPLET + fenêtre jusqu'à AUJOURD'HUI ---
     instruments = _seed_universe()
@@ -1434,6 +1456,34 @@ def build_snapshot(seed: int = 7) -> dict:
                                   "qty": round(notion / px, 4) if px else 0.0})
     _alloc_rows(_preset_weights, _alp_cap, "equity")     # actions/ETF → capital Alpaca
     _alloc_rows(_crypto_weights, _bit_cap, "crypto")     # crypto → capital Bitmart
+    # Séries OHLC pour les graphiques cliquables (Positions/Trades/Réel) — bornées (~500 barres)
+    _chart_syms = {o["symbol"] for o in _preset_alloc} | {p.get("symbol") for p in _live["real"]["positions"]}
+    _chart_series = {}
+    for s in _chart_syms:
+        b = data.get(s)
+        if b:
+            bb = b[-500:]
+            _chart_series[s] = [{"t": x.ts.isoformat()[:10], "o": round(x.open, 4), "h": round(x.high, 4),
+                                 "l": round(x.low, 4), "c": round(x.close, 4), "v": round(x.volume, 0)} for x in bb]
+    # PERF PAR COMPTE (backtest du sleeve) : Alpaca = poche actions, Bitmart = poche crypto
+    _alp_perf = {"available": False}
+    if _pe.get("available"):
+        _alp_perf = {**_curve_stats(_pe["equity"]),
+                     "curve": [{"t": d, "v": v} for d, v in zip(_pe["dates"], _pe["equity"])]}
+    _bit_perf = {"available": False}
+    try:
+        _crypto_data = {s: b for s, b in data.items()
+                        if acmap.get(s) == "crypto" or s.upper().endswith(("USDT", "USDC")) or "/USD" in s.upper()}
+        if len(_crypto_data) >= 3:
+            _pe_cr = preset_equity_daily(_crypto_data, {}, asset_classes=acmap, dd_target=_dd,
+                                         top_k=12, min_names=3, max_weight=0.20, init_cap=init_cap)
+            if _pe_cr.get("available"):
+                _bit_perf = {**_curve_stats(_pe_cr["equity"]),
+                             "curve": [{"t": d, "v": v} for d, v in zip(_pe_cr["dates"], _pe_cr["equity"])]}
+    except Exception:  # noqa: BLE001
+        pass
+    _live["alpaca_perf"] = _alp_perf
+    _live["bitmart_perf"] = _bit_perf
     # BLACK-LITTERMAN : prior équipondéré + vues = conviction z-scorée → poids postérieurs
     try:
         import numpy as _np2
@@ -1483,6 +1533,9 @@ def build_snapshot(seed: int = 7) -> dict:
             "dates": _dash_dates,
             "positions": comp["rows"], "totals": comp["totals"],
             "preset_allocation": _preset_alloc,        # allocation PRESET (production) → page Positions
+            "alloc_capital": {"alpaca": round(_alp_cap, 2), "bitmart": round(_bit_cap, 2),
+                              "total": round(_alp_cap + _bit_cap, 2)},  # base réelle par compte
+            "chart_series": _chart_series,             # OHLC cliquables (preset + positions réelles)
             "portfolio": portfolio_kpis,
             "position_series": position_series,
             "position_markers": position_markers,
