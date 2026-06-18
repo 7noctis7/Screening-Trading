@@ -1349,6 +1349,19 @@ def build_snapshot(seed: int = 7) -> dict:
     from packages.backtest.preset_backtest import preset_latest_weights
     _preset_weights = preset_latest_weights(_tradeable_data, _quality, asset_classes=acmap,
                                             dd_target=_dd, band=0.03)
+    # SLEEVE CRYPTO (best practice) : poche risk-parity crypto mélangée selon QUANT_CRYPTO_PCT
+    # (défaut 0 = désactivé ; nécessite des fonds Bitmart SPOT). Les actions sont réduites d'autant.
+    _crypto_pct = float(_os.environ.get("QUANT_CRYPTO_PCT", "0.0"))
+    if _crypto_pct > 0:
+        try:
+            from packages.backtest.crypto_sleeve import crypto_weights
+            _cw = crypto_weights(data, asset_classes=acmap, dd_target=_dd)
+            if _cw:
+                _preset_weights = {s: round(w * (1 - _crypto_pct), 4) for s, w in _preset_weights.items()}
+                for s, w in _cw.items():
+                    _preset_weights[s] = round(_preset_weights.get(s, 0.0) + w * _crypto_pct, 4)
+        except Exception:  # noqa: BLE001
+            pass
     # Courbe d'equity QUOTIDIENNE du preset → c'est ELLE qui pilote le dashboard (le swing est legacy)
     from packages.backtest.preset_backtest import preset_equity_daily
     _pe = preset_equity_daily(_tradeable_data, _quality, asset_classes=acmap, dd_target=_dd, init_cap=init_cap)
