@@ -20,11 +20,13 @@ class BitmartBroker:
     is_paper = False                 # Bitmart n'a pas de vrai paper → dry_run protège
 
     def __init__(self, api_key: str | None = None, api_secret: str | None = None,
-                 memo: str | None = None, dry_run: bool = True) -> None:
+                 memo: str | None = None, dry_run: bool = True, market: str | None = None) -> None:
         self.dry_run = dry_run
         self._key = api_key or os.environ.get("BITMART_API_KEY", "")
         self._secret = api_secret or os.environ.get("BITMART_API_SECRET", "")
         self._memo = memo or os.environ.get("BITMART_API_MEMO", "")
+        # marché de TRADING : "spot" (défaut, sans levier) ou "swap" (futures — levier = risque).
+        self.market = (market or os.environ.get("BITMART_MARKET", "spot")).lower()
         self._ex = None              # connexion ccxt paresseuse
         self._loaded = False
 
@@ -35,7 +37,8 @@ class BitmartBroker:
         if self._ex is None:
             import ccxt  # import local
             self._ex = ccxt.bitmart({"apiKey": self._key, "secret": self._secret,
-                                     "uid": self._memo, "enableRateLimit": True})
+                                     "uid": self._memo, "enableRateLimit": True,
+                                     "options": {"defaultType": "swap" if self.market == "swap" else "spot"}})
         if not self._loaded:
             try:
                 self._ex.load_markets()
@@ -110,39 +113,45 @@ class BitmartBroker:
             return 0.0
 
     def positions(self) -> list[Position]:
-        """Positions SPOT = coins détenus (solde > 0), valorisés au dernier prix. (pas de futures)."""
+        """Positions = coins SPOT détenus (solde > 0) + positions FUTURES ouvertes (swap)."""
         if not self._live():
             return []
-        try:
-            bal = self._client().fetch_balance()
-            total = bal.get("total", {}) or {}
-            out: list[Position] = []
+        out: list[Position] = []
+        try:                                          # SPOT : coins en solde
+            total = (self._client().fetch_balance({"type": "spot"}).get("total", {}) or {})
             for coin, amt in total.items():
                 amt = float(amt or 0.0)
                 if coin in ("USDT", "USDC", "USD") or amt <= 0:
                     continue
                 sym = f"{coin}/USDT"
                 out.append(Position(sym, Side.LONG, amt, self.last_price(sym)))
-            return out
         except Exception:  # noqa: BLE001
-            return []
+            pass
+        try:                                          # FUTURES : positions ouvertes
+            for p in (self._client().fetch_positions() or []):
+                out.append(position_from_ccxt(p))
+        except Exception:  # noqa: BLE001
+            pass
+        return out
 
     def equity(self) -> float:
-        """Valeur totale du compte spot en USDT (cash USDT + valeur des coins)."""
+        """Valeur totale en USDT sur les DEUX portefeuilles (spot : cash + coins ; futures : marge)."""
         if not self._live():
             return 0.0
-        try:
-            bal = self._client().fetch_balance()
-            total = bal.get("total", {}) or {}
-            eq = float(total.get("USDT", 0.0) or 0.0) + float(total.get("USDC", 0.0) or 0.0)
-            for coin, amt in total.items():
-                amt = float(amt or 0.0)
-                if coin in ("USDT", "USDC", "USD") or amt <= 0:
-                    continue
-                eq += amt * self.last_price(f"{coin}/USDT")
-            return round(eq, 2)
-        except Exception:  # noqa: BLE001
-            return 0.0
+        eq = 0.0
+        for typ in ("spot", "swap"):
+            try:
+                total = (self._client().fetch_balance({"type": typ}).get("total", {}) or {})
+                eq += float(total.get("USDT", 0.0) or 0.0) + float(total.get("USDC", 0.0) or 0.0)
+                if typ == "spot":
+                    for coin, amt in total.items():
+                        amt = float(amt or 0.0)
+                        if coin in ("USDT", "USDC", "USD") or amt <= 0:
+                            continue
+                        eq += amt * self.last_price(f"{coin}/USDT")
+            except Exception:  # noqa: BLE001
+                pass
+        return round(eq, 2)
 
     def cancel(self, client_id: str) -> bool:
         return True
