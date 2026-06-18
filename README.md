@@ -115,7 +115,7 @@ cd ~/Screening-Trading
 source .venv/bin/activate
 export QUANT_PRICE_DB="$HOME/Desktop/YAHOO.db"   # ta base réelle (adapte le chemin)
 export FRED_API_KEY="ta_cle_fred"               # page Macro chiffrée (le FMI marche sans clé)
-export QUANT_FUND=yf                             # fondamentaux réels via yfinance (767 actifs)
+# fondamentaux réels via yfinance = défaut si en ligne (QUANT_FUND=synthetic pour forcer l'offline)
 export QUANT_NEWS=1                              # news RSS réelles
 make api
 ```
@@ -148,6 +148,12 @@ Mettre à jour la base chaque jour (append idempotent, jamais d'écrasement) :
 ```bash
 python scripts/ingest_prices.py --since 2015-01-01   # backfill complet
 python scripts/ingest_prices.py --daily              # incrémental quotidien
+```
+
+**Automatiser la maj quotidienne en une commande** (macOS launchd / Linux crontab, 22h30 lun-ven) :
+```bash
+make cron-install      # active la tâche planifiée (logs : /tmp/quant_daily.log)
+make cron-uninstall    # la désactive
 ```
 
 **Depuis le téléphone** : lancez l'API sur le Mac en réseau local
