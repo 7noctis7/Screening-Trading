@@ -142,7 +142,8 @@ export default function Portfolio() {
             <thead className="text-muted text-xs">
               <tr><th className="text-left font-normal">Actif</th><th className="text-right font-normal">Actuelle</th>
               <th className="text-right font-normal">HRP</th><th className="text-right font-normal">Min-var</th>
-              <th className="text-right font-normal">Risk parity</th></tr>
+              <th className="text-right font-normal">Risk parity</th>
+              {opt.black_litterman && <th className="text-right font-normal">Black-Litterman</th>}</tr>
             </thead>
             <tbody>{opt.symbols.map((s: string, i: number) => (
               <tr key={s} className="border-t border-border">
@@ -151,6 +152,7 @@ export default function Portfolio() {
                 <td className="text-right" style={{ color: "#3b82f6" }}>{(opt.hrp[i] * 100).toFixed(1)}%</td>
                 <td className="text-right" style={{ color: "#60a5fa" }}>{(opt.min_variance[i] * 100).toFixed(1)}%</td>
                 <td className="text-right" style={{ color: "#a855f7" }}>{((opt.risk_parity?.[i] ?? 0) * 100).toFixed(1)}%</td>
+                {opt.black_litterman && <td className="text-right" style={{ color: "#22d3ee" }}>{((opt.black_litterman[i] ?? 0) * 100).toFixed(1)}%</td>}
               </tr>))}</tbody>
           </table>
           <p className="text-muted2 text-xs mt-2">HRP (hierarchical risk parity, López de Prado) &amp; min-variance — robustes sans inversion instable de la covariance.</p>

@@ -1174,6 +1174,9 @@ def build_snapshot(seed: int = 7) -> dict:
     from packages.portfolio.vol_managed import vol_managed_backtest
     rm["vol_managed"] = vol_managed_backtest(rets, target_vol=vol_target_from_drawdown(_dd),
                                              window=20, max_leverage=1.0)
+    # RÉGIME DE VOLATILITÉ (calme/normal/stress) → multiplicateur d'exposition au-delà du VIX
+    from packages.regime.vol_regime import vol_regime
+    rm["vol_regime"] = vol_regime(rets, window=20)
 
     # Sharpe probabiliste & DÉFLATÉ (garde-fou surapprentissage / essais multiples)
     from packages.portfolio.psr import deflated_sharpe_ratio, probabilistic_sharpe_ratio
@@ -1263,6 +1266,24 @@ def build_snapshot(seed: int = 7) -> dict:
     preset_bt = preset_backtest(data, _quality, asset_classes=acmap, swing_equity=equity,
                                 dd_target=_dd, band=0.03)
     recommended["preset_backtest"] = preset_bt          # rattaché à l'allocation recommandée affichée
+    # BLACK-LITTERMAN : prior équipondéré + vues = conviction z-scorée → poids postérieurs
+    try:
+        import numpy as _np2
+        from packages.portfolio.black_litterman import black_litterman, views_from_scores
+        _conv = {r["symbol"]: r.get("conviction") for r in conviction_sec.get("rows", [])}
+        _scores = [_conv.get(s) if _conv.get(s) is not None else float("nan") for s in cb_syms]
+        _P, _Q = views_from_scores(_scores)
+        _wm = _np2.array([1.0 / len(cb_syms)] * len(cb_syms))
+        optimal["black_litterman"] = black_litterman(cov, _wm, _P, _Q)["weights"]
+    except Exception:  # noqa: BLE001
+        pass
+    # AUDIT BIAIS DU SURVIVANT (honnêteté des backtests longs)
+    try:
+        from packages.data.survivorship import survivorship_audit
+        _uni_syms = [m["symbol"] if isinstance(m, dict) else m for m in full_universe]
+        data_sec_extra = survivorship_audit(_uni_syms)
+    except Exception:  # noqa: BLE001
+        data_sec_extra = None
     return {
         "meta": {
             "generated_at": now.isoformat(),
@@ -1316,7 +1337,8 @@ def build_snapshot(seed: int = 7) -> dict:
         "open_trades": comp["rows"],
         "trade_stats": trade_stats,
         "universe": _universe_section(full_universe),
-        "data": _data_section(data, acmap, len(full_universe)),
+        "data": {**_data_section(data, acmap, len(full_universe)),
+                 **({"survivorship": data_sec_extra} if data_sec_extra else {})},
         "themes": themes,
         "ml": ml,
         "sentiment": sentiment_sec,

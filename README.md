@@ -155,7 +155,14 @@ no-trade band) **et de l'overlay volatilité gérée**, sur VOS données (point-
 ```bash
 export QUANT_PRICE_DB="$HOME/Desktop/YAHOO.db"   # sinon synthétique
 make backtest-preset                              # preset vs swing vs équipondéré + Moreira-Muir
+make calibrate-preset                             # meilleure combo (DD × top-K × bande) par Sharpe déflaté
+make preset-report                                # rapport HTML (courbes + drawdowns) → out/preset_report.html
 ```
+
+> **Biais du survivant** : l'univers ne contient que les titres *encore cotés*. Pour des backtests
+> longs honnêtes, déposer `data/delisted.csv` (cf. `data/delisted.csv.example`) — l'audit s'affiche
+> sur la page Données. Allocation **Black-Litterman** (vues = conviction) et **régime de volatilité**
+> (calme/normal/stress) exposés dans Portefeuille / Risque.
 
 **Automatiser la maj quotidienne en une commande** (macOS launchd / Linux crontab, 22h30 lun-ven) :
 ```bash

@@ -22,6 +22,14 @@ export default function DataPage() {
     <main className="max-w-5xl mx-auto p-6 space-y-4">
       <h1 className="text-xl font-semibold tracking-tight">Données</h1>
       <StepBanner active="data" />
+      {d.survivorship?.available && (
+        <div className="card p-3 text-sm flex items-start gap-2"
+          style={{ borderColor: d.survivorship.corrected ? "var(--pos)" : "var(--warn)" }}>
+          <span>{d.survivorship.corrected ? "✅" : "⚠️"}</span>
+          <span><b>Biais du survivant : {d.survivorship.severity}.</b>{" "}
+            <span className="text-muted">{d.survivorship.n_active} actifs cotés · {d.survivorship.n_delisted} délistés réintégrés. {d.survivorship.note}</span></span>
+        </div>
+      )}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {cards.map(([lab, val]) => (
           <div key={lab} className="card p-4">
