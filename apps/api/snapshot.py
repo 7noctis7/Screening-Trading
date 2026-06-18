@@ -28,7 +28,10 @@ from packages.storage import MacroStore
 
 ROOT = Path(__file__).resolve().parents[2]
 _NETWORK_KINDS = {"wikipedia", "ishares_holdings", "nasdaq_trader", "coingecko"}
-_HISTORY_DAYS = 1700        # ~4,6 ans d'historique jusqu'à aujourd'hui
+import os as _os_hist
+# Profondeur d'historique (jours calendaires). Configurable : QUANT_HISTORY_DAYS=3650 → ~10 ans
+# (depuis ~2016) si ta base le permet. Plus long = backtests plus lents.
+_HISTORY_DAYS = int(_os_hist.environ.get("QUANT_HISTORY_DAYS", "1700"))
 
 
 def _seed_universe() -> list[dict]:
