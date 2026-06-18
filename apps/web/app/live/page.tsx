@@ -50,6 +50,9 @@ export default function Live() {
       <h1 className="text-xl font-semibold tracking-tight">Portefeuille réel</h1>
       <StepBanner active="live" />
       <p className="text-muted text-xs">Données <b>réelles</b> de tes comptes Alpaca / Bitmart uniquement (aucun fictif). KPI &amp; positions séparés par broker.</p>
+      <div className="card p-3 text-xs" style={{ borderColor: "color-mix(in srgb, var(--accent) 35%, transparent)" }}>
+        ℹ️ <b>Le preset ne sélectionne que des actions/ETF</b> (qualité fondamentale) → tous les ordres vont chez <b>Alpaca</b> ; <b>Bitmart reste inactif</b> tant qu'aucune crypto n'est retenue. Trading <b>SPOT uniquement</b> (jamais de futures/levier) : un solde sur ton portefeuille <b>futures</b> Bitmart n'est <b>pas</b> utilisé.
+      </div>
 
       {/* KPI globaux */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
