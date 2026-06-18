@@ -163,3 +163,65 @@ def preset_latest_weights(data: dict, quality: dict | None = None, asset_classes
     gross = 0.0 if pv <= 0 else min(1.0, tgt_vol / pv)
     w = w * gross
     return {universe[i]: round(float(w[i]), 4) for i in range(len(universe)) if w[i] > 1e-4}
+
+
+def preset_equity_daily(data: dict, quality: dict | None = None, asset_classes: dict | None = None,
+                        dd_target: float = 0.35, band: float = 0.03, step: int = 21,
+                        lookback: int = 120, top_k: int = 30, k_dd: float = 2.5,
+                        blackout_move: float = 0.12, max_weight: float = 0.10, min_names: int = 12,
+                        init_cap: float = 10000.0) -> dict:
+    """Courbe d'equity QUOTIDIENNE du preset (pour le dashboard) : rebalancement tous les `step`
+    jours, accumulation des rendements quotidiens entre deux rebalancements. Renvoie
+    {equity:[$], dates:[iso], available}. Même logique que le backtest (anti-fuite)."""
+    from packages.backtest.preset_backtest import preset_latest_weights  # noqa: F401 (cohérence)
+    syms = [s for s, b in data.items() if b and len(b) > lookback + step]
+    if len(syms) < 5:
+        return {"available": False}
+    L = min(len(data[s]) for s in syms)
+    M = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in syms}
+    ref = max(syms, key=lambda s: len(data[s]))
+    dts = [b.ts.isoformat() for b in data[ref]][-L:]
+    quality = quality or {}
+    q = {s: quality.get(s) for s in syms if quality.get(s) is not None}
+    universe = (sorted(q, key=lambda s: q[s], reverse=True)[:top_k] if len(q) >= 5 else syms[:top_k])
+    A = np.asarray([M[s] for s in universe])
+    rets = A[:, 1:] / A[:, :-1] - 1
+    tgt_vol = max(0.0, abs(dd_target)) / k_dd
+    start = max(lookback, 50)
+    w = np.zeros(len(universe))
+    eq = [init_cap]
+    out_dates = [dts[start]]
+    for t in range(start, L - 1):
+        if (t - start) % step == 0:                       # rebalancement
+            win = rets[:, max(0, t - lookback):t]
+            if win.shape[1] >= 20:
+                cov = _cov_annual(win)
+                nw = np.asarray(equal_risk_contribution(cov), float)
+                last2 = A[:, t] / A[:, t - 2] - 1
+                nw_bl = np.where(np.abs(last2) > blackout_move, 0.0, nw)
+                if int((nw_bl > 0).sum()) >= min_names:
+                    nw = nw_bl
+                s1 = nw.sum(); nw = nw / s1 if s1 > 0 else nw
+                for _ in range(3):
+                    over = nw > max_weight
+                    if not over.any():
+                        break
+                    exc = (nw[over] - max_weight).sum(); nw[over] = max_weight
+                    free = ~over & (nw > 0)
+                    if free.any():
+                        nw[free] += exc * nw[free] / nw[free].sum()
+                    else:
+                        break
+                s2 = nw.sum(); nw = nw / s2 if s2 > 0 else nw
+                pv = float(np.sqrt(max(0.0, nw @ cov @ nw)))
+                gross = 0.0 if pv <= 0 else min(1.0, tgt_vol / pv)
+                nw = nw * gross
+                if band > 0 and w.sum() > 0:
+                    nw = np.where(np.abs(nw - w) < band, w, nw)
+                w = nw
+        r_d = float((w * (A[:, t + 1] / A[:, t] - 1)).sum())   # rendement quotidien réalisé
+        eq.append(eq[-1] * (1 + r_d))
+        out_dates.append(dts[t + 1])
+    if len(eq) < 30:
+        return {"available": False}
+    return {"available": True, "equity": [round(x, 2) for x in eq], "dates": out_dates}

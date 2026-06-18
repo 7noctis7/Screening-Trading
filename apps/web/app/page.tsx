@@ -18,7 +18,10 @@ export default function Dashboard() {
   const m = d.metrics;
   return (
     <main className="max-w-6xl mx-auto p-6 space-y-4">
-      <h1 className="text-xl font-semibold tracking-tight">Quant Terminal</h1>
+      <h1 className="text-xl font-semibold tracking-tight">Quant Terminal
+        {d.strategy_label && <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full align-middle"
+          style={{ background: "color-mix(in srgb, var(--accent) 16%, transparent)", color: "var(--accent2)" }}>
+          stratégie : {d.strategy_label}</span>}</h1>
       <StepBanner active="screener" />
       <RegimeBanner regime={d.regime} />
       <SentimentBanner sentiment={sent} />

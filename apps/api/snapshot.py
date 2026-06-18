@@ -1328,6 +1328,17 @@ def build_snapshot(seed: int = 7) -> dict:
     # ALLOCATION DE PRODUCTION = poids ACTUELS du preset (ce que make live réplique en paper)
     from packages.backtest.preset_backtest import preset_latest_weights
     _preset_weights = preset_latest_weights(data, _quality, asset_classes=acmap, dd_target=_dd, band=0.03)
+    # Courbe d'equity QUOTIDIENNE du preset → c'est ELLE qui pilote le dashboard (le swing est legacy)
+    from packages.backtest.preset_backtest import preset_equity_daily
+    _pe = preset_equity_daily(data, _quality, asset_classes=acmap, dd_target=_dd, init_cap=init_cap)
+    if _pe.get("available"):
+        _dash_metrics = PL.metrics_payload(_pe["equity"])
+        _dash_equity = [{"t": d, "v": v} for d, v in zip(_pe["dates"], _pe["equity"])]
+        _dash_dates = _pe["dates"]
+    else:                                              # repli swing si preset indisponible
+        _dash_metrics = PL.metrics_payload(equity)
+        _dash_equity = PL.equity_series(equity, ts_list)
+        _dash_dates = dates
     # BLACK-LITTERMAN : prior équipondéré + vues = conviction z-scorée → poids postérieurs
     try:
         import numpy as _np2
@@ -1370,10 +1381,11 @@ def build_snapshot(seed: int = 7) -> dict:
         "dashboard": {
             "as_of": last_bar.isoformat(),
             "regime": PL.regime_payload(regime, expo),
-            "metrics": PL.metrics_payload(equity),
-            "equity": PL.equity_series(equity, ts_list),
-            "benchmarks": _bench_series({"S&P 500": sp, "Nasdaq 100": ndx}, dates, init_cap),
-            "dates": dates,
+            "metrics": _dash_metrics,                 # PRESET (production), pas le swing legacy
+            "equity": _dash_equity,
+            "strategy_label": "preset (risk-parity + DD-target)" if _pe.get("available") else "swing",
+            "benchmarks": _bench_series({"S&P 500": sp, "Nasdaq 100": ndx}, _dash_dates, init_cap),
+            "dates": _dash_dates,
             "positions": comp["rows"], "totals": comp["totals"],
             "portfolio": portfolio_kpis,
             "position_series": position_series,
