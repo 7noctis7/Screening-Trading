@@ -157,6 +157,37 @@ export default function Portfolio() {
         </section>
       )}
 
+      {(() => {
+        const rec = a?.recommended_allocation, pb = rec?.preset_backtest;
+        if (!pb?.available) return null;
+        const rows: [string, any, string][] = [
+          ["Preset (best practice)", pb.preset, "#22d3ee"],
+          ["Swing (actuel)", pb.swing, "#f59e0b"],
+          ["Équipondéré (même univers)", pb.benchmark, "#9aa1ab"],
+        ].filter((r) => r[1]) as any;
+        return (
+          <section className="card p-4 overflow-x-auto">
+            <h2 className="text-sm uppercase tracking-wide text-muted mb-1">Preset stratégique « best practice » — backtest comparatif</h2>
+            <p className="text-muted2 text-xs mb-3">Qualité (top {pb.top_k}) → risk-parity (ERC) → exposition pilotée par drawdown-cible ({pct(pb.dd_target)}) → earnings blackout → bande de non-trading ({pct(pb.band)}). Point-in-time, net de coûts par classe. Turnover {pb.turnover_annual}×/an · exposition brute moy. {pct(pb.avg_gross)}.</p>
+            <table className="w-full text-sm">
+              <thead className="text-muted text-xs"><tr>
+                <th className="text-left font-normal">Stratégie</th>
+                <th className="text-right font-normal">Rendement</th><th className="text-right font-normal">Annualisé</th>
+                <th className="text-right font-normal">Sharpe</th><th className="text-right font-normal">Max DD</th></tr></thead>
+              <tbody className="mono">{rows.map(([lab, st, col]) => (
+                <tr key={lab} className="border-t border-border">
+                  <td className="py-1.5 font-sans" style={{ color: col }}>{lab}</td>
+                  <td className="text-right">{(st.total_return * 100).toFixed(1)}%</td>
+                  <td className="text-right">{(st.annualized * 100).toFixed(1)}%</td>
+                  <td className="text-right"><b>{st.sharpe}</b></td>
+                  <td className="text-right" style={{ color: "#f43f5e" }}>{(st.max_drawdown * 100).toFixed(1)}%</td>
+                </tr>))}</tbody>
+            </table>
+            <p className="text-muted2 text-xs mt-2">💡 Lecture honnête : le preset vise le <b>meilleur rendement ajusté du risque</b> (Sharpe ↑, drawdown ↓), pas le CAGR maximal. Sans edge directionnel prouvé (DSR ≈ 0), réduire le risque et le turnover est le levier le plus fiable. Le swing peut afficher un CAGR brut plus élevé mais avec un drawdown bien supérieur.</p>
+          </section>
+        );
+      })()}
+
       <CorrelationHeatmap data={a?.correlation} />
       <ExpertReview review={a?.review} />
     </main>
