@@ -28,7 +28,7 @@ export function EquityChart({ series, benchmarks, height = 260 }:
   return (
     <div className="card p-4">
       <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
-        <div className="text-xs uppercase tracking-wide text-muted">Performance du portefeuille ($)</div>
+        <div className="text-xs uppercase tracking-wide text-muted">Performance — base 10 000 $ (ptf vs benchmarks)</div>
         <div className="flex gap-1.5">
           {names.map((n) => (
             <button key={n} onClick={() => setOn((s) => ({ ...s, [n]: !s[n] }))}

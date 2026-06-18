@@ -13,7 +13,7 @@ export const STEPS: { n: number; key: string; page: string; title: string; desc:
   { n: 8, key: "sentiment", page: "/sentiment", title: "Sentiment & news", desc: "Humeur & actualité (macro + par actif)." },
   { n: 9, key: "conviction", page: "/conviction", title: "Conviction", desc: "FUSION (technique+ML+fondamental+sentiment+investisseurs) → note + allocation." },
   { n: 10, key: "screener", page: "/", title: "Dashboard", desc: "Synthèse : performance, régime macro, playbook VIX, top screener." },
-  { n: 11, key: "portfolio", page: "/positions", title: "Sélection & portefeuille", desc: "La STRATÉGIE swing (suivi de tendance, backtestée) décide des positions + sizing." },
+  { n: 11, key: "portfolio", page: "/positions", title: "Sélection & portefeuille", desc: "Allocation PRESET (risk-parity + DD-target + blackout, plafonnée 10 %/ligne) sur l'univers qualité négociable." },
   { n: 12, key: "risk", page: "/risk", title: "Risque", desc: "VaR/EVT/GARCH, limites, stress-tests, allocation optimale." },
   { n: 13, key: "live", page: "/live", title: "Exécution", desc: "Réplication chez le broker (Alpaca/Bitmart), positions réelles, coûts." },
 ];
@@ -54,10 +54,11 @@ export function PipelineFull() {
       <div className="card p-4 text-sm" style={{ borderColor: "color-mix(in srgb, var(--warn) 40%, transparent)" }}>
         <b>💡 Pourquoi les actifs détenus ≠ le top du screener / ML ?</b>
         <p className="text-muted mt-1.5">
-          Le <b>portefeuille</b> (Positions/Trades) est constitué par <b>une seule stratégie : le swing trend-following
-          backtesté</b> — le <b>décideur final</b>. Le Screening, le ML, les Fondamentaux et le Sentiment sont des
-          <b> lentilles d'analyse</b> fusionnées dans la <Link href="/conviction" className="text-accent">note de conviction</Link>,
-          qui propose une allocation alternative risk-aware. Deux logiques → deux listes, c'est normal.
+          Le <b>portefeuille de production</b> (Positions) est l'<b>allocation PRESET</b> : univers qualité →
+          risk-parity → DD-target → blackout, plafonnée 10 %/ligne, sur les actifs <b>négociables</b>. Le Screening,
+          le ML, les Fondamentaux et le Sentiment sont des <b>lentilles d'analyse</b> (fusionnées dans la{" "}
+          <Link href="/conviction" className="text-accent">conviction</Link>). La page <b>Trades</b> garde l'ancien
+          swing en référence. Pas d'edge directionnel prouvé → on gagne par la <b>gestion du risque</b>.
         </p>
       </div>
     </section>

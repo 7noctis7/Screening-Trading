@@ -44,12 +44,20 @@ export default function Dashboard() {
     const cut = new Date(last); cut.setFullYear(cut.getFullYear() - years);
     return eqFull.filter((p) => new Date(p.t) >= cut);
   }, [eqFull, years]);
-  const benchSliced = useMemo(() => {
-    if (!years || !d?.benchmarks) return d?.benchmarks;
-    const cutT = sliced[0]?.t;
+  // rebase une série pour qu'elle démarre à 10 000 $ au début de la fenêtre (comparaison équitable)
+  const rebase = (arr?: { t: string; v: number }[]) => {
+    if (!arr?.length || !arr[0].v) return arr ?? [];
+    const f = 10000 / arr[0].v;
+    return arr.map((p) => ({ t: p.t, v: Math.round(p.v * f * 100) / 100 }));
+  };
+  const chartEquity = useMemo(() => rebase(sliced), [sliced]);
+  const chartBench = useMemo(() => {
+    const src = d?.benchmarks as Record<string, any[]> | undefined;
+    if (!src) return src;
+    const cutT = sliced[0]?.t ?? "";
     const out: Record<string, any[]> = {};
-    for (const [k, arr] of Object.entries(d.benchmarks as Record<string, any[]>))
-      out[k] = arr.filter((p) => p.t >= cutT);
+    for (const [k, arr] of Object.entries(src))
+      out[k] = rebase((years ? arr.filter((p) => p.t >= cutT) : arr));
     return out;
   }, [d?.benchmarks, sliced, years]);
   if (!d) return <PageSkeleton />;
@@ -82,7 +90,7 @@ export default function Dashboard() {
         <MetricCard label="Sortino" value={m.sortino?.toFixed(2)} />
         <MetricCard label="Max DD" value={pct(m.max_drawdown)} tone="neg" />
       </div>
-      <EquityChart series={sliced} benchmarks={benchSliced} />
+      <EquityChart series={chartEquity} benchmarks={chartBench} />
       <section className="card p-4 overflow-x-auto">
         <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Top screener — multi-actifs (score facteurs + edge ML)</h2>
         <table className="w-full text-sm">
