@@ -711,6 +711,15 @@ def _sentiment_section(held: list, names: dict, sector_of: dict, data: dict) -> 
                      "headlines": heads[:5]})
     mood = round(sum(r["score"] for r in rows) / len(rows), 4) if rows else 0.0
     has_news = any(r["n_news"] for r in rows)
+    # Δsentiment (révision) : meilleur prédicteur EOD que le niveau. Persisté quotidiennement.
+    try:
+        from packages.sentiment.history import record_and_delta
+        _delta = record_and_delta({r["symbol"]: r["score"] for r in rows})
+        for r in rows:
+            r["score_change"] = _delta["by_symbol"].get(r["symbol"], 0.0)
+        mood_change = _delta["mood_delta"]
+    except Exception:  # noqa: BLE001
+        mood_change = 0.0
     # Fils d'actualité (RSS gratuit) — marché + MACRO (FED/BCE/FMI/économie). Toujours tentés.
     market_news, macro_news = [], []
     try:
@@ -729,8 +738,8 @@ def _sentiment_section(held: list, names: dict, sector_of: dict, data: dict) -> 
         "available": bool(rows),
         "engine": S.engine_name() if (has_news or market_news) else "momentum 63 j (repli hors-ligne)",
         "source": "news RSS" if (has_news or market_news) else "dérivé du momentum (QUANT_NEWS=1 pour les news par actif)",
-        "market_mood": mood, "market_label": S.label_of(mood), "rows": rows,
-        "market_news": market_news, "macro_news": macro_news,
+        "market_mood": mood, "market_label": S.label_of(mood), "mood_change": mood_change,
+        "rows": rows, "market_news": market_news, "macro_news": macro_news,
     }
 
 

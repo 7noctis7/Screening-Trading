@@ -35,7 +35,12 @@ export default function Sentiment() {
               <div style={{ height: "100%", width: `${moodPct}%`, background: "linear-gradient(90deg,#f43f5e,#9aa1ad,#22c55e)" }} />
             </div>
             <div className="text-xs text-muted mt-1.5">
-              score moyen <b className="text-fg">{mood.toFixed(2)}</b> · moteur <b className="text-fg">{s.engine}</b> · source <b className="text-fg">{s.source}</b>
+              score moyen <b className="text-fg">{mood.toFixed(2)}</b>
+              {s.mood_change != null && s.mood_change !== 0 && (
+                <> · Δ révision <b style={{ color: s.mood_change > 0 ? "#22c55e" : "#f43f5e" }}>
+                  {s.mood_change > 0 ? "+" : ""}{s.mood_change.toFixed(2)}</b></>
+              )}
+              {" "}· moteur <b className="text-fg">{s.engine}</b> · source <b className="text-fg">{s.source}</b>
             </div>
           </div>
         </div>
