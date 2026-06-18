@@ -45,6 +45,17 @@ _COST_BY_CLASS: dict[str, dict[str, float]] = {
 }
 
 
+def market_impact_bps(notional: float, adv_usd: float, coef: float = 10.0) -> float:
+    """Impact de marché NON-LINÉAIRE (loi en racine carrée, Almgren) : coef·√(notional/ADV), en bps.
+
+    C'est ce qui détruit l'alpha sur les actifs illiquides (small-caps, crypto de niche) : doubler
+    la taille ne double pas l'impact, il croît en √. coef≈10 bps pour 100 % d'ADV (prudent).
+    """
+    if adv_usd <= 0 or notional <= 0:
+        return 0.0
+    return coef * (abs(notional) / adv_usd) ** 0.5
+
+
 def cost_assumptions() -> list[dict]:
     """Table des hypothèses de coûts par classe (pour affichage UI / transparence TCA)."""
     return [{"asset_class": ac, "fee_bps": v["fee_bps"], "slippage_bps": v["slippage_bps"],

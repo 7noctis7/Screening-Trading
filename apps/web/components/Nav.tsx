@@ -3,6 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LiveBadge } from "@/components/LiveBadge";
+import { useMeta } from "@/lib/api";
 
 // Ordre = flux logique : données → analyses → risque → exécution
 const LINKS: [string, string][] = [
@@ -26,9 +27,16 @@ const LINKS: [string, string][] = [
 
 export function Nav() {
   const path = usePathname();
+  const { data: meta } = useMeta();
   return (
     <nav className="sticky top-0 z-20 border-b border-border"
       style={{ background: "rgba(10,12,16,.72)", backdropFilter: "saturate(160%) blur(14px)" }}>
+      {meta?.data_synthetic && (
+        <div className="px-6 py-1 text-[11px] text-center"
+          style={{ background: "color-mix(in srgb, var(--warn) 22%, transparent)", color: "var(--warn)" }}>
+          ⚠️ Données factices (synthétiques) — démo UI uniquement, ne pas décider. Branche <code className="mono">QUANT_PRICE_DB</code>.
+        </div>
+      )}
       <div className="max-w-6xl mx-auto px-6 py-3 flex flex-wrap gap-1.5 items-center">
         <span className="flex items-center gap-2 text-sm font-semibold tracking-tight mr-3">
           <span className="inline-block w-[18px] h-[18px] rounded-md"

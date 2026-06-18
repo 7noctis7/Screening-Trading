@@ -28,6 +28,11 @@ def main() -> None:
     print("Chargement des prix…")
     data, mode = _load_prices(instruments, sector_of, end - timedelta(days=_HISTORY_DAYS), end, 7)
     print(f"Mode : {mode} · univers {len(data)}")
+    import os as _os
+    if mode.startswith("synthetic") and _os.environ.get("QUANT_ALLOW_SYNTHETIC") != "1":
+        print("\n⛔ DONNÉES SYNTHÉTIQUES — calibration non significative (DSR≈0 par construction).")
+        print("   Branche QUANT_PRICE_DB, ou QUANT_ALLOW_SYNTHETIC=1 pour forcer la démo.")
+        return
     print("Scores qualité (fondamentaux)…")
     fs = _fundamentals_section(list(data), acmap, names, sector_of, data)
     quality = {r["symbol"]: r.get("combined_score") for r in fs.get("rows", [])}

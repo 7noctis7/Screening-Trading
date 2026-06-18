@@ -20,6 +20,7 @@ const q = (key: string, path: string, ms: number = LIVE) =>
     placeholderData: keepPreviousData,
   });
 
+export const useMeta = () => q("meta", "/api/meta", 60000);
 export const useDashboard = () => q("dashboard", "/api/dashboard", 15000);
 export const useScreener = () => q("screener", "/api/screener");
 export const usePortfolio = () => q("portfolio", "/api/portfolio");
