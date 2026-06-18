@@ -68,17 +68,12 @@ def main() -> None:
             print(line + "  " + ("aperçu" if dry else "broker absent"))
             continue
         try:
-            if o["broker"] == "Alpaca":
-                broker.submit_notional(bsym, side, notional)   # ordre par montant $
-                status = "envoyé (paper)"
-            else:
-                px = bitmart.last_price(bsym)
-                qty = notional / px if px > 0 else 0.0
-                if qty <= 0:
-                    status = "prix indisponible — sauté"
-                else:
-                    broker.submit(Order(bsym, side, qty, OrderType.MARKET))
-                    status = f"envoyé qty={qty:.4f}"
+            # ordre par MONTANT $ dans les deux cas — le broker dérive/arrondit la quantité
+            res = broker.submit_notional(bsym, side, notional)
+            q = getattr(res, "qty", 0.0) or 0.0
+            status = ("rejeté (min/précision)" if getattr(res, "status", None)
+                      and str(res.status).endswith("REJECTED")
+                      else (f"envoyé qty≈{q:.4f}" if q else "envoyé (paper)"))
             sent += 1
         except Exception as e:  # noqa: BLE001
             status = f"échec ({str(e)[:40]})"
