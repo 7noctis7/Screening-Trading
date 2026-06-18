@@ -150,6 +150,13 @@ python scripts/ingest_prices.py --since 2015-01-01   # backfill complet
 python scripts/ingest_prices.py --daily              # incrémental quotidien
 ```
 
+**Backtest walk-forward du preset best-practice** (qualité + risk-parity + DD-target + blackout +
+no-trade band) **et de l'overlay volatilité gérée**, sur VOS données (point-in-time, net de coûts) :
+```bash
+export QUANT_PRICE_DB="$HOME/Desktop/YAHOO.db"   # sinon synthétique
+make backtest-preset                              # preset vs swing vs équipondéré + Moreira-Muir
+```
+
 **Automatiser la maj quotidienne en une commande** (macOS launchd / Linux crontab, 22h30 lun-ven) :
 ```bash
 make cron-install      # active la tâche planifiée (logs : /tmp/quant_daily.log)
