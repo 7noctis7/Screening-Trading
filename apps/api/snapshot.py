@@ -334,7 +334,7 @@ def _vix_playbook(v: float) -> dict:
 
 
 def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
-                  target_weights: dict | None = None) -> dict:
+                  target_weights: dict | None = None, crypto_weights: dict | None = None) -> dict:
     """Portefeuille RÉEL : statut de connexion aux brokers (Alpaca actions, Bitmart crypto).
     Non connecté tant que les clés API ne sont pas fournies → ordres « cibles » à répliquer.
     Si `target_weights` est fourni (allocation PRESET de production), les ordres cibles en découlent ;
@@ -384,16 +384,24 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
         "positions": a_d["positions"] + b_d["positions"],
         "alpaca": a_d, "bitmart": b_d,
     }
-    if target_weights:                            # allocation PRESET (production best-practice)
+    if target_weights or crypto_weights:          # allocation PRESET (2 poches : actions + crypto)
         from packages.execution.routing import route as _route
         targets = []
-        for s, w in sorted(target_weights.items(), key=lambda kv: -kv[1]):
+        # poche actions/ETF → capital ALPACA ; poche crypto → capital BITMART (comptes distincts)
+        for s, w in sorted((target_weights or {}).items(), key=lambda kv: -kv[1]):
             if w <= 0:
                 continue
             r = _route(s, acmap.get(s, "equity"))
             targets.append({"symbol": s, "broker": r["broker"], "broker_symbol": r["broker_symbol"],
                             "asset_class": acmap.get(s, ""), "weight_pct": round(w, 4),
-                            "side": "long", "tradeable": r["tradeable"]})
+                            "side": "long", "tradeable": r["tradeable"], "capital": "alpaca"})
+        for s, w in sorted((crypto_weights or {}).items(), key=lambda kv: -kv[1]):
+            if w <= 0:
+                continue
+            r = _route(s, "crypto")
+            targets.append({"symbol": s, "broker": r["broker"], "broker_symbol": r["broker_symbol"],
+                            "asset_class": "crypto", "weight_pct": round(w, 4),
+                            "side": "long", "tradeable": r["tradeable"], "capital": "bitmart"})
     else:                                         # repli : poids du portefeuille modèle (swing)
         tot = sum(p["current_value"] for p in positions) or 1.0
         targets = [{"symbol": p["symbol"], "broker": "Bitmart" if acmap.get(p["symbol"]) == "crypto" else "Alpaca",
@@ -420,13 +428,15 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
 
 def _live_with_rebalance(positions: list, acmap: dict, kpis: dict | None,
                          current_weights: dict[str, float],
-                         target_weights: dict | None = None) -> dict:
+                         target_weights: dict | None = None,
+                         crypto_weights: dict | None = None) -> dict:
     """_live_section + aperçu de la BANDE DE NON-TRADING (réduit le churn)."""
     from packages.execution.algos import twap_schedule
     from packages.execution.reconciliation import reconcile
     from packages.execution.tca import decompose_cost
     from packages.portfolio.rebalance import apply_no_trade_band
-    live = _live_section(positions, acmap, kpis, target_weights=target_weights)
+    live = _live_section(positions, acmap, kpis, target_weights=target_weights,
+                         crypto_weights=crypto_weights)
     targets = {o["symbol"]: o["weight_pct"] for o in live["target_orders"]}
     live["rebalance"] = apply_no_trade_band(targets, current_weights, band=0.02)
     # réconciliation cible ↔ positions + TCA (coût d'exécution estimé)
@@ -1349,19 +1359,14 @@ def build_snapshot(seed: int = 7) -> dict:
     from packages.backtest.preset_backtest import preset_latest_weights
     _preset_weights = preset_latest_weights(_tradeable_data, _quality, asset_classes=acmap,
                                             dd_target=_dd, band=0.03)
-    # SLEEVE CRYPTO (best practice) : poche risk-parity crypto mélangée selon QUANT_CRYPTO_PCT
-    # (défaut 0 = désactivé ; nécessite des fonds Bitmart SPOT). Les actions sont réduites d'autant.
-    _crypto_pct = float(_os.environ.get("QUANT_CRYPTO_PCT", "0.0"))
-    if _crypto_pct > 0:
-        try:
-            from packages.backtest.crypto_sleeve import crypto_weights
-            _cw = crypto_weights(data, asset_classes=acmap, dd_target=_dd)
-            if _cw:
-                _preset_weights = {s: round(w * (1 - _crypto_pct), 4) for s, w in _preset_weights.items()}
-                for s, w in _cw.items():
-                    _preset_weights[s] = round(_preset_weights.get(s, 0.0) + w * _crypto_pct, 4)
-        except Exception:  # noqa: BLE001
-            pass
+    # SLEEVE CRYPTO (best practice, risk-parity) — poche SÉPARÉE, dimensionnée sur le capital BITMART.
+    # Comptes distincts : les actions sont dimensionnées sur le capital ALPACA, la crypto sur Bitmart.
+    _crypto_weights = {}
+    try:
+        from packages.backtest.crypto_sleeve import crypto_weights
+        _crypto_weights = crypto_weights(data, asset_classes=acmap, dd_target=_dd)
+    except Exception:  # noqa: BLE001
+        pass
     # Courbe d'equity QUOTIDIENNE du preset → c'est ELLE qui pilote le dashboard (le swing est legacy)
     from packages.backtest.preset_backtest import preset_equity_daily
     _pe = preset_equity_daily(_tradeable_data, _quality, asset_classes=acmap, dd_target=_dd, init_cap=init_cap)
@@ -1373,19 +1378,28 @@ def build_snapshot(seed: int = 7) -> dict:
         _dash_metrics = PL.metrics_payload(equity)
         _dash_equity = PL.equity_series(equity, ts_list)
         _dash_dates = dates
-    # Allocation PRESET détaillée (pour la page Positions) = ce que le système détient réellement
+    # Exécution réelle (lit les comptes brokers) — calculée TÔT pour dimensionner chaque poche
+    # sur le capital de SON compte (actions ← Alpaca, crypto ← Bitmart).
+    _live = _live_with_rebalance(comp["rows"], acmap, portfolio_kpis, w_by_name,
+                                 target_weights=_preset_weights, crypto_weights=_crypto_weights)
+    _alp_cap = (_live["real"]["alpaca"]["equity"] or 0.0) or init_cap
+    _bit_cap = _live["real"]["bitmart"]["equity"] or 0.0
+    # Allocation PRESET détaillée (page Positions) : 2 poches, chacune sur le capital de son broker
     _preset_alloc = []
-    for s, w in sorted(_preset_weights.items(), key=lambda kv: -kv[1]):
-        if w <= 0:
-            continue
-        r = route(s, acmap.get(s, "equity"))
-        px = data[s][-1].close if data.get(s) else 0.0
-        notion = round(w * init_cap, 2)
-        _preset_alloc.append({"symbol": s, "sector": sector_of.get(s, ""),
-                              "asset_class": acmap.get(s, ""), "broker": r["broker"],
-                              "broker_symbol": r["broker_symbol"], "tradeable": r["tradeable"],
-                              "weight": round(w, 4), "notional": notion, "price": round(px, 2),
-                              "qty": round(notion / px, 4) if px else 0.0})
+    def _alloc_rows(weights, cap, ac_default):
+        for s, w in sorted(weights.items(), key=lambda kv: -kv[1]):
+            if w <= 0:
+                continue
+            r = route(s, acmap.get(s, ac_default))
+            px = data[s][-1].close if data.get(s) else 0.0
+            notion = round(w * cap, 2)
+            _preset_alloc.append({"symbol": s, "sector": sector_of.get(s, ""),
+                                  "asset_class": acmap.get(s, ac_default), "broker": r["broker"],
+                                  "broker_symbol": r["broker_symbol"], "tradeable": r["tradeable"],
+                                  "weight": round(w, 4), "notional": notion, "price": round(px, 2),
+                                  "qty": round(notion / px, 4) if px else 0.0})
+    _alloc_rows(_preset_weights, _alp_cap, "equity")     # actions/ETF → capital Alpaca
+    _alloc_rows(_crypto_weights, _bit_cap, "crypto")     # crypto → capital Bitmart
     # BLACK-LITTERMAN : prior équipondéré + vues = conviction z-scorée → poids postérieurs
     try:
         import numpy as _np2
@@ -1475,8 +1489,7 @@ def build_snapshot(seed: int = 7) -> dict:
         "fundamentals": fundamentals_sec,
         "investors": investors_sec,
         "conviction": conviction_sec,
-        "live": _live_with_rebalance(comp["rows"], acmap, portfolio_kpis, w_by_name,
-                                     target_weights=_preset_weights),
+        "live": _live,
     }
 
 
