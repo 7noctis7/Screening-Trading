@@ -40,6 +40,9 @@ export default function Dashboard() {
   const { data: sent } = useSentiment();
   const [years, setYears] = useState(0);   // 0 = tout
   const [showLedger, setShowLedger] = useState(false);
+  const [showReal, setShowReal] = useState(false);
+  const [ledgerQ, setLedgerQ] = useState("");
+  const [ledgerSort, setLedgerSort] = useState<{ k: string; dir: number }>({ k: "date", dir: -1 });
   const { data: ledger } = usePresetLedger();
   const eqFull: { t: string; v: number }[] = d?.equity ?? [];
   const sliced = useMemo(() => {
@@ -107,15 +110,16 @@ export default function Dashboard() {
             <th className="text-right font-normal">Sharpe</th><th className="text-right font-normal">Sortino</th>
             <th className="text-right font-normal">Max DD</th></tr></thead>
           <tbody className="mono">
-            {([["Portefeuille (preset)", m, "#22d3ee"],
-               ...Object.entries(chartBench ?? {}).map(([n, arr]) => [n, statsFrom(arr as any), n === "S&P 500" ? "#f59e0b" : "#a855f7"])] as any[])
-              .filter((row) => row[1]).map(([name, st, col]: any) => {
-                const isPtf = name === "Portefeuille (preset)";
+            {([["Portefeuille (backtest preset)", m, "#22d3ee", "backtest"],
+               ...(d.real_portfolio?.available ? [["Portefeuille RÉEL (Alpaca+Bitmart)", d.real_portfolio.stats, "#22c55e", "real"]] : []),
+               ...Object.entries(chartBench ?? {}).map(([n, arr]) => [n, statsFrom(arr as any), n === "S&P 500" ? "#f59e0b" : "#a855f7", ""])] as any[])
+              .filter((row) => row[1]).map(([name, st, col, kind]: any) => {
+                const click = kind === "backtest" ? () => setShowLedger(v => !v) : kind === "real" ? () => setShowReal(v => !v) : undefined;
+                const open = kind === "backtest" ? showLedger : kind === "real" ? showReal : false;
                 return (
-                <tr key={name} className={`border-t border-border ${isPtf ? "cursor-pointer hover:bg-surfaceAlt" : ""}`}
-                  onClick={isPtf ? () => setShowLedger(v => !v) : undefined}>
+                <tr key={name} className={`border-t border-border ${click ? "cursor-pointer hover:bg-surfaceAlt" : ""}`} onClick={click}>
                   <td className="py-1.5 font-sans" style={{ color: col }}>{name}
-                    {isPtf && <span className="ml-1 text-accent border-b border-dotted border-border text-xs">journal {showLedger ? "▲" : "▼"}</span>}</td>
+                    {click && <span className="ml-1 text-accent border-b border-dotted border-border text-xs">journal {open ? "▲" : "▼"}</span>}</td>
                   <td className="text-right">{(st.total_return * 100).toFixed(1)}%</td>
                   <td className="text-right">{((st.cagr ?? 0) * 100).toFixed(1)}%</td>
                   <td className="text-right">{st.sharpe?.toFixed(2)}</td>
@@ -125,27 +129,76 @@ export default function Dashboard() {
               })}
           </tbody>
         </table>
-        <p className="text-muted2 text-xs mt-2">Indices RÉELS (^GSPC / ^NDX) rebasés à 10 000 $ au début de la période. KPI recalculés sur la fenêtre sélectionnée. <b>Clique « Portefeuille (preset) »</b> pour le journal de trades détaillé (P&L réel).</p>
+        <p className="text-muted2 text-xs mt-2"><b>Backtest preset</b> = simulation de la stratégie sur prix RÉELS (~10 ans). <b>Portefeuille RÉEL</b> = ton compte Alpaca+Bitmart (historique court car récent). Clique une ligne pour son journal de trades.</p>
       </section>
+
+      {/* Journal RÉEL : ordres réellement exécutés (Alpaca+Bitmart) + positions réelles */}
+      {showReal && (() => {
+        const rt = d.real_trades ?? [], rp = d.real_positions ?? [], rps = d.real_portfolio?.stats ?? {};
+        const dlt = (x?: number) => (x ?? 0).toLocaleString("fr-FR", { maximumFractionDigits: 2 });
+        return (
+          <section className="card p-4 overflow-x-auto">
+            <h2 className="text-sm uppercase tracking-wide text-muted mb-1">Journal RÉEL — compte Alpaca + Bitmart</h2>
+            {rt.length === 0 && rp.length === 0 ? (
+              <p className="text-muted text-sm">Aucun trade/position réel (comptes non connectés ou aucun ordre passé). Passe des ordres en paper : <code>make live-go</code>.</p>
+            ) : (<>
+              <p className="text-muted2 text-xs mb-3">Rendement réel <b style={{ color: "#22c55e" }}>{((rps.total_return ?? 0) * 100).toFixed(1)}%</b> · {rt.length} ordres exécutés · {rp.length} positions. 100 % données réelles brokers.</p>
+              {rp.length > 0 && <table className="w-full text-sm mono mb-3"><thead className="text-muted text-xs"><tr>
+                <th className="text-left font-normal">Position</th><th className="text-left font-normal">Broker</th><th className="text-right font-normal">Qté</th>
+                <th className="text-right font-normal">PRU</th><th className="text-right font-normal">Prix</th><th className="text-right font-normal">Valeur</th>
+                <th className="text-right font-normal">P&L</th><th className="text-right font-normal">%</th></tr></thead>
+                <tbody>{rp.map((p: any, i: number) => (<tr key={i} className="border-t border-border">
+                  <td className="py-1">{p.symbol}</td><td className="font-sans text-xs">{p.broker}</td><td className="text-right">{(p.qty ?? 0).toFixed(4)}</td>
+                  <td className="text-right">{p.avg_price == null ? "—" : `$${dlt(p.avg_price)}`}</td><td className="text-right">${dlt(p.price)}</td>
+                  <td className="text-right">${dlt(p.market_value)}</td>
+                  <td className="text-right" style={{ color: p.pnl == null ? "#9aa1ad" : p.pnl >= 0 ? "#22c55e" : "#ef4444" }}>{p.pnl == null ? "—" : `$${dlt(p.pnl)}`}</td>
+                  <td className="text-right" style={{ color: (p.pnl_pct ?? 0) >= 0 ? "#22c55e" : "#ef4444" }}>{p.pnl_pct == null ? "—" : `${(p.pnl_pct * 100).toFixed(1)}%`}</td></tr>))}</tbody></table>}
+              {rt.length > 0 && <table className="w-full text-sm mono"><thead className="text-muted text-xs"><tr>
+                <th className="text-left font-normal">Date</th><th className="text-left font-normal">Actif</th><th className="text-left font-normal">Broker</th>
+                <th className="text-left font-normal">Sens</th><th className="text-right font-normal">Qté</th><th className="text-right font-normal">Prix</th>
+                <th className="text-right font-normal">Montant</th></tr></thead>
+                <tbody>{rt.slice(0, 200).map((t: any, i: number) => (<tr key={i} className="border-t border-border">
+                  <td className="py-1 text-muted">{String(t.date).slice(0, 10)}</td><td>{t.symbol}</td><td className="font-sans text-xs">{t.broker}</td>
+                  <td style={{ color: t.side === "buy" ? "#22c55e" : "#f43f5e" }}>{t.side === "buy" ? "▲ achat" : "▼ vente"}</td>
+                  <td className="text-right">{(t.qty ?? 0).toFixed(4)}</td><td className="text-right">${dlt(t.price)}</td><td className="text-right">${dlt(t.notional)}</td></tr>))}</tbody></table>}
+            </>)}
+          </section>
+        );
+      })()}
 
       {/* Journal de trades du portefeuille de production (P&L réel) — justifie la performance */}
       {showLedger && ledger?.available && (() => {
         const sm = ledger.summary ?? {}; const dlt = (x?: number) => (x ?? 0).toLocaleString("fr-FR", { maximumFractionDigits: 0 });
+        const q = ledgerQ.trim().toUpperCase();
+        const rows0 = (ledger.trades ?? []).filter((t: any) => !q || String(t.symbol).toUpperCase().includes(q));
+        const sorted = [...rows0].sort((a: any, b: any) => {
+          let av = a[ledgerSort.k], bv = b[ledgerSort.k];
+          av = av == null ? -Infinity : av; bv = bv == null ? -Infinity : bv;
+          return typeof av === "string" ? ledgerSort.dir * String(av).localeCompare(String(bv)) : ledgerSort.dir * (av - bv);
+        }).slice(0, 400);
+        const sortBy = (k: string) => setLedgerSort(s => ({ k, dir: s.k === k ? -s.dir : -1 }));
+        const Th = ({ k, label, r }: any) => (
+          <th className={`${r ? "text-right" : "text-left"} font-normal cursor-pointer hover:text-fg select-none`} onClick={() => sortBy(k)}>
+            {label}{ledgerSort.k === k ? (ledgerSort.dir < 0 ? " ▼" : " ▲") : ""}</th>);
         return (
           <section className="card p-4 overflow-x-auto">
             <h2 className="text-sm uppercase tracking-wide text-muted mb-1">Journal de trades — portefeuille de production (P&L réel)</h2>
-            <p className="text-muted2 text-xs mb-3">Backtest discret parts/cash sur prix RÉELS ({sm.start} → {sm.end}). Capital {dlt(sm.init_cap)}$ → {dlt(sm.final_equity)}$ ·
+            <p className="text-muted2 text-xs mb-2">Backtest discret parts/cash sur prix RÉELS ({sm.start} → {sm.end}). Capital {dlt(sm.init_cap)}$ → {dlt(sm.final_equity)}$ ·
               rendement <b style={{ color: "#22d3ee" }}>{((sm.total_return ?? 0) * 100).toFixed(1)}%</b> ·
               P&L réalisé <b style={{ color: (sm.realized_pnl ?? 0) >= 0 ? "#22c55e" : "#ef4444" }}>{dlt(sm.realized_pnl)}$</b> ·
-              latent <b style={{ color: (sm.unrealized_pnl ?? 0) >= 0 ? "#22c55e" : "#ef4444" }}>{dlt(sm.unrealized_pnl)}$</b> · {sm.n_trades} trades. Réconcilie la courbe du dashboard.</p>
+              latent <b style={{ color: (sm.unrealized_pnl ?? 0) >= 0 ? "#22c55e" : "#ef4444" }}>{dlt(sm.unrealized_pnl)}$</b> · {sm.n_trades} trades. Réconcilie la courbe.</p>
+            <div className="flex items-center gap-2 mb-2">
+              <input value={ledgerQ} onChange={(e) => setLedgerQ(e.target.value)} placeholder="filtrer par actif (ex. QQQ)"
+                className="text-sm px-2 py-1 rounded bg-surfaceAlt border border-border outline-none w-48" />
+              <span className="text-muted2 text-xs">{rows0.length} trades · clique un en-tête pour trier</span>
+            </div>
             <table className="w-full text-sm mono">
               <thead className="text-muted text-xs"><tr>
-                <th className="text-left font-normal">Date</th><th className="text-left font-normal">Actif</th>
-                <th className="text-left font-normal">Sens</th><th className="text-right font-normal">Qté</th>
-                <th className="text-right font-normal">Prix</th><th className="text-right font-normal">PRU</th>
-                <th className="text-right font-normal">Montant</th><th className="text-right font-normal">P&L</th>
-                <th className="text-right font-normal">%</th><th className="text-left font-normal pl-3">Motif</th></tr></thead>
-              <tbody>{(ledger.trades ?? []).slice(0, 200).map((t: any, i: number) => (
+                <Th k="date" label="Date" /><Th k="symbol" label="Actif" /><Th k="side" label="Sens" />
+                <Th k="qty" label="Qté" r /><Th k="price" label="Prix" r /><Th k="avg_cost" label="PRU" r />
+                <Th k="notional" label="Montant" r /><Th k="pnl" label="P&L" r /><Th k="pnl_pct" label="%" r />
+                <th className="text-left font-normal pl-3">Motif</th></tr></thead>
+              <tbody>{sorted.map((t: any, i: number) => (
                 <tr key={i} className="border-t border-border">
                   <td className="py-1 text-muted">{String(t.date).slice(0, 10)}</td>
                   <td>{t.symbol}</td>

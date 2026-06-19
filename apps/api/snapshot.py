@@ -1731,6 +1731,25 @@ def build_snapshot(seed: int = 7) -> dict:
         _live["alpaca_perf"].get("curve", []) if _live["alpaca_perf"].get("source") == "réel" else [],
         _live["bitmart_perf"].get("curve", []) if _live["bitmart_perf"].get("source") == "réel" else [],
         sp, ndx, _cal_full)
+    # PORTEFEUILLE RÉEL combiné (Alpaca + Bitmart) : courbe d'equity réelle + stats → ligne cliquable
+    # du dashboard (réconcilie avec les ORDRES réellement exécutés + positions réelles).
+    _alp_c = _live["alpaca_perf"].get("curve", []) if _live["alpaca_perf"].get("source") == "réel" else []
+    _cr_c = _live["bitmart_perf"].get("curve", []) if _live["bitmart_perf"].get("source") == "réel" else []
+    _real_portfolio = {"available": False}
+    if _alp_c or _cr_c:
+        _rdates = sorted(set(p["t"][:10] for p in _alp_c) | set(p["t"][:10] for p in _cr_c))
+
+        def _ffill(cv):
+            m = {p["t"][:10]: p["v"] for p in cv}
+            out, last = [], None
+            for d in _rdates:
+                last = m.get(d, last)
+                out.append(last if last is not None else 0.0)
+            return out
+        _comb = [a + b for a, b in zip(_ffill(_alp_c), _ffill(_cr_c))]
+        if len(_comb) >= 2:
+            _real_portfolio = {"available": True, "stats": _curve_stats(_comb),
+                               "curve": [{"t": d, "v": round(v, 2)} for d, v in zip(_rdates, _comb)]}
     # BLACK-LITTERMAN : prior équipondéré + vues = conviction z-scorée → poids postérieurs
     try:
         import numpy as _np2
@@ -1855,6 +1874,9 @@ def build_snapshot(seed: int = 7) -> dict:
             "metrics": _dash_metrics,                 # PRESET (production), pas le swing legacy
             "equity": _dash_equity,
             "account_compare": _account_cmp,           # comptes réels (Alpaca/Crypto) vs S&P/Nasdaq
+            "real_portfolio": _real_portfolio,         # courbe RÉELLE combinée (Alpaca+Bitmart) + stats
+            "real_trades": _live["real"].get("trades", []),     # ordres RÉELS exécutés (journal réel)
+            "real_positions": _live["real"].get("positions", []),  # positions RÉELLES + P&L
             "index_core": _index_core_info,            # cœur(s) indiciel(s) + satellite preset
             "strategy_label": (
                 " + ".join([f"{int(round(_qqq_pct*100))}% QQQ"] * (_qqq_pct > 0)
