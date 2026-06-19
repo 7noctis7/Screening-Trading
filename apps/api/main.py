@@ -106,10 +106,16 @@ def _snap() -> dict:
         s, ts = _load_disk()
         if s is not None:
             _CACHE, _CACHE_TS = s, ts
-    if _CACHE is None:                                   # aucun cache → build synchrone (1re fois)
-        _CACHE = build_snapshot()
-        _CACHE_TS = time.time()
-        _persist(_CACHE, _CACHE_TS)
+    if _CACHE is None:                                   # aucun cache → build synchrone UNIQUE (verrou)
+        with _BUILD_LOCK:                                # empêche 2 builds concurrents = 2× mémoire (OOM)
+            if _CACHE is None:                           # double-check : un autre thread a pu finir
+                _BUILDING = True
+                try:
+                    s = build_snapshot()
+                    _CACHE, _CACHE_TS = s, time.time()
+                    _persist(_CACHE, _CACHE_TS)
+                finally:
+                    _BUILDING = False
         return _CACHE
     if (time.time() - _CACHE_TS) > _TTL_S and not _BUILDING:   # périmé → refresh en fond, sert l'ancien
         with _BUILD_LOCK:
@@ -125,11 +131,13 @@ def _warm() -> None:
     rafraîchissement en arrière-plan → le 1er chargement du site est immédiat."""
     global _CACHE, _CACHE_TS, _BUILDING
     s, ts = _load_disk()
-    if s is not None:
+    if s is not None:                                    # cache valide → sert + rafraîchit en fond
         _CACHE, _CACHE_TS = s, ts
-    if not _BUILDING:
-        _BUILDING = True
-        threading.Thread(target=_rebuild, daemon=True).start()
+        if not _BUILDING:
+            _BUILDING = True
+            threading.Thread(target=_rebuild, daemon=True).start()
+    # sinon : PAS de cache → on NE lance PAS de build de fond ; la 1re requête le construira UNE
+    # seule fois (sous verrou) → évite 2 builds simultanés = 2× mémoire = OOM sur grosses données.
 
 
 @app.get("/health")
