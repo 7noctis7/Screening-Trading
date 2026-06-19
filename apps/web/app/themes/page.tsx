@@ -1,5 +1,5 @@
 "use client";
-import { useThemes } from "@/lib/api";
+import { useThemes, useMeta } from "@/lib/api";
 import { PageSkeleton } from "@/components/ui";
 import { StepBanner } from "@/components/Pipeline";
 
@@ -12,7 +12,9 @@ const STANCE: Record<string, [string, string]> = {
 
 export default function Themes() {
   const { data: th } = useThemes();
+  const { data: meta } = useMeta();
   if (!th) return <PageSkeleton />;
+  const synth = meta?.data_synthetic ?? false;
   const sectors = th.sectors ?? [];
   const maxAbs = Math.max(0.01, ...sectors.map((s: any) => Math.abs(s.ytd)));
   return (
@@ -71,8 +73,8 @@ export default function Themes() {
       </section>
 
       <p className="text-muted text-xs">
-        Données synthétiques reproductibles. Lecture : privilégier les setups haussiers dans les secteurs bullish ;
-        éviter les contre-tendances dans les secteurs bearish.
+        {synth ? "⚠️ Données synthétiques (démo — aucune base réelle branchée)." : "Données RÉELLES (YAHOO.db)."}
+        {" "}Lecture : privilégier les setups haussiers dans les secteurs bullish ; éviter les contre-tendances dans les secteurs bearish.
       </p>
     </main>
   );
