@@ -1535,7 +1535,16 @@ def build_snapshot(seed: int = 7) -> dict:
     _alloc_rows(_preset_weights, _alp_cap, "equity")     # actions/ETF → capital Alpaca
     _alloc_rows(_crypto_weights, _bit_cap, "crypto")     # crypto → capital Bitmart
     # Séries OHLC pour les graphiques cliquables (Positions/Trades/Réel) — bornées (~500 barres)
-    _chart_syms = {o["symbol"] for o in _preset_alloc} | {p.get("symbol") for p in _live["real"]["positions"]}
+    # MARQUEURS achat/vente du PRESET (par symbole) → fléchés sur le graphe technique des pages
+    # Trades & Positions, exactement aux dates des rebalancements (corrige l'absence de signaux).
+    _preset_markers: dict[str, list] = {}
+    for _t in (_preset_trades.get("trades", []) if _preset_trades.get("available") else []):
+        _preset_markers.setdefault(_t["symbol"], []).append(
+            {"t": _t["date"][:10], "side": "buy" if _t["side"] == "BUY" else "sell"})
+    # symboles cliquables = alloc preset + positions réelles + TOUS les symboles tradés par le preset
+    _chart_syms = ({o["symbol"] for o in _preset_alloc}
+                   | {p.get("symbol") for p in _live["real"]["positions"]}
+                   | set(_preset_markers.keys()))
     _chart_series = {}
     for s in _chart_syms:
         b = data.get(s)
@@ -1644,6 +1653,7 @@ def build_snapshot(seed: int = 7) -> dict:
             "portfolio": portfolio_kpis,
             "position_series": position_series,
             "position_markers": position_markers,
+            "preset_markers": _preset_markers,         # signaux achat/vente du preset (par symbole)
             "earnings_risk": _earnings_risk(held),
             "trade_stats": trade_stats,
             "vix": vix_now, "vix_playbook": _vix_playbook(vix_now),
