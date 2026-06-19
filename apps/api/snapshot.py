@@ -1445,7 +1445,8 @@ def build_snapshot(seed: int = 7) -> dict:
     if _pe.get("available") and _core_closes and len(_core_closes) > 60:
         from packages.backtest.index_core import blend_equity, optimize_index_core
         _ic = optimize_index_core(_pe["equity"], _core_closes,
-                                  grid=(0.0, 0.25, 0.5, 0.75, 1.0), objective="sharpe")
+                                  grid=(0.0, 0.25, 0.5, 0.75, 1.0), objective="sharpe",
+                                  min_improve=0.05)   # marge réelle (anti-bruit / anti-overfit)
         _env_core = _os.environ.get("QUANT_INDEX_CORE")
         if _env_core is not None:                       # part forcée manuellement (override)
             try:
