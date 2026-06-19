@@ -1080,36 +1080,50 @@ def _load_prices(instruments, sector_of, start, end, seed):
             prov_db = DBPriceProvider(db)
         except Exception:  # noqa: BLE001 — base illisible → tout en synthétique
             prov_db = None
+    from packages.data.providers.db_provider import DBPriceProvider as _DBP
     # base CRYPTO dédiée (data/crypto.db via `make ingest-crypto`) — la crypto n'est pas dans YAHOO.db
     prov_crypto = None
     _crypto_db = ROOT / "data" / "crypto.db"
     if _crypto_db.exists():
         try:
-            from packages.data.providers.db_provider import DBPriceProvider as _DBP
             prov_crypto = _DBP(_crypto_db)
         except Exception:  # noqa: BLE001
             prov_crypto = None
+    # couche de MISE À JOUR fraîche (data/market.db via `make daily`, yfinance) lue PAR-DESSUS
+    # YAHOO.db → les barres récentes (jusqu'à aujourd'hui) sont RÉELLES sans toucher YAHOO.db.
+    prov_updates = None
+    _upd_db = ROOT / "data" / "market.db"
+    if _upd_db.exists() and (db is None or _upd_db.resolve() != Path(db).resolve()):
+        try:
+            prov_updates = _DBP(_upd_db)
+        except Exception:  # noqa: BLE001
+            prov_updates = None
     for m in instruments:
         s = m["symbol"]
         ac_m = m.get("asset_class", "equity")
-        bars = []
-        provs = ([prov_crypto] if ac_m == "crypto" and prov_crypto else []) + ([prov_db] if prov_db else [])
-        for prov in provs:                           # crypto → crypto.db d'abord, sinon YAHOO.db
+        if ac_m == "crypto":
+            provs = [prov_crypto] if prov_crypto else []
+        else:
+            provs = [p for p in (prov_db, prov_updates) if p]   # historique + maj fraîche (fusion)
+        merged: dict = {}
+        for prov in provs:
+            got = []
             for alias in _yahoo_aliases(s, ac_m):
-                bars = prov.fetch_ohlcv(alias, "1d", start, end)
-                if len(bars) >= 250:
+                got = prov.fetch_ohlcv(alias, "1d", start, end)
+                if len(got) >= 50:
                     break
-            if len(bars) >= 250:
-                break
-        if len(bars) >= 250:
-            data[s] = bars
+            for _b in got:                               # fusion par date (la maj écrase l'historique)
+                merged[_b.ts.isoformat()[:10]] = _b
+        if len(merged) >= 250:
+            data[s] = sorted(merged.values(), key=lambda x: x.ts)
             real_syms.add(s)
         else:
             drift, vol = _SECTOR_DV.get(sector_of[s], (0.07, 0.18))
             data[s] = data_providers.create(
                 "synthetic", seed=seed, drift=drift, annual_vol=vol).fetch_ohlcv(s, "1d", start, end)
     n_real = len(real_syms)
-    _src = db.name if db else ("crypto.db" if prov_crypto else "?")
+    _src = db.name if db else ("market.db" if prov_updates else "crypto.db" if prov_crypto else "?")
+    _src += " + maj market.db" if (db and prov_updates) else ""
     if n_real == 0:
         mode = "synthetic"
     elif n_real == len(instruments):
