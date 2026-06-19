@@ -60,7 +60,7 @@ _BUILD_LOCK = threading.Lock()
 _SNAP_FILE = Path(__file__).resolve().parents[2] / ".cache" / "snapshot.pkl"
 # Bump à chaque changement de SCHÉMA du snapshot → invalide le cache disque (évite de servir un
 # ancien snapshot construit par une version antérieure du code).
-_SNAP_VERSION = "2026-06-19-real-broker-perf"
+_SNAP_VERSION = "2026-06-19-qqq25-preset75"
 
 
 def _load_disk() -> tuple[dict | None, float]:
@@ -165,7 +165,7 @@ def positions() -> dict:
             "alloc_capital": dash.get("alloc_capital", {}),
             "portfolio": dash["portfolio"],
             "series": {**dash.get("chart_series", {}), **dash["position_series"]},
-            "markers": dash["position_markers"]}
+            "markers": {**dash["position_markers"], **dash.get("preset_markers", {})}}
 
 
 @app.get("/api/trades")
@@ -175,7 +175,7 @@ def trades() -> dict:
     return {"trades": snap["trades"], "open_trades": snap["open_trades"],
             "stats": snap["trade_stats"], "preset_trades": snap.get("preset_trades", {}),
             "series": {**d.get("chart_series", {}), **d["position_series"]},
-            "markers": d["position_markers"]}
+            "markers": {**d["position_markers"], **d.get("preset_markers", {})}}
 
 
 @app.get("/api/sentiment")

@@ -120,6 +120,41 @@ export default function Dashboard() {
         </table>
         <p className="text-muted2 text-xs mt-2">Indices RÉELS (^GSPC / ^NDX) rebasés à 10 000 $ au début de la période. KPI recalculés sur la fenêtre sélectionnée.</p>
       </section>
+
+      {/* Cœur(s) indiciel(s) + satellite preset : blend de production (preset pur vs mélange) */}
+      {d.index_core?.enabled && (
+        <section className="card p-4 overflow-x-auto">
+          <h2 className="text-sm uppercase tracking-wide text-muted mb-1">Cœur indiciel + satellite preset</h2>
+          <p className="text-muted2 text-xs mb-3">
+            Allocation active : <b style={{ color: "#22d3ee" }}>
+            {(d.index_core.components ?? []).map((c: any) => `${Math.round(c.pct * 100)}% ${c.kind.toUpperCase()}`).join(" + ")}
+            {" + "}{Math.round((1 - d.index_core.core_pct) * 100)}% preset</b>. Top-10 {d.index_core.mc_weighting === "market_cap"
+              ? "pondéré par market cap réelle" : "pondéré par proxy dollar-volume (lance make ingest-mktcap)"}, re-classé chaque trimestre.
+          </p>
+          <table className="w-full text-sm">
+            <thead className="text-muted text-xs"><tr>
+              <th className="text-left font-normal">Stratégie</th>
+              <th className="text-right font-normal">CAGR</th><th className="text-right font-normal">Sharpe</th>
+              <th className="text-right font-normal">Sortino</th><th className="text-right font-normal">Max DD</th></tr></thead>
+            <tbody className="mono">
+              {([["Preset pur", d.index_core.base_stats, "#9aa1ab"],
+                 ["Mélange (production)", d.index_core.blended_stats, "#22d3ee"]] as any[])
+                .filter((r) => r[1]?.available).map(([name, st, col]: any) => (
+                  <tr key={name} className="border-t border-border">
+                    <td className="py-1.5 font-sans" style={{ color: col }}>{name}</td>
+                    <td className="text-right">{(st.cagr * 100).toFixed(1)}%</td>
+                    <td className="text-right">{st.sharpe?.toFixed(2)}</td>
+                    <td className="text-right">{st.sortino?.toFixed(2)}</td>
+                    <td className="text-right" style={{ color: "#f43f5e" }}>{(st.max_drawdown * 100).toFixed(1)}%</td>
+                  </tr>))}
+            </tbody>
+          </table>
+          {d.index_core.core_holdings?.length > 0 && (
+            <p className="text-muted2 text-xs mt-2">Panier top-10 : {d.index_core.core_holdings.join(", ")}.</p>
+          )}
+          <p className="text-muted2 text-xs mt-1">Détail des ratios : <code>make index-core</code>. Changer le blend : <code>QUANT_CORE_SPEC="qqq:0.25"</code> (défaut) — ajoute <code>,megacap:0.10</code> pour un cœur mixte.</p>
+        </section>
+      )}
       <section className="card p-4 overflow-x-auto">
         <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Top screener — multi-actifs (score facteurs + edge ML)</h2>
         <table className="w-full text-sm">
