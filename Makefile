@@ -1,4 +1,4 @@
-.PHONY: install setup test lint demos api api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core index-core-stress index-core-regime crypto-core ingest-mktcap preset-report calibrate-preset screen-niche list-db live live-go clean
+.PHONY: install setup test lint demos api api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core index-core-stress index-core-regime crypto-core ingest-crypto ingest-mktcap preset-report calibrate-preset screen-niche list-db live live-go clean
 PYTHON ?= python3      ## sur macOS c'est python3 (surchargeable : make api PYTHON=python)
 install:          ## installe les dépendances (uv)
 	uv venv && uv pip install -e ".[dev,data,quant,api,ml]"
@@ -58,6 +58,8 @@ index-core-regime:   ## allocation adaptative bull/range/bear (détection MM200 
 	$(PYTHON) scripts/index_core_regime.py $(ARGS)
 crypto-core:         ## cœur crypto BTC + panier majeures (équivalent QQQ pour Bitmart)
 	$(PYTHON) scripts/crypto_core_sweep.py $(ARGS)
+ingest-crypto:       ## ingère les prix des top-N cryptos (yfinance) → data/crypto.db (prix RÉELS)
+	$(PYTHON) scripts/ingest_crypto.py $(ARGS)
 ingest-mktcap:       ## ingère les market caps (yfinance) → data/market_caps.json (cœur cap-weighted)
 	$(PYTHON) scripts/ingest_market_cap.py $(ARGS)
 preset-report:       ## rapport HTML autonome du backtest preset (courbes + drawdowns) → out/preset_report.html
