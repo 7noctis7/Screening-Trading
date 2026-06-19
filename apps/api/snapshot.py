@@ -1435,13 +1435,14 @@ def build_snapshot(seed: int = 7) -> dict:
     from packages.backtest.preset_backtest import preset_equity_daily
     _pe = preset_equity_daily(_tradeable_data, _quality, asset_classes=acmap, dd_target=_dd, init_cap=init_cap)
     # --- CŒUR(S) INDICIEL(S) + SATELLITE PRESET (multi-cœur) --------------------------------
-    # Mélange un/des cœur(s) passif(s) au preset. DÉFAUT : 15% QQQ + 10% top-10 méga-caps + 75%
-    # preset. Le top-10 est CLASSÉ & PONDÉRÉ par MARKET CAP réelle (data/market_caps.json via
-    # `make ingest-mktcap`) — sinon repli proxy dollar-volume + équipondéré. Re-classé tous les
-    # trimestres → entrées/sorties du top-10 prises en compte. Spec configurable :
-    #   QUANT_CORE_SPEC="qqq:0.15,megacap:0.10"   (le reste = preset)
+    # Mélange un/des cœur(s) passif(s) au preset. DÉFAUT : 25% QQQ + 75% preset (le top-10 méga-caps
+    # cap-weighted n'ajoute pas d'edge sur QQQ une fois fait proprement → écarté du défaut). Le cœur
+    # megacap reste activable via la spec. Le top-10 (si activé) est classé/pondéré par MARKET CAP
+    # réelle (data/market_caps.json via `make ingest-mktcap`). Spec configurable :
+    #   QUANT_CORE_SPEC="qqq:0.25"            (défaut)
+    #   QUANT_CORE_SPEC="qqq:0.15,megacap:0.10"   (cœur mixte ; le reste = preset)
     from packages.backtest.index_core import blend_equity_multi
-    _spec_raw = _os.environ.get("QUANT_CORE_SPEC", "qqq:0.15,megacap:0.10")
+    _spec_raw = _os.environ.get("QUANT_CORE_SPEC", "qqq:0.25")
     _spec: dict[str, float] = {}
     for _part in _spec_raw.split(","):
         if ":" in _part:
