@@ -38,7 +38,7 @@ def main() -> None:
     ac = {m["symbol"]: m.get("asset_class", "equity") for m in inst}
     end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     start = end - timedelta(days=_HISTORY_DAYS)
-    data, mode = _load_prices(inst, so, start, end, 7)
+    data, mode, _real = _load_prices(inst, so, start, end, 7)
 
     # candidats = sociétés US négociables (pas d'ETF), classées par liquidité récente
     cand = [s for s, b in data.items()

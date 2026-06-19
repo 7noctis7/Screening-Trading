@@ -27,7 +27,7 @@ def main() -> None:
     inst = _seed_universe()
     so = {m["symbol"]: _sector_of(m) for m in inst}
     end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    data, mode = _load_prices(inst, so, end - timedelta(days=_HISTORY_DAYS), end, 7)
+    data, mode, _real = _load_prices(inst, so, end - timedelta(days=_HISTORY_DAYS), end, 7)
     src = os.environ.get("QUANT_UNIVERSE", "seeds (univers complet)")
     print(f"Univers : {src}\nMode données : {mode} · {len(data)} actifs\n")
 

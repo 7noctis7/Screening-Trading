@@ -60,7 +60,7 @@ _BUILD_LOCK = threading.Lock()
 _SNAP_FILE = Path(__file__).resolve().parents[2] / ".cache" / "snapshot.pkl"
 # Bump à chaque changement de SCHÉMA du snapshot → invalide le cache disque (évite de servir un
 # ancien snapshot construit par une version antérieure du code).
-_SNAP_VERSION = "2026-06-19-qqq25-preset75"
+_SNAP_VERSION = "2026-06-19-realdata-markers-window"
 
 
 def _load_disk() -> tuple[dict | None, float]:
@@ -144,7 +144,9 @@ def meta() -> dict:
 
 @app.get("/api/dashboard")
 def dashboard() -> dict:
-    return _snap()["dashboard"]
+    d = dict(_snap()["dashboard"])
+    d.pop("chart_series", None)      # lourd & inutile ici (utilisé par Positions/Trades/Live)
+    return d
 
 
 @app.get("/api/screener")

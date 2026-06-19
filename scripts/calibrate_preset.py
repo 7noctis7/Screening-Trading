@@ -26,7 +26,7 @@ def main() -> None:
     names = {m["symbol"]: m.get("name", m["symbol"]) for m in instruments}
     end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     print("Chargement des prix…")
-    data, mode = _load_prices(instruments, sector_of, end - timedelta(days=_HISTORY_DAYS), end, 7)
+    data, mode, _real = _load_prices(instruments, sector_of, end - timedelta(days=_HISTORY_DAYS), end, 7)
     print(f"Mode : {mode} · univers {len(data)}")
     import os as _os
     if mode.startswith("synthetic") and _os.environ.get("QUANT_ALLOW_SYNTHETIC") != "1":

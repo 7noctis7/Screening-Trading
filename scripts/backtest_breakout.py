@@ -30,7 +30,7 @@ def main() -> None:
     instruments = _seed_universe()
     sector_of = {m["symbol"]: _sector_of(m) for m in instruments}
     end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    data, mode = _load_prices(instruments, sector_of, end - timedelta(days=_HISTORY_DAYS), end, 7)
+    data, mode, _real = _load_prices(instruments, sector_of, end - timedelta(days=_HISTORY_DAYS), end, 7)
     syms = list(data)[:a.assets]
     print(f"Mode des données : {mode} · {len(syms)} actifs")
     r = breakout_backtest({s: data[s] for s in syms}, lookback=a.lookback, hold=a.hold)

@@ -38,20 +38,23 @@ def _stats(eq: list[float]) -> dict:
 
 def blend_equity(preset_eq: list[float], index_closes: list[float], core_pct: float,
                  init_cap: float | None = None) -> tuple[list[float] | None, int]:
-    """Courbe d'equity du mélange (core_pct × indice + (1-core_pct) × preset), rééq. quotidien.
+    """Courbe d'equity du mélange (core_pct × cœur + (1-core_pct) × preset), rééq. quotidien.
 
-    Aligne les deux séries sur leur QUEUE commune (les `n` derniers points). Renvoie
-    (equity, n) où n = nombre de points de la courbe ; (None, 0) si échantillon insuffisant."""
+    ANCRÉ sur la fenêtre du PRESET (longueur complète) : le cœur ne s'applique que là où ses
+    données existent (les `k` derniers jours) ; avant, on reste à 100 % preset. Évite de tronquer
+    tout l'historique quand le cœur (ex. QQQ en base) est plus court que le preset."""
     p = np.asarray(preset_eq, dtype=float)
     x = np.asarray(index_closes, dtype=float)
-    n = min(p.size, x.size)
-    if n < 31:
+    if p.size < 31:
         return None, 0
-    p, x = p[-n:], x[-n:]
     pr = p[1:] / p[:-1] - 1
-    xr = x[1:] / x[:-1] - 1
+    xr = x[1:] / x[:-1] - 1 if x.size > 1 else np.zeros(0)
     c = max(0.0, min(1.0, float(core_pct)))
-    br = c * xr + (1.0 - c) * pr
+    core_ret = pr.copy()                                # défaut = preset (période sans données cœur)
+    k = min(xr.size, pr.size)
+    if k > 0:
+        core_ret[-k:] = xr[-k:]
+    br = c * core_ret + (1.0 - c) * pr
     cap = float(init_cap) if init_cap is not None else float(p[0])
     eq = [cap]
     for rr in br:
@@ -61,21 +64,25 @@ def blend_equity(preset_eq: list[float], index_closes: list[float], core_pct: fl
 
 def blend_equity_multi(preset_eq: list[float], cores: list[tuple[list[float], float]],
                        init_cap: float | None = None) -> tuple[list[float] | None, int]:
-    """Mélange MULTI-CŒUR : equity = Σ wᵢ·cœurᵢ + (1-Σwᵢ)·preset, rééq. quotidien. `cores` est
-    une liste de (série, poids). Aligne toutes les séries sur leur queue commune → (equity, n)."""
-    series = [np.asarray(preset_eq, dtype=float)] + [np.asarray(c, dtype=float) for c, _ in cores]
-    n = min(s.size for s in series)
-    if n < 31:
+    """Mélange MULTI-CŒUR : equity = Σ wᵢ·cœurᵢ + (1-Σwᵢ)·preset, rééq. quotidien. ANCRÉ sur la
+    fenêtre COMPLÈTE du preset : chaque cœur ne s'applique que là où ses données existent (sinon
+    100 % preset). Plus de troncature de l'historique si un cœur est plus court que le preset."""
+    p = np.asarray(preset_eq, dtype=float)
+    if p.size < 31:
         return None, 0
-    series = [s[-n:] for s in series]
-    rets = [s[1:] / s[:-1] - 1 for s in series]
+    pr = p[1:] / p[:-1] - 1
     cw = [max(0.0, float(w)) for _, w in cores]
-    pw = max(0.0, 1.0 - sum(cw))                       # part preset = reste
-    weights = [pw] + cw
-    br = np.zeros(n - 1)
-    for w, r in zip(weights, rets):
-        br = br + w * r
-    cap = float(init_cap) if init_cap is not None else float(series[0][0])
+    pw = max(0.0, 1.0 - sum(cw))
+    br = pw * pr
+    for (series, w), wclamp in zip(cores, cw):
+        c = np.asarray(series, dtype=float)
+        cr = c[1:] / c[:-1] - 1 if c.size > 1 else np.zeros(0)
+        core_ret = pr.copy()                            # défaut = preset là où le cœur n'existe pas
+        k = min(cr.size, pr.size)
+        if k > 0:
+            core_ret[-k:] = cr[-k:]
+        br = br + wclamp * core_ret
+    cap = float(init_cap) if init_cap is not None else float(p[0])
     eq = [cap]
     for rr in br:
         eq.append(eq[-1] * (1.0 + float(rr)))

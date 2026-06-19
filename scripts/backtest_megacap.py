@@ -34,7 +34,7 @@ def main() -> None:
     ac = {m["symbol"]: m.get("asset_class", "equity") for m in inst}
     end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     start = end - timedelta(days=_HISTORY_DAYS)
-    data, mode = _load_prices(inst, so, start, end, 7)
+    data, mode, _real = _load_prices(inst, so, start, end, 7)
     print(f"Mode : {mode} · univers {len(data)} · top {a.top} · pas {a.step} j\n")
 
     r = megacap_rotation(data, asset_classes=ac, top_n=a.top, step=a.step)

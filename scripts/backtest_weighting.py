@@ -32,7 +32,7 @@ def main() -> None:
     instruments = _seed_universe()
     sector_of = {m["symbol"]: _sector_of(m) for m in instruments}
     end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    data, mode = _load_prices(instruments, sector_of, end - timedelta(days=_HISTORY_DAYS), end, 7)
+    data, mode, _real = _load_prices(instruments, sector_of, end - timedelta(days=_HISTORY_DAYS), end, 7)
     print(f"Mode des données : {mode} · univers {len(data)}")
     r = weighting_backtest(data, step=a.step, max_assets=a.assets, band=a.band)
     if not r.get("available"):

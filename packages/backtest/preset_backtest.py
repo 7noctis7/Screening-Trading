@@ -270,11 +270,18 @@ def preset_trade_log(data: dict, quality: dict | None = None, asset_classes: dic
         return {"available": False}
     L = min(len(data[s]) for s in syms)
     M = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in syms}
-    ref = max(syms, key=lambda s: len(data[s]))
-    dts = [b.ts.isoformat()[:10] for b in data[ref]][-L:]
     quality = quality or {}
     q = {s: quality.get(s) for s in syms if quality.get(s) is not None}
     universe = (sorted(q, key=lambda s: q[s], reverse=True)[:top_k] if len(q) >= 5 else syms[:top_k])
+    # même filtre « courbe longue » que preset_equity_daily : écarte les historiques courts (IPO)
+    # → univers cohérent avec la courbe d'equity et fenêtre commune profonde.
+    _lmax = max(len(data[s]) for s in universe)
+    universe = [s for s in universe if len(data[s]) >= 0.6 * _lmax] or universe
+    L = min(len(data[s]) for s in universe)
+    M = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in universe}
+    # dates PAR SYMBOLE (chacun aligné sur SES propres barres) → un marqueur tombe toujours dans la
+    # fenêtre du titre (sinon le signal d'entrée précède le début des données du titre = invisible).
+    D = {s: [b.ts.isoformat()[:10] for b in data[s]][-L:] for s in universe}
     A = np.asarray([M[s] for s in universe])
     rets = A[:, 1:] / A[:, :-1] - 1
     tgt_vol = max(0.0, abs(dd_target)) / k_dd
@@ -298,7 +305,7 @@ def preset_trade_log(data: dict, quality: dict | None = None, asset_classes: dic
                     reason = "sortie (hors univers / blackout)"
                 else:
                     reason = "renforcement (risk-parity)" if d > 0 else "allègement (DD-target/risk-parity)"
-                trades.append({"date": dts[t], "symbol": sym,
+                trades.append({"date": D[sym][t], "symbol": sym,
                                "side": "BUY" if d > 0 else "SELL",
                                "from": round(float(prev[i]), 4), "to": round(float(w[i]), 4),
                                "notional": round(abs(d) * init_cap, 2), "reason": reason})

@@ -1064,8 +1064,10 @@ def _yahoo_aliases(sym: str, ac: str) -> list[str]:
 
 def _load_prices(instruments, sector_of, start, end, seed):
     """Charge l'OHLCV : base RÉELLE (YAHOO.db…) en priorité, sinon synthétique sectorisé
-    (et synthétique en complément pour les symboles absents de la base). Renvoie (data, mode)."""
-    data, n_real = {}, 0
+    (et synthétique en complément pour les symboles absents de la base). Renvoie
+    (data, mode, real_syms) — `real_syms` = symboles à données RÉELLES (les autres sont synthétiques
+    et NE doivent PAS apparaître en production/allocation/graphes : prix factices)."""
+    data, real_syms = {}, set()
     db = _price_db_path()
     prov_db = None
     if db is not None:
@@ -1084,18 +1086,19 @@ def _load_prices(instruments, sector_of, start, end, seed):
                     break
         if len(bars) >= 250:
             data[s] = bars
-            n_real += 1
+            real_syms.add(s)
         else:
             drift, vol = _SECTOR_DV.get(sector_of[s], (0.07, 0.18))
             data[s] = data_providers.create(
                 "synthetic", seed=seed, drift=drift, annual_vol=vol).fetch_ohlcv(s, "1d", start, end)
+    n_real = len(real_syms)
     if n_real == 0:
         mode = "synthetic"
     elif n_real == len(instruments):
         mode = f"réel ({db.name})"
     else:
         mode = f"mixte ({n_real} réels / {len(instruments)} via {db.name})"
-    return data, mode
+    return data, mode, real_syms
 
 
 def _index_closes(aliases: list[str], start, end, fallback: list[float]) -> tuple[list[float], bool]:
@@ -1157,7 +1160,7 @@ def build_snapshot(seed: int = 7) -> dict:
     end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     start = end - timedelta(days=_HISTORY_DAYS)
     # prix RÉELS (base locale) si disponibles, sinon synthétique sectorisé (cohérence secteurs)
-    data, data_mode = _load_prices(instruments, sector_of, start, end, seed)
+    data, data_mode, real_syms = _load_prices(instruments, sector_of, start, end, seed)
     n = max(len(b) for b in data.values())
     # VIX RÉEL (^VIX) si dispo (base/yfinance), aligné sur n barres ; sinon synthétique.
     _vix_real, _vix_is_real = _index_closes(["^VIX", "VIX"], start, end, [])
@@ -1405,13 +1408,16 @@ def build_snapshot(seed: int = 7) -> dict:
     # Backtest point-in-time, comparé au swing actuel et à l'équipondéré.
     from packages.backtest.preset_backtest import preset_backtest
     _quality = {r["symbol"]: r.get("combined_score") for r in fundamentals_sec.get("rows", [])}
-    # UNIVERS NÉGOCIABLE : on restreint la production aux instruments que les brokers peuvent trader
-    # (actions US + ETF via Alpaca, crypto via Bitmart) → Dashboard, Positions et ordres COHÉRENTS
-    # et exécutables (plus d'actions .AS/.PA impossibles chez Alpaca).
+    # UNIVERS NÉGOCIABLE : production restreinte aux instruments (1) négociables par les brokers
+    # (actions US + ETF via Alpaca, crypto via Bitmart) ET (2) à DONNÉES RÉELLES uniquement — les
+    # symboles en repli synthétique (prix factices, ex. RZLV absent de YAHOO.db) sont EXCLUS de
+    # l'allocation/des ordres/des graphes pour ne JAMAIS afficher de prix halluciné.
     from packages.execution.routing import is_tradeable, route
-    _tradeable_data = {s: b for s, b in data.items() if is_tradeable(s, acmap.get(s, "equity"))}
-    if len(_tradeable_data) < 30:                        # garde-fou : si trop peu, on garde tout
-        _tradeable_data = data
+    _tradeable_data = {s: b for s, b in data.items()
+                       if is_tradeable(s, acmap.get(s, "equity")) and s in real_syms}
+    if len(_tradeable_data) < 30:                        # garde-fou (mode démo/synthétique) :
+        # pas assez de réel → on retombe sur le négociable (la bannière « données factices » prévient)
+        _tradeable_data = {s: b for s, b in data.items() if is_tradeable(s, acmap.get(s, "equity"))} or data
     preset_bt = preset_backtest(_tradeable_data, _quality, asset_classes=acmap, swing_equity=equity,
                                 dd_target=_dd, band=0.03)
     recommended["preset_backtest"] = preset_bt          # rattaché à l'allocation recommandée affichée
@@ -1549,10 +1555,17 @@ def build_snapshot(seed: int = 7) -> dict:
     _chart_series = {}
     for s in _chart_syms:
         b = data.get(s)
-        if b:
+        if not b:
+            continue
+        mks = _preset_markers.get(s)
+        if mks:                                          # couvre depuis le 1er signal (sinon il est
+            first = min(m["t"] for m in mks)             # hors fenêtre et invisible sur le graphe)
+            idx = next((i for i, x in enumerate(b) if x.ts.isoformat()[:10] >= first), max(0, len(b) - 500))
+            bb = b[max(0, idx - 10):][-2600:]
+        else:
             bb = b[-500:]
-            _chart_series[s] = [{"t": x.ts.isoformat()[:10], "o": round(x.open, 4), "h": round(x.high, 4),
-                                 "l": round(x.low, 4), "c": round(x.close, 4), "v": round(x.volume, 0)} for x in bb]
+        _chart_series[s] = [{"t": x.ts.isoformat()[:10], "o": round(x.open, 4), "h": round(x.high, 4),
+                             "l": round(x.low, 4), "c": round(x.close, 4), "v": round(x.volume, 0)} for x in bb]
     # le cœur QQQ n'est pas dans l'univers → courbe cliquable depuis ses closes réels
     if _index_core_info.get("enabled") and _qqq_pct > 0 and len(_qqq_closes) > 1:
         _cc = [round(float(c), 4) for c in _qqq_closes[-500:]]

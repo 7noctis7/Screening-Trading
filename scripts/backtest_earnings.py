@@ -43,7 +43,7 @@ def main() -> None:
     acmap = {m["symbol"]: m["asset_class"] for m in instruments}
     sector_of = {m["symbol"]: _sector_of(m) for m in instruments}
     end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    data, mode = _load_prices(instruments, sector_of, end - timedelta(days=_HISTORY_DAYS), end, 7)
+    data, mode, _real = _load_prices(instruments, sector_of, end - timedelta(days=_HISTORY_DAYS), end, 7)
     eqs = [s for s in data if acmap.get(s) in ("equity", "etf")][:a.assets]
     print(f"Mode des données : {mode} · {len(eqs)} actions · récupération des dates de résultats (yfinance)…")
     earnings = {}
