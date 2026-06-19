@@ -351,10 +351,8 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
             from packages.execution.alpaca_broker import AlpacaBroker
             b = AlpacaBroker(paper=True)
             d["equity"] = round(float(b.equity()), 2)
-            d["positions"] = [{"symbol": p.instrument, "broker": "Alpaca",
-                               "side": p.side.value if hasattr(p.side, "value") else str(p.side),
-                               "qty": round(p.qty, 4), "avg_price": round(p.avg_price, 2)}
-                              for p in b.positions()]
+            d["positions"] = b.positions_detailed()   # positions RÉELLES enrichies (prix/valeur/P&L)
+            d["orders"] = b.orders()                   # ordres RÉELS exécutés (page Trades)
             d["history"] = b.portfolio_history()      # historique d'equity RÉEL (Alpaca le stocke)
             d["ok"] = True
         except Exception as e:  # noqa: BLE001
@@ -369,20 +367,21 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
             from packages.execution.bitmart_broker import BitmartBroker
             b = BitmartBroker(dry_run=False)
             d["equity"] = round(float(b.equity()), 2)
-            d["positions"] = [{"symbol": p.instrument, "broker": "Bitmart",
-                               "side": p.side.value if hasattr(p.side, "value") else str(p.side),
-                               "qty": round(p.qty, 4), "avg_price": round(p.avg_price, 2)}
-                              for p in b.positions()]
+            d["positions"] = b.positions_detailed()   # positions SPOT RÉELLES enrichies
+            d["orders"] = b.orders()                   # transactions RÉELLES (page Trades)
             d["ok"] = True
         except Exception as e:  # noqa: BLE001
             d["error"] = str(e)[:160]
         return d
 
     a_d, b_d = _alpaca(), _bitmart()
+    _real_trades = sorted((a_d.get("orders", []) + b_d.get("orders", [])),
+                          key=lambda o: o.get("date", ""), reverse=True)
     real = {
         "connected": a_d["ok"] or b_d["ok"],
         "equity": round(a_d["equity"] + b_d["equity"], 2),
         "positions": a_d["positions"] + b_d["positions"],
+        "trades": _real_trades,                    # ordres RÉELS exécutés (Alpaca + Bitmart)
         "alpaca": a_d, "bitmart": b_d,
     }
     # enregistre l'equity réelle du jour (construit l'historique réel par broker)
@@ -1161,6 +1160,17 @@ def build_snapshot(seed: int = 7) -> dict:
     start = end - timedelta(days=_HISTORY_DAYS)
     # prix RÉELS (base locale) si disponibles, sinon synthétique sectorisé (cohérence secteurs)
     data, data_mode, real_syms = _load_prices(instruments, sector_of, start, end, seed)
+    # INTÉGRITÉ DES DONNÉES : si une base réelle est branchée, on RETIRE TOUT symbole en repli
+    # synthétique de l'univers de travail → screener, ML, thèmes, conviction, preset, graphes…
+    # tournent UNIQUEMENT sur des prix réels (zéro donnée fictive). En mode démo (aucune base),
+    # real_syms est vide → on garde le synthétique (la bannière « données factices » prévient).
+    if len(real_syms) >= 30:
+        instruments = [m for m in instruments if m["symbol"] in real_syms]
+        symbols = [m["symbol"] for m in instruments]
+        data = {s: data[s] for s in symbols}
+        acmap = {s: acmap[s] for s in symbols}
+        names = {s: names[s] for s in symbols}
+        sector_of = {s: sector_of[s] for s in symbols}
     n = max(len(b) for b in data.values())
     # VIX RÉEL (^VIX) si dispo (base/yfinance), aligné sur n barres ; sinon synthétique.
     _vix_real, _vix_is_real = _index_closes(["^VIX", "VIX"], start, end, [])
@@ -1548,16 +1558,25 @@ def build_snapshot(seed: int = 7) -> dict:
     for _t in (_preset_trades.get("trades", []) if _preset_trades.get("available") else []):
         _preset_markers.setdefault(_t["symbol"], []).append(
             {"t": _t["date"][:10], "side": "buy" if _t["side"] == "BUY" else "sell"})
-    # symboles cliquables = alloc preset + positions réelles + TOUS les symboles tradés par le preset
+    # MARQUEURS RÉELS (depuis les ordres exécutés Alpaca/Bitmart) → pages Positions & Trades RÉELLES
+    _real_markers: dict[str, list] = {}
+    for _o in _live["real"].get("trades", []):
+        _sym = _o.get("symbol", "")
+        if _sym:
+            _real_markers.setdefault(_sym, []).append(
+                {"t": str(_o.get("date", ""))[:10], "side": "buy" if _o.get("side") == "buy" else "sell"})
+    # symboles cliquables = alloc preset + positions/ordres RÉELS + symboles tradés par le preset
     _chart_syms = ({o["symbol"] for o in _preset_alloc}
                    | {p.get("symbol") for p in _live["real"]["positions"]}
-                   | set(_preset_markers.keys()))
+                   | {o.get("symbol") for o in _live["real"].get("trades", [])}
+                   | set(_preset_markers.keys()) | set(_real_markers.keys())) - {""}
     _chart_series = {}
     for s in _chart_syms:
         b = data.get(s)
         if not b:
             continue
-        mks = _preset_markers.get(s)
+        mks = (_preset_markers.get(s) or []) + (_real_markers.get(s) or [])
+        mks = [m for m in mks if m.get("t")]
         if mks:                                          # couvre depuis le 1er signal (sinon il est
             first = min(m["t"] for m in mks)             # hors fenêtre et invisible sur le graphe)
             idx = next((i for i, x in enumerate(b) if x.ts.isoformat()[:10] >= first), max(0, len(b) - 500))
@@ -1668,6 +1687,7 @@ def build_snapshot(seed: int = 7) -> dict:
             "position_series": position_series,
             "position_markers": position_markers,
             "preset_markers": _preset_markers,         # signaux achat/vente du preset (par symbole)
+            "real_markers": _real_markers,             # signaux achat/vente RÉELS (ordres brokers)
             "earnings_risk": _earnings_risk(held),
             "trade_stats": trade_stats,
             "vix": vix_now, "vix_playbook": _vix_playbook(vix_now),

@@ -68,6 +68,43 @@ class AlpacaBroker:
     def positions(self) -> list[Position]:
         return [position_from_alpaca(p) for p in self._client.get_all_positions()]
 
+    def positions_detailed(self) -> list[dict]:
+        """Positions RÉELLES enrichies (prix courant, valeur de marché, P&L latent) pour l'UI."""
+        out = []
+        for p in self._client.get_all_positions():
+            out.append({
+                "symbol": p.symbol, "broker": "Alpaca",
+                "side": "long" if str(getattr(p, "side", "long")).lower().endswith("long") else "short",
+                "qty": abs(float(p.qty)), "avg_price": float(p.avg_entry_price),
+                "price": float(getattr(p, "current_price", 0) or 0),
+                "market_value": float(getattr(p, "market_value", 0) or 0),
+                "pnl": float(getattr(p, "unrealized_pl", 0) or 0),
+                "pnl_pct": float(getattr(p, "unrealized_plpc", 0) or 0)})
+        return out
+
+    def orders(self, limit: int = 100) -> list[dict]:
+        """Ordres RÉELS exécutés (fills) du compte — pour la page Trades. [] si indispo."""
+        try:
+            from alpaca.trading.requests import GetOrdersRequest
+            from alpaca.trading.enums import QueryOrderStatus
+            res = self._client.get_orders(GetOrdersRequest(status=QueryOrderStatus.CLOSED, limit=limit))
+            out = []
+            for o in res:
+                fq = float(getattr(o, "filled_qty", 0) or 0)
+                if fq <= 0:                       # on ne garde que les ordres réellement remplis
+                    continue
+                ts = getattr(o, "filled_at", None) or getattr(o, "submitted_at", None)
+                out.append({
+                    "symbol": o.symbol, "broker": "Alpaca",
+                    "side": str(getattr(o, "side", "")).lower().split(".")[-1],
+                    "qty": fq, "price": float(getattr(o, "filled_avg_price", 0) or 0),
+                    "notional": fq * float(getattr(o, "filled_avg_price", 0) or 0),
+                    "date": ts.isoformat() if ts else "",
+                    "status": str(getattr(o, "status", "")).lower().split(".")[-1]})
+            return out
+        except Exception:  # noqa: BLE001
+            return []
+
     def equity(self) -> float:
         return float(self._client.get_account().equity)
 
