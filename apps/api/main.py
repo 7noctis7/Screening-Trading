@@ -58,12 +58,17 @@ _TTL_S = 900  # 15 min : aligne le rafraîchissement serveur sur le flux différ
 _BUILDING = False
 _BUILD_LOCK = threading.Lock()
 _SNAP_FILE = Path(__file__).resolve().parents[2] / ".cache" / "snapshot.pkl"
+# Bump à chaque changement de SCHÉMA du snapshot → invalide le cache disque (évite de servir un
+# ancien snapshot construit par une version antérieure du code).
+_SNAP_VERSION = "2026-06-19-real-broker-perf"
 
 
 def _load_disk() -> tuple[dict | None, float]:
     try:
         with _SNAP_FILE.open("rb") as f:
             d = pickle.load(f)  # noqa: S301 — artefact local de confiance
+        if d.get("version") != _SNAP_VERSION:           # code changé → ignore l'ancien cache
+            return None, 0.0
         return d["snap"], float(d["ts"])
     except Exception:  # noqa: BLE001
         return None, 0.0
@@ -73,7 +78,7 @@ def _persist(snap: dict, ts: float) -> None:
     try:
         _SNAP_FILE.parent.mkdir(parents=True, exist_ok=True)
         with _SNAP_FILE.open("wb") as f:
-            pickle.dump({"snap": snap, "ts": ts}, f)
+            pickle.dump({"snap": snap, "ts": ts, "version": _SNAP_VERSION}, f)
     except Exception:  # noqa: BLE001
         pass
 

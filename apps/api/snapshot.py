@@ -1480,9 +1480,9 @@ def build_snapshot(seed: int = 7) -> dict:
     def _broker_perf(bd: dict, broker_key: str, model_curve: list | None) -> dict:
         if bd.get("ok"):                                   # compte connecté → on veut du RÉEL
             rc = bd.get("history") or []                   # Alpaca portfolio history (réel)
-            if len(rc) < 5:
+            if len(rc) < 10:
                 rc = _eq_series(broker_key)                # sinon suivi quotidien persistant
-            if len(rc) >= 20:
+            if len(rc) >= 10:
                 return {**_curve_stats([p["v"] for p in rc]), "curve": rc, "source": "réel"}
             return {"available": False, "source": "réel-court",
                     "note": "Compte récent : historique réel en cours de constitution "
