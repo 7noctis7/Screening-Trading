@@ -1,4 +1,4 @@
-.PHONY: install setup test lint demos api api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core ingest-mktcap preset-report calibrate-preset screen-niche list-db live live-go clean
+.PHONY: install setup test lint demos api api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core index-core-stress index-core-regime ingest-mktcap preset-report calibrate-preset screen-niche list-db live live-go clean
 PYTHON ?= python3      ## sur macOS c'est python3 (surchargeable : make api PYTHON=python)
 install:          ## installe les dépendances (uv)
 	uv venv && uv pip install -e ".[dev,data,quant,api,ml]"
@@ -52,6 +52,10 @@ backtest-megacap:    ## top-N méga-caps (rotation classement) vs S&P/Nasdaq ré
 	$(PYTHON) scripts/backtest_megacap.py
 index-core:          ## sweep cœur(s) + preset (QQQ / top-10 méga-caps) sur la vraie data
 	$(PYTHON) scripts/index_core_sweep.py $(ARGS)
+index-core-stress:   ## stress-test BEAR : perte du portefeuille par ratio QQQ pendant les krachs
+	$(PYTHON) scripts/index_core_stress.py $(ARGS)
+index-core-regime:   ## allocation adaptative bull/range/bear (détection MM200 S&P) vs fixe
+	$(PYTHON) scripts/index_core_regime.py $(ARGS)
 ingest-mktcap:       ## ingère les market caps (yfinance) → data/market_caps.json (cœur cap-weighted)
 	$(PYTHON) scripts/ingest_market_cap.py $(ARGS)
 preset-report:       ## rapport HTML autonome du backtest preset (courbes + drawdowns) → out/preset_report.html

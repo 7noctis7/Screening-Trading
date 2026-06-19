@@ -1522,6 +1522,7 @@ def build_snapshot(seed: int = 7) -> dict:
                         "mc_weighting": _mc_weighting, "mktcap_real": bool(_mktcaps),
                         "qqq_is_real": bool(_qqq_real), "mc_is_real": bool(_mc_real)}
     _preset_pure = list(_pe.get("equity", []))           # courbe preset PURE (avant mélange) → sweep
+    _preset_pure_dates = list(_pe.get("dates", []))      # dates alignées (pour le stress-test bear)
     _cores = []
     if _qqq_pct > 0 and _qqq_closes and len(_qqq_closes) > 60:
         _cores.append((_qqq_closes, _qqq_pct, "qqq"))
@@ -1556,7 +1557,7 @@ def build_snapshot(seed: int = 7) -> dict:
     # blocs de courbes (preset pur + cœurs) → permet au script make index-core de balayer N'IMPORTE
     # quel ratio instantanément, sur la VRAIE mesure de production (source de vérité unique).
     _ic_curves = {"preset": _preset_pure, "qqq": list(_qqq_closes), "megacap": list(_mc_curve),
-                  "sector_mom": list(_sm_curve)}
+                  "sector_mom": list(_sm_curve), "dates": _preset_pure_dates, "sp": list(sp)}
     if _pe.get("available"):
         _dash_metrics = PL.metrics_payload(_pe["equity"])
         _dash_equity = [{"t": d, "v": v} for d, v in zip(_pe["dates"], _pe["equity"])]
