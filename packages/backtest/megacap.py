@@ -10,6 +10,32 @@ import numpy as np
 
 from packages.backtest.conviction_backtest import _stats
 
+# Doubles classes d'actions (même SOCIÉTÉ) → on n'en garde qu'UNE dans le top-N (sinon Alphabet,
+# Fox… sont comptés deux fois et volent une place). On garde la 1re rencontrée (= plus grosse).
+_DUAL_CLASS = {"GOOG": "ALPHABET", "GOOGL": "ALPHABET", "FOX": "FOX", "FOXA": "FOX",
+               "NWS": "NEWSCORP", "NWSA": "NEWSCORP", "BRK-A": "BERKSHIRE", "BRK-B": "BERKSHIRE",
+               "BRK.A": "BERKSHIRE", "BRK.B": "BERKSHIRE", "UA": "UNDERARMOUR", "UAA": "UNDERARMOUR"}
+
+
+def _company_key(sym: str) -> str:
+    return _DUAL_CLASS.get(sym.upper(), sym.upper())
+
+
+def _top_unique(ranked: list[str], top_n: int) -> list[str]:
+    """top_n SOCIÉTÉS distinctes (déduplique les doubles classes d'actions)."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for s in ranked:
+        ck = _company_key(s)
+        if ck in seen:
+            continue
+        seen.add(ck)
+        out.append(s)
+        if len(out) >= top_n:
+            break
+    return out
+
+
 
 def megacap_rotation(data: dict, asset_classes: dict | None = None, top_n: int = 10,
                      step: int = 63, lookback: int = 63) -> dict:
@@ -27,7 +53,7 @@ def megacap_rotation(data: dict, asset_classes: dict | None = None, top_n: int =
     last_top: list[str] = []
     for t in range(max(lookback, 50), L - 1, step):
         score = {s: float(np.mean(dvol[s][max(0, t - lookback):t])) for s in syms}
-        top = sorted(score, key=lambda s: score[s], reverse=True)[:top_n]
+        top = _top_unique(sorted(score, key=lambda s: score[s], reverse=True), top_n)
         nxt = min(t + step, L - 1)
         port.append(float(np.mean([closes[s][nxt] / closes[s][t] - 1 for s in top])))
         turn += len(set(top) ^ prev) / (2 * top_n)
@@ -85,7 +111,7 @@ def megacap_equity_daily(data: dict, asset_classes: dict | None = None, top_n: i
                 score = {s: float(size[s][t]) for s in syms}            # cap ponctuelle
             else:
                 score = {s: float(np.mean(size[s][max(0, t - lookback):t])) for s in syms}
-            cur = sorted(score, key=lambda s: score[s], reverse=True)[:top_n]
+            cur = _top_unique(sorted(score, key=lambda s: score[s], reverse=True), top_n)
             if use_cap:                                   # pondération PAR CAP (renormalisée au top-N)
                 tot = sum(max(0.0, score[s]) for s in cur) or 1.0
                 curw = {s: max(0.0, score[s]) / tot for s in cur}
