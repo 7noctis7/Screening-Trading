@@ -154,16 +154,26 @@ class BitmartBroker:
         return round(eq, 2)
 
     def positions_detailed(self) -> list[dict]:
-        """Positions SPOT réelles enrichies (prix courant, valeur, P&L latent) pour l'UI."""
+        """Positions SPOT réelles enrichies. Le prix d'entrée n'EXISTE PAS dans le solde spot →
+        on le reconstitue depuis l'historique d'achats réel ; si inconnu, P&L = None (UI « — »)
+        plutôt qu'un faux 0 %."""
+        buys: dict[str, list[float]] = {}                # symbole → [coût total, qté totale] (achats)
+        for t in self.orders(200):
+            if t.get("side") == "buy" and t.get("qty"):
+                b = buys.setdefault(t["symbol"], [0.0, 0.0])
+                b[0] += float(t.get("notional", 0) or 0); b[1] += float(t["qty"])
         out: list[dict] = []
         for p in self.positions():
             px = self.last_price(p.instrument)
+            bb = buys.get(p.instrument)
+            avg = (bb[0] / bb[1]) if bb and bb[1] > 0 else 0.0
             mv = p.qty * px
-            pnl = (px - p.avg_price) * p.qty if p.avg_price > 0 else 0.0
+            known = avg > 0
             out.append({"symbol": p.instrument, "broker": "Bitmart", "side": "long",
-                        "qty": p.qty, "avg_price": p.avg_price, "price": px,
-                        "market_value": round(mv, 2), "pnl": round(pnl, 2),
-                        "pnl_pct": round((px / p.avg_price - 1), 4) if p.avg_price > 0 else 0.0})
+                        "qty": p.qty, "avg_price": round(avg, 6) if known else None, "price": px,
+                        "market_value": round(mv, 2),
+                        "pnl": round((px - avg) * p.qty, 2) if known else None,
+                        "pnl_pct": round(px / avg - 1, 4) if known else None})
         return out
 
     def orders(self, limit: int = 100) -> list[dict]:
@@ -180,6 +190,22 @@ class BitmartBroker:
                             "price": float(t.get("price", 0) or 0),
                             "notional": float(t.get("cost", 0) or 0),
                             "date": t.get("datetime", "") or "", "status": "filled"})
+            return out
+        except Exception:  # noqa: BLE001
+            return []
+
+    def ohlcv(self, symbol: str, timeframe: str = "1d", limit: int = 400) -> list[dict]:
+        """Bougies RÉELLES (ccxt) d'une paire spot → [{t,o,h,l,c,v}] pour le graphe. [] si indispo."""
+        if not self._live():
+            return []
+        try:
+            rows = self._client().fetch_ohlcv(symbol, timeframe=timeframe, limit=limit) or []
+            from datetime import datetime, timezone
+            out = []
+            for ts, o, h, low, c, v in rows:
+                d = datetime.fromtimestamp(ts / 1000, tz=timezone.utc).date().isoformat()
+                out.append({"t": d, "o": round(float(o), 6), "h": round(float(h), 6),
+                            "l": round(float(low), 6), "c": round(float(c), 6), "v": round(float(v or 0), 2)})
             return out
         except Exception:  # noqa: BLE001
             return []

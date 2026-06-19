@@ -369,6 +369,9 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
             d["equity"] = round(float(b.equity()), 2)
             d["positions"] = b.positions_detailed()   # positions SPOT RÉELLES enrichies
             d["orders"] = b.orders()                   # transactions RÉELLES (page Trades)
+            # bougies réelles (Bitmart) pour les graphes des positions/ordres crypto (absents de YAHOO.db)
+            _csyms = {p["symbol"] for p in d["positions"]} | {o.get("symbol") for o in d["orders"]}
+            d["ohlcv"] = {s: bars for s in _csyms if s and (bars := b.ohlcv(s))}
             d["ok"] = True
         except Exception as e:  # noqa: BLE001
             d["error"] = str(e)[:160]
@@ -1623,6 +1626,10 @@ def build_snapshot(seed: int = 7) -> dict:
             bb = b[-500:]
         _chart_series[s] = [{"t": x.ts.isoformat()[:10], "o": round(x.open, 4), "h": round(x.high, 4),
                              "l": round(x.low, 4), "c": round(x.close, 4), "v": round(x.volume, 0)} for x in bb]
+    # bougies RÉELLES Bitmart pour les positions/ordres crypto (absents de YAHOO.db)
+    for _sym, _bars in (_live["real"].get("bitmart", {}).get("ohlcv", {}) or {}).items():
+        if _bars and _sym not in _chart_series:
+            _chart_series[_sym] = _bars
     # le cœur QQQ n'est pas dans l'univers → courbe cliquable depuis ses closes réels
     if _index_core_info.get("enabled") and _qqq_pct > 0 and len(_qqq_closes) > 1:
         _cc = [round(float(c), 4) for c in _qqq_closes[-500:]]
