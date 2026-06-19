@@ -155,6 +155,39 @@ export default function Dashboard() {
           <p className="text-muted2 text-xs mt-1">Détail des ratios : <code>make index-core</code>. Changer le blend : <code>QUANT_CORE_SPEC="qqq:0.5"</code> (défaut) — ajoute <code>,megacap:0.10</code> ou <code>sector_mom:0.25</code> pour un cœur mixte.</p>
         </section>
       )}
+
+      {/* Comparaison comptes RÉELS (Alpaca / Crypto) vs indices */}
+      {d.account_compare?.available ? (() => {
+        const ac = d.account_compare; const col: Record<string, string> = { "Alpaca (réel)": "#22d3ee", "Crypto (réel)": "#a855f7", "S&P 500": "#f59e0b", "Nasdaq 100": "#8b5cf6" };
+        const names = Object.keys(ac.series ?? {});
+        const main = names[0]; const benchNames = names.slice(1);
+        const benchmarks = Object.fromEntries(benchNames.map((n) => [n, ac.series[n]]));
+        return (
+          <section className="card p-4 overflow-x-auto">
+            <h2 className="text-sm uppercase tracking-wide text-muted mb-1">Mes comptes réels vs indices <span className="text-[11px] normal-case">· base 100 · {ac.window?.[0]} → {ac.window?.[1]}</span></h2>
+            {main && <EquityChart series={ac.series[main]} benchmarks={benchmarks} />}
+            <table className="w-full text-sm mt-3">
+              <thead className="text-muted text-xs"><tr><th className="text-left font-normal">Série</th>
+                <th className="text-right font-normal">Rendement</th><th className="text-right font-normal">CAGR</th>
+                <th className="text-right font-normal">Sharpe</th><th className="text-right font-normal">Max DD</th></tr></thead>
+              <tbody className="mono">{(ac.kpis ?? []).map((k: any) => (
+                <tr key={k.name} className="border-t border-border">
+                  <td className="py-1.5 font-sans" style={{ color: col[k.name] ?? "#9aa1ab" }}>{k.name}</td>
+                  <td className="text-right">{(k.return * 100).toFixed(1)}%</td>
+                  <td className="text-right">{(k.cagr * 100).toFixed(1)}%</td>
+                  <td className="text-right">{k.sharpe?.toFixed(2)}</td>
+                  <td className="text-right" style={{ color: "#f43f5e" }}>{(k.maxdd * 100).toFixed(1)}%</td>
+                </tr>))}</tbody>
+            </table>
+            <p className="text-muted2 text-xs mt-2">Données 100 % réelles (historique broker + indices ^GSPC/^NDX). L'historique réel des comptes est court au début et s'étoffe chaque jour.</p>
+          </section>
+        );
+      })() : (
+        <section className="card p-4">
+          <h2 className="text-sm uppercase tracking-wide text-muted mb-1">Mes comptes réels vs indices</h2>
+          <p className="text-muted text-xs">Historique réel des comptes en constitution (quelques jours de suivi nécessaires) ou comptes non connectés. La comparaison s'affichera dès que des données réelles seront disponibles.</p>
+        </section>
+      )}
       <section className="card p-4 overflow-x-auto">
         <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Top screener — multi-actifs (score facteurs + edge ML)</h2>
         <table className="w-full text-sm">
