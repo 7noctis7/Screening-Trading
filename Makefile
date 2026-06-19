@@ -50,8 +50,8 @@ backtest-preset:     ## backtest walk-forward du preset best-practice + overlay 
 	$(PYTHON) scripts/backtest_preset.py
 backtest-megacap:    ## top-N méga-caps (rotation classement) vs S&P/Nasdaq réels
 	$(PYTHON) scripts/backtest_megacap.py
-index-core:          ## balaie le meilleur ratio cœur indiciel (QQQ/SPY) + satellite preset
-	$(PYTHON) scripts/index_core_sweep.py
+index-core:          ## meilleur ratio cœur + preset (ARGS="--core-type megacap" pour le top-10)
+	$(PYTHON) scripts/index_core_sweep.py $(ARGS)
 preset-report:       ## rapport HTML autonome du backtest preset (courbes + drawdowns) → out/preset_report.html
 	$(PYTHON) scripts/export_preset_report.py
 calibrate-preset:    ## calibre le preset (DD × top-K × bande) par Sharpe déflaté (anti-overfit)

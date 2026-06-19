@@ -1435,13 +1435,26 @@ def build_snapshot(seed: int = 7) -> dict:
     from packages.backtest.preset_backtest import preset_equity_daily
     _pe = preset_equity_daily(_tradeable_data, _quality, asset_classes=acmap, dd_target=_dd, init_cap=init_cap)
     # --- CŒUR INDICIEL + SATELLITE PRESET ---------------------------------------------------
-    # On balaie la part « cœur » (ETF indiciel passif, défaut QQQ/Nasdaq 100) vs « satellite »
-    # (preset) et on RETIENT la meilleure par Sharpe — mais SEULEMENT si elle bat le preset pur.
-    # QUANT_INDEX_CORE force une part fixe ∈ [0,1] ; sinon auto-sélection sur tes données réelles.
-    _core_sym = _os.environ.get("QUANT_INDEX_CORE_SYMBOL", "QQQ").upper()
-    _core_closes, _core_real = _index_closes([_core_sym, "^NDX", "^IXIC"], start, end, ndx)
+    # On balaie la part « cœur » vs « satellite » (preset) et on RETIENT la meilleure par Sharpe
+    # — mais SEULEMENT si elle bat le preset pur. QUANT_INDEX_CORE force une part fixe ∈ [0,1].
+    # Deux types de cœur (QUANT_INDEX_CORE_TYPE) : "etf" = ETF indiciel passif (défaut QQQ/Nasdaq),
+    # "megacap" = rotation des N plus grosses (top-10 par dollar-volume, re-classé) → plus offensif.
+    _core_type = _os.environ.get("QUANT_INDEX_CORE_TYPE", "etf").lower()
+    _core_top: list[str] = []                            # noms du panier méga-caps (si megacap)
+    if _core_type == "megacap":
+        from packages.backtest.megacap import megacap_equity_daily
+        _mc = megacap_equity_daily(_tradeable_data, asset_classes=acmap, init_cap=init_cap)
+        if _mc.get("available"):
+            _core_closes, _core_real, _core_top = _mc["equity"], True, _mc.get("current_top", [])
+            _core_sym = "TOP10"
+        else:                                            # repli ETF si rotation indisponible
+            _core_type = "etf"
+    if _core_type != "megacap":
+        _core_sym = _os.environ.get("QUANT_INDEX_CORE_SYMBOL", "QQQ").upper()
+        _core_closes, _core_real = _index_closes([_core_sym, "^NDX", "^IXIC"], start, end, ndx)
     _index_core_info = {"enabled": False, "core_pct": 0.0, "symbol": _core_sym,
-                        "objective": "sharpe", "core_is_real": bool(_core_real)}
+                        "core_type": _core_type, "objective": "sharpe",
+                        "core_is_real": bool(_core_real)}
     if _pe.get("available") and _core_closes and len(_core_closes) > 60:
         from packages.backtest.index_core import blend_equity, optimize_index_core
         _ic = optimize_index_core(_pe["equity"], _core_closes,
@@ -1464,8 +1477,14 @@ def build_snapshot(seed: int = 7) -> dict:
                 _pe["equity"] = _blended
                 _pe["dates"] = _pe["dates"][-_m:]
             _preset_weights = {s: w * (1.0 - _core_pct) for s, w in _preset_weights.items()}
-            _preset_weights[_core_sym] = _preset_weights.get(_core_sym, 0.0) + _core_pct
+            if _core_type == "megacap" and _core_top:    # cœur = panier top-N équipondéré
+                _per = _core_pct / len(_core_top)
+                for _s in _core_top:
+                    _preset_weights[_s] = _preset_weights.get(_s, 0.0) + _per
+            else:                                        # cœur = 1 ligne ETF (QQQ/SPY)
+                _preset_weights[_core_sym] = _preset_weights.get(_core_sym, 0.0) + _core_pct
             _index_core_info.update({"enabled": True, "core_pct": round(_core_pct, 2),
+                                     "core_holdings": _core_top if _core_type == "megacap" else [_core_sym],
                                      "blended_stats": _curve_stats(_pe["equity"])})
     _core_px = float(_core_closes[-1]) if _core_closes else 0.0
     if _pe.get("available"):

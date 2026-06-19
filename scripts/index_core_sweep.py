@@ -26,10 +26,14 @@ sys.path.insert(0, str(ROOT))
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--symbol", default=None, help="ETF cœur (QQQ=Nasdaq 100, SPY=S&P 500)")
+    ap.add_argument("--core-type", default=None, choices=["etf", "megacap"],
+                    help="etf=ETF passif (QQQ) · megacap=rotation top-10 méga-caps")
     ap.add_argument("--core", default=None, help="force une part de cœur ∈ [0,1] (sinon auto)")
     a = ap.parse_args()
     if a.symbol:
         os.environ["QUANT_INDEX_CORE_SYMBOL"] = a.symbol.upper()
+    if a.core_type:
+        os.environ["QUANT_INDEX_CORE_TYPE"] = a.core_type
     if a.core is not None:
         os.environ["QUANT_INDEX_CORE"] = str(a.core)
 
@@ -41,7 +45,8 @@ def main() -> None:
         print("Cœur indiciel indisponible (données réelles d'indice absentes)."); return
 
     sym = ic.get("symbol", "QQQ")
-    print(f"Cœur {sym} ({'réel' if ic.get('core_is_real') else 'repli synthétique'}) · "
+    label = "TOP10 méga-caps (rotation)" if ic.get("core_type") == "megacap" else sym
+    print(f"Cœur {label} ({'réel' if ic.get('core_is_real') else 'repli synthétique'}) · "
           f"objectif {ic.get('objective', 'sharpe')}\n")
     print(f"  {'Cœur '+sym:>10s} {'Preset':>8s} {'CAGR':>8s} {'Sharpe':>7s} "
           f"{'Sortino':>8s} {'maxDD':>8s} {'Calmar':>7s} {'Rdt tot.':>9s}")
@@ -63,6 +68,8 @@ def main() -> None:
         print(f"  ✅ RETENU : {cp*100:.0f}% {sym} + {(1-cp)*100:.0f}% preset · {how}")
         print(f"     Sharpe {bs.get('sharpe')} vs preset pur {base.get('sharpe')} · "
               f"CAGR {bs.get('cagr', 0)*100:.1f}% · maxDD {bs.get('max_drawdown', 0)*100:.1f}%")
+        if ic.get("core_type") == "megacap" and ic.get("core_holdings"):
+            print(f"     Panier cœur : {', '.join(ic['core_holdings'])}")
         print("     → déjà actif dans le dashboard et l'allocation de production.")
     else:
         print(f"  ⛔ Aucun mélange ne bat le preset pur (Sharpe {base.get('sharpe')}) "
