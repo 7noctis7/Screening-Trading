@@ -208,8 +208,9 @@ def _setup_label(mom: float, trend: float) -> str:
 
 def _themes_section(data: dict, sector_of: dict, end) -> dict:
     """Thèmes de marché calculés depuis les MÊMES données que le trading → cohérence
-    positions ↔ secteurs. YTD = performance sur les 365 derniers jours ; meilleurs
-    setups par secteur (momentum + tendance vs MM50). Seuls les secteurs « investissables »
+    positions ↔ secteurs. YTD = perf CALENDAIRE réelle (depuis le 1ᵉʳ janvier) ; garde-fou
+    anti-glitch (saut > 150 %/j écarté). Meilleurs setups par secteur (momentum + tendance vs MM50).
+    Seuls les secteurs « investissables »
     (4ᵉ révolution + GICS, hors forex/indices/etf) alimentent la heatmap d'actifs."""
     import numpy as np
 
@@ -225,11 +226,20 @@ def _themes_section(data: dict, sector_of: dict, end) -> dict:
         if len(items) < 3:
             continue
         assets = []
+        _cur_year = end.year
         for s, bars in items:
             c = np.array([b.close for b in bars], float)
-            if c.size < 380:
+            if c.size < 64:
                 continue
-            ytd = float(c[-1] / c[-252] - 1.0)                   # 12 derniers mois
+            # GARDE-FOU DATA : saut quotidien aberrant (>150 % en 1 jour = split non ajusté /
+            # glitch / discontinuité de fusion) → on écarte le titre (évite les SPCX +627 % faux).
+            rr = c[1:] / c[:-1] - 1.0
+            if rr.size and (np.nanmax(np.abs(rr)) > 1.5 or not np.all(np.isfinite(c)) or c.min() <= 0):
+                continue
+            # YTD CALENDAIRE RÉEL : base = dernier cours de l'année précédente (sinon 1ʳᵉ barre dispo)
+            _bidx = next((i for i, b in enumerate(bars) if b.ts.year == _cur_year), None)
+            base = bars[_bidx - 1].close if (_bidx and _bidx > 0) else float(c[0])
+            ytd = float(c[-1] / base - 1.0) if base > 0 else 0.0
             mom = float(c[-1] / c[-63] - 1.0)                    # ~3 mois
             sma50 = float(c[-50:].mean())
             trend = float((c[-1] - sma50) / sma50)
@@ -1106,14 +1116,15 @@ def _load_prices(instruments, sector_of, start, end, seed):
         else:
             provs = [p for p in (prov_db, prov_updates) if p]   # historique + maj fraîche (fusion)
         merged: dict = {}
-        for prov in provs:
+        for prov in provs:                               # ordre : YAHOO.db (historique) puis market.db
             got = []
             for alias in _yahoo_aliases(s, ac_m):
                 got = prov.fetch_ohlcv(alias, "1d", start, end)
                 if len(got) >= 50:
                     break
-            for _b in got:                               # fusion par date (la maj écrase l'historique)
-                merged[_b.ts.isoformat()[:10]] = _b
+            for _b in got:                               # EXTENSION sans écrasement : YAHOO.db garde
+                merged.setdefault(_b.ts.isoformat()[:10], _b)   # la priorité, market.db complète les dates
+        # manquantes → pas de discontinuité d'ajustement (raw vs adjusted) au milieu de l'historique.
         if len(merged) >= 250:
             data[s] = sorted(merged.values(), key=lambda x: x.ts)
             real_syms.add(s)
@@ -1589,6 +1600,16 @@ def build_snapshot(seed: int = 7) -> dict:
     # quel ratio instantanément, sur la VRAIE mesure de production (source de vérité unique).
     _ic_curves = {"preset": _preset_pure, "qqq": list(_qqq_closes), "megacap": list(_mc_curve),
                   "sector_mom": list(_sm_curve), "dates": _preset_pure_dates, "sp": list(sp)}
+    # JOURNAL DÉTAILLÉ + P&L du portefeuille de production (cœur QQQ + satellite preset) → justifie
+    # la perf affichée (clic « Portefeuille (preset) » sur le dashboard). Prix réels, parts/cash.
+    try:
+        from packages.backtest.preset_backtest import preset_ledger
+        _preset_ledger = preset_ledger(_tradeable_data, _quality, asset_classes=acmap, dd_target=_dd,
+                                       band=0.03, init_cap=init_cap,
+                                       core_closes=list(_qqq_closes) if _qqq_pct > 0 else None,
+                                       core_pct=_qqq_pct, core_sym="QQQ")
+    except Exception:  # noqa: BLE001
+        _preset_ledger = {"available": False}
     if _pe.get("available"):
         _dash_metrics = PL.metrics_payload(_pe["equity"])
         _dash_equity = [{"t": d, "v": v} for d, v in zip(_pe["dates"], _pe["equity"])]
@@ -1760,7 +1781,7 @@ def build_snapshot(seed: int = 7) -> dict:
             _prm["vol_regime"] = vol_regime(_prt, window=20)
             _prel = relative_metrics(_peq, bench_px); _pmc = monte_carlo(_prt, seed=1)
             _psy = [r["symbol"] for r in sorted(_pr, key=lambda x: -x["current_value"]) if r["symbol"] in data][:12]
-            _pcorr_payload, _prb_payload, _popt = PL.correlation_payload(syms, corr, clusters), risk_budget, optimal
+            _pcorr_payload, _prb_payload, _popt, _prec = PL.correlation_payload(syms, corr, clusters), risk_budget, optimal, recommended
             if len(_psy) >= 2:
                 _prb_by = {s: returns_from_equity([b.close for b in data[s]]) for s in _psy}
                 _ps, _pc = correlation_matrix({k: list(v) for k, v in _prb_by.items()})
@@ -1775,6 +1796,15 @@ def build_snapshot(seed: int = 7) -> dict:
                          "hrp": [round(x, 4) for x in hrp_weights(_pcov)],
                          "min_variance": [round(x, 4) for x in min_variance_weights(_pcov)],
                          "risk_parity": [round(x, 4) for x in equal_risk_contribution(_pcov)]}
+                try:                                     # allocation recommandée sur les titres PRESET
+                    _prec = build_target(_pcb, _pcov, {s: _pwn.get(s, 0.0) for s in _pcb},
+                                         dd_target=_dd_eff, band=0.03, max_gross=1.0)
+                    for _k in ("dd_target_nominal", "dd_target_tail_adjusted", "tail_ratio",
+                               "edge_proven", "edge_note", "preset_backtest"):
+                        if _k in recommended:
+                            _prec[_k] = recommended[_k]
+                except Exception:  # noqa: BLE001
+                    _prec = recommended
             _pwn = {r["symbol"]: r["current_value"]/_pt for r in _pr}
             _pws, _pwc = {}, {}
             for r in _pr:
@@ -1789,7 +1819,7 @@ def build_snapshot(seed: int = 7) -> dict:
                                           "mc_projection": mc_projection(_prt, horizon=252, start_value=100.0, seed=1),
                                           "correlation": _pcorr_payload, "risk_budget": _prb_payload,
                                           "limits": _plim, "stress": _pstress, "optimal_allocation": _popt,
-                                          "recommended_allocation": recommended,
+                                          "recommended_allocation": _prec,
                                           "review": PL.review_payload(expert_review({**_pagg, **_pcomp["totals"]})),
                                           "multi_strategy": multi_strategy}}
         except Exception:  # noqa: BLE001 — au moindre souci, on garde l'analyse swing (jamais de page cassée)
@@ -1849,6 +1879,7 @@ def build_snapshot(seed: int = 7) -> dict:
         "open_trades": comp["rows"],
         "trade_stats": trade_stats,
         "preset_trades": _preset_trades,           # journal des rebalancements du preset (production)
+        "preset_ledger": _preset_ledger,           # journal détaillé + P&L (justifie la perf du dashboard)
         "index_core_curves": _ic_curves,           # courbes preset/QQQ/megacap → sweeps instantanés
         "universe": _universe_section(full_universe),
         "data": {**_data_section(data, acmap, len(full_universe)),

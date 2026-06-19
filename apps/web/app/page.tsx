@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { StepBanner } from "@/components/Pipeline";
-import { useDashboard, useScreener, useSentiment } from "@/lib/api";
+import { useDashboard, useScreener, useSentiment, usePresetLedger } from "@/lib/api";
 import { MetricCard } from "@/components/MetricCard";
 import { RegimeBanner } from "@/components/RegimeBanner";
 import { VixPlaybook } from "@/components/VixPlaybook";
@@ -39,6 +39,8 @@ export default function Dashboard() {
   const { data: s } = useScreener();
   const { data: sent } = useSentiment();
   const [years, setYears] = useState(0);   // 0 = tout
+  const [showLedger, setShowLedger] = useState(false);
+  const { data: ledger } = usePresetLedger();
   const eqFull: { t: string; v: number }[] = d?.equity ?? [];
   const sliced = useMemo(() => {
     if (!years || !eqFull.length) return eqFull;
@@ -107,19 +109,59 @@ export default function Dashboard() {
           <tbody className="mono">
             {([["Portefeuille (preset)", m, "#22d3ee"],
                ...Object.entries(chartBench ?? {}).map(([n, arr]) => [n, statsFrom(arr as any), n === "S&P 500" ? "#f59e0b" : "#a855f7"])] as any[])
-              .filter((row) => row[1]).map(([name, st, col]: any) => (
-                <tr key={name} className="border-t border-border">
-                  <td className="py-1.5 font-sans" style={{ color: col }}>{name}</td>
+              .filter((row) => row[1]).map(([name, st, col]: any) => {
+                const isPtf = name === "Portefeuille (preset)";
+                return (
+                <tr key={name} className={`border-t border-border ${isPtf ? "cursor-pointer hover:bg-surfaceAlt" : ""}`}
+                  onClick={isPtf ? () => setShowLedger(v => !v) : undefined}>
+                  <td className="py-1.5 font-sans" style={{ color: col }}>{name}
+                    {isPtf && <span className="ml-1 text-accent border-b border-dotted border-border text-xs">journal {showLedger ? "▲" : "▼"}</span>}</td>
                   <td className="text-right">{(st.total_return * 100).toFixed(1)}%</td>
                   <td className="text-right">{((st.cagr ?? 0) * 100).toFixed(1)}%</td>
                   <td className="text-right">{st.sharpe?.toFixed(2)}</td>
                   <td className="text-right">{st.sortino?.toFixed(2)}</td>
                   <td className="text-right" style={{ color: "#f43f5e" }}>{(st.max_drawdown * 100).toFixed(1)}%</td>
-                </tr>))}
+                </tr>);
+              })}
           </tbody>
         </table>
-        <p className="text-muted2 text-xs mt-2">Indices RÉELS (^GSPC / ^NDX) rebasés à 10 000 $ au début de la période. KPI recalculés sur la fenêtre sélectionnée.</p>
+        <p className="text-muted2 text-xs mt-2">Indices RÉELS (^GSPC / ^NDX) rebasés à 10 000 $ au début de la période. KPI recalculés sur la fenêtre sélectionnée. <b>Clique « Portefeuille (preset) »</b> pour le journal de trades détaillé (P&L réel).</p>
       </section>
+
+      {/* Journal de trades du portefeuille de production (P&L réel) — justifie la performance */}
+      {showLedger && ledger?.available && (() => {
+        const sm = ledger.summary ?? {}; const dlt = (x?: number) => (x ?? 0).toLocaleString("fr-FR", { maximumFractionDigits: 0 });
+        return (
+          <section className="card p-4 overflow-x-auto">
+            <h2 className="text-sm uppercase tracking-wide text-muted mb-1">Journal de trades — portefeuille de production (P&L réel)</h2>
+            <p className="text-muted2 text-xs mb-3">Backtest discret parts/cash sur prix RÉELS ({sm.start} → {sm.end}). Capital {dlt(sm.init_cap)}$ → {dlt(sm.final_equity)}$ ·
+              rendement <b style={{ color: "#22d3ee" }}>{((sm.total_return ?? 0) * 100).toFixed(1)}%</b> ·
+              P&L réalisé <b style={{ color: (sm.realized_pnl ?? 0) >= 0 ? "#22c55e" : "#ef4444" }}>{dlt(sm.realized_pnl)}$</b> ·
+              latent <b style={{ color: (sm.unrealized_pnl ?? 0) >= 0 ? "#22c55e" : "#ef4444" }}>{dlt(sm.unrealized_pnl)}$</b> · {sm.n_trades} trades. Réconcilie la courbe du dashboard.</p>
+            <table className="w-full text-sm mono">
+              <thead className="text-muted text-xs"><tr>
+                <th className="text-left font-normal">Date</th><th className="text-left font-normal">Actif</th>
+                <th className="text-left font-normal">Sens</th><th className="text-right font-normal">Qté</th>
+                <th className="text-right font-normal">Prix</th><th className="text-right font-normal">PRU</th>
+                <th className="text-right font-normal">Montant</th><th className="text-right font-normal">P&L</th>
+                <th className="text-right font-normal">%</th><th className="text-left font-normal pl-3">Motif</th></tr></thead>
+              <tbody>{(ledger.trades ?? []).slice(0, 200).map((t: any, i: number) => (
+                <tr key={i} className="border-t border-border">
+                  <td className="py-1 text-muted">{String(t.date).slice(0, 10)}</td>
+                  <td>{t.symbol}</td>
+                  <td style={{ color: t.side === "BUY" ? "#22c55e" : "#f43f5e" }}>{t.side === "BUY" ? "▲ achat" : "▼ vente"}</td>
+                  <td className="text-right">{t.qty}</td><td className="text-right">${t.price}</td>
+                  <td className="text-right text-muted">{t.avg_cost != null ? `$${t.avg_cost}` : "—"}</td>
+                  <td className="text-right">${dlt(t.notional)}</td>
+                  <td className="text-right" style={{ color: t.pnl == null ? "#9aa1ad" : t.pnl >= 0 ? "#22c55e" : "#ef4444" }}>{t.pnl == null ? "—" : `$${dlt(t.pnl)}`}</td>
+                  <td className="text-right" style={{ color: t.pnl_pct == null ? "#9aa1ad" : t.pnl_pct >= 0 ? "#22c55e" : "#ef4444" }}>{t.pnl_pct == null ? "—" : `${(t.pnl_pct * 100).toFixed(1)}%`}</td>
+                  <td className="pl-3 text-muted font-sans text-xs">{t.reason}</td>
+                </tr>))}</tbody>
+            </table>
+            <p className="text-muted2 text-xs mt-2">Positions ouvertes : {(ledger.open_positions ?? []).map((p: any) => `${p.symbol} (${(p.pnl_pct != null ? (p.pnl_pct * 100).toFixed(0) : "—")}%)`).join(" · ")}</p>
+          </section>
+        );
+      })()}
 
       {/* Cœur(s) indiciel(s) + satellite preset : blend de production (preset pur vs mélange) */}
       {d.index_core?.enabled && (
