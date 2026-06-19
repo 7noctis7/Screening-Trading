@@ -80,24 +80,31 @@ def megacap_equity_daily(data: dict, asset_classes: dict | None = None, top_n: i
     _ok = ("equity", "etf") if include_etf else ("equity", "")
     syms = [s for s, b in data.items()
             if b and len(b) > lookback + 2 * step and ac.get(s, "equity") in _ok]
+    # market caps dispo pour assez de titres → on classera/pondérera par cap RÉELLE
+    use_cap = bool(market_caps) and len([s for s in syms if s in market_caps]) >= top_n
+    if use_cap:
+        syms = [s for s in syms if s in market_caps]
+    if len(syms) < top_n:
+        return {"available": False}
+    # COURBE LONGUE (même règle que le preset) : on écarte les historiques courts (IPO récentes)
+    # qui tronqueraient toute la courbe au plus court → la fenêtre commune remonte aussi loin que
+    # les sociétés établies (sinon une IPO 2023 ramène tout le dashboard à 2023).
+    lmax = max(len(data[s]) for s in syms)
+    syms = [s for s in syms if len(data[s]) >= 0.6 * lmax] or syms
     if len(syms) < top_n:
         return {"available": False}
     L = min(len(data[s]) for s in syms)
     closes = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in syms}
     ref = max(syms, key=lambda s: len(data[s]))
     dts = [b.ts.isoformat() for b in data[ref]][-L:]
-    # métrique de TAILLE : market cap réelle (cap-weighted) si dispo pour ≥ top_n titres, sinon proxy
-    use_cap = False
+    # métrique de TAILLE : market cap réelle (cap-weighted) si dispo, sinon proxy dollar-volume
     size: dict[str, np.ndarray] = {}
-    if market_caps:
+    if use_cap:
         from packages.data.market_cap import shares_asof
-        capped = [s for s in syms if s in market_caps]
-        if len(capped) >= top_n:
-            for s in capped:
-                sh = shares_asof(market_caps[s], dts)
-                size[s] = np.nan_to_num(sh * closes[s], nan=0.0)
-            syms, use_cap = capped, True
-    if not use_cap:                                       # repli : dollar-volume (proxy de taille)
+        for s in syms:
+            sh = shares_asof(market_caps[s], dts)
+            size[s] = np.nan_to_num(sh * closes[s], nan=0.0)
+    else:                                                 # repli : dollar-volume (proxy de taille)
         size = {s: closes[s] * np.asarray([getattr(b, "volume", 0.0) for b in data[s]][-L:], float)
                 for s in syms}
     start = max(lookback, 50)
