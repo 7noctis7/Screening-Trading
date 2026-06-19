@@ -1080,14 +1080,27 @@ def _load_prices(instruments, sector_of, start, end, seed):
             prov_db = DBPriceProvider(db)
         except Exception:  # noqa: BLE001 — base illisible → tout en synthétique
             prov_db = None
+    # base CRYPTO dédiée (data/crypto.db via `make ingest-crypto`) — la crypto n'est pas dans YAHOO.db
+    prov_crypto = None
+    _crypto_db = ROOT / "data" / "crypto.db"
+    if _crypto_db.exists():
+        try:
+            from packages.data.providers.db_provider import DBPriceProvider as _DBP
+            prov_crypto = _DBP(_crypto_db)
+        except Exception:  # noqa: BLE001
+            prov_crypto = None
     for m in instruments:
         s = m["symbol"]
+        ac_m = m.get("asset_class", "equity")
         bars = []
-        if prov_db:                                  # essaie le symbole + ses alias Yahoo
-            for alias in _yahoo_aliases(s, m.get("asset_class", "equity")):
-                bars = prov_db.fetch_ohlcv(alias, "1d", start, end)
+        provs = ([prov_crypto] if ac_m == "crypto" and prov_crypto else []) + ([prov_db] if prov_db else [])
+        for prov in provs:                           # crypto → crypto.db d'abord, sinon YAHOO.db
+            for alias in _yahoo_aliases(s, ac_m):
+                bars = prov.fetch_ohlcv(alias, "1d", start, end)
                 if len(bars) >= 250:
                     break
+            if len(bars) >= 250:
+                break
         if len(bars) >= 250:
             data[s] = bars
             real_syms.add(s)
@@ -1096,12 +1109,13 @@ def _load_prices(instruments, sector_of, start, end, seed):
             data[s] = data_providers.create(
                 "synthetic", seed=seed, drift=drift, annual_vol=vol).fetch_ohlcv(s, "1d", start, end)
     n_real = len(real_syms)
+    _src = db.name if db else ("crypto.db" if prov_crypto else "?")
     if n_real == 0:
         mode = "synthetic"
     elif n_real == len(instruments):
-        mode = f"réel ({db.name})"
+        mode = f"réel ({_src})"
     else:
-        mode = f"mixte ({n_real} réels / {len(instruments)} via {db.name})"
+        mode = f"mixte ({n_real} réels / {len(instruments)} via {_src})"
     return data, mode, real_syms
 
 
