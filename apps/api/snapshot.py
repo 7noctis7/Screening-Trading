@@ -1725,6 +1725,75 @@ def build_snapshot(seed: int = 7) -> dict:
         data_sec_extra = survivorship_audit(_uni_syms)
     except Exception:  # noqa: BLE001
         data_sec_extra = None
+    # === PORTEFEUILLE & ANALYSE — COHÉRENT avec l'ALLOCATION DE PRODUCTION (preset + cœur QQQ) ===
+    # Remplace l'analyse du swing legacy (Sharpe 0.17 / maxDD -53 % / revue 28 — hors-sujet) par
+    # la même boîte à outils appliquée à ce qui est RÉELLEMENT alloué/tradé. Garde-fou : repli swing.
+    _port_payload = {**comp, "metrics": PL.metrics_payload(equity),
+                     "benchmarks": PL.benchmark_comparison(equity, benches), "strategy_label": "swing (legacy)",
+                     "analysis": {"relative": rel, "risk": rm, "monte_carlo": mc,
+                                  "mc_projection": mc_projection(rets, horizon=252, start_value=100.0, seed=1),
+                                  "attribution": attr, "correlation": PL.correlation_payload(syms, corr, clusters),
+                                  "risk_budget": risk_budget, "limits": limits, "stress": stress,
+                                  "optimal_allocation": optimal, "recommended_allocation": recommended,
+                                  "review": PL.review_payload(expert_review({**agg, **comp["totals"]})),
+                                  "multi_strategy": multi_strategy}}
+    if _pe.get("available") and _preset_alloc:
+        try:
+            _pl = (" + ".join([f"{int(round(_qqq_pct*100))}% QQQ"]*(_qqq_pct > 0)
+                   + [f"{int(round(_mc_pct*100))}% TOP10"]*(_mc_pct > 0)
+                   + [f"{int(round((1-_index_core_info['core_pct'])*100))}% preset"])
+                   if _index_core_info.get("enabled") else "preset (risk-parity + DD-target)")
+            _pr = [{"symbol": r["symbol"], "name": names.get(r["symbol"], r["symbol"]), "sector": r["sector"],
+                    "asset_class": r["asset_class"], "current_value": r["notional"], "qty": r.get("qty", 0.0),
+                    "weight_pct": r["weight"], "broker": r.get("broker", ""), "side": "long",
+                    "avg_price": r.get("price", 0.0), "last": r.get("price", 0.0), "pnl": 0.0, "pnl_pct": 0.0,
+                    "stance": stance_by.get(r["sector"], "neutral"), "ml_score": ml_scores.get(r["symbol"])}
+                   for r in _preset_alloc]
+            _pt = sum(r["current_value"] for r in _pr) or 1.0
+            _pcomp = {"rows": _pr, "totals": {"current_value": round(_pt, 2), "n_positions": len(_pr),
+                      "exposure_pct": 1.0, "pnl": 0.0, "pnl_pct": 0.0, "cost_basis": round(_pt, 2)}}
+            _peq = _pe["equity"]; _prt = returns_from_equity(_peq)
+            _prm = risk_metrics_fn(_prt)
+            _pv = _prm.get("var_95", 0.0); _prm["var_horizons"] = [{"days": h, "var_95": round(_pv*(h**0.5), 4)} for h in (1, 10, 21)]
+            _prm["var_cornish_fisher_95"] = cornish_fisher_var(_prt, 0.95); _prm["vol_ewma"] = ewma_vol(_prt)
+            _prm["garch"] = fit_garch(_prt); _prm["var_backtest"] = backtest_var(_prt, _prm.get("var_95", 0.0), alpha=0.95)
+            _prm["vol_regime"] = vol_regime(_prt, window=20)
+            _prel = relative_metrics(_peq, bench_px); _pmc = monte_carlo(_prt, seed=1)
+            _psy = [r["symbol"] for r in sorted(_pr, key=lambda x: -x["current_value"]) if r["symbol"] in data][:12]
+            _pcorr_payload, _prb_payload, _popt = PL.correlation_payload(syms, corr, clusters), risk_budget, optimal
+            if len(_psy) >= 2:
+                _prb_by = {s: returns_from_equity([b.close for b in data[s]]) for s in _psy}
+                _ps, _pc = correlation_matrix({k: list(v) for k, v in _prb_by.items()})
+                _pcorr_payload = PL.correlation_payload(_ps, _pc, cluster(_ps, _pc, 0.7))
+                _pcb, _pcov = covariance({s: list(_prb_by[s]) for s in _ps})
+                _pwn = {r["symbol"]: r["current_value"]/_pt for r in _pr}
+                _prbk = risk_contributions([_pwn.get(s, 0.0) for s in _pcb], _pcov)
+                _prb_payload = {"symbols": _pcb, "contrib_pct": _prbk["contrib_pct"],
+                                "portfolio_vol": _prbk["portfolio_vol"], "diversification_ratio": _prbk["diversification_ratio"]}
+                _prm["factor_risk"] = pca_risk({s: list(_prb_by[s]) for s in _ps})
+                _popt = {"symbols": _pcb, "current": [round(_pwn.get(s, 0.0), 4) for s in _pcb],
+                         "hrp": [round(x, 4) for x in hrp_weights(_pcov)],
+                         "min_variance": [round(x, 4) for x in min_variance_weights(_pcov)],
+                         "risk_parity": [round(x, 4) for x in equal_risk_contribution(_pcov)]}
+            _pwn = {r["symbol"]: r["current_value"]/_pt for r in _pr}
+            _pws, _pwc = {}, {}
+            for r in _pr:
+                _pws[r["sector"]] = _pws.get(r["sector"], 0.0) + r["current_value"]/_pt
+                _pwc[r["asset_class"]] = _pwc.get(r["asset_class"], 0.0) + r["current_value"]/_pt
+            _plim = concentration_report(_pwn, _pws, max_name=0.20, max_sector=0.40)
+            _pstress = {"scenarios": scenario_analysis(_pwc), "hedge": hedge_suggestion(_pwc, target_max_loss=-0.15)}
+            _pagg = {**PL.metrics_payload(_peq), **_prel, **_prm, **_pmc}
+            _port_payload = {**_pcomp, "metrics": PL.metrics_payload(_peq),
+                             "benchmarks": PL.benchmark_comparison(_peq, benches), "strategy_label": _pl,
+                             "analysis": {"relative": _prel, "risk": _prm, "monte_carlo": _pmc,
+                                          "mc_projection": mc_projection(_prt, horizon=252, start_value=100.0, seed=1),
+                                          "correlation": _pcorr_payload, "risk_budget": _prb_payload,
+                                          "limits": _plim, "stress": _pstress, "optimal_allocation": _popt,
+                                          "recommended_allocation": recommended,
+                                          "review": PL.review_payload(expert_review({**_pagg, **_pcomp["totals"]})),
+                                          "multi_strategy": multi_strategy}}
+        except Exception:  # noqa: BLE001 — au moindre souci, on garde l'analyse swing (jamais de page cassée)
+            pass
     return {
         "meta": {
             "generated_at": now.isoformat(),
@@ -1775,24 +1844,7 @@ def build_snapshot(seed: int = 7) -> dict:
             "vix_series": vix[::max(1, n // 240)],   # sous-échantillonné pour le graphe
         },
         "screener": screener,
-        "portfolio": {
-            **comp,
-            "metrics": PL.metrics_payload(equity),
-            "benchmarks": PL.benchmark_comparison(equity, benches),
-            "analysis": {
-                "relative": rel, "risk": rm, "monte_carlo": mc,
-                "mc_projection": mc_projection(rets, horizon=252, start_value=100.0, seed=1),
-                "attribution": attr,
-                "correlation": PL.correlation_payload(syms, corr, clusters),
-                "risk_budget": risk_budget,
-                "limits": limits,
-                "stress": stress,
-                "optimal_allocation": optimal,
-                "recommended_allocation": recommended,
-                "review": PL.review_payload(expert_review({**agg, **comp["totals"]})),
-                "multi_strategy": multi_strategy,
-            },
-        },
+        "portfolio": _port_payload,
         "trades": [PL.trade_payload(t) for t in recent],
         "open_trades": comp["rows"],
         "trade_stats": trade_stats,
