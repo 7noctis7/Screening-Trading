@@ -369,6 +369,9 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
             d["equity"] = round(float(b.equity()), 2)
             d["positions"] = b.positions_detailed()   # positions SPOT RÉELLES enrichies
             d["orders"] = b.orders()                   # transactions RÉELLES (page Trades)
+            # bougies réelles (Bitmart) pour les graphes des positions/ordres crypto (absents de YAHOO.db)
+            _csyms = {p["symbol"] for p in d["positions"]} | {o.get("symbol") for o in d["orders"]}
+            d["ohlcv"] = {s: bars for s in _csyms if s and (bars := b.ohlcv(s))}
             d["ok"] = True
         except Exception as e:  # noqa: BLE001
             d["error"] = str(e)[:160]
@@ -1623,6 +1626,10 @@ def build_snapshot(seed: int = 7) -> dict:
             bb = b[-500:]
         _chart_series[s] = [{"t": x.ts.isoformat()[:10], "o": round(x.open, 4), "h": round(x.high, 4),
                              "l": round(x.low, 4), "c": round(x.close, 4), "v": round(x.volume, 0)} for x in bb]
+    # bougies RÉELLES Bitmart pour les positions/ordres crypto (absents de YAHOO.db)
+    for _sym, _bars in (_live["real"].get("bitmart", {}).get("ohlcv", {}) or {}).items():
+        if _bars and _sym not in _chart_series:
+            _chart_series[_sym] = _bars
     # le cœur QQQ n'est pas dans l'univers → courbe cliquable depuis ses closes réels
     if _index_core_info.get("enabled") and _qqq_pct > 0 and len(_qqq_closes) > 1:
         _cc = [round(float(c), 4) for c in _qqq_closes[-500:]]
@@ -1663,6 +1670,12 @@ def build_snapshot(seed: int = 7) -> dict:
         pass
     _live["alpaca_perf"] = _broker_perf(_live["real"]["alpaca"], "alpaca", _eq_model)
     _live["bitmart_perf"] = _broker_perf(_live["real"]["bitmart"], "bitmart", _cr_model)
+    # COMPARAISON COMPTES RÉELS vs INDICES (Alpaca vs Crypto vs S&P vs Nasdaq) pour le dashboard
+    _cal_full = [b.ts for b in max(data.values(), key=len)]
+    _account_cmp = _account_compare(
+        _live["alpaca_perf"].get("curve", []) if _live["alpaca_perf"].get("source") == "réel" else [],
+        _live["bitmart_perf"].get("curve", []) if _live["bitmart_perf"].get("source") == "réel" else [],
+        sp, ndx, _cal_full)
     # BLACK-LITTERMAN : prior équipondéré + vues = conviction z-scorée → poids postérieurs
     try:
         import numpy as _np2
@@ -1708,6 +1721,7 @@ def build_snapshot(seed: int = 7) -> dict:
                        "macro_sources": _macro_sources},
             "metrics": _dash_metrics,                 # PRESET (production), pas le swing legacy
             "equity": _dash_equity,
+            "account_compare": _account_cmp,           # comptes réels (Alpaca/Crypto) vs S&P/Nasdaq
             "index_core": _index_core_info,            # cœur(s) indiciel(s) + satellite preset
             "strategy_label": (
                 " + ".join([f"{int(round(_qqq_pct*100))}% QQQ"] * (_qqq_pct > 0)
@@ -1779,6 +1793,60 @@ def _earnings_risk(held: list) -> list[dict]:
         return flag_positions(list(held)[:25], within=7)
     except Exception:  # noqa: BLE001
         return []
+
+
+def _account_compare(alp_curve: list, cr_curve: list, sp: list, ndx: list, cal_dates: list) -> dict:
+    """Compare les comptes RÉELS (Alpaca, Crypto/Bitmart) vs S&P 500 / Nasdaq 100, rebasés à 100 sur
+    la fenêtre où des données réelles existent. Courbes réelles courtes au début (compte récent)."""
+    import numpy as np
+
+    def by_date(px, cal):
+        if not px:
+            return {}
+        off = len(cal) - len(px)
+        return {cal[off + i].date().isoformat(): float(px[i]) for i in range(len(px)) if off + i >= 0}
+
+    spd, ndxd = by_date(sp, cal_dates), by_date(ndx, cal_dates)
+    reals = {}
+    if len(alp_curve) >= 2:
+        reals["Alpaca (réel)"] = {str(p["t"])[:10]: p["v"] for p in alp_curve}
+    if len(cr_curve) >= 2:
+        reals["Crypto (réel)"] = {str(p["t"])[:10]: p["v"] for p in cr_curve}
+    if not reals:
+        return {"available": False}
+    axis = sorted(set().union(*[set(d) for d in reals.values()]))
+
+    def stats(vals):
+        v = np.asarray(vals, float)
+        if v.size < 2:
+            return {"return": 0.0, "cagr": 0.0, "sharpe": 0.0, "maxdd": 0.0}
+        r = v[1:] / v[:-1] - 1
+        tot = float(v[-1] / v[0] - 1)
+        sd = float(r.std())
+        mdd = float((v / np.maximum.accumulate(v) - 1).min())
+        cagr = float((1 + tot) ** (252.0 / len(r)) - 1) if tot > -1 else -1.0
+        return {"return": round(tot, 4), "cagr": round(cagr, 4),
+                "sharpe": round(r.mean() / sd * 252 ** 0.5, 2) if sd > 0 else 0.0, "maxdd": round(mdd, 4)}
+
+    def build(dmap):
+        out, last = [], None
+        for d in axis:
+            if d in dmap:
+                last = dmap[d]
+            if last is not None:
+                out.append((d, last))
+        if len(out) < 2:
+            return None
+        base = out[0][1] or 1.0
+        return [{"t": d, "v": round(100 * v / base, 2)} for d, v in out], stats([v for _, v in out])
+
+    series, kpis = {}, []
+    for name, dmap in list(reals.items()) + [("S&P 500", spd), ("Nasdaq 100", ndxd)]:
+        b = build(dmap)
+        if b:
+            series[name], st = b
+            kpis.append({"name": name, **st})
+    return {"available": bool(series), "window": [axis[0], axis[-1]], "series": series, "kpis": kpis}
 
 
 def _bench_series(benches: dict, dates: list, init_cap: float) -> dict:

@@ -73,11 +73,11 @@ export default function Positions() {
               <td className="py-1.5"><span className={series[r.symbol] ? "text-accent border-b border-dotted border-border" : ""}>{r.symbol}</span></td>
               <td className="font-sans text-xs">{r.broker}</td>
               <td className="text-right">{(r.qty ?? 0).toFixed(4)}</td>
-              <td className="text-right">${usd(r.avg_price)}</td>
+              <td className="text-right">{r.avg_price == null ? "—" : `$${usd(r.avg_price)}`}</td>
               <td className="text-right">${usd(r.price)}</td>
               <td className="text-right">${usd(r.market_value)}</td>
-              <td className="text-right" style={{ color: (r.pnl ?? 0) >= 0 ? "#22c55e" : "#ef4444" }}>${usd(r.pnl)}</td>
-              <td className="text-right" style={{ color: (r.pnl_pct ?? 0) >= 0 ? "#22c55e" : "#ef4444" }}>{((r.pnl_pct ?? 0) * 100).toFixed(1)}%</td>
+              <td className="text-right" style={{ color: r.pnl == null ? "#9aa1ad" : r.pnl >= 0 ? "#22c55e" : "#ef4444" }}>{r.pnl == null ? "—" : `$${usd(r.pnl)}`}</td>
+              <td className="text-right" style={{ color: r.pnl_pct == null ? "#9aa1ad" : r.pnl_pct >= 0 ? "#22c55e" : "#ef4444" }}>{r.pnl_pct == null ? "—" : `${(r.pnl_pct * 100).toFixed(1)}%`}</td>
             </tr>))}</tbody>
         </table>
         </>)}
