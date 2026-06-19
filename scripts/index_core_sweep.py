@@ -55,6 +55,7 @@ def main() -> None:
     cur = snap.get("index_core_curves", {})
     ic = snap["dashboard"].get("index_core", {})
     preset, qqq, mc = cur.get("preset", []), cur.get("qqq", []), cur.get("megacap", [])
+    sm = cur.get("sector_mom", [])
     if not preset:
         print("Preset indisponible."); return
 
@@ -62,6 +63,7 @@ def main() -> None:
     wlabel = ic.get("mc_weighting", "—")
     note = "pondéré MARKET CAP réelle" if wlabel == "market_cap" else "proxy dollar-volume (lance ingest-mktcap)"
     _sweep(f"CŒUR TOP-10 MÉGA-CAPS ({note}) + satellite preset", preset, mc)
+    _sweep("CŒUR MOMENTUM SECTORIEL (top-2 secteurs 6 mois, mensuel, filtre MM50) + satellite preset", preset, sm)
 
     # blend configuré en production (défaut 15% QQQ + 10% top-10 + 75% preset)
     if ic.get("enabled"):

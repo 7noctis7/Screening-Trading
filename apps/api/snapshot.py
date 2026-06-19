@@ -1193,9 +1193,31 @@ def build_snapshot(seed: int = 7) -> dict:
         trail_atr=5.0,              # trailing stop ATR : protège les gains, laisse courir
         next_open_fills=True)       # exécution à l'ouverture suivante (anti look-ahead)
 
-    # régime macro point-in-time (couvre toute la fenêtre)
-    months = int(_HISTORY_DAYS / 30) + 4
-    ms = MacroStore(":memory:"); ms.upsert(synthetic_macro(start, months=months))
+    # indices RÉELS (S&P 500 / Nasdaq 100) — calculés TÔT car le régime macro s'en sert
+    _sp_syn = [b.close for b in data_providers.create(
+        "synthetic", seed=101, drift=0.09, annual_vol=0.16).fetch_ohlcv("S&P 500", "1d", start, end)]
+    _ndx_syn = [b.close for b in data_providers.create(
+        "synthetic", seed=202, drift=0.13, annual_vol=0.22).fetch_ohlcv("Nasdaq 100", "1d", start, end)]
+    sp, _sp_real = _index_closes(["^GSPC", "SPX", "SPY"], start, end, _sp_syn)        # VRAI S&P 500
+    ndx, _ndx_real = _index_closes(["^NDX", "^IXIC", "QQQ"], start, end, _ndx_syn)    # VRAI Nasdaq 100
+
+    # régime macro RÉEL point-in-time : VIX réel + tendance S&P (proxy activité) + FRED (courbe,
+    # chômage) si FRED_API_KEY. Repli synthétique UNIQUEMENT si aucune donnée réelle disponible.
+    import os as _os_macro
+    _fred_key = _os_macro.environ.get("FRED_API_KEY")
+    _macro_sources, _macro_real = {"régime": "synthétique (aucune donnée macro réelle dispo)"}, False
+    if _vix_is_real or _sp_real or _fred_key:        # au moins une vraie source macro
+        from packages.regime.real_macro import real_macro_store
+        _cal = [b.ts for b in max(data.values(), key=len)]
+        _vix_d = _cal[-len(vix):] if _vix_is_real else []
+        _vix_v = vix if _vix_is_real else []
+        _sp_d = _cal[-len(sp):] if _sp_real else []
+        _sp_v = sp if _sp_real else []
+        ms, _macro_sources, _macro_real = real_macro_store(_vix_v, _vix_d, _sp_v, _sp_d, fred_key=_fred_key)
+    if not _macro_real or ms.count() == 0:
+        months = int(_HISTORY_DAYS / 30) + 4
+        ms = MacroStore(":memory:"); ms.upsert(synthetic_macro(start, months=months))
+        _macro_sources, _macro_real = {"régime": "synthétique (aucune donnée macro réelle dispo)"}, False
     regime = MacroRegimeClassifier(ms).classify(end - timedelta(days=2))
     impact = MacroImpactMap(load_yaml(ROOT / "config" / "macro_impact.yaml"))
     expo = impact.exposure_multiplier(regime)
@@ -1205,15 +1227,9 @@ def build_snapshot(seed: int = 7) -> dict:
     ranked = ranker.rank(data, t=n - 1, regime=regime, top_n=12)
 
     # benchmark JUSTE = univers équipondéré (buy & hold) → mesure l'alpha actif du swing.
-    # + S&P 500 synthétique en référence marché. Tous rebasés 100 pour superposition.
+    # (S&P 500 / Nasdaq 100 RÉELS déjà chargés plus haut pour le régime macro.)
     norm = [[b.close / d0[0].close for b in d0] for d0 in (data[s] for s in symbols)]
     eqw = [sum(col) / len(col) * 100 for col in zip(*norm)]
-    _sp_syn = [b.close for b in data_providers.create(
-        "synthetic", seed=101, drift=0.09, annual_vol=0.16).fetch_ohlcv("S&P 500", "1d", start, end)]
-    _ndx_syn = [b.close for b in data_providers.create(
-        "synthetic", seed=202, drift=0.13, annual_vol=0.22).fetch_ohlcv("Nasdaq 100", "1d", start, end)]
-    sp, _sp_real = _index_closes(["^GSPC", "SPX", "SPY"], start, end, _sp_syn)        # VRAI S&P 500
-    ndx, _ndx_real = _index_closes(["^NDX", "^IXIC", "QQQ"], start, end, _ndx_syn)    # VRAI Nasdaq 100
     bench_px = eqw
     benches = {"Univers (équipondéré)": eqw, "S&P 500": sp, "Nasdaq 100": ndx}
     # backtest MULTI-STRATÉGIE sur l'indice équipondéré (tendance/momentum/retour moyenne + ensemble)
@@ -1469,7 +1485,7 @@ def build_snapshot(seed: int = 7) -> dict:
                 _spec[_k.strip().lower()] = max(0.0, float(_v))
             except ValueError:
                 pass
-    _qqq_pct, _mc_pct = _spec.get("qqq", 0.0), _spec.get("megacap", 0.0)
+    _qqq_pct, _mc_pct, _sm_pct = _spec.get("qqq", 0.0), _spec.get("megacap", 0.0), _spec.get("sector_mom", 0.0)
     # market caps (sidecar) → pondération « comme un vrai indice »
     _mktcaps = {}
     try:
@@ -1488,8 +1504,20 @@ def build_snapshot(seed: int = 7) -> dict:
         if _mc.get("available"):
             _mc_curve, _mc_top = _mc["equity"], _mc.get("current_top", [])
             _mc_w, _mc_real, _mc_weighting = _mc.get("current_weights", {}), True, _mc.get("weighting", "—")
+    # cœur MOMENTUM SECTORIEL — TOUJOURS calculé (pour le sweep `make index-core`), activé en prod
+    # seulement si présent dans la spec (QUANT_CORE_SPEC="sector_mom:0.25").
+    _sm_curve, _sm_holds, _sm_secs = [], [], []
+    try:
+        from packages.backtest.sector_momentum import sector_momentum_equity_daily
+        _sm = sector_momentum_equity_daily(_tradeable_data, sector_of, asset_classes=acmap, init_cap=init_cap)
+        if _sm.get("available"):
+            _sm_curve = _sm["equity"]
+            _sm_holds, _sm_secs = _sm.get("current_holdings", []), _sm.get("current_sectors", [])
+    except Exception:  # noqa: BLE001
+        pass
     _index_core_info = {"enabled": False, "core_pct": 0.0, "symbol": "QQQ+TOP10",
-                        "core_type": "multi", "spec": {"qqq": _qqq_pct, "megacap": _mc_pct},
+                        "core_type": "multi",
+                        "spec": {"qqq": _qqq_pct, "megacap": _mc_pct, "sector_mom": _sm_pct},
                         "core_holdings": _mc_top, "core_weights": _mc_w,
                         "mc_weighting": _mc_weighting, "mktcap_real": bool(_mktcaps),
                         "qqq_is_real": bool(_qqq_real), "mc_is_real": bool(_mc_real)}
@@ -1499,6 +1527,8 @@ def build_snapshot(seed: int = 7) -> dict:
         _cores.append((_qqq_closes, _qqq_pct, "qqq"))
     if _mc_pct > 0 and _mc_curve and len(_mc_curve) > 60:
         _cores.append((_mc_curve, _mc_pct, "megacap"))
+    if _sm_pct > 0 and _sm_curve and len(_sm_curve) > 60:
+        _cores.append((_sm_curve, _sm_pct, "sector_mom"))
     _total_core = sum(w for _, w, _ in _cores)
     if _pe.get("available") and _cores and 0 < _total_core <= 1.0:
         _blended, _m = blend_equity_multi(_pe["equity"], [(c, w) for c, w, _ in _cores], init_cap=init_cap)
@@ -1513,6 +1543,10 @@ def build_snapshot(seed: int = 7) -> dict:
                 _sw = sum(_w.get(s, 0.0) for s in _mc_top) or 1.0
                 for _s in _mc_top:
                     _preset_weights[_s] = _preset_weights.get(_s, 0.0) + _mc_pct * _w.get(_s, 0.0) / _sw
+            if _sm_pct > 0 and _sm_holds:                 # momentum sectoriel : équipondéré sur les titres tenus
+                _per = _sm_pct / len(_sm_holds)
+                for _s in _sm_holds:
+                    _preset_weights[_s] = _preset_weights.get(_s, 0.0) + _per
             _index_core_info.update({"enabled": True, "core_pct": round(_total_core, 2),
                                      "components": [{"kind": k, "pct": w} for _, w, k in _cores],
                                      "base_stats": _base_stats,
@@ -1521,7 +1555,8 @@ def build_snapshot(seed: int = 7) -> dict:
     _core_sym = "QQQ"
     # blocs de courbes (preset pur + cœurs) → permet au script make index-core de balayer N'IMPORTE
     # quel ratio instantanément, sur la VRAIE mesure de production (source de vérité unique).
-    _ic_curves = {"preset": _preset_pure, "qqq": list(_qqq_closes), "megacap": list(_mc_curve)}
+    _ic_curves = {"preset": _preset_pure, "qqq": list(_qqq_closes), "megacap": list(_mc_curve),
+                  "sector_mom": list(_sm_curve)}
     if _pe.get("available"):
         _dash_metrics = PL.metrics_payload(_pe["equity"])
         _dash_equity = [{"t": d, "v": v} for d, v in zip(_pe["dates"], _pe["equity"])]
@@ -1668,7 +1703,8 @@ def build_snapshot(seed: int = 7) -> dict:
         },
         "dashboard": {
             "as_of": last_bar.isoformat(),
-            "regime": PL.regime_payload(regime, expo),
+            "regime": {**PL.regime_payload(regime, expo), "macro_real": _macro_real,
+                       "macro_sources": _macro_sources},
             "metrics": _dash_metrics,                 # PRESET (production), pas le swing legacy
             "equity": _dash_equity,
             "index_core": _index_core_info,            # cœur(s) indiciel(s) + satellite preset
