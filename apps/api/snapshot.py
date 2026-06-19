@@ -1605,12 +1605,18 @@ def build_snapshot(seed: int = 7) -> dict:
     try:
         from packages.backtest.preset_backtest import preset_ledger
         _preset_ledger = preset_ledger(_tradeable_data, _quality, asset_classes=acmap, dd_target=_dd,
-                                       band=0.03, init_cap=init_cap,
+                                       band=0.03, init_cap=init_cap, max_trades=6000,
                                        core_closes=list(_qqq_closes) if _qqq_pct > 0 else None,
                                        core_pct=_qqq_pct, core_sym="QQQ")
     except Exception:  # noqa: BLE001
         _preset_ledger = {"available": False}
-    if _pe.get("available"):
+    # COURBE DU DASHBOARD = courbe du JOURNAL (exécution discrète réaliste, parts/cash) → le graphe
+    # et l'historique des trades RÉCONCILIENT exactement (même source). Repli : blend continu / swing.
+    if _preset_ledger.get("available") and len(_preset_ledger.get("equity", [])) > 30:
+        _dash_metrics = PL.metrics_payload(_preset_ledger["equity"])
+        _dash_equity = [{"t": d, "v": v} for d, v in zip(_preset_ledger["dates"], _preset_ledger["equity"])]
+        _dash_dates = _preset_ledger["dates"]
+    elif _pe.get("available"):
         _dash_metrics = PL.metrics_payload(_pe["equity"])
         _dash_equity = [{"t": d, "v": v} for d, v in zip(_pe["dates"], _pe["equity"])]
         _dash_dates = _pe["dates"]
