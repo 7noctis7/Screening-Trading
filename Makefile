@@ -1,4 +1,4 @@
-.PHONY: install setup test lint demos api api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core index-core-stress index-core-regime crypto-core ingest-crypto ingest-mktcap preset-report calibrate-preset screen-niche list-db live live-go clean
+.PHONY: install setup test lint demos api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core index-core-stress index-core-regime crypto-core ingest-crypto ingest-mktcap preset-report calibrate-preset screen-niche list-db live live-go clean
 PYTHON ?= python3      ## sur macOS c'est python3 (surchargeable : make api PYTHON=python)
 install:          ## installe les dépendances (uv)
 	uv venv && uv pip install -e ".[dev,data,quant,api,ml]"
@@ -14,8 +14,10 @@ demos:            ## exécute les démos offline
 	$(PYTHON) scripts/demo_paper_loop.py && $(PYTHON) scripts/demo_alerts.py && $(PYTHON) scripts/demo_ops.py
 preview:          ## régénère les aperçus HTML du dashboard/portefeuille
 	$(PYTHON) apps/web/preview/build_preview.py
-api:              ## lance l'API FastAPI (localhost)
-	$(PYTHON) -m uvicorn apps.api.main:app --reload
+api:              ## lance l'API FastAPI (localhost) — STABLE, sans reload (évite l'OOM pendant make daily)
+	$(PYTHON) -m uvicorn apps.api.main:app
+api-dev:          ## API avec reload du CODE seulement (apps/packages) — ne surveille PAS data/ (dev)
+	$(PYTHON) -m uvicorn apps.api.main:app --reload --reload-dir apps --reload-dir packages
 api-lan:          ## lance l'API accessible depuis le téléphone (même Wi-Fi) → http://IP_DU_MAC:8000
 	$(PYTHON) -m uvicorn apps.api.main:app --host 0.0.0.0 --port 8000
 web:              ## lance le front Next.js
