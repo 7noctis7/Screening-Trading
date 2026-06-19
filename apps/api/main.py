@@ -162,6 +162,12 @@ def screener() -> dict:
     return _snap()["screener"]
 
 
+@app.get("/api/preset_ledger")
+def preset_ledger() -> dict:
+    """Journal détaillé du preset (trades + P&L réel) qui justifie la perf du dashboard."""
+    return _snap().get("preset_ledger", {"available": False})
+
+
 @app.get("/api/portfolio")
 def portfolio() -> dict:
     return _snap()["portfolio"]

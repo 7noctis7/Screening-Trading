@@ -318,3 +318,124 @@ def preset_trade_log(data: dict, quality: dict | None = None, asset_classes: dic
     per_year = 252.0 / step
     return {"available": True, "trades": trades, "n_rebalances": rebs,
             "turnover_annual": round(turn / rebs * per_year, 2) if rebs else 0.0}
+
+
+def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict | None = None,
+                  dd_target: float = 0.35, band: float = 0.03, step: int = 21, lookback: int = 120,
+                  top_k: int = 30, k_dd: float = 2.5, blackout_move: float = 0.12,
+                  max_weight: float = 0.10, min_names: int = 12, init_cap: float = 10000.0,
+                  max_trades: int = 500, core_closes: list | None = None, core_pct: float = 0.0,
+                  core_sym: str = "QQQ") -> dict:
+    """Journal de trades RÉEL du portefeuille de production (backtest discret parts/cash sur prix
+    réels) qui JUSTIFIE la performance affichée : chaque achat/vente avec date, actif, sens, qté,
+    prix, PRU (coût moyen), P&L réalisé ($ et %), motif. Inclut le CŒUR indiciel (core_sym à
+    core_pct) + le satellite preset à (1-core_pct). Equity finale = cash + positions → réconcilie
+    la courbe du dashboard. PRU = coût moyen pondéré."""
+    syms = [s for s, b in data.items() if b and len(b) > lookback + step]
+    if len(syms) < 5:
+        return {"available": False}
+    quality = quality or {}
+    q = {s: quality.get(s) for s in syms if quality.get(s) is not None}
+    universe = (sorted(q, key=lambda s: q[s], reverse=True)[:top_k] if len(q) >= 5 else syms[:top_k])
+    _lens = sorted((len(data[s]) for s in universe), reverse=True)
+    _need = _lens[min(min_names, len(_lens)) - 1] if _lens else 0
+    universe = [s for s in universe if len(data[s]) >= _need] or universe
+    L = min(len(data[s]) for s in universe)
+    M = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in universe}
+    ref = max(universe, key=lambda s: len(data[s]))
+    dts = [b.ts.isoformat()[:10] for b in data[ref]][-L:]
+    A = np.asarray([M[s] for s in universe])
+    rets = A[:, 1:] / A[:, :-1] - 1
+    idx = {s: i for i, s in enumerate(universe)}
+    tgt_vol = max(0.0, abs(dd_target)) / k_dd
+    start = max(lookback, 50)
+    cash = float(init_cap)
+    shares = {s: 0.0 for s in universe}
+    cost = {s: 0.0 for s in universe}                     # PRU (coût moyen pondéré)
+    w = np.zeros(len(universe))
+    trades: list[dict] = []
+    realized = 0.0
+    # CŒUR indiciel (ex. QQQ à 50 %) inclus comme une ligne, aligné sur la fenêtre du preset
+    _cp = max(0.0, min(1.0, float(core_pct)))
+    core_on = bool(core_closes) and _cp > 0 and len(core_closes) >= L
+    core_arr = np.asarray(core_closes[-L:], float) if core_on else None
+    qsh = qcost = 0.0
+    sat = 1.0 - _cp if core_on else 1.0                   # part allouée au satellite preset
+    for t in range(start, L - 1, step):
+        nw = _weights_at(A, rets, t, lookback, blackout_move, max_weight, min_names, tgt_vol)
+        if nw is None:
+            continue
+        if band > 0 and w.sum() > 0:
+            nw = np.where(np.abs(nw - w) < band, w, nw)
+        px = A[:, t]
+        equity = cash + sum(shares[s] * px[idx[s]] for s in universe) + (qsh * float(core_arr[t]) if core_on else 0.0)
+        if core_on:                                       # rééquilibrage du CŒUR (QQQ) à core_pct
+            cpx = float(core_arr[t]); d_val = float(_cp * equity - qsh * cpx)
+            if cpx > 0 and abs(d_val) >= max(0.004 * equity, 1.0):
+                if d_val > 0:
+                    dq = d_val / cpx; tot = qsh + dq
+                    qcost = (qcost * qsh + cpx * dq) / tot if tot > 0 else cpx
+                    qsh, cash = tot, cash - d_val
+                    trades.append({"date": dts[t], "symbol": core_sym, "side": "BUY", "qty": round(dq, 4),
+                                   "price": round(cpx, 2), "notional": round(d_val, 2), "avg_cost": round(qcost, 2),
+                                   "pnl": None, "pnl_pct": None, "reason": "cœur indiciel (rééquilibrage)"})
+                else:
+                    sq = min(qsh, -d_val / cpx)
+                    if sq > 1e-9:
+                        pnl = (cpx - qcost) * sq; realized += pnl; qsh, cash = qsh - sq, cash + sq * cpx
+                        trades.append({"date": dts[t], "symbol": core_sym, "side": "SELL", "qty": round(sq, 4),
+                                       "price": round(cpx, 2), "notional": round(sq * cpx, 2), "avg_cost": round(qcost, 2),
+                                       "pnl": round(pnl, 2), "pnl_pct": round(cpx / qcost - 1, 4) if qcost > 0 else None,
+                                       "reason": "cœur indiciel (allègement)"})
+        for i, s in enumerate(universe):
+            price = float(px[i])
+            if price <= 0:
+                continue
+            d_val = float(nw[i] * sat * equity - shares[s] * price)   # satellite = (1-core_pct)
+            if abs(d_val) < max(0.004 * equity, 1.0):     # variation négligeable → pas de trade
+                continue
+            if d_val > 0:                                  # ACHAT
+                dq = d_val / price
+                tot = shares[s] + dq
+                cost[s] = (cost[s] * shares[s] + price * dq) / tot if tot > 0 else price
+                shares[s], cash = tot, cash - d_val
+                reason = "entrée (univers qualité, risk-parity)" if (shares[s] - dq) <= 1e-9 else "renforcement (risk-parity)"
+                trades.append({"date": dts[t], "symbol": s, "side": "BUY", "qty": round(dq, 4),
+                               "price": round(price, 2), "notional": round(d_val, 2),
+                               "avg_cost": round(cost[s], 2), "pnl": None, "pnl_pct": None, "reason": reason})
+            else:                                          # VENTE (P&L réalisé vs PRU)
+                sq = min(shares[s], -d_val / price)
+                if sq <= 1e-9:
+                    continue
+                pnl = (price - cost[s]) * sq
+                realized += pnl
+                shares[s], cash = shares[s] - sq, cash + sq * price
+                reason = ("sortie (hors univers / blackout)" if (nw[i] <= 1e-4 or shares[s] <= 1e-6)
+                          else "allègement (DD-target/risk-parity)")
+                trades.append({"date": dts[t], "symbol": s, "side": "SELL", "qty": round(sq, 4),
+                               "price": round(price, 2), "notional": round(sq * price, 2),
+                               "avg_cost": round(cost[s], 2), "pnl": round(pnl, 2),
+                               "pnl_pct": round(price / cost[s] - 1, 4) if cost[s] > 0 else None, "reason": reason})
+        w = nw
+    pxf = A[:, L - 1]
+    open_pos = [{"symbol": s, "qty": round(shares[s], 4), "avg_cost": round(cost[s], 2),
+                 "price": round(float(pxf[idx[s]]), 2), "value": round(shares[s] * float(pxf[idx[s]]), 2),
+                 "pnl": round((float(pxf[idx[s]]) - cost[s]) * shares[s], 2),
+                 "pnl_pct": round(float(pxf[idx[s]]) / cost[s] - 1, 4) if cost[s] > 0 else None}
+                for s in universe if shares[s] > 1e-6]
+    if core_on and qsh > 1e-9:                            # ligne du cœur indiciel (QQQ)
+        _cpx = float(core_arr[L - 1])
+        open_pos.insert(0, {"symbol": core_sym, "qty": round(qsh, 4), "avg_cost": round(qcost, 2),
+                            "price": round(_cpx, 2), "value": round(qsh * _cpx, 2),
+                            "pnl": round((_cpx - qcost) * qsh, 2),
+                            "pnl_pct": round(_cpx / qcost - 1, 4) if qcost > 0 else None})
+    final_eq = cash + sum(p["value"] for p in open_pos)
+    unrealized = sum(p["pnl"] for p in open_pos)
+    n_all = len(trades)
+    trades = sorted(trades, key=lambda x: x["date"], reverse=True)[:max_trades]
+    return {"available": True, "trades": trades, "open_positions": open_pos,
+            "summary": {"init_cap": round(init_cap, 2), "final_equity": round(final_eq, 2),
+                        "total_return": round(final_eq / init_cap - 1, 4),
+                        "realized_pnl": round(realized, 2), "unrealized_pnl": round(unrealized, 2),
+                        "cash": round(cash, 2), "n_trades": n_all,
+                        "start": dts[start], "end": dts[L - 1]}}
