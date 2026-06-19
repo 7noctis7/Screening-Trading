@@ -120,6 +120,41 @@ export default function Dashboard() {
         </table>
         <p className="text-muted2 text-xs mt-2">Indices RÉELS (^GSPC / ^NDX) rebasés à 10 000 $ au début de la période. KPI recalculés sur la fenêtre sélectionnée.</p>
       </section>
+
+      {/* Cœur indiciel + satellite preset : meilleur ratio (sweep) + part adoptée */}
+      {d.index_core?.table?.some((r: any) => r.stats?.available) && (
+        <section className="card p-4 overflow-x-auto">
+          <h2 className="text-sm uppercase tracking-wide text-muted mb-1">Cœur indiciel ({d.index_core.symbol}) + satellite preset</h2>
+          <p className="text-muted2 text-xs mb-3">
+            {d.index_core.enabled
+              ? <>Adopté : <b style={{ color: "#22d3ee" }}>{Math.round(d.index_core.core_pct * 100)}% {d.index_core.symbol} + {Math.round((1 - d.index_core.core_pct) * 100)}% preset</b>{d.index_core.manual ? " (forcé via QUANT_INDEX_CORE)" : " (auto : meilleur Sharpe qui bat le preset pur)"}.</>
+              : <>Aucun mélange ne bat le preset pur sur le Sharpe → <b>100% preset</b> conservé. Force un ratio avec <code>QUANT_INDEX_CORE=0.5</code> si tu veux le tester.</>}
+          </p>
+          <table className="w-full text-sm">
+            <thead className="text-muted text-xs"><tr>
+              <th className="text-left font-normal">Cœur {d.index_core.symbol}</th><th className="text-left font-normal">Preset</th>
+              <th className="text-right font-normal">CAGR</th><th className="text-right font-normal">Sharpe</th>
+              <th className="text-right font-normal">Sortino</th><th className="text-right font-normal">Max DD</th>
+              <th className="text-right font-normal">Calmar</th></tr></thead>
+            <tbody className="mono">
+              {d.index_core.table.filter((r: any) => r.stats?.available).map((r: any) => {
+                const sel = Math.abs(r.core - (d.index_core.enabled ? d.index_core.core_pct : 0)) < 1e-6;
+                return (
+                  <tr key={r.core} className="border-t border-border" style={sel ? { background: "rgba(34,211,238,0.08)" } : undefined}>
+                    <td className="py-1.5">{Math.round(r.core * 100)}%{sel && <span className="ml-1" style={{ color: "#22d3ee" }}>◀</span>}</td>
+                    <td>{Math.round((1 - r.core) * 100)}%</td>
+                    <td className="text-right">{(r.stats.cagr * 100).toFixed(1)}%</td>
+                    <td className="text-right">{r.stats.sharpe?.toFixed(2)}</td>
+                    <td className="text-right">{r.stats.sortino?.toFixed(2)}</td>
+                    <td className="text-right" style={{ color: "#f43f5e" }}>{(r.stats.max_drawdown * 100).toFixed(1)}%</td>
+                    <td className="text-right">{r.stats.calmar?.toFixed(2)}</td>
+                  </tr>);
+              })}
+            </tbody>
+          </table>
+          <p className="text-muted2 text-xs mt-2">Mélange rééquilibré quotidiennement (cœur {d.index_core.core_is_real ? "réel" : "repli"}). On n'adopte le cœur que s'il améliore le Sharpe vs preset pur.</p>
+        </section>
+      )}
       <section className="card p-4 overflow-x-auto">
         <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Top screener — multi-actifs (score facteurs + edge ML)</h2>
         <table className="w-full text-sm">

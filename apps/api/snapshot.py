@@ -1434,6 +1434,39 @@ def build_snapshot(seed: int = 7) -> dict:
     # Courbe d'equity QUOTIDIENNE du preset → c'est ELLE qui pilote le dashboard (le swing est legacy)
     from packages.backtest.preset_backtest import preset_equity_daily
     _pe = preset_equity_daily(_tradeable_data, _quality, asset_classes=acmap, dd_target=_dd, init_cap=init_cap)
+    # --- CŒUR INDICIEL + SATELLITE PRESET ---------------------------------------------------
+    # On balaie la part « cœur » (ETF indiciel passif, défaut QQQ/Nasdaq 100) vs « satellite »
+    # (preset) et on RETIENT la meilleure par Sharpe — mais SEULEMENT si elle bat le preset pur.
+    # QUANT_INDEX_CORE force une part fixe ∈ [0,1] ; sinon auto-sélection sur tes données réelles.
+    _core_sym = _os.environ.get("QUANT_INDEX_CORE_SYMBOL", "QQQ").upper()
+    _core_closes, _core_real = _index_closes([_core_sym, "^NDX", "^IXIC"], start, end, ndx)
+    _index_core_info = {"enabled": False, "core_pct": 0.0, "symbol": _core_sym,
+                        "objective": "sharpe", "core_is_real": bool(_core_real)}
+    if _pe.get("available") and _core_closes and len(_core_closes) > 60:
+        from packages.backtest.index_core import blend_equity, optimize_index_core
+        _ic = optimize_index_core(_pe["equity"], _core_closes,
+                                  grid=(0.0, 0.25, 0.5, 0.75, 1.0), objective="sharpe")
+        _env_core = _os.environ.get("QUANT_INDEX_CORE")
+        if _env_core is not None:                       # part forcée manuellement (override)
+            try:
+                _core_pct = max(0.0, min(1.0, float(_env_core)))
+            except ValueError:
+                _core_pct = 0.0
+        else:                                           # auto : best ratio, seulement s'il améliore
+            _core_pct = _ic["best_core"]
+        _index_core_info.update({"table": _ic["table"], "base_stats": _ic["base_stats"],
+                                 "best_stats": _ic["best_stats"], "auto_best": _ic["best_core"],
+                                 "improved": _ic["improved"], "manual": _env_core is not None})
+        if _core_pct > 0.0:                             # ADOPTÉ → mélange equity + alloc + ordres
+            _blended, _m = blend_equity(_pe["equity"], _core_closes, _core_pct, init_cap=init_cap)
+            if _blended:
+                _pe["equity"] = _blended
+                _pe["dates"] = _pe["dates"][-_m:]
+            _preset_weights = {s: w * (1.0 - _core_pct) for s, w in _preset_weights.items()}
+            _preset_weights[_core_sym] = _preset_weights.get(_core_sym, 0.0) + _core_pct
+            _index_core_info.update({"enabled": True, "core_pct": round(_core_pct, 2),
+                                     "blended_stats": _curve_stats(_pe["equity"])})
+    _core_px = float(_core_closes[-1]) if _core_closes else 0.0
     if _pe.get("available"):
         _dash_metrics = PL.metrics_payload(_pe["equity"])
         _dash_equity = [{"t": d, "v": v} for d, v in zip(_pe["dates"], _pe["equity"])]
@@ -1450,12 +1483,13 @@ def build_snapshot(seed: int = 7) -> dict:
     _bit_cap = _live["real"]["bitmart"]["equity"] or 0.0
     # Allocation PRESET détaillée (page Positions) : 2 poches, chacune sur le capital de son broker
     _preset_alloc = []
+    _px_override = {_core_sym: _core_px} if _core_px > 0 else {}
     def _alloc_rows(weights, cap, ac_default):
         for s, w in sorted(weights.items(), key=lambda kv: -kv[1]):
             if w <= 0:
                 continue
             r = route(s, acmap.get(s, ac_default))
-            px = data[s][-1].close if data.get(s) else 0.0
+            px = data[s][-1].close if data.get(s) else _px_override.get(s, 0.0)
             notion = round(w * cap, 2)
             _preset_alloc.append({"symbol": s, "sector": sector_of.get(s, ""),
                                   "asset_class": acmap.get(s, ac_default), "broker": r["broker"],
@@ -1473,6 +1507,13 @@ def build_snapshot(seed: int = 7) -> dict:
             bb = b[-500:]
             _chart_series[s] = [{"t": x.ts.isoformat()[:10], "o": round(x.open, 4), "h": round(x.high, 4),
                                  "l": round(x.low, 4), "c": round(x.close, 4), "v": round(x.volume, 0)} for x in bb]
+    # le cœur indiciel (QQQ) n'est pas dans l'univers → courbe cliquable depuis ses closes réels
+    if _index_core_info.get("enabled") and len(_core_closes) > 1:
+        _cc = [round(float(c), 4) for c in _core_closes[-500:]]
+        _cd = _dash_dates[-len(_cc):] if len(_dash_dates) >= len(_cc) else []
+        if _cd:
+            _chart_series[_core_sym] = [{"t": d[:10], "o": c, "h": c, "l": c, "c": c, "v": 0}
+                                        for d, c in zip(_cd, _cc)]
     # PERF PAR COMPTE — PRIORITÉ AUX DONNÉES RÉELLES (historique Alpaca / suivi equity quotidien).
     # Repli "modèle" (backtest du sleeve) UNIQUEMENT si le compte n'est pas connecté.
     from packages.execution.equity_history import series as _eq_series
@@ -1550,7 +1591,12 @@ def build_snapshot(seed: int = 7) -> dict:
             "regime": PL.regime_payload(regime, expo),
             "metrics": _dash_metrics,                 # PRESET (production), pas le swing legacy
             "equity": _dash_equity,
-            "strategy_label": "preset (risk-parity + DD-target)" if _pe.get("available") else "swing",
+            "index_core": _index_core_info,            # cœur indiciel + satellite (part adoptée + sweep)
+            "strategy_label": (
+                f"{int(round(_index_core_info['core_pct']*100))}% {_core_sym} + "
+                f"{int(round((1-_index_core_info['core_pct'])*100))}% preset"
+                if _index_core_info.get("enabled")
+                else ("preset (risk-parity + DD-target)" if _pe.get("available") else "swing")),
             "benchmarks": _bench_series({"S&P 500": sp, "Nasdaq 100": ndx}, _dash_dates, init_cap),
             "dates": _dash_dates,
             "positions": comp["rows"], "totals": comp["totals"],

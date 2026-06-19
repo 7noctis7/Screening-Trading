@@ -12,7 +12,11 @@ def test_snapshot_keys_and_json():
     snap = _snap()
     assert set(snap) == {"meta", "dashboard", "screener", "portfolio", "trades",
                          "open_trades", "trade_stats", "universe", "data", "themes", "ml",
-                         "sentiment", "fundamentals", "investors", "conviction", "live"}
+                         "sentiment", "fundamentals", "investors", "conviction", "live",
+                         "preset_trades"}
+    # cœur indiciel + satellite : bloc présent (sweep + part adoptée) sur le dashboard
+    ic = snap["dashboard"]["index_core"]
+    assert "core_pct" in ic and "enabled" in ic and "symbol" in ic
     assert snap["meta"]["initial_capital"] == 10_000
     assert "regime" in snap["dashboard"] and "metrics" in snap["dashboard"]
     assert "benchmarks" in snap["portfolio"]
