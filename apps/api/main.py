@@ -60,7 +60,7 @@ _BUILD_LOCK = threading.Lock()
 _SNAP_FILE = Path(__file__).resolve().parents[2] / ".cache" / "snapshot.pkl"
 # Bump à chaque changement de SCHÉMA du snapshot → invalide le cache disque (évite de servir un
 # ancien snapshot construit par une version antérieure du code).
-_SNAP_VERSION = "2026-06-19-qqq25-preset75"
+_SNAP_VERSION = "2026-06-19-qqq50-default"
 
 
 def _load_disk() -> tuple[dict | None, float]:
@@ -144,7 +144,9 @@ def meta() -> dict:
 
 @app.get("/api/dashboard")
 def dashboard() -> dict:
-    return _snap()["dashboard"]
+    d = dict(_snap()["dashboard"])
+    d.pop("chart_series", None)      # lourd & inutile ici (utilisé par Positions/Trades/Live)
+    return d
 
 
 @app.get("/api/screener")
@@ -159,23 +161,27 @@ def portfolio() -> dict:
 
 @app.get("/api/positions")
 def positions() -> dict:
-    dash = _snap()["dashboard"]
-    return {"positions": dash["positions"], "totals": dash["totals"],
-            "preset_allocation": dash.get("preset_allocation", []),
+    snap = _snap()
+    dash = snap["dashboard"]
+    real = snap["live"]["real"]
+    return {"real_positions": real.get("positions", []),    # positions RÉELLES (Alpaca + Bitmart)
+            "connected": real.get("connected", False),
+            "accounts": {"alpaca": real.get("alpaca", {}), "bitmart": real.get("bitmart", {})},
             "alloc_capital": dash.get("alloc_capital", {}),
-            "portfolio": dash["portfolio"],
-            "series": {**dash.get("chart_series", {}), **dash["position_series"]},
-            "markers": {**dash["position_markers"], **dash.get("preset_markers", {})}}
+            "series": dash.get("chart_series", {}),
+            "markers": dash.get("real_markers", {})}
 
 
 @app.get("/api/trades")
 def trades() -> dict:
     snap = _snap()
     d = snap["dashboard"]
-    return {"trades": snap["trades"], "open_trades": snap["open_trades"],
-            "stats": snap["trade_stats"], "preset_trades": snap.get("preset_trades", {}),
-            "series": {**d.get("chart_series", {}), **d["position_series"]},
-            "markers": {**d["position_markers"], **d.get("preset_markers", {})}}
+    real = snap["live"]["real"]
+    return {"real_trades": real.get("trades", []),          # ordres RÉELS exécutés (Alpaca + Bitmart)
+            "connected": real.get("connected", False),
+            "accounts": {"alpaca": real.get("alpaca", {}), "bitmart": real.get("bitmart", {})},
+            "series": d.get("chart_series", {}),
+            "markers": d.get("real_markers", {})}
 
 
 @app.get("/api/sentiment")

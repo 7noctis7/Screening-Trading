@@ -152,7 +152,7 @@ export default function Dashboard() {
           {d.index_core.core_holdings?.length > 0 && (
             <p className="text-muted2 text-xs mt-2">Panier top-10 : {d.index_core.core_holdings.join(", ")}.</p>
           )}
-          <p className="text-muted2 text-xs mt-1">Détail des ratios : <code>make index-core</code>. Changer le blend : <code>QUANT_CORE_SPEC="qqq:0.25"</code> (défaut) — ajoute <code>,megacap:0.10</code> pour un cœur mixte.</p>
+          <p className="text-muted2 text-xs mt-1">Détail des ratios : <code>make index-core</code>. Changer le blend : <code>QUANT_CORE_SPEC="qqq:0.5"</code> (défaut) — ajoute <code>,megacap:0.10</code> ou <code>sector_mom:0.25</code> pour un cœur mixte.</p>
         </section>
       )}
       <section className="card p-4 overflow-x-auto">

@@ -351,10 +351,8 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
             from packages.execution.alpaca_broker import AlpacaBroker
             b = AlpacaBroker(paper=True)
             d["equity"] = round(float(b.equity()), 2)
-            d["positions"] = [{"symbol": p.instrument, "broker": "Alpaca",
-                               "side": p.side.value if hasattr(p.side, "value") else str(p.side),
-                               "qty": round(p.qty, 4), "avg_price": round(p.avg_price, 2)}
-                              for p in b.positions()]
+            d["positions"] = b.positions_detailed()   # positions RÉELLES enrichies (prix/valeur/P&L)
+            d["orders"] = b.orders()                   # ordres RÉELS exécutés (page Trades)
             d["history"] = b.portfolio_history()      # historique d'equity RÉEL (Alpaca le stocke)
             d["ok"] = True
         except Exception as e:  # noqa: BLE001
@@ -369,20 +367,21 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
             from packages.execution.bitmart_broker import BitmartBroker
             b = BitmartBroker(dry_run=False)
             d["equity"] = round(float(b.equity()), 2)
-            d["positions"] = [{"symbol": p.instrument, "broker": "Bitmart",
-                               "side": p.side.value if hasattr(p.side, "value") else str(p.side),
-                               "qty": round(p.qty, 4), "avg_price": round(p.avg_price, 2)}
-                              for p in b.positions()]
+            d["positions"] = b.positions_detailed()   # positions SPOT RÉELLES enrichies
+            d["orders"] = b.orders()                   # transactions RÉELLES (page Trades)
             d["ok"] = True
         except Exception as e:  # noqa: BLE001
             d["error"] = str(e)[:160]
         return d
 
     a_d, b_d = _alpaca(), _bitmart()
+    _real_trades = sorted((a_d.get("orders", []) + b_d.get("orders", [])),
+                          key=lambda o: o.get("date", ""), reverse=True)
     real = {
         "connected": a_d["ok"] or b_d["ok"],
         "equity": round(a_d["equity"] + b_d["equity"], 2),
         "positions": a_d["positions"] + b_d["positions"],
+        "trades": _real_trades,                    # ordres RÉELS exécutés (Alpaca + Bitmart)
         "alpaca": a_d, "bitmart": b_d,
     }
     # enregistre l'equity réelle du jour (construit l'historique réel par broker)
@@ -755,16 +754,18 @@ def _sentiment_section(held: list, names: dict, sector_of: dict, data: dict) -> 
     except Exception:  # noqa: BLE001
         mood_change = 0.0
     # Fils d'actualité (RSS gratuit) — marché + MACRO (FED/BCE/FMI/économie). Toujours tentés.
+    # ACTUALITÉS : uniquement l'ANNÉE EN COURS, dédupliquées, triées du + récent au + ancien.
+    # Qualité > quantité : on garde une sélection courte et fraîche (avec la date affichée).
     market_news, macro_news = [], []
     try:
         from packages.sentiment.rss import MACRO_FEEDS, fetch_headlines
-        for h in fetch_headlines(limit=12, timeout=3.0):
+        for h in fetch_headlines(limit=8, timeout=3.0, current_year_only=True):
             sc = S.analyze([h["title"]])[0]
-            market_news.append({"title": h["title"], "link": h.get("link", ""),
+            market_news.append({"title": h["title"], "link": h.get("link", ""), "date": h.get("date", ""),
                                 "label": sc["label"], "score": sc["score"]})
-        for h in fetch_headlines(MACRO_FEEDS, limit=12, timeout=3.0):
+        for h in fetch_headlines(MACRO_FEEDS, limit=6, timeout=3.0, current_year_only=True):
             sc = S.analyze([h["title"]])[0]
-            macro_news.append({"title": h["title"], "link": h.get("link", ""),
+            macro_news.append({"title": h["title"], "link": h.get("link", ""), "date": h.get("date", ""),
                                "label": sc["label"], "score": sc["score"]})
     except Exception:  # noqa: BLE001
         pass
@@ -1064,8 +1065,10 @@ def _yahoo_aliases(sym: str, ac: str) -> list[str]:
 
 def _load_prices(instruments, sector_of, start, end, seed):
     """Charge l'OHLCV : base RÉELLE (YAHOO.db…) en priorité, sinon synthétique sectorisé
-    (et synthétique en complément pour les symboles absents de la base). Renvoie (data, mode)."""
-    data, n_real = {}, 0
+    (et synthétique en complément pour les symboles absents de la base). Renvoie
+    (data, mode, real_syms) — `real_syms` = symboles à données RÉELLES (les autres sont synthétiques
+    et NE doivent PAS apparaître en production/allocation/graphes : prix factices)."""
+    data, real_syms = {}, set()
     db = _price_db_path()
     prov_db = None
     if db is not None:
@@ -1084,18 +1087,19 @@ def _load_prices(instruments, sector_of, start, end, seed):
                     break
         if len(bars) >= 250:
             data[s] = bars
-            n_real += 1
+            real_syms.add(s)
         else:
             drift, vol = _SECTOR_DV.get(sector_of[s], (0.07, 0.18))
             data[s] = data_providers.create(
                 "synthetic", seed=seed, drift=drift, annual_vol=vol).fetch_ohlcv(s, "1d", start, end)
+    n_real = len(real_syms)
     if n_real == 0:
         mode = "synthetic"
     elif n_real == len(instruments):
         mode = f"réel ({db.name})"
     else:
         mode = f"mixte ({n_real} réels / {len(instruments)} via {db.name})"
-    return data, mode
+    return data, mode, real_syms
 
 
 def _index_closes(aliases: list[str], start, end, fallback: list[float]) -> tuple[list[float], bool]:
@@ -1157,7 +1161,18 @@ def build_snapshot(seed: int = 7) -> dict:
     end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     start = end - timedelta(days=_HISTORY_DAYS)
     # prix RÉELS (base locale) si disponibles, sinon synthétique sectorisé (cohérence secteurs)
-    data, data_mode = _load_prices(instruments, sector_of, start, end, seed)
+    data, data_mode, real_syms = _load_prices(instruments, sector_of, start, end, seed)
+    # INTÉGRITÉ DES DONNÉES : si une base réelle est branchée, on RETIRE TOUT symbole en repli
+    # synthétique de l'univers de travail → screener, ML, thèmes, conviction, preset, graphes…
+    # tournent UNIQUEMENT sur des prix réels (zéro donnée fictive). En mode démo (aucune base),
+    # real_syms est vide → on garde le synthétique (la bannière « données factices » prévient).
+    if len(real_syms) >= 30:
+        instruments = [m for m in instruments if m["symbol"] in real_syms]
+        symbols = [m["symbol"] for m in instruments]
+        data = {s: data[s] for s in symbols}
+        acmap = {s: acmap[s] for s in symbols}
+        names = {s: names[s] for s in symbols}
+        sector_of = {s: sector_of[s] for s in symbols}
     n = max(len(b) for b in data.values())
     # VIX RÉEL (^VIX) si dispo (base/yfinance), aligné sur n barres ; sinon synthétique.
     _vix_real, _vix_is_real = _index_closes(["^VIX", "VIX"], start, end, [])
@@ -1178,9 +1193,31 @@ def build_snapshot(seed: int = 7) -> dict:
         trail_atr=5.0,              # trailing stop ATR : protège les gains, laisse courir
         next_open_fills=True)       # exécution à l'ouverture suivante (anti look-ahead)
 
-    # régime macro point-in-time (couvre toute la fenêtre)
-    months = int(_HISTORY_DAYS / 30) + 4
-    ms = MacroStore(":memory:"); ms.upsert(synthetic_macro(start, months=months))
+    # indices RÉELS (S&P 500 / Nasdaq 100) — calculés TÔT car le régime macro s'en sert
+    _sp_syn = [b.close for b in data_providers.create(
+        "synthetic", seed=101, drift=0.09, annual_vol=0.16).fetch_ohlcv("S&P 500", "1d", start, end)]
+    _ndx_syn = [b.close for b in data_providers.create(
+        "synthetic", seed=202, drift=0.13, annual_vol=0.22).fetch_ohlcv("Nasdaq 100", "1d", start, end)]
+    sp, _sp_real = _index_closes(["^GSPC", "SPX", "SPY"], start, end, _sp_syn)        # VRAI S&P 500
+    ndx, _ndx_real = _index_closes(["^NDX", "^IXIC", "QQQ"], start, end, _ndx_syn)    # VRAI Nasdaq 100
+
+    # régime macro RÉEL point-in-time : VIX réel + tendance S&P (proxy activité) + FRED (courbe,
+    # chômage) si FRED_API_KEY. Repli synthétique UNIQUEMENT si aucune donnée réelle disponible.
+    import os as _os_macro
+    _fred_key = _os_macro.environ.get("FRED_API_KEY")
+    _macro_sources, _macro_real = {"régime": "synthétique (aucune donnée macro réelle dispo)"}, False
+    if _vix_is_real or _sp_real or _fred_key:        # au moins une vraie source macro
+        from packages.regime.real_macro import real_macro_store
+        _cal = [b.ts for b in max(data.values(), key=len)]
+        _vix_d = _cal[-len(vix):] if _vix_is_real else []
+        _vix_v = vix if _vix_is_real else []
+        _sp_d = _cal[-len(sp):] if _sp_real else []
+        _sp_v = sp if _sp_real else []
+        ms, _macro_sources, _macro_real = real_macro_store(_vix_v, _vix_d, _sp_v, _sp_d, fred_key=_fred_key)
+    if not _macro_real or ms.count() == 0:
+        months = int(_HISTORY_DAYS / 30) + 4
+        ms = MacroStore(":memory:"); ms.upsert(synthetic_macro(start, months=months))
+        _macro_sources, _macro_real = {"régime": "synthétique (aucune donnée macro réelle dispo)"}, False
     regime = MacroRegimeClassifier(ms).classify(end - timedelta(days=2))
     impact = MacroImpactMap(load_yaml(ROOT / "config" / "macro_impact.yaml"))
     expo = impact.exposure_multiplier(regime)
@@ -1190,15 +1227,9 @@ def build_snapshot(seed: int = 7) -> dict:
     ranked = ranker.rank(data, t=n - 1, regime=regime, top_n=12)
 
     # benchmark JUSTE = univers équipondéré (buy & hold) → mesure l'alpha actif du swing.
-    # + S&P 500 synthétique en référence marché. Tous rebasés 100 pour superposition.
+    # (S&P 500 / Nasdaq 100 RÉELS déjà chargés plus haut pour le régime macro.)
     norm = [[b.close / d0[0].close for b in d0] for d0 in (data[s] for s in symbols)]
     eqw = [sum(col) / len(col) * 100 for col in zip(*norm)]
-    _sp_syn = [b.close for b in data_providers.create(
-        "synthetic", seed=101, drift=0.09, annual_vol=0.16).fetch_ohlcv("S&P 500", "1d", start, end)]
-    _ndx_syn = [b.close for b in data_providers.create(
-        "synthetic", seed=202, drift=0.13, annual_vol=0.22).fetch_ohlcv("Nasdaq 100", "1d", start, end)]
-    sp, _sp_real = _index_closes(["^GSPC", "SPX", "SPY"], start, end, _sp_syn)        # VRAI S&P 500
-    ndx, _ndx_real = _index_closes(["^NDX", "^IXIC", "QQQ"], start, end, _ndx_syn)    # VRAI Nasdaq 100
     bench_px = eqw
     benches = {"Univers (équipondéré)": eqw, "S&P 500": sp, "Nasdaq 100": ndx}
     # backtest MULTI-STRATÉGIE sur l'indice équipondéré (tendance/momentum/retour moyenne + ensemble)
@@ -1405,13 +1436,16 @@ def build_snapshot(seed: int = 7) -> dict:
     # Backtest point-in-time, comparé au swing actuel et à l'équipondéré.
     from packages.backtest.preset_backtest import preset_backtest
     _quality = {r["symbol"]: r.get("combined_score") for r in fundamentals_sec.get("rows", [])}
-    # UNIVERS NÉGOCIABLE : on restreint la production aux instruments que les brokers peuvent trader
-    # (actions US + ETF via Alpaca, crypto via Bitmart) → Dashboard, Positions et ordres COHÉRENTS
-    # et exécutables (plus d'actions .AS/.PA impossibles chez Alpaca).
+    # UNIVERS NÉGOCIABLE : production restreinte aux instruments (1) négociables par les brokers
+    # (actions US + ETF via Alpaca, crypto via Bitmart) ET (2) à DONNÉES RÉELLES uniquement — les
+    # symboles en repli synthétique (prix factices, ex. RZLV absent de YAHOO.db) sont EXCLUS de
+    # l'allocation/des ordres/des graphes pour ne JAMAIS afficher de prix halluciné.
     from packages.execution.routing import is_tradeable, route
-    _tradeable_data = {s: b for s, b in data.items() if is_tradeable(s, acmap.get(s, "equity"))}
-    if len(_tradeable_data) < 30:                        # garde-fou : si trop peu, on garde tout
-        _tradeable_data = data
+    _tradeable_data = {s: b for s, b in data.items()
+                       if is_tradeable(s, acmap.get(s, "equity")) and s in real_syms}
+    if len(_tradeable_data) < 30:                        # garde-fou (mode démo/synthétique) :
+        # pas assez de réel → on retombe sur le négociable (la bannière « données factices » prévient)
+        _tradeable_data = {s: b for s, b in data.items() if is_tradeable(s, acmap.get(s, "equity"))} or data
     preset_bt = preset_backtest(_tradeable_data, _quality, asset_classes=acmap, swing_equity=equity,
                                 dd_target=_dd, band=0.03)
     recommended["preset_backtest"] = preset_bt          # rattaché à l'allocation recommandée affichée
@@ -1435,14 +1469,14 @@ def build_snapshot(seed: int = 7) -> dict:
     from packages.backtest.preset_backtest import preset_equity_daily
     _pe = preset_equity_daily(_tradeable_data, _quality, asset_classes=acmap, dd_target=_dd, init_cap=init_cap)
     # --- CŒUR(S) INDICIEL(S) + SATELLITE PRESET (multi-cœur) --------------------------------
-    # Mélange un/des cœur(s) passif(s) au preset. DÉFAUT : 25% QQQ + 75% preset (le top-10 méga-caps
-    # cap-weighted n'ajoute pas d'edge sur QQQ une fois fait proprement → écarté du défaut). Le cœur
-    # megacap reste activable via la spec. Le top-10 (si activé) est classé/pondéré par MARKET CAP
-    # réelle (data/market_caps.json via `make ingest-mktcap`). Spec configurable :
-    #   QUANT_CORE_SPEC="qqq:0.25"            (défaut)
-    #   QUANT_CORE_SPEC="qqq:0.15,megacap:0.10"   (cœur mixte ; le reste = preset)
+    # Mélange un/des cœur(s) passif(s) au preset. DÉFAUT : 50% QQQ + 50% preset (meilleur couple
+    # rendement/risque sur l'historique réel : Sharpe 0,98 · CAGR 20,3% · maxDD -31% vs preset pur
+    # 0,93/17,8%/-34%). Le momentum sectoriel et le top-10 méga-caps sont dominés par QQQ → écartés
+    # du défaut (restent activables via la spec). Spec configurable :
+    #   QUANT_CORE_SPEC="qqq:0.5"            (défaut)
+    #   QUANT_CORE_SPEC="qqq:0.15,megacap:0.10" / "sector_mom:0.25"   (le reste = preset)
     from packages.backtest.index_core import blend_equity_multi
-    _spec_raw = _os.environ.get("QUANT_CORE_SPEC", "qqq:0.25")
+    _spec_raw = _os.environ.get("QUANT_CORE_SPEC", "qqq:0.5")
     _spec: dict[str, float] = {}
     for _part in _spec_raw.split(","):
         if ":" in _part:
@@ -1451,7 +1485,7 @@ def build_snapshot(seed: int = 7) -> dict:
                 _spec[_k.strip().lower()] = max(0.0, float(_v))
             except ValueError:
                 pass
-    _qqq_pct, _mc_pct = _spec.get("qqq", 0.0), _spec.get("megacap", 0.0)
+    _qqq_pct, _mc_pct, _sm_pct = _spec.get("qqq", 0.0), _spec.get("megacap", 0.0), _spec.get("sector_mom", 0.0)
     # market caps (sidecar) → pondération « comme un vrai indice »
     _mktcaps = {}
     try:
@@ -1470,8 +1504,20 @@ def build_snapshot(seed: int = 7) -> dict:
         if _mc.get("available"):
             _mc_curve, _mc_top = _mc["equity"], _mc.get("current_top", [])
             _mc_w, _mc_real, _mc_weighting = _mc.get("current_weights", {}), True, _mc.get("weighting", "—")
+    # cœur MOMENTUM SECTORIEL — TOUJOURS calculé (pour le sweep `make index-core`), activé en prod
+    # seulement si présent dans la spec (QUANT_CORE_SPEC="sector_mom:0.25").
+    _sm_curve, _sm_holds, _sm_secs = [], [], []
+    try:
+        from packages.backtest.sector_momentum import sector_momentum_equity_daily
+        _sm = sector_momentum_equity_daily(_tradeable_data, sector_of, asset_classes=acmap, init_cap=init_cap)
+        if _sm.get("available"):
+            _sm_curve = _sm["equity"]
+            _sm_holds, _sm_secs = _sm.get("current_holdings", []), _sm.get("current_sectors", [])
+    except Exception:  # noqa: BLE001
+        pass
     _index_core_info = {"enabled": False, "core_pct": 0.0, "symbol": "QQQ+TOP10",
-                        "core_type": "multi", "spec": {"qqq": _qqq_pct, "megacap": _mc_pct},
+                        "core_type": "multi",
+                        "spec": {"qqq": _qqq_pct, "megacap": _mc_pct, "sector_mom": _sm_pct},
                         "core_holdings": _mc_top, "core_weights": _mc_w,
                         "mc_weighting": _mc_weighting, "mktcap_real": bool(_mktcaps),
                         "qqq_is_real": bool(_qqq_real), "mc_is_real": bool(_mc_real)}
@@ -1481,6 +1527,8 @@ def build_snapshot(seed: int = 7) -> dict:
         _cores.append((_qqq_closes, _qqq_pct, "qqq"))
     if _mc_pct > 0 and _mc_curve and len(_mc_curve) > 60:
         _cores.append((_mc_curve, _mc_pct, "megacap"))
+    if _sm_pct > 0 and _sm_curve and len(_sm_curve) > 60:
+        _cores.append((_sm_curve, _sm_pct, "sector_mom"))
     _total_core = sum(w for _, w, _ in _cores)
     if _pe.get("available") and _cores and 0 < _total_core <= 1.0:
         _blended, _m = blend_equity_multi(_pe["equity"], [(c, w) for c, w, _ in _cores], init_cap=init_cap)
@@ -1495,6 +1543,10 @@ def build_snapshot(seed: int = 7) -> dict:
                 _sw = sum(_w.get(s, 0.0) for s in _mc_top) or 1.0
                 for _s in _mc_top:
                     _preset_weights[_s] = _preset_weights.get(_s, 0.0) + _mc_pct * _w.get(_s, 0.0) / _sw
+            if _sm_pct > 0 and _sm_holds:                 # momentum sectoriel : équipondéré sur les titres tenus
+                _per = _sm_pct / len(_sm_holds)
+                for _s in _sm_holds:
+                    _preset_weights[_s] = _preset_weights.get(_s, 0.0) + _per
             _index_core_info.update({"enabled": True, "core_pct": round(_total_core, 2),
                                      "components": [{"kind": k, "pct": w} for _, w, k in _cores],
                                      "base_stats": _base_stats,
@@ -1503,7 +1555,8 @@ def build_snapshot(seed: int = 7) -> dict:
     _core_sym = "QQQ"
     # blocs de courbes (preset pur + cœurs) → permet au script make index-core de balayer N'IMPORTE
     # quel ratio instantanément, sur la VRAIE mesure de production (source de vérité unique).
-    _ic_curves = {"preset": _preset_pure, "qqq": list(_qqq_closes), "megacap": list(_mc_curve)}
+    _ic_curves = {"preset": _preset_pure, "qqq": list(_qqq_closes), "megacap": list(_mc_curve),
+                  "sector_mom": list(_sm_curve)}
     if _pe.get("available"):
         _dash_metrics = PL.metrics_payload(_pe["equity"])
         _dash_equity = [{"t": d, "v": v} for d, v in zip(_pe["dates"], _pe["equity"])]
@@ -1542,17 +1595,33 @@ def build_snapshot(seed: int = 7) -> dict:
     for _t in (_preset_trades.get("trades", []) if _preset_trades.get("available") else []):
         _preset_markers.setdefault(_t["symbol"], []).append(
             {"t": _t["date"][:10], "side": "buy" if _t["side"] == "BUY" else "sell"})
-    # symboles cliquables = alloc preset + positions réelles + TOUS les symboles tradés par le preset
+    # MARQUEURS RÉELS (depuis les ordres exécutés Alpaca/Bitmart) → pages Positions & Trades RÉELLES
+    _real_markers: dict[str, list] = {}
+    for _o in _live["real"].get("trades", []):
+        _sym = _o.get("symbol", "")
+        if _sym:
+            _real_markers.setdefault(_sym, []).append(
+                {"t": str(_o.get("date", ""))[:10], "side": "buy" if _o.get("side") == "buy" else "sell"})
+    # symboles cliquables = alloc preset + positions/ordres RÉELS + symboles tradés par le preset
     _chart_syms = ({o["symbol"] for o in _preset_alloc}
                    | {p.get("symbol") for p in _live["real"]["positions"]}
-                   | set(_preset_markers.keys()))
+                   | {o.get("symbol") for o in _live["real"].get("trades", [])}
+                   | set(_preset_markers.keys()) | set(_real_markers.keys())) - {""}
     _chart_series = {}
     for s in _chart_syms:
         b = data.get(s)
-        if b:
+        if not b:
+            continue
+        mks = (_preset_markers.get(s) or []) + (_real_markers.get(s) or [])
+        mks = [m for m in mks if m.get("t")]
+        if mks:                                          # couvre depuis le 1er signal (sinon il est
+            first = min(m["t"] for m in mks)             # hors fenêtre et invisible sur le graphe)
+            idx = next((i for i, x in enumerate(b) if x.ts.isoformat()[:10] >= first), max(0, len(b) - 500))
+            bb = b[max(0, idx - 10):][-2600:]
+        else:
             bb = b[-500:]
-            _chart_series[s] = [{"t": x.ts.isoformat()[:10], "o": round(x.open, 4), "h": round(x.high, 4),
-                                 "l": round(x.low, 4), "c": round(x.close, 4), "v": round(x.volume, 0)} for x in bb]
+        _chart_series[s] = [{"t": x.ts.isoformat()[:10], "o": round(x.open, 4), "h": round(x.high, 4),
+                             "l": round(x.low, 4), "c": round(x.close, 4), "v": round(x.volume, 0)} for x in bb]
     # le cœur QQQ n'est pas dans l'univers → courbe cliquable depuis ses closes réels
     if _index_core_info.get("enabled") and _qqq_pct > 0 and len(_qqq_closes) > 1:
         _cc = [round(float(c), 4) for c in _qqq_closes[-500:]]
@@ -1634,7 +1703,8 @@ def build_snapshot(seed: int = 7) -> dict:
         },
         "dashboard": {
             "as_of": last_bar.isoformat(),
-            "regime": PL.regime_payload(regime, expo),
+            "regime": {**PL.regime_payload(regime, expo), "macro_real": _macro_real,
+                       "macro_sources": _macro_sources},
             "metrics": _dash_metrics,                 # PRESET (production), pas le swing legacy
             "equity": _dash_equity,
             "index_core": _index_core_info,            # cœur(s) indiciel(s) + satellite preset
@@ -1655,6 +1725,7 @@ def build_snapshot(seed: int = 7) -> dict:
             "position_series": position_series,
             "position_markers": position_markers,
             "preset_markers": _preset_markers,         # signaux achat/vente du preset (par symbole)
+            "real_markers": _real_markers,             # signaux achat/vente RÉELS (ordres brokers)
             "earnings_risk": _earnings_risk(held),
             "trade_stats": trade_stats,
             "vix": vix_now, "vix_playbook": _vix_playbook(vix_now),

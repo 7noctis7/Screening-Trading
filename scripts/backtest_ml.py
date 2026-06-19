@@ -32,7 +32,7 @@ def main() -> None:
     sector_of = {m["symbol"]: _sector_of(m) for m in instruments}
     end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     start = end - timedelta(days=_HISTORY_DAYS)
-    data, mode = _load_prices(instruments, sector_of, start, end, 7)
+    data, mode, _real = _load_prices(instruments, sector_of, start, end, 7)
     print(f"Mode des données : {mode} · univers {len(data)}")
     print("Backtest ML walk-forward en cours (ré-entraînement à chaque rebalancement)…")
     res = ml_walkforward(data, step=a.step, max_assets=a.assets)

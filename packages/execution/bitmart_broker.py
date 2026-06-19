@@ -153,6 +153,37 @@ class BitmartBroker:
                 pass
         return round(eq, 2)
 
+    def positions_detailed(self) -> list[dict]:
+        """Positions SPOT réelles enrichies (prix courant, valeur, P&L latent) pour l'UI."""
+        out: list[dict] = []
+        for p in self.positions():
+            px = self.last_price(p.instrument)
+            mv = p.qty * px
+            pnl = (px - p.avg_price) * p.qty if p.avg_price > 0 else 0.0
+            out.append({"symbol": p.instrument, "broker": "Bitmart", "side": "long",
+                        "qty": p.qty, "avg_price": p.avg_price, "price": px,
+                        "market_value": round(mv, 2), "pnl": round(pnl, 2),
+                        "pnl_pct": round((px / p.avg_price - 1), 4) if p.avg_price > 0 else 0.0})
+        return out
+
+    def orders(self, limit: int = 100) -> list[dict]:
+        """Ordres/transactions RÉELS exécutés (spot) — pour la page Trades. [] si indispo."""
+        if not self._live():
+            return []
+        try:
+            trades = self._client().fetch_my_trades(limit=limit) or []
+            out = []
+            for t in trades:
+                out.append({"symbol": t.get("symbol", ""), "broker": "Bitmart",
+                            "side": str(t.get("side", "")).lower(),
+                            "qty": float(t.get("amount", 0) or 0),
+                            "price": float(t.get("price", 0) or 0),
+                            "notional": float(t.get("cost", 0) or 0),
+                            "date": t.get("datetime", "") or "", "status": "filled"})
+            return out
+        except Exception:  # noqa: BLE001
+            return []
+
     def cancel(self, client_id: str) -> bool:
         return True
 
