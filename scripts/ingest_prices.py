@@ -53,9 +53,12 @@ def _ysym(sym: str, ac: str) -> str | None:
 
 def _connect() -> sqlite3.Connection:
     DB.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB, timeout=60)           # attend le verrou (lecteurs API) au lieu d'échouer
-    conn.execute("PRAGMA journal_mode=WAL")          # lecteurs + 1 écrivain en parallèle (pas de lock)
-    conn.execute("PRAGMA busy_timeout=60000")        # 60 s d'attente si la base est occupée
+    conn = sqlite3.connect(DB, timeout=120)          # attend le verrou (lecteurs API) au lieu d'échouer
+    conn.execute("PRAGMA busy_timeout=120000")       # EN PREMIER → les pragmas suivants attendent le verrou
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")      # lecteurs + 1 écrivain en parallèle (idéal)
+    except sqlite3.OperationalError:
+        pass                                         # base tenue par un lecteur → on reste en rollback (busy_timeout gère)
     conn.executescript(_DDL)
     return conn
 
