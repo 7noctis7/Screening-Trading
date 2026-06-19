@@ -12,8 +12,8 @@ const shortDate = (t: any) => {
 const compact = (v: number) => (Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${Math.round(v)}`);
 const BCOL: Record<string, string> = { "S&P 500": "#f59e0b", "Nasdaq 100": "#a855f7" };
 
-export function EquityChart({ series, benchmarks, height = 260 }:
-  { series: any[]; benchmarks?: Record<string, { t: string; v: number }[]>; height?: number }) {
+export function EquityChart({ series, benchmarks, height = 260, title }:
+  { series: any[]; benchmarks?: Record<string, { t: string; v: number }[]>; height?: number; title?: string }) {
   const names = Object.keys(benchmarks ?? {});
   const [on, setOn] = useState<Record<string, boolean>>(() => Object.fromEntries(names.map((n) => [n, true])));
   // fusionne equity + benchmarks par date (overlay)
@@ -28,7 +28,7 @@ export function EquityChart({ series, benchmarks, height = 260 }:
   return (
     <div className="card p-4">
       <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
-        <div className="text-xs uppercase tracking-wide text-muted">Performance — base 10 000 $ (ptf vs benchmarks)</div>
+        <div className="text-xs uppercase tracking-wide text-muted">{title ?? "Performance — base 10 000 $ (ptf vs benchmarks)"}</div>
         <div className="flex gap-1.5">
           {names.map((n) => (
             <button key={n} onClick={() => setOn((s) => ({ ...s, [n]: !s[n] }))}

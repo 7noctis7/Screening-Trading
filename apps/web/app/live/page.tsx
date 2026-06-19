@@ -9,8 +9,13 @@ import { TechnicalChart } from "@/components/TechnicalChart";
 const eur = (x?: number) => Math.round(x ?? 0).toLocaleString("fr-FR");
 const pct = (x?: number) => `${((x ?? 0) * 100).toFixed(1)}%`;
 
-function Perf({ p, accent }: { p: any; accent: string }) {
-  if (!p?.available) return null;
+function Perf({ p, name }: { p: any; name: string }) {
+  // historique réel encore trop court → message au lieu d'un graphe trompeur
+  if (!p?.available) {
+    return p?.source === "réel-court"
+      ? <p className="text-muted2 text-[11px] mt-3">📈 {p.note}</p> : null;
+  }
+  const real = p.source === "réel";
   const kpis: [string, string, string][] = [
     ["CAGR", pct(p.cagr), (p.cagr ?? 0) >= 0 ? "#22c55e" : "#f43f5e"],
     ["Sharpe", String(p.sharpe), ""], ["Sortino", String(p.sortino), ""],
@@ -19,14 +24,23 @@ function Perf({ p, accent }: { p: any; accent: string }) {
   ];
   return (
     <>
-      <div className="grid grid-cols-3 gap-2 mt-3">
+      <div className="flex items-center gap-2 mt-3">
+        <span className="text-muted text-[10px] uppercase tracking-wide">Performance</span>
+        <span className="text-[10px] px-1.5 py-0.5 rounded-full"
+          style={{ background: `color-mix(in srgb, ${real ? "#22c55e" : "#f59e0b"} 18%, transparent)`,
+                   color: real ? "#22c55e" : "#f59e0b" }}>
+          {real ? "données réelles du compte" : "modèle (backtest sleeve — compte non connecté)"}
+        </span>
+      </div>
+      <div className="grid grid-cols-3 gap-2 mt-2">
         {kpis.map(([k, v, c]) => (
           <div key={k}><div className="text-muted text-[10px] uppercase">{k}</div>
             <div className="mono text-sm" style={{ color: c || undefined }}>{v}</div></div>
         ))}
       </div>
-      {p.curve?.length > 5 && <div className="mt-3"><EquityChart series={p.curve} height={150} /></div>}
-      <p className="text-muted2 text-[11px] mt-1">Backtest du sleeve (point-in-time). Style {accent ? "" : ""}.</p>
+      {p.curve?.length > 5 && <div className="mt-3">
+        <EquityChart series={p.curve} height={150}
+          title={real ? `Equity réelle — ${name}` : `Modèle (backtest) — ${name}`} /></div>}
     </>
   );
 }
@@ -65,7 +79,7 @@ function BrokerCard({ b, perf, accent, series, onPick }: any) {
                   <td className="text-right text-muted">{((p.val / tot) * 100).toFixed(0)}%</td></tr>))}</tbody>
             </table>
           )}
-          <Perf p={perf} accent={accent} />
+          <Perf p={perf} name={b.name} />
         </>
       ) : (
         <p className="text-xs mt-2" style={{ color }}>

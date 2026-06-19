@@ -355,6 +355,7 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
                                "side": p.side.value if hasattr(p.side, "value") else str(p.side),
                                "qty": round(p.qty, 4), "avg_price": round(p.avg_price, 2)}
                               for p in b.positions()]
+            d["history"] = b.portfolio_history()      # historique d'equity RÉEL (Alpaca le stocke)
             d["ok"] = True
         except Exception as e:  # noqa: BLE001
             d["error"] = str(e)[:160]
@@ -384,6 +385,13 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
         "positions": a_d["positions"] + b_d["positions"],
         "alpaca": a_d, "bitmart": b_d,
     }
+    # enregistre l'equity réelle du jour (construit l'historique réel par broker)
+    try:
+        from packages.execution.equity_history import record as _eq_record
+        if a_d["ok"] or b_d["ok"]:
+            _eq_record({"alpaca": a_d["equity"], "bitmart": b_d["equity"]})
+    except Exception:  # noqa: BLE001
+        pass
     if target_weights or crypto_weights:          # allocation PRESET (2 poches : actions + crypto)
         from packages.execution.routing import route as _route
         targets = []
@@ -1465,12 +1473,27 @@ def build_snapshot(seed: int = 7) -> dict:
             bb = b[-500:]
             _chart_series[s] = [{"t": x.ts.isoformat()[:10], "o": round(x.open, 4), "h": round(x.high, 4),
                                  "l": round(x.low, 4), "c": round(x.close, 4), "v": round(x.volume, 0)} for x in bb]
-    # PERF PAR COMPTE (backtest du sleeve) : Alpaca = poche actions, Bitmart = poche crypto
-    _alp_perf = {"available": False}
-    if _pe.get("available"):
-        _alp_perf = {**_curve_stats(_pe["equity"]),
-                     "curve": [{"t": d, "v": v} for d, v in zip(_pe["dates"], _pe["equity"])]}
-    _bit_perf = {"available": False}
+    # PERF PAR COMPTE — PRIORITÉ AUX DONNÉES RÉELLES (historique Alpaca / suivi equity quotidien).
+    # Repli "modèle" (backtest du sleeve) UNIQUEMENT si le compte n'est pas connecté.
+    from packages.execution.equity_history import series as _eq_series
+
+    def _broker_perf(bd: dict, broker_key: str, model_curve: list | None) -> dict:
+        if bd.get("ok"):                                   # compte connecté → on veut du RÉEL
+            rc = bd.get("history") or []                   # Alpaca portfolio history (réel)
+            if len(rc) < 5:
+                rc = _eq_series(broker_key)                # sinon suivi quotidien persistant
+            if len(rc) >= 20:
+                return {**_curve_stats([p["v"] for p in rc]), "curve": rc, "source": "réel"}
+            return {"available": False, "source": "réel-court",
+                    "note": "Compte récent : historique réel en cours de constitution "
+                            "(quelques jours de suivi nécessaires)."}
+        if model_curve:                                    # non connecté → modèle (backtest sleeve)
+            return {**_curve_stats([p["v"] for p in model_curve]), "curve": model_curve, "source": "modèle"}
+        return {"available": False}
+
+    _eq_model = ([{"t": d, "v": v} for d, v in zip(_pe["dates"], _pe["equity"])]
+                 if _pe.get("available") else None)
+    _cr_model = None
     try:
         _crypto_data = {s: b for s, b in data.items()
                         if acmap.get(s) == "crypto" or s.upper().endswith(("USDT", "USDC")) or "/USD" in s.upper()}
@@ -1478,12 +1501,11 @@ def build_snapshot(seed: int = 7) -> dict:
             _pe_cr = preset_equity_daily(_crypto_data, {}, asset_classes=acmap, dd_target=_dd,
                                          top_k=12, min_names=3, max_weight=0.20, init_cap=init_cap)
             if _pe_cr.get("available"):
-                _bit_perf = {**_curve_stats(_pe_cr["equity"]),
-                             "curve": [{"t": d, "v": v} for d, v in zip(_pe_cr["dates"], _pe_cr["equity"])]}
+                _cr_model = [{"t": d, "v": v} for d, v in zip(_pe_cr["dates"], _pe_cr["equity"])]
     except Exception:  # noqa: BLE001
         pass
-    _live["alpaca_perf"] = _alp_perf
-    _live["bitmart_perf"] = _bit_perf
+    _live["alpaca_perf"] = _broker_perf(_live["real"]["alpaca"], "alpaca", _eq_model)
+    _live["bitmart_perf"] = _broker_perf(_live["real"]["bitmart"], "bitmart", _cr_model)
     # BLACK-LITTERMAN : prior équipondéré + vues = conviction z-scorée → poids postérieurs
     try:
         import numpy as _np2

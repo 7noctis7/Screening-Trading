@@ -71,6 +71,19 @@ class AlpacaBroker:
     def equity(self) -> float:
         return float(self._client.get_account().equity)
 
+    def portfolio_history(self, period: str = "1A", timeframe: str = "1D") -> list[dict]:
+        """Historique RÉEL d'equity du compte (Alpaca le stocke). Renvoie [{t, v}] (vide si indispo)."""
+        from datetime import datetime, timezone
+        try:
+            from alpaca.trading.requests import GetPortfolioHistoryRequest
+            ph = self._client.get_portfolio_history(
+                GetPortfolioHistoryRequest(period=period, timeframe=timeframe))
+            ts, eq = list(ph.timestamp or []), list(ph.equity or [])
+            return [{"t": datetime.fromtimestamp(t, tz=timezone.utc).date().isoformat(),
+                     "v": round(float(v), 2)} for t, v in zip(ts, eq) if v]
+        except Exception:  # noqa: BLE001
+            return []
+
     def cancel(self, client_id: str) -> bool:
         try:
             o = self._client.get_order_by_client_id(client_id)
