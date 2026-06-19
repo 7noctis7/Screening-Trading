@@ -1557,7 +1557,7 @@ def build_snapshot(seed: int = 7) -> dict:
     # blocs de courbes (preset pur + cœurs) → permet au script make index-core de balayer N'IMPORTE
     # quel ratio instantanément, sur la VRAIE mesure de production (source de vérité unique).
     _ic_curves = {"preset": _preset_pure, "qqq": list(_qqq_closes), "megacap": list(_mc_curve),
-                  "sector_mom": list(_sm_curve), "dates": _preset_pure_dates}
+                  "sector_mom": list(_sm_curve), "dates": _preset_pure_dates, "sp": list(sp)}
     if _pe.get("available"):
         _dash_metrics = PL.metrics_payload(_pe["equity"])
         _dash_equity = [{"t": d, "v": v} for d, v in zip(_pe["dates"], _pe["equity"])]
