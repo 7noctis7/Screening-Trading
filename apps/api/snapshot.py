@@ -1434,59 +1434,75 @@ def build_snapshot(seed: int = 7) -> dict:
     # Courbe d'equity QUOTIDIENNE du preset → c'est ELLE qui pilote le dashboard (le swing est legacy)
     from packages.backtest.preset_backtest import preset_equity_daily
     _pe = preset_equity_daily(_tradeable_data, _quality, asset_classes=acmap, dd_target=_dd, init_cap=init_cap)
-    # --- CŒUR INDICIEL + SATELLITE PRESET ---------------------------------------------------
-    # On balaie la part « cœur » vs « satellite » (preset) et on RETIENT la meilleure par Sharpe
-    # — mais SEULEMENT si elle bat le preset pur. QUANT_INDEX_CORE force une part fixe ∈ [0,1].
-    # Deux types de cœur (QUANT_INDEX_CORE_TYPE) : "etf" = ETF indiciel passif (défaut QQQ/Nasdaq),
-    # "megacap" = rotation des N plus grosses (top-10 par dollar-volume, re-classé) → plus offensif.
-    _core_type = _os.environ.get("QUANT_INDEX_CORE_TYPE", "etf").lower()
-    _core_top: list[str] = []                            # noms du panier méga-caps (si megacap)
-    if _core_type == "megacap":
-        from packages.backtest.megacap import megacap_equity_daily
-        _mc = megacap_equity_daily(_tradeable_data, asset_classes=acmap, init_cap=init_cap)
-        if _mc.get("available"):
-            _core_closes, _core_real, _core_top = _mc["equity"], True, _mc.get("current_top", [])
-            _core_sym = "TOP10"
-        else:                                            # repli ETF si rotation indisponible
-            _core_type = "etf"
-    if _core_type != "megacap":
-        _core_sym = _os.environ.get("QUANT_INDEX_CORE_SYMBOL", "QQQ").upper()
-        _core_closes, _core_real = _index_closes([_core_sym, "^NDX", "^IXIC"], start, end, ndx)
-    _index_core_info = {"enabled": False, "core_pct": 0.0, "symbol": _core_sym,
-                        "core_type": _core_type, "objective": "sharpe",
-                        "core_is_real": bool(_core_real)}
-    if _pe.get("available") and _core_closes and len(_core_closes) > 60:
-        from packages.backtest.index_core import blend_equity, optimize_index_core
-        _ic = optimize_index_core(_pe["equity"], _core_closes,
-                                  grid=(0.0, 0.25, 0.5, 0.75, 1.0), objective="sharpe",
-                                  min_improve=0.05)   # marge réelle (anti-bruit / anti-overfit)
-        _env_core = _os.environ.get("QUANT_INDEX_CORE")
-        if _env_core is not None:                       # part forcée manuellement (override)
+    # --- CŒUR(S) INDICIEL(S) + SATELLITE PRESET (multi-cœur) --------------------------------
+    # Mélange un/des cœur(s) passif(s) au preset. DÉFAUT : 15% QQQ + 10% top-10 méga-caps + 75%
+    # preset. Le top-10 est CLASSÉ & PONDÉRÉ par MARKET CAP réelle (data/market_caps.json via
+    # `make ingest-mktcap`) — sinon repli proxy dollar-volume + équipondéré. Re-classé tous les
+    # trimestres → entrées/sorties du top-10 prises en compte. Spec configurable :
+    #   QUANT_CORE_SPEC="qqq:0.15,megacap:0.10"   (le reste = preset)
+    from packages.backtest.index_core import blend_equity_multi
+    _spec_raw = _os.environ.get("QUANT_CORE_SPEC", "qqq:0.15,megacap:0.10")
+    _spec: dict[str, float] = {}
+    for _part in _spec_raw.split(","):
+        if ":" in _part:
+            _k, _, _v = _part.partition(":")
             try:
-                _core_pct = max(0.0, min(1.0, float(_env_core)))
+                _spec[_k.strip().lower()] = max(0.0, float(_v))
             except ValueError:
-                _core_pct = 0.0
-        else:                                           # auto : best ratio, seulement s'il améliore
-            _core_pct = _ic["best_core"]
-        _index_core_info.update({"table": _ic["table"], "base_stats": _ic["base_stats"],
-                                 "best_stats": _ic["best_stats"], "auto_best": _ic["best_core"],
-                                 "improved": _ic["improved"], "manual": _env_core is not None})
-        if _core_pct > 0.0:                             # ADOPTÉ → mélange equity + alloc + ordres
-            _blended, _m = blend_equity(_pe["equity"], _core_closes, _core_pct, init_cap=init_cap)
-            if _blended:
-                _pe["equity"] = _blended
-                _pe["dates"] = _pe["dates"][-_m:]
-            _preset_weights = {s: w * (1.0 - _core_pct) for s, w in _preset_weights.items()}
-            if _core_type == "megacap" and _core_top:    # cœur = panier top-N équipondéré
-                _per = _core_pct / len(_core_top)
-                for _s in _core_top:
-                    _preset_weights[_s] = _preset_weights.get(_s, 0.0) + _per
-            else:                                        # cœur = 1 ligne ETF (QQQ/SPY)
-                _preset_weights[_core_sym] = _preset_weights.get(_core_sym, 0.0) + _core_pct
-            _index_core_info.update({"enabled": True, "core_pct": round(_core_pct, 2),
-                                     "core_holdings": _core_top if _core_type == "megacap" else [_core_sym],
+                pass
+    _qqq_pct, _mc_pct = _spec.get("qqq", 0.0), _spec.get("megacap", 0.0)
+    # market caps (sidecar) → pondération « comme un vrai indice »
+    _mktcaps = {}
+    try:
+        from packages.data.market_cap import load_market_caps
+        _mktcaps = load_market_caps()
+    except Exception:  # noqa: BLE001
+        pass
+    # cœur ETF (QQQ) et cœur top-10 méga-caps
+    _qqq_closes, _qqq_real = (_index_closes(["QQQ", "^NDX", "^IXIC"], start, end, ndx)
+                              if _qqq_pct > 0 else ([], False))
+    _mc_curve, _mc_top, _mc_w, _mc_real, _mc_weighting = [], [], {}, False, "—"
+    if _mc_pct > 0:
+        from packages.backtest.megacap import megacap_equity_daily
+        _mc = megacap_equity_daily(_tradeable_data, asset_classes=acmap, init_cap=init_cap,
+                                   market_caps=_mktcaps or None)
+        if _mc.get("available"):
+            _mc_curve, _mc_top = _mc["equity"], _mc.get("current_top", [])
+            _mc_w, _mc_real, _mc_weighting = _mc.get("current_weights", {}), True, _mc.get("weighting", "—")
+    _index_core_info = {"enabled": False, "core_pct": 0.0, "symbol": "QQQ+TOP10",
+                        "core_type": "multi", "spec": {"qqq": _qqq_pct, "megacap": _mc_pct},
+                        "core_holdings": _mc_top, "core_weights": _mc_w,
+                        "mc_weighting": _mc_weighting, "mktcap_real": bool(_mktcaps),
+                        "qqq_is_real": bool(_qqq_real), "mc_is_real": bool(_mc_real)}
+    _preset_pure = list(_pe.get("equity", []))           # courbe preset PURE (avant mélange) → sweep
+    _cores = []
+    if _qqq_pct > 0 and _qqq_closes and len(_qqq_closes) > 60:
+        _cores.append((_qqq_closes, _qqq_pct, "qqq"))
+    if _mc_pct > 0 and _mc_curve and len(_mc_curve) > 60:
+        _cores.append((_mc_curve, _mc_pct, "megacap"))
+    _total_core = sum(w for _, w, _ in _cores)
+    if _pe.get("available") and _cores and 0 < _total_core <= 1.0:
+        _blended, _m = blend_equity_multi(_pe["equity"], [(c, w) for c, w, _ in _cores], init_cap=init_cap)
+        if _blended:
+            _base_stats = _curve_stats(_pe["equity"][-_m:])
+            _pe["equity"], _pe["dates"] = _blended, _pe["dates"][-_m:]
+            _preset_weights = {s: w * (1.0 - _total_core) for s, w in _preset_weights.items()}
+            if _qqq_pct > 0:
+                _preset_weights["QQQ"] = _preset_weights.get("QQQ", 0.0) + _qqq_pct
+            if _mc_pct > 0 and _mc_top:                   # top-10 réparti PAR market cap (sinon égal)
+                _w = _mc_w or {s: 1.0 / len(_mc_top) for s in _mc_top}
+                _sw = sum(_w.get(s, 0.0) for s in _mc_top) or 1.0
+                for _s in _mc_top:
+                    _preset_weights[_s] = _preset_weights.get(_s, 0.0) + _mc_pct * _w.get(_s, 0.0) / _sw
+            _index_core_info.update({"enabled": True, "core_pct": round(_total_core, 2),
+                                     "components": [{"kind": k, "pct": w} for _, w, k in _cores],
+                                     "base_stats": _base_stats,
                                      "blended_stats": _curve_stats(_pe["equity"])})
-    _core_px = float(_core_closes[-1]) if _core_closes else 0.0
+    _core_px = float(_qqq_closes[-1]) if _qqq_closes else 0.0
+    _core_sym = "QQQ"
+    # blocs de courbes (preset pur + cœurs) → permet au script make index-core de balayer N'IMPORTE
+    # quel ratio instantanément, sur la VRAIE mesure de production (source de vérité unique).
+    _ic_curves = {"preset": _preset_pure, "qqq": list(_qqq_closes), "megacap": list(_mc_curve)}
     if _pe.get("available"):
         _dash_metrics = PL.metrics_payload(_pe["equity"])
         _dash_equity = [{"t": d, "v": v} for d, v in zip(_pe["dates"], _pe["equity"])]
@@ -1527,13 +1543,13 @@ def build_snapshot(seed: int = 7) -> dict:
             bb = b[-500:]
             _chart_series[s] = [{"t": x.ts.isoformat()[:10], "o": round(x.open, 4), "h": round(x.high, 4),
                                  "l": round(x.low, 4), "c": round(x.close, 4), "v": round(x.volume, 0)} for x in bb]
-    # le cœur indiciel (QQQ) n'est pas dans l'univers → courbe cliquable depuis ses closes réels
-    if _index_core_info.get("enabled") and len(_core_closes) > 1:
-        _cc = [round(float(c), 4) for c in _core_closes[-500:]]
+    # le cœur QQQ n'est pas dans l'univers → courbe cliquable depuis ses closes réels
+    if _index_core_info.get("enabled") and _qqq_pct > 0 and len(_qqq_closes) > 1:
+        _cc = [round(float(c), 4) for c in _qqq_closes[-500:]]
         _cd = _dash_dates[-len(_cc):] if len(_dash_dates) >= len(_cc) else []
         if _cd:
-            _chart_series[_core_sym] = [{"t": d[:10], "o": c, "h": c, "l": c, "c": c, "v": 0}
-                                        for d, c in zip(_cd, _cc)]
+            _chart_series["QQQ"] = [{"t": d[:10], "o": c, "h": c, "l": c, "c": c, "v": 0}
+                                    for d, c in zip(_cd, _cc)]
     # PERF PAR COMPTE — PRIORITÉ AUX DONNÉES RÉELLES (historique Alpaca / suivi equity quotidien).
     # Repli "modèle" (backtest du sleeve) UNIQUEMENT si le compte n'est pas connecté.
     from packages.execution.equity_history import series as _eq_series
@@ -1611,10 +1627,11 @@ def build_snapshot(seed: int = 7) -> dict:
             "regime": PL.regime_payload(regime, expo),
             "metrics": _dash_metrics,                 # PRESET (production), pas le swing legacy
             "equity": _dash_equity,
-            "index_core": _index_core_info,            # cœur indiciel + satellite (part adoptée + sweep)
+            "index_core": _index_core_info,            # cœur(s) indiciel(s) + satellite preset
             "strategy_label": (
-                f"{int(round(_index_core_info['core_pct']*100))}% {_core_sym} + "
-                f"{int(round((1-_index_core_info['core_pct'])*100))}% preset"
+                " + ".join([f"{int(round(_qqq_pct*100))}% QQQ"] * (_qqq_pct > 0)
+                           + [f"{int(round(_mc_pct*100))}% TOP10"] * (_mc_pct > 0)
+                           + [f"{int(round((1-_index_core_info['core_pct'])*100))}% preset"])
                 if _index_core_info.get("enabled")
                 else ("preset (risk-parity + DD-target)" if _pe.get("available") else "swing")),
             "benchmarks": _bench_series({"S&P 500": sp, "Nasdaq 100": ndx}, _dash_dates, init_cap),
@@ -1655,6 +1672,7 @@ def build_snapshot(seed: int = 7) -> dict:
         "open_trades": comp["rows"],
         "trade_stats": trade_stats,
         "preset_trades": _preset_trades,           # journal des rebalancements du preset (production)
+        "index_core_curves": _ic_curves,           # courbes preset/QQQ/megacap → sweeps instantanés
         "universe": _universe_section(full_universe),
         "data": {**_data_section(data, acmap, len(full_universe)),
                  **({"survivorship": data_sec_extra} if data_sec_extra else {})},

@@ -59,6 +59,29 @@ def blend_equity(preset_eq: list[float], index_closes: list[float], core_pct: fl
     return [round(v, 2) for v in eq], len(eq)
 
 
+def blend_equity_multi(preset_eq: list[float], cores: list[tuple[list[float], float]],
+                       init_cap: float | None = None) -> tuple[list[float] | None, int]:
+    """Mélange MULTI-CŒUR : equity = Σ wᵢ·cœurᵢ + (1-Σwᵢ)·preset, rééq. quotidien. `cores` est
+    une liste de (série, poids). Aligne toutes les séries sur leur queue commune → (equity, n)."""
+    series = [np.asarray(preset_eq, dtype=float)] + [np.asarray(c, dtype=float) for c, _ in cores]
+    n = min(s.size for s in series)
+    if n < 31:
+        return None, 0
+    series = [s[-n:] for s in series]
+    rets = [s[1:] / s[:-1] - 1 for s in series]
+    cw = [max(0.0, float(w)) for _, w in cores]
+    pw = max(0.0, 1.0 - sum(cw))                       # part preset = reste
+    weights = [pw] + cw
+    br = np.zeros(n - 1)
+    for w, r in zip(weights, rets):
+        br = br + w * r
+    cap = float(init_cap) if init_cap is not None else float(series[0][0])
+    eq = [cap]
+    for rr in br:
+        eq.append(eq[-1] * (1.0 + float(rr)))
+    return [round(v, 2) for v in eq], len(eq)
+
+
 def optimize_index_core(preset_eq: list[float], index_closes: list[float],
                         grid: tuple[float, ...] = (0.0, 0.25, 0.5, 0.75, 1.0),
                         objective: str = "sharpe", min_improve: float = 0.01) -> dict:

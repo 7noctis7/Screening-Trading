@@ -42,11 +42,14 @@ def megacap_rotation(data: dict, asset_classes: dict | None = None, top_n: int =
 
 def megacap_equity_daily(data: dict, asset_classes: dict | None = None, top_n: int = 10,
                          step: int = 63, lookback: int = 63, init_cap: float = 10000.0,
-                         include_etf: bool = False) -> dict:
-    """Courbe d'equity QUOTIDIENNE de la rotation top-N méga-caps (équipondéré, re-classé tous
-    les `step` jours par dollar-volume) → utilisable comme « cœur » mélangé au preset. Par défaut
-    SOCIÉTÉS uniquement (les ETF type SPY/QQQ sont exclus). Renvoie {available, equity, dates,
-    current_top}. Anti-fuite : on détient le panier classé EN t pour le rendement t→t+1."""
+                         include_etf: bool = False, market_caps: dict | None = None) -> dict:
+    """Courbe d'equity QUOTIDIENNE de la rotation top-N méga-caps → cœur mélangé au preset.
+
+    Classement & PONDÉRATION par MARKET CAP réelle si `market_caps` est fourni (comme un vrai
+    indice cap-weighted), sinon repli proxy dollar-volume + équipondéré. Re-classé tous les `step`
+    jours → une société qui sort/entre du top-N est prise en compte (rotation). SOCIÉTÉS
+    uniquement par défaut (ETF exclus). Anti-fuite : panier classé EN t pour le rendement t→t+1.
+    Renvoie {available, equity, dates, current_top, current_weights, weighting}."""
     ac = asset_classes or {}
     _ok = ("equity", "etf") if include_etf else ("equity", "")
     syms = [s for s, b in data.items()
@@ -55,22 +58,44 @@ def megacap_equity_daily(data: dict, asset_classes: dict | None = None, top_n: i
         return {"available": False}
     L = min(len(data[s]) for s in syms)
     closes = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in syms}
-    dvol = {s: closes[s] * np.asarray([getattr(b, "volume", 0.0) for b in data[s]][-L:], float)
-            for s in syms}
     ref = max(syms, key=lambda s: len(data[s]))
     dts = [b.ts.isoformat() for b in data[ref]][-L:]
+    # métrique de TAILLE : market cap réelle (cap-weighted) si dispo pour ≥ top_n titres, sinon proxy
+    use_cap = False
+    size: dict[str, np.ndarray] = {}
+    if market_caps:
+        from packages.data.market_cap import shares_asof
+        capped = [s for s in syms if s in market_caps]
+        if len(capped) >= top_n:
+            for s in capped:
+                sh = shares_asof(market_caps[s], dts)
+                size[s] = np.nan_to_num(sh * closes[s], nan=0.0)
+            syms, use_cap = capped, True
+    if not use_cap:                                       # repli : dollar-volume (proxy de taille)
+        size = {s: closes[s] * np.asarray([getattr(b, "volume", 0.0) for b in data[s]][-L:], float)
+                for s in syms}
     start = max(lookback, 50)
     cur: list[str] = []
+    curw: dict[str, float] = {}
     eq = [init_cap]
     out_dates = [dts[start]]
     for t in range(start, L - 1):
-        if (t - start) % step == 0:                       # re-classement (rotation)
-            score = {s: float(np.mean(dvol[s][max(0, t - lookback):t])) for s in syms}
+        if (t - start) % step == 0:                       # re-classement (rotation entrée/sortie)
+            if use_cap:
+                score = {s: float(size[s][t]) for s in syms}            # cap ponctuelle
+            else:
+                score = {s: float(np.mean(size[s][max(0, t - lookback):t])) for s in syms}
             cur = sorted(score, key=lambda s: score[s], reverse=True)[:top_n]
-        r_d = float(np.mean([closes[s][t + 1] / closes[s][t] - 1 for s in cur])) if cur else 0.0
+            if use_cap:                                   # pondération PAR CAP (renormalisée au top-N)
+                tot = sum(max(0.0, score[s]) for s in cur) or 1.0
+                curw = {s: max(0.0, score[s]) / tot for s in cur}
+            else:                                         # repli : équipondéré
+                curw = {s: 1.0 / len(cur) for s in cur} if cur else {}
+        r_d = float(sum(curw.get(s, 0.0) * (closes[s][t + 1] / closes[s][t] - 1) for s in cur)) if cur else 0.0
         eq.append(eq[-1] * (1 + r_d))
         out_dates.append(dts[t + 1])
     if len(eq) < 30:
         return {"available": False}
     return {"available": True, "equity": [round(x, 2) for x in eq], "dates": out_dates,
-            "current_top": cur}
+            "current_top": cur, "current_weights": {s: round(w, 4) for s, w in curw.items()},
+            "weighting": "market_cap" if use_cap else "dollar_volume"}

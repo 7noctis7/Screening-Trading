@@ -121,38 +121,38 @@ export default function Dashboard() {
         <p className="text-muted2 text-xs mt-2">Indices RÉELS (^GSPC / ^NDX) rebasés à 10 000 $ au début de la période. KPI recalculés sur la fenêtre sélectionnée.</p>
       </section>
 
-      {/* Cœur indiciel + satellite preset : meilleur ratio (sweep) + part adoptée */}
-      {d.index_core?.table?.some((r: any) => r.stats?.available) && (
+      {/* Cœur(s) indiciel(s) + satellite preset : blend de production (preset pur vs mélange) */}
+      {d.index_core?.enabled && (
         <section className="card p-4 overflow-x-auto">
-          <h2 className="text-sm uppercase tracking-wide text-muted mb-1">Cœur indiciel ({d.index_core.symbol}) + satellite preset</h2>
+          <h2 className="text-sm uppercase tracking-wide text-muted mb-1">Cœur indiciel + satellite preset</h2>
           <p className="text-muted2 text-xs mb-3">
-            {d.index_core.enabled
-              ? <>Adopté : <b style={{ color: "#22d3ee" }}>{Math.round(d.index_core.core_pct * 100)}% {d.index_core.symbol} + {Math.round((1 - d.index_core.core_pct) * 100)}% preset</b>{d.index_core.manual ? " (forcé via QUANT_INDEX_CORE)" : " (auto : meilleur Sharpe qui bat le preset pur)"}.</>
-              : <>Aucun mélange ne bat le preset pur sur le Sharpe → <b>100% preset</b> conservé. Force un ratio avec <code>QUANT_INDEX_CORE=0.5</code> si tu veux le tester.</>}
+            Allocation active : <b style={{ color: "#22d3ee" }}>
+            {(d.index_core.components ?? []).map((c: any) => `${Math.round(c.pct * 100)}% ${c.kind.toUpperCase()}`).join(" + ")}
+            {" + "}{Math.round((1 - d.index_core.core_pct) * 100)}% preset</b>. Top-10 {d.index_core.mc_weighting === "market_cap"
+              ? "pondéré par market cap réelle" : "pondéré par proxy dollar-volume (lance make ingest-mktcap)"}, re-classé chaque trimestre.
           </p>
           <table className="w-full text-sm">
             <thead className="text-muted text-xs"><tr>
-              <th className="text-left font-normal">Cœur {d.index_core.symbol}</th><th className="text-left font-normal">Preset</th>
+              <th className="text-left font-normal">Stratégie</th>
               <th className="text-right font-normal">CAGR</th><th className="text-right font-normal">Sharpe</th>
-              <th className="text-right font-normal">Sortino</th><th className="text-right font-normal">Max DD</th>
-              <th className="text-right font-normal">Calmar</th></tr></thead>
+              <th className="text-right font-normal">Sortino</th><th className="text-right font-normal">Max DD</th></tr></thead>
             <tbody className="mono">
-              {d.index_core.table.filter((r: any) => r.stats?.available).map((r: any) => {
-                const sel = Math.abs(r.core - (d.index_core.enabled ? d.index_core.core_pct : 0)) < 1e-6;
-                return (
-                  <tr key={r.core} className="border-t border-border" style={sel ? { background: "rgba(34,211,238,0.08)" } : undefined}>
-                    <td className="py-1.5">{Math.round(r.core * 100)}%{sel && <span className="ml-1" style={{ color: "#22d3ee" }}>◀</span>}</td>
-                    <td>{Math.round((1 - r.core) * 100)}%</td>
-                    <td className="text-right">{(r.stats.cagr * 100).toFixed(1)}%</td>
-                    <td className="text-right">{r.stats.sharpe?.toFixed(2)}</td>
-                    <td className="text-right">{r.stats.sortino?.toFixed(2)}</td>
-                    <td className="text-right" style={{ color: "#f43f5e" }}>{(r.stats.max_drawdown * 100).toFixed(1)}%</td>
-                    <td className="text-right">{r.stats.calmar?.toFixed(2)}</td>
-                  </tr>);
-              })}
+              {([["Preset pur", d.index_core.base_stats, "#9aa1ab"],
+                 ["Mélange (production)", d.index_core.blended_stats, "#22d3ee"]] as any[])
+                .filter((r) => r[1]?.available).map(([name, st, col]: any) => (
+                  <tr key={name} className="border-t border-border">
+                    <td className="py-1.5 font-sans" style={{ color: col }}>{name}</td>
+                    <td className="text-right">{(st.cagr * 100).toFixed(1)}%</td>
+                    <td className="text-right">{st.sharpe?.toFixed(2)}</td>
+                    <td className="text-right">{st.sortino?.toFixed(2)}</td>
+                    <td className="text-right" style={{ color: "#f43f5e" }}>{(st.max_drawdown * 100).toFixed(1)}%</td>
+                  </tr>))}
             </tbody>
           </table>
-          <p className="text-muted2 text-xs mt-2">Mélange rééquilibré quotidiennement (cœur {d.index_core.core_is_real ? "réel" : "repli"}). On n'adopte le cœur que s'il améliore le Sharpe vs preset pur.</p>
+          {d.index_core.core_holdings?.length > 0 && (
+            <p className="text-muted2 text-xs mt-2">Panier top-10 : {d.index_core.core_holdings.join(", ")}.</p>
+          )}
+          <p className="text-muted2 text-xs mt-1">Détail des ratios : <code>make index-core</code>. Changer le blend : <code>QUANT_CORE_SPEC="qqq:0.15,megacap:0.10"</code>.</p>
         </section>
       )}
       <section className="card p-4 overflow-x-auto">
