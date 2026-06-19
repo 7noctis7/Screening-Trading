@@ -208,8 +208,9 @@ def _setup_label(mom: float, trend: float) -> str:
 
 def _themes_section(data: dict, sector_of: dict, end) -> dict:
     """Thèmes de marché calculés depuis les MÊMES données que le trading → cohérence
-    positions ↔ secteurs. YTD = performance sur les 365 derniers jours ; meilleurs
-    setups par secteur (momentum + tendance vs MM50). Seuls les secteurs « investissables »
+    positions ↔ secteurs. YTD = perf CALENDAIRE réelle (depuis le 1ᵉʳ janvier) ; garde-fou
+    anti-glitch (saut > 150 %/j écarté). Meilleurs setups par secteur (momentum + tendance vs MM50).
+    Seuls les secteurs « investissables »
     (4ᵉ révolution + GICS, hors forex/indices/etf) alimentent la heatmap d'actifs."""
     import numpy as np
 
@@ -225,11 +226,20 @@ def _themes_section(data: dict, sector_of: dict, end) -> dict:
         if len(items) < 3:
             continue
         assets = []
+        _cur_year = end.year
         for s, bars in items:
             c = np.array([b.close for b in bars], float)
-            if c.size < 380:
+            if c.size < 64:
                 continue
-            ytd = float(c[-1] / c[-252] - 1.0)                   # 12 derniers mois
+            # GARDE-FOU DATA : saut quotidien aberrant (>150 % en 1 jour = split non ajusté /
+            # glitch / discontinuité de fusion) → on écarte le titre (évite les SPCX +627 % faux).
+            rr = c[1:] / c[:-1] - 1.0
+            if rr.size and (np.nanmax(np.abs(rr)) > 1.5 or not np.all(np.isfinite(c)) or c.min() <= 0):
+                continue
+            # YTD CALENDAIRE RÉEL : base = dernier cours de l'année précédente (sinon 1ʳᵉ barre dispo)
+            _bidx = next((i for i, b in enumerate(bars) if b.ts.year == _cur_year), None)
+            base = bars[_bidx - 1].close if (_bidx and _bidx > 0) else float(c[0])
+            ytd = float(c[-1] / base - 1.0) if base > 0 else 0.0
             mom = float(c[-1] / c[-63] - 1.0)                    # ~3 mois
             sma50 = float(c[-50:].mean())
             trend = float((c[-1] - sma50) / sma50)
@@ -1106,14 +1116,15 @@ def _load_prices(instruments, sector_of, start, end, seed):
         else:
             provs = [p for p in (prov_db, prov_updates) if p]   # historique + maj fraîche (fusion)
         merged: dict = {}
-        for prov in provs:
+        for prov in provs:                               # ordre : YAHOO.db (historique) puis market.db
             got = []
             for alias in _yahoo_aliases(s, ac_m):
                 got = prov.fetch_ohlcv(alias, "1d", start, end)
                 if len(got) >= 50:
                     break
-            for _b in got:                               # fusion par date (la maj écrase l'historique)
-                merged[_b.ts.isoformat()[:10]] = _b
+            for _b in got:                               # EXTENSION sans écrasement : YAHOO.db garde
+                merged.setdefault(_b.ts.isoformat()[:10], _b)   # la priorité, market.db complète les dates
+        # manquantes → pas de discontinuité d'ajustement (raw vs adjusted) au milieu de l'historique.
         if len(merged) >= 250:
             data[s] = sorted(merged.values(), key=lambda x: x.ts)
             real_syms.add(s)

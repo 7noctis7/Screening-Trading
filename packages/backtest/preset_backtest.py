@@ -179,10 +179,12 @@ def preset_equity_daily(data: dict, quality: dict | None = None, asset_classes: 
     quality = quality or {}
     q = {s: quality.get(s) for s in syms if quality.get(s) is not None}
     universe = (sorted(q, key=lambda s: q[s], reverse=True)[:top_k] if len(q) >= 5 else syms[:top_k])
-    # COURBE LONGUE : on écarte les titres à historique court (IPO récentes) qui tronqueraient
-    # toute la courbe au plus court → la fenêtre commune remonte aussi loin que les valeurs établies.
-    lmax = max(len(data[s]) for s in universe)
-    universe = [s for s in universe if len(data[s]) >= 0.6 * lmax] or universe
+    # COURBE LA PLUS LONGUE POSSIBLE : on garde les `min_names` titres aux plus longs historiques →
+    # la fenêtre remonte aussi loin que le permettent au moins min_names valeurs (au lieu d'un
+    # seuil 60 % arbitraire qui coupait la courbe vers ~2021).
+    _lens = sorted((len(data[s]) for s in universe), reverse=True)
+    _need = _lens[min(min_names, len(_lens)) - 1] if _lens else 0
+    universe = [s for s in universe if len(data[s]) >= _need] or universe
     L = min(len(data[s]) for s in universe)
     M = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in universe}
     ref = max(universe, key=lambda s: len(data[s]))
@@ -273,10 +275,10 @@ def preset_trade_log(data: dict, quality: dict | None = None, asset_classes: dic
     quality = quality or {}
     q = {s: quality.get(s) for s in syms if quality.get(s) is not None}
     universe = (sorted(q, key=lambda s: q[s], reverse=True)[:top_k] if len(q) >= 5 else syms[:top_k])
-    # même filtre « courbe longue » que preset_equity_daily : écarte les historiques courts (IPO)
-    # → univers cohérent avec la courbe d'equity et fenêtre commune profonde.
-    _lmax = max(len(data[s]) for s in universe)
-    universe = [s for s in universe if len(data[s]) >= 0.6 * _lmax] or universe
+    # même logique « courbe la plus longue » que preset_equity_daily (min_names plus longs historiques)
+    _lens = sorted((len(data[s]) for s in universe), reverse=True)
+    _need = _lens[min(min_names, len(_lens)) - 1] if _lens else 0
+    universe = [s for s in universe if len(data[s]) >= _need] or universe
     L = min(len(data[s]) for s in universe)
     M = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in universe}
     # dates PAR SYMBOLE (chacun aligné sur SES propres barres) → un marqueur tombe toujours dans la
