@@ -22,7 +22,11 @@ export default function Risk() {
   const maxc = Math.max(0.01, ...(rb?.contrib_pct ?? [0]));
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-4">
-      <h1 className="text-xl font-semibold tracking-tight">Risque — vue institutionnelle</h1>
+      <h1 className="text-xl font-semibold tracking-tight">Risque — vue institutionnelle
+        {data.strategy_label && <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full align-middle"
+          style={{ background: "color-mix(in srgb, var(--accent) 16%, transparent)", color: "var(--accent2)" }}>
+          {data.strategy_label}</span>}</h1>
+      <p className="text-muted text-xs">Risque de l'<b>allocation de production</b> (preset + cœur), cohérent avec le Dashboard et Positions.</p>
       <StepBanner active="risk" />
 
       <section className="card p-4">
