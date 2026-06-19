@@ -49,7 +49,9 @@ def main() -> None:
     start = end - timedelta(days=a.days)
     db = ROOT / "data" / "crypto.db"
     db.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(db))
+    conn = sqlite3.connect(str(db), timeout=60)
+    conn.execute("PRAGMA journal_mode=WAL")          # lecteurs API + écriture sans 'database is locked'
+    conn.execute("PRAGMA busy_timeout=60000")
     conn.execute("CREATE TABLE IF NOT EXISTS prices (symbol TEXT, date TEXT, open REAL, high REAL, "
                  "low REAL, close REAL, volume REAL, PRIMARY KEY (symbol, date))")
     ok = 0
