@@ -754,16 +754,18 @@ def _sentiment_section(held: list, names: dict, sector_of: dict, data: dict) -> 
     except Exception:  # noqa: BLE001
         mood_change = 0.0
     # Fils d'actualité (RSS gratuit) — marché + MACRO (FED/BCE/FMI/économie). Toujours tentés.
+    # ACTUALITÉS : uniquement l'ANNÉE EN COURS, dédupliquées, triées du + récent au + ancien.
+    # Qualité > quantité : on garde une sélection courte et fraîche (avec la date affichée).
     market_news, macro_news = [], []
     try:
         from packages.sentiment.rss import MACRO_FEEDS, fetch_headlines
-        for h in fetch_headlines(limit=12, timeout=3.0):
+        for h in fetch_headlines(limit=8, timeout=3.0, current_year_only=True):
             sc = S.analyze([h["title"]])[0]
-            market_news.append({"title": h["title"], "link": h.get("link", ""),
+            market_news.append({"title": h["title"], "link": h.get("link", ""), "date": h.get("date", ""),
                                 "label": sc["label"], "score": sc["score"]})
-        for h in fetch_headlines(MACRO_FEEDS, limit=12, timeout=3.0):
+        for h in fetch_headlines(MACRO_FEEDS, limit=6, timeout=3.0, current_year_only=True):
             sc = S.analyze([h["title"]])[0]
-            macro_news.append({"title": h["title"], "link": h.get("link", ""),
+            macro_news.append({"title": h["title"], "link": h.get("link", ""), "date": h.get("date", ""),
                                "label": sc["label"], "score": sc["score"]})
     except Exception:  # noqa: BLE001
         pass

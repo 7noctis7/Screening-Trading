@@ -48,12 +48,13 @@ export default function Sentiment() {
 
       {(s.macro_news ?? []).length > 0 && (
         <section className="card p-4">
-          <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Macro & banques centrales (FED · BCE · FMI · économie)</h2>
+          <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Macro & banques centrales (FED · BCE · FMI · économie) <span className="text-[11px] normal-case">· année en cours, plus récent d'abord</span></h2>
           <ul className="space-y-1.5 text-sm">
             {s.macro_news.map((h: any, i: number) => (
               <li key={i} className="flex gap-2">
                 <span style={{ color: h.score > 0 ? "#22c55e" : h.score < 0 ? "#f43f5e" : "#9aa1ad" }}>
                   {h.score > 0 ? "▲" : h.score < 0 ? "▼" : "–"}</span>
+                {h.date && <span className="text-muted2 text-[11px] mono shrink-0">{h.date.slice(5)}</span>}
                 {h.link ? <a href={h.link} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">{h.title}</a> : <span>{h.title}</span>}
               </li>))}
           </ul>
@@ -62,12 +63,13 @@ export default function Sentiment() {
 
       {(s.market_news ?? []).length > 0 && (
         <section className="card p-4">
-          <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Actualité marché</h2>
+          <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Actualité marché <span className="text-[11px] normal-case">· année en cours, plus récent d'abord</span></h2>
           <ul className="space-y-1.5 text-sm">
             {s.market_news.map((h: any, i: number) => (
               <li key={i} className="flex gap-2">
                 <span style={{ color: h.score > 0 ? "#22c55e" : h.score < 0 ? "#f43f5e" : "#9aa1ad" }}>
                   {h.score > 0 ? "▲" : h.score < 0 ? "▼" : "–"}</span>
+                {h.date && <span className="text-muted2 text-[11px] mono shrink-0">{h.date.slice(5)}</span>}
                 {h.link ? <a href={h.link} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">{h.title}</a> : <span>{h.title}</span>}
               </li>))}
           </ul>
