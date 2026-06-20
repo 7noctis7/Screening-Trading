@@ -562,9 +562,11 @@ def company_report_html(r: dict[str, Any], theme: str = "dark") -> str:
     snow = r.get("snowflake") or {}
     if snow.get("axes"):
         ax = snow["axes"]
+        _dy = r.get("dividend_yield")
+        _extra = {"DIVIDEND": (f" · rdt {_pct(_dy)}" if _dy else " · non-payeur")}
         legend = "".join(
             f'<div style="display:flex;justify-content:space-between;font-size:11px;margin:3px 0">'
-            f'<span style="color:{_C["muted"]};letter-spacing:.08em">{k}</span>'
+            f'<span style="color:{_C["muted"]};letter-spacing:.08em">{k}{_extra.get(k,"")}</span>'
             f'<span style="color:{_C["fg"]};font-variant-numeric:tabular-nums">{v}/100</span></div>'
             for k, v in ax.items())
         snow_card = _card("Portfolio Snowflake", (

@@ -44,7 +44,8 @@ def _cache_put(symbol: str, info: dict) -> None:
             "totalDebt", "totalCash", "freeCashflow", "sector",
             "revenueGrowth", "earningsGrowth",
             "financialCurrency", "currency",                   # devises (comptes vs cours) → conversion ADR
-            "longName", "shortName")})                          # raison sociale
+            "longName", "shortName",                            # raison sociale
+            "dividendYield", "trailingAnnualDividendYield", "payoutRatio")})   # dividende
         (_CACHE_DIR / f"{symbol.replace('/', '_')}.json").write_text(json.dumps(keep))
     except Exception:  # noqa: BLE001
         pass
@@ -96,6 +97,22 @@ def _growth_from_stmt(t) -> tuple[float | None, float | None]:
     return rev_g, eps_g
 
 
+def _div_yield(info: dict) -> float | None:
+    """Rendement du dividende en FRACTION (ex. 0.025). yfinance le donne parfois en % → normalise."""
+    for k in ("dividendYield", "trailingAnnualDividendYield"):
+        v = info.get(k)
+        if v in (None, ""):
+            continue
+        try:
+            y = float(v)
+        except (TypeError, ValueError):
+            continue
+        if y <= 0:
+            return 0.0
+        return y / 100.0 if y > 1.0 else y                 # >1 → exprimé en %, on normalise
+    return None
+
+
 class YFinanceFundamentalsProvider:
     name = "yfinance"
 
@@ -137,4 +154,5 @@ class YFinanceFundamentalsProvider:
             revenue_growth=_opt("revenueGrowth"), earnings_growth=_opt("earningsGrowth"),
             currency=(info.get("financialCurrency") or None),     # devise des comptes
             price_currency=(info.get("currency") or None),        # devise du cours (ADR → USD)
-            name=(info.get("longName") or info.get("shortName") or None))
+            name=(info.get("longName") or info.get("shortName") or None),
+            dividend_yield=_div_yield(info))
