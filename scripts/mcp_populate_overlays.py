@@ -10,7 +10,12 @@ from __future__ import annotations
 import argparse
 import json
 
-from packages.mcp_tradingview.risk_overlays import Z_VAR95, Z_VAR99, populate_from_api
+from packages.mcp_tradingview.risk_overlays import (
+    Z_VAR95,
+    Z_VAR99,
+    populate_from_api,
+    populate_from_snapshot,
+)
 
 
 def main() -> None:
@@ -19,9 +24,14 @@ def main() -> None:
     ap.add_argument("--var", choices=["95", "99"], default="95")
     ap.add_argument("--lookback", type=int, default=21)
     ap.add_argument("--evt-mult", type=float, default=1.15)
+    ap.add_argument("--offline", action="store_true",
+                    help="construit le snapshot directement (cron) au lieu d'appeler l'API")
     a = ap.parse_args()
-    res = populate_from_api(base_url=a.base, z=Z_VAR99 if a.var == "99" else Z_VAR95,
-                            lookback=a.lookback, evt_mult=a.evt_mult)
+    z = Z_VAR99 if a.var == "99" else Z_VAR95
+    if a.offline:
+        res = populate_from_snapshot(z=z, lookback=a.lookback, evt_mult=a.evt_mult)
+    else:
+        res = populate_from_api(base_url=a.base, z=z, lookback=a.lookback, evt_mult=a.evt_mult)
     print(json.dumps(res, ensure_ascii=False, indent=2))
 
 
