@@ -60,7 +60,7 @@ _BUILD_LOCK = threading.Lock()
 _SNAP_FILE = Path(__file__).resolve().parents[2] / ".cache" / "snapshot.pkl"
 # Bump à chaque changement de SCHÉMA du snapshot → invalide le cache disque (évite de servir un
 # ancien snapshot construit par une version antérieure du code).
-_SNAP_VERSION = "2026-06-19-prod-coherent-analysis"
+_SNAP_VERSION = "2026-06-20-broker-fees-slippage"
 
 
 def _load_disk() -> tuple[dict | None, float]:
