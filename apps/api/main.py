@@ -332,6 +332,8 @@ def events() -> dict:
             log.warning("upcoming_ipos failed: %s", e); ipos = []
         _EVENTS = {"available": bool(earn or ipos), "earnings": earn, "ipos": ipos,
                    "n_symbols": len(eq), "fmp": bool(os.environ.get("FMP_API_KEY")),
+                   "fmp_earnings": any(e.get("source") == "FMP" for e in earn),
+                   "fmp_ipos": any(p.get("source") == "FMP" for p in ipos),
                    "as_of": datetime.now(timezone.utc).isoformat()}
         _EVENTS_TS = time.time()
     return _EVENTS

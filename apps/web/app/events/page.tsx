@@ -41,6 +41,7 @@ function sortRows<T extends Record<string, any>>(rows: T[], k: string, dir: numb
 export default function Events() {
   const { data } = useEvents();
   const [eQ, setEQ] = useState("");
+  const [eScope, setEScope] = useState<"top" | "all">("top");   // défaut : top 5 % ; "all" = toute la base
   const [eTag, setETag] = useState("tout");
   const [eWhen, setEWhen] = useState("tout");
   const [eSort, setESort] = useState<{ k: string; dir: number }>({ k: "date", dir: 1 });
@@ -55,12 +56,15 @@ export default function Events() {
     const q = eQ.trim().toUpperCase();
     let r = earnings.map((e: any) => ({ ...e, _sp: surprise(e.eps_estimate, e.eps_actual),
       _when: (e.date ?? "") >= today ? "à venir" : "publié" }));
+    // par défaut on n'affiche QUE le top 5 % (lignes étiquetées) ; "Toute la base" lève ce filtre.
+    // une recherche explicite donne aussi accès à toute la base.
+    if (eScope === "top" && !q) r = r.filter((e: any) => (e.tags ?? []).length > 0);
     if (q) r = r.filter((e: any) => `${e.symbol} ${e.name}`.toUpperCase().includes(q));
     if (eTag === "base") r = r.filter((e: any) => !(e.tags ?? []).length);
     else if (eTag !== "tout") r = r.filter((e: any) => (e.tags ?? []).includes(eTag));
     if (eWhen !== "tout") r = r.filter((e: any) => e._when === eWhen);
     return sortRows(r, eSort.k, eSort.dir);
-  }, [earnings, eQ, eTag, eWhen, eSort, today]);
+  }, [earnings, eQ, eScope, eTag, eWhen, eSort, today]);
 
   const ipoRows = useMemo(() => {
     const q = iQ.trim().toUpperCase();
@@ -95,7 +99,8 @@ export default function Events() {
       {/* ===== RÉSULTATS TRIMESTRIELS ===== */}
       <section className="card p-4 overflow-x-auto">
         <h2 className="text-sm uppercase tracking-wide text-muted mb-1">📅 Prochains résultats trimestriels ({earnRows.length}/{earnings.length})</h2>
-        <p className="text-muted2 text-xs mb-2">BPA et revenu <b>estimés</b> (consensus) puis <b>annoncés (réels)</b> dès publication. « Surprise » = écart réel vs estimé.</p>
+        <p className="text-muted2 text-xs mb-2">BPA et revenu <b>estimés</b> (consensus) puis <b>annoncés (réels)</b> dès publication. « Surprise » = écart réel vs estimé (donc « — » pour les rapports à venir, c'est normal).
+        {!data.fmp_earnings && <> · <span className="text-muted2">Source yfinance : le <b>revenu réel</b> n'est renseigné que pour le dernier trimestre publié ; le calendrier FMP (plan payant) le fournit pour tous.</span></>}</p>
         {/* LÉGENDE des étiquettes « Suivi » */}
         <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3 text-xs">
           <span className="text-muted2 uppercase tracking-wide">Légende :</span>
@@ -107,6 +112,12 @@ export default function Events() {
         </div>
         {/* RECHERCHE + FILTRES */}
         <div className="flex flex-wrap items-center gap-2 mb-3">
+          <div className="flex rounded overflow-hidden border border-border text-sm">
+            <button onClick={() => setEScope("top")}
+              className={`px-2.5 py-1 ${eScope === "top" ? "bg-accent text-bg" : "bg-surfaceAlt text-muted hover:text-fg"}`}>⭐ Top 5 %</button>
+            <button onClick={() => setEScope("all")}
+              className={`px-2.5 py-1 ${eScope === "all" ? "bg-accent text-bg" : "bg-surfaceAlt text-muted hover:text-fg"}`}>Toute la base</button>
+          </div>
           <input value={eQ} onChange={(e) => setEQ(e.target.value)} placeholder="rechercher (ticker ou société)"
             className="text-sm px-2 py-1 rounded bg-surfaceAlt border border-border outline-none w-56" />
           <select value={eTag} onChange={(e) => setETag(e.target.value)}
@@ -120,7 +131,7 @@ export default function Events() {
             <option value="à venir">À venir</option>
             <option value="publié">Publiés</option>
           </select>
-          <span className="text-muted2 text-xs">clique un en-tête pour trier</span>
+          <span className="text-muted2 text-xs">clique un en-tête pour trier{eScope === "all" ? " · « Toute la base » = sociétés au calendrier disponible (échantillon yfinance le plus large ; FMP plan = exhaustif)" : ""}</span>
         </div>
         {earnRows.length === 0 ? <p className="text-muted text-sm">Aucun résultat ne correspond.</p> : (
         <table className="w-full text-sm mono">
