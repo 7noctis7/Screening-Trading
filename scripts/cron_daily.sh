@@ -17,6 +17,7 @@ cd "$ROOT"
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] maj quotidienne — début"
 python scripts/ingest_prices.py --daily            # backfill incrémental idempotent
+python scripts/data_audit.py || true                # audit PwC des bases (complétude/exactitude/PIT)
 python scripts/train_model.py || true               # ré-entraîne le modèle ML (serving découplé)
 python apps/web/preview/build_interactive.py        # régénère le terminal autonome
 python scripts/mcp_populate_overlays.py --offline || true   # cônes VaR/EVT + blackouts → charts (best-effort)

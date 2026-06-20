@@ -41,6 +41,25 @@ def main() -> None:
     print(f"   Artefact : {arts[0] if arts else '(non écrit)'} · servi : {ml.get('served_from')}")
     print("   L'API chargera cet artefact (plus de réentraînement par requête).")
 
+    # MLOps : tracking MLflow (López de Prado) — hyperparams + métriques + importances + artefact,
+    # tag `production-ready` si edge OOS validé. NON bloquant (no-op si MLflow absent).
+    try:
+        from packages.ml.tracking import track_training
+        imp = {r["feature"]: r["weight"] for r in ml.get("feature_importance", [])}
+        logged = track_training(
+            run_name="train_model",
+            params={"model": ml.get("model"), "horizon_days": ml.get("horizon_days"),
+                    "validation": ml.get("validation"), "n_train": ml.get("n_train"),
+                    "n_splits": ml.get("n_splits"), "data_mode": mode},
+            metrics={"auc_oos": ml.get("auc") or 0.0, "edge_ok": 1.0 if ml.get("edge_ok") else 0.0},
+            importances=imp, artifact=str(arts[0]) if arts else None,
+            tags={"status": "production-ready" if ml.get("edge_ok") else "candidate",
+                  "validation": "purged_cv_embargo"})
+        print("   MLflow : " + ("logué (" + ("production-ready" if ml.get("edge_ok") else "candidate") + ")"
+                                 if logged else "ignoré (mlflow absent)"))
+    except Exception:  # noqa: BLE001 — le tracking ne doit jamais faire échouer l'entraînement
+        pass
+
 
 if __name__ == "__main__":
     main()
