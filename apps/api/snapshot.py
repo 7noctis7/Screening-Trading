@@ -264,7 +264,8 @@ def _themes_section(data: dict, sector_of: dict, end) -> dict:
     }
 
 
-def _data_section(data: dict, acmap: dict[str, str], universe_total: int = 0) -> dict:
+def _data_section(data: dict, acmap: dict[str, str], universe_total: int = 0,
+                  mode: str = "synthetic") -> dict:
     """Vue DONNÉES : collecte (providers, barres, qualité) + couches de base de données."""
     import pandas as pd
 
@@ -294,7 +295,7 @@ def _data_section(data: dict, acmap: dict[str, str], universe_total: int = 0) ->
         "health": health,
         "symbols_total": len(symbols),
         "universe_total": universe_total or len(symbols),   # total disponible (29k si YAHOO.db)
-        "provider": "synthetic",
+        "provider": mode,                                   # vrai mode des données (réel / mixte / synthétique)
         "fallback_order": src_cfg.get("ohlcv", {}).get("fallback_order", []),
         "fundamentals_provider": src_cfg.get("fundamentals", {}).get("provider"),
         "cache": src_cfg.get("ohlcv", {}).get("cache"),
@@ -1960,7 +1961,7 @@ def build_snapshot(seed: int = 7) -> dict:
         "preset_ledger": _preset_ledger,           # journal détaillé + P&L (justifie la perf du dashboard)
         "index_core_curves": _ic_curves,           # courbes preset/QQQ/megacap → sweeps instantanés
         "universe": _universe_section(full_universe),
-        "data": {**_data_section(data, acmap, len(full_universe)),
+        "data": {**_data_section(data, acmap, len(full_universe), data_mode),
                  **({"survivorship": data_sec_extra} if data_sec_extra else {})},
         "themes": themes,
         "ml": ml,
