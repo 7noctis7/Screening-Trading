@@ -682,11 +682,20 @@ def _enrich_cross_source(report: dict, f: Any, sym: str) -> None:
     ajusté = « non-GAAP ») au dépôt SEC EDGAR (10-K, GAAP). Construit la table de réconciliation et,
     si un écart > 10 % sur CA OU RN, lève une BLOCKING ALERT (protocole PwC). Best-effort."""
     try:
-        from packages.fundamentals.sec_provider import financial_history
-        hist = financial_history(sym, years=1)
-        if not hist:
-            return
-        sec = hist[-1]
+        from packages.fundamentals.sec_provider import financial_history, quarterly_history
+        # PÉRIODE ALIGNÉE : la source primaire (yfinance) est en TTM → on compare au TTM SEC (somme des
+        # 4 derniers trimestres 10-Q), pas au dernier exercice annuel (sinon faux écarts énormes).
+        period = "TTM"
+        q = quarterly_history(sym, n=4)
+        qrev = [x.get("revenue") for x in q if x.get("revenue") is not None]
+        qni = [x.get("net_income") for x in q if x.get("net_income") is not None]
+        if len(q) >= 4 and len(qrev) == 4 and len(qni) == 4:
+            sec = {"revenue": sum(qrev), "net_income": sum(qni)}
+        else:                                              # repli : exercice annuel (périodes non alignées)
+            hist = financial_history(sym, years=1)
+            if not hist:
+                return
+            sec = hist[-1]; period = "annuel"
         rows, max_gap = [], 0.0
         for label, reported, gaap in (("Chiffre d'affaires", f.revenue, sec.get("revenue")),
                                       ("Résultat net", f.net_income, sec.get("net_income"))):
@@ -700,9 +709,10 @@ def _enrich_cross_source(report: dict, f: Any, sym: str) -> None:
         if not rows:
             return
         report["reconciliation"] = {
-            "rows": rows, "max_gap": round(max_gap, 3),
-            "note": "« Reporté » = source primaire (yfinance/FMP, souvent TTM/ajusté, non-GAAP) · "
-                    "« GAAP » = dernier 10-K SEC EDGAR (source de vérité comptable)."}
+            "rows": rows, "max_gap": round(max_gap, 3), "period": period,
+            "note": (f"« Reporté » = source primaire (yfinance, TTM) · « GAAP » = SEC EDGAR "
+                     f"({'TTM, somme des 4 derniers 10-Q' if period=='TTM' else 'dernier 10-K'}, "
+                     f"source de vérité comptable).")}
         report["cross_source_gap"] = round(max_gap, 3)
         audit = report.setdefault("audit", {})
         audit["counts"] = audit.get("counts", {})
