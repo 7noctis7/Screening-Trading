@@ -58,6 +58,25 @@ def test_reverse_dcf_recovers_growth():
     assert abs(g - 0.08) < 0.01
 
 
+def test_convert_financials_scales_monetary_only():
+    f = _fin(price=462.0, shares=5.2e9, revenue=2.159e12, net_income=1.0e12, total_debt=3e11,
+             cash=1.5e12, currency="TWD", price_currency="USD")
+    g = cf.convert_financials(f, 0.031)                      # TWD→USD
+    assert abs(g.revenue - 2.159e12 * 0.031) < 1            # CA converti
+    assert abs(g.net_income - 1.0e12 * 0.031) < 1
+    assert g.price == f.price and g.shares == f.shares       # cours & actions inchangés
+    assert g.currency == "USD"
+    # après conversion, le P/E redevient plausible (capi USD / résultat net USD)
+    from packages.fundamentals import valuation
+    pe = valuation.per(g)
+    assert 5 < pe < 200                                      # plus l'aberration ~1
+
+
+def test_convert_financials_identity_when_same():
+    f = _fin()
+    assert cf.convert_financials(f, 1.0) is f                # pas de conversion si fx=1
+
+
 def test_gearing_negative_when_net_cash():
     f = _fin(total_debt=5e7, cash=2e8)                       # trésorerie nette positive
     assert cf.gearing(f) < 0

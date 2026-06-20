@@ -441,8 +441,8 @@ def _company_macro() -> dict | None:
     try:
         d = _snap().get("dashboard", {})
         reg = d.get("regime", {}) or {}
-        return {"regime": reg.get("label") or reg.get("regime"), "vix": d.get("vix"),
-                "exposure": reg.get("exposure")}
+        label = reg.get("label") or reg.get("regime") or reg.get("risk_mode") or reg.get("cycle")
+        return {"regime": label or "—", "vix": d.get("vix"), "exposure": reg.get("exposure")}
     except Exception:  # noqa: BLE001
         return None
 
@@ -512,6 +512,21 @@ def _build_company_report_cached(sym: str) -> tuple[dict | None, str | None]:
     f, prior, src = fetch_financials_chain(sym)
     if f is None:
         return None, f"aucune donnée pour {sym}"
+    # CONVERSION DEVISE (ADR) : comptes en devise locale ≠ cours → on convertit pour une valorisation
+    # correcte (au lieu de masquer). Best-effort : si pas de taux (hors-ligne), la gate masquera.
+    fx_note = None
+    if f.currency and f.price_currency and f.currency != f.price_currency:
+        try:
+            from packages.data.fx import rate
+            from packages.fundamentals.corporate_finance import convert_financials
+            fx = rate(f.currency, f.price_currency)
+            if fx and fx > 0:
+                f = convert_financials(f, fx)
+                if prior is not None:
+                    prior = convert_financials(prior, fx)
+                fx_note = f"comptes convertis en {f.price_currency} (taux {fx:.4f})"
+        except Exception:  # noqa: BLE001
+            pass
     name = next((m.get("name") for m in _seed_universe() if m.get("symbol") == sym), sym)
     beta, ml_score = 1.0, None
     try:
@@ -529,6 +544,10 @@ def _build_company_report_cached(sym: str) -> tuple[dict | None, str | None]:
                                   price_dates=dates, financial_history=fin_hist, peers=_company_peers(sym))
     report["source"] = src
     report["earnings_signature"] = sig
+    if fx_note:
+        report["fx_conversion"] = fx_note
+        report.setdefault("audit", {}).setdefault("findings", []).append(
+            {"severity": "warning", "detail": fx_note})
     _enrich_cross_source(report, f, sym)               # audit multi-sources (fiabilité croisée)
     _enrich_ai_memo(report)                             # mémo IA local si dispo (sinon règles)
     if len(_REPORT_CACHE) >= _REPORT_CACHE_MAX:

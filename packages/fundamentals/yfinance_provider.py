@@ -42,7 +42,8 @@ def _cache_put(symbol: str, info: dict) -> None:
             "currentPrice", "regularMarketPrice", "totalRevenue", "netIncomeToCommon", "ebitda",
             "sharesOutstanding", "marketCap", "grossMargins", "ebit", "totalStockholderEquity",
             "totalDebt", "totalCash", "freeCashflow", "sector",
-            "revenueGrowth", "earningsGrowth")})               # croissances YoY RÉELLES (Yahoo)
+            "revenueGrowth", "earningsGrowth",
+            "financialCurrency", "currency")})                 # devises (comptes vs cours) → conversion ADR
         (_CACHE_DIR / f"{symbol.replace('/', '_')}.json").write_text(json.dumps(keep))
     except Exception:  # noqa: BLE001
         pass
@@ -132,4 +133,6 @@ class YFinanceFundamentalsProvider:
             total_equity=_f(info, "totalStockholderEquity") or revenue * 0.5,
             total_debt=_f(info, "totalDebt"), cash=_f(info, "totalCash"),
             fcf=_f(info, "freeCashflow"), interest_expense=0.0,
-            revenue_growth=_opt("revenueGrowth"), earnings_growth=_opt("earningsGrowth"))
+            revenue_growth=_opt("revenueGrowth"), earnings_growth=_opt("earningsGrowth"),
+            currency=(info.get("financialCurrency") or None),     # devise des comptes
+            price_currency=(info.get("currency") or None))        # devise du cours (ADR → USD)
