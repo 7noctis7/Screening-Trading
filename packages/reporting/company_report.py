@@ -216,8 +216,13 @@ def build_company_report(f: Financials, *, name: str | None = None,
                        "revenue_growth": _san(f.revenue_growth, -1, 10)}
     sector_comparison = sector_positioning(company_metrics, peers) if peers else {"available": False}
 
+    # RISQUE DE PRIX (Citadel/JPM) : marge de sécurité DCF Base. Un actif d'exception payé à un prix
+    # absurde reste un mauvais investissement → pilier Valorisation à 0 et pénalité globale ≤ 40 %.
+    mos = val_scen.get("margin_of_safety")
+    overvalued = bool(val_reliable and mos is not None and mos < -0.30)
+
     # score global /100 : moyenne pondérée de piliers normalisés
-    pillars = _pillar_scores(f, rr, roce, wacc, val_scen, piotroski, altman, val_reliable)
+    pillars = _pillar_scores(f, rr, roce, wacc, val_scen, piotroski, altman, val_reliable, overvalued)
     fundamental_score = int(round(sum(p["score"] * p["weight"] for p in pillars.values())))
     tech_score = technical_score(technical)
     ml_sc = int(round(max(0.0, min(1.0, ml_score)) * 100)) if ml_score is not None else None
@@ -229,7 +234,14 @@ def build_company_report(f: Financials, *, name: str | None = None,
         parts.append((ml_sc, 0.15))
     wsum = sum(w for _, w in parts)
     global_score = int(round(sum(v * w for v, w in parts) / wsum)) if wsum else fundamental_score
-    reco = ("Achat" if global_score >= 65 else "Conserver" if global_score >= 45 else "Vente")
+    # pénalité de surévaluation : nulle à −30 %, maximale (−40 %) à partir de −70 %
+    penalty = 1.0
+    if overvalued:
+        sev = min(1.0, (abs(mos) - 0.30) / 0.40)
+        penalty = 1.0 - 0.40 * sev
+        global_score = int(round(global_score * penalty))
+    reco = ("Achat" if global_score >= 65 else "Neutre" if global_score >= 45 else "Sous surveillance")
+    verdict_status = reco.upper()
 
     return {
         "as_of": datetime.now(timezone.utc).date().isoformat(),
@@ -237,8 +249,10 @@ def build_company_report(f: Financials, *, name: str | None = None,
                      "price": _f(f.price), "market_cap": _f(valuation.market_cap(f), 0),
                      "enterprise_value": _f(valuation.enterprise_value(f), 0), "shares": _f(f.shares, 0)},
         "audit": audit,
-        "score": {"global": global_score, "recommendation": reco, "pillars": pillars,
-                  "fundamental": fundamental_score, "technical": tech_score, "ml": ml_sc},
+        "score": {"global": global_score, "recommendation": reco, "verdict_status": verdict_status,
+                  "pillars": pillars, "fundamental": fundamental_score, "technical": tech_score,
+                  "ml": ml_sc, "valuation_penalty": round(penalty, 2)},
+        "flags": {"overvalued": overvalued, "blocking_alert": False},
         "vernimmen": {
             "roce_after_tax": _f(roce, 4), "wacc": _f(wacc, 4),
             "value_creation_spread": _f((roce - wacc) if roce == roce else None, 4),
@@ -325,7 +339,8 @@ def _valuation_plausible(f: Financials, mult: dict, val_scen: dict) -> tuple[boo
 
 
 def _pillar_scores(f: Financials, rr: dict, roce: float, wacc: float, val_scen: dict,
-                   piotroski: int, altman: dict, val_reliable: bool = True) -> dict[str, dict]:
+                   piotroski: int, altman: dict, val_reliable: bool = True,
+                   overvalued: bool = False) -> dict[str, dict]:
     """Scores 0-100 par pilier + poids (somme = 1). Bornés, robustes aux NaN."""
     def clip(x: float) -> int:
         return int(max(0, min(100, round(x))))
@@ -335,7 +350,12 @@ def _pillar_scores(f: Financials, rr: dict, roce: float, wacc: float, val_scen: 
     spread = (roce - wacc) if roce == roce else 0.0
     value_creation = clip(50 + 500 * max(-0.1, min(0.1, spread))) # +10 pts de spread → 100
     mos = val_scen.get("margin_of_safety")
-    valuation_sc = clip(50 + 200 * mos) if (mos is not None and val_reliable) else 50  # neutre si non fiable
+    if overvalued:                                               # surévaluation sévère (< −30 %) → 0
+        valuation_sc = 0
+    elif mos is not None and val_reliable:
+        valuation_sc = clip(50 + 200 * mos)
+    else:
+        valuation_sc = 50                                       # neutre si non fiable
     nd = rr.get("net_debt_ebitda")
     solidity = clip(100 - 25 * (nd if (nd is not None and nd == nd) else 1.0)) if (nd is not None) else 60
     solidity = clip(0.6 * solidity + 0.4 * (piotroski / 9 * 100))
