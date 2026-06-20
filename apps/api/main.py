@@ -447,6 +447,17 @@ def _company_macro() -> dict | None:
         return None
 
 
+def _company_financial_history(sym: str) -> list[dict] | None:
+    """Historique financier 5-6 ans RÉEL via SEC EDGAR (CA/résultat/BPA par exercice). None si
+    émetteur non-SEC (le builder dérivera alors N-1/N). Best-effort."""
+    try:
+        from packages.fundamentals.sec_provider import financial_history
+        h = financial_history(sym, years=6)
+        return h or None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _company_earnings(sym: str) -> dict | None:
     """Prochaine date de résultats + BPA/revenu estimés & annoncés (réels) pour un titre."""
     try:
@@ -494,9 +505,11 @@ def _build_company_report_cached(sym: str) -> tuple[dict | None, str | None]:
     except Exception:  # noqa: BLE001
         pass
     closes = _company_closes(sym)
+    fin_hist = _company_financial_history(sym)
     report = build_company_report(f, name=name, prior=prior, beta=beta,
                                   technical=_company_technical(sym, closes), macro=_company_macro(),
-                                  earnings=earnings, ml_score=ml_score, price_series=closes)
+                                  earnings=earnings, ml_score=ml_score, price_series=closes,
+                                  financial_history=fin_hist)
     report["source"] = src
     report["earnings_signature"] = sig
     if len(_REPORT_CACHE) >= _REPORT_CACHE_MAX:

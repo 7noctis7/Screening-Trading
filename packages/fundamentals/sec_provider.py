@@ -86,6 +86,50 @@ def _latest(facts: dict, *concepts: str) -> float | None:
     return s[-1] if s else None
 
 
+def _annual_by_year(facts: dict, *concepts: str) -> dict[int, float]:
+    """Valeurs annuelles (10-K/20-F, FY) indexées par EXERCICE (année de fin) pour le 1er concept
+    disponible. Permet d'aligner CA/résultat/BPA sur les mêmes exercices."""
+    for c in concepts:
+        node = facts.get("us-gaap", {}).get(c) or facts.get("dei", {}).get(c)
+        if not node:
+            continue
+        units = node.get("units", {})
+        series = units.get("USD") or units.get("USD/shares") or units.get("shares") or next(iter(units.values()), [])
+        annual = [x for x in series if x.get("form") in ("10-K", "20-F") and x.get("fp") == "FY"
+                  and x.get("val") is not None]
+        if not annual:
+            continue
+        out: dict[int, float] = {}
+        for x in annual:
+            try:
+                out[int(str(x.get("end", ""))[:4])] = float(x["val"])   # dernier dépôt prime (amendé)
+            except (TypeError, ValueError):
+                continue
+        if out:
+            return out
+    return {}
+
+
+def financial_history(symbol: str, years: int = 6) -> list[dict]:
+    """Historique financier RÉEL pluriannuel (SEC EDGAR companyfacts) : CA, résultat net, BPA dilué
+    par exercice (≤ `years` derniers). [] si émetteur non-SEC / indisponible. Gratuit, point-in-time."""
+    cik = _cik_map().get(symbol.upper())
+    if not cik:
+        return []
+    facts = _facts(cik)
+    if not facts:
+        return []
+    rev = _annual_by_year(facts, "RevenueFromContractWithCustomerExcludingAssessedTax",
+                          "Revenues", "SalesRevenueNet")
+    ni = _annual_by_year(facts, "NetIncomeLoss")
+    eps = _annual_by_year(facts, "EarningsPerShareDiluted", "EarningsPerShareBasic")
+    yrs = sorted(set(rev) | set(ni))[-years:]
+    out = []
+    for y in yrs:
+        out.append({"year": y, "revenue": rev.get(y), "net_income": ni.get(y), "eps": eps.get(y)})
+    return out
+
+
 def _growth(facts: dict, *concepts: str) -> float | None:
     """Croissance YoY RÉELLE entre les deux derniers exercices annuels (None si indisponible)."""
     s = _annual_series(facts, *concepts)

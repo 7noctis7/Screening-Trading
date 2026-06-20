@@ -299,9 +299,13 @@ def company_report_html(r: dict[str, Any]) -> str:
         inner += (f'<div style="font-size:11px;color:{_C["muted"]};margin:8px 0 2px">Drawdown (sous l\'eau)</div>'
                   f'{_spark_drawdown(closes)}')
     if len(hist) >= 2:
+        cagr = ch.get("revenue_cagr")
+        cagr_txt = (f' <span style="color:{_C["pos"] if cagr>=0 else _C["neg"]}">· CAGR {cagr*100:+.1f}%</span>'
+                    if cagr is not None else "")
+        ny = ch.get("history_years") or len(hist)
         inner += (f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:8px">'
-                  f'<div><div style="font-size:11px;color:{_C["muted"]};margin-bottom:2px">Chiffre d\'affaires</div>'
-                  f'{_bars_history(hist, "revenue")}</div>'
+                  f'<div><div style="font-size:11px;color:{_C["muted"]};margin-bottom:2px">Chiffre d\'affaires '
+                  f'({ny} ex.){cagr_txt}</div>{_bars_history(hist, "revenue")}</div>'
                   f'<div><div style="font-size:11px;color:{_C["muted"]};margin-bottom:2px">Résultat net</div>'
                   f'{_bars_history(hist, "net_income")}</div></div>')
     if inner:

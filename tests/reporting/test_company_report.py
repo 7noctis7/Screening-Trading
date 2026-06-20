@@ -98,6 +98,20 @@ def test_charts_derive_history_from_prior():
     assert [h["year"] for h in hist][0] < [h["year"] for h in hist][1]   # N-1 puis N
 
 
+def test_multiyear_history_computes_cagr():
+    hist = [{"year": 2020, "revenue": 1.0e10, "net_income": 2e9},
+            {"year": 2021, "revenue": 1.5e10, "net_income": 3e9},
+            {"year": 2022, "revenue": 2.0e10, "net_income": 4e9},
+            {"year": 2023, "revenue": 3.0e10, "net_income": 6e9},
+            {"year": 2024, "revenue": 4.0e10, "net_income": 9e9}]
+    r = build_company_report(_fin(), name="NVIDIA", financial_history=hist)
+    ch = r["charts"]
+    assert ch["history_years"] == 5 and ch["revenue_cagr"] is not None
+    # CAGR (1e10→4e10 sur 4 ans) ≈ 41.4 %
+    assert abs(ch["revenue_cagr"] - ((4.0e10 / 1.0e10) ** (1 / 4) - 1)) < 1e-3   # arrondi 4 déc.
+    assert "CAGR" in company_report_html(r)
+
+
 def test_optional_sections_rendered():
     r = build_company_report(_fin(), name="NVIDIA",
                              technical={"trend": "haussière", "rsi": 55, "macd_signal": "haussier",
