@@ -2,14 +2,16 @@
 import { useEvents } from "@/lib/api";
 import { PageSkeleton, EmptyState } from "@/components/ui";
 
-// couleur [texte, fond] par étiquette de suivi
-const TAGC: Record<string, [string, string]> = {
-  position: ["#22c55e", "color-mix(in srgb,#22c55e 16%,transparent)"],
-  conviction: ["#a78bfa", "color-mix(in srgb,#8b5cf6 16%,transparent)"],
-  ML: ["#22d3ee", "color-mix(in srgb,#22d3ee 16%,transparent)"],
-  "fond.": ["#f59e0b", "color-mix(in srgb,#f59e0b 16%,transparent)"],
-  "invest.": ["#f472b6", "color-mix(in srgb,#ec4899 16%,transparent)"],
+// étiquettes de suivi : couleur [texte, fond], emoji et description (pour la légende)
+const TAGS: Record<string, { c: string; bg: string; emoji: string; desc: string }> = {
+  position: { c: "#22c55e", bg: "color-mix(in srgb,#22c55e 16%,transparent)", emoji: "💼", desc: "Tu détiens ce titre (Alpaca / Bitmart)" },
+  conviction: { c: "#a78bfa", bg: "color-mix(in srgb,#8b5cf6 16%,transparent)", emoji: "⭐", desc: "Top 5 % de la note de conviction (fusion des lentilles)" },
+  ML: { c: "#22d3ee", bg: "color-mix(in srgb,#22d3ee 16%,transparent)", emoji: "🤖", desc: "Top 5 % du score Machine Learning" },
+  "fond.": { c: "#f59e0b", bg: "color-mix(in srgb,#f59e0b 16%,transparent)", emoji: "📊", desc: "Top 5 % du score fondamental" },
+  "invest.": { c: "#60a5fa", bg: "color-mix(in srgb,#3b82f6 16%,transparent)", emoji: "🏦", desc: "Top 5 % du score investisseurs (13F / superinvestisseurs)" },
+  base: { c: "#9aa1ad", bg: "color-mix(in srgb,#9aa1ad 16%,transparent)", emoji: "•", desc: "Présent dans ta base, hors top scores" },
 };
+const TAGC = (t: string): [string, string] => [TAGS[t]?.c ?? "#9aa1ad", TAGS[t]?.bg ?? "color-mix(in srgb,#9aa1ad 16%,transparent)"];
 const dt = (s?: string) => (s ? String(s).slice(0, 10) : "—");
 // montants : BPA en $, revenu en $ (compact : K/M/Md)
 const eps = (x?: number | null) => (x == null ? "—" : `$${x.toFixed(2)}`);
@@ -51,7 +53,16 @@ export default function Events() {
       {/* ===== RÉSULTATS TRIMESTRIELS ===== */}
       <section className="card p-4 overflow-x-auto">
         <h2 className="text-sm uppercase tracking-wide text-muted mb-1">📅 Prochains résultats trimestriels ({earnings.length})</h2>
-        <p className="text-muted2 text-xs mb-3">BPA et revenu <b>estimés</b> (consensus) puis <b>annoncés (réels)</b> dès publication. « Surprise » = écart réel vs estimé.</p>
+        <p className="text-muted2 text-xs mb-2">BPA et revenu <b>estimés</b> (consensus) puis <b>annoncés (réels)</b> dès publication. « Surprise » = écart réel vs estimé.</p>
+        {/* LÉGENDE des étiquettes « Suivi » */}
+        <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3 text-xs">
+          <span className="text-muted2 uppercase tracking-wide">Légende :</span>
+          {Object.entries(TAGS).map(([k, v]) => (
+            <span key={k} className="flex items-center gap-1">
+              <span className="text-[10px] px-1 py-0.5 rounded whitespace-nowrap" style={{ background: v.bg, color: v.c }}>{v.emoji} {k}</span>
+              <span className="text-muted2">{v.desc}</span>
+            </span>))}
+        </div>
         {earnings.length === 0 ? <p className="text-muted text-sm">Aucun résultat à venir détecté.</p> : (
         <table className="w-full text-sm mono">
           <thead className="text-muted text-xs">
@@ -69,10 +80,9 @@ export default function Events() {
               <td className="py-1.5"><span style={{ color: upcoming ? "#22d3ee" : "#9aa1ad" }}>{dt(e.date)}</span></td>
               <td>{e.symbol}</td>
               <td className="font-sans text-xs text-muted2 max-w-[180px] truncate">{e.name || "—"}</td>
-              <td className="pl-2 font-sans">{(e.tags ?? []).length === 0 ? <span className="text-muted2 text-xs">base</span> :
-                (e.tags ?? []).map((t: string) => (
-                  <span key={t} className="text-[10px] px-1 py-0.5 rounded mr-1 whitespace-nowrap"
-                    style={{ background: TAGC[t]?.[1] ?? "color-mix(in srgb,#9aa1ad 16%,transparent)", color: TAGC[t]?.[0] ?? "#9aa1ad" }}>{t}</span>))}</td>
+              <td className="pl-2 font-sans">{((e.tags ?? []).length === 0 ? ["base"] : e.tags).map((t: string) => (
+                <span key={t} className="text-[10px] px-1 py-0.5 rounded mr-1 whitespace-nowrap"
+                  style={{ background: TAGC(t)[1], color: TAGC(t)[0] }}>{TAGS[t]?.emoji} {t}</span>))}</td>
               <td className="text-right">{eps(e.eps_estimate)}</td>
               <td className="text-right" style={{ color: e.eps_actual == null ? "#9aa1ad" : "#e5e7eb" }}>{eps(e.eps_actual)}</td>
               <td className="text-right">{big(e.revenue_estimate)}</td>
