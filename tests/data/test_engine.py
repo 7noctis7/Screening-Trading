@@ -37,3 +37,32 @@ def test_covariance_matrix_shape_and_symmetry():
 def test_available_keys():
     a = E.available()
     assert {"duckdb", "polars", "numpy"} <= set(a)
+
+
+def test_ledoit_wolf_shrinks_toward_target():
+    import numpy as np
+    rng = np.random.default_rng(1)
+    X = rng.normal(0, 0.01, (8, 12))                         # n≈T → covariance empirique instable
+    sigma, delta = E.ledoit_wolf_shrinkage(X)
+    assert 0.0 <= delta <= 1.0 and delta > 0.0               # régularisation active
+    assert sigma.shape == (8, 8)
+    assert np.allclose(sigma, sigma.T)                       # symétrique
+    assert (np.linalg.eigvalsh(sigma) > -1e-9).all()        # PSD (mieux conditionnée)
+
+
+def test_covariance_shrink_flag_changes_result():
+    import numpy as np
+    rng = np.random.default_rng(2)
+    rets = {f"S{i}": list(rng.normal(0, 0.01, 15)) for i in range(8)}
+    _, cov_raw = E.covariance_matrix(rets, shrink=False, cache=False)
+    _, cov_lw = E.covariance_matrix(rets, shrink=True, cache=False)
+    assert not np.allclose(cov_raw, cov_lw)                  # le shrinkage modifie bien la matrice
+
+
+def test_covariance_cache_returns_identical_object():
+    import numpy as np
+    rng = np.random.default_rng(3)
+    rets = {"A": list(rng.normal(0, 0.01, 30)), "B": list(rng.normal(0, 0.02, 30))}
+    a = E.covariance_matrix(rets, cache=True)
+    b = E.covariance_matrix(rets, cache=True)
+    assert a[1] is b[1]                                      # même objet → servi depuis le cache

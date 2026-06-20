@@ -53,8 +53,13 @@ def covariance(returns_by_asset: dict[str, list[float]]) -> tuple[list[str], np.
     if not syms:
         return [], np.zeros((0, 0))
     try:
+        import os
+
         from packages.data.engine import covariance_matrix
-        cb_syms, cov = covariance_matrix(returns_by_asset, annualize=252)
+        # Shrinkage Ledoit-Wolf par défaut (covariance stabilisée → ERC moins nerveux, moins de
+        # turnover) ; désactivable avec QUANT_COV_SHRINK=0.
+        _shrink = os.environ.get("QUANT_COV_SHRINK", "1").lower() not in ("0", "false", "no")
+        cb_syms, cov = covariance_matrix(returns_by_asset, annualize=252, shrink=_shrink)
         # le moteur filtre les séries trop courtes (<2 pts) ; on aligne la sortie sur l'attendu
         if len(cb_syms) == len(syms):
             return cb_syms, np.atleast_2d(np.asarray(cov, dtype=float))

@@ -119,14 +119,84 @@ def read_prices_polars(db: str | Path, symbols: list[str] | None = None,
     return pl.DataFrame(read_prices_rows(db, symbols, start, end))
 
 
-def covariance_matrix(returns_by_symbol: dict[str, list[float]], annualize: int = 252) -> tuple[list[str], Any]:
+def ledoit_wolf_shrinkage(mat: Any) -> tuple[Any, float]:
+    """Shrinkage analytique de Ledoit-Wolf (2004) vers une cible à corrélation constante — pur numpy.
+
+    La covariance empirique est instable quand n_actifs ≈ n_observations (cas top-30) : l'ERC y
+    surréagit (turnover, poids extrêmes). On régularise S vers F (même variances, corrélation moyenne)
+    avec une intensité δ* optimale estimée sur les données. `mat` : n×T (lignes = actifs).
+    Renvoie (Σ régularisée n×n, δ utilisé ∈ [0,1])."""
+    import numpy as np
+    A = np.asarray(mat, dtype=float)
+    n = A.shape[0]
+    if n < 2 or A.shape[1] < 2:
+        return (np.cov(A) if A.size else np.zeros((n, n))), 0.0
+    X = A.T                                                   # (T, n) : observations en lignes
+    t = X.shape[0]
+    X = X - X.mean(axis=0, keepdims=True)
+    S = (X.T @ X) / t                                         # cov empirique (diviseur T)
+    var = np.diag(S)
+    std = np.sqrt(np.clip(var, 1e-300, None))
+    outer = np.outer(std, std)
+    r_bar = (float((S / outer).sum()) - n) / (n * (n - 1))   # corrélation moyenne hors diagonale
+    F = r_bar * outer                                        # cible : corrélation constante
+    np.fill_diagonal(F, var)
+    # π̂ : somme des variances asymptotiques des éléments de S
+    Y = X ** 2
+    pi_mat = (Y.T @ Y) / t - S ** 2
+    pi = float(pi_mat.sum())
+    # ρ̂ : termes diagonaux + contribution des termes croisés (modèle corrélation constante)
+    term = (X ** 3).T @ X / t - var[:, None] * S            # θ_ij
+    np.fill_diagonal(term, 0.0)
+    rho = float(np.diag(pi_mat).sum()) + r_bar * float(((outer / outer.T) * term).sum())
+    # γ̂ : distance de Frobenius² entre cible et empirique
+    gamma = float(((F - S) ** 2).sum())
+    kappa = (pi - rho) / gamma if gamma > 0 else 0.0
+    delta = max(0.0, min(1.0, kappa / t))                    # intensité optimale bornée [0,1]
+    sigma = delta * F + (1.0 - delta) * S
+    return sigma, delta
+
+
+# Cache de covariance incrémental : clé = (symboles ordonnés, dernière obs de chaque série, params).
+# Le snapshot recalcule l'ERC sur plusieurs sleeves (preset/crypto) avec les MÊMES rendements →
+# on évite les recalculs identiques. Mémoire bornée (LRU manuel), pur stdlib, jamais bloquant.
+_COV_CACHE: dict[Any, tuple[list[str], Any]] = {}
+_COV_CACHE_MAX = 64
+
+
+def _cov_cache_key(returns_by_symbol: dict[str, list[float]], annualize: int, shrink: bool) -> Any:
+    parts = []
+    for s in sorted(returns_by_symbol):
+        r = returns_by_symbol[s]
+        if r and len(r) >= 2:
+            parts.append((s, len(r), round(float(r[-1]), 10), round(float(r[0]), 10)))
+    return (tuple(parts), annualize, shrink)
+
+
+def covariance_matrix(returns_by_symbol: dict[str, list[float]], annualize: int = 252,
+                      shrink: bool = False, cache: bool = True) -> tuple[list[str], Any]:
     """Matrice de covariance ANNUALISÉE (numpy vectorisé) sur les rendements alignés → entrée ERC.
-    Aligne les séries sur la longueur minimale commune. Renvoie (symboles, matrice np.ndarray)."""
+
+    Aligne les séries sur la longueur minimale commune. `shrink=True` applique Ledoit-Wolf
+    (covariance stabilisée, recommandé quand n_actifs ≈ n_obs). `cache=True` mémorise le résultat
+    par signature (symboles + bornes de série) pour éviter les recalculs identiques dans un build.
+    Renvoie (symboles, matrice np.ndarray)."""
     import numpy as np
     syms = [s for s, r in returns_by_symbol.items() if r and len(r) >= 2]
     if len(syms) < 2:
         return syms, np.zeros((len(syms), len(syms)))
+    key = _cov_cache_key(returns_by_symbol, annualize, shrink) if cache else None
+    if key is not None and key in _COV_CACHE:
+        return _COV_CACHE[key]
     m = min(len(returns_by_symbol[s]) for s in syms)
     mat = np.array([returns_by_symbol[s][-m:] for s in syms], dtype=float)
-    cov = np.cov(mat) * annualize
+    if shrink:
+        cov, _delta = ledoit_wolf_shrinkage(mat)
+        cov = cov * annualize
+    else:
+        cov = np.cov(mat) * annualize
+    if key is not None:
+        if len(_COV_CACHE) >= _COV_CACHE_MAX:
+            _COV_CACHE.pop(next(iter(_COV_CACHE)))           # éviction FIFO simple (mémoire bornée)
+        _COV_CACHE[key] = (syms, cov)
     return syms, cov
