@@ -226,9 +226,60 @@ def _meta_common(snapshot: dict, attr: dict) -> dict[str, Any]:
     }
 
 
+def _verdict(kill: bool, limits_ok: bool) -> tuple[str, str]:
+    """(libellé, type de callout Obsidian) selon l'état de risque."""
+    if kill:
+        return "🔴 Incident", "danger"
+    if not limits_ok:
+        return "🟠 Vigilance", "warning"
+    return "🟢 Nominal", "success"
+
+
+def _ret_window(curve: list, lookback: int) -> float | None:
+    v = [float(x) for x in (curve or []) if x is not None]
+    if len(v) < 2:
+        return None
+    base = v[-min(lookback + 1, len(v))]
+    return (v[-1] / base - 1.0) if base else None
+
+
+def _week_perf(snapshot: dict, days: int = 5) -> dict:
+    """Perf glissante (≈1 semaine) du preset vs QQQ, à partir des courbes réelles."""
+    cur = snapshot.get("index_core_curves", {}) or {}
+    rp, rq = _ret_window(cur.get("preset"), days), _ret_window(cur.get("qqq"), days)
+    out = {"preset": rp, "qqq": rq, "excess": None, "days": days}
+    if rp is not None and rq is not None:
+        out["excess"] = round(rp - rq, 4)
+    return out
+
+
+def _contributors(snapshot: dict, days: int = 5, n: int = 5) -> tuple[list[dict], list[dict]]:
+    """(top contributeurs, top détracteurs) = poids × rendement sur `days`, depuis l'alloc preset
+    et les séries OHLC. Renvoie ([], []) si la donnée manque."""
+    d = snapshot.get("dashboard", {}) or {}
+    alloc = d.get("preset_allocation") or d.get("positions") or []
+    series = d.get("chart_series", {}) or {}
+    rows: list[dict] = []
+    for a in alloc:
+        sym = a.get("symbol")
+        w = a.get("weight") or a.get("weight_pct")
+        bars = series.get(sym)
+        if not sym or w is None or not bars:
+            continue
+        ret = _ret_window([b.get("c") for b in bars], days)
+        if ret is None:
+            continue
+        rows.append({"symbol": sym, "sector": a.get("sector", ""), "weight": float(w),
+                     "ret": ret, "contrib": float(w) * ret})
+    rows.sort(key=lambda r: r["contrib"], reverse=True)
+    top = rows[:n]
+    bottom = [r for r in rows[::-1] if r["contrib"] < 0][:n]
+    return top, bottom
+
+
 def daily_note(snapshot: dict, attr: dict, incidents: list[dict], date: str | None = None,
                svg_asset: str | None = None) -> tuple[str, str]:
-    """Construit (chemin relatif, contenu) de la note journalière. PUR."""
+    """Note journalière — design épuré (TL;DR + tables groupées). PUR."""
     dt = date or datetime.now(timezone.utc).date().isoformat()
     d = snapshot.get("dashboard", {}) or {}
     metrics = d.get("metrics", {}) or {}
@@ -237,103 +288,119 @@ def daily_note(snapshot: dict, attr: dict, incidents: list[dict], date: str | No
     led = (snapshot.get("preset_ledger", {}) or {}).get("summary", {}) or {}
     reg = d.get("regime", {}) or {}
     meta = {"type": "daily_journal", "date": dt, "tags": ["quant", "journal"], **_meta_common(snapshot, attr)}
-
     regime_link = f"[[Régime_{reg.get('risk_mode', 'neutral')}]]"
-    kill = meta["kill_switch"]
-    parts: list[str] = [_yaml_front_matter(meta), "", f"# 📓 Journal quant — {dt}", "",
-                        f"Régime : {regime_link} · cycle **{reg.get('cycle','?')}** · VIX **{_f(d.get('vix'),1)}** · "
-                        f"stratégie **{d.get('strategy_label','—')}** · hub : [[Preset_Performance]]", ""]
-    # bloc d'alerte (citation) si kill-switch ou limites franchies
+    kill, ok = meta["kill_switch"], limits.get("ok", True)
+    verdict, ctype = _verdict(kill, ok)
+
+    P: list[str] = [_yaml_front_matter(meta), "", f"# 📓 {dt} · Journal quant", "",
+                    f"> [!{ctype}] {verdict} — {regime_link} ({reg.get('cycle','?')}) · VIX **{_f(d.get('vix'),1)}** · "
+                    f"Sharpe **{_f(metrics.get('sharpe'))}** · MaxDD **{_pct(metrics.get('max_drawdown'))}** · "
+                    f"Alpha **{_pct(attr.get('alpha_annual'))}**",
+                    f"> Stratégie {d.get('strategy_label','—')} · [[Preset_Performance]] · [[07_RISK_POLICY]]", ""]
     if kill:
-        parts += [f"> [!danger] KILL-SWITCH ACTIF — drawdown courant {_pct(meta.get('drawdown_now'))} ≤ −{int(_KILL_DD*100)}%", ""]
-    if not limits.get("ok", True):
-        parts += ["> [!warning] Budget de risque dépassé : "
-                  + "; ".join(f"{b.get('type')} {b.get('label')} {_pct(b.get('weight'))} > {_pct(b.get('limit'))}"
-                              for b in (limits.get("breaches") or [])), ""]
-    # tableau des métriques clés (aligné)
-    parts += ["## Métriques clés", "",
-              "| Métrique | Valeur |", "|---|---:|",
-              f"| Rendement total | {_pct(metrics.get('total_return'))} |",
-              f"| Sharpe | {_f(metrics.get('sharpe'))} |",
-              f"| Sortino | {_f(metrics.get('sortino'))} |",
-              f"| Calmar | {_f(metrics.get('calmar'))} |",
-              f"| Max Drawdown | {_pct(metrics.get('max_drawdown'))} |",
-              f"| VaR 95 % | {_pct(risk.get('var_95'))} |",
-              f"| CVaR 95 % | {_pct(risk.get('cvar_95'))} |",
-              f"| Vol (GARCH) | {_pct(meta.get('garch_vol'))} |",
-              f"| Frais payés (net) | {_f(led.get('fees_paid'),0)} $ ({_pct(led.get('fees_pct'),2)}) |",
-              f"| Réconciliation | {'✅' if led.get('reconciles') else '⚠️'} |", ""]
-    # attribution
+        P += [f"> [!danger] KILL-SWITCH ACTIF — drawdown courant {_pct(meta.get('drawdown_now'))} ≤ −{int(_KILL_DD*100)} %. "
+              "Exposition coupée jusqu'à revue.", ""]
+    elif not ok:
+        P += ["> [!warning] Budget de risque dépassé — "
+              + " · ".join(f"{b.get('label')} {_pct(b.get('weight'))} > {_pct(b.get('limit'))}"
+                           for b in (limits.get("breaches") or [])), ""]
+    # métriques groupées (perf | risque) — compact, aligné
+    P += ["## Métriques clés", "",
+          "| Performance |  | Risque |  |", "|---|--:|---|--:|",
+          f"| Rendement | {_pct(metrics.get('total_return'))} | VaR 95 % | {_pct(risk.get('var_95'))} |",
+          f"| Sharpe | {_f(metrics.get('sharpe'))} | CVaR 95 % | {_pct(risk.get('cvar_95'))} |",
+          f"| Sortino | {_f(metrics.get('sortino'))} | Vol GARCH | {_pct(meta.get('garch_vol'))} |",
+          f"| Calmar | {_f(metrics.get('calmar'))} | DD courant | {_pct(meta.get('drawdown_now'))} |",
+          f"| Max DD | {_pct(metrics.get('max_drawdown'))} | Frais nets | {_pct(led.get('fees_pct'),2)} |", ""]
     if attr.get("available"):
-        parts += ["## Attribution (net de frais) — Alpha vs Beta QQQ", "",
-                  "| | |", "|---|---:|",
-                  f"| **Alpha annualisé** | {_pct(attr.get('alpha_annual'))} |",
-                  f"| Beta vs QQQ | {_f(attr.get('beta_qqq'))} |",
-                  f"| Corrélation QQQ | {_f(attr.get('corr_qqq'))} (R²={_f(attr.get('r2'))}) |",
-                  f"| Preset total | {_pct(attr.get('preset_total'))} |",
-                  f"| QQQ total | {_pct(attr.get('qqq_total'))} |", ""]
-    # état des limites + kill-switch (Mermaid flow)
-    parts += ["## État du risque", "", "```mermaid", "flowchart LR",
-              f'  R["Régime: {reg.get("risk_mode","?")}"] --> L["Limites: {"OK" if limits.get("ok",True) else "FRANCHIES"}"]',
-              f'  L --> K["Kill-switch: {"ACTIF" if kill else "armé"}"]', "```", ""]
+        P += [f"> [!note] **Attribution nette de frais** — Alpha annualisé **{_pct(attr.get('alpha_annual'))}**, "
+              f"Beta QQQ **{_f(attr.get('beta_qqq'))}**, R² **{_f(attr.get('r2'))}** · "
+              f"Preset {_pct(attr.get('preset_total'))} vs QQQ {_pct(attr.get('qqq_total'))}.", ""]
     if svg_asset:
-        parts += [f"## Courbe d'equity (preset, net)", "", f"![[{svg_asset}]]", ""]
+        P += [f"![[{svg_asset}]]", ""]
+    P += ["## État du risque", "", "```mermaid", "flowchart LR",
+          f'  R["Régime · {reg.get("risk_mode","?")}"] --> L["Limites · {"OK" if ok else "FRANCHIES"}"]',
+          f'  L --> K["Kill-switch · {"ACTIF" if kill else "armé"}"]', "```", ""]
     if incidents:
-        parts += ["## Incidents du jour", ""]
-        parts += [f"- [[{_POSTMORTEM_DIR}/incident_{dt}|{i['type']}]] — {i['detail']}" for i in incidents]
-        parts += [""]
-    parts += ["---", f"*Généré {datetime.now(timezone.utc).isoformat(timespec='seconds')} · point-in-time · "
-              "ne bloque jamais le trading.*"]
-    return f"{_JOURNAL_DIR}/{dt}.md", "\n".join(parts)
+        P += ["## ⚠️ Incidents", "",
+              *[f"- [[{_POSTMORTEM_DIR}/incident_{dt}|{i['type']}]] — {i['detail']}" for i in incidents], ""]
+    P += ["---", f"<small>Généré {datetime.now(timezone.utc).isoformat(timespec='seconds')} · point-in-time · "
+          "n'interrompt jamais le trading.</small>"]
+    return f"{_JOURNAL_DIR}/{dt}.md", "\n".join(P)
+
+
+def weekly_note(snapshot: dict, attr: dict, date: str | None = None) -> tuple[str, str]:
+    """Synthèse hebdomadaire — perf 7 j, top contributeurs/détracteurs, dérive de l'alpha. PUR."""
+    dt_obj = datetime.fromisoformat(date) if date else datetime.now(timezone.utc)
+    iso = dt_obj.isocalendar()
+    wk = f"{iso[0]}-W{iso[1]:02d}"
+    perf = _week_perf(snapshot)
+    top, bottom = _contributors(snapshot)
+    meta = {"type": "weekly_review", "date": dt_obj.date().isoformat(), "week": wk,
+            "tags": ["quant", "weekly"], **_meta_common(snapshot, attr)}
+    P = [_yaml_front_matter(meta), "", f"# 🗓️ {wk} · Synthèse hebdomadaire", "",
+         f"> [!info] Preset **{_pct(perf['preset'])}** vs QQQ **{_pct(perf['qqq'])}** → excès **{_pct(perf['excess'])}** "
+         f"(≈{perf['days']} j) · Alpha annualisé **{_pct(attr.get('alpha_annual'))}** · Beta **{_f(attr.get('beta_qqq'))}**",
+         f"> [[Preset_Performance]] · [[10_BACKTEST_RESULTS]]", ""]
+    if top:
+        P += ["## 🏆 Top contributeurs", "", "| Actif | Secteur | Poids | Perf | Contrib |", "|---|---|--:|--:|--:|",
+              *[f"| [[{r['symbol']}]] | {r['sector']} | {_pct(r['weight'])} | {_pct(r['ret'])} | {_pct(r['contrib'],2)} |"
+                for r in top], ""]
+    if bottom:
+        P += ["## 🧊 Détracteurs", "", "| Actif | Secteur | Poids | Perf | Contrib |", "|---|---|--:|--:|--:|",
+              *[f"| [[{r['symbol']}]] | {r['sector']} | {_pct(r['weight'])} | {_pct(r['ret'])} | {_pct(r['contrib'],2)} |"
+                for r in bottom], ""]
+    if not top and not bottom:
+        P += ["> [!note] Contributions par actif indisponibles (séries OHLC absentes de ce build).", ""]
+    P += ["---", f"<small>Synthèse {wk} · générée {dt_obj.date().isoformat()}.</small>"]
+    return f"06_Weekly/{wk}.md", "\n".join(P)
 
 
 def incident_note(snapshot: dict, incident: dict, date: str | None = None) -> tuple[str, str]:
-    """Note de post-mortem isolée capturant le snapshot exact au moment de la rupture. PUR."""
+    """Post-mortem isolé — snapshot exact de la rupture, design audit. PUR."""
     dt = date or datetime.now(timezone.utc).date().isoformat()
     d = snapshot.get("dashboard", {}) or {}
     metrics = d.get("metrics", {}) or {}
     risk = ((snapshot.get("portfolio", {}) or {}).get("analysis", {}) or {}).get("risk", {}) or {}
     limits = ((snapshot.get("portfolio", {}) or {}).get("analysis", {}) or {}).get("limits", {}) or {}
-    positions = (snapshot.get("dashboard", {}) or {}).get("positions", []) or []
+    positions = (d.get("preset_allocation") or d.get("positions") or [])
     meta = {"type": "incident", "date": dt, "incident_type": incident.get("type"),
             "tags": ["quant", "incident", "post_mortem"], **_meta_common(snapshot, {})}
-    top = sorted(positions, key=lambda r: -(r.get("weight") or 0))[:10]
-    parts = [_yaml_front_matter(meta), "", f"# 🚨 Post-mortem — {incident.get('type')} ({dt})", "",
-             f"> [!danger] {incident.get('detail','')}", "",
-             "## Snapshot au moment de la rupture", "",
-             "| | |", "|---|---:|",
-             f"| VIX | {_f(d.get('vix'),1)} |",
-             f"| Régime | {d.get('regime',{}).get('risk_mode','?')} / {d.get('regime',{}).get('cycle','?')} |",
-             f"| Max Drawdown | {_pct(metrics.get('max_drawdown'))} |",
-             f"| VaR 95 % / CVaR 95 % | {_pct(risk.get('var_95'))} / {_pct(risk.get('cvar_95'))} |",
-             f"| Vol (GARCH) | {_pct((risk.get('garch') or {}).get('vol_forecast') if isinstance(risk.get('garch'),dict) else None)} |",
-             f"| Concentration top nom | {limits.get('top_name','—')} {_pct(limits.get('top_name_weight'))} |", "",
-             "## Carnet (top 10 expositions)", "", "| Actif | Secteur | Poids |", "|---|---|---:|"]
-    parts += [f"| [[{r.get('symbol','?')}]] | {r.get('sector','')} | {_pct(r.get('weight'))} |" for r in top]
-    parts += ["", "## Limites franchies", ""]
-    parts += ([f"- **{b.get('type')}** {b.get('label')} : {_pct(b.get('weight'))} > {_pct(b.get('limit'))}"
-               for b in (limits.get("breaches") or [])] or ["- (aucune limite de poids franchie)"])
-    parts += ["", "## Actions correctives (à compléter)", "",
-              "- [ ] Cause racine identifiée", "- [ ] Réduction d'exposition décidée",
-              "- [ ] Recalibrage / mise à jour de la policy de risque [[07_RISK_POLICY]]",
-              "", f"Lié au journal : [[{_JOURNAL_DIR}/{dt}]] · hub : [[Preset_Performance]]"]
-    return f"{_POSTMORTEM_DIR}/incident_{dt}.md", "\n".join(parts)
+    top = sorted(positions, key=lambda r: -(r.get("weight") or r.get("weight_pct") or 0))[:10]
+    P = [_yaml_front_matter(meta), "", f"# 🚨 {dt} · Post-mortem — {incident.get('type')}", "",
+         f"> [!danger] {incident.get('detail','')}", "",
+         "## Snapshot de la rupture", "", "| Indicateur | Valeur |", "|---|--:|",
+         f"| VIX | {_f(d.get('vix'),1)} |",
+         f"| Régime | {d.get('regime',{}).get('risk_mode','?')} / {d.get('regime',{}).get('cycle','?')} |",
+         f"| Drawdown courant | {_pct(meta.get('drawdown_now'))} |",
+         f"| VaR 95 % / CVaR 95 % | {_pct(risk.get('var_95'))} / {_pct(risk.get('cvar_95'))} |",
+         f"| Concentration top | {limits.get('top_name','—')} {_pct(limits.get('top_name_weight'))} |", "",
+         "## Carnet — top 10 expositions", "", "| Actif | Secteur | Poids |", "|---|---|--:|",
+         *[f"| [[{r.get('symbol','?')}]] | {r.get('sector','')} | {_pct(r.get('weight') or r.get('weight_pct'))} |" for r in top],
+         "", "## Actions correctives", "",
+         "- [ ] Cause racine identifiée", "- [ ] Réduction d'exposition décidée",
+         "- [ ] Mise à jour [[07_RISK_POLICY]]", "",
+         f"<small>Lié : [[{_JOURNAL_DIR}/{dt}]] · [[Preset_Performance]]</small>"]
+    return f"{_POSTMORTEM_DIR}/incident_{dt}.md", "\n".join(P)
 
 
 def preset_performance_hub(snapshot: dict, attr: dict, date: str | None = None) -> tuple[str, str]:
-    """Note-hub [[Preset_Performance]] : cible des liens + index Dataview des journaux. PUR."""
+    """Hub [[Preset_Performance]] — résumé + index Dataview. PUR."""
     dt = date or datetime.now(timezone.utc).date().isoformat()
     meta = {"type": "attribution_hub", "date": dt, "tags": ["quant", "hub"], **_meta_common(snapshot, attr)}
-    parts = [_yaml_front_matter(meta), "", "# 📈 Preset_Performance — hub d'attribution", "",
-             f"Dernière maj : **{dt}**. Alpha net annualisé **{_pct(attr.get('alpha_annual'))}** · "
-             f"Beta QQQ **{_f(attr.get('beta_qqq'))}** · R² **{_f(attr.get('r2'))}**.", "",
-             "## Journaux récents (Dataview)", "", "```dataview",
-             "table sharpe, max_drawdown, var_95, alpha_annual, kill_switch",
-             "from #journal", "sort date desc", "limit 30", "```", "",
-             "## Incidents (Dataview)", "", "```dataview",
-             "table incident_type, max_drawdown, vix from #incident sort date desc", "```", "",
-             "Voir aussi : [[07_RISK_POLICY]] · [[10_BACKTEST_RESULTS]] · [[06_STRATEGIES]]"]
-    return _HUB_NOTE, "\n".join(parts)
+    P = [_yaml_front_matter(meta), "", "# 📈 Preset_Performance", "",
+         f"> [!abstract] Alpha net annualisé **{_pct(attr.get('alpha_annual'))}** · Beta QQQ "
+         f"**{_f(attr.get('beta_qqq'))}** · R² **{_f(attr.get('r2'))}** — maj {dt}", "",
+         "## Journaux récents", "", "```dataview",
+         "table sharpe as Sharpe, max_drawdown as MaxDD, var_95 as VaR, alpha_annual as Alpha, kill_switch as Kill",
+         "from #journal sort date desc limit 30", "```", "",
+         "## Synthèses hebdomadaires", "", "```dataview",
+         "table alpha_annual as Alpha, beta_qqq as Beta from #weekly sort date desc", "```", "",
+         "## Incidents", "", "```dataview",
+         "table incident_type as Type, drawdown_now as DD, vix as VIX from #incident sort date desc", "```", "",
+         "Réf. : [[07_RISK_POLICY]] · [[10_BACKTEST_RESULTS]] · [[06_STRATEGIES]]"]
+    return _HUB_NOTE, "\n".join(P)
+
 
 
 # ─────────────────────────── Orchestration (robuste) ───────────────────────────
@@ -377,6 +444,7 @@ def sync_obsidian_vault(snapshot: dict | None = None, root: str | os.PathLike | 
             res["errors"].append(f"svg: {e}")
         # notes
         for builder in (lambda: daily_note(snapshot, attr, incidents, dt, svg_asset),
+                        lambda: weekly_note(snapshot, attr, dt),
                         lambda: preset_performance_hub(snapshot, attr, dt)):
             try:
                 rel, content = builder()

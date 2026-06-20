@@ -80,3 +80,13 @@ def test_sync_never_raises_on_bad_snapshot(tmp_path):
     # snapshot vide / cassé → ne lève pas, renvoie ok avec coffre minimal
     res = O.sync_obsidian_vault(snapshot={}, root=tmp_path)
     assert isinstance(res, dict) and "ok" in res
+
+
+def test_weekly_note_structure():
+    s = _snap()
+    s["dashboard"]["preset_allocation"] = [{"symbol": "MU", "sector": "Tech", "weight": 0.08}]
+    s["dashboard"]["chart_series"] = {"MU": [{"c": 100 + i} for i in range(10)]}
+    rel, md = O.weekly_note(s, O.compute_attribution(s), "2026-06-20")
+    assert rel.startswith("06_Weekly/") and rel.endswith(".md")
+    assert "type: weekly_review" in md and "Synthèse hebdomadaire" in md
+    assert "[[Preset_Performance]]" in md and "[[MU]]" in md          # contributeur lié
