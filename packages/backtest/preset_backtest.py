@@ -337,18 +337,14 @@ def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict |
     if len(syms) < 5:
         return {"available": False}
     # COÛTS RÉELS : commission + slippage déduits du cash à CHAQUE exécution, calibrés sur les barèmes
-    # courtiers (actions→Alpaca 0 % ; crypto→BitMart 0,25 %…). Désactivable via QUANT_FEES=0.
-    from packages.execution.costs import broker_cost_bps
+    # courtiers (actions→Alpaca 0 % ; crypto→BitMart 0,25 % ; IBKR minimum 1 $/ordre…).
+    # Désactivable via QUANT_FEES=0.
+    from packages.execution.costs import broker_fee
     acmap = asset_classes or {}
     _fees_on = os.environ.get("QUANT_FEES", "1") != "0"
-    _bps_cache: dict[str, float] = {}
 
-    def _tc(sym: str) -> float:                            # coût aller-simple (fraction du notionnel)
-        if not _fees_on:
-            return 0.0
-        if sym not in _bps_cache:
-            _bps_cache[sym] = broker_cost_bps(acmap.get(sym, "equity")) / 1e4
-        return _bps_cache[sym]
+    def _tc(sym: str, notional: float) -> float:          # coût RÉEL de l'exécution ($), minimum par ordre inclus
+        return broker_fee(acmap.get(sym, "equity"), notional) if _fees_on else 0.0
 
     fees_paid = 0.0
     quality = quality or {}
@@ -401,7 +397,7 @@ def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict |
                         if d_val > 0:
                             dq = d_val / cpx; tot = qsh + dq
                             qcost = (qcost * qsh + cpx * dq) / tot if tot > 0 else cpx
-                            _fee = d_val * _tc(core_sym); fees_paid += _fee
+                            _fee = _tc(core_sym, d_val); fees_paid += _fee
                             qsh, cash = tot, cash - d_val - _fee
                             trades.append({"date": dts[t], "symbol": core_sym, "side": "BUY", "qty": round(dq, 4),
                                            "price": round(cpx, 2), "notional": round(d_val, 2), "avg_cost": round(qcost, 2),
@@ -409,7 +405,7 @@ def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict |
                         else:
                             sq = min(qsh, -d_val / cpx)
                             if sq > 1e-9:
-                                _fee = sq * cpx * _tc(core_sym); fees_paid += _fee
+                                _fee = _tc(core_sym, sq * cpx); fees_paid += _fee
                                 pnl = (cpx - qcost) * sq; realized += pnl; qsh, cash = qsh - sq, cash + sq * cpx - _fee
                                 trades.append({"date": dts[t], "symbol": core_sym, "side": "SELL", "qty": round(sq, 4),
                                                "price": round(cpx, 2), "notional": round(sq * cpx, 2), "avg_cost": round(qcost, 2),
@@ -426,7 +422,7 @@ def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict |
                         dq = d_val / price
                         tot = shares[s] + dq
                         cost[s] = (cost[s] * shares[s] + price * dq) / tot if tot > 0 else price
-                        _fee = d_val * _tc(s); fees_paid += _fee
+                        _fee = _tc(s, d_val); fees_paid += _fee
                         shares[s], cash = tot, cash - d_val - _fee
                         reason = "entrée (univers qualité, risk-parity)" if (shares[s] - dq) <= 1e-9 else "renforcement (risk-parity)"
                         trades.append({"date": dts[t], "symbol": s, "side": "BUY", "qty": round(dq, 4),
@@ -439,7 +435,7 @@ def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict |
                             continue
                         pnl = (price - cost[s]) * sq
                         realized += pnl
-                        _fee = sq * price * _tc(s); fees_paid += _fee
+                        _fee = _tc(s, sq * price); fees_paid += _fee
                         shares[s], cash = shares[s] - sq, cash + sq * price - _fee
                         reason = ("sortie (hors univers / blackout)" if (nw[i] <= 1e-4 or shares[s] <= 1e-6)
                                   else "allègement (DD-target/risk-parity)")
@@ -468,18 +464,39 @@ def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict |
     final_eq = cash + sum(p["value"] for p in open_pos)
     unrealized = sum(p["pnl"] for p in open_pos)
     n_all = len(trades)
-    trades = sorted(trades, key=lambda x: x["date"], reverse=True)[:max_trades]
-    # P&L LATENT par achat : valeur mark-to-market au DERNIER prix (si tu avais gardé ces parts).
-    _last_px = {universe[i]: float(pxf[i]) for i in range(len(universe))}
+    # --- P&L LATENT par ACHAT, RÉCONCILIÉ avec les positions ouvertes ---
+    # Un achat ne porte du latent que pour les parts ENCORE détenues : on suit en FIFO les parts
+    # consommées par les ventes ; les parts survivantes sont valorisées au PRU MOYEN de la position.
+    # Ainsi Σ(latent des achats) = Σ(latent des positions ouvertes) à l'$ près, et
+    # Σ(P&L réalisé des ventes) + Σ(latent des achats) = (equity finale − capital initial) + frais.
+    from collections import deque as _deque
+    _cur = {s: float(pxf[idx[s]]) for s in universe}
+    _avgc = {s: cost[s] for s in universe}
     if core_on:
-        _last_px[core_sym] = float(core_arr[L - 1])
-    for _t in trades:
-        _lp = _last_px.get(_t["symbol"])
-        if _t["side"] == "BUY" and _lp and _t.get("price"):
-            _t["latent"] = round((_lp - _t["price"]) * _t["qty"], 2)
-            _t["latent_pct"] = round(_lp / _t["price"] - 1, 4)
-        else:
+        _cur[core_sym] = float(core_arr[L - 1]); _avgc[core_sym] = qcost
+    _lots: dict = {}
+    for _t in trades:                                      # ordre chronologique (ascendant)
+        s = _t["symbol"]; q = _t.get("qty") or 0.0
+        if _t["side"] == "BUY":
+            _t["_rem"] = q; _t["latent"], _t["latent_pct"] = 0.0, None
+            _lots.setdefault(s, _deque()).append(_t)
+        else:                                              # VENTE : consomme les achats au FIFO
             _t["latent"], _t["latent_pct"] = None, None
+            dq = q; dl = _lots.get(s)
+            while dq > 1e-9 and dl:
+                lot = dl[0]; take = min(lot["_rem"], dq); lot["_rem"] -= take; dq -= take
+                if lot["_rem"] <= 1e-9:
+                    dl.popleft()
+    for s, dl in _lots.items():                            # parts survivantes → latent au PRU moyen
+        cp, ac = _cur.get(s), _avgc.get(s, 0.0)
+        for lot in dl:
+            rem = lot.get("_rem", 0.0)
+            if rem > 1e-9 and cp and ac > 0:
+                lot["latent"] = round((cp - ac) * rem, 2)
+                lot["latent_pct"] = round(cp / ac - 1, 4)
+    for _t in trades:
+        _t.pop("_rem", None)
+    trades = sorted(trades, key=lambda x: x["date"], reverse=True)[:max_trades]
     # transparence frais : courtiers retenus + estimation de la perf SANS frais (premier ordre).
     from packages.execution.costs import broker_for
     _gross_eq = final_eq + fees_paid                       # ≈ equity sans frais (estimation au 1er ordre)
@@ -496,4 +513,8 @@ def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict |
                         "fees_paid": round(fees_paid, 2), "fees_pct": round(fees_paid / init_cap, 4),
                         "gross_return": round(_gross_eq / init_cap - 1, 4), "fees_on": _fees_on,
                         "brokers": _brokers,
+                        # réconciliation explicite : P&L total = réalisé + latent = gain du graphe + frais
+                        "total_pnl": round(realized + unrealized, 2),
+                        "graph_gain": round(final_eq - init_cap, 2),
+                        "reconciles": abs((realized + unrealized) - (final_eq - init_cap) - fees_paid) < max(1.0, 0.001 * init_cap),
                         "start": dts[start], "end": dts[L - 1]}}

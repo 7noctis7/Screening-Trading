@@ -50,11 +50,11 @@ _COST_BY_CLASS: dict[str, dict[str, float]] = {
 # valeurs liquides / paires majeures). Sources : grilles publiques Alpaca, IBKR, Binance, BitMart.
 BROKER_FEES: dict[str, dict[str, float]] = {
     # ACTIONS / ETF US
-    "alpaca": {"commission_bps": 0.0, "slippage_bps": 2.0},    # 0 $ commission (frais SEC/TAF ~0,1 bp négligés) + spread serré
-    "ibkr": {"commission_bps": 0.5, "slippage_bps": 2.0},      # Pro fixe 0,005 $/action (min 1 $) ≈ 0,5 bp sur large-caps
+    "alpaca": {"commission_bps": 0.0, "slippage_bps": 2.0, "min_fee": 0.0},    # 0 $ commission, aucun minimum
+    "ibkr": {"commission_bps": 0.5, "slippage_bps": 2.0, "min_fee": 1.0},      # Pro fixe 0,005 $/action, MINIMUM 1 $/ordre
     # CRYPTO SPOT
-    "binance": {"commission_bps": 10.0, "slippage_bps": 6.0},  # 0,10 % taker (0,075 % avec BNB) + spread majors
-    "bitmart": {"commission_bps": 25.0, "slippage_bps": 10.0}, # 0,25 % taker ; liquidité moindre → slippage +
+    "binance": {"commission_bps": 10.0, "slippage_bps": 6.0, "min_fee": 0.0},  # 0,10 % taker, pas de minimum
+    "bitmart": {"commission_bps": 25.0, "slippage_bps": 10.0, "min_fee": 0.0}, # 0,25 % taker, pas de minimum
 }
 # Courtier par défaut par classe = TES comptes réels (actions→Alpaca, crypto→BitMart).
 # Surchargeable : QUANT_BROKER_EQUITY (alpaca|ibkr) / QUANT_BROKER_CRYPTO (bitmart|binance).
@@ -72,10 +72,21 @@ def broker_for(asset_class: str) -> str:
 
 
 def broker_cost_bps(asset_class: str) -> float:
-    """Coût ALLER-SIMPLE (commission + slippage) en bps pour la classe, selon le courtier réel.
-    C'est ce qu'on déduit du cash à CHAQUE exécution du backtest (achat ou vente)."""
+    """Coût ALLER-SIMPLE en bps (commission proportionnelle + slippage), hors minimum par ordre.
+    Pour le coût RÉEL d'une exécution (avec minimum), utiliser broker_fee()."""
     b = BROKER_FEES.get(broker_for(asset_class), BROKER_FEES["alpaca"])
     return float(b["commission_bps"] + b["slippage_bps"])
+
+
+def broker_fee(asset_class: str, notional: float) -> float:
+    """Coût RÉEL d'UNE exécution ($) pour un notionnel donné, selon le courtier :
+    commission = max(minimum_par_ordre, notionnel × commission_bps) + slippage = notionnel × slippage_bps.
+    Le MINIMUM par ordre (ex. IBKR 1 $) domine pour les petits ordres → frais réalistes même à faible
+    notionnel (sinon un % seul sous-estime massivement le coût de nombreux petits trades)."""
+    b = BROKER_FEES.get(broker_for(asset_class), BROKER_FEES["alpaca"])
+    n = abs(notional)
+    commission = max(float(b.get("min_fee", 0.0)), n * b["commission_bps"] / 1e4)
+    return commission + n * b["slippage_bps"] / 1e4
 
 
 def broker_assumptions() -> list[dict]:
