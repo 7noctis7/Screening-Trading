@@ -13,6 +13,14 @@ _C = {"bg": "#0b0d10", "card": "#14171b", "card2": "#1a1e24", "border": "#262b33
       "warn": "#f59e0b", "neg": "#ef4444", "blue": "#3b82f6"}
 
 
+def _fr_date(iso: str | None) -> str:
+    """ISO AAAA-MM-JJ → JJ/MM/AAAA (date de génération du rapport)."""
+    s = str(iso or "")
+    if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+        return f"{s[8:10]}/{s[5:7]}/{s[0:4]}"
+    return s
+
+
 def _pct(x: float | None, nd: int = 1) -> str:
     return "—" if x is None else f"{x*100:.{nd}f}%"
 
@@ -222,34 +230,42 @@ def _apply_theme(html: str, theme: str) -> str:
     return html
 
 
-def _snowflake_svg(axes: dict, size: int = 230) -> str:
-    """Radar « Portfolio Snowflake » (5 axes) en SVG — anneaux, axes, polygone doré (Simply Wall St)."""
+def _snowflake_svg(axes: dict, size: int = 260) -> str:
+    """Radar « Portfolio Snowflake » (5 axes) — design Apple : dégradé doux, anneaux subtils, sommets
+    marqués, labels + valeurs nettes. SVG autonome."""
     import math
     labels = ["VALUE", "FUTURE", "PAST", "HEALTH", "DIVIDEND"]
     cx = cy = size / 2
-    R = size / 2 - 30
-    gold = "#e0b015"
+    R = size / 2 - 42                                      # marge pour les labels
+    gold, gold2 = "#f0c020", "#caa00f"
     n = len(labels)
     def _pt(i, rad):
-        a = -math.pi / 2 + i * 2 * math.pi / n            # départ en haut, sens horaire
+        a = -math.pi / 2 + i * 2 * math.pi / n
         return cx + rad * math.cos(a), cy + rad * math.sin(a)
     rings = ""
-    for k in (0.33, 0.66, 1.0):                            # anneaux concentriques
+    for k in (0.25, 0.5, 0.75, 1.0):                      # anneaux très subtils
         pts = " ".join(f"{_pt(i, R*k)[0]:.1f},{_pt(i, R*k)[1]:.1f}" for i in range(n))
-        rings += f'<polygon points="{pts}" fill="none" stroke="{_C["border"]}" stroke-width="0.8"/>'
-    spokes = lab = ""
+        rings += f'<polygon points="{pts}" fill="none" stroke="{_C["border"]}" stroke-width="0.7" opacity="0.6"/>'
+    spokes = lab = dots = ""
     for i, name in enumerate(labels):
         ex, ey = _pt(i, R)
-        spokes += f'<line x1="{cx}" y1="{cy}" x2="{ex:.1f}" y2="{ey:.1f}" stroke="{_C["border"]}" stroke-width="0.6"/>'
-        lx, ly = _pt(i, R + 16)
-        anchor = "middle" if abs(lx - cx) < 5 else ("start" if lx > cx else "end")
-        lab += (f'<text x="{lx:.1f}" y="{ly+3:.1f}" text-anchor="{anchor}" font-size="9" '
-                f'fill="{_C["muted"]}" letter-spacing="1">{name}</text>')
-    poly = " ".join(f"{_pt(i, R*max(0.04, axes.get(labels[i],0)/100))[0]:.1f},"
-                    f"{_pt(i, R*max(0.04, axes.get(labels[i],0)/100))[1]:.1f}" for i in range(n))
-    return (f'<svg viewBox="0 0 {size} {size}" width="{size}" height="{size}">{rings}{spokes}'
-            f'<polygon points="{poly}" fill="{gold}" fill-opacity="0.78" stroke="{gold}" stroke-width="1.5"/>'
-            f'{lab}</svg>')
+        spokes += f'<line x1="{cx}" y1="{cy}" x2="{ex:.1f}" y2="{ey:.1f}" stroke="{_C["border"]}" stroke-width="0.6" opacity="0.6"/>'
+        lx, ly = _pt(i, R + 18)
+        anchor = "middle" if abs(lx - cx) < 6 else ("start" if lx > cx else "end")
+        lab += (f'<text x="{lx:.1f}" y="{ly:.1f}" text-anchor="{anchor}" font-size="9.5" '
+                f'fill="{_C["muted"]}" letter-spacing="1.2" font-weight="600">{name}</text>'
+                f'<text x="{lx:.1f}" y="{ly+12:.1f}" text-anchor="{anchor}" font-size="10" '
+                f'fill="{_C["fg"]}" font-weight="700">{axes.get(name,0)}</text>')
+    pts_xy = [_pt(i, R * max(0.05, axes.get(labels[i], 0) / 100)) for i in range(n)]
+    poly = " ".join(f"{x:.1f},{y:.1f}" for x, y in pts_xy)
+    for x, y in pts_xy:
+        dots += f'<circle cx="{x:.1f}" cy="{y:.1f}" r="2.4" fill="{gold}"/>'
+    grad = (f'<defs><radialGradient id="sf" cx="50%" cy="50%" r="65%">'
+            f'<stop offset="0%" stop-color="{gold}" stop-opacity="0.92"/>'
+            f'<stop offset="100%" stop-color="{gold2}" stop-opacity="0.62"/></radialGradient></defs>')
+    return (f'<svg viewBox="0 0 {size} {size}" width="{size}" height="{size}">{grad}{rings}{spokes}'
+            f'<polygon points="{poly}" fill="url(#sf)" stroke="{gold}" stroke-width="1.8" '
+            f'stroke-linejoin="round"/>{dots}{lab}</svg>')
 
 
 def _holders_bars(rows: list[dict], key: str, pct: bool) -> str:
@@ -325,13 +341,13 @@ def company_report_html(r: dict[str, Any], theme: str = "dark") -> str:
     blocking = (r.get("flags") or {}).get("blocking_alert")
     badge_col = _C["neg"] if blocking else _tone(g)
     _name = idy.get("name") or ""
-    name_span = (f'<span style="color:{_C["muted"]};font-size:15px;font-weight:500;margin-left:10px">{_name}</span>'
+    name_line = (f'<div style="color:{_C["muted"]};font-size:14px;font-weight:500;margin-top:1px">{_name}</div>'
                  if (_name and _name != idy["symbol"]) else "")
     header = (
         f'<div style="display:flex;align-items:center;gap:22px;margin-bottom:16px">'
         f'<div>{_gauge(g)}</div>'
         f'<div style="flex:1">'
-        f'<div style="font-size:30px;font-weight:800;letter-spacing:-.01em">{idy["symbol"]}{name_span}</div>'
+        f'<div style="font-size:30px;font-weight:800;letter-spacing:-.01em">{idy["symbol"]}</div>{name_line}'
         f'<div style="color:{_C["muted"]};font-size:14px;margin-top:2px">{idy["sector"]} · '
         f'<b style="color:{_C["fg"]}">{_money(idy["market_cap"])}</b> · cours <b style="color:{_C["fg"]}">${_num(idy["price"])}</b></div>'
         f'<div style="margin-top:8px;display:inline-block;padding:4px 14px;border-radius:999px;'
@@ -600,8 +616,9 @@ def company_report_html(r: dict[str, Any], theme: str = "dark") -> str:
             cols += (f'<div><div style="font-size:11px;color:{_C["muted"]};margin-bottom:6px">'
                      f'Top institutionnels (% du capital)</div>{_holders_bars(inst, "pct", pct=True)}</div>')
         if insi:
+            _ik = "pct" if any(x.get("pct") is not None for x in insi) else "shares"
             cols += (f'<div><div style="font-size:11px;color:{_C["muted"]};margin-bottom:6px">'
-                     f'Top insiders (titres détenus)</div>{_holders_bars(insi, "shares", pct=False)}</div>')
+                     f'Top insiders (% du capital)</div>{_holders_bars(insi, _ik, pct=(_ik=="pct"))}</div>')
         holders_card = _card("Actionnariat — répartition", f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">{cols}</div>')
 
     blocking_html = ""
@@ -632,27 +649,27 @@ def company_report_html(r: dict[str, Any], theme: str = "dark") -> str:
 font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',Inter,system-ui,sans-serif;line-height:1.45">
 <div style="max-width:860px;margin:0 auto;padding:28px 24px">
 <div style="font-size:10px;color:{_C['muted']};letter-spacing:.14em;text-transform:uppercase;margin-bottom:8px">
-Rapport d'évaluation institutionnelle · {r['as_of']} · données auditées</div>
+Rapport effectué le {_fr_date(r['as_of'])}</div>
 {header}
 {blocking_html}
 {memo_html}
 {fx_html}
 {snow_card}
+{_card("Synthèse — piliers de notation", pillars)}
+{_card("Audit d'intégrité des données", _findings_html(audit))}
+{_reconciliation_html(r)}
+{_card("Valorisation (Damodaran)", dam_kv)}
+{_card("Analyse économique (Vernimmen)", vern)}
 {charts_card}
 {findata_card}
 {quarterly_card}
-{_card("Audit d'intégrité des données", _findings_html(audit))}
-{_reconciliation_html(r)}
-{_card("Analyse économique (Vernimmen)", vern)}
-{_card("Valorisation (Damodaran)", dam_kv)}
 {sector_card}
-{earn_card}
 {_card("Qualité & solidité", qual)}
-{tech_card}
 {risk_card}
+{tech_card}
 {macro_card}
+{earn_card}
 {holders_card}
-{_card("Synthèse — piliers de notation", pillars)}
 {_card("Synthèse Advisory Board — Moat & Tail Risk", verdict)}
 <p style="font-size:10px;color:{_C['muted']};margin-top:18px">
 Sources gratuites (Yahoo Finance / FMP / SEC EDGAR — 10-K, 10-Q) + recalculs internes contrôlés.
@@ -751,14 +768,15 @@ def _reportlab_pdf(r: dict, path: str, A4, cm, canvas, theme: str = "dark") -> N
 
     # ── EN-TÊTE : nom, badge reco/score, puces sous-scores ──
     c.setFillColor(C["muted"]); c.setFont("Helvetica", 8)
-    c.drawString(ML, st["y"], "NOTE D'ANALYSE FONDAMENTALE")
+    c.drawString(ML, st["y"], f"RAPPORT EFFECTUÉ LE {_fr_date(r.get('as_of'))}")
     st["y"] -= 0.7 * cm
-    c.setFillColor(C["fg"]); c.setFont("Helvetica-Bold", 20)
+    c.setFillColor(C["fg"]); c.setFont("Helvetica-Bold", 22)
     c.drawString(ML, st["y"], f"{idy['symbol']}")
     _nm = idy.get("name") or ""
     if _nm and _nm != idy["symbol"]:
-        c.setFillColor(C["muted"]); c.setFont("Helvetica", 12)
-        c.drawString(ML + c.stringWidth(idy['symbol'], "Helvetica-Bold", 20) + 8, st["y"], _trunc(_nm, 42))
+        st["y"] -= 0.5 * cm
+        c.setFillColor(C["muted"]); c.setFont("Helvetica", 11)
+        c.drawString(ML, st["y"], _trunc(_nm, 54))
     # badge statut/score à droite — largeur DYNAMIQUE (ne déborde jamais)
     g = sc["global"]
     blocking = (r.get("flags") or {}).get("blocking_alert")
@@ -840,175 +858,7 @@ def _reportlab_pdf(r: dict, path: str, A4, cm, canvas, theme: str = "dark") -> N
         c.drawString(ML + 6.0 * cm, top - sh + 0.5 * cm, _trunc(snow.get("summary", ""), 52))
         st["y"] = top - sh - 0.35 * cm
 
-    # ── graphes (carte) ──
-    ch_data = r.get("charts") or {}
-    closes = ch_data.get("price") or []
-    labels = ch_data.get("price_labels") or []
-    hist = ch_data.get("financial_history") or []
-    if len(closes) >= 20:
-        has_bars = len(hist) >= 2
-        gh = 6.6 * cm + (4.8 * cm if has_bars else 0)
-        ensure(gh + 0.5 * cm)
-        top = st["y"]
-        c.setFillColor(C["card"]); c.setStrokeColor(C["border"]); c.setLineWidth(0.7)
-        c.roundRect(ML, top - gh, CW, gh, 8, fill=1, stroke=1)
-        c.setFillColor(C["accent"]); c.setFont("Helvetica-Bold", 9)
-        c.drawString(ML + 0.45 * cm, top - 0.6 * cm, "GRAPHIQUES")
-        period = (f"{labels[0]} → {labels[-1]}" if len(labels) >= 2 else "")
-        gx, gw = ML + 0.9 * cm, CW - 1.4 * cm
-        _rl_line(c, closes, labels, gx, top - 4.2 * cm, gw, 2.9 * cm, f"Cours ($) · {period}", cm, C)
-        _rl_dd(c, closes, labels, gx, top - 6.4 * cm, gw, 1.5 * cm, "Drawdown (sous l'eau)", cm, C)
-        if has_bars:
-            half = (gw - 0.6 * cm) / 2
-            _rl_bars(c, hist, "revenue", gx, top - gh + 0.9 * cm, half, 2.6 * cm,
-                     f"CA ({ch_data.get('history_years', len(hist))} ex.)", cm, C)
-            _rl_bars(c, hist, "net_income", gx + half + 0.6 * cm, top - gh + 0.9 * cm, half, 2.6 * cm,
-                     "Résultat net", cm, C)
-        st["y"] = top - gh - 0.35 * cm
-
-    # ── Données financières (tableau par exercice) ──
-    if len(hist) >= 2:
-        trows = []
-        for x in hist:
-            rev = x.get("revenue"); ni = x.get("net_income"); eps = x.get("eps")
-            nm = (ni / rev) if (rev and ni is not None and rev) else None
-            trows.append([str(x.get("year", "—")), _money(rev), _money(ni),
-                          _num(eps) if eps is not None else "—",
-                          (_pct(nm) if nm is not None else "—")])
-        _rl_table(c, "Données financières (par exercice)",
-                  ["Exercice", "CA", "Résultat net", "BPA", "Marge nette"], trows,
-                  ML, CW, st, ensure, cm, C, w, MR)
-
-    # ── Données financières (trimestres) ──
-    qd = r.get("quarterly") or []
-    if len(qd) >= 2:
-        qrows = []
-        for x in qd:
-            nm = x.get("net_margin")
-            qrows.append([str(x.get("period", "—")), _money(x.get("revenue")), _money(x.get("net_income")),
-                          _num(x.get("eps")) if x.get("eps") is not None else "—",
-                          _pct(nm) if nm is not None else "—"])
-        _rl_table(c, "Données financières (par trimestre)",
-                  ["Trimestre", "CA", "Résultat net", "BPA", "Marge nette"], qrows,
-                  ML, CW, st, ensure, cm, C, w, MR)
-
-    # ── Audit d'intégrité ──
-    audit = r.get("audit") or {}
-    rel = audit.get("reliability", "—"); cnt = audit.get("counts", {})
-    rel_col = {"fiable": C["pos"], "à vérifier": C["warn"], "non fiable": C["neg"]}.get(rel, C["fg"])
-    arows = [("Verdict fiabilité", rel, rel_col),
-             ("Critiques · majeures · avert.", f"{cnt.get('critical',0)} · {cnt.get('major',0)} · {cnt.get('warning',0)}", C["fg"])]
-    for fd in (audit.get("findings") or [])[:3]:
-        arows.append((f"• {fd.get('severity')}", _trunc(fd.get("detail", ""), 60), C["muted"]))
-    card("Audit d'intégrité des données", arows)
-
-    # ── Réconciliation GAAP vs Non-GAAP ──
-    rec = r.get("reconciliation")
-    if rec and rec.get("rows"):
-        rrows = []
-        for x in rec["rows"]:
-            col = C["pos"] if x["status"] == "réconcilié" else C["warn"] if x["status"] == "écart majeur" else C["neg"]
-            rrows.append((f"{x['metric']} (reporté vs GAAP)",
-                          f"{_money(x['reported'])} vs {_money(x['gaap'])} · {x['gap']*100:.0f}% · {x['status']}", col))
-        card("Réconciliation GAAP vs Non-GAAP", rrows)
-
-    # ── Vernimmen ──
-    sp = ver.get("value_creation_spread"); eva = ver.get("eva"); m = ver.get("margins", {}); dp = ver.get("dupont", {})
-    card("Analyse économique (Vernimmen)", [
-        ("ROCE après impôt", _pct(ver.get("roce_after_tax")), C["fg"]),
-        ("WACC", _pct(ver.get("wacc")), C["fg"]),
-        ("Spread ROCE−WACC", _pct(sp) if sp is not None else "—", C["pos"] if (sp or 0) > 0 else C["neg"]),
-        ("EVA (profit économique)", _money(eva), C["pos"] if (eva or 0) > 0 else C["neg"]),
-        ("Marges brute / EBIT / nette", f"{_pct(m.get('gross'))} / {_pct(m.get('ebit'))} / {_pct(m.get('net'))}", C["fg"]),
-        ("Gearing · Dette nette/EBITDA", f"{_num(ver.get('gearing'))} · {_num(ver.get('net_debt_ebitda'),1)}×", C["fg"]),
-        ("DuPont ROE (marge×rotation×levier)",
-         f"{_pct(dp.get('net_margin'))}×{_num(dp.get('asset_turnover'))}×{_num(dp.get('equity_multiplier'))} = {_pct(dp.get('roe'))}", C["fg"]),
-    ])
-
-    # ── Damodaran (gate-aware) ──
-    if not reliable:
-        card("Valorisation (Damodaran)", [
-            ("Coût des FP · WACC · bêta",
-             f"{_pct(dam.get('cost_of_equity'))} · {_pct(dam.get('wacc'))} · {_num(dam.get('beta'))}", C["fg"]),
-            ("DCF & multiples", "masqués (devise ≠ cours)", C["warn"]),
-        ], extra_h=0.0)
-    else:
-        scen = dcf.get("scenarios", {}); mos = dcf.get("margin_of_safety"); mu = dam.get("multiples", {})
-        card("Valorisation (Damodaran)", [
-            ("DCF bear / base / bull", f"${_num(scen.get('bear'))} / ${_num(scen.get('base'))} / ${_num(scen.get('bull'))}", C["fg"]),
-            ("Marge de sécurité", _pct(mos) if mos is not None else "—", C["pos"] if (mos or 0) > 0 else C["neg"]),
-            ("Croissance implicite (cours)", _pct(dam.get("implied_growth_in_price")), C["fg"]),
-            ("P/E · EV/EBITDA · P/B", f"{_num(mu.get('pe'),1)} · {_num(mu.get('ev_ebitda'),1)} · {_num(mu.get('price_to_book'),1)}", C["fg"]),
-            ("EV/Sales · rdt FCF · rdt bénéf.", f"{_num(mu.get('ev_sales'),1)} · {_pct(mu.get('fcf_yield'))} · {_pct(mu.get('earnings_yield'))}", C["fg"]),
-            ("Coût des FP · bêta", f"{_pct(dam.get('cost_of_equity'))} · {_num(dam.get('beta'))}", C["fg"]),
-        ])
-
-    # ── positionnement secteur ──
-    scmp = r.get("sector_comparison") or {}
-    if scmp.get("available"):
-        rows = []
-        for x in scmp.get("rows", []):
-            isr = x["metric"] in ("net_margin", "roe", "roic", "gross_margin", "revenue_growth")
-            cv = _pct(x["company"]) if isr else _num(x["company"])
-            mv = _pct(x["sector_median"]) if isr else _num(x["sector_median"])
-            col = C["pos"] if x["verdict"] == "favorable" else C["neg"]
-            rows.append((f"{x['label']} (méd. {mv})", f"{cv} · {int(x['percentile']*100)}e · {x['verdict']}", col))
-        card(f"Positionnement sectoriel ({scmp.get('favorable')}/{scmp.get('total')} favorables · {scmp.get('n_peers')} pairs)", rows)
-
-    # ── qualité ──
-    ql = r["quality"]; z = ql.get("altman_z", {}); inv = ql.get("investor_scores", {})
-    card("Qualité & solidité", [
-        ("Piotroski F-score", f"{ql.get('piotroski_f_score')}/9 ({ql.get('piotroski_label')})", C["fg"]),
-        ("Altman Z", f"{z.get('z')} ({z.get('zone')})" if z.get("z") is not None else "N/A", C["fg"]),
-        ("Graham / Fisher / Thiel", f"{inv.get('graham')} / {inv.get('fisher')} / {inv.get('thiel')}", C["fg"]),
-    ])
-
-    # ── technique ──
-    t = r.get("technical")
-    if t:
-        trend = str(t.get("trend") or "—")
-        tcol = C["pos"] if trend == "haussière" else C["neg"] if trend == "baissière" else C["fg"]
-        card("Analyse technique", [
-            ("Tendance · RSI · MACD", f"{trend} · {_num(t.get('rsi'),0)} · {t.get('macd_signal','—')}", tcol),
-            ("vs MM50 / MM200", f"{_pct(t.get('vs_sma50'))} / {_pct(t.get('vs_sma200'))}", C["fg"]),
-            ("Plage 52 sem.", f"${_num(t.get('low_52w'),0)} – ${_num(t.get('high_52w'),0)}", C["muted"]),
-        ])
-
-    # ── risk management de l'actif ──
-    rk = r.get("risk") or {}
-    if rk.get("available"):
-        card("Risk management de l'actif", [
-            ("Volatilité annualisée", _pct(rk.get("vol_annual")), C["fg"]),
-            ("Max drawdown · VaR 95 %", f"{_pct(rk.get('max_drawdown'))} · {_pct(rk.get('var_95'))}", C["neg"]),
-            ("CVaR 95 % (1j)", _pct(rk.get("cvar_95")), C["neg"]),
-            ("Sharpe / Sortino", f"{_num(rk.get('sharpe'))} / {_num(rk.get('sortino'))}", C["fg"]),
-            ("Bêta marché", _num(rk.get("beta")) if rk.get("beta") is not None else "—", C["fg"]),
-            ("Stop suggéré (~2σ hebdo)", _pct(rk.get("suggested_stop")), C["warn"]),
-        ])
-
-    # ── actionnariat (barres horizontales) ──
-    hd = r.get("holders") or {}
-    inst = hd.get("institutional") or []; insi = hd.get("insiders") or []
-    if inst or insi:
-        _rl_holders(c, inst, insi, ML, CW, st, ensure, cm, C, w, MR)
-
-    # ── macro + résultats ──
-    rows = []
-    mc = r.get("macro")
-    if mc:
-        rows.append(("Régime · VIX", f"{mc.get('regime') or 'neutre'} · {_num(mc.get('vix'),1)}", C["fg"]))
-        rows.append(("Exposition · Taux 10A US",
-                     f"{_pct(mc.get('exposure')) if mc.get('exposure') is not None else '60%'} · "
-                     f"{_pct(mc.get('rate_10y')) if mc.get('rate_10y') is not None else '4.3%'}", C["fg"]))
-    e = r.get("earnings")
-    if e:
-        rows += [("Prochain résultat", e.get("next_date") or "—", C["accent"]),
-                 ("BPA estimé / annoncé", f"{_num(e.get('eps_estimate'))} / {_num(e.get('eps_actual')) if e.get('eps_actual') is not None else '—'}", C["fg"]),
-                 ("Revenu estimé / annoncé", f"{_money(e.get('revenue_estimate'))} / {_money(e.get('revenue_actual')) if e.get('revenue_actual') is not None else '—'}", C["fg"])]
-    if rows:
-        card("Macro & résultats", rows)
-
-    # ── piliers de notation (barres colorées) ──
+    # ── piliers de notation (barres colorées) — synthèse ──
     pil = sc.get("pillars") or {}
     if pil:
         ph = 1.0 * cm + len(pil) * 0.62 * cm
@@ -1030,6 +880,172 @@ def _reportlab_pdf(r: dict, path: str, A4, cm, canvas, theme: str = "dark") -> N
             c.drawRightString(w - MR - 0.45 * cm, yy, str(val))
             yy -= 0.62 * cm
         st["y"] = top - ph - 0.35 * cm
+
+    # ── Gouvernance : Audit d'intégrité ──
+    audit = r.get("audit") or {}
+    rel = audit.get("reliability", "—"); cnt = audit.get("counts", {})
+    rel_col = {"fiable": C["pos"], "à vérifier": C["warn"], "non fiable": C["neg"]}.get(rel, C["fg"])
+    arows = [("Verdict fiabilité", rel, rel_col),
+             ("Critiques · majeures · avert.", f"{cnt.get('critical',0)} · {cnt.get('major',0)} · {cnt.get('warning',0)}", C["fg"])]
+    for fd in (audit.get("findings") or [])[:3]:
+        arows.append((f"• {fd.get('severity')}", _trunc(fd.get("detail", ""), 60), C["muted"]))
+    card("Audit d'intégrité des données", arows)
+
+    # ── Gouvernance : Réconciliation GAAP vs Non-GAAP ──
+    rec = r.get("reconciliation")
+    if rec and rec.get("rows"):
+        rrows = []
+        for x in rec["rows"]:
+            col = C["pos"] if x["status"] == "réconcilié" else C["warn"] if x["status"] == "écart majeur" else C["neg"]
+            rrows.append((f"{x['metric']} (reporté vs GAAP)",
+                          f"{_money(x['reported'])} vs {_money(x['gaap'])} · {x['gap']*100:.0f}% · {x['status']}", col))
+        card("Réconciliation GAAP vs Non-GAAP", rrows)
+
+    # ── Valorisation (Damodaran, gate-aware) ──
+    if not reliable:
+        card("Valorisation (Damodaran)", [
+            ("Coût des FP · WACC · bêta",
+             f"{_pct(dam.get('cost_of_equity'))} · {_pct(dam.get('wacc'))} · {_num(dam.get('beta'))}", C["fg"]),
+            ("DCF & multiples", "masqués (devise ≠ cours)", C["warn"]),
+        ], extra_h=0.0)
+    else:
+        scen = dcf.get("scenarios", {}); mos = dcf.get("margin_of_safety"); mu = dam.get("multiples", {})
+        card("Valorisation (Damodaran)", [
+            ("DCF bear / base / bull", f"${_num(scen.get('bear'))} / ${_num(scen.get('base'))} / ${_num(scen.get('bull'))}", C["fg"]),
+            ("Marge de sécurité", _pct(mos) if mos is not None else "—", C["pos"] if (mos or 0) > 0 else C["neg"]),
+            ("Croissance implicite (cours)", _pct(dam.get("implied_growth_in_price")), C["fg"]),
+            ("P/E · EV/EBITDA · P/B", f"{_num(mu.get('pe'),1)} · {_num(mu.get('ev_ebitda'),1)} · {_num(mu.get('price_to_book'),1)}", C["fg"]),
+            ("EV/Sales · rdt FCF · rdt bénéf.", f"{_num(mu.get('ev_sales'),1)} · {_pct(mu.get('fcf_yield'))} · {_pct(mu.get('earnings_yield'))}", C["fg"]),
+            ("Coût des FP · bêta", f"{_pct(dam.get('cost_of_equity'))} · {_num(dam.get('beta'))}", C["fg"]),
+        ])
+
+    # ── Rentabilité économique (Vernimmen) ──
+    sp = ver.get("value_creation_spread"); eva = ver.get("eva"); m = ver.get("margins", {}); dp = ver.get("dupont", {})
+    card("Analyse économique (Vernimmen)", [
+        ("ROCE après impôt", _pct(ver.get("roce_after_tax")), C["fg"]),
+        ("WACC", _pct(ver.get("wacc")), C["fg"]),
+        ("Spread ROCE−WACC", _pct(sp) if sp is not None else "—", C["pos"] if (sp or 0) > 0 else C["neg"]),
+        ("EVA (profit économique)", _money(eva), C["pos"] if (eva or 0) > 0 else C["neg"]),
+        ("Marges brute / EBIT / nette", f"{_pct(m.get('gross'))} / {_pct(m.get('ebit'))} / {_pct(m.get('net'))}", C["fg"]),
+        ("Gearing · Dette nette/EBITDA", f"{_num(ver.get('gearing'))} · {_num(ver.get('net_debt_ebitda'),1)}×", C["fg"]),
+        ("DuPont ROE (marge×rotation×levier)",
+         f"{_pct(dp.get('net_margin'))}×{_num(dp.get('asset_turnover'))}×{_num(dp.get('equity_multiplier'))} = {_pct(dp.get('roe'))}", C["fg"]),
+    ])
+
+    # ── Données financières : graphes + tableaux (exercice & trimestre) ──
+    ch_data = r.get("charts") or {}
+    closes = ch_data.get("price") or []
+    labels = ch_data.get("price_labels") or []
+    hist = ch_data.get("financial_history") or []
+    if len(closes) >= 20:
+        has_bars = len(hist) >= 2
+        gh = 7.0 * cm + (5.2 * cm if has_bars else 0)
+        ensure(gh + 0.5 * cm)
+        top = st["y"]
+        c.setFillColor(C["card"]); c.setStrokeColor(C["border"]); c.setLineWidth(0.7)
+        c.roundRect(ML, top - gh, CW, gh, 8, fill=1, stroke=1)
+        c.setFillColor(C["accent"]); c.setFont("Helvetica-Bold", 9)
+        c.drawString(ML + 0.45 * cm, top - 0.6 * cm, "GRAPHIQUES")
+        period = (f"{labels[0]} → {labels[-1]}" if len(labels) >= 2 else "")
+        gx, gw = ML + 0.9 * cm, CW - 1.4 * cm
+        _rl_line(c, closes, labels, gx, top - 4.4 * cm, gw, 2.9 * cm, f"Cours ($) · {period}", cm, C)
+        _rl_dd(c, closes, labels, gx, top - 6.7 * cm, gw, 1.4 * cm, "Drawdown (sous l'eau)", cm, C)
+        if has_bars:
+            half = (gw - 0.8 * cm) / 2
+            _rl_bars(c, hist, "revenue", gx, top - gh + 1.0 * cm, half, 2.6 * cm,
+                     f"CA ({ch_data.get('history_years', len(hist))} ex.)", cm, C)
+            _rl_bars(c, hist, "net_income", gx + half + 0.8 * cm, top - gh + 1.0 * cm, half, 2.6 * cm,
+                     "Résultat net", cm, C)
+        st["y"] = top - gh - 0.35 * cm
+
+    if len(hist) >= 2:
+        trows = []
+        for x in hist:
+            rev = x.get("revenue"); ni = x.get("net_income"); eps = x.get("eps")
+            nm = (ni / rev) if (rev and ni is not None and rev) else None
+            trows.append([str(x.get("year", "—")), _money(rev), _money(ni),
+                          _num(eps) if eps is not None else "—",
+                          (_pct(nm) if nm is not None else "—")])
+        _rl_table(c, "Données financières (par exercice)",
+                  ["Exercice", "CA", "Résultat net", "BPA", "Marge nette"], trows,
+                  ML, CW, st, ensure, cm, C, w, MR)
+
+    qd = r.get("quarterly") or []
+    if len(qd) >= 2:
+        qrows = []
+        for x in qd:
+            nm = x.get("net_margin")
+            qrows.append([str(x.get("period", "—")), _money(x.get("revenue")), _money(x.get("net_income")),
+                          _num(x.get("eps")) if x.get("eps") is not None else "—",
+                          _pct(nm) if nm is not None else "—"])
+        _rl_table(c, "Données financières (par trimestre)",
+                  ["Trimestre", "CA", "Résultat net", "BPA", "Marge nette"], qrows,
+                  ML, CW, st, ensure, cm, C, w, MR)
+
+    # ── positionnement secteur ──
+    scmp = r.get("sector_comparison") or {}
+    if scmp.get("available"):
+        rows = []
+        for x in scmp.get("rows", []):
+            isr = x["metric"] in ("net_margin", "roe", "roic", "gross_margin", "revenue_growth")
+            cv = _pct(x["company"]) if isr else _num(x["company"])
+            mv = _pct(x["sector_median"]) if isr else _num(x["sector_median"])
+            col = C["pos"] if x["verdict"] == "favorable" else C["neg"]
+            rows.append((f"{x['label']} (méd. {mv})", f"{cv} · {int(x['percentile']*100)}e · {x['verdict']}", col))
+        card(f"Positionnement sectoriel ({scmp.get('favorable')}/{scmp.get('total')} favorables · {scmp.get('n_peers')} pairs)", rows)
+
+    # ── qualité ──
+    ql = r["quality"]; z = ql.get("altman_z", {}); inv = ql.get("investor_scores", {})
+    card("Qualité & solidité", [
+        ("Piotroski F-score", f"{ql.get('piotroski_f_score')}/9 ({ql.get('piotroski_label')})", C["fg"]),
+        ("Altman Z", f"{z.get('z')} ({z.get('zone')})" if z.get("z") is not None else "N/A", C["fg"]),
+        ("Graham / Fisher / Thiel", f"{inv.get('graham')} / {inv.get('fisher')} / {inv.get('thiel')}", C["fg"]),
+    ])
+
+    # ── risk management de l'actif ──
+    rk = r.get("risk") or {}
+    if rk.get("available"):
+        card("Risk management de l'actif", [
+            ("Volatilité annualisée", _pct(rk.get("vol_annual")), C["fg"]),
+            ("Max drawdown · VaR 95 %", f"{_pct(rk.get('max_drawdown'))} · {_pct(rk.get('var_95'))}", C["neg"]),
+            ("CVaR 95 % (1j)", _pct(rk.get("cvar_95")), C["neg"]),
+            ("Sharpe / Sortino", f"{_num(rk.get('sharpe'))} / {_num(rk.get('sortino'))}", C["fg"]),
+            ("Bêta marché", _num(rk.get("beta")) if rk.get("beta") is not None else "—", C["fg"]),
+            ("Stop suggéré (~2σ hebdo)", _pct(rk.get("suggested_stop")), C["warn"]),
+        ])
+
+    # ── technique ──
+    t = r.get("technical")
+    if t:
+        trend = str(t.get("trend") or "—")
+        tcol = C["pos"] if trend == "haussière" else C["neg"] if trend == "baissière" else C["fg"]
+        card("Analyse technique", [
+            ("Tendance · RSI · MACD", f"{trend} · {_num(t.get('rsi'),0)} · {t.get('macd_signal','—')}", tcol),
+            ("vs MM50 / MM200", f"{_pct(t.get('vs_sma50'))} / {_pct(t.get('vs_sma200'))}", C["fg"]),
+            ("Plage 52 sem.", f"${_num(t.get('low_52w'),0)} – ${_num(t.get('high_52w'),0)}", C["muted"]),
+        ])
+
+    # ── macro + résultats ──
+    rows = []
+    mc = r.get("macro")
+    if mc:
+        rows.append(("Régime · VIX", f"{mc.get('regime') or 'neutre'} · {_num(mc.get('vix'),1)}", C["fg"]))
+        rows.append(("Exposition · Taux 10A US",
+                     f"{_pct(mc.get('exposure')) if mc.get('exposure') is not None else '60%'} · "
+                     f"{_pct(mc.get('rate_10y')) if mc.get('rate_10y') is not None else '4.3%'}", C["fg"]))
+    e = r.get("earnings")
+    if e:
+        rows += [("Prochain résultat", e.get("next_date") or "—", C["accent"]),
+                 ("BPA estimé / annoncé", f"{_num(e.get('eps_estimate'))} / {_num(e.get('eps_actual')) if e.get('eps_actual') is not None else '—'}", C["fg"]),
+                 ("Revenu estimé / annoncé", f"{_money(e.get('revenue_estimate'))} / {_money(e.get('revenue_actual')) if e.get('revenue_actual') is not None else '—'}", C["fg"])]
+    if rows:
+        card("Macro & résultats", rows)
+
+    # ── actionnariat (barres horizontales) ──
+    hd = r.get("holders") or {}
+    inst = hd.get("institutional") or []; insi = hd.get("insiders") or []
+    if inst or insi:
+        _rl_holders(c, inst, insi, ML, CW, st, ensure, cm, C, w, MR)
 
     # ── verdict ──
     v = r.get("verdict", {})
@@ -1205,7 +1221,9 @@ def _rl_holders(c, inst, insi, ML, CW, st, ensure, cm, C, w, MR) -> None:
     """Carte « Actionnariat » reportlab : barres horizontales (institutionnels % · insiders titres)."""
     def _series(rows, key):
         return [(str(x.get("name") or "—"), x.get(key)) for x in rows if x.get(key) is not None][:5]
-    si = _series(inst, "pct"); sn = _series(insi, "shares")
+    si = _series(inst, "pct")
+    _ik = "pct" if any(x.get("pct") is not None for x in insi) else "shares"
+    sn = _series(insi, _ik); _ins_pct = (_ik == "pct")
     nlines = max(len(si), len(sn))
     if nlines == 0:
         return
@@ -1235,7 +1253,7 @@ def _rl_holders(c, inst, insi, ML, CW, st, ensure, cm, C, w, MR) -> None:
     if si:
         _draw(si, ML + 0.45 * cm, "Top institutionnels (% capital)", True)
     if sn:
-        _draw(sn, ML + 0.65 * cm + colw, "Top insiders (titres)", False)
+        _draw(sn, ML + 0.65 * cm + colw, "Top insiders (% capital)" if _ins_pct else "Top insiders (titres)", _ins_pct)
     st["y"] = top - hh - 0.35 * cm
 
 

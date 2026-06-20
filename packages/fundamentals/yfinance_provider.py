@@ -19,7 +19,7 @@ from packages.fundamentals.models import Financials
 # Cache disque (le cron quotidien le réchauffe → builds suivants instantanés). TTL 24 h.
 _CACHE_DIR = Path(__file__).resolve().parents[2] / ".cache" / "yf_fundamentals"
 _CACHE_TTL = 86_400.0
-_SCHEMA = "2"  # bump quand on ajoute des champs (ex. croissances) → invalide les vieux caches
+_SCHEMA = "3"  # v3 : + longName/devises/dividende → invalide les caches v2 (sinon champs manquants)
 
 
 def _cache_get(symbol: str) -> dict | None:

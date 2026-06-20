@@ -543,29 +543,36 @@ def _quarterly_yf(sym: str) -> list[dict] | None:
         return None
 
 
-def _company_holders(sym: str) -> dict | None:
-    """Top 5 actionnaires INSTITUTIONNELS + top 5 INSIDERS (yfinance), pour graphe de répartition.
-    Best-effort (réseau) ; None si indisponible/hors-ligne."""
+def _company_holders(sym: str, shares_out: float | None = None) -> dict | None:
+    """Top 5 INSTITUTIONNELS + top 5 INSIDERS (yfinance), en % du capital. Best-effort réseau."""
     try:
         import yfinance as yf
         t = yf.Ticker(sym)
+        so = shares_out if (shares_out and shares_out > 0) else None
+        if so is None:                                     # actions en circulation pour convertir les insiders
+            try:
+                so = float(t.fast_info.get("shares") or t.fast_info.get("sharesOutstanding") or 0) or None
+            except Exception:  # noqa: BLE001
+                so = None
         inst, ins = [], []
         try:
             df = t.institutional_holders
             if df is not None and not getattr(df, "empty", True):
                 for _, row in df.head(5).iterrows():
                     pct = row.get("pctHeld") if "pctHeld" in row else row.get("% Out")
-                    inst.append({"name": str(row.get("Holder", "")),
-                                 "pct": float(pct) if pct == pct and pct is not None else None})
+                    p = float(pct) if (pct is not None and pct == pct) else None
+                    inst.append({"name": str(row.get("Holder", "")), "pct": p})
         except Exception:  # noqa: BLE001
             pass
         try:
             df = t.insider_roster_holders
             if df is not None and not getattr(df, "empty", True):
-                col = "Shares Owned Directly" if "Shares Owned Directly" in df.columns else None
+                col = next((c for c in ("Shares Owned Directly", "Shares Owned Indirectly",
+                                        "Position Direct") if c in df.columns), None)
                 for _, row in df.head(5).iterrows():
-                    ins.append({"name": str(row.get("Name", "")),
-                                "shares": float(row.get(col)) if (col and row.get(col) == row.get(col)) else None})
+                    sh = float(row.get(col)) if (col and row.get(col) == row.get(col)) else None
+                    pct = (sh / so) if (sh and so) else None    # insider en % du capital
+                    ins.append({"name": str(row.get("Name", "")), "pct": pct, "shares": sh})
         except Exception:  # noqa: BLE001
             pass
         if not inst and not ins:
@@ -652,7 +659,7 @@ def _build_company_report_cached(sym: str) -> tuple[dict | None, str | None]:
                                   price_dates=dates, financial_history=fin_hist, peers=_company_peers(sym))
     report["source"] = src
     report["earnings_signature"] = sig
-    holders = _company_holders(sym)
+    holders = _company_holders(sym, getattr(f, "shares", None))
     if holders:
         report["holders"] = holders
     quarterly = _company_quarterly(sym)
