@@ -1276,6 +1276,25 @@ def build_snapshot(seed: int = 7) -> dict:
         acmap = {s: acmap[s] for s in symbols}
         names = {s: names[s] for s in symbols}
         sector_of = {s: sector_of[s] for s in symbols}
+    # --- GATE D'AUDIT (PwC) : avant de bâtir screener/ML/preset sur ces prix, on les audite.
+    #   QUANT_AUDIT=strict  → REFUSE de servir des données à anomalie CRITIQUE (lève → l'API sert
+    #                         le dernier snapshot sain ; un build corrompu n'atteint jamais l'écran).
+    #   QUANT_AUDIT=warn|1  → audite et joint le rapport (`_audit`) au snapshot, sans bloquer.
+    #   (défaut désactivé ; n'audite QUE des prix réels — le synthétique de démo n'a pas à passer.)
+    _audit_report: dict | None = None
+    _audit_mode = _os_hist.environ.get("QUANT_AUDIT", "").lower()
+    if _audit_mode in ("strict", "warn", "1", "true") and real_syms and data_mode == "real":
+        from packages.data.audit import assert_integrity, audit_and_report
+        try:
+            _ar = audit_and_report(data, universe=symbols)
+            _audit_report = _ar.to_dict()
+            if _audit_mode == "strict":
+                assert_integrity(_ar)             # lève DataIntegrityError si anomalie critique
+        except Exception as _ae:                  # noqa: BLE001
+            if _audit_mode == "strict":
+                raise                             # strict : on propage → l'API garde le snapshot sain
+            _audit_report = {"ok": False, "error": str(_ae)}   # warn : best-effort, jamais bloquant
+
     n = max(len(b) for b in data.values())
     # VIX RÉEL (^VIX) si dispo (base/yfinance), aligné sur n barres ; sinon synthétique.
     _vix_real, _vix_is_real = _index_closes(["^VIX", "VIX"], start, end, [])
@@ -1955,6 +1974,7 @@ def build_snapshot(seed: int = 7) -> dict:
             "period_start": start.isoformat(),
             "delay_minutes": 15,                 # flux différé 15 min (EOD/synthétique)
             "mode": data_mode,
+            "audit": _audit_report,              # rapport d'intégrité PwC (None si QUANT_AUDIT inactif)
             "data_synthetic": data_mode.startswith("synthetic"),
             "data_warning": ("⚠️ DONNÉES FACTICES (synthétiques) — démo UI uniquement, NE PAS "
                              "décider ni backtester dessus. Branche QUANT_PRICE_DB."
