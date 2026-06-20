@@ -635,7 +635,8 @@ def _reportlab_pdf(r: dict, path: str, A4, cm, canvas, theme: str = "dark") -> N
     labels = ch_data.get("price_labels") or []
     hist = ch_data.get("financial_history") or []
     if len(closes) >= 20:
-        gh = 5.0 * cm + (3.4 * cm if len(hist) >= 2 else 0)
+        has_bars = len(hist) >= 2
+        gh = 6.6 * cm + (4.8 * cm if has_bars else 0)
         ensure(gh + 0.5 * cm)
         top = st["y"]
         c.setFillColor(C["card"]); c.setStrokeColor(C["border"]); c.setLineWidth(0.7)
@@ -643,15 +644,42 @@ def _reportlab_pdf(r: dict, path: str, A4, cm, canvas, theme: str = "dark") -> N
         c.setFillColor(C["accent"]); c.setFont("Helvetica-Bold", 9)
         c.drawString(ML + 0.45 * cm, top - 0.6 * cm, "GRAPHIQUES")
         period = (f"{labels[0]} → {labels[-1]}" if len(labels) >= 2 else "")
-        _rl_line(c, closes, labels, ML + 0.9 * cm, top - 4.5 * cm, CW - 1.4 * cm, 3.0 * cm,
-                 f"Cours ($) · {period}", cm, C)
-        if len(hist) >= 2:
-            _rl_bars(c, hist, "revenue", ML + 0.9 * cm, top - gh + 0.9 * cm, CW - 1.4 * cm, 2.2 * cm,
-                     f"Chiffre d'affaires ({ch_data.get('history_years', len(hist))} ex.)", cm, C)
+        gx, gw = ML + 0.9 * cm, CW - 1.4 * cm
+        _rl_line(c, closes, labels, gx, top - 4.2 * cm, gw, 2.9 * cm, f"Cours ($) · {period}", cm, C)
+        _rl_dd(c, closes, labels, gx, top - 6.4 * cm, gw, 1.5 * cm, "Drawdown (sous l'eau)", cm, C)
+        if has_bars:
+            half = (gw - 0.6 * cm) / 2
+            _rl_bars(c, hist, "revenue", gx, top - gh + 0.9 * cm, half, 2.6 * cm,
+                     f"CA ({ch_data.get('history_years', len(hist))} ex.)", cm, C)
+            _rl_bars(c, hist, "net_income", gx + half + 0.6 * cm, top - gh + 0.9 * cm, half, 2.6 * cm,
+                     "Résultat net", cm, C)
         st["y"] = top - gh - 0.35 * cm
 
+    # ── Données financières (tableau par exercice) ──
+    if len(hist) >= 2:
+        trows = []
+        for x in hist:
+            rev = x.get("revenue"); ni = x.get("net_income"); eps = x.get("eps")
+            nm = (ni / rev) if (rev and ni is not None and rev) else None
+            trows.append([str(x.get("year", "—")), _money(rev), _money(ni),
+                          _num(eps) if eps is not None else "—",
+                          (_pct(nm) if nm is not None else "—")])
+        _rl_table(c, "Données financières (par exercice)",
+                  ["Exercice", "CA", "Résultat net", "BPA", "Marge nette"], trows,
+                  ML, CW, st, ensure, cm, C, w, MR)
+
+    # ── Audit d'intégrité ──
+    audit = r.get("audit") or {}
+    rel = audit.get("reliability", "—"); cnt = audit.get("counts", {})
+    rel_col = {"fiable": C["pos"], "à vérifier": C["warn"], "non fiable": C["neg"]}.get(rel, C["fg"])
+    arows = [("Verdict fiabilité", rel, rel_col),
+             ("Critiques · majeures · avert.", f"{cnt.get('critical',0)} · {cnt.get('major',0)} · {cnt.get('warning',0)}", C["fg"])]
+    for fd in (audit.get("findings") or [])[:3]:
+        arows.append((f"• {fd.get('severity')}", _trunc(fd.get("detail", ""), 60), C["muted"]))
+    card("Audit d'intégrité des données", arows)
+
     # ── Vernimmen ──
-    sp = ver.get("value_creation_spread"); eva = ver.get("eva"); m = ver.get("margins", {})
+    sp = ver.get("value_creation_spread"); eva = ver.get("eva"); m = ver.get("margins", {}); dp = ver.get("dupont", {})
     card("Analyse économique (Vernimmen)", [
         ("ROCE après impôt", _pct(ver.get("roce_after_tax")), C["fg"]),
         ("WACC", _pct(ver.get("wacc")), C["fg"]),
@@ -659,6 +687,8 @@ def _reportlab_pdf(r: dict, path: str, A4, cm, canvas, theme: str = "dark") -> N
         ("EVA (profit économique)", _money(eva), C["pos"] if (eva or 0) > 0 else C["neg"]),
         ("Marges brute / EBIT / nette", f"{_pct(m.get('gross'))} / {_pct(m.get('ebit'))} / {_pct(m.get('net'))}", C["fg"]),
         ("Gearing · Dette nette/EBITDA", f"{_num(ver.get('gearing'))} · {_num(ver.get('net_debt_ebitda'),1)}×", C["fg"]),
+        ("DuPont ROE (marge×rotation×levier)",
+         f"{_pct(dp.get('net_margin'))}×{_num(dp.get('asset_turnover'))}×{_num(dp.get('equity_multiplier'))} = {_pct(dp.get('roe'))}", C["fg"]),
     ])
 
     # ── Damodaran (gate-aware) ──
@@ -675,6 +705,7 @@ def _reportlab_pdf(r: dict, path: str, A4, cm, canvas, theme: str = "dark") -> N
             ("Marge de sécurité", _pct(mos) if mos is not None else "—", C["pos"] if (mos or 0) > 0 else C["neg"]),
             ("Croissance implicite (cours)", _pct(dam.get("implied_growth_in_price")), C["fg"]),
             ("P/E · EV/EBITDA · P/B", f"{_num(mu.get('pe'),1)} · {_num(mu.get('ev_ebitda'),1)} · {_num(mu.get('price_to_book'),1)}", C["fg"]),
+            ("EV/Sales · rdt FCF · rdt bénéf.", f"{_num(mu.get('ev_sales'),1)} · {_pct(mu.get('fcf_yield'))} · {_pct(mu.get('earnings_yield'))}", C["fg"]),
             ("Coût des FP · bêta", f"{_pct(dam.get('cost_of_equity'))} · {_num(dam.get('beta'))}", C["fg"]),
         ])
 
@@ -721,6 +752,29 @@ def _reportlab_pdf(r: dict, path: str, A4, cm, canvas, theme: str = "dark") -> N
                  ("Revenu estimé / annoncé", f"{_money(e.get('revenue_estimate'))} / {_money(e.get('revenue_actual')) if e.get('revenue_actual') is not None else '—'}", C["fg"])]
     if rows:
         card("Macro & résultats", rows)
+
+    # ── piliers de notation (barres colorées) ──
+    pil = sc.get("pillars") or {}
+    if pil:
+        ph = 1.0 * cm + len(pil) * 0.62 * cm
+        ensure(ph + 0.4 * cm)
+        top = st["y"]
+        c.setFillColor(C["card"]); c.setStrokeColor(C["border"]); c.setLineWidth(0.7)
+        c.roundRect(ML, top - ph, CW, ph, 8, fill=1, stroke=1)
+        c.setFillColor(C["accent"]); c.setFont("Helvetica-Bold", 9)
+        c.drawString(ML + 0.45 * cm, top - 0.6 * cm, "PILIERS DE NOTATION")
+        yy = top - 1.15 * cm
+        bar_x = ML + 6.0 * cm; bar_w = CW - 6.0 * cm - 1.4 * cm
+        for name, p in pil.items():
+            val = p.get("score", 0)
+            c.setFillColor(C["muted"]); c.setFont("Helvetica", 8.5)
+            c.drawString(ML + 0.45 * cm, yy, _trunc(name, 34))
+            c.setFillColor(C["border"]); c.roundRect(bar_x, yy - 0.05 * cm, bar_w, 0.22 * cm, 2, fill=1, stroke=0)
+            c.setFillColor(tone(val)); c.roundRect(bar_x, yy - 0.05 * cm, bar_w * max(0, min(100, val)) / 100, 0.22 * cm, 2, fill=1, stroke=0)
+            c.setFillColor(tone(val)); c.setFont("Helvetica-Bold", 8.5)
+            c.drawRightString(w - MR - 0.45 * cm, yy, str(val))
+            yy -= 0.62 * cm
+        st["y"] = top - ph - 0.35 * cm
 
     # ── verdict ──
     v = r.get("verdict", {})
@@ -830,3 +884,63 @@ def company_report_markdown(r: dict[str, Any]) -> str:
         body += ["", "## Vigilance", "", *[f"- ⚠️ {s}" for s in v["watch"][:4]]]
     body += ["", f"<small>Sources gratuites · Vernimmen & Damodaran · maj {r.get('as_of')}.</small>"]
     return "\n".join(fm + body)
+
+
+def _trunc(s: str, n: int) -> str:
+    s = str(s)
+    return s if len(s) <= n else s[: n - 1] + "…"
+
+
+def _rl_dd(c, closes, labels, x, y, w, h, title, cm, C=None) -> None:
+    """Courbe de drawdown (sous l'eau) reportlab : axe Y en %, dates en X."""
+    from reportlab.lib.colors import HexColor
+    neg = C["neg"] if C else HexColor("#ef4444")
+    mut = C["muted"] if C else HexColor("#9aa1ab")
+    bdr = C["border"] if C else HexColor("#2a2f37")
+    peak, dd = closes[0], []
+    for v in closes:
+        peak = max(peak, v); dd.append(v / peak - 1.0 if peak else 0.0)
+    lo = min(dd); rng = (0.0 - lo) or 1.0
+    x0 = x + 1.0 * cm
+    c.setFillColor(mut); c.setFont("Helvetica", 8); c.drawString(x, y + h + 4, title)
+    c.setStrokeColor(bdr); c.setLineWidth(0.5)
+    for k in range(3):
+        yy = y + h * k / 2
+        c.line(x0, yy, x + w, yy)
+        c.setFillColor(mut); c.setFont("Helvetica", 6.5)
+        c.drawRightString(x + 0.9 * cm, yy - 2, f"{(0.0 - rng*(1-k/2))*100:.0f}%")
+    n = len(dd)
+    pts = [(x0 + i * (w - 1.0 * cm) / (n - 1), y + (v - lo) / rng * h) for i, v in enumerate(dd)]
+    c.setStrokeColor(neg); c.setLineWidth(1.1)
+    for a, b in zip(pts[:-1], pts[1:]):
+        c.line(a[0], a[1], b[0], b[1])
+
+
+def _rl_table(c, title, headers, rows, ML, CW, st, ensure, cm, C, w, MR) -> None:
+    """Tableau (Données financières) reportlab dans une carte arrondie, colonnes alignées à droite."""
+    row_h = 0.5 * cm
+    th = 1.3 * cm + (len(rows) + 1) * row_h
+    ensure(th + 0.4 * cm)
+    top = st["y"]
+    c.setFillColor(C["card"]); c.setStrokeColor(C["border"]); c.setLineWidth(0.7)
+    c.roundRect(ML, top - th, CW, th, 8, fill=1, stroke=1)
+    c.setFillColor(C["accent"]); c.setFont("Helvetica-Bold", 9)
+    c.drawString(ML + 0.45 * cm, top - 0.6 * cm, title.upper())
+    ncol = len(headers)
+    x0 = ML + 0.45 * cm
+    colw = (CW - 0.9 * cm) / ncol
+    yy = top - 1.25 * cm
+    c.setFont("Helvetica", 7.5); c.setFillColor(C["muted"])
+    for j, hd in enumerate(headers):
+        (c.drawString if j == 0 else c.drawRightString)(
+            x0 + (j * colw if j == 0 else (j + 1) * colw - 0.2 * cm), yy, hd)
+    yy -= row_h
+    for row in rows:
+        c.setStrokeColor(C["border"]); c.setLineWidth(0.3); c.line(x0, yy + 0.32 * cm, ML + CW - 0.45 * cm, yy + 0.32 * cm)
+        c.setFont("Helvetica", 8.5)
+        for j, cell in enumerate(row):
+            c.setFillColor(C["fg"] if j == 0 else C["fg"])
+            (c.drawString if j == 0 else c.drawRightString)(
+                x0 + (j * colw if j == 0 else (j + 1) * colw - 0.2 * cm), yy, str(cell))
+        yy -= row_h
+    st["y"] = top - th - 0.35 * cm

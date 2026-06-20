@@ -26,8 +26,11 @@ export function ReportButton({ ticker, assetClass }: { ticker: string; assetClas
         title={`Note fond clair — ${ticker}`} onClick={(e) => e.stopPropagation()}
         className="text-[9px] text-muted hover:text-accent transition-colors leading-none" aria-label="fond clair">☀</a>
       <a href={url("pdf", "dark")} target="_blank" rel="noopener noreferrer"
-        title={`Télécharger la note PDF — ${ticker}`} onClick={(e) => e.stopPropagation()}
+        title={`Télécharger la note PDF (sombre) — ${ticker}`} onClick={(e) => e.stopPropagation()}
         className="text-[9px] font-semibold text-muted hover:text-accent transition-colors leading-none">PDF</a>
+      <a href={url("pdf", "light")} target="_blank" rel="noopener noreferrer"
+        title={`Télécharger la note PDF (blanc) — ${ticker}`} onClick={(e) => e.stopPropagation()}
+        className="text-[9px] font-semibold text-muted hover:text-accent transition-colors leading-none">PDF☀</a>
     </span>
   );
 }
