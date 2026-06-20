@@ -105,6 +105,32 @@ class AlpacaBroker:
         except Exception:  # noqa: BLE001
             return []
 
+    def open_orders(self, limit: int = 100) -> list[dict]:
+        """Ordres OUVERTS / en attente d'exécution (non encore remplis) — page Trades.
+        Inclut new/accepted/pending_new/held/partially_filled (ex. marché fermé le week-end). [] si indispo."""
+        try:
+            from alpaca.trading.requests import GetOrdersRequest
+            from alpaca.trading.enums import QueryOrderStatus
+            res = self._client.get_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, limit=limit))
+            out = []
+            for o in res:
+                rq = float(getattr(o, "qty", 0) or 0)
+                fq = float(getattr(o, "filled_qty", 0) or 0)
+                lp = getattr(o, "limit_price", None)
+                px = float(lp) if lp else float(getattr(o, "filled_avg_price", 0) or 0)
+                ts = getattr(o, "submitted_at", None) or getattr(o, "created_at", None)
+                out.append({
+                    "symbol": o.symbol, "broker": "Alpaca",
+                    "side": str(getattr(o, "side", "")).lower().split(".")[-1],
+                    "qty": rq, "filled_qty": fq,
+                    "price": px, "order_type": str(getattr(o, "order_type", "")).lower().split(".")[-1],
+                    "notional": rq * px if px else 0.0,
+                    "date": ts.isoformat() if ts else "",
+                    "status": str(getattr(o, "status", "")).lower().split(".")[-1]})
+            return out
+        except Exception:  # noqa: BLE001
+            return []
+
     def equity(self) -> float:
         return float(self._client.get_account().equity)
 

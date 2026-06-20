@@ -60,7 +60,7 @@ _BUILD_LOCK = threading.Lock()
 _SNAP_FILE = Path(__file__).resolve().parents[2] / ".cache" / "snapshot.pkl"
 # Bump à chaque changement de SCHÉMA du snapshot → invalide le cache disque (évite de servir un
 # ancien snapshot construit par une version antérieure du code).
-_SNAP_VERSION = "2026-06-20-alpaca-bitmart-realistic-fees"
+_SNAP_VERSION = "2026-06-20-open-orders-pending"
 
 
 def _load_disk() -> tuple[dict | None, float]:
@@ -192,6 +192,7 @@ def trades() -> dict:
     d = snap["dashboard"]
     real = snap["live"]["real"]
     return {"real_trades": real.get("trades", []),          # ordres RÉELS exécutés (Alpaca + Bitmart)
+            "real_open_orders": real.get("open_orders", []),  # ordres RÉELS en attente d'exécution (non remplis)
             "connected": real.get("connected", False),
             "accounts": {"alpaca": real.get("alpaca", {}), "bitmart": real.get("bitmart", {})},
             "series": d.get("chart_series", {}),

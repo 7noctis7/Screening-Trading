@@ -194,6 +194,27 @@ class BitmartBroker:
         except Exception:  # noqa: BLE001
             return []
 
+    def open_orders(self, limit: int = 100) -> list[dict]:
+        """Ordres SPOT OUVERTS / en attente d'exécution (non remplis) — page Trades. [] si indispo."""
+        if not self._live():
+            return []
+        try:
+            oo = self._client().fetch_open_orders(limit=limit) or []
+            out = []
+            for o in oo:
+                rq = float(o.get("amount", 0) or 0)
+                px = float(o.get("price", 0) or 0)
+                out.append({"symbol": o.get("symbol", ""), "broker": "Bitmart",
+                            "side": str(o.get("side", "")).lower(),
+                            "qty": rq, "filled_qty": float(o.get("filled", 0) or 0),
+                            "price": px, "order_type": str(o.get("type", "")).lower(),
+                            "notional": float(o.get("cost", 0) or 0) or rq * px,
+                            "date": o.get("datetime", "") or "",
+                            "status": str(o.get("status", "open")).lower()})
+            return out
+        except Exception:  # noqa: BLE001
+            return []
+
     def ohlcv(self, symbol: str, timeframe: str = "1d", limit: int = 400) -> list[dict]:
         """Bougies RÉELLES (ccxt) d'une paire spot → [{t,o,h,l,c,v}] pour le graphe. [] si indispo."""
         if not self._live():
