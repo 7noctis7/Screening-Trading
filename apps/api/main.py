@@ -375,6 +375,153 @@ def analytics() -> dict:
             "html": pa.to_html_snippet("Preset vs QQQ (net de frais)")}
 
 
+def _sma(values: list[float], n: int) -> float | None:
+    return sum(values[-n:]) / n if len(values) >= n else None
+
+
+def _rsi(values: list[float], n: int = 14) -> float | None:
+    if len(values) < n + 1:
+        return None
+    gains = losses = 0.0
+    for i in range(-n, 0):
+        d = values[i] - values[i - 1]
+        gains += max(0.0, d); losses += max(0.0, -d)
+    if losses == 0:
+        return 100.0
+    rs = (gains / n) / (losses / n)
+    return round(100 - 100 / (1 + rs), 1)
+
+
+def _company_technical(sym: str) -> dict | None:
+    """Résumé technique d'un titre depuis la base de prix RÉELLE (tendance, RSI, MACD, position vs
+    moyennes mobiles, plage 52 sem.). Pur-Python, best-effort → None si indisponible."""
+    try:
+        from packages.data.engine import read_prices_rows
+        rows = read_prices_rows("market.db", symbols=[sym]) or read_prices_rows("crypto.db", symbols=[sym])
+        closes = [float(r["close"]) for r in sorted(rows, key=lambda r: r.get("ts") or "")
+                  if r.get("close") is not None]
+        if len(closes) < 60:
+            return None
+        last = closes[-1]
+        s50 = _sma(closes, 50); s200 = _sma(closes, 200)
+        ema12 = _ema(closes, 12); ema26 = _ema(closes, 26)
+        macd = (ema12 - ema26) if (ema12 is not None and ema26 is not None) else None
+        win = closes[-252:] if len(closes) >= 252 else closes
+        trend = "haussière" if (s50 and last > s50 and (not s200 or last > s200)) else (
+            "baissière" if (s50 and last < s50) else "neutre")
+        return {"trend": trend, "rsi": _rsi(closes),
+                "macd_signal": ("haussier" if (macd or 0) > 0 else "baissier") if macd is not None else None,
+                "vs_sma50": (last / s50 - 1) if s50 else None,
+                "vs_sma200": (last / s200 - 1) if s200 else None,
+                "low_52w": min(win), "high_52w": max(win)}
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _ema(values: list[float], n: int) -> float | None:
+    if len(values) < n:
+        return None
+    k = 2 / (n + 1)
+    e = values[0]
+    for v in values[1:]:
+        e = v * k + e * (1 - k)
+    return e
+
+
+def _company_macro() -> dict | None:
+    """Contexte macro courant (régime, VIX, exposition conseillée) depuis le snapshot."""
+    try:
+        d = _snap().get("dashboard", {})
+        reg = d.get("regime", {}) or {}
+        return {"regime": reg.get("label") or reg.get("regime"), "vix": d.get("vix"),
+                "exposure": reg.get("exposure")}
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _company_earnings(sym: str) -> dict | None:
+    """Prochaine date de résultats + BPA/revenu estimés & annoncés (réels) pour un titre."""
+    try:
+        from packages.events import earnings_for
+        rows = earnings_for([sym]) or []
+        if not rows:
+            return None
+        row = sorted(rows, key=lambda r: r.get("date") or "")[-1]   # le plus récent/à venir
+        return {"next_date": row.get("date"), "eps_estimate": row.get("eps_estimate"),
+                "eps_actual": row.get("eps_actual"), "revenue_estimate": row.get("revenue_estimate"),
+                "revenue_actual": row.get("revenue_actual")}
+    except Exception:  # noqa: BLE001
+        return None
+
+
+# Cache des notes par société, INVALIDÉ PAR LES RÉSULTATS TRIMESTRIELS : la clé inclut la date
+# du dernier résultat publié → dès qu'une société publie un nouveau trimestre, la note se régénère
+# automatiquement (et reste servie depuis le cache entre deux publications, sans recalcul).
+_REPORT_CACHE: dict[str, tuple[str, dict]] = {}
+_REPORT_CACHE_MAX = 256
+
+
+def _build_company_report_cached(sym: str) -> tuple[dict | None, str | None]:
+    """Construit (ou ressort du cache) la note. Renvoie (report, error). Cache clé = ticker +
+    signature de résultats (date + BPA/revenu annoncés) → régénération à chaque nouvelle publication."""
+    from apps.api.snapshot import _seed_universe, fetch_financials_chain
+    from packages.reporting import build_company_report
+    earnings = _company_earnings(sym)
+    sig = "|".join(str(x) for x in [
+        (earnings or {}).get("date") or (earnings or {}).get("next_date"),
+        (earnings or {}).get("eps_actual"), (earnings or {}).get("revenue_actual")])
+    cached = _REPORT_CACHE.get(sym)
+    if cached and cached[0] == sig:
+        return cached[1], None
+    f, prior, src = fetch_financials_chain(sym)
+    if f is None:
+        return None, f"aucune donnée pour {sym}"
+    name = next((m.get("name") for m in _seed_universe() if m.get("symbol") == sym), sym)
+    beta, ml_score = 1.0, None
+    try:
+        snap = _snap()
+        rm = snap.get("portfolio", {}).get("analysis", {}).get("risk", {})
+        beta = float(rm.get("beta") or 1.0)
+        ml_score = (snap.get("ml", {}).get("scores", {}) or {}).get(sym)   # proba ML du titre
+    except Exception:  # noqa: BLE001
+        pass
+    report = build_company_report(f, name=name, prior=prior, beta=beta,
+                                  technical=_company_technical(sym), macro=_company_macro(),
+                                  earnings=earnings, ml_score=ml_score)
+    report["source"] = src
+    report["earnings_signature"] = sig
+    if len(_REPORT_CACHE) >= _REPORT_CACHE_MAX:
+        _REPORT_CACHE.pop(next(iter(_REPORT_CACHE)))
+    _REPORT_CACHE[sym] = (sig, report)
+    return report, None
+
+
+@app.get("/api/company_report")
+def company_report(ticker: str, format: str = "html") -> Any:
+    """Note d'analyse fondamentale par société (Vernimmen + Damodaran, intrants audités PwC).
+    `format` : html (page autonome), json (données), pdf (reportlab si présent, sinon HTML).
+    Sources gratuites réelles (yfinance→FMP→SEC EDGAR), repli synthétique hors-ligne.
+    La note est mise en cache et REGÉNÉRÉE automatiquement à chaque nouveau résultat trimestriel."""
+    from fastapi.responses import HTMLResponse, FileResponse
+
+    from packages.reporting import company_report_html, company_report_pdf
+    sym = (ticker or "").strip().upper()
+    if not sym:
+        return JSONResponse({"available": False, "error": "ticker requis"}, status_code=400)
+    report, err = _build_company_report_cached(sym)
+    if report is None:
+        return JSONResponse({"available": False, "error": err}, status_code=404)
+    if format == "json":
+        return report
+    if format == "pdf":
+        out = Path(_LOG_DIR).parent / "out" / f"note_{sym}.pdf"
+        pdf = company_report_pdf(report, out)
+        if pdf and pdf.exists():
+            return FileResponse(str(pdf), media_type="application/pdf", filename=f"note_{sym}.pdf")
+        # repli : pas de reportlab → on sert le HTML imprimable
+    return HTMLResponse(company_report_html(report))
+
+
 @app.get("/api/ai/status")
 def ai_status() -> dict:
     """Disponibilité d'un LLM local (LM Studio / Ollama)."""

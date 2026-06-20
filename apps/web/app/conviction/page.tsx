@@ -4,6 +4,7 @@ import { PageSkeleton, EmptyState } from "@/components/ui";
 import { SortableTable, type Col } from "@/components/SortableTable";
 import { StepBanner } from "@/components/Pipeline";
 import { IR } from "@/lib/ir";
+import { ReportButton } from "@/components/ReportButton";
 
 const z = (v?: number) => (v == null ? "—" : <span style={{ color: v > 0 ? "#22c55e" : v < 0 ? "#f43f5e" : "#9aa1ad" }}>{v.toFixed(2)}</span>);
 
@@ -14,7 +15,7 @@ export default function Conviction() {
     return <main className="max-w-3xl mx-auto p-6"><EmptyState title="Conviction indisponible" hint="Signaux insuffisants." /></main>;
 
   const cols: Col[] = [
-    { key: "symbol", label: "Actif", render: (v, row) => <IR ticker={v} name={row.name} assetClass={row.asset_class} className="mono text-accent hover:underline" /> },
+    { key: "symbol", label: "Actif", render: (v, row) => (<span className="inline-flex items-center gap-1.5"><IR ticker={v} name={row.name} assetClass={row.asset_class} className="mono text-accent hover:underline" /><ReportButton ticker={v} assetClass={row.asset_class} /></span>) },
     { key: "sector", label: "Secteur", render: (v) => <span className="text-muted text-xs">{v}</span> },
     { key: "trend", label: "Tendance", num: true, render: z, csv: (v) => v },
     { key: "ml", label: "ML", num: true, render: z, csv: (v) => v },
