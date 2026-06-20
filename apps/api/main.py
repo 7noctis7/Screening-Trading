@@ -277,22 +277,55 @@ def events() -> dict:
         from packages.events import earnings_for, upcoming_ipos
         snap = _snap()
         names: dict[str, str] = {}
-        eq: list[str] = []
+        for r in (snap.get("conviction", {}).get("rows", []) + snap.get("fundamentals", {}).get("rows", [])
+                  + snap.get("investors", {}).get("rows", [])):
+            if r.get("symbol") and r.get("name"):
+                names.setdefault(r["symbol"], r["name"])
+
+        def _top_syms(pairs, pct=0.05, n_min=3) -> set:
+            """Top 5 % (au moins n_min) d'une liste (symbole, score) — meilleurs scores d'abord."""
+            p = sorted([(s, v) for s, v in pairs if s and v is not None], key=lambda x: x[1], reverse=True)
+            return {s for s, _ in p[:max(n_min, round(len(p) * pct))]}
+
+        _conv = snap.get("conviction", {}).get("rows", [])
+        _scr = snap.get("screener", {}).get("rows", [])
+        # TOP 5 % par lentille (ML, fondamentaux, investisseurs) + meilleures convictions globales
+        top_ml = _top_syms([(r["symbol"], r.get("ml")) for r in _conv]
+                           + [(r["symbol"], r.get("ml_score")) for r in _scr])
+        top_fund = _top_syms([(r["symbol"], r.get("combined_score")) for r in snap.get("fundamentals", {}).get("rows", [])]
+                             + [(r["symbol"], r.get("fundamental")) for r in _conv])
+        top_inv = _top_syms([(r["symbol"], r.get("overall")) for r in snap.get("investors", {}).get("rows", [])]
+                            + [(r["symbol"], r.get("investor")) for r in _conv])
+        top_conv = _top_syms([(r["symbol"], r.get("conviction")) for r in _conv])
+        # ÉTIQUETTES (pourquoi une société est suivie) — positions réelles + top scores
+        tags: dict[str, list] = {}
+        real_eq = {p.get("symbol") for p in snap.get("live", {}).get("real", {}).get("positions", [])
+                   if p.get("symbol") and (p.get("asset_class") or "equity") in ("equity", "etf")}
+        for s in real_eq:
+            tags.setdefault(s, []).append("position")
+        for s in top_conv:
+            tags.setdefault(s, []).append("conviction")
+        for s in top_ml:
+            tags.setdefault(s, []).append("ML")
+        for s in top_fund:
+            tags.setdefault(s, []).append("fond.")
+        for s in top_inv:
+            tags.setdefault(s, []).append("invest.")
+        # univers : on met EN TÊTE les positions + top scores (pour passer le plafond yfinance à 40)
+        eq: list[str] = list(dict.fromkeys(list(tags)))
         for r in snap.get("universe", {}).get("instruments", []):
             sym = r.get("symbol"); ac = (r.get("asset_class") or "equity")
             if sym and ac in ("equity", "etf"):
-                eq.append(sym); names[sym] = r.get("name", "") or ""
-        for p in snap.get("live", {}).get("real", {}).get("positions", []):   # + positions réelles
-            s = p.get("symbol")
-            if s and (p.get("asset_class") or "equity") in ("equity", "etf"):
-                eq.append(s)
+                eq.append(sym); names.setdefault(sym, r.get("name", "") or "")
         eq = list(dict.fromkeys(eq))
         try:
             earn = earnings_for(eq)
         except Exception as e:  # noqa: BLE001
             log.warning("earnings_for failed: %s", e); earn = []
         for ev in earn:
-            ev["name"] = names.get(ev.get("symbol", ""), "")
+            sym = ev.get("symbol", "")
+            ev["name"] = names.get(sym, "")
+            ev["tags"] = tags.get(sym, [])
         try:
             ipos = upcoming_ipos()
         except Exception as e:  # noqa: BLE001
