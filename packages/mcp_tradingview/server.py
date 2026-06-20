@@ -92,6 +92,81 @@ def _h_fetch_alerts(args: dict) -> dict:
     return {"ok": True, "alerts": [a.to_dict() for a in alerts], "risk": veto}
 
 
+def _h_compare_pine_python(args: dict) -> dict:
+    """Backtest Python équivalent au Pine sur les prix réels (via API) → métriques de cross-validation."""
+    from packages.mcp_tradingview.pine import generate_pine_script, pine_equiv_backtest
+    from packages.mcp_tradingview.risk_overlays import _bars_to_series, _get_json
+    ticker = str(args.get("ticker", "")).strip().upper()
+    if not ticker:
+        return {"error": "ticker requis"}
+    base = str(args.get("base_url", "http://localhost:8000")).rstrip("/")
+    try:
+        series = (_get_json(f"{base}/api/positions").get("series", {}) or {}).get(ticker)
+    except Exception as e:  # noqa: BLE001
+        return {"available": False, "error": f"API injoignable: {e}"}
+    if not series:
+        return {"available": False, "error": f"aucune série pour {ticker}"}
+    times, closes = _bars_to_series(series)
+    metrics = pine_equiv_backtest(times, closes, dd_target=args.get("dd_target"),
+                                  lookback=args.get("lookback"))
+    return {"ok": True, "ticker": ticker, "python_reference": metrics,
+            "pine": generate_pine_script(f"{ticker} preset", {"params": metrics.get("params", {})}),
+            "note": "Colle le Pine sur TradingView et compare son backtest à python_reference."}
+
+
+def _h_overlay_triple_barrier(args: dict) -> dict:
+    """Trace les barrières ML (TP/SL/temps) du dernier achat d'un ticker (prix réels via API)."""
+    from packages.mcp_tradingview.risk_overlays import _bars_to_series, _get_json, triple_barrier_overlay
+    from packages.mcp_tradingview.store import OverlayStore
+    ticker = str(args.get("ticker", "")).strip().upper()
+    if not ticker:
+        return {"error": "ticker requis"}
+    base = str(args.get("base_url", "http://localhost:8000")).rstrip("/")
+    try:
+        pos = _get_json(f"{base}/api/positions")
+    except Exception as e:  # noqa: BLE001
+        return {"available": False, "error": f"API injoignable: {e}"}
+    series = (pos.get("series", {}) or {}).get(ticker)
+    if not series:
+        return {"available": False, "error": f"aucune série pour {ticker}"}
+    times, closes = _bars_to_series(series)
+    entries = [str(m.get("t", ""))[:10] for m in (pos.get("markers", {}) or {}).get(ticker, [])
+               if str(m.get("side", "")).lower() == "buy"]
+    bands, mks = triple_barrier_overlay(times, closes, entries, pt=float(args.get("pt", 2.0)),
+                                        sl=float(args.get("sl", 2.0)), horizon=int(args.get("horizon", 20)))
+    if not bands:
+        return {"available": False, "error": "aucun achat exploitable pour les barrières"}
+    saved = OverlayStore().set_bands(ticker, bands, source="triple-barrier")
+    OverlayStore().set_markers(ticker, mks, source="triple-barrier")
+    return {"ok": True, "ticker": ticker, "n_bands": len(saved.get("bands", [])), "n_markers": len(mks)}
+
+
+def _h_query_market_db(args: dict) -> dict:
+    """Lecture SEULE (SELECT) des bases de prix locales — audit data en langage naturel, sans risque."""
+    import re
+    import sqlite3
+    from pathlib import Path
+    db = str(args.get("db", "market")).strip().lower()
+    if db not in ("market", "crypto"):
+        return {"error": "db doit être 'market' ou 'crypto'"}
+    sql = str(args.get("sql", "")).strip().rstrip(";")
+    if not re.match(r"(?is)^\s*select\b", sql) or ";" in sql:
+        return {"error": "seule UNE requête SELECT est autorisée (lecture seule)"}
+    path = Path(__file__).resolve().parents[2] / "data" / f"{db}.db"
+    if not path.exists():
+        return {"available": False, "error": f"base absente: {db}.db"}
+    limit = max(1, min(1000, int(args.get("limit", 100))))
+    try:
+        con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        cur = con.execute(sql)
+        rows = cur.fetchmany(limit)
+        cols = [d[0] for d in cur.description] if cur.description else []
+        con.close()
+    except sqlite3.Error as e:
+        return {"error": f"SQL: {e}"}
+    return {"ok": True, "db": db, "columns": cols, "rows": [list(r) for r in rows], "n": len(rows)}
+
+
 def _h_auto_risk_bands(args: dict) -> dict:
     """Calcule le cône VaR/EVT depuis les prix RÉELS (via l'API) et l'écrit comme overlay.
     Sans ticker → traite tous les titres détenus. Découplé : lit l'API, n'importe pas le cœur."""
@@ -159,6 +234,29 @@ TOOLS: dict[str, dict[str, Any]] = {
             "lookback": {"type": "integer"},
             "evt_mult": {"type": "number"}}},
         "handler": _h_auto_risk_bands,
+    },
+    "overlay_triple_barrier": {
+        "description": "Trace les barrières ML (take-profit / stop / temps) du dernier achat d'un actif, "
+                       "calculées sur les prix réels — visualise ce que le modèle attend comme sortie.",
+        "inputSchema": {"type": "object", "required": ["ticker"], "properties": {
+            "ticker": {"type": "string"}, "pt": {"type": "number"}, "sl": {"type": "number"},
+            "horizon": {"type": "integer"}}},
+        "handler": _h_overlay_triple_barrier,
+    },
+    "compare_pine_python": {
+        "description": "Backtest Python équivalent au Pine généré (vol-target + no-trade band) sur les prix "
+                       "réels d'un actif → métriques de cross-validation + le code Pine à coller sur TradingView.",
+        "inputSchema": {"type": "object", "required": ["ticker"], "properties": {
+            "ticker": {"type": "string"}, "dd_target": {"type": "number"}, "lookback": {"type": "integer"}}},
+        "handler": _h_compare_pine_python,
+    },
+    "query_market_db": {
+        "description": "Interroge en LECTURE SEULE (SELECT uniquement) les bases de prix locales "
+                       "(data/market.db, data/crypto.db) — audit data en langage naturel, sans risque d'écriture.",
+        "inputSchema": {"type": "object", "required": ["sql"], "properties": {
+            "db": {"type": "string", "enum": ["market", "crypto"]},
+            "sql": {"type": "string"}, "limit": {"type": "integer"}}},
+        "handler": _h_query_market_db,
     },
 }
 

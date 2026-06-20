@@ -11,6 +11,7 @@ On reproduit fidèlement la couche **par actif** : EXPOSITION pilotée par la vo
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 # Défauts alignés sur la PRODUCTION (cf. preset_backtest / env QUANT_DD_TARGET=0.45).
@@ -112,3 +113,64 @@ plot(heldExposure, "Exposition tenue", color=color.new(color.teal, 0), linewidth
 plot(targetExposure, "Exposition cible", color=color.new(color.gray, 40))
 bgcolor(inBlackout ? color.new(color.orange, 85) : na, title="Blackout earnings")
 """
+
+
+def pine_equiv_backtest(times: list[str], closes: list[float], dd_target: float | None = None,
+                        k_dd: float | None = None, band: float | None = None,
+                        max_weight: float | None = None, lookback: int | None = None) -> dict:
+    """Reproduit EN PYTHON la logique PAR SYMBOLE du script Pine (vol-target DD-cible + no-trade band),
+    pour CHIFFRER l'écart avec le backtest TradingView. Point-in-time : l'exposition du jour t+1 n'utilise
+    que l'info ≤ t. Long-only, sans levier. Renvoie des métriques nettes (pas de frais ici : comparaison
+    de LOGIQUE, pas de perf absolue). Pur (stdlib)."""
+    p = _params({})
+    dd = dd_target if dd_target is not None else p["dd_target"]
+    k = k_dd if k_dd is not None else p["k_dd"]
+    bd = band if band is not None else p["band"]
+    mw = max_weight if max_weight is not None else p["max_weight"]
+    lb = int(lookback if lookback is not None else p["lookback"])
+    n = min(len(times), len(closes))
+    c = [float(x) for x in closes[:n]]
+    if n < lb + 5:
+        return {"available": False, "reason": "série trop courte"}
+    rets = [c[i] / c[i - 1] - 1.0 for i in range(1, n)]            # rendements simples (j → j+1)
+    logr = [math.log(c[i] / c[i - 1]) for i in range(1, n) if c[i - 1] > 0 and c[i] > 0]
+    target_vol = dd / k
+    held = 0.0
+    eq = 1.0
+    curve = [1.0]
+    n_reb = 0
+    expo_sum = 0.0
+    expo_days = 0
+    for j in range(lb, len(rets)):                                 # j indexe rets ; vol estimée sur logr[j-lb:j]
+        win = logr[j - lb:j]
+        if len(win) < 2:
+            continue
+        m = sum(win) / len(win)
+        sd = math.sqrt(sum((x - m) ** 2 for x in win) / (len(win) - 1))
+        vol = sd * math.sqrt(252)
+        target = min(mw, max(0.0, target_vol / vol)) if vol > 0 else 0.0
+        if abs(target - held) > bd:                                # no-trade band (hystérésis)
+            held = target
+            n_reb += 1
+        eq *= (1.0 + held * rets[j])                              # applique l'expo tenue au rendement du jour
+        curve.append(eq)
+        expo_sum += held
+        expo_days += 1
+    if len(curve) < 3:
+        return {"available": False, "reason": "pas assez de points"}
+    # métriques
+    dr = [curve[i] / curve[i - 1] - 1.0 for i in range(1, len(curve))]
+    mu = sum(dr) / len(dr)
+    sd = math.sqrt(sum((x - mu) ** 2 for x in dr) / (len(dr) - 1)) if len(dr) > 1 else 0.0
+    sharpe = (mu / sd * math.sqrt(252)) if sd > 0 else 0.0
+    peak = curve[0]; mdd = 0.0
+    for v in curve:
+        peak = max(peak, v)
+        mdd = min(mdd, v / peak - 1.0)
+    years = len(curve) / 252.0
+    cagr = curve[-1] ** (1 / years) - 1.0 if years > 0 and curve[-1] > 0 else 0.0
+    return {"available": True, "total_return": round(curve[-1] - 1.0, 4), "cagr": round(cagr, 4),
+            "sharpe": round(sharpe, 2), "max_drawdown": round(mdd, 4),
+            "avg_exposure": round(expo_sum / expo_days, 4) if expo_days else 0.0,
+            "n_rebalances": n_reb, "n_days": len(curve),
+            "params": {"dd_target": dd, "k_dd": k, "band": bd, "max_weight": mw, "lookback": lb}}

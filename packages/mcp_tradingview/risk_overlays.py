@@ -70,6 +70,52 @@ def var_cone(times: list[str], closes: list[float], z: float = Z_VAR95,
 
 
 # ─────────────────────────── Lecture API (HTTP, découplé) ───────────────────────────
+def triple_barrier_overlay(times: list[str], closes: list[float], entry_dates: list[str],
+                           pt: float = 2.0, sl: float = 2.0, horizon: int = 20) -> tuple[list[RiskBand], list[ChartMarker]]:
+    """Visualise les barrières ML (triple-barrier) du DERNIER achat : take-profit (haut), stop (bas) sur
+    la fenêtre, + marqueur de sortie (pt/sl/time). Réutilise packages.ml.labeling (déjà testé)."""
+    n = min(len(times), len(closes))
+    if n < 5 or not entry_dates:
+        return [], []
+    try:
+        import numpy as np
+
+        from packages.ml.labeling import ewm_volatility, triple_barrier
+    except Exception:  # noqa: BLE001
+        return [], []
+    idx = {str(times[i])[:10]: i for i in range(n)}
+    entries = sorted({idx[d[:10]] for d in entry_dates if d[:10] in idx})
+    if not entries:
+        return [], []
+    last = entries[-1]                                    # dernier achat → fenêtre la plus pertinente
+    c = np.asarray([float(x) for x in closes[:n]], float)
+    vol = ewm_volatility(c)
+    labels = triple_barrier(c, [last], pt=pt, sl=sl, vol=vol, horizon=horizon)
+    if not labels:
+        return [], []
+    lab = labels[0]
+    up = float(c[last]) * (1 + pt * float(vol[last]))
+    dn = max(0.0, float(c[last]) * (1 - sl * float(vol[last])))
+    bands = [RiskBand(time=str(times[i])[:10], upper=up, lower=dn)
+             for i in range(last, min(lab.exit_idx, n - 1) + 1)]
+    mk = [ChartMarker(time=str(times[lab.exit_idx])[:10], side="sell",
+                      text=f"sortie {lab.touched} ({lab.ret*100:+.1f}%)")]
+    return bands, mk
+
+
+def _load_cached_snapshot() -> dict | None:
+    """Charge le snapshot persisté par l'API (.cache/snapshot.pkl) — évite de le reconstruire."""
+    import pickle
+    from pathlib import Path
+    p = Path(__file__).resolve().parents[2] / ".cache" / "snapshot.pkl"
+    try:
+        with p.open("rb") as f:
+            d = pickle.load(f)  # noqa: S301 — artefact local de confiance
+        return d.get("snap") if isinstance(d, dict) else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _get_json(url: str, timeout: float = 8.0) -> Any:
     with urllib.request.urlopen(url, timeout=timeout) as r:  # noqa: S310 — localhost contrôlé
         return json.loads(r.read().decode())
@@ -137,11 +183,13 @@ def populate_from_snapshot(store: OverlayStore | None = None, z: float = Z_VAR95
     """Variante OFFLINE (cron) : construit le snapshot directement (pas d'API à démarrer) et écrit
     les overlays. Import du cœur PARESSEUX (sens autorisé : connecteur → cœur). Tolérant aux pannes."""
     st = store or OverlayStore()
-    try:
-        from apps.api.snapshot import build_snapshot
-        snap = build_snapshot()
-    except Exception as e:  # noqa: BLE001
-        return {"available": False, "error": f"snapshot indisponible: {e}"}
+    snap = _load_cached_snapshot()                       # réutilise .cache/snapshot.pkl si présent (évite un 2e build → OOM)
+    if snap is None:
+        try:
+            from apps.api.snapshot import build_snapshot
+            snap = build_snapshot()
+        except Exception as e:  # noqa: BLE001
+            return {"available": False, "error": f"snapshot indisponible: {e}"}
     dash = snap.get("dashboard", {})
     series = dash.get("chart_series", {}) or {}
     markers_by = dash.get("real_markers", {}) or {}

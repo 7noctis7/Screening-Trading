@@ -37,6 +37,16 @@ def main() -> None:
     if a.live and not a.yes:
         print("⚠️  --live exige --yes (confirmation explicite). Abandon."); return
 
+    # KILL-SWITCH : alertes TradingView (webhook) → veto / réduction d'exposition (sécurité live).
+    from packages.mcp_tradingview.alerts import fetch_tv_technical_alerts, to_risk_veto
+    risk = to_risk_veto(fetch_tv_technical_alerts())
+    reduce = 0.0 if risk.get("veto") else float(risk.get("reduce", 1.0))
+    if risk.get("veto"):
+        print(f"⛔ KILL-SWITCH ACTIF (alertes TV critiques) : {', '.join(risk['reasons']) or '—'}")
+        print("   → exposition forcée à 0, aucun ordre ne sera envoyé.")
+    elif reduce < 1.0:
+        print(f"⚠️  Alertes TV : exposition réduite ×{reduce:.2f} ({', '.join(risk['reasons']) or '—'})")
+
     alpaca = bitmart = None
     if not dry:
         from packages.execution.bitmart_broker import BitmartBroker
@@ -57,7 +67,11 @@ def main() -> None:
     sent = 0
     for o in sorted(targets, key=lambda x: -x["weight_pct"]):
         cap = bit_cap if o.get("capital") == "bitmart" else alp_cap
-        notional = o["weight_pct"] * cap
+        notional = o["weight_pct"] * cap * reduce          # kill-switch : ×0 (veto) … ×1 (normal)
+        if reduce <= 0.0:                                   # veto total → on n'envoie rien
+            print(f"  {o['side'].upper():4s} {o.get('broker_symbol', o['symbol']):14s} "
+                  f"{o['broker']:8s} {o['weight_pct']*100:6.1f}% {'—':>9s}  bloqué (kill-switch)")
+            continue
         side = Side.LONG if o["side"] == "long" else Side.SHORT
         broker = bitmart if o["broker"] == "Bitmart" else alpaca
         bsym = o.get("broker_symbol", o["symbol"])            # symbole côté broker (mapping)
