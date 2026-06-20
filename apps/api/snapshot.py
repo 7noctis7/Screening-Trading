@@ -1674,6 +1674,43 @@ def build_snapshot(seed: int = 7) -> dict:
         if _sym:
             _real_markers.setdefault(_sym, []).append(
                 {"t": str(_o.get("date", ""))[:10], "side": "buy" if _o.get("side") == "buy" else "sell"})
+    # NEWS RECENTRÉES SUR TON PORTEFEUILLE : on reconstruit les lignes de sentiment à partir des
+    # positions RÉELLES (Alpaca + Bitmart) + de l'allocation PRESET (production), pas du modèle legacy
+    # → les actualités collent enfin à ce que tu détiens réellement.
+    try:
+        if _os.environ.get("QUANT_NEWS") == "1":
+            from packages import sentiment as _Snews
+            _pf_syms, _seen = [], set()
+            for _s in ([p.get("symbol") for p in _live["real"]["positions"]]
+                       + [o["symbol"] for o in _preset_alloc] + list(held)):
+                if _s and _s not in _seen:
+                    _seen.add(_s); _pf_syms.append(_s)
+            _pf_syms = _pf_syms[:30]
+
+            def _yahoo_sym(sym: str) -> str:               # crypto "BTC/USDT" → "BTC-USD" pour le flux Yahoo
+                if acmap.get(sym) == "crypto" or "/" in sym:
+                    return sym.split("/")[0].upper() + "-USD"
+                return sym
+            _new_rows = []
+            for _s in _pf_syms:
+                _r = _Snews.news_sentiment(_yahoo_sym(_s))
+                _score, _n, _heads = _r["score"], _r["n"], _r["headlines"]
+                if _n == 0:                                # repli momentum (hors-ligne) — cohérent
+                    _b = data.get(_s)
+                    if _b and len(_b) > 64:
+                        _score = round(max(-1.0, min(1.0, (_b[-1].close / _b[-64].close - 1) * 3.0)), 4)
+                _new_rows.append({"symbol": _s, "name": names.get(_s, ""), "sector": sector_of.get(_s, ""),
+                                  "score": _score, "label": _Snews.label_of(_score), "n_news": _n,
+                                  "headlines": _heads[:5]})
+            if _new_rows:
+                sentiment_sec["rows"] = _new_rows
+                sentiment_sec["portfolio_driven"] = True
+                _mood = round(sum(r["score"] for r in _new_rows) / len(_new_rows), 4)
+                sentiment_sec["market_mood"] = _mood
+                sentiment_sec["market_label"] = _Snews.label_of(_mood)
+                sentiment_sec["source"] = "news RSS — recentré sur ton portefeuille (positions réelles + preset)"
+    except Exception:  # noqa: BLE001
+        pass
     # symboles cliquables = alloc preset + positions/ordres RÉELS + symboles tradés par le preset
     _chart_syms = ({o["symbol"] for o in _preset_alloc}
                    | {p.get("symbol") for p in _live["real"]["positions"]}

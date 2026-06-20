@@ -77,8 +77,8 @@ export default function Sentiment() {
       )}
 
       <section className="card p-4 overflow-x-auto">
-        <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Sentiment par position
-          <span className="ml-2 text-xs normal-case font-normal">(liens d'articles par actif : lance l'API avec <code className="mono">QUANT_NEWS=1</code>)</span></h2>
+        <h2 className="text-sm uppercase tracking-wide text-muted mb-3">{s.portfolio_driven ? "Sentiment de TON portefeuille" : "Sentiment par position"}
+          <span className="ml-2 text-xs normal-case font-normal">{s.portfolio_driven ? "(positions réelles Alpaca + Bitmart + allocation preset)" : <>(liens d'articles par actif : lance l'API avec <code className="mono">QUANT_NEWS=1</code>)</>}</span></h2>
         <table className="w-full text-sm">
           <thead className="text-muted text-xs">
             <tr><th className="text-left font-normal">Actif</th><th className="text-left font-normal">Sentiment</th>

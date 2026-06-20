@@ -12,6 +12,7 @@ const LINKS: [string, string][] = [
   ["/universe", "Univers"],
   ["/macro", "Macro"],
   ["/themes", "Thèmes de marché"],
+  ["/events", "Événements"],
   ["/fundamentals", "Fondamentaux"],
   ["/investors", "Investisseurs"],
   ["/ml", "Signaux ML"],
