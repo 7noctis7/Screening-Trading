@@ -246,7 +246,8 @@ def build_company_report(f: Financials, *, name: str | None = None,
     charts = _charts_block(f, prior, price_series, financial_history, price_dates)
     snow = snowflake(valuation_score=pillars["valorisation"]["score"], revenue_growth=f.revenue_growth,
                      ml_score=ml_score, revenue_cagr=charts.get("revenue_cagr"),
-                     roe=dp.get("roe"), piotroski=piotroski, altman_z=altman.get("z"))
+                     roe=dp.get("roe"), piotroski=piotroski, altman_z=altman.get("z"),
+                     dividend_yield=getattr(f, "dividend_yield", None))
 
     return {
         "as_of": datetime.now(timezone.utc).date().isoformat(),
@@ -288,6 +289,7 @@ def build_company_report(f: Financials, *, name: str | None = None,
         "earnings": earnings or None,
         "charts": charts,
         "snowflake": snow,
+        "dividend_yield": _f(getattr(f, "dividend_yield", None), 4),
         "risk": risk_block(price_series, beta),
         "verdict": _verdict(f, global_score, reco, roce, wacc, val_scen, audit),
     }
