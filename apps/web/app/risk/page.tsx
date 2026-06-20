@@ -1,9 +1,51 @@
 "use client";
 import { StepBanner } from "@/components/Pipeline";
-import { usePortfolio } from "@/lib/api";
+import { usePortfolio, useMeta } from "@/lib/api";
 import { PageSkeleton } from "@/components/ui";
 
 const pct = (x?: number) => `${((x ?? 0) * 100).toFixed(1)}%`;
+
+function HealthChip({ label, value, tone, title }: { label: string; value: string; tone: string; title?: string }) {
+  return (
+    <div className="flex items-center gap-2" title={title}>
+      <span className="inline-block w-2 h-2 rounded-full" style={{ background: tone }} />
+      <span className="text-xs text-muted">{label}</span>
+      <span className="text-xs mono" style={{ color: tone, fontWeight: 600 }}>{value}</span>
+    </div>
+  );
+}
+
+function SystemHealth({ meta, cd }: { meta: any; cd: any }) {
+  if (!meta) return null;
+  const synth = meta.data_synthetic;
+  const audit = meta.audit;
+  const cache = meta.cov_cache;
+  const kappa = cd?.cond_used;
+  // données : rouge si synthétique, ambre si audit non-ok, vert sinon
+  const dataTone = synth ? "#ef4444" : (audit && !audit.ok ? "#f59e0b" : "#22c55e");
+  const dataVal = synth ? "synthétique" : (audit ? (audit.ok ? "réelles ✓ auditées" : `${(audit.counts?.critical ?? 0)} critique(s)`) : "réelles");
+  const kTone = kappa == null ? "#64748b" : kappa < 50 ? "#22c55e" : kappa < 500 ? "#f59e0b" : "#ef4444";
+  const hr = cache?.hit_rate;
+  const hrTone = hr == null ? "#64748b" : hr >= 0.6 ? "#22c55e" : hr >= 0.3 ? "#f59e0b" : "#94a3b8";
+  return (
+    <section className="card p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm uppercase tracking-wide text-muted">Santé système</h2>
+        {meta.generated_at && <span className="text-[11px] mono text-muted">maj {String(meta.generated_at).slice(0, 16).replace("T", " ")}</span>}
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <HealthChip label="Données" value={dataVal} tone={dataTone}
+          title="État de l'intégrité des données (audit PwC : complétude / exactitude / point-in-time)." />
+        <HealthChip label="Conditionnement κ" value={kappa == null ? "n/a" : Math.round(kappa).toString()} tone={kTone}
+          title="Nombre de condition de la covariance après shrinkage. Vert <50 (stable), ambre <500, rouge >500." />
+        <HealthChip label="Cache covariance" value={hr == null ? "n/a" : `${Math.round(hr * 100)}%`} tone={hrTone}
+          title={`Hit-rate du cache de covariance${cache?.builds ? ` sur ${cache.builds} builds` : ""}.`} />
+        <HealthChip label="Mode" value={meta.strategy ?? "—"} tone="#64748b"
+          title={`Délai flux : ${meta.delay_minutes ?? 0} min · univers ${meta.universe_size ?? "?"} titres.`} />
+      </div>
+    </section>
+  );
+}
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
@@ -14,6 +56,7 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: str
 
 export default function Risk() {
   const { data } = usePortfolio();
+  const { data: meta } = useMeta();
   if (!data) return <PageSkeleton />;
   const a = data.analysis ?? {};
   const rm = a.risk ?? {}, rb = a.risk_budget, lim = a.limits, stress = a.stress;
@@ -28,6 +71,8 @@ export default function Risk() {
           {data.strategy_label}</span>}</h1>
       <p className="text-muted text-xs">Risque de l'<b>allocation de production</b> (preset + cœur), cohérent avec le Dashboard et Positions.</p>
       <StepBanner active="risk" />
+
+      <SystemHealth meta={meta} cd={rb?.covariance_diagnostics} />
 
       <section className="card p-4">
         <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Mesures de risque</h2>

@@ -196,6 +196,64 @@ def cov_cache_stats() -> dict[str, Any]:
     return s
 
 
+_COV_STATS_PATH = _COV_DISK_DIR / "stats.json"
+
+
+def persist_cov_cache_stats() -> dict[str, Any]:
+    """Agrège le hit-rate du cache sur plusieurs builds/redémarrages dans .cache/cov/stats.json
+    (cumul + nombre de builds). Renvoie le cumul persistant. Best-effort, ne lève jamais."""
+    cur = cov_cache_stats()
+    agg = {"hits": 0, "disk_hits": 0, "misses": 0, "builds": 0}
+    try:
+        import json
+        if _COV_STATS_PATH.exists():
+            prev = json.loads(_COV_STATS_PATH.read_text())
+            for k in agg:
+                agg[k] = int(prev.get(k, 0))
+    except Exception:  # noqa: BLE001 — fichier absent/corrompu → on repart de zéro
+        pass
+    for k in ("hits", "disk_hits", "misses"):
+        agg[k] += int(cur.get(k, 0))
+    agg["builds"] += 1
+    tot = agg["hits"] + agg["disk_hits"] + agg["misses"]
+    agg["hit_rate"] = round((agg["hits"] + agg["disk_hits"]) / tot, 4) if tot else 0.0
+    try:
+        import json
+        import os
+        _COV_DISK_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = _COV_STATS_PATH.with_suffix(".tmp.json")
+        tmp.write_text(json.dumps(agg))
+        os.replace(tmp, _COV_STATS_PATH)
+    except Exception:  # noqa: BLE001 — disque indisponible → on n'agrège pas
+        pass
+    return agg
+
+
+def auto_ttl_days(default: float = 14.0, lo: float = 7.0, hi: float = 45.0) -> float:
+    """Auto-tuning du TTL de purge à partir du hit-rate disque cumulé : si les signatures sont
+    volatiles (hit-rate bas) on RALLONGE le TTL (inutile de purger vite, ça ne ressert pas) ; si le
+    hit-rate est élevé (cache efficace) on RACCOURCIT légèrement pour borner la taille du répertoire.
+    Bornes [lo, hi]. Best-effort → `default` si pas d'historique. Surchargé par QUANT_COV_TTL_DAYS."""
+    try:
+        import json
+        import os
+        env = os.environ.get("QUANT_COV_TTL_DAYS")
+        if env:
+            return max(lo, min(hi, float(env)))
+        if not _COV_STATS_PATH.exists():
+            return default
+        agg = json.loads(_COV_STATS_PATH.read_text())
+        tot = agg.get("hits", 0) + agg.get("disk_hits", 0) + agg.get("misses", 0)
+        if tot < 50:                                         # pas assez de signal → défaut
+            return default
+        hr = (agg.get("hits", 0) + agg.get("disk_hits", 0)) / tot
+        # hr bas → TTL long (hi) ; hr haut → TTL court (lo) : interpolation linéaire inversée
+        ttl = hi - (hi - lo) * max(0.0, min(1.0, hr))
+        return round(max(lo, min(hi, ttl)), 1)
+    except Exception:  # noqa: BLE001
+        return default
+
+
 def purge_cov_disk_cache(max_age_days: float = 14.0) -> int:
     """Purge les covariances persistées plus vieilles que `max_age_days` (les nouvelles barres
     quotidiennes rendent les anciennes signatures obsolètes → évite l'accumulation infinie).
