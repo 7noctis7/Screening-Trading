@@ -58,6 +58,67 @@ def _bar(score: int) -> str:
             f'<div style="height:100%;width:{max(0,min(100,score))}%;background:{col}"></div></div>')
 
 
+def _poly(vals: list[float], w: float, h: float, pad: float = 4) -> str:
+    if len(vals) < 2:
+        return ""
+    lo, hi = min(vals), max(vals)
+    rng = (hi - lo) or 1.0
+    n = len(vals)
+    return " ".join(f"{pad+i*(w-2*pad)/(n-1):.1f},{h-pad-(v-lo)/rng*(h-2*pad):.1f}"
+                    for i, v in enumerate(vals))
+
+
+def _spark_price(closes: list[float], w: int = 760, h: int = 120) -> str:
+    """Cours + moyennes mobiles 50/200 (SVG). Aire douce sous le cours."""
+    if len(closes) < 20:
+        return ""
+    def _ma(n: int) -> list[float]:
+        return [sum(closes[max(0, i-n+1):i+1]) / min(i+1, n) for i in range(len(closes))]
+    price = _poly(closes, w, h)
+    area = f"{price} {w-4:.1f},{h-4:.1f} 4,{h-4:.1f}"
+    layers = (f'<polygon points="{area}" fill="{_C["accent"]}" opacity="0.08"/>'
+              f'<polyline points="{price}" fill="none" stroke="{_C["accent"]}" stroke-width="1.8"/>')
+    if len(closes) >= 50:
+        layers += f'<polyline points="{_poly(_ma(50), w, h)}" fill="none" stroke="{_C["warn"]}" stroke-width="1" opacity="0.8"/>'
+    if len(closes) >= 200:
+        layers += f'<polyline points="{_poly(_ma(200), w, h)}" fill="none" stroke="{_C["muted"]}" stroke-width="1" opacity="0.7"/>'
+    return f'<svg viewBox="0 0 {w} {h}" width="100%" height="{h}">{layers}</svg>'
+
+
+def _spark_drawdown(closes: list[float], w: int = 760, h: int = 70) -> str:
+    """Courbe de drawdown (sous l'eau) en rouge."""
+    if len(closes) < 20:
+        return ""
+    peak, dd = closes[0], []
+    for c in closes:
+        peak = max(peak, c)
+        dd.append(c / peak - 1.0 if peak else 0.0)
+    pts = _poly(dd, w, h)
+    area = f"{pts} {w-4:.1f},4 4,4"
+    return (f'<svg viewBox="0 0 {w} {h}" width="100%" height="{h}">'
+            f'<polygon points="{area}" fill="{_C["neg"]}" opacity="0.12"/>'
+            f'<polyline points="{pts}" fill="none" stroke="{_C["neg"]}" stroke-width="1.4"/></svg>')
+
+
+def _bars_history(hist: list[dict], key: str, w: int = 760, h: int = 110) -> str:
+    """Barres annuelles (CA ou résultat net) avec étiquette d'année."""
+    vals = [float(x.get(key) or 0) for x in hist]
+    if len(vals) < 2:
+        return ""
+    hi = max(abs(v) for v in vals) or 1.0
+    n = len(vals)
+    bw = (w - 10) / n * 0.62
+    gap = (w - 10) / n
+    bars = ""
+    for i, (x, v) in enumerate(zip(hist, vals)):
+        bh = abs(v) / hi * (h - 24)
+        cx = 5 + i * gap + (gap - bw) / 2
+        col = _C["accent"] if v >= 0 else _C["neg"]
+        bars += (f'<rect x="{cx:.1f}" y="{h-18-bh:.1f}" width="{bw:.1f}" height="{bh:.1f}" rx="2" fill="{col}" opacity="0.85"/>'
+                 f'<text x="{cx+bw/2:.1f}" y="{h-5:.1f}" text-anchor="middle" font-size="9" fill="{_C["muted"]}">{x.get("year","")}</text>')
+    return f'<svg viewBox="0 0 {w} {h}" width="100%" height="{h}">{bars}</svg>'
+
+
 def _card(title: str, inner: str) -> str:
     return (f'<section style="background:{_C["card"]};border:1px solid {_C["border"]};border-radius:16px;'
             f'padding:18px;margin-bottom:14px">'
@@ -225,6 +286,27 @@ def company_report_html(r: dict[str, Any]) -> str:
             ("Plage 52 sem.", f'${_num(t.get("low_52w"),0)} – ${_num(t.get("high_52w"),0)}', _C["muted"]),
         ]))
 
+    # Graphiques (cours+MM, drawdown, barres CA/résultat)
+    charts_card = ""
+    ch = r.get("charts") or {}
+    closes = ch.get("price") or []
+    hist = ch.get("financial_history") or []
+    inner = ""
+    if len(closes) >= 20:
+        inner += (f'<div style="font-size:11px;color:{_C["muted"]};margin-bottom:2px">Cours & moyennes mobiles '
+                  f'(<span style="color:{_C["accent"]}">cours</span> · <span style="color:{_C["warn"]}">MM50</span> · '
+                  f'<span style="color:{_C["muted"]}">MM200</span>)</div>{_spark_price(closes)}')
+        inner += (f'<div style="font-size:11px;color:{_C["muted"]};margin:8px 0 2px">Drawdown (sous l\'eau)</div>'
+                  f'{_spark_drawdown(closes)}')
+    if len(hist) >= 2:
+        inner += (f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:8px">'
+                  f'<div><div style="font-size:11px;color:{_C["muted"]};margin-bottom:2px">Chiffre d\'affaires</div>'
+                  f'{_bars_history(hist, "revenue")}</div>'
+                  f'<div><div style="font-size:11px;color:{_C["muted"]};margin-bottom:2px">Résultat net</div>'
+                  f'{_bars_history(hist, "net_income")}</div></div>')
+    if inner:
+        charts_card = _card("Graphiques", inner)
+
     # Macro & régime (top-down)
     macro_card = ""
     mc = r.get("macro")
@@ -246,6 +328,7 @@ font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',Inter,system-ui,sans-
 <div style="font-size:11px;color:{_C['muted']};letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px">
 Note d'analyse fondamentale · {r['as_of']}</div>
 {header}
+{charts_card}
 {_card("Audit d'intégrité des données (PwC)", _findings_html(audit))}
 {_card("Analyse économique (Vernimmen)", vern)}
 {_card("Valorisation (Damodaran)", dam_kv)}

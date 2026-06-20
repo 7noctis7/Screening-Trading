@@ -98,6 +98,8 @@ audit:            ## audit PwC des bases de prix (complétude/exactitude/point-i
 	$(PYTHON) scripts/data_audit.py $(ARGS)
 ingest-delisted:  ## détecte les titres délistés (barres trop anciennes) → data/delisted.csv (anti-biais du survivant)
 	$(PYTHON) scripts/ingest_delisted.py $(ARGS)
+reports:          ## pré-génère les notes d'analyse (top-conviction + positions) → out/notes/AAAA-MM-JJ
+	$(PYTHON) scripts/generate_reports.py $(ARGS)
 analytics:        ## rapport de perf QuantStats (Sortino/Calmar/Alpha-Beta vs QQQ) → vault/Performance_Report.md
 	$(PYTHON) scripts/perf_report.py
 clean:

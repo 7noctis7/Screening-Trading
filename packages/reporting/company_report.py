@@ -113,7 +113,9 @@ def build_company_report(f: Financials, *, name: str | None = None,
                          technical: dict[str, Any] | None = None,
                          macro: dict[str, Any] | None = None,
                          earnings: dict[str, Any] | None = None,
-                         ml_score: float | None = None) -> dict[str, Any]:
+                         ml_score: float | None = None,
+                         price_series: list[float] | None = None,
+                         financial_history: list[dict] | None = None) -> dict[str, Any]:
     """Construit la note d'analyse complète (dict sérialisable JSON) pour une société.
 
     Sections optionnelles à forte valeur (rendues si fournies) :
@@ -196,8 +198,24 @@ def build_company_report(f: Financials, *, name: str | None = None,
         "technical": technical or None,
         "macro": macro or None,
         "earnings": earnings or None,
+        "charts": _charts_block(f, prior, price_series, financial_history),
         "verdict": _verdict(f, global_score, reco, roce, wacc, val_scen, audit),
     }
+
+
+def _charts_block(f: Financials, prior: Financials | None, price_series: list[float] | None,
+                  financial_history: list[dict] | None) -> dict[str, Any]:
+    """Données pour les mini-graphes : série de cours (bornée) + historique CA/résultat. À défaut
+    d'historique fourni, on dérive 2 points (N-1, N) depuis prior/current — honnête et toujours là."""
+    px = [float(x) for x in (price_series or []) if x is not None][-504:]   # ≤ ~2 ans de daily
+    hist = financial_history
+    if not hist:
+        hist = []
+        yr = f.as_of.year
+        if prior is not None:
+            hist.append({"year": yr - 1, "revenue": prior.revenue, "net_income": prior.net_income})
+        hist.append({"year": yr, "revenue": f.revenue, "net_income": f.net_income})
+    return {"price": px, "financial_history": hist}
 
 
 def _pillar_scores(f: Financials, rr: dict, roce: float, wacc: float, val_scen: dict,

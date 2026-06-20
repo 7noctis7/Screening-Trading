@@ -81,6 +81,23 @@ def test_three_scores_present_and_global_blends():
     assert 0 <= sc["global"] <= 100
 
 
+def test_charts_block_and_svg_render():
+    closes = [100 + i * 0.5 for i in range(260)]              # tendance régulière
+    r = build_company_report(_fin(price=closes[-1]), name="NVIDIA",
+                             prior=_fin(revenue=1.2e11, net_income=6e10),
+                             price_series=closes)
+    ch = r["charts"]
+    assert len(ch["price"]) > 0 and len(ch["financial_history"]) == 2   # N-1 + N
+    html = company_report_html(r)
+    assert "Graphiques" in html and "<svg" in html and "Drawdown" in html
+
+
+def test_charts_derive_history_from_prior():
+    r = build_company_report(_fin(), name="X", prior=_fin(revenue=1e11, net_income=5e10))
+    hist = r["charts"]["financial_history"]
+    assert [h["year"] for h in hist][0] < [h["year"] for h in hist][1]   # N-1 puis N
+
+
 def test_optional_sections_rendered():
     r = build_company_report(_fin(), name="NVIDIA",
                              technical={"trend": "haussière", "rsi": 55, "macd_signal": "haussier",

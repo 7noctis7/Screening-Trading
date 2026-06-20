@@ -392,14 +392,22 @@ def _rsi(values: list[float], n: int = 14) -> float | None:
     return round(100 - 100 / (1 + rs), 1)
 
 
-def _company_technical(sym: str) -> dict | None:
-    """Résumé technique d'un titre depuis la base de prix RÉELLE (tendance, RSI, MACD, position vs
-    moyennes mobiles, plage 52 sem.). Pur-Python, best-effort → None si indisponible."""
+def _company_closes(sym: str) -> list[float]:
+    """Série de clôtures RÉELLES d'un titre (market.db puis crypto.db). [] si absente."""
     try:
         from packages.data.engine import read_prices_rows
         rows = read_prices_rows("market.db", symbols=[sym]) or read_prices_rows("crypto.db", symbols=[sym])
-        closes = [float(r["close"]) for r in sorted(rows, key=lambda r: r.get("ts") or "")
-                  if r.get("close") is not None]
+        return [float(r["close"]) for r in sorted(rows, key=lambda r: r.get("ts") or "")
+                if r.get("close") is not None]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _company_technical(sym: str, closes: list[float] | None = None) -> dict | None:
+    """Résumé technique d'un titre depuis la base de prix RÉELLE (tendance, RSI, MACD, position vs
+    moyennes mobiles, plage 52 sem.). Pur-Python, best-effort → None si indisponible."""
+    try:
+        closes = closes if closes is not None else _company_closes(sym)
         if len(closes) < 60:
             return None
         last = closes[-1]
@@ -485,9 +493,10 @@ def _build_company_report_cached(sym: str) -> tuple[dict | None, str | None]:
         ml_score = (snap.get("ml", {}).get("scores", {}) or {}).get(sym)   # proba ML du titre
     except Exception:  # noqa: BLE001
         pass
+    closes = _company_closes(sym)
     report = build_company_report(f, name=name, prior=prior, beta=beta,
-                                  technical=_company_technical(sym), macro=_company_macro(),
-                                  earnings=earnings, ml_score=ml_score)
+                                  technical=_company_technical(sym, closes), macro=_company_macro(),
+                                  earnings=earnings, ml_score=ml_score, price_series=closes)
     report["source"] = src
     report["earnings_signature"] = sig
     if len(_REPORT_CACHE) >= _REPORT_CACHE_MAX:
