@@ -13,7 +13,7 @@ export QUANT_PRICE_DB="${QUANT_PRICE_DB:-$HOME/Desktop/YAHOO.db}"
 export QUANT_FUND="${QUANT_FUND:-yf}"
 export QUANT_NEWS="${QUANT_NEWS:-1}"
 export QUANT_HISTORY_DAYS="${QUANT_HISTORY_DAYS:-4015}"
-unset QUANT_CORE_SPEC 2>/dev/null || true
+# QUANT_CORE_SPEC / QUANT_DD_TARGET : respectés s'ils sont définis dans l'environnement (sinon défaut code).
 
 BRANCH="claude/clever-lovelace-ognwya"
 if [ "${QUANT_NO_UPDATE:-0}" != "1" ]; then
