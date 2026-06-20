@@ -728,6 +728,20 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
     except Exception:  # noqa: BLE001
         pass
 
+    # HISTORIQUE D'ENTRAÎNEMENT + DRIFT DE PERFORMANCE (journal append-only, sans dépendance) :
+    # suit l'AUC OOS run après run et signale une dégradation du modèle (ré-entraînement à revoir).
+    training_history: dict = {"available": False}
+    try:
+        from packages.ml.tracking import detect_drift, load_history
+        _hist = load_history(limit=30)
+        if _hist:
+            training_history = {"available": True,
+                                "runs": [{"ts": h.get("ts"), "status": h.get("status"),
+                                          "auc_oos": h.get("metrics", {}).get("auc_oos")} for h in _hist[-15:]],
+                                "drift": detect_drift(_hist, metric="auc_oos")}
+    except Exception:  # noqa: BLE001
+        pass
+
     # GARDE-FOU edge : un AUC OOS ≤ 0.52 = pas d'edge prédictif exploitable (le score reste
     # affiché mais ne doit PAS piloter de sizing agressif). Discipline anti-surapprentissage.
     edge_ok = bool(cv_auc is not None and cv_auc >= 0.52)
@@ -748,6 +762,7 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
         "walk_forward": walk_forward,
         "meta_labeling": meta,
         "drift": drift,
+        "training_history": training_history,
     }
 
 

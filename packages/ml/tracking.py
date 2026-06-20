@@ -41,3 +41,63 @@ def track_training(*, run_name: str, params: dict[str, Any], metrics: dict[str, 
     except Exception as e:  # noqa: BLE001 — toute panne MLflow est non bloquante
         log.warning("MLflow tracking ignoré : %s", e)
         return False
+
+
+# ─────────── Journal de runs SANS dépendance (toujours dispo, complète MLflow) ───────────
+_HISTORY_PATH = _ROOT / "models" / "train_history.jsonl"
+
+
+def record_run(*, metrics: dict[str, float], params: dict[str, Any] | None = None,
+               status: str = "candidate", path: str | Path | None = None) -> bool:
+    """Ajoute une ligne au journal d'entraînement (JSONL append-only). stdlib pur, jamais bloquant.
+    Sert de source au suivi de drift et à l'affichage front, indépendamment de MLflow."""
+    try:
+        import json
+        from datetime import datetime, timezone
+        p = Path(path) if path else _HISTORY_PATH
+        p.parent.mkdir(parents=True, exist_ok=True)
+        rec = {"ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+               "status": status,
+               "metrics": {k: round(float(v), 6) for k, v in metrics.items() if v is not None},
+               "params": {k: v for k, v in (params or {}).items() if v is not None}}
+        with p.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(rec) + "\n")
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def load_history(limit: int = 30, path: str | Path | None = None) -> list[dict]:
+    """Lit les derniers runs du journal (les plus récents en dernier). Best-effort → [] si absent."""
+    try:
+        import json
+        p = Path(path) if path else _HISTORY_PATH
+        if not p.exists():
+            return []
+        lines = [ln for ln in p.read_text(encoding="utf-8").splitlines() if ln.strip()]
+        out = []
+        for ln in lines[-limit:]:
+            try:
+                out.append(json.loads(ln))
+            except ValueError:
+                continue
+        return out
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def detect_drift(history: list[dict], *, metric: str = "auc_oos", window: int = 5,
+                 drop: float = 0.05) -> dict[str, Any]:
+    """Détecte une DÉGRADATION du modèle : la métrique courante chute de plus de `drop` sous la
+    moyenne des `window` runs précédents. Pur stdlib. Renvoie {drift, current, baseline, delta}."""
+    vals = [h.get("metrics", {}).get(metric) for h in history]
+    vals = [float(v) for v in vals if v is not None]
+    if len(vals) < 2:
+        return {"drift": False, "current": vals[-1] if vals else None, "baseline": None, "delta": None,
+                "n": len(vals)}
+    current = vals[-1]
+    prev = vals[-(window + 1):-1] or vals[:-1]
+    baseline = sum(prev) / len(prev)
+    delta = round(current - baseline, 6)
+    return {"drift": (baseline - current) > drop, "current": round(current, 6),
+            "baseline": round(baseline, 6), "delta": delta, "n": len(vals), "metric": metric}
