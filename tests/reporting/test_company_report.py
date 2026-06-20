@@ -7,7 +7,7 @@ from packages.reporting import (
     build_company_report,
     company_report_html,
 )
-from packages.reporting.company_report import technical_score
+from packages.reporting.company_report import sector_positioning, technical_score
 
 
 def _fin(**kw) -> Financials:
@@ -60,6 +60,32 @@ def test_html_render_contains_sections():
 def test_pillars_sum_weights_to_one():
     r = build_company_report(_fin(), name="NVIDIA")
     assert abs(sum(p["weight"] for p in r["score"]["pillars"].values()) - 1.0) < 1e-9
+
+
+def test_sector_positioning_direction_aware():
+    peers = [{"net_margin": 0.10, "per": 30}, {"net_margin": 0.12, "per": 25},
+             {"net_margin": 0.15, "per": 20}, {"net_margin": 0.20, "per": 18}]
+    # société : marge élevée (favorable) + P/E bas (favorable)
+    comp = {"net_margin": 0.30, "per": 15}
+    res = sector_positioning(comp, peers)
+    assert res["available"]
+    by = {r["metric"]: r for r in res["rows"]}
+    assert by["net_margin"]["verdict"] == "favorable" and by["net_margin"]["percentile"] == 1.0
+    assert by["per"]["verdict"] == "favorable"             # P/E plus bas que tous → favorable
+
+
+def test_sector_positioning_needs_min_peers():
+    res = sector_positioning({"net_margin": 0.2}, [{"net_margin": 0.1}])
+    assert not res["available"]                            # <3 valeurs → pas de positionnement
+
+
+def test_report_includes_sector_comparison():
+    peers = [{"net_margin": 0.1, "roe": 0.1, "roic": 0.1, "gross_margin": 0.3, "per": 30, "ev_ebitda": 20}
+             for _ in range(5)]
+    r = build_company_report(_fin(), name="NVIDIA", peers=peers)
+    sc = r["sector_comparison"]
+    assert sc["available"] and sc["total"] >= 1
+    assert "Positionnement sectoriel" in company_report_html(r)
 
 
 def test_technical_score_directional():

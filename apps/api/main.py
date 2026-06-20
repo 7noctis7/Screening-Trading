@@ -447,6 +447,23 @@ def _company_macro() -> dict | None:
         return None
 
 
+def _company_peers(sym: str) -> list[dict] | None:
+    """Pairs sectoriels (mêmes métriques) depuis la section fondamentaux du snapshot, pour le
+    positionnement vs secteur. None si indisponible."""
+    try:
+        rows = (_snap().get("fundamentals", {}) or {}).get("rows", []) or []
+        sec = next((r.get("sector") for r in rows if r.get("symbol") == sym), None)
+        if not sec:
+            return None
+        peers = [{"net_margin": r.get("net_margin"), "roe": r.get("roe"), "roic": r.get("roic"),
+                  "gross_margin": r.get("gross_margin"), "per": r.get("per"),
+                  "ev_ebitda": r.get("ev_ebitda")}
+                 for r in rows if r.get("sector") == sec]
+        return peers if len(peers) >= 3 else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _company_financial_history(sym: str) -> list[dict] | None:
     """Historique financier 5-6 ans RÉEL via SEC EDGAR (CA/résultat/BPA par exercice). None si
     émetteur non-SEC (le builder dérivera alors N-1/N). Best-effort."""
@@ -509,7 +526,7 @@ def _build_company_report_cached(sym: str) -> tuple[dict | None, str | None]:
     report = build_company_report(f, name=name, prior=prior, beta=beta,
                                   technical=_company_technical(sym, closes), macro=_company_macro(),
                                   earnings=earnings, ml_score=ml_score, price_series=closes,
-                                  financial_history=fin_hist)
+                                  financial_history=fin_hist, peers=_company_peers(sym))
     report["source"] = src
     report["earnings_signature"] = sig
     if len(_REPORT_CACHE) >= _REPORT_CACHE_MAX:
@@ -542,6 +559,48 @@ def company_report(ticker: str, format: str = "html") -> Any:
             return FileResponse(str(pdf), media_type="application/pdf", filename=f"note_{sym}.pdf")
         # repli : pas de reportlab → on sert le HTML imprimable
     return HTMLResponse(company_report_html(report))
+
+
+_NOTES_DIR = Path(_LOG_DIR).parent / "out" / "notes"
+
+
+@app.get("/api/notes")
+def notes_list() -> dict:
+    """Liste les notes d'analyse ARCHIVÉES (pré-générées par le cron) → out/notes/AAAA-MM-JJ/.
+    Renvoie {dates:[...], notes:[{date, symbol, html, pdf}]} (récent d'abord)."""
+    out: list[dict] = []
+    try:
+        if _NOTES_DIR.exists():
+            for day in sorted(_NOTES_DIR.iterdir(), reverse=True):
+                if not day.is_dir():
+                    continue
+                syms: dict[str, dict] = {}
+                for fp in day.glob("note_*.*"):
+                    if fp.suffix not in (".html", ".pdf"):
+                        continue
+                    sym = fp.stem.replace("note_", "")
+                    syms.setdefault(sym, {"date": day.name, "symbol": sym})
+                    syms[sym][fp.suffix[1:]] = f"/api/note_file?date={day.name}&symbol={sym}&ext={fp.suffix[1:]}"
+                out.extend(syms.values())
+    except Exception:  # noqa: BLE001
+        pass
+    dates = sorted({n["date"] for n in out}, reverse=True)
+    return {"available": bool(out), "dates": dates, "notes": out}
+
+
+@app.get("/api/note_file")
+def note_file(date: str, symbol: str, ext: str = "html") -> Any:
+    """Sert une note archivée (validation stricte du chemin sous out/notes — anti-traversal)."""
+    from fastapi.responses import FileResponse, HTMLResponse
+    safe_date = "".join(c for c in date if c.isdigit() or c == "-")
+    safe_sym = "".join(c for c in symbol.upper() if c.isalnum() or c in ".-")
+    ext = "pdf" if ext == "pdf" else "html"
+    fp = (_NOTES_DIR / safe_date / f"note_{safe_sym}.{ext}").resolve()
+    if not str(fp).startswith(str(_NOTES_DIR.resolve())) or not fp.exists():
+        return JSONResponse({"error": "note introuvable"}, status_code=404)
+    if ext == "pdf":
+        return FileResponse(str(fp), media_type="application/pdf", filename=f"note_{safe_sym}.pdf")
+    return HTMLResponse(fp.read_text(encoding="utf-8"))
 
 
 @app.get("/api/ai/status")
