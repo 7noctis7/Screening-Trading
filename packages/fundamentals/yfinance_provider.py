@@ -19,13 +19,16 @@ from packages.fundamentals.models import Financials
 # Cache disque (le cron quotidien le réchauffe → builds suivants instantanés). TTL 24 h.
 _CACHE_DIR = Path(__file__).resolve().parents[2] / ".cache" / "yf_fundamentals"
 _CACHE_TTL = 86_400.0
+_SCHEMA = "2"  # bump quand on ajoute des champs (ex. croissances) → invalide les vieux caches
 
 
 def _cache_get(symbol: str) -> dict | None:
     p = _CACHE_DIR / f"{symbol.replace('/', '_')}.json"
     try:
         if p.exists() and time.time() - p.stat().st_mtime < _CACHE_TTL:
-            return json.loads(p.read_text())
+            d = json.loads(p.read_text())
+            if d.get("_schema") == _SCHEMA:                 # schéma à jour (sinon refetch)
+                return d
     except Exception:  # noqa: BLE001
         return None
     return None
@@ -34,11 +37,12 @@ def _cache_get(symbol: str) -> dict | None:
 def _cache_put(symbol: str, info: dict) -> None:
     try:
         _CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        keep = {k: info.get(k) for k in (
+        keep = {"_schema": _SCHEMA}
+        keep.update({k: info.get(k) for k in (
             "currentPrice", "regularMarketPrice", "totalRevenue", "netIncomeToCommon", "ebitda",
             "sharesOutstanding", "marketCap", "grossMargins", "ebit", "totalStockholderEquity",
             "totalDebt", "totalCash", "freeCashflow", "sector",
-            "revenueGrowth", "earningsGrowth")}                # croissances YoY RÉELLES (Yahoo)
+            "revenueGrowth", "earningsGrowth")})               # croissances YoY RÉELLES (Yahoo)
         (_CACHE_DIR / f"{symbol.replace('/', '_')}.json").write_text(json.dumps(keep))
     except Exception:  # noqa: BLE001
         pass
