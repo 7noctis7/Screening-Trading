@@ -136,15 +136,23 @@ export default function Dashboard() {
       </section>
 
       {/* Graphique technique de l'actif cliqué dans un journal (indicateurs + signaux achat/vente) */}
-      {selSym && (pos?.series ?? {})[selSym] && (
+      {selSym && (pos?.series ?? {})[selSym] && (() => {
+        // marqueurs = trades du JOURNAL lui-même (cohérence garantie graphe ↔ journal)
+        const mk = [
+          ...((ledger?.trades ?? []).filter((t: any) => t.symbol === selSym)
+            .map((t: any) => ({ t: String(t.date).slice(0, 10), side: t.side === "BUY" ? "buy" : "sell" }))),
+          ...((d.real_trades ?? []).filter((t: any) => t.symbol === selSym)
+            .map((t: any) => ({ t: String(t.date).slice(0, 10), side: t.side === "buy" ? "buy" : "sell" }))),
+        ];
+        return (
         <section className="card p-4">
           <div className="flex justify-between items-center mb-2">
-            <h2 className="text-sm uppercase tracking-wide text-muted">Graphique technique — {selSym} <span className="normal-case text-xs">· signaux achat/vente du portefeuille</span></h2>
+            <h2 className="text-sm uppercase tracking-wide text-muted">Graphique technique — {selSym} <span className="normal-case text-xs">· {mk.length} signaux achat/vente du journal</span></h2>
             <button onClick={() => setSelSym(null)} className="text-muted hover:text-fg text-sm">✕</button>
           </div>
-          <TechnicalChart data={pos!.series[selSym]} markers={[...((d.preset_markers ?? {})[selSym] ?? []), ...((d.real_markers ?? {})[selSym] ?? [])]} />
-        </section>
-      )}
+          <TechnicalChart data={pos!.series[selSym]} markers={mk} />
+        </section>);
+      })()}
 
       {/* Journal RÉEL : ordres réellement exécutés (Alpaca+Bitmart) + positions réelles */}
       {showReal && (() => {
