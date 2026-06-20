@@ -15,6 +15,8 @@ Compare le preset à l'équipondéré (bench) et, si fourni, à la courbe du swi
 
 from __future__ import annotations
 
+import os
+
 import numpy as np
 
 from packages.backtest.conviction_backtest import _stats
@@ -334,6 +336,21 @@ def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict |
     syms = [s for s, b in data.items() if b and len(b) > lookback + step]
     if len(syms) < 5:
         return {"available": False}
+    # COÛTS RÉELS : commission + slippage déduits du cash à CHAQUE exécution, calibrés sur les barèmes
+    # courtiers (actions→Alpaca 0 % ; crypto→BitMart 0,25 %…). Désactivable via QUANT_FEES=0.
+    from packages.execution.costs import broker_cost_bps
+    acmap = asset_classes or {}
+    _fees_on = os.environ.get("QUANT_FEES", "1") != "0"
+    _bps_cache: dict[str, float] = {}
+
+    def _tc(sym: str) -> float:                            # coût aller-simple (fraction du notionnel)
+        if not _fees_on:
+            return 0.0
+        if sym not in _bps_cache:
+            _bps_cache[sym] = broker_cost_bps(acmap.get(sym, "equity")) / 1e4
+        return _bps_cache[sym]
+
+    fees_paid = 0.0
     quality = quality or {}
     q = {s: quality.get(s) for s in syms if quality.get(s) is not None}
     universe = (sorted(q, key=lambda s: q[s], reverse=True)[:top_k] if len(q) >= 5 else syms[:top_k])
@@ -384,18 +401,20 @@ def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict |
                         if d_val > 0:
                             dq = d_val / cpx; tot = qsh + dq
                             qcost = (qcost * qsh + cpx * dq) / tot if tot > 0 else cpx
-                            qsh, cash = tot, cash - d_val
+                            _fee = d_val * _tc(core_sym); fees_paid += _fee
+                            qsh, cash = tot, cash - d_val - _fee
                             trades.append({"date": dts[t], "symbol": core_sym, "side": "BUY", "qty": round(dq, 4),
                                            "price": round(cpx, 2), "notional": round(d_val, 2), "avg_cost": round(qcost, 2),
-                                           "pnl": None, "pnl_pct": None, "reason": "cœur indiciel (rééquilibrage)"})
+                                           "pnl": None, "pnl_pct": None, "fee": round(_fee, 2), "reason": "cœur indiciel (rééquilibrage)"})
                         else:
                             sq = min(qsh, -d_val / cpx)
                             if sq > 1e-9:
-                                pnl = (cpx - qcost) * sq; realized += pnl; qsh, cash = qsh - sq, cash + sq * cpx
+                                _fee = sq * cpx * _tc(core_sym); fees_paid += _fee
+                                pnl = (cpx - qcost) * sq; realized += pnl; qsh, cash = qsh - sq, cash + sq * cpx - _fee
                                 trades.append({"date": dts[t], "symbol": core_sym, "side": "SELL", "qty": round(sq, 4),
                                                "price": round(cpx, 2), "notional": round(sq * cpx, 2), "avg_cost": round(qcost, 2),
                                                "pnl": round(pnl, 2), "pnl_pct": round(cpx / qcost - 1, 4) if qcost > 0 else None,
-                                               "reason": "cœur indiciel (allègement)"})
+                                               "fee": round(_fee, 2), "reason": "cœur indiciel (allègement)"})
                 for i, s in enumerate(universe):
                     price = float(px[i])
                     if price <= 0:
@@ -407,24 +426,28 @@ def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict |
                         dq = d_val / price
                         tot = shares[s] + dq
                         cost[s] = (cost[s] * shares[s] + price * dq) / tot if tot > 0 else price
-                        shares[s], cash = tot, cash - d_val
+                        _fee = d_val * _tc(s); fees_paid += _fee
+                        shares[s], cash = tot, cash - d_val - _fee
                         reason = "entrée (univers qualité, risk-parity)" if (shares[s] - dq) <= 1e-9 else "renforcement (risk-parity)"
                         trades.append({"date": dts[t], "symbol": s, "side": "BUY", "qty": round(dq, 4),
                                        "price": round(price, 2), "notional": round(d_val, 2),
-                                       "avg_cost": round(cost[s], 2), "pnl": None, "pnl_pct": None, "reason": reason})
+                                       "avg_cost": round(cost[s], 2), "pnl": None, "pnl_pct": None,
+                                       "fee": round(_fee, 2), "reason": reason})
                     else:                                          # VENTE (P&L réalisé vs PRU)
                         sq = min(shares[s], -d_val / price)
                         if sq <= 1e-9:
                             continue
                         pnl = (price - cost[s]) * sq
                         realized += pnl
-                        shares[s], cash = shares[s] - sq, cash + sq * price
+                        _fee = sq * price * _tc(s); fees_paid += _fee
+                        shares[s], cash = shares[s] - sq, cash + sq * price - _fee
                         reason = ("sortie (hors univers / blackout)" if (nw[i] <= 1e-4 or shares[s] <= 1e-6)
                                   else "allègement (DD-target/risk-parity)")
                         trades.append({"date": dts[t], "symbol": s, "side": "SELL", "qty": round(sq, 4),
                                        "price": round(price, 2), "notional": round(sq * price, 2),
                                        "avg_cost": round(cost[s], 2), "pnl": round(pnl, 2),
-                                       "pnl_pct": round(price / cost[s] - 1, 4) if cost[s] > 0 else None, "reason": reason})
+                                       "pnl_pct": round(price / cost[s] - 1, 4) if cost[s] > 0 else None,
+                                       "fee": round(_fee, 2), "reason": reason})
                 w = nw
         px1 = A[:, t + 1]                                  # valorisation quotidienne (mark-to-market)
         val = sum(shares[s] * px1[idx[s]] for s in universe) + (qsh * float(core_arr[t + 1]) if core_on else 0.0)
@@ -457,10 +480,20 @@ def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict |
             _t["latent_pct"] = round(_lp / _t["price"] - 1, 4)
         else:
             _t["latent"], _t["latent_pct"] = None, None
+    # transparence frais : courtiers retenus + estimation de la perf SANS frais (premier ordre).
+    from packages.execution.costs import broker_for
+    _gross_eq = final_eq + fees_paid                       # ≈ equity sans frais (estimation au 1er ordre)
+    _brokers = {}
+    if _fees_on:
+        _acs = {acmap.get(s, "equity") for s in universe} | {acmap.get(core_sym, "equity") if core_on else "equity"}
+        _brokers = {ac: broker_for(ac) for ac in sorted(_acs)}
     return {"available": True, "trades": trades, "open_positions": open_pos,
             "equity": [round(x, 2) for x in eq_curve], "dates": out_dates,
             "summary": {"init_cap": round(init_cap, 2), "final_equity": round(final_eq, 2),
                         "total_return": round(final_eq / init_cap - 1, 4),
                         "realized_pnl": round(realized, 2), "unrealized_pnl": round(unrealized, 2),
                         "cash": round(cash, 2), "n_trades": n_all,
+                        "fees_paid": round(fees_paid, 2), "fees_pct": round(fees_paid / init_cap, 4),
+                        "gross_return": round(_gross_eq / init_cap - 1, 4), "fees_on": _fees_on,
+                        "brokers": _brokers,
                         "start": dts[start], "end": dts[L - 1]}}

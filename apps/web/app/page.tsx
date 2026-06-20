@@ -209,6 +209,10 @@ export default function Dashboard() {
               rendement <b style={{ color: "#22d3ee" }}>{((sm.total_return ?? 0) * 100).toFixed(1)}%</b> ·
               P&L réalisé <b style={{ color: (sm.realized_pnl ?? 0) >= 0 ? "#22c55e" : "#ef4444" }}>{dlt(sm.realized_pnl)}$</b> ·
               latent <b style={{ color: (sm.unrealized_pnl ?? 0) >= 0 ? "#22c55e" : "#ef4444" }}>{dlt(sm.unrealized_pnl)}$</b> · {sm.n_trades} trades. Réconcilie la courbe.</p>
+            {sm.fees_on !== false && (
+              <p className="text-muted2 text-xs mb-2">Frais RÉELS déduits : <b style={{ color: "#f59e0b" }}>−{dlt(sm.fees_paid)}$</b> ({((sm.fees_pct ?? 0) * 100).toFixed(2)}%) — commission + slippage aux barèmes courtiers
+              ({Object.entries(sm.brokers ?? {}).map(([ac, b]: any) => `${ac}→${b}`).join(", ")}). Rendement brut (sans frais) {((sm.gross_return ?? 0) * 100).toFixed(1)}% → <b>net {((sm.total_return ?? 0) * 100).toFixed(1)}%</b>.</p>
+            )}
             <div className="flex items-center gap-2 mb-2">
               <input value={ledgerQ} onChange={(e) => setLedgerQ(e.target.value)} placeholder="filtrer par actif (ex. QQQ)"
                 className="text-sm px-2 py-1 rounded bg-surfaceAlt border border-border outline-none w-48" />
