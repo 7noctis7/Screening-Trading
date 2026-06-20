@@ -213,6 +213,7 @@ export default function Dashboard() {
               <p className="text-muted2 text-xs mb-2">Frais RÉELS déduits : <b style={{ color: "#f59e0b" }}>−{dlt(sm.fees_paid)}$</b> ({((sm.fees_pct ?? 0) * 100).toFixed(2)}%) — commission + slippage aux barèmes courtiers
               ({Object.entries(sm.brokers ?? {}).map(([ac, b]: any) => `${ac}→${b}`).join(", ")}). Rendement brut (sans frais) {((sm.gross_return ?? 0) * 100).toFixed(1)}% → <b>net {((sm.total_return ?? 0) * 100).toFixed(1)}%</b>.</p>
             )}
+            <p className="text-muted2 text-xs mb-2">Réconciliation {sm.reconciles ? <b style={{ color: "#22c55e" }}>✓</b> : <b style={{ color: "#ef4444" }}>≠</b>} : P&L total <b>{dlt(sm.total_pnl)}$</b> = réalisé {dlt(sm.realized_pnl)}$ + latent {dlt(sm.unrealized_pnl)}$ = gain du graphe {dlt(sm.graph_gain)}$ {sm.fees_on !== false ? <>+ frais {dlt(sm.fees_paid)}$</> : null}. La somme des colonnes du journal (réalisé sur ventes, latent sur achats) égale ces totaux.</p>
             <div className="flex items-center gap-2 mb-2">
               <input value={ledgerQ} onChange={(e) => setLedgerQ(e.target.value)} placeholder="filtrer par actif (ex. QQQ)"
                 className="text-sm px-2 py-1 rounded bg-surfaceAlt border border-border outline-none w-48" />

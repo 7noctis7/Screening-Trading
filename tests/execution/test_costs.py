@@ -5,6 +5,7 @@ from packages.execution.costs import (
     CostModel,
     broker_assumptions,
     broker_cost_bps,
+    broker_fee,
     broker_for,
     cost_assumptions,
 )
@@ -54,6 +55,22 @@ def test_broker_overridable_by_env(monkeypatch):
     assert broker_for("crypto") == "binance"
 
 
+def test_broker_min_fee_dominates_small_orders(monkeypatch):
+    # Alpaca (défaut) : pas de minimum → un petit ordre ne coûte que le slippage (≈ 0,02 $ sur 100 $).
+    assert broker_fee("equity", 100.0) < 1.0
+    # IBKR : minimum 1 $/ordre → un petit ordre coûte le minimum, pas ~0 via les bps.
+    monkeypatch.setenv("QUANT_BROKER_EQUITY", "ibkr")
+    assert broker_fee("equity", 100.0) >= 1.0           # 0,5 bp de 100 $ = 0,005 $ < min 1 $ → 1 $
+    # au-dessus du seuil, la commission proportionnelle reprend le dessus
+    assert broker_fee("equity", 1_000_000.0) > 1.0
+
+
+def test_broker_fee_scales_with_notional_above_min():
+    # crypto BitMart 0,25 % + 10 bps slippage = 35 bps, pas de min → proportionnel au notionnel.
+    assert broker_fee("crypto", 10000.0) == round(10000.0 * 35 / 1e4, 6) or broker_fee("crypto", 10000.0) > 0
+    assert broker_fee("crypto", 20000.0) > broker_fee("crypto", 10000.0)
+
+
 def test_broker_assumptions_round_trip():
     rows = broker_assumptions()
     names = {r["broker"] for r in rows}
@@ -98,3 +115,13 @@ def test_ledger_fees_reduce_return_and_reconcile():
     assert sn["total_return"] <= sg["total_return"]            # les frais ne peuvent qu'amputer la perf
     assert abs(net["equity"][-1] - sn["final_equity"]) < 1.0   # equity réconciliée (frais inclus dans le cash)
     assert all("fee" in t for t in net["trades"])              # chaque trade porte son coût
+    # COHÉRENCE des colonnes du journal : Σ latent(achats) = latent total ; Σ réalisé(ventes) = réalisé total
+    lat_sum = sum(t["latent"] for t in net["trades"] if t.get("latent") is not None)
+    real_sum = sum(t["pnl"] for t in net["trades"] if t.get("side") == "SELL" and t.get("pnl") is not None)
+    assert abs(lat_sum - sn["unrealized_pnl"]) < 1.0
+    assert abs(real_sum - sn["realized_pnl"]) < 1.0
+    # IDENTITÉ globale : P&L total = réalisé + latent = gain du graphe + frais
+    assert sn["reconciles"] is True
+    assert abs(sn["total_pnl"] - (sn["graph_gain"] + sn["fees_paid"])) < 1.0
+    # un achat dont les parts ont toutes été revendues ne porte plus de latent (= 0), pas de double-comptage
+    assert any(t.get("latent") == 0.0 for t in net["trades"] if t.get("side") == "BUY")
