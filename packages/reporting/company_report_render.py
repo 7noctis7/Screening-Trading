@@ -514,183 +514,274 @@ def company_report_pdf(r: dict[str, Any], out_path: str | Path, theme: str = "da
     except Exception:  # noqa: BLE001 — aucune lib PDF → HTML imprimable
         out.with_suffix(".html").write_text(html, encoding="utf-8")
         return None
-    _reportlab_pdf(r, str(out), A4, cm, canvas)
+    _reportlab_pdf(r, str(out), A4, cm, canvas, theme)
     return out
 
 
-def _reportlab_pdf(r: dict, path: str, A4, cm, canvas) -> None:
-    """Note complète en reportlab : en-tête, scores, mémo, graphes (cours/drawdown/CA), Vernimmen,
-    Damodaran (gate-aware), positionnement secteur, qualité, technique, macro, résultats, verdict."""
+# Palettes PDF (Apple-grade) — sombre & clair
+_PDF_DARK = {"bg": "#0b0d10", "card": "#15181d", "fg": "#e8eaed", "muted": "#9aa1ab",
+             "border": "#2a2f37", "accent": "#22d3ee", "pos": "#22c55e", "warn": "#f59e0b",
+             "neg": "#ef4444", "blue": "#3b82f6"}
+_PDF_LIGHT = {"bg": "#ffffff", "card": "#f6f8fa", "fg": "#0b0d10", "muted": "#5b6470",
+              "border": "#e3e7ec", "accent": "#0891b2", "pos": "#16a34a", "warn": "#d97706",
+              "neg": "#dc2626", "blue": "#2563eb"}
+
+
+def _reportlab_pdf(r: dict, path: str, A4, cm, canvas, theme: str = "dark") -> None:
+    """Note Apple-grade en reportlab : palette couleur, cartes arrondies, badge de score, puces de
+    sous-scores, valeurs code-couleur, graphes stylés. Respecte le thème clair/sombre."""
+    from reportlab.lib.colors import HexColor
+    P = _PDF_LIGHT if theme == "light" else _PDF_DARK
+    C = {k: HexColor(v) for k, v in P.items()}
+
+    def tone(score):
+        return C["pos"] if score is not None and score >= 65 else C["warn"] if score is not None and score >= 45 else C["neg"]
+
     idy, sc, ver, dam = r["identity"], r["score"], r["vernimmen"], r["damodaran"]
     dcf = dam.get("dcf", {}); reliable = dcf.get("reliable", True)
     c = canvas.Canvas(path, pagesize=A4)
     w, h = A4
-    ML = 2 * cm
-    st = {"y": h - 1.8 * cm}
+    ML, MR = 1.7 * cm, 1.7 * cm
+    CW = w - ML - MR
+    st = {"y": h - 1.6 * cm}
 
-    def nl(dy=0.62 * cm):
-        st["y"] -= dy
-        if st["y"] < 2.2 * cm:
-            c.setFont("Helvetica-Oblique", 7.5)
-            c.drawString(ML, 1.3 * cm, "Sources gratuites · Vernimmen & Damodaran · aide à la décision, pas un conseil.")
-            c.showPage(); st["y"] = h - 1.8 * cm
+    def _bg():
+        c.setFillColor(C["bg"]); c.rect(0, 0, w, h, fill=1, stroke=0)
 
-    def head(t):
-        nl(0.5 * cm); c.setFont("Helvetica-Bold", 11); c.setFillGray(0.1)
-        c.drawString(ML, st["y"], t); nl(0.15 * cm)
-        c.setStrokeGray(0.8); c.line(ML, st["y"], w - ML, st["y"]); nl(0.35 * cm)
+    def _footer():
+        c.setFont("Helvetica-Oblique", 7); c.setFillColor(C["muted"])
+        c.drawString(ML, 1.1 * cm, "Sources gratuites · cadre Vernimmen & A. Damodaran · aide à la décision, pas un conseil.")
+        c.drawRightString(w - MR, 1.1 * cm, str(r.get("as_of", "")))
 
-    def kv(k, v):
-        c.setFont("Helvetica", 10); c.setFillGray(0.3); c.drawString(ML, st["y"], str(k))
-        c.setFillGray(0.0); c.drawRightString(w - ML, st["y"], str(v)); nl()
+    _bg()
 
-    def para(text, font="Helvetica", size=9.5, wid=108):
-        c.setFont(font, size); c.setFillGray(0.2)
-        for ln in _wrap(text, wid):
-            c.drawString(ML, st["y"], ln); nl(0.46 * cm)
+    def ensure(space):
+        if st["y"] - space < 1.8 * cm:
+            _footer(); c.showPage(); _bg(); st["y"] = h - 1.6 * cm
 
-    # en-tête + scores
-    c.setFont("Helvetica-Bold", 17); c.setFillGray(0.0)
-    c.drawString(ML, st["y"], f"{idy['name']} ({idy['symbol']})"); nl(0.6 * cm)
-    c.setFont("Helvetica", 10); c.setFillGray(0.3)
-    c.drawString(ML, st["y"], f"{idy['sector']} · {_money(idy.get('market_cap'))} de capi · cours ${_num(idy.get('price'))}"); nl()
-    c.setFont("Helvetica-Bold", 12); c.setFillGray(0.0)
-    c.drawString(ML, st["y"], f"{sc['recommendation']} · {sc['global']}/100   "
-                              f"(fondamental {sc.get('fundamental')} · technique {sc.get('technical')} · ML {sc.get('ml')})"); nl()
+    def card(title, rows, *, extra_h=0.0):
+        """Carte arrondie : titre accent + lignes (label, valeur, couleur)."""
+        row_h = 0.56 * cm
+        ch = 1.0 * cm + len(rows) * row_h + extra_h
+        ensure(ch + 0.4 * cm)
+        top = st["y"]
+        c.setFillColor(C["card"]); c.setStrokeColor(C["border"]); c.setLineWidth(0.7)
+        c.roundRect(ML, top - ch, CW, ch, 8, fill=1, stroke=1)
+        c.setFillColor(C["accent"]); c.setFont("Helvetica-Bold", 9)
+        c.drawString(ML + 0.45 * cm, top - 0.6 * cm, title.upper())
+        yy = top - 1.15 * cm
+        for lab, val, col in rows:
+            c.setFont("Helvetica", 9.5); c.setFillColor(C["muted"])
+            c.drawString(ML + 0.45 * cm, yy, str(lab))
+            c.setFont("Helvetica-Bold", 9.5); c.setFillColor(col or C["fg"])
+            c.drawRightString(w - MR - 0.45 * cm, yy, str(val))
+            yy -= row_h
+        st["y"] = top - ch - 0.35 * cm
+        return top, ch
+
+    # ── EN-TÊTE : nom, badge reco/score, puces sous-scores ──
+    c.setFillColor(C["muted"]); c.setFont("Helvetica", 8)
+    c.drawString(ML, st["y"], "NOTE D'ANALYSE FONDAMENTALE")
+    st["y"] -= 0.7 * cm
+    c.setFillColor(C["fg"]); c.setFont("Helvetica-Bold", 19)
+    c.drawString(ML, st["y"], f"{idy['name']}")
+    c.setFillColor(C["muted"]); c.setFont("Helvetica", 12)
+    c.drawString(ML + c.stringWidth(idy['name'], "Helvetica-Bold", 19) + 6, st["y"], idy['symbol'])
+    # badge reco/score à droite
+    g = sc["global"]; bw, bh = 3.4 * cm, 1.0 * cm
+    bx, by = w - MR - bw, st["y"] - 0.2 * cm
+    c.setFillColor(tone(g)); c.roundRect(bx, by, bw, bh, 7, fill=1, stroke=0)
+    c.setFillColor(HexColor("#ffffff")); c.setFont("Helvetica-Bold", 12)
+    c.drawCentredString(bx + bw / 2, by + 0.32 * cm, f"{sc['recommendation']} · {g}/100")
+    st["y"] -= 0.62 * cm
+    c.setFillColor(C["muted"]); c.setFont("Helvetica", 9.5)
+    c.drawString(ML, st["y"], f"{idy['sector']} · {_money(idy.get('market_cap'))} de capi · cours ${_num(idy.get('price'))}")
+    st["y"] -= 0.7 * cm
+    # puces sous-scores
+    chip_w = 3.7 * cm
+    for i, (lab, val) in enumerate([("Fondamental", sc.get("fundamental")),
+                                    ("Technique", sc.get("technical")), ("ML", sc.get("ml"))]):
+        cx = ML + i * (chip_w + 0.25 * cm)
+        c.setFillColor(C["card"]); c.setStrokeColor(C["border"]); c.setLineWidth(0.7)
+        c.roundRect(cx, st["y"] - 0.7 * cm, chip_w, 0.95 * cm, 6, fill=1, stroke=1)
+        c.setFillColor(C["muted"]); c.setFont("Helvetica", 7.5)
+        c.drawString(cx + 0.3 * cm, st["y"] - 0.18 * cm, lab.upper())
+        c.setFillColor(tone(val)); c.setFont("Helvetica-Bold", 13)
+        c.drawString(cx + 0.3 * cm, st["y"] - 0.58 * cm, f"{val if val is not None else '—'}")
+        c.setFillColor(C["muted"]); c.setFont("Helvetica", 7.5)
+        c.drawString(cx + 0.3 * cm + c.stringWidth(str(val), "Helvetica-Bold", 13) + 3, st["y"] - 0.58 * cm, "/100")
+    st["y"] -= 1.25 * cm
+
+    # ── mémo (carte accent) ──
     if r.get("memo"):
-        nl(0.1 * cm); para(r["memo"], "Helvetica-Oblique", 9.5)
+        lines = _wrap(r["memo"], 105)
+        mh = 0.5 * cm + len(lines) * 0.42 * cm
+        ensure(mh + 0.3 * cm)
+        top = st["y"]
+        c.setFillColor(C["card"]); c.roundRect(ML, top - mh, CW, mh, 7, fill=1, stroke=0)
+        c.setFillColor(C["accent"]); c.rect(ML, top - mh, 0.09 * cm, mh, fill=1, stroke=0)
+        c.setFillColor(C["fg"]); c.setFont("Helvetica-Oblique", 9.5)
+        yy = top - 0.4 * cm
+        for ln in lines:
+            c.drawString(ML + 0.45 * cm, yy, ln); yy -= 0.42 * cm
+        st["y"] = top - mh - 0.35 * cm
+        if r.get("fx_conversion"):
+            c.setFillColor(C["muted"]); c.setFont("Helvetica", 8)
+            c.drawString(ML, st["y"], f"converti: {r['fx_conversion']}"); st["y"] -= 0.5 * cm
 
-    # graphes
-    ch = r.get("charts") or {}
-    closes = ch.get("price") or []
-    labels = ch.get("price_labels") or []
+    # ── graphes (carte) ──
+    ch_data = r.get("charts") or {}
+    closes = ch_data.get("price") or []
+    labels = ch_data.get("price_labels") or []
+    hist = ch_data.get("financial_history") or []
     if len(closes) >= 20:
+        gh = 5.0 * cm + (3.4 * cm if len(hist) >= 2 else 0)
+        ensure(gh + 0.5 * cm)
+        top = st["y"]
+        c.setFillColor(C["card"]); c.setStrokeColor(C["border"]); c.setLineWidth(0.7)
+        c.roundRect(ML, top - gh, CW, gh, 8, fill=1, stroke=1)
+        c.setFillColor(C["accent"]); c.setFont("Helvetica-Bold", 9)
+        c.drawString(ML + 0.45 * cm, top - 0.6 * cm, "GRAPHIQUES")
         period = (f"{labels[0]} → {labels[-1]}" if len(labels) >= 2 else "")
-        head("Graphiques")
-        _rl_line(c, closes, labels, ML, st["y"] - 3.8 * cm, w - 2 * ML, 3.4 * cm,
-                 f"Cours ($) · {period}" if period else "Cours ($)", cm)
-        nl(4.4 * cm)
-        hist = ch.get("financial_history") or []
+        _rl_line(c, closes, labels, ML + 0.9 * cm, top - 4.5 * cm, CW - 1.4 * cm, 3.0 * cm,
+                 f"Cours ($) · {period}", cm, C)
         if len(hist) >= 2:
-            _rl_bars(c, hist, "revenue", ML, st["y"] - 3.2 * cm, w - 2 * ML, 3.0 * cm,
-                     f"Chiffre d'affaires ({ch.get('history_years', len(hist))} ex.)", cm)
-            nl(3.6 * cm)
+            _rl_bars(c, hist, "revenue", ML + 0.9 * cm, top - gh + 0.9 * cm, CW - 1.4 * cm, 2.2 * cm,
+                     f"Chiffre d'affaires ({ch_data.get('history_years', len(hist))} ex.)", cm, C)
+        st["y"] = top - gh - 0.35 * cm
 
-    # Vernimmen
-    head("Analyse économique (Vernimmen)")
-    kv("ROCE après impôt", _pct(ver.get("roce_after_tax")))
-    kv("WACC", _pct(ver.get("wacc")))
-    sp = ver.get("value_creation_spread")
-    kv("Spread ROCE−WACC", _pct(sp) if sp is not None else "—")
-    kv("EVA (profit économique)", _money(ver.get("eva")))
-    m = ver.get("margins", {})
-    kv("Marges brute / EBIT / nette", f"{_pct(m.get('gross'))} / {_pct(m.get('ebit'))} / {_pct(m.get('net'))}")
-    kv("Gearing · Dette nette/EBITDA", f"{_num(ver.get('gearing'))} · {_num(ver.get('net_debt_ebitda'),1)}×")
+    # ── Vernimmen ──
+    sp = ver.get("value_creation_spread"); eva = ver.get("eva"); m = ver.get("margins", {})
+    card("Analyse économique (Vernimmen)", [
+        ("ROCE après impôt", _pct(ver.get("roce_after_tax")), C["fg"]),
+        ("WACC", _pct(ver.get("wacc")), C["fg"]),
+        ("Spread ROCE−WACC", _pct(sp) if sp is not None else "—", C["pos"] if (sp or 0) > 0 else C["neg"]),
+        ("EVA (profit économique)", _money(eva), C["pos"] if (eva or 0) > 0 else C["neg"]),
+        ("Marges brute / EBIT / nette", f"{_pct(m.get('gross'))} / {_pct(m.get('ebit'))} / {_pct(m.get('net'))}", C["fg"]),
+        ("Gearing · Dette nette/EBITDA", f"{_num(ver.get('gearing'))} · {_num(ver.get('net_debt_ebitda'),1)}×", C["fg"]),
+    ])
 
-    # Damodaran (gate-aware)
-    head("Valorisation (Damodaran)")
+    # ── Damodaran (gate-aware) ──
     if not reliable:
-        para("Valorisation masquée : comptes en devise différente du cours (titre type ADR). "
-             "DCF & multiples non fiables — affichage volontairement supprimé.", "Helvetica-Oblique", 9)
-        kv("Coût des FP (MEDAF) · WACC · bêta",
-           f"{_pct(dam.get('cost_of_equity'))} · {_pct(dam.get('wacc'))} · {_num(dam.get('beta'))}")
+        card("Valorisation (Damodaran)", [
+            ("Coût des FP · WACC · bêta",
+             f"{_pct(dam.get('cost_of_equity'))} · {_pct(dam.get('wacc'))} · {_num(dam.get('beta'))}", C["fg"]),
+            ("DCF & multiples", "masqués (devise ≠ cours)", C["warn"]),
+        ], extra_h=0.0)
     else:
-        scen = dcf.get("scenarios", {})
-        kv("DCF bear / base / bull", f"${_num(scen.get('bear'))} / ${_num(scen.get('base'))} / ${_num(scen.get('bull'))}")
-        mos = dcf.get("margin_of_safety")
-        kv("Marge de sécurité", _pct(mos) if mos is not None else "—")
-        kv("Croissance implicite (cours)", _pct(dam.get("implied_growth_in_price")))
-        kv("Coût des FP · bêta", f"{_pct(dam.get('cost_of_equity'))} · {_num(dam.get('beta'))}")
+        scen = dcf.get("scenarios", {}); mos = dcf.get("margin_of_safety"); mu = dam.get("multiples", {})
+        card("Valorisation (Damodaran)", [
+            ("DCF bear / base / bull", f"${_num(scen.get('bear'))} / ${_num(scen.get('base'))} / ${_num(scen.get('bull'))}", C["fg"]),
+            ("Marge de sécurité", _pct(mos) if mos is not None else "—", C["pos"] if (mos or 0) > 0 else C["neg"]),
+            ("Croissance implicite (cours)", _pct(dam.get("implied_growth_in_price")), C["fg"]),
+            ("P/E · EV/EBITDA · P/B", f"{_num(mu.get('pe'),1)} · {_num(mu.get('ev_ebitda'),1)} · {_num(mu.get('price_to_book'),1)}", C["fg"]),
+            ("Coût des FP · bêta", f"{_pct(dam.get('cost_of_equity'))} · {_num(dam.get('beta'))}", C["fg"]),
+        ])
 
-    # positionnement secteur
+    # ── positionnement secteur ──
     scmp = r.get("sector_comparison") or {}
     if scmp.get("available"):
-        head(f"Positionnement sectoriel ({scmp.get('favorable')}/{scmp.get('total')} favorables · {scmp.get('n_peers')} pairs)")
+        rows = []
         for x in scmp.get("rows", []):
             isr = x["metric"] in ("net_margin", "roe", "roic", "gross_margin", "revenue_growth")
             cv = _pct(x["company"]) if isr else _num(x["company"])
             mv = _pct(x["sector_median"]) if isr else _num(x["sector_median"])
-            kv(x["label"], f"{cv}  (méd. {mv})  {int(x['percentile']*100)}e  {x['verdict']}")
+            col = C["pos"] if x["verdict"] == "favorable" else C["neg"]
+            rows.append((f"{x['label']} (méd. {mv})", f"{cv} · {int(x['percentile']*100)}e · {x['verdict']}", col))
+        card(f"Positionnement sectoriel ({scmp.get('favorable')}/{scmp.get('total')} favorables · {scmp.get('n_peers')} pairs)", rows)
 
-    # qualité
-    head("Qualité & solidité")
+    # ── qualité ──
     ql = r["quality"]; z = ql.get("altman_z", {}); inv = ql.get("investor_scores", {})
-    kv("Piotroski F-score", f"{ql.get('piotroski_f_score')}/9 ({ql.get('piotroski_label')})")
-    kv("Altman Z", f"{z.get('z')} ({z.get('zone')})" if z.get("z") is not None else "N/A")
-    kv("Graham / Fisher / Thiel", f"{inv.get('graham')} / {inv.get('fisher')} / {inv.get('thiel')}")
+    card("Qualité & solidité", [
+        ("Piotroski F-score", f"{ql.get('piotroski_f_score')}/9 ({ql.get('piotroski_label')})", C["fg"]),
+        ("Altman Z", f"{z.get('z')} ({z.get('zone')})" if z.get("z") is not None else "N/A", C["fg"]),
+        ("Graham / Fisher / Thiel", f"{inv.get('graham')} / {inv.get('fisher')} / {inv.get('thiel')}", C["fg"]),
+    ])
 
-    # technique
+    # ── technique ──
     t = r.get("technical")
     if t:
-        head("Analyse technique")
-        kv("Tendance · RSI · MACD", f"{t.get('trend','—')} · {_num(t.get('rsi'),0)} · {t.get('macd_signal','—')}")
-        kv("vs MM50 / MM200", f"{_pct(t.get('vs_sma50'))} / {_pct(t.get('vs_sma200'))}")
-        kv("Plage 52 sem.", f"${_num(t.get('low_52w'),0)} – ${_num(t.get('high_52w'),0)}")
+        trend = str(t.get("trend") or "—")
+        tcol = C["pos"] if trend == "haussière" else C["neg"] if trend == "baissière" else C["fg"]
+        card("Analyse technique", [
+            ("Tendance · RSI · MACD", f"{trend} · {_num(t.get('rsi'),0)} · {t.get('macd_signal','—')}", tcol),
+            ("vs MM50 / MM200", f"{_pct(t.get('vs_sma50'))} / {_pct(t.get('vs_sma200'))}", C["fg"]),
+            ("Plage 52 sem.", f"${_num(t.get('low_52w'),0)} – ${_num(t.get('high_52w'),0)}", C["muted"]),
+        ])
 
-    # macro + résultats
+    # ── macro + résultats ──
+    rows = []
     mc = r.get("macro")
     if mc:
-        head("Contexte macroéconomique")
-        kv("Régime · VIX", f"{mc.get('regime') or '—'} · {_num(mc.get('vix'),1)}")
+        rows.append(("Régime · VIX", f"{mc.get('regime') or '—'} · {_num(mc.get('vix'),1)}", C["fg"]))
     e = r.get("earnings")
     if e:
-        head("Résultats & estimations")
-        kv("Prochain résultat", e.get("next_date") or "—")
-        kv("BPA estimé / annoncé", f"{_num(e.get('eps_estimate'))} / {_num(e.get('eps_actual')) if e.get('eps_actual') is not None else '—'}")
-        kv("Revenu estimé / annoncé", f"{_money(e.get('revenue_estimate'))} / {_money(e.get('revenue_actual')) if e.get('revenue_actual') is not None else '—'}")
+        rows += [("Prochain résultat", e.get("next_date") or "—", C["accent"]),
+                 ("BPA estimé / annoncé", f"{_num(e.get('eps_estimate'))} / {_num(e.get('eps_actual')) if e.get('eps_actual') is not None else '—'}", C["fg"]),
+                 ("Revenu estimé / annoncé", f"{_money(e.get('revenue_estimate'))} / {_money(e.get('revenue_actual')) if e.get('revenue_actual') is not None else '—'}", C["fg"])]
+    if rows:
+        card("Macro & résultats", rows)
 
-    # verdict
+    # ── verdict ──
     v = r.get("verdict", {})
     if v.get("strengths") or v.get("watch"):
-        head("Verdict")
-        for s in v.get("strengths", [])[:4]:
-            para("+ " + s, "Helvetica", 9)
-        for s in v.get("watch", [])[:4]:
-            para("- " + s, "Helvetica", 9)
-    c.setFont("Helvetica-Oblique", 7.5); c.setFillGray(0.4)
-    c.drawString(ML, 1.3 * cm, "Sources gratuites · Vernimmen & Damodaran · aide à la décision, pas un conseil.")
-    c.showPage(); c.save()
+        rows = [("✓ " + s, "", C["pos"]) for s in v.get("strengths", [])[:4]]
+        rows += [("▸ " + s, "", C["warn"]) for s in v.get("watch", [])[:4]]
+        # wrap long lines into the label column (value empty)
+        wrapped = []
+        for lab, _, col in rows:
+            for j, ln in enumerate(_wrap(lab, 95)):
+                wrapped.append((ln if j == 0 else "   " + ln, "", col))
+        card("Verdict", wrapped)
+
+    _footer(); c.showPage(); c.save()
 
 
-def _rl_line(c, vals, labels, x, y, w, h, title, cm) -> None:
-    """Courbe (cours) reportlab avec axe Y ($) ET axe X DATÉ (début / milieu / fin)."""
+def _rl_line(c, vals, labels, x, y, w, h, title, cm, C=None) -> None:
+    """Courbe (cours) reportlab : axe Y ($), axe X DATÉ, aire + ligne accent. C = palette couleur."""
+    from reportlab.lib.colors import HexColor
+    acc = C["accent"] if C else HexColor("#22d3ee")
+    mut = C["muted"] if C else HexColor("#9aa1ab")
+    bdr = C["border"] if C else HexColor("#2a2f37")
     lo, hi = min(vals), max(vals)
     rng = (hi - lo) or 1.0
-    x0 = x + 1.1 * cm
-    c.setFont("Helvetica", 8); c.setFillGray(0.4); c.drawString(x, y + h + 5, title)
-    c.setStrokeGray(0.85)
+    x0 = x + 1.0 * cm
+    c.setFillColor(mut); c.setFont("Helvetica", 8); c.drawString(x, y + h + 4, title)
+    c.setStrokeColor(bdr); c.setLineWidth(0.5)
     for k in range(4):
         yy = y + h * k / 3
         c.line(x0, yy, x + w, yy)
-        c.setFillGray(0.5); c.setFont("Helvetica", 7)
-        c.drawRightString(x + 1.0 * cm, yy - 2, f"${_num(lo + rng * k / 3, 0)}")
+        c.setFillColor(mut); c.setFont("Helvetica", 6.5)
+        c.drawRightString(x + 0.9 * cm, yy - 2, f"${_num(lo + rng * k / 3, 0)}")
     n = len(vals)
-    pts = [(x0 + i * (w - 1.1 * cm) / (n - 1), y + (v - lo) / rng * h) for i, v in enumerate(vals)]
-    c.setStrokeColorRGB(0.13, 0.59, 0.95); c.setLineWidth(1.1)
+    pts = [(x0 + i * (w - 1.0 * cm) / (n - 1), y + (v - lo) / rng * h) for i, v in enumerate(vals)]
+    c.setStrokeColor(acc); c.setLineWidth(1.2)
     for a, b in zip(pts[:-1], pts[1:]):
         c.line(a[0], a[1], b[0], b[1])
-    c.setStrokeGray(0.85); c.setLineWidth(1)
-    # axe X daté
     if labels and len(labels) >= 2:
-        c.setFillGray(0.5); c.setFont("Helvetica", 7)
+        c.setFillColor(mut); c.setFont("Helvetica", 6.5)
         for frac, draw in ((0.0, c.drawString), (0.5, c.drawCentredString), (1.0, c.drawRightString)):
             idx = min(len(labels) - 1, int(frac * (len(labels) - 1)))
-            draw(x0 + (w - 1.1 * cm) * frac, y - 10, str(labels[idx]))
+            draw(x0 + (w - 1.0 * cm) * frac, y - 9, str(labels[idx]))
 
 
-def _rl_bars(c, hist, key, x, y, w, h, title, cm) -> None:
-    """Barres annuelles (CA) reportlab avec valeur au-dessus + année."""
+def _rl_bars(c, hist, key, x, y, w, h, title, cm, C=None) -> None:
+    """Barres annuelles (CA) reportlab : valeur au-dessus + année, couleur accent. C = palette."""
+    from reportlab.lib.colors import HexColor
+    acc = C["accent"] if C else HexColor("#22d3ee")
+    mut = C["muted"] if C else HexColor("#9aa1ab")
+    fg = C["fg"] if C else HexColor("#e8eaed")
     vals = [float(d.get(key) or 0) for d in hist]
     hi = max(vals + [0.0]) or 1.0
-    c.setFont("Helvetica", 8); c.setFillGray(0.4); c.drawString(x, y + h + 4, title)
-    n = len(vals); gap = (w - 1.1 * cm) / n; bw = gap * 0.6
+    c.setFillColor(mut); c.setFont("Helvetica", 8); c.drawString(x, y + h + 4, title)
+    n = len(vals); gap = (w - 1.0 * cm) / n; bw = gap * 0.58
     for i, (d, v) in enumerate(zip(hist, vals)):
         bh = (v / hi) * h if hi else 0
-        bx = x + 1.1 * cm + i * gap + (gap - bw) / 2
-        c.setFillColorRGB(0.13, 0.59, 0.95); c.rect(bx, y, bw, max(1, bh), fill=1, stroke=0)
-        c.setFillGray(0.2); c.setFont("Helvetica", 7)
+        bx = x + 1.0 * cm + i * gap + (gap - bw) / 2
+        c.setFillColor(acc); c.roundRect(bx, y, bw, max(1, bh), 2, fill=1, stroke=0)
+        c.setFillColor(fg); c.setFont("Helvetica", 6.5)
         c.drawCentredString(bx + bw / 2, y + bh + 2, _money_axis(v))
-        c.setFillGray(0.5); c.drawCentredString(bx + bw / 2, y - 9, str(d.get("year", "")))
+        c.setFillColor(mut); c.drawCentredString(bx + bw / 2, y - 9, str(d.get("year", "")))
 
 
 def _wrap(text: str, width: int) -> list[str]:
