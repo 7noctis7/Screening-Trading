@@ -567,9 +567,12 @@ function portfolioBar(k){
       <span class="mono" style="width:64px">${s}</span>
       <span style="height:8px;border-radius:4px;background:var(--accent);width:${Math.round(rb.contrib_pct[i]/mx*100)}%;max-width:360px"></span>
       <span class="mono" style="color:var(--muted)">${(rb.contrib_pct[i]*100).toFixed(1)}%</span></div>`).join('');
+    const cd=rb.covariance_diagnostics||{};
+    const kappa=(cd.cond_used!=null)?`<div class="mono" style="font-size:11px;color:var(--muted);margin-top:2px" title="Nombre de condition de la covariance (avant → après shrinkage Ledoit-Wolf). Plus κ est bas, plus la matrice de risque est stable.">κ ${Math.round(cd.cond_raw)} → ${Math.round(cd.cond_used)}${cd.delta>0?` · shrinkage ${Math.round(cd.delta*100)}%`:''}</div>`:'';
     p.appendChild($(`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center">
       <div class="label">Budget de risque (contribution à la vol)</div>
       <div class="mono" style="font-size:12px;color:var(--muted)">vol ${pct(rb.portfolio_vol)} · diversif ×${rb.diversification_ratio}</div></div>
+      ${kappa}
       <div style="margin-top:10px">${bars}</div></div>`));
   }
   if(lim){
