@@ -577,29 +577,59 @@ def _build_company_report_cached(sym: str) -> tuple[dict | None, str | None]:
 
 
 def _enrich_cross_source(report: dict, f: Any, sym: str) -> None:
-    """Audit de FIABILITÉ CROISÉE : compare le CA retenu vs une 2e source (SEC EDGAR) ; signale un
-    écart significatif (>15 %). Best-effort, n'altère jamais la note si indisponible."""
+    """VENTILATION GAAP vs NON-GAAP : compare CA & résultat net de la source primaire (souvent TTM/
+    ajusté = « non-GAAP ») au dépôt SEC EDGAR (10-K, GAAP). Construit la table de réconciliation et,
+    si un écart > 10 % sur CA OU RN, lève une BLOCKING ALERT (protocole PwC). Best-effort."""
     try:
         from packages.fundamentals.sec_provider import financial_history
         hist = financial_history(sym, years=1)
-        sec_rev = (hist[-1].get("revenue") if hist else None)
-        if sec_rev and f.revenue and sec_rev > 0:
-            gap = abs(f.revenue - sec_rev) / sec_rev
-            report["cross_source_gap"] = round(gap, 3)
-            audit = report.setdefault("audit", {})
-            audit["counts"] = audit.get("counts", {})
-            # Protocole PwC : > 10 % d'écart CA/RN inter-sources → BLOCKING ALERT (gèle l'ordre)
-            if gap > 0.10:
-                sev = "critical" if gap > 0.25 else "warning"
-                audit.setdefault("findings", []).append({
-                    "severity": sev,
-                    "detail": f"écart CA inter-sources {gap*100:.0f}% (source {f.revenue/1e9:.1f}Md vs SEC EDGAR {sec_rev/1e9:.1f}Md) — réconciliation requise"})
-                audit["counts"][sev] = audit["counts"].get(sev, 0) + 1
-                report.setdefault("flags", {})["blocking_alert"] = True
-                report["score"]["verdict_status"] = "CONTRÔLE REQUIS"
-                report["score"]["recommendation"] = "Contrôle requis"
+        if not hist:
+            return
+        sec = hist[-1]
+        rows, max_gap = [], 0.0
+        for label, reported, gaap in (("Chiffre d'affaires", f.revenue, sec.get("revenue")),
+                                      ("Résultat net", f.net_income, sec.get("net_income"))):
+            if gaap is None or not gaap:
+                continue
+            gap = abs((reported or 0) - gaap) / abs(gaap)
+            max_gap = max(max_gap, gap)
+            status = "réconcilié" if gap <= 0.10 else ("écart majeur" if gap <= 0.25 else "écart critique")
+            rows.append({"metric": label, "reported": reported, "gaap": gaap,
+                         "gap": round(gap, 3), "status": status})
+        if not rows:
+            return
+        report["reconciliation"] = {
+            "rows": rows, "max_gap": round(max_gap, 3),
+            "note": "« Reporté » = source primaire (yfinance/FMP, souvent TTM/ajusté, non-GAAP) · "
+                    "« GAAP » = dernier 10-K SEC EDGAR (source de vérité comptable)."}
+        report["cross_source_gap"] = round(max_gap, 3)
+        audit = report.setdefault("audit", {})
+        audit["counts"] = audit.get("counts", {})
+        # Protocole PwC : > 10 % d'écart CA OU RN inter-sources → BLOCKING ALERT (gèle l'ordre)
+        if max_gap > 0.10:
+            sev = "critical" if max_gap > 0.25 else "warning"
+            worst = max(rows, key=lambda x: x["gap"])
+            audit.setdefault("findings", []).append({
+                "severity": sev,
+                "detail": (f"écart {worst['metric']} GAAP vs source {worst['gap']*100:.0f}% "
+                           f"({_b(worst['reported'])} vs SEC {_b(worst['gaap'])}) — réconciliation requise")})
+            audit["counts"][sev] = audit["counts"].get(sev, 0) + 1
+            report.setdefault("flags", {})["blocking_alert"] = True
+            report["score"]["verdict_status"] = "CONTRÔLE REQUIS"
+            report["score"]["recommendation"] = "Contrôle requis"
     except Exception:  # noqa: BLE001
         pass
+
+
+def _b(x) -> str:
+    try:
+        a = abs(float(x))
+        for d, s in ((1e12, "T"), (1e9, "Md"), (1e6, "M")):
+            if a >= d:
+                return f"{float(x)/d:.1f}{s}"
+        return f"{float(x):.0f}"
+    except (TypeError, ValueError):
+        return "—"
 
 
 def _enrich_ai_memo(report: dict) -> None:

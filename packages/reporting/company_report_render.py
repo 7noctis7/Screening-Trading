@@ -222,6 +222,30 @@ def _apply_theme(html: str, theme: str) -> str:
     return html
 
 
+def _reconciliation_html(r: dict[str, Any]) -> str:
+    """Carte « Réconciliation GAAP vs Non-GAAP » — CA & résultat net : reporté vs SEC EDGAR (GAAP)."""
+    rec = r.get("reconciliation")
+    if not rec or not rec.get("rows"):
+        return ""
+    def _b(x):
+        return _money(x) if x is not None else "—"
+    rows = ""
+    for x in rec["rows"]:
+        col = _C["pos"] if x["status"] == "réconcilié" else _C["warn"] if x["status"] == "écart majeur" else _C["neg"]
+        rows += (f'<tr style="border-top:1px solid {_C["border"]}">'
+                 f'<td style="padding:5px 0">{x["metric"]}</td>'
+                 f'<td style="text-align:right">{_b(x["reported"])}</td>'
+                 f'<td style="text-align:right">{_b(x["gaap"])}</td>'
+                 f'<td style="text-align:right;color:{col}">{x["gap"]*100:.0f}%</td>'
+                 f'<td style="text-align:right;color:{col}">{x["status"]}</td></tr>')
+    inner = (f'<table style="width:100%;font-size:12px"><thead><tr style="color:{_C["muted"]};font-size:11px">'
+             f'<th style="text-align:left">Métrique</th><th style="text-align:right">Reporté (non-GAAP)</th>'
+             f'<th style="text-align:right">GAAP (SEC)</th><th style="text-align:right">Écart</th>'
+             f'<th style="text-align:right">Statut</th></tr></thead><tbody>{rows}</tbody></table>'
+             f'<p style="font-size:10px;color:{_C["muted"]};margin:8px 0 0">{rec.get("note","")}</p>')
+    return _card("Réconciliation GAAP vs Non-GAAP", inner)
+
+
 def company_report_html(r: dict[str, Any], theme: str = "dark") -> str:
     idy, sc, ver, dam, ql = r["identity"], r["score"], r["vernimmen"], r["damodaran"], r["quality"]
     audit = r["audit"]
@@ -499,6 +523,7 @@ Rapport d'évaluation institutionnelle · {r['as_of']} · données auditées</di
 {charts_card}
 {findata_card}
 {_card("Audit d'intégrité des données", _findings_html(audit))}
+{_reconciliation_html(r)}
 {_card("Analyse économique (Vernimmen)", vern)}
 {_card("Valorisation (Damodaran)", dam_kv)}
 {sector_card}
@@ -714,6 +739,16 @@ def _reportlab_pdf(r: dict, path: str, A4, cm, canvas, theme: str = "dark") -> N
     for fd in (audit.get("findings") or [])[:3]:
         arows.append((f"• {fd.get('severity')}", _trunc(fd.get("detail", ""), 60), C["muted"]))
     card("Audit d'intégrité des données", arows)
+
+    # ── Réconciliation GAAP vs Non-GAAP ──
+    rec = r.get("reconciliation")
+    if rec and rec.get("rows"):
+        rrows = []
+        for x in rec["rows"]:
+            col = C["pos"] if x["status"] == "réconcilié" else C["warn"] if x["status"] == "écart majeur" else C["neg"]
+            rrows.append((f"{x['metric']} (reporté vs GAAP)",
+                          f"{_money(x['reported'])} vs {_money(x['gaap'])} · {x['gap']*100:.0f}% · {x['status']}", col))
+        card("Réconciliation GAAP vs Non-GAAP", rrows)
 
     # ── Vernimmen ──
     sp = ver.get("value_creation_spread"); eva = ver.get("eva"); m = ver.get("margins", {}); dp = ver.get("dupont", {})

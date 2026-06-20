@@ -73,6 +73,17 @@ def test_markdown_obsidian_note():
     assert "ROCE" in md and "DCF base" in md and "Vigilance" in md or "Forces" in md
 
 
+def test_reconciliation_html_gaap_vs_nongaap():
+    from packages.reporting.company_report_render import _reconciliation_html
+    r = {"reconciliation": {"rows": [
+        {"metric": "Chiffre d'affaires", "reported": 58.1e9, "gaap": 37.4e9, "gap": 0.55, "status": "écart critique"},
+        {"metric": "Résultat net", "reported": 8.5e9, "gaap": 8.5e9, "gap": 0.0, "status": "réconcilié"}],
+        "max_gap": 0.55, "note": "n"}}
+    h = _reconciliation_html(r)
+    assert "Réconciliation GAAP vs Non-GAAP" in h and "GAAP (SEC)" in h and "Reporté (non-GAAP)" in h
+    assert "55%" in h and "réconcilié" in h
+
+
 def test_overvaluation_penalty_and_pillar_zero():
     # action excellente mais payée beaucoup trop cher : FCF faible vs capi → DCF ≪ cours
     f = _fin(price=1133.0, shares=1.1e9, revenue=3.74e10, gross_profit=2.18e10, ebit=2.0e10,
