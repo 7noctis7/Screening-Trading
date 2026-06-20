@@ -92,6 +92,18 @@ def _h_fetch_alerts(args: dict) -> dict:
     return {"ok": True, "alerts": [a.to_dict() for a in alerts], "risk": veto}
 
 
+def _h_auto_risk_bands(args: dict) -> dict:
+    """Calcule le cône VaR/EVT depuis les prix RÉELS (via l'API) et l'écrit comme overlay.
+    Sans ticker → traite tous les titres détenus. Découplé : lit l'API, n'importe pas le cœur."""
+    from packages.mcp_tradingview.risk_overlays import Z_VAR95, Z_VAR99, populate_from_api
+    z = Z_VAR99 if str(args.get("var", "95")) in ("99", "var99") else Z_VAR95
+    res = populate_from_api(
+        base_url=args.get("base_url", "http://localhost:8000"),
+        tickers=[args["ticker"]] if args.get("ticker") else None,
+        z=z, lookback=int(args.get("lookback", 21)), evt_mult=float(args.get("evt_mult", 1.15)))
+    return res
+
+
 # ─────────────────────────── Registre d'outils ───────────────────────────
 TOOLS: dict[str, dict[str, Any]] = {
     "plot_signal_on_chart": {
@@ -137,6 +149,16 @@ TOOLS: dict[str, dict[str, Any]] = {
                        "risk-engine (veto/kill-switch, facteur de réduction d'exposition).",
         "inputSchema": {"type": "object", "properties": {}},
         "handler": _h_fetch_alerts,
+    },
+    "auto_risk_bands": {
+        "description": "Calcule AUTOMATIQUEMENT le cône de VaR/EVT depuis les prix réels (via l'API du "
+                       "terminal) et le projette sur le(s) graphique(s). Sans 'ticker' → tous les titres détenus.",
+        "inputSchema": {"type": "object", "properties": {
+            "ticker": {"type": "string"},
+            "var": {"type": "string", "enum": ["95", "99"]},
+            "lookback": {"type": "integer"},
+            "evt_mult": {"type": "number"}}},
+        "handler": _h_auto_risk_bands,
     },
 }
 

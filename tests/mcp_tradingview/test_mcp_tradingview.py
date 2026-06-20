@@ -92,6 +92,29 @@ def test_server_call_tool_pine_and_unknown():
     assert "error" in S.call_tool("does_not_exist", {})
 
 
+def test_var_cone_brackets_price_and_positive():
+    import math
+    from packages.mcp_tradingview.risk_overlays import Z_VAR95, var_cone
+    times = [f"2026-01-{(i % 28) + 1:02d}" for i in range(80)]
+    closes = [100 * math.exp(0.0004 * i + 0.01 * math.sin(i)) for i in range(80)]
+    bands = var_cone(times, closes, z=Z_VAR95, lookback=21)
+    assert len(bands) > 0
+    for b in bands:
+        b.validate()
+        assert b.upper > b.lower >= 0.0                  # cône cohérent, plancher ≥ 0
+
+
+def test_var_cone_too_short_returns_empty():
+    from packages.mcp_tradingview.risk_overlays import var_cone
+    assert var_cone(["2026-01-01", "2026-01-02"], [100.0, 101.0]) == []
+
+
+def test_auto_risk_bands_api_down_is_graceful():
+    # API injoignable → pas de crash, available=False
+    res = S.call_tool("auto_risk_bands", {"ticker": "AAPL", "base_url": "http://127.0.0.1:9"})
+    assert res.get("available") is False
+
+
 def test_server_plot_signal_validation_error_is_caught():
     # side invalide → ValueError dans le handler → encapsulé en {"error": ...}, pas de crash
     res = S.call_tool("plot_signal_on_chart", {"ticker": "AAPL",
