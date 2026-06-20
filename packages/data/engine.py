@@ -160,8 +160,13 @@ def ledoit_wolf_shrinkage(mat: Any) -> tuple[Any, float]:
 # Cache de covariance incrémental : clé = (symboles ordonnés, dernière obs de chaque série, params).
 # Le snapshot recalcule l'ERC sur plusieurs sleeves (preset/crypto) avec les MÊMES rendements →
 # on évite les recalculs identiques. Mémoire bornée (LRU manuel), pur stdlib, jamais bloquant.
+# Persistance disque optionnelle (.cache/cov/) : survit aux redémarrages API / runs cron → le
+# premier build du matin réutilise la covariance de la veille pour les séries inchangées.
+import hashlib
+
 _COV_CACHE: dict[Any, tuple[list[str], Any]] = {}
 _COV_CACHE_MAX = 64
+_COV_DISK_DIR = _ROOT / ".cache" / "cov"
 
 
 def _cov_cache_key(returns_by_symbol: dict[str, list[float]], annualize: int, shrink: bool) -> Any:
@@ -173,6 +178,61 @@ def _cov_cache_key(returns_by_symbol: dict[str, list[float]], annualize: int, sh
     return (tuple(parts), annualize, shrink)
 
 
+def _cov_disk_path(key: Any) -> Path:
+    h = hashlib.sha1(repr(key).encode()).hexdigest()[:24]    # signature compacte, stable
+    return _COV_DISK_DIR / f"{h}.npz"
+
+
+def _cov_disk_load(key: Any) -> tuple[list[str], Any] | None:
+    """Charge une covariance persistée (best-effort). Jamais bloquant."""
+    try:
+        import numpy as np
+        p = _cov_disk_path(key)
+        if not p.exists():
+            return None
+        with np.load(p, allow_pickle=False) as z:
+            return list(z["syms"]), z["cov"]
+    except Exception:  # noqa: BLE001 — fichier corrompu/illisible → on recalcule
+        return None
+
+
+def _cov_disk_save(key: Any, syms: list[str], cov: Any) -> None:
+    """Persiste une covariance (best-effort, écriture atomique). Jamais bloquant."""
+    try:
+        import os
+        import numpy as np
+        _COV_DISK_DIR.mkdir(parents=True, exist_ok=True)
+        p = _cov_disk_path(key)
+        tmp = p.with_suffix(".tmp.npz")
+        np.savez_compressed(tmp, syms=np.asarray(syms, dtype=object).astype(str), cov=np.asarray(cov))
+        os.replace(tmp, p)
+    except Exception:  # noqa: BLE001 — disque plein/lecture seule → on continue sans persister
+        pass
+
+
+def covariance_diagnostics(cov_raw: Any, cov_used: Any | None = None, delta: float = 0.0) -> dict:
+    """Diagnostic de qualité du risque (visibilité institutionnelle) : nombre de condition de la
+    matrice de covariance avant/après shrinkage et δ retenu. Pur numpy, ne lève jamais."""
+    out: dict[str, Any] = {"delta": round(float(delta), 4)}
+    try:
+        import numpy as np
+
+        def _cond(C: Any) -> float | None:
+            C = np.asarray(C, dtype=float)
+            if C.ndim != 2 or C.shape[0] < 2:
+                return None
+            ev = np.linalg.eigvalsh((C + C.T) / 2.0)
+            lo = float(ev.min())
+            hi = float(ev.max())
+            return round(hi / lo, 1) if lo > 1e-15 else float("inf")
+        out["cond_raw"] = _cond(cov_raw)
+        out["cond_used"] = _cond(cov_used if cov_used is not None else cov_raw)
+        out["n_assets"] = int(np.asarray(cov_raw).shape[0]) if np.asarray(cov_raw).ndim == 2 else 0
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
 def covariance_matrix(returns_by_symbol: dict[str, list[float]], annualize: int = 252,
                       shrink: bool = False, cache: bool = True) -> tuple[list[str], Any]:
     """Matrice de covariance ANNUALISÉE (numpy vectorisé) sur les rendements alignés → entrée ERC.
@@ -181,13 +241,21 @@ def covariance_matrix(returns_by_symbol: dict[str, list[float]], annualize: int 
     (covariance stabilisée, recommandé quand n_actifs ≈ n_obs). `cache=True` mémorise le résultat
     par signature (symboles + bornes de série) pour éviter les recalculs identiques dans un build.
     Renvoie (symboles, matrice np.ndarray)."""
+    import os
+
     import numpy as np
     syms = [s for s, r in returns_by_symbol.items() if r and len(r) >= 2]
     if len(syms) < 2:
         return syms, np.zeros((len(syms), len(syms)))
     key = _cov_cache_key(returns_by_symbol, annualize, shrink) if cache else None
+    use_disk = cache and os.environ.get("QUANT_COV_DISK_CACHE", "1").lower() not in ("0", "false", "no")
     if key is not None and key in _COV_CACHE:
         return _COV_CACHE[key]
+    if key is not None and use_disk:                         # cold-start : relit la veille si inchangé
+        hit = _cov_disk_load(key)
+        if hit is not None:
+            _COV_CACHE[key] = hit
+            return hit
     m = min(len(returns_by_symbol[s]) for s in syms)
     mat = np.array([returns_by_symbol[s][-m:] for s in syms], dtype=float)
     if shrink:
@@ -199,4 +267,6 @@ def covariance_matrix(returns_by_symbol: dict[str, list[float]], annualize: int 
         if len(_COV_CACHE) >= _COV_CACHE_MAX:
             _COV_CACHE.pop(next(iter(_COV_CACHE)))           # éviction FIFO simple (mémoire bornée)
         _COV_CACHE[key] = (syms, cov)
+        if use_disk:
+            _cov_disk_save(key, syms, cov)
     return syms, cov

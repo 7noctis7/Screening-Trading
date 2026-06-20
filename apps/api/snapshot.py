@@ -1400,9 +1400,28 @@ def build_snapshot(seed: int = 7) -> dict:
         w_by_sector[r["sector"]] = w_by_sector.get(r["sector"], 0.0) + r["current_value"] / invested_now
     cb_syms, cov = covariance({s: list(rets_by[s]) for s in syms})  # mêmes actifs que corr
     rb = risk_contributions([w_by_name.get(s, 0.0) for s in cb_syms], cov)
+    # diagnostic de conditionnement (qualité du risque) : cov empirique vs régularisée + δ retenu
+    _cov_diag: dict = {}
+    try:
+        import numpy as _npd
+
+        from packages.data.engine import (covariance_diagnostics, covariance_matrix,
+                                          ledoit_wolf_shrinkage)
+        _rets = {s: list(rets_by[s]) for s in syms}
+        _, _cov_raw = covariance_matrix(_rets, shrink=False)
+        _csyms = [s for s in cb_syms if _rets.get(s) and len(_rets[s]) >= 2]
+        _m = min(len(_rets[s]) for s in _csyms) if _csyms else 0
+        _delta = 0.0
+        if _m >= 2:
+            _mat = _npd.array([_rets[s][-_m:] for s in _csyms], dtype=float)
+            _, _delta = ledoit_wolf_shrinkage(_mat)
+        _cov_diag = covariance_diagnostics(_cov_raw, cov, delta=_delta)
+    except Exception:  # noqa: BLE001 — diagnostic best-effort, jamais bloquant
+        _cov_diag = {}
     risk_budget = {"symbols": cb_syms, "contrib_pct": rb["contrib_pct"],
                    "portfolio_vol": rb["portfolio_vol"],
-                   "diversification_ratio": rb["diversification_ratio"]}
+                   "diversification_ratio": rb["diversification_ratio"],
+                   "covariance_diagnostics": _cov_diag}
     limits = concentration_report(w_by_name, w_by_sector, max_name=0.20, max_sector=0.40)
 
     # --- STRESS-TESTS MACRO + COUVERTURE (axe 11) ---
