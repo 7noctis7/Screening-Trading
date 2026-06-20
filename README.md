@@ -1,5 +1,7 @@
 # Quant Terminal — Screening & Trading systématique multi-actifs
 
+*Dernière mise à jour : 2026-06-20.*
+
 Plateforme **open-source** de **screening** et de **trading systématique** (actions, ETF, forex,
 crypto, commodités, indices) de niveau institutionnel, avec un **terminal web premium** (style
 hedge-fund). Priorités : **robustesse & reproductibilité > maintenabilité > gestion du risque >
