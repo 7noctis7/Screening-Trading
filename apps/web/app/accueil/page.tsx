@@ -8,16 +8,17 @@ import { PipelineFull } from "@/components/Pipeline";
 const WINDOWS: [string, string, string][] = [
   ["/", "Dashboard", "Vue d'ensemble : performance, régime de marché, playbook VIX, top screener (facteurs + ML), humeur de marché."],
   ["/themes", "Thèmes de marché", "Heatmap de performance par secteur (4ᵉ révolution industrielle) — où va l'argent."],
+  ["/events", "Événements", "Prochains résultats trimestriels (BPA & revenu estimés et annoncés) pour tes positions + le top 5 % des scores, et IPOs US (S-1/S-1/A SEC EDGAR + FMP). Recherche, filtres, tri."],
   ["/ml", "Signaux ML", "Probabilité de hausse à ~1 mois (modèle entraîné en CV purgée) + validation : walk-forward, calibration, conformal, meta-labeling, drift."],
   ["/fundamentals", "Fondamentaux", "Ratios (PER, EV/EBITDA, P/B, ROE), DCF, Piotroski, Altman Z, note technique et note combinée. Reco BUY/HOLD/SELL."],
-  ["/sentiment", "Sentiment & news", "Humeur par position (FinBERT / lexique / momentum), titres d'actualité (RSS gratuit)."],
-  ["/universe", "Univers", "Les 929 actifs (actions, ETF, forex, crypto, commodités) — recherche, filtres, export CSV."],
+  ["/sentiment", "Sentiment & news", "Humeur & actualité recentrées sur ton portefeuille (positions réelles + preset) — FinBERT / lexique / momentum, RSS gratuit."],
+  ["/universe", "Univers", "L'univers investissable (actions, ETF, forex, crypto, commodités) — recherche, filtres, export CSV."],
   ["/data", "Données", "Qualité des données (NaN, outliers, fraîcheur), couverture réelle par classe d'actifs."],
   ["/portfolio", "Portefeuille & Analyse", "Mesures relatives, Monte-Carlo, attribution, corrélation, revue experte."],
   ["/risk", "Risque", "VaR/CVaR/EVT/GARCH, backtest de VaR, risque factoriel, budget de risque, limites, stress-tests, allocation optimale, multi-stratégie."],
   ["/positions", "Positions", "Positions ouvertes + clic sur un actif → graphique technique (volumes, MM, marqueurs, ligne d'info)."],
-  ["/trades", "Trades", "Historique et trades en cours, statistiques (win rate, profit factor, turnover)."],
-  ["/live", "Portefeuille réel", "Connexion Alpaca (actions, paper) / Bitmart (crypto), ordres cibles, réconciliation, coûts d'exécution (TCA)."],
+  ["/trades", "Trades", "Tes ordres réels : exécutés (fills) + en attente d'exécution, avec statut, quantité et type."],
+  ["/live", "Portefeuille réel", "Connexion Alpaca (actions, paper) / BitMart (crypto) : courbe réelle, réconciliation, frais & coûts d'exécution (TCA)."],
 ];
 
 function G({ term, children }: { term: string; children: React.ReactNode }) {
@@ -62,9 +63,9 @@ export default function Accueil() {
         <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Les fenêtres</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {WINDOWS.map(([href, name, desc]) => (
-            <Link key={href} href={href} className="card p-4 hover:bg-surfaceAlt transition-colors">
+            <Link key={href} href={href} className="card p-4 hover:bg-surfaceAlt transition-colors min-w-0">
               <div className="font-medium">{name}</div>
-              <div className="text-muted text-sm mt-1">{desc}</div>
+              <div className="text-muted text-sm mt-1 break-words">{desc}</div>
             </Link>
           ))}
         </div>
