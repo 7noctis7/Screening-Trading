@@ -37,7 +37,8 @@ def _cache_put(symbol: str, info: dict) -> None:
         keep = {k: info.get(k) for k in (
             "currentPrice", "regularMarketPrice", "totalRevenue", "netIncomeToCommon", "ebitda",
             "sharesOutstanding", "marketCap", "grossMargins", "ebit", "totalStockholderEquity",
-            "totalDebt", "totalCash", "freeCashflow", "sector")}
+            "totalDebt", "totalCash", "freeCashflow", "sector",
+            "revenueGrowth", "earningsGrowth")}                # croissances YoY RÉELLES (Yahoo)
         (_CACHE_DIR / f"{symbol.replace('/', '_')}.json").write_text(json.dumps(keep))
     except Exception:  # noqa: BLE001
         pass
@@ -74,6 +75,16 @@ class YFinanceFundamentalsProvider:
         ebitda = _f(info, "ebitda")
         shares = _f(info, "sharesOutstanding") or (_f(info, "marketCap") / price if price else 0.0)
         gross_margin = _f(info, "grossMargins")
+
+        def _opt(*keys):                                      # valeur réelle ou None (jamais 0 factice)
+            for k in keys:
+                v = info.get(k)
+                if v not in (None, ""):
+                    try:
+                        return float(v)
+                    except (TypeError, ValueError):
+                        continue
+            return None
         return Financials(
             symbol=symbol, as_of=as_of or datetime.now(timezone.utc),
             sector=info.get("sector", "Unknown"), price=price, shares=shares,
@@ -81,4 +92,5 @@ class YFinanceFundamentalsProvider:
             ebit=_f(info, "ebit") or ebitda * 0.85, ebitda=ebitda, net_income=net_income,
             total_equity=_f(info, "totalStockholderEquity") or revenue * 0.5,
             total_debt=_f(info, "totalDebt"), cash=_f(info, "totalCash"),
-            fcf=_f(info, "freeCashflow"), interest_expense=0.0)
+            fcf=_f(info, "freeCashflow"), interest_expense=0.0,
+            revenue_growth=_opt("revenueGrowth"), earnings_growth=_opt("earningsGrowth"))

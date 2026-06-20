@@ -42,14 +42,21 @@ def altman_z(f: Financials) -> dict:
     Z = 1.2·X1 + 1.4·X2 + 3.3·X3 + 0.6·X4 + 1.0·X5
     (X1≈cash/actif, X2≈capitaux propres/actif [proxy bénéfices non distribués],
      X3=EBIT/actif, X4=capitalisation/dette, X5=CA/actif). Z>2.99 sûr · <1.81 détresse.
+
+    Garde-fous : sans bilan exploitable (ETF, données absentes) → N/A ; X4 est BORNÉ (sinon une
+    dette ≈ 0 fait exploser le ratio vers l'infini) ; Z final borné à une plage réaliste.
     """
-    ta = _assets(f)
+    ta = f.total_equity + f.total_debt
+    if ta <= 0 or f.revenue <= 0:                 # pas de bilan/CA exploitable (ETF, champs absents)
+        return {"z": None, "zone": "n/a"}
     x1 = f.cash / ta
     x2 = f.total_equity / ta
     x3 = f.ebit / ta
-    x4 = (f.price * f.shares) / max(1e-9, f.total_debt)
+    # X4 = capitalisation / dette : peu/pas de dette = très sûr, mais on BORNE (évite l'explosion).
+    x4 = min(6.0, (f.price * f.shares) / f.total_debt) if f.total_debt > 1.0 else 6.0
     x5 = f.revenue / ta
     z = 1.2 * x1 + 1.4 * x2 + 3.3 * x3 + 0.6 * x4 + 1.0 * x5
+    z = max(-20.0, min(30.0, z))                  # plage réaliste (jamais 1e19)
     zone = "sûr" if z > 2.99 else ("gris" if z >= 1.81 else "détresse")
     return {"z": round(z, 2), "zone": zone}
 
