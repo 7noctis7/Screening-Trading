@@ -26,6 +26,27 @@ const LINKS: [string, string][] = [
   ["/live", "Portefeuille réel"],
 ];
 
+function SystemStatus({ meta }: { meta: any }) {
+  if (!meta) return null;
+  const synth = meta.data_synthetic;
+  const audit = meta.audit;
+  // vert = réelles & saines · ambre = anomalies non critiques · rouge = critiques/synthétique
+  const tone = synth ? "#ef4444" : (audit && !audit.ok ? "#f59e0b" : "#22c55e");
+  const label = synth ? "synthétique"
+    : audit ? (audit.ok ? "données auditées" : `${audit.counts?.critical ?? 0} critique(s)`)
+    : "données réelles";
+  const title = synth ? "Données synthétiques — démo UI uniquement."
+    : audit ? `Audit PwC : ${audit.counts?.critical ?? 0} critiques · ${audit.counts?.major ?? 0} majeures · ${audit.counts?.warning ?? 0} avertissements`
+    : "Données réelles (audit non calculé).";
+  return (
+    <Link href="/data" title={title}
+      className="hidden md:flex items-center gap-1.5 text-[11px] text-muted2 mono px-2 py-1 rounded-md border border-border hover:text-fg transition-colors">
+      <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: tone, boxShadow: `0 0 8px ${tone}` }} />
+      {label}
+    </Link>
+  );
+}
+
 export function Nav() {
   const path = usePathname();
   const { data: meta } = useMeta();
@@ -60,6 +81,7 @@ export function Nav() {
           );
         })}
         <span className="ml-auto" />
+        <SystemStatus meta={meta} />
         <LiveBadge />
         <span className="hidden md:inline text-[11px] text-muted2 mono px-2 py-1 rounded-md border border-border">⌘K</span>
         <ThemeToggle />
