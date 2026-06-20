@@ -68,55 +68,110 @@ def _poly(vals: list[float], w: float, h: float, pad: float = 4) -> str:
                     for i, v in enumerate(vals))
 
 
-def _spark_price(closes: list[float], w: int = 760, h: int = 120) -> str:
-    """Cours + moyennes mobiles 50/200 (SVG). Aire douce sous le cours."""
+_PADL = 52      # marge gauche pour les labels d'axe Y
+_PADB = 18      # marge basse pour les labels d'axe X
+
+
+def _money_axis(v: float) -> str:
+    a = abs(v)
+    for div, suf in ((1e12, "T"), (1e9, "Md"), (1e6, "M"), (1e3, "k")):
+        if a >= div:
+            return f"{v/div:.1f}{suf}"
+    return f"{v:.0f}"
+
+
+def _poly_xy(vals: list[float], lo: float, hi: float, x0: float, x1: float, y0: float, y1: float) -> str:
+    rng = (hi - lo) or 1.0
+    n = len(vals)
+    return " ".join(f"{x0+i*(x1-x0)/(n-1):.1f},{y1-(v-lo)/rng*(y1-y0):.1f}" for i, v in enumerate(vals))
+
+
+def _spark_price(closes: list[float], labels: list[str] | None = None, w: int = 760, h: int = 150) -> str:
+    """Cours + MM50/200 avec AXES CHIFFRÉS (Y = prix $, X = dates). Aire douce + grille."""
     if len(closes) < 20:
         return ""
     def _ma(n: int) -> list[float]:
         return [sum(closes[max(0, i-n+1):i+1]) / min(i+1, n) for i in range(len(closes))]
-    price = _poly(closes, w, h)
-    area = f"{price} {w-4:.1f},{h-4:.1f} 4,{h-4:.1f}"
+    lo, hi = min(closes), max(closes)
+    x0, x1, y0, y1 = _PADL, w - 6, 8, h - _PADB
+    grid, ylab = "", ""
+    for k in range(5):                                   # 5 lignes de grille + valeurs $ sur Y
+        yy = y0 + (y1 - y0) * k / 4
+        val = hi - (hi - lo) * k / 4
+        grid += f'<line x1="{x0}" y1="{yy:.1f}" x2="{x1}" y2="{yy:.1f}" stroke="{_C["border"]}" stroke-width="0.5"/>'
+        ylab += f'<text x="{x0-6}" y="{yy+3:.1f}" text-anchor="end" font-size="9" fill="{_C["muted"]}">${_num(val,0)}</text>'
+    price = _poly_xy(closes, lo, hi, x0, x1, y0, y1)
+    area = f"{price} {x1:.1f},{y1:.1f} {x0:.1f},{y1:.1f}"
     layers = (f'<polygon points="{area}" fill="{_C["accent"]}" opacity="0.08"/>'
               f'<polyline points="{price}" fill="none" stroke="{_C["accent"]}" stroke-width="1.8"/>')
     if len(closes) >= 50:
-        layers += f'<polyline points="{_poly(_ma(50), w, h)}" fill="none" stroke="{_C["warn"]}" stroke-width="1" opacity="0.8"/>'
+        layers += f'<polyline points="{_poly_xy(_ma(50), lo, hi, x0, x1, y0, y1)}" fill="none" stroke="{_C["warn"]}" stroke-width="1" opacity="0.85"/>'
     if len(closes) >= 200:
-        layers += f'<polyline points="{_poly(_ma(200), w, h)}" fill="none" stroke="{_C["muted"]}" stroke-width="1" opacity="0.7"/>'
-    return f'<svg viewBox="0 0 {w} {h}" width="100%" height="{h}">{layers}</svg>'
+        layers += f'<polyline points="{_poly_xy(_ma(200), lo, hi, x0, x1, y0, y1)}" fill="none" stroke="{_C["muted"]}" stroke-width="1" opacity="0.7"/>'
+    xlab = ""
+    if labels and len(labels) >= 2:                      # dates début/milieu/fin sur X
+        for frac, anc in ((0.0, "start"), (0.5, "middle"), (1.0, "end")):
+            idx = min(len(labels) - 1, int(frac * (len(labels) - 1)))
+            xx = x0 + (x1 - x0) * frac
+            xlab += f'<text x="{xx:.1f}" y="{h-5}" text-anchor="{anc}" font-size="9" fill="{_C["muted"]}">{labels[idx]}</text>'
+    return f'<svg viewBox="0 0 {w} {h}" width="100%" height="{h}">{grid}{layers}{ylab}{xlab}</svg>'
 
 
-def _spark_drawdown(closes: list[float], w: int = 760, h: int = 70) -> str:
-    """Courbe de drawdown (sous l'eau) en rouge."""
+def _spark_drawdown(closes: list[float], labels: list[str] | None = None, w: int = 760, h: int = 90) -> str:
+    """Drawdown (sous l'eau) avec axe Y en % et repères de dates."""
     if len(closes) < 20:
         return ""
     peak, dd = closes[0], []
     for c in closes:
         peak = max(peak, c)
         dd.append(c / peak - 1.0 if peak else 0.0)
-    pts = _poly(dd, w, h)
-    area = f"{pts} {w-4:.1f},4 4,4"
-    return (f'<svg viewBox="0 0 {w} {h}" width="100%" height="{h}">'
+    lo = min(dd); hi = 0.0
+    x0, x1, y0, y1 = _PADL, w - 6, 8, h - _PADB
+    grid = ylab = ""
+    for k in range(3):
+        yy = y0 + (y1 - y0) * k / 2
+        val = hi - (hi - lo) * k / 2
+        grid += f'<line x1="{x0}" y1="{yy:.1f}" x2="{x1}" y2="{yy:.1f}" stroke="{_C["border"]}" stroke-width="0.5"/>'
+        ylab += f'<text x="{x0-6}" y="{yy+3:.1f}" text-anchor="end" font-size="9" fill="{_C["muted"]}">{val*100:.0f}%</text>'
+    pts = _poly_xy(dd, lo, hi, x0, x1, y0, y1)
+    area = f"{pts} {x1:.1f},{y0:.1f} {x0:.1f},{y0:.1f}"
+    xlab = ""
+    if labels and len(labels) >= 2:
+        for frac, anc in ((0.0, "start"), (1.0, "end")):
+            idx = min(len(labels) - 1, int(frac * (len(labels) - 1)))
+            xx = x0 + (x1 - x0) * frac
+            xlab += f'<text x="{xx:.1f}" y="{h-5}" text-anchor="{anc}" font-size="9" fill="{_C["muted"]}">{labels[idx]}</text>'
+    return (f'<svg viewBox="0 0 {w} {h}" width="100%" height="{h}">{grid}'
             f'<polygon points="{area}" fill="{_C["neg"]}" opacity="0.12"/>'
-            f'<polyline points="{pts}" fill="none" stroke="{_C["neg"]}" stroke-width="1.4"/></svg>')
+            f'<polyline points="{pts}" fill="none" stroke="{_C["neg"]}" stroke-width="1.4"/>{ylab}{xlab}</svg>')
 
 
-def _bars_history(hist: list[dict], key: str, w: int = 760, h: int = 110) -> str:
-    """Barres annuelles (CA ou résultat net) avec étiquette d'année."""
+def _bars_history(hist: list[dict], key: str, w: int = 760, h: int = 150) -> str:
+    """Barres annuelles (CA/résultat) avec VALEUR au-dessus de chaque barre, année en X, axe Y."""
     vals = [float(x.get(key) or 0) for x in hist]
     if len(vals) < 2:
         return ""
-    hi = max(abs(v) for v in vals) or 1.0
+    hi = max(vals + [0.0]); lo = min(vals + [0.0])
+    span = (hi - lo) or 1.0
+    x0, y0, y1 = _PADL, 14, h - _PADB
+    plot_w = w - x0 - 6
+    zero_y = y1 - (0 - lo) / span * (y1 - y0)            # ligne du zéro
     n = len(vals)
-    bw = (w - 10) / n * 0.62
-    gap = (w - 10) / n
+    gap = plot_w / n
+    bw = gap * 0.6
+    grid = (f'<line x1="{x0}" y1="{zero_y:.1f}" x2="{w-6}" y2="{zero_y:.1f}" stroke="{_C["border"]}" stroke-width="0.6"/>'
+            f'<text x="{x0-6}" y="{y0+3}" text-anchor="end" font-size="9" fill="{_C["muted"]}">{_money_axis(hi)}</text>'
+            f'<text x="{x0-6}" y="{zero_y+3:.1f}" text-anchor="end" font-size="9" fill="{_C["muted"]}">0</text>')
     bars = ""
     for i, (x, v) in enumerate(zip(hist, vals)):
-        bh = abs(v) / hi * (h - 24)
-        cx = 5 + i * gap + (gap - bw) / 2
+        cx = x0 + i * gap + (gap - bw) / 2
+        vy = y1 - (v - lo) / span * (y1 - y0)
+        top = min(vy, zero_y); bh = abs(vy - zero_y)
         col = _C["accent"] if v >= 0 else _C["neg"]
-        bars += (f'<rect x="{cx:.1f}" y="{h-18-bh:.1f}" width="{bw:.1f}" height="{bh:.1f}" rx="2" fill="{col}" opacity="0.85"/>'
-                 f'<text x="{cx+bw/2:.1f}" y="{h-5:.1f}" text-anchor="middle" font-size="9" fill="{_C["muted"]}">{x.get("year","")}</text>')
-    return f'<svg viewBox="0 0 {w} {h}" width="100%" height="{h}">{bars}</svg>'
+        bars += (f'<rect x="{cx:.1f}" y="{top:.1f}" width="{bw:.1f}" height="{max(1,bh):.1f}" rx="2" fill="{col}" opacity="0.85"/>'
+                 f'<text x="{cx+bw/2:.1f}" y="{(top-3):.1f}" text-anchor="middle" font-size="9" fill="{_C["fg"]}">{_money_axis(v)}</text>'
+                 f'<text x="{cx+bw/2:.1f}" y="{h-5}" text-anchor="middle" font-size="9" fill="{_C["muted"]}">{x.get("year","")}</text>')
+    return f'<svg viewBox="0 0 {w} {h}" width="100%" height="{h}">{grid}{bars}</svg>'
 
 
 def _card(title: str, inner: str) -> str:
@@ -211,20 +266,30 @@ def company_report_html(r: dict[str, Any]) -> str:
     # Damodaran
     dcf = dam["dcf"]; scen = dcf.get("scenarios", {})
     mos = dcf.get("margin_of_safety")
-    dam_kv = _kv_grid([
-        ("Coût des FP (MEDAF)", _pct(dam.get("cost_of_equity")), _C["fg"]),
-        ("WACC", _pct(dam.get("wacc")), _C["fg"]),
-        ("Bêta", _num(dam.get("beta")), _C["fg"]),
-        ("DCF bear", "$" + _num(scen.get("bear")), _C["muted"]),
-        ("DCF base", "$" + _num(scen.get("base")), _C["fg"]),
-        ("DCF bull", "$" + _num(scen.get("bull")), _C["muted"]),
-        ("Marge de sécurité", _pct(mos) if mos is not None else "—",
-         _C["pos"] if (mos or 0) > 0 else _C["neg"]),
-        ("Croiss. implicite (cours)", _pct(dam.get("implied_growth_in_price")), _C["fg"]),
-    ])
+    reliable = dcf.get("reliable", True)
+    if not reliable:
+        # valorisation masquée : comptes en devise locale ≠ cours (ADR) → on N'AFFICHE PAS de faux chiffres
+        dam_kv = (f'<div style="background:{_C["warn"]}22;border-left:3px solid {_C["warn"]};'
+                  f'border-radius:8px;padding:10px 12px;font-size:12px;color:{_C["fg"]}">'
+                  f'⚠️ <b>Valorisation non fiable</b> — les comptes semblent publiés dans une devise '
+                  f'différente du cours (titre type ADR). DCF & multiples masqués pour ne pas induire '
+                  f'en erreur. Coût du capital indicatif : MEDAF {_pct(dam.get("cost_of_equity"))} · '
+                  f'WACC {_pct(dam.get("wacc"))} · bêta {_num(dam.get("beta"))}.</div>')
+    else:
+        dam_kv = _kv_grid([
+            ("Coût des FP (MEDAF)", _pct(dam.get("cost_of_equity")), _C["fg"]),
+            ("WACC", _pct(dam.get("wacc")), _C["fg"]),
+            ("Bêta", _num(dam.get("beta")), _C["fg"]),
+            ("DCF bear", "$" + _num(scen.get("bear")), _C["muted"]),
+            ("DCF base", "$" + _num(scen.get("base")), _C["fg"]),
+            ("DCF bull", "$" + _num(scen.get("bull")), _C["muted"]),
+            ("Marge de sécurité", _pct(mos) if mos is not None else "—",
+             _C["pos"] if (mos or 0) > 0 else _C["neg"]),
+            ("Croiss. implicite (cours)", _pct(dam.get("implied_growth_in_price")), _C["fg"]),
+        ])
     # multiples vs secteur
     mvs = dam.get("multiples_vs_sector", {})
-    if mvs:
+    if mvs and reliable:
         rows = "".join(
             f'<tr style="border-top:1px solid {_C["border"]}"><td style="padding:4px 0">{k.upper()}</td>'
             f'<td style="text-align:right">{_num(v.get("company"))}</td>'
@@ -311,14 +376,17 @@ def company_report_html(r: dict[str, Any]) -> str:
     charts_card = ""
     ch = r.get("charts") or {}
     closes = ch.get("price") or []
+    labels = ch.get("price_labels") or []
     hist = ch.get("financial_history") or []
     inner = ""
     if len(closes) >= 20:
+        last = closes[-1]; lo = min(closes); hi = max(closes)
         inner += (f'<div style="font-size:11px;color:{_C["muted"]};margin-bottom:2px">Cours & moyennes mobiles '
-                  f'(<span style="color:{_C["accent"]}">cours</span> · <span style="color:{_C["warn"]}">MM50</span> · '
-                  f'<span style="color:{_C["muted"]}">MM200</span>)</div>{_spark_price(closes)}')
+                  f'(<span style="color:{_C["accent"]}">cours ${_num(last)}</span> · '
+                  f'<span style="color:{_C["warn"]}">MM50</span> · <span style="color:{_C["muted"]}">MM200</span>'
+                  f' · plage ${_num(lo,0)}–${_num(hi,0)})</div>{_spark_price(closes, labels)}')
         inner += (f'<div style="font-size:11px;color:{_C["muted"]};margin:8px 0 2px">Drawdown (sous l\'eau)</div>'
-                  f'{_spark_drawdown(closes)}')
+                  f'{_spark_drawdown(closes, labels)}')
     if len(hist) >= 2:
         cagr = ch.get("revenue_cagr")
         cagr_txt = (f' <span style="color:{_C["pos"] if cagr>=0 else _C["neg"]}">· CAGR {cagr*100:+.1f}%</span>'

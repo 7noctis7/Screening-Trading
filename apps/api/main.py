@@ -392,22 +392,22 @@ def _rsi(values: list[float], n: int = 14) -> float | None:
     return round(100 - 100 / (1 + rs), 1)
 
 
-def _company_closes(sym: str) -> list[float]:
-    """Série de clôtures RÉELLES d'un titre (market.db puis crypto.db). [] si absente."""
+def _company_closes(sym: str) -> tuple[list[float], list[str]]:
+    """Clôtures RÉELLES + dates d'un titre (market.db puis crypto.db). ([],[]) si absent."""
     try:
         from packages.data.engine import read_prices_rows
         rows = read_prices_rows("market.db", symbols=[sym]) or read_prices_rows("crypto.db", symbols=[sym])
-        return [float(r["close"]) for r in sorted(rows, key=lambda r: r.get("ts") or "")
-                if r.get("close") is not None]
+        rows = [r for r in sorted(rows, key=lambda r: r.get("ts") or "") if r.get("close") is not None]
+        return [float(r["close"]) for r in rows], [str(r.get("ts") or "")[:10] for r in rows]
     except Exception:  # noqa: BLE001
-        return []
+        return [], []
 
 
 def _company_technical(sym: str, closes: list[float] | None = None) -> dict | None:
     """Résumé technique d'un titre depuis la base de prix RÉELLE (tendance, RSI, MACD, position vs
     moyennes mobiles, plage 52 sem.). Pur-Python, best-effort → None si indisponible."""
     try:
-        closes = closes if closes is not None else _company_closes(sym)
+        closes = closes if closes is not None else _company_closes(sym)[0]
         if len(closes) < 60:
             return None
         last = closes[-1]
@@ -521,12 +521,12 @@ def _build_company_report_cached(sym: str) -> tuple[dict | None, str | None]:
         ml_score = (snap.get("ml", {}).get("scores", {}) or {}).get(sym)   # proba ML du titre
     except Exception:  # noqa: BLE001
         pass
-    closes = _company_closes(sym)
+    closes, dates = _company_closes(sym)
     fin_hist = _company_financial_history(sym)
     report = build_company_report(f, name=name, prior=prior, beta=beta,
                                   technical=_company_technical(sym, closes), macro=_company_macro(),
                                   earnings=earnings, ml_score=ml_score, price_series=closes,
-                                  financial_history=fin_hist, peers=_company_peers(sym))
+                                  price_dates=dates, financial_history=fin_hist, peers=_company_peers(sym))
     report["source"] = src
     report["earnings_signature"] = sig
     _enrich_cross_source(report, f, sym)               # audit multi-sources (fiabilité croisée)
