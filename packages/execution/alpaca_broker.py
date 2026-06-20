@@ -114,17 +114,20 @@ class AlpacaBroker:
             res = self._client.get_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, limit=limit))
             out = []
             for o in res:
-                rq = float(getattr(o, "qty", 0) or 0)
+                rq = float(getattr(o, "qty", 0) or 0)            # ordre en parts (qty)…
+                nv = float(getattr(o, "notional", 0) or 0)       # …ou ordre en MONTANT $ (notional, qty=None)
                 fq = float(getattr(o, "filled_qty", 0) or 0)
                 lp = getattr(o, "limit_price", None)
                 px = float(lp) if lp else float(getattr(o, "filled_avg_price", 0) or 0)
                 ts = getattr(o, "submitted_at", None) or getattr(o, "created_at", None)
+                # montant : notional explicite si présent, sinon parts × prix (si prix connu)
+                amount = nv if nv > 0 else (rq * px if px else 0.0)
                 out.append({
                     "symbol": o.symbol, "broker": "Alpaca",
                     "side": str(getattr(o, "side", "")).lower().split(".")[-1],
-                    "qty": rq, "filled_qty": fq,
+                    "qty": rq, "filled_qty": fq, "notional_order": nv > 0,
                     "price": px, "order_type": str(getattr(o, "order_type", "")).lower().split(".")[-1],
-                    "notional": rq * px if px else 0.0,
+                    "notional": round(amount, 2),
                     "date": ts.isoformat() if ts else "",
                     "status": str(getattr(o, "status", "")).lower().split(".")[-1]})
             return out

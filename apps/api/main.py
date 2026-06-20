@@ -60,7 +60,7 @@ _BUILD_LOCK = threading.Lock()
 _SNAP_FILE = Path(__file__).resolve().parents[2] / ".cache" / "snapshot.pkl"
 # Bump à chaque changement de SCHÉMA du snapshot → invalide le cache disque (évite de servir un
 # ancien snapshot construit par une version antérieure du code).
-_SNAP_VERSION = "2026-06-20-open-orders-pending"
+_SNAP_VERSION = "2026-06-20-events-news-notional-fix"
 
 
 def _load_disk() -> tuple[dict | None, float]:
@@ -259,6 +259,49 @@ def macro() -> dict:
         _MACRO = {"fred": macro_snapshot(), "imf": imf_projections()}
         _MACRO_TS = time.time()
     return _MACRO
+
+
+_EVENTS: dict | None = None
+_EVENTS_TS: float = 0.0
+
+
+@app.get("/api/events")
+def events() -> dict:
+    """Calendrier d'événements RÉELS : résultats trimestriels (BPA/revenu estimés & annoncés) des
+    sociétés de la base + positions réelles, et IPOs US (S-1/S-1/A SEC EDGAR + FMP). Cache 6 h."""
+    global _EVENTS, _EVENTS_TS
+    if _EVENTS is None or (time.time() - _EVENTS_TS) > 21600:
+        import os
+        from datetime import datetime, timezone
+
+        from packages.events import earnings_for, upcoming_ipos
+        snap = _snap()
+        names: dict[str, str] = {}
+        eq: list[str] = []
+        for r in snap.get("universe", {}).get("instruments", []):
+            sym = r.get("symbol"); ac = (r.get("asset_class") or "equity")
+            if sym and ac in ("equity", "etf"):
+                eq.append(sym); names[sym] = r.get("name", "") or ""
+        for p in snap.get("live", {}).get("real", {}).get("positions", []):   # + positions réelles
+            s = p.get("symbol")
+            if s and (p.get("asset_class") or "equity") in ("equity", "etf"):
+                eq.append(s)
+        eq = list(dict.fromkeys(eq))
+        try:
+            earn = earnings_for(eq)
+        except Exception as e:  # noqa: BLE001
+            log.warning("earnings_for failed: %s", e); earn = []
+        for ev in earn:
+            ev["name"] = names.get(ev.get("symbol", ""), "")
+        try:
+            ipos = upcoming_ipos()
+        except Exception as e:  # noqa: BLE001
+            log.warning("upcoming_ipos failed: %s", e); ipos = []
+        _EVENTS = {"available": bool(earn or ipos), "earnings": earn, "ipos": ipos,
+                   "n_symbols": len(eq), "fmp": bool(os.environ.get("FMP_API_KEY")),
+                   "as_of": datetime.now(timezone.utc).isoformat()}
+        _EVENTS_TS = time.time()
+    return _EVENTS
 
 
 @app.get("/api/ai/status")

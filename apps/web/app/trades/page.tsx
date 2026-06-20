@@ -60,7 +60,7 @@ export default function Trades() {
               <td><span className={series[t.symbol] ? "text-accent border-b border-dotted border-border" : ""}>{t.symbol}</span></td>
               <td className="font-sans text-xs">{t.broker}</td>
               <td style={{ color: t.side === "buy" ? "#22c55e" : "#f43f5e" }}>{t.side === "buy" ? "▲ achat" : "▼ vente"}</td>
-              <td className="text-right">{(t.qty ?? 0).toFixed(4)}</td>
+              <td className="text-right">{t.notional_order ? <span className="text-muted2">en $</span> : (t.qty ?? 0).toFixed(4)}</td>
               <td className="text-right text-muted2">{(t.filled_qty ?? 0).toFixed(4)}</td>
               <td className="text-right">{t.price ? `$${usd(t.price)}` : "marché"}</td>
               <td className="pl-2 font-sans text-xs text-muted2">{t.order_type || "—"}</td>

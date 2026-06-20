@@ -37,3 +37,4 @@ export const useLive = () => q("live", "/api/live", 30000);
 export const useConviction = () => q("conviction", "/api/conviction", 60000);
 export const useInvestors = () => q("investors", "/api/investors", 60000);
 export const useMacro = () => q("macro", "/api/macro", 600000);
+export const useEvents = () => q("events", "/api/events", 600000);
