@@ -130,3 +130,41 @@ def populate_from_api(base_url: str = "http://localhost:8000", store: OverlaySto
         done.append(sym)
     return {"available": True, "tickers": done, "n": len(done),
             "var_z": z, "lookback": lookback, "evt_mult": evt_mult}
+
+
+def populate_from_snapshot(store: OverlayStore | None = None, z: float = Z_VAR95,
+                           lookback: int = 21, evt_mult: float = 1.15) -> dict:
+    """Variante OFFLINE (cron) : construit le snapshot directement (pas d'API à démarrer) et écrit
+    les overlays. Import du cœur PARESSEUX (sens autorisé : connecteur → cœur). Tolérant aux pannes."""
+    st = store or OverlayStore()
+    try:
+        from apps.api.snapshot import build_snapshot
+        snap = build_snapshot()
+    except Exception as e:  # noqa: BLE001
+        return {"available": False, "error": f"snapshot indisponible: {e}"}
+    dash = snap.get("dashboard", {})
+    series = dash.get("chart_series", {}) or {}
+    markers_by = dash.get("real_markers", {}) or {}
+    held = [p.get("symbol") for p in snap.get("live", {}).get("real", {}).get("positions", [])
+            if p.get("symbol")] or list(series)
+    # blackouts résultats (best-effort réseau via le module events ; ignoré si indisponible)
+    events: dict = {}
+    try:
+        from packages.events import earnings_for
+        events = {"earnings": earnings_for([s for s in dict.fromkeys(held)])}
+    except Exception:  # noqa: BLE001
+        events = {}
+    from packages.mcp_tradingview.models import Overlay
+    done: list[str] = []
+    for sym in dict.fromkeys(held):
+        bars = series.get(sym)
+        if not bars:
+            continue
+        times, closes = _bars_to_series(bars)
+        bands = var_cone(times, closes, z=z, lookback=lookback, evt_mult=evt_mult)
+        mks = [ChartMarker(time=str(m.get("t", ""))[:10], side=str(m.get("side", "buy")).lower())
+               for m in (markers_by.get(sym) or [])]
+        zones = _blackouts_from_events(events, sym)
+        st.set_overlay(Overlay(ticker=sym, markers=mks, bands=bands, blackouts=zones, source="risk-auto-cron"))
+        done.append(sym)
+    return {"available": True, "tickers": done, "n": len(done), "mode": "offline"}
