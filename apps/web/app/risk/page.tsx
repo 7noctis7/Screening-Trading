@@ -179,12 +179,17 @@ export default function Risk() {
             <h2 className="text-sm uppercase tracking-wide text-muted">Budget de risque (contribution à la vol)</h2>
             <span className="text-xs mono text-muted">vol {pct(rb.portfolio_vol)} · diversif ×{rb.diversification_ratio}</span>
           </div>
-          {rb.covariance_diagnostics?.cond_used != null && (
-            <div className="mt-1 text-[11px] mono text-muted" title="Nombre de condition de la matrice de covariance (avant → après shrinkage Ledoit-Wolf) et intensité de régularisation. Plus κ est bas, plus la matrice de risque est stable.">
-              κ {Math.round(rb.covariance_diagnostics.cond_raw)} → {Math.round(rb.covariance_diagnostics.cond_used)}
-              {rb.covariance_diagnostics.delta > 0 && <> · shrinkage {Math.round(rb.covariance_diagnostics.delta * 100)}%</>}
-            </div>
-          )}
+          {rb.covariance_diagnostics?.cond_used != null && (() => {
+            const k = rb.covariance_diagnostics.cond_used;
+            const col = k < 50 ? "#22c55e" : k < 500 ? "#f59e0b" : "#ef4444";   // vert / ambre / rouge
+            return (
+              <div className="mt-1 text-[11px] mono" title="Nombre de condition de la matrice de covariance (avant → après shrinkage Ledoit-Wolf) et intensité de régularisation. Vert <50 (stable), ambre <500, rouge >500 (risque mal estimé : univers trop concentré ou historique trop court).">
+                <span className="text-muted">κ {Math.round(rb.covariance_diagnostics.cond_raw)} → </span>
+                <span style={{ color: col, fontWeight: 600 }}>{Math.round(k)}</span>
+                {rb.covariance_diagnostics.delta > 0 && <span className="text-muted"> · shrinkage {Math.round(rb.covariance_diagnostics.delta * 100)}%</span>}
+              </div>
+            );
+          })()}
           <div className="space-y-1.5 mt-3">
             {rb.symbols.map((s: string, i: number) => (
               <div key={s} className="flex items-center gap-2 text-xs">

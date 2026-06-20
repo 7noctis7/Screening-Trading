@@ -1402,11 +1402,13 @@ def build_snapshot(seed: int = 7) -> dict:
     rb = risk_contributions([w_by_name.get(s, 0.0) for s in cb_syms], cov)
     # diagnostic de conditionnement (qualité du risque) : cov empirique vs régularisée + δ retenu
     _cov_diag: dict = {}
+    _cov_cache_stats: dict = {}
     try:
         import numpy as _npd
 
-        from packages.data.engine import (covariance_diagnostics, covariance_matrix,
-                                          ledoit_wolf_shrinkage, purge_cov_disk_cache)
+        from packages.data.engine import (cov_cache_stats, covariance_diagnostics,
+                                          covariance_matrix, ledoit_wolf_shrinkage,
+                                          purge_cov_disk_cache)
         purge_cov_disk_cache()                              # purge TTL des signatures obsolètes (1×/build)
         _rets = {s: list(rets_by[s]) for s in syms}
         _, _cov_raw = covariance_matrix(_rets, shrink=False)
@@ -1417,6 +1419,7 @@ def build_snapshot(seed: int = 7) -> dict:
             _mat = _npd.array([_rets[s][-_m:] for s in _csyms], dtype=float)
             _, _delta = ledoit_wolf_shrinkage(_mat)
         _cov_diag = covariance_diagnostics(_cov_raw, cov, delta=_delta)
+        _cov_cache_stats = cov_cache_stats()
     except Exception:  # noqa: BLE001 — diagnostic best-effort, jamais bloquant
         _cov_diag = {}
     risk_budget = {"symbols": cb_syms, "contrib_pct": rb["contrib_pct"],
@@ -1995,6 +1998,7 @@ def build_snapshot(seed: int = 7) -> dict:
             "delay_minutes": 15,                 # flux différé 15 min (EOD/synthétique)
             "mode": data_mode,
             "audit": _audit_report,              # rapport d'intégrité PwC (None si QUANT_AUDIT inactif)
+            "cov_cache": _cov_cache_stats,       # hit-rate du cache de covariance (gain réel en prod)
             "data_synthetic": data_mode.startswith("synthetic"),
             "data_warning": ("⚠️ DONNÉES FACTICES (synthétiques) — démo UI uniquement, NE PAS "
                              "décider ni backtester dessus. Branche QUANT_PRICE_DB."
