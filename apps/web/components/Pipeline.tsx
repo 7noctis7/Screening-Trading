@@ -4,18 +4,19 @@ import Link from "next/link";
 // Pipeline du raisonnement : de la donnée brute au portefeuille (ordre = déroulé du process).
 export const STEPS: { n: number; key: string; page: string; title: string; desc: string }[] = [
   { n: 1, key: "data", page: "/data", title: "Données", desc: "Prix réels (YAHOO.db), contrôle qualité & couverture." },
-  { n: 2, key: "universe", page: "/universe", title: "Univers", desc: "Les ~929 actifs investissables (actions, ETF, crypto, forex, commodités)." },
+  { n: 2, key: "universe", page: "/universe", title: "Univers", desc: "L'univers investissable (actions, ETF, crypto, forex, commodités)." },
   { n: 3, key: "macro", page: "/macro", title: "Macro", desc: "Contexte économique chiffré (FRED) : croissance, inflation, taux, courbe, VIX." },
   { n: 4, key: "themes", page: "/themes", title: "Thèmes de marché", desc: "Rotation sectorielle (performance YTD) — où va l'argent." },
-  { n: 5, key: "fundamentals", page: "/fundamentals", title: "Fondamentaux", desc: "Valeur, qualité, DCF, Piotroski, Altman — pour les actions/ETF." },
-  { n: 6, key: "investors", page: "/investors", title: "Doctrines investisseurs", desc: "Scores Graham / Fisher / Thiel / Schwab (4ᵉ révolution industrielle)." },
-  { n: 7, key: "ml", page: "/ml", title: "Signaux ML", desc: "Probabilité de hausse à ~1 mois (modèle validé sans fuite)." },
-  { n: 8, key: "sentiment", page: "/sentiment", title: "Sentiment & news", desc: "Humeur & actualité (macro + par actif)." },
-  { n: 9, key: "conviction", page: "/conviction", title: "Conviction", desc: "FUSION (technique+ML+fondamental+sentiment+investisseurs) → note + allocation." },
-  { n: 10, key: "screener", page: "/", title: "Dashboard", desc: "Synthèse : performance, régime macro, playbook VIX, top screener." },
-  { n: 11, key: "portfolio", page: "/positions", title: "Sélection & portefeuille", desc: "Allocation PRESET (risk-parity + DD-target + blackout, plafonnée 10 %/ligne) sur l'univers qualité négociable." },
-  { n: 12, key: "risk", page: "/risk", title: "Risque", desc: "VaR/EVT/GARCH, limites, stress-tests, allocation optimale." },
-  { n: 13, key: "live", page: "/live", title: "Exécution", desc: "Réplication chez le broker (Alpaca/Bitmart), positions réelles, coûts." },
+  { n: 5, key: "events", page: "/events", title: "Événements", desc: "Résultats trimestriels (BPA & revenu estimés et annoncés) + IPOs US (SEC EDGAR)." },
+  { n: 6, key: "fundamentals", page: "/fundamentals", title: "Fondamentaux", desc: "Valeur, qualité, DCF, Piotroski, Altman — pour les actions/ETF." },
+  { n: 7, key: "investors", page: "/investors", title: "Doctrines investisseurs", desc: "Scores Graham / Fisher / Thiel / Schwab (4ᵉ révolution industrielle)." },
+  { n: 8, key: "ml", page: "/ml", title: "Signaux ML", desc: "Probabilité de hausse à ~1 mois (modèle validé sans fuite)." },
+  { n: 9, key: "sentiment", page: "/sentiment", title: "Sentiment & news", desc: "Humeur & actualité, recentrées sur ton portefeuille." },
+  { n: 10, key: "conviction", page: "/conviction", title: "Conviction", desc: "Fusion des lentilles (technique + ML + fondamental + sentiment + investisseurs) → note + allocation." },
+  { n: 11, key: "screener", page: "/", title: "Dashboard", desc: "Synthèse : performance, régime macro, playbook VIX, top screener." },
+  { n: 12, key: "portfolio", page: "/positions", title: "Sélection & portefeuille", desc: "Allocation 50 % QQQ + 50 % preset (risk-parity + DD-target + blackout, plafonnée 10 %/ligne)." },
+  { n: 13, key: "risk", page: "/risk", title: "Risque", desc: "VaR/EVT/GARCH, limites, stress-tests, allocation optimale." },
+  { n: 14, key: "live", page: "/live", title: "Exécution", desc: "Réplication chez le broker (Alpaca/BitMart), positions réelles, frais & TCA." },
 ];
 const N = STEPS.length;
 
@@ -41,13 +42,13 @@ export function PipelineFull() {
       <h2 className="text-sm uppercase tracking-wide text-muted">Le raisonnement, étape par étape</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {STEPS.map((s) => (
-          <Link key={s.key} href={s.page} className="card p-4 hover:bg-surfaceAlt transition-colors">
+          <Link key={s.key} href={s.page} className="card p-4 hover:bg-surfaceAlt transition-colors min-w-0">
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full mono text-xs font-semibold"
+              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full mono text-xs font-semibold shrink-0"
                 style={{ background: "color-mix(in srgb, var(--accent) 18%, transparent)", color: "var(--accent2)" }}>{s.n}</span>
               <b className="text-sm">{s.title}</b>
             </div>
-            <div className="text-muted text-xs mt-1.5">{s.desc}</div>
+            <div className="text-muted text-xs mt-1.5 break-words">{s.desc}</div>
           </Link>
         ))}
       </div>
@@ -57,8 +58,8 @@ export function PipelineFull() {
           Le <b>portefeuille de production</b> (Positions) est l'<b>allocation PRESET</b> : univers qualité →
           risk-parity → DD-target → blackout, plafonnée 10 %/ligne, sur les actifs <b>négociables</b>. Le Screening,
           le ML, les Fondamentaux et le Sentiment sont des <b>lentilles d'analyse</b> (fusionnées dans la{" "}
-          <Link href="/conviction" className="text-accent">conviction</Link>). La page <b>Trades</b> garde l'ancien
-          swing en référence. Pas d'edge directionnel prouvé → on gagne par la <b>gestion du risque</b>.
+          <Link href="/conviction" className="text-accent">conviction</Link>). La page <b>Trades</b> montre tes
+          ordres réels (exécutés + en attente). Pas d'edge directionnel prouvé → on gagne par la <b>gestion du risque</b>.
         </p>
       </div>
     </section>
