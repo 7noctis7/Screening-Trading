@@ -1406,10 +1406,10 @@ def build_snapshot(seed: int = 7) -> dict:
     try:
         import numpy as _npd
 
-        from packages.data.engine import (cov_cache_stats, covariance_diagnostics,
+        from packages.data.engine import (auto_ttl_days, covariance_diagnostics,
                                           covariance_matrix, ledoit_wolf_shrinkage,
-                                          purge_cov_disk_cache)
-        purge_cov_disk_cache()                              # purge TTL des signatures obsolètes (1×/build)
+                                          persist_cov_cache_stats, purge_cov_disk_cache)
+        purge_cov_disk_cache(auto_ttl_days())              # purge TTL auto-réglé (1×/build)
         _rets = {s: list(rets_by[s]) for s in syms}
         _, _cov_raw = covariance_matrix(_rets, shrink=False)
         _csyms = [s for s in cb_syms if _rets.get(s) and len(_rets[s]) >= 2]
@@ -1419,7 +1419,7 @@ def build_snapshot(seed: int = 7) -> dict:
             _mat = _npd.array([_rets[s][-_m:] for s in _csyms], dtype=float)
             _, _delta = ledoit_wolf_shrinkage(_mat)
         _cov_diag = covariance_diagnostics(_cov_raw, cov, delta=_delta)
-        _cov_cache_stats = cov_cache_stats()
+        _cov_cache_stats = persist_cov_cache_stats()       # cumul persistant (hit-rate multi-builds)
     except Exception:  # noqa: BLE001 — diagnostic best-effort, jamais bloquant
         _cov_diag = {}
     risk_budget = {"symbols": cb_syms, "contrib_pct": rb["contrib_pct"],

@@ -95,6 +95,36 @@ def test_cov_cache_stats_track_hits_and_misses(monkeypatch):
     assert 0.0 <= s["hit_rate"] <= 1.0 and s["hit_rate"] == 0.5
 
 
+def test_persist_cov_cache_stats_accumulates(tmp_path, monkeypatch):
+    monkeypatch.setattr(E, "_COV_DISK_DIR", tmp_path / "cov")
+    monkeypatch.setattr(E, "_COV_STATS_PATH", tmp_path / "cov" / "stats.json")
+    E._COV_STATS.update(hits=3, disk_hits=1, misses=2)
+    a = E.persist_cov_cache_stats()
+    assert a["builds"] == 1 and a["hits"] == 3 and a["misses"] == 2
+    b = E.persist_cov_cache_stats()                          # 2e build : cumul
+    assert b["builds"] == 2 and b["hits"] == 6 and b["misses"] == 4
+    assert 0.0 <= b["hit_rate"] <= 1.0
+
+
+def test_auto_ttl_inverse_to_hit_rate(tmp_path, monkeypatch):
+    import json
+    monkeypatch.setattr(E, "_COV_DISK_DIR", tmp_path / "cov")
+    monkeypatch.setattr(E, "_COV_STATS_PATH", tmp_path / "cov" / "stats.json")
+    monkeypatch.delenv("QUANT_COV_TTL_DAYS", raising=False)
+    (tmp_path / "cov").mkdir()
+    # hit-rate élevé → TTL court (proche lo) ; hit-rate bas → TTL long (proche hi)
+    (tmp_path / "cov" / "stats.json").write_text(json.dumps({"hits": 90, "disk_hits": 0, "misses": 10}))
+    ttl_high = E.auto_ttl_days(lo=7, hi=45)
+    (tmp_path / "cov" / "stats.json").write_text(json.dumps({"hits": 10, "disk_hits": 0, "misses": 90}))
+    ttl_low = E.auto_ttl_days(lo=7, hi=45)
+    assert ttl_high < ttl_low and 7 <= ttl_high <= 45 and 7 <= ttl_low <= 45
+
+
+def test_auto_ttl_env_override(monkeypatch):
+    monkeypatch.setenv("QUANT_COV_TTL_DAYS", "21")
+    assert E.auto_ttl_days() == 21.0
+
+
 def test_purge_cov_disk_cache_removes_old(tmp_path, monkeypatch):
     import os
     import time
