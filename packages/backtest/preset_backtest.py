@@ -343,8 +343,8 @@ def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict |
     acmap = asset_classes or {}
     _fees_on = os.environ.get("QUANT_FEES", "1") != "0"
 
-    def _tc(sym: str, notional: float) -> float:          # coût RÉEL de l'exécution ($), minimum par ordre inclus
-        return broker_fee(acmap.get(sym, "equity"), notional) if _fees_on else 0.0
+    def _tc(sym: str, notional: float, side: str = "BUY") -> float:   # coût RÉEL de l'exécution ($)
+        return broker_fee(acmap.get(sym, "equity"), notional, side) if _fees_on else 0.0
 
     fees_paid = 0.0
     quality = quality or {}
@@ -405,7 +405,7 @@ def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict |
                         else:
                             sq = min(qsh, -d_val / cpx)
                             if sq > 1e-9:
-                                _fee = _tc(core_sym, sq * cpx); fees_paid += _fee
+                                _fee = _tc(core_sym, sq * cpx, "SELL"); fees_paid += _fee
                                 pnl = (cpx - qcost) * sq; realized += pnl; qsh, cash = qsh - sq, cash + sq * cpx - _fee
                                 trades.append({"date": dts[t], "symbol": core_sym, "side": "SELL", "qty": round(sq, 4),
                                                "price": round(cpx, 2), "notional": round(sq * cpx, 2), "avg_cost": round(qcost, 2),
@@ -435,7 +435,7 @@ def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict |
                             continue
                         pnl = (price - cost[s]) * sq
                         realized += pnl
-                        _fee = _tc(s, sq * price); fees_paid += _fee
+                        _fee = _tc(s, sq * price, "SELL"); fees_paid += _fee
                         shares[s], cash = shares[s] - sq, cash + sq * price - _fee
                         reason = ("sortie (hors univers / blackout)" if (nw[i] <= 1e-4 or shares[s] <= 1e-6)
                                   else "allègement (DD-target/risk-parity)")

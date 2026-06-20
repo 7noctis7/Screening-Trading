@@ -71,6 +71,14 @@ def test_broker_fee_scales_with_notional_above_min():
     assert broker_fee("crypto", 20000.0) > broker_fee("crypto", 10000.0)
 
 
+def test_alpaca_regulatory_fee_only_on_sell():
+    # Alpaca : 0 commission. La VENTE coûte plus que l'ACHAT (frais SEC/TAF réglementaires, ventes only).
+    buy = broker_fee("equity", 10000.0, "BUY")
+    sell = broker_fee("equity", 10000.0, "SELL")
+    assert sell > buy > 0                  # achat = slippage seul ; vente = slippage + réglementaire
+    assert buy == round(10000.0 * 5 / 1e4, 6)   # 5 bps de slippage
+
+
 def test_broker_assumptions_round_trip():
     rows = broker_assumptions()
     names = {r["broker"] for r in rows}
