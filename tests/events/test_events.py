@@ -22,6 +22,13 @@ def test_parse_fmp_earnings_handles_missing():
     assert out[0]["eps_estimate"] is None and out[0]["eps_actual"] is None
 
 
+def test_num_rejects_nan():
+    from packages.events.earnings import _num
+    assert _num(float("nan")) is None        # NaN pandas → None (pas de "réel" fantôme)
+    assert _num("") is None and _num(None) is None
+    assert _num("1.5") == 1.5 and _num(3) == 3.0
+
+
 def test_parse_yf_calendar():
     import datetime as _d
     cal = {"Earnings Date": [_d.date(2026, 7, 29)], "Earnings Average": 1.1, "Revenue Average": 5.0e9}
