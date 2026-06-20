@@ -218,7 +218,8 @@ export default function Dashboard() {
               <thead className="text-muted text-xs"><tr>
                 <Th k="date" label="Date" /><Th k="symbol" label="Actif" /><Th k="side" label="Sens" />
                 <Th k="qty" label="Qté" r /><Th k="price" label="Prix" r /><Th k="avg_cost" label="PRU" r />
-                <Th k="notional" label="Montant" r /><Th k="pnl" label="P&L" r /><Th k="pnl_pct" label="%" r />
+                <Th k="notional" label="Montant" r /><Th k="pnl" label="P&L réalisé" r /><Th k="pnl_pct" label="%" r />
+                <Th k="latent" label="P&L latent" r /><Th k="latent_pct" label="% lat." r />
                 <th className="text-left font-normal pl-3">Motif</th></tr></thead>
               <tbody>{sorted.map((t: any, i: number) => (
                 <tr key={i} className="border-t border-border">
@@ -230,6 +231,8 @@ export default function Dashboard() {
                   <td className="text-right">${dlt(t.notional)}</td>
                   <td className="text-right" style={{ color: t.pnl == null ? "#9aa1ad" : t.pnl >= 0 ? "#22c55e" : "#ef4444" }}>{t.pnl == null ? "—" : `$${dlt(t.pnl)}`}</td>
                   <td className="text-right" style={{ color: t.pnl_pct == null ? "#9aa1ad" : t.pnl_pct >= 0 ? "#22c55e" : "#ef4444" }}>{t.pnl_pct == null ? "—" : `${(t.pnl_pct * 100).toFixed(1)}%`}</td>
+                  <td className="text-right" style={{ color: t.latent == null ? "#9aa1ad" : t.latent >= 0 ? "#22c55e" : "#ef4444" }}>{t.latent == null ? "—" : `$${dlt(t.latent)}`}</td>
+                  <td className="text-right" style={{ color: t.latent_pct == null ? "#9aa1ad" : t.latent_pct >= 0 ? "#22c55e" : "#ef4444" }}>{t.latent_pct == null ? "—" : `${(t.latent_pct * 100).toFixed(1)}%`}</td>
                   <td className="pl-3 text-muted font-sans text-xs">{t.reason}</td>
                 </tr>))}</tbody>
             </table>
