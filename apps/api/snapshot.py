@@ -835,28 +835,75 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
     from packages.fundamentals.provider import degrade_prior
     from packages.fundamentals.scoring import altman_z, f_score, f_score_label, piotroski_full
 
-    prov, src = _fund_provider()
-    all_eq = [s for s in symbols if acmap.get(s) in ("equity", "etf")]
-    # cap : FMP free tier ≈40 ; yfinance réel mais lent ≈80 ; synthétique → tout l'univers
-    cap = 40 if src.startswith("FMP") else (80 if src.startswith("yfinance") else 2000)
-    capped = (src.startswith("FMP") or src.startswith("yfinance")) and len(all_eq) > cap
-    eq = all_eq[:cap]
-    if not eq:
-        return {"available": False}
+    import os as _osf
 
-    def _rows_for(provider, universe):
+    all_eq = [s for s in symbols if acmap.get(s) in ("equity", "etf")]
+    if not all_eq:
+        return {"available": False}
+    # SOURCES RÉELLES EN CHAÎNE, PAR ACTIF : yfinance → FMP (clé) → SEC EDGAR. On couvre TOUT
+    # l'univers actions (pas de plafond), en parallèle ; le synthétique n'est qu'un repli hors-ligne.
+    _mode = _osf.environ.get("QUANT_FUND", "").lower()
+    _providers: list = []
+    if _mode != "synthetic":
+        try:
+            from packages.common.net import online
+            _net = (_mode == "yf") or online()
+        except Exception:  # noqa: BLE001
+            _net = False
+        if _net:
+            try:
+                from packages.fundamentals.yfinance_provider import YFinanceFundamentalsProvider
+                _providers.append(("yfinance", YFinanceFundamentalsProvider()))
+            except Exception:  # noqa: BLE001
+                pass
+        if _osf.environ.get("FMP_API_KEY"):
+            try:
+                from packages.fundamentals.fmp_provider import FMPFundamentalsProvider
+                _providers.append(("FMP", FMPFundamentalsProvider()))
+            except Exception:  # noqa: BLE001
+                pass
+        if _net:
+            try:
+                from packages.fundamentals.sec_provider import SECFundamentalsProvider
+                _providers.append(("SEC", SECFundamentalsProvider()))
+            except Exception:  # noqa: BLE001
+                pass
+    cap = int(_osf.environ.get("QUANT_FUND_MAX", "1200"))   # large → couvre tout l'univers actions
+    eq = all_eq[:cap]
+    capped = len(all_eq) > cap
+    by_source: dict[str, int] = {}
+
+    def _chain_fetch(universe: list) -> dict:
+        """1re source RÉELLE qui répond pour chaque actif (yfinance → FMP → SEC), en parallèle."""
+        from concurrent.futures import ThreadPoolExecutor
+
+        def _one(s):
+            for label, p in _providers:
+                try:
+                    f = p.get(s)
+                except Exception:  # noqa: BLE001
+                    f = None
+                if f is not None:
+                    return s, label, f
+            return s, None, None
+        out: dict = {}
+        workers = max(4, min(16, int(_osf.environ.get("QUANT_FUND_WORKERS", "12"))))
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            for s, label, f in ex.map(_one, universe):
+                if f is not None:
+                    out[s] = f
+                    by_source[label] = by_source.get(label, 0) + 1
+        return out
+
+    def _rows_for(fin_by: dict, universe: list):
         out = []
         for s in universe:
-            try:
-                f = provider.get(s)
-            except Exception:  # noqa: BLE001
-                f = None
+            f = fin_by.get(s)
             if f is None:
                 continue
             mos = valuation.margin_of_safety(f)
-            try:                                      # exercice N-1 (Piotroski + croissances YoY)
-                prev = getattr(provider, "get_prior", None)
-                prev = prev(s) if callable(prev) else degrade_prior(f)
+            try:                                      # N-1 approximé (déterministe) → Piotroski + YoY
+                prev = degrade_prior(f)
                 fs = piotroski_full(f, prev)
             except Exception:  # noqa: BLE001
                 prev, fs = None, f_score(f)
@@ -884,30 +931,17 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
             })
         return out
 
-    rows = _rows_for(prov, eq)
-    # REPLI EN CASCADE — on privilégie TOUJOURS des sources RÉELLES avant le synthétique :
-    # FMP (free tier ~40, souvent vide sur les tickers étrangers .PA/.AS) → yfinance (réel, gratuit) → SEC.
-    if len(rows) < 5 and src.startswith("FMP"):
-        try:
-            from packages.fundamentals.yfinance_provider import YFinanceFundamentalsProvider
-            prov, src = YFinanceFundamentalsProvider(), "yfinance (réel, gratuit)"
-            cap = 80; capped = len(all_eq) > cap; eq = all_eq[:cap]
-            rows = _rows_for(prov, eq)
-        except Exception:  # noqa: BLE001
-            rows = []
-    if len(rows) < 5:                                # source SEC EDGAR (XBRL, gratuit) pour les actions US
-        try:
-            from packages.fundamentals.sec_provider import SECFundamentalsProvider
-            prov, src = SECFundamentalsProvider(), "SEC EDGAR (XBRL, gratuit)"
-            cap = 80; capped = len(all_eq) > cap; eq = all_eq[:cap]
-            rows = _rows_for(prov, eq)
-        except Exception:  # noqa: BLE001
-            pass
-    if len(rows) < 5:                                # dernier recours : synthétique (offline-safe)
+    rows = []
+    if _providers:
+        rows = _rows_for(_chain_fetch(eq), eq)
+        src = "réel multi-source : " + " → ".join(
+            f"{k} {v}" for k, v in sorted(by_source.items(), key=lambda kv: -kv[1])) if by_source else "réel"
+    if len(rows) < 5:                                # hors-ligne total → synthétique déterministe
         from packages.fundamentals.provider import SyntheticFundamentalsProvider
-        prov, src = SyntheticFundamentalsProvider(), "synthétique (repli — sources réelles indisponibles)"
-        eq, cap, capped = all_eq, len(all_eq), False
-        rows = _rows_for(prov, eq)
+        sp = SyntheticFundamentalsProvider()
+        eq, capped = all_eq, False
+        rows = _rows_for({s: sp.get(s) for s in eq}, eq)
+        src = "synthétique (repli — hors-ligne)"
     if not rows:
         return {"available": False}
 

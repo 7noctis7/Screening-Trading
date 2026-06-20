@@ -53,9 +53,12 @@ export default function Fundamentals() {
       </div>
       {f.capped && (
         <div className="card p-3 text-xs" style={{ borderColor: "color-mix(in srgb, var(--warn) 40%, transparent)" }}>
-          ⚠️ <b>{f.n}</b> titres analysés sur {f.total_equities} : la source <b>{f.source}</b> est limitée (FMP free tier ≈40, yfinance ≈80 car réel & plus lent).
-          Pour <b>tout l'univers</b> : retire <code className="mono">FMP_API_KEY</code>/<code className="mono">QUANT_FUND</code> du <code className="mono">.env</code> (mode synthétique de démo) — ou garde la source réelle sur ce sous-ensemble pertinent.
+          ⚠️ <b>{f.n}</b> titres analysés sur {f.total_equities} (plafond <code className="mono">QUANT_FUND_MAX</code>).
+          Augmente <code className="mono">QUANT_FUND_MAX</code> dans le <code className="mono">.env</code> pour couvrir davantage d'actifs.
         </div>
+      )}
+      {!f.capped && String(f.source ?? "").startsWith("réel") && (
+        <p className="text-muted2 text-xs">✓ {f.n}/{f.total_equities} titres en données <b>réelles</b>, multi-source par actif (yfinance → FMP → SEC EDGAR). Les actifs sans aucune source réelle sont omis.</p>
       )}
       <p className="text-muted text-xs">{f.method} · Seuls les <b>actions/ETF</b> ont des fondamentaux (crypto/forex/commodités exclus). <b>Clique un en-tête de colonne pour trier</b> (▲/▼), filtre, exporte en CSV.</p>
       <section className="card p-4">
