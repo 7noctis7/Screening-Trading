@@ -47,3 +47,10 @@ logs/
 /.cache/
 
 /models/
+
+# Coffre Obsidian — notes AUTO-générées (journal/attribution/post-mortems/assets) : artefacts runtime
+vault/03_Journal/
+vault/04_Post_Mortem/
+vault/05_Regimes/
+vault/_assets/
+vault/Preset_Performance.md

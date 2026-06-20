@@ -20,4 +20,5 @@ python scripts/ingest_prices.py --daily            # backfill incrémental idemp
 python scripts/train_model.py || true               # ré-entraîne le modèle ML (serving découplé)
 python apps/web/preview/build_interactive.py        # régénère le terminal autonome
 python scripts/mcp_populate_overlays.py --offline || true   # cônes VaR/EVT + blackouts → charts (best-effort)
+python -m packages.reporting.obsidian || true               # coffre Obsidian : journal + attribution + post-mortems
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] maj quotidienne — OK"
