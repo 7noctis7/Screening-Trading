@@ -885,10 +885,28 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
         return out
 
     rows = _rows_for(prov, eq)
-    if len(rows) < 5 and src.startswith("FMP"):     # clé FMP absente/invalide → repli synthétique
+    # REPLI EN CASCADE — on privilégie TOUJOURS des sources RÉELLES avant le synthétique :
+    # FMP (free tier ~40, souvent vide sur les tickers étrangers .PA/.AS) → yfinance (réel, gratuit) → SEC.
+    if len(rows) < 5 and src.startswith("FMP"):
+        try:
+            from packages.fundamentals.yfinance_provider import YFinanceFundamentalsProvider
+            prov, src = YFinanceFundamentalsProvider(), "yfinance (réel, gratuit)"
+            cap = 80; capped = len(all_eq) > cap; eq = all_eq[:cap]
+            rows = _rows_for(prov, eq)
+        except Exception:  # noqa: BLE001
+            rows = []
+    if len(rows) < 5:                                # source SEC EDGAR (XBRL, gratuit) pour les actions US
+        try:
+            from packages.fundamentals.sec_provider import SECFundamentalsProvider
+            prov, src = SECFundamentalsProvider(), "SEC EDGAR (XBRL, gratuit)"
+            cap = 80; capped = len(all_eq) > cap; eq = all_eq[:cap]
+            rows = _rows_for(prov, eq)
+        except Exception:  # noqa: BLE001
+            pass
+    if len(rows) < 5:                                # dernier recours : synthétique (offline-safe)
         from packages.fundamentals.provider import SyntheticFundamentalsProvider
-        prov, src = SyntheticFundamentalsProvider(), "synthétique (repli FMP)"
-        eq, cap, capped = all_eq, len(all_eq), False   # repli → TOUT l'univers (plus de plafond 40)
+        prov, src = SyntheticFundamentalsProvider(), "synthétique (repli — sources réelles indisponibles)"
+        eq, cap, capped = all_eq, len(all_eq), False
         rows = _rows_for(prov, eq)
     if not rows:
         return {"available": False}
@@ -1962,6 +1980,7 @@ def build_snapshot(seed: int = 7) -> dict:
         "index_core_curves": _ic_curves,           # courbes preset/QQQ/megacap → sweeps instantanés
         "universe": _universe_section(full_universe),
         "data": {**_data_section(data, acmap, len(full_universe), data_mode),
+                 "fundamentals_provider": fundamentals_sec.get("source", "—"),   # source RÉELLE utilisée (runtime)
                  **({"survivorship": data_sec_extra} if data_sec_extra else {})},
         "themes": themes,
         "ml": ml,
