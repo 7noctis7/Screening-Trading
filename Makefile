@@ -1,4 +1,4 @@
-.PHONY: install setup test lint demos api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core index-core-stress index-core-regime crypto-core ingest-crypto ingest-mktcap preset-report calibrate-preset screen-niche list-db live live-go clean
+.PHONY: install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core index-core-stress index-core-regime crypto-core ingest-crypto ingest-mktcap preset-report calibrate-preset screen-niche list-db live live-go clean
 PYTHON ?= python3      ## sur macOS c'est python3 (surchargeable : make api PYTHON=python)
 install:          ## installe les dépendances (uv)
 	uv venv && uv pip install -e ".[dev,data,quant,api,ml]"
@@ -14,6 +14,10 @@ demos:            ## exécute les démos offline
 	$(PYTHON) scripts/demo_paper_loop.py && $(PYTHON) scripts/demo_alerts.py && $(PYTHON) scripts/demo_ops.py
 preview:          ## régénère les aperçus HTML du dashboard/portefeuille
 	$(PYTHON) apps/web/preview/build_preview.py
+start:            ## TOUT EN UNE COMMANDE : maj code + kill vieux process + API (fond) + site
+	bash scripts/start.sh
+stop:             ## arrête l'API et le site (uvicorn + next dev)
+	@pkill -f "uvicorn apps.api.main" 2>/dev/null; lsof -ti:8000 2>/dev/null | xargs kill -9 2>/dev/null; lsof -ti:3000 2>/dev/null | xargs kill -9 2>/dev/null; echo "arrêté"
 api:              ## lance l'API FastAPI (localhost) — STABLE, sans reload (évite l'OOM pendant make daily)
 	$(PYTHON) -m uvicorn apps.api.main:app
 api-dev:          ## API avec reload du CODE seulement (apps/packages) — ne surveille PAS data/ (dev)
