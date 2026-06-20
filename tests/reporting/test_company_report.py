@@ -101,6 +101,24 @@ def test_charts_have_numeric_axes():
     assert 'text-anchor="end"' in html and "$" in html           # labels d'axe Y chiffrés
 
 
+def test_theme_light_and_dark():
+    r = build_company_report(_fin(), name="NVIDIA")
+    dark = company_report_html(r, theme="dark")
+    light = company_report_html(r, theme="light")
+    assert "#0b0d10" in dark and "background:#0b0d10" in dark        # fond sombre
+    assert "background:#ffffff" in light                             # fond clair
+    assert dark != light
+
+
+def test_more_content_multiples_and_findata():
+    hist = [{"year": y, "revenue": 1e10 * (y - 2019), "net_income": 2e9 * (y - 2019), "eps": y - 2019}
+            for y in range(2020, 2025)]
+    r = build_company_report(_fin(), name="NVIDIA", financial_history=hist)
+    html = company_report_html(r)
+    assert "Multiples : P/E" in html                                 # multiples toujours affichés
+    assert "Données financières" in html and "Marge nette" in html   # tableau chiffré par exercice
+
+
 def test_memo_present_and_rendered():
     r = build_company_report(_fin(), name="NVIDIA", beta=1.5)
     assert r["memo"] and "NVIDIA" in r["memo"] and r["memo_source"] == "synthèse (règles)"

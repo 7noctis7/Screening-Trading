@@ -207,7 +207,22 @@ def _findings_html(audit: dict) -> str:
             f'{body}')
 
 
-def company_report_html(r: dict[str, Any]) -> str:
+def _apply_theme(html: str, theme: str) -> str:
+    """Bascule la palette sombre→claire par remplacement de tokens (sans mutation globale, thread-safe)."""
+    if theme != "light":
+        return html
+    tmp = [("#0b0d10", "@BG@"), ("#14171b", "@CARD@"), ("#1a1e24", "@CARD2@"),
+           ("#262b33", "@BORDER@"), ("#e8eaed", "@FG@"), ("#9aa1ab", "@MUTED@")]
+    for a, t in tmp:
+        html = html.replace(a, t)
+    light = {"@BG@": "#ffffff", "@CARD@": "#f7f8fa", "@CARD2@": "#eef2f6",
+             "@BORDER@": "#e3e7ec", "@FG@": "#0b0d10", "@MUTED@": "#5b6470"}
+    for t, c in light.items():
+        html = html.replace(t, c)
+    return html
+
+
+def company_report_html(r: dict[str, Any], theme: str = "dark") -> str:
     idy, sc, ver, dam, ql = r["identity"], r["score"], r["vernimmen"], r["damodaran"], r["quality"]
     audit = r["audit"]
     g = sc["global"]
@@ -287,6 +302,15 @@ def company_report_html(r: dict[str, Any]) -> str:
              _C["pos"] if (mos or 0) > 0 else _C["neg"]),
             ("Croiss. implicite (cours)", _pct(dam.get("implied_growth_in_price")), _C["fg"]),
         ])
+        # multiples de valorisation (toujours affichés quand fiables)
+        mu = dam.get("multiples", {})
+        dam_kv += (f'<div style="margin-top:12px;font-size:12px;color:{_C["muted"]}">Multiples : '
+                   f'P/E <b style="color:{_C["fg"]}">{_num(mu.get("pe"),1)}</b> · '
+                   f'EV/EBITDA <b style="color:{_C["fg"]}">{_num(mu.get("ev_ebitda"),1)}</b> · '
+                   f'EV/Sales <b style="color:{_C["fg"]}">{_num(mu.get("ev_sales"),1)}</b> · '
+                   f'P/B <b style="color:{_C["fg"]}">{_num(mu.get("price_to_book"),1)}</b> · '
+                   f'rdt FCF <b style="color:{_C["fg"]}">{_pct(mu.get("fcf_yield"))}</b> · '
+                   f'rdt bénéf. <b style="color:{_C["fg"]}">{_pct(mu.get("earnings_yield"))}</b></div>')
     # multiples vs secteur
     mvs = dam.get("multiples_vs_sector", {})
     if mvs and reliable:
@@ -400,6 +424,25 @@ def company_report_html(r: dict[str, Any]) -> str:
     if inner:
         charts_card = _card("Graphiques", inner)
 
+    # Données financières — tableau chiffré par exercice (fort impact)
+    findata_card = ""
+    if len(hist) >= 2:
+        rows = ""
+        for x in hist:
+            rev = x.get("revenue"); ni = x.get("net_income"); eps = x.get("eps")
+            nm = (ni / rev) if (rev and ni is not None and rev != 0) else None
+            rows += (f'<tr style="border-top:1px solid {_C["border"]}">'
+                     f'<td style="padding:4px 0">{x.get("year","—")}</td>'
+                     f'<td style="text-align:right">{_money(rev)}</td>'
+                     f'<td style="text-align:right">{_money(ni)}</td>'
+                     f'<td style="text-align:right;color:{_C["muted"]}">{_num(eps) if eps is not None else "—"}</td>'
+                     f'<td style="text-align:right;color:{(_C["pos"] if (nm or 0)>=0 else _C["neg"])}">{_pct(nm) if nm is not None else "—"}</td></tr>')
+        findata_card = _card("Données financières (par exercice)",
+            f'<table style="width:100%;font-size:12px"><thead><tr style="color:{_C["muted"]};font-size:11px">'
+            f'<th style="text-align:left">Exercice</th><th style="text-align:right">CA</th>'
+            f'<th style="text-align:right">Résultat net</th><th style="text-align:right">BPA</th>'
+            f'<th style="text-align:right">Marge nette</th></tr></thead><tbody>{rows}</tbody></table>')
+
     # Macro & régime (top-down)
     macro_card = ""
     mc = r.get("macro")
@@ -411,7 +454,7 @@ def company_report_html(r: dict[str, Any]) -> str:
             ("Taux 10 ans", _pct(mc.get("rate_10y")) if mc.get("rate_10y") is not None else "—", _C["fg"]),
         ]))
 
-    return f"""<!doctype html><html lang="fr"><head><meta charset="utf-8">
+    _html = f"""<!doctype html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Note d'analyse — {idy['name']} ({idy['symbol']})</title>
 <style>@media print{{body{{background:#fff!important;color:#000!important}}}}</style></head>
@@ -427,6 +470,7 @@ Note d'analyse fondamentale · {r['as_of']}</div>
   f'Synthèse · {r.get("memo_source","")}</span><div style="margin-top:4px">{r["memo"]}</div></div>')
   if r.get("memo") else ""}
 {charts_card}
+{findata_card}
 {_card("Audit d'intégrité des données", _findings_html(audit))}
 {_card("Analyse économique (Vernimmen)", vern)}
 {_card("Valorisation (Damodaran)", dam_kv)}
@@ -442,15 +486,16 @@ Sources gratuites (Yahoo Finance / FMP / SEC EDGAR — 10-K, 10-Q) + recalculs i
 Cadre Vernimmen (rentabilité économique) & A. Damodaran (coût du capital, DCF). Ce document est
 une aide à la décision, pas un conseil en investissement.</p>
 </div></body></html>"""
+    return _apply_theme(_html, theme)
 
 
-def company_report_pdf(r: dict[str, Any], out_path: str | Path) -> Path | None:
+def company_report_pdf(r: dict[str, Any], out_path: str | Path, theme: str = "dark") -> Path | None:
     """PDF FIDÈLE à la note HTML complète (toutes sections, graphes, gate de valorisation) via
     weasyprint si présent. Repli reportlab (résumé respectant la gate) sinon ; ou écriture du HTML
-    imprimable si aucune lib. Best-effort : ne lève jamais."""
+    imprimable si aucune lib. `theme` : dark | light. Best-effort : ne lève jamais."""
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
-    html = company_report_html(r)
+    html = company_report_html(r, theme=theme)
     # 1) weasyprint : rend l'INTÉGRALITÉ du HTML en PDF (identique à l'écran)
     try:
         from weasyprint import HTML
@@ -458,7 +503,7 @@ def company_report_pdf(r: dict[str, Any], out_path: str | Path) -> Path | None:
         return out
     except Exception:  # noqa: BLE001 — weasyprint absent/échec → repli reportlab
         pass
-    # 2) reportlab : résumé complet RESPECTANT la gate (jamais de chiffre masqué)
+    # 2) reportlab : note COMPLÈTE (graphes inclus) respectant la gate
     try:
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.units import cm
@@ -466,56 +511,173 @@ def company_report_pdf(r: dict[str, Any], out_path: str | Path) -> Path | None:
     except Exception:  # noqa: BLE001 — aucune lib PDF → HTML imprimable
         out.with_suffix(".html").write_text(html, encoding="utf-8")
         return None
+    _reportlab_pdf(r, str(out), A4, cm, canvas)
+    return out
+
+
+def _reportlab_pdf(r: dict, path: str, A4, cm, canvas) -> None:
+    """Note complète en reportlab : en-tête, scores, mémo, graphes (cours/drawdown/CA), Vernimmen,
+    Damodaran (gate-aware), positionnement secteur, qualité, technique, macro, résultats, verdict."""
     idy, sc, ver, dam = r["identity"], r["score"], r["vernimmen"], r["damodaran"]
     dcf = dam.get("dcf", {}); reliable = dcf.get("reliable", True)
-    c = canvas.Canvas(str(out), pagesize=A4)
+    c = canvas.Canvas(path, pagesize=A4)
     w, h = A4
-    y = h - 2 * cm
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(2 * cm, y, f"Note d'analyse — {idy['name']} ({idy['symbol']})")
-    c.setFont("Helvetica", 10); y -= 0.7 * cm
-    c.drawString(2 * cm, y, f"{idy['sector']} · score {sc['global']}/100 · {sc['recommendation']} "
-                            f"(fond {sc.get('fundamental')} · tech {sc.get('technical')} · ml {sc.get('ml')})")
+    ML = 2 * cm
+    st = {"y": h - 1.8 * cm}
+
+    def nl(dy=0.62 * cm):
+        st["y"] -= dy
+        if st["y"] < 2.2 * cm:
+            c.setFont("Helvetica-Oblique", 7.5)
+            c.drawString(ML, 1.3 * cm, "Sources gratuites · Vernimmen & Damodaran · aide à la décision, pas un conseil.")
+            c.showPage(); st["y"] = h - 1.8 * cm
+
+    def head(t):
+        nl(0.5 * cm); c.setFont("Helvetica-Bold", 11); c.setFillGray(0.1)
+        c.drawString(ML, st["y"], t); nl(0.15 * cm)
+        c.setStrokeGray(0.8); c.line(ML, st["y"], w - ML, st["y"]); nl(0.35 * cm)
+
+    def kv(k, v):
+        c.setFont("Helvetica", 10); c.setFillGray(0.3); c.drawString(ML, st["y"], str(k))
+        c.setFillGray(0.0); c.drawRightString(w - ML, st["y"], str(v)); nl()
+
+    def para(text, font="Helvetica", size=9.5, wid=108):
+        c.setFont(font, size); c.setFillGray(0.2)
+        for ln in _wrap(text, wid):
+            c.drawString(ML, st["y"], ln); nl(0.46 * cm)
+
+    # en-tête + scores
+    c.setFont("Helvetica-Bold", 17); c.setFillGray(0.0)
+    c.drawString(ML, st["y"], f"{idy['name']} ({idy['symbol']})"); nl(0.6 * cm)
+    c.setFont("Helvetica", 10); c.setFillGray(0.3)
+    c.drawString(ML, st["y"], f"{idy['sector']} · {_money(idy.get('market_cap'))} de capi · cours ${_num(idy.get('price'))}"); nl()
+    c.setFont("Helvetica-Bold", 12); c.setFillGray(0.0)
+    c.drawString(ML, st["y"], f"{sc['recommendation']} · {sc['global']}/100   "
+                              f"(fondamental {sc.get('fundamental')} · technique {sc.get('technical')} · ML {sc.get('ml')})"); nl()
     if r.get("memo"):
-        c.setFont("Helvetica-Oblique", 9); y -= 0.8 * cm
-        for ln in _wrap(r["memo"], 110):
-            c.drawString(2 * cm, y, ln); y -= 0.45 * cm
-    dcf_line = ("masquée (devise ≠ cours, ADR)" if not reliable else
-                f"${_num(dcf.get('scenarios',{}).get('base'))} / "
-                f"{_pct(dcf.get('margin_of_safety')) if dcf.get('margin_of_safety') is not None else '—'}")
-    lines = [
-        ("ROCE après impôt", _pct(ver.get("roce_after_tax"))),
-        ("WACC", _pct(ver.get("wacc"))),
-        ("Spread ROCE-WACC", _pct(ver.get("value_creation_spread")) if ver.get("value_creation_spread") is not None else "—"),
-        ("EVA (profit économique)", _money(ver.get("eva"))),
-        ("Marge nette / brute", f"{_pct(ver.get('margins',{}).get('net'))} / {_pct(ver.get('margins',{}).get('gross'))}"),
-        ("DCF base / marge de sécurité", dcf_line),
-        ("Piotroski / Altman Z", f"{r['quality']['piotroski_f_score']}/9 · {r['quality']['altman_z'].get('z')}"),
-    ]
-    sc_cmp = r.get("sector_comparison") or {}
-    if sc_cmp.get("available"):
-        lines.append(("Vs secteur", f"{sc_cmp.get('favorable')}/{sc_cmp.get('total')} favorables"))
+        nl(0.1 * cm); para(r["memo"], "Helvetica-Oblique", 9.5)
+
+    # graphes
+    ch = r.get("charts") or {}
+    closes = ch.get("price") or []
+    if len(closes) >= 20:
+        head("Graphiques")
+        _rl_line(c, closes, ML, st["y"] - 3.6 * cm, w - 2 * ML, 3.4 * cm, "Cours ($)", cm)
+        nl(4.0 * cm)
+        hist = ch.get("financial_history") or []
+        if len(hist) >= 2:
+            _rl_bars(c, hist, "revenue", ML, st["y"] - 3.2 * cm, w - 2 * ML, 3.0 * cm,
+                     f"Chiffre d'affaires ({ch.get('history_years', len(hist))} ex.)", cm)
+            nl(3.6 * cm)
+
+    # Vernimmen
+    head("Analyse économique (Vernimmen)")
+    kv("ROCE après impôt", _pct(ver.get("roce_after_tax")))
+    kv("WACC", _pct(ver.get("wacc")))
+    sp = ver.get("value_creation_spread")
+    kv("Spread ROCE−WACC", _pct(sp) if sp is not None else "—")
+    kv("EVA (profit économique)", _money(ver.get("eva")))
+    m = ver.get("margins", {})
+    kv("Marges brute / EBIT / nette", f"{_pct(m.get('gross'))} / {_pct(m.get('ebit'))} / {_pct(m.get('net'))}")
+    kv("Gearing · Dette nette/EBITDA", f"{_num(ver.get('gearing'))} · {_num(ver.get('net_debt_ebitda'),1)}×")
+
+    # Damodaran (gate-aware)
+    head("Valorisation (Damodaran)")
+    if not reliable:
+        para("Valorisation masquée : comptes en devise différente du cours (titre type ADR). "
+             "DCF & multiples non fiables — affichage volontairement supprimé.", "Helvetica-Oblique", 9)
+        kv("Coût des FP (MEDAF) · WACC · bêta",
+           f"{_pct(dam.get('cost_of_equity'))} · {_pct(dam.get('wacc'))} · {_num(dam.get('beta'))}")
+    else:
+        scen = dcf.get("scenarios", {})
+        kv("DCF bear / base / bull", f"${_num(scen.get('bear'))} / ${_num(scen.get('base'))} / ${_num(scen.get('bull'))}")
+        mos = dcf.get("margin_of_safety")
+        kv("Marge de sécurité", _pct(mos) if mos is not None else "—")
+        kv("Croissance implicite (cours)", _pct(dam.get("implied_growth_in_price")))
+        kv("Coût des FP · bêta", f"{_pct(dam.get('cost_of_equity'))} · {_num(dam.get('beta'))}")
+
+    # positionnement secteur
+    scmp = r.get("sector_comparison") or {}
+    if scmp.get("available"):
+        head(f"Positionnement sectoriel ({scmp.get('favorable')}/{scmp.get('total')} favorables · {scmp.get('n_peers')} pairs)")
+        for x in scmp.get("rows", []):
+            isr = x["metric"] in ("net_margin", "roe", "roic", "gross_margin", "revenue_growth")
+            cv = _pct(x["company"]) if isr else _num(x["company"])
+            mv = _pct(x["sector_median"]) if isr else _num(x["sector_median"])
+            kv(x["label"], f"{cv}  (méd. {mv})  {int(x['percentile']*100)}e  {x['verdict']}")
+
+    # qualité
+    head("Qualité & solidité")
+    ql = r["quality"]; z = ql.get("altman_z", {}); inv = ql.get("investor_scores", {})
+    kv("Piotroski F-score", f"{ql.get('piotroski_f_score')}/9 ({ql.get('piotroski_label')})")
+    kv("Altman Z", f"{z.get('z')} ({z.get('zone')})" if z.get("z") is not None else "N/A")
+    kv("Graham / Fisher / Thiel", f"{inv.get('graham')} / {inv.get('fisher')} / {inv.get('thiel')}")
+
+    # technique
+    t = r.get("technical")
+    if t:
+        head("Analyse technique")
+        kv("Tendance · RSI · MACD", f"{t.get('trend','—')} · {_num(t.get('rsi'),0)} · {t.get('macd_signal','—')}")
+        kv("vs MM50 / MM200", f"{_pct(t.get('vs_sma50'))} / {_pct(t.get('vs_sma200'))}")
+        kv("Plage 52 sem.", f"${_num(t.get('low_52w'),0)} – ${_num(t.get('high_52w'),0)}")
+
+    # macro + résultats
+    mc = r.get("macro")
+    if mc:
+        head("Contexte macroéconomique")
+        kv("Régime · VIX", f"{mc.get('regime','—')} · {_num(mc.get('vix'),1)}")
     e = r.get("earnings")
     if e:
-        lines.append(("Prochain résultat · BPA est.", f"{e.get('next_date','—')} · {_num(e.get('eps_estimate'))}"))
-    c.setFont("Helvetica", 11); y -= 0.8 * cm
-    for k, val in lines:
-        c.drawString(2 * cm, y, str(k)); c.drawRightString(w - 2 * cm, y, str(val)); y -= 0.7 * cm
+        head("Résultats & estimations")
+        kv("Prochain résultat", e.get("next_date") or "—")
+        kv("BPA estimé / annoncé", f"{_num(e.get('eps_estimate'))} / {_num(e.get('eps_actual')) if e.get('eps_actual') is not None else '—'}")
+        kv("Revenu estimé / annoncé", f"{_money(e.get('revenue_estimate'))} / {_money(e.get('revenue_actual')) if e.get('revenue_actual') is not None else '—'}")
+
+    # verdict
     v = r.get("verdict", {})
     if v.get("strengths") or v.get("watch"):
-        c.setFont("Helvetica-Bold", 10); y -= 0.3 * cm
-        c.drawString(2 * cm, y, "Points clés"); y -= 0.5 * cm
-        c.setFont("Helvetica", 9)
-        for s in v.get("strengths", [])[:3]:
-            for ln in _wrap("+ " + s, 110):
-                c.drawString(2 * cm, y, ln); y -= 0.42 * cm
-        for s in v.get("watch", [])[:3]:
-            for ln in _wrap("- " + s, 110):
-                c.drawString(2 * cm, y, ln); y -= 0.42 * cm
-    c.setFont("Helvetica-Oblique", 8)
-    c.drawString(2 * cm, 1.5 * cm, "Sources gratuites · Vernimmen & Damodaran · aide à la décision, pas un conseil.")
+        head("Verdict")
+        for s in v.get("strengths", [])[:4]:
+            para("+ " + s, "Helvetica", 9)
+        for s in v.get("watch", [])[:4]:
+            para("- " + s, "Helvetica", 9)
+    c.setFont("Helvetica-Oblique", 7.5); c.setFillGray(0.4)
+    c.drawString(ML, 1.3 * cm, "Sources gratuites · Vernimmen & Damodaran · aide à la décision, pas un conseil.")
     c.showPage(); c.save()
-    return out
+
+
+def _rl_line(c, vals, x, y, w, h, title, cm) -> None:
+    """Courbe (cours) reportlab avec axes Y ($) et bornes."""
+    lo, hi = min(vals), max(vals)
+    rng = (hi - lo) or 1.0
+    c.setFont("Helvetica", 8); c.setFillGray(0.4); c.drawString(x, y + h + 4, title)
+    c.setStrokeGray(0.85)
+    for k in range(4):
+        yy = y + h * k / 3
+        c.line(x + 1.1 * cm, yy, x + w, yy)
+        c.setFillGray(0.5); c.setFont("Helvetica", 7)
+        c.drawRightString(x + 1.0 * cm, yy - 2, f"${_num(lo + rng * k / 3, 0)}")
+    n = len(vals)
+    pts = [(x + 1.1 * cm + i * (w - 1.1 * cm) / (n - 1), y + (v - lo) / rng * h) for i, v in enumerate(vals)]
+    c.setStrokeColorRGB(0.13, 0.59, 0.95); c.setLineWidth(1.1)
+    for a, b in zip(pts[:-1], pts[1:]):
+        c.line(a[0], a[1], b[0], b[1])
+    c.setStrokeGray(0.85); c.setLineWidth(1)
+
+
+def _rl_bars(c, hist, key, x, y, w, h, title, cm) -> None:
+    """Barres annuelles (CA) reportlab avec valeur au-dessus + année."""
+    vals = [float(d.get(key) or 0) for d in hist]
+    hi = max(vals + [0.0]) or 1.0
+    c.setFont("Helvetica", 8); c.setFillGray(0.4); c.drawString(x, y + h + 4, title)
+    n = len(vals); gap = (w - 1.1 * cm) / n; bw = gap * 0.6
+    for i, (d, v) in enumerate(zip(hist, vals)):
+        bh = (v / hi) * h if hi else 0
+        bx = x + 1.1 * cm + i * gap + (gap - bw) / 2
+        c.setFillColorRGB(0.13, 0.59, 0.95); c.rect(bx, y, bw, max(1, bh), fill=1, stroke=0)
+        c.setFillGray(0.2); c.setFont("Helvetica", 7)
+        c.drawCentredString(bx + bw / 2, y + bh + 2, _money_axis(v))
+        c.setFillGray(0.5); c.drawCentredString(bx + bw / 2, y - 9, str(d.get("year", "")))
 
 
 def _wrap(text: str, width: int) -> list[str]:

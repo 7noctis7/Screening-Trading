@@ -304,22 +304,23 @@ def _valuation_plausible(f: Financials, mult: dict, val_scen: dict) -> tuple[boo
     """Garde-fou PwC : détecte une valorisation INCOHÉRENTE (typiquement ADR dont les comptes sont en
     devise locale alors que le cours est en USD → P/E ≪ 1, EV/EBITDA ≈ 0, DCF ≫ cours). Renvoie
     (fiable, raisons). Les ratios purement comptables (marges, ROCE) restent valides."""
+    # On ne flague QUE la signature « comptes en plus grosse devise » : grandeurs comptables TROP
+    # GRANDES vs le cours → P/E ≪ 1, EV/EBITDA ≈ 0, P/S extrême, DCF ≫ cours. Un P/E ÉLEVÉ (société
+    # à faibles marges / turnaround) est légitime et ne doit PAS être confondu avec une devise mixte.
     reasons: list[str] = []
     mcap = f.price * f.shares
     pe = mult.get("pe")
     ev_eb = mult.get("ev_ebitda")
     ps = (mcap / f.revenue) if f.revenue > 0 else None
     base = (val_scen.get("scenarios") or {}).get("base")
-    if pe is not None and 0 < pe < 3:
+    if pe is not None and 0 < pe < 2:
         reasons.append(f"P/E implausible ({pe}) — devise des comptes ≠ devise du cours (ADR ?)")
-    if pe is not None and pe > 600:
-        reasons.append(f"P/E implausible ({pe})")
     if ev_eb is not None and 0 < ev_eb < 1:
         reasons.append(f"EV/EBITDA implausible ({ev_eb}) — incohérence d'unités/devise")
-    if ps is not None and (ps < 0.05 or ps > 80):
+    if ps is not None and (ps < 0.03 or ps > 100):
         reasons.append(f"P/S implausible ({ps:.2f}) — incohérence d'unités/devise")
-    if base and f.price and (base / f.price) > 8:
-        reasons.append(f"DCF ({base:.0f}) ≫ cours ({f.price:.0f}) — valorisation masquée (unités/devise)")
+    if base and f.price and (base / f.price) > 10:
+        reasons.append(f"DCF ({base:.0f}) ≫ cours ({f.price:.0f}) — valorisation peu fiable")
     return (len(reasons) == 0), reasons
 
 
