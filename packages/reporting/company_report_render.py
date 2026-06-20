@@ -427,7 +427,7 @@ Note d'analyse fondamentale · {r['as_of']}</div>
   f'Synthèse · {r.get("memo_source","")}</span><div style="margin-top:4px">{r["memo"]}</div></div>')
   if r.get("memo") else ""}
 {charts_card}
-{_card("Audit d'intégrité des données (PwC)", _findings_html(audit))}
+{_card("Audit d'intégrité des données", _findings_html(audit))}
 {_card("Analyse économique (Vernimmen)", vern)}
 {_card("Valorisation (Damodaran)", dam_kv)}
 {sector_card}
@@ -438,50 +438,96 @@ Note d'analyse fondamentale · {r['as_of']}</div>
 {_card("Synthèse — piliers de notation", pillars)}
 {_card("Verdict", verdict)}
 <p style="font-size:10px;color:{_C['muted']};margin-top:18px">
-Sources gratuites (Yahoo Finance / FMP / SEC EDGAR — 10-K, 10-Q) + recalculs internes audités.
+Sources gratuites (Yahoo Finance / FMP / SEC EDGAR — 10-K, 10-Q) + recalculs internes contrôlés.
 Cadre Vernimmen (rentabilité économique) & A. Damodaran (coût du capital, DCF). Ce document est
 une aide à la décision, pas un conseil en investissement.</p>
 </div></body></html>"""
 
 
 def company_report_pdf(r: dict[str, Any], out_path: str | Path) -> Path | None:
-    """PDF via reportlab si présent ; sinon écrit le HTML (imprimable) et renvoie None pour le PDF.
-    Best-effort : ne lève jamais pour ne pas casser un pipeline."""
+    """PDF FIDÈLE à la note HTML complète (toutes sections, graphes, gate de valorisation) via
+    weasyprint si présent. Repli reportlab (résumé respectant la gate) sinon ; ou écriture du HTML
+    imprimable si aucune lib. Best-effort : ne lève jamais."""
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
+    html = company_report_html(r)
+    # 1) weasyprint : rend l'INTÉGRALITÉ du HTML en PDF (identique à l'écran)
+    try:
+        from weasyprint import HTML
+        HTML(string=html).write_pdf(str(out))
+        return out
+    except Exception:  # noqa: BLE001 — weasyprint absent/échec → repli reportlab
+        pass
+    # 2) reportlab : résumé complet RESPECTANT la gate (jamais de chiffre masqué)
     try:
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.units import cm
         from reportlab.pdfgen import canvas
-    except Exception:  # noqa: BLE001 — pas de reportlab → repli HTML
-        html_path = out.with_suffix(".html")
-        html_path.write_text(company_report_html(r), encoding="utf-8")
+    except Exception:  # noqa: BLE001 — aucune lib PDF → HTML imprimable
+        out.with_suffix(".html").write_text(html, encoding="utf-8")
         return None
     idy, sc, ver, dam = r["identity"], r["score"], r["vernimmen"], r["damodaran"]
+    dcf = dam.get("dcf", {}); reliable = dcf.get("reliable", True)
     c = canvas.Canvas(str(out), pagesize=A4)
     w, h = A4
     y = h - 2 * cm
     c.setFont("Helvetica-Bold", 16)
     c.drawString(2 * cm, y, f"Note d'analyse — {idy['name']} ({idy['symbol']})")
     c.setFont("Helvetica", 10); y -= 0.7 * cm
-    c.drawString(2 * cm, y, f"{idy['sector']} · score {sc['global']}/100 · {sc['recommendation']}")
+    c.drawString(2 * cm, y, f"{idy['sector']} · score {sc['global']}/100 · {sc['recommendation']} "
+                            f"(fond {sc.get('fundamental')} · tech {sc.get('technical')} · ml {sc.get('ml')})")
+    if r.get("memo"):
+        c.setFont("Helvetica-Oblique", 9); y -= 0.8 * cm
+        for ln in _wrap(r["memo"], 110):
+            c.drawString(2 * cm, y, ln); y -= 0.45 * cm
+    dcf_line = ("masquée (devise ≠ cours, ADR)" if not reliable else
+                f"${_num(dcf.get('scenarios',{}).get('base'))} / "
+                f"{_pct(dcf.get('margin_of_safety')) if dcf.get('margin_of_safety') is not None else '—'}")
     lines = [
         ("ROCE après impôt", _pct(ver.get("roce_after_tax"))),
         ("WACC", _pct(ver.get("wacc"))),
         ("Spread ROCE-WACC", _pct(ver.get("value_creation_spread")) if ver.get("value_creation_spread") is not None else "—"),
-        ("EVA", _money(ver.get("eva"))),
-        ("DCF base / marge de sécurité", f"${_num(dam['dcf'].get('scenarios',{}).get('base'))} / "
-         f"{_pct(dam['dcf'].get('margin_of_safety')) if dam['dcf'].get('margin_of_safety') is not None else '—'}"),
-        ("Piotroski / Altman Z", f"{r['quality']['piotroski_f_score']}/9 · "
-         f"{r['quality']['altman_z'].get('z')}"),
+        ("EVA (profit économique)", _money(ver.get("eva"))),
+        ("Marge nette / brute", f"{_pct(ver.get('margins',{}).get('net'))} / {_pct(ver.get('margins',{}).get('gross'))}"),
+        ("DCF base / marge de sécurité", dcf_line),
+        ("Piotroski / Altman Z", f"{r['quality']['piotroski_f_score']}/9 · {r['quality']['altman_z'].get('z')}"),
     ]
-    c.setFont("Helvetica", 11); y -= 1.0 * cm
+    sc_cmp = r.get("sector_comparison") or {}
+    if sc_cmp.get("available"):
+        lines.append(("Vs secteur", f"{sc_cmp.get('favorable')}/{sc_cmp.get('total')} favorables"))
+    e = r.get("earnings")
+    if e:
+        lines.append(("Prochain résultat · BPA est.", f"{e.get('next_date','—')} · {_num(e.get('eps_estimate'))}"))
+    c.setFont("Helvetica", 11); y -= 0.8 * cm
     for k, val in lines:
         c.drawString(2 * cm, y, str(k)); c.drawRightString(w - 2 * cm, y, str(val)); y -= 0.7 * cm
+    v = r.get("verdict", {})
+    if v.get("strengths") or v.get("watch"):
+        c.setFont("Helvetica-Bold", 10); y -= 0.3 * cm
+        c.drawString(2 * cm, y, "Points clés"); y -= 0.5 * cm
+        c.setFont("Helvetica", 9)
+        for s in v.get("strengths", [])[:3]:
+            for ln in _wrap("+ " + s, 110):
+                c.drawString(2 * cm, y, ln); y -= 0.42 * cm
+        for s in v.get("watch", [])[:3]:
+            for ln in _wrap("- " + s, 110):
+                c.drawString(2 * cm, y, ln); y -= 0.42 * cm
     c.setFont("Helvetica-Oblique", 8)
-    c.drawString(2 * cm, 1.5 * cm, "Sources gratuites auditées (PwC) · Vernimmen & Damodaran · pas un conseil.")
+    c.drawString(2 * cm, 1.5 * cm, "Sources gratuites · Vernimmen & Damodaran · aide à la décision, pas un conseil.")
     c.showPage(); c.save()
     return out
+
+
+def _wrap(text: str, width: int) -> list[str]:
+    words, lines, cur = str(text).split(), [], ""
+    for wd in words:
+        if len(cur) + len(wd) + 1 > width:
+            lines.append(cur); cur = wd
+        else:
+            cur = (cur + " " + wd).strip()
+    if cur:
+        lines.append(cur)
+    return lines[:8]
 
 
 def company_report_markdown(r: dict[str, Any]) -> str:
@@ -516,5 +562,5 @@ def company_report_markdown(r: dict[str, Any]) -> str:
         body += ["", "## Forces", "", *[f"- ✅ {s}" for s in v["strengths"][:4]]]
     if v.get("watch"):
         body += ["", "## Vigilance", "", *[f"- ⚠️ {s}" for s in v["watch"][:4]]]
-    body += ["", f"<small>Sources gratuites auditées (PwC) · Vernimmen & Damodaran · maj {r.get('as_of')}.</small>"]
+    body += ["", f"<small>Sources gratuites · Vernimmen & Damodaran · maj {r.get('as_of')}.</small>"]
     return "\n".join(fm + body)

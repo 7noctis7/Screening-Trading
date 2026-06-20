@@ -54,7 +54,7 @@ def test_report_value_creation_detected():
 def test_html_render_contains_sections():
     html = company_report_html(build_company_report(_fin(), name="NVIDIA", beta=1.6))
     assert html.startswith("<!doctype html>")
-    for token in ("Vernimmen", "Damodaran", "PwC", "NVIDIA", "ROCE", "WACC", "Verdict"):
+    for token in ("Vernimmen", "Damodaran", "Audit d'intégrité", "NVIDIA", "ROCE", "WACC", "Verdict"):
         assert token in html
 
 
