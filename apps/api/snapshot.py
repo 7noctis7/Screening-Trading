@@ -904,8 +904,8 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
             fs = f_score(f)                            # solidité 0-9 RÉELLE (signaux de l'exercice courant)
             mcap = valuation.market_cap(f)
             ps = mcap / f.revenue if f.revenue else None          # price-to-sales
-            rev_g = f.revenue_growth                   # croissances YoY RÉELLES (source) — None si inconnu
-            eps_g = f.earnings_growth                  # (plus de N-1 fabriqué → plus de valeur identique partout)
+            # NB : les croissances YoY (CA/bénéf.) sont volontairement RETIRÉES — trop volatiles/aberrantes
+            # sur les small-caps (dénominateur ≈ 0) → hors tableau et hors notation.
             _az = altman_z(f)
             out.append({
                 "symbol": s, "name": names.get(s, ""), "sector": sector_of.get(s, ""),
@@ -916,8 +916,6 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
                 "roic": round(ratios.roic(f), 3), "gross_margin": round(ratios.gross_margin(f), 3),
                 "net_margin": round(ratios.net_margin(f), 3),
                 "fcf_yield": round(valuation.fcf_yield(f), 3),
-                "rev_growth": None if rev_g is None else round(rev_g, 3),
-                "earnings_growth": None if eps_g is None else round(eps_g, 3),
                 "margin_of_safety": None if mos != mos else round(mos, 3),
                 "f_score": fs, "f_score_label": f_score_label(fs),
                 "altman_z": _az["z"], "altman_zone": _az["zone"],
