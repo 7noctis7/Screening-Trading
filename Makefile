@@ -84,6 +84,10 @@ live-go:          ## EXÉCUTE en paper (Alpaca paper + Bitmart) — clés API re
 	$(PYTHON) scripts/run_live.py --live --yes
 mcp-tv:           ## lance le serveur MCP TradingView (overlays, Pine, alertes) — stdio, en parallèle de l'API/front
 	$(PYTHON) -m packages.mcp_tradingview.server
+mcp-selftest:     ## auto-vérif des outils MCP en mémoire (sans handshake) — liste + génère un Pine
+	$(PYTHON) -c "from packages.mcp_tradingview import server as s; import json; \
+print('outils:', [t['name'] for t in s.list_tools()]); \
+print('pine ok:', s.call_tool('generate_pine_script', {'strategy_name':'selftest'})['pine'][:14])"
 mcp-overlays:     ## calcule les cônes VaR/EVT (prix réels) + blackouts et les pousse au chart (API démarrée requise)
 	$(PYTHON) scripts/mcp_populate_overlays.py
 vault-sync:       ## régénère le coffre Obsidian (journal du jour, attribution, post-mortems) depuis YAHOO.db
