@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { StepBanner } from "@/components/Pipeline";
-import { useDashboard, useScreener, useSentiment, usePresetLedger, usePositions } from "@/lib/api";
+import { useDashboard, useScreener, useSentiment, usePresetLedger, usePositions, useAnalytics } from "@/lib/api";
 import { MetricCard } from "@/components/MetricCard";
 import { RegimeBanner } from "@/components/RegimeBanner";
 import { VixPlaybook } from "@/components/VixPlaybook";
@@ -47,6 +47,7 @@ export default function Dashboard() {
   const [selSym, setSelSym] = useState<string | null>(null);
   const { data: ledger } = usePresetLedger();
   const { data: pos } = usePositions();
+  const { data: ana } = useAnalytics();
   const eqFull: { t: string; v: number }[] = d?.equity ?? [];
   const sliced = useMemo(() => {
     if (!years || !eqFull.length) return eqFull;
@@ -134,6 +135,41 @@ export default function Dashboard() {
         </table>
         <p className="text-muted2 text-xs mt-2"><b>Backtest preset</b> = simulation de la stratégie sur prix RÉELS (~10 ans). <b>Portefeuille RÉEL</b> = ton compte Alpaca+Bitmart (historique court car récent). Clique une ligne pour son journal de trades.</p>
       </section>
+
+      {/* Attribution Alpha / Bêta (vision Citadel) : compétence vs exposition marché */}
+      {ana?.available && ana.attribution?.available && (() => {
+        const at = ana.attribution, mt = ana.metrics ?? {};
+        const aShare = Math.round((at.alpha_share ?? 0) * 100);
+        const aPos = (at.alpha_contribution ?? 0) >= 0;
+        return (
+          <section className="card p-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h2 className="text-sm uppercase tracking-wide text-muted">Performance &amp; attribution (Alpha / Bêta vs QQQ)</h2>
+              <span className="text-xs mono" style={{ color: aShare >= 50 ? "#22c55e" : "#f59e0b" }}>{at.verdict}</span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-3">
+              <div><div className="text-muted text-xs">Alpha annualisé</div>
+                <div className="text-lg mono" style={{ color: (mt.alpha_annual ?? 0) >= 0 ? "#22c55e" : "#ef4444" }}>
+                  {mt.alpha_annual == null ? "—" : `${(mt.alpha_annual * 100).toFixed(1)}%`}</div></div>
+              <div><div className="text-muted text-xs">Bêta (QQQ)</div><div className="text-lg mono">{mt.beta ?? "—"}</div></div>
+              <div><div className="text-muted text-xs">Contrib. Alpha</div>
+                <div className="text-lg mono" style={{ color: aPos ? "#22c55e" : "#ef4444" }}>{(at.alpha_contribution * 100).toFixed(1)}%</div></div>
+              <div><div className="text-muted text-xs">Contrib. Bêta</div><div className="text-lg mono">{(at.beta_contribution * 100).toFixed(1)}%</div></div>
+              <div><div className="text-muted text-xs">Calmar / Corr</div><div className="text-lg mono">{mt.calmar ?? "—"} / {mt.corr ?? "—"}</div></div>
+            </div>
+            {/* barre de décomposition alpha vs bêta */}
+            <div className="mt-3 h-2 rounded overflow-hidden flex" title={`Part de la perf attribuable à l'algo (alpha) : ${aShare}%`}>
+              <span style={{ width: `${aShare}%`, background: "#22c55e" }} />
+              <span style={{ width: `${100 - aShare}%`, background: "#3b82f6" }} />
+            </div>
+            <p className="text-muted2 text-xs mt-2">
+              <span style={{ color: "#22c55e" }}>■</span> Alpha (compétence) {aShare}% ·
+              <span style={{ color: "#3b82f6" }}> ■</span> Bêta (marché) {100 - aShare}%.
+              Perf preset {(at.portfolio_return * 100).toFixed(1)}% vs QQQ {(at.benchmark_return * 100).toFixed(1)}% — net de frais.
+            </p>
+          </section>
+        );
+      })()}
 
       {/* Graphique technique de l'actif cliqué dans un journal (indicateurs + signaux achat/vente) */}
       {selSym && (pos?.series ?? {})[selSym] && (() => {

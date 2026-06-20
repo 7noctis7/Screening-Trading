@@ -105,6 +105,27 @@ class PerformanceAnalytics:
                            None if beta is None else round(beta, 3),
                            None if corr is None else round(corr, 3), n)
 
+    def attribution(self) -> dict[str, Any]:
+        """Décompose le rendement total en contribution BÊTA (marché, QQQ) et ALPHA (généré par
+        l'algo) — vision Citadel. β·r_marché = part marché ; le reste = alpha + sélection. Pur."""
+        m = self.metrics()
+        if not self.b or m.beta is None:
+            return {"available": False}
+        k = min(len(self.r), len(self.b))
+        rr, bb = self.r[-k:], self.b[-k:]
+        beta = m.beta
+        bench_total = math.prod(1 + x for x in bb) - 1.0          # rendement marché (QQQ)
+        port_total = math.prod(1 + x for x in rr) - 1.0
+        beta_contrib = beta * bench_total                         # part expliquée par l'exposition marché
+        alpha_contrib = port_total - beta_contrib                # résidu = alpha (compétence)
+        share = (abs(alpha_contrib) / (abs(alpha_contrib) + abs(beta_contrib))
+                 if (abs(alpha_contrib) + abs(beta_contrib)) > 0 else 0.0)
+        return {"available": True, "beta": round(beta, 3),
+                "portfolio_return": round(port_total, 4), "benchmark_return": round(bench_total, 4),
+                "beta_contribution": round(beta_contrib, 4), "alpha_contribution": round(alpha_contrib, 4),
+                "alpha_share": round(share, 3), "alpha_annual": m.alpha_annual,
+                "verdict": ("alpha dominant (compétence)" if share >= 0.5 else "bêta dominant (marché)")}
+
     # ── sorties ─────────────────────────────────────────────────────────
     def to_markdown_summary(self, title: str = "Performance") -> str:
         m = self.metrics()
