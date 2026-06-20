@@ -102,15 +102,7 @@ class YFinanceFundamentalsProvider:
         if info is None:
             try:
                 import yfinance as yf
-                t = yf.Ticker(symbol)
-                info = t.info or {}
-                # croissances : champ Yahoo si présent, SINON calcul (N−N-1)/N-1 sur les états réels
-                if info.get("revenueGrowth") in (None, "") or info.get("earningsGrowth") in (None, ""):
-                    crg, ceg = _growth_from_stmt(t)
-                    if info.get("revenueGrowth") in (None, ""):
-                        info["revenueGrowth"] = crg
-                    if info.get("earningsGrowth") in (None, ""):
-                        info["earningsGrowth"] = ceg
+                info = yf.Ticker(symbol).info or {}
                 _cache_put(symbol, info)
             except Exception:  # noqa: BLE001
                 return None
