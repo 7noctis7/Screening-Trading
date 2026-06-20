@@ -235,6 +235,27 @@ def company_report_html(r: dict[str, Any]) -> str:
                    f'<th style="text-align:right">Société</th><th style="text-align:right">Secteur</th></tr>'
                    f'</thead><tbody>{rows}</tbody></table>')
 
+    # Positionnement sectoriel (vs pairs)
+    sector_card = ""
+    scmp = r.get("sector_comparison") or {}
+    if scmp.get("available") and scmp.get("rows"):
+        def _fmt(metric, val):
+            return _pct(val) if metric in ("net_margin", "roe", "roic", "gross_margin", "revenue_growth") else _num(val)
+        rows = "".join(
+            f'<tr style="border-top:1px solid {_C["border"]}">'
+            f'<td style="padding:5px 0">{x["label"]}</td>'
+            f'<td style="text-align:right">{_fmt(x["metric"], x["company"])}</td>'
+            f'<td style="text-align:right;color:{_C["muted"]}">{_fmt(x["metric"], x["sector_median"])}</td>'
+            f'<td style="text-align:right">{int(x["percentile"]*100)}<span style="font-size:9px;color:{_C["muted"]}">e</span></td>'
+            f'<td style="text-align:right;color:{_C["pos"] if x["verdict"]=="favorable" else _C["neg"]}">{x["verdict"]}</td></tr>'
+            for x in scmp["rows"])
+        sector_card = _card(
+            f'Positionnement sectoriel ({scmp.get("favorable",0)}/{scmp.get("total",0)} favorables · {scmp.get("n_peers",0)} pairs)',
+            f'<table style="width:100%;font-size:12px"><thead><tr style="color:{_C["muted"]};font-size:11px">'
+            f'<th style="text-align:left">Métrique</th><th style="text-align:right">Société</th>'
+            f'<th style="text-align:right">Médiane sect.</th><th style="text-align:right">Rang</th>'
+            f'<th style="text-align:right">Verdict</th></tr></thead><tbody>{rows}</tbody></table>')
+
     # Qualité
     z = ql["altman_z"]; inv = ql["investor_scores"]
     qual = _kv_grid([
@@ -336,6 +357,7 @@ Note d'analyse fondamentale · {r['as_of']}</div>
 {_card("Audit d'intégrité des données (PwC)", _findings_html(audit))}
 {_card("Analyse économique (Vernimmen)", vern)}
 {_card("Valorisation (Damodaran)", dam_kv)}
+{sector_card}
 {earn_card}
 {_card("Qualité & solidité", qual)}
 {tech_card}

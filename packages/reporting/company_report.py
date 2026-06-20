@@ -78,6 +78,45 @@ def audit_financials(f: Financials) -> dict[str, Any]:
 
 
 # ───────────────────────────── construction de la note ─────────────────────────────
+# métriques de positionnement : (clé, libellé, plus_haut_est_mieux)
+_PEER_METRICS = [
+    ("net_margin", "Marge nette", True), ("roe", "ROE", True), ("roic", "ROIC", True),
+    ("gross_margin", "Marge brute", True), ("per", "P/E", False), ("ev_ebitda", "EV/EBITDA", False),
+    ("revenue_growth", "Croissance CA", True),
+]
+
+
+def _median(xs: list[float]) -> float | None:
+    xs = sorted(v for v in xs if v is not None and v == v)
+    if not xs:
+        return None
+    n = len(xs)
+    return xs[n // 2] if n % 2 else (xs[n // 2 - 1] + xs[n // 2]) / 2
+
+
+def sector_positioning(company: dict[str, Any], peers: list[dict[str, Any]]) -> dict[str, Any]:
+    """Positionne la société vs ses pairs SECTORIELS : médiane, percentile et verdict (favorable/
+    défavorable) par métrique, direction-aware (P/E bas = favorable, marge haute = favorable).
+    `peers` : métriques des sociétés du même secteur (incluant ou non la société). Pur, robuste."""
+    rows = []
+    for key, label, higher in _PEER_METRICS:
+        cval = company.get(key)
+        vals = [p.get(key) for p in peers if p.get(key) is not None and p.get(key) == p.get(key)]
+        med = _median(vals)
+        if cval is None or cval != cval or med is None or len(vals) < 3:
+            continue
+        below = sum(1 for v in vals if v < cval)
+        pct = below / len(vals)                              # rang percentile brut (part sous la société)
+        rank = pct if higher else (1 - pct)                 # normalisé : 1 = meilleur du secteur
+        verdict = "favorable" if ((cval >= med) == higher) else "défavorable"
+        rows.append({"metric": key, "label": label, "company": round(float(cval), 4),
+                     "sector_median": round(float(med), 4), "percentile": round(rank, 2),
+                     "verdict": verdict})
+    fav = sum(1 for r in rows if r["verdict"] == "favorable")
+    return {"available": bool(rows), "n_peers": len(peers), "rows": rows,
+            "favorable": fav, "total": len(rows)}
+
+
 def technical_score(t: dict[str, Any] | None) -> int | None:
     """Score technique 0-100 à partir du résumé (tendance, RSI, MACD, position vs moyennes mobiles).
     None si pas de données techniques. Borné, robuste aux champs absents."""
@@ -115,7 +154,8 @@ def build_company_report(f: Financials, *, name: str | None = None,
                          earnings: dict[str, Any] | None = None,
                          ml_score: float | None = None,
                          price_series: list[float] | None = None,
-                         financial_history: list[dict] | None = None) -> dict[str, Any]:
+                         financial_history: list[dict] | None = None,
+                         peers: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """Construit la note d'analyse complète (dict sérialisable JSON) pour une société.
 
     Sections optionnelles à forte valeur (rendues si fournies) :
@@ -150,6 +190,12 @@ def build_company_report(f: Financials, *, name: str | None = None,
     inv = investor_scores(f, f.sector, prior)
     piotroski = scoring.piotroski_full(f, prior) if prior else scoring.f_score(f)
     altman = scoring.altman_z(f)
+
+    # positionnement sectoriel (vs pairs) — direction-aware, percentile + verdict
+    company_metrics = {"net_margin": rr.get("net_margin"), "roe": rr.get("roe"), "roic": rr.get("roic"),
+                       "gross_margin": rr.get("gross_margin"), "per": mult.get("pe"),
+                       "ev_ebitda": mult.get("ev_ebitda"), "revenue_growth": f.revenue_growth}
+    sector_comparison = sector_positioning(company_metrics, peers) if peers else {"available": False}
 
     # score global /100 : moyenne pondérée de piliers normalisés
     pillars = _pillar_scores(f, rr, roce, wacc, val_scen, piotroski, altman)
@@ -195,6 +241,7 @@ def build_company_report(f: Financials, *, name: str | None = None,
             "piotroski_f_score": piotroski, "piotroski_label": scoring.f_score_label(piotroski),
             "altman_z": altman, "investor_scores": inv,
         },
+        "sector_comparison": sector_comparison,
         "technical": technical or None,
         "macro": macro or None,
         "earnings": earnings or None,

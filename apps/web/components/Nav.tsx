@@ -14,6 +14,7 @@ const LINKS: [string, string][] = [
   ["/themes", "Thèmes de marché"],
   ["/events", "Événements"],
   ["/fundamentals", "Fondamentaux"],
+  ["/notes", "Notes d'analyse"],
   ["/investors", "Investisseurs"],
   ["/ml", "Signaux ML"],
   ["/sentiment", "Sentiment & news"],
