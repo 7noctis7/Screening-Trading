@@ -101,6 +101,21 @@ def test_charts_have_numeric_axes():
     assert 'text-anchor="end"' in html and "$" in html           # labels d'axe Y chiffrés
 
 
+def test_pdf_renders_both_themes(tmp_path):
+    import pytest
+    pytest.importorskip("reportlab")
+    from packages.reporting import company_report_pdf
+    closes = [100 + i * 0.3 for i in range(120)]
+    dates = [f"2025-{1 + i % 12:02d}-15" for i in range(120)]
+    r = build_company_report(_fin(), name="NVIDIA", price_series=closes, price_dates=dates,
+                             financial_history=[{"year": y, "revenue": 1e10 * (y - 2019),
+                                                 "net_income": 2e9 * (y - 2019)} for y in range(2020, 2025)])
+    for th in ("dark", "light"):
+        p = tmp_path / f"note_{th}.pdf"
+        out = company_report_pdf(r, p, theme=th)
+        assert out is not None and p.exists() and p.stat().st_size > 2000
+
+
 def test_theme_light_and_dark():
     r = build_company_report(_fin(), name="NVIDIA")
     dark = company_report_html(r, theme="dark")
