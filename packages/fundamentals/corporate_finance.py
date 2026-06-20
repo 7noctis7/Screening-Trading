@@ -19,6 +19,20 @@ def _safe(n: float, d: float) -> float:
     return n / d if d else float("nan")
 
 
+def convert_financials(f: Financials, fx: float) -> Financials:
+    """Convertit les grandeurs MONÉTAIRES des états financiers par le taux `fx` (1 devise comptes =
+    `fx` devise du cours) → cohérence avec le cours/capitalisation. Le cours et le nombre d'actions
+    NE sont PAS touchés (déjà dans la devise du cours). Pur, déterministe."""
+    from dataclasses import replace
+    if not fx or fx <= 0 or fx == 1.0:
+        return f
+    return replace(
+        f, revenue=f.revenue * fx, gross_profit=f.gross_profit * fx, ebit=f.ebit * fx,
+        ebitda=f.ebitda * fx, net_income=f.net_income * fx, total_equity=f.total_equity * fx,
+        total_debt=f.total_debt * fx, cash=f.cash * fx, fcf=f.fcf * fx,
+        interest_expense=f.interest_expense * fx, currency=f.price_currency or f.currency)
+
+
 def capital_employed(f: Financials) -> float:
     """Capitaux employés (Vernimmen) = capitaux propres + dette nette."""
     return f.total_equity + max(0.0, f.total_debt - f.cash)

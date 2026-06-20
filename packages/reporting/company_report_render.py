@@ -405,10 +405,11 @@ def company_report_html(r: dict[str, Any], theme: str = "dark") -> str:
     inner = ""
     if len(closes) >= 20:
         last = closes[-1]; lo = min(closes); hi = max(closes)
+        period = f" · période {labels[0]} → {labels[-1]}" if len(labels) >= 2 else ""
         inner += (f'<div style="font-size:11px;color:{_C["muted"]};margin-bottom:2px">Cours & moyennes mobiles '
                   f'(<span style="color:{_C["accent"]}">cours ${_num(last)}</span> · '
                   f'<span style="color:{_C["warn"]}">MM50</span> · <span style="color:{_C["muted"]}">MM200</span>'
-                  f' · plage ${_num(lo,0)}–${_num(hi,0)})</div>{_spark_price(closes, labels)}')
+                  f' · plage ${_num(lo,0)}–${_num(hi,0)}{period})</div>{_spark_price(closes, labels)}')
         inner += (f'<div style="font-size:11px;color:{_C["muted"]};margin:8px 0 2px">Drawdown (sous l\'eau)</div>'
                   f'{_spark_drawdown(closes, labels)}')
     if len(hist) >= 2:
@@ -469,6 +470,8 @@ Note d'analyse fondamentale · {r['as_of']}</div>
   f'<span style="font-size:10px;color:{_C["muted"]};text-transform:uppercase;letter-spacing:.06em">'
   f'Synthèse · {r.get("memo_source","")}</span><div style="margin-top:4px">{r["memo"]}</div></div>')
   if r.get("memo") else ""}
+{(f'<div style="font-size:11px;color:{_C["muted"]};margin:-6px 0 12px">💱 {r["fx_conversion"]} — '
+  f'valorisation calculée après conversion de devise.</div>') if r.get("fx_conversion") else ""}
 {charts_card}
 {findata_card}
 {_card("Audit d'intégrité des données", _findings_html(audit))}
@@ -560,10 +563,13 @@ def _reportlab_pdf(r: dict, path: str, A4, cm, canvas) -> None:
     # graphes
     ch = r.get("charts") or {}
     closes = ch.get("price") or []
+    labels = ch.get("price_labels") or []
     if len(closes) >= 20:
+        period = (f"{labels[0]} → {labels[-1]}" if len(labels) >= 2 else "")
         head("Graphiques")
-        _rl_line(c, closes, ML, st["y"] - 3.6 * cm, w - 2 * ML, 3.4 * cm, "Cours ($)", cm)
-        nl(4.0 * cm)
+        _rl_line(c, closes, labels, ML, st["y"] - 3.8 * cm, w - 2 * ML, 3.4 * cm,
+                 f"Cours ($) · {period}" if period else "Cours ($)", cm)
+        nl(4.4 * cm)
         hist = ch.get("financial_history") or []
         if len(hist) >= 2:
             _rl_bars(c, hist, "revenue", ML, st["y"] - 3.2 * cm, w - 2 * ML, 3.0 * cm,
@@ -625,7 +631,7 @@ def _reportlab_pdf(r: dict, path: str, A4, cm, canvas) -> None:
     mc = r.get("macro")
     if mc:
         head("Contexte macroéconomique")
-        kv("Régime · VIX", f"{mc.get('regime','—')} · {_num(mc.get('vix'),1)}")
+        kv("Régime · VIX", f"{mc.get('regime') or '—'} · {_num(mc.get('vix'),1)}")
     e = r.get("earnings")
     if e:
         head("Résultats & estimations")
@@ -646,23 +652,30 @@ def _reportlab_pdf(r: dict, path: str, A4, cm, canvas) -> None:
     c.showPage(); c.save()
 
 
-def _rl_line(c, vals, x, y, w, h, title, cm) -> None:
-    """Courbe (cours) reportlab avec axes Y ($) et bornes."""
+def _rl_line(c, vals, labels, x, y, w, h, title, cm) -> None:
+    """Courbe (cours) reportlab avec axe Y ($) ET axe X DATÉ (début / milieu / fin)."""
     lo, hi = min(vals), max(vals)
     rng = (hi - lo) or 1.0
-    c.setFont("Helvetica", 8); c.setFillGray(0.4); c.drawString(x, y + h + 4, title)
+    x0 = x + 1.1 * cm
+    c.setFont("Helvetica", 8); c.setFillGray(0.4); c.drawString(x, y + h + 5, title)
     c.setStrokeGray(0.85)
     for k in range(4):
         yy = y + h * k / 3
-        c.line(x + 1.1 * cm, yy, x + w, yy)
+        c.line(x0, yy, x + w, yy)
         c.setFillGray(0.5); c.setFont("Helvetica", 7)
         c.drawRightString(x + 1.0 * cm, yy - 2, f"${_num(lo + rng * k / 3, 0)}")
     n = len(vals)
-    pts = [(x + 1.1 * cm + i * (w - 1.1 * cm) / (n - 1), y + (v - lo) / rng * h) for i, v in enumerate(vals)]
+    pts = [(x0 + i * (w - 1.1 * cm) / (n - 1), y + (v - lo) / rng * h) for i, v in enumerate(vals)]
     c.setStrokeColorRGB(0.13, 0.59, 0.95); c.setLineWidth(1.1)
     for a, b in zip(pts[:-1], pts[1:]):
         c.line(a[0], a[1], b[0], b[1])
     c.setStrokeGray(0.85); c.setLineWidth(1)
+    # axe X daté
+    if labels and len(labels) >= 2:
+        c.setFillGray(0.5); c.setFont("Helvetica", 7)
+        for frac, draw in ((0.0, c.drawString), (0.5, c.drawCentredString), (1.0, c.drawRightString)):
+            idx = min(len(labels) - 1, int(frac * (len(labels) - 1)))
+            draw(x0 + (w - 1.1 * cm) * frac, y - 10, str(labels[idx]))
 
 
 def _rl_bars(c, hist, key, x, y, w, h, title, cm) -> None:
