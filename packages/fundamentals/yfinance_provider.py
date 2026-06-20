@@ -55,6 +55,41 @@ def _f(info: dict, *keys: str, default: float = 0.0) -> float:
     return default
 
 
+def _yoy_row(df, label: str, lag: int = 1) -> float | None:
+    """Croissance (val_N − val_N-1)/|val_N-1| pour une ligne d'un état financier yfinance.
+    Colonnes = périodes (plus récent d'abord) ; lag=1 (annuel) ou lag=4 (même trimestre N vs N-1)."""
+    try:
+        if df is None or getattr(df, "empty", True) or label not in df.index:
+            return None
+        vals = list(df.loc[label].tolist())
+        if len(vals) <= lag:
+            return None
+        cur, prev = float(vals[0]), float(vals[lag])
+        if prev == 0 or prev != prev or cur != cur:        # 0 ou NaN → non calculable
+            return None
+        return cur / abs(prev) - 1.0 if prev > 0 else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _growth_from_stmt(t) -> tuple[float | None, float | None]:
+    """Croissances CA & bénéfice net calculées DEPUIS les états réels : annuel d'abord,
+    sinon trimestriel en glissement annuel (YoY, lag=4 → neutralise la saisonnalité)."""
+    rev_g = eps_g = None
+    for attr, lag in (("income_stmt", 1), ("quarterly_income_stmt", 4)):
+        if rev_g is not None and eps_g is not None:
+            break
+        try:
+            df = getattr(t, attr, None)
+        except Exception:  # noqa: BLE001
+            df = None
+        if rev_g is None:
+            rev_g = _yoy_row(df, "Total Revenue", lag) or _yoy_row(df, "TotalRevenue", lag)
+        if eps_g is None:
+            eps_g = _yoy_row(df, "Net Income", lag) or _yoy_row(df, "NetIncome", lag)
+    return rev_g, eps_g
+
+
 class YFinanceFundamentalsProvider:
     name = "yfinance"
 
@@ -63,7 +98,15 @@ class YFinanceFundamentalsProvider:
         if info is None:
             try:
                 import yfinance as yf
-                info = yf.Ticker(symbol).info or {}
+                t = yf.Ticker(symbol)
+                info = t.info or {}
+                # croissances : champ Yahoo si présent, SINON calcul (N−N-1)/N-1 sur les états réels
+                if info.get("revenueGrowth") in (None, "") or info.get("earningsGrowth") in (None, ""):
+                    crg, ceg = _growth_from_stmt(t)
+                    if info.get("revenueGrowth") in (None, ""):
+                        info["revenueGrowth"] = crg
+                    if info.get("earningsGrowth") in (None, ""):
+                        info["earningsGrowth"] = ceg
                 _cache_put(symbol, info)
             except Exception:  # noqa: BLE001
                 return None
