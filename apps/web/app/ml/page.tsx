@@ -2,6 +2,7 @@
 import { StepBanner } from "@/components/Pipeline";
 import { useMl } from "@/lib/api";
 import { PageSkeleton, EmptyState } from "@/components/ui";
+import { IR } from "@/lib/ir";
 
 const nb = (x?: number) => (x ?? 0).toLocaleString("fr-FR");
 
@@ -54,7 +55,7 @@ export default function Ml() {
           </thead>
           <tbody>{ml.top_conviction.map((a: any) => (
             <tr key={a.symbol} className="border-t border-border">
-              <td className="py-1.5 mono">{a.symbol}</td><td className="text-muted">{a.name}</td>
+              <td className="py-1.5 mono"><IR ticker={a.symbol} name={a.name} assetClass={a.asset_class} className="text-accent hover:underline" /></td><td className="text-muted">{a.name}</td>
               <td className="text-muted">{a.sector}</td>
               <td className="text-right mono" style={{ color: a.ml_score >= 0.5 ? "#22c55e" : "#f43f5e" }}>
                 {(a.ml_score * 100).toFixed(1)}%</td>

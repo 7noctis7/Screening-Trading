@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { useUniverse } from "@/lib/api";
 import { PageSkeleton } from "@/components/ui";
 import { downloadCsv } from "@/lib/csv";
+import { IR } from "@/lib/ir";
 
 const nb = (x?: number) => (x ?? 0).toLocaleString("fr-FR");
 const ROW_H = 33;            // hauteur de ligne fixe (virtualisation)
@@ -107,7 +108,7 @@ export default function Universe() {
                 <div key={`${r.symbol}-${start + i}`}
                   className="grid grid-cols-5 gap-2 text-sm border-b border-border items-center"
                   style={{ height: ROW_H }}>
-                  <span className="mono">{r.symbol}</span>
+                  <IR ticker={r.symbol} name={r.name} assetClass={r.asset_class} className="mono text-accent hover:underline truncate" />
                   <span className="text-muted truncate">{r.name}</span>
                   <span>{r.asset_class}</span>
                   <span className="text-muted">{r.venue}</span>

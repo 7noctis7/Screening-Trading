@@ -3,6 +3,7 @@ import { useInvestors } from "@/lib/api";
 import { PageSkeleton, EmptyState } from "@/components/ui";
 import { SortableTable, type Col } from "@/components/SortableTable";
 import { StepBanner } from "@/components/Pipeline";
+import { IR } from "@/lib/ir";
 
 const bar = (v: number) => (
   <span className="inline-flex items-center gap-1.5">
@@ -18,7 +19,7 @@ export default function Investors() {
     return <main className="max-w-3xl mx-auto p-6"><EmptyState title="Scores investisseurs indisponibles" hint="Actions/ETF requis." /></main>;
 
   const cols: Col[] = [
-    { key: "symbol", label: "Actif" },
+    { key: "symbol", label: "Actif", render: (v, row) => <IR ticker={v} name={row.name} assetClass={row.asset_class} className="mono text-accent hover:underline" /> },
     { key: "sector", label: "Secteur", render: (v) => <span className="text-muted text-xs">{v}</span> },
     { key: "graham", label: "Graham (value)", num: true, render: bar },
     { key: "fisher", label: "Fisher (qualité)", num: true, render: bar },
