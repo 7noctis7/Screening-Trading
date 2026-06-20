@@ -11,6 +11,7 @@ Best-effort : ne crashe jamais ; saute proprement un titre en échec.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from datetime import date
 from pathlib import Path
@@ -44,7 +45,9 @@ def main() -> int:
 
     from apps.api.snapshot import _seed_universe, fetch_financials_chain
     from packages.reporting import (build_company_report, company_report_html,
-                                    company_report_pdf)
+                                    company_report_markdown, company_report_pdf)
+
+    vault_dir = Path(os.environ.get("QUANT_VAULT", ROOT / "vault")) / "04_Companies"
 
     targets = ([t.strip().upper() for t in args.tickers.split(",") if t.strip()]
                if args.tickers else _targets(args.top))
@@ -64,6 +67,11 @@ def main() -> int:
             r = build_company_report(f, name=names.get(sym, sym), prior=prior)
             (out_dir / f"note_{sym}.html").write_text(company_report_html(r), encoding="utf-8")
             company_report_pdf(r, out_dir / f"note_{sym}.pdf")     # PDF si reportlab, sinon HTML
+            try:                                                   # note Obsidian qualitative (coffre)
+                vault_dir.mkdir(parents=True, exist_ok=True)
+                (vault_dir / f"{sym}.md").write_text(company_report_markdown(r), encoding="utf-8")
+            except Exception:  # noqa: BLE001
+                pass
             ok += 1
             print(f"  {sym:<8} ✓ note générée")
         except Exception as e:  # noqa: BLE001

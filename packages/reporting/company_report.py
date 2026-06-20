@@ -241,6 +241,9 @@ def build_company_report(f: Financials, *, name: str | None = None,
             "piotroski_f_score": piotroski, "piotroski_label": scoring.f_score_label(piotroski),
             "altman_z": altman, "investor_scores": inv,
         },
+        "memo": _memo(f, name or f.symbol, global_score, reco, roce, wacc, val_scen,
+                      rr, sector_comparison),
+        "memo_source": "synthèse (règles)",
         "sector_comparison": sector_comparison,
         "technical": technical or None,
         "macro": macro or None,
@@ -299,6 +302,27 @@ def _pillar_scores(f: Financials, rr: dict, roce: float, wacc: float, val_scen: 
         "solidité financière": {"score": solidity, "weight": 0.20},
         "sécurité (Altman)": {"score": safety, "weight": 0.10},
     }
+
+
+def _memo(f: Financials, name: str, score: int, reco: str, roce: float, wacc: float,
+          val_scen: dict, rr: dict, sector_cmp: dict) -> str:
+    """Mémo de synthèse déterministe (2-3 phrases, fort impact) — toujours présent, sans LLM."""
+    nm = rr.get("net_margin")
+    mos = val_scen.get("margin_of_safety")
+    creates = (roce == roce and roce > wacc)
+    parts = [f"{name} obtient {score}/100 — recommandation {reco.lower()}."]
+    if creates:
+        parts.append(f"L'entreprise crée de la valeur (ROCE {roce*100:.0f}% > WACC {wacc*100:.0f}%)"
+                     + (f", avec une marge nette de {nm*100:.0f}%." if nm else "."))
+    else:
+        parts.append("La rentabilité économique ne couvre pas le coût du capital (ROCE ≤ WACC).")
+    if mos is not None:
+        parts.append(f"Le DCF base ressort {'sous-évalué' if mos>0 else 'au-dessus du cours'} "
+                     f"({mos*100:+.0f}% de marge de sécurité).")
+    if sector_cmp.get("available"):
+        parts.append(f"Vs son secteur : {sector_cmp.get('favorable',0)}/{sector_cmp.get('total',0)} "
+                     f"métriques favorables.")
+    return " ".join(parts)
 
 
 def _verdict(f: Financials, score: int, reco: str, roce: float, wacc: float,

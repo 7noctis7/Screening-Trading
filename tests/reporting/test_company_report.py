@@ -6,6 +6,7 @@ from packages.reporting import (
     audit_financials,
     build_company_report,
     company_report_html,
+    company_report_markdown,
 )
 from packages.reporting.company_report import sector_positioning, technical_score
 
@@ -60,6 +61,23 @@ def test_html_render_contains_sections():
 def test_pillars_sum_weights_to_one():
     r = build_company_report(_fin(), name="NVIDIA")
     assert abs(sum(p["weight"] for p in r["score"]["pillars"].values()) - 1.0) < 1e-9
+
+
+def test_markdown_obsidian_note():
+    r = build_company_report(_fin(), name="NVIDIA", beta=1.5,
+                             peers=[{"net_margin": 0.1, "roe": 0.1, "roic": 0.1, "gross_margin": 0.3,
+                                     "per": 30, "ev_ebitda": 20} for _ in range(5)])
+    md = company_report_markdown(r)
+    assert md.startswith("---") and "type: company_report" in md   # front matter Dataview
+    assert "tags: [quant, company]" in md and "# 🏢 NVIDIA" in md
+    assert "ROCE" in md and "DCF base" in md and "Vigilance" in md or "Forces" in md
+
+
+def test_memo_present_and_rendered():
+    r = build_company_report(_fin(), name="NVIDIA", beta=1.5)
+    assert r["memo"] and "NVIDIA" in r["memo"] and r["memo_source"] == "synthèse (règles)"
+    html = company_report_html(r)
+    assert "Synthèse" in html and r["memo"][:20] in html
 
 
 def test_sector_positioning_direction_aware():

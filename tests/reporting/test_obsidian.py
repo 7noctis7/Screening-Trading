@@ -56,7 +56,7 @@ def test_daily_note_structure_and_frontmatter():
     rel, md = O.daily_note(s, O.compute_attribution(s), O.detect_incidents(s), "2026-06-20")
     assert rel == "03_Journal/2026-06-20.md"
     assert md.startswith("---") and "type: daily_journal" in md and "date: 2026-06-20" in md
-    assert "```mermaid" in md and "## Métriques clés" in md
+    assert "**Risque**" in md and "## Métriques clés" in md     # statut risque concis (ex-mermaid)
     assert "KILL-SWITCH ACTIF" in md and "[[Preset_Performance]]" in md
 
 
