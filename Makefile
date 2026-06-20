@@ -1,5 +1,7 @@
 .PHONY: install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto ingest-mktcap preset-report calibrate-preset screen-niche list-db live live-go clean
-PYTHON ?= python3      ## sur macOS c'est python3 (surchargeable : make api PYTHON=python)
+# PYTHON : utilise AUTOMATIQUEMENT le venv s'il existe (.venv/bin/python), sinon python3 système.
+# Évite le piège « No module named numpy » quand le venv n'est pas activé. Surchargeable.
+PYTHON ?= $(shell [ -x .venv/bin/python ] && echo .venv/bin/python || echo python3)
 install:          ## installe les dépendances (uv)
 	uv venv && uv pip install -e ".[dev,data,quant,api,ml]"
 setup:            ## installation locale guidée (venv, détection YAHOO.db, build, cron) — 1 commande
@@ -92,5 +94,9 @@ mcp-overlays:     ## calcule les cônes VaR/EVT (prix réels) + blackouts et les
 	$(PYTHON) scripts/mcp_populate_overlays.py
 vault-sync:       ## régénère le coffre Obsidian (journal du jour, attribution, post-mortems) depuis YAHOO.db
 	$(PYTHON) -m packages.reporting.obsidian
+audit:            ## audit PwC des bases de prix (complétude/exactitude/point-in-time) — make audit ARGS=--strict
+	$(PYTHON) scripts/data_audit.py $(ARGS)
+analytics:        ## rapport de perf QuantStats (Sortino/Calmar/Alpha-Beta vs QQQ) → vault/Performance_Report.md
+	$(PYTHON) scripts/perf_report.py
 clean:
 	find . -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null; rm -rf out

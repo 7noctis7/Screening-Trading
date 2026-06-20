@@ -360,6 +360,20 @@ async def tv_webhook(request: Request) -> dict:
     return {"ok": a is not None, "alert": a.to_dict() if a else None}
 
 
+@app.get("/api/analytics")
+def analytics() -> dict:
+    """Reporting de performance (Sortino/Calmar/Alpha/Beta vs QQQ, MaxDD) — net de frais.
+    Renvoie métriques + un snippet HTML prêt pour le front. Tolérant : {available:false} si indispo."""
+    from packages.reporting.analytics import PerformanceAnalytics
+    cur = _snap().get("index_core_curves", {}) or {}
+    preset, qqq = cur.get("preset") or [], cur.get("qqq") or []
+    if len(preset) < 30:
+        return {"available": False}
+    pa = PerformanceAnalytics.from_curves(preset, qqq)
+    return {"available": True, "metrics": pa.metrics().to_dict(),
+            "html": pa.to_html_snippet("Preset vs QQQ (net de frais)")}
+
+
 @app.get("/api/ai/status")
 def ai_status() -> dict:
     """Disponibilité d'un LLM local (LM Studio / Ollama)."""
