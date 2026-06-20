@@ -2,6 +2,7 @@
 import { useThemes, useMeta } from "@/lib/api";
 import { PageSkeleton } from "@/components/ui";
 import { StepBanner } from "@/components/Pipeline";
+import { IR } from "@/lib/ir";
 
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 const STANCE: Record<string, [string, string]> = {
@@ -63,7 +64,7 @@ export default function Themes() {
                 <td className="pl-3">
                   {(s.top_assets ?? []).map((a: any) => (
                     <span key={a.symbol} className="inline-block mr-1.5 mb-1 px-2 py-0.5 rounded-full bg-surfaceAlt text-xs">
-                      <b>{a.symbol}</b> {pct(a.ytd)} · {a.setup}
+                      <IR ticker={a.symbol} name={a.name} assetClass={a.asset_class} className="font-bold text-accent hover:underline" /> {pct(a.ytd)} · {a.setup}
                     </span>
                   ))}
                 </td>

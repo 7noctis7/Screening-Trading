@@ -2,6 +2,7 @@
 import { StepBanner } from "@/components/Pipeline";
 import { useData } from "@/lib/api";
 import { PageSkeleton } from "@/components/ui";
+import { IR } from "@/lib/ir";
 
 const nb = (x?: number) => (x ?? 0).toLocaleString("fr-FR");
 const dt = (s?: string) => (s ? String(s).slice(0, 10) : "—");
@@ -84,7 +85,7 @@ export default function DataPage() {
             </thead>
             <tbody>{(d.collection ?? []).map((r: any) => (
               <tr key={r.symbol} className="border-t border-border">
-                <td className="py-1.5">{r.symbol}</td><td className="text-muted font-sans">{r.asset_class}</td>
+                <td className="py-1.5"><IR ticker={r.symbol} assetClass={r.asset_class} className="text-accent hover:underline" /></td><td className="text-muted font-sans">{r.asset_class}</td>
                 <td className="text-right">{r.bars}</td>
                 <td className="text-muted">{dt(r.start)}</td><td className="text-muted">{dt(r.end)}</td>
                 <td className="text-right">{r.last_close}</td>

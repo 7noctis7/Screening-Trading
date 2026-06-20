@@ -2,6 +2,7 @@
 import { useMemo, useState } from "react";
 import { useEvents } from "@/lib/api";
 import { PageSkeleton, EmptyState } from "@/components/ui";
+import { IR } from "@/lib/ir";
 
 // étiquettes de suivi : couleur, emoji et description (pour la légende + filtre)
 const TAGS: Record<string, { c: string; bg: string; emoji: string; desc: string }> = {
@@ -145,7 +146,7 @@ export default function Events() {
           <tbody>{earnRows.map((e: any, i: number) => (
             <tr key={i} className="border-t border-border">
               <td className="py-1.5"><span style={{ color: e._when === "à venir" ? "#22d3ee" : "#9aa1ad" }}>{dt(e.date)}</span></td>
-              <td>{e.symbol}</td>
+              <td><IR ticker={e.symbol} name={e.name} className="text-accent hover:underline" /></td>
               <td className="font-sans text-xs text-muted2 max-w-[180px] truncate">{e.name || "—"}</td>
               <td className="pl-2 font-sans">{((e.tags ?? []).length === 0 ? ["base"] : e.tags).map((t: string) => (
                 <span key={t} className="text-[10px] px-1 py-0.5 rounded mr-1 whitespace-nowrap"
@@ -181,7 +182,7 @@ export default function Events() {
           <tbody>{ipoRows.map((p: any, i: number) => (
             <tr key={i} className="border-t border-border">
               <td className="py-1.5">{dt(p.date)}</td>
-              <td style={{ color: p.ticker ? "#22d3ee" : "#9aa1ad" }}>{p.ticker || "—"}</td>
+              <td>{p.ticker ? <IR ticker={p.ticker} name={p.name} className="text-accent hover:underline" /> : <span style={{ color: "#9aa1ad" }}>—</span>}</td>
               <td className="font-sans text-xs max-w-[220px] truncate">
                 {p.link ? <a href={p.link} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">{p.name || "—"}</a> : (p.name || "—")}</td>
               <td className="font-sans text-xs text-muted2">{p.industry || p.exchange || "—"}</td>

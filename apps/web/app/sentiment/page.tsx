@@ -2,6 +2,7 @@
 import { StepBanner } from "@/components/Pipeline";
 import { useSentiment } from "@/lib/api";
 import { PageSkeleton, EmptyState } from "@/components/ui";
+import { IR } from "@/lib/ir";
 
 const SC: Record<string, [string, string]> = {
   bullish: ["#22c55e", "▲"], bearish: ["#f43f5e", "▼"], neutral: ["#9aa1ad", "–"],
@@ -87,7 +88,7 @@ export default function Sentiment() {
           </thead>
           <tbody>{rows.map((r: any) => (
             <tr key={r.symbol} className="border-t border-border align-top">
-              <td className="py-1.5 mono">{r.symbol}</td>
+              <td className="py-1.5 mono"><IR ticker={r.symbol} name={r.name} assetClass={r.asset_class} className="text-accent hover:underline" /></td>
               <td>{tag(r.label, r.sector)}</td>
               <td className="text-right mono" style={{ color: r.score > 0 ? "#22c55e" : r.score < 0 ? "#f43f5e" : "#9aa1ad" }}>{(r.score ?? 0).toFixed(2)}</td>
               <td className="text-right mono">{r.n_news ?? 0}</td>
