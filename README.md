@@ -12,22 +12,29 @@ alpha > produit**. Architecture en **plugins** (« ajouter un fichier, jamais to
 
 ## ✨ Le terminal en un coup d'œil
 
-10 fenêtres : **Dashboard** (perf vs benchmarks, régime, playbook VIX, screener+ML) ·
-**Thèmes de marché** (heatmap YTD par secteur 4ᵉ révolution industrielle) · **Signaux ML** ·
-**Sentiment & news** (FinBERT optionnel / lexique / repli momentum, news RSS gratuites) ·
+Fenêtres : **Dashboard** (perf vs benchmarks, régime, playbook VIX, screener+ML) ·
+**Thèmes de marché** (heatmap YTD par secteur 4ᵉ révolution industrielle) ·
+**Événements** (prochains résultats trimestriels — BPA & revenu **estimés et annoncés** — pour tes
+positions + le **top 5 %** des scores, et **IPOs US** via dépôts S‑1/S‑1/A **SEC EDGAR** + FMP) ·
+**Signaux ML** ·
+**Sentiment & news** (recentré sur **ton** portefeuille ; FinBERT optionnel / lexique / repli momentum, RSS gratuit) ·
 **Fondamentaux** (DCF, ratios, Piotroski, Altman Z, note technique + combinée) ·
-**Univers** (929 actifs, recherche/filtres, table virtualisée) · **Données** (collecte, qualité, couverture) ·
+**Univers** (recherche/filtres, table virtualisée) · **Données** (collecte, qualité, couverture) ·
 **Portefeuille & Analyse** (Monte-Carlo, attribution, revue experte) · **Risque** (VaR/EVT/GARCH,
 backtest VaR, ACP, budget de risque, limites, stress, allocation HRP/ERC, multi-stratégie) ·
-**Positions** · **Trades** · **Portefeuille réel** (Alpaca/Bitmart, réconciliation, TCA).
+**Positions** · **Trades** (ordres exécutés **+ ordres en attente**) · **Portefeuille réel** (Alpaca/Bitmart, réconciliation, TCA).
 
 > 🧭 Carte complète des modules : [`docs/MODULES.md`](docs/MODULES.md).
 > 📱 **Installable (PWA)** : la preview génère `manifest.webmanifest` + `sw.js` → « Ajouter à
 > l'écran d'accueil » sur téléphone = vraie app, utilisable **hors-ligne**. ⌘K · mode live · thème clair/sombre.
 > 🤗 **Démo publique gratuite** : déployable en un Space HuggingFace (`deploy/hf_space/`).
 
-- **Capital fictif 10 000 $** alloué aux **meilleurs setups** (force relative), exposition
-  **pilotée par le VIX** (1.0 / 0.7 / 0.4, **sans levier**), objectif : **surperformer l'univers équipondéré**.
+- **Stratégie de production** : **50 % QQQ (cœur indiciel) + 50 % preset** (qualité top‑30 →
+  risk‑parity ERC → DD‑target → blackout résultats → no‑trade band → cap 10 %), capital de base
+  10 000 $, exposition **pilotée par le VIX**, **sans levier**. Choix **décidé par la donnée**
+  (`make index-core` / `ledger-sweep`) ; pas d'edge directionnel prouvé → on gagne par le **risque**.
+- **Frais réalistes** modélisés (commission + slippage + SEC/TAF) aux barèmes **Alpaca / IBKR /
+  Binance / BitMart** ; le **journal de trades** réconcilie à l'$ près avec la courbe (réalisé + latent + frais).
 - **Données réelles** branchables (yfinance / FMP / votre `YAHOO.db`, ~4 Go) avec repli synthétique —
   le build affiche le **MODE DES DONNÉES** (réel / mixte / synthétique).
 - **ML** : Gradient Boosting (sklearn) ou logit numpy, **CV purgée + embargo** (López de Prado),
@@ -99,8 +106,10 @@ uv pip install -e ".[dev,quant,ml,reporting]"
 pytest -q
 # Terminal autonome (aucune API requise) :
 python apps/web/preview/build_interactive.py    # ouvre apps/web/preview/interactive.html
-# API + front :
-make api        # uvicorn apps.api.main:app --reload   (http://localhost:8000)
+# API + front EN UNE COMMANDE (maj du code + tue les vieux process + API en fond + site) :
+make start      # → http://localhost:3000  (laisse ~1-3 min au 1er build) ·  make stop pour arrêter
+# …ou en deux fenêtres séparées :
+make api        # uvicorn apps.api.main:app   (http://localhost:8000)
 make web        # cd apps/web && npm install && npm run dev (http://localhost:3000)
 ```
 
