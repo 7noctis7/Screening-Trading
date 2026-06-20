@@ -21,7 +21,8 @@ positions + le **top 5 %** des scores, et **IPOs US** via dépôts S‑1/S‑1/A
 **Signaux ML** ·
 **Sentiment & news** (recentré sur **ton** portefeuille ; FinBERT optionnel / lexique / repli momentum, RSS gratuit) ·
 **Fondamentaux** (DCF, ratios, Piotroski, Altman Z, note technique + combinée) ·
-**Univers** (recherche/filtres, table virtualisée) · **Données** (collecte, qualité, couverture) ·
+**Notes d'analyse** (note PDF/HTML par société — Vernimmen + Damodaran, audit PwC — archives datées) ·
+**Univers** (recherche/filtres, table virtualisée) · **Données** (collecte, qualité, **audit PwC**, couverture) ·
 **Portefeuille & Analyse** (Monte-Carlo, attribution, revue experte) · **Risque** (VaR/EVT/GARCH,
 backtest VaR, ACP, budget de risque, limites, stress, allocation HRP/ERC, multi-stratégie) ·
 **Positions** · **Trades** (ordres exécutés **+ ordres en attente**) · **Portefeuille réel** (Alpaca/Bitmart, réconciliation, TCA).
@@ -37,8 +38,15 @@ backtest VaR, ACP, budget de risque, limites, stress, allocation HRP/ERC, multi-
   (`make index-core` / `ledger-sweep`) ; pas d'edge directionnel prouvé → on gagne par le **risque**.
 - **Frais réalistes** modélisés (commission + slippage + SEC/TAF) aux barèmes **Alpaca / IBKR /
   Binance / BitMart** ; le **journal de trades** réconcilie à l'$ près avec la courbe (réalisé + latent + frais).
-- **Données réelles** branchables (yfinance / FMP / votre `YAHOO.db`, ~4 Go) avec repli synthétique —
-  le build affiche le **MODE DES DONNÉES** (réel / mixte / synthétique).
+- **Notes d'analyse institutionnelles** par société (icône 📄 + page `/notes`) : **Vernimmen**
+  (ROCE vs WACC, EVA, DuPont, gearing) + **Damodaran** (DCF scénarios & inversé, multiples vs
+  secteur), 3 scores (fondamental/technique/ML), résultats & estimations, historique CA/résultat
+  **5-6 ans SEC EDGAR** + CAGR, graphes SVG, **mémo IA local optionnel** — chaque chiffre **audité
+  PwC** (cohérence + complétude + fiabilité croisée). PDF/HTML, **régénérées à chaque résultat
+  trimestriel** et **archivées chaque nuit**. Notes aussi écrites dans le coffre Obsidian (`#company`).
+- **Données réelles** branchables (yfinance / FMP / SEC EDGAR / votre `YAHOO.db`, ~4 Go) avec repli
+  synthétique — le build affiche le **MODE DES DONNÉES** (réel / mixte / synthétique) et un **audit
+  PwC** (complétude / exactitude / point-in-time / biais du survivant) visible dans la fenêtre Données.
 - **ML** : Gradient Boosting (sklearn) ou logit numpy, **CV purgée + embargo** (López de Prado),
   triple-barrier — aucune fuite du futur.
 - **Graphiques chandeliers** au clic (volumes, MA20/50/100/200, EMA, Bollinger, RSI, timeframe D/W/M,
@@ -182,6 +190,14 @@ make preset-report                                # rapport HTML (courbes + draw
 **Entraîner le modèle ML hors-ligne** (serving découplé — l'API charge l'artefact, ne réentraîne plus) :
 ```bash
 make train         # → models/ (lancé aussi par le cron quotidien)
+```
+
+**Données & notes** (lancés aussi par le cron quotidien) :
+```bash
+make audit                 # audit PwC des bases (complétude/exactitude/PIT) — ARGS=--strict pour gater
+make ingest-delisted       # détecte les délistés → data/delisted.csv (anti-biais du survivant)
+make reports               # notes d'analyse (top-conviction + positions) → out/notes/AAAA-MM-JJ + coffre
+make analytics             # rapport perf QuantStats (Sortino/Calmar/Alpha-Beta) → vault/Performance_Report.md
 ```
 
 **Automatiser la maj quotidienne en une commande** (macOS launchd / Linux crontab, 22h30 lun-ven) :
