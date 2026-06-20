@@ -1,0 +1,36 @@
+# Connecteur MCP TradingView (plug-and-play) — config-driven, n'altère pas le cœur.
+# Activation serveur :  make mcp-tv   (ou : python -m packages.mcp_tradingview.server)
+mcp_tradingview:
+  enabled: true
+  transport: stdio                 # stdio (SDK mcp) ou repli JSON-RPC stdio automatique
+
+  # Pont MCP → API/front (fichiers locaux sous .cache/, jamais commités)
+  overlay_store: .cache/tv_overlays.json
+  alerts_drop:  .cache/tv_alerts.json
+
+  # POINT-IN-TIME : overlays & alertes = AFFICHAGE / LIVE uniquement.
+  # Interdits dans le backtest et l'entraînement ML (CV purgée + embargo). Ne pas changer sans audit.
+  point_in_time_isolation: true
+
+  # Repli si le flux TradingView échoue (réseau/clé) : on n'invente pas de signaux de trading,
+  # on dégrade proprement (overlays vides, veto neutre) — jamais de données synthétiques en live.
+  fallback:
+    on_feed_error: degrade_empty   # degrade_empty | keep_last
+
+  # Défauts du traducteur Pine (miroir de la production ; surchargés par le YAML passé à l'outil)
+  pine_defaults:
+    dd_target: 0.45
+    k_dd: 2.5
+    band: 0.03
+    max_weight: 0.10
+    lookback: 120
+    top_k: 30
+    blackout_move: 0.12
+
+  # Webhook entrant des alertes TradingView (POST). Mappe severity → action risk-engine.
+  webhook:
+    path: /api/tv/webhook
+    severity_map:                  # critical → veto total ; warning → expo ×0.5 ; info → rien
+      critical: veto
+      warning:  reduce_half
+      info:     none

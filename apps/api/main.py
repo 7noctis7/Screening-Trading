@@ -339,6 +339,27 @@ def events() -> dict:
     return _EVENTS
 
 
+@app.get("/api/overlays")
+def overlays(ticker: str = "") -> dict:
+    """Overlays graphiques (marqueurs ▲▼, cônes de risque, blackouts) écrits par le serveur MCP
+    TradingView → lus par lightweight-charts. Display-only (jamais utilisé par backtest/ML)."""
+    from packages.mcp_tradingview.store import OverlayStore
+    st = OverlayStore()
+    return st.get(ticker) if ticker else st.all()
+
+
+@app.post("/api/tv/webhook")
+async def tv_webhook(request: Request) -> dict:
+    """Webhook entrant des alertes TradingView (Pine/indicateur) → drop pour le risk-engine (veto)."""
+    from packages.mcp_tradingview.alerts import append_alert
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001
+        body = {}
+    a = append_alert(body if isinstance(body, dict) else {})
+    return {"ok": a is not None, "alert": a.to_dict() if a else None}
+
+
 @app.get("/api/ai/status")
 def ai_status() -> dict:
     """Disponibilité d'un LLM local (LM Studio / Ollama)."""

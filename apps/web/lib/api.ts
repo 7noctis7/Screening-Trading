@@ -38,3 +38,11 @@ export const useConviction = () => q("conviction", "/api/conviction", 60000);
 export const useInvestors = () => q("investors", "/api/investors", 60000);
 export const useMacro = () => q("macro", "/api/macro", 600000);
 export const useEvents = () => q("events", "/api/events", 600000);
+// Overlays MCP TradingView (cônes de risque + blackouts) pour un ticker — null si aucun.
+export const useOverlays = (ticker: string | null) =>
+  useQuery({
+    queryKey: ["overlays", ticker], enabled: !!ticker,
+    queryFn: () => get<any>(`/api/overlays?ticker=${encodeURIComponent(ticker ?? "")}`),
+    refetchInterval: 20000, refetchOnWindowFocus: false, staleTime: 10000, gcTime: 600000,
+    placeholderData: keepPreviousData,
+  });
