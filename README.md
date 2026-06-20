@@ -63,9 +63,9 @@ flowchart TD
     PROV["data.providers<br/>synthetic · yfinance · db"]
     STORE["storage<br/>bronze/silver/gold · feature store · quality"]
     IND["indicators"]; FUND["fundamentals"]; RANK["ranking (multi-facteur)"]
-    REG["regime (macro point-in-time)"]; STRAT["strategies (swing…)"]
+    REG["regime (macro point-in-time)"]; STRAT["strategies (preset best-practice · cœur QQQ · swing legacy)"]
     SIZE["portfolio.sizing (vol-target)"]; RISK["risk (kill-switch)"]
-    BT["backtest (vectorisé fast_swing)"]; EXEC["execution (Sim · Alpaca paper)"]
+    BT["backtest (preset ledger parts/cash · vectorisé)"]; EXEC["execution (Sim · Alpaca · BitMart)"]
     ML["ml (CV purgée, triple-barrier)"]; PORT["portfolio (VaR/CVaR · Monte-Carlo · attribution · revue)"]
   end
   subgraph APP["apps/ — produit"]
@@ -83,10 +83,10 @@ flowchart TD
   SNAP --> PREV
 ```
 
-**Pipeline** : `données → (régime macro) → screening/ranking + ML → stratégie swing →
-sizing vol-target → risk engine (veto/kill-switch) → backtest vectorisé → portefeuille
-(perf, VaR/CVaR, Monte-Carlo) → API → terminal web`. Mêmes interfaces backtest ↔ paper ↔ live
-(parité). Diagrammes vivants : [`vault/01_ARCHITECTURE.md`](vault/01_ARCHITECTURE.md).
+**Pipeline** : `données → (régime macro) → screening/ranking + ML → preset (qualité · risk-parity ERC ·
+DD-target) + cœur QQQ → sizing vol-target → risk engine (veto/kill-switch) → backtest discret (parts/cash,
+net de frais) → portefeuille (perf, VaR/CVaR, Monte-Carlo) → API → terminal web`. Mêmes interfaces
+backtest ↔ paper ↔ live (parité). Diagrammes vivants : [`vault/01_ARCHITECTURE.md`](vault/01_ARCHITECTURE.md).
 
 | Dossier | Rôle |
 |---|---|
