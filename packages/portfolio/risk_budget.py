@@ -44,10 +44,24 @@ def risk_contributions(weights, cov) -> dict:
 
 
 def covariance(returns_by_asset: dict[str, list[float]]) -> tuple[list[str], np.ndarray]:
-    """Matrice de covariance (annualisée ×252) à partir des rendements par actif (alignés)."""
+    """Matrice de covariance (annualisée ×252) à partir des rendements par actif (alignés).
+
+    Délègue au moteur vectorisé unique (`packages.data.engine.covariance_matrix`) — source de
+    vérité partagée avec le screener, prête pour l'accélération DuckDB/Polars. Repli numpy local
+    si le moteur est indisponible : ne casse jamais le snapshot."""
     syms = list(returns_by_asset)
     if not syms:
         return [], np.zeros((0, 0))
+    try:
+        from packages.data.engine import covariance_matrix
+        cb_syms, cov = covariance_matrix(returns_by_asset, annualize=252)
+        # le moteur filtre les séries trop courtes (<2 pts) ; on aligne la sortie sur l'attendu
+        if len(cb_syms) == len(syms):
+            return cb_syms, np.atleast_2d(np.asarray(cov, dtype=float))
+        if cb_syms:
+            return cb_syms, np.atleast_2d(np.asarray(cov, dtype=float))
+    except Exception:  # noqa: BLE001 — moteur indisponible → repli numpy pur ci-dessous
+        pass
     n = min(len(v) for v in returns_by_asset.values())
     M = np.array([returns_by_asset[s][-n:] for s in syms], dtype=float)
     cov = np.cov(M) * 252.0 if n > 1 else np.zeros((len(syms), len(syms)))

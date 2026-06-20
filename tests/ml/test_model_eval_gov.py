@@ -1,4 +1,6 @@
-import numpy as np
+import pytest
+
+np = pytest.importorskip("numpy")               # cœur ML : sauté si numpy absent (sandbox sans deps)
 from packages.ml import (LogitModel, make_model, accuracy, precision_recall,
                          champion_challenger, ModelRegistry)
 
@@ -24,6 +26,7 @@ def test_logit_handles_nan():
 
 
 def test_sklearn_adapter_runs():
+    pytest.importorskip("sklearn")              # adaptateur scikit-learn optionnel
     X, y = _separable()
     m = make_model("sklearn").fit(X, y)
     assert accuracy(y, m.predict(X)) > 0.8

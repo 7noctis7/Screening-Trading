@@ -79,3 +79,25 @@ def test_assert_integrity_raises_on_critical():
 
 def test_assert_integrity_passes_when_clean():
     assert_integrity(audit_dataset({"AAA": _good()}, now=date(2026, 7, 1)))   # ne lève pas
+
+
+class _Bar:                                                  # objet type Bar (attributs, pas dict)
+    __slots__ = ("ts", "open", "high", "low", "close", "volume")
+
+    def __init__(self, d):
+        self.ts, self.open, self.high = d["ts"], d["o"], d["h"]
+        self.low, self.close, self.volume = d["l"], d["c"], d["v"]
+
+
+def test_gate_accepts_bar_objects():
+    # la gate du snapshot passe des objets Bar (attributs) — l'audit doit les lire comme les dicts.
+    bars = [_Bar(d) for d in _good()]
+    rep = audit_dataset({"AAA": bars}, now=date(2026, 7, 1))
+    assert rep.ok and not rep.critical
+
+
+def test_gate_catches_critical_on_bar_objects():
+    bars = [_Bar(d) for d in _good()]
+    bars[10].close = -1.0                                     # prix négatif → critique
+    a = audit_series("AAA", bars, now=date(2026, 7, 1))
+    assert any(x.severity == "critical" for x in a)
