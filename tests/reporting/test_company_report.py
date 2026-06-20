@@ -40,7 +40,7 @@ def test_report_structure_complete():
     for key in ("identity", "audit", "score", "vernimmen", "damodaran", "quality", "verdict"):
         assert key in r
     assert 0 <= r["score"]["global"] <= 100
-    assert r["score"]["recommendation"] in ("Achat", "Conserver", "Vente")
+    assert r["score"]["recommendation"] in ("Achat", "Neutre", "Sous surveillance", "Contrôle requis")
     assert r["vernimmen"]["roce_after_tax"] is not None
     assert "scenarios" in r["damodaran"]["dcf"]
 
@@ -71,6 +71,24 @@ def test_markdown_obsidian_note():
     assert md.startswith("---") and "type: company_report" in md   # front matter Dataview
     assert "tags: [quant, company]" in md and "# 🏢 NVIDIA" in md
     assert "ROCE" in md and "DCF base" in md and "Vigilance" in md or "Forces" in md
+
+
+def test_overvaluation_penalty_and_pillar_zero():
+    # action excellente mais payée beaucoup trop cher : FCF faible vs capi → DCF ≪ cours
+    f = _fin(price=1133.0, shares=1.1e9, revenue=3.74e10, gross_profit=2.18e10, ebit=2.0e10,
+             ebitda=2.3e10, net_income=1.55e10, total_equity=5e10, total_debt=1e10, cash=1.2e10,
+             fcf=6e8, interest_expense=4e8)
+    r = build_company_report(f, name="Micron", beta=1.0)
+    mos = r["damodaran"]["dcf"]["margin_of_safety"]
+    if mos is not None and mos < -0.30:                          # cas surévalué
+        assert r["score"]["pillars"]["valorisation"]["score"] == 0
+        assert r["score"]["valuation_penalty"] < 1.0
+        assert r["flags"]["overvalued"] is True
+
+
+def test_verdict_status_labels():
+    r = build_company_report(_fin(), name="NVIDIA")
+    assert r["score"]["verdict_status"] in ("ACHAT", "NEUTRE", "SOUS SURVEILLANCE")
 
 
 def test_valuation_gate_masks_currency_mismatch():

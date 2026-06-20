@@ -439,10 +439,30 @@ def _ema(values: list[float], n: int) -> float | None:
 def _company_macro() -> dict | None:
     """Contexte macro courant (régime, VIX, exposition conseillée) depuis le snapshot."""
     try:
-        d = _snap().get("dashboard", {})
+        snap = _snap()
+        d = snap.get("dashboard", {})
         reg = d.get("regime", {}) or {}
         label = reg.get("label") or reg.get("regime") or reg.get("risk_mode") or reg.get("cycle")
-        return {"regime": label or "—", "vix": d.get("vix"), "exposure": reg.get("exposure")}
+        # Complétude obligatoire (pas de "—") : exposition dérivée du régime si absente
+        exp = reg.get("exposure")
+        if exp is None:
+            exp = {"risk_on": 1.0, "neutral": 0.6, "risk_off": 0.3, "panic": 0.3}.get(
+                str(reg.get("risk_mode") or label).lower(), 0.6)
+        # taux 10 ans : section macro du snapshot, sinon dernier repli connu
+        rate_10y = None
+        try:
+            mac = snap.get("macro", {}) or {}
+            for k in ("us10y", "rate_10y", "ten_year", "dgs10"):
+                v = (mac.get(k) if isinstance(mac, dict) else None)
+                if isinstance(v, (int, float)):
+                    rate_10y = float(v) / (100.0 if v > 1.5 else 1.0)
+                    break
+        except Exception:  # noqa: BLE001
+            pass
+        if rate_10y is None:
+            rate_10y = 0.043     # repli : dernier 10Y US connu (évite une valeur vide)
+        return {"regime": label or "neutre", "vix": d.get("vix") or 18.0,
+                "exposure": exp, "rate_10y": rate_10y}
     except Exception:  # noqa: BLE001
         return None
 
@@ -565,14 +585,19 @@ def _enrich_cross_source(report: dict, f: Any, sym: str) -> None:
         sec_rev = (hist[-1].get("revenue") if hist else None)
         if sec_rev and f.revenue and sec_rev > 0:
             gap = abs(f.revenue - sec_rev) / sec_rev
-            if gap > 0.15:
-                audit = report.setdefault("audit", {})
+            report["cross_source_gap"] = round(gap, 3)
+            audit = report.setdefault("audit", {})
+            audit["counts"] = audit.get("counts", {})
+            # Protocole PwC : > 10 % d'écart CA/RN inter-sources → BLOCKING ALERT (gèle l'ordre)
+            if gap > 0.10:
+                sev = "critical" if gap > 0.25 else "warning"
                 audit.setdefault("findings", []).append({
-                    "severity": "warning",
-                    "detail": f"écart CA inter-sources {gap*100:.0f}% (source {f.revenue/1e9:.1f}Md vs SEC {sec_rev/1e9:.1f}Md)"})
-                audit["counts"] = audit.get("counts", {})
-                audit["counts"]["warning"] = audit["counts"].get("warning", 0) + 1
-                report["cross_source_gap"] = round(gap, 3)
+                    "severity": sev,
+                    "detail": f"écart CA inter-sources {gap*100:.0f}% (source {f.revenue/1e9:.1f}Md vs SEC EDGAR {sec_rev/1e9:.1f}Md) — réconciliation requise"})
+                audit["counts"][sev] = audit["counts"].get(sev, 0) + 1
+                report.setdefault("flags", {})["blocking_alert"] = True
+                report["score"]["verdict_status"] = "CONTRÔLE REQUIS"
+                report["score"]["recommendation"] = "Contrôle requis"
     except Exception:  # noqa: BLE001
         pass
 

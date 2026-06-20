@@ -247,17 +247,21 @@ def company_report_html(r: dict[str, Any], theme: str = "dark") -> str:
                   f'{_mini("Technique", sc.get("technical"))}'
                   f'{_mini("ML", sc.get("ml"))}</div>')
 
-    # en-tête
+    # en-tête — Hero Section (ticker/capi/prix massifs, badge statut faible saturation)
+    status = sc.get("verdict_status", sc["recommendation"].upper())
+    blocking = (r.get("flags") or {}).get("blocking_alert")
+    badge_col = _C["neg"] if blocking else _tone(g)
     header = (
-        f'<div style="display:flex;align-items:center;gap:20px;margin-bottom:18px">'
+        f'<div style="display:flex;align-items:center;gap:22px;margin-bottom:16px">'
         f'<div>{_gauge(g)}</div>'
-        f'<div style="flex:1"><div style="font-size:24px;font-weight:700">{idy["name"]} '
-        f'<span style="color:{_C["muted"]};font-size:16px">{idy["symbol"]}</span></div>'
-        f'<div style="color:{_C["muted"]};font-size:13px">{idy["sector"]} · {_money(idy["market_cap"])} de capi · '
-        f'cours ${_num(idy["price"])}</div>'
-        f'<div style="margin-top:6px;display:inline-block;padding:3px 12px;border-radius:999px;'
-        f'background:{_tone(g)}22;color:{_tone(g)};font-weight:600;font-size:13px">'
-        f'{sc["recommendation"]} · {g}/100</div>'
+        f'<div style="flex:1">'
+        f'<div style="font-size:30px;font-weight:800;letter-spacing:-.01em">{idy["symbol"]}'
+        f'<span style="color:{_C["muted"]};font-size:15px;font-weight:500;margin-left:10px">{idy["name"]}</span></div>'
+        f'<div style="color:{_C["muted"]};font-size:14px;margin-top:2px">{idy["sector"]} · '
+        f'<b style="color:{_C["fg"]}">{_money(idy["market_cap"])}</b> · cours <b style="color:{_C["fg"]}">${_num(idy["price"])}</b></div>'
+        f'<div style="margin-top:8px;display:inline-block;padding:4px 14px;border-radius:999px;'
+        f'background:{badge_col}1f;color:{badge_col};font-weight:700;font-size:13px;letter-spacing:.02em">'
+        f'{status} · {g}/100</div>'
         f'{sub_scores}</div></div>')
 
     # Vernimmen
@@ -355,14 +359,18 @@ def company_report_html(r: dict[str, Any], theme: str = "dark") -> str:
         ("Thiel", f'{inv.get("thiel")}/100', _C["fg"]),
     ])
 
-    # Verdict
+    # Synthèse Advisory Board — Moat / Tail Risk
     v = r["verdict"]
-    st = "".join(f'<li style="color:{_C["pos"]};font-size:12px;margin:2px 0">✓ {s}</li>' for s in v["strengths"])
-    wt = "".join(f'<li style="color:{_C["warn"]};font-size:12px;margin:2px 0">▸ {s}</li>' for s in v["watch"])
+    st = "".join(f'<li style="color:{_C["pos"]};font-size:12px;margin:3px 0">✓ {s}</li>' for s in v["strengths"])
+    wt = "".join(f'<li style="color:{_C["warn"]};font-size:12px;margin:3px 0">▸ {s}</li>' for s in v["watch"])
+    if (r.get("flags") or {}).get("blocking_alert"):
+        wt = (f'<li style="color:{_C["neg"]};font-size:12px;margin:3px 0;font-weight:600">⛔ Réconciliation '
+              f'de données requise — ne pas trader avant résolution.</li>') + wt
+    _lab = "font-size:9px;letter-spacing:.14em;text-transform:uppercase"
     verdict = (f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">'
-               f'<div><div style="font-size:11px;color:{_C["muted"]};text-transform:uppercase">Points forts</div>'
+               f'<div><div style="color:{_C["muted"]};{_lab}">Points forts · Moat</div>'
                f'<ul style="margin:6px 0 0;padding-left:16px">{st}</ul></div>'
-               f'<div><div style="font-size:11px;color:{_C["muted"]};text-transform:uppercase">Points de vigilance</div>'
+               f'<div><div style="color:{_C["muted"]};{_lab}">Risques fatals · Tail Risk</div>'
                f'<ul style="margin:6px 0 0;padding-left:16px">{wt}</ul></div></div>')
 
     # Résultats & estimations (forte valeur)
@@ -455,6 +463,26 @@ def company_report_html(r: dict[str, Any], theme: str = "dark") -> str:
             ("Taux 10 ans", _pct(mc.get("rate_10y")) if mc.get("rate_10y") is not None else "—", _C["fg"]),
         ]))
 
+    blocking_html = ""
+    if (r.get("flags") or {}).get("blocking_alert"):
+        blocking_html = (
+            f'<div style="background:{_C["neg"]}1f;border:1px solid {_C["neg"]};border-radius:10px;'
+            f'padding:11px 14px;margin-bottom:14px;font-size:13px;color:{_C["neg"]};font-weight:600">'
+            "⛔ CONTRÔLE REQUIS — réconciliation de données nécessaire (écart inter-sources). "
+            "Ordre gelé (paper/live) jusqu'à résolution.</div>")
+    memo_html = ""
+    if r.get("memo"):
+        _src = " · IA" if r.get("memo_source") == "IA locale" else ""
+        memo_html = (
+            f'<div style="background:{_C["card2"]};border-left:3px solid {_C["accent"]};border-radius:10px;'
+            f'padding:12px 14px;margin-bottom:14px;font-size:13px;color:{_C["fg"]}">'
+            f'<span style="font-size:9px;color:{_C["muted"]};text-transform:uppercase;letter-spacing:.14em">'
+            f'Axe directeur{_src}</span>'
+            f'<div style="margin-top:5px;line-height:1.5">{r["memo"]}</div></div>')
+    fx_html = ""
+    if r.get("fx_conversion"):
+        fx_html = (f'<div style="font-size:11px;color:{_C["muted"]};margin:-6px 0 12px">💱 '
+                   f'{r["fx_conversion"]} — valorisation calculée après conversion de devise.</div>')
     _html = f"""<!doctype html><html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Note d'analyse — {idy['name']} ({idy['symbol']})</title>
@@ -462,16 +490,12 @@ def company_report_html(r: dict[str, Any], theme: str = "dark") -> str:
 <body style="margin:0;background:{_C['bg']};color:{_C['fg']};
 font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',Inter,system-ui,sans-serif;line-height:1.45">
 <div style="max-width:860px;margin:0 auto;padding:28px 24px">
-<div style="font-size:11px;color:{_C['muted']};letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px">
-Note d'analyse fondamentale · {r['as_of']}</div>
+<div style="font-size:10px;color:{_C['muted']};letter-spacing:.14em;text-transform:uppercase;margin-bottom:8px">
+Rapport d'évaluation institutionnelle · {r['as_of']} · données auditées</div>
 {header}
-{(f'<div style="background:{_C["card2"]};border-left:3px solid {_C["accent"]};border-radius:10px;'
-  f'padding:12px 14px;margin-bottom:14px;font-size:13px;color:{_C["fg"]}">'
-  f'<span style="font-size:10px;color:{_C["muted"]};text-transform:uppercase;letter-spacing:.06em">'
-  f'Synthèse · {r.get("memo_source","")}</span><div style="margin-top:4px">{r["memo"]}</div></div>')
-  if r.get("memo") else ""}
-{(f'<div style="font-size:11px;color:{_C["muted"]};margin:-6px 0 12px">💱 {r["fx_conversion"]} — '
-  f'valorisation calculée après conversion de devise.</div>') if r.get("fx_conversion") else ""}
+{blocking_html}
+{memo_html}
+{fx_html}
 {charts_card}
 {findata_card}
 {_card("Audit d'intégrité des données", _findings_html(audit))}
@@ -483,7 +507,7 @@ Note d'analyse fondamentale · {r['as_of']}</div>
 {tech_card}
 {macro_card}
 {_card("Synthèse — piliers de notation", pillars)}
-{_card("Verdict", verdict)}
+{_card("Synthèse Advisory Board — Moat & Tail Risk", verdict)}
 <p style="font-size:10px;color:{_C['muted']};margin-top:18px">
 Sources gratuites (Yahoo Finance / FMP / SEC EDGAR — 10-K, 10-Q) + recalculs internes contrôlés.
 Cadre Vernimmen (rentabilité économique) & A. Damodaran (coût du capital, DCF). Ce document est
@@ -587,12 +611,16 @@ def _reportlab_pdf(r: dict, path: str, A4, cm, canvas, theme: str = "dark") -> N
     c.drawString(ML, st["y"], f"{idy['name']}")
     c.setFillColor(C["muted"]); c.setFont("Helvetica", 12)
     c.drawString(ML + c.stringWidth(idy['name'], "Helvetica-Bold", 19) + 6, st["y"], idy['symbol'])
-    # badge reco/score à droite
-    g = sc["global"]; bw, bh = 3.4 * cm, 1.0 * cm
+    # badge statut/score à droite
+    g = sc["global"]
+    blocking = (r.get("flags") or {}).get("blocking_alert")
+    status = sc.get("verdict_status", sc["recommendation"].upper())
+    badge_col = C["neg"] if blocking else tone(g)
+    bw, bh = 4.3 * cm, 1.0 * cm
     bx, by = w - MR - bw, st["y"] - 0.2 * cm
-    c.setFillColor(tone(g)); c.roundRect(bx, by, bw, bh, 7, fill=1, stroke=0)
-    c.setFillColor(HexColor("#ffffff")); c.setFont("Helvetica-Bold", 12)
-    c.drawCentredString(bx + bw / 2, by + 0.32 * cm, f"{sc['recommendation']} · {g}/100")
+    c.setFillColor(badge_col); c.roundRect(bx, by, bw, bh, 7, fill=1, stroke=0)
+    c.setFillColor(HexColor("#ffffff")); c.setFont("Helvetica-Bold", 11)
+    c.drawCentredString(bx + bw / 2, by + 0.34 * cm, f"{status} · {g}/100")
     st["y"] -= 0.62 * cm
     c.setFillColor(C["muted"]); c.setFont("Helvetica", 9.5)
     c.drawString(ML, st["y"], f"{idy['sector']} · {_money(idy.get('market_cap'))} de capi · cours ${_num(idy.get('price'))}")
@@ -612,7 +640,16 @@ def _reportlab_pdf(r: dict, path: str, A4, cm, canvas, theme: str = "dark") -> N
         c.drawString(cx + 0.3 * cm + c.stringWidth(str(val), "Helvetica-Bold", 13) + 3, st["y"] - 0.58 * cm, "/100")
     st["y"] -= 1.25 * cm
 
-    # ── mémo (carte accent) ──
+    # ── bannière BLOCKING ALERT ──
+    if (r.get("flags") or {}).get("blocking_alert"):
+        bhh = 0.95 * cm
+        c.setFillColor(C["neg"]); c.roundRect(ML, st["y"] - bhh, CW, bhh, 6, fill=1, stroke=0)
+        c.setFillColor(HexColor("#ffffff")); c.setFont("Helvetica-Bold", 9.5)
+        c.drawString(ML + 0.4 * cm, st["y"] - 0.6 * cm,
+                     "CONTRÔLE REQUIS — réconciliation de données nécessaire · ordre gelé (paper/live)")
+        st["y"] -= bhh + 0.35 * cm
+
+    # ── axe directeur (carte accent) ──
     if r.get("memo"):
         lines = _wrap(r["memo"], 105)
         mh = 0.5 * cm + len(lines) * 0.42 * cm
@@ -744,7 +781,10 @@ def _reportlab_pdf(r: dict, path: str, A4, cm, canvas, theme: str = "dark") -> N
     rows = []
     mc = r.get("macro")
     if mc:
-        rows.append(("Régime · VIX", f"{mc.get('regime') or '—'} · {_num(mc.get('vix'),1)}", C["fg"]))
+        rows.append(("Régime · VIX", f"{mc.get('regime') or 'neutre'} · {_num(mc.get('vix'),1)}", C["fg"]))
+        rows.append(("Exposition · Taux 10A US",
+                     f"{_pct(mc.get('exposure')) if mc.get('exposure') is not None else '60%'} · "
+                     f"{_pct(mc.get('rate_10y')) if mc.get('rate_10y') is not None else '4.3%'}", C["fg"]))
     e = r.get("earnings")
     if e:
         rows += [("Prochain résultat", e.get("next_date") or "—", C["accent"]),
@@ -786,7 +826,7 @@ def _reportlab_pdf(r: dict, path: str, A4, cm, canvas, theme: str = "dark") -> N
         for lab, _, col in rows:
             for j, ln in enumerate(_wrap(lab, 95)):
                 wrapped.append((ln if j == 0 else "   " + ln, "", col))
-        card("Verdict", wrapped)
+        card("Synthèse Advisory Board — Moat & Tail Risk", wrapped)
 
     _footer(); c.showPage(); c.save()
 
