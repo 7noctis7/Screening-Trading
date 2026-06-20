@@ -23,17 +23,15 @@ export default function NotesPage() {
       {/* génération à la demande */}
       <section className="card p-4">
         <h2 className="text-sm uppercase tracking-wide text-muted mb-2">Générer une note</h2>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <input value={gen} onChange={(e) => setGen(e.target.value.toUpperCase())}
             placeholder="ticker (ex. AAPL)" className="text-sm px-2 py-1 rounded bg-surfaceAlt border border-border outline-none w-44" />
-          <a href={gen ? `${BASE}/api/company_report?ticker=${encodeURIComponent(gen)}&format=html` : undefined}
-            target="_blank" rel="noopener noreferrer"
-            className={`text-sm px-3 py-1 rounded-md border border-border ${gen ? "text-accent hover:bg-surfaceAlt" : "text-muted2 pointer-events-none opacity-50"}`}>
-            Ouvrir HTML</a>
-          <a href={gen ? `${BASE}/api/company_report?ticker=${encodeURIComponent(gen)}&format=pdf` : undefined}
-            target="_blank" rel="noopener noreferrer"
-            className={`text-sm px-3 py-1 rounded-md border border-border ${gen ? "text-accent hover:bg-surfaceAlt" : "text-muted2 pointer-events-none opacity-50"}`}>
-            PDF</a>
+          {([["HTML sombre", "html", "dark"], ["HTML clair", "html", "light"], ["PDF sombre", "pdf", "dark"], ["PDF clair", "pdf", "light"]] as [string, string, string][]).map(([lab, fmt, th]) => (
+            <a key={lab} href={gen ? `${BASE}/api/company_report?ticker=${encodeURIComponent(gen)}&format=${fmt}&theme=${th}` : undefined}
+              target="_blank" rel="noopener noreferrer"
+              className={`text-sm px-3 py-1 rounded-md border border-border ${gen ? "text-accent hover:bg-surfaceAlt" : "text-muted2 pointer-events-none opacity-50"}`}>
+              {lab}</a>
+          ))}
         </div>
       </section>
 

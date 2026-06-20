@@ -587,11 +587,11 @@ def _enrich_ai_memo(report: dict) -> None:
 
 
 @app.get("/api/company_report")
-def company_report(ticker: str, format: str = "html") -> Any:
-    """Note d'analyse fondamentale par société (Vernimmen + Damodaran, intrants audités PwC).
-    `format` : html (page autonome), json (données), pdf (reportlab si présent, sinon HTML).
-    Sources gratuites réelles (yfinance→FMP→SEC EDGAR), repli synthétique hors-ligne.
-    La note est mise en cache et REGÉNÉRÉE automatiquement à chaque nouveau résultat trimestriel."""
+def company_report(ticker: str, format: str = "html", theme: str = "dark") -> Any:
+    """Note d'analyse fondamentale par société (Vernimmen + Damodaran, intrants contrôlés).
+    `format` : html (page autonome), json (données), pdf (weasyprint/reportlab si présent, sinon HTML).
+    `theme` : dark (défaut) | light. Sources gratuites réelles (yfinance→FMP→SEC EDGAR), repli
+    synthétique hors-ligne. Note mise en cache et REGÉNÉRÉE à chaque nouveau résultat trimestriel."""
     from fastapi.responses import HTMLResponse, FileResponse
 
     from packages.reporting import company_report_html, company_report_pdf
@@ -601,15 +601,16 @@ def company_report(ticker: str, format: str = "html") -> Any:
     report, err = _build_company_report_cached(sym)
     if report is None:
         return JSONResponse({"available": False, "error": err}, status_code=404)
+    th = "light" if theme == "light" else "dark"
     if format == "json":
         return report
     if format == "pdf":
         out = Path(_LOG_DIR).parent / "out" / f"note_{sym}.pdf"
-        pdf = company_report_pdf(report, out)
+        pdf = company_report_pdf(report, out, theme=th)
         if pdf and pdf.exists():
             return FileResponse(str(pdf), media_type="application/pdf", filename=f"note_{sym}.pdf")
-        # repli : pas de reportlab → on sert le HTML imprimable
-    return HTMLResponse(company_report_html(report))
+        # repli : pas de moteur PDF → on sert le HTML imprimable
+    return HTMLResponse(company_report_html(report, theme=th))
 
 
 _NOTES_DIR = Path(_LOG_DIR).parent / "out" / "notes"
