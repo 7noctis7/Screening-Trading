@@ -20,6 +20,7 @@ sentiment = ["transformers", "torch"]   # FinBERT optionnel ; sinon lexique stdl
 space = ["gradio>=4.0"]                  # démo publique HuggingFace Space (gratuit)
 orchestration = ["apscheduler", "prefect"]
 api = ["fastapi", "uvicorn[standard]", "websockets", "sqlalchemy", "alembic"]
+mcp = ["mcp>=1.0"]                       # transport MCP natif (sinon repli JSON-RPC stdio, sans dépendance)
 dev = ["pytest", "pytest-cov", "ruff", "mypy", "pre-commit"]
 
 [tool.ruff]

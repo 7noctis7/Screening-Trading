@@ -84,5 +84,7 @@ live-go:          ## EXÉCUTE en paper (Alpaca paper + Bitmart) — clés API re
 	$(PYTHON) scripts/run_live.py --live --yes
 mcp-tv:           ## lance le serveur MCP TradingView (overlays, Pine, alertes) — stdio, en parallèle de l'API/front
 	$(PYTHON) -m packages.mcp_tradingview.server
+mcp-overlays:     ## calcule les cônes VaR/EVT (prix réels) + blackouts et les pousse au chart (API démarrée requise)
+	$(PYTHON) scripts/mcp_populate_overlays.py
 clean:
 	find . -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null; rm -rf out

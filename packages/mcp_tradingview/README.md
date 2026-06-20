@@ -31,6 +31,15 @@ Brancher dans **Claude Desktop** (`claude_desktop_config.json`) :
 | `set_blackout_zones(ticker, zones)` | Zones de blackout résultats (SEC EDGAR / FMP) |
 | `generate_pine_script(strategy_name, yaml_config)` | Preset YAML → Pine Script v5 (cross-validation) |
 | `fetch_tv_technical_alerts()` | Alertes TV (webhook) → veto/kill-switch risk-engine |
+| `auto_risk_bands(ticker?, var, lookback)` | **Auto** : cône VaR/EVT calculé sur les prix réels (via l'API) → chart |
+
+### Cônes de risque automatiques (sans l'agent)
+```bash
+make mcp-overlays    # = python scripts/mcp_populate_overlays.py  (API démarrée requise)
+```
+Lit `/api/positions` (séries + marqueurs réels) et `/api/events` (blackouts résultats), calcule le
+cône **VaR/EVT** point-in-time sur les prix réels, et écrit l'overlay store → le chart l'affiche.
+Idéal en cron. Transport MCP natif : `uv pip install -e ".[mcp]"`.
 
 ## Pont vers le navigateur
 Les outils ÉCRIVENT dans `.cache/tv_overlays.json` (overlay store, écriture atomique).
