@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { useTrades } from "@/lib/api";
+import { useTrades, useOverlays } from "@/lib/api";
 import { TechnicalChart } from "@/components/TechnicalChart";
 import { PageSkeleton } from "@/components/ui";
 
@@ -10,6 +10,7 @@ const dt = (s?: string) => (s ? String(s).slice(0, 10) : "—");
 export default function Trades() {
   const { data } = useTrades();
   const [sel, setSel] = useState<string | null>(null);
+  const { data: ov } = useOverlays(sel);                 // overlays MCP TradingView du symbole sélectionné
   if (!data) return <PageSkeleton />;
   const trades = data.real_trades ?? [];
   const openOrders = data.real_open_orders ?? [];
@@ -38,7 +39,8 @@ export default function Trades() {
             <h2 className="text-sm uppercase tracking-wide text-muted">Graphique technique — {sel}</h2>
             <button onClick={() => setSel(null)} className="text-muted hover:text-fg text-sm">✕</button>
           </div>
-          <TechnicalChart data={series[sel]} markers={markers[sel] ?? []} />
+          <TechnicalChart data={series[sel]} markers={markers[sel] ?? []}
+            overlays={ov ? { bands: ov.bands, blackouts: ov.blackouts } : undefined} />
         </section>
       )}
 

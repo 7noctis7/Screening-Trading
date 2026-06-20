@@ -8,6 +8,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 type Bar = { t: string; o: number; h: number; l: number; c: number; v?: number };
 type Marker = { t: string; side: "buy" | "sell"; price?: number };
 type TF = "D" | "W" | "M";
+// Overlays pilotés par le serveur MCP TradingView (cônes de risque + blackouts résultats).
+type RiskBand = { time: string; upper: number; lower: number };
+type Blackout = { start: string; end: string; label?: string };
+type Overlays = { bands?: RiskBand[]; blackouts?: Blackout[] };
 
 function sma(v: number[], p: number): (number | undefined)[] {
   const o: (number | undefined)[] = []; let s = 0;
@@ -56,8 +60,8 @@ const MAS: { p: number; color: string }[] = [
   { p: 100, color: "#a855f7" }, { p: 200, color: "#ef4444" },
 ];
 
-export function TechnicalChart({ data, markers = [], height = 360 }:
-  { data: Bar[]; markers?: Marker[]; height?: number }) {
+export function TechnicalChart({ data, markers = [], height = 360, overlays }:
+  { data: Bar[]; markers?: Marker[]; height?: number; overlays?: Overlays }) {
   const ref = useRef<HTMLDivElement>(null);
   const legendRef = useRef<HTMLDivElement>(null);
   const [tf, setTf] = useState<TF>("D");
@@ -199,6 +203,24 @@ export function TechnicalChart({ data, markers = [], height = 360 }:
       }
       void tOf;
 
+      // === Overlays MCP TradingView : cônes de risque (VaR/EVT, no-trade band) + blackouts ===
+      if (overlays?.bands?.length) {
+        const up = chart.addLineSeries({ color: "rgba(245,158,11,.8)", lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
+        const lo = chart.addLineSeries({ color: "rgba(245,158,11,.8)", lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
+        const pt = (k: "upper" | "lower") => overlays.bands!
+          .map((b) => ({ time: dateToTime[b.time] ?? b.time, value: b[k] }))
+          .filter((x: any) => x.value != null)
+          .sort((a: any, b: any) => (a.time < b.time ? -1 : 1));
+        up.setData(pt("upper")); lo.setData(pt("lower"));
+      }
+      if (overlays?.blackouts?.length) {
+        const maxHi = Math.max(...bars.map((d) => d.h)) * 1.05;
+        const covered = (t: string) => overlays.blackouts!.some((z) => t >= z.start && t <= z.end);
+        const bo = chart.addHistogramSeries({ priceScaleId: "blackout", priceLineVisible: false, lastValueVisible: false });
+        bo.priceScale().applyOptions({ scaleMargins: { top: 0.05, bottom: 0.0 }, visible: false });
+        bo.setData(bars.filter((d) => covered(d.t)).map((d) => ({ time: d.t, value: maxHi, color: "rgba(245,158,11,.12)" })));
+      }
+
       if (markers.length) {
         const mk = markers
           .map((m) => {
@@ -239,7 +261,7 @@ export function TechnicalChart({ data, markers = [], height = 360 }:
       chart.timeScale().fitContent();
     })();
     return () => { disposed = true; if (chart) chart.remove(); };
-  }, [bars, dateToTime, markers, height, vis]);
+  }, [bars, dateToTime, markers, height, vis, overlays]);
 
   return (
     <div>

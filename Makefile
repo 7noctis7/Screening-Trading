@@ -82,5 +82,7 @@ live:             ## APERÇU des ordres à répliquer (dry-run, aucun ordre envo
 	$(PYTHON) scripts/run_live.py --equity 10000
 live-go:          ## EXÉCUTE en paper (Alpaca paper + Bitmart) — clés API requises
 	$(PYTHON) scripts/run_live.py --live --yes
+mcp-tv:           ## lance le serveur MCP TradingView (overlays, Pine, alertes) — stdio, en parallèle de l'API/front
+	$(PYTHON) -m packages.mcp_tradingview.server
 clean:
 	find . -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null; rm -rf out
