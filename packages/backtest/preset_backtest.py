@@ -446,6 +446,17 @@ def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict |
     unrealized = sum(p["pnl"] for p in open_pos)
     n_all = len(trades)
     trades = sorted(trades, key=lambda x: x["date"], reverse=True)[:max_trades]
+    # P&L LATENT par achat : valeur mark-to-market au DERNIER prix (si tu avais gardé ces parts).
+    _last_px = {universe[i]: float(pxf[i]) for i in range(len(universe))}
+    if core_on:
+        _last_px[core_sym] = float(core_arr[L - 1])
+    for _t in trades:
+        _lp = _last_px.get(_t["symbol"])
+        if _t["side"] == "BUY" and _lp and _t.get("price"):
+            _t["latent"] = round((_lp - _t["price"]) * _t["qty"], 2)
+            _t["latent_pct"] = round(_lp / _t["price"] - 1, 4)
+        else:
+            _t["latent"], _t["latent_pct"] = None, None
     return {"available": True, "trades": trades, "open_positions": open_pos,
             "equity": [round(x, 2) for x in eq_curve], "dates": out_dates,
             "summary": {"init_cap": round(init_cap, 2), "final_equity": round(final_eq, 2),
