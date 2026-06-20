@@ -23,3 +23,5 @@ class Financials:
     cash: float
     fcf: float
     interest_expense: float = 0.0
+    revenue_growth: float | None = None       # croissance CA YoY RÉELLE (si fournie par la source)
+    earnings_growth: float | None = None      # croissance bénéfices YoY RÉELLE (si fournie par la source)

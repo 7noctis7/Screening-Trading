@@ -62,8 +62,8 @@ def _facts(cik: str) -> dict | None:
         return None
 
 
-def _latest(facts: dict, *concepts: str) -> float | None:
-    """Dernière valeur ANNUELLE (10-K/20-F, FY) d'un concept us-gaap/dei ; sinon la plus récente."""
+def _annual_series(facts: dict, *concepts: str) -> list[float]:
+    """Valeurs ANNUELLES (10-K/20-F, FY) triées par date pour le 1er concept disponible."""
     for c in concepts:
         node = facts.get("us-gaap", {}).get(c) or facts.get("dei", {}).get(c)
         if not node:
@@ -77,7 +77,20 @@ def _latest(facts: dict, *concepts: str) -> float | None:
         if not pool:
             continue
         pool.sort(key=lambda x: x.get("end", ""))
-        return float(pool[-1]["val"])
+        return [float(x["val"]) for x in pool]
+    return []
+
+
+def _latest(facts: dict, *concepts: str) -> float | None:
+    s = _annual_series(facts, *concepts)
+    return s[-1] if s else None
+
+
+def _growth(facts: dict, *concepts: str) -> float | None:
+    """Croissance YoY RÉELLE entre les deux derniers exercices annuels (None si indisponible)."""
+    s = _annual_series(facts, *concepts)
+    if len(s) >= 2 and s[-2] not in (0, None):
+        return s[-1] / abs(s[-2]) - 1.0 if s[-2] > 0 else None
     return None
 
 
@@ -120,10 +133,14 @@ class SECFundamentalsProvider:
         price, shares = self._price_shares(symbol)
         if shares <= 0:
             shares = _latest(facts, "CommonStockSharesOutstanding", "EntityCommonStockSharesOutstanding") or 0.0
+        rev_g = _growth(facts, "RevenueFromContractWithCustomerExcludingAssessedTax",
+                        "Revenues", "SalesRevenueNet")
+        eps_g = _growth(facts, "NetIncomeLoss")
         return Financials(
             symbol=symbol, as_of=as_of or datetime.now(timezone.utc),
             sector="Unknown", price=price, shares=shares,
             revenue=revenue, gross_profit=gross or revenue * 0.4,
             ebit=ebit or (net_income * 1.3), ebitda=(ebit + dep) if ebit else net_income * 1.5,
             net_income=net_income, total_equity=equity or revenue * 0.5,
-            total_debt=debt, cash=cash, fcf=0.0, interest_expense=0.0)
+            total_debt=debt, cash=cash, fcf=0.0, interest_expense=0.0,
+            revenue_growth=rev_g, earnings_growth=eps_g)

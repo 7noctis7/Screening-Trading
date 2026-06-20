@@ -832,8 +832,7 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
     (marge de sécurité) et score composite value+quality. Equities/ETF uniquement.
     FMP si `FMP_API_KEY`, sinon fondamentaux synthétiques déterministes (offline-safe)."""
     from packages.fundamentals import ratios, valuation
-    from packages.fundamentals.provider import degrade_prior
-    from packages.fundamentals.scoring import altman_z, f_score, f_score_label, piotroski_full
+    from packages.fundamentals.scoring import altman_z, f_score, f_score_label
 
     import os as _osf
 
@@ -902,15 +901,12 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
             if f is None:
                 continue
             mos = valuation.margin_of_safety(f)
-            try:                                      # N-1 approximé (déterministe) → Piotroski + YoY
-                prev = degrade_prior(f)
-                fs = piotroski_full(f, prev)
-            except Exception:  # noqa: BLE001
-                prev, fs = None, f_score(f)
+            fs = f_score(f)                            # solidité 0-9 RÉELLE (signaux de l'exercice courant)
             mcap = valuation.market_cap(f)
             ps = mcap / f.revenue if f.revenue else None          # price-to-sales
-            rev_g = (f.revenue / prev.revenue - 1) if (prev and prev.revenue) else None
-            eps_g = (f.net_income / prev.net_income - 1) if (prev and prev.net_income > 0) else None
+            rev_g = f.revenue_growth                   # croissances YoY RÉELLES (source) — None si inconnu
+            eps_g = f.earnings_growth                  # (plus de N-1 fabriqué → plus de valeur identique partout)
+            _az = altman_z(f)
             out.append({
                 "symbol": s, "name": names.get(s, ""), "sector": sector_of.get(s, ""),
                 "per": round(valuation.per(f), 1), "ev_ebitda": round(valuation.ev_ebitda(f), 1),
@@ -924,7 +920,7 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
                 "earnings_growth": None if eps_g is None else round(eps_g, 3),
                 "margin_of_safety": None if mos != mos else round(mos, 3),
                 "f_score": fs, "f_score_label": f_score_label(fs),
-                "altman_z": altman_z(f)["z"], "altman_zone": altman_z(f)["zone"],
+                "altman_z": _az["z"], "altman_zone": _az["zone"],
                 "per_raw": valuation.per(f),
                 "_val": (valuation.earnings_yield(f) + valuation.fcf_yield(f)),
                 "_qual": (ratios.roic(f) + ratios.gross_margin(f) + ratios.fcf_conversion(f)),
