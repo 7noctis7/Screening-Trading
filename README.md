@@ -38,12 +38,15 @@ backtest VaR, ACP, budget de risque, limites, stress, allocation HRP/ERC, multi-
   (`make index-core` / `ledger-sweep`) ; pas d'edge directionnel prouvé → on gagne par le **risque**.
 - **Frais réalistes** modélisés (commission + slippage + SEC/TAF) aux barèmes **Alpaca / IBKR /
   Binance / BitMart** ; le **journal de trades** réconcilie à l'$ près avec la courbe (réalisé + latent + frais).
-- **Notes d'analyse institutionnelles** par société (icône 📄 + page `/notes`) : **Vernimmen**
-  (ROCE vs WACC, EVA, DuPont, gearing) + **Damodaran** (DCF scénarios & inversé, multiples vs
-  secteur), 3 scores (fondamental/technique/ML), résultats & estimations, historique CA/résultat
-  **5-6 ans SEC EDGAR** + CAGR, graphes SVG, **mémo IA local optionnel** — chaque chiffre **audité
-  PwC** (cohérence + complétude + fiabilité croisée). PDF/HTML, **régénérées à chaque résultat
-  trimestriel** et **archivées chaque nuit**. Notes aussi écrites dans le coffre Obsidian (`#company`).
+- **Notes d'analyse institutionnelles** par société (icône 📄 + page `/notes`, **HTML & PDF, thème
+  clair/sombre**) : **Portfolio Snowflake** (radar VALUE/FUTURE/PAST/HEALTH/DIVIDEND), **Vernimmen**
+  (ROCE vs WACC, EVA, DuPont, gearing) + **Damodaran** (DCF scénarios & inversé, multiples vs secteur),
+  3 scores (fondamental/technique/ML), **risk management** (vol, VaR/CVaR, Sharpe/Sortino, stop),
+  résultats & estimations, historique CA/résultat **annuel + trimestriel** (yfinance → SEC EDGAR 10-Q),
+  **actionnariat** (top institutionnels/insiders), **conversion devise ADR**, et **gouvernance PwC** :
+  audit d'intégrité + **réconciliation GAAP vs Non-GAAP** (devise de dépôt) → **blocking alert** et
+  pénalité de surévaluation (DCF). Régénérées à chaque résultat trimestriel, archivées chaque nuit,
+  miroir Obsidian (`#company`).
 - **Données réelles** branchables (yfinance / FMP / SEC EDGAR / votre `YAHOO.db`, ~4 Go) avec repli
   synthétique — le build affiche le **MODE DES DONNÉES** (réel / mixte / synthétique) et un **audit
   PwC** (complétude / exactitude / point-in-time / biais du survivant) visible dans la fenêtre Données.

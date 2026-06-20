@@ -1,5 +1,22 @@
 # 04 — JOURNAL
 
+## Session 2026-06-20 — Notes d'analyse institutionnelles (PwC / Citadel / Apple)
+**Fait.**
+- **Note d'analyse par société** (HTML + PDF reportlab/weasyprint, thème clair/sombre, design Apple) :
+  `packages/reporting/company_report.py` + `company_report_render.py` ; endpoint `/api/company_report`,
+  page `/notes`, icône 📄 (Fondamentaux/Conviction), pré-génération nocturne `make reports`.
+- **Contenu** : Portfolio Snowflake (radar 5 axes), Vernimmen (ROCE/WACC/EVA/DuPont/gearing),
+  Damodaran (DCF scénarios + inversé, multiples vs secteur), 3 scores (fond/tech/ML), risk management
+  (vol/VaR/CVaR/Sharpe/Sortino/stop), historique annuel + trimestriel (yfinance → SEC EDGAR 10-Q),
+  actionnariat (institutionnels/insiders en %), graphes SVG (cours+MM, drawdown, CA/RN), dividende réel.
+- **Gouvernance (PwC)** : audit d'intégrité + **réconciliation GAAP vs Non-GAAP** en devise de dépôt,
+  **blocking alert** (>10 % CA/RN), **pénalité de surévaluation** (DCF MoS < −30 % → pilier 0 + ≤ −40 %).
+- **Fiabilité** : conversion devise ADR (yfinance financialCurrency + FX gratuit), réconciliation
+  alignée TTM (faux écarts dûs au change/période supprimés), EBITDA ≥ EBIT, NaN → « — ».
+- Cause racine corrigée : cache yfinance v3 (nom société/devise/dividende), réordonnancement thématique.
+
+**Décidé.** Réconciliation en devise de dépôt (intégrité) ≠ valorisation en devise du cours (marché).
+
 ## Session 0 — Fondation
 **Fait.**
 - Posé le monorepo (section 3 du prompt maître) : `apps/`, `packages/`, `config/`, `tests/`, `vault/`.
