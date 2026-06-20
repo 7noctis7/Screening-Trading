@@ -18,6 +18,7 @@ cd "$ROOT"
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] maj quotidienne — début"
 python scripts/ingest_prices.py --daily            # backfill incrémental idempotent
 python scripts/data_audit.py || true                # audit PwC des bases (complétude/exactitude/PIT)
+python scripts/ingest_delisted.py || true           # met à jour data/delisted.csv (anti-biais survivant)
 # Gate optionnelle : QUANT_AUDIT=strict fait refuser au build tout prix à anomalie CRITIQUE.
 python scripts/train_model.py || true               # ré-entraîne le modèle ML (serving découplé)
 python apps/web/preview/build_interactive.py        # régénère le terminal autonome
