@@ -46,15 +46,17 @@ _COST_BY_CLASS: dict[str, dict[str, float]] = {
 
 
 # --- Barèmes RÉELS des courtiers (≈ 2024-2026), en points de base (1 bp = 0,01 %) ---
-# commission = frais courtier par exécution ; slippage = demi-spread + impact marché (estimé, sur des
-# valeurs liquides / paires majeures). Sources : grilles publiques Alpaca, IBKR, Binance, BitMart.
+# commission = frais courtier par exécution ; slippage = demi-spread + impact marché (estimé) ;
+# min_fee = minimum par ordre ($) ; reg_bps = frais RÉGLEMENTAIRES prélevés UNIQUEMENT à la VENTE
+# (SEC fee ≈ 0,278 bp + FINRA TAF) — obligatoires sur actions US même chez un courtier "0 commission".
+# Sources : grilles publiques Alpaca, IBKR, Binance, BitMart + barème SEC/FINRA.
 BROKER_FEES: dict[str, dict[str, float]] = {
     # ACTIONS / ETF US
-    "alpaca": {"commission_bps": 0.0, "slippage_bps": 2.0, "min_fee": 0.0},    # 0 $ commission, aucun minimum
-    "ibkr": {"commission_bps": 0.5, "slippage_bps": 2.0, "min_fee": 1.0},      # Pro fixe 0,005 $/action, MINIMUM 1 $/ordre
+    "alpaca": {"commission_bps": 0.0, "slippage_bps": 5.0, "min_fee": 0.0, "reg_bps": 0.28},  # 0 commission : coût réel = spread + SEC/TAF à la vente
+    "ibkr": {"commission_bps": 0.5, "slippage_bps": 5.0, "min_fee": 1.0, "reg_bps": 0.28},    # Pro fixe 0,005 $/action, MINIMUM 1 $/ordre
     # CRYPTO SPOT
-    "binance": {"commission_bps": 10.0, "slippage_bps": 6.0, "min_fee": 0.0},  # 0,10 % taker, pas de minimum
-    "bitmart": {"commission_bps": 25.0, "slippage_bps": 10.0, "min_fee": 0.0}, # 0,25 % taker, pas de minimum
+    "binance": {"commission_bps": 10.0, "slippage_bps": 10.0, "min_fee": 0.0, "reg_bps": 0.0},  # 0,10 % taker
+    "bitmart": {"commission_bps": 25.0, "slippage_bps": 12.0, "min_fee": 0.0, "reg_bps": 0.0},  # 0,25 % taker, crypto moins liquide → slippage +
 }
 # Courtier par défaut par classe = TES comptes réels (actions→Alpaca, crypto→BitMart).
 # Surchargeable : QUANT_BROKER_EQUITY (alpaca|ibkr) / QUANT_BROKER_CRYPTO (bitmart|binance).
@@ -78,15 +80,19 @@ def broker_cost_bps(asset_class: str) -> float:
     return float(b["commission_bps"] + b["slippage_bps"])
 
 
-def broker_fee(asset_class: str, notional: float) -> float:
+def broker_fee(asset_class: str, notional: float, side: str = "BUY") -> float:
     """Coût RÉEL d'UNE exécution ($) pour un notionnel donné, selon le courtier :
-    commission = max(minimum_par_ordre, notionnel × commission_bps) + slippage = notionnel × slippage_bps.
-    Le MINIMUM par ordre (ex. IBKR 1 $) domine pour les petits ordres → frais réalistes même à faible
-    notionnel (sinon un % seul sous-estime massivement le coût de nombreux petits trades)."""
+      commission = max(minimum_par_ordre, notionnel × commission_bps)
+      + slippage  = notionnel × slippage_bps
+      + réglementaire (SEC/TAF) = notionnel × reg_bps, UNIQUEMENT à la VENTE d'actions.
+    Le MINIMUM par ordre (ex. IBKR 1 $) domine pour les petits ordres ; les frais SEC/TAF rendent
+    réaliste un courtier "0 commission" comme Alpaca (le coût réel y est le spread + le réglementaire)."""
     b = BROKER_FEES.get(broker_for(asset_class), BROKER_FEES["alpaca"])
     n = abs(notional)
     commission = max(float(b.get("min_fee", 0.0)), n * b["commission_bps"] / 1e4)
-    return commission + n * b["slippage_bps"] / 1e4
+    slippage = n * b["slippage_bps"] / 1e4
+    regulatory = n * float(b.get("reg_bps", 0.0)) / 1e4 if str(side).upper() == "SELL" else 0.0
+    return commission + slippage + regulatory
 
 
 def broker_assumptions() -> list[dict]:
