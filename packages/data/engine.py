@@ -183,6 +183,19 @@ def _cov_disk_path(key: Any) -> Path:
     return _COV_DISK_DIR / f"{h}.npz"
 
 
+# Compteurs de hit-rate du cache (mesure réelle du gain en prod ; signale une signature instable
+# si les misses explosent). Pur stdlib, jamais bloquant.
+_COV_STATS: dict[str, int] = {"hits": 0, "disk_hits": 0, "misses": 0}
+
+
+def cov_cache_stats() -> dict[str, Any]:
+    """Statistiques du cache de covariance : hits mémoire, hits disque, misses + taux global."""
+    s = dict(_COV_STATS)
+    total = s["hits"] + s["disk_hits"] + s["misses"]
+    s["hit_rate"] = round((s["hits"] + s["disk_hits"]) / total, 4) if total else 0.0
+    return s
+
+
 def purge_cov_disk_cache(max_age_days: float = 14.0) -> int:
     """Purge les covariances persistées plus vieilles que `max_age_days` (les nouvelles barres
     quotidiennes rendent les anciennes signatures obsolètes → évite l'accumulation infinie).
@@ -273,12 +286,16 @@ def covariance_matrix(returns_by_symbol: dict[str, list[float]], annualize: int 
     key = _cov_cache_key(returns_by_symbol, annualize, shrink) if cache else None
     use_disk = cache and os.environ.get("QUANT_COV_DISK_CACHE", "1").lower() not in ("0", "false", "no")
     if key is not None and key in _COV_CACHE:
+        _COV_STATS["hits"] += 1
         return _COV_CACHE[key]
     if key is not None and use_disk:                         # cold-start : relit la veille si inchangé
         hit = _cov_disk_load(key)
         if hit is not None:
             _COV_CACHE[key] = hit
+            _COV_STATS["disk_hits"] += 1
             return hit
+    if cache:
+        _COV_STATS["misses"] += 1
     m = min(len(returns_by_symbol[s]) for s in syms)
     mat = np.array([returns_by_symbol[s][-m:] for s in syms], dtype=float)
     if shrink:

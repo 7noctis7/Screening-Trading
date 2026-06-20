@@ -81,6 +81,20 @@ def test_covariance_disk_cache_survives_memory_clear(tmp_path, monkeypatch):
     assert list((tmp_path / "cov").glob("*.npz"))            # un artefact a bien été écrit
 
 
+def test_cov_cache_stats_track_hits_and_misses(monkeypatch):
+    import numpy as np
+    monkeypatch.setenv("QUANT_COV_DISK_CACHE", "0")          # isole le cache mémoire
+    E._COV_CACHE.clear()
+    E._COV_STATS.update(hits=0, disk_hits=0, misses=0)
+    rng = np.random.default_rng(11)
+    rets = {"A": list(rng.normal(0, 0.01, 25)), "B": list(rng.normal(0, 0.02, 25))}
+    E.covariance_matrix(rets, cache=True)                    # miss (1er calcul)
+    E.covariance_matrix(rets, cache=True)                    # hit mémoire
+    s = E.cov_cache_stats()
+    assert s["misses"] == 1 and s["hits"] == 1
+    assert 0.0 <= s["hit_rate"] <= 1.0 and s["hit_rate"] == 0.5
+
+
 def test_purge_cov_disk_cache_removes_old(tmp_path, monkeypatch):
     import os
     import time
