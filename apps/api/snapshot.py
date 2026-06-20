@@ -363,6 +363,7 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
             d["equity"] = round(float(b.equity()), 2)
             d["positions"] = b.positions_detailed()   # positions RÉELLES enrichies (prix/valeur/P&L)
             d["orders"] = b.orders()                   # ordres RÉELS exécutés (page Trades)
+            d["open_orders"] = b.open_orders()         # ordres RÉELS en attente d'exécution (non remplis)
             d["history"] = b.portfolio_history()      # historique d'equity RÉEL (Alpaca le stocke)
             d["ok"] = True
         except Exception as e:  # noqa: BLE001
@@ -379,6 +380,7 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
             d["equity"] = round(float(b.equity()), 2)
             d["positions"] = b.positions_detailed()   # positions SPOT RÉELLES enrichies
             d["orders"] = b.orders()                   # transactions RÉELLES (page Trades)
+            d["open_orders"] = b.open_orders()         # ordres SPOT en attente d'exécution (non remplis)
             # bougies réelles (Bitmart) pour les graphes des positions/ordres crypto (absents de YAHOO.db)
             _csyms = {p["symbol"] for p in d["positions"]} | {o.get("symbol") for o in d["orders"]}
             d["ohlcv"] = {s: bars for s in _csyms if s and (bars := b.ohlcv(s))}
@@ -390,11 +392,14 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
     a_d, b_d = _alpaca(), _bitmart()
     _real_trades = sorted((a_d.get("orders", []) + b_d.get("orders", [])),
                           key=lambda o: o.get("date", ""), reverse=True)
+    _real_open = sorted((a_d.get("open_orders", []) + b_d.get("open_orders", [])),
+                        key=lambda o: o.get("date", ""), reverse=True)
     real = {
         "connected": a_d["ok"] or b_d["ok"],
         "equity": round(a_d["equity"] + b_d["equity"], 2),
         "positions": a_d["positions"] + b_d["positions"],
         "trades": _real_trades,                    # ordres RÉELS exécutés (Alpaca + Bitmart)
+        "open_orders": _real_open,                 # ordres RÉELS en attente d'exécution (non remplis)
         "alpaca": a_d, "bitmart": b_d,
     }
     # enregistre l'equity réelle du jour (construit l'historique réel par broker)
