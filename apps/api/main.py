@@ -529,10 +529,61 @@ def _build_company_report_cached(sym: str) -> tuple[dict | None, str | None]:
                                   financial_history=fin_hist, peers=_company_peers(sym))
     report["source"] = src
     report["earnings_signature"] = sig
+    _enrich_cross_source(report, f, sym)               # audit multi-sources (fiabilité croisée)
+    _enrich_ai_memo(report)                             # mémo IA local si dispo (sinon règles)
     if len(_REPORT_CACHE) >= _REPORT_CACHE_MAX:
         _REPORT_CACHE.pop(next(iter(_REPORT_CACHE)))
     _REPORT_CACHE[sym] = (sig, report)
     return report, None
+
+
+def _enrich_cross_source(report: dict, f: Any, sym: str) -> None:
+    """Audit de FIABILITÉ CROISÉE : compare le CA retenu vs une 2e source (SEC EDGAR) ; signale un
+    écart significatif (>15 %). Best-effort, n'altère jamais la note si indisponible."""
+    try:
+        from packages.fundamentals.sec_provider import financial_history
+        hist = financial_history(sym, years=1)
+        sec_rev = (hist[-1].get("revenue") if hist else None)
+        if sec_rev and f.revenue and sec_rev > 0:
+            gap = abs(f.revenue - sec_rev) / sec_rev
+            if gap > 0.15:
+                audit = report.setdefault("audit", {})
+                audit.setdefault("findings", []).append({
+                    "severity": "warning",
+                    "detail": f"écart CA inter-sources {gap*100:.0f}% (source {f.revenue/1e9:.1f}Md vs SEC {sec_rev/1e9:.1f}Md)"})
+                audit["counts"] = audit.get("counts", {})
+                audit["counts"]["warning"] = audit["counts"].get("warning", 0) + 1
+                report["cross_source_gap"] = round(gap, 3)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _enrich_ai_memo(report: dict) -> None:
+    """Remplace le mémo par une synthèse IA locale (LM Studio/Ollama) si un serveur répond. Sinon
+    conserve la synthèse à base de règles. Jamais bloquant, rien ne sort de la machine."""
+    try:
+        from packages.llm import available, complete
+        if not available():
+            return
+        idy, sc = report.get("identity", {}), report.get("score", {})
+        v = report.get("verdict", {})
+        facts = (f"Société: {idy.get('name')} ({idy.get('symbol')}), secteur {idy.get('sector')}. "
+                 f"Score {sc.get('global')}/100 (fond {sc.get('fundamental')}, tech {sc.get('technical')}, "
+                 f"ml {sc.get('ml')}), reco {sc.get('recommendation')}. "
+                 f"Vernimmen: ROCE {report.get('vernimmen',{}).get('roce_after_tax')} vs WACC "
+                 f"{report.get('vernimmen',{}).get('wacc')}. DCF base marge de sécurité "
+                 f"{report.get('damodaran',{}).get('dcf',{}).get('margin_of_safety')}. "
+                 f"Forces: {', '.join(v.get('strengths', [])[:3])}. Vigilance: {', '.join(v.get('watch', [])[:3])}.")
+        memo = complete(
+            "Rédige une synthèse d'investisseur en 3 phrases maximum, factuelle et nuancée, à partir "
+            "de ces données. Pas de conseil financier explicite.\n\n" + facts,
+            system="Tu es un analyste financier senior (style Damodaran/Vernimmen). Concis, précis, français.",
+            temperature=0.3)
+        if memo and len(memo.strip()) > 30:
+            report["memo"] = memo.strip()
+            report["memo_source"] = "IA locale"
+    except Exception:  # noqa: BLE001
+        pass
 
 
 @app.get("/api/company_report")

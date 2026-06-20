@@ -353,6 +353,11 @@ font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',Inter,system-ui,sans-
 <div style="font-size:11px;color:{_C['muted']};letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px">
 Note d'analyse fondamentale · {r['as_of']}</div>
 {header}
+{(f'<div style="background:{_C["card2"]};border-left:3px solid {_C["accent"]};border-radius:10px;'
+  f'padding:12px 14px;margin-bottom:14px;font-size:13px;color:{_C["fg"]}">'
+  f'<span style="font-size:10px;color:{_C["muted"]};text-transform:uppercase;letter-spacing:.06em">'
+  f'Synthèse · {r.get("memo_source","")}</span><div style="margin-top:4px">{r["memo"]}</div></div>')
+  if r.get("memo") else ""}
 {charts_card}
 {_card("Audit d'intégrité des données (PwC)", _findings_html(audit))}
 {_card("Analyse économique (Vernimmen)", vern)}
@@ -409,3 +414,39 @@ def company_report_pdf(r: dict[str, Any], out_path: str | Path) -> Path | None:
     c.drawString(2 * cm, 1.5 * cm, "Sources gratuites auditées (PwC) · Vernimmen & Damodaran · pas un conseil.")
     c.showPage(); c.save()
     return out
+
+
+def company_report_markdown(r: dict[str, Any]) -> str:
+    """Rendu Markdown Obsidian de la note — concis, fort impact, front matter Dataview + wikilinks.
+    Quality over quantity : uniquement les chiffres décisifs. Réutilisable dans le coffre."""
+    idy, sc, ver, dam, ql = r["identity"], r["score"], r["vernimmen"], r["damodaran"], r["quality"]
+    dcf = dam.get("dcf", {}); scen = dcf.get("scenarios", {})
+    fm = ["---", "type: company_report", f"symbol: {idy['symbol']}", f"sector: {idy.get('sector','')}",
+          f"score: {sc.get('global')}", f"recommendation: {sc.get('recommendation')}",
+          f"roce: {ver.get('roce_after_tax')}", f"wacc: {ver.get('wacc')}",
+          f"margin_of_safety: {dcf.get('margin_of_safety')}", "tags: [quant, company]",
+          f"updated: {r.get('as_of')}", "---"]
+    rel = {"fiable": "✅", "à vérifier": "⚠️", "non fiable": "⛔"}.get(r.get("audit", {}).get("reliability"), "")
+    spread = ver.get("value_creation_spread")
+    body = [
+        "", f"# 🏢 {idy['name']} ({idy['symbol']})", "",
+        f"> [!abstract] **{sc.get('recommendation')} · {sc.get('global')}/100** "
+        f"(fond {sc.get('fundamental')} · tech {sc.get('technical')} · ml {sc.get('ml')}) {rel}",
+        f"> {r.get('memo','')}", "",
+        "## Décideurs", "", "| Indicateur | Valeur |", "|---|--:|",
+        f"| ROCE − WACC | {_pct(spread) if spread is not None else '—'} |",
+        f"| EVA | {_money(ver.get('eva'))} |",
+        f"| Marge nette | {_pct(ver.get('margins',{}).get('net'))} |",
+        f"| DCF base / sécurité | ${_num(scen.get('base'))} / {_pct(dcf.get('margin_of_safety')) if dcf.get('margin_of_safety') is not None else '—'} |",
+        f"| Piotroski / Altman Z | {ql.get('piotroski_f_score')}/9 · {ql.get('altman_z',{}).get('z')} |",
+    ]
+    scmp = r.get("sector_comparison") or {}
+    if scmp.get("available"):
+        body.append(f"| Vs secteur | {scmp.get('favorable')}/{scmp.get('total')} favorables |")
+    v = r.get("verdict", {})
+    if v.get("strengths"):
+        body += ["", "## Forces", "", *[f"- ✅ {s}" for s in v["strengths"][:4]]]
+    if v.get("watch"):
+        body += ["", "## Vigilance", "", *[f"- ⚠️ {s}" for s in v["watch"][:4]]]
+    body += ["", f"<small>Sources gratuites auditées (PwC) · Vernimmen & Damodaran · maj {r.get('as_of')}.</small>"]
+    return "\n".join(fm + body)

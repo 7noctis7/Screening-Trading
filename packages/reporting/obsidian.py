@@ -318,14 +318,14 @@ def daily_note(snapshot: dict, attr: dict, incidents: list[dict], date: str | No
               f"Preset {_pct(attr.get('preset_total'))} vs QQQ {_pct(attr.get('qqq_total'))}.", ""]
     if svg_asset:
         P += [f"![[{svg_asset}]]", ""]
-    P += ["## État du risque", "", "```mermaid", "flowchart LR",
-          f'  R["Régime · {reg.get("risk_mode","?")}"] --> L["Limites · {"OK" if ok else "FRANCHIES"}"]',
-          f'  L --> K["Kill-switch · {"ACTIF" if kill else "armé"}"]', "```", ""]
+    # statut de risque en une ligne (plus dense qu'un flowchart décoratif)
+    P += [f"> [!{'danger' if kill else 'warning' if not ok else 'note'}] **Risque** — "
+          f"régime {reg.get('risk_mode','?')} · limites {'OK' if ok else 'FRANCHIES'} · "
+          f"kill-switch {'ACTIF' if kill else 'armé'}.", ""]
     if incidents:
         P += ["## ⚠️ Incidents", "",
               *[f"- [[{_POSTMORTEM_DIR}/incident_{dt}|{i['type']}]] — {i['detail']}" for i in incidents], ""]
-    P += ["---", f"<small>Généré {datetime.now(timezone.utc).isoformat(timespec='seconds')} · point-in-time · "
-          "n'interrompt jamais le trading.</small>"]
+    P += ["---", "<small>Point-in-time · n'interrompt jamais le trading.</small>"]
     return f"{_JOURNAL_DIR}/{dt}.md", "\n".join(P)
 
 
@@ -398,6 +398,9 @@ def preset_performance_hub(snapshot: dict, attr: dict, date: str | None = None) 
          "table alpha_annual as Alpha, beta_qqq as Beta from #weekly sort date desc", "```", "",
          "## Incidents", "", "```dataview",
          "table incident_type as Type, drawdown_now as DD, vix as VIX from #incident sort date desc", "```", "",
+         "## Notes par société", "", "```dataview",
+         "table score as Score, recommendation as Reco, roce as ROCE, margin_of_safety as Sécurité",
+         "from #company sort score desc", "```", "",
          "Réf. : [[07_RISK_POLICY]] · [[10_BACKTEST_RESULTS]] · [[06_STRATEGIES]]"]
     return _HUB_NOTE, "\n".join(P)
 
