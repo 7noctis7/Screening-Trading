@@ -44,8 +44,13 @@ def main() -> None:
     # MLOps : tracking MLflow (López de Prado) — hyperparams + métriques + importances + artefact,
     # tag `production-ready` si edge OOS validé. NON bloquant (no-op si MLflow absent).
     try:
-        from packages.ml.tracking import track_training
+        from packages.ml.tracking import record_run, track_training
         imp = {r["feature"]: r["weight"] for r in ml.get("feature_importance", [])}
+        # journal append-only SANS dépendance (source du suivi de drift + affichage front)
+        record_run(metrics={"auc_oos": ml.get("auc") or 0.0, "edge_ok": 1.0 if ml.get("edge_ok") else 0.0},
+                   params={"model": ml.get("model"), "validation": ml.get("validation"),
+                           "n_train": ml.get("n_train"), "data_mode": mode},
+                   status="production-ready" if ml.get("edge_ok") else "candidate")
         logged = track_training(
             run_name="train_model",
             params={"model": ml.get("model"), "horizon_days": ml.get("horizon_days"),

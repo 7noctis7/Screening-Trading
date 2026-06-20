@@ -12,6 +12,7 @@ export default function Ml() {
   if (!ml.available)
     return <main className="max-w-3xl mx-auto p-6"><EmptyState title="Modèle ML indisponible" hint="Échantillon insuffisant pour entraîner le modèle." /></main>;
   const cal = ml.calibration, drift = ml.drift, conf = ml.conformal, wf = ml.walk_forward, meta = ml.meta_labeling;
+  const th = ml.training_history;
   const cards: [string, string][] = [
     ["Modèle", ml.model],
     ["AUC (out-of-time)", ml.auc != null ? String(ml.auc) : "—"],
@@ -127,6 +128,31 @@ export default function Ml() {
                   <td className="py-1 text-muted">{f}</td>
                   <td className="text-right mono">{d.psi}</td>
                   <td className="text-right text-xs" style={{ color: d.status === "fort" ? "#f43f5e" : d.status === "modéré" ? "#f59e0b" : "#22c55e" }}>{d.status}</td>
+                </tr>))}
+            </tbody></table>
+          </section>
+        )}
+        {th?.available && (
+          <section className="card p-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm uppercase tracking-wide text-muted">Historique d'entraînement &amp; drift de performance</h2>
+              {th.drift && (
+                <span className="text-xs" style={{ color: th.drift.drift ? "#f43f5e" : "#22c55e" }}>
+                  {th.drift.drift ? "⚠️ dégradation détectée" : "stable"}
+                  {th.drift.delta != null && <span className="text-muted"> · Δ {th.drift.delta > 0 ? "+" : ""}{th.drift.delta}</span>}
+                </span>
+              )}
+            </div>
+            <p className="text-muted2 text-xs mt-1 font-sans">
+              AUC OOS du dernier run vs moyenne des précédents (journal <span className="mono">models/train_history.jsonl</span>).
+              {th.drift?.baseline != null && <> Référence {th.drift.baseline}, actuel {th.drift.current}.</>}
+            </p>
+            <table className="w-full text-sm mt-2"><tbody>
+              {(th.runs ?? []).slice().reverse().map((r: any, i: number) => (
+                <tr key={i} className="border-t border-border">
+                  <td className="py-1 text-muted mono text-xs">{String(r.ts ?? "").slice(0, 16).replace("T", " ")}</td>
+                  <td className="text-xs" style={{ color: r.status === "production-ready" ? "#22c55e" : "#94a3b8" }}>{r.status}</td>
+                  <td className="text-right mono">{r.auc_oos != null ? Number(r.auc_oos).toFixed(3) : "—"}</td>
                 </tr>))}
             </tbody></table>
           </section>
