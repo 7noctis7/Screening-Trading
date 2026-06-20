@@ -73,6 +73,18 @@ def test_markdown_obsidian_note():
     assert "ROCE" in md and "DCF base" in md and "Vigilance" in md or "Forces" in md
 
 
+def test_no_nan_and_negative_bars_render():
+    # société en perte (FCF négatif → DCF NaN ; résultat net négatif → barres sous zéro)
+    f = _fin(price=6.0, shares=2e8, revenue=7.4e8, gross_profit=3e8, ebit=-2e8, ebitda=-1.5e8,
+             net_income=-5.4e8, total_equity=4e8, total_debt=2e8, cash=3e8, fcf=-1e8)
+    hist = [{"year": 2023, "revenue": 38e6, "net_income": -146e6, "eps": -0.7},
+            {"year": 2024, "revenue": 75e6, "net_income": -162e6, "eps": -0.8}]
+    r = build_company_report(f, name="XYZ Holdings, Inc.", financial_history=hist)
+    html = company_report_html(r)
+    assert "nan" not in html.lower().replace("financ", "")     # aucun "$nan" affiché
+    assert "non calculable" in html                            # DCF FCF négatif → message propre
+
+
 def test_snowflake_axes_and_render():
     from packages.reporting.company_report import snowflake
     s = snowflake(valuation_score=70, revenue_growth=0.3, ml_score=0.7, revenue_cagr=0.25,

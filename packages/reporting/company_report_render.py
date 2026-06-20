@@ -21,16 +21,20 @@ def _fr_date(iso: str | None) -> str:
     return s
 
 
+def _isnan(x) -> bool:
+    return isinstance(x, float) and x != x
+
+
 def _pct(x: float | None, nd: int = 1) -> str:
-    return "—" if x is None else f"{x*100:.{nd}f}%"
+    return "—" if (x is None or _isnan(x)) else f"{x*100:.{nd}f}%"
 
 
 def _num(x: float | None, nd: int = 2) -> str:
-    return "—" if x is None else f"{x:,.{nd}f}".replace(",", " ")
+    return "—" if (x is None or _isnan(x)) else f"{x:,.{nd}f}".replace(",", " ")
 
 
 def _money(x: float | None) -> str:
-    if x is None:
+    if x is None or _isnan(x):
         return "—"
     a = abs(x)
     for div, suf in ((1e12, "T"), (1e9, "Md"), (1e6, "M")):
@@ -81,6 +85,8 @@ _PADB = 18      # marge basse pour les labels d'axe X
 
 
 def _money_axis(v: float) -> str:
+    if v is None or _isnan(v):
+        return "—"
     a = abs(v)
     for div, suf in ((1e12, "T"), (1e9, "Md"), (1e6, "M"), (1e3, "k")):
         if a >= div:
@@ -176,8 +182,9 @@ def _bars_history(hist: list[dict], key: str, w: int = 760, h: int = 150) -> str
         vy = y1 - (v - lo) / span * (y1 - y0)
         top = min(vy, zero_y); bh = abs(vy - zero_y)
         col = _C["accent"] if v >= 0 else _C["neg"]
+        ly = (top - 3) if v >= 0 else (max(vy, zero_y) + 10)   # libellé au-dessus si positif, en-dessous si négatif
         bars += (f'<rect x="{cx:.1f}" y="{top:.1f}" width="{bw:.1f}" height="{max(1,bh):.1f}" rx="2" fill="{col}" opacity="0.85"/>'
-                 f'<text x="{cx+bw/2:.1f}" y="{(top-3):.1f}" text-anchor="middle" font-size="9" fill="{_C["fg"]}">{_money_axis(v)}</text>'
+                 f'<text x="{cx+bw/2:.1f}" y="{ly:.1f}" text-anchor="middle" font-size="9" fill="{_C["fg"]}">{_money_axis(v)}</text>'
                  f'<text x="{cx+bw/2:.1f}" y="{h-5}" text-anchor="middle" font-size="9" fill="{_C["muted"]}">{x.get("year","")}</text>')
     return f'<svg viewBox="0 0 {w} {h}" width="100%" height="{h}">{grid}{bars}</svg>'
 
@@ -386,17 +393,21 @@ def company_report_html(r: dict[str, Any], theme: str = "dark") -> str:
                   f'en erreur. Coût du capital indicatif : MEDAF {_pct(dam.get("cost_of_equity"))} · '
                   f'WACC {_pct(dam.get("wacc"))} · bêta {_num(dam.get("beta"))}.</div>')
     else:
-        dam_kv = _kv_grid([
-            ("Coût des FP (MEDAF)", _pct(dam.get("cost_of_equity")), _C["fg"]),
-            ("WACC", _pct(dam.get("wacc")), _C["fg"]),
-            ("Bêta", _num(dam.get("beta")), _C["fg"]),
-            ("DCF bear", "$" + _num(scen.get("bear")), _C["muted"]),
-            ("DCF base", "$" + _num(scen.get("base")), _C["fg"]),
-            ("DCF bull", "$" + _num(scen.get("bull")), _C["muted"]),
-            ("Marge de sécurité", _pct(mos) if mos is not None else "—",
-             _C["pos"] if (mos or 0) > 0 else _C["neg"]),
-            ("Croiss. implicite (cours)", _pct(dam.get("implied_growth_in_price")), _C["fg"]),
-        ])
+        _base = scen.get("base")
+        _dcf_ok = _base is not None and not _isnan(_base)
+        rows = [("Coût des FP (MEDAF)", _pct(dam.get("cost_of_equity")), _C["fg"]),
+                ("WACC", _pct(dam.get("wacc")), _C["fg"]),
+                ("Bêta", _num(dam.get("beta")), _C["fg"])]
+        if _dcf_ok:
+            rows += [("DCF bear", "$" + _num(scen.get("bear")), _C["muted"]),
+                     ("DCF base", "$" + _num(scen.get("base")), _C["fg"]),
+                     ("DCF bull", "$" + _num(scen.get("bull")), _C["muted"]),
+                     ("Marge de sécurité", _pct(mos) if mos is not None else "—",
+                      _C["pos"] if (mos or 0) > 0 else _C["neg"]),
+                     ("Croiss. implicite (cours)", _pct(dam.get("implied_growth_in_price")), _C["fg"])]
+        else:
+            rows.append(("DCF (FCFF)", "non calculable (FCF négatif)", _C["muted"]))
+        dam_kv = _kv_grid(rows)
         # multiples de valorisation (toujours affichés quand fiables)
         mu = dam.get("multiples", {})
         dam_kv += (f'<div style="margin-top:12px;font-size:12px;color:{_C["muted"]}">Multiples : '
@@ -910,14 +921,20 @@ def _reportlab_pdf(r: dict, path: str, A4, cm, canvas, theme: str = "dark") -> N
         ], extra_h=0.0)
     else:
         scen = dcf.get("scenarios", {}); mos = dcf.get("margin_of_safety"); mu = dam.get("multiples", {})
-        card("Valorisation (Damodaran)", [
-            ("DCF bear / base / bull", f"${_num(scen.get('bear'))} / ${_num(scen.get('base'))} / ${_num(scen.get('bull'))}", C["fg"]),
-            ("Marge de sécurité", _pct(mos) if mos is not None else "—", C["pos"] if (mos or 0) > 0 else C["neg"]),
-            ("Croissance implicite (cours)", _pct(dam.get("implied_growth_in_price")), C["fg"]),
+        _base = scen.get("base"); _dcf_ok = _base is not None and not _isnan(_base)
+        drows = []
+        if _dcf_ok:
+            drows += [
+                ("DCF bear / base / bull", f"${_num(scen.get('bear'))} / ${_num(scen.get('base'))} / ${_num(scen.get('bull'))}", C["fg"]),
+                ("Marge de sécurité", _pct(mos) if mos is not None else "—", C["pos"] if (mos or 0) > 0 else C["neg"]),
+                ("Croissance implicite (cours)", _pct(dam.get("implied_growth_in_price")), C["fg"])]
+        else:
+            drows.append(("DCF (FCFF)", "non calculable (FCF négatif)", C["muted"]))
+        drows += [
             ("P/E · EV/EBITDA · P/B", f"{_num(mu.get('pe'),1)} · {_num(mu.get('ev_ebitda'),1)} · {_num(mu.get('price_to_book'),1)}", C["fg"]),
             ("EV/Sales · rdt FCF · rdt bénéf.", f"{_num(mu.get('ev_sales'),1)} · {_pct(mu.get('fcf_yield'))} · {_pct(mu.get('earnings_yield'))}", C["fg"]),
-            ("Coût des FP · bêta", f"{_pct(dam.get('cost_of_equity'))} · {_num(dam.get('beta'))}", C["fg"]),
-        ])
+            ("Coût des FP · bêta", f"{_pct(dam.get('cost_of_equity'))} · {_num(dam.get('beta'))}", C["fg"])]
+        card("Valorisation (Damodaran)", drows)
 
     # ── Rentabilité économique (Vernimmen) ──
     sp = ver.get("value_creation_spread"); eva = ver.get("eva"); m = ver.get("margins", {}); dp = ver.get("dupont", {})
@@ -1091,21 +1108,32 @@ def _rl_line(c, vals, labels, x, y, w, h, title, cm, C=None) -> None:
 
 
 def _rl_bars(c, hist, key, x, y, w, h, title, cm, C=None) -> None:
-    """Barres annuelles (CA) reportlab : valeur au-dessus + année, couleur accent. C = palette."""
+    """Barres annuelles (CA/résultat) reportlab — gère les valeurs NÉGATIVES (ligne de zéro, barres
+    au-dessus/en-dessous, libellés positionnés sans déborder). `y` = base de la zone du graphe."""
     from reportlab.lib.colors import HexColor
     acc = C["accent"] if C else HexColor("#22d3ee")
+    neg = C["neg"] if C else HexColor("#ef4444")
     mut = C["muted"] if C else HexColor("#9aa1ab")
     fg = C["fg"] if C else HexColor("#e8eaed")
     vals = [float(d.get(key) or 0) for d in hist]
-    hi = max(vals + [0.0]) or 1.0
+    hi = max(vals + [0.0]); lo = min(vals + [0.0])
+    span = (hi - lo) or 1.0
+    pad = 0.32 * cm                                        # marge haut/bas pour les libellés de valeur
+    bot, h2 = y + pad, h - 2 * pad                         # zone réservée aux barres
+    zero = bot + (0 - lo) / span * h2                      # ordonnée de la ligne du zéro
     c.setFillColor(mut); c.setFont("Helvetica", 8); c.drawString(x, y + h + 4, title)
-    n = len(vals); gap = (w - 1.0 * cm) / n; bw = gap * 0.58
+    c.setStrokeColor(C["border"] if C else HexColor("#2a2f37")); c.setLineWidth(0.5)
+    c.line(x + 1.0 * cm, zero, x + w, zero)               # ligne du zéro
+    n = len(vals); gap = (w - 1.0 * cm) / n; bw = gap * 0.56
     for i, (d, v) in enumerate(zip(hist, vals)):
-        bh = (v / hi) * h if hi else 0
+        vy = bot + (v - lo) / span * h2
         bx = x + 1.0 * cm + i * gap + (gap - bw) / 2
-        c.setFillColor(acc); c.roundRect(bx, y, bw, max(1, bh), 2, fill=1, stroke=0)
+        top = max(vy, zero); bh = abs(vy - zero)
+        c.setFillColor(acc if v >= 0 else neg)
+        c.roundRect(bx, min(vy, zero), bw, max(1, bh), 2, fill=1, stroke=0)
         c.setFillColor(fg); c.setFont("Helvetica", 6.5)
-        c.drawCentredString(bx + bw / 2, y + bh + 2, _money_axis(v))
+        ly = (top + 3) if v >= 0 else (min(vy, zero) - 7)  # au-dessus si positif, en-dessous si négatif
+        c.drawCentredString(bx + bw / 2, ly, _money_axis(v))
         c.setFillColor(mut); c.drawCentredString(bx + bw / 2, y - 9, str(d.get("year", "")))
 
 

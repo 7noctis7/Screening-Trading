@@ -143,11 +143,13 @@ class YFinanceFundamentalsProvider:
                     except (TypeError, ValueError):
                         continue
             return None
+        ebit_v = _f(info, "ebit") or ebitda * 0.85
+        ebitda_v = max(ebitda, ebit_v) if ebitda else ebit_v   # EBITDA ≥ EBIT (D&A ≥ 0) — évite l'incohérence
         return Financials(
             symbol=symbol, as_of=as_of or datetime.now(timezone.utc),
             sector=info.get("sector", "Unknown"), price=price, shares=shares,
             revenue=revenue, gross_profit=revenue * gross_margin if gross_margin else 0.0,
-            ebit=_f(info, "ebit") or ebitda * 0.85, ebitda=ebitda, net_income=net_income,
+            ebit=ebit_v, ebitda=ebitda_v, net_income=net_income,
             total_equity=_f(info, "totalStockholderEquity") or revenue * 0.5,
             total_debt=_f(info, "totalDebt"), cash=_f(info, "totalCash"),
             fcf=_f(info, "freeCashflow"), interest_expense=0.0,
