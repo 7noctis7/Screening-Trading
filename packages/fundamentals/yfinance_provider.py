@@ -43,7 +43,8 @@ def _cache_put(symbol: str, info: dict) -> None:
             "sharesOutstanding", "marketCap", "grossMargins", "ebit", "totalStockholderEquity",
             "totalDebt", "totalCash", "freeCashflow", "sector",
             "revenueGrowth", "earningsGrowth",
-            "financialCurrency", "currency")})                 # devises (comptes vs cours) → conversion ADR
+            "financialCurrency", "currency",                   # devises (comptes vs cours) → conversion ADR
+            "longName", "shortName")})                          # raison sociale
         (_CACHE_DIR / f"{symbol.replace('/', '_')}.json").write_text(json.dumps(keep))
     except Exception:  # noqa: BLE001
         pass
@@ -135,4 +136,5 @@ class YFinanceFundamentalsProvider:
             fcf=_f(info, "freeCashflow"), interest_expense=0.0,
             revenue_growth=_opt("revenueGrowth"), earnings_growth=_opt("earningsGrowth"),
             currency=(info.get("financialCurrency") or None),     # devise des comptes
-            price_currency=(info.get("currency") or None))        # devise du cours (ADR → USD)
+            price_currency=(info.get("currency") or None),        # devise du cours (ADR → USD)
+            name=(info.get("longName") or info.get("shortName") or None))

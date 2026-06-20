@@ -495,6 +495,86 @@ def _company_financial_history(sym: str) -> list[dict] | None:
         return None
 
 
+def _company_quarterly(sym: str) -> list[dict] | None:
+    """4 derniers TRIMESTRES : yfinance d'abord, repli SEC EDGAR (10-Q). CA, résultat net, BPA, marge."""
+    yq = _quarterly_yf(sym)
+    if yq and len([x for x in yq if x.get("revenue")]) >= 2:
+        return yq
+    try:                                                    # repli SEC EDGAR (officiel, gratuit)
+        from packages.fundamentals.sec_provider import quarterly_history
+        sq = quarterly_history(sym, n=4)
+        if sq and len([x for x in sq if x.get("revenue")]) >= 2:
+            return sq
+    except Exception:  # noqa: BLE001
+        pass
+    return yq
+
+
+def _quarterly_yf(sym: str) -> list[dict] | None:
+    """4 derniers trimestres via yfinance (quarterly_income_stmt)."""
+    try:
+        import yfinance as yf
+        df = yf.Ticker(sym).quarterly_income_stmt
+        if df is None or getattr(df, "empty", True):
+            return None
+
+        def _row(*names):
+            for n in names:
+                if n in df.index:
+                    return df.loc[n]
+            return None
+        rev = _row("Total Revenue", "TotalRevenue")
+        ni = _row("Net Income", "NetIncome", "Net Income Common Stockholders")
+        eps = _row("Diluted EPS", "Basic EPS")
+        out = []
+        for col in list(df.columns)[:4]:
+            def _v(s):
+                try:
+                    return float(s[col]) if s is not None and s[col] == s[col] else None
+                except Exception:  # noqa: BLE001
+                    return None
+            rv, nv = _v(rev), _v(ni)
+            out.append({"period": f"{col.year}-T{getattr(col, 'quarter', '?')}",
+                        "revenue": rv, "net_income": nv, "eps": _v(eps),
+                        "net_margin": (nv / rv if (rv and nv is not None) else None)})
+        out.reverse()                                   # plus ancien → plus récent
+        return out or None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _company_holders(sym: str) -> dict | None:
+    """Top 5 actionnaires INSTITUTIONNELS + top 5 INSIDERS (yfinance), pour graphe de répartition.
+    Best-effort (réseau) ; None si indisponible/hors-ligne."""
+    try:
+        import yfinance as yf
+        t = yf.Ticker(sym)
+        inst, ins = [], []
+        try:
+            df = t.institutional_holders
+            if df is not None and not getattr(df, "empty", True):
+                for _, row in df.head(5).iterrows():
+                    pct = row.get("pctHeld") if "pctHeld" in row else row.get("% Out")
+                    inst.append({"name": str(row.get("Holder", "")),
+                                 "pct": float(pct) if pct == pct and pct is not None else None})
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            df = t.insider_roster_holders
+            if df is not None and not getattr(df, "empty", True):
+                col = "Shares Owned Directly" if "Shares Owned Directly" in df.columns else None
+                for _, row in df.head(5).iterrows():
+                    ins.append({"name": str(row.get("Name", "")),
+                                "shares": float(row.get(col)) if (col and row.get(col) == row.get(col)) else None})
+        except Exception:  # noqa: BLE001
+            pass
+        if not inst and not ins:
+            return None
+        return {"institutional": inst, "insiders": ins}
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _company_earnings(sym: str) -> dict | None:
     """Prochaine date de résultats + BPA/revenu estimés & annoncés (réels) pour un titre."""
     try:
@@ -547,7 +627,15 @@ def _build_company_report_cached(sym: str) -> tuple[dict | None, str | None]:
                 fx_note = f"comptes convertis en {f.price_currency} (taux {fx:.4f})"
         except Exception:  # noqa: BLE001
             pass
-    name = next((m.get("name") for m in _seed_universe() if m.get("symbol") == sym), sym)
+    # nom : raison sociale de la source (yfinance/SEC) > univers seed > ticker ; sinon SEC name map
+    name = getattr(f, "name", None) or next(
+        (m.get("name") for m in _seed_universe() if m.get("symbol") == sym), None)
+    if not name or name == sym:
+        try:
+            from packages.fundamentals.sec_provider import company_name
+            name = company_name(sym) or name or sym
+        except Exception:  # noqa: BLE001
+            name = name or sym
     beta, ml_score = 1.0, None
     try:
         snap = _snap()
@@ -564,6 +652,12 @@ def _build_company_report_cached(sym: str) -> tuple[dict | None, str | None]:
                                   price_dates=dates, financial_history=fin_hist, peers=_company_peers(sym))
     report["source"] = src
     report["earnings_signature"] = sig
+    holders = _company_holders(sym)
+    if holders:
+        report["holders"] = holders
+    quarterly = _company_quarterly(sym)
+    if quarterly:
+        report["quarterly"] = quarterly
     if fx_note:
         report["fx_conversion"] = fx_note
         report.setdefault("audit", {}).setdefault("findings", []).append(

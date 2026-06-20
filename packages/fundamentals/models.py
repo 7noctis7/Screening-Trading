@@ -27,3 +27,4 @@ class Financials:
     earnings_growth: float | None = None      # croissance bénéfices YoY RÉELLE (si fournie par la source)
     currency: str | None = None               # devise des ÉTATS FINANCIERS (ex. TWD pour TSM)
     price_currency: str | None = None         # devise du COURS (ex. USD pour l'ADR) — sert à convertir
+    name: str | None = None                   # raison sociale (ex. "Oscar Health, Inc.") si la source la fournit
