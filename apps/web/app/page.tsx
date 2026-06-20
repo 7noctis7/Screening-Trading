@@ -1,12 +1,13 @@
 "use client";
 import { useMemo, useState } from "react";
 import { StepBanner } from "@/components/Pipeline";
-import { useDashboard, useScreener, useSentiment, usePresetLedger } from "@/lib/api";
+import { useDashboard, useScreener, useSentiment, usePresetLedger, usePositions } from "@/lib/api";
 import { MetricCard } from "@/components/MetricCard";
 import { RegimeBanner } from "@/components/RegimeBanner";
 import { VixPlaybook } from "@/components/VixPlaybook";
 import { SentimentBanner } from "@/components/SentimentBanner";
 import { EquityChart } from "@/components/EquityChart";
+import { TechnicalChart } from "@/components/TechnicalChart";
 import { PageSkeleton } from "@/components/ui";
 
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
@@ -43,7 +44,9 @@ export default function Dashboard() {
   const [showReal, setShowReal] = useState(false);
   const [ledgerQ, setLedgerQ] = useState("");
   const [ledgerSort, setLedgerSort] = useState<{ k: string; dir: number }>({ k: "date", dir: -1 });
+  const [selSym, setSelSym] = useState<string | null>(null);
   const { data: ledger } = usePresetLedger();
+  const { data: pos } = usePositions();
   const eqFull: { t: string; v: number }[] = d?.equity ?? [];
   const sliced = useMemo(() => {
     if (!years || !eqFull.length) return eqFull;
@@ -132,6 +135,17 @@ export default function Dashboard() {
         <p className="text-muted2 text-xs mt-2"><b>Backtest preset</b> = simulation de la stratégie sur prix RÉELS (~10 ans). <b>Portefeuille RÉEL</b> = ton compte Alpaca+Bitmart (historique court car récent). Clique une ligne pour son journal de trades.</p>
       </section>
 
+      {/* Graphique technique de l'actif cliqué dans un journal (indicateurs + signaux achat/vente) */}
+      {selSym && (pos?.series ?? {})[selSym] && (
+        <section className="card p-4">
+          <div className="flex justify-between items-center mb-2">
+            <h2 className="text-sm uppercase tracking-wide text-muted">Graphique technique — {selSym} <span className="normal-case text-xs">· signaux achat/vente du portefeuille</span></h2>
+            <button onClick={() => setSelSym(null)} className="text-muted hover:text-fg text-sm">✕</button>
+          </div>
+          <TechnicalChart data={pos!.series[selSym]} markers={[...((d.preset_markers ?? {})[selSym] ?? []), ...((d.real_markers ?? {})[selSym] ?? [])]} />
+        </section>
+      )}
+
       {/* Journal RÉEL : ordres réellement exécutés (Alpaca+Bitmart) + positions réelles */}
       {showReal && (() => {
         const rt = d.real_trades ?? [], rp = d.real_positions ?? [], rps = d.real_portfolio?.stats ?? {};
@@ -158,7 +172,7 @@ export default function Dashboard() {
                 <th className="text-left font-normal">Sens</th><th className="text-right font-normal">Qté</th><th className="text-right font-normal">Prix</th>
                 <th className="text-right font-normal">Montant</th></tr></thead>
                 <tbody>{rt.slice(0, 200).map((t: any, i: number) => (<tr key={i} className="border-t border-border">
-                  <td className="py-1 text-muted">{String(t.date).slice(0, 10)}</td><td>{t.symbol}</td><td className="font-sans text-xs">{t.broker}</td>
+                  <td className="py-1 text-muted">{String(t.date).slice(0, 10)}</td><td><span className="text-accent border-b border-dotted border-border cursor-pointer" onClick={() => setSelSym(t.symbol)}>{t.symbol}</span></td><td className="font-sans text-xs">{t.broker}</td>
                   <td style={{ color: t.side === "buy" ? "#22c55e" : "#f43f5e" }}>{t.side === "buy" ? "▲ achat" : "▼ vente"}</td>
                   <td className="text-right">{(t.qty ?? 0).toFixed(4)}</td><td className="text-right">${dlt(t.price)}</td><td className="text-right">${dlt(t.notional)}</td></tr>))}</tbody></table>}
             </>)}
@@ -201,7 +215,7 @@ export default function Dashboard() {
               <tbody>{sorted.map((t: any, i: number) => (
                 <tr key={i} className="border-t border-border">
                   <td className="py-1 text-muted">{String(t.date).slice(0, 10)}</td>
-                  <td>{t.symbol}</td>
+                  <td><span className="text-accent border-b border-dotted border-border cursor-pointer" onClick={() => setSelSym(t.symbol)}>{t.symbol}</span></td>
                   <td style={{ color: t.side === "BUY" ? "#22c55e" : "#f43f5e" }}>{t.side === "BUY" ? "▲ achat" : "▼ vente"}</td>
                   <td className="text-right">{t.qty}</td><td className="text-right">${t.price}</td>
                   <td className="text-right text-muted">{t.avg_cost != null ? `$${t.avg_cost}` : "—"}</td>
