@@ -2,6 +2,14 @@
 import { useEvents } from "@/lib/api";
 import { PageSkeleton, EmptyState } from "@/components/ui";
 
+// couleur [texte, fond] par étiquette de suivi
+const TAGC: Record<string, [string, string]> = {
+  position: ["#22c55e", "color-mix(in srgb,#22c55e 16%,transparent)"],
+  conviction: ["#a78bfa", "color-mix(in srgb,#8b5cf6 16%,transparent)"],
+  ML: ["#22d3ee", "color-mix(in srgb,#22d3ee 16%,transparent)"],
+  "fond.": ["#f59e0b", "color-mix(in srgb,#f59e0b 16%,transparent)"],
+  "invest.": ["#f472b6", "color-mix(in srgb,#ec4899 16%,transparent)"],
+};
 const dt = (s?: string) => (s ? String(s).slice(0, 10) : "—");
 // montants : BPA en $, revenu en $ (compact : K/M/Md)
 const eps = (x?: number | null) => (x == null ? "—" : `$${x.toFixed(2)}`);
@@ -29,7 +37,8 @@ export default function Events() {
     <main className="max-w-6xl mx-auto p-6 space-y-4">
       <h1 className="text-xl font-semibold tracking-tight">Événements</h1>
       <p className="text-muted text-xs">
-        Résultats trimestriels (BPA &amp; revenu estimés et annoncés) des sociétés de ta base + tes positions réelles,
+        Résultats trimestriels (BPA &amp; revenu estimés et annoncés) de tes positions réelles, du top 5 % des scores
+        (conviction, ML, fondamentaux, investisseurs) et des sociétés de ta base,
         et IPOs US (dépôts S-1/S-1/A SEC EDGAR{data.fmp ? " + calendrier FMP" : ""}). 100 % sources publiques réelles
         {data.fmp ? "." : " — ajoute FMP_API_KEY pour le ticker, la fourchette de prix et la valorisation des IPOs."}
       </p>
@@ -47,7 +56,7 @@ export default function Events() {
         <table className="w-full text-sm mono">
           <thead className="text-muted text-xs">
             <tr><th className="text-left font-normal">Date</th><th className="text-left font-normal">Actif</th>
-            <th className="text-left font-normal">Société</th>
+            <th className="text-left font-normal">Société</th><th className="text-left font-normal pl-2">Suivi</th>
             <th className="text-right font-normal">BPA est.</th><th className="text-right font-normal">BPA réel</th>
             <th className="text-right font-normal">Rev. est.</th><th className="text-right font-normal">Rev. réel</th>
             <th className="text-right font-normal">Surprise</th><th className="text-left font-normal pl-2">Quand</th></tr>
@@ -59,7 +68,11 @@ export default function Events() {
             <tr key={i} className="border-t border-border">
               <td className="py-1.5"><span style={{ color: upcoming ? "#22d3ee" : "#9aa1ad" }}>{dt(e.date)}</span></td>
               <td>{e.symbol}</td>
-              <td className="font-sans text-xs text-muted2 max-w-[200px] truncate">{e.name || "—"}</td>
+              <td className="font-sans text-xs text-muted2 max-w-[180px] truncate">{e.name || "—"}</td>
+              <td className="pl-2 font-sans">{(e.tags ?? []).length === 0 ? <span className="text-muted2 text-xs">base</span> :
+                (e.tags ?? []).map((t: string) => (
+                  <span key={t} className="text-[10px] px-1 py-0.5 rounded mr-1 whitespace-nowrap"
+                    style={{ background: TAGC[t]?.[1] ?? "color-mix(in srgb,#9aa1ad 16%,transparent)", color: TAGC[t]?.[0] ?? "#9aa1ad" }}>{t}</span>))}</td>
               <td className="text-right">{eps(e.eps_estimate)}</td>
               <td className="text-right" style={{ color: e.eps_actual == null ? "#9aa1ad" : "#e5e7eb" }}>{eps(e.eps_actual)}</td>
               <td className="text-right">{big(e.revenue_estimate)}</td>
