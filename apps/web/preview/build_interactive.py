@@ -838,6 +838,26 @@ function mkTable(head,bodyRows){
   colWrap.appendChild(mkTable('<th>Symbole</th><th>Classe</th><th style="text-align:right">Barres</th><th>Début</th><th>Fin</th><th style="text-align:right">Dernier cours</th>',colRows));
   cc.appendChild(colWrap);
   p.appendChild(cc);
+  // audit PwC
+  if(d.audit){
+    const au=d.audit,cnt=au.counts||{},aok=au.ok;
+    const anoRows=(au.anomalies||[]).slice(0,100).map(an=>`<tr><td class="mono">${an.symbol}</td>
+      <td style="color:var(--muted)">${an.kind}</td>
+      <td class="mono" style="color:${an.severity==='critical'?'#ef4444':an.severity==='major'?'#f59e0b':'#94a3b8'}">${an.severity}</td>
+      <td style="color:var(--muted)">${an.detail}</td></tr>`);
+    const ac=$(`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div class="label">Audit d'intégrité (PwC)</div>
+      <span class="pill" style="color:${aok?'#22c55e':'#ef4444'}">${aok?'✓ aucune anomalie critique':('✗ '+(cnt.critical||0)+' critique(s)')}</span></div>
+      <div style="display:flex;gap:24px;margin-bottom:6px">
+        <div><div class="label">Critiques</div><div class="mono" style="font-size:18px;color:${(cnt.critical||0)>0?'#ef4444':'var(--muted)'}">${cnt.critical||0}</div></div>
+        <div><div class="label">Majeures</div><div class="mono" style="font-size:18px;color:${(cnt.major||0)>0?'#f59e0b':'var(--muted)'}">${cnt.major||0}</div></div>
+        <div><div class="label">Avertissements</div><div class="mono" style="font-size:18px;color:var(--muted)">${cnt.warning||0}</div></div>
+      </div>
+      <div style="font-size:12px;color:var(--muted)">${eur(au.n_symbols)} séries · ${eur(au.n_bars)} barres auditées (complétude · exactitude OHLC · point-in-time · biais du survivant)</div></div>`);
+    if(anoRows.length){const aw=$('<div style="max-height:220px;overflow:auto;margin-top:8px"></div>');
+      aw.appendChild(mkTable('<th>Symbole</th><th>Type</th><th>Sévérité</th><th>Détail</th>',anoRows));ac.appendChild(aw);}
+    p.appendChild(ac);
+  }
   // qualité
   const q=d.quality||{},ok=q.ok;
   const qc=$(`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">

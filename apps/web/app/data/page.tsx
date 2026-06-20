@@ -68,6 +68,48 @@ export default function DataPage() {
         </section>
       )}
 
+      {/* Audit PwC — complétude / exactitude / point-in-time */}
+      {d.audit && (
+        <section className="card p-4">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h2 className="text-sm uppercase tracking-wide text-muted">Audit d'intégrité (PwC)</h2>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-surfaceAlt"
+              style={{ color: d.audit.ok ? "#22c55e" : "#ef4444" }}>
+              {d.audit.ok ? "✓ aucune anomalie critique" : `✗ ${d.audit.counts?.critical ?? 0} critique(s)`}
+            </span>
+          </div>
+          <div className="grid grid-cols-3 gap-3 mt-3">
+            {([["Critiques", d.audit.counts?.critical ?? 0, "#ef4444"],
+               ["Majeures", d.audit.counts?.major ?? 0, "#f59e0b"],
+               ["Avertissements", d.audit.counts?.warning ?? 0, "#94a3b8"]] as [string, number, string][])
+              .map(([lab, val, col]) => (
+                <div key={lab}>
+                  <div className="text-muted text-xs">{lab}</div>
+                  <div className="text-lg mono" style={{ color: val > 0 ? col : "var(--muted)" }}>{val}</div>
+                </div>))}
+          </div>
+          <p className="text-muted text-xs mt-2">
+            {nb(d.audit.n_symbols)} séries · {nb(d.audit.n_bars)} barres auditées (complétude · exactitude OHLC · point-in-time · biais du survivant)
+          </p>
+          {(d.audit.anomalies ?? []).length > 0 && (
+            <div className="max-h-[220px] overflow-auto mt-2">
+              <table className="w-full text-xs mono">
+                <thead className="text-muted sticky top-0 bg-surface">
+                  <tr><th className="text-left font-normal">Symbole</th><th className="text-left font-normal">Type</th>
+                  <th className="text-left font-normal">Sévérité</th><th className="text-left font-normal">Détail</th></tr>
+                </thead>
+                <tbody>{d.audit.anomalies.slice(0, 100).map((an: any, i: number) => (
+                  <tr key={i} className="border-t border-border">
+                    <td className="py-1">{an.symbol}</td><td className="text-muted font-sans">{an.kind}</td>
+                    <td style={{ color: an.severity === "critical" ? "#ef4444" : an.severity === "major" ? "#f59e0b" : "#94a3b8" }}>{an.severity}</td>
+                    <td className="text-muted font-sans">{an.detail}</td>
+                  </tr>))}</tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
       <section className="card p-4">
         <div className="flex items-center justify-between mb-1">
           <h2 className="text-sm uppercase tracking-wide text-muted">Collecte OHLCV — univers complet</h2>

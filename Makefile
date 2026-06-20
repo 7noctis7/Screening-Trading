@@ -96,6 +96,8 @@ vault-sync:       ## régénère le coffre Obsidian (journal du jour, attributio
 	$(PYTHON) -m packages.reporting.obsidian
 audit:            ## audit PwC des bases de prix (complétude/exactitude/point-in-time) — make audit ARGS=--strict
 	$(PYTHON) scripts/data_audit.py $(ARGS)
+ingest-delisted:  ## détecte les titres délistés (barres trop anciennes) → data/delisted.csv (anti-biais du survivant)
+	$(PYTHON) scripts/ingest_delisted.py $(ARGS)
 analytics:        ## rapport de perf QuantStats (Sortino/Calmar/Alpha-Beta vs QQQ) → vault/Performance_Report.md
 	$(PYTHON) scripts/perf_report.py
 clean:

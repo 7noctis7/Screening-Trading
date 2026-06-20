@@ -9,10 +9,60 @@ réintégrer les disparus dans les backtests longs. stdlib uniquement.
 from __future__ import annotations
 
 import csv
+import os
+from datetime import date, datetime
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT = _ROOT / "data" / "delisted.csv"
+
+
+def _as_date(v: object) -> date | None:
+    if isinstance(v, datetime):
+        return v.date()
+    if isinstance(v, date):
+        return v
+    try:
+        return datetime.fromisoformat(str(v)[:10]).date()
+    except (TypeError, ValueError):
+        return None
+
+
+def derive_delisted(last_bar_by_symbol: dict[str, object], *, asof: date,
+                    stale_days: int = 60, names: dict[str, str] | None = None,
+                    sectors: dict[str, str] | None = None) -> list[dict]:
+    """Dérive (point-in-time) les titres probablement DÉLISTÉS : ceux dont la dernière barre est
+    antérieure de plus de `stale_days` à `asof` (sortie de cote / halt prolongé). Heuristique libre
+    et reproductible — pas de fuite future (n'utilise que des dates ≤ asof). stdlib pur."""
+    names = names or {}
+    sectors = sectors or {}
+    out: list[dict] = []
+    for sym, last in last_bar_by_symbol.items():
+        d = _as_date(last)
+        if d is None or d > asof:
+            continue                                         # date absente ou future → on ignore
+        if (asof - d).days > stale_days:
+            out.append({"symbol": sym, "name": names.get(sym, ""),
+                        "sector": sectors.get(sym, ""), "delisted_on": d.isoformat()})
+    out.sort(key=lambda r: r["symbol"])
+    return out
+
+
+def write_delisted(rows: list[dict], path: str | Path | None = None) -> int:
+    """Écrit/fusionne data/delisted.csv (clé = symbol ; écriture atomique). Renvoie le total écrit."""
+    p = Path(path) if path else _DEFAULT
+    merged = {r["symbol"]: r for r in load_delisted(p)}      # conserve l'existant
+    for r in rows:
+        merged[r["symbol"]] = r                              # la dérivation récente prime
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".tmp.csv")
+    with tmp.open("w", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["symbol", "name", "sector", "delisted_on"])
+        w.writeheader()
+        for r in sorted(merged.values(), key=lambda x: x["symbol"]):
+            w.writerow({k: r.get(k, "") for k in ("symbol", "name", "sector", "delisted_on")})
+    os.replace(tmp, p)
+    return len(merged)
 
 
 def load_delisted(path: str | Path | None = None) -> list[dict]:

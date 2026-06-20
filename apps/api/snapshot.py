@@ -289,6 +289,16 @@ def _data_section(data: dict, acmap: dict[str, str], universe_total: int = 0,
     rep = validate_ohlcv(df, first, "1d", max_gap_ratio=0.5)
     from packages.storage.data_health import health_report
     health = health_report(data, acmap)
+    # AUDIT PwC complet (complétude / exactitude / point-in-time) — toujours calculé sur données
+    # réelles pour affichage (la gate bloquante reste séparée, pilotée par QUANT_AUDIT). Best-effort.
+    audit_summary: dict | None = None
+    if mode == "real":
+        try:
+            from packages.data.audit import audit_and_report
+            _ar = audit_and_report(data, universe=symbols)
+            audit_summary = _ar.to_dict()
+        except Exception:  # noqa: BLE001 — affichage non critique
+            audit_summary = None
     src_cfg = load_yaml(ROOT / "config" / "data_sources.yaml")
     return {
         "as_of": data[first][-1].ts.isoformat(),
@@ -303,6 +313,7 @@ def _data_section(data: dict, acmap: dict[str, str], universe_total: int = 0,
         "total_bars": sum(c["bars"] for c in collection),
         "quality": {"symbol": rep.symbol, "n_rows": rep.n_rows, "ok": rep.ok,
                     "errors": rep.errors, "warnings": rep.warnings},
+        "audit": audit_summary,                             # rapport PwC : ok, compteurs, anomalies
         "layers": [
             {"name": "Bronze — barres brutes", "store": "bars_repo · duckdb_bars_repo",
              "desc": "OHLCV ingéré par symbole/timeframe, validé par contrats qualité"},
