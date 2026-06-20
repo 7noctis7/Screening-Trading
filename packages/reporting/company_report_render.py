@@ -222,6 +222,55 @@ def _apply_theme(html: str, theme: str) -> str:
     return html
 
 
+def _snowflake_svg(axes: dict, size: int = 230) -> str:
+    """Radar « Portfolio Snowflake » (5 axes) en SVG — anneaux, axes, polygone doré (Simply Wall St)."""
+    import math
+    labels = ["VALUE", "FUTURE", "PAST", "HEALTH", "DIVIDEND"]
+    cx = cy = size / 2
+    R = size / 2 - 30
+    gold = "#e0b015"
+    n = len(labels)
+    def _pt(i, rad):
+        a = -math.pi / 2 + i * 2 * math.pi / n            # départ en haut, sens horaire
+        return cx + rad * math.cos(a), cy + rad * math.sin(a)
+    rings = ""
+    for k in (0.33, 0.66, 1.0):                            # anneaux concentriques
+        pts = " ".join(f"{_pt(i, R*k)[0]:.1f},{_pt(i, R*k)[1]:.1f}" for i in range(n))
+        rings += f'<polygon points="{pts}" fill="none" stroke="{_C["border"]}" stroke-width="0.8"/>'
+    spokes = lab = ""
+    for i, name in enumerate(labels):
+        ex, ey = _pt(i, R)
+        spokes += f'<line x1="{cx}" y1="{cy}" x2="{ex:.1f}" y2="{ey:.1f}" stroke="{_C["border"]}" stroke-width="0.6"/>'
+        lx, ly = _pt(i, R + 16)
+        anchor = "middle" if abs(lx - cx) < 5 else ("start" if lx > cx else "end")
+        lab += (f'<text x="{lx:.1f}" y="{ly+3:.1f}" text-anchor="{anchor}" font-size="9" '
+                f'fill="{_C["muted"]}" letter-spacing="1">{name}</text>')
+    poly = " ".join(f"{_pt(i, R*max(0.04, axes.get(labels[i],0)/100))[0]:.1f},"
+                    f"{_pt(i, R*max(0.04, axes.get(labels[i],0)/100))[1]:.1f}" for i in range(n))
+    return (f'<svg viewBox="0 0 {size} {size}" width="{size}" height="{size}">{rings}{spokes}'
+            f'<polygon points="{poly}" fill="{gold}" fill-opacity="0.78" stroke="{gold}" stroke-width="1.5"/>'
+            f'{lab}</svg>')
+
+
+def _holders_bars(rows: list[dict], key: str, pct: bool) -> str:
+    """Barres horizontales Apple-grade pour l'actionnariat (plus lisible qu'un camembert)."""
+    vals = [(_x.get("name") or "—", _x.get(key)) for _x in rows if _x.get(key) is not None]
+    if not vals:
+        return f'<div style="font-size:11px;color:{_C["muted"]}">données indisponibles</div>'
+    mx = max(v for _, v in vals) or 1.0
+    out = ""
+    for name, v in vals:
+        wpct = max(3, round(v / mx * 100))
+        label = (f"{v*100:.1f}%" if pct else _money_axis(v))
+        out += (f'<div style="margin:5px 0">'
+                f'<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px">'
+                f'<span style="color:{_C["fg"]}">{_trunc(name, 26)}</span>'
+                f'<span style="color:{_C["muted"]};font-variant-numeric:tabular-nums">{label}</span></div>'
+                f'<div style="height:6px;border-radius:3px;background:{_C["border"]}">'
+                f'<div style="height:6px;border-radius:3px;width:{wpct}%;background:{_C["accent"]}"></div></div></div>')
+    return out
+
+
 def _reconciliation_html(r: dict[str, Any]) -> str:
     """Carte « Réconciliation GAAP vs Non-GAAP » — CA & résultat net : reporté vs SEC EDGAR (GAAP)."""
     rec = r.get("reconciliation")
@@ -275,12 +324,14 @@ def company_report_html(r: dict[str, Any], theme: str = "dark") -> str:
     status = sc.get("verdict_status", sc["recommendation"].upper())
     blocking = (r.get("flags") or {}).get("blocking_alert")
     badge_col = _C["neg"] if blocking else _tone(g)
+    _name = idy.get("name") or ""
+    name_span = (f'<span style="color:{_C["muted"]};font-size:15px;font-weight:500;margin-left:10px">{_name}</span>'
+                 if (_name and _name != idy["symbol"]) else "")
     header = (
         f'<div style="display:flex;align-items:center;gap:22px;margin-bottom:16px">'
         f'<div>{_gauge(g)}</div>'
         f'<div style="flex:1">'
-        f'<div style="font-size:30px;font-weight:800;letter-spacing:-.01em">{idy["symbol"]}'
-        f'<span style="color:{_C["muted"]};font-size:15px;font-weight:500;margin-left:10px">{idy["name"]}</span></div>'
+        f'<div style="font-size:30px;font-weight:800;letter-spacing:-.01em">{idy["symbol"]}{name_span}</div>'
         f'<div style="color:{_C["muted"]};font-size:14px;margin-top:2px">{idy["sector"]} · '
         f'<b style="color:{_C["fg"]}">{_money(idy["market_cap"])}</b> · cours <b style="color:{_C["fg"]}">${_num(idy["price"])}</b></div>'
         f'<div style="margin-top:8px;display:inline-block;padding:4px 14px;border-radius:999px;'
@@ -476,6 +527,25 @@ def company_report_html(r: dict[str, Any], theme: str = "dark") -> str:
             f'<th style="text-align:right">Résultat net</th><th style="text-align:right">BPA</th>'
             f'<th style="text-align:right">Marge nette</th></tr></thead><tbody>{rows}</tbody></table>')
 
+    # Données financières — TRIMESTRES (récents)
+    quarterly_card = ""
+    qd = r.get("quarterly") or []
+    if len(qd) >= 2:
+        qrows = ""
+        for x in qd:
+            rev = x.get("revenue"); ni = x.get("net_income"); eps = x.get("eps"); nm = x.get("net_margin")
+            qrows += (f'<tr style="border-top:1px solid {_C["border"]}">'
+                      f'<td style="padding:4px 0">{x.get("period","—")}</td>'
+                      f'<td style="text-align:right">{_money(rev)}</td>'
+                      f'<td style="text-align:right">{_money(ni)}</td>'
+                      f'<td style="text-align:right;color:{_C["muted"]}">{_num(eps) if eps is not None else "—"}</td>'
+                      f'<td style="text-align:right;color:{(_C["pos"] if (nm or 0)>=0 else _C["neg"])}">{_pct(nm) if nm is not None else "—"}</td></tr>')
+        quarterly_card = _card("Données financières (par trimestre)",
+            f'<table style="width:100%;font-size:12px"><thead><tr style="color:{_C["muted"]};font-size:11px">'
+            f'<th style="text-align:left">Trimestre</th><th style="text-align:right">CA</th>'
+            f'<th style="text-align:right">Résultat net</th><th style="text-align:right">BPA</th>'
+            f'<th style="text-align:right">Marge nette</th></tr></thead><tbody>{qrows}</tbody></table>')
+
     # Macro & régime (top-down)
     macro_card = ""
     mc = r.get("macro")
@@ -486,6 +556,51 @@ def company_report_html(r: dict[str, Any], theme: str = "dark") -> str:
             ("Exposition conseillée", _pct(mc.get("exposure")) if mc.get("exposure") is not None else "—", _C["fg"]),
             ("Taux 10 ans", _pct(mc.get("rate_10y")) if mc.get("rate_10y") is not None else "—", _C["fg"]),
         ]))
+
+    # Portfolio Snowflake (radar 5 axes)
+    snow_card = ""
+    snow = r.get("snowflake") or {}
+    if snow.get("axes"):
+        ax = snow["axes"]
+        legend = "".join(
+            f'<div style="display:flex;justify-content:space-between;font-size:11px;margin:3px 0">'
+            f'<span style="color:{_C["muted"]};letter-spacing:.08em">{k}</span>'
+            f'<span style="color:{_C["fg"]};font-variant-numeric:tabular-nums">{v}/100</span></div>'
+            for k, v in ax.items())
+        snow_card = _card("Portfolio Snowflake", (
+            f'<div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">'
+            f'<div>{_snowflake_svg(ax)}</div>'
+            f'<div style="flex:1;min-width:160px">{legend}'
+            f'<div style="margin-top:8px;font-size:12px;color:{_C["muted"]};font-style:italic">{snow.get("summary","")}</div>'
+            f'</div></div>'))
+
+    # Risk management de l'actif
+    risk_card = ""
+    rk = r.get("risk") or {}
+    if rk.get("available"):
+        risk_card = _card("Risk management de l'actif", _kv_grid([
+            ("Volatilité annualisée", _pct(rk.get("vol_annual")), _C["fg"]),
+            ("Max drawdown", _pct(rk.get("max_drawdown")), _C["neg"]),
+            ("VaR 95 % (1j)", _pct(rk.get("var_95")), _C["neg"]),
+            ("CVaR 95 % (1j)", _pct(rk.get("cvar_95")), _C["neg"]),
+            ("Sharpe / Sortino", f'{_num(rk.get("sharpe"))} / {_num(rk.get("sortino"))}', _C["fg"]),
+            ("Bêta marché", _num(rk.get("beta")) if rk.get("beta") is not None else "—", _C["fg"]),
+            ("Stop suggéré (~2σ hebdo)", _pct(rk.get("suggested_stop")), _C["warn"]),
+        ]))
+
+    # Actionnariat — top 5 institutionnels + insiders (barres horizontales)
+    holders_card = ""
+    hd = r.get("holders") or {}
+    inst = hd.get("institutional") or []; insi = hd.get("insiders") or []
+    if inst or insi:
+        cols = ""
+        if inst:
+            cols += (f'<div><div style="font-size:11px;color:{_C["muted"]};margin-bottom:6px">'
+                     f'Top institutionnels (% du capital)</div>{_holders_bars(inst, "pct", pct=True)}</div>')
+        if insi:
+            cols += (f'<div><div style="font-size:11px;color:{_C["muted"]};margin-bottom:6px">'
+                     f'Top insiders (titres détenus)</div>{_holders_bars(insi, "shares", pct=False)}</div>')
+        holders_card = _card("Actionnariat — répartition", f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">{cols}</div>')
 
     blocking_html = ""
     if (r.get("flags") or {}).get("blocking_alert"):
@@ -520,8 +635,10 @@ Rapport d'évaluation institutionnelle · {r['as_of']} · données auditées</di
 {blocking_html}
 {memo_html}
 {fx_html}
+{snow_card}
 {charts_card}
 {findata_card}
+{quarterly_card}
 {_card("Audit d'intégrité des données", _findings_html(audit))}
 {_reconciliation_html(r)}
 {_card("Analyse économique (Vernimmen)", vern)}
@@ -530,7 +647,9 @@ Rapport d'évaluation institutionnelle · {r['as_of']} · données auditées</di
 {earn_card}
 {_card("Qualité & solidité", qual)}
 {tech_card}
+{risk_card}
 {macro_card}
+{holders_card}
 {_card("Synthèse — piliers de notation", pillars)}
 {_card("Synthèse Advisory Board — Moat & Tail Risk", verdict)}
 <p style="font-size:10px;color:{_C['muted']};margin-top:18px">
@@ -632,20 +751,25 @@ def _reportlab_pdf(r: dict, path: str, A4, cm, canvas, theme: str = "dark") -> N
     c.setFillColor(C["muted"]); c.setFont("Helvetica", 8)
     c.drawString(ML, st["y"], "NOTE D'ANALYSE FONDAMENTALE")
     st["y"] -= 0.7 * cm
-    c.setFillColor(C["fg"]); c.setFont("Helvetica-Bold", 19)
-    c.drawString(ML, st["y"], f"{idy['name']}")
-    c.setFillColor(C["muted"]); c.setFont("Helvetica", 12)
-    c.drawString(ML + c.stringWidth(idy['name'], "Helvetica-Bold", 19) + 6, st["y"], idy['symbol'])
-    # badge statut/score à droite
+    c.setFillColor(C["fg"]); c.setFont("Helvetica-Bold", 20)
+    c.drawString(ML, st["y"], f"{idy['symbol']}")
+    _nm = idy.get("name") or ""
+    if _nm and _nm != idy["symbol"]:
+        c.setFillColor(C["muted"]); c.setFont("Helvetica", 12)
+        c.drawString(ML + c.stringWidth(idy['symbol'], "Helvetica-Bold", 20) + 8, st["y"], _trunc(_nm, 42))
+    # badge statut/score à droite — largeur DYNAMIQUE (ne déborde jamais)
     g = sc["global"]
     blocking = (r.get("flags") or {}).get("blocking_alert")
     status = sc.get("verdict_status", sc["recommendation"].upper())
     badge_col = C["neg"] if blocking else tone(g)
-    bw, bh = 4.3 * cm, 1.0 * cm
+    btxt = f"{status} · {g}/100"
+    c.setFont("Helvetica-Bold", 10.5)
+    bw = c.stringWidth(btxt, "Helvetica-Bold", 10.5) + 0.7 * cm
+    bh = 0.95 * cm
     bx, by = w - MR - bw, st["y"] - 0.2 * cm
     c.setFillColor(badge_col); c.roundRect(bx, by, bw, bh, 7, fill=1, stroke=0)
-    c.setFillColor(HexColor("#ffffff")); c.setFont("Helvetica-Bold", 11)
-    c.drawCentredString(bx + bw / 2, by + 0.34 * cm, f"{status} · {g}/100")
+    c.setFillColor(HexColor("#ffffff"))
+    c.drawCentredString(bx + bw / 2, by + 0.32 * cm, btxt)
     st["y"] -= 0.62 * cm
     c.setFillColor(C["muted"]); c.setFont("Helvetica", 9.5)
     c.drawString(ML, st["y"], f"{idy['sector']} · {_money(idy.get('market_cap'))} de capi · cours ${_num(idy.get('price'))}")
@@ -691,6 +815,29 @@ def _reportlab_pdf(r: dict, path: str, A4, cm, canvas, theme: str = "dark") -> N
             c.setFillColor(C["muted"]); c.setFont("Helvetica", 8)
             c.drawString(ML, st["y"], f"converti: {r['fx_conversion']}"); st["y"] -= 0.5 * cm
 
+    # ── Portfolio Snowflake (radar) ──
+    snow = r.get("snowflake") or {}
+    if snow.get("axes"):
+        sh = 5.2 * cm
+        ensure(sh + 0.4 * cm)
+        top = st["y"]
+        c.setFillColor(C["card"]); c.setStrokeColor(C["border"]); c.setLineWidth(0.7)
+        c.roundRect(ML, top - sh, CW, sh, 8, fill=1, stroke=1)
+        c.setFillColor(C["accent"]); c.setFont("Helvetica-Bold", 9)
+        c.drawString(ML + 0.45 * cm, top - 0.6 * cm, "PORTFOLIO SNOWFLAKE")
+        _rl_snowflake(c, snow["axes"], ML + 2.6 * cm, top - 3.0 * cm, 1.8 * cm, cm, C)
+        # légende à droite
+        yy = top - 1.3 * cm
+        for k, v in snow["axes"].items():
+            c.setFillColor(C["muted"]); c.setFont("Helvetica", 9)
+            c.drawString(ML + 6.0 * cm, yy, k)
+            c.setFillColor(C["fg"]); c.setFont("Helvetica-Bold", 9)
+            c.drawString(ML + 9.5 * cm, yy, f"{v}/100")
+            yy -= 0.55 * cm
+        c.setFillColor(C["muted"]); c.setFont("Helvetica-Oblique", 8.5)
+        c.drawString(ML + 6.0 * cm, top - sh + 0.5 * cm, _trunc(snow.get("summary", ""), 52))
+        st["y"] = top - sh - 0.35 * cm
+
     # ── graphes (carte) ──
     ch_data = r.get("charts") or {}
     closes = ch_data.get("price") or []
@@ -728,6 +875,19 @@ def _reportlab_pdf(r: dict, path: str, A4, cm, canvas, theme: str = "dark") -> N
                           (_pct(nm) if nm is not None else "—")])
         _rl_table(c, "Données financières (par exercice)",
                   ["Exercice", "CA", "Résultat net", "BPA", "Marge nette"], trows,
+                  ML, CW, st, ensure, cm, C, w, MR)
+
+    # ── Données financières (trimestres) ──
+    qd = r.get("quarterly") or []
+    if len(qd) >= 2:
+        qrows = []
+        for x in qd:
+            nm = x.get("net_margin")
+            qrows.append([str(x.get("period", "—")), _money(x.get("revenue")), _money(x.get("net_income")),
+                          _num(x.get("eps")) if x.get("eps") is not None else "—",
+                          _pct(nm) if nm is not None else "—"])
+        _rl_table(c, "Données financières (par trimestre)",
+                  ["Trimestre", "CA", "Résultat net", "BPA", "Marge nette"], qrows,
                   ML, CW, st, ensure, cm, C, w, MR)
 
     # ── Audit d'intégrité ──
@@ -811,6 +971,24 @@ def _reportlab_pdf(r: dict, path: str, A4, cm, canvas, theme: str = "dark") -> N
             ("vs MM50 / MM200", f"{_pct(t.get('vs_sma50'))} / {_pct(t.get('vs_sma200'))}", C["fg"]),
             ("Plage 52 sem.", f"${_num(t.get('low_52w'),0)} – ${_num(t.get('high_52w'),0)}", C["muted"]),
         ])
+
+    # ── risk management de l'actif ──
+    rk = r.get("risk") or {}
+    if rk.get("available"):
+        card("Risk management de l'actif", [
+            ("Volatilité annualisée", _pct(rk.get("vol_annual")), C["fg"]),
+            ("Max drawdown · VaR 95 %", f"{_pct(rk.get('max_drawdown'))} · {_pct(rk.get('var_95'))}", C["neg"]),
+            ("CVaR 95 % (1j)", _pct(rk.get("cvar_95")), C["neg"]),
+            ("Sharpe / Sortino", f"{_num(rk.get('sharpe'))} / {_num(rk.get('sortino'))}", C["fg"]),
+            ("Bêta marché", _num(rk.get("beta")) if rk.get("beta") is not None else "—", C["fg"]),
+            ("Stop suggéré (~2σ hebdo)", _pct(rk.get("suggested_stop")), C["warn"]),
+        ])
+
+    # ── actionnariat (barres horizontales) ──
+    hd = r.get("holders") or {}
+    inst = hd.get("institutional") or []; insi = hd.get("insiders") or []
+    if inst or insi:
+        _rl_holders(c, inst, insi, ML, CW, st, ensure, cm, C, w, MR)
 
     # ── macro + résultats ──
     rows = []
@@ -1019,3 +1197,74 @@ def _rl_table(c, title, headers, rows, ML, CW, st, ensure, cm, C, w, MR) -> None
                 x0 + (j * colw if j == 0 else (j + 1) * colw - 0.2 * cm), yy, str(cell))
         yy -= row_h
     st["y"] = top - th - 0.35 * cm
+
+
+def _rl_holders(c, inst, insi, ML, CW, st, ensure, cm, C, w, MR) -> None:
+    """Carte « Actionnariat » reportlab : barres horizontales (institutionnels % · insiders titres)."""
+    def _series(rows, key):
+        return [(str(x.get("name") or "—"), x.get(key)) for x in rows if x.get(key) is not None][:5]
+    si = _series(inst, "pct"); sn = _series(insi, "shares")
+    nlines = max(len(si), len(sn))
+    if nlines == 0:
+        return
+    hh = 1.45 * cm + nlines * 0.62 * cm
+    ensure(hh + 0.4 * cm)
+    top = st["y"]
+    c.setFillColor(C["card"]); c.setStrokeColor(C["border"]); c.setLineWidth(0.7)
+    c.roundRect(ML, top - hh, CW, hh, 8, fill=1, stroke=1)
+    c.setFillColor(C["accent"]); c.setFont("Helvetica-Bold", 9)
+    c.drawString(ML + 0.45 * cm, top - 0.6 * cm, "ACTIONNARIAT — RÉPARTITION")
+    colw = (CW - 1.2 * cm) / 2
+
+    def _draw(series, x0, title, is_pct):
+        c.setFillColor(C["muted"]); c.setFont("Helvetica", 7.5)
+        c.drawString(x0, top - 1.15 * cm, title)
+        mx = max((v for _, v in series), default=1.0) or 1.0
+        yy = top - 1.6 * cm
+        for name, v in series:
+            c.setFillColor(C["fg"]); c.setFont("Helvetica", 7.5)
+            c.drawString(x0, yy + 0.12 * cm, _trunc(name, 22))
+            lab = f"{v*100:.1f}%" if is_pct else _money_axis(v)
+            c.setFillColor(C["muted"]); c.drawRightString(x0 + colw - 0.1 * cm, yy + 0.12 * cm, lab)
+            c.setFillColor(C["border"]); c.roundRect(x0, yy - 0.05 * cm, colw - 0.1 * cm, 0.16 * cm, 2, fill=1, stroke=0)
+            c.setFillColor(C["accent"]); c.roundRect(x0, yy - 0.05 * cm, (colw - 0.1 * cm) * max(0.04, v / mx), 0.16 * cm, 2, fill=1, stroke=0)
+            yy -= 0.62 * cm
+
+    if si:
+        _draw(si, ML + 0.45 * cm, "Top institutionnels (% capital)", True)
+    if sn:
+        _draw(sn, ML + 0.65 * cm + colw, "Top insiders (titres)", False)
+    st["y"] = top - hh - 0.35 * cm
+
+
+def _rl_snowflake(c, axes, cx, cy, R, cm, C) -> None:
+    """Radar « Portfolio Snowflake » reportlab : anneaux + polygone doré (5 axes)."""
+    import math
+    from reportlab.lib.colors import HexColor
+    gold = HexColor("#e0b015")
+    labels = ["VALUE", "FUTURE", "PAST", "HEALTH", "DIVIDEND"]
+    n = len(labels)
+    def _pt(i, rad):
+        a = -math.pi / 2 + i * 2 * math.pi / n
+        return cx + rad * math.cos(a), cy + rad * math.sin(a)
+    c.setStrokeColor(C["border"]); c.setLineWidth(0.5)
+    for k in (0.33, 0.66, 1.0):                            # anneaux
+        pts = [_pt(i, R * k) for i in range(n)]
+        p = c.beginPath(); p.moveTo(*pts[0])
+        for q in pts[1:]:
+            p.lineTo(*q)
+        p.close(); c.drawPath(p, stroke=1, fill=0)
+    for i in range(n):                                     # rayons + labels
+        ex, ey = _pt(i, R)
+        c.line(cx, cy, ex, ey)
+        lx, ly = _pt(i, R + 0.35 * cm)
+        c.setFillColor(C["muted"]); c.setFont("Helvetica", 6)
+        c.drawCentredString(lx, ly - 2, labels[i])
+    poly = c.beginPath()                                   # polygone des scores
+    pts = [_pt(i, R * max(0.05, axes.get(labels[i], 0) / 100)) for i in range(n)]
+    poly.moveTo(*pts[0])
+    for q in pts[1:]:
+        poly.lineTo(*q)
+    poly.close()
+    c.setFillColor(gold); c.setStrokeColor(gold); c.setLineWidth(1.2)
+    c.setFillAlpha(0.75); c.drawPath(poly, stroke=1, fill=1); c.setFillAlpha(1)

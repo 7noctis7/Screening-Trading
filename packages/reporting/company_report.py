@@ -243,6 +243,11 @@ def build_company_report(f: Financials, *, name: str | None = None,
     reco = ("Achat" if global_score >= 65 else "Neutre" if global_score >= 45 else "Sous surveillance")
     verdict_status = reco.upper()
 
+    charts = _charts_block(f, prior, price_series, financial_history, price_dates)
+    snow = snowflake(valuation_score=pillars["valorisation"]["score"], revenue_growth=f.revenue_growth,
+                     ml_score=ml_score, revenue_cagr=charts.get("revenue_cagr"),
+                     roe=dp.get("roe"), piotroski=piotroski, altman_z=altman.get("z"))
+
     return {
         "as_of": datetime.now(timezone.utc).date().isoformat(),
         "identity": {"symbol": f.symbol, "name": name or f.symbol, "sector": f.sector,
@@ -281,9 +286,83 @@ def build_company_report(f: Financials, *, name: str | None = None,
         "technical": technical or None,
         "macro": macro or None,
         "earnings": earnings or None,
-        "charts": _charts_block(f, prior, price_series, financial_history, price_dates),
+        "charts": charts,
+        "snowflake": snow,
+        "risk": risk_block(price_series, beta),
         "verdict": _verdict(f, global_score, reco, roce, wacc, val_scen, audit),
     }
+
+
+def snowflake(*, valuation_score: int, revenue_growth: float | None, ml_score: float | None,
+              revenue_cagr: float | None, roe: float | None, piotroski: int, altman_z: float | None,
+              dividend_yield: float | None = None) -> dict[str, Any]:
+    """Radar « Portfolio Snowflake » (style Simply Wall St) — 5 axes 0-100, cohérents avec les
+    fondamentaux : VALUE (valorisation), FUTURE (croissance attendue), PAST (performance passée),
+    HEALTH (solidité financière), DIVIDEND (rendement). Pur, robuste aux None."""
+    def clip(x: float) -> int:
+        return int(max(0, min(100, round(x))))
+
+    value = clip(valuation_score)                                  # déjà 0-100 (gate incluse)
+    rg = revenue_growth if revenue_growth is not None else 0.0
+    mlc = (ml_score * 100 if ml_score is not None else 50)
+    future = clip(45 + 180 * max(-0.2, min(0.4, rg)) + (mlc - 50) * 0.35)
+    cagr = revenue_cagr if revenue_cagr is not None else 0.0
+    roe_v = roe if roe is not None else 0.0
+    past = clip(35 + 180 * max(-0.2, min(0.5, cagr)) + 60 * max(-0.2, min(0.6, roe_v)))
+    z = altman_z if altman_z is not None else 3.0
+    health = clip(0.5 * (piotroski / 9 * 100) + 0.5 * max(0, min(100, z / 6 * 100)))
+    dividend = clip((dividend_yield or 0.0) * 100 * 12)           # ~8 %+ → plein ; 0 = non-payeur
+    axes = {"VALUE": value, "FUTURE": future, "PAST": past, "HEALTH": health, "DIVIDEND": dividend}
+    # résumé en langage naturel (axes saillants)
+    tags = []
+    if past >= 60:
+        tags.append("past performer" if future < 60 else "established performer")
+    if future >= 60:
+        tags.append("good growth potential")
+    if value >= 60:
+        tags.append("trading below fair value")
+    elif value <= 25:
+        tags.append("expensive vs fair value")
+    if health >= 70:
+        tags.append("solid balance sheet")
+    if dividend >= 50:
+        tags.append("dividend payer")
+    summary = (", ".join(tags[:3]).capitalize() + ".") if tags else "Profil équilibré."
+    return {"axes": axes, "summary": summary,
+            "dividend_known": dividend_yield is not None}
+
+
+def risk_block(closes: list[float] | None, beta: float | None = None) -> dict[str, Any]:
+    """Risk management de l'actif depuis les cours réels : vol annualisée, max drawdown, VaR/CVaR 95 %
+    (historique 1 j), Sharpe & Sortino (rf=0), bêta, stop suggéré (~2σ hebdo). Pur, ne lève jamais."""
+    import math
+    px = [float(x) for x in (closes or []) if x is not None]
+    if len(px) < 30:
+        return {"available": False}
+    rets = [px[i] / px[i - 1] - 1.0 for i in range(1, len(px)) if px[i - 1]]
+    n = len(rets)
+    mu = sum(rets) / n
+    sd = (sum((x - mu) ** 2 for x in rets) / (n - 1)) ** 0.5 if n > 1 else 0.0
+    dn = [min(0.0, x) for x in rets]
+    dsd = (sum(x * x for x in dn) / n) ** 0.5
+    vol_a = sd * math.sqrt(252)
+    sharpe = (mu / sd * math.sqrt(252)) if sd > 0 else 0.0
+    sortino = (mu / dsd * math.sqrt(252)) if dsd > 0 else 0.0
+    # max drawdown
+    peak, mdd = px[0], 0.0
+    for v in px:
+        peak = max(peak, v); mdd = min(mdd, v / peak - 1.0)
+    # VaR / CVaR 95 % historiques (perte 1 j)
+    s = sorted(rets)
+    k = max(0, int(0.05 * len(s)) - 1)
+    var95 = -s[k]
+    tail = s[: k + 1]
+    cvar95 = -(sum(tail) / len(tail)) if tail else var95
+    stop = -2.0 * sd * math.sqrt(5)               # ~2σ sur 5 séances (stop hebdo indicatif)
+    return {"available": True, "vol_annual": round(vol_a, 4), "max_drawdown": round(mdd, 4),
+            "var_95": round(var95, 4), "cvar_95": round(cvar95, 4), "sharpe": round(sharpe, 2),
+            "sortino": round(sortino, 2), "beta": (round(float(beta), 2) if beta is not None else None),
+            "suggested_stop": round(stop, 4)}
 
 
 def _charts_block(f: Financials, prior: Financials | None, price_series: list[float] | None,

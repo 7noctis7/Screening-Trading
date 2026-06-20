@@ -30,6 +30,9 @@ def _get_json(url: str, timeout: float = 20.0):
         return json.loads(r.read().decode("utf-8", "replace"))
 
 
+_NAME_CACHE = _CACHE_DIR / "_name_map.json"
+
+
 def _cik_map() -> dict[str, str]:
     try:
         if _CIK_CACHE.exists() and time.time() - _CIK_CACHE.stat().st_mtime < _CIK_TTL:
@@ -39,11 +42,25 @@ def _cik_map() -> dict[str, str]:
     try:
         raw = _get_json("https://www.sec.gov/files/company_tickers.json")
         m = {str(v["ticker"]).upper(): f"{int(v['cik_str']):010d}" for v in raw.values()}
+        names = {str(v["ticker"]).upper(): str(v.get("title", "")).title() for v in raw.values()}
         _CACHE_DIR.mkdir(parents=True, exist_ok=True)
         _CIK_CACHE.write_text(json.dumps(m))
+        _NAME_CACHE.write_text(json.dumps(names))
         return m
     except Exception:  # noqa: BLE001
         return {}
+
+
+def company_name(symbol: str) -> str | None:
+    """Raison sociale officielle SEC (company_tickers.json) pour un ticker. None si inconnu."""
+    try:
+        if not _NAME_CACHE.exists():
+            _cik_map()
+        if _NAME_CACHE.exists():
+            return json.loads(_NAME_CACHE.read_text()).get(symbol.upper())
+    except Exception:  # noqa: BLE001
+        pass
+    return None
 
 
 def _facts(cik: str) -> dict | None:
@@ -130,6 +147,60 @@ def financial_history(symbol: str, years: int = 6) -> list[dict]:
     return out
 
 
+def _quarterly_by_end(facts: dict, *concepts: str) -> dict[str, float]:
+    """Valeurs TRIMESTRIELLES discrètes (période ~3 mois) indexées par date de fin, pour le 1er
+    concept dispo. Filtre les cumuls YTD (6/9/12 mois) en ne gardant que les durées ≈ 80-100 jours."""
+    from datetime import date as _d
+    for c in concepts:
+        node = facts.get("us-gaap", {}).get(c)
+        if not node:
+            continue
+        series = node.get("units", {}).get("USD") or node.get("units", {}).get("USD/shares")
+        if not series:
+            continue
+        out: dict[str, float] = {}
+        for x in series:
+            s, e, v = x.get("start"), x.get("end"), x.get("val")
+            if not (s and e) or v is None or x.get("form") not in ("10-Q", "10-K"):
+                continue
+            try:
+                days = (_d.fromisoformat(e[:10]) - _d.fromisoformat(s[:10])).days
+            except ValueError:
+                continue
+            if 80 <= days <= 100:                          # un seul trimestre (pas un cumul)
+                out[e[:10]] = float(v)
+        if out:
+            return out
+    return {}
+
+
+def quarterly_history(symbol: str, n: int = 4) -> list[dict]:
+    """4 derniers TRIMESTRES (SEC EDGAR 10-Q, périodes discrètes ~3 mois) : CA, résultat net, BPA,
+    marge nette. [] si non-SEC/indisponible. Repli robuste pour le tableau trimestriel."""
+    cik = _cik_map().get(symbol.upper())
+    if not cik:
+        return []
+    facts = _facts(cik)
+    if not facts:
+        return []
+    rev = _quarterly_by_end(facts, "RevenueFromContractWithCustomerExcludingAssessedTax",
+                            "Revenues", "SalesRevenueNet")
+    ni = _quarterly_by_end(facts, "NetIncomeLoss")
+    eps = _quarterly_by_end(facts, "EarningsPerShareDiluted", "EarningsPerShareBasic")
+    ends = sorted(set(rev) | set(ni))[-n:]
+    out = []
+    for e in ends:
+        rv, nv = rev.get(e), ni.get(e)
+        try:
+            q = (int(e[5:7]) - 1) // 3 + 1
+            period = f"{e[:4]}-T{q}"
+        except (ValueError, IndexError):
+            period = e
+        out.append({"period": period, "revenue": rv, "net_income": nv, "eps": eps.get(e),
+                    "net_margin": (nv / rv if (rv and nv is not None) else None)})
+    return out
+
+
 def _growth(facts: dict, *concepts: str) -> float | None:
     """Croissance YoY RÉELLE entre les deux derniers exercices annuels (None si indisponible)."""
     s = _annual_series(facts, *concepts)
@@ -187,4 +258,4 @@ class SECFundamentalsProvider:
             ebit=ebit or (net_income * 1.3), ebitda=(ebit + dep) if ebit else net_income * 1.5,
             net_income=net_income, total_equity=equity or revenue * 0.5,
             total_debt=debt, cash=cash, fcf=0.0, interest_expense=0.0,
-            revenue_growth=rev_g, earnings_growth=eps_g)
+            revenue_growth=rev_g, earnings_growth=eps_g, name=company_name(symbol))

@@ -73,6 +73,52 @@ def test_markdown_obsidian_note():
     assert "ROCE" in md and "DCF base" in md and "Vigilance" in md or "Forces" in md
 
 
+def test_snowflake_axes_and_render():
+    from packages.reporting.company_report import snowflake
+    s = snowflake(valuation_score=70, revenue_growth=0.3, ml_score=0.7, revenue_cagr=0.25,
+                  roe=0.4, piotroski=8, altman_z=5.0)
+    ax = s["axes"]
+    assert set(ax) == {"VALUE", "FUTURE", "PAST", "HEALTH", "DIVIDEND"}
+    assert all(0 <= v <= 100 for v in ax.values())
+    assert ax["DIVIDEND"] == 0                                    # pas de dividende fourni
+    assert s["summary"]
+    # rendu radar dans la note
+    r = build_company_report(_fin(), name="NVIDIA", financial_history=[
+        {"year": y, "revenue": 1e10 * (y - 2019), "net_income": 2e9 * (y - 2019)} for y in range(2020, 2025)])
+    html = company_report_html(r)
+    assert "Portfolio Snowflake" in html and "<polygon" in html and "VALUE" in html
+
+
+def test_risk_block_metrics():
+    from packages.reporting.company_report import risk_block
+    import random
+    rng = random.Random(0)
+    closes = [100.0]
+    for _ in range(250):
+        closes.append(closes[-1] * (1 + rng.uniform(-0.03, 0.03)))
+    rk = risk_block(closes, beta=1.2)
+    assert rk["available"] and rk["vol_annual"] > 0 and rk["max_drawdown"] <= 0
+    assert rk["var_95"] is not None and rk["beta"] == 1.2 and rk["suggested_stop"] < 0
+
+
+def test_risk_block_short_series():
+    from packages.reporting.company_report import risk_block
+    assert risk_block([1, 2, 3]) == {"available": False}
+
+
+def test_holders_and_quarterly_render():
+    closes = [100 + i * 0.2 for i in range(120)]
+    r = build_company_report(_fin(), name="NVIDIA", price_series=closes, beta=1.4)
+    r["holders"] = {"institutional": [{"name": "Vanguard", "pct": 0.08}, {"name": "BlackRock", "pct": 0.07}],
+                    "insiders": [{"name": "J. Huang", "shares": 9e8}]}
+    r["quarterly"] = [{"period": "2025-T1", "revenue": 3e10, "net_income": 1e10, "eps": 4.0, "net_margin": 0.33},
+                      {"period": "2025-T2", "revenue": 3.2e10, "net_income": 1.1e10, "eps": 4.4, "net_margin": 0.34}]
+    html = company_report_html(r)
+    assert "Actionnariat" in html and "Vanguard" in html
+    assert "par trimestre" in html and "2025-T2" in html
+    assert "Risk management" in html              # bloc risque (price_series indispo → mais clé présente)
+
+
 def test_reconciliation_html_gaap_vs_nongaap():
     from packages.reporting.company_report_render import _reconciliation_html
     r = {"reconciliation": {"rows": [
