@@ -96,6 +96,15 @@ def main() -> None:
     print(f"\nTerminé : {sent} ordres envoyés (paper)." if not dry else
           "\nAperçu (dry-run). Pour exécuter en paper : python3 scripts/run_live.py --live --yes")
 
+    # CLÔTURE : synchronise le coffre Obsidian (journal + attribution + post-mortems).
+    # Best-effort STRICT : ne lève jamais → ne peut pas bloquer l'exécution.
+    try:
+        from packages.reporting.obsidian import sync_obsidian_vault
+        r = sync_obsidian_vault()
+        print(f"Coffre Obsidian : {len(r.get('written', []))} note(s) · {r.get('incidents', 0)} incident(s).")
+    except Exception:  # noqa: BLE001
+        pass
+
 
 if __name__ == "__main__":
     main()
