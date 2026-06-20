@@ -120,3 +120,51 @@ def test_server_plot_signal_validation_error_is_caught():
     res = S.call_tool("plot_signal_on_chart", {"ticker": "AAPL",
                                                "markers": [{"time": "2026-06-18", "side": "nope"}]})
     assert "error" in res
+
+
+# ── A3 : backtest Python équivalent au Pine ────────────────────────────────
+def test_pine_equiv_backtest_metrics():
+    import math
+    from packages.mcp_tradingview.pine import pine_equiv_backtest
+    times = [f"2026-{((i//28)%12)+1:02d}-{(i%28)+1:02d}" for i in range(400)]
+    closes = [100 * math.exp(0.0003 * i) * (1 + 0.02 * math.sin(i / 7)) for i in range(400)]
+    m = pine_equiv_backtest(times, closes, lookback=60)
+    assert m["available"] is True
+    assert -1.0 <= m["max_drawdown"] <= 0.0
+    assert 0.0 <= m["avg_exposure"] <= m["params"]["max_weight"] + 1e-9
+    assert m["n_days"] > 0
+
+
+def test_pine_equiv_backtest_too_short():
+    from packages.mcp_tradingview.pine import pine_equiv_backtest
+    assert pine_equiv_backtest(["2026-01-01"], [100.0])["available"] is False
+
+
+# ── A2 : overlay triple-barrier ────────────────────────────────────────────
+def test_triple_barrier_overlay():
+    import math
+    from packages.mcp_tradingview.risk_overlays import triple_barrier_overlay
+    times = [f"2026-01-{(i % 28) + 1:02d}" for i in range(60)]
+    closes = [100 * (1 + 0.01 * i) for i in range(60)]      # tendance haussière → TP touché
+    bands, mks = triple_barrier_overlay(times, closes, entry_dates=[times[5]], pt=2.0, sl=2.0, horizon=20)
+    assert len(bands) >= 1 and len(mks) == 1
+    for b in bands:
+        b.validate(); assert b.upper > b.lower >= 0.0
+    assert mks[0].side == "sell"
+
+
+def test_triple_barrier_overlay_no_entry():
+    from packages.mcp_tradingview.risk_overlays import triple_barrier_overlay
+    assert triple_barrier_overlay(["2026-01-01"], [100.0], entry_dates=[]) == ([], [])
+
+
+# ── C : query_market_db (lecture seule) ────────────────────────────────────
+def test_query_market_db_rejects_non_select():
+    assert "error" in S.call_tool("query_market_db", {"db": "market", "sql": "DROP TABLE bars"})
+    assert "error" in S.call_tool("query_market_db", {"db": "market", "sql": "select 1; delete from bars"})
+    assert "error" in S.call_tool("query_market_db", {"db": "evil", "sql": "select 1"})
+
+
+def test_compare_pine_python_api_down_graceful():
+    res = S.call_tool("compare_pine_python", {"ticker": "AAPL", "base_url": "http://127.0.0.1:9"})
+    assert res.get("available") is False

@@ -886,7 +886,9 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
                     return s, label, f
             return s, None, None
         out: dict = {}
-        workers = max(4, min(16, int(_osf.environ.get("QUANT_FUND_WORKERS", "12"))))
+        # défaut PRUDENT (6) : trop de threads yfinance simultanés saturent la RAM (Killed:9 / OOM).
+        # Montable via QUANT_FUND_WORKERS si la machine a de la marge.
+        workers = max(2, min(16, int(_osf.environ.get("QUANT_FUND_WORKERS", "6"))))
         with ThreadPoolExecutor(max_workers=workers) as ex:
             for s, label, f in ex.map(_one, universe):
                 if f is not None:

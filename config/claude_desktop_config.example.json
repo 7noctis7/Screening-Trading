@@ -1,0 +1,32 @@
+{
+  "mcpServers": {
+    "quant-tradingview": {
+      "command": "bash",
+      "args": ["-lc", "cd /ABS/PATH/TO/Screening-Trading && source .venv/bin/activate && python -m packages.mcp_tradingview.server"]
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/ABS/PATH/TO/Screening-Trading"]
+    },
+    "git": {
+      "command": "uvx",
+      "args": ["mcp-server-git", "--repository", "/ABS/PATH/TO/Screening-Trading"]
+    },
+    "fetch": {
+      "command": "uvx",
+      "args": ["mcp-server-fetch"]
+    },
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"]
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+    },
+    "time": {
+      "command": "uvx",
+      "args": ["mcp-server-time"]
+    }
+  }
+}

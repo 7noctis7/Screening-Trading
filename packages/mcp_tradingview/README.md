@@ -32,6 +32,15 @@ Brancher dans **Claude Desktop** (`claude_desktop_config.json`) :
 | `generate_pine_script(strategy_name, yaml_config)` | Preset YAML → Pine Script v5 (cross-validation) |
 | `fetch_tv_technical_alerts()` | Alertes TV (webhook) → veto/kill-switch risk-engine |
 | `auto_risk_bands(ticker?, var, lookback)` | **Auto** : cône VaR/EVT calculé sur les prix réels (via l'API) → chart |
+| `overlay_triple_barrier(ticker, pt, sl, horizon)` | Barrières ML (TP/SL/temps) du dernier achat → chart |
+| `compare_pine_python(ticker, dd_target, lookback)` | Backtest Python équivalent au Pine → métriques de cross-validation + code Pine |
+| `query_market_db(db, sql, limit)` | **Lecture seule** (SELECT) de `data/market.db` / `crypto.db` — audit data en langage naturel |
+
+## Brancher d'autres serveurs MCP (officiels uniquement)
+Exemple prêt à l'emploi : **`config/claude_desktop_config.example.json`** (remplace `/ABS/PATH/TO/...`).
+Il câble, en plus de `quant-tradingview`, des serveurs **de référence Anthropic** : `filesystem`, `git`,
+`fetch`, `memory`, `sequential-thinking`, `time`. Pour interroger tes bases de prix, préfère l'outil
+audité **`query_market_db`** (lecture seule) plutôt qu'un serveur SQLite tiers en écriture.
 
 ### Cônes de risque automatiques (sans l'agent)
 ```bash
