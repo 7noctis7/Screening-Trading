@@ -852,17 +852,53 @@ def _fund_provider():
     return SyntheticFundamentalsProvider(), "synthétique (démo)"
 
 
+def _fund_provider_chain() -> list:
+    """Chaîne ORDONNÉE de providers fondamentaux pour 1 actif : yfinance → FMP (si clé) → SEC EDGAR,
+    avec le synthétique en DERNIER recours (offline) → une note est TOUJOURS produite."""
+    import os as _osf
+    mode = _osf.environ.get("QUANT_FUND", "").lower()
+    out: list = []
+    if mode != "synthetic":
+        try:
+            from packages.common.net import online
+            net = (mode == "yf") or online()
+        except Exception:  # noqa: BLE001
+            net = False
+        if net:
+            try:
+                from packages.fundamentals.yfinance_provider import YFinanceFundamentalsProvider
+                out.append(("yfinance (réel)", YFinanceFundamentalsProvider()))
+            except Exception:  # noqa: BLE001
+                pass
+        if _osf.environ.get("FMP_API_KEY"):
+            try:
+                from packages.fundamentals.fmp_provider import FMPFundamentalsProvider
+                out.append(("FMP (réel)", FMPFundamentalsProvider()))
+            except Exception:  # noqa: BLE001
+                pass
+        if net:
+            try:
+                from packages.fundamentals.sec_provider import SECFundamentalsProvider
+                out.append(("SEC EDGAR (réel)", SECFundamentalsProvider()))
+            except Exception:  # noqa: BLE001
+                pass
+    from packages.fundamentals.provider import SyntheticFundamentalsProvider
+    out.append(("synthétique (repli)", SyntheticFundamentalsProvider()))   # toujours en dernier
+    return out
+
+
 def fetch_financials_chain(symbol: str):
-    """Récupère un `Financials` pour UN symbole via la chaîne réelle (yfinance→FMP→SEC), + l'exercice
-    N-1 si la source l'expose. Renvoie (financials, prior, source). (None, None, src) si introuvable.
-    Sert la note d'analyse par société (endpoint /api/company_report)."""
-    prov, src = _fund_provider()
-    try:
-        f = prov.get(symbol)
-    except Exception:  # noqa: BLE001
-        f = None
-    prior = None
-    if f is not None:
+    """Récupère un `Financials` pour UN symbole via la chaîne réelle (yfinance→FMP→SEC EDGAR) puis
+    le synthétique en repli, + l'exercice N-1 si la source l'expose. Renvoie (financials, prior,
+    source). Sert la note d'analyse (endpoint /api/company_report) — produit TOUJOURS une note."""
+    for src, prov in _fund_provider_chain():
+        try:
+            f = prov.get(symbol)
+        except Exception:  # noqa: BLE001
+            f = None
+        if f is None:
+            continue
+        prior = None
         for meth in ("get_prior", "get_previous"):
             fn = getattr(prov, meth, None)
             if callable(fn):
@@ -871,7 +907,8 @@ def fetch_financials_chain(symbol: str):
                 except Exception:  # noqa: BLE001
                     prior = None
                 break
-    return f, prior, src
+        return f, prior, src
+    return None, None, "indisponible"
 
 
 def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: dict,
