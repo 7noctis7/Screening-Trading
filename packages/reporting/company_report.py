@@ -154,6 +154,7 @@ def build_company_report(f: Financials, *, name: str | None = None,
                          earnings: dict[str, Any] | None = None,
                          ml_score: float | None = None,
                          price_series: list[float] | None = None,
+                         price_dates: list[str] | None = None,
                          financial_history: list[dict] | None = None,
                          peers: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """Construit la note d'analyse complète (dict sérialisable JSON) pour une société.
@@ -187,18 +188,36 @@ def build_company_report(f: Financials, *, name: str | None = None,
     mult_vs_sector = {k: {"company": mult.get(k), "sector": _f(sm.get(k))}
                       for k in ("pe", "ev_ebitda", "ev_sales", "price_to_book") if sm.get(k)}
 
+    # GATE DE PLAUSIBILITÉ DE LA VALORISATION (PwC) : pour les ADR (TSM, ASML.AS…), la source publie
+    # souvent les comptes en DEVISE LOCALE alors que le cours est en USD → multiples & DCF absurdes
+    # (P/E ≪ 1, EV/EBITDA ≈ 0, DCF ≫ cours). On DÉTECTE l'incohérence, on MASQUE les chiffres
+    # trompeurs et on le signale, au lieu d'afficher une valorisation fausse.
+    val_reliable, val_reasons = _valuation_plausible(f, mult, val_scen)
+    if not val_reliable:
+        val_scen = {**val_scen, "reliable": False, "margin_of_safety": None}
+        for r in val_reasons:
+            audit["findings"].append({"severity": "warning", "detail": r})
+        audit["counts"]["warning"] = audit["counts"].get("warning", 0) + len(val_reasons)
+    else:
+        val_scen["reliable"] = True
+
     inv = investor_scores(f, f.sector, prior)
     piotroski = scoring.piotroski_full(f, prior) if prior else scoring.f_score(f)
     altman = scoring.altman_z(f)
 
-    # positionnement sectoriel (vs pairs) — direction-aware, percentile + verdict
-    company_metrics = {"net_margin": rr.get("net_margin"), "roe": rr.get("roe"), "roic": rr.get("roic"),
-                       "gross_margin": rr.get("gross_margin"), "per": mult.get("pe"),
-                       "ev_ebitda": mult.get("ev_ebitda"), "revenue_growth": f.revenue_growth}
+    # positionnement sectoriel (vs pairs) — direction-aware, percentile + verdict.
+    # Métriques ASSAINIES : on écarte les valeurs implausibles (devise mixte) pour ne pas polluer.
+    def _san(v, lo, hi):
+        return v if (v is not None and v == v and lo <= v <= hi) else None
+    company_metrics = {"net_margin": _san(rr.get("net_margin"), -2, 1), "roe": _san(rr.get("roe"), -5, 5),
+                       "roic": _san(rr.get("roic"), -1, 3), "gross_margin": _san(rr.get("gross_margin"), -0.1, 1),
+                       "per": (mult.get("pe") if val_reliable else None),
+                       "ev_ebitda": (mult.get("ev_ebitda") if val_reliable else None),
+                       "revenue_growth": _san(f.revenue_growth, -1, 10)}
     sector_comparison = sector_positioning(company_metrics, peers) if peers else {"available": False}
 
     # score global /100 : moyenne pondérée de piliers normalisés
-    pillars = _pillar_scores(f, rr, roce, wacc, val_scen, piotroski, altman)
+    pillars = _pillar_scores(f, rr, roce, wacc, val_scen, piotroski, altman, val_reliable)
     fundamental_score = int(round(sum(p["score"] * p["weight"] for p in pillars.values())))
     tech_score = technical_score(technical)
     ml_sc = int(round(max(0.0, min(1.0, ml_score)) * 100)) if ml_score is not None else None
@@ -248,16 +267,19 @@ def build_company_report(f: Financials, *, name: str | None = None,
         "technical": technical or None,
         "macro": macro or None,
         "earnings": earnings or None,
-        "charts": _charts_block(f, prior, price_series, financial_history),
+        "charts": _charts_block(f, prior, price_series, financial_history, price_dates),
         "verdict": _verdict(f, global_score, reco, roce, wacc, val_scen, audit),
     }
 
 
 def _charts_block(f: Financials, prior: Financials | None, price_series: list[float] | None,
-                  financial_history: list[dict] | None) -> dict[str, Any]:
-    """Données pour les mini-graphes : série de cours (bornée) + historique CA/résultat. À défaut
-    d'historique fourni, on dérive 2 points (N-1, N) depuis prior/current — honnête et toujours là."""
-    px = [float(x) for x in (price_series or []) if x is not None][-504:]   # ≤ ~2 ans de daily
+                  financial_history: list[dict] | None, price_dates: list[str] | None = None) -> dict[str, Any]:
+    """Données pour les mini-graphes : série de cours (bornée) + dates (axe X) + historique CA/résultat.
+    À défaut d'historique fourni, on dérive 2 points (N-1, N) depuis prior/current — honnête."""
+    series = [(d, float(x)) for d, x in zip(price_dates or [None] * len(price_series or []),
+                                            (price_series or [])) if x is not None][-504:]  # ≤ ~2 ans
+    px = [v for _, v in series]
+    px_labels = [str(d)[:10] for d, _ in series if d]
     hist = financial_history
     if not hist:
         hist = []
@@ -274,22 +296,45 @@ def _charts_block(f: Financials, prior: Financials | None, price_series: list[fl
         n = (y1 - y0) if (y1 and y0 and y1 > y0) else (len(rev_pts) - 1)
         if n > 0 and v0 > 0:
             rev_cagr = round((v1 / v0) ** (1 / n) - 1.0, 4)
-    return {"price": px, "financial_history": hist, "revenue_cagr": rev_cagr,
-            "history_years": len(hist)}
+    return {"price": px, "price_labels": px_labels, "financial_history": hist,
+            "revenue_cagr": rev_cagr, "history_years": len(hist)}
+
+
+def _valuation_plausible(f: Financials, mult: dict, val_scen: dict) -> tuple[bool, list[str]]:
+    """Garde-fou PwC : détecte une valorisation INCOHÉRENTE (typiquement ADR dont les comptes sont en
+    devise locale alors que le cours est en USD → P/E ≪ 1, EV/EBITDA ≈ 0, DCF ≫ cours). Renvoie
+    (fiable, raisons). Les ratios purement comptables (marges, ROCE) restent valides."""
+    reasons: list[str] = []
+    mcap = f.price * f.shares
+    pe = mult.get("pe")
+    ev_eb = mult.get("ev_ebitda")
+    ps = (mcap / f.revenue) if f.revenue > 0 else None
+    base = (val_scen.get("scenarios") or {}).get("base")
+    if pe is not None and 0 < pe < 3:
+        reasons.append(f"P/E implausible ({pe}) — devise des comptes ≠ devise du cours (ADR ?)")
+    if pe is not None and pe > 600:
+        reasons.append(f"P/E implausible ({pe})")
+    if ev_eb is not None and 0 < ev_eb < 1:
+        reasons.append(f"EV/EBITDA implausible ({ev_eb}) — incohérence d'unités/devise")
+    if ps is not None and (ps < 0.05 or ps > 80):
+        reasons.append(f"P/S implausible ({ps:.2f}) — incohérence d'unités/devise")
+    if base and f.price and (base / f.price) > 8:
+        reasons.append(f"DCF ({base:.0f}) ≫ cours ({f.price:.0f}) — valorisation masquée (unités/devise)")
+    return (len(reasons) == 0), reasons
 
 
 def _pillar_scores(f: Financials, rr: dict, roce: float, wacc: float, val_scen: dict,
-                   piotroski: int, altman: dict) -> dict[str, dict]:
+                   piotroski: int, altman: dict, val_reliable: bool = True) -> dict[str, dict]:
     """Scores 0-100 par pilier + poids (somme = 1). Bornés, robustes aux NaN."""
     def clip(x: float) -> int:
         return int(max(0, min(100, round(x))))
 
     nm = rr.get("net_margin") or 0.0
-    profitability = clip(50 + 250 * nm)                          # 20 % de marge → 100
+    profitability = clip(50 + 250 * max(-0.4, min(0.4, nm)))      # borné (anti devise mixte)
     spread = (roce - wacc) if roce == roce else 0.0
-    value_creation = clip(50 + 500 * spread)                     # +10 pts de spread → 100
+    value_creation = clip(50 + 500 * max(-0.1, min(0.1, spread))) # +10 pts de spread → 100
     mos = val_scen.get("margin_of_safety")
-    valuation_sc = clip(50 + 200 * mos) if mos is not None else 50
+    valuation_sc = clip(50 + 200 * mos) if (mos is not None and val_reliable) else 50  # neutre si non fiable
     nd = rr.get("net_debt_ebitda")
     solidity = clip(100 - 25 * (nd if (nd is not None and nd == nd) else 1.0)) if (nd is not None) else 60
     solidity = clip(0.6 * solidity + 0.4 * (piotroski / 9 * 100))

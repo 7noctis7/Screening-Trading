@@ -73,6 +73,34 @@ def test_markdown_obsidian_note():
     assert "ROCE" in md and "DCF base" in md and "Vigilance" in md or "Forces" in md
 
 
+def test_valuation_gate_masks_currency_mismatch():
+    # ADR : comptes en devise locale (revenue/net_income géants) vs cours USD → valorisation masquée
+    f = _fin(price=462.0, shares=5.2e9, revenue=2.159e12, gross_profit=1.3e12, ebit=1.1e12,
+             ebitda=1.4e12, net_income=1.0e12, total_equity=2.0e12, total_debt=3e11, cash=1.5e12, fcf=8e11)
+    r = build_company_report(f, name="TSMC", beta=1.0)
+    assert r["damodaran"]["dcf"]["reliable"] is False
+    assert r["damodaran"]["dcf"]["margin_of_safety"] is None        # MoS aberrante masquée
+    assert any("devise" in x["detail"] or "unités" in x["detail"] for x in r["audit"]["findings"])
+    html = company_report_html(r)
+    assert "Valorisation non fiable" in html
+
+
+def test_valuation_plausible_stays_reliable():
+    r = build_company_report(_fin(), name="NVIDIA")               # valeurs USD cohérentes
+    assert r["damodaran"]["dcf"]["reliable"] is True
+
+
+def test_charts_have_numeric_axes():
+    closes = [100 + i * 0.4 for i in range(260)]
+    dates = [f"2025-{1 + i % 12:02d}-15" for i in range(260)]
+    r = build_company_report(_fin(), name="X", price_series=closes, price_dates=dates,
+                             financial_history=[{"year": y, "revenue": 1e10 * (y - 2019),
+                                                 "net_income": 2e9 * (y - 2019)} for y in range(2020, 2025)])
+    assert r["charts"]["price_labels"]                            # dates pour l'axe X
+    html = company_report_html(r)
+    assert 'text-anchor="end"' in html and "$" in html           # labels d'axe Y chiffrés
+
+
 def test_memo_present_and_rendered():
     r = build_company_report(_fin(), name="NVIDIA", beta=1.5)
     assert r["memo"] and "NVIDIA" in r["memo"] and r["memo_source"] == "synthèse (règles)"
