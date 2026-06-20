@@ -619,6 +619,7 @@ def _build_company_report_cached(sym: str) -> tuple[dict | None, str | None]:
     f, prior, src = fetch_financials_chain(sym)
     if f is None:
         return None, f"aucune donnée pour {sym}"
+    f_recon = f                                            # financials AVANT conversion (devise de dépôt)
     # CONVERSION DEVISE (ADR) : comptes en devise locale ≠ cours → on convertit pour une valorisation
     # correcte (au lieu de masquer). Best-effort : si pas de taux (hors-ligne), la gate masquera.
     fx_note = None
@@ -669,7 +670,7 @@ def _build_company_report_cached(sym: str) -> tuple[dict | None, str | None]:
         report["fx_conversion"] = fx_note
         report.setdefault("audit", {}).setdefault("findings", []).append(
             {"severity": "warning", "detail": fx_note})
-    _enrich_cross_source(report, f, sym)               # audit multi-sources (fiabilité croisée)
+    _enrich_cross_source(report, f_recon, sym)         # réconciliation en devise de dépôt (EUR vs EUR)
     _enrich_ai_memo(report)                             # mémo IA local si dispo (sinon règles)
     if len(_REPORT_CACHE) >= _REPORT_CACHE_MAX:
         _REPORT_CACHE.pop(next(iter(_REPORT_CACHE)))
@@ -710,7 +711,8 @@ def _enrich_cross_source(report: dict, f: Any, sym: str) -> None:
             return
         report["reconciliation"] = {
             "rows": rows, "max_gap": round(max_gap, 3), "period": period,
-            "note": (f"« Reporté » = source primaire (yfinance, TTM) · « GAAP » = SEC EDGAR "
+            "note": (f"Comparaison en DEVISE DE DÉPÔT (avant conversion de change). "
+                     f"« Reporté » = source primaire (yfinance, TTM) · « GAAP » = SEC EDGAR "
                      f"({'TTM, somme des 4 derniers 10-Q' if period=='TTM' else 'dernier 10-K'}, "
                      f"source de vérité comptable).")}
         report["cross_source_gap"] = round(max_gap, 3)
