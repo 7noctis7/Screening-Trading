@@ -33,3 +33,16 @@ def test_html_snippet():
 def test_empty_is_safe():
     m = PerformanceAnalytics([], []).metrics()
     assert m.n_days == 0 and m.sharpe == 0
+
+
+def test_attribution_decomposes_alpha_beta():
+    at = PerformanceAnalytics.from_curves(_curve(), _curve(seed=2)).attribution()
+    assert at["available"] is True
+    # cohérence : contribution bêta + alpha = rendement portefeuille
+    assert abs((at["beta_contribution"] + at["alpha_contribution"]) - at["portfolio_return"]) < 1e-6
+    assert 0.0 <= at["alpha_share"] <= 1.0 and at["verdict"] in (
+        "alpha dominant (compétence)", "bêta dominant (marché)")
+
+
+def test_attribution_unavailable_without_benchmark():
+    assert PerformanceAnalytics.from_curves(_curve()).attribution() == {"available": False}

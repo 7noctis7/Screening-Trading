@@ -371,6 +371,7 @@ def analytics() -> dict:
         return {"available": False}
     pa = PerformanceAnalytics.from_curves(preset, qqq)
     return {"available": True, "metrics": pa.metrics().to_dict(),
+            "attribution": pa.attribution(),
             "html": pa.to_html_snippet("Preset vs QQQ (net de frais)")}
 
 
