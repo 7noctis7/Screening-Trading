@@ -4,6 +4,7 @@ import { PageSkeleton, EmptyState } from "@/components/ui";
 import { SortableTable, type Col } from "@/components/SortableTable";
 import { StepBanner } from "@/components/Pipeline";
 import { IR } from "@/lib/ir";
+import { ReportButton } from "@/components/ReportButton";
 
 const RC: Record<string, string> = { BUY: "#22c55e", HOLD: "#9aa1ad", SELL: "#f43f5e" };
 const pp = (x?: number) => (x == null ? "—" : `${(x * 100).toFixed(0)}%`);
@@ -16,7 +17,7 @@ export default function Fundamentals() {
     return <main className="max-w-3xl mx-auto p-6"><EmptyState title="Aucun fondamental disponible" hint="Actifs sans données fondamentales (crypto/forex)." /></main>;
 
   const cols: Col[] = [
-    { key: "symbol", label: "Actif", render: (v, row) => <IR ticker={v} name={row.name} assetClass={row.asset_class} className="mono text-accent hover:underline" /> },
+    { key: "symbol", label: "Actif", render: (v, row) => (<span className="inline-flex items-center gap-1.5"><IR ticker={v} name={row.name} assetClass={row.asset_class} className="mono text-accent hover:underline" /><ReportButton ticker={v} assetClass={row.asset_class} /></span>) },
     { key: "sector", label: "Secteur", render: (v) => <span className="text-muted text-xs">{v}</span> },
     { key: "per", label: "PER", num: true },
     { key: "ps", label: "P/S", num: true, render: (v) => (v == null ? "—" : v) },

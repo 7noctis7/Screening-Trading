@@ -852,6 +852,28 @@ def _fund_provider():
     return SyntheticFundamentalsProvider(), "synthétique (démo)"
 
 
+def fetch_financials_chain(symbol: str):
+    """Récupère un `Financials` pour UN symbole via la chaîne réelle (yfinance→FMP→SEC), + l'exercice
+    N-1 si la source l'expose. Renvoie (financials, prior, source). (None, None, src) si introuvable.
+    Sert la note d'analyse par société (endpoint /api/company_report)."""
+    prov, src = _fund_provider()
+    try:
+        f = prov.get(symbol)
+    except Exception:  # noqa: BLE001
+        f = None
+    prior = None
+    if f is not None:
+        for meth in ("get_prior", "get_previous"):
+            fn = getattr(prov, meth, None)
+            if callable(fn):
+                try:
+                    prior = fn(symbol)
+                except Exception:  # noqa: BLE001
+                    prior = None
+                break
+    return f, prior, src
+
+
 def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: dict,
                           data: dict | None = None) -> dict:
     """Analyse FONDAMENTALE : ratios (PER, EV/EBITDA, P/B, ROE/ROIC, marges), valorisation DCF
