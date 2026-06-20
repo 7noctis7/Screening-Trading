@@ -66,3 +66,29 @@ def test_covariance_cache_returns_identical_object():
     a = E.covariance_matrix(rets, cache=True)
     b = E.covariance_matrix(rets, cache=True)
     assert a[1] is b[1]                                      # même objet → servi depuis le cache
+
+
+def test_covariance_disk_cache_survives_memory_clear(tmp_path, monkeypatch):
+    import numpy as np
+    monkeypatch.setattr(E, "_COV_DISK_DIR", tmp_path / "cov")
+    monkeypatch.setenv("QUANT_COV_DISK_CACHE", "1")
+    rng = np.random.default_rng(7)
+    rets = {"A": list(rng.normal(0, 0.01, 40)), "B": list(rng.normal(0, 0.02, 40))}
+    _, cov1 = E.covariance_matrix(rets, cache=True)          # calcule + persiste sur disque
+    E._COV_CACHE.clear()                                     # simule un redémarrage (RAM vidée)
+    _, cov2 = E.covariance_matrix(rets, cache=True)          # doit relire le disque, pas recalculer
+    assert np.allclose(cov1, cov2)
+    assert list((tmp_path / "cov").glob("*.npz"))            # un artefact a bien été écrit
+
+
+def test_covariance_diagnostics_reports_condition_numbers():
+    import numpy as np
+    rng = np.random.default_rng(9)
+    f = rng.normal(0, 0.01, (1, 30))
+    X = rng.uniform(0.3, 1.2, (10, 1)) @ f + rng.normal(0, 0.01, (10, 30))
+    cov_lw, delta = E.ledoit_wolf_shrinkage(X)
+    cov_raw = np.cov(X)
+    d = E.covariance_diagnostics(cov_raw, cov_lw, delta=delta)
+    assert d["cond_used"] is not None and d["cond_raw"] is not None
+    assert d["cond_used"] <= d["cond_raw"]                   # le shrinkage améliore le conditionnement
+    assert d["n_assets"] == 10 and 0.0 <= d["delta"] <= 1.0
