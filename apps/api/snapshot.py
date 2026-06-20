@@ -1145,19 +1145,26 @@ def _load_prices(instruments, sector_of, start, end, seed):
 
 
 def _index_closes(aliases: list[str], start, end, fallback: list[float]) -> tuple[list[float], bool]:
-    """Closes RÉELS d'un indice (essaie les alias dans YAHOO.db puis yfinance). Sinon `fallback`
-    synthétique. Renvoie (closes, is_real)."""
-    db = _price_db_path()
-    if db is not None:
+    """Closes RÉELS d'un indice/ETF : essaie les alias dans TOUTES les bases (YAHOO.db + market.db +
+    crypto.db) et garde la série la PLUS LONGUE (ex. QQQ complet via market.db même si YAHOO.db ne
+    l'a que récent), puis yfinance. Sinon `fallback` synthétique. Renvoie (closes, is_real)."""
+    from packages.data.providers.db_provider import DBPriceProvider
+    cands: list[list[float]] = []
+    _dbs = [_price_db_path(), ROOT / "data" / "market.db", ROOT / "data" / "crypto.db"]
+    for _dbp in _dbs:
+        if _dbp is None or not Path(_dbp).exists():
+            continue
         try:
-            from packages.data.providers.db_provider import DBPriceProvider
-            prov = DBPriceProvider(db)
+            prov = DBPriceProvider(_dbp)
             for a in aliases:
                 bars = prov.fetch_ohlcv(a, "1d", start, end)
                 if len(bars) >= 250:
-                    return [b.close for b in bars], True
+                    cands.append([b.close for b in bars])
+                    break
         except Exception:  # noqa: BLE001
-            pass
+            continue
+    if cands:
+        return max(cands, key=len), True               # la série réelle la plus longue
     try:
         from packages.common.net import online
         if online():

@@ -355,10 +355,17 @@ def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict |
     w = np.zeros(len(universe))
     trades: list[dict] = []
     realized = 0.0
-    # CŒUR indiciel (ex. QQQ à 50 %) inclus comme une ligne, aligné sur la fenêtre du preset
+    # CŒUR indiciel (ex. QQQ à 50 %) inclus comme une ligne, aligné sur la fenêtre du preset.
+    # Robuste : si le cœur est un peu plus court, on cale sa queue et on remplit le début à plat
+    # (le cœur ne contribue qu'à partir de sa 1re donnée) → le % cœur agit dès que possible.
     _cp = max(0.0, min(1.0, float(core_pct)))
-    core_on = bool(core_closes) and _cp > 0 and len(core_closes) >= L
-    core_arr = np.asarray(core_closes[-L:], float) if core_on else None
+    core_on = bool(core_closes) and _cp > 0 and len(core_closes) >= 250
+    if core_on:
+        _cc = list(core_closes)
+        core_arr = (np.asarray(_cc[-L:], float) if len(_cc) >= L
+                    else np.asarray([_cc[0]] * (L - len(_cc)) + _cc, float))
+    else:
+        core_arr = None
     qsh = qcost = 0.0
     sat = 1.0 - _cp if core_on else 1.0                   # part allouée au satellite preset
     eq_curve = [float(init_cap)]                           # courbe d'equity QUOTIDIENNE (parts tenues)
