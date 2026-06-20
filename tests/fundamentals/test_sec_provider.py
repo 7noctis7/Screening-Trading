@@ -1,6 +1,6 @@
 """SEC EDGAR XBRL : sélection de la dernière valeur annuelle (parsing pur, hors-ligne)."""
 
-from packages.fundamentals.sec_provider import _growth, _latest
+from packages.fundamentals.sec_provider import _annual_by_year, _growth, _latest
 
 
 def test_latest_prefers_most_recent_annual():
@@ -36,3 +36,14 @@ def test_growth_yoy_real_between_two_years():
     one = {"us-gaap": {"Revenues": {"units": {"USD": [
         {"end": "2024-12-31", "val": 100, "form": "10-K", "fp": "FY"}]}}}}
     assert _growth(one, "Revenues") is None
+
+
+def test_annual_by_year_indexes_by_fiscal_year():
+    facts = {"us-gaap": {"Revenues": {"units": {"USD": [
+        {"end": "2022-12-31", "val": 80, "form": "10-K", "fp": "FY"},
+        {"end": "2023-12-31", "val": 100, "form": "10-K", "fp": "FY"},
+        {"end": "2024-12-31", "val": 130, "form": "10-K", "fp": "FY"},
+        {"end": "2024-09-30", "val": 33, "form": "10-Q", "fp": "Q3"},   # trimestriel ignoré
+    ]}}}}
+    by = _annual_by_year(facts, "Revenues")
+    assert by == {2022: 80.0, 2023: 100.0, 2024: 130.0}

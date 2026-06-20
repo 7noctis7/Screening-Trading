@@ -215,7 +215,17 @@ def _charts_block(f: Financials, prior: Financials | None, price_series: list[fl
         if prior is not None:
             hist.append({"year": yr - 1, "revenue": prior.revenue, "net_income": prior.net_income})
         hist.append({"year": yr, "revenue": f.revenue, "net_income": f.net_income})
-    return {"price": px, "financial_history": hist}
+    # CAGR du CA sur la période de l'historique (≥3 points = histo réel pluriannuel)
+    rev_cagr = None
+    rev_pts = [(h.get("year"), h.get("revenue")) for h in hist
+               if h.get("revenue") and h.get("revenue") > 0]
+    if len(rev_pts) >= 3:
+        (y0, v0), (y1, v1) = rev_pts[0], rev_pts[-1]
+        n = (y1 - y0) if (y1 and y0 and y1 > y0) else (len(rev_pts) - 1)
+        if n > 0 and v0 > 0:
+            rev_cagr = round((v1 / v0) ** (1 / n) - 1.0, 4)
+    return {"price": px, "financial_history": hist, "revenue_cagr": rev_cagr,
+            "history_years": len(hist)}
 
 
 def _pillar_scores(f: Financials, rr: dict, roce: float, wacc: float, val_scen: dict,
