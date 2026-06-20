@@ -183,6 +183,29 @@ def _cov_disk_path(key: Any) -> Path:
     return _COV_DISK_DIR / f"{h}.npz"
 
 
+def purge_cov_disk_cache(max_age_days: float = 14.0) -> int:
+    """Purge les covariances persistées plus vieilles que `max_age_days` (les nouvelles barres
+    quotidiennes rendent les anciennes signatures obsolètes → évite l'accumulation infinie).
+    Appelée une fois par build. Best-effort, ne lève jamais. Renvoie le nombre de fichiers purgés."""
+    try:
+        import os
+        import time
+        if not _COV_DISK_DIR.exists():
+            return 0
+        cutoff = time.time() - max_age_days * 86400.0
+        n = 0
+        for p in _COV_DISK_DIR.glob("*.npz"):
+            try:
+                if p.stat().st_mtime < cutoff:
+                    os.remove(p)
+                    n += 1
+            except OSError:
+                continue
+        return n
+    except Exception:  # noqa: BLE001 — purge non critique
+        return 0
+
+
 def _cov_disk_load(key: Any) -> tuple[list[str], Any] | None:
     """Charge une covariance persistée (best-effort). Jamais bloquant."""
     try:

@@ -1406,7 +1406,8 @@ def build_snapshot(seed: int = 7) -> dict:
         import numpy as _npd
 
         from packages.data.engine import (covariance_diagnostics, covariance_matrix,
-                                          ledoit_wolf_shrinkage)
+                                          ledoit_wolf_shrinkage, purge_cov_disk_cache)
+        purge_cov_disk_cache()                              # purge TTL des signatures obsolètes (1×/build)
         _rets = {s: list(rets_by[s]) for s in syms}
         _, _cov_raw = covariance_matrix(_rets, shrink=False)
         _csyms = [s for s in cb_syms if _rets.get(s) and len(_rets[s]) >= 2]

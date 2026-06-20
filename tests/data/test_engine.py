@@ -81,6 +81,19 @@ def test_covariance_disk_cache_survives_memory_clear(tmp_path, monkeypatch):
     assert list((tmp_path / "cov").glob("*.npz"))            # un artefact a bien été écrit
 
 
+def test_purge_cov_disk_cache_removes_old(tmp_path, monkeypatch):
+    import os
+    import time
+    d = tmp_path / "cov"; d.mkdir()
+    monkeypatch.setattr(E, "_COV_DISK_DIR", d)
+    old = d / "old.npz"; old.write_bytes(b"x")
+    new = d / "new.npz"; new.write_bytes(b"y")
+    past = time.time() - 30 * 86400                          # 30 jours
+    os.utime(old, (past, past))
+    n = E.purge_cov_disk_cache(max_age_days=14)
+    assert n == 1 and not old.exists() and new.exists()      # vieux purgé, récent conservé
+
+
 def test_covariance_diagnostics_reports_condition_numbers():
     import numpy as np
     rng = np.random.default_rng(9)
