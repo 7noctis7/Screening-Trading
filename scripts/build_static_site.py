@@ -29,7 +29,9 @@ def main() -> int:
     r = subprocess.run([sys.executable, str(ROOT / "scripts" / "dump_static.py"),
                         "--max-reports", MAX_REPORTS], cwd=str(ROOT))
     if r.returncode != 0:
-        print("⚠️ dump_static a échoué — on continue avec ce qui existe.")
+        print("⛔ dump_static a échoué — données absentes : on n'expose pas un site cassé "
+              "(toutes les pages tourneraient en boucle). Corrige le snapshot puis relance.")
+        return 1
 
     # 2) export statique Next.js (même UI que make start)
     print("→ [2/3] Export statique Next.js…")
