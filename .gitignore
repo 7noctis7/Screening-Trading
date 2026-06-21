@@ -61,3 +61,5 @@ vault/04_Companies/
 apps/web/out/
 apps/web/public/data/
 apps/web/public/reports/
+apps/web/tsconfig.tsbuildinfo
+*.tsbuildinfo
