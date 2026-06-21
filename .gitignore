@@ -27,7 +27,7 @@ htmlcov/
 # Node / Next.js
 node_modules/
 .next/
-apps/web/package-lock.json
+# NB: apps/web/package-lock.json EST versionné — requis pour `npm ci` reproductible et le cache npm CI.
 
 # OS
 .DS_Store
