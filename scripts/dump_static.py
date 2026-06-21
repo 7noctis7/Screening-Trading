@@ -16,6 +16,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+import logging as _lg                                # silence le bruit réseau (yfinance dumpe des pages HTML)
+for _n in ("yfinance", "urllib3", "peewee"):
+    _lg.getLogger(_n).setLevel(_lg.CRITICAL)
+
 PUB = ROOT / "apps" / "web" / "public"
 DATA = PUB / "data"
 REPORTS = PUB / "reports"
