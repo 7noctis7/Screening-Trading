@@ -4,7 +4,7 @@
 #
 # Installation (macOS / Linux) :
 #   crontab -e   puis ajouter (tous les jours à 22h30, après clôture US) :
-#     30 22 * * 1-5 /Users/thierryfanlo/Screening-Trading/scripts/cron_daily.sh >> /tmp/quant_daily.log 2>&1
+#     30 22 * * 1-5 /Users/vous/Screening-Trading/scripts/cron_daily.sh >> /tmp/quant_daily.log 2>&1
 #   ou, sur macOS, via launchd (cf. docs/REAL_DATA.md).
 set -euo pipefail
 

@@ -4,6 +4,10 @@ import { useNotes } from "@/lib/api";
 import { PageSkeleton } from "@/components/ui";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const STATIC = process.env.NEXT_PUBLIC_STATIC === "1";
+// En statique, n.html/n.pdf contiennent déjà le basePath (ex. /Screening-Trading/reports/AAPL.html) →
+// on les sert tels quels (relatifs à l'origine). En dynamique, on préfixe par l'URL de l'API.
+const reportUrl = (p: string) => (STATIC ? p : `${BASE}${p}`);
 
 export default function NotesPage() {
   const { data } = useNotes();
@@ -20,7 +24,8 @@ export default function NotesPage() {
       <h1 className="text-xl font-semibold tracking-tight">Notes d'analyse</h1>
       <p className="text-muted text-xs">Notes fondamentales (Vernimmen + Damodaran) — archivées chaque nuit, ou générées à la demande pour n'importe quel ticker.</p>
 
-      {/* génération à la demande */}
+      {/* génération à la demande — nécessite l'API live (masqué sur le site statique) */}
+      {!STATIC && (
       <section className="card p-4">
         <h2 className="text-sm uppercase tracking-wide text-muted mb-2">Générer une note</h2>
         <div className="flex items-center gap-2 flex-wrap">
@@ -34,6 +39,7 @@ export default function NotesPage() {
           ))}
         </div>
       </section>
+      )}
 
       {/* archives */}
       <section className="card p-4">
@@ -53,8 +59,8 @@ export default function NotesPage() {
                   {items.sort((a, b) => a.symbol.localeCompare(b.symbol)).map((n) => (
                     <span key={n.symbol} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border text-sm">
                       <span className="mono">{n.symbol}</span>
-                      {n.html && <a href={`${BASE}${n.html}`} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline text-xs">HTML</a>}
-                      {n.pdf && <a href={`${BASE}${n.pdf}`} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline text-xs">PDF</a>}
+                      {n.html && <a href={reportUrl(n.html)} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline text-xs">HTML</a>}
+                      {n.pdf && <a href={reportUrl(n.pdf)} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline text-xs">PDF</a>}
                     </span>
                   ))}
                 </div>

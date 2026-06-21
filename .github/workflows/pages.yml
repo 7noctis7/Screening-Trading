@@ -30,6 +30,8 @@ concurrency:
 env:
   NEXT_PUBLIC_BASE_PATH: /Screening-Trading
   QUANT_MAX_REPORTS: "60"
+  QUANT_HISTORY_DAYS: "4015"   # ~11 ans → courbes & journaux depuis ~2015
+  QUANT_FUND_MAX: "1200"       # couvre tout l'univers actions (pas de plafond fondamentaux)
 
 jobs:
   build:
@@ -67,8 +69,9 @@ jobs:
         env:
           QUANT_PRICE_DB: ${{ github.workspace }}/data/market.db
         run: |
-          python scripts/ingest_prices.py --since "$(date -u -d '18 months ago' +%Y-%m-%d)" || true
-          python scripts/ingest_crypto.py || true
+          # Historique long (depuis 2015) → le dashboard et les journaux remontent à ~2015, pas 18 mois.
+          python scripts/ingest_prices.py --since 2015-01-01 || true
+          python scripts/ingest_crypto.py --days 4015 || true
 
       - name: Construire le site (front Next.js statique + données réelles)
         env:
