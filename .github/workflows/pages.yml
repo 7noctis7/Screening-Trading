@@ -3,6 +3,7 @@ name: Déploiement PWA (GitHub Pages — front complet, données réelles, gratu
 # Publie le VRAI front Next.js (parité `make start`) en statique sur GitHub Pages, avec des données
 # RÉELLES récupérées gratuitement dans le build (yfinance / SEC EDGAR). Aucune YAHOO.db privée, Mac
 # éteint. Rafraîchi chaque nuit. Univers borné par config/mobile_universe.csv (watchlist + top 200).
+# NB : le nom du compte n'est jamais codé en dur ici — l'URL Pages suit automatiquement le compte.
 
 on:
   workflow_dispatch:
