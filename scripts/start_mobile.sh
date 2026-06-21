@@ -23,10 +23,17 @@ fi
 echo "→ Données : ${QUANT_PRICE_DB:-(aucune base trouvée → synthétique de démo)}"
 export QUANT_FUND="${QUANT_FUND:-yf}"     # fondamentaux réels (yfinance) par défaut
 
-echo "→ [1/2] Watchlist + top 200 (config/mobile_universe.csv + rapport Obsidian)…"
-"$PY" scripts/build_watchlist.py || echo "  (watchlist ignorée — on continue)"
+# [1/2] Calcule la watchlist + top 200 (parcourt TOUT l'univers → 1-3 min). Skippable.
+if [ "${SKIP_WATCHLIST:-0}" = "1" ] && [ -f config/mobile_universe.csv ]; then
+  echo "→ [1/2] Watchlist : conservée (SKIP_WATCHLIST=1)."
+else
+  echo "→ [1/2] Watchlist + top 200 (parcourt tout l'univers, peut prendre 1-3 min)…"
+  "$PY" scripts/build_watchlist.py || echo "  (watchlist ignorée — on continue)"
+fi
 
-echo "→ [2/2] Construction de la PWA (site/)…"
+# [2/2] Construit la PWA BORNÉE à l'univers mobile (rapide = exactement ce que verra le téléphone).
+echo "→ [2/2] Construction de la PWA (univers mobile borné)…"
+[ -f config/mobile_universe.csv ] && export QUANT_UNIVERSE="$ROOT/config/mobile_universe.csv"
 "$PY" scripts/build_site.py
 
 URL="http://localhost:${PORT}"
