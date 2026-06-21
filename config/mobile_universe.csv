@@ -1,0 +1,13 @@
+symbol,name,asset_class,venue,currency,sector
+PLTR,Palantir Technologies,equity,,USD,Information Technology
+TSLA,Tesla,equity,,USD,Consumer Discretionary
+BMNR,Bitmine Immersion,equity,,USD,Financials
+CLSK,CleanSpark,equity,,USD,Information Technology
+SBET,SharpLink Gaming,equity,,USD,Consumer Discretionary
+ABCL,AbCellera Biologics,equity,,USD,Health Care
+SPCX,SPAC / SpaceX proxy,equity,,USD,Industrials
+BTC-USD,Bitcoin,crypto,,USD,Crypto & Blockchain
+ETH-USD,Ethereum,crypto,,USD,Crypto & Blockchain
+ONDO-USD,Ondo,crypto,,USD,Crypto & Blockchain
+NEAR-USD,NEAR Protocol,crypto,,USD,Crypto & Blockchain
+RENDER-USD,Render,crypto,,USD,Crypto & Blockchain

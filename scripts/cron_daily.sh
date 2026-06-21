@@ -25,4 +25,5 @@ python apps/web/preview/build_interactive.py        # régénère le terminal au
 python scripts/mcp_populate_overlays.py --offline || true   # cônes VaR/EVT + blackouts → charts (best-effort)
 python -m packages.reporting.obsidian || true               # coffre Obsidian : journal + attribution + post-mortems
 python scripts/generate_reports.py || true                  # notes d'analyse (top-conviction + positions) datées
+python scripts/build_watchlist.py || true                   # top 200 + watchlist → config/mobile_universe.csv + Obsidian
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] maj quotidienne — OK"
