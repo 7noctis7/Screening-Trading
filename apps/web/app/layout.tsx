@@ -10,10 +10,19 @@ const themeInit = `(function(){try{var t=localStorage.getItem('theme');
 if(t==='light'){document.documentElement.classList.remove('dark');}
 else{document.documentElement.classList.add('dark');}}catch(e){document.documentElement.classList.add('dark');}})();`;
 
+// Purge tout ANCIEN service worker (ex-terminal autonome interactive.html) + ses caches → évite de
+// resservir une « ancienne version » figée. Le front Next.js n'enregistre aucun SW.
+const swCleanup = `(function(){try{if('serviceWorker' in navigator){
+navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});});}
+if(window.caches&&caches.keys){caches.keys().then(function(ks){ks.forEach(function(k){caches.delete(k);});});}}catch(e){}})();`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr" className="dark" suppressHydrationWarning>
-      <head><script dangerouslySetInnerHTML={{ __html: themeInit }} /></head>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInit }} />
+        <script dangerouslySetInnerHTML={{ __html: swCleanup }} />
+      </head>
       <body className="text-fg antialiased"><ParticlesBg /><Providers><Nav /><CommandPalette />{children}</Providers></body>
     </html>
   );
