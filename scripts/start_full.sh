@@ -19,6 +19,8 @@ if [ -z "${QUANT_PRICE_DB:-}" ]; then
 fi
 echo "→ Données : ${QUANT_PRICE_DB:-(aucune base → synthétique de démo)}"
 export QUANT_FUND="${QUANT_FUND:-yf}"
+export QUANT_MAX_REPORTS="${QUANT_MAX_REPORTS:-24}"   # notes pré-générées en local (rapide ; CI = 60)
+export QUANT_NO_LLM=1                                  # pas d'appel LLM pendant le build (anti-blocage)
 
 # [1/3] watchlist + top 200 (parcourt tout l'univers ~1-3 min) — skippable
 if [ "${SKIP_WATCHLIST:-0}" = "1" ] && [ -f config/mobile_universe.csv ]; then
