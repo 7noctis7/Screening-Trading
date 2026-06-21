@@ -105,12 +105,11 @@ def triple_barrier_overlay(times: list[str], closes: list[float], entry_dates: l
 
 def _load_cached_snapshot() -> dict | None:
     """Charge le snapshot persisté par l'API (.cache/snapshot.pkl) — évite de le reconstruire."""
-    import pickle
     from pathlib import Path
+    from packages.common import safe_pickle
     p = Path(__file__).resolve().parents[2] / ".cache" / "snapshot.pkl"
     try:
-        with p.open("rb") as f:
-            d = pickle.load(f)  # noqa: S301 — artefact local de confiance
+        d = safe_pickle.load(p)  # durci : anti-symlink + perms + hash optionnel
         return d.get("snap") if isinstance(d, dict) else None
     except Exception:  # noqa: BLE001
         return None

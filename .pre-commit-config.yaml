@@ -1,0 +1,15 @@
+# Garde-fou local : empêche un secret d'être committé (complète l'Action CI gitleaks).
+# Activation (1 fois) :  pip install pre-commit && pre-commit install
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: detect-private-key          # bloque toute clé privée (-----BEGIN ... PRIVATE KEY-----)
+      - id: check-added-large-files     # évite de committer une base/artefact lourd par erreur
+        args: ["--maxkb=2048"]
+      - id: end-of-file-fixer
+      - id: trailing-whitespace

@@ -8,7 +8,6 @@ ou périmé, le pipeline retombe sur un entraînement inline (jamais bloquant). 
 from __future__ import annotations
 
 import hashlib
-import pickle
 import time
 from pathlib import Path
 
@@ -22,22 +21,23 @@ def _key(signature) -> str:
 
 def save(signature, model, payload: dict) -> bool:
     try:
-        _DIR.mkdir(parents=True, exist_ok=True)
-        with (_DIR / f"ml_{_key(signature)}.pkl").open("wb") as f:
-            pickle.dump({"model": model, "payload": payload, "ts": time.time()}, f)
+        from packages.common import safe_pickle
+        safe_pickle.dump({"model": model, "payload": payload, "ts": time.time()},
+                         _DIR / f"ml_{_key(signature)}.pkl")   # + sidecar .sha256 (provenance)
         return True
     except Exception:  # noqa: BLE001
         return False
 
 
 def load(signature, ttl: float = _TTL):
-    """Renvoie (model, payload) si un artefact frais existe, sinon None."""
+    """Renvoie (model, payload) si un artefact frais existe, sinon None.
+    Durci : refuse symlink + vérifie l'empreinte SHA-256 (artefact ML potentiellement partagé)."""
     try:
+        from packages.common import safe_pickle
         p = _DIR / f"ml_{_key(signature)}.pkl"
         if not p.exists() or time.time() - p.stat().st_mtime > ttl:
             return None
-        with p.open("rb") as f:
-            d = pickle.load(f)            # noqa: S301 — artefact local de confiance
+        d = safe_pickle.load(p)
         return d["model"], d["payload"]
     except Exception:  # noqa: BLE001
         return None
