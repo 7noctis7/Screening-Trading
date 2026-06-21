@@ -1,0 +1,26 @@
+name: Scan secrets (gitleaks)
+
+# Bloque tout secret (clé API, token, mot de passe) avant qu'il n'atteigne le dépôt PUBLIC.
+# Gratuit pour les dépôts personnels/publics. Scanne le diff (PR/push) et l'historique complet.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # historique complet → détecte un secret committé puis retiré
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+          GITLEAKS_ENABLE_SUMMARY: "true"

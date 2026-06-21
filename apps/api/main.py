@@ -32,8 +32,23 @@ for _noisy in ("watchfiles", "watchfiles.main"):   # silence le rechargeur (logs
     logging.getLogger(_noisy).setLevel(logging.WARNING)
 
 app = FastAPI(title="Quant Trading API", version="0.1.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"],
+# CORS verrouillé par défaut sur localhost (l'API n'a pas d'auth). Élargir EXPLICITEMENT via
+# QUANT_CORS_ORIGINS="https://mon-domaine" si tu exposes l'API (jamais "*" sur réseau ouvert).
+_cors_env = os.environ.get("QUANT_CORS_ORIGINS",
+                           "http://localhost:3000,http://127.0.0.1:3000,http://localhost:8080")
+_cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()] or ["http://localhost:3000"]
+app.add_middleware(CORSMiddleware, allow_origins=_cors_origins, allow_methods=["*"],
                    allow_headers=["*"])
+
+# Jeton partagé pour les endpoints en écriture (webhook). Si non défini → accès LOCALHOST uniquement.
+_WEBHOOK_TOKEN = os.environ.get("QUANT_WEBHOOK_TOKEN", "")
+
+
+def _webhook_authorized(request: Request) -> bool:
+    if _WEBHOOK_TOKEN:
+        return request.headers.get("X-Webhook-Token") == _WEBHOOK_TOKEN
+    host = request.client.host if request.client else ""
+    return host in ("127.0.0.1", "::1", "localhost")
 
 
 @app.middleware("http")
@@ -50,7 +65,6 @@ async def _log_requests(request: Request, call_next):
     log.log(lvl, "%s %s → %s (%.0f ms)", request.method, request.url.path, resp.status_code, dt)
     return resp
 
-import pickle
 import threading
 
 _CACHE: dict | None = None
@@ -66,8 +80,8 @@ _SNAP_VERSION = "2026-06-21-history-2015"
 
 def _load_disk() -> tuple[dict | None, float]:
     try:
-        with _SNAP_FILE.open("rb") as f:
-            d = pickle.load(f)  # noqa: S301 — artefact local de confiance
+        from packages.common import safe_pickle
+        d = safe_pickle.load(_SNAP_FILE)                # durci : anti-symlink + perms + hash optionnel
         if d.get("version") != _SNAP_VERSION:           # code changé → ignore l'ancien cache
             return None, 0.0
         return d["snap"], float(d["ts"])
@@ -77,9 +91,8 @@ def _load_disk() -> tuple[dict | None, float]:
 
 def _persist(snap: dict, ts: float) -> None:
     try:
-        _SNAP_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with _SNAP_FILE.open("wb") as f:
-            pickle.dump({"snap": snap, "ts": ts, "version": _SNAP_VERSION}, f)
+        from packages.common import safe_pickle
+        safe_pickle.dump({"snap": snap, "ts": ts, "version": _SNAP_VERSION}, _SNAP_FILE)  # + sidecar .sha256
     except Exception:  # noqa: BLE001
         pass
 
@@ -351,7 +364,10 @@ def overlays(ticker: str = "") -> dict:
 
 @app.post("/api/tv/webhook")
 async def tv_webhook(request: Request) -> dict:
-    """Webhook entrant des alertes TradingView (Pine/indicateur) → drop pour le risk-engine (veto)."""
+    """Webhook entrant des alertes TradingView (Pine/indicateur) → drop pour le risk-engine (veto).
+    Protégé : jeton X-Webhook-Token si QUANT_WEBHOOK_TOKEN est défini, sinon localhost uniquement."""
+    if not _webhook_authorized(request):
+        return JSONResponse(status_code=401, content={"ok": False, "error": "non autorisé"})
     from packages.mcp_tradingview.alerts import append_alert
     try:
         body = await request.json()
