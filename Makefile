@@ -100,6 +100,8 @@ ingest-delisted:  ## détecte les titres délistés (barres trop anciennes) → 
 	$(PYTHON) scripts/ingest_delisted.py $(ARGS)
 reports:          ## pré-génère les notes d'analyse (top-conviction + positions) → out/notes/AAAA-MM-JJ
 	$(PYTHON) scripts/generate_reports.py $(ARGS)
+watchlist:        ## top 200 par note + watchlist fixe → config/mobile_universe.csv + rapport Obsidian (borne la PWA en ligne)
+	$(PYTHON) scripts/build_watchlist.py $(ARGS)
 analytics:        ## rapport de perf QuantStats (Sortino/Calmar/Alpha-Beta vs QQQ) → vault/Performance_Report.md
 	$(PYTHON) scripts/perf_report.py
 clean:

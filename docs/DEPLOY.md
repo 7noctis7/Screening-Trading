@@ -23,6 +23,19 @@ python scripts/build_site.py        # → dossier site/ (index.html + PWA)
 # puis : ouvrir site/index.html, ou servir : python -m http.server -d site 8080
 ```
 
+## Univers : téléphone **borné**, Mac **illimité**
+- **En local (Mac)** : `make start` n'utilise PAS d'univers restreint → tu cherches sur **tous** les actifs.
+- **En ligne / mobile (PWA)** : bornée à `config/mobile_universe.csv` = **watchlist fixe + top 200 par note**.
+- Régénérer cette liste (en local, données réelles) :
+  ```bash
+  make watchlist            # → config/mobile_universe.csv (watchlist + top 200) + rapport Obsidian
+  git add config/mobile_universe.csv && git commit -m "maj univers mobile" && git push
+  ```
+  La prochaine build Pages prend automatiquement la nouvelle liste. La **watchlist** (PLTR, TSLA,
+  BMNR, CLSK, SBET, ABCL, SPCX + BTC/ETH/ONDO/NEAR/RENDER-USD) est **toujours incluse**.
+  `make watchlist` écrit aussi `vault/04_Companies/_TOP200.md` (rapport classé) et les notes des
+  valeurs suivies dans ton coffre Obsidian. Lancé aussi par le cron quotidien.
+
 ## Personnaliser
 - **Univers / profondeur** : variables d'env dans le workflow (`QUANT_UNIVERSE`, fenêtre `--since`).
 - **Fréquence** : champ `schedule.cron` du workflow.
