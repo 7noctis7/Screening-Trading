@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LiveBadge } from "@/components/LiveBadge";
 import { useMeta } from "@/lib/api";
@@ -62,7 +63,9 @@ export function Nav() {
   const path = usePathname();
   const { data: meta } = useMeta();
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
+  useEffect(() => { setMounted(true); }, []);
   // Ferme le tiroir au changement de page + verrouille le scroll du body quand il est ouvert.
   useEffect(() => { setOpen(false); }, [path]);
   useEffect(() => {
@@ -80,7 +83,7 @@ export function Nav() {
     </span>
   );
 
-  return (
+  const bar = (
     <nav className="sticky top-0 z-30 border-b border-border nav-safe"
       style={{ background: "color-mix(in srgb, var(--bg) 72%, transparent)", backdropFilter: "saturate(160%) blur(14px)", WebkitBackdropFilter: "saturate(160%) blur(14px)" }}>
       {meta?.data_synthetic && (
@@ -126,63 +129,73 @@ export function Nav() {
         <span className="text-[11px] text-muted2 mono px-2 py-1 rounded-md border border-border">⌘K</span>
         <ThemeToggle />
       </div>
-
-      {/* ---- Tiroir MOBILE (sheet plein écran, style iOS) ---- */}
-      {open && (
-        <div className="md:hidden fixed inset-0 z-40" onClick={() => setOpen(false)}>
-          <div className="absolute inset-0" style={{ background: "rgba(0,0,0,.5)", backdropFilter: "blur(2px)" }} />
-          <div onClick={(e) => e.stopPropagation()}
-            className="drawer-panel absolute top-0 right-0 h-full w-[86%] max-w-[360px] flex flex-col border-l border-border"
-            style={{ background: "color-mix(in srgb, var(--bg) 96%, transparent)", boxShadow: "-20px 0 60px rgba(0,0,0,.45)" }}>
-            <div className="flex items-center gap-2 px-4 h-14 border-b border-border shrink-0">
-              {Brand}
-              <button onClick={() => setOpen(false)} aria-label="Fermer le menu"
-                className="ml-auto grid place-items-center w-10 h-10 rounded-[12px] border border-border text-fg active:scale-95 transition-transform"
-                style={{ background: "var(--surface)" }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                  <line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-3 py-3 space-y-5">
-              <Link href="/accueil" onClick={() => setOpen(false)}
-                className={`flex items-center gap-3 px-3 py-3 rounded-[14px] text-[15px] border transition-colors ${
-                  isActive("/accueil", path) ? "bg-surfaceAlt text-fg border-border2" : "text-fg border-border"}`}
-                style={{ background: isActive("/accueil", path) ? undefined : "var(--surface)" }}>
-                🏠 Accueil
-              </Link>
-              {GROUPS.map(([section, hrefs]) => (
-                <div key={section}>
-                  <div className="px-2 mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted2">{section}</div>
-                  <div className="rounded-[14px] overflow-hidden border border-border" style={{ background: "var(--surface)" }}>
-                    {hrefs.map((href, idx) => {
-                      const active = isActive(href, path);
-                      return (
-                        <Link key={href} href={href} onClick={() => setOpen(false)}
-                          className={`flex items-center gap-2 px-4 py-3 text-[15px] transition-colors ${idx ? "border-t border-border" : ""} ${
-                            active ? "text-fg" : "text-muted hover:text-fg"}`}
-                          style={{ background: active ? "var(--surface2)" : undefined }}>
-                          {active && <span className="inline-block w-1.5 h-1.5 rounded-full"
-                            style={{ background: "var(--accent)", boxShadow: "0 0 8px var(--accent)" }} />}
-                          <span className={active ? "font-medium" : ""}>{LABEL[href]}</span>
-                          <span className="ml-auto text-muted2">›</span>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="shrink-0 border-t border-border px-4 py-3 flex items-center gap-2 nav-safe-bottom">
-              <StatusDot meta={meta} withLabel />
-              <span className="ml-auto" />
-              <LiveBadge />
-            </div>
-          </div>
-        </div>
-      )}
     </nav>
+  );
+
+  // ---- Tiroir MOBILE (sheet plein écran, style iOS) ----
+  // Rendu via PORTAL dans <body> : le <nav> a un backdrop-filter, qui « piège » sinon les éléments
+  // position:fixed (ils se positionnent par rapport au nav et non au viewport → tiroir écrasé en haut).
+  const drawer = (
+    <div className="md:hidden fixed inset-0 z-[60]" onClick={() => setOpen(false)}>
+      <div className="absolute inset-0" style={{ background: "rgba(0,0,0,.5)" }} />
+      <div onClick={(e) => e.stopPropagation()}
+        className="drawer-panel absolute top-0 right-0 h-full w-[86%] max-w-[360px] flex flex-col border-l border-border"
+        style={{ background: "var(--bg)", boxShadow: "-20px 0 60px rgba(0,0,0,.45)",
+                 paddingTop: "env(safe-area-inset-top)" }}>
+        <div className="flex items-center gap-2 px-4 h-14 border-b border-border shrink-0">
+          {Brand}
+          <button onClick={() => setOpen(false)} aria-label="Fermer le menu"
+            className="ml-auto grid place-items-center w-10 h-10 rounded-[12px] border border-border text-fg active:scale-95 transition-transform"
+            style={{ background: "var(--surface)" }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-5">
+          <Link href="/accueil" onClick={() => setOpen(false)}
+            className={`flex items-center gap-3 px-3 py-3 rounded-[14px] text-[15px] border transition-colors ${
+              isActive("/accueil", path) ? "bg-surfaceAlt text-fg border-border2" : "text-fg border-border"}`}
+            style={{ background: isActive("/accueil", path) ? undefined : "var(--surface)" }}>
+            🏠 Accueil
+          </Link>
+          {GROUPS.map(([section, hrefs]) => (
+            <div key={section}>
+              <div className="px-2 mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted2">{section}</div>
+              <div className="rounded-[14px] overflow-hidden border border-border" style={{ background: "var(--surface)" }}>
+                {hrefs.map((href, idx) => {
+                  const active = isActive(href, path);
+                  return (
+                    <Link key={href} href={href} onClick={() => setOpen(false)}
+                      className={`flex items-center gap-2 px-4 py-3 text-[15px] transition-colors ${idx ? "border-t border-border" : ""} ${
+                        active ? "text-fg" : "text-muted hover:text-fg"}`}
+                      style={{ background: active ? "var(--surface2)" : undefined }}>
+                      {active && <span className="inline-block w-1.5 h-1.5 rounded-full"
+                        style={{ background: "var(--accent)", boxShadow: "0 0 8px var(--accent)" }} />}
+                      <span className={active ? "font-medium" : ""}>{LABEL[href]}</span>
+                      <span className="ml-auto text-muted2">›</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="shrink-0 border-t border-border px-4 py-3 flex items-center gap-2 nav-safe-bottom">
+          <StatusDot meta={meta} withLabel />
+          <span className="ml-auto" />
+          <LiveBadge />
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      {bar}
+      {mounted && open && createPortal(drawer, document.body)}
+    </>
   );
 }
