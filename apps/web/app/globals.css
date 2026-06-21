@@ -148,3 +148,37 @@ main { animation:fade .35s ease; }
 
 a { color:inherit; }
 .text-accent { color:var(--accent2); }
+
+/* ============================================================================
+   Mobile — qualité Apple : encoches (safe-area), pas de débordement horizontal,
+   respiration compacte, défilement inertiel, cibles tactiles ≥ 44 px.
+   ============================================================================ */
+/* Aucune barre de défilement horizontale parasite (les tableaux larges scrollent DANS leur carte). */
+html, body { overflow-x:clip; max-width:100%; }
+
+/* Encoches iPhone : la nav translucide (PWA plein écran) se cale sous le statut ; tiroir au-dessus du
+   home-indicator. (Sans effet en navigation Safari classique.) */
+.nav-safe { padding-top:env(safe-area-inset-top); }
+.nav-safe-bottom { padding-bottom:env(safe-area-inset-bottom); }
+
+/* Défilement inertiel iOS pour tout conteneur scrollable (tableaux, heatmaps). */
+.overflow-x-auto, .overflow-y-auto, .overflow-auto { -webkit-overflow-scrolling:touch; }
+/* Indice visuel discret « ça scrolle » sur les tableaux larges en mobile. */
+.overflow-x-auto { scrollbar-width:thin; }
+
+@media (max-width: 640px) {
+  /* Respiration horizontale compacte : on récupère de la largeur utile (les pages utilisent p-6). */
+  main { padding-left:14px !important; padding-right:14px !important; padding-top:14px !important; }
+  .card { padding:14px; border-radius:14px; }
+  h1 { font-size:20px; }
+  /* Les cartes contenant un tableau scrollent horizontalement au lieu de déborder l'écran. */
+  .card { max-width:100%; }
+  /* iOS ne zoome plus au focus d'un champ (police ≥ 16 px). */
+  input, select, textarea { font-size:16px; }
+  /* Cibles tactiles confortables. */
+  nav a, .card a[href] { -webkit-tap-highlight-color:transparent; }
+}
+
+/* Animation d'entrée du tiroir mobile (glisse + fondu, respect reduce-motion via la règle plus haut). */
+.drawer-panel { animation:slideIn .22s cubic-bezier(.32,.72,0,1); }
+@keyframes slideIn { from { transform:translateX(100%); } to { transform:translateX(0); } }
