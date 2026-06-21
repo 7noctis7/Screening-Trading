@@ -34,6 +34,15 @@ def real_macro_store(vix_vals, vix_dates, sp_closes, sp_dates,
     store = MacroStore(":memory:")
     sources: dict[str, str] = {}
 
+    # Alignement défensif valeurs↔dates : le calendrier univers peut être plus court que la série
+    # d'indice réelle (ex. en CI, ^GSPC a plus de barres que la plus longue action) → on tronque sur
+    # le commun par la fin pour éviter tout IndexError (sinon le snapshot entier plante).
+    def _align(vals, dates):
+        k = min(len(vals), len(dates))
+        return (list(vals)[-k:], list(dates)[-k:]) if k else ([], [])
+    vix_vals, vix_dates = _align(vix_vals, vix_dates)
+    sp_closes, sp_dates = _align(sp_closes, sp_dates)
+
     # VIX réel
     vobs = [MacroObservation("VIXCLS", _dt(d), float(v), _dt(d))
             for d, v in zip(vix_dates, vix_vals) if v and float(v) > 0]

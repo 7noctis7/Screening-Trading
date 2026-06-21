@@ -32,7 +32,10 @@ def main() -> None:
     inst = [m for m in _seed_universe() if m.get("asset_class") == "crypto"]
     bases: list[str] = []
     for m in inst:                                       # bases uniques, dans l'ordre de l'univers
-        base = m["symbol"].split("/")[0].upper()
+        # normalise vers la base : BTC/USDT → BTC, BTC-USD → BTC, BTC → BTC (évite le suffixe ajouté
+        # en double « BTC-USD-USD » quand l'univers stocke déjà le format yfinance).
+        raw = m["symbol"].upper().split("/")[0]
+        base = raw[:-4] if raw.endswith("-USD") else (raw[:-5] if raw.endswith("-USDT") else raw)
         if base and base not in bases:
             bases.append(base)
     bases = bases[:a.top]
