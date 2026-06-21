@@ -8,7 +8,12 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ["apps/**", "packages/**", "scripts/**", "config/**", ".github/workflows/pages.yml"]
+    paths:
+      - "apps/**"
+      - "packages/**"
+      - "scripts/**"
+      - "config/**"
+      - ".github/workflows/pages.yml"
   schedule:
     - cron: "30 5 * * 1-6"
 
@@ -22,42 +27,59 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  NEXT_PUBLIC_BASE_PATH: /Screening-Trading      # = nom du repo (URL Pages : /<repo>/)
-  QUANT_MAX_REPORTS: "60"                         # nb de notes HTML pré-générées (borne le temps de build)
+  NEXT_PUBLIC_BASE_PATH: /Screening-Trading
+  QUANT_MAX_REPORTS: "60"
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
-      - uses: actions/setup-node@v4
-        with: { node-version: "20", cache: "npm", cache-dependency-path: apps/web/package-lock.json }
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: apps/web/package-lock.json
+
       - name: Dépendances Python
         run: |
           python -m pip install -U pip
           pip install -e ".[data,quant,api]"
+
       - name: Dépendances web
         run: cd apps/web && (npm ci || npm install)
+
       - name: Univers mobile (watchlist + top 200 si présent)
         run: |
           if [ -f config/mobile_universe.csv ]; then
-            echo "QUANT_UNIVERSE=${{ github.workspace }}/config/mobile_universe.csv" >> "$GITHUB_ENV"
+            echo "QUANT_UNIVERSE=${GITHUB_WORKSPACE}/config/mobile_universe.csv" >> "$GITHUB_ENV"
           fi
+
       - name: Ingestion des prix RÉELS (yfinance — best-effort)
-        env: { QUANT_PRICE_DB: ${{ github.workspace }}/data/market.db }
+        env:
+          QUANT_PRICE_DB: ${{ github.workspace }}/data/market.db
         run: |
           python scripts/ingest_prices.py --since "$(date -u -d '18 months ago' +%Y-%m-%d)" || true
           python scripts/ingest_crypto.py || true
+
       - name: Construire le site (front Next.js statique + données réelles)
         env:
           QUANT_PRICE_DB: ${{ github.workspace }}/data/market.db
           QUANT_FUND: "yf"
           QUANT_NEWS: "0"
         run: python scripts/build_static_site.py
-      - uses: actions/upload-pages-artifact@v3
-        with: { path: site }
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
 
   deploy:
     needs: build
@@ -66,5 +88,6 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - id: deployment
+      - name: Deploy to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4
