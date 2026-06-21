@@ -101,7 +101,9 @@ reports:          ## pré-génère les notes d'analyse (top-conviction + positio
 	$(PYTHON) scripts/generate_reports.py $(ARGS)
 watchlist:        ## top 200 par note + watchlist fixe → config/mobile_universe.csv + rapport Obsidian (borne la PWA en ligne)
 	$(PYTHON) scripts/build_watchlist.py $(ARGS)
-site:             ## TOUT-EN-UN MOBILE : watchlist + top 200 + build PWA + serveur local (http://localhost:8080)
+site:             ## TOUT-EN-UN MOBILE (front COMPLET Next.js) : watchlist + données + export + serveur (http://localhost:8080)
+	bash scripts/start_full.sh
+site-lite:        ## variante LÉGÈRE sans Node (terminal autonome interactive.html) + serveur local
 	bash scripts/start_mobile.sh
 analytics:        ## rapport de perf QuantStats (Sortino/Calmar/Alpha-Beta vs QQQ) → vault/Performance_Report.md
 	$(PYTHON) scripts/perf_report.py
