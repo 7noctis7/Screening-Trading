@@ -1,8 +1,9 @@
 # Déploiement gratuit — en ligne & sur téléphone (données réelles, sans Mac allumé)
 
-Le terminal autonome (`apps/web/preview/interactive.html`) est une **PWA** (installable, hors-ligne).
-On le publie sur **GitHub Pages** via **GitHub Actions**, qui **récupère les données réelles
-gratuitement dans le cloud** (yfinance / SEC EDGAR) à chaque build. Résultat :
+On publie le **vrai front Next.js (parité totale avec `make start`** : notes 📄, page `/notes`,
+Snowflake, Risque, Données, etc.) **exporté en statique** sur **GitHub Pages** via **GitHub Actions**,
+qui **récupère les données réelles gratuitement dans le cloud** (yfinance / SEC EDGAR) à chaque build
+et les **fige en JSON**. Résultat :
 
 - 🌐 **URL permanente** : `https://<ton-user>.github.io/Screening-Trading/`
 - 📱 **Installable sur téléphone** : ouvrir l'URL → « Ajouter à l'écran d'accueil » → vraie app, **hors-ligne**.
@@ -19,8 +20,10 @@ gratuitement dans le cloud** (yfinance / SEC EDGAR) à chaque build. Résultat :
 
 ## Tester en local
 ```bash
-python scripts/build_site.py        # → dossier site/ (index.html + PWA)
-# puis : ouvrir site/index.html, ou servir : python -m http.server -d site 8080
+# Front complet exporté en statique (comme en ligne) — nécessite Node + apps/web/node_modules :
+NEXT_PUBLIC_BASE_PATH="" python scripts/build_static_site.py   # → dossier site/
+python -m http.server -d site 8080                             # http://localhost:8080
+# Aperçu léger sans Node (terminal autonome) : make site
 ```
 
 ## Univers : téléphone **borné**, Mac **illimité**
