@@ -1,13 +1,211 @@
 symbol,name,asset_class,venue,currency,sector
-PLTR,Palantir Technologies,equity,,USD,Information Technology
-TSLA,Tesla,equity,,USD,Consumer Discretionary
-BMNR,Bitmine Immersion,equity,,USD,Financials
-CLSK,CleanSpark,equity,,USD,Information Technology
-SBET,SharpLink Gaming,equity,,USD,Consumer Discretionary
-ABCL,AbCellera Biologics,equity,,USD,Health Care
-SPCX,SPAC / SpaceX proxy,equity,,USD,Industrials
-BTC-USD,Bitcoin,crypto,,USD,Crypto & Blockchain
-ETH-USD,Ethereum,crypto,,USD,Crypto & Blockchain
-ONDO-USD,Ondo,crypto,,USD,Crypto & Blockchain
-NEAR-USD,NEAR Protocol,crypto,,USD,Crypto & Blockchain
-RENDER-USD,Render,crypto,,USD,Crypto & Blockchain
+PLTR,Palantir Technologies,equity,,USD,Intelligence artificielle
+TSLA,Tesla,equity,,USD,Véhicules électriques
+BMNR,Bitmine Immersion,equity,,USD,Actions diverses
+CLSK,CleanSpark,equity,,USD,Actions diverses
+SBET,SharpLink Gaming,equity,,USD,Actions diverses
+ABCL,AbCellera Biologics,equity,,USD,Actions diverses
+SPCX,SPAC / SpaceX proxy,equity,,USD,Actions diverses
+BTC-USD,Bitcoin,crypto,,USD,
+ETH-USD,Ethereum,crypto,,USD,
+ONDO-USD,Ondo,crypto,,USD,
+NEAR-USD,NEAR Protocol,crypto,,USD,
+RENDER-USD,Render,crypto,,USD,
+OSCR,,equity,,,Actions diverses
+TSM,,equity,,,Semi-conducteurs
+BIDU,,equity,,,Actions diverses
+PATH,,equity,,,Actions diverses
+BABA,,equity,,,Actions diverses
+VNO,,equity,,,Actions diverses
+DUOL,,equity,,,Actions diverses
+TRV,,equity,,,Actions diverses
+TTEK,,equity,,,Actions diverses
+THC,,equity,,,Actions diverses
+VZ,,equity,,,Actions diverses
+TDS,,equity,,,Actions diverses
+TROW,,equity,,,Actions diverses
+SIG,,equity,,,Actions diverses
+PRU,,equity,,,Actions diverses
+NWS,,equity,,,Actions diverses
+SLG,,equity,,,Actions diverses
+ZTS,,equity,,,Actions diverses
+T,,equity,,,Actions diverses
+SYF,,equity,,,Actions diverses
+COIN,,equity,,,Crypto & Blockchain
+STZ,,equity,,,Actions diverses
+OMC,,equity,,,Actions diverses
+NWSA,,equity,,,Actions diverses
+ZBH,,equity,,,Actions diverses
+PGR,,equity,,,Actions diverses
+TEN,,equity,,,Actions diverses
+ZION,,equity,,,Actions diverses
+UDR,,equity,,,Actions diverses
+UAL,,equity,,,Actions diverses
+SNA,,equity,,,Actions diverses
+SPG,,equity,,,Actions diverses
+NOW,ServiceNow,equity,,,Cloud & Datacenters
+PBI,,equity,,,Actions diverses
+PVH,,equity,,,Actions diverses
+RRC,,equity,,,Actions diverses
+VEEV,,equity,,,Actions diverses
+SWKS,,equity,,,Actions diverses
+TGT,,equity,,,Actions diverses
+PFE,,equity,,,Actions diverses
+WFC,,equity,,,Actions diverses
+PHM,,equity,,,Actions diverses
+LNC,,equity,,,Actions diverses
+TFC,,equity,,,Actions diverses
+OKTA,Okta,equity,,,Cybersécurité
+PFG,,equity,,,Actions diverses
+M,,equity,,,Actions diverses
+TXT,,equity,,,Actions diverses
+NEM,,equity,,,Actions diverses
+V,,equity,,,Fintech & Paiements
+VRSK,,equity,,,Actions diverses
+MAT,,equity,,,Actions diverses
+USB,,equity,,,Actions diverses
+SYY,,equity,,,Actions diverses
+SWK,,equity,,,Actions diverses
+QRVO,,equity,,,Actions diverses
+KSS,,equity,,,Actions diverses
+MHK,,equity,,,Actions diverses
+SPGI,,equity,,,Actions diverses
+TSN,,equity,,,Actions diverses
+MO,,equity,,,Actions diverses
+HRB,,equity,,,Actions diverses
+SLB,,equity,,,Énergie (fossile)
+TSCO,,equity,,,Actions diverses
+TPR,,equity,,,Actions diverses
+R,,equity,,,Actions diverses
+IFF,,equity,,,Actions diverses
+TEL,,equity,,,Actions diverses
+PNR,,equity,,,Actions diverses
+XYL,,equity,,,Actions diverses
+MKC,,equity,,,Actions diverses
+TYL,,equity,,,Actions diverses
+LEG,,equity,,,Actions diverses
+HPQ,,equity,,,Actions diverses
+NOV,,equity,,,Actions diverses
+VRSN,,equity,,,Actions diverses
+TYGO,,equity,,,Actions diverses
+GPN,,equity,,,Actions diverses
+ZS,Zscaler,equity,,,Cybersécurité
+GTLB,,equity,,,Actions diverses
+NTR,,equity,,,Actions diverses
+LKQ,,equity,,,Actions diverses
+SJM,,equity,,,Actions diverses
+L,,equity,,,Actions diverses
+MAS,,equity,,,Actions diverses
+MCK,,equity,,,Actions diverses
+PPG,,equity,,,Actions diverses
+BK,,equity,,,Actions diverses
+PG,,equity,,,Conso. de base
+TMO,,equity,,,Actions diverses
+ENPH,Enphase,equity,,,Énergie propre & Transition
+MFA,,equity,,,Actions diverses
+GM,,equity,,,Actions diverses
+HIG,,equity,,,Actions diverses
+HIMS,,equity,,,Actions diverses
+SYK,,equity,,,Actions diverses
+PNC,,equity,,,Actions diverses
+MTB,,equity,,,Actions diverses
+CRM,,equity,,,Actions diverses
+DDOG,Datadog,equity,,,Cloud & Datacenters
+HST,,equity,,,Actions diverses
+STT,,equity,,,Actions diverses
+ANET,,equity,,,Actions diverses
+HOOD,,equity,,,Actions diverses
+NTAP,,equity,,,Actions diverses
+MDB,MongoDB,equity,,,Cloud & Datacenters
+PSA,,equity,,,Actions diverses
+MAA,,equity,,,Actions diverses
+LOW,,equity,,,Actions diverses
+EXPE,,equity,,,Actions diverses
+GIS,,equity,,,Actions diverses
+OXY,,equity,,,Actions diverses
+MRK,,equity,,,Actions diverses
+IBM,,equity,,,Actions diverses
+ICE,,equity,,,Actions diverses
+FIS,,equity,,,Actions diverses
+EQT,,equity,,,Actions diverses
+ASML,,equity,,,Semi-conducteurs
+NOK,,equity,,,Actions diverses
+VRT,,equity,,,Actions diverses
+HSY,,equity,,,Actions diverses
+NOC,,equity,,,Espace & Défense
+PM,,equity,,,Actions diverses
+NET,Cloudflare,equity,,,Cybersécurité
+SHW,,equity,,,Actions diverses
+KR,,equity,,,Actions diverses
+NWL,,equity,,,Actions diverses
+MRVL,,equity,,,Actions diverses
+FOX,,equity,,,Actions diverses
+FOXA,,equity,,,Actions diverses
+VFC,,equity,,,Actions diverses
+VTR,,equity,,,Actions diverses
+NDAQ,,equity,,,Actions diverses
+CTSH,,equity,,,Actions diverses
+WU,,equity,,,Actions diverses
+PLD,,equity,,,Actions diverses
+SAN,,equity,,,Actions diverses
+MA,,equity,,,Fintech & Paiements
+LH,,equity,,,Actions diverses
+TJX,,equity,,,Actions diverses
+LLY,,equity,,,Biotech & Génomique
+IONQ,,equity,,,Actions diverses
+LB,,equity,,,Actions diverses
+OKLO,,equity,,,Actions diverses
+UHS,,equity,,,Actions diverses
+SOFI,,equity,,,Actions diverses
+MCD,,equity,,,Actions diverses
+KIM,,equity,,,Actions diverses
+KEX,,equity,,,Actions diverses
+ARM,,equity,,,Actions diverses
+RIOT,Riot Platforms,equity,,,Crypto & Blockchain
+TDG,,equity,,,Actions diverses
+SNOW,Snowflake,equity,,,Intelligence artificielle
+FSLR,,equity,,,Énergie propre & Transition
+STM,,equity,,,Actions diverses
+SCHW,,equity,,,Actions diverses
+MRNA,Moderna,equity,,,Biotech & Génomique
+HPE,,equity,,,Actions diverses
+CRSP,CRISPR Tx,equity,,,Biotech & Génomique
+POET,,equity,,,Actions diverses
+TTWO,,equity,,,Actions diverses
+EOG,,equity,,,Énergie (fossile)
+QS,,equity,,,Actions diverses
+RIVN,Rivian,equity,,,Véhicules électriques
+AI,C3.ai,equity,,,Intelligence artificielle
+KEY,,equity,,,Actions diverses
+MARA,Marathon Digital,equity,,,Crypto & Blockchain
+DHI,,equity,,,Actions diverses
+RGTI,,equity,,,Actions diverses
+EQR,,equity,,,Actions diverses
+DLTR,,equity,,,Actions diverses
+SMCI,Super Micro,equity,,,Semi-conducteurs
+RR,,equity,,,Actions diverses
+HCA,,equity,,,Actions diverses
+PLUG,Plug Power,equity,,,Énergie propre & Transition
+CRCL,,equity,,,Actions diverses
+ARQQ,,equity,,,Actions diverses
+DG,,equity,,,Actions diverses
+NIO,NIO,equity,,,Véhicules électriques
+ULTA,,equity,,,Actions diverses
+MTD,,equity,,,Actions diverses
+KMB,,equity,,,Actions diverses
+LEN,,equity,,,Actions diverses
+PH,,equity,,,Actions diverses
+GD,,equity,,,Actions diverses
+RZLV,,equity,,,Actions diverses
+MUR,,equity,,,Actions diverses
+NKE,,equity,,,Actions diverses
+TER,,equity,,,Robotique & Automatisation
+NTLA,,equity,,,Actions diverses
+HOG,,equity,,,Actions diverses
+NTRS,,equity,,,Actions diverses
+BEAM,,equity,,,Actions diverses
+LCID,Lucid,equity,,,Véhicules électriques
+ESS,,equity,,,Actions diverses
+MCO,,equity,,,Actions diverses
+MSCI,,equity,,,Actions diverses
+SE,,equity,,,Actions diverses

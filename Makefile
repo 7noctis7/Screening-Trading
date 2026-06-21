@@ -16,8 +16,7 @@ demos:            ## exécute les démos offline
 	$(PYTHON) scripts/demo_paper_loop.py && $(PYTHON) scripts/demo_alerts.py && $(PYTHON) scripts/demo_ops.py
 preview:          ## régénère les aperçus HTML du dashboard/portefeuille
 	$(PYTHON) apps/web/preview/build_preview.py
-start:            ## TOUT EN UNE COMMANDE : maj code + kill vieux process + API (fond) + site
-	bash scripts/start.sh
+start:            ## TOUT EN UNE COMMANDE : maj code + kill vieux process + API (fond) + site	bash scripts/start.sh
 stop:             ## arrête l'API et le site (uvicorn + next dev)
 	@pkill -f "uvicorn apps.api.main" 2>/dev/null; lsof -ti:8000 2>/dev/null | xargs kill -9 2>/dev/null; lsof -ti:3000 2>/dev/null | xargs kill -9 2>/dev/null; echo "arrêté"
 api:              ## lance l'API FastAPI (localhost) — STABLE, sans reload (évite l'OOM pendant make daily)
@@ -102,6 +101,8 @@ reports:          ## pré-génère les notes d'analyse (top-conviction + positio
 	$(PYTHON) scripts/generate_reports.py $(ARGS)
 watchlist:        ## top 200 par note + watchlist fixe → config/mobile_universe.csv + rapport Obsidian (borne la PWA en ligne)
 	$(PYTHON) scripts/build_watchlist.py $(ARGS)
+site:             ## TOUT-EN-UN MOBILE : watchlist + top 200 + build PWA + serveur local (http://localhost:8080)
+	bash scripts/start_mobile.sh
 analytics:        ## rapport de perf QuantStats (Sortino/Calmar/Alpha-Beta vs QQQ) → vault/Performance_Report.md
 	$(PYTHON) scripts/perf_report.py
 clean:
