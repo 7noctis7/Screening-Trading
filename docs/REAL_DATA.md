@@ -141,7 +141,7 @@ make cron          # exécute scripts/cron_daily.sh (idempotent : append, jamais
 
 **crontab** (Linux/macOS) — tous les jours de semaine à 22h30 (après clôture US) :
 ```cron
-30 22 * * 1-5 /Users/thierryfanlo/Screening-Trading/scripts/cron_daily.sh >> /tmp/quant_daily.log 2>&1
+30 22 * * 1-5 /Users/vous/Screening-Trading/scripts/cron_daily.sh >> /tmp/quant_daily.log 2>&1
 ```
 
 **launchd** (macOS, recommandé) — `~/Library/LaunchAgents/com.quant.daily.plist` :
@@ -151,7 +151,7 @@ make cron          # exécute scripts/cron_daily.sh (idempotent : append, jamais
 <plist version="1.0"><dict>
   <key>Label</key><string>com.quant.daily</string>
   <key>ProgramArguments</key>
-  <array><string>/Users/thierryfanlo/Screening-Trading/scripts/cron_daily.sh</string></array>
+  <array><string>/Users/vous/Screening-Trading/scripts/cron_daily.sh</string></array>
   <key>StartCalendarInterval</key><dict><key>Hour</key><integer>22</integer><key>Minute</key><integer>30</integer></dict>
   <key>StandardOutPath</key><string>/tmp/quant_daily.log</string>
   <key>StandardErrorPath</key><string>/tmp/quant_daily.err</string>

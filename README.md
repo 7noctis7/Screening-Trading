@@ -166,7 +166,7 @@ Le projet utilise une **vraie base si elle existe**, sinon le synthétique (cf.
 
 ```bash
 # ⚠️ deux commandes SÉPARÉES — remplacez le chemin par le vôtre :
-export QUANT_PRICE_DB="/Users/thierryfanlo/data/YAHOO.db"
+export QUANT_PRICE_DB="/Users/vous/data/YAHOO.db"
 make api          # ou : python apps/web/preview/build_interactive.py
 ```
 

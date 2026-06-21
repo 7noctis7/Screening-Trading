@@ -182,3 +182,14 @@ html, body { overflow-x:clip; max-width:100%; }
 /* Animation d'entrée du tiroir mobile (glisse + fondu, respect reduce-motion via la règle plus haut). */
 .drawer-panel { animation:slideIn .22s cubic-bezier(.32,.72,0,1); }
 @keyframes slideIn { from { transform:translateX(100%); } to { transform:translateX(0); } }
+
+/* ============================================================================
+   Lisibilité THÈME CLAIR : le décor (photo, halos, grille) lavait le texte.
+   On atténue fortement le décor et on contraste davantage les textes secondaires.
+   ============================================================================ */
+:root:not(.dark) { --muted:#3f4c55; --muted2:#5b6a73; }     /* textes secondaires plus foncés */
+:root:not(.dark) html::before { opacity:.10; }              /* photo de fond quasi effacée */
+:root:not(.dark) html::after  { opacity:.22; }              /* grille tech discrète */
+:root:not(.dark) body::before { opacity:.4; filter:saturate(.8); }  /* halos colorés atténués */
+/* Cartes parfaitement opaques en clair (aucun fond qui transparaît sous le texte). */
+:root:not(.dark) .card { background:var(--surface); }

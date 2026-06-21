@@ -34,7 +34,8 @@ def _json_default(o):
         if isinstance(o, (np.integer,)):
             return int(o)
         if isinstance(o, (np.floating,)):
-            return float(o)
+            v = float(o)
+            return v if v == v and v not in (float("inf"), float("-inf")) else None
         if isinstance(o, np.ndarray):
             return o.tolist()
     except Exception:  # noqa: BLE001
@@ -42,8 +43,32 @@ def _json_default(o):
     return str(o)
 
 
+import math as _math
+
+
+def _clean(o):
+    """Neutralise NaN/Inf → None (sinon json.dumps écrit les tokens NaN/Infinity = JSON INVALIDE,
+    et fetch().json() casse côté navigateur → page bloquée en chargement). Convertit aussi les
+    scalaires/tableaux numpy."""
+    try:
+        import numpy as _np
+        if isinstance(o, _np.ndarray):
+            return _clean(o.tolist())
+        if isinstance(o, _np.generic):
+            o = o.item()
+    except Exception:  # noqa: BLE001
+        pass
+    if isinstance(o, float):
+        return o if _math.isfinite(o) else None
+    if isinstance(o, dict):
+        return {k: _clean(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [_clean(v) for v in o]
+    return o
+
+
 def _write(name: str, payload) -> None:
-    (DATA / f"{name}.json").write_text(json.dumps(payload, default=_json_default, ensure_ascii=False),
+    (DATA / f"{name}.json").write_text(json.dumps(_clean(payload), default=_json_default, ensure_ascii=False),
                                        encoding="utf-8")
 
 
