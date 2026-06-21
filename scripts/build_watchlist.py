@@ -23,6 +23,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+import logging as _lg                                # silence le bruit réseau yfinance/urllib3
+for _n in ("yfinance", "urllib3", "peewee"):
+    _lg.getLogger(_n).setLevel(_lg.CRITICAL)
+
 # WATCHLIST TOUJOURS INCLUSE (crypto au format yfinance « -USD »).
 WATCHLIST: list[dict] = [
     {"symbol": "PLTR", "name": "Palantir Technologies", "asset_class": "equity"},
