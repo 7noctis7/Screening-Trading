@@ -18,7 +18,7 @@ export default function NotesPage() {
   return (
     <main className="max-w-4xl mx-auto p-6 space-y-4">
       <h1 className="text-xl font-semibold tracking-tight">Notes d'analyse</h1>
-      <p className="text-muted text-xs">Notes fondamentales (Vernimmen + Damodaran, intrants audités PwC) — archivées chaque nuit, ou générées à la demande pour n'importe quel ticker.</p>
+      <p className="text-muted text-xs">Notes fondamentales (Vernimmen + Damodaran) — archivées chaque nuit, ou générées à la demande pour n'importe quel ticker.</p>
 
       {/* génération à la demande */}
       <section className="card p-4">
