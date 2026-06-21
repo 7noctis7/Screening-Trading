@@ -19,6 +19,8 @@ sys.path.insert(0, str(ROOT))
 import logging as _lg                                # silence le bruit réseau (yfinance dumpe des pages HTML)
 for _n in ("yfinance", "urllib3", "peewee"):
     _lg.getLogger(_n).setLevel(_lg.CRITICAL)
+os.environ.setdefault("QUANT_NO_LLM", "1")          # jamais d'appel LLM en batch (évite les blocages)
+os.environ.setdefault("QUANT_REPORT_LITE", "1")     # notes batch : saute actionnariat/trimestriel (lent)
 
 PUB = ROOT / "apps" / "web" / "public"
 DATA = PUB / "data"

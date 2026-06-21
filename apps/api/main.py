@@ -7,6 +7,7 @@ En offline, les routes renvoient le snapshot synthétique ; en prod, brancher l'
 from __future__ import annotations
 
 import logging
+import os
 import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -660,12 +661,14 @@ def _build_company_report_cached(sym: str) -> tuple[dict | None, str | None]:
                                   price_dates=dates, financial_history=fin_hist, peers=_company_peers(sym))
     report["source"] = src
     report["earnings_signature"] = sig
-    holders = _company_holders(sym, getattr(f, "shares", None))
-    if holders:
-        report["holders"] = holders
-    quarterly = _company_quarterly(sym)
-    if quarterly:
-        report["quarterly"] = quarterly
+    # mode LITE (builds batch site/CI) : on saute les appels yfinance lents (actionnariat, trimestriel)
+    if os.environ.get("QUANT_REPORT_LITE") != "1":
+        holders = _company_holders(sym, getattr(f, "shares", None))
+        if holders:
+            report["holders"] = holders
+        quarterly = _company_quarterly(sym)
+        if quarterly:
+            report["quarterly"] = quarterly
     if fx_note:
         report["fx_conversion"] = fx_note
         report.setdefault("audit", {}).setdefault("findings", []).append(
@@ -748,6 +751,8 @@ def _b(x) -> str:
 def _enrich_ai_memo(report: dict) -> None:
     """Remplace le mémo par une synthèse IA locale (LM Studio/Ollama) si un serveur répond. Sinon
     conserve la synthèse à base de règles. Jamais bloquant, rien ne sort de la machine."""
+    if os.environ.get("QUANT_NO_LLM") == "1":      # builds batch (site/CI) : pas d'appel LLM (évite les blocages)
+        return
     try:
         from packages.llm import available, complete
         if not available():
