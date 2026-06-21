@@ -3,10 +3,29 @@
 // (Vernimmen + Damodaran, intrants audités PwC, sources gratuites yfinance/FMP/SEC EDGAR).
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const STATIC = process.env.NEXT_PUBLIC_STATIC === "1";
+const BP = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 export function ReportButton({ ticker, assetClass }: { ticker: string; assetClass?: string }) {
   const ac = (assetClass || "").toLowerCase();
   if (ac && ac !== "equity" && ac !== "etf") return null;   // note fondamentale = actions/ETF
+  const icon = (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" /><line x1="9" y1="13" x2="15" y2="13" /><line x1="9" y1="17" x2="13" y2="17" />
+    </svg>);
+  // En statique (GitHub Pages) : note HTML pré-générée. En local : endpoint dynamique (HTML/PDF, thèmes).
+  if (STATIC) {
+    const href = `${BP}/reports/${encodeURIComponent(ticker)}.html`;
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
+        title={`Note d'analyse — ${ticker}`} aria-label={`Note d'analyse ${ticker}`}
+        className="inline-flex items-center justify-center w-5 h-5 rounded-md text-muted hover:text-accent hover:bg-surfaceAlt transition-colors align-middle">
+        {icon}
+      </a>
+    );
+  }
   const url = (fmt: string, theme: string) =>
     `${BASE}/api/company_report?ticker=${encodeURIComponent(ticker)}&format=${fmt}&theme=${theme}`;
   return (
@@ -15,13 +34,7 @@ export function ReportButton({ ticker, assetClass }: { ticker: string; assetClas
         title={`Note d'analyse — ${ticker} (Vernimmen + Damodaran)`}
         onClick={(e) => e.stopPropagation()}
         className="inline-flex items-center justify-center w-5 h-5 rounded-md text-muted hover:text-accent hover:bg-surfaceAlt transition-colors"
-        aria-label={`Note d'analyse ${ticker}`}>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-          strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-          <polyline points="14 2 14 8 20 8" /><line x1="9" y1="13" x2="15" y2="13" /><line x1="9" y1="17" x2="13" y2="17" />
-        </svg>
-      </a>
+        aria-label={`Note d'analyse ${ticker}`}>{icon}</a>
       <a href={url("html", "light")} target="_blank" rel="noopener noreferrer"
         title={`Note fond clair — ${ticker}`} onClick={(e) => e.stopPropagation()}
         className="text-[9px] text-muted hover:text-accent transition-colors leading-none" aria-label="fond clair">☀</a>

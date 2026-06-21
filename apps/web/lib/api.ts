@@ -2,9 +2,19 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// Mode STATIQUE (GitHub Pages) : on lit des instantanés JSON figés au lieu d'interroger l'API.
+const STATIC = process.env.NEXT_PUBLIC_STATIC === "1";
+const BP = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
+function _staticUrl(path: string): string {
+  // "/api/portfolio" → "<base>/data/portfolio.json" ; les query (overlays, …) sont neutralisés.
+  const name = path.split("?")[0].replace(/^\/api\//, "").replace(/\//g, "_");
+  return `${BP}/data/${name}.json`;
+}
 
 async function get<T>(path: string): Promise<T> {
-  const r = await fetch(`${BASE}${path}`);
+  const url = STATIC ? _staticUrl(path) : `${BASE}${path}`;
+  const r = await fetch(url);
   if (!r.ok) throw new Error(`API ${path}: ${r.status}`);
   return r.json();
 }

@@ -1,16 +1,16 @@
-name: Déploiement PWA (GitHub Pages, données réelles, gratuit)
+name: Déploiement PWA (GitHub Pages — front complet, données réelles, gratuit)
 
-# Publie le terminal autonome (PWA installable sur téléphone, hors-ligne) sur GitHub Pages.
-# Les données RÉELLES sont récupérées gratuitement dans le build (yfinance / SEC EDGAR) — aucune
-# YAHOO.db privée n'est utilisée, et le Mac n'a pas besoin d'être allumé. Rafraîchi chaque nuit.
+# Publie le VRAI front Next.js (parité `make start`) en statique sur GitHub Pages, avec des données
+# RÉELLES récupérées gratuitement dans le build (yfinance / SEC EDGAR). Aucune YAHOO.db privée, Mac
+# éteint. Rafraîchi chaque nuit. Univers borné par config/mobile_universe.csv (watchlist + top 200).
 
 on:
-  workflow_dispatch:                 # bouton « Run workflow » manuel
+  workflow_dispatch:
   push:
     branches: [main]
-    paths: ["apps/**", "packages/**", "scripts/**", ".github/workflows/pages.yml"]
+    paths: ["apps/**", "packages/**", "scripts/**", "config/**", ".github/workflows/pages.yml"]
   schedule:
-    - cron: "30 5 * * 1-6"           # tous les jours ouvrés ~05h30 UTC (après clôture US)
+    - cron: "30 5 * * 1-6"
 
 permissions:
   contents: read
@@ -21,41 +21,43 @@ concurrency:
   group: pages
   cancel-in-progress: true
 
+env:
+  NEXT_PUBLIC_BASE_PATH: /Screening-Trading      # = nom du repo (URL Pages : /<repo>/)
+  QUANT_MAX_REPORTS: "60"                         # nb de notes HTML pré-générées (borne le temps de build)
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Installer les dépendances
+        with: { python-version: "3.11" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "20", cache: "npm", cache-dependency-path: apps/web/package-lock.json }
+      - name: Dépendances Python
         run: |
           python -m pip install -U pip
-          pip install -e ".[data,quant]"
-      - name: Définir l'univers mobile (watchlist + top 200 si présent)
+          pip install -e ".[data,quant,api]"
+      - name: Dépendances web
+        run: cd apps/web && (npm ci || npm install)
+      - name: Univers mobile (watchlist + top 200 si présent)
         run: |
           if [ -f config/mobile_universe.csv ]; then
             echo "QUANT_UNIVERSE=${{ github.workspace }}/config/mobile_universe.csv" >> "$GITHUB_ENV"
-            echo "Univers mobile borné : $(($(wc -l < config/mobile_universe.csv)-1)) actifs."
-          else
-            echo "Pas de config/mobile_universe.csv → univers complet (lance 'make watchlist' en local)."
           fi
-      - name: Ingestion des prix RÉELS (yfinance, gratuit — best-effort)
-        env:
-          QUANT_PRICE_DB: ${{ github.workspace }}/data/market.db
+      - name: Ingestion des prix RÉELS (yfinance — best-effort)
+        env: { QUANT_PRICE_DB: ${{ github.workspace }}/data/market.db }
         run: |
           python scripts/ingest_prices.py --since "$(date -u -d '18 months ago' +%Y-%m-%d)" || true
           python scripts/ingest_crypto.py || true
-      - name: Construire le site (PWA, données réelles si dispo)
+      - name: Construire le site (front Next.js statique + données réelles)
         env:
           QUANT_PRICE_DB: ${{ github.workspace }}/data/market.db
-          QUANT_FUND: "yf"            # fondamentaux réels via yfinance
-          QUANT_NEWS: "0"             # pas de RSS en CI (rapide)
-        run: python scripts/build_site.py
+          QUANT_FUND: "yf"
+          QUANT_NEWS: "0"
+        run: python scripts/build_static_site.py
       - uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
+        with: { path: site }
 
   deploy:
     needs: build
