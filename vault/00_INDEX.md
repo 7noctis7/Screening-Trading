@@ -30,5 +30,14 @@ Priorités : robustesse > maintenabilité > gestion du risque > recherche d'alph
 | `11_DESIGN_SYSTEM.md` | Tokens UI, composants |
 | `12_FACTORS.md` | Définitions des facteurs |
 
+## En ligne (PWA gratuite)
+**https://7noctis7.github.io/Screening-Trading/** — front Next.js complet en statique, données réelles,
+reconstruit chaque jour ouvré par GitHub Actions (`.github/workflows/pages.yml`). Mac éteint, 0 €.
+Univers borné `config/mobile_universe.csv` (watchlist + top 200). Local : `make site`. Détails `docs/DEPLOY.md`.
+Le site public **n'a pas** les clés courtier → positions réelles **local-only**.
+
 ## État actuel
-**Session 1 terminée** — tranche verticale runnable (data→backtest→métriques), 21 tests verts. Prochaine priorité : **Storage DuckDB + persistance journal + contrats pandera**.
+**2026-06-21** — PWA mobile **en ligne et fonctionnelle** (données réelles, historique 2015, notes HTML,
+thème clair lisible, menu mobile en tiroir). Pipeline statique durci (NaN-safe, abort si dump vide, lockfile
+versionné). Audit sécurité repo public : **propre**. Prochaine priorité : tunnel privé optionnel pour les
+positions réelles sur mobile + élargir la couverture fondamentale réelle en CI (SEC EDGAR vs yfinance rate-limit).

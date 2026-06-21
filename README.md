@@ -1,6 +1,11 @@
 # Quant Terminal — Screening & Trading systématique multi-actifs
 
-*Dernière mise à jour : 2026-06-20.*
+*Dernière mise à jour : 2026-06-21.*
+
+> 🌐📱 **EN LIGNE, GRATUIT, SUR TÉLÉPHONE, MAC ÉTEINT** : **https://7noctis7.github.io/Screening-Trading/**
+> — la PWA complète (vrai front Next.js) est reconstruite chaque jour ouvré par GitHub Actions avec des
+> **données réelles** récupérées dans le cloud (yfinance / SEC EDGAR). Aucune base privée, aucune clé.
+> Voir « [Site en ligne gratuit](#-site-en-ligne-gratuit-github-pages--pwa) » plus bas.
 
 Plateforme **open-source** de **screening** et de **trading systématique** (actions, ETF, forex,
 crypto, commodités, indices) de niveau institutionnel, avec un **terminal web premium** (style
@@ -28,13 +33,8 @@ backtest VaR, ACP, budget de risque, limites, stress, allocation HRP/ERC, multi-
 **Positions** · **Trades** (ordres exécutés **+ ordres en attente**) · **Portefeuille réel** (Alpaca/Bitmart, réconciliation, TCA).
 
 > 🧭 Carte complète des modules : [`docs/MODULES.md`](docs/MODULES.md).
-> 📱 **Installable (PWA)** : la preview génère `manifest.webmanifest` + `sw.js` → « Ajouter à
-> l'écran d'accueil » sur téléphone = vraie app, utilisable **hors-ligne**. ⌘K · mode live · thème clair/sombre.
-> 🤗 **Démo publique gratuite** : déployable en un Space HuggingFace (`deploy/hf_space/`).
-> 🌐📱 **En ligne & sur téléphone, GRATUIT, données réelles, sans PC allumé** : GitHub Pages +
-> Actions construit la PWA chaque nuit avec des **données réelles** récupérées dans le cloud
-> (yfinance / SEC EDGAR). Activer : *Settings → Pages → Source = GitHub Actions*. Détails :
-> [`docs/DEPLOY.md`](docs/DEPLOY.md).
+> 📱 **Installable (PWA)** : sur le site en ligne, *Partager → Sur l'écran d'accueil* = vraie app
+> plein écran (encoche gérée, menu en tiroir style iOS). ⌘K · mode live · thème clair/sombre.
 
 - **Stratégie de production** : **50 % QQQ (cœur indiciel) + 50 % preset** (qualité top‑30 →
   risk‑parity ERC → DD‑target → blackout résultats → no‑trade band → cap 10 %), capital de base
@@ -158,6 +158,30 @@ après un `git pull`). La fenêtre 1 doit rester lancée : le site interroge l'A
 
 > 💡 **Sans rien installer** : `python apps/web/preview/build_interactive.py` génère un fichier
 > autonome `apps/web/preview/interactive.html` à ouvrir directement (aucune des 2 fenêtres requise).
+
+## 🌐 Site en ligne gratuit (GitHub Pages + PWA)
+
+Le **vrai front Next.js** (parité `make start`) est publié en statique sur **GitHub Pages**, reconstruit
+chaque jour ouvré (cron) **et** à chaque push sur `main` par GitHub Actions (`.github/workflows/pages.yml`),
+avec des **données réelles** récupérées gratuitement dans le cloud (yfinance / SEC EDGAR). **Mac éteint, 0 €.**
+
+- **URL** : `https://<ton-compte>.github.io/Screening-Trading/` (ex. `https://7noctis7.github.io/Screening-Trading/`).
+- **Activer (1 fois)** : *Settings → Pages → Source = **GitHub Actions***. Le dépôt doit être **public**
+  (les fichiers sensibles `.env`/`*.db` sont gitignorés → rien de privé n'est publié ; le build CI n'a
+  **pas** tes clés courtier, donc tes positions réelles **n'apparaissent jamais** sur le site public).
+- **Univers borné** : la PWA en ligne couvre `config/mobile_universe.csv` = **watchlist fixe + top 200 par note**
+  (généré par `make watchlist`), pour un site léger et rapide sur téléphone. En local, aucun bridage.
+- **Détails / dépannage** : [`docs/DEPLOY.md`](docs/DEPLOY.md).
+
+> 📵 **Positions réelles en privé** : le site public ne montre pas tes comptes. Pour voir Alpaca/Bitmart,
+> lance en **local** (`make start` avec ton `.env`) — jamais sur l'URL publique.
+
+**Construire / prévisualiser le site statique en local** (même rendu qu'en ligne) :
+```bash
+make site         # watchlist + top 200 → données figées → export Next.js → http://localhost:8080
+make site-lite    # variante LÉGÈRE sans Node (terminal autonome interactive.html)
+make watchlist    # (re)génère config/mobile_universe.csv (watchlist + top 200) + miroir Obsidian
+```
 
 ## 📈 Brancher VOS données réelles (yfinance / FMP / YAHOO.db)
 

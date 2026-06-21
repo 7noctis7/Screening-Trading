@@ -1,5 +1,31 @@
 # 04 — JOURNAL
 
+## Session 2026-06-21 — Mise en ligne GRATUITE (PWA mobile) + durcissement
+**Fait.**
+- **Déploiement GitHub Pages + Actions** (`.github/workflows/pages.yml`) : vrai front Next.js statique
+  (parité `make start`) reconstruit chaque jour ouvré + à chaque push `main`, **données réelles** dans le
+  cloud (yfinance/SEC). URL : `https://7noctis7.github.io/Screening-Trading/`. Mac éteint, 0 €.
+- **Pipeline statique** : `scripts/dump_static.py` (fige `/api/*` en JSON + notes HTML) →
+  `scripts/build_static_site.py` (export Next.js `output:export` → `site/`). Commandes `make site` /
+  `site-lite` / `watchlist`. Univers borné `config/mobile_universe.csv` (watchlist fixe + top 200).
+- **Bugs CI corrigés** (verts en local, cassés en ligne) :
+  - lockfile `apps/web/package-lock.json` dé-ignoré et versionné (cache npm + `npm ci`).
+  - `real_macro_store` : alignement défensif valeurs↔dates (l'indice réel est plus long que le calendrier
+    univers en CI) → fin de l'`IndexError` qui plantait tout le snapshot (site déployé sans données).
+  - `dump_static` : `_clean()` NaN/Inf → `null` (sinon JSON invalide → pages bloquées en chargement, ex.
+    Fondamentaux). `build_static_site` aborte si le dump échoue (plus de déploiement « vert mais vide »).
+  - `ingest_crypto` : base normalisée `BTC-USD → BTC` (fin du `BTC-USD-USD` 404).
+  - Historique CI **depuis 2015** (`--since 2015-01-01`, `QUANT_HISTORY_DAYS=4015`) au lieu de 18 mois.
+- **UI/UX mobile (Apple)** : nav en **tiroir** rendu par portail (échappe au `backdrop-filter` qui
+  l'écrasait), safe-area iPhone, anti-débordement horizontal, thème clair plus lisible (décor atténué),
+  heatmap de corrélation scrollable. Liens notes corrigés en statique.
+- **Sécurité (repo public)** : audit OK — aucun secret/clé/`.env`/`.db` traqué, historique propre, tout
+  gitignoré. Username macOS neutralisé dans les chemins d'exemple.
+
+**Décidé.** Le site **public** ne reçoit jamais les clés courtier → positions réelles **local-only**
+(confidentialité). Renommage compte GitHub → l'URL Pages suit (pas de hardcode), mais ne pas renommer
+pendant un run (jeton OIDC invalidé).
+
 ## Session 2026-06-20 — Notes d'analyse institutionnelles (PwC / Citadel / Apple)
 **Fait.**
 - **Note d'analyse par société** (HTML + PDF reportlab/weasyprint, thème clair/sombre, design Apple) :
