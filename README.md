@@ -31,6 +31,10 @@ backtest VaR, ACP, budget de risque, limites, stress, allocation HRP/ERC, multi-
 > 📱 **Installable (PWA)** : la preview génère `manifest.webmanifest` + `sw.js` → « Ajouter à
 > l'écran d'accueil » sur téléphone = vraie app, utilisable **hors-ligne**. ⌘K · mode live · thème clair/sombre.
 > 🤗 **Démo publique gratuite** : déployable en un Space HuggingFace (`deploy/hf_space/`).
+> 🌐📱 **En ligne & sur téléphone, GRATUIT, données réelles, sans PC allumé** : GitHub Pages +
+> Actions construit la PWA chaque nuit avec des **données réelles** récupérées dans le cloud
+> (yfinance / SEC EDGAR). Activer : *Settings → Pages → Source = GitHub Actions*. Détails :
+> [`docs/DEPLOY.md`](docs/DEPLOY.md).
 
 - **Stratégie de production** : **50 % QQQ (cœur indiciel) + 50 % preset** (qualité top‑30 →
   risk‑parity ERC → DD‑target → blackout résultats → no‑trade band → cap 10 %), capital de base
