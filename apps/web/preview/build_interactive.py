@@ -1115,16 +1115,16 @@ _MANIFEST = {
     "description": "Terminal quant : screening & trading systématique multi-actifs.",
     "icons": [{"src": _ICON, "sizes": "512x512", "type": "image/svg+xml", "purpose": "any maskable"}],
 }
-# Cache-first sur la coquille → ouverture instantanée + usage hors-ligne sur téléphone.
-_SW = """const C='quant-terminal-v1';const A=['interactive.html','manifest.webmanifest'];
-self.addEventListener('install',e=>{self.skipWaiting();
-  e.waitUntil(caches.open(C).then(c=>c.addAll(A).catch(()=>{})));});
+# NETWORK-FIRST + cache VERSIONNÉ par build (__SWVER__) : toujours la dernière version en ligne,
+# usage hors-ligne conservé. Évite le piège « je revois une ancienne version » (cache figé).
+_SW = """const C='quant-terminal-__SWVER__';
+self.addEventListener('install',e=>{self.skipWaiting();});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>
-  Promise.all(ks.filter(k=>k!==C).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
+  Promise.all(ks.map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
 self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;
-  e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(resp=>{
+  e.respondWith(fetch(e.request).then(resp=>{
     const cp=resp.clone();caches.open(C).then(c=>c.put(e.request,cp).catch(()=>{}));return resp;
-  }).catch(()=>caches.match('interactive.html'))));});
+  }).catch(()=>caches.match(e.request).then(r=>r||caches.match('interactive.html'))));});
 """
 
 
@@ -1139,7 +1139,10 @@ if __name__ == "__main__":
     html, meta = build()
     out.write_text(html, encoding="utf-8")
     (here / "manifest.webmanifest").write_text(json.dumps(_MANIFEST, ensure_ascii=False), encoding="utf-8")
-    (here / "sw.js").write_text(_SW, encoding="utf-8")
+    # version du cache = horodatage du build → invalide automatiquement l'ancienne PWA
+    import re as _re, time as _time
+    swver = _re.sub(r"[^0-9]", "", str(meta.get("generated_at") or "")) or str(int(_time.time()))
+    (here / "sw.js").write_text(_SW.replace("__SWVER__", swver), encoding="utf-8")
     print(f"écrit : {out}  (+ manifest.webmanifest, sw.js — PWA installable)")
     print(f"  → MODE DES DONNÉES : {meta.get('mode')}   "
           f"(univers {meta.get('universe_size')} · tradés {meta.get('traded_assets')})")
