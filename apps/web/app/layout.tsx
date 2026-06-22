@@ -6,6 +6,8 @@ import { ParticlesBg } from "@/components/ParticlesBg";
 export const metadata = {
   title: "Quant Terminal",
   description: "Screening & trading multi-actifs",
+  manifest: "/manifest.webmanifest",
+  icons: { icon: "/favicon-32.png", shortcut: "/favicon.ico", apple: "/apple-touch-icon.png" },
   appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Quant Terminal" },
 };
 
