@@ -3,6 +3,39 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+## 🎯 SPRINT « ALPHA / CALMAR » — à démarrer (2026-06-24)
+> Objectif : **Calmar 0.17 → 0.6-0.9** en **divisant le Max DD par 2** + alpha honnête.
+> Cible code : `packages/backtest/preset_backtest.py` (cœur de la stratégie de production).
+> ✅ déjà fait : réplication idempotente **anti-levier** (`run_live.py`, réconciliation au delta).
+
+### 🔴 P0 — Réduire le Max DD (le plus gros levier sur le Calmar)
+- [ ] **#6 Coupe-circuit drawdown (CPPI)** : suivre DD depuis le pic ; `dd<-10%→gross×0.5`, `dd<-15%→gross×0` (ré-arme à la reprise). `preset_backtest.py` boucle `for t`.
+- [ ] **#5 Porte de régime sur le gross** : plein risque si `^NDX>MM200 & pente>0` ; 0.6 en distribution ; 0.2 sous MM200. (`packages/regime/` + passer la courbe NDX au backtest.)
+- [ ] **#3 Covariance Ledoit-Wolf** dans `_cov_annual` (`preset_backtest.py:27`) — utiliser `packages.data.engine.ledoit_wolf_shrinkage` (déjà dispo) au lieu de `np.cov` brut.
+- [ ] **#9 Rebalancement déclenché par la vol** : rebal si `|Δσ|/σ>25%` ou dérive>band (au lieu de `step=21` fixe).
+
+### 🟠 P1 — Booster l'alpha (sans β subi)
+- [ ] **#1 Anti cash-drag** : `preset_backtest.py:71` `gross=min(1,tgt_vol/pv)` → `clip(tgt_vol/pv,0,GROSS_MAX≈1.5)`, `tgt_vol≈0.15`.
+- [ ] **#4 Tilt momentum sur ERC** : `w ∝ w_erc × max(0,mom_12m)^γ` (renormalisé) — l'ERC pur étouffe les leaders (NVDA…).
+- [ ] **#7 Sizing demi-Kelly bridé** : `f=0.5·μ/σ²`, clip `[0,max_w]`, renormalisé sur le gross.
+- [ ] **#8 Gate breadth cross-asset** : `gross×clip(%univers>MM200 / 0.5, 0, 1)`.
+
+### 🟢 Anti-overfitting (OBLIGATOIRE — rigueur López de Prado)
+- [ ] **#2 CRITIQUE — fuite de données** : `preset_backtest.py:46-48` le tilt qualité utilise le score fondamental **actuel** sur tout l'historique (look-ahead + survivorship). → qualité **point-in-time** (vintages) OU univers **prix-only** (momentum 12-1). *Le 6.9 % d'alpha est probablement surestimé tant que ce n'est pas corrigé.*
+- [ ] **#10 Gate DSR/PBO** sur `make calibrate-preset` : n'accepter des params que si **DSR>0 & PBO<0.5** (purged CV — briques `packages/ml` + `portfolio/psr.py`).
+
+### ⚙️ Opérationnel (rapide, côté utilisateur)
+- [ ] **Reset Alpaca paper + 1 seul `make live-go`** → annule le levier ~1,85× actuel.
+- [ ] **Ménage disque macOS** (Data volume ~12 Go libres) : `prediction-market-analysis` 50 Go, `Desktop` 21 Go, `Library` 16 Go.
+- [ ] Plugins Obsidian : **Smart Connections** + **Obsidian Git** (si pas encore activés).
+- [ ] (Optionnel) Supabase : créer projet + table `daily_kpis` → `make supabase-kpis`.
+
+### 📐 Méthode (chaque amélioration)
+1. coder dans `preset_backtest.py` derrière un **flag** (comparer avant/après) ;
+2. `make backtest-preset` + `make calibrate-preset` → vérifier **Calmar ↑ & MaxDD ↓** ;
+3. **walk-forward OOS** (pas d'overfitting) ; 4. test pytest ; 5. PR → merge.
+> Trio recommandé pour commencer : **#6 + #5 + #3** (attaque directe du Calmar), 1 PR testée.
+
 ## ✅ Fait
 - [x] **S13** Excellence op (drift PSI, audit trail, télémétrie, backup, tear sheets HTML/PDF)
 - [x] **S12** Alertes multi-canal (moteur/sinks/throttle/handlers event-bus)
