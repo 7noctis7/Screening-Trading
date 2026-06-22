@@ -28,25 +28,22 @@ def _watchlist() -> list[str] | None:
 
 
 def validate_rows(rows: list[dict]) -> list[str]:
-    """Renvoie la liste des violations d'intégrité (vide = OK). Tolère les champs OHLC manquants
-    (None) — on ne contrôle QUE ce qui est présent (la complétude est gérée par data_audit)."""
+    """Renvoie les violations d'INTÉGRITÉ LOGIQUE (vide = OK). On ne signale QUE l'impossible :
+    prix présent ≤ 0, high < low, volume < 0, symbole/date manquant. Une valeur ABSENTE (close None
+    = trou de données) n'est PAS une violation (gérée par data_audit/complétude). Les écarts OHLC
+    fins (low>min(open,close)) viennent des prix ajustés → tolérés (bruit, non bloquant)."""
     bad: list[str] = []
     for r in rows:
         sym, d = r.get("symbol"), (r.get("date") or r.get("ts"))
-        o, h, l, c = r.get("open"), r.get("high"), r.get("low"), r.get("close")
-        v = r.get("volume")
+        h, l, c, v = r.get("high"), r.get("low"), r.get("close"), r.get("volume")
         tag = f"{sym}@{d}"
         if not sym or not d:
             bad.append(f"{tag}: symbole/date manquant"); continue
-        if c is None or c <= 0:
-            bad.append(f"{tag}: close invalide ({c})")
-        if h is not None and l is not None and h < l:
+        if c is not None and c <= 0:                       # prix présent mais ≤ 0 = impossible
+            bad.append(f"{tag}: close ≤ 0 ({c})")
+        if h is not None and l is not None and h < l:      # high < low = impossible
             bad.append(f"{tag}: high<low ({h}<{l})")
-        if h is not None and c is not None and o is not None and h < max(o, c):
-            bad.append(f"{tag}: high<max(open,close)")
-        if l is not None and c is not None and o is not None and l > min(o, c):
-            bad.append(f"{tag}: low>min(open,close)")
-        if v is not None and v < 0:
+        if v is not None and v < 0:                        # volume négatif = impossible
             bad.append(f"{tag}: volume<0 ({v})")
     return bad
 

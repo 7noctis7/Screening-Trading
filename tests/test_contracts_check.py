@@ -21,3 +21,17 @@ def test_tolerates_missing_ohlc_fields():
     # seules les colonnes présentes sont contrôlées (close valide ici) → pas de violation
     rows = [{"symbol": "A", "ts": "2026-06-20", "close": 12.0}]
     assert validate_rows(rows) == []
+
+
+def test_missing_close_is_not_a_violation():
+    # close=None = trou de données (complétude), PAS une contradiction → toléré par le gate
+    rows = [{"symbol": "A", "date": "2026-06-18", "open": None, "high": None,
+             "low": None, "close": None, "volume": None}]
+    assert validate_rows(rows) == []
+
+
+def test_adjusted_price_ohlc_noise_tolerated():
+    # low>min(open,close) (artefact prix ajustés) ne doit PAS bloquer
+    rows = [{"symbol": "ABBV", "date": "2026-06-22", "open": 10, "high": 11,
+             "low": 10.5, "close": 10.2, "volume": 100}]
+    assert validate_rows(rows) == []
