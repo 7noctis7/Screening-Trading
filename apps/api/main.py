@@ -770,9 +770,7 @@ def _enrich_ai_memo(report: dict) -> None:
     if os.environ.get("QUANT_NO_LLM") == "1":      # builds batch (site/CI) : pas d'appel LLM (évite les blocages)
         return
     try:
-        from packages.llm import available, complete
-        if not available():
-            return
+        from packages.llm import smart_text
         idy, sc = report.get("identity", {}), report.get("score", {})
         v = report.get("verdict", {})
         facts = (f"Société: {idy.get('name')} ({idy.get('symbol')}), secteur {idy.get('sector')}. "
@@ -782,11 +780,11 @@ def _enrich_ai_memo(report: dict) -> None:
                  f"{report.get('vernimmen',{}).get('wacc')}. DCF base marge de sécurité "
                  f"{report.get('damodaran',{}).get('dcf',{}).get('margin_of_safety')}. "
                  f"Forces: {', '.join(v.get('strengths', [])[:3])}. Vigilance: {', '.join(v.get('watch', [])[:3])}.")
-        memo = complete(
+        # Tâche SIMPLE (synthèse) → routeur FinOps : Gemma local (gratuit) d'abord, repli LM Studio.
+        memo = smart_text(
             "Rédige une synthèse d'investisseur en 3 phrases maximum, factuelle et nuancée, à partir "
             "de ces données. Pas de conseil financier explicite.\n\n" + facts,
-            system="Tu es un analyste financier senior (style Damodaran/Vernimmen). Concis, précis, français.",
-            temperature=0.3)
+            system="Tu es un analyste financier senior (style Damodaran/Vernimmen). Concis, précis, français.")
         if memo and len(memo.strip()) > 30:
             report["memo"] = memo.strip()
             report["memo_source"] = "IA locale"
