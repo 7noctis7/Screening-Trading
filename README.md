@@ -181,9 +181,15 @@ make api
 **Fenêtre 2 — le front (site Next.js)** → l'interface sur `http://localhost:3000`
 ```bash
 cd ~/Screening-Trading/apps/web
-npm install     # la 1ʳᵉ fois seulement
+rm -rf .next        # ⚠️ obligatoire si tu viens de lancer `make site` (build statique incompatible avec dev)
+npm install         # la 1ʳᵉ fois seulement
 npm run dev
 ```
+
+> ⚠️ **Piège `localhost:3000` (`Cannot find module './682.js'` / `/_document`)** : `make site` laisse
+> `apps/web/.next` en **mode export statique**, que `next dev` ne sait pas relire. **Solution** :
+> `cd apps/web && rm -rf .next && npm run dev`. Règle : un `rm -rf .next` à chaque bascule
+> `make site` (statique :8080) ↔ `npm run dev` (dynamique :3000).
 
 Puis ouvre **`http://localhost:3000`** dans ton navigateur (`Cmd+Shift+R` pour forcer le rechargement
 après un `git pull`). La fenêtre 1 doit rester lancée : le site interroge l'API en continu.

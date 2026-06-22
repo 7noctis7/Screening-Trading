@@ -52,6 +52,8 @@ reconstruit chaque jour ouvré par GitHub Actions (`.github/workflows/pages.yml`
 - `real_macro_store` aligne valeurs↔dates (l'indice réel est plus long que le calendrier univers en CI).
 - Historique CI **depuis 2015** (`QUANT_HISTORY_DAYS=4015`, ingest `--since 2015-01-01`).
 - `pickle` chargé uniquement via `packages/common/safe_pickle` (anti-symlink + hash).
+- **Dev `localhost:3000`** : après un `make site` (build export), faire `cd apps/web && rm -rf .next && npm run dev`
+  (sinon `Cannot find module './682.js'` / `/_document` — le `.next` export n'est pas relisible par `next dev`).
 
 ## Sécurité (acquis)
 CORS API verrouillé sur localhost (`QUANT_CORS_ORIGINS` pour élargir) · webhook protégé
