@@ -28,7 +28,9 @@ reconstruit chaque jour ouvré par GitHub Actions (`.github/workflows/pages.yml`
 | `make site` | build du site statique mobile (watchlist + top 200 → `localhost:8080`) |
 | `make watchlist` | régénère `config/mobile_universe.csv` + miroir Obsidian |
 | `make reports` | notes d'analyse institutionnelles → `out/notes/` + vault |
-| `make audit` | audit PwC des bases de prix |
+| `make audit` | audit PwC des bases de prix (gate CI : `--strict`) |
+| `make brief` | brief unifié (priorités + journal + diffs + audit) — démarrage de session |
+| `make vault-search Q="..."` | recherche sémantique locale du vault (TF-IDF ; Ollama optionnel) |
 
 ## GARDE-FOUS (ne jamais enfreindre)
 - **Paper par défaut.** Aucun ordre réel sans `--live --yes` **ET** clés API présentes.

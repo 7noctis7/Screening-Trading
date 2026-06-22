@@ -33,6 +33,9 @@ node_modules/
 .DS_Store
 *~
 
+# brief unifié généré (make brief --write)
+vault/_BRIEF.md
+
 # artefact généré (régénéré via make interactive)
 apps/web/preview/interactive.html
 apps/web/preview/manifest.webmanifest
