@@ -124,9 +124,11 @@ def _ollama_embed(texts: list[str]) -> list[list[float]] | None:
         import urllib.request
         out = []
         for t in texts:
+            # borne la longueur : nomic-embed plafonne à ~2048 tokens (~5k car.). On tronque à
+            # 4000 car. (< limite) pour ne PAS faire échouer l'embedding (sinon repli TF-IDF global).
             req = urllib.request.Request(
                 f"{host}/api/embeddings",
-                data=json.dumps({"model": model, "prompt": t[:8000]}).encode(),
+                data=json.dumps({"model": model, "prompt": t[:4000]}).encode(),
                 headers={"Content-Type": "application/json"})
             with urllib.request.urlopen(req, timeout=20) as r:  # noqa: S310 — hôte local
                 out.append(json.loads(r.read())["embedding"])
