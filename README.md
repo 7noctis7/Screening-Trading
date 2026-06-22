@@ -117,6 +117,14 @@ backtest ↔ paper ↔ live (parité). Diagrammes vivants : [`vault/01_ARCHITECT
 > garde-fous). Skills prêts à l'emploi dans `.claude/commands/` : `/deploy`, `/audit-secrets`,
 > `/company-note`. La mémoire long-terme vit dans `vault/` (Obsidian) + miroir Notion.
 
+### 🧠 Utiliser le vault Obsidian
+Ouvrir le dossier **`vault/`** comme vault (Open folder as vault) ; **`vault/00_INDEX.md`** est le
+tableau de bord (liens cliquables + raccourcis). **Rituel** : lire `00_INDEX → 01_ARCHITECTURE →
+04_JOURNAL (3 dernières) → 03_TODO` *avant*, puis maj `03_TODO` + entrée datée `04_JOURNAL` *après*.
+Les fichiers **auto-générés** (`Performance_Report.md`, `04_Companies/`, `_TOP200.md`) ne s'éditent
+pas à la main — ils sont (re)produits par `make analytics` / `reports` / `watchlist` / `vault-sync`
+(ou le cron). Détails pas-à-pas : note Notion « Comment utiliser Obsidian ».
+
 ---
 
 ## 🚀 Démarrage
