@@ -39,6 +39,12 @@ Priorités : robustesse > maintenabilité > gestion du risque > recherche d'alph
 | | `04_Companies/_TOP200.md` | `make watchlist` |
 | | journal du jour · attribution · post-mortems | `make vault-sync` |
 
+## 💻 Lancer en local
+- **Site statique (= en ligne)** → `make site` → http://localhost:8080
+- **Terminal dynamique (données live)** → fenêtre 1 `make api` · fenêtre 2 :
+  `cd apps/web && rm -rf .next && npm run dev` → http://localhost:3000
+  > ⚠️ Le `rm -rf .next` est **obligatoire** après un `make site` (sinon `Cannot find module './682.js'`).
+
 ## ⌨️ Raccourcis Obsidian essentiels
 | Raccourci | Action |
 |---|---|
