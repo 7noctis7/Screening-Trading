@@ -30,7 +30,11 @@ reconstruit chaque jour ouvré par GitHub Actions (`.github/workflows/pages.yml`
 | `make reports` | notes d'analyse institutionnelles → `out/notes/` + vault |
 | `make audit` | audit PwC des bases de prix (gate CI : `--strict`) |
 | `make brief` | brief unifié (priorités + journal + diffs + audit) — démarrage de session |
-| `make vault-search Q="..."` | recherche sémantique locale du vault (TF-IDF ; Ollama optionnel) |
+| `make vault-search Q="..."` | recherche sémantique locale du vault (TF-IDF ; Ollama optionnel ; `--code`) |
+| `make contracts` | gate d'intégrité OHLCV (bloque l'impossible) — aussi en CI |
+| `make hf-push` / `hf-pull` | cache OHLCV souverain (HuggingFace, anti rate-limit yfinance) |
+| `make notion-sync` | miroir Obsidian → Notion |
+| `make supabase-kpis` | historique KPIs cloud (Supabase) |
 
 ## GARDE-FOUS (ne jamais enfreindre)
 - **Paper par défaut.** Aucun ordre réel sans `--live --yes` **ET** clés API présentes.
