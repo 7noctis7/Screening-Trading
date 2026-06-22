@@ -1,4 +1,4 @@
-.PHONY: install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto ingest-mktcap preset-report calibrate-preset screen-niche list-db live live-go clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search
+.PHONY: install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto ingest-mktcap preset-report calibrate-preset screen-niche list-db live live-go clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull
 # PYTHON : utilise AUTOMATIQUEMENT le venv s'il existe (.venv/bin/python), sinon python3 système.
 # Évite le piège « No module named numpy » quand le venv n'est pas activé. Surchargeable.
 PYTHON ?= $(shell [ -x .venv/bin/python ] && echo .venv/bin/python || echo python3)
@@ -112,5 +112,9 @@ brief:            ## brief unifié (priorités + journal + changements + audit) 
 	$(PYTHON) scripts/daily_brief.py $(ARGS)
 vault-search:     ## recherche sémantique locale du vault — make vault-search Q="ta question" (TF-IDF ; QUANT_EMBED=ollama)
 	$(PYTHON) scripts/vault_search.py search "$(Q)" -k $(or $(K),5)
+hf-push:          ## pousse le cache OHLCV (market+crypto) vers le dataset HuggingFace (HF_TOKEN requis)
+	$(PYTHON) scripts/hf_cache.py push $(ARGS)
+hf-pull:          ## reconstruit data/*.db depuis le cache HuggingFace public (sans token)
+	$(PYTHON) scripts/hf_cache.py pull $(ARGS)
 clean:
 	find . -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null; rm -rf out

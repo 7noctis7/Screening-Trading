@@ -65,11 +65,16 @@ jobs:
             echo "QUANT_UNIVERSE=${GITHUB_WORKSPACE}/config/mobile_universe.csv" >> "$GITHUB_ENV"
           fi
 
-      - name: Ingestion des prix RÉELS (yfinance — best-effort)
+      - name: Cache OHLCV depuis Hugging Face (public, sans token — socle reproductible)
+        run: |
+          # Repart d'un cache versionné → indépendant du rate-limit yfinance. No-op si dataset vide.
+          python scripts/hf_cache.py pull || true
+
+      - name: Ingestion des prix RÉELS (yfinance — top-up best-effort)
         env:
           QUANT_PRICE_DB: ${{ github.workspace }}/data/market.db
         run: |
-          # Historique long (depuis 2015) → le dashboard et les journaux remontent à ~2015, pas 18 mois.
+          # Complète le cache HF (historique 2015) ; idempotent (INSERT OR IGNORE).
           python scripts/ingest_prices.py --since 2015-01-01 || true
           python scripts/ingest_crypto.py --days 4015 || true
 
