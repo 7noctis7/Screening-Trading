@@ -28,4 +28,5 @@ python scripts/generate_reports.py || true                  # notes d'analyse (t
 python scripts/build_watchlist.py || true                   # top 200 + watchlist → config/mobile_universe.csv + Obsidian
 [ -n "${HF_TOKEN:-}" ] && python scripts/hf_cache.py push || true   # rafraîchit le cache OHLCV HF (si HF_TOKEN présent)
 [ -n "${NOTION_TOKEN:-}" ] && python scripts/notion_sync.py || true # miroir Obsidian→Notion (si NOTION_TOKEN présent)
+[ -n "${SUPABASE_URL:-}" ] && python scripts/kpi_to_supabase.py || true  # historique KPIs cloud (si Supabase configuré)
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] maj quotidienne — OK"
