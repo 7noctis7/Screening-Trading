@@ -86,6 +86,14 @@ jobs:
           # dur, remplacer par `--strict` (exit≠0 si anomalie CRITIQUE).
           python scripts/data_audit.py || true
 
+      - name: Gate contrats OHLCV (#10 — bloquant sur l'intégrité)
+        env:
+          QUANT_PRICE_DB: ${{ github.workspace }}/data/market.db
+        run: |
+          # Échoue le build si une barre viole l'intégrité (close≤0, high<low, volume<0…).
+          # Ne bloque PAS sur l'absence de données (gérée séparément) → safe vs rate-limit yfinance.
+          python scripts/contracts_check.py
+
       - name: Construire le site (front Next.js statique + données réelles)
         env:
           QUANT_PRICE_DB: ${{ github.workspace }}/data/market.db

@@ -52,6 +52,36 @@ def _chunks(vault: Path) -> list[dict]:
     return out
 
 
+def _code_chunks(roots: list[Path]) -> list[dict]:
+    """Découpe les .py par bloc top-level (def/class) → contexte ciblé pour Claude (#2, moins de tokens)."""
+    out: list[dict] = []
+    for root in roots:
+        if not root.exists():
+            continue
+        for f in sorted(root.rglob("*.py")):
+            if "__pycache__" in f.parts:
+                continue
+            rel = f.relative_to(ROOT).as_posix() if str(f).startswith(str(ROOT)) else f.name
+            try:
+                lines = f.read_text(encoding="utf-8").splitlines()
+            except Exception:  # noqa: BLE001
+                continue
+            heading, buf = f"{f.stem} (module)", []
+
+            def _flush():
+                txt = "\n".join(buf).strip()
+                if txt:
+                    out.append({"file": rel, "heading": heading, "text": txt})
+            for ln in lines:
+                if (ln.startswith("def ") or ln.startswith("class ")
+                        or ln.startswith("    def ")):                 # bloc top-level / méthode
+                    _flush(); heading = ln.strip().rstrip(":"); buf = [ln]
+                else:
+                    buf.append(ln)
+            _flush()
+    return out
+
+
 def _tfidf_vectors(chunks: list[dict]) -> tuple[list[dict], dict]:
     docs = [_tokens(c["text"] + " " + c["heading"]) for c in chunks]
     n = len(docs) or 1
@@ -105,8 +135,8 @@ def _ollama_embed(texts: list[str]) -> list[list[float]] | None:
         return None
 
 
-def search(query: str, vault: Path, k: int = 5) -> list[dict]:
-    chunks = _chunks(vault)
+def search(query: str, vault: Path, k: int = 5, code_roots: list[Path] | None = None) -> list[dict]:
+    chunks = _chunks(vault) + (_code_chunks(code_roots) if code_roots else [])
     if not chunks:
         return []
     use_ollama = os.environ.get("QUANT_EMBED", "tfidf").lower() == "ollama"
@@ -133,8 +163,10 @@ def main() -> int:
     s.add_argument("query")
     s.add_argument("-k", type=int, default=5)
     s.add_argument("--vault", default=str(ROOT / "vault"))
+    s.add_argument("--code", action="store_true", help="indexe aussi packages/ et scripts/ (.py)")
     a = ap.parse_args()
-    hits = search(a.query, Path(a.vault), a.k)
+    code_roots = [ROOT / "packages", ROOT / "scripts"] if a.code else None
+    hits = search(a.query, Path(a.vault), a.k, code_roots=code_roots)
     if not hits:
         print("(aucun résultat)"); return 0
     for h in hits:

@@ -21,9 +21,24 @@ from packages.data import hf_cache  # noqa: E402
 from packages.data.engine import read_prices_rows  # noqa: E402
 
 
+def _write_parquet(rows: list[dict], local) -> int:
+    """Écrit les lignes en Parquet. Polars (multi-thread, Arrow) si dispo, sinon pandas. Renvoie n."""
+    keep = ("symbol", "date", "open", "high", "low", "close", "volume")
+    norm = [{("date" if k == "ts" else k): v for k, v in r.items()} for r in rows]
+    try:
+        import polars as pl
+        df = pl.from_dicts(norm)
+        df.select([c for c in keep if c in df.columns]).write_parquet(str(local))
+        return df.height
+    except Exception:  # noqa: BLE001 — polars absent/erreur → repli pandas
+        import pandas as pd
+        df = pd.DataFrame(norm)
+        df[[c for c in keep if c in df.columns]].to_parquet(local, index=False)
+        return len(df)
+
+
 def _push(dbs: list[str], dataset_id: str, token: str | None) -> int:
     import os
-    import pandas as pd
     from huggingface_hub import HfApi
 
     token = token or os.environ.get("HF_TOKEN")
@@ -43,10 +58,8 @@ def _push(dbs: list[str], dataset_id: str, token: str | None) -> int:
         rows = read_prices_rows(db)
         if not rows:
             print(f"· {db} : base absente/vide — ignorée"); continue
-        df = pd.DataFrame(rows).rename(columns={"ts": "date"})
-        keep = [c for c in ("symbol", "date", "open", "high", "low", "close", "volume") if c in df.columns]
         local = cache / f"{db}.parquet"
-        df[keep].to_parquet(local, index=False)
+        n = _write_parquet(rows, local)
         try:
             api.upload_file(path_or_fileobj=str(local), path_in_repo=f"{db}.parquet",
                             repo_id=dataset_id, repo_type="dataset")
@@ -54,7 +67,7 @@ def _push(dbs: list[str], dataset_id: str, token: str | None) -> int:
             print(f"⛔ upload {db} refusé : {e}\n   → vérifie que le dataset '{dataset_id}' EXISTE "
                   f"(Public) et que ton token a WRITE dessus (fine-grained → selected repos).")
             continue
-        print(f"✓ {db}.parquet poussé ({len(df)} lignes) → {dataset_id}")
+        print(f"✓ {db}.parquet poussé ({n} lignes) → {dataset_id}")
         pushed += 1
     return 0 if pushed else 1
 
