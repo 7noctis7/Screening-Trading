@@ -59,6 +59,8 @@ class DBPriceProvider:
         self._long = None       # (table, symcol, datecol, {ohlc->col})
         self._norm = None       # (price_table, link_col, datecol, {ohlc}, {SYMBOLE->id})
         self._per_ticker = set()
+        self._bulk: dict[str, list[Bar]] | None = None   # cache vectorisé {symbole: [Bar]} (preload)
+        self._bulk_key: tuple | None = None              # (timeframe, start, end) du preload courant
         self._detect(table)
 
     def _columns(self, table: str) -> dict:
@@ -199,10 +201,56 @@ class DBPriceProvider:
         return (f'"{dat}",{col(o["open"])},{col(o["high"])},{col(o["low"])},'
                 f'{col(o["close"])},{col(o["volume"])}')
 
+    @staticmethod
+    def _mk_bar(symbol: str, timeframe: str, r) -> Bar | None:
+        """Construit un Bar depuis une ligne (date,open,high,low,close,volume). None si invalide."""
+        try:
+            cl_ = float(r[4])
+            if cl_ <= 0:
+                return None
+            op = float(r[1] if r[1] is not None else r[4])
+            hi = float(r[2] if r[2] is not None else r[4])
+            lo = float(r[3] if r[3] is not None else r[4])
+            vol = float(r[5]) if len(r) > 5 and r[5] is not None else 0.0
+            return Bar(symbol, timeframe, _parse_ts(r[0]), op, hi, lo, cl_, vol)
+        except (TypeError, ValueError):
+            return None
+
+    def preload(self, symbols: list[str], timeframe: str, start: datetime,
+                end: datetime | None = None) -> bool:
+        """Charge en UN scan vectorisé tout l'OHLCV des `symbols` (format LONG) → cache mémoire,
+        au lieu de N requêtes par symbole (gain latence Citadel). Best-effort : repli SQL si échec.
+        `fetch_ohlcv` sert ensuite depuis le cache pour la même fenêtre (timeframe, start, end)."""
+        if not self._long or not symbols:
+            return False
+        try:
+            t, sym, dat, o = self._long
+            s = start.strftime("%Y-%m-%d")
+            e = (end or datetime.now(timezone.utc)).strftime("%Y-%m-%d")
+            uniq = list(dict.fromkeys(symbols))
+            cache: dict[str, list[Bar]] = {}
+            for i in range(0, len(uniq), 900):                      # borne SQLite ~999 paramètres
+                chunk = uniq[i:i + 900]
+                ph = ",".join("?" * len(chunk))
+                q = (f'SELECT "{sym}" AS _s,{self._select(dat, o)} FROM "{t}" '
+                     f'WHERE "{sym}" IN ({ph}) AND "{dat}">=? AND "{dat}"<=? ORDER BY "{sym}","{dat}"')
+                for row in self._conn.execute(q, (*chunk, s, e)).fetchall():
+                    b = self._mk_bar(str(row[0]), timeframe, (row[1], row[2], row[3], row[4], row[5], row[6]))
+                    if b is not None:
+                        cache.setdefault(str(row[0]), []).append(b)
+            self._bulk, self._bulk_key = cache, (timeframe, s, e)
+            return True
+        except Exception:  # noqa: BLE001 — base illisible/verrouillée → repli SQL par symbole
+            self._bulk, self._bulk_key = None, None
+            return False
+
     def fetch_ohlcv(self, symbol: str, timeframe: str, start: datetime,
                     end: datetime | None = None) -> list[Bar]:
         end = end or datetime.now(timezone.utc)
         s, e = start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
+        # chemin rapide : sert depuis le cache vectorisé si la fenêtre correspond (cf. preload)
+        if self._bulk is not None and self._bulk_key == (timeframe, s, e):
+            return list(self._bulk.get(symbol, []))
         try:
             if self._long:
                 t, sym, dat, o = self._long
@@ -230,20 +278,7 @@ class DBPriceProvider:
                 return []
         except sqlite3.Error:
             return []
-        bars = []
-        for r in rows:
-            try:
-                ts = _parse_ts(r[0])
-                op = float(r[1] if r[1] is not None else r[4])
-                hi = float(r[2] if r[2] is not None else r[4])
-                lo = float(r[3] if r[3] is not None else r[4])
-                cl_ = float(r[4])
-                vol = float(r[5]) if len(r) > 5 and r[5] is not None else 0.0
-                if cl_ > 0:
-                    bars.append(Bar(symbol, timeframe, ts, op, hi, lo, cl_, vol))
-            except (TypeError, ValueError):
-                continue
-        return bars
+        return [b for r in rows if (b := self._mk_bar(symbol, timeframe, r)) is not None]
 
 
 def _parse_ts(v) -> datetime:

@@ -1247,6 +1247,20 @@ def _load_prices(instruments, sector_of, start, end, seed):
             prov_updates = _DBP(_upd_db)
         except Exception:  # noqa: BLE001
             prov_updates = None
+    # PRELOAD vectorisé (1 scan au lieu de N requêtes/symbole) : on précharge tout l'OHLCV des
+    # alias de l'univers dans chaque provider LONG. Best-effort — repli SQL par symbole si échec.
+    try:
+        _eq_aliases, _cx_aliases = [], []
+        for _m in instruments:
+            _ac = _m.get("asset_class", "equity")
+            (_cx_aliases if _ac == "crypto" else _eq_aliases).extend(_yahoo_aliases(_m["symbol"], _ac))
+        for _p in (prov_db, prov_updates):
+            if _p:
+                _p.preload(_eq_aliases, "1d", start, end)
+        if prov_crypto:
+            prov_crypto.preload(_cx_aliases, "1d", start, end)
+    except Exception:  # noqa: BLE001 — l'accélérateur ne doit jamais casser le chargement
+        pass
     for m in instruments:
         s = m["symbol"]
         ac_m = m.get("asset_class", "equity")
