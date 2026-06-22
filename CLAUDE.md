@@ -14,7 +14,7 @@ Priorités : robustesse > maintenabilité > gestion du risque > alpha > produit.
 2. Reformuler en 3 lignes : état du projet + prochaine priorité.
 3. Agir par petits incréments **testés**.
 4. **Clôturer** : maj `03_TODO`, entrée datée `04_JOURNAL`, ADR dans `02_DECISIONS` si choix
-   structurant, maj des diagrammes si l'archi change, miroir Notion, push.
+   structurant, maj des diagrammes si l'archi change, miroir Notion, push. → skill **`/close-session`**.
 
 ## En ligne (PWA gratuite)
 **https://7noctis7.github.io/Screening-Trading/** — front complet en statique, données réelles,

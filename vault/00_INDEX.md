@@ -19,12 +19,13 @@ Priorités : robustesse > maintenabilité > gestion du risque > recherche d'alph
 
 ## 🔁 Rituel de session (sans qu'on le redemande)
 > Auto-chargé : `CLAUDE.md` (racine du repo) rappelle ce rituel + les garde-fous à **chaque** session
-> Claude Code. Skills : `/deploy`, `/audit-secrets`, `/company-note` (dans `.claude/commands/`).
+> Claude Code. Skills : `/deploy`, `/audit-secrets`, `/company-note`, `/close-session` (dans `.claude/commands/`).
 1. **Avant** : [[00_INDEX]] → [[01_ARCHITECTURE]] (les 2 diagrammes) → [[04_JOURNAL]] (3 dernières) → [[03_TODO]].
 2. Reformuler en 3 lignes : où en est le projet, prochaine priorité (situer la tâche dans le schéma).
 3. **Pendant** : exécuter par petits incréments testés.
 4. **Après (clôture)** : maj [[03_TODO]], entrée datée [[04_JOURNAL]], log [[02_DECISIONS]] si choix
-   structurant, maj des diagrammes si l'archi a changé, miroir Notion, push.
+   structurant, maj des diagrammes si l'archi a changé, miroir Notion, push. → skill **`/close-session`**.
+   (En auto : le **cron** régénère chaque jour le journal/attribution/post-mortems via `make vault-sync`.)
 5. Laisser le projet reprenable par une autre instance (schéma à jour = garantie).
 
 ## ✍️ Ce que TU édites vs ce qui s'écrit TOUT SEUL

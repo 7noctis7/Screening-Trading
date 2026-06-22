@@ -115,7 +115,7 @@ backtest ↔ paper ↔ live (parité). Diagrammes vivants : [`vault/01_ARCHITECT
 
 > 🧠 **Contexte agent** : `CLAUDE.md` (racine) est auto-chargé par Claude Code (rituel mémoire +
 > garde-fous). Skills prêts à l'emploi dans `.claude/commands/` : `/deploy`, `/audit-secrets`,
-> `/company-note`. La mémoire long-terme vit dans `vault/` (Obsidian) + miroir Notion.
+> `/company-note`, `/close-session`. La mémoire long-terme vit dans `vault/` (Obsidian) + miroir Notion.
 
 ### 🧠 Utiliser le vault Obsidian
 Ouvrir le dossier **`vault/`** comme vault (Open folder as vault) ; **`vault/00_INDEX.md`** est le
