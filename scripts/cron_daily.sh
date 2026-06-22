@@ -26,4 +26,5 @@ python scripts/mcp_populate_overlays.py --offline || true   # cônes VaR/EVT + b
 python -m packages.reporting.obsidian || true               # coffre Obsidian : journal + attribution + post-mortems
 python scripts/generate_reports.py || true                  # notes d'analyse (top-conviction + positions) datées
 python scripts/build_watchlist.py || true                   # top 200 + watchlist → config/mobile_universe.csv + Obsidian
+[ -n "${HF_TOKEN:-}" ] && python scripts/hf_cache.py push || true   # rafraîchit le cache OHLCV HF (si HF_TOKEN présent)
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] maj quotidienne — OK"
