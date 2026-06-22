@@ -1,0 +1,49 @@
+{
+  "name": "TradingView → Quant Risk Engine",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "tradingview",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "tv-webhook",
+      "name": "TradingView Alert",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 300],
+      "webhookId": "tradingview-quant"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8000/api/tv/webhook",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Webhook-Token", "value": "={{ $env.QUANT_WEBHOOK_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body || $json) }}",
+        "options": { "timeout": 8000 }
+      },
+      "id": "fwd-risk",
+      "name": "→ Risk Engine (/api/tv/webhook)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [540, 300]
+    }
+  ],
+  "connections": {
+    "TradingView Alert": {
+      "main": [[ { "node": "→ Risk Engine (/api/tv/webhook)", "type": "main", "index": 0 } ]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "quant" }]
+}
