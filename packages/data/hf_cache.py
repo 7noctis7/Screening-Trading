@@ -46,7 +46,11 @@ def write_sqlite(rows, db_path: str | Path) -> int:
                 continue
             recs.append((sym, str(d)[:10], r.get("open"), r.get("high"),
                          r.get("low"), r.get("close"), r.get("volume")))
-        con.executemany("INSERT OR REPLACE INTO prices VALUES (?,?,?,?,?,?,?)", recs)
+        # colonnes nommées → compatible avec une table `prices` existante au schéma plus large
+        # (ex. colonne adj_close en plus) ; les colonnes non fournies prennent leur défaut/NULL.
+        con.executemany(
+            "INSERT OR REPLACE INTO prices (symbol,date,open,high,low,close,volume) "
+            "VALUES (?,?,?,?,?,?,?)", recs)
         con.commit()
         return len(recs)
     finally:

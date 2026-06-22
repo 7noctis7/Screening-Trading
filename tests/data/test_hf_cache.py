@@ -27,6 +27,20 @@ def test_write_sqlite_idempotent(tmp_path: Path):
     assert len(read_prices_rows(db)) == 1
 
 
+def test_write_sqlite_into_existing_wider_table(tmp_path: Path):
+    import sqlite3
+    db = tmp_path / "market.db"
+    con = sqlite3.connect(db)                   # table préexistante avec une colonne EN PLUS (adj_close)
+    con.executescript(
+        "CREATE TABLE prices(symbol TEXT, date TEXT, open REAL, high REAL, low REAL, "
+        "close REAL, adj_close REAL, volume REAL, PRIMARY KEY(symbol,date));")
+    con.commit(); con.close()
+    n = write_sqlite([{"symbol": "AAPL", "date": "2026-06-20", "close": 1.5, "volume": 10}], db)
+    assert n == 1
+    back = read_prices_rows(db)
+    assert back and back[0]["symbol"] == "AAPL"
+
+
 def test_parquet_url_uses_dataset():
     url = parquet_url("market", "Noctis777/screening-trading-cache")
     assert url == ("https://huggingface.co/datasets/Noctis777/screening-trading-cache"
