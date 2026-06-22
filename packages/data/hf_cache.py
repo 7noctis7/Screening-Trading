@@ -15,6 +15,7 @@ import sqlite3
 from pathlib import Path
 
 DEFAULT_DATASET = "Noctis777/screening-trading-cache"
+_ROOT = Path(__file__).resolve().parents[2]
 
 _DDL = """CREATE TABLE IF NOT EXISTS prices(
   symbol TEXT NOT NULL, date TEXT NOT NULL,
@@ -55,6 +56,27 @@ def write_sqlite(rows, db_path: str | Path) -> int:
         return len(recs)
     finally:
         con.close()
+
+
+def momentum_ranking(days: int = 30, limit: int = 20, dataset_id: str | None = None,
+                     source: str | None = None) -> list[dict]:
+    """Top variations sur `days` jours via DuckDB (SQL colonnaire vectorisé, pushdown, multi-thread).
+    Lit `data/cache/market.parquet` si présent, sinon l'URL HF publique. [] si DuckDB/source indispo.
+    Démontre la couche analytique #5 (agrégats sans charger en RAM)."""
+    try:
+        import duckdb
+        src = source or str(_ROOT / "data" / "cache" / "market.parquet")
+        if source is None and not Path(src).exists():
+            src = parquet_url("market", dataset_id)
+        q = duckdb.sql(f"""
+            WITH p AS (SELECT symbol, CAST(date AS DATE) AS d, close FROM read_parquet('{src}'))
+            SELECT symbol, last(close ORDER BY d) / first(close ORDER BY d) - 1 AS ret
+            FROM p WHERE d >= (SELECT max(d) FROM p) - INTERVAL {int(days)} DAY
+            GROUP BY symbol HAVING count(*) > 1
+            ORDER BY ret DESC LIMIT {int(limit)}""")
+        return [dict(zip(q.columns, r)) for r in q.fetchall()]
+    except Exception:  # noqa: BLE001 — DuckDB absent / parquet injoignable → repli vide
+        return []
 
 
 def read_parquet_rows(name: str, dataset_id: str | None = None) -> list[dict]:
