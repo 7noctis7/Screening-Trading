@@ -30,7 +30,12 @@ def _push(dbs: list[str], dataset_id: str, token: str | None) -> int:
     if not token:
         print("⛔ HF_TOKEN absent (.env ou env). Pousse impossible."); return 1
     api = HfApi(token=token)
-    api.create_repo(repo_id=dataset_id, repo_type="dataset", exist_ok=True)
+    try:
+        # Best-effort : un token fine-grained limité à un repo peut écrire mais PAS créer.
+        api.create_repo(repo_id=dataset_id, repo_type="dataset", exist_ok=True)
+    except Exception as e:  # noqa: BLE001
+        print(f"· create_repo ignoré ({type(e).__name__}) — le dataset doit déjà exister "
+              f"(crée-le sur huggingface.co → New → Dataset → '{dataset_id}', Public).")
     cache = ROOT / "data" / "cache"
     cache.mkdir(parents=True, exist_ok=True)
     pushed = 0
@@ -42,8 +47,13 @@ def _push(dbs: list[str], dataset_id: str, token: str | None) -> int:
         keep = [c for c in ("symbol", "date", "open", "high", "low", "close", "volume") if c in df.columns]
         local = cache / f"{db}.parquet"
         df[keep].to_parquet(local, index=False)
-        api.upload_file(path_or_fileobj=str(local), path_in_repo=f"{db}.parquet",
-                        repo_id=dataset_id, repo_type="dataset")
+        try:
+            api.upload_file(path_or_fileobj=str(local), path_in_repo=f"{db}.parquet",
+                            repo_id=dataset_id, repo_type="dataset")
+        except Exception as e:  # noqa: BLE001
+            print(f"⛔ upload {db} refusé : {e}\n   → vérifie que le dataset '{dataset_id}' EXISTE "
+                  f"(Public) et que ton token a WRITE dessus (fine-grained → selected repos).")
+            continue
         print(f"✓ {db}.parquet poussé ({len(df)} lignes) → {dataset_id}")
         pushed += 1
     return 0 if pushed else 1
