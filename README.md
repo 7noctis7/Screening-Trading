@@ -113,6 +113,10 @@ backtest ↔ paper ↔ live (parité). Diagrammes vivants : [`vault/01_ARCHITECT
 | `config/` | YAML (univers, facteurs, risque, macro…) |
 | `data/seed/` | Univers offline (CSV) · `scripts/` ETL & démos · `tests/` miroir · `vault/` mémoire |
 
+> 🧠 **Contexte agent** : `CLAUDE.md` (racine) est auto-chargé par Claude Code (rituel mémoire +
+> garde-fous). Skills prêts à l'emploi dans `.claude/commands/` : `/deploy`, `/audit-secrets`,
+> `/company-note`. La mémoire long-terme vit dans `vault/` (Obsidian) + miroir Notion.
+
 ---
 
 ## 🚀 Démarrage
