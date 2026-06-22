@@ -401,7 +401,13 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
             d["error"] = str(e)[:160]
         return d
 
-    a_d, b_d = _alpaca(), _bitmart()
+    # Interroge les DEUX brokers EN PARALLÈLE (threads — appels HTTP bloquants alpaca-py/ccxt) :
+    # réconciliation ~2× plus rapide quand les deux comptes sont connectés. Chaque _broker() est
+    # déjà isolé/try-except → non bloquant et sortie identique au mode série.
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=2) as _ex:
+        _fa, _fb = _ex.submit(_alpaca), _ex.submit(_bitmart)
+        a_d, b_d = _fa.result(), _fb.result()
     _real_trades = sorted((a_d.get("orders", []) + b_d.get("orders", [])),
                           key=lambda o: o.get("date", ""), reverse=True)
     _real_open = sorted((a_d.get("open_orders", []) + b_d.get("open_orders", [])),
