@@ -73,6 +73,14 @@ jobs:
           python scripts/ingest_prices.py --since 2015-01-01 || true
           python scripts/ingest_crypto.py --days 4015 || true
 
+      - name: Contrôle qualité des données (audit PwC — rapport visible)
+        env:
+          QUANT_PRICE_DB: ${{ github.workspace }}/data/market.db
+        run: |
+          # Rapport de complétude/exactitude/PIT. Non bloquant (yfinance flaky en CI) ; pour gater
+          # dur, remplacer par `--strict` (exit≠0 si anomalie CRITIQUE).
+          python scripts/data_audit.py || true
+
       - name: Construire le site (front Next.js statique + données réelles)
         env:
           QUANT_PRICE_DB: ${{ github.workspace }}/data/market.db
