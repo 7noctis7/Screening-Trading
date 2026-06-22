@@ -1,6 +1,6 @@
 # Quant Terminal — Screening & Trading systématique multi-actifs
 
-*Dernière mise à jour : 2026-06-21.*
+*Dernière mise à jour : 2026-06-23.*
 
 > 🌐📱 **EN LIGNE, GRATUIT, SUR TÉLÉPHONE, MAC ÉTEINT** : **https://7noctis7.github.io/Screening-Trading/**
 > — la PWA complète (vrai front Next.js) est reconstruite chaque jour ouvré par GitHub Actions avec des
@@ -124,6 +124,26 @@ tableau de bord (liens cliquables + raccourcis). **Rituel** : lire `00_INDEX →
 Les fichiers **auto-générés** (`Performance_Report.md`, `04_Companies/`, `_TOP200.md`) ne s'éditent
 pas à la main — ils sont (re)produits par `make analytics` / `reports` / `watchlist` / `vault-sync`
 (ou le cron). Détails pas-à-pas : note Notion « Comment utiliser Obsidian ».
+
+### 🧰 Stack locale gratuite & automatisation (« Mastermind 100 »)
+Améliorations **100 % open-source / gratuites**, sans dépendance payante :
+
+| Commande | Rôle | Brique gratuite |
+|---|---|---|
+| `make brief` | one-pager de session (priorités + journal + diffs + audit) | stdlib |
+| `make vault-search Q="…"` | recherche **sémantique** du vault (`--code` pour le code) | TF-IDF · Ollama `nomic-embed-text` |
+| `make contracts` | **gate** d'intégrité OHLCV (bloque l'impossible) — aussi en CI | stdlib/pandera |
+| `make hf-push` / `make hf-pull` | cache OHLCV **souverain** (anti rate-limit yfinance) | Hugging Face Dataset |
+| `make notion-sync` | miroir Obsidian → Notion | API Notion |
+| `make supabase-kpis` | historique KPIs cloud (cross-device) | Supabase free |
+
+- **FinOps IA** : `packages/llm` route les tâches simples vers un **LLM local** (Ollama, ex. `gemma3n:e4b`/`qwen2.5:3b`) → l'API payante n'est utilisée que pour le raisonnement complexe (`QUANT_LOCAL_LLM`).
+- **Perf** : hot-path prix **vectorisé** (1 scan au lieu de N), snapshot **incrémental** (mémoïsation par hash, `.cache/stages/`), brokers Alpaca∥Bitmart **en parallèle**, analytics **DuckDB** sur Parquet.
+- **Sécurité** : `gitleaks` (CI + pre-commit), CORS verrouillé, webhook signé, `safe_pickle` (anti-symlink + SHA-256). Audit dépôt public : propre.
+- **Event-driven** : workflow **n8n** prêt (`integrations/n8n/`) → `POST /api/tv/webhook` (veto risque, aucun ordre).
+- **Agent** : `CLAUDE.md` auto-chargé + skills `/deploy` `/audit-secrets` `/company-note` `/close-session` `/brief`.
+
+Clés optionnelles dans `.env` (cf. `.env.example`) : `OLLAMA_HOST`, `QUANT_LOCAL_LLM`, `QUANT_EMBED`, `HF_TOKEN`/`HF_DATASET`, `NOTION_TOKEN`/`NOTION_PARENT`, `SUPABASE_URL`/`SUPABASE_KEY`, `QUANT_WEBHOOK_TOKEN`. Tout est **best-effort** : absent → la fonctionnalité se désactive proprement.
 
 ---
 

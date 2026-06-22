@@ -1,5 +1,29 @@
 # 04 — JOURNAL
 
+## Session 2026-06-23 — « Mastermind 100 » : optimisations gratuites (FinOps/perf/data/auto)
+**Fait.** (toutes open-source, testées, mergées)
+- **FinOps IA** : `packages/llm/local.py` (`cheap_llm` Ollama + `smart_text` routeur) → tâches simples
+  sur LLM local gratuit (`QUANT_LOCAL_LLM`, ex. gemma3n:e4b/qwen2.5:3b), Claude réservé au complexe.
+  Corrigé un bug : `complete()` renvoie un dict → le mémo IA n'était jamais posé.
+- **RAG** : `scripts/vault_search.py` — embeddings denses Ollama (`QUANT_EMBED=ollama`,
+  `nomic-embed-text`) + indexation du **code** (`--code`). Texte tronqué 4000 car. (anti-overflow 2048).
+- **Perf** : hot-path prix **vectorisé** (preload 1 scan, `db_provider`), snapshot **incrémental**
+  (`packages/common/memo.py`, mémoïse multi_strategy + monte_carlo), brokers Alpaca∥Bitmart en
+  parallèle (ThreadPoolExecutor), analytics **DuckDB** sur Parquet (`hf_cache.momentum_ranking`),
+  push HF en **Polars**.
+- **Data souveraine** : cache OHLCV **Hugging Face** (`scripts/hf_cache.py`, push/pull) → CI lit le
+  cache avant yfinance (fini le rate-limit). Gate **contrats** OHLCV bloquant (`contracts_check.py`,
+  CI) — ne bloque que l'impossible (close≤0, high<low, vol<0), tolère trous & prix ajustés.
+- **Automatisation** : miroir **Notion** (`notion_sync.py`), KPIs **Supabase** (`kpi_to_supabase.py`),
+  workflow **n8n** TradingView→`/api/tv/webhook` (`integrations/n8n/`). Tous branchés au cron (best-effort).
+- **Agent** : `CLAUDE.md` enrichi (nouvelles commandes), skill `/brief`, RAG code.
+- **Robustesse tests** : `test_snapshot`/`test_local` rendus indépendants de l'environnement
+  (clés courtier présentes, LLM local actif, univers crypto réel `-USD`).
+
+**Décidé.** Tout est **best-effort** : chaque intégration (Ollama, HF, Notion, Supabase, n8n) se
+désactive proprement si la clé/le service est absent → jamais bloquant. n8n n'a de valeur qu'avec un
+tunnel public (TradingView cloud) → le webhook reste testable en local via `curl`.
+
 ## Session 2026-06-21 — Mise en ligne GRATUITE (PWA mobile) + durcissement
 **Fait.**
 - **Déploiement GitHub Pages + Actions** (`.github/workflows/pages.yml`) : vrai front Next.js statique
