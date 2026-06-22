@@ -74,12 +74,13 @@ def test_snapshot_dates_and_themes():
 
 
 def test_universe_has_us_equities_and_usdc():
-    """L'univers offline inclut des actions US (PLTR cherchable) et les cryptos en USDC."""
+    """L'univers inclut des actions US (PLTR cherchable) et des cryptos en USD (jamais USDT)."""
     uni = _snap()["universe"]
     syms = {i["symbol"] for i in uni["instruments"]}
     assert "PLTR" in syms and "NVDA" in syms          # actions US présentes
     crypto = [i["symbol"] for i in uni["instruments"] if i["asset_class"] == "crypto"]
-    assert crypto and all("/USDC" in s for s in crypto)   # paires en USDC, plus d'USDT
+    # cotées en USD : seed offline (/USDC) OU univers réel yfinance (-USD) — jamais USDT.
+    assert crypto and all(("/USDC" in s) or s.endswith("-USD") for s in crypto)
     assert not any("/USDT" in s for s in syms)
 
 
@@ -101,7 +102,12 @@ def test_vix_playbook_and_live():
     assert d["vix_playbook"]["exposure"] in {1.2, 1.0, 0.6, 0.3}
     live = snap["live"]
     assert {b["name"] for b in live["brokers"]} == {"Alpaca", "Bitmart"}
-    assert live["mode"] == "paper" and live["connected"] is False   # pas de clés → non connecté
+    assert live["mode"] == "paper"
+    # « non connecté » garanti UNIQUEMENT sans clés (CI). Si des clés sont présentes (machine
+    # configurée), l'état dépend du broker/réseau → on n'assert pas.
+    import os as _os
+    if not (_os.environ.get("ALPACA_API_KEY") or _os.environ.get("BITMART_API_KEY")):
+        assert live["connected"] is False
     # projection Monte-Carlo : bandes de percentiles ordonnées
     mp = snap["portfolio"]["analysis"]["mc_projection"]
     assert mp["final_p5"] <= mp["final_p50"] <= mp["final_p95"]
