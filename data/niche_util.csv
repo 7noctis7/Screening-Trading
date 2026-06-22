@@ -1,0 +1,41 @@
+symbol,name,asset_class,venue,currency,sector
+AEE,Ameren Corporation,equity,,USD,Utilities
+AEP,American Electric Power Company,equity,,USD,Utilities
+AES,The AES Corporation,equity,,USD,Utilities
+ATO,Atmos Energy Corporation,equity,,USD,Utilities
+AWK,"American Water Works Company, I",equity,,USD,Utilities
+CEG,Constellation Energy Corporatio,equity,,USD,Utilities
+CMS,CMS Energy Corporation,equity,,USD,Utilities
+CNP,"CenterPoint Energy, Inc (Holdin",equity,,USD,Utilities
+D,"Dominion Energy, Inc.",equity,,USD,Utilities
+DTE,DTE Energy Company,equity,,USD,Utilities
+DUK,Duke Energy Corporation (Holdin,equity,,USD,Utilities
+ED,"Consolidated Edison, Inc.",equity,,USD,Utilities
+EIX,Edison International,equity,,USD,Utilities
+ES,Eversource Energy (D/B/A),equity,,USD,Utilities
+ETR,Entergy Corporation,equity,,USD,Utilities
+EVRG,"Evergy, Inc.",equity,,USD,Utilities
+EXC,Exelon Corporation,equity,,USD,Utilities
+FE,FirstEnergy Corp.,equity,,USD,Utilities
+LNT,Alliant Energy Corporation,equity,,USD,Utilities
+NEE,"NextEra Energy, Inc.",equity,,USD,Utilities
+NI,NiSource Inc,equity,,USD,Utilities
+NRG,"NRG Energy, Inc.",equity,,USD,Utilities
+PCG,Pacific Gas & Electric Co.,equity,,USD,Utilities
+PEG,Public Service Enterprise Group,equity,,USD,Utilities
+PNW,Pinnacle West Capital Corporati,equity,,USD,Utilities
+PPL,PPL Corporation,equity,,USD,Utilities
+SO,Southern Company (The),equity,,USD,Utilities
+SRE,DBA Sempra,equity,,USD,Utilities
+WEC,"WEC Energy Group, Inc.",equity,,USD,Utilities
+XEL,Xcel Energy Inc.,equity,,USD,Utilities
+ADN,"Advent Technologies Holdings, I",equity,,USD,Utilities
+ARTNA,Artesian Resources Corporation,equity,,USD,Utilities
+AY,Atlantica Sustainable Infrastru,equity,,USD,Utilities
+BNRG,Brenmiller Energy Ltd,equity,,USD,Utilities
+CDZI,"Cadiz, Inc.",equity,,USD,Utilities
+CDZIP,"Cadiz, Inc. - Depositary Shares",equity,,USD,Utilities
+CREG,Smart Powerr Corp.,equity,,USD,Utilities
+CWCO,Consolidated Water Co. Ltd.,equity,,USD,Utilities
+FLNC,"Fluence Energy, Inc.",equity,,USD,Utilities
+GWRS,"Global Water Resources, Inc.",equity,,USD,Utilities

@@ -1,0 +1,41 @@
+symbol,name,asset_class,venue,currency,sector
+AMT,American Tower Corporation (REI,equity,,USD,Real Estate
+ARE,Alexandria Real Estate Equities,equity,,USD,Real Estate
+AVB,"AvalonBay Communities, Inc.",equity,,USD,Real Estate
+BXP,"Boston Properties, Inc.",equity,,USD,Real Estate
+CBRE,CBRE Group Inc,equity,,USD,Real Estate
+CCI,Crown Castle Inc.,equity,,USD,Real Estate
+CPT,Camden Property Trust,equity,,USD,Real Estate
+CSGP,"CoStar Group, Inc.",equity,,USD,Real Estate
+DLR,"Digital Realty Trust, Inc.",equity,,USD,Real Estate
+EQIX,"Equinix, Inc.",equity,,USD,Real Estate
+EQR,Equity Residential,equity,,USD,Real Estate
+ESS,"Essex Property Trust, Inc.",equity,,USD,Real Estate
+EXR,Extra Space Storage Inc,equity,,USD,Real Estate
+FRT,Federal Realty Investment Trust,equity,,USD,Real Estate
+HST,Host Hotels,equity,,USD,Real Estate
+INVH,Invitation Homes Inc.,equity,,USD,Real Estate
+IRM,Iron Mountain Incorporated (Del,equity,,USD,Real Estate
+KIM,Kimco Realty Corporation,equity,,USD,Real Estate
+MAA,Mid-America Apartment Communiti,equity,,USD,Real Estate
+O,Realty Income Corporation,equity,,USD,Real Estate
+PLD,"Prologis, Inc.",equity,,USD,Real Estate
+PSA,Public Storage,equity,,USD,Real Estate
+REG,Regency Centers Corporation,equity,,USD,Real Estate
+SBAC,SBA Communications Corporation,equity,,USD,Real Estate
+SPG,"Simon Property Group, Inc.",equity,,USD,Real Estate
+UDR,"UDR, Inc.",equity,,USD,Real Estate
+VICI,VICI Properties Inc.,equity,,USD,Real Estate
+VNO,Vornado Realty Trust,equity,,USD,Real Estate
+VTR,"Ventas, Inc.",equity,,USD,Real Estate
+WELL,Welltower Inc.,equity,,USD,Real Estate
+WY,Weyerhaeuser Company,equity,,USD,Real Estate
+AEI,Alset Inc.,equity,,USD,Real Estate
+AFCG,"AFC Gamma, Inc.",equity,,USD,Real Estate
+AGNC,AGNC Investment Corp.,equity,,USD,Real Estate
+AGNCL,AGNC Investment Corp. - Deposit,equity,,USD,Real Estate
+AGNCM,AGNC Investment Corp. - Deposit,equity,,USD,Real Estate
+AGNCN,AGNC Investment Corp. - Deposit,equity,,USD,Real Estate
+AGNCO,AGNC Investment Corp. - Deposit,equity,,USD,Real Estate
+AGNCP,AGNC Investment Corp. - Deposit,equity,,USD,Real Estate
+ASPS,Altisource Portfolio Solutions ,equity,,USD,Real Estate

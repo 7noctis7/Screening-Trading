@@ -1,0 +1,251 @@
+{
+  "main": {
+    "id": "8aaa13f14a6f411d",
+    "type": "split",
+    "children": [
+      {
+        "id": "035f45708839644a",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "c7a2f27619a90b0b",
+            "type": "leaf",
+            "state": {
+              "type": "graph",
+              "state": {},
+              "icon": "lucide-git-fork",
+              "title": "Vue graphique"
+            }
+          },
+          {
+            "id": "003f703c782322aa",
+            "type": "leaf",
+            "state": {
+              "type": "smart-release-notes-view",
+              "state": {},
+              "icon": "file-text",
+              "title": "Release Notes"
+            }
+          },
+          {
+            "id": "720fb39489a03dc7",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "04_Companies/CLSK.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "CLSK"
+            }
+          }
+        ],
+        "currentTab": 2
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "23ea7d0166acefbf",
+    "type": "split",
+    "children": [
+      {
+        "id": "e610ec317e6aa4d1",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "f7d2fa1084fb4b1f",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Explorateur de fichiers"
+            }
+          },
+          {
+            "id": "8aa08516bd4693e6",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Rechercher"
+            }
+          },
+          {
+            "id": "f27a30aedb8e5fdc",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Signets"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "6f623db09f51a96f",
+    "type": "split",
+    "children": [
+      {
+        "id": "b168d42d4f4129b7",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "b4b569a64af2a6aa",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "04_Companies/CLSK.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Rétrolien pour CLSK"
+            }
+          },
+          {
+            "id": "8aa3e5f7120840b2",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "02_DECISIONS.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Liens sortants de 02_DECISIONS"
+            }
+          },
+          {
+            "id": "0a9ce8e5c76e6374",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Mots-clés"
+            }
+          },
+          {
+            "id": "601e97acba0dd550",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "Toutes les propriétés"
+            }
+          },
+          {
+            "id": "165a6f82643f4283",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "02_DECISIONS.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Plan de 02_DECISIONS"
+            }
+          },
+          {
+            "id": "23e8943eba6a7244",
+            "type": "leaf",
+            "state": {
+              "type": "smart-connections-view",
+              "state": {},
+              "icon": "smart-connections",
+              "title": "Connections"
+            }
+          }
+        ],
+        "currentTab": 5
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Ouvrir le sélecteur rapide": false,
+      "graph:Ouvrir la vue graphique": false,
+      "canvas:Créer une nouvelle toile": false,
+      "daily-notes:Ouvrir la note quotidienne": false,
+      "templates:Insérer le modèle": false,
+      "command-palette:Ouvrir la palette de commandes": false,
+      "bases:Créer une nouvelle base": false,
+      "smart-connections:Smart Connections: Open connections view": false,
+      "smart-connections:Toggle Footer Connections": false,
+      "smart-connections:Smart Connections: Open random connection": false,
+      "obsidian-git:Open Git source control": false
+    }
+  },
+  "active": "720fb39489a03dc7",
+  "lastOpenFiles": [
+    "ENPH.md",
+    "12_FACTORS.md",
+    "11_DESIGN_SYSTEM.md",
+    "10_BACKTEST_RESULTS.md",
+    "09_RESEARCH.md",
+    "08_DATA_MODEL.md",
+    "07_RISK_POLICY.md",
+    "04_JOURNAL.md",
+    "05_DATA_SOURCES.md",
+    "03_TODO.md",
+    "04_Companies/ABCL.md",
+    "04_Companies/_TOP200.md",
+    "03_Journal/2026-06-22.md",
+    "03_Journal/2026-06-20.md",
+    "_assets/equity_2026-06-22.svg",
+    "_assets/equity_2026-06-20.svg",
+    "06_STRATEGIES.md",
+    "02_DECISIONS.md",
+    "01_ARCHITECTURE.md",
+    "00_INDEX.md",
+    "AVAX/USDC.md",
+    "06_Weekly/2026-W25.md",
+    "05_Regimes/Régime_risk_on.md",
+    "04_Post_Mortem/incident_2026-06-20.md",
+    "Preset_Performance.md",
+    "AVAX",
+    "06_Weekly"
+  ]
+}

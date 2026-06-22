@@ -1,0 +1,41 @@
+symbol,name,asset_class,venue,currency,sector
+016.F,CRESCENT POINT ENERGY,equity,,EUR,Energy
+024.F,METAROCK GROUP LTD.,equity,,EUR,Energy
+03G.F,GASLOG PARTNERS UTS,equity,,EUR,Energy
+APA,APA Corporation,equity,,USD,Energy
+BKR,Baker Hughes Company,equity,,USD,Energy
+COP,ConocoPhillips,equity,,USD,Energy
+CTRA,Coterra Energy Inc.,equity,,USD,Energy
+CVX,Chevron Corporation,equity,,USD,Energy
+DVN,Devon Energy Corporation,equity,,USD,Energy
+EOG,"EOG Resources, Inc.",equity,,USD,Energy
+EQT,EQT Corporation,equity,,USD,Energy
+FANG,"Diamondback Energy, Inc.",equity,,USD,Energy
+HAL,Halliburton Company,equity,,USD,Energy
+KMI,"Kinder Morgan, Inc.",equity,,USD,Energy
+MPC,Marathon Petroleum Corporation,equity,,USD,Energy
+OKE,"ONEOK, Inc.",equity,,USD,Energy
+OXY,Occidental Petroleum Corporatio,equity,,USD,Energy
+PSX,Phillips 66,equity,,USD,Energy
+SLB,Schlumberger N.V.,equity,,USD,Energy
+TRGP,"Targa Resources, Inc.",equity,,USD,Energy
+VLO,Valero Energy Corporation,equity,,USD,Energy
+WMB,"Williams Companies, Inc. (The)",equity,,USD,Energy
+XOM,Exxon Mobil Corporation,equity,,USD,Energy
+ALPS,"Alpine Summit Energy Partners, ",equity,,USD,Energy
+AMTX,"Aemetis, Inc",equity,,USD,Energy
+ARLP,"Alliance Resource Partners, L.P",equity,,USD,Energy
+BOOM,DMC Global Inc.,equity,,USD,Energy
+BROG,Brooge Energy Limited,equity,,USD,Energy
+CHRD,Chord Energy Corporation,equity,,USD,Energy
+CLMT,Calumet Specialty Products Part,equity,,USD,Energy
+CLNE,Clean Energy Fuels Corp.,equity,,USD,Energy
+DMLP,"Dorchester Minerals, L.P.",equity,,USD,Energy
+DWSN,Dawson Geophysical Company,equity,,USD,Energy
+EPSN,Epsilon Energy Ltd.,equity,,USD,Energy
+ACDC,ProFrac Holding Corp.,equity,,USD,Energy
+GEOS,Geospace Technologies Corporati,equity,,USD,Energy
+GLNG,Golar LNG Limited,equity,,USD,Energy
+GPP,Green Plains Partners LP,equity,,USD,Energy
+HNRG,Hallador Energy Company,equity,,USD,Energy
+HPK,"HighPeak Energy, Inc.",equity,,USD,Energy
