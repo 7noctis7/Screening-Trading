@@ -1455,7 +1455,11 @@ def build_snapshot(seed: int = 7) -> dict:
     benches = {"Univers (équipondéré)": eqw, "S&P 500": sp, "Nasdaq 100": ndx}
     # backtest MULTI-STRATÉGIE sur l'indice équipondéré (tendance/momentum/retour moyenne + ensemble)
     from packages.backtest.multi_strategy import run_multi_strategy
-    multi_strategy = run_multi_strategy(eqw)
+    from packages.common.memo import cached_stage
+    # étape PURE (courbe → stratégies) : mémoïsée par contenu → non recalculée si l'indice équipondéré
+    # n'a pas changé (pas de nouvelle barre). Repli transparent sur le calcul direct si cache indispo.
+    multi_strategy = cached_stage("multi_strategy", [float(x) for x in eqw],
+                                  lambda: run_multi_strategy(eqw))
 
     # --- analyse de portefeuille (mesures relatives, risque, thèmes, ML) ---
     rel = relative_metrics(equity, bench_px)
