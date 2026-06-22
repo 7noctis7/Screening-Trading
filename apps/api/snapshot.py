@@ -1468,7 +1468,9 @@ def build_snapshot(seed: int = 7) -> dict:
     # VaR multi-horizon (mise à l'échelle racine-du-temps) : 1 j / 10 j (Bâle) / 21 j (1 mois)
     _v1 = rm.get("var_95", 0.0)
     rm["var_horizons"] = [{"days": h, "var_95": round(_v1 * (h ** 0.5), 4)} for h in (1, 10, 21)]
-    mc = monte_carlo(rets, seed=1)
+    # Monte-Carlo (2000 sims, seedé → déterministe) mémoïsé par contenu : non relancé si les
+    # rendements du portefeuille n'ont pas changé (cf. packages/common/memo.py).
+    mc = cached_stage("monte_carlo", [float(x) for x in rets], lambda: monte_carlo(rets, seed=1))
     all_trades = journal.all()
     attr = attribution.attribute(all_trades, "strategy")
     agg = {**PL.metrics_payload(equity), **rel, **rm, **mc}
