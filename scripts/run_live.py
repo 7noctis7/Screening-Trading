@@ -64,37 +64,62 @@ def main() -> None:
           f"mode {'DRY-RUN (aucun ordre)' if dry else 'LIVE (paper)'}")
     print(f"  {'SENS':4s} {'ACTIF':14s} {'BROKER':8s} {'POIDS':>7s} {'MONTANT':>10s}  statut")
 
-    sent = 0
-    for o in sorted(targets, key=lambda x: -x["weight_pct"]):
-        cap = bit_cap if o.get("capital") == "bitmart" else alp_cap
-        notional = o["weight_pct"] * cap * reduce          # kill-switch : ×0 (veto) … ×1 (normal)
-        if reduce <= 0.0:                                   # veto total → on n'envoie rien
-            print(f"  {o['side'].upper():4s} {o.get('broker_symbol', o['symbol']):14s} "
-                  f"{o['broker']:8s} {o['weight_pct']*100:6.1f}% {'—':>9s}  bloqué (kill-switch)")
-            continue
-        side = Side.LONG if o["side"] == "long" else Side.SHORT
-        broker = bitmart if o["broker"] == "Bitmart" else alpaca
-        bsym = o.get("broker_symbol", o["symbol"])            # symbole côté broker (mapping)
-        line = f"  {o['side'].upper():4s} {bsym:14s} {o['broker']:8s} {o['weight_pct']*100:6.1f}% {notional:9.0f}$"
-        if o.get("tradeable") is False:                       # non négociable → jamais envoyé
-            print(line + "  non négociable (sauté)")
-            continue
-        if dry or broker is None:
-            print(line + "  " + ("aperçu" if dry else "broker absent"))
-            continue
+    # --- RÉCONCILIATION idempotente + ANTI-LEVIER ---
+    # On ne ré-achète PAS la cible complète à chaque run : on n'échange que le DELTA (cible − détenu).
+    # Relancer converge vers la cible (jamais d'empilement) ; les cibles sont plafonnées à 100 % du
+    # capital PAR broker (somme des poids ≤ 1) → JAMAIS de marge/levier. Sur un compte déjà sur-investi,
+    # les deltas sont négatifs → on VEND pour redescendre à 100 % (déleverage automatique).
+    cur_alp: dict[str, float] = {}
+    cur_bit: dict[str, float] = {}
+    if not dry:
         try:
-            # ordre par MONTANT $ dans les deux cas — le broker dérive/arrondit la quantité
-            res = broker.submit_notional(bsym, side, notional)
-            q = getattr(res, "qty", 0.0) or 0.0
-            status = ("rejeté (min/précision)" if getattr(res, "status", None)
-                      and str(res.status).endswith("REJECTED")
-                      else (f"envoyé qty≈{q:.4f}" if q else "envoyé (paper)"))
-            sent += 1
+            if alpaca:
+                cur_alp = {p["symbol"]: float(p.get("market_value", 0) or 0) for p in alpaca.positions_detailed()}
+            if bitmart:
+                cur_bit = {p["symbol"]: float(p.get("market_value", 0) or 0) for p in bitmart.positions_detailed()}
         except Exception as e:  # noqa: BLE001
-            status = f"échec ({str(e)[:40]})"
-        print(line + "  " + status)
-    print(f"\nTerminé : {sent} ordres envoyés (paper)." if not dry else
-          "\nAperçu (dry-run). Pour exécuter en paper : python3 scripts/run_live.py --live --yes")
+            print(f"⚠️  lecture des positions échouée ({str(e)[:50]}) — réconciliation prudente (détenu=0).")
+
+    if reduce <= 0.0:                                          # kill-switch total : on n'envoie rien
+        for o in targets:
+            print(f"  {o['side'].upper():4s} {o.get('broker_symbol', o['symbol']):14s} "
+                  f"{o['broker']:8s} {o['weight_pct']*100:6.1f}%  bloqué (kill-switch)")
+        print("\n⛔ Kill-switch : aucun ordre (exposition gelée).")
+        return
+
+    band_frac = 0.005                                         # ignore les micro-deltas (< 0,5 % du capital)
+    sent = 0
+    for bname, broker, cap, cur in (("Alpaca", alpaca, alp_cap, cur_alp),
+                                    ("Bitmart", bitmart, bit_cap, cur_bit)):
+        tgs = [o for o in targets if (o.get("capital") == "bitmart") == (bname == "Bitmart")]
+        sw = sum(o["weight_pct"] for o in tgs)
+        scale = min(1.0, 1.0 / sw) if sw > 1.0 else 1.0       # ANTI-LEVIER : Σ cibles ≤ capital
+        tgt: dict[str, dict] = {}
+        for o in tgs:
+            bsym = o.get("broker_symbol", o["symbol"])
+            tgt[bsym] = {"o": o, "val": o["weight_pct"] * cap * reduce * scale}
+        for bsym in cur:                                      # détenu hors-cible → liquidation (cible 0)
+            tgt.setdefault(bsym, {"o": None, "val": 0.0})
+        band = max(band_frac * cap, 5.0)
+        for bsym, info in sorted(tgt.items(), key=lambda kv: -kv[1]["val"]):
+            o = info["o"]
+            delta = info["val"] - cur.get(bsym, 0.0)          # >0 acheter · <0 vendre
+            tag = f"  {bsym:14s} {bname:8s} cible {info['val']:8.0f}$ détenu {cur.get(bsym,0.0):8.0f}$ Δ {delta:+8.0f}$"
+            if o is not None and o.get("tradeable") is False:
+                print(tag + "  non négociable"); continue
+            if abs(delta) < band:
+                print(tag + "  ✓ déjà aligné"); continue
+            side = Side.LONG if delta > 0 else Side.SHORT     # SHORT = vendre le surplus (spot/long-only)
+            if dry or broker is None:
+                print(tag + "  " + ("aperçu" if dry else "broker absent")); continue
+            try:
+                broker.submit_notional(bsym, side, abs(delta))
+                sent += 1
+                print(tag + ("  ▲ achat" if delta > 0 else "  ▼ vente"))
+            except Exception as e:  # noqa: BLE001
+                print(tag + f"  échec ({str(e)[:40]})")
+    print(f"\nTerminé : {sent} ordre(s) de réconciliation envoyé(s) (paper, sans levier)." if not dry else
+          "\nAperçu (dry-run). Réconciliation réelle : python3 scripts/run_live.py --live --yes")
 
     # CLÔTURE : synchronise le coffre Obsidian (journal + attribution + post-mortems).
     # Best-effort STRICT : ne lève jamais → ne peut pas bloquer l'exécution.
