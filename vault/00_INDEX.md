@@ -8,6 +8,8 @@ commodities, indices), niveau institutionnel, 100 % OSS. **Paper par défaut.**
 Priorités : robustesse > maintenabilité > gestion du risque > recherche d'alpha > produit.
 
 ## Rituel de session (sans qu'on le redemande)
+> Auto-chargé : `CLAUDE.md` (racine) rappelle ce rituel + les garde-fous à chaque session Claude Code.
+> Skills disponibles : `/deploy`, `/audit-secrets`, `/company-note` (dans `.claude/commands/`).
 1. Lire `00_INDEX` → **`01_ARCHITECTURE` (les 2 diagrammes)** → `04_JOURNAL` (3 dernières) → `03_TODO`.
 2. Reformuler en 3 lignes : où en est le projet, prochaine priorité (situer la tâche dans le schéma).
 3. Exécuter par petits incréments testés.
