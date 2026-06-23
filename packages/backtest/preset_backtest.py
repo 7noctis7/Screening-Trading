@@ -73,7 +73,7 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
                     swing_equity: list | None = None, dd_target: float = 0.25, band: float = 0.03,
                     step: int = 21, lookback: int = 120, top_k: int = 30, k_dd: float = 1.6,
                     blackout_move: float = 0.12, regime_gate: bool = True,
-                    mom_tilt: bool = True) -> dict:
+                    mom_tilt: bool = True, legacy_quality_universe: bool = False) -> dict:
     syms = [s for s, b in data.items() if b and len(b) > lookback + 2 * step]
     if len(syms) < 5:
         return {"available": False}
@@ -82,10 +82,20 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
     acmap = asset_classes or {}
     quality = quality or {}
 
-    # univers tilt-qualité (statique → factor sleeve, sans fuite des prix)
-    q = {s: quality.get(s) for s in syms if quality.get(s) is not None}
-    universe = (sorted(q, key=lambda s: q[s], reverse=True)[:top_k]
-                if len(q) >= 5 else syms[:top_k])
+    # #2 ANTI-FUITE : en backtest, le score `quality` est le score ACTUEL → l'appliquer à des dates
+    # passées = look-ahead + biais du survivant. On sélectionne donc l'univers par MOMENTUM prix-only
+    # mesuré au DÉBUT du backtest (aucune info future). `legacy_quality_universe=True` rétablit l'ancien
+    # comportement (fuite — pour comparaison uniquement). En PRODUCTION, le tilt qualité du jour reste légitime.
+    if legacy_quality_universe:
+        q = {s: quality.get(s) for s in syms if quality.get(s) is not None}
+        universe = (sorted(q, key=lambda s: q[s], reverse=True)[:top_k]
+                    if len(q) >= 5 else syms[:top_k])
+    else:
+        _s0 = max(lookback, 50)
+        _sel = {s: float(M[s][_s0 - 1] / M[s][max(0, _s0 - 252 - 1)] - 1)
+                for s in syms if len(M[s]) > _s0}
+        universe = (sorted(_sel, key=lambda s: _sel[s], reverse=True)[:top_k]
+                    if len(_sel) >= 5 else syms[:top_k])
     A = np.asarray([M[s] for s in universe])                    # n × L
     mkt = A.mean(axis=0)                                         # indice de marché (porte régime + frein DD)
     rets = A[:, 1:] / A[:, :-1] - 1
