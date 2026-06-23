@@ -1,5 +1,17 @@
 # 04 — JOURNAL
 
+## Session 2026-06-23 — #8 Garde anti-hallucination LLM (alignement)
+**Fait.** `packages/llm/guard.py` : `guard_numbers()` — tout nombre significatif (%/décimal/≥10) du
+memo IA absent des `facts` fournis est neutralisé (`[n.d.]`) ou rejeté. Branché dans `_enrich_ai_memo`
+(`main.py`) : >2 chiffres fabriqués → on garde le mémo à base de règles ; sinon mémo nettoyé +
+mention « chiffres contrôlés ». L'IA narre, ne calcule jamais. 6 tests. **543 verts.**
+
+**Validation données réelles (run utilisateur, 2026-06-23) :** `make backtest-preset` Preset CAGR 80,5 %
+Sharpe 2,44 **maxDD -9,0 %** vs équipondéré CAGR 180 % Sharpe 2,16 **maxDD -23,3 %** → DD divisé par
+~2,6 pour un meilleur Sharpe. `make calibrate-preset` : 27 combos, **Sharpe déflaté ≤ 1 %** partout
+→ **DSR≈0 CONFIRMÉ en réel** : aucun alpha directionnel robuste. Best défensif : DD15/top20/bande3.
+Le manifeste d'honnêteté est empiriquement validé : la valeur = gestion du risque, pas l'alpha.
+
 ## Session 2026-06-23 — #5 SPC / Six Sigma (qualité data) + UI
 **Fait.** `packages/data/spc.py` (stdlib) : `p_chart` (carte p ±3σ), `cusum` (détection de dérive),
 `dpmo` + `sigma_level` (décalage 1,5σ). Wiring dans la section `data` : taux de défaut OHLCV sur tout
