@@ -15,8 +15,8 @@
 - [ ] **#9 Rebalancement déclenché par la vol** : rebal si `|Δσ|/σ>25%` ou dérive>band (au lieu de `step=21` fixe).
 
 ### 🟠 P1 — Booster l'alpha (sans β subi)
-- [ ] **#1 Anti cash-drag** : `preset_backtest.py:71` `gross=min(1,tgt_vol/pv)` → `clip(tgt_vol/pv,0,GROSS_MAX≈1.5)`, `tgt_vol≈0.15`.
-- [ ] **#4 Tilt momentum sur ERC** : `w ∝ w_erc × max(0,mom_12m)^γ` (renormalisé) — l'ERC pur étouffe les leaders (NVDA…).
+- [x] **#1 Anti cash-drag (sans levier, k_dd→1.6)** : `preset_backtest.py:71` `gross=min(1,tgt_vol/pv)` → `clip(tgt_vol/pv,0,GROSS_MAX≈1.5)`, `tgt_vol≈0.15`.
+- [x] **#4 Tilt momentum sur ERC** : `w ∝ w_erc × max(0,mom_12m)^γ` (renormalisé) — l'ERC pur étouffe les leaders (NVDA…).
 - [ ] **#7 Sizing demi-Kelly bridé** : `f=0.5·μ/σ²`, clip `[0,max_w]`, renormalisé sur le gross.
 - [ ] **#8 Gate breadth cross-asset** : `gross×clip(%univers>MM200 / 0.5, 0, 1)`.
 
