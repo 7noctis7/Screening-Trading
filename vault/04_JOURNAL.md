@@ -1,5 +1,24 @@
 # 04 — JOURNAL
 
+## Session 2026-06-23 — Design « radical » (robuste, 0 dépendance) [PR #229]
+**Fait.** (CSS-only / contenu à `Nav.tsx` → aucune régression fonctionnelle possible, build static 21/21 vert)
+- **Aurora background** : ruban conique flou (`body::after`, `globals.css`), mélangé en OKLCH aux accents,
+  atténué en thème clair, **coupé sous `prefers-reduced-motion`**. Rendu CSS pur → 0 WebGL, 0 dépendance,
+  0 coût batterie d'un canvas (objectif « borealis » premium sans le risque).
+- **Accents OKLCH** : `--accent/--accent2/--pos/--neg/--warn` en OKLCH derrière `@supports`, déclarés
+  **après** les hex → fallback automatique, aucune régression possible (plus vifs sur écrans P3).
+- **Typographie display** : `font-optical-sizing`, ligatures `ss01/cv01`, `text-wrap:balance`, tracking
+  resserré sur les titres.
+- **Nav desktop condensée** : 18 liens qui passaient à la ligne → **Accueil + 3 menus groupés**
+  (Marché / Analyse / Portefeuille), pur CSS `group-hover`/`focus-within` (pas d'état JS fragile,
+  accessible clavier).
+
+**Décidé (best practice — robustesse > produit).** Les 3 items « radicaux » restants sont **écartés** car
+chacun ajoute une dépendance ou un appel réseau au **build CI** → risque sur la reconstruction quotidienne
+du site : WebGL aurora (OGL), View Transitions à élément partagé (`next-view-transitions` — la VT native
+ne se déclenche pas sur la navigation SPA de Next), police variable (`next/font` échoue si pas de réseau au
+build). L'aurora CSS couvre l'objectif visuel sans ce risque ; `pageIn` couvre déjà les transitions de page.
+
 ## Session 2026-06-23 — « Mastermind 100 » : optimisations gratuites (FinOps/perf/data/auto)
 **Fait.** (toutes open-source, testées, mergées)
 - **FinOps IA** : `packages/llm/local.py` (`cheap_llm` Ollama + `smart_text` routeur) → tâches simples

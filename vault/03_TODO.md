@@ -44,6 +44,9 @@
 > ✅ **Sprint 8/10 FAIT** : #3 #5 #6 #1 #4 #2 #8 #10 (PR #220→#224). A/B krach : Max DD -41%. #7/#9 différés (parcimonie/conflit). **Mesurer sur données réelles** : `make backtest-preset` + `calibrate-preset`.
 
 ## ✅ Fait
+- [x] **Design « radical » (robuste, 0 dép)** [PR #229] : aurora CSS (`body::after`), accents OKLCH
+  (`@supports`+fallback), typo display (optical-sizing/ligatures/balance), nav desktop groupée (3 menus).
+  Écartés (best practice, risque build CI) : WebGL/OGL, `next-view-transitions`, `next/font`.
 - [x] **S13** Excellence op (drift PSI, audit trail, télémétrie, backup, tear sheets HTML/PDF)
 - [x] **S12** Alertes multi-canal (moteur/sinks/throttle/handlers event-bus)
 - [x] **S11** Analyse de portefeuille (relatif/risque/corrélation/attribution/stress/revue) + écrans portefeuille & positions
