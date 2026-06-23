@@ -38,7 +38,7 @@ jobs:
         run: python -m pytest -q
 
   lint:
-    name: ruff (informatif)
+    name: ruff + mypy (informatif)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,8 +46,11 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - name: Install ruff
-        run: pip install ruff
+      - name: Install ruff + mypy
+        run: pip install ruff mypy
       - name: ruff check (non bloquant)
         continue-on-error: true
         run: ruff check packages apps scripts
+      - name: mypy (non bloquant — strict trop bruyant sur le legacy)
+        continue-on-error: true
+        run: mypy packages

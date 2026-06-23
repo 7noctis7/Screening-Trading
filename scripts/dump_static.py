@@ -85,7 +85,7 @@ def main() -> int:
 
     # 1) endpoints sans paramètre → JSON figés (fidèles aux transformations des routes)
     routes = {
-        "meta": M.meta, "dashboard": M.dashboard, "screener": M.screener,
+        "meta": M.meta, "dashboard": M.dashboard, "screener": M.screener, "screen": M.screen,
         "preset_ledger": M.preset_ledger, "portfolio": M.portfolio, "positions": M.positions,
         "trades": M.trades, "sentiment": M.sentiment, "fundamentals": M.fundamentals,
         "universe": M.universe, "data": M.data, "themes": M.themes, "ml": M.ml,

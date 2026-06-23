@@ -12,6 +12,7 @@ const LINKS: [string, string][] = [
   ["/accueil", "Accueil"],
   ["/data", "Données"],
   ["/universe", "Univers"],
+  ["/screener", "Screener"],
   ["/macro", "Macro"],
   ["/themes", "Thèmes de marché"],
   ["/events", "Événements"],
@@ -31,7 +32,7 @@ const LINKS: [string, string][] = [
 
 // Regroupement par thème pour le tiroir mobile (lecture premium, style réglages iOS).
 const GROUPS: [string, string[]][] = [
-  ["Marché", ["/data", "/universe", "/macro", "/themes", "/events"]],
+  ["Marché", ["/data", "/universe", "/screener", "/macro", "/themes", "/events"]],
   ["Analyse", ["/fundamentals", "/notes", "/investors", "/ml", "/sentiment", "/conviction"]],
   ["Portefeuille", ["/", "/portfolio", "/risk", "/positions", "/trades", "/live"]],
 ];
