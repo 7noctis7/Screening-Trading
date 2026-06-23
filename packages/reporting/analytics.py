@@ -117,14 +117,30 @@ class PerformanceAnalytics:
         bench_total = math.prod(1 + x for x in bb) - 1.0          # rendement marché (QQQ)
         port_total = math.prod(1 + x for x in rr) - 1.0
         beta_contrib = beta * bench_total                         # part expliquée par l'exposition marché
-        alpha_contrib = port_total - beta_contrib                # résidu = alpha (compétence)
+        alpha_contrib = port_total - beta_contrib                # résidu = rendement hors-QQQ
         share = (abs(alpha_contrib) / (abs(alpha_contrib) + abs(beta_contrib))
                  if (abs(alpha_contrib) + abs(beta_contrib)) > 0 else 0.0)
+        # Significativité de l'alpha (honnêteté) : t-stat du résidu e = r - β·b.
+        # « alpha » mono-facteur = COMPÉTENCE seulement si |t|≥2 ; sinon rendement
+        # non corrélé à QQQ (autres bêtas + chance). Cohérent avec DSR≈0.
+        resid = [rr[i] - beta * bb[i] for i in range(k)]
+        mean_e = sum(resid) / k
+        se = _std(resid) / math.sqrt(k) if k > 1 else 0.0
+        alpha_t = mean_e / se if se > 0 else 0.0
+        significant = abs(alpha_t) >= 2.0
+        underperf = port_total < bench_total
+        if share >= 0.5 and significant and not underperf:
+            verdict = "alpha dominant (significatif)"
+        elif share >= 0.5:
+            verdict = "rendement hors-QQQ — NON prouvé (alpha non significatif / DSR≈0)"
+        else:
+            verdict = "bêta dominant (marché)"
         return {"available": True, "beta": round(beta, 3),
                 "portfolio_return": round(port_total, 4), "benchmark_return": round(bench_total, 4),
                 "beta_contribution": round(beta_contrib, 4), "alpha_contribution": round(alpha_contrib, 4),
                 "alpha_share": round(share, 3), "alpha_annual": m.alpha_annual,
-                "verdict": ("alpha dominant (compétence)" if share >= 0.5 else "bêta dominant (marché)")}
+                "alpha_tstat": round(alpha_t, 2), "alpha_significant": significant,
+                "underperforms_benchmark": underperf, "verdict": verdict}
 
     # ── sorties ─────────────────────────────────────────────────────────
     def to_markdown_summary(self, title: str = "Performance") -> str:

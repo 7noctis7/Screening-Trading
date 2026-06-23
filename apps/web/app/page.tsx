@@ -161,7 +161,7 @@ export default function Dashboard() {
           <section className="card p-4">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <h2 className="text-sm uppercase tracking-wide text-muted">Performance &amp; attribution (Alpha / Bêta vs QQQ)</h2>
-              <span className="text-xs mono" style={{ color: aShare >= 50 ? "#22c55e" : "#f59e0b" }}>{at.verdict}</span>
+              <span className="text-xs mono" style={{ color: (at.alpha_significant && !at.underperforms_benchmark) ? "#22c55e" : "#f59e0b" }}>{at.verdict}</span>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-3">
               <div><div className="text-muted text-xs">Alpha annualisé</div>
@@ -179,10 +179,16 @@ export default function Dashboard() {
               <span style={{ width: `${100 - aShare}%`, background: "#3b82f6" }} />
             </div>
             <p className="text-muted2 text-xs mt-2">
-              <span style={{ color: "#22c55e" }}>■</span> Alpha (compétence) {aShare}% ·
+              <span style={{ color: "#22c55e" }}>■</span> Hors-QQQ {aShare}% ·
               <span style={{ color: "#3b82f6" }}> ■</span> Bêta (marché) {100 - aShare}%.
               Perf preset {(at.portfolio_return * 100).toFixed(1)}% vs QQQ {(at.benchmark_return * 100).toFixed(1)}% — net de frais.
             </p>
+            {(at.underperforms_benchmark || at.alpha_significant === false) && (
+              <p className="text-xs mt-1" style={{ color: "#f59e0b" }}>
+                ⚠ {at.underperforms_benchmark && `Sous-performe QQQ en absolu (${(at.portfolio_return * 100).toFixed(0)}% vs ${(at.benchmark_return * 100).toFixed(0)}%).`}
+                {at.alpha_significant === false && ` Alpha non significatif (t=${at.alpha_tstat}).`} Le rendement « hors-QQQ » n'est PAS une preuve de compétence (DSR≈0) — souvent d'autres bêtas + chance.
+              </p>
+            )}
           </section>
         );
       })()}
