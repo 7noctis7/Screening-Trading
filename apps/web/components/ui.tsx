@@ -2,7 +2,7 @@
 // Primitives UI — skeletons de chargement + états vides (best practice : jamais d'écran nu).
 
 export function Skeleton({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse rounded-md bg-surfaceAlt ${className}`} />;
+  return <div className={`shimmer rounded-md bg-surfaceAlt ${className}`} />;
 }
 
 export function PageSkeleton() {
