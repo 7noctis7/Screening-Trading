@@ -10,7 +10,7 @@
 - 📓 [[04_JOURNAL]] — log daté (lis les 3 dernières entrées)
 - 🔌 [[05_DATA_SOURCES]] · 📈 [[06_STRATEGIES]] · 🛡️ [[07_RISK_POLICY]]
 - 🗃️ [[08_DATA_MODEL]] · 🔬 [[09_RESEARCH]] · 📊 [[10_BACKTEST_RESULTS]]
-- 🎨 [[11_DESIGN_SYSTEM]] · 🧮 [[12_FACTORS]]
+- 🎨 [[11_DESIGN_SYSTEM]] · 🧮 [[12_FACTORS]] · 🪞 [[12_MANIFESTE_HONNETETE]] (DSR≈0 assumé = le wedge)
 
 ## Mission
 Screening & trading systématique multi-actifs (actions, ETF, forex, crypto, commodities, indices),
