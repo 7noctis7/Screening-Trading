@@ -13,12 +13,27 @@
   --accent:#0891b2; --accent2:#06b6d4; --pos:#16a34a; --neg:#dc2626; --warn:#d97706;
   --shadow:0 1px 2px rgba(16,24,40,.06),0 8px 24px rgba(16,24,40,.08);
 }
+/* Accents en OKLCH (gamut perceptuellement uniforme, plus vifs sur écrans P3).
+   PROGRESSIF : déclarés APRÈS les hex → un navigateur sans support oklch ignore ces lignes
+   et garde le hex. Aucune régression possible. */
+@supports (color: oklch(0.6 0.1 200)) {
+  :root {
+    --accent:oklch(0.62 0.115 217); --accent2:oklch(0.72 0.125 207);
+    --pos:oklch(0.63 0.17 150); --neg:oklch(0.58 0.22 27); --warn:oklch(0.68 0.16 60);
+  }
+}
 .dark {
   /* ---- thème SOMBRE (cyan/teal/vert néon sur bleu nuit teinté, moins dur que le noir pur) ---- */
   --bg:#0a1118; --bg2:#0e1721; --surface:#121c26; --surface2:#16212d; --surface3:#1b2935;
   --border:#22303c; --border2:#2e3f4d; --fg:#eaf2f4; --muted:#93a7b1; --muted2:#637580;
   --accent:#22d3ee; --accent2:#5eead4; --pos:#22c55e; --neg:#f43f5e; --warn:#f59e0b;
   --shadow:0 1px 2px rgba(0,0,0,.45),0 10px 30px rgba(0,0,0,.3);
+}
+@supports (color: oklch(0.6 0.1 200)) {
+  .dark {
+    --accent:oklch(0.79 0.135 200); --accent2:oklch(0.86 0.115 175);
+    --pos:oklch(0.76 0.18 149); --neg:oklch(0.67 0.215 13); --warn:oklch(0.78 0.16 70);
+  }
 }
 
 * { box-sizing: border-box; }
@@ -79,6 +94,29 @@ body::before {
   50% { transform:translate3d(0,-18px,0) scale(1.05); opacity:1; }
   100% { transform:translate3d(0,12px,0) scale(1.02); opacity:.9; }
 }
+/* AURORA (rendu CSS, 0 dépendance, 0 WebGL) : ruban conique flou qui ondule très lentement
+   par-dessus les halos. Donne la profondeur « borealis » premium sans coût batterie d'un canvas.
+   Coupé sous reduce-motion (règle globale) ; opacité faible → la donnée reste la star. */
+body::after {
+  content:""; position:fixed; inset:-15%; z-index:-2; pointer-events:none; will-change:transform;
+  background:conic-gradient(from 210deg at 50% 40%,
+    transparent 0deg,
+    color-mix(in oklab, var(--accent) 22%, transparent) 70deg,
+    color-mix(in oklab, var(--accent2) 20%, transparent) 150deg,
+    color-mix(in oklab, var(--pos) 14%, transparent) 230deg,
+    transparent 320deg);
+  filter:blur(80px) saturate(1.05);
+  mask-image:radial-gradient(ellipse 70% 60% at 50% 30%, #000 0%, transparent 78%);
+  -webkit-mask-image:radial-gradient(ellipse 70% 60% at 50% 30%, #000 0%, transparent 78%);
+  opacity:.5;
+  animation:aurora 40s ease-in-out infinite alternate;
+}
+:root:not(.dark) body::after { opacity:.32; }   /* plus discret en clair (lisibilité) */
+@keyframes aurora {
+  0%   { transform:rotate(0deg)   scale(1.05) translate3d(0,0,0); }
+  50%  { transform:rotate(8deg)   scale(1.15) translate3d(2%,-2%,0); }
+  100% { transform:rotate(-6deg)  scale(1.1)  translate3d(-2%,2%,0); }
+}
 /* Hero d'Accueil : même photo, plus présente */
 .hero-photo {
   background-image:linear-gradient(180deg, rgba(4,7,10,.35), rgba(4,7,10,.85)), url('/hero.jpg');
@@ -133,8 +171,13 @@ button:active { transform:translateY(1px); }
 /* Sélection de texte aux couleurs de la marque */
 ::selection { background:color-mix(in srgb, var(--accent) 35%, transparent); }
 
-/* Titres — hiérarchie nette */
-h1 { font-size:22px; font-weight:680; }
+/* Titres — hiérarchie nette + traitement « display » (optical sizing, ligatures, balance) */
+h1, h2, h3 {
+  font-optical-sizing:auto;
+  font-feature-settings:"ss01","cv01","case";
+  text-wrap:balance;                 /* coupures de titre équilibrées (pas de veuve) */
+}
+h1 { font-size:22px; font-weight:680; letter-spacing:-.024em; }
 h2 { font-size:13px; font-weight:600; }
 
 /* Apparition douce des pages (profondeur / motion) */

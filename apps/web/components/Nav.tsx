@@ -39,6 +39,48 @@ const LABEL: Record<string, string> = Object.fromEntries(LINKS);
 
 const isActive = (href: string, path: string) => (href === "/" ? path === "/" : path.startsWith(href));
 
+// Menu déroulant desktop (condense 18 liens → 3 groupes). 100 % CSS (group-hover / focus-within) :
+// aucun état JS à casser ; accessible au clavier (focus-within) ; pont de survol via le padding interne.
+function DesktopMenu({ section, hrefs, path }: { section: string; hrefs: string[]; path: string }) {
+  const anyActive = hrefs.some((h) => isActive(h, path));
+  return (
+    <div className="relative group">
+      <button aria-haspopup="true"
+        className={`px-3 py-1.5 rounded-[10px] text-sm transition-all duration-150 border inline-flex items-center gap-1.5 ${
+          anyActive ? "bg-surfaceAlt text-fg border-border2 shadow"
+                    : "text-muted hover:text-fg hover:bg-surfaceAlt border-transparent"}`}>
+        {anyActive && <span className="inline-block w-1.5 h-1.5 rounded-full"
+          style={{ background: "var(--accent)", boxShadow: "0 0 8px var(--accent)" }} />}
+        {section}
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+          className="opacity-60 transition-transform duration-200 group-hover:rotate-180">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+      <div className="invisible opacity-0 translate-y-1 transition-all duration-150 absolute left-0 top-full pt-2 z-50 min-w-[230px]
+                      group-hover:visible group-hover:opacity-100 group-hover:translate-y-0
+                      group-focus-within:visible group-focus-within:opacity-100 group-focus-within:translate-y-0">
+        <div className="rounded-[14px] border border-border overflow-hidden shadow-xl"
+          style={{ background: "color-mix(in srgb, var(--surface) 94%, transparent)", backdropFilter: "saturate(160%) blur(14px)", WebkitBackdropFilter: "saturate(160%) blur(14px)" }}>
+          {hrefs.map((href, idx) => {
+            const active = isActive(href, path);
+            return (
+              <Link key={href} href={href}
+                className={`flex items-center gap-2 px-3.5 py-2.5 text-[13px] transition-colors ${idx ? "border-t border-border" : ""} ${
+                  active ? "text-fg" : "text-muted hover:text-fg"}`}
+                style={{ background: active ? "var(--surface2)" : undefined }}>
+                {active && <span className="inline-block w-1.5 h-1.5 rounded-full"
+                  style={{ background: "var(--accent)", boxShadow: "0 0 8px var(--accent)" }} />}
+                <span className={active ? "font-medium" : ""}>{LABEL[href]}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StatusDot({ meta, withLabel = false }: { meta: any; withLabel?: boolean }) {
   if (!meta) return null;
   const synth = meta.data_synthetic;
@@ -107,22 +149,20 @@ export function Nav() {
         </button>
       </div>
 
-      {/* ---- Barre DESKTOP : navigation horizontale ---- */}
-      <div className="hidden md:flex max-w-6xl mx-auto px-6 py-3 flex-wrap gap-1.5 items-center">
-        <Link href="/" className="mr-3">{Brand}</Link>
-        {LINKS.map(([href, label]) => {
-          const active = isActive(href, path);
-          return (
-            <Link key={href} href={href}
-              className={`px-3 py-1.5 rounded-[10px] text-sm transition-all duration-150 border ${
-                active ? "bg-surfaceAlt text-fg border-border2 shadow"
-                       : "text-muted hover:text-fg hover:bg-surfaceAlt border-transparent"}`}>
-              {active && <span className="inline-block w-1.5 h-1.5 rounded-full mr-2 align-middle"
-                style={{ background: "var(--accent)", boxShadow: "0 0 8px var(--accent)" }} />}
-              {label}
-            </Link>
-          );
-        })}
+      {/* ---- Barre DESKTOP : navigation condensée (Accueil + 3 menus groupés) ---- */}
+      <div className="hidden md:flex max-w-6xl mx-auto px-6 py-3 gap-1.5 items-center">
+        <Link href="/" className="mr-2">{Brand}</Link>
+        <Link href="/accueil"
+          className={`px-3 py-1.5 rounded-[10px] text-sm transition-all duration-150 border ${
+            isActive("/accueil", path) ? "bg-surfaceAlt text-fg border-border2 shadow"
+                                       : "text-muted hover:text-fg hover:bg-surfaceAlt border-transparent"}`}>
+          {isActive("/accueil", path) && <span className="inline-block w-1.5 h-1.5 rounded-full mr-2 align-middle"
+            style={{ background: "var(--accent)", boxShadow: "0 0 8px var(--accent)" }} />}
+          Accueil
+        </Link>
+        {GROUPS.map(([section, hrefs]) => (
+          <DesktopMenu key={section} section={section} hrefs={hrefs} path={path} />
+        ))}
         <span className="ml-auto" />
         <StatusDot meta={meta} />
         <LiveBadge />
