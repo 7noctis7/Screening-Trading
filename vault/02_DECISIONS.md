@@ -207,3 +207,22 @@ Portefeuille et Positions vides.
 **Conséquence.** Les 3 onglets s'affichent indépendamment ; un futur bug de données dans un
 onglet dégrade cet onglet seul, pas toute la page. Règle générale pour tout HTML généré :
 ne jamais `innerHTML` un fragment de table orphelin.
+
+## ADR-0023 — Stratégie best-practice : satellite risk-managed + cœur QQQ (DSR≈0)
+**Date :** 2026-06-23
+**Statut :** accepté
+**Contexte.** Sprint « Alpha/Calmar » : améliorations #1-#6, #8, #10 (Ledoit-Wolf, porte de régime,
+frein DD, anti cash-drag sans levier, tilt momentum, anti-fuite univers, breadth, gate DSR).
+Mesure sur données RÉELLES (`make backtest-preset` / `calibrate-preset`) :
+- Preset : CAGR 79.6 %, Sharpe 1.84, **Max DD −14.6 %** (Calmar ≈ 5.4 vs 0.17 au départ).
+- Calibration : **Sharpe déflaté ≈ 0 sur les 27 combos** → AUCUN edge directionnel robuste.
+- L'« alpha 6.9 % » d'avant était **gonflé par une fuite** (#2, désormais corrigée).
+**Décision.** On n'invente pas d'alpha (López de Prado) :
+1. Le preset est un **satellite à risque maîtrisé** — défaut `QUANT_DD_TARGET=0.25` (0.15 max-défensif,
+   0.45 agressif). Son edge est la **gestion du risque** (DD bas, Sharpe élevé, décorrélé), pas le stock-picking.
+2. Le **rendement absolu vient de la bêta honnête** : cœur indiciel `QUANT_CORE_SPEC="qqq:0.5"`.
+   Pour plus de rendement → augmenter le QQQ (plus de bêta/DD assumés), PAS presser un alpha inexistant.
+3. **#7 (Kelly) et #9 (vol-trigger) abandonnés** : DSR≈0 → ajouter des paramètres = surface d'overfitting,
+   aucun gain attendu. Parcimonie.
+**Conséquences.** Objectif réaliste = **Calmar/Sharpe élevés** (préservation du capital), pas battre le
+QQQ en absolu sans sa bêta. Le gate #10 refuse toute combo non robuste → params défensifs par défaut.
