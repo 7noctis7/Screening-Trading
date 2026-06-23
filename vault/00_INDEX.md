@@ -68,4 +68,7 @@ RAG sémantique (embeddings + code), hot-path vectorisé, snapshot incrémental 
 parallèles, cache OHLCV souverain (HuggingFace), gate contrats OHLCV (CI), miroir Notion, KPIs Supabase,
 webhook n8n. Sécurité : gitleaks + CORS + safe_pickle + audit propre. Cron quotidien branché (best-effort).
 Commandes : `make brief / vault-search / contracts / hf-pull / notion-sync / supabase-kpis`.
-Prochaine priorité : ménage disque local (macOS) + tunnel public si TradingView temps réel souhaité.
+**Sprint Alpha/Calmar fait (8/10)** : sur données réelles, Max DD −14.6 % (Calmar ≈ 5.4 vs 0.17) mais
+**DSR≈0 = pas d'edge directionnel** → décision best-practice (ADR-0023) : **preset satellite risk-managed
+`QUANT_DD_TARGET=0.25` + cœur QQQ 50 %** ; #7/#9 abandonnés (parcimonie). Le rendement absolu = plus de
+QQQ (bêta honnête), pas d'alpha à presser. Prochaine priorité : ménage disque macOS ; data/delisted.csv.

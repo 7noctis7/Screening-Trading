@@ -1583,8 +1583,9 @@ def build_snapshot(seed: int = 7) -> dict:
     import os as _os
     from packages.portfolio.construction import (build_target, tail_adjusted_dd_target,
                                                  vol_target_from_drawdown)
-    _dd = float(_os.environ.get("QUANT_DD_TARGET", "0.45"))   # défaut : DD-cible 0.45 (sweep réel :
-    # Sharpe 1.24 vs 1.13 à 0.35, CAGR +4 pts, drawdown quasi inchangé → corrige la sous-exposition)
+    _dd = float(_os.environ.get("QUANT_DD_TARGET", "0.25"))   # best practice (DSR≈0 → risk-managed) :
+    # DD-cible 0.25 (équilibre exposition/DD). 0.15 = max-défensif · 0.45 = agressif. Le cœur QQQ
+    # (QUANT_CORE_SPEC) porte la bêta/le rendement ; le preset = satellite à risque maîtrisé.
     # ticket #5 : durcit le DD-cible si les queues sont épaisses (CVaR/VaR > gaussien)
     _tail = (rm.get("cvar_95", 0.0) / rm["var_95"]) if rm.get("var_95") else None
     _dd_eff = tail_adjusted_dd_target(_dd, _tail)
