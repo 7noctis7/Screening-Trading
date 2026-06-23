@@ -1,5 +1,17 @@
 # 04 — JOURNAL
 
+## Session 2026-06-23 — CI gate (pytest bloquant + ruff informatif)
+**Fait.** `.github/workflows/ci.yml` : 2 jobs sur push `main` / PR / dispatch.
+- **`tests`** : setup-python 3.11 + cache pip, install **lean** `.[common,data,quant,api]` + reportlab +
+  scikit-learn (les tests gardent torch/vectorbt/xgboost… via `importorskip` → skip propre si absent ;
+  aucun import lourd au top-level des packages), puis `pytest -q` **bloquant**. Local : **505 passés,
+  4 skips, 77 s**.
+- **`lint`** : `ruff check packages apps scripts` en **`continue-on-error`** (informatif). Le legacy a
+  ~3857 occurrences ruff → on ratchet sans bloquer le flux ; passera bloquant après burn-down.
+- `concurrency` (annule les runs superséd és) + `permissions: contents read`.
+**Décidé.** mypy **différé** (strict = trop bruyant sur le legacy, gate inutilisable d'emblée). weasyprint
+exclu de l'install CI (libs système cairo/pango) — seul reportlab est testé, installé directement.
+
 ## Session 2026-06-23 — Design « radical » (robuste, 0 dépendance) [PR #229]
 **Fait.** (CSS-only / contenu à `Nav.tsx` → aucune régression fonctionnelle possible, build static 21/21 vert)
 - **Aurora background** : ruban conique flou (`body::after`, `globals.css`), mélangé en OKLCH aux accents,
