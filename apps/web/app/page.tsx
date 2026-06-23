@@ -96,11 +96,11 @@ export default function Dashboard() {
         ))}
       </div>
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <MetricCard label="Rendement" value={pct(m.total_return)} tone={m.total_return >= 0 ? "pos" : "neg"} />
-        <MetricCard label="CAGR" value={pct(m.cagr ?? 0)} tone={(m.cagr ?? 0) >= 0 ? "pos" : "neg"} />
-        <MetricCard label="Sharpe" value={m.sharpe?.toFixed(2)} />
-        <MetricCard label="Sortino" value={m.sortino?.toFixed(2)} />
-        <MetricCard label="Max DD" value={pct(m.max_drawdown)} tone="neg" />
+        <MetricCard hero label="Rendement" value={pct(m.total_return)} tone={m.total_return >= 0 ? "pos" : "neg"} />
+        <MetricCard hero label="CAGR" value={pct(m.cagr ?? 0)} tone={(m.cagr ?? 0) >= 0 ? "pos" : "neg"} />
+        <MetricCard hero label="Sharpe" value={m.sharpe?.toFixed(2)} />
+        <MetricCard hero label="Sortino" value={m.sortino?.toFixed(2)} />
+        <MetricCard hero label="Max DD" value={pct(m.max_drawdown)} tone="neg" />
       </div>
       <EquityChart series={chartEquity} benchmarks={chartBench} />
 

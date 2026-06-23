@@ -3,13 +3,16 @@ import { useEffect, useRef, useState } from "react";
 
 // Carte KPI avec compteur animé (count-up) sur la partie numérique, préfixe/suffixe préservés.
 // Respecte prefers-reduced-motion (affichage direct). tone = couleur sémantique P&L/risque.
-export function MetricCard({ label, value, tone }: { label: string; value: string; tone?: "pos" | "neg" }) {
+export function MetricCard({ label, value, tone, hero }:
+  { label: string; value: string; tone?: "pos" | "neg"; hero?: boolean }) {
   const color = tone === "pos" ? "text-pos" : tone === "neg" ? "text-neg" : "text-fg";
   const display = useCountUp(value);
   return (
-    <div className="card p-4">
-      <div className="text-muted text-xs uppercase tracking-wide">{label}</div>
-      <div className={`mono text-2xl mt-1 ${color}`}>{display}</div>
+    <div className={`card ${hero ? "p-5" : "p-4"}`}>
+      <div className="text-muted text-[11px] uppercase tracking-[0.08em]">{label}</div>
+      <div className={`mono mt-1 ${color} ${hero ? "text-3xl md:text-4xl font-semibold tracking-tight" : "text-2xl"}`}>
+        {display}
+      </div>
     </div>
   );
 }
