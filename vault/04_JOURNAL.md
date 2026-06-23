@@ -1,5 +1,19 @@
 # 04 — JOURNAL
 
+## Session 2026-06-23 — Attribution honnête + nettoyage repo + docs
+**Fait.**
+- **Verdict d'attribution gaté sur la significativité** [PR #240] : `analytics.attribution()` calcule le
+  **t-stat de l'alpha** (résidu r−β·b) + flags `alpha_significant`/`underperforms_benchmark`. Verdict
+  « compétence » SEULEMENT si |t|≥2 ET ne sous-performe pas QQQ ; sinon « hors-QQQ — NON prouvé (DSR≈0) ».
+  Front : label « Alpha (compétence) » → « Hors-QQQ » + caveat. Corrige l'incohérence relevée par
+  l'utilisateur (β≈0,08 attribuait mécaniquement ~tout à l'alpha ; le preset sous-performe QQQ 160 % vs 557 %).
+- **Nettoyage repo** [PR #239] : retrait du **gitlink fantôme** `Screening-Trading` (mode 160000, sans
+  `.gitmodules`) + `.gitignore /Screening-Trading/`. Côté utilisateur : sortie de Vim (`core.editor true`),
+  suppression du clone imbriqué récursif, réalignement `reset --hard origin/main`.
+- **Docs** : README (table commandes + bloc Gouvernance/Honnêteté), TODO (opérationnel mesuré, chantiers
+  restants), index. Rappels UX : `qt` (alias projet), `rm -rf apps/web/.next` avant `npm run dev` après
+  un `make site`, site en ligne ≠ local = **données différentes** (univers CI borné vs `YAHOO.db`), pas version.
+
 ## Session 2026-06-23 — #8 Garde anti-hallucination LLM (alignement)
 **Fait.** `packages/llm/guard.py` : `guard_numbers()` — tout nombre significatif (%/décimal/≥10) du
 memo IA absent des `facts` fournis est neutralisé (`[n.d.]`) ou rejeté. Branché dans `_enrich_ai_memo`

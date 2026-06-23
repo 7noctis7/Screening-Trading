@@ -25,23 +25,29 @@
 - [x] **#10 Gate DSR (robuste/défensif)** sur `make calibrate-preset` : n'accepter des params que si **DSR>0 & PBO<0.5** (purged CV — briques `packages/ml` + `portfolio/psr.py`).
 
 ### ⚙️ Opérationnel (rapide, côté utilisateur)
-- [ ] **CE SOIR au retour sur le Mac — mesurer le gain du sprint** :
-  ```bash
-  cd ~/Screening-Trading && git pull origin main
-  make backtest-preset      # Calmar / MaxDD du preset (avant/après)
-  make calibrate-preset     # meilleurs params (Sharpe déflaté, anti-overfit)
-  ```
-  → attendu : Max DD nettement ↓, Calmar ↑, alpha honnête < 6.9 % (#2 a retiré la fuite).
+- [x] **Mesuré sur données réelles (2026-06-23)** : `make backtest-preset` → Preset CAGR 80,5 % · Sharpe 2,44 ·
+  **MaxDD -9,0 %** vs équipondéré MaxDD -23,3 % (DD ÷ ~2,6). `make calibrate-preset` → 27 combos,
+  **Sharpe déflaté ≤ 1 % partout = DSR≈0 CONFIRMÉ** (aucun alpha directionnel robuste).
+- [ ] **Adopter le réglage défensif recommandé** : `echo 'QUANT_DD_TARGET=0.15' >> .env`
+  (combo le moins overfit : DD-cible 15 % · top-K 20 · bande 3 % · turnover 0,20×).
 - [ ] **Reset Alpaca paper + 1 seul `make live-go`** → annule le levier ~1,85× actuel.
 - [ ] **Ménage disque macOS** (Data volume ~12 Go libres) : `prediction-market-analysis` 50 Go, `Desktop` 21 Go, `Library` 16 Go.
 - [ ] Plugins Obsidian : **Smart Connections** + **Obsidian Git** (si pas encore activés).
 - [ ] (Optionnel) Supabase : créer projet + table `daily_kpis` → `make supabase-kpis`.
 
+### 🔭 Chantiers code restants (non urgents — palier déjà très bon)
+- [ ] **#6** Facteur prediction-markets (Kalshi/Polymarket, API publiques gratuites) — vrai wedge data.
+- [ ] **#9** GARCH(1,1) au sizing vol-target (module `packages/portfolio/garch.py` déjà présent) — derrière flag + A/B.
+- [ ] **Suite #2** : extraction des sections du god-object `snapshot.py` en modules `packages/sections/*` + registre.
+- [ ] **Burn-down ruff/mypy** (~3800) par lots → puis passer les gates **bloquants**.
+
 ### 📐 Méthode (chaque amélioration)
 1. coder dans `preset_backtest.py` derrière un **flag** (comparer avant/après) ;
 2. `make backtest-preset` + `make calibrate-preset` → vérifier **Calmar ↑ & MaxDD ↓** ;
 3. **walk-forward OOS** (pas d'overfitting) ; 4. test pytest ; 5. PR → merge.
-> ✅ **Sprint 8/10 FAIT** : #3 #5 #6 #1 #4 #2 #8 #10 (PR #220→#224). A/B krach : Max DD -41%. #7/#9 différés (parcimonie/conflit). **Mesurer sur données réelles** : `make backtest-preset` + `calibrate-preset`.
+> ✅ **Sprint alpha 8/10** : #3 #5 #6 #1 #4 #2 #8 #10. **Audit « Conseil Suprême » 10/10 livrés** (gate
+> publication, repro, lignage, property tests, isolation des fautes, PSR/honnêteté, Six Sigma, garde LLM,
+> screener bout-en-bout, CI gate) + **verdict d'attribution honnête** (gaté sur t-stat). DSR≈0 confirmé en réel.
 
 ## ✅ Fait
 - [x] **Sprint-0 Gouvernance (audit Conseil Suprême, 0 €)** : gate publication anti « site muet »
