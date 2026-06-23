@@ -65,7 +65,9 @@
 - [x] **S0** Configs YAML d'exemple (universe/risk/factors/strategy) + tests d'archi
 
 ## P0 — Socle (sans quoi rien ne tient)
-- [ ] **CI** : ruff + mypy + pytest en GitHub Actions ; pre-commit
+- [x] **CI** : **pytest bloquant** + **ruff informatif** en GitHub Actions (`.github/workflows/ci.yml`),
+  cache pip + concurrency. pre-commit déjà en place (gitleaks/clé privée/gros fichiers/EOF).
+  `(reste : mypy — différé, strict trop bruyant sur le legacy ; ruff bloquant après burn-down des ~3800)`
 - [x] **Storage** : bronze/silver + **GOLD feature store** (SQLite, upsert idempotent, multi-TF, anti-skew) `(reste : DuckDB+Parquet, Alembic, Feast)`
 - [x] **DataProvider** : synthetic + **yfinance** + wrappers **fallback/cache/rate-limit** + **FMP fondamental** + backend **DuckDB** pluggable `(reste : Finnhub/Alpaca temps réel)`
 - [x] **Qualité DB** : contrats OHLCV (prix>0, cohérence, ts, gaps, fraîcheur) → **pipeline bloquant** `(reste : pandera/GE, alerte branchée)`

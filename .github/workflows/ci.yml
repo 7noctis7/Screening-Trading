@@ -1,0 +1,53 @@
+name: CI (tests + lint)
+
+# Gate de robustesse (priorité #1 du projet) : la suite pytest doit rester verte sur main et à
+# chaque PR. Ruff tourne en INFORMATIF (non bloquant) tant que le legacy n'est pas nettoyé
+# (~3800 occurrences) → on ratchet sans bloquer le flux. Passera bloquant une fois le code propre.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Annule un run précédent si un nouveau push arrive sur la même réf (économie de minutes CI).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install deps (lean — les tests skippent proprement les libs lourdes absentes)
+        run: |
+          python -m pip install -U pip
+          # Set minimal mais suffisant : les tests gardent torch/vectorbt/xgboost… via importorskip.
+          # weasyprint exclu (libs système cairo/pango) ; reportlab installé directement pour ses tests.
+          pip install -e ".[common,data,quant,api]" reportlab scikit-learn pytest
+      - name: pytest
+        run: python -m pytest -q
+
+  lint:
+    name: ruff (informatif)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install ruff
+        run: pip install ruff
+      - name: ruff check (non bloquant)
+        continue-on-error: true
+        run: ruff check packages apps scripts
