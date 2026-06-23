@@ -66,3 +66,6 @@ apps/web/public/data/
 apps/web/public/reports/
 apps/web/tsconfig.tsbuildinfo
 *.tsbuildinfo
+
+# Anti clone-imbriqué accidentel (gitlink parasite)
+/Screening-Trading/
