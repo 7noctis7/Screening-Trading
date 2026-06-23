@@ -1,0 +1,19 @@
+# Moteur de screening : filtres durs (gardent/écartent) puis scoring z-score des survivants.
+# Métriques dispo : facteurs (momentum, trend, low_vol, value, quality) + prix
+# (last_close, dollar_volume, ret_1m/3m/6m/12m, dist_sma50/200, above_sma50/200,
+#  drawdown_from_high, vol_63). Booléens encodés 1.0/0.0 (filtrer via `op: ">=", value: 1`).
+# Opérateurs : > >= < <= == != between (value=[lo,hi]).  on_missing: fail (défaut) | pass.
+
+filters:
+  - {metric: dollar_volume,     op: ">=",      value: 5000000}   # liquidité min (~5 M$/j)
+  - {metric: above_sma200,      op: ">=",      value: 1}         # tendance de fond haussière
+  - {metric: drawdown_from_high, op: ">=",     value: -0.30}     # pas en plein effondrement
+  - {metric: ret_12m,           op: between,   value: [0.0, 4.0]} # momentum positif, sans bulle
+
+scoring:
+  weights:
+    momentum: 1.0
+    trend: 0.5
+    low_vol: 0.5
+  sector_neutral: false
+  top_n: 25

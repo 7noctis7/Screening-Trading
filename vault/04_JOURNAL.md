@@ -1,5 +1,22 @@
 # 04 — JOURNAL
 
+## Session 2026-06-23 — Moteur de screening (filtres YAML + scoring z-score) [P1]
+**Fait.** `packages/screening/` (le stub était vide) — comble le trou P1 « screening → trading ».
+- **`engine.py`** : `ScreeningEngine` = filtres durs `{metric, op, value}` (op : `> >= < <= == != between`,
+  `on_missing: fail|pass`) → survivants notés par **composite z-score** (réutilise `_zscore` du ranking,
+  global ou sector-neutral, facteur sans donnée ignoré). `ScreenResult` porte `passed/score/failed/
+  metrics/contributions` + `reason` lisible. `from_yaml()` + `top_n` + `include_rejected`.
+- **`metrics.py`** : vocabulaire unifié filtres↔scoring. Réutilise le **registre de facteurs**
+  (`momentum/trend/low_vol`, et `value/quality` si fondamental chargé) + **métriques prix** internes
+  (`dollar_volume`, `ret_1m/3m/6m/12m`, `dist_sma50/200`, `above_sma50/200`, `drawdown_from_high`,
+  `vol_63`, `last_close`). Point-in-time (barres ≤ t). Métrique inconnue → `ValueError` franc.
+- **`config/screening.yaml`** : preset (liquidité ≥5 M$, au-dessus MM200, DD > -30 %, momentum sain) +
+  scoring momentum/trend/low_vol, top 25.
+- **Tests** : `tests/screening/test_engine.py` (11) — filtres, between, on_missing, liquidité, ordre du
+  score, top_n, métrique/op inconnus, chargement YAML. **516 passés** au total, ruff propre sur le neuf.
+**Décidé.** DRY : on réutilise `_zscore`/`FactorContext`/le registre de facteurs au lieu de dupliquer.
+Le screening (filtre booléen + tri) est complémentaire du ranking (tri pur pondéré régime×classe).
+
 ## Session 2026-06-23 — CI gate (pytest bloquant + ruff informatif)
 **Fait.** `.github/workflows/ci.yml` : 2 jobs sur push `main` / PR / dispatch.
 - **`tests`** : setup-python 3.11 + cache pip, install **lean** `.[common,data,quant,api]` + reportlab +

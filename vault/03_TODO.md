@@ -77,7 +77,10 @@
 ## P1 — Cœur de la valeur (screening → paper trading)
 - [x] **Macro & régime point-in-time** : MacroStore (vintages ALFRED) + FRED provider + surprises éco + cartographie macro→actifs + classifieur cycle `(reste : FMI/OCDE international, breadth)` + FMI/OCDE, **surprises éco (réalisé vs consensus)**, cartographie macro→actifs, classification cycle + risk-on/off → `RegimeState` quotidien point-in-time
 - [x] **Fondamental & valo** : ratios Vernimmen + multiples/**DCF** Damodaran + facteurs **value/quality** sector-neutral `(reste : providers réels FMP/yfinance, DuPont détaillé, point-in-time réel)`
-- [ ] **Screening** : moteur de filtres YAML + scoring z-score cross-sectional
+- [x] **Screening** : moteur de filtres YAML + scoring z-score cross-sectional
+  (`packages/screening/` : `engine.py` filtres durs op/between/on_missing → survivants notés par
+  composite z-score ; `metrics.py` réutilise le registre de facteurs + métriques prix ;
+  `config/screening.yaml` ; 11 tests). Réutilise `_zscore` du ranking (DRY).
 - [x] **Ranking multi-facteur** : momentum/trend/low-vol (z-score cross-sectional), pondérations **régime × classe** + applicabilité, top N **explicable** `(reste : value/quality du fondamental)`
 - [x] **Stratégies** (plugins) : `ma_crossover` (trend), `rsi_reversion` (mean-rev), stop/target ATR `(reste : breakout, pairs, short, trailing, scaling)`
 - [x] **Sizing** : `fixed_fractional`, `vol_target` (cap) `(reste : Kelly bridé, risk-parity)`
