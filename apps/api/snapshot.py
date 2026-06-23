@@ -300,10 +300,31 @@ def _data_section(data: dict, acmap: dict[str, str], universe_total: int = 0,
             audit_summary = _ar.to_dict()
         except Exception:  # noqa: BLE001 — affichage non critique
             audit_summary = None
+    # SPC / Six Sigma : taux de défaut OHLCV sur TOUT le panel → DPMO + niveau sigma.
+    # Défaut = barre non conforme (high<low, prix≤0, volume<0, ou NaN). Best-effort.
+    spc_block: dict = {"available": False}
+    try:
+        from packages.data.spc import dpmo, p_chart, sigma_level
+        total, bad = 0, 0
+        for _bars in data.values():
+            for b in _bars:
+                total += 1
+                ok = (b.high >= b.low and b.open > 0 and b.low > 0 and b.close > 0
+                      and b.volume >= 0 and b.close == b.close and b.high == b.high)
+                if not ok:
+                    bad += 1
+        _d = dpmo(bad, total)
+        spc_block = {"available": True, "p_chart": p_chart(bad, total),
+                     "dpmo": round(_d, 2), "sigma_level": sigma_level(_d),
+                     "checks": "high>=low, prix>0, volume>=0, non-NaN",
+                     "target_dpmo": 3.4}
+    except Exception:  # noqa: BLE001 — affichage non critique
+        spc_block = {"available": False}
     src_cfg = load_yaml(ROOT / "config" / "data_sources.yaml")
     return {
         "as_of": data[first][-1].ts.isoformat(),
         "health": health,
+        "spc": spc_block,                                   # SPC / Six Sigma (qualité pipeline)
         "symbols_total": len(symbols),
         "universe_total": universe_total or len(symbols),   # total disponible (29k si YAHOO.db)
         "provider": mode,                                   # vrai mode des données (réel / mixte / synthétique)

@@ -68,6 +68,31 @@ export default function DataPage() {
         </section>
       )}
 
+      {/* SPC / Six Sigma — taux de défaut du pipeline OHLCV */}
+      {d.spc?.available && (
+        <section className="card p-4">
+          <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Maîtrise statistique (Six Sigma)</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {([
+              ["Niveau sigma", `${d.spc.sigma_level}σ`,
+                d.spc.sigma_level >= 6 ? "#22c55e" : d.spc.sigma_level >= 4.5 ? "#f59e0b" : "#f43f5e"],
+              ["DPMO", nb(Math.round(d.spc.dpmo)), undefined],
+              ["Cible", `${d.spc.target_dpmo} DPMO`, "#94a3b8"],
+              ["Barres contrôlées", nb(d.spc.p_chart?.n ?? 0), undefined],
+            ] as [string, string, string | undefined][]).map(([lab, val, col]) => (
+              <div key={lab} className="rounded-lg border border-border p-3" style={{ background: "var(--surface)" }}>
+                <div className="text-muted text-[11px] uppercase tracking-wide">{lab}</div>
+                <div className="text-xl mono mt-1" style={col ? { color: col } : undefined}>{val}</div>
+              </div>
+            ))}
+          </div>
+          <div className="text-xs text-muted2 mt-2">
+            Défaut = barre non conforme ({d.spc.checks}). Taux p̂ = {((d.spc.p_chart?.p ?? 0) * 100).toFixed(5)} %.
+            Cible 3,4 DPMO = 6σ (convention décalage 1,5σ).
+          </div>
+        </section>
+      )}
+
       {/* Audit PwC — complétude / exactitude / point-in-time */}
       {d.audit && (
         <section className="card p-4">

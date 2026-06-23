@@ -1,5 +1,12 @@
 # 04 — JOURNAL
 
+## Session 2026-06-23 — #5 SPC / Six Sigma (qualité data) + UI
+**Fait.** `packages/data/spc.py` (stdlib) : `p_chart` (carte p ±3σ), `cusum` (détection de dérive),
+`dpmo` + `sigma_level` (décalage 1,5σ). Wiring dans la section `data` : taux de défaut OHLCV sur tout
+le panel (high<low / prix≤0 / volume<0 / NaN) → DPMO + niveau sigma (`data.spc`). Section
+« Maîtrise statistique (Six Sigma) » sur la page Données (niveau σ coloré, DPMO, cible 3,4, p̂).
+8 tests. Smoke réel : 3,7 M barres, 0 défaut → 6σ (le gate contrats garde la base propre). **537 verts.**
+
 ## Session 2026-06-23 — #2 isolation des fautes + #3 PSR/honnêteté en UI
 **Fait.**
 - **#2 (phase 1)** `packages/common/safe_section.py` : chaque section feuille du snapshot (themes, ml,
