@@ -21,6 +21,7 @@ from packages.data import data_providers
 from packages.execution import CostModel
 from packages.portfolio import (attribution, correlation_matrix, cluster, expert_review,
                                 mc_projection, monte_carlo, relative_metrics, risk_metrics_fn)
+from packages.common.safe_section import safe_section
 from packages.portfolio.metrics import returns_from_equity
 from packages.ranking import RankingEngine
 from packages.regime import MacroImpactMap, MacroRegimeClassifier, synthetic_macro
@@ -1520,9 +1521,9 @@ def build_snapshot(seed: int = 7) -> dict:
     all_trades = journal.all()
     attr = attribution.attribute(all_trades, "strategy")
     agg = {**PL.metrics_payload(equity), **rel, **rm, **mc}
-    themes = _themes_section(data, sector_of, end)         # mêmes données (cohérence)
+    themes = safe_section("themes", _themes_section, data, sector_of, end)  # isolé
     stance_by = themes.get("stance_by_sector", {})
-    ml = _ml_section(data, sector_of, names)
+    ml = safe_section("ml", _ml_section, data, sector_of, names)            # isolé
     ml_scores = ml.get("scores", {}) if ml.get("available") else {}
 
     # SINGLE SOURCE OF TRUTH : les positions ouvertes pilotent positions/trades/corrélation/graphes
@@ -1707,7 +1708,7 @@ def build_snapshot(seed: int = 7) -> dict:
         r["ml_score"] = ml_scores.get(r["symbol"])
         r["sector"] = sector_of.get(r["symbol"], "")
     # Screener à FILTRES (packages.screening) — univers réduit aux candidats éligibles.
-    screen_sec = _screen_section(data, acmap, names, sector_of, n - 1)
+    screen_sec = safe_section("screen", _screen_section, data, acmap, names, sector_of, n - 1)
     now = datetime.now(timezone.utc)
     last_bar = ts_list[-1]
     vix_now = vix[-1]
@@ -1725,11 +1726,14 @@ def build_snapshot(seed: int = 7) -> dict:
     }
 
     # --- NOTE DE CONVICTION : fusion des lentilles (best practice multi-facteurs) ---
-    sentiment_sec = _sentiment_section(held, names, sector_of, data)
+    sentiment_sec = safe_section("sentiment", _sentiment_section, held, names, sector_of, data)
     _cand_eq = list(dict.fromkeys(held + [r["symbol"] for r in screener["rows"]] + symbols))
-    fundamentals_sec = _fundamentals_section(_cand_eq, acmap, names, sector_of, data)
-    investors_sec = _investor_section(_cand_eq, acmap, names, sector_of)
-    conviction_sec = _conviction_section(
+    fundamentals_sec = safe_section(
+        "fundamentals", _fundamentals_section, _cand_eq, acmap, names, sector_of, data)
+    investors_sec = safe_section(
+        "investors", _investor_section, _cand_eq, acmap, names, sector_of)
+    conviction_sec = safe_section(
+        "conviction", _conviction_section,
         held, screener, ml_scores, sentiment_sec, fundamentals_sec, investors_sec,
         data, sector_of, names)
     # --- PRESET « best practice » : qualité + risk-parity + DD-target + blackout + no-trade band ---
@@ -2207,8 +2211,8 @@ def build_snapshot(seed: int = 7) -> dict:
         "preset_trades": _preset_trades,           # journal des rebalancements du preset (production)
         "preset_ledger": _preset_ledger,           # journal détaillé + P&L (justifie la perf du dashboard)
         "index_core_curves": _ic_curves,           # courbes preset/QQQ/megacap → sweeps instantanés
-        "universe": _universe_section(full_universe),
-        "data": {**_data_section(data, acmap, len(full_universe), data_mode),
+        "universe": safe_section("universe", _universe_section, full_universe),
+        "data": {**safe_section("data", _data_section, data, acmap, len(full_universe), data_mode),
                  "fundamentals_provider": fundamentals_sec.get("source", "—"),   # source RÉELLE utilisée (runtime)
                  **({"survivorship": data_sec_extra} if data_sec_extra else {})},
         "themes": themes,
