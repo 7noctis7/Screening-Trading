@@ -40,8 +40,14 @@ def test_attribution_decomposes_alpha_beta():
     assert at["available"] is True
     # cohérence : contribution bêta + alpha = rendement portefeuille
     assert abs((at["beta_contribution"] + at["alpha_contribution"]) - at["portfolio_return"]) < 1e-6
-    assert 0.0 <= at["alpha_share"] <= 1.0 and at["verdict"] in (
-        "alpha dominant (compétence)", "bêta dominant (marché)")
+    assert 0.0 <= at["alpha_share"] <= 1.0
+    # verdict honnête : significativité gatée + flags exposés
+    assert isinstance(at["verdict"], str) and at["verdict"]
+    assert "alpha_tstat" in at and isinstance(at["alpha_significant"], bool)
+    assert isinstance(at["underperforms_benchmark"], bool)
+    # un alpha non significatif ne doit JAMAIS être étiqueté « significatif »
+    if not at["alpha_significant"] or at["underperforms_benchmark"]:
+        assert "significatif)" not in at["verdict"]
 
 
 def test_attribution_unavailable_without_benchmark():
