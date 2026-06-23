@@ -12,12 +12,12 @@
 - [x] **#6 Frein drawdown (marché)** : suivre DD depuis le pic ; `dd<-10%→gross×0.5`, `dd<-15%→gross×0` (ré-arme à la reprise). `preset_backtest.py` boucle `for t`.
 - [x] **#5 Porte de régime sur le gross** : plein risque si `^NDX>MM200 & pente>0` ; 0.6 en distribution ; 0.2 sous MM200. (`packages/regime/` + passer la courbe NDX au backtest.)
 - [x] **#3 Covariance Ledoit-Wolf** dans `_cov_annual` (`preset_backtest.py:27`) — utiliser `packages.data.engine.ledoit_wolf_shrinkage` (déjà dispo) au lieu de `np.cov` brut.
-- [ ] **#9 Rebalancement déclenché par la vol** : rebal si `|Δσ|/σ>25%` ou dérive>band (au lieu de `step=21` fixe).
+- [~] **#9 Rebalancement déclenché par la vol** : DIFFÉRÉ (parcimonie) — les portes #5/#6/#8 dé-risquent déjà à chaque step ; marginal. À n'ajouter QUE si le backtest réel le justifie.
 
 ### 🟠 P1 — Booster l'alpha (sans β subi)
 - [x] **#1 Anti cash-drag (sans levier, k_dd→1.6)** : `preset_backtest.py:71` `gross=min(1,tgt_vol/pv)` → `clip(tgt_vol/pv,0,GROSS_MAX≈1.5)`, `tgt_vol≈0.15`.
 - [x] **#4 Tilt momentum sur ERC** : `w ∝ w_erc × max(0,mom_12m)^γ` (renormalisé) — l'ERC pur étouffe les leaders (NVDA…).
-- [ ] **#7 Sizing demi-Kelly bridé** : `f=0.5·μ/σ²`, clip `[0,max_w]`, renormalisé sur le gross.
+- [~] **#7 Sizing demi-Kelly** : DIFFÉRÉ — conflit avec le sizing ERC+momentum déjà en place ; +1 paramètre = +overfit. À évaluer en A/B vs ERC seulement si besoin.
 - [x] **#8 Gate breadth cross-asset** : `gross×clip(%univers>MM200 / 0.5, 0, 1)`.
 
 ### 🟢 Anti-overfitting (OBLIGATOIRE — rigueur López de Prado)
@@ -41,7 +41,7 @@
 1. coder dans `preset_backtest.py` derrière un **flag** (comparer avant/après) ;
 2. `make backtest-preset` + `make calibrate-preset` → vérifier **Calmar ↑ & MaxDD ↓** ;
 3. **walk-forward OOS** (pas d'overfitting) ; 4. test pytest ; 5. PR → merge.
-> ✅ Trio P0 **#6+#5+#3 FAIT** (PR #220) — A/B krach : Max DD -53.6% → -31.7% (-41%). Suite : P1 #1/#4/#7/#8 + anti-overfit #2/#10.
+> ✅ **Sprint 8/10 FAIT** : #3 #5 #6 #1 #4 #2 #8 #10 (PR #220→#224). A/B krach : Max DD -41%. #7/#9 différés (parcimonie/conflit). **Mesurer sur données réelles** : `make backtest-preset` + `calibrate-preset`.
 
 ## ✅ Fait
 - [x] **S13** Excellence op (drift PSI, audit trail, télémétrie, backup, tear sheets HTML/PDF)
