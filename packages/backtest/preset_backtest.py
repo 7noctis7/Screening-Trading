@@ -69,11 +69,22 @@ def _mom_tilt(A: np.ndarray, t: int, w: np.ndarray, gamma: float = 1.0) -> np.nd
     return w2 / s if s > 0 else w
 
 
+def _breadth(A: np.ndarray, t: int) -> float:
+    """#8 ampleur de marché : fraction de l'univers au-dessus de sa MM200 (santé interne du marché).
+    Faible breadth = rallye étroit/fragile → on réduit le gross. Data-driven, dans [0,1]."""
+    if t < 25:
+        return 1.0
+    lo = max(0, t - 200)
+    above = [A[i, t] > A[i, lo:t].mean() for i in range(A.shape[0]) if t - lo > 5]
+    return float(np.mean(above)) if above else 1.0
+
+
 def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict | None = None,
                     swing_equity: list | None = None, dd_target: float = 0.25, band: float = 0.03,
                     step: int = 21, lookback: int = 120, top_k: int = 30, k_dd: float = 1.6,
                     blackout_move: float = 0.12, regime_gate: bool = True,
-                    mom_tilt: bool = True, legacy_quality_universe: bool = False) -> dict:
+                    mom_tilt: bool = True, legacy_quality_universe: bool = False,
+                    breadth_gate: bool = True) -> dict:
     syms = [s for s, b in data.items() if b and len(b) > lookback + 2 * step]
     if len(syms) < 5:
         return {"available": False}
@@ -124,6 +135,8 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
         gross = 0.0 if pv <= 0 else min(1.0, tgt_vol / pv)
         if regime_gate:                                         # #5 régime + #6 frein DD (≤ 1, jamais de levier)
             gross *= _regime_mult(mkt, t)
+        if breadth_gate:                                        # #8 ampleur de marché (rallye étroit → ↓)
+            gross *= float(np.clip(_breadth(A, t) / 0.5, 0.0, 1.0))
         w = w * gross
         if band > 0 and prev_w.sum() > 0:                       # bande de non-trading
             w = np.where(np.abs(w - prev_w) < band, prev_w, w)
@@ -172,7 +185,8 @@ def preset_latest_weights(data: dict, quality: dict | None = None, asset_classes
                           dd_target: float = 0.35, band: float = 0.03, lookback: int = 120,
                           top_k: int = 30, k_dd: float = 1.6, blackout_move: float = 0.12,
                           max_weight: float = 0.10, min_names: int = 12,
-                          regime_gate: bool = True, mom_tilt: bool = True) -> dict:
+                          regime_gate: bool = True, mom_tilt: bool = True,
+                          breadth_gate: bool = True) -> dict:
     """Poids cibles ACTUELS du preset (dernière barre) — pilote la PRODUCTION (make live).
 
     Même logique que le backtest (qualité top-K -> risk-parity ERC -> DD-target -> blackout), mais
@@ -224,6 +238,8 @@ def preset_latest_weights(data: dict, quality: dict | None = None, asset_classes
     gross = 0.0 if pv <= 0 else min(1.0, tgt_vol / pv)
     if regime_gate:                                             # #5 régime + #6 frein DD (production)
         gross *= _regime_mult(mkt, t)
+    if breadth_gate:                                            # #8 ampleur de marché (production)
+        gross *= float(np.clip(_breadth(A, t) / 0.5, 0.0, 1.0))
     w = w * gross
     return {universe[i]: round(float(w[i]), 4) for i in range(len(universe)) if w[i] > 1e-4}
 
