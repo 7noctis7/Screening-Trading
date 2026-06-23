@@ -804,8 +804,14 @@ def _enrich_ai_memo(report: dict) -> None:
             "de ces données. Pas de conseil financier explicite.\n\n" + facts,
             system="Tu es un analyste financier senior (style Damodaran/Vernimmen). Concis, précis, français.")
         if memo and len(memo.strip()) > 30:
-            report["memo"] = memo.strip()
-            report["memo_source"] = "IA locale"
+            # Garde anti-hallucination : aucun chiffre absent des `facts` ne peut subsister.
+            from packages.llm.guard import guard_numbers
+            clean, violations = guard_numbers(memo.strip(), facts, policy="redact")
+            # Trop de chiffres fabriqués → on rejette l'IA et on garde le mémo à base de règles.
+            if len(violations) > 2:
+                return
+            report["memo"] = clean
+            report["memo_source"] = "IA locale" + (" (chiffres contrôlés)" if violations else "")
     except Exception:  # noqa: BLE001
         pass
 
