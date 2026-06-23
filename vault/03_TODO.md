@@ -25,6 +25,13 @@
 - [ ] **#10 Gate DSR/PBO** sur `make calibrate-preset` : n'accepter des params que si **DSR>0 & PBO<0.5** (purged CV — briques `packages/ml` + `portfolio/psr.py`).
 
 ### ⚙️ Opérationnel (rapide, côté utilisateur)
+- [ ] **CE SOIR au retour sur le Mac — mesurer le gain du sprint** :
+  ```bash
+  cd ~/Screening-Trading && git pull origin main
+  make backtest-preset      # Calmar / MaxDD du preset (avant/après)
+  make calibrate-preset     # meilleurs params (Sharpe déflaté, anti-overfit)
+  ```
+  → attendu : Max DD nettement ↓, Calmar ↑, alpha honnête < 6.9 % (#2 a retiré la fuite).
 - [ ] **Reset Alpaca paper + 1 seul `make live-go`** → annule le levier ~1,85× actuel.
 - [ ] **Ménage disque macOS** (Data volume ~12 Go libres) : `prediction-market-analysis` 50 Go, `Desktop` 21 Go, `Library` 16 Go.
 - [ ] Plugins Obsidian : **Smart Connections** + **Obsidian Git** (si pas encore activés).
