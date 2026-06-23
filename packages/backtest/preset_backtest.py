@@ -5,7 +5,8 @@ Combine, à chaque rebalancement :
      pas de fuite ; c'est un *sleeve* facteur qualité).
   2. **Risk-parity (ERC)** : chaque actif contribue également au risque (covariance trailing).
   3. **DD-target exposure** : exposition brute dimensionnée pour viser un drawdown cible
-     (vol-cible ≈ DD/2.5), le reste en cash → pilotage par la volatilité réalisée.
+     (vol-cible ≈ DD/1.6 — anti cash-drag), plafonnée à 100 % (**jamais de levier**) → le reste en cash.
+     Tilt momentum (#4) + porte de régime/frein DD (#5/#6) appliqués au gross/poids.
   4. **Earnings blackout (proxy)** : on évite d'entrer juste après un choc binaire (|move 2 j| élevé).
   5. **No-trade band** : on ne bouge un poids que s'il dérive de plus de `band` (turnover ↓).
   6. **Coûts par classe d'actifs** déduits du turnover (réalisme).
@@ -54,10 +55,25 @@ def _regime_mult(mkt: np.ndarray, t: int) -> float:
     return g
 
 
+def _mom_tilt(A: np.ndarray, t: int, w: np.ndarray, gamma: float = 1.0) -> np.ndarray:
+    """#4 incline les poids ERC vers le momentum 12 mois (capte les leaders type NVDA), SANS toucher
+    au gross : on renormalise à la même somme. Réduit le « low-vol drag » de l'ERC pur."""
+    base = A[:, max(0, t - 252)]
+    mom = np.where(base > 0, A[:, t] / base - 1.0, 0.0)
+    tilt = np.clip(mom, 0.0, None) ** gamma
+    if float(tilt.sum()) <= 0:
+        return w
+    f = 0.5 + 0.5 * tilt / (tilt.mean() + 1e-9)                  # 0.5×base + 0.5×momentum
+    w2 = w * f
+    s = float(w2.sum())
+    return w2 / s if s > 0 else w
+
+
 def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict | None = None,
                     swing_equity: list | None = None, dd_target: float = 0.25, band: float = 0.03,
-                    step: int = 21, lookback: int = 120, top_k: int = 30, k_dd: float = 2.5,
-                    blackout_move: float = 0.12, regime_gate: bool = True) -> dict:
+                    step: int = 21, lookback: int = 120, top_k: int = 30, k_dd: float = 1.6,
+                    blackout_move: float = 0.12, regime_gate: bool = True,
+                    mom_tilt: bool = True) -> dict:
     syms = [s for s, b in data.items() if b and len(b) > lookback + 2 * step]
     if len(syms) < 5:
         return {"available": False}
@@ -92,6 +108,8 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
         w = np.where(np.abs(last2) > blackout_move, 0.0, w)
         ssum = w.sum()
         w = w / ssum if ssum > 0 else w
+        if mom_tilt:                                            # #4 incline vers les leaders (momentum)
+            w = _mom_tilt(A, t, w)
         pv = float(np.sqrt(max(0.0, w @ cov @ w)))              # DD-target : exposition pilotée par la vol
         gross = 0.0 if pv <= 0 else min(1.0, tgt_vol / pv)
         if regime_gate:                                         # #5 régime + #6 frein DD (≤ 1, jamais de levier)
@@ -142,9 +160,9 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
 
 def preset_latest_weights(data: dict, quality: dict | None = None, asset_classes: dict | None = None,
                           dd_target: float = 0.35, band: float = 0.03, lookback: int = 120,
-                          top_k: int = 30, k_dd: float = 2.5, blackout_move: float = 0.12,
+                          top_k: int = 30, k_dd: float = 1.6, blackout_move: float = 0.12,
                           max_weight: float = 0.10, min_names: int = 12,
-                          regime_gate: bool = True) -> dict:
+                          regime_gate: bool = True, mom_tilt: bool = True) -> dict:
     """Poids cibles ACTUELS du preset (dernière barre) — pilote la PRODUCTION (make live).
 
     Même logique que le backtest (qualité top-K -> risk-parity ERC -> DD-target -> blackout), mais
@@ -175,6 +193,8 @@ def preset_latest_weights(data: dict, quality: dict | None = None, asset_classes
         w = w_bl
     ssum = w.sum()
     w = w / ssum if ssum > 0 else w
+    if mom_tilt:                                                # #4 tilt momentum (avant le plafond)
+        w = _mom_tilt(A, t, w)
     # PLAFOND DE CONCENTRATION : aucune position > max_weight (anti-sur-concentration), itéré
     for _ in range(3):
         over = w > max_weight
@@ -200,7 +220,7 @@ def preset_latest_weights(data: dict, quality: dict | None = None, asset_classes
 
 def preset_equity_daily(data: dict, quality: dict | None = None, asset_classes: dict | None = None,
                         dd_target: float = 0.35, band: float = 0.03, step: int = 21,
-                        lookback: int = 120, top_k: int = 30, k_dd: float = 2.5,
+                        lookback: int = 120, top_k: int = 30, k_dd: float = 1.6,
                         blackout_move: float = 0.12, max_weight: float = 0.10, min_names: int = 12,
                         init_cap: float = 10000.0) -> dict:
     """Courbe d'equity QUOTIDIENNE du preset (pour le dashboard) : rebalancement tous les `step`
@@ -295,7 +315,7 @@ def _weights_at(A, rets, t, lookback, blackout_move, max_weight, min_names, tgt_
 
 def preset_trade_log(data: dict, quality: dict | None = None, asset_classes: dict | None = None,
                      dd_target: float = 0.35, band: float = 0.03, step: int = 21, lookback: int = 120,
-                     top_k: int = 30, k_dd: float = 2.5, blackout_move: float = 0.12,
+                     top_k: int = 30, k_dd: float = 1.6, blackout_move: float = 0.12,
                      max_weight: float = 0.10, min_names: int = 12, init_cap: float = 10000.0,
                      max_trades: int = 150) -> dict:
     """Journal des TRADES du preset : à chaque rebalancement, variations de poids → achats/ventes
@@ -355,7 +375,7 @@ def preset_trade_log(data: dict, quality: dict | None = None, asset_classes: dic
 
 def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict | None = None,
                   dd_target: float = 0.35, band: float = 0.03, step: int = 21, lookback: int = 120,
-                  top_k: int = 30, k_dd: float = 2.5, blackout_move: float = 0.12,
+                  top_k: int = 30, k_dd: float = 1.6, blackout_move: float = 0.12,
                   max_weight: float = 0.10, min_names: int = 12, init_cap: float = 10000.0,
                   max_trades: int = 500, core_closes: list | None = None, core_pct: float = 0.0,
                   core_sym: str = "QQQ") -> dict:
