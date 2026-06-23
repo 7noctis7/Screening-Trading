@@ -9,9 +9,9 @@
 > ✅ déjà fait : réplication idempotente **anti-levier** (`run_live.py`, réconciliation au delta).
 
 ### 🔴 P0 — Réduire le Max DD (le plus gros levier sur le Calmar)
-- [ ] **#6 Coupe-circuit drawdown (CPPI)** : suivre DD depuis le pic ; `dd<-10%→gross×0.5`, `dd<-15%→gross×0` (ré-arme à la reprise). `preset_backtest.py` boucle `for t`.
-- [ ] **#5 Porte de régime sur le gross** : plein risque si `^NDX>MM200 & pente>0` ; 0.6 en distribution ; 0.2 sous MM200. (`packages/regime/` + passer la courbe NDX au backtest.)
-- [ ] **#3 Covariance Ledoit-Wolf** dans `_cov_annual` (`preset_backtest.py:27`) — utiliser `packages.data.engine.ledoit_wolf_shrinkage` (déjà dispo) au lieu de `np.cov` brut.
+- [x] **#6 Frein drawdown (marché)** : suivre DD depuis le pic ; `dd<-10%→gross×0.5`, `dd<-15%→gross×0` (ré-arme à la reprise). `preset_backtest.py` boucle `for t`.
+- [x] **#5 Porte de régime sur le gross** : plein risque si `^NDX>MM200 & pente>0` ; 0.6 en distribution ; 0.2 sous MM200. (`packages/regime/` + passer la courbe NDX au backtest.)
+- [x] **#3 Covariance Ledoit-Wolf** dans `_cov_annual` (`preset_backtest.py:27`) — utiliser `packages.data.engine.ledoit_wolf_shrinkage` (déjà dispo) au lieu de `np.cov` brut.
 - [ ] **#9 Rebalancement déclenché par la vol** : rebal si `|Δσ|/σ>25%` ou dérive>band (au lieu de `step=21` fixe).
 
 ### 🟠 P1 — Booster l'alpha (sans β subi)
@@ -34,7 +34,7 @@
 1. coder dans `preset_backtest.py` derrière un **flag** (comparer avant/après) ;
 2. `make backtest-preset` + `make calibrate-preset` → vérifier **Calmar ↑ & MaxDD ↓** ;
 3. **walk-forward OOS** (pas d'overfitting) ; 4. test pytest ; 5. PR → merge.
-> Trio recommandé pour commencer : **#6 + #5 + #3** (attaque directe du Calmar), 1 PR testée.
+> ✅ Trio P0 **#6+#5+#3 FAIT** (PR #220) — A/B krach : Max DD -53.6% → -31.7% (-41%). Suite : P1 #1/#4/#7/#8 + anti-overfit #2/#10.
 
 ## ✅ Fait
 - [x] **S13** Excellence op (drift PSI, audit trail, télémétrie, backup, tear sheets HTML/PDF)
