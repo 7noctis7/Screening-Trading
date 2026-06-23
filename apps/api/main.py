@@ -75,7 +75,7 @@ _BUILD_LOCK = threading.Lock()
 _SNAP_FILE = Path(__file__).resolve().parents[2] / ".cache" / "snapshot.pkl"
 # Bump à chaque changement de SCHÉMA du snapshot → invalide le cache disque (évite de servir un
 # ancien snapshot construit par une version antérieure du code).
-_SNAP_VERSION = "2026-06-21-history-2015"
+_SNAP_VERSION = "2026-06-23-screen"
 
 
 def _load_disk() -> tuple[dict | None, float]:
@@ -174,6 +174,11 @@ def dashboard() -> dict:
 @app.get("/api/screener")
 def screener() -> dict:
     return _snap()["screener"]
+
+
+@app.get("/api/screen")
+def screen() -> dict:
+    return _snap()["screen"]
 
 
 @app.get("/api/preset_ledger")

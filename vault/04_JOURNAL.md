@@ -1,5 +1,21 @@
 # 04 — JOURNAL
 
+## Session 2026-06-23 — Screening branché (API + page front) + mypy CI + `make screen`
+**Fait.** Le moteur de screening est désormais **exposé de bout en bout**.
+- **Snapshot** : `_screen_section()` (`apps/api/snapshot.py`) lance `ScreeningEngine` sur le panel de
+  l'univers → section `screen` (count, universe_size, filtres, poids, rows top-50 enrichis nom/secteur/
+  classe + score/reason/ret_12m/drawdown/dollar_volume). Best-effort (jamais bloquant). Smoke réel :
+  **25 candidats / 929**. Bump `_SNAP_VERSION` (invalide le cache).
+- **API** : `GET /api/screen` (`apps/api/main.py`) ; **dump statique** (`dump_static.py`) → `data/screen.json`
+  pour la PWA ; hook `useScreen` (`lib/api.ts`).
+- **Front** : page `/screener` (`apps/web/app/screener/page.tsx`) — KPIs (candidats/univers/sélectivité),
+  critères appliqués, table triée par score (recherche + export CSV, EmptyState si 0). Lien nav ajouté
+  (groupe Marché). Build static OK : **20 routes**.
+- **CI** : `mypy packages` ajouté au job lint en **non-bloquant** (strict trop bruyant sur le legacy).
+- **CLI** : `make screen` (`scripts/run_screen.py`) imprime les candidats (source de vérité = snapshot).
+- **Tests** : `test_snapshot` (clé `screen` + structure) + `test_engine` (payload `_screen_section`).
+  **517 verts**.
+
 ## Session 2026-06-23 — Moteur de screening (filtres YAML + scoring z-score) [P1]
 **Fait.** `packages/screening/` (le stub était vide) — comble le trou P1 « screening → trading ».
 - **`engine.py`** : `ScreeningEngine` = filtres durs `{metric, op, value}` (op : `> >= < <= == != between`,

@@ -33,6 +33,7 @@ const q = (key: string, path: string, ms: number = LIVE) =>
 export const useMeta = () => q("meta", "/api/meta", 60000);
 export const useDashboard = () => q("dashboard", "/api/dashboard", 15000);
 export const useScreener = () => q("screener", "/api/screener");
+export const useScreen = () => q("screen", "/api/screen", 60000);
 export const usePortfolio = () => q("portfolio", "/api/portfolio");
 export const usePositions = () => q("positions", "/api/positions");
 export const useTrades = () => q("trades", "/api/trades");

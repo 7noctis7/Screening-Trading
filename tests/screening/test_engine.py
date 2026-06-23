@@ -135,3 +135,19 @@ def test_available_metrics_includes_factors_and_price():
     assert "momentum" in metrics
     assert "dollar_volume" in metrics
     assert "above_sma200" in metrics
+
+
+def test_snapshot_screen_section_payload_shape():
+    from apps.api.snapshot import _screen_section
+    panel = {"UP": _bars_vol(_up(n=320, lo=50.0, hi=150.0), 100_000, "UP")}
+    sec = _screen_section(
+        panel, {"UP": "equity"}, {"UP": "Up Co"}, {"UP": "Tech"}, len(panel["UP"]) - 1
+    )
+    assert sec["available"] is True
+    assert sec["filters"] and sec["weights"]
+    assert sec["universe_size"] == 1
+    assert sec["count"] >= 1
+    row = sec["rows"][0]
+    assert row["symbol"] == "UP"
+    for k in ("rank", "score", "reason", "ret_12m", "dollar_volume", "sector"):
+        assert k in row

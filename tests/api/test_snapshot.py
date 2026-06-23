@@ -10,10 +10,14 @@ def _snap():
 
 def test_snapshot_keys_and_json():
     snap = _snap()
-    assert set(snap) == {"meta", "dashboard", "screener", "portfolio", "trades",
+    assert set(snap) == {"meta", "dashboard", "screener", "screen", "portfolio", "trades",
                          "open_trades", "trade_stats", "universe", "data", "themes", "ml",
                          "sentiment", "fundamentals", "investors", "conviction", "live",
                          "preset_trades", "index_core_curves", "preset_ledger"}
+    # screener à filtres (packages.screening) : structure attendue
+    scr = snap["screen"]
+    assert scr["available"] and scr["universe_size"] > 0 and isinstance(scr["rows"], list)
+    assert scr["filters"] and scr["weights"]
     # cœur(s) indiciel(s) + satellite : bloc présent sur le dashboard
     ic = snap["dashboard"]["index_core"]
     assert "core_pct" in ic and "enabled" in ic and "symbol" in ic

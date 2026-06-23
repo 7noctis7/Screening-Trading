@@ -1359,6 +1359,46 @@ def _curve_stats(eq: list[float]) -> dict:
             "profit_factor": round(gains / losses, 2) if losses > 0 else 0.0}
 
 
+def _r(x, nd=3):
+    """Arrondi NaN-safe (→ None) pour les payloads JSON."""
+    return round(float(x), nd) if isinstance(x, (int, float)) and x == x else None
+
+
+def _screen_section(panel: dict, acmap: dict, names: dict, sector_of: dict, t: int) -> dict:
+    """Screener à FILTRES (packages.screening) : filtres durs YAML puis tri par composite z-score.
+    Complète le 'screener' (ranking pur) en montrant l'univers RÉDUIT aux candidats éligibles."""
+    try:
+        from packages.screening import ScreeningEngine
+        eng = ScreeningEngine.from_yaml(ROOT / "config" / "screening.yaml")
+    except Exception as e:  # noqa: BLE001 - jamais bloquant
+        return {"available": False, "error": str(e)}
+    try:
+        results = eng.screen(panel, t=t)
+    except Exception as e:  # noqa: BLE001
+        return {"available": False, "error": str(e)}
+    rows = []
+    for i, r in enumerate(results[:50], 1):
+        rows.append({
+            "rank": i, "symbol": r.symbol,
+            "name": names.get(r.symbol, r.symbol),
+            "asset_class": acmap.get(r.symbol, "equity"),
+            "sector": sector_of.get(r.symbol, ""),
+            "score": _r(r.score),
+            "reason": r.reason,
+            "ret_12m": _r(r.metrics.get("ret_12m")),
+            "drawdown": _r(r.metrics.get("drawdown_from_high")),
+            "dollar_volume": _r(r.metrics.get("dollar_volume"), 0),
+        })
+    return {
+        "available": True,
+        "count": len(results),
+        "universe_size": len(panel),
+        "filters": [f"{f['metric']} {f.get('op', '>=')} {f.get('value')}" for f in eng.filters],
+        "weights": eng.weights,
+        "rows": rows,
+    }
+
+
 def build_snapshot(seed: int = 7) -> dict:
     # --- univers COMPLET + fenêtre jusqu'à AUJOURD'HUI ---
     instruments = _seed_universe()
@@ -1666,6 +1706,8 @@ def build_snapshot(seed: int = 7) -> dict:
     for r in screener["rows"]:                    # enrichit le screener du score ML + secteur
         r["ml_score"] = ml_scores.get(r["symbol"])
         r["sector"] = sector_of.get(r["symbol"], "")
+    # Screener à FILTRES (packages.screening) — univers réduit aux candidats éligibles.
+    screen_sec = _screen_section(data, acmap, names, sector_of, n - 1)
     now = datetime.now(timezone.utc)
     last_bar = ts_list[-1]
     vix_now = vix[-1]
@@ -2157,6 +2199,7 @@ def build_snapshot(seed: int = 7) -> dict:
             "vix_series": vix[::max(1, n // 240)],   # sous-échantillonné pour le graphe
         },
         "screener": screener,
+        "screen": screen_sec,
         "portfolio": _port_payload,
         "trades": [PL.trade_payload(t) for t in recent],
         "open_trades": comp["rows"],

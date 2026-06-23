@@ -65,9 +65,9 @@
 - [x] **S0** Configs YAML d'exemple (universe/risk/factors/strategy) + tests d'archi
 
 ## P0 — Socle (sans quoi rien ne tient)
-- [x] **CI** : **pytest bloquant** + **ruff informatif** en GitHub Actions (`.github/workflows/ci.yml`),
-  cache pip + concurrency. pre-commit déjà en place (gitleaks/clé privée/gros fichiers/EOF).
-  `(reste : mypy — différé, strict trop bruyant sur le legacy ; ruff bloquant après burn-down des ~3800)`
+- [x] **CI** : **pytest bloquant** + **ruff & mypy informatifs** en GitHub Actions
+  (`.github/workflows/ci.yml`), cache pip + concurrency. pre-commit en place (gitleaks/clé/gros fichiers).
+  `(reste : ruff/mypy bloquants après burn-down du legacy ~3800)`
 - [x] **Storage** : bronze/silver + **GOLD feature store** (SQLite, upsert idempotent, multi-TF, anti-skew) `(reste : DuckDB+Parquet, Alembic, Feast)`
 - [x] **DataProvider** : synthetic + **yfinance** + wrappers **fallback/cache/rate-limit** + **FMP fondamental** + backend **DuckDB** pluggable `(reste : Finnhub/Alpaca temps réel)`
 - [x] **Qualité DB** : contrats OHLCV (prix>0, cohérence, ts, gaps, fraîcheur) → **pipeline bloquant** `(reste : pandera/GE, alerte branchée)`
@@ -80,7 +80,9 @@
 - [x] **Screening** : moteur de filtres YAML + scoring z-score cross-sectional
   (`packages/screening/` : `engine.py` filtres durs op/between/on_missing → survivants notés par
   composite z-score ; `metrics.py` réutilise le registre de facteurs + métriques prix ;
-  `config/screening.yaml` ; 11 tests). Réutilise `_zscore` du ranking (DRY).
+  `config/screening.yaml` ; 12 tests). Réutilise `_zscore` du ranking (DRY).
+  **Branché** : section snapshot `screen` + `GET /api/screen` + dump statique + page front `/screener`
+  (nav groupe Marché) + `make screen`. Smoke réel : 25 candidats / 929.
 - [x] **Ranking multi-facteur** : momentum/trend/low-vol (z-score cross-sectional), pondérations **régime × classe** + applicabilité, top N **explicable** `(reste : value/quality du fondamental)`
 - [x] **Stratégies** (plugins) : `ma_crossover` (trend), `rsi_reversion` (mean-rev), stop/target ATR `(reste : breakout, pairs, short, trailing, scaling)`
 - [x] **Sizing** : `fixed_fractional`, `vol_target` (cap) `(reste : Kelly bridé, risk-parity)`
