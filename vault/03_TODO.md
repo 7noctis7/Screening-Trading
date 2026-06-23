@@ -44,6 +44,10 @@
 > ✅ **Sprint 8/10 FAIT** : #3 #5 #6 #1 #4 #2 #8 #10 (PR #220→#224). A/B krach : Max DD -41%. #7/#9 différés (parcimonie/conflit). **Mesurer sur données réelles** : `make backtest-preset` + `calibrate-preset`.
 
 ## ✅ Fait
+- [x] **Sprint-0 Gouvernance (audit Conseil Suprême, 0 €)** : gate publication anti « site muet »
+  (`check_build.py`), `_SNAP_VERSION` auto-hash + `make repro`, lignage/réconciliation
+  (`packages/data/lineage.py`), tests de propriété hypothesis, `pip-audit` CI, manifeste honnêteté.
+  Reportés : #2 god-object, #9 GARCH, #3 DSR-UI, #5 SPC, #8 validateur LLM, #6 prediction-markets.
 - [x] **Design « radical » (robuste, 0 dép)** [PR #229] : aurora CSS (`body::after`), accents OKLCH
   (`@supports`+fallback), typo display (optical-sizing/ligatures/balance), nav desktop groupée (3 menus).
   Écartés (best practice, risque build CI) : WebGL/OGL, `next-view-transitions`, `next/font`.

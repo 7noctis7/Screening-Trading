@@ -1,5 +1,26 @@
 # 04 — JOURNAL
 
+## Session 2026-06-23 — Sprint-0 Gouvernance (audit « Conseil Suprême ») — tout 0 €
+**Fait.** Items à plus haut ratio impact/effort de la matrice d'audit, tous gratuits & CI-vérifiés.
+- **#1 Gate de publication (andon)** : `scripts/check_build.py` → **échec ROUGE** du workflow Pages si
+  le site est vide/tronqué/**périmé** (`meta.generated_at` ≠ aujourd'hui). Branché dans `pages.yml`
+  après le build. Tue le défaut « vert mais muet ».
+- **#7 Reproductibilité** : `_SNAP_VERSION` = **hash auto** du code (`snapshot.py`+`payloads.py`) → fin du
+  bump manuel (risque humain éliminé). `make repro` → `out/repro.json` (git sha + config hash + version
+  + seed + env). Auditabilité « niveau papier ».
+- **#4 Lignage & réconciliation** : `packages/data/lineage.py` — `fingerprint()` (provenance SHA-256
+  déterministe) + `reconcile()` (divergence inter-sources yf/FMP/HF, brèches > tolérance). 5 tests.
+- **#13 Tests de propriété** (`hypothesis`, OSS) : invariants des noyaux maths (`_zscore` standardisé,
+  ordre préservé, série constante → 0 ; `above_sma200` booléen). A **déjà débusqué** une pathologie
+  d'annulation flottante (corrigée par `assume`).
+- **#11 `pip-audit`** (vulns deps) ajouté au job lint CI, non-bloquant. `hypothesis`/`pip-audit` en dev.
+- **#14 Manifeste d'honnêteté** : `vault/12_MANIFESTE_HONNETETE.md` (DSR≈0 assumé = le wedge).
+- **526 tests verts**, ruff propre sur tout le code neuf.
+**Décidé.** Reportés en sprints dédiés (risque/scope, à faire avec vérif renforcée) : **#2** démontage
+du god-object `snapshot.py` (registre de sections + isolation des fautes), **#9** GARCH au sizing,
+**#3** DSR en UI, **#5** SPC/CUSUM, **#8** validateur anti-hallucination LLM, **#6** facteur
+prediction-markets (Kalshi/Polymarket). Le burn-down ruff/mypy (~3800) précède le passage des gates en bloquant.
+
 ## Session 2026-06-23 — Screening branché (API + page front) + mypy CI + `make screen`
 **Fait.** Le moteur de screening est désormais **exposé de bout en bout**.
 - **Snapshot** : `_screen_section()` (`apps/api/snapshot.py`) lance `ScreeningEngine` sur le panel de
