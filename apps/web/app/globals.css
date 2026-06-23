@@ -31,7 +31,7 @@ html::before {
   background:url('/hero.jpg') no-repeat;
   background-position:center 20%;
   background-size:min(1500px, 96%) auto;
-  opacity:.26; filter:blur(0.5px) saturate(1.12) contrast(1.04); will-change:transform;
+  opacity:.10; filter:blur(0.5px) saturate(1.12) contrast(1.04); will-change:transform;
   /* dégradé radial en masque → les bords de la photo se fondent au lieu de couper net */
   mask-image:radial-gradient(ellipse 62% 58% at 50% 30%, #000 38%, transparent 82%);
   -webkit-mask-image:radial-gradient(ellipse 62% 58% at 50% 30%, #000 38%, transparent 82%);
@@ -46,7 +46,7 @@ html::after {
   background-size:46px 46px;
   mask-image:radial-gradient(circle at 50% 35%, #000 0%, transparent 72%);
   -webkit-mask-image:radial-gradient(circle at 50% 35%, #000 0%, transparent 72%);
-  opacity:.5;
+  opacity:.22;
 }
 @keyframes kenburns {
   0%   { transform:scale(1.04) translate3d(0,0,0); }
@@ -182,6 +182,44 @@ html, body { overflow-x:clip; max-width:100%; }
 /* Animation d'entrée du tiroir mobile (glisse + fondu, respect reduce-motion via la règle plus haut). */
 .drawer-panel { animation:slideIn .22s cubic-bezier(.32,.72,0,1); }
 @keyframes slideIn { from { transform:translateX(100%); } to { transform:translateX(0); } }
+
+/* ============================================================================
+   MOUVEMENT (Locomotive · Resn · Hello Monday) — fluide, organique, 60 fps.
+   Tout n'anime que transform/opacity ; entièrement coupé sous reduce-motion (règle plus haut).
+   ============================================================================ */
+@media (prefers-reduced-motion: no-preference) {
+  /* Transition de page « seamless » : le contenu monte + apparaît à chaque navigation. */
+  main { animation:pageIn .42s cubic-bezier(.22,.61,.36,1) both; }
+  @keyframes pageIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
+
+  /* Entrée des cartes (profondeur). Le hover (translateY(-1px)) reprend la main ensuite. */
+  .card { animation:cardIn .5s cubic-bezier(.22,.61,.36,1) both; }
+  @keyframes cardIn { from { opacity:0; transform:translateY(14px) scale(.985); } to { opacity:1; transform:none; } }
+
+  /* Reveal au scroll natif (0 JS) : ajoute la classe `reveal` à une section pour un fondu-montée
+     piloté par la position dans le viewport. Dégrade proprement si non supporté. */
+  @supports (animation-timeline: view()) {
+    .reveal { animation:revealIn linear both; animation-timeline:view(); animation-range:entry 0% cover 30%; }
+    @keyframes revealIn { from { opacity:0; transform:translateY(26px); } to { opacity:1; transform:none; } }
+  }
+
+  /* Skeletons : balayage « shimmer » (perçu plus rapide qu'un simple pulse). */
+  .shimmer { position:relative; overflow:hidden; }
+  .shimmer::after {
+    content:""; position:absolute; inset:0; transform:translateX(-100%);
+    background:linear-gradient(90deg, transparent, color-mix(in srgb, var(--fg) 8%, transparent), transparent);
+    animation:shimmer 1.4s infinite;
+  }
+  @keyframes shimmer { 100% { transform:translateX(100%); } }
+}
+
+/* Micro-interactions tactiles : pression nette sur les éléments cliquables. */
+button:active, a[href]:active, [role="button"]:active { transform:translateY(0.5px); }
+/* Accent « live » : halo qui respire (LiveBadge / état régime). */
+@media (prefers-reduced-motion: no-preference) {
+  .pulse-dot { animation:pulseDot 2s ease-in-out infinite; }
+  @keyframes pulseDot { 0%,100% { opacity:.55; } 50% { opacity:1; } }
+}
 
 /* ============================================================================
    Lisibilité THÈME CLAIR : le décor (photo, halos, grille) lavait le texte.
