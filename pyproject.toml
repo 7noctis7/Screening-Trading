@@ -21,7 +21,7 @@ space = ["gradio>=4.0"]                  # démo publique HuggingFace Space (gra
 orchestration = ["apscheduler", "prefect"]
 api = ["fastapi", "uvicorn[standard]", "websockets", "sqlalchemy", "alembic"]
 mcp = ["mcp>=1.0"]                       # transport MCP natif (sinon repli JSON-RPC stdio, sans dépendance)
-dev = ["pytest", "pytest-cov", "ruff", "mypy", "pre-commit"]
+dev = ["pytest", "pytest-cov", "ruff", "mypy", "pre-commit", "hypothesis", "pip-audit"]
 
 [tool.ruff]
 line-length = 88

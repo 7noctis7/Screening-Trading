@@ -101,6 +101,9 @@ jobs:
           QUANT_NEWS: "0"
         run: python scripts/build_static_site.py
 
+      - name: Gate publication (andon — échec ROUGE si site vide ou périmé)
+        run: python scripts/check_build.py site
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

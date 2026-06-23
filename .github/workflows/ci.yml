@@ -33,7 +33,7 @@ jobs:
           python -m pip install -U pip
           # Set minimal mais suffisant : les tests gardent torch/vectorbt/xgboost… via importorskip.
           # weasyprint exclu (libs système cairo/pango) ; reportlab installé directement pour ses tests.
-          pip install -e ".[common,data,quant,api]" reportlab scikit-learn pytest
+          pip install -e ".[common,data,quant,api]" reportlab scikit-learn pytest hypothesis
       - name: pytest
         run: python -m pytest -q
 
@@ -54,3 +54,8 @@ jobs:
       - name: mypy (non bloquant — strict trop bruyant sur le legacy)
         continue-on-error: true
         run: mypy packages
+      - name: pip-audit (vulnérabilités des dépendances — non bloquant)
+        continue-on-error: true
+        run: |
+          pip install pip-audit
+          pip-audit --progress-spinner off || true

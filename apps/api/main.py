@@ -73,9 +73,22 @@ _TTL_S = 900  # 15 min : aligne le rafraîchissement serveur sur le flux différ
 _BUILDING = False
 _BUILD_LOCK = threading.Lock()
 _SNAP_FILE = Path(__file__).resolve().parents[2] / ".cache" / "snapshot.pkl"
-# Bump à chaque changement de SCHÉMA du snapshot → invalide le cache disque (évite de servir un
-# ancien snapshot construit par une version antérieure du code).
-_SNAP_VERSION = "2026-06-23-screen"
+# Version du cache = HASH du code qui construit le snapshot (snapshot.py + payloads.py). Auto-calculé →
+# tout changement de code invalide le cache disque, sans bump manuel (fin du risque humain). Repli
+# horodaté si la lecture des sources échoue.
+def _snap_version() -> str:
+    import hashlib
+    h = hashlib.sha256()
+    here = Path(__file__).resolve().parent
+    for fn in ("snapshot.py", "payloads.py"):
+        try:
+            h.update((here / fn).read_bytes())
+        except OSError:
+            return "fallback-no-source"
+    return "auto-" + h.hexdigest()[:12]
+
+
+_SNAP_VERSION = _snap_version()
 
 
 def _load_disk() -> tuple[dict | None, float]:
