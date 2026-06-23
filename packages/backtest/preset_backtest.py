@@ -27,13 +27,37 @@ from packages.portfolio.optimize import equal_risk_contribution
 def _cov_annual(win: np.ndarray) -> np.ndarray:
     if win.shape[0] == 1:
         return np.array([[float(win.var()) * 252]])
-    return np.cov(win) * 252
+    try:                                                        # #3 Ledoit-Wolf : covariance shrinkée
+        from packages.data.engine import ledoit_wolf_shrinkage  # (n×T) → Σ stabilisée
+        cov, _ = ledoit_wolf_shrinkage(win)
+        return cov * 252
+    except Exception:  # noqa: BLE001 — repli covariance empirique si indispo
+        return np.cov(win) * 252
+
+
+def _regime_mult(mkt: np.ndarray, t: int) -> float:
+    """#5 porte de régime + #6 frein de drawdown, sur l'indice de marché (moyenne de l'univers).
+    Plein risque en tendance haussière saine ; coupe en distribution / sous MM200 / gros DD de marché.
+    Data-driven (mêmes valeurs quels que soient les params) → ne réduit JAMAIS le gross au-dessus de 1."""
+    if t < 25:
+        return 1.0
+    hist = mkt[:t + 1]
+    ma = hist[-200:].mean()
+    slope = mkt[t] / mkt[t - 20] - 1.0
+    peak = float(np.maximum.accumulate(hist)[-1])
+    dd = mkt[t] / peak - 1.0 if peak > 0 else 0.0
+    if dd < -0.15:                                              # #6 frein DD : krach de marché → cash
+        return 0.0
+    g = 1.0 if (mkt[t] > ma and slope > 0) else (0.6 if mkt[t] > ma else 0.2)   # #5 régime
+    if dd < -0.10:                                             # #6 demi-frein
+        g *= 0.5
+    return g
 
 
 def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict | None = None,
                     swing_equity: list | None = None, dd_target: float = 0.25, band: float = 0.03,
                     step: int = 21, lookback: int = 120, top_k: int = 30, k_dd: float = 2.5,
-                    blackout_move: float = 0.12) -> dict:
+                    blackout_move: float = 0.12, regime_gate: bool = True) -> dict:
     syms = [s for s, b in data.items() if b and len(b) > lookback + 2 * step]
     if len(syms) < 5:
         return {"available": False}
@@ -47,6 +71,7 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
     universe = (sorted(q, key=lambda s: q[s], reverse=True)[:top_k]
                 if len(q) >= 5 else syms[:top_k])
     A = np.asarray([M[s] for s in universe])                    # n × L
+    mkt = A.mean(axis=0)                                         # indice de marché (porte régime + frein DD)
     rets = A[:, 1:] / A[:, :-1] - 1
     tgt_vol = max(0.0, abs(dd_target)) / k_dd
     rt = np.asarray([CostModel.for_asset_class(acmap.get(s, "equity")).round_trip_bps / 1e4
@@ -69,6 +94,8 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
         w = w / ssum if ssum > 0 else w
         pv = float(np.sqrt(max(0.0, w @ cov @ w)))              # DD-target : exposition pilotée par la vol
         gross = 0.0 if pv <= 0 else min(1.0, tgt_vol / pv)
+        if regime_gate:                                         # #5 régime + #6 frein DD (≤ 1, jamais de levier)
+            gross *= _regime_mult(mkt, t)
         w = w * gross
         if band > 0 and prev_w.sum() > 0:                       # bande de non-trading
             w = np.where(np.abs(w - prev_w) < band, prev_w, w)
@@ -116,7 +143,8 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
 def preset_latest_weights(data: dict, quality: dict | None = None, asset_classes: dict | None = None,
                           dd_target: float = 0.35, band: float = 0.03, lookback: int = 120,
                           top_k: int = 30, k_dd: float = 2.5, blackout_move: float = 0.12,
-                          max_weight: float = 0.10, min_names: int = 12) -> dict:
+                          max_weight: float = 0.10, min_names: int = 12,
+                          regime_gate: bool = True) -> dict:
     """Poids cibles ACTUELS du preset (dernière barre) — pilote la PRODUCTION (make live).
 
     Même logique que le backtest (qualité top-K -> risk-parity ERC -> DD-target -> blackout), mais
@@ -132,6 +160,7 @@ def preset_latest_weights(data: dict, quality: dict | None = None, asset_classes
     universe = (sorted(q, key=lambda s: q[s], reverse=True)[:top_k]
                 if len(q) >= 5 else syms[:top_k])
     A = np.asarray([M[s] for s in universe])
+    mkt = A.mean(axis=0)                                         # indice de marché (porte régime + frein DD)
     rets = A[:, 1:] / A[:, :-1] - 1
     t = L - 1
     win = rets[:, max(0, t - lookback):t]
@@ -163,6 +192,8 @@ def preset_latest_weights(data: dict, quality: dict | None = None, asset_classes
     tgt_vol = max(0.0, abs(dd_target)) / k_dd
     pv = float(np.sqrt(max(0.0, w @ cov @ w)))
     gross = 0.0 if pv <= 0 else min(1.0, tgt_vol / pv)
+    if regime_gate:                                             # #5 régime + #6 frein DD (production)
+        gross *= _regime_mult(mkt, t)
     w = w * gross
     return {universe[i]: round(float(w[i]), 4) for i in range(len(universe)) if w[i] > 1e-4}
 
