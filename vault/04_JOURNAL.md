@@ -1,5 +1,19 @@
 # 04 — JOURNAL
 
+## Session 2026-06-23 — #2 isolation des fautes + #3 PSR/honnêteté en UI
+**Fait.**
+- **#2 (phase 1)** `packages/common/safe_section.py` : chaque section feuille du snapshot (themes, ml,
+  screen, sentiment, fundamentals, investors, conviction, universe, data) est isolée → une panne
+  renvoie `{available:False}` au lieu de tuer tout le snapshot (anti bug historique IndexError).
+  Chemin heureux inchangé. [PR #235]
+- **#3 PSR en UI** : `_psr_block()` calcule le **PSR = P(Sharpe vrai > 0)** (corrigé skew/kurtosis,
+  `packages/portfolio/psr.py`) sur la courbe affichée → `dashboard.honesty`. Bandeau « Honnêteté »
+  sur le dashboard (PSR %, Sharpe ann., n, note expliquant que le DSR multi-essais ≈ 0). Passe par le
+  payload `dashboard` existant (0 endpoint, dump statique automatique). `_SNAP_VERSION` auto-hash →
+  cache invalidé sans bump manuel.
+**Décidé.** On affiche le PSR (honnête, mono-courbe) ET on rappelle le DSR≈0 : transparence = wedge.
+Reportés : #5 SPC, #8 validateur LLM, #6 prediction-markets, #9 GARCH, suite du #2 (modules sections).
+
 ## Session 2026-06-23 — Sprint-0 Gouvernance (audit « Conseil Suprême ») — tout 0 €
 **Fait.** Items à plus haut ratio impact/effort de la matrice d'audit, tous gratuits & CI-vérifiés.
 - **#1 Gate de publication (andon)** : `scripts/check_build.py` → **échec ROUGE** du workflow Pages si

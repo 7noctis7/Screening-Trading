@@ -102,6 +102,22 @@ export default function Dashboard() {
         <MetricCard hero label="Sortino" value={m.sortino?.toFixed(2)} />
         <MetricCard hero label="Max DD" value={pct(m.max_drawdown)} tone="neg" />
       </div>
+
+      {/* Honnêteté statistique (manifeste) : PSR affiché, DSR multi-essais ≈ 0 assumé. */}
+      {d.honesty?.available && (
+        <div className="card p-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs" title={d.honesty.note}>
+          <span className="px-2 py-0.5 rounded-full text-[10px] uppercase tracking-[0.08em] font-semibold"
+            style={{ background: "color-mix(in srgb, var(--accent) 18%, transparent)", color: "var(--accent2)" }}>
+            Honnêteté
+          </span>
+          <span className="mono">PSR <b className="text-fg">{Math.round((d.honesty.psr ?? 0) * 100)}%</b>{" "}
+            <span className="text-muted2">P(Sharpe&gt;0)</span></span>
+          <span className="mono text-muted">Sharpe ann. {d.honesty.sharpe_annualized}</span>
+          <span className="mono text-muted">n={d.honesty.n_obs}</span>
+          <span className="text-muted2 basis-full md:basis-auto md:flex-1 md:min-w-0">{d.honesty.note}</span>
+        </div>
+      )}
+
       <EquityChart series={chartEquity} benchmarks={chartBench} />
 
       {/* Comparaison KPI : portefeuille vs benchmarks, sur la période choisie */}

@@ -1400,6 +1400,36 @@ def _screen_section(panel: dict, acmap: dict, names: dict, sector_of: dict, t: i
     }
 
 
+def _psr_block(equity: list) -> dict:
+    """Honnêteté statistique (cf. manifeste) : PSR = P(Sharpe vrai > 0) sur la courbe affichée,
+    corrigée skew/kurtosis (López de Prado). On assume le DSR≈0 plutôt que de le cacher."""
+    import numpy as _np
+
+    from packages.portfolio.psr import probabilistic_sharpe_ratio
+    e = _np.asarray(equity, float)
+    if e.size < 31:
+        return {"available": False}
+    r = e[1:] / e[:-1] - 1.0
+    sd = float(r.std(ddof=1))
+    if sd <= 0:
+        return {"available": False}
+    sharpe_d = float(r.mean() / sd)
+    mu = float(r.mean())
+    skew = float(((r - mu) ** 3).mean() / sd ** 3)
+    kurt = float(((r - mu) ** 4).mean() / sd ** 4)
+    psr = probabilistic_sharpe_ratio(sharpe_d, len(r), skew=skew, kurt=kurt, sr_benchmark=0.0)
+    return {
+        "available": True,
+        "psr": psr,
+        "sharpe_annualized": round(sharpe_d * (252 ** 0.5), 2),
+        "n_obs": int(len(r)),
+        "skew": round(skew, 3),
+        "excess_kurtosis": round(kurt - 3.0, 2),
+        "note": ("PSR = probabilité que le Sharpe vrai dépasse 0 (corrigé skew/kurtosis). "
+                 "DSR multi-essais ≈ 0 → pas d'alpha directionnel prouvé : géré comme béta + risque."),
+    }
+
+
 def build_snapshot(seed: int = 7) -> dict:
     # --- univers COMPLET + fenêtre jusqu'à AUJOURD'HUI ---
     instruments = _seed_universe()
@@ -1878,14 +1908,19 @@ def build_snapshot(seed: int = 7) -> dict:
         _dash_metrics = PL.metrics_payload(_preset_ledger["equity"])
         _dash_equity = [{"t": d, "v": v} for d, v in zip(_preset_ledger["dates"], _preset_ledger["equity"])]
         _dash_dates = _preset_ledger["dates"]
+        _dash_eq_curve = _preset_ledger["equity"]
     elif _pe.get("available"):
         _dash_metrics = PL.metrics_payload(_pe["equity"])
         _dash_equity = [{"t": d, "v": v} for d, v in zip(_pe["dates"], _pe["equity"])]
         _dash_dates = _pe["dates"]
+        _dash_eq_curve = _pe["equity"]
     else:                                              # repli swing si preset indisponible
         _dash_metrics = PL.metrics_payload(equity)
         _dash_equity = PL.equity_series(equity, ts_list)
         _dash_dates = dates
+        _dash_eq_curve = equity
+    # Honnêteté statistique : PSR sur la courbe affichée (isolé — best-effort).
+    _honesty = safe_section("honesty", _psr_block, _dash_eq_curve)
     # Exécution réelle (lit les comptes brokers) — calculée TÔT pour dimensionner chaque poche
     # sur le capital de SON compte (actions ← Alpaca, crypto ← Bitmart).
     _live = _live_with_rebalance(comp["rows"], acmap, portfolio_kpis, w_by_name,
@@ -2173,6 +2208,7 @@ def build_snapshot(seed: int = 7) -> dict:
             "regime": {**PL.regime_payload(regime, expo), "macro_real": _macro_real,
                        "macro_sources": _macro_sources},
             "metrics": _dash_metrics,                 # PRESET (production), pas le swing legacy
+            "honesty": _honesty,                       # PSR / honnêteté statistique (manifeste)
             "equity": _dash_equity,
             "account_compare": _account_cmp,           # comptes réels (Alpaca/Crypto) vs S&P/Nasdaq
             "real_portfolio": _real_portfolio,         # courbe RÉELLE combinée (Alpaca+Bitmart) + stats
