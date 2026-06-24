@@ -1,7 +1,38 @@
 "use client";
-import { useMacro } from "@/lib/api";
+import { useMacro, usePredictionMarkets } from "@/lib/api";
 import { PageSkeleton } from "@/components/ui";
 import { StepBanner } from "@/components/Pipeline";
+
+function PredMarkets() {
+  const { data: pm } = usePredictionMarkets();
+  if (!pm?.available) return null;
+  const blocks = ([
+    ["Macro", pm.macro ?? {}], ["Actifs détenus", pm.assets ?? {}], ["Résultats", pm.earnings ?? {}],
+  ] as [string, Record<string, number>][]).filter(([, o]) => Object.keys(o).length);
+  if (!blocks.length) return null;
+  return (
+    <section className="card p-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h2 className="text-sm uppercase tracking-wide text-muted">Marchés de prédiction (sagesse des foules)</h2>
+        <span className="text-[11px] text-muted2">{pm.n_markets} marchés · Kalshi + Polymarket · sans clé</span>
+      </div>
+      <p className="text-muted2 text-xs mt-1">Probas implicites forward-looking. Indicatif (overlay de risque), pas un signal d'alpha.</p>
+      <div className="grid md:grid-cols-3 gap-3 mt-3">
+        {blocks.map(([title, obj]) => (
+          <div key={title} className="rounded-lg border border-border p-3" style={{ background: "var(--surface)" }}>
+            <div className="text-muted text-[11px] uppercase tracking-wide mb-1.5">{title}</div>
+            {Object.entries(obj).map(([k, v]) => (
+              <div key={k} className="flex items-center justify-between text-sm py-0.5">
+                <span className="text-muted truncate mr-2">{k}</span>
+                <span className="mono" style={{ color: "var(--accent2)" }}>{Math.round((v as number) * 100)}%</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 export default function Macro() {
   const { data } = useMacro();
@@ -11,6 +42,7 @@ export default function Macro() {
     <main className="max-w-5xl mx-auto p-6 space-y-4">
       <h1 className="text-xl font-semibold tracking-tight">Analyse macroéconomique</h1>
       <StepBanner active="macro" />
+      <PredMarkets />
 
       {/* Indicateurs chiffrés (FRED) */}
       {!m.available ? (

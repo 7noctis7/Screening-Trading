@@ -99,6 +99,7 @@ jobs:
           QUANT_PRICE_DB: ${{ github.workspace }}/data/market.db
           QUANT_FUND: "yf"
           QUANT_NEWS: "0"
+          QUANT_PREDMKT: "1"        # marchés de prédiction (Kalshi/Polymarket, sans clé) en ligne
         run: python scripts/build_static_site.py
 
       - name: Gate publication (andon — échec ROUGE si site vide ou périmé)
