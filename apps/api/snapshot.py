@@ -1457,6 +1457,35 @@ def _psr_block(equity: list) -> dict:
     }
 
 
+def _prediction_section(held: list, acmap: dict, names: dict) -> dict:
+    """Marchés de prédiction (Kalshi+Polymarket) : probas macro + actifs + résultats.
+    Gate QUANT_PREDMKT=1 (réseau) → OFF par défaut (tests/offline). Best-effort."""
+    import os
+    if os.environ.get("QUANT_PREDMKT") != "1":
+        return {"available": False, "reason": "QUANT_PREDMKT!=1"}
+    try:
+        from packages.data.prediction_markets import (
+            asset_signals,
+            earnings_signals,
+            fetch_markets,
+            macro_signals,
+        )
+        recs = fetch_markets(300)
+        if not recs:
+            return {"available": False, "reason": "réseau"}
+        eq = [s for s in held if acmap.get(s) == "equity"][:25]
+        nm = {s: names.get(s, s) for s in eq}
+        macro = {k: v for k, v in macro_signals(records=recs).items() if v is not None}
+        asset_raw = asset_signals(held[:40], records=recs)
+        assets = {k: v for k, v in asset_raw.items() if v is not None}
+        earn = {k: v for k, v in earnings_signals(eq, records=recs, names=nm).items()
+                if v is not None}
+        return {"available": True, "n_markets": len(recs),
+                "macro": macro, "assets": assets, "earnings": earn}
+    except Exception as e:  # noqa: BLE001
+        return {"available": False, "reason": str(e)}
+
+
 def build_snapshot(seed: int = 7) -> dict:
     # --- univers COMPLET + fenêtre jusqu'à AUJOURD'HUI ---
     instruments = _seed_universe()
@@ -2267,6 +2296,8 @@ def build_snapshot(seed: int = 7) -> dict:
         },
         "screener": screener,
         "screen": screen_sec,
+        "prediction_markets": safe_section("prediction_markets", _prediction_section,
+                                           held, acmap, names),
         "portfolio": _port_payload,
         "trades": [PL.trade_payload(t) for t in recent],
         "open_trades": comp["rows"],

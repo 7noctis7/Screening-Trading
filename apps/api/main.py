@@ -194,6 +194,11 @@ def screen() -> dict:
     return _snap()["screen"]
 
 
+@app.get("/api/prediction_markets")
+def prediction_markets() -> dict:
+    return _snap()["prediction_markets"]
+
+
 @app.get("/api/preset_ledger")
 def preset_ledger() -> dict:
     """Journal détaillé du preset (trades + P&L réel) qui justifie la perf du dashboard."""

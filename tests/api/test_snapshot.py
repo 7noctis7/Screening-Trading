@@ -10,7 +10,8 @@ def _snap():
 
 def test_snapshot_keys_and_json():
     snap = _snap()
-    assert set(snap) == {"meta", "dashboard", "screener", "screen", "portfolio", "trades",
+    assert set(snap) == {"meta", "dashboard", "screener", "screen", "prediction_markets",
+                         "portfolio", "trades",
                          "open_trades", "trade_stats", "universe", "data", "themes", "ml",
                          "sentiment", "fundamentals", "investors", "conviction", "live",
                          "preset_trades", "index_core_curves", "preset_ledger"}
@@ -18,6 +19,8 @@ def test_snapshot_keys_and_json():
     scr = snap["screen"]
     assert scr["available"] and scr["universe_size"] > 0 and isinstance(scr["rows"], list)
     assert scr["filters"] and scr["weights"]
+    # prediction-markets : présent, gaté OFF par défaut (pas de réseau en test)
+    assert snap["prediction_markets"]["available"] is False
     # cœur(s) indiciel(s) + satellite : bloc présent sur le dashboard
     ic = snap["dashboard"]["index_core"]
     assert "core_pct" in ic and "enabled" in ic and "symbol" in ic
