@@ -3,8 +3,13 @@ from packages.portfolio import metrics
 from packages.portfolio import attribution, benchmark, correlation, risk_metrics, stress
 from packages.portfolio.benchmark import relative_metrics
 from packages.portfolio.risk_metrics import risk_metrics as risk_metrics_fn
-from packages.portfolio.correlation import correlation_matrix, cluster
+from packages.portfolio.correlation import (
+    cluster,
+    conditional_correlation,
+    correlation_matrix,
+)
 from packages.portfolio.stress import (
+    drawdown_breach,
     mc_projection,
     monte_carlo,
     monte_carlo_trades,

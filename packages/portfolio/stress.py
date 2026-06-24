@@ -36,6 +36,23 @@ def monte_carlo(returns, horizon: int = 252, n_sims: int = 2000,
             "worst_dd": round(float(np.min(max_dds)), 4)}
 
 
+def drawdown_breach(equity, dd_limit: float = -0.15) -> dict:
+    """Décision kill-switch intraday : drawdown courant depuis le pic vs `dd_limit`.
+
+    `breach=True` → on aplatit les positions (la stratégie daily ne verrait le krach
+    qu'au prochain run ; ce check en cron ferme le gap 24/7). Calcul pur, sans ordre.
+    """
+    e = np.asarray(equity, float)
+    e = e[np.isfinite(e)]
+    if e.size < 2:
+        return {"available": False}
+    peak = float(np.maximum.accumulate(e)[-1])
+    dd = float(e[-1] / peak - 1.0) if peak > 0 else 0.0
+    return {"available": True, "drawdown": round(dd, 4), "limit": dd_limit,
+            "breach": bool(dd <= dd_limit), "peak": round(peak, 2),
+            "last": round(float(e[-1]), 2)}
+
+
 def monte_carlo_trades(trade_returns, n_sims: int = 1000, mode: str = "shuffle",
                        ruin_threshold: float = -0.5, seed: int = 0) -> dict:
     """Monte Carlo sur les SÉQUENCES DE TRADES (pas un bootstrap iid de rendements).
