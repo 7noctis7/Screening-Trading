@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,38 +22,9 @@ if str(ROOT) not in sys.path:
 
 
 def _load_bars(ticker: str, years: int = 10):
-    """Bars réels : base locale d'abord (YAHOO.db), repli yfinance sinon. [].
-
-    Le repli yfinance débloque les tickers HORS univers (small/mid-caps absentes
-    de la base) — indispensable pour tester le PEAD là où il a une chance de vivre.
-    """
-    try:
-        from apps.api.snapshot import _price_db_path
-        from packages.data.providers.db_provider import DBPriceProvider
-        db = _price_db_path()
-        if db:
-            start = datetime.now(UTC) - timedelta(days=365 * years)
-            bars = DBPriceProvider(db).fetch_ohlcv(ticker, "1d", start)
-            if len(bars) >= 60:
-                return bars
-    except Exception as e:  # noqa: BLE001
-        print(f"⚠ base indispo pour {ticker} : {e}")
-    return _load_bars_yf(ticker, years)
-
-
-def _load_bars_yf(ticker: str, years: int = 10):
-    """Repli prix via yfinance pour les tickers hors base. []."""
-    try:
-        from types import SimpleNamespace
-
-        import yfinance as yf
-        df = yf.Ticker(ticker).history(period=f"{years}y", auto_adjust=True)
-        if df is None or df.empty:
-            return []
-        return [SimpleNamespace(ts=ix.to_pydatetime(), close=float(r["Close"]))
-                for ix, r in df.iterrows()]
-    except Exception:  # noqa: BLE001
-        return []
+    """Barres réelles (base locale, repli yfinance) — voir packages.data.price_loader."""
+    from packages.data.price_loader import load_bars
+    return load_bars(ticker, years)
 
 
 def _earnings_dates(ticker: str):
