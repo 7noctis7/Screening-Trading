@@ -36,6 +36,60 @@ def monte_carlo(returns, horizon: int = 252, n_sims: int = 2000,
             "worst_dd": round(float(np.min(max_dds)), 4)}
 
 
+def drawdown_breach(equity, dd_limit: float = -0.15) -> dict:
+    """Décision kill-switch intraday : drawdown courant depuis le pic vs `dd_limit`.
+
+    `breach=True` → on aplatit les positions (la stratégie daily ne verrait le krach
+    qu'au prochain run ; ce check en cron ferme le gap 24/7). Calcul pur, sans ordre.
+    """
+    e = np.asarray(equity, float)
+    e = e[np.isfinite(e)]
+    if e.size < 2:
+        return {"available": False}
+    peak = float(np.maximum.accumulate(e)[-1])
+    dd = float(e[-1] / peak - 1.0) if peak > 0 else 0.0
+    return {"available": True, "drawdown": round(dd, 4), "limit": dd_limit,
+            "breach": bool(dd <= dd_limit), "peak": round(peak, 2),
+            "last": round(float(e[-1]), 2)}
+
+
+def monte_carlo_trades(trade_returns, n_sims: int = 1000, mode: str = "shuffle",
+                       ruin_threshold: float = -0.5, seed: int = 0) -> dict:
+    """Monte Carlo sur les SÉQUENCES DE TRADES (pas un bootstrap iid de rendements).
+
+    Le bootstrap iid casse la dépendance de chemin → sous-estime le DD. Ici on
+    rééchantillonne la séquence des P&L par trade :
+      - `shuffle` : permute l'ordre des trades (le DD tient-il au timing ?) ;
+      - `bootstrap` : tire avec remise (variabilité de l'échantillon).
+    Renvoie la distribution des drawdowns (médiane + p95 = pire cas réaliste) + p_ruin.
+    """
+    r = np.asarray(trade_returns, float)
+    r = r[np.isfinite(r)]
+    if r.size < 2:
+        return {"available": False}
+    rng = np.random.default_rng(seed)
+    finals, max_dds, ruined = [], [], 0
+    n = r.size
+    for _ in range(n_sims):
+        seq = (rng.permutation(r) if mode == "shuffle"
+               else rng.choice(r, size=n, replace=True))
+        eq = np.cumprod(1 + seq)
+        finals.append(float(eq[-1] - 1))
+        peak = np.maximum.accumulate(eq)
+        dd = float(((eq - peak) / peak).min())
+        max_dds.append(dd)
+        if dd <= ruin_threshold:
+            ruined += 1
+    return {
+        "available": True, "mode": mode, "n_trades": int(n), "n_sims": n_sims,
+        "p_ruin": round(ruined / n_sims, 4),
+        "median_return": round(float(np.median(finals)), 4),
+        "median_dd": round(float(np.median(max_dds)), 4),
+        "dd_p95": round(float(np.percentile(max_dds, 5)), 4),   # pire cas réaliste
+        "worst_dd": round(float(np.min(max_dds)), 4),
+    }
+
+
 def mc_projection(returns, horizon: int = 252, n_sims: int = 1000,
                   start_value: float = 100.0, seed: int = 0, step: int = 5) -> dict:
     """Éventail Monte Carlo des trajectoires FUTURES (bootstrap des rendements).
