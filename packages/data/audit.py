@@ -102,6 +102,17 @@ def _business_days(d0: date, d1: date) -> int:
     return n
 
 
+def _calendar_days(d0: date, d1: date) -> int:
+    """Jours calendaires (365/an) entre d0 et d1 inclus — marchés 24/7 (crypto)."""
+    return (d1 - d0).days + 1 if d1 >= d0 else 0
+
+
+def _is_crypto(symbol: str) -> bool:
+    """Heuristique crypto (marché 24/7) : paires /USDC,/USDT ou suffixe -USD/-USDT."""
+    s = symbol.upper()
+    return "/USDC" in s or "/USDT" in s or s.endswith(("-USD", "-USDT"))
+
+
 # ─────────────────────────── audit par série ───────────────────────────
 def audit_series(symbol: str, bars: Iterable[Any], *, now: date | None = None,
                  max_gap_ratio: float = 0.10, split_jump: float = 0.50,
@@ -140,13 +151,18 @@ def audit_series(symbol: str, bars: Iterable[Any], *, now: date | None = None,
             if stale == stale_run:
                 out.append(Anomaly(symbol, "accuracy", "warning", f"prix figé {stale_run} j consécutifs (≈{d})"))
         prev_c = c if c else prev_c
-    # complétude : trous vs calendrier ouvré
+    # complétude : trous vs calendrier (crypto = 365 j/an ; sinon jours ouvrés)
     if len(dates) >= 2:
-        expected = _business_days(min(dates), max(dates))
+        if _is_crypto(symbol):
+            expected = _calendar_days(min(dates), max(dates))
+            cal = "j calendaires"
+        else:
+            expected = _business_days(min(dates), max(dates))
+            cal = "j ouvrés"
         ratio = 1.0 - (len(dates) / expected) if expected else 0.0
         if ratio > max_gap_ratio:
-            out.append(Anomaly(symbol, "completeness", "major",
-                               f"{ratio*100:.0f}% de bougies manquantes ({len(dates)}/{expected} j ouvrés)"))
+            msg = f"{ratio*100:.0f}% manquantes ({len(dates)}/{expected} {cal})"
+            out.append(Anomaly(symbol, "completeness", "major", msg))
     return out
 
 
