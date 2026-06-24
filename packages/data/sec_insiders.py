@@ -109,9 +109,16 @@ def _parse_form4_filings(submissions: Any) -> list[dict]:
 
 
 def _form4_xml_url(cik: str, accession: str, primary_doc: str) -> str:
-    """URL du document Form 4 (XML brut) sur EDGAR."""
+    """URL du document Form 4 (XML brut) sur EDGAR.
+
+    `primaryDocument` pointe souvent vers la version XSLT-rendue (HTML), ex.
+    `xslF345X03/wf-form4.xml` ; le XML brut est le même nom SANS ce préfixe.
+    """
     acc = accession.replace("-", "")
-    return f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{acc}/{primary_doc}"
+    doc = primary_doc
+    if "/" in doc and doc.lower().startswith("xsl"):
+        doc = doc.split("/", 1)[1]                 # retire le préfixe XSLT → XML brut
+    return f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{acc}/{doc}"
 
 
 def _get_text(url: str, timeout: float = 6.0) -> str | None:
@@ -124,12 +131,16 @@ def _get_text(url: str, timeout: float = 6.0) -> str | None:
         return None
 
 
-def form4_buy_dates_for_ticker(ticker: str, limit: int = 40) -> list[str]:
+def form4_buy_dates_for_ticker(ticker: str, limit: int = 40,
+                               pause: float = 0.12) -> list[str]:
     """Dates des Form 4 = ACHAT NET d'un ticker (XML parsé). Best-effort, [].
 
     Filtre le bruit : on ne garde que les dépôts où l'initié ACHÈTE plus qu'il ne vend
-    (`direction == 'buy'`). Élimine ventes, exercices d'options et plans 10b5-1.
+    (`direction == 'buy'`). Élimine ventes, exercices d'options et plans 10b5-1. `pause`
+    espace les requêtes (politesse SEC ≤10/s, anti rate-limit).
     """
+    import time
+
     cik = ticker_to_cik(ticker)
     if not cik:
         return []
@@ -139,6 +150,8 @@ def form4_buy_dates_for_ticker(ticker: str, limit: int = 40) -> list[str]:
         xml = _get_text(_form4_xml_url(cik, f["accession"], f["primary_doc"]))
         if xml and parse_form4_xml(xml).get("direction") == "buy":
             out.append(f["date"])
+        if pause:
+            time.sleep(pause)
     return sorted(set(out))
 
 
