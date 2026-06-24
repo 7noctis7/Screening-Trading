@@ -25,6 +25,10 @@
 - [x] **#10 Gate DSR (robuste/défensif)** sur `make calibrate-preset` : n'accepter des params que si **DSR>0 & PBO<0.5** (purged CV — briques `packages/ml` + `portfolio/psr.py`).
 
 ### ⚙️ Opérationnel (rapide, côté utilisateur)
+- [ ] **CE SOIR — installer le plugin Obsidian Dataview + le tester** : Obsidian → Réglages → Modules
+  complémentaires → désactiver le mode restreint → Parcourir → installer **Dataview** → activer.
+  Ouvrir `vault/08_Alphas/00_Alpha_Dashboard.md` : les tableaux doivent se remplir (hypothèses triées
+  par DSR). Si vide : vérifier que les notes `08_Alphas/*.md` ont bien le frontmatter `type: alpha_hypothesis`.
 - [x] **Mesuré sur données réelles (2026-06-23)** : `make backtest-preset` → Preset CAGR 80,5 % · Sharpe 2,44 ·
   **MaxDD -9,0 %** vs équipondéré MaxDD -23,3 % (DD ÷ ~2,6). `make calibrate-preset` → 27 combos,
   **Sharpe déflaté ≤ 1 % partout = DSR≈0 CONFIRMÉ** (aucun alpha directionnel robuste).
