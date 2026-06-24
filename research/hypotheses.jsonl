@@ -12,3 +12,4 @@
 {"classe": ["equity"], "date": "2026-06-24", "dsr": null, "facteur": "event_earnings_basket", "horizon": "swing", "pbo": 0.209, "statut": "rejete", "these": "Event-study panier earnings (10 tickers) : CAR +0.68%, p=0.209."}
 {"classe": ["equity"], "date": "2026-06-24", "dsr": null, "facteur": "event_earnings_basket", "horizon": "swing", "pbo": 0.019, "statut": "en_test", "these": "Event-study panier earnings (12 tickers) : CAR +1.28%, p=0.019."}
 {"classe": ["equity"], "date": "2026-06-24", "dsr": null, "facteur": "event_insider_basket", "horizon": "swing", "pbo": 0.718, "statut": "rejete", "these": "Event-study panier insider (10 tickers) : CAR +1.93%, p=0.718."}
+{"classe": ["equity"], "date": "2026-06-24", "dsr": 0.0, "facteur": "pead_smid", "horizon": "swing", "pbo": 0.7579, "sharpe": 0.204, "statut": "rejete", "these": "PEAD small/mid hold=21j coût=10bps : ann +5.9%, DSR 0.000, PBO 0.7579."}

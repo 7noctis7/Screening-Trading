@@ -230,6 +230,8 @@
   },
   "active": "720fb39489a03dc7",
   "lastOpenFiles": [
+    "10_Backtests/PEAD_smid.md",
+    "10_Backtests",
     "09_Events/_BASKET_insider.md",
     "09_Events/_BASKET_earnings.md",
     "09_Events/AAPL.md",
@@ -257,7 +259,6 @@
     "_assets/equity_2026-06-20.svg",
     "06_STRATEGIES.md",
     "02_DECISIONS.md",
-    "00_INDEX.md",
     "AVAX",
     "06_Weekly"
   ]
