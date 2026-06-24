@@ -100,3 +100,23 @@ def test_parse_form4_dates_filters_form4():
     out = _parse_form4_dates(subs)
     assert out == ["2026-06-18", "2026-06-20"]                 # 4 only, dédup, trié
     assert _parse_form4_dates(None) == []
+
+
+def test_parse_form4_filings_keeps_accession_and_doc():
+    from packages.data.sec_insiders import _parse_form4_filings
+    subs = {"filings": {"recent": {
+        "form": ["4", "10-Q", "4"],
+        "filingDate": ["2026-06-20", "2026-05-01", "2026-06-18"],
+        "accessionNumber": ["0000320193-26-000077", "x", "0000320193-26-000070"],
+        "primaryDocument": ["wf-form4_1.xml", "y.htm", "wf-form4_2.xml"]}}}
+    out = _parse_form4_filings(subs)
+    assert len(out) == 2 and out[0]["accession"] == "0000320193-26-000077"
+    assert out[1]["primary_doc"] == "wf-form4_2.xml"
+    assert _parse_form4_filings(None) == []
+
+
+def test_form4_xml_url_strips_dashes_and_pads():
+    from packages.data.sec_insiders import _form4_xml_url
+    url = _form4_xml_url("0000320193", "0000320193-26-000077", "wf-form4.xml")
+    assert url == ("https://www.sec.gov/Archives/edgar/data/320193/"
+                   "000032019326000077/wf-form4.xml")

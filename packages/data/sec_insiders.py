@@ -94,6 +94,54 @@ def form4_dates_for_ticker(ticker: str, limit: int = 120) -> list[str]:
     return _parse_form4_dates(_get_json(_SUBMISSIONS.format(cik=int(cik))), limit)
 
 
+def _parse_form4_filings(submissions: Any) -> list[dict]:
+    """Submissions EDGAR → [{date, accession, primary_doc}] des Form 4 (testable)."""
+    recent = (((submissions or {}).get("filings", {}) or {}).get("recent", {}) or {})
+    forms = recent.get("form", []) or []
+    dates = recent.get("filingDate", []) or []
+    accs = recent.get("accessionNumber", []) or []
+    docs = recent.get("primaryDocument", []) or []
+    out: list[dict] = []
+    for f, d, acc, doc in zip(forms, dates, accs, docs):
+        if str(f) == "4" and d and acc and doc:
+            out.append({"date": d, "accession": acc, "primary_doc": doc})
+    return out
+
+
+def _form4_xml_url(cik: str, accession: str, primary_doc: str) -> str:
+    """URL du document Form 4 (XML brut) sur EDGAR."""
+    acc = accession.replace("-", "")
+    return f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{acc}/{primary_doc}"
+
+
+def _get_text(url: str, timeout: float = 6.0) -> str | None:
+    try:
+        ua = {"User-Agent": "quant-terminal research@example.com"}
+        req = urllib.request.Request(url, headers=ua)
+        with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310
+            return r.read().decode("utf-8", "replace")
+    except Exception:  # noqa: BLE001 - best-effort
+        return None
+
+
+def form4_buy_dates_for_ticker(ticker: str, limit: int = 40) -> list[str]:
+    """Dates des Form 4 = ACHAT NET d'un ticker (XML parsé). Best-effort, [].
+
+    Filtre le bruit : on ne garde que les dépôts où l'initié ACHÈTE plus qu'il ne vend
+    (`direction == 'buy'`). Élimine ventes, exercices d'options et plans 10b5-1.
+    """
+    cik = ticker_to_cik(ticker)
+    if not cik:
+        return []
+    data = _get_json(_SUBMISSIONS.format(cik=int(cik)))
+    out: list[str] = []
+    for f in _parse_form4_filings(data)[-limit:]:
+        xml = _get_text(_form4_xml_url(cik, f["accession"], f["primary_doc"]))
+        if xml and parse_form4_xml(xml).get("direction") == "buy":
+            out.append(f["date"])
+    return sorted(set(out))
+
+
 def parse_form4_xml(xml_text: str) -> dict:
     """Parse un Form 4 (XML) → sens RÉEL (achat/vente), pas juste l'activité.
 
