@@ -113,11 +113,13 @@ def main() -> None:
             if dry or broker is None:
                 print(tag + "  " + ("aperçu" if dry else "broker absent")); continue
             try:
-                broker.submit_notional(bsym, side, abs(delta))
+                from packages.common.retry import retry
+                # backoff exponentiel sur timeouts / rate-limits transitoires du broker
+                retry(lambda: broker.submit_notional(bsym, side, abs(delta)), attempts=3)
                 sent += 1
                 print(tag + ("  ▲ achat" if delta > 0 else "  ▼ vente"))
             except Exception as e:  # noqa: BLE001
-                print(tag + f"  échec ({str(e)[:40]})")
+                print(tag + f"  échec après retries ({str(e)[:40]})")
     print(f"\nTerminé : {sent} ordre(s) de réconciliation envoyé(s) (paper, sans levier)." if not dry else
           "\nAperçu (dry-run). Réconciliation réelle : python3 scripts/run_live.py --live --yes")
 
