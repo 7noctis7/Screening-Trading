@@ -33,12 +33,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "04_Companies/CLSK.md",
+                "file": "03_TODO.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "CLSK"
+              "title": "03_TODO"
             }
           }
         ],
@@ -195,9 +195,19 @@
               "icon": "smart-connections",
               "title": "Connections"
             }
+          },
+          {
+            "id": "5a332c6293585545",
+            "type": "leaf",
+            "state": {
+              "type": "git-view",
+              "state": {},
+              "icon": "git-pull-request",
+              "title": "Source Control"
+            }
           }
         ],
-        "currentTab": 5
+        "currentTab": 6
       }
     ],
     "direction": "horizontal",
@@ -220,6 +230,12 @@
   },
   "active": "720fb39489a03dc7",
   "lastOpenFiles": [
+    "01_ARCHITECTURE.md",
+    "08_Alphas/value_multiples.md",
+    "08_Alphas/00_Alpha_Dashboard.md",
+    "09_Events/00_Event_Study_Dashboard.md",
+    "04_Companies/AGN.AS.md",
+    "04_Companies/CLSK.md",
     "ENPH.md",
     "12_FACTORS.md",
     "11_DESIGN_SYSTEM.md",
@@ -238,13 +254,10 @@
     "_assets/equity_2026-06-20.svg",
     "06_STRATEGIES.md",
     "02_DECISIONS.md",
-    "01_ARCHITECTURE.md",
     "00_INDEX.md",
     "AVAX/USDC.md",
     "06_Weekly/2026-W25.md",
     "05_Regimes/Régime_risk_on.md",
-    "04_Post_Mortem/incident_2026-06-20.md",
-    "Preset_Performance.md",
     "AVAX",
     "06_Weekly"
   ]
