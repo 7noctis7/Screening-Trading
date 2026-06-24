@@ -35,7 +35,16 @@
 - [ ] Plugins Obsidian : **Smart Connections** + **Obsidian Git** (si pas encore activés).
 - [ ] (Optionnel) Supabase : créer projet + table `daily_kpis` → `make supabase-kpis`.
 
+### ✅ Audit « 5 entités » — feuille de route 5 lots FAITE (PR #242 + #243, 567 tests)
+- [x] **Lot 1** chirurgie : indices `^` exclus du screener + retry/backoff broker (`packages/common/retry.py`).
+- [x] **Lot 2** ADF + Minimum FFD (`ml/features.py` : `adf_stat`, `min_ffd`).
+- [x] **Lot 3** Monte Carlo par séquences de trades (`portfolio/stress.monte_carlo_trades`).
+- [x] **Lot 4** calendrier crypto 365 j (`data/audit` conscient de la classe).
+- [x] **Lot 5** corrélation conditionnelle + kill-switch intraday (`make kill-check`).
+
 ### 🔭 Chantiers code restants (non urgents — palier déjà très bon)
+- [ ] **Obsidian research-infra** (reco comité hedge fund) : `08_Alphas/` notes atomiques d'hypothèse
+  (frontmatter statut/dsr) + ledger d'essais `research/hypotheses.jsonl` + dashboard Dataview → boucle idée↔DSR.
 - [ ] **#6** Facteur prediction-markets (Kalshi/Polymarket, API publiques gratuites) — vrai wedge data.
 - [ ] **#9** GARCH(1,1) au sizing vol-target (module `packages/portfolio/garch.py` déjà présent) — derrière flag + A/B.
 - [ ] **Suite #2** : extraction des sections du god-object `snapshot.py` en modules `packages/sections/*` + registre.
