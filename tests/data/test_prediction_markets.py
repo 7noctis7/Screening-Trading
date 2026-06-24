@@ -82,3 +82,50 @@ def test_earnings_signals_requires_earnings_term_and_asset():
             {"question": "Apple new product launch?", "probability": 0.9}]
     out = earnings_signals(["AAPL"], records=recs, names={"AAPL": "Apple"})
     assert out["AAPL"] == 0.6      # le launch (0.9) est ignoré (pas un terme résultats)
+
+
+def test_debias_pushes_extremes_and_keeps_half():
+    from packages.data.prediction_markets import debias
+    assert debias(0.5) == 0.5                 # 50 % invariant
+    assert debias(0.8) > 0.8                   # favori sous-pricé → relevé
+    assert debias(0.2) < 0.2                   # outsider sur-pricé → abaissé
+    assert debias(0.5, alpha=1.0) == 0.5       # alpha=1 → identité
+
+
+def test_polymarket_mid_from_bid_ask_and_spread():
+    data = [{"question": "Fed cuts?", "bestBid": 0.60, "bestAsk": 0.66,
+             "volume24hr": 1e6, "endDate": "2026-07-31"}]
+    out = _parse_polymarket(data)
+    assert out[0]["probability"] == 0.63       # mid = (0.60+0.66)/2
+    assert out[0]["spread"] == 0.06 and out[0]["volume"] == 1e6
+
+
+def test_kalshi_mid_from_bid_ask():
+    data = {"markets": [{"title": "CPI hot?", "yes_bid": 40, "yes_ask": 44,
+                         "volume": 5000}]}
+    out = _parse_kalshi(data)
+    assert out[0]["probability"] == 0.42 and out[0]["spread"] == 0.04
+
+
+def test_signals_detail_filters_illiquid_and_debiases():
+    from packages.data.prediction_markets import signals_detail
+    recs = [
+        {"question": "Fed rate cut?", "probability": 0.8, "spread": 0.02,
+         "source": "kalshi", "volume": 1000},
+        {"question": "Recession soon?", "probability": 0.3, "spread": 0.40,  # illiquide
+         "source": "polymarket", "volume": 10},
+    ]
+    out = signals_detail(recs, {"fed": ["fed"], "rec": ["recession"]})
+    assert out["fed"]["p"] == 0.8 and out["fed"]["p_adj"] > 0.8   # dé-biaisé
+    assert out["rec"] is None                              # spread>15 % → ignoré
+
+
+def test_macro_and_earnings_detail_shapes():
+    from packages.data.prediction_markets import earnings_detail, macro_detail
+    recs = [{"question": "Will the Fed cut rates?", "probability": 0.7, "spread": 0.03},
+            {"question": "Will Apple beat earnings?", "probability": 0.6,
+             "spread": 0.05}]
+    macro = macro_detail(records=recs)
+    assert macro["fed_rate_cut"]["p"] == 0.7 and "p_adj" in macro["fed_rate_cut"]
+    earn = earnings_detail(["AAPL"], records=recs, names={"AAPL": "Apple"})
+    assert earn["AAPL"]["p"] == 0.6 and earn["AAPL"]["p_adj"] != 0.6

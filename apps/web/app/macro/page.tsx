@@ -3,30 +3,50 @@ import { useMacro, usePredictionMarkets } from "@/lib/api";
 import { PageSkeleton } from "@/components/ui";
 import { StepBanner } from "@/components/Pipeline";
 
+// Une valeur peut être un nombre (ancien format) ou {p, p_adj, spread, source}.
+type PMVal = number | { p?: number; p_adj?: number; spread?: number | null; source?: string };
+const pct = (x?: number | null) => (x == null ? "—" : `${Math.round(x * 100)}%`);
+function norm(v: PMVal) {
+  return typeof v === "number" ? { p: v } : v;
+}
+
 function PredMarkets() {
   const { data: pm } = usePredictionMarkets();
   if (!pm?.available) return null;
   const blocks = ([
     ["Macro", pm.macro ?? {}], ["Actifs détenus", pm.assets ?? {}], ["Résultats", pm.earnings ?? {}],
-  ] as [string, Record<string, number>][]).filter(([, o]) => Object.keys(o).length);
+  ] as [string, Record<string, PMVal>][]).filter(([, o]) => Object.keys(o).length);
   if (!blocks.length) return null;
+  const alpha = pm.alpha ?? 1.15;
   return (
     <section className="card p-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-sm uppercase tracking-wide text-muted">Marchés de prédiction (sagesse des foules)</h2>
         <span className="text-[11px] text-muted2">{pm.n_markets} marchés · Kalshi + Polymarket · sans clé</span>
       </div>
-      <p className="text-muted2 text-xs mt-1">Probas implicites forward-looking. Indicatif (overlay de risque), pas un signal d'alpha.</p>
+      <p className="text-muted2 text-xs mt-1">
+        Probas <b>mid-price</b>, dé-biaisées favori-outsider (α={alpha}). <b>brut</b> = prix affiché · <b>±</b> = spread du carnet.
+        Forward-looking — overlay de risque, pas un signal d'alpha.
+      </p>
       <div className="grid md:grid-cols-3 gap-3 mt-3">
         {blocks.map(([title, obj]) => (
           <div key={title} className="rounded-lg border border-border p-3" style={{ background: "var(--surface)" }}>
             <div className="text-muted text-[11px] uppercase tracking-wide mb-1.5">{title}</div>
-            {Object.entries(obj).map(([k, v]) => (
-              <div key={k} className="flex items-center justify-between text-sm py-0.5">
-                <span className="text-muted truncate mr-2">{k}</span>
-                <span className="mono" style={{ color: "var(--accent2)" }}>{Math.round((v as number) * 100)}%</span>
-              </div>
-            ))}
+            {Object.entries(obj).map(([k, raw]) => {
+              const v = norm(raw);
+              const adj = v.p_adj ?? v.p;
+              const debiased = v.p_adj != null && v.p != null && v.p_adj !== v.p;
+              return (
+                <div key={k} className="flex items-center justify-between text-sm py-0.5">
+                  <span className="text-muted truncate mr-2" title={v.source}>{k}</span>
+                  <span className="text-right whitespace-nowrap">
+                    <span className="mono" style={{ color: "var(--accent2)" }}>{pct(adj)}</span>
+                    {debiased && <span className="text-muted2 text-[10px] ml-1">brut {pct(v.p)}</span>}
+                    {v.spread != null && <span className="text-muted2 text-[10px] ml-1">±{pct(v.spread)}</span>}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         ))}
       </div>
