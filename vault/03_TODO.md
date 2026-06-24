@@ -37,7 +37,23 @@
 - [ ] **Installer + tester le plugin Obsidian Dataview** : Réglages → Modules complémentaires → désactiver
   le mode restreint → Parcourir → **Dataview** → activer. Ouvrir `vault/08_Alphas/00_Alpha_Dashboard.md`
   (les 7 hypothèses doivent apparaître, triées par DSR). Si vide : vérifier le frontmatter `type: alpha_hypothesis`.
-- [ ] **(quand je l'aurai livré)** tester le connecteur prediction-markets : `python -c "from packages.data.prediction_markets import fetch_markets; print(fetch_markets()[:3])"` (lecture seule, sans clé — nécessite le réseau).
+- [ ] **Tester le connecteur prediction-markets** (lecture seule, sans clé, nécessite le réseau) :
+  ```bash
+  python -c "from packages.data.prediction_markets import fetch_markets; print(fetch_markets()[:3])"
+  ```
+- [ ] **Lancer un PREMIER event-study sur données réelles** (étape qui décide si on continue le ML/LLM) :
+  ```bash
+  python - <<'PY'
+  from packages.data.sec_insiders import fetch_recent_form4   # ou tes dates d'earnings (PEAD)
+  from packages.research.event_study import significance
+  # 1) construire la série de rendements d'un ticker (ex. depuis ta YAHOO.db)
+  # 2) trouver les indices de barres correspondant aux events (insiders / earnings)
+  # 3) significance(returns, event_indices, post=5)  -> {mean_car, t_stat, placebo_p_value, significant}
+  PY
+  ```
+  → **règle d'or** : si `significant=False` (p≥0.05 vs placebo) → on **ne code PAS** le ML/LLM (mirage).
+  Si `True` → feu vert pour les étapes 4-6. Reporte-moi le résultat.
+- [ ] **(rappel)** le LLM ne sert qu'à l'extraction de texte **as-of** (≤ ts_public), jamais à prédire.
 
 ### ⚙️ Opérationnel (rapide, côté utilisateur)
 - [x] **Mesuré sur données réelles (2026-06-23)** : `make backtest-preset` → Preset CAGR 80,5 % · Sharpe 2,44 ·
