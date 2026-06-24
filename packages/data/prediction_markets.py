@@ -31,6 +31,10 @@ _CRYPTO_NAMES: dict[str, str] = {
 }
 
 
+MAX_SPREAD = 0.15   # carnet plus large que 15 pts = illiquide → bruit (filtre Jobs)
+DEBIAS_ALPHA = 1.15  # >1 corrige le biais favori-outsider (recalibration power)
+
+
 def _get_json(url: str, timeout: float = 6.0) -> Any:
     """GET JSON best-effort (stdlib). None sur toute erreur (réseau, parse, timeout)."""
     try:
@@ -41,8 +45,28 @@ def _get_json(url: str, timeout: float = 6.0) -> Any:
         return None
 
 
+def _num(x: Any) -> float | None:
+    """float(x) tolérant. None si non convertible (champ absent/vide)."""
+    try:
+        return float(x)
+    except (TypeError, ValueError):
+        return None
+
+
+def debias(p: float, alpha: float = DEBIAS_ALPHA) -> float:
+    """Corrige le biais favori-outsider (recalibration *power*).
+
+    Les outsiders (p faible) sont structurellement sur-pricés et les favoris (p
+    élevé) sous-pricés : `p**a / (p**a + (1-p)**a)` avec a>1 repousse vers les
+    extrêmes → proba « vraie » plus honnête. a=1 → identité. Effet volontaire-
+    ment modéré (la foule reste un overlay de risque, pas un signal d'alpha).
+    """
+    q = min(max(float(p), 1e-4), 1 - 1e-4)
+    return round(q**alpha / (q**alpha + (1 - q) ** alpha), 4)
+
+
 def _parse_polymarket(data: Any) -> list[dict]:
-    """Normalise Gamma Polymarket → [{source, question, probability, end}]."""
+    """Gamma Polymarket → [{source, question, probability, spread, volume, end}]."""
     out: list[dict] = []
     for m in data or []:
         prices = m.get("outcomePrices")
@@ -51,30 +75,41 @@ def _parse_polymarket(data: Any) -> list[dict]:
                 prices = json.loads(prices)
             except json.JSONDecodeError:
                 prices = None
-        prob = None
-        if isinstance(prices, list) and prices:
-            try:
-                prob = round(float(prices[0]), 4)
-            except (TypeError, ValueError):
-                prob = None
+        last = _num(prices[0]) if isinstance(prices, list) and prices else None
+        bid, ask = _num(m.get("bestBid")), _num(m.get("bestAsk"))
+        mid = (bid + ask) / 2 if bid is not None and ask is not None else last
+        spread = _num(m.get("spread"))
+        if spread is None and bid is not None and ask is not None:
+            spread = abs(ask - bid)
+        vol = _num(m.get("volume24hr")) or _num(m.get("volume"))
         q = m.get("question") or m.get("title")
-        if q and prob is not None:
+        if q and mid is not None:
             out.append({"source": "polymarket", "question": q,
-                        "probability": prob, "end": m.get("endDate")})
+                        "probability": round(mid, 4),
+                        "spread": round(spread, 4) if spread is not None else None,
+                        "volume": vol, "end": m.get("endDate")})
     return out
 
 
 def _parse_kalshi(data: Any) -> list[dict]:
-    """Normalise Kalshi → [{source, question, probability, end}] (prix en cents)."""
+    """Kalshi → [{source, question, probability, spread, volume, end}] (cents)."""
     out: list[dict] = []
     for m in (data or {}).get("markets", []):
-        price = m.get("last_price") or m.get("yes_bid")
-        prob = (round(float(price) / 100.0, 4)
-                if isinstance(price, (int, float)) else None)
+        bid, ask = _num(m.get("yes_bid")), _num(m.get("yes_ask"))
+        last = _num(m.get("last_price"))
+        if bid is not None and ask is not None:
+            mid, spread = (bid + ask) / 2 / 100.0, abs(ask - bid) / 100.0
+        else:
+            price = last if last is not None else bid
+            mid = price / 100.0 if price is not None else None
+            spread = None
+        vol = _num(m.get("volume")) or _num(m.get("open_interest"))
         q = m.get("title") or m.get("ticker")
-        if q and prob is not None:
+        if q and mid is not None:
             out.append({"source": "kalshi", "question": q,
-                        "probability": prob, "end": m.get("close_time")})
+                        "probability": round(mid, 4),
+                        "spread": round(spread, 4) if spread is not None else None,
+                        "volume": vol, "end": m.get("close_time")})
     return out
 
 
@@ -109,10 +144,67 @@ def signals_for(records: list[dict], keyword_map: dict[str, list[str]]) -> dict:
     return out
 
 
+def signals_detail(records: list[dict], keyword_map: dict[str, list[str]],
+                   alpha: float = DEBIAS_ALPHA,
+                   max_spread: float = MAX_SPREAD) -> dict:
+    """{label: {p, p_adj, spread, volume, source}} — 1er marché LIQUIDE par label.
+
+    Comme `signals_for` mais renvoie le détail microstructure + la proba dé-biaisée,
+    et IGNORE les carnets trop larges (`spread > max_spread`) = filtre anti-bruit.
+    """
+    out: dict[str, dict | None] = {}
+    for label, kws in keyword_map.items():
+        kws_l = [k.lower() for k in kws]
+        hit = None
+        for r in records:
+            sp = r.get("spread")
+            if sp is not None and sp > max_spread:
+                continue                                  # illiquide → on saute
+            if any(k in str(r.get("question", "")).lower() for k in kws_l):
+                hit = r
+                break
+        if hit is None:
+            out[label] = None
+            continue
+        p = hit.get("probability")
+        out[label] = {"p": p, "p_adj": debias(p, alpha) if p is not None else None,
+                      "spread": hit.get("spread"), "volume": hit.get("volume"),
+                      "source": hit.get("source")}
+    return out
+
+
 def macro_signals(records: list[dict] | None = None, limit: int = 300) -> dict:
     """Probas MACRO (Fed, CPI, récession, emploi, shutdown). Forward-looking."""
     recs = records if records is not None else fetch_markets(limit)
     return signals_for(recs, MACRO_KEYWORDS)
+
+
+def macro_detail(records: list[dict] | None = None, alpha: float = DEBIAS_ALPHA,
+                 limit: int = 300) -> dict:
+    """Détail microstructure + proba dé-biaisée des marchés MACRO (non-None)."""
+    recs = records if records is not None else fetch_markets(limit)
+    return {k: v for k, v in signals_detail(recs, MACRO_KEYWORDS, alpha).items()
+            if v is not None}
+
+
+def asset_detail(tickers: list[str], records: list[dict] | None = None,
+                 names: dict[str, str] | None = None, alpha: float = DEBIAS_ALPHA,
+                 limit: int = 300) -> dict:
+    """Détail microstructure + proba dé-biaisée par actif (ticker/nom/crypto)."""
+    recs = records if records is not None else fetch_markets(limit)
+    name_map = {**_CRYPTO_NAMES, **(names or {})}
+    km = {tk: [tk, name_map.get(tk.upper(), tk)] for tk in tickers}
+    return {k: v for k, v in signals_detail(recs, km, alpha).items() if v is not None}
+
+
+def earnings_detail(tickers: list[str], records: list[dict] | None = None,
+                    names: dict[str, str] | None = None, alpha: float = DEBIAS_ALPHA,
+                    limit: int = 300) -> dict:
+    """Proba RÉSULTATS dé-biaisée par société {ticker: {p, p_adj}} (non-None)."""
+    recs = records if records is not None else fetch_markets(limit)
+    base = earnings_signals(tickers, records=recs, names=names)
+    return {tk: {"p": p, "p_adj": debias(p, alpha)}
+            for tk, p in base.items() if p is not None}
 
 
 def asset_signals(tickers: list[str], records: list[dict] | None = None,
