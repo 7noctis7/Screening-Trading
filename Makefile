@@ -87,8 +87,8 @@ log-alpha:           ## logue un essai d'hypothèse d'alpha (ledger anti p-hacki
 	$(PYTHON) scripts/log_hypothesis.py $(ARGS)
 sync-alphas:         ## propage le ledger vers le frontmatter des notes vault/08_Alphas/
 	$(PYTHON) scripts/sync_alpha_notes.py
-event-study:         ## event-study sur un ticker (TICKER=AAPL [ARGS="--source insider --post 10"])
-	$(PYTHON) scripts/event_study_cli.py --ticker $(TICKER) $(ARGS)
+event-study:         ## event-study 1 ticker (TICKER=AAPL) ou PANIER (TICKERS="AAPL,MSFT,NVDA")
+	$(PYTHON) scripts/event_study_cli.py --ticker $(TICKER) $(if $(TICKERS),--tickers $(TICKERS)) $(ARGS)
 screen-niche:        ## audit d'exploitabilité d'un univers/niche (score 0-100) avant de s'engager
 	$(PYTHON) scripts/screen_niche.py
 list-db:             ## liste ce que contient YAHOO.db (classes/secteurs) → pour bâtir une vraie niche

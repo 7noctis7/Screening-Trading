@@ -78,3 +78,36 @@ def significance(asset_ret, event_indices, post: int = 5, bench_ret=None,
     p = placebo_pvalue(asset_ret, len(event_indices), obs["mean_car"], post,
                        bench_ret, n_sims, seed)
     return {**obs, "placebo_p_value": round(p, 4), "significant": bool(p < 0.05)}
+
+
+def aggregate_significance(series: dict, post: int = 5, n_sims: int = 1000,
+                           seed: int = 0) -> dict:
+    """Event-study CROSS-SECTIONNEL : CAR poolé sur tous les events + placebo.
+
+    `series = {ticker: (returns, event_indices)}`. Un seul ticker significatif ne prouve
+    rien → on POOL. Placebo : dates aléatoires par ticker (même nombre) puis pool → H0.
+    """
+    cars: list[float] = []
+    for ret, idx in series.values():
+        cars.extend(c for i in idx if (c := car(ret, i, post)) == c)
+    if len(cars) < 5:
+        return {"available": False}
+    arr = np.array(cars)
+    sd = float(arr.std(ddof=1))
+    obs_mean = float(arr.mean())
+    t = obs_mean / (sd / np.sqrt(len(arr))) if sd > 0 else 0.0
+    rng = np.random.default_rng(seed)
+    sims = np.empty(n_sims)
+    for k in range(n_sims):
+        pool: list[float] = []
+        for ret, idx in series.values():
+            n = len(np.asarray(ret, float))
+            if n - post - 1 <= 0 or not idx:
+                continue
+            ridx = rng.integers(0, n - post - 1, size=len(idx))
+            pool.extend(car(ret, int(j), post) for j in ridx)
+        sims[k] = float(np.mean(pool)) if pool else 0.0
+    p = float((np.abs(sims) >= abs(obs_mean)).mean())
+    return {"available": True, "n_assets": len(series), "n_events": len(arr),
+            "mean_car": round(obs_mean, 5), "t_stat": round(float(t), 3),
+            "placebo_p_value": round(p, 4), "significant": bool(p < 0.05)}
