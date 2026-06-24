@@ -1,6 +1,7 @@
-.PHONY: install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto ingest-mktcap preset-report calibrate-preset screen repro kill-check log-alpha sync-alphas screen-niche list-db live live-go clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull notion-sync contracts supabase-kpis
+.PHONY: install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto ingest-mktcap preset-report calibrate-preset screen repro kill-check log-alpha sync-alphas event-study screen-niche list-db live live-go clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull notion-sync contracts supabase-kpis
 # PYTHON : utilise AUTOMATIQUEMENT le venv s'il existe (.venv/bin/python), sinon python3 système.
 # Évite le piège « No module named numpy » quand le venv n'est pas activé. Surchargeable.
+TICKER ?= AAPL
 PYTHON ?= $(shell [ -x .venv/bin/python ] && echo .venv/bin/python || echo python3)
 install:          ## installe les dépendances (uv)
 	uv venv && uv pip install -e ".[dev,data,quant,api,ml]"
@@ -86,6 +87,8 @@ log-alpha:           ## logue un essai d'hypothèse d'alpha (ledger anti p-hacki
 	$(PYTHON) scripts/log_hypothesis.py $(ARGS)
 sync-alphas:         ## propage le ledger vers le frontmatter des notes vault/08_Alphas/
 	$(PYTHON) scripts/sync_alpha_notes.py
+event-study:         ## event-study sur un ticker (TICKER=AAPL [ARGS="--source insider --post 10"])
+	$(PYTHON) scripts/event_study_cli.py --ticker $(TICKER) $(ARGS)
 screen-niche:        ## audit d'exploitabilité d'un univers/niche (score 0-100) avant de s'engager
 	$(PYTHON) scripts/screen_niche.py
 list-db:             ## liste ce que contient YAHOO.db (classes/secteurs) → pour bâtir une vraie niche
