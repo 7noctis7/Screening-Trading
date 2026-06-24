@@ -107,3 +107,25 @@ def test_aggregate_significance_random_not_significant():
               for tk in ("A", "B")}
     out = aggregate_significance(series, post=5, n_sims=300, seed=3)
     assert out["available"] and out["significant"] is False
+
+
+def test_dedup_events_collapses_overlapping():
+    from packages.research.event_study import dedup_events
+    assert dedup_events([10, 12, 13, 40, 41, 80]) == [10, 12, 13, 40, 41, 80]  # gap=0
+    assert dedup_events([10, 12, 13, 40, 41, 80], min_gap=5) == [10, 40, 80]
+    assert dedup_events([], min_gap=5) == []
+
+
+def test_aggregate_significance_benchmark_removes_market_drift():
+    from packages.research.event_study import aggregate_significance
+    rng = np.random.default_rng(7)
+    # marché en dérive haussière ; les "events" ne portent AUCUN edge propre.
+    series = {}
+    for tk in ("A", "B", "C"):
+        bench = np.full(500, 0.002) + rng.normal(0, 0.001, 500)   # drift marché
+        ret = bench + rng.normal(0, 0.001, 500)                   # titre ≈ marché
+        ev = list(range(20, 460, 30))
+        series[tk] = (ret, ev, bench)
+    out = aggregate_significance(series, post=5, n_sims=300, seed=1)
+    # CAR anormal (titre − marché) ≈ 0 → non significatif (le piège t=8 désamorcé)
+    assert out["available"] and out["significant"] is False

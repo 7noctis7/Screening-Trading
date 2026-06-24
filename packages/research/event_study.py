@@ -27,6 +27,22 @@ def event_indices(bar_dates, event_dates) -> list[int]:
     return sorted(set(out))
 
 
+def dedup_events(event_idx, min_gap: int = 0) -> list[int]:
+    """Garde des events espacés d'au moins `min_gap` barres (collapse les grappes).
+
+    Anti-autocorrélation : des fenêtres CAR qui se chevauchent (ex. 1 dépôt insider
+    par semaine) ne sont PAS indépendantes → elles gonflent artificiellement le
+    t-stat. On ne garde qu'un event par fenêtre. `min_gap=0` → aucun filtrage.
+    """
+    out: list[int] = []
+    last = None
+    for i in sorted(set(int(x) for x in event_idx)):
+        if last is None or i - last >= min_gap:
+            out.append(i)
+            last = i
+    return out
+
+
 def _abnormal(asset_ret: np.ndarray, bench_ret: np.ndarray | None) -> np.ndarray:
     a = np.asarray(asset_ret, float)
     b = np.zeros_like(a) if bench_ret is None else np.asarray(bench_ret, float)
@@ -84,12 +100,20 @@ def aggregate_significance(series: dict, post: int = 5, n_sims: int = 1000,
                            seed: int = 0) -> dict:
     """Event-study CROSS-SECTIONNEL : CAR poolé sur tous les events + placebo.
 
-    `series = {ticker: (returns, event_indices)}`. Un seul ticker significatif ne prouve
-    rien → on POOL. Placebo : dates aléatoires par ticker (même nombre) puis pool → H0.
+    `series = {ticker: (returns, event_indices[, bench_returns])}`. Un seul ticker
+    significatif ne prouve rien → on POOL. Si `bench_returns` est fourni, le CAR est
+    ANORMAL (titre − benchmark) → on isole l'edge de la dérive de marché. Placebo :
+    dates aléatoires par ticker (même nombre) puis pool → H0.
     """
+    def _unpack(val):
+        ret, idx = val[0], val[1]
+        bench = val[2] if len(val) > 2 else None
+        return ret, idx, bench
+
     cars: list[float] = []
-    for ret, idx in series.values():
-        cars.extend(c for i in idx if (c := car(ret, i, post)) == c)
+    for val in series.values():
+        ret, idx, bench = _unpack(val)
+        cars.extend(c for i in idx if (c := car(ret, i, post, bench)) == c)
     if len(cars) < 5:
         return {"available": False}
     arr = np.array(cars)
@@ -100,12 +124,13 @@ def aggregate_significance(series: dict, post: int = 5, n_sims: int = 1000,
     sims = np.empty(n_sims)
     for k in range(n_sims):
         pool: list[float] = []
-        for ret, idx in series.values():
+        for val in series.values():
+            ret, idx, bench = _unpack(val)
             n = len(np.asarray(ret, float))
             if n - post - 1 <= 0 or not idx:
                 continue
             ridx = rng.integers(0, n - post - 1, size=len(idx))
-            pool.extend(car(ret, int(j), post) for j in ridx)
+            pool.extend(car(ret, int(j), post, bench) for j in ridx)
         sims[k] = float(np.mean(pool)) if pool else 0.0
     p = float((np.abs(sims) >= abs(obs_mean)).mean())
     return {"available": True, "n_assets": len(series), "n_events": len(arr),
