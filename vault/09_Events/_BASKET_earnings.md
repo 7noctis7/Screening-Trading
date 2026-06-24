@@ -2,16 +2,16 @@
 type: event_study_result
 ticker: PANIER
 event_type: earnings
-n: 410
-n_assets: 10
-mean_car: 0.00682
-t_stat: 1.884
-placebo_p_value: 0.209
-significant: false
+n: 467
+n_assets: 12
+mean_car: 0.01284
+t_stat: 2.65
+placebo_p_value: 0.019
+significant: true
 post: 5
 date: 2026-06-24
 ---
 
 # 🛰️ Event-study PANIER (earnings)
 
-10 tickers · CAR +0.68% · t=1.884 · p=0.209 → mirage.
+12 tickers · CAR +1.28% · t=2.65 · p=0.019 → edge cross-sectionnel.
