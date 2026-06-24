@@ -73,8 +73,18 @@
 - [x] **Lot 4** calendrier crypto 365 j (`data/audit` conscient de la classe).
 - [x] **Lot 5** corrélation conditionnelle + kill-switch intraday (`make kill-check`).
 
+### 🟢 PISTE D'ALPHA ACTIVE (2026-06-24) — PEAD significatif sur AAPL
+- [x] **event-study AAPL/earnings SIGNIFICATIF** : CAR +2,0 % / 5 j · t=2,18 · placebo p=0,008 (`make event-study`).
+- [ ] **VALIDER en cross-sectionnel** : event-study sur un PANIER (pas 1 ticker) → PEAD généralise-t-il ?
+- [ ] **Backtester le signal `pead_signal`** comme stratégie (coûts + DSR>0.5 & PBO<0.5) avant d'y croire.
+- [x] **#6 prediction-markets** (connecteur macro/actifs/résultats + page Macro) — FAIT [#249].
+- [x] **Obsidian research-infra** (ledger + dashboard Dataview) — FAIT.
+- [x] **Insider Form 4 buy/sell via XML** (`parse_form4_xml` + `net_insider_signal`) — FAIT.
+
 ### 🔭 Chantiers code restants (non urgents — palier déjà très bon)
-- [ ] **Obsidian research-infra** (reco comité hedge fund) : `08_Alphas/` notes atomiques d'hypothèse
+- [ ] **Insider event-study par ticker** : `fetch_recent_form4` ne ramène que les dépôts GLOBAUX récents
+  → requête EDGAR par CIK/ticker nécessaire pour l'historique d'une société (sinon 0 event).
+- [ ] _(legacy)_ Obsidian research-infra — voir ci-dessus, fait.
   (frontmatter statut/dsr) + ledger d'essais `research/hypotheses.jsonl` + dashboard Dataview → boucle idée↔DSR.
 - [ ] **#6** Facteur prediction-markets (Kalshi/Polymarket, API publiques gratuites) — vrai wedge data.
 - [ ] **#9** GARCH(1,1) au sizing vol-target (module `packages/portfolio/garch.py` déjà présent) — derrière flag + A/B.
