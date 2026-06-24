@@ -1394,8 +1394,13 @@ def _screen_section(panel: dict, acmap: dict, names: dict, sector_of: dict, t: i
         eng = ScreeningEngine.from_yaml(ROOT / "config" / "screening.yaml")
     except Exception as e:  # noqa: BLE001 - jamais bloquant
         return {"available": False, "error": str(e)}
+    # INVESTABLE uniquement : on ne propose pas un actif non achetable (indices ^… = régime/benchmark,
+    # pas un ordre). Évite les candidats fantômes (ex. ^KS11) dans le screener.
+    investable = {s: bars for s, bars in panel.items()
+                  if not s.startswith("^") and acmap.get(s) != "index"}
+    excluded = len(panel) - len(investable)
     try:
-        results = eng.screen(panel, t=t)
+        results = eng.screen(investable, t=t)
     except Exception as e:  # noqa: BLE001
         return {"available": False, "error": str(e)}
     rows = []
@@ -1414,7 +1419,8 @@ def _screen_section(panel: dict, acmap: dict, names: dict, sector_of: dict, t: i
     return {
         "available": True,
         "count": len(results),
-        "universe_size": len(panel),
+        "universe_size": len(investable),
+        "excluded_non_investable": excluded,
         "filters": [f"{f['metric']} {f.get('op', '>=')} {f.get('value')}" for f in eng.filters],
         "weights": eng.weights,
         "rows": rows,
