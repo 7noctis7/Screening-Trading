@@ -2,11 +2,11 @@
 type: event_study_result
 ticker: PANIER
 event_type: insider
-n: 1095
-n_assets: 10
-mean_car: 0.01934
-t_stat: 8.002
-placebo_p_value: 0.718
+n: 12
+n_assets: 3
+mean_car: 0.02961
+t_stat: 0.899
+placebo_p_value: 0.545
 significant: false
 post: 20
 date: 2026-06-24
@@ -14,4 +14,4 @@ date: 2026-06-24
 
 # 🛰️ Event-study PANIER (insider)
 
-10 tickers · CAR +1.93% · t=8.002 · p=0.718 → mirage.
+3 tickers · CAR +2.96% · t=0.899 · p=0.545 → mirage.
