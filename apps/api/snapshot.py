@@ -1465,23 +1465,21 @@ def _prediction_section(held: list, acmap: dict, names: dict) -> dict:
         return {"available": False, "reason": "QUANT_PREDMKT!=1"}
     try:
         from packages.data.prediction_markets import (
-            asset_signals,
-            earnings_signals,
+            DEBIAS_ALPHA,
+            asset_detail,
+            earnings_detail,
             fetch_markets,
-            macro_signals,
+            macro_detail,
         )
         recs = fetch_markets(300)
         if not recs:
             return {"available": False, "reason": "réseau"}
         eq = [s for s in held if acmap.get(s) == "equity"][:25]
         nm = {s: names.get(s, s) for s in eq}
-        macro = {k: v for k, v in macro_signals(records=recs).items() if v is not None}
-        asset_raw = asset_signals(held[:40], records=recs)
-        assets = {k: v for k, v in asset_raw.items() if v is not None}
-        earn = {k: v for k, v in earnings_signals(eq, records=recs, names=nm).items()
-                if v is not None}
-        return {"available": True, "n_markets": len(recs),
-                "macro": macro, "assets": assets, "earnings": earn}
+        return {"available": True, "n_markets": len(recs), "alpha": DEBIAS_ALPHA,
+                "macro": macro_detail(records=recs),
+                "assets": asset_detail(held[:40], records=recs),
+                "earnings": earnings_detail(eq, records=recs, names=nm)}
     except Exception as e:  # noqa: BLE001
         return {"available": False, "reason": str(e)}
 
