@@ -1,9 +1,15 @@
 """Tests event-store PIT + feature store as-of + event-study (fondation alt-data)."""
 
+from datetime import date
+
 import numpy as np
 
 from packages.research.event_store import Event, append_events, load_events
-from packages.research.event_study import car, significance
+from packages.research.event_study import (
+    car,
+    event_indices,
+    significance,
+)
 from packages.research.feature_store import asof_join, asof_price
 
 
@@ -64,3 +70,16 @@ def test_event_study_random_events_not_significant():
     events = list(rng.integers(20, 560, size=20))
     out = significance(ret, events, post=5, n_sims=500, seed=3)
     assert out["available"] and out["significant"] is False
+
+
+def test_event_indices_maps_to_next_tradable_bar():
+    bar_dates = [date(2024, 1, d) for d in range(1, 11)]      # 01..10 jan
+    events = [date(2024, 1, 3), date(2024, 1, 7), date(2023, 12, 1)]
+    idx = event_indices(bar_dates, events)
+    assert idx == [0, 2, 6]            # 2023-12 → barre 0 ; 01-03 → 2 ; 01-07 → 6
+
+
+def test_event_indices_dedup_and_out_of_range():
+    bar_dates = [date(2024, 1, d) for d in range(1, 6)]
+    events = [date(2024, 1, 2), date(2024, 1, 2), date(2024, 6, 1)]   # doublon+hors
+    assert event_indices(bar_dates, events) == [1]

@@ -7,7 +7,24 @@ empirique : si l'effet réel ≈ placebo, c'est du bruit. Pur numpy.
 
 from __future__ import annotations
 
+from bisect import bisect_left
+
 import numpy as np
+
+
+def event_indices(bar_dates, event_dates) -> list[int]:
+    """Dates d'event → indice de la 1re barre à/après (barre tradable).
+
+    `bar_dates` trié croissant. Dédup + trié. Anti look-ahead : on entre à la barre
+    qui SUIT l'event public, jamais avant.
+    """
+    bd = [str(d) for d in bar_dates]
+    out: list[int] = []
+    for e in event_dates:
+        i = bisect_left(bd, str(e))
+        if i < len(bd):
+            out.append(i)
+    return sorted(set(out))
 
 
 def _abnormal(asset_ret: np.ndarray, bench_ret: np.ndarray | None) -> np.ndarray:
