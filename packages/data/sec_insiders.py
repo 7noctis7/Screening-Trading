@@ -19,6 +19,8 @@ from typing import Any
 
 _EFTS = "https://efts.sec.gov/LATEST/search-index?forms=4&q=%22%22&from=0&size={limit}"
 _TICKER_RE = re.compile(r"\(([A-Z.]{1,6})\)")
+_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
+_SUBMISSIONS = "https://data.sec.gov/submissions/CIK{cik:010d}.json"
 
 
 def _get_json(url: str, timeout: float = 6.0) -> Any:
@@ -49,6 +51,47 @@ def _parse_efts(data: Any) -> list[dict]:
 def fetch_recent_form4(limit: int = 100) -> list[dict]:
     """Derniers dépôts Form 4 (best-effort EDGAR). [] si réseau indisponible."""
     return _parse_efts(_get_json(_EFTS.format(limit=limit)))
+
+
+def _parse_cik_registry(data: Any, ticker: str) -> str | None:
+    """Registre SEC ticker→CIK → CIK 10 chiffres (zero-paddé). None si absent."""
+    if not isinstance(data, dict):
+        return None
+    want = ticker.upper()
+    for row in data.values():
+        if str((row or {}).get("ticker", "")).upper() == want:
+            try:
+                return f"{int(row['cik_str']):010d}"
+            except (KeyError, ValueError, TypeError):
+                return None
+    return None
+
+
+def ticker_to_cik(ticker: str) -> str | None:
+    """Ticker → CIK (10 chiffres) via le registre public SEC. None si introuvable."""
+    return _parse_cik_registry(_get_json(_TICKERS_URL), ticker)
+
+
+def _parse_form4_dates(submissions: Any, limit: int = 120) -> list[str]:
+    """Réponse submissions EDGAR → dates de dépôt des Form 4 (triées, dédup)."""
+    recent = (((submissions or {}).get("filings", {}) or {}).get("recent", {}) or {})
+    forms = recent.get("form", []) or []
+    dates = recent.get("filingDate", []) or []
+    out = [d for f, d in zip(forms, dates) if str(f) == "4" and d]
+    return sorted(set(out))[-limit:]
+
+
+def form4_dates_for_ticker(ticker: str, limit: int = 120) -> list[str]:
+    """Dates de dépôt des Form 4 d'UN ticker (EDGAR submissions par CIK). [].
+
+    Contrairement à `fetch_recent_form4` (flux global), cette requête est ciblée :
+    ticker → CIK → /submissions → on filtre form == "4". C'est ce qui permet
+    l'event-study insiders par ticker (et le mode PANIER --source insider).
+    """
+    cik = ticker_to_cik(ticker)
+    if not cik:
+        return []
+    return _parse_form4_dates(_get_json(_SUBMISSIONS.format(cik=int(cik))), limit)
 
 
 def parse_form4_xml(xml_text: str) -> dict:

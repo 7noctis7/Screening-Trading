@@ -80,3 +80,23 @@ def test_net_insider_signal_cluster():
 def test_net_insider_signal_empty():
     from packages.data.sec_insiders import net_insider_signal
     assert net_insider_signal([{"available": False}])["available"] is False
+
+
+def test_parse_cik_registry_maps_ticker():
+    from packages.data.sec_insiders import _parse_cik_registry
+    reg = {"0": {"cik_str": 320193, "ticker": "AAPL", "title": "Apple Inc."},
+           "1": {"cik_str": 789019, "ticker": "MSFT", "title": "Microsoft"}}
+    assert _parse_cik_registry(reg, "msft") == "0000789019"   # paddé, insensible casse
+    assert _parse_cik_registry(reg, "TSLA") is None
+    assert _parse_cik_registry(None, "AAPL") is None
+
+
+def test_parse_form4_dates_filters_form4():
+    from packages.data.sec_insiders import _parse_form4_dates
+    subs = {"filings": {"recent": {
+        "form": ["4", "10-Q", "4", "8-K", "4"],
+        "filingDate": ["2026-06-20", "2026-05-01", "2026-06-20", "2026-04-01",
+                       "2026-06-18"]}}}
+    out = _parse_form4_dates(subs)
+    assert out == ["2026-06-18", "2026-06-20"]                 # 4 only, dédup, trié
+    assert _parse_form4_dates(None) == []
