@@ -22,17 +22,37 @@ if str(ROOT) not in sys.path:
 
 
 def _load_bars(ticker: str, years: int = 10):
-    """Bars réels depuis la base (QUANT_PRICE_DB / YAHOO.db). [] si indispo."""
+    """Bars réels : base locale d'abord (YAHOO.db), repli yfinance sinon. [].
+
+    Le repli yfinance débloque les tickers HORS univers (small/mid-caps absentes
+    de la base) — indispensable pour tester le PEAD là où il a une chance de vivre.
+    """
     try:
         from apps.api.snapshot import _price_db_path
         from packages.data.providers.db_provider import DBPriceProvider
         db = _price_db_path()
-        if not db:
-            return []
-        start = datetime.now(UTC) - timedelta(days=365 * years)
-        return DBPriceProvider(db).fetch_ohlcv(ticker, "1d", start)  # bars réels
+        if db:
+            start = datetime.now(UTC) - timedelta(days=365 * years)
+            bars = DBPriceProvider(db).fetch_ohlcv(ticker, "1d", start)
+            if len(bars) >= 60:
+                return bars
     except Exception as e:  # noqa: BLE001
-        print(f"⚠ chargement prix échoué : {e}")
+        print(f"⚠ base indispo pour {ticker} : {e}")
+    return _load_bars_yf(ticker, years)
+
+
+def _load_bars_yf(ticker: str, years: int = 10):
+    """Repli prix via yfinance pour les tickers hors base. []."""
+    try:
+        from types import SimpleNamespace
+
+        import yfinance as yf
+        df = yf.Ticker(ticker).history(period=f"{years}y", auto_adjust=True)
+        if df is None or df.empty:
+            return []
+        return [SimpleNamespace(ts=ix.to_pydatetime(), close=float(r["Close"]))
+                for ix, r in df.iterrows()]
+    except Exception:  # noqa: BLE001
         return []
 
 
@@ -49,16 +69,13 @@ def _earnings_dates(ticker: str):
 
 
 def _insider_dates(ticker: str):
-    """Dates de dépôts Form 4 pour le ticker (EDGAR full-text, best-effort). []."""
+    """Dates de dépôts Form 4 du ticker (EDGAR submissions par CIK, ciblé). []."""
     try:
         from datetime import date
 
-        from packages.data.sec_insiders import fetch_recent_form4
-        out = []
-        for f in fetch_recent_form4(limit=200):
-            if f.get("ticker") == ticker and f.get("date"):
-                out.append(date.fromisoformat(str(f["date"])[:10]))
-        return sorted(set(out))
+        from packages.data.sec_insiders import form4_dates_for_ticker
+        return sorted({date.fromisoformat(d[:10])
+                       for d in form4_dates_for_ticker(ticker)})
     except Exception:  # noqa: BLE001
         return []
 
