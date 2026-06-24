@@ -24,24 +24,70 @@
 - [x] **#2 CRITIQUE — fuite de données (corrigée : univers backtest momentum prix-only)** : `preset_backtest.py:46-48` le tilt qualité utilise le score fondamental **actuel** sur tout l'historique (look-ahead + survivorship). → qualité **point-in-time** (vintages) OU univers **prix-only** (momentum 12-1). *Le 6.9 % d'alpha est probablement surestimé tant que ce n'est pas corrigé.*
 - [x] **#10 Gate DSR (robuste/défensif)** sur `make calibrate-preset` : n'accepter des params que si **DSR>0 & PBO<0.5** (purged CV — briques `packages/ml` + `portfolio/psr.py`).
 
-### ⚙️ Opérationnel (rapide, côté utilisateur)
-- [ ] **CE SOIR au retour sur le Mac — mesurer le gain du sprint** :
+### 🌙 CE SOIR sur le Mac (ce que TOI tu dois faire)
+- [ ] **Récupérer le code** : `qt && git pull origin main`.
+- [ ] **Backtester les 2 nouveaux signaux d'alpha** (overnight, ts_momentum) sur tes données réelles :
   ```bash
-  cd ~/Screening-Trading && git pull origin main
-  make backtest-preset      # Calmar / MaxDD du preset (avant/après)
-  make calibrate-preset     # meilleurs params (Sharpe déflaté, anti-overfit)
+  make backtest-preset          # vérifie que rien n'a régressé
+  make calibrate-preset         # loggue + synchronise le DSR dans le ledger/notes (auto)
+  # tester un signal isolé via le screener (édite config/screening.yaml -> weights: {overnight: 1}) :
+  make screen
   ```
-  → attendu : Max DD nettement ↓, Calmar ↑, alpha honnête < 6.9 % (#2 a retiré la fuite).
+  → reporte le DSR obtenu : un facteur n'est **promu** que si DSR>0.5 ET PBO<0.5 (sinon il reste `hypothese`).
+- [ ] **Installer + tester le plugin Obsidian Dataview** : Réglages → Modules complémentaires → désactiver
+  le mode restreint → Parcourir → **Dataview** → activer. Ouvrir `vault/08_Alphas/00_Alpha_Dashboard.md`
+  (les 7 hypothèses doivent apparaître, triées par DSR). Si vide : vérifier le frontmatter `type: alpha_hypothesis`.
+- [ ] **Tester le connecteur prediction-markets** (lecture seule, sans clé, nécessite le réseau) :
+  ```bash
+  python -c "from packages.data.prediction_markets import fetch_markets; print(fetch_markets()[:3])"
+  ```
+- [ ] **Lancer un PREMIER event-study sur données réelles** (étape qui décide si on continue le ML/LLM) :
+  ```bash
+  python - <<'PY'
+  from packages.data.sec_insiders import fetch_recent_form4   # ou tes dates d'earnings (PEAD)
+  from packages.research.event_study import significance
+  # 1) construire la série de rendements d'un ticker (ex. depuis ta YAHOO.db)
+  # 2) trouver les indices de barres correspondant aux events (insiders / earnings)
+  # 3) significance(returns, event_indices, post=5)  -> {mean_car, t_stat, placebo_p_value, significant}
+  PY
+  ```
+  → **règle d'or** : si `significant=False` (p≥0.05 vs placebo) → on **ne code PAS** le ML/LLM (mirage).
+  Si `True` → feu vert pour les étapes 4-6. Reporte-moi le résultat.
+- [ ] **(rappel)** le LLM ne sert qu'à l'extraction de texte **as-of** (≤ ts_public), jamais à prédire.
+
+### ⚙️ Opérationnel (rapide, côté utilisateur)
+- [x] **Mesuré sur données réelles (2026-06-23)** : `make backtest-preset` → Preset CAGR 80,5 % · Sharpe 2,44 ·
+  **MaxDD -9,0 %** vs équipondéré MaxDD -23,3 % (DD ÷ ~2,6). `make calibrate-preset` → 27 combos,
+  **Sharpe déflaté ≤ 1 % partout = DSR≈0 CONFIRMÉ** (aucun alpha directionnel robuste).
+- [ ] **Adopter le réglage défensif recommandé** : `echo 'QUANT_DD_TARGET=0.15' >> .env`
+  (combo le moins overfit : DD-cible 15 % · top-K 20 · bande 3 % · turnover 0,20×).
 - [ ] **Reset Alpaca paper + 1 seul `make live-go`** → annule le levier ~1,85× actuel.
 - [ ] **Ménage disque macOS** (Data volume ~12 Go libres) : `prediction-market-analysis` 50 Go, `Desktop` 21 Go, `Library` 16 Go.
 - [ ] Plugins Obsidian : **Smart Connections** + **Obsidian Git** (si pas encore activés).
 - [ ] (Optionnel) Supabase : créer projet + table `daily_kpis` → `make supabase-kpis`.
 
+### ✅ Audit « 5 entités » — feuille de route 5 lots FAITE (PR #242 + #243, 567 tests)
+- [x] **Lot 1** chirurgie : indices `^` exclus du screener + retry/backoff broker (`packages/common/retry.py`).
+- [x] **Lot 2** ADF + Minimum FFD (`ml/features.py` : `adf_stat`, `min_ffd`).
+- [x] **Lot 3** Monte Carlo par séquences de trades (`portfolio/stress.monte_carlo_trades`).
+- [x] **Lot 4** calendrier crypto 365 j (`data/audit` conscient de la classe).
+- [x] **Lot 5** corrélation conditionnelle + kill-switch intraday (`make kill-check`).
+
+### 🔭 Chantiers code restants (non urgents — palier déjà très bon)
+- [ ] **Obsidian research-infra** (reco comité hedge fund) : `08_Alphas/` notes atomiques d'hypothèse
+  (frontmatter statut/dsr) + ledger d'essais `research/hypotheses.jsonl` + dashboard Dataview → boucle idée↔DSR.
+- [ ] **#6** Facteur prediction-markets (Kalshi/Polymarket, API publiques gratuites) — vrai wedge data.
+- [ ] **#9** GARCH(1,1) au sizing vol-target (module `packages/portfolio/garch.py` déjà présent) — derrière flag + A/B.
+- [ ] **Suite #2** : extraction des sections du god-object `snapshot.py` en modules `packages/sections/*` + registre.
+- [ ] **Burn-down ruff/mypy** (~3800) par lots → puis passer les gates **bloquants**.
+
 ### 📐 Méthode (chaque amélioration)
 1. coder dans `preset_backtest.py` derrière un **flag** (comparer avant/après) ;
 2. `make backtest-preset` + `make calibrate-preset` → vérifier **Calmar ↑ & MaxDD ↓** ;
 3. **walk-forward OOS** (pas d'overfitting) ; 4. test pytest ; 5. PR → merge.
-> ✅ **Sprint 8/10 FAIT** : #3 #5 #6 #1 #4 #2 #8 #10 (PR #220→#224). A/B krach : Max DD -41%. #7/#9 différés (parcimonie/conflit). **Mesurer sur données réelles** : `make backtest-preset` + `calibrate-preset`.
+> ✅ **Sprint alpha 8/10** : #3 #5 #6 #1 #4 #2 #8 #10. **Audit « Conseil Suprême » 10/10 livrés** (gate
+> publication, repro, lignage, property tests, isolation des fautes, PSR/honnêteté, Six Sigma, garde LLM,
+> screener bout-en-bout, CI gate) + **verdict d'attribution honnête** (gaté sur t-stat). DSR≈0 confirmé en réel.
 
 ## ✅ Fait
 - [x] **Sprint-0 Gouvernance (audit Conseil Suprême, 0 €)** : gate publication anti « site muet »

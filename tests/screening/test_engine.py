@@ -151,3 +151,17 @@ def test_snapshot_screen_section_payload_shape():
     assert row["symbol"] == "UP"
     for k in ("rank", "score", "reason", "ret_12m", "dollar_volume", "sector"):
         assert k in row
+
+
+def test_screen_section_excludes_non_investable_indices():
+    from apps.api.snapshot import _screen_section
+    panel = {
+        "UP": _bars_vol(_up(n=320, lo=50.0, hi=150.0), 100_000, "UP"),
+        "^KS11": _bars_vol(_up(n=320, lo=50.0, hi=160.0), 100_000, "^KS11"),  # indice
+    }
+    acmap = {"UP": "equity", "^KS11": "index"}
+    sec = _screen_section(panel, acmap, {}, {}, len(panel["UP"]) - 1)
+    syms = {r["symbol"] for r in sec["rows"]}
+    assert "^KS11" not in syms              # indice non achetable → exclu
+    assert sec["universe_size"] == 1        # seul l'investable est compté
+    assert sec["excluded_non_investable"] == 1

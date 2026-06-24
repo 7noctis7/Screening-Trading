@@ -131,12 +131,18 @@ Améliorations **100 % open-source / gratuites**, sans dépendance payante :
 | Commande | Rôle | Brique gratuite |
 |---|---|---|
 | `make brief` | one-pager de session (priorités + journal + diffs + audit) | stdlib |
+| `make screen` | **screener à filtres** (config/screening.yaml) → candidats triés par z-score | stdlib/numpy |
+| `make repro` | **manifeste de reproductibilité** (git sha + config/data hash + env) → `out/repro.json` | stdlib |
 | `make vault-search Q="…"` | recherche **sémantique** du vault (`--code` pour le code) | TF-IDF · Ollama `nomic-embed-text` |
 | `make contracts` | **gate** d'intégrité OHLCV (bloque l'impossible) — aussi en CI | stdlib/pandera |
 | `make hf-push` / `make hf-pull` | cache OHLCV **souverain** (anti rate-limit yfinance) | Hugging Face Dataset |
 | `make notion-sync` | miroir Obsidian → Notion | API Notion |
 | `make supabase-kpis` | historique KPIs cloud (cross-device) | Supabase free |
 
+- **Screening → trading** : `packages/screening` (filtres YAML durs `op`/`between`/`on_missing` → scoring z-score cross-sectional, réutilise le registre de facteurs) exposé en `GET /api/screen` + page front **`/screener`**.
+- **Honnêteté statistique (le wedge)** : le dashboard affiche son **PSR** = P(Sharpe vrai > 0) et rappelle que le **DSR multi-essais ≈ 0** (pas d'alpha directionnel prouvé). L'attribution alpha/β est **gatée sur la significativité** (t-stat) : pas de « compétence » sans preuve. Cf. `vault/12_MANIFESTE_HONNETETE.md`.
+- **Gouvernance & antifragilité (audit « Conseil Suprême », 0 €)** : gate de publication anti « site muet » (`scripts/check_build.py`, échec rouge si vide/périmé) · **lignage & réconciliation** inter-sources (`packages/data/lineage.py`) · **SPC / Six Sigma** sur la qualité OHLCV (DPMO + niveau σ, `packages/data/spc.py`) · **isolation des fautes** par section (`safe_section` — une section qui plante ne tue plus le snapshot) · **garde anti-hallucination** des memos LLM (`packages/llm/guard.py`).
+- **CI** : `pytest` **bloquant** + `ruff`/`mypy`/`pip-audit` **informatifs** (`.github/workflows/ci.yml`) ; tests de **propriété** (`hypothesis`) sur les noyaux maths.
 - **FinOps IA** : `packages/llm` route les tâches simples vers un **LLM local** (Ollama, ex. `gemma3n:e4b`/`qwen2.5:3b`) → l'API payante n'est utilisée que pour le raisonnement complexe (`QUANT_LOCAL_LLM`).
 - **Perf** : hot-path prix **vectorisé** (1 scan au lieu de N), snapshot **incrémental** (mémoïsation par hash, `.cache/stages/`), brokers Alpaca∥Bitmart **en parallèle**, analytics **DuckDB** sur Parquet.
 - **Sécurité** : `gitleaks` (CI + pre-commit), CORS verrouillé, webhook signé, `safe_pickle` (anti-symlink + SHA-256). Audit dépôt public : propre.
