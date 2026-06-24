@@ -83,3 +83,27 @@ def test_event_indices_dedup_and_out_of_range():
     bar_dates = [date(2024, 1, d) for d in range(1, 6)]
     events = [date(2024, 1, 2), date(2024, 1, 2), date(2024, 6, 1)]   # doublon+hors
     assert event_indices(bar_dates, events) == [1]
+
+
+def test_aggregate_significance_detects_cross_sectional_drift():
+    from packages.research.event_study import aggregate_significance
+    rng = np.random.default_rng(0)
+    series = {}
+    for tk in ("A", "B", "C"):
+        ret = rng.normal(0, 0.005, 500)
+        ev = list(range(20, 460, 30))
+        for e in ev:
+            ret[e + 1: e + 6] += 0.015          # dérive post-event sur CHAQUE ticker
+        series[tk] = (ret, ev)
+    out = aggregate_significance(series, post=5, n_sims=300, seed=1)
+    assert out["available"] and out["n_assets"] == 3 and out["mean_car"] > 0
+    assert out["significant"] is True
+
+
+def test_aggregate_significance_random_not_significant():
+    from packages.research.event_study import aggregate_significance
+    rng = np.random.default_rng(2)
+    series = {tk: (rng.normal(0, 0.01, 500), list(rng.integers(20, 460, size=15)))
+              for tk in ("A", "B")}
+    out = aggregate_significance(series, post=5, n_sims=300, seed=3)
+    assert out["available"] and out["significant"] is False
