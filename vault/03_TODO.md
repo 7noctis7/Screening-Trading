@@ -24,11 +24,22 @@
 - [x] **#2 CRITIQUE — fuite de données (corrigée : univers backtest momentum prix-only)** : `preset_backtest.py:46-48` le tilt qualité utilise le score fondamental **actuel** sur tout l'historique (look-ahead + survivorship). → qualité **point-in-time** (vintages) OU univers **prix-only** (momentum 12-1). *Le 6.9 % d'alpha est probablement surestimé tant que ce n'est pas corrigé.*
 - [x] **#10 Gate DSR (robuste/défensif)** sur `make calibrate-preset` : n'accepter des params que si **DSR>0 & PBO<0.5** (purged CV — briques `packages/ml` + `portfolio/psr.py`).
 
+### 🌙 CE SOIR sur le Mac (ce que TOI tu dois faire)
+- [ ] **Récupérer le code** : `qt && git pull origin main`.
+- [ ] **Backtester les 2 nouveaux signaux d'alpha** (overnight, ts_momentum) sur tes données réelles :
+  ```bash
+  make backtest-preset          # vérifie que rien n'a régressé
+  make calibrate-preset         # loggue + synchronise le DSR dans le ledger/notes (auto)
+  # tester un signal isolé via le screener (édite config/screening.yaml -> weights: {overnight: 1}) :
+  make screen
+  ```
+  → reporte le DSR obtenu : un facteur n'est **promu** que si DSR>0.5 ET PBO<0.5 (sinon il reste `hypothese`).
+- [ ] **Installer + tester le plugin Obsidian Dataview** : Réglages → Modules complémentaires → désactiver
+  le mode restreint → Parcourir → **Dataview** → activer. Ouvrir `vault/08_Alphas/00_Alpha_Dashboard.md`
+  (les 7 hypothèses doivent apparaître, triées par DSR). Si vide : vérifier le frontmatter `type: alpha_hypothesis`.
+- [ ] **(quand je l'aurai livré)** tester le connecteur prediction-markets : `python -c "from packages.data.prediction_markets import fetch_markets; print(fetch_markets()[:3])"` (lecture seule, sans clé — nécessite le réseau).
+
 ### ⚙️ Opérationnel (rapide, côté utilisateur)
-- [ ] **CE SOIR — installer le plugin Obsidian Dataview + le tester** : Obsidian → Réglages → Modules
-  complémentaires → désactiver le mode restreint → Parcourir → installer **Dataview** → activer.
-  Ouvrir `vault/08_Alphas/00_Alpha_Dashboard.md` : les tableaux doivent se remplir (hypothèses triées
-  par DSR). Si vide : vérifier que les notes `08_Alphas/*.md` ont bien le frontmatter `type: alpha_hypothesis`.
 - [x] **Mesuré sur données réelles (2026-06-23)** : `make backtest-preset` → Preset CAGR 80,5 % · Sharpe 2,44 ·
   **MaxDD -9,0 %** vs équipondéré MaxDD -23,3 % (DD ÷ ~2,6). `make calibrate-preset` → 27 combos,
   **Sharpe déflaté ≤ 1 % partout = DSR≈0 CONFIRMÉ** (aucun alpha directionnel robuste).

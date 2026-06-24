@@ -81,3 +81,45 @@ class LowVol:
                 rets = np.diff(np.log(c[-self.window - 1:]))
                 out[sym] = float(-rets.std(ddof=1))
         return out
+
+
+@factor_calcs.register("overnight")
+class Overnight:
+    """Anomalie overnight : rendement moyen close→open (la prime se concentre la nuit).
+    Thèse : les détenteurs nocturnes sont rémunérés (risque des news hors séance)."""
+
+    name = "overnight"
+    sector_neutral = False
+
+    def __init__(self, window: int = 63) -> None:
+        self.window = window
+
+    def values(self, ctx: FactorContext) -> dict[str, float]:
+        out: dict[str, float] = {}
+        for sym, bars in ctx.panel.items():
+            t = min(ctx.t, len(bars) - 1)
+            seg = bars[max(0, t - self.window): t + 1]
+            on = [b.open / pc - 1.0 for pc, b in zip(
+                [x.close for x in seg[:-1]], seg[1:], strict=False) if pc]
+            out[sym] = float(np.mean(on)) if on else float("nan")
+        return out
+
+
+@factor_calcs.register("ts_momentum")
+class TSMomentum:
+    """Momentum time-series (trend-following) : rendement trailing sur `window` jours.
+    Thèse : marché retail 24/7 (crypto) → arbitrage lent, tendances persistantes."""
+
+    name = "ts_momentum"
+    sector_neutral = False
+
+    def __init__(self, window: int = 90) -> None:
+        self.window = window
+
+    def values(self, ctx: FactorContext) -> dict[str, float]:
+        out: dict[str, float] = {}
+        for sym, bars in ctx.panel.items():
+            c = _closes(bars, min(ctx.t, len(bars) - 1))
+            out[sym] = (float(c[-1] / c[-self.window] - 1.0)
+                        if c.size >= self.window + 1 else float("nan"))
+        return out
