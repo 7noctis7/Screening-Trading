@@ -120,3 +120,11 @@ def test_form4_xml_url_strips_dashes_and_pads():
     url = _form4_xml_url("0000320193", "0000320193-26-000077", "wf-form4.xml")
     assert url == ("https://www.sec.gov/Archives/edgar/data/320193/"
                    "000032019326000077/wf-form4.xml")
+
+
+def test_form4_xml_url_drops_xslt_prefix():
+    from packages.data.sec_insiders import _form4_xml_url
+    # primaryDocument pointe vers la version HTML rendue → on veut le XML brut.
+    url = _form4_xml_url("320193", "0000320193-26-000077", "xslF345X03/wf-form4.xml")
+    assert url.endswith("/000032019326000077/wf-form4.xml")
+    assert "xslF345X03" not in url
