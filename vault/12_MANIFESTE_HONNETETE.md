@@ -28,3 +28,19 @@ Pour tout signal candidat $s$, sous la filtration $\mathcal{F}_t$ :
 $$\mathbb{E}[r_{t+1}\mid \mathcal{F}_t,\, s] \approx 0 \;\Rightarrow\; \text{on optimise } \mathbb{V}[\cdot]\text{, pas } \mathbb{E}[\cdot].$$
 Aucun facteur n'entre en production sans franchir le gate DSR/PBO. La qualité du **processus** est
 le produit ; la survie (antifragilité) est l'objectif ; l'honnêteté est la marque.
+
+## Registre des hypothèses alt-data testées (2026-06) — 4 négatifs propres
+Pipeline honnête appliqué (event-study → placebo → coûts → DSR → PBO). **Un négatif documenté
+vaut un positif** : il ferme une impasse au lieu de vendre un mirage.
+
+| Hypothèse | Méthode | Verdict |
+|---|---|---|
+| PEAD large-cap | event-study panier, placebo | ❌ p=0,209 |
+| PEAD small/mid | event-study ✅ p=0,019 **mais** backtest net | ❌ Sharpe 0,20 · DSR 0 · **PBO 0,76** |
+| Insider Form 4 (large + small) | achats nets, dé-chevauchés, vs SPY | ❌ p≥0,55 (le t=8 brut = autocorrélation) |
+| Funding crypto | fade, z causal, placebo | ❌ p=0,16 (t=-3,4 trompeur : queues épaisses) |
+
+**Leçon transverse :** plusieurs fois un **t-stat spectaculaire** (insider t=8, funding t=-3,4) a été
+**désamorcé par le placebo** — fenêtres qui se chevauchent + queues épaisses gonflent le t naïf.
+Le placebo (et le PBO) séparent la recherche de l'illusion. **Conclusion : pas d'alpha directionnel
+exploitable dans la data gratuite testée → on optimise la variance, pas l'espérance.**
