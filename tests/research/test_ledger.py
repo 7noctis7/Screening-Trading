@@ -51,3 +51,29 @@ def test_summary(tmp_path):
     append_record({"facteur": "b", "dsr": 0.7}, p)
     s = summary(p)
     assert s["n_trials"] == 2 and s["n_robust"] == 1 and s["best_dsr"] == 0.7
+
+
+def test_sync_notes_frontmatter(tmp_path):
+    from packages.research.ledger import append_record, sync_notes_frontmatter
+    notes = tmp_path / "alphas"
+    notes.mkdir()
+    fm = "---\nfacteur: momentum\ndsr: null\nsharpe: null\n---\n# m\n"
+    (notes / "momentum_x.md").write_text(fm, encoding="utf-8")
+    (notes / "_TEMPLATE.md").write_text(
+        "---\nfacteur: momentum\ndsr: null\n---\n", encoding="utf-8")
+    led = tmp_path / "h.jsonl"
+    append_record({"facteur": "momentum", "dsr": 0.42, "sharpe": 2.1}, led)
+    n = sync_notes_frontmatter(notes, led)
+    assert n == 1                                   # le template (_…) est ignoré
+    txt = (notes / "momentum_x.md").read_text(encoding="utf-8")
+    assert "dsr: 0.42" in txt and "sharpe: 2.1" in txt
+
+
+def test_sync_skips_unknown_factor(tmp_path):
+    from packages.research.ledger import append_record, sync_notes_frontmatter
+    notes = tmp_path / "alphas"
+    notes.mkdir()
+    (notes / "value_x.md").write_text(
+        "---\nfacteur: value\ndsr: null\n---\n", encoding="utf-8")
+    append_record({"facteur": "momentum", "dsr": 0.9}, tmp_path / "h.jsonl")
+    assert sync_notes_frontmatter(notes, tmp_path / "h.jsonl") == 0   # pas de 'value'

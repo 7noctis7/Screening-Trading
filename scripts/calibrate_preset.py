@@ -56,6 +56,26 @@ def main() -> None:
     print(f"  Pour l'appliquer : export QUANT_DD_TARGET={b['dd_target']}")
     print(f"\n{res['note']}")
 
+    # Boucle backtest → mémoire : on logue l'essai dans le ledger (trace + déflation N). Best-effort.
+    try:
+        from datetime import UTC, datetime
+
+        from packages.research.ledger import append_record, sync_notes_frontmatter, trial_count
+        append_record({
+            "date": datetime.now(UTC).date().isoformat(),
+            "facteur": "preset", "classe": ["equity", "etf", "crypto"], "horizon": "swing",
+            "dsr": round(float(b["dsr"]), 4), "sharpe": round(float(b["sharpe"]), 2),
+            "maxdd": round(float(b["max_drawdown"]), 4),
+            "params": {"dd_target": b["dd_target"], "top_k": b["top_k"], "band": b["band"],
+                       "n_combos": res["n_trials"]},
+            "statut": "promu" if b["dsr"] > 0.5 else "en_test",
+            "these": "Preset best-practice (qualité→ERC→DD-target→blackout→bande).",
+        })
+        updated = sync_notes_frontmatter()       # propage le DSR vers les notes 08_Alphas/
+        print(f"\n📒 Essai logué (ledger N={trial_count()}) · notes synchronisées : {updated}")
+    except Exception as e:  # noqa: BLE001 - automatisation best-effort, jamais bloquante
+        print(f"\n(ledger non mis à jour : {e})")
+
 
 if __name__ == "__main__":
     main()
