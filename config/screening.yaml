@@ -4,11 +4,14 @@
 #  drawdown_from_high, vol_63). Booléens encodés 1.0/0.0 (filtrer via `op: ">=", value: 1`).
 # Opérateurs : > >= < <= == != between (value=[lo,hi]).  on_missing: fail (défaut) | pass.
 
+# Note anti-redondance (audit) : `above_sma200` est LA porte de tendance. `ret_12m` ne sert
+# plus qu'à CAPER les bulles (borne haute) — pas à re-filtrer le momentum, déjà récompensé
+# dans le scoring (poids momentum=1.0). On évite de compter deux fois le même signal.
 filters:
   - {metric: dollar_volume,     op: ">=",      value: 5000000}   # liquidité min (~5 M$/j)
   - {metric: above_sma200,      op: ">=",      value: 1}         # tendance de fond haussière
   - {metric: drawdown_from_high, op: ">=",     value: -0.30}     # pas en plein effondrement
-  - {metric: ret_12m,           op: between,   value: [0.0, 4.0]} # momentum positif, sans bulle
+  - {metric: ret_12m,           op: between,   value: [-1.0, 4.0]} # cap anti-bulle uniquement
 
 scoring:
   weights:

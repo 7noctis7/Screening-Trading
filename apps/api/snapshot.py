@@ -1360,24 +1360,22 @@ def _index_closes(aliases: list[str], start, end, fallback: list[float]) -> tupl
 
 
 def _curve_stats(eq: list[float]) -> dict:
-    """KPIs d'une courbe d'equity : CAGR, Sharpe, Sortino, maxDD, win-rate, profit factor."""
+    """KPIs d'une courbe d'equity. Ratios via perf_summary (SOURCE UNIQUE DE VÉRITÉ) ;
+    profit_factor/win_rate dérivés des rendements quotidiens (gains/pertes)."""
     import numpy as _np
+
+    from packages.portfolio.metrics import perf_summary
     e = _np.asarray(eq, dtype=float)
     if e.size < 30:
         return {"available": False}
     r = e[1:] / e[:-1] - 1
-    total = float(e[-1] / e[0] - 1)
-    cagr = float((1 + total) ** (252.0 / len(r)) - 1) if total > -1 else -1.0
-    sd = float(r.std())
-    dn = r[r < 0]
-    dsd = float((dn ** 2).mean() ** 0.5) if dn.size else 0.0
-    peak = _np.maximum.accumulate(e)
-    mdd = float((e / peak - 1).min())
+    ps = perf_summary(r)                                  # cagr/sharpe/sortino/maxdd unifiés
+    if not ps.get("available"):
+        return {"available": False}
     gains, losses = float(r[r > 0].sum()), float(-r[r < 0].sum())
-    return {"available": True, "cagr": round(cagr, 4), "total_return": round(total, 4),
-            "sharpe": round(r.mean() / sd * (252 ** 0.5), 2) if sd > 0 else 0.0,
-            "sortino": round(r.mean() / dsd * (252 ** 0.5), 2) if dsd > 0 else 0.0,
-            "max_drawdown": round(mdd, 4), "win_rate": round(float((r > 0).mean()), 3),
+    return {"available": True, "cagr": ps["cagr"], "total_return": ps["total_return"],
+            "sharpe": ps["sharpe"], "sortino": ps["sortino"],
+            "max_drawdown": ps["max_drawdown"], "win_rate": round(float((r > 0).mean()), 3),
             "profit_factor": round(gains / losses, 2) if losses > 0 else 0.0}
 
 
