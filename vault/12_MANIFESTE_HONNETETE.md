@@ -10,7 +10,9 @@ sur-performance robuste après correction du biais de sélection (multiple testi
 et c'est **notre différenciation**.
 
 ## Ce que nous revendiquons (vrai et mesuré)
-- **Gestion du risque** : Max DD divisé par ~2 en A/B krach (-53,6 % → -31,7 %).
+- **Gestion du risque** : drawdown réduit ~2× vs équipondéré sur le backtest preset
+  reproductible (`make backtest-preset` : preset −9,0 % vs équipondéré −23,3 %, run 2026-06-23,
+  cf. `vault/04_JOURNAL.md`). *(Aucun chiffre de stress non reproductible n'est revendiqué ici.)*
 - **Béta cœur assumé** : 50 % QQQ + satellite risk-managed (ADR-0023). Pas de prétention d'oracle.
 - **Anti-overfitting** : gate $DSR>0 \wedge PBO<0.5$, CV purgée/embargo (López de Prado), fuite de
   données détectée et corrigée (le « 6,9 % d'alpha » initial était un artefact de look-ahead).
