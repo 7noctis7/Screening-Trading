@@ -35,7 +35,8 @@ def load_bars_yf(ticker: str, years: int = 10):
         df = yf.Ticker(ticker).history(period=f"{years}y", auto_adjust=True)
         if df is None or df.empty:
             return []
-        return [SimpleNamespace(ts=ix.to_pydatetime(), close=float(r["Close"]))
+        return [SimpleNamespace(ts=ix.to_pydatetime(), close=float(r["Close"]),
+                                volume=float(r.get("Volume", 0.0) or 0.0))
                 for ix, r in df.iterrows()]
     except Exception:  # noqa: BLE001 - best-effort
         return []
