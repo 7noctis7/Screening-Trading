@@ -1662,7 +1662,26 @@ def build_snapshot(seed: int = 7) -> dict:
                    "portfolio_vol": rb["portfolio_vol"],
                    "diversification_ratio": rb["diversification_ratio"],
                    "covariance_diagnostics": _cov_diag}
-    limits = concentration_report(w_by_name, w_by_sector, max_name=0.20, max_sector=0.40)
+    # #3 audit : la corrélation de stress PILOTE les limites (resserre si diversif faiblit)
+    try:
+        import numpy as _np_lim
+
+        from packages.portfolio.correlation import conditional_correlation
+        from packages.risk.limits import concentration_report_adaptive
+        _rb = {k: list(v) for k, v in rets_by.items() if len(v) >= 10}
+        _ml = min((len(v) for v in _rb.values()), default=0)
+        if len(_rb) >= 2 and _ml >= 10:
+            _aligned = {k: v[-_ml:] for k, v in _rb.items()}
+            _proxy = [float(x) for x in _np_lim.mean(list(_aligned.values()), axis=0)]
+            _corr_cond = conditional_correlation(_aligned, _proxy)
+            limits = concentration_report_adaptive(w_by_name, w_by_sector, _corr_cond,
+                                                   max_name=0.20, max_sector=0.40)
+        else:
+            limits = concentration_report(w_by_name, w_by_sector, max_name=0.20,
+                                          max_sector=0.40)
+    except Exception:  # noqa: BLE001 — repli sur le rapport fixe
+        limits = concentration_report(w_by_name, w_by_sector, max_name=0.20,
+                                      max_sector=0.40)
 
     # --- STRESS-TESTS MACRO + COUVERTURE (axe 11) ---
     from packages.portfolio.scenarios import hedge_suggestion, scenario_analysis
