@@ -23,6 +23,8 @@ import numpy as np
 from packages.backtest.conviction_backtest import _stats
 from packages.execution.costs import CostModel
 from packages.portfolio.optimize import equal_risk_contribution
+from packages.portfolio.risk_advanced import ewma_vol
+from packages.portfolio.risk_overlay import drawdown_taper
 
 
 def _cov_annual(win: np.ndarray) -> np.ndarray:
@@ -87,7 +89,9 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
                     step: int = 21, lookback: int = 120, top_k: int = 30, k_dd: float = 1.6,
                     blackout_move: float = 0.12, regime_gate: bool = True,
                     mom_tilt: bool = True, legacy_quality_universe: bool = False,
-                    breadth_gate: bool = True) -> dict:
+                    breadth_gate: bool = True, risk_overlay: bool = False,
+                    ro_dd_soft: float = -0.08, ro_dd_hard: float = -0.20,
+                    ewma_lam: float = 0.94) -> dict:
     syms = [s for s, b in data.items() if b and len(b) > lookback + 2 * step]
     if len(syms) < 5:
         return {"available": False}
@@ -114,6 +118,7 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
     mkt = A.mean(axis=0)                                         # indice de marché (porte régime + frein DD)
     rets = A[:, 1:] / A[:, :-1] - 1
     tgt_vol = max(0.0, abs(dd_target)) / k_dd
+    per_year = 252.0 / step
     rt = np.asarray([CostModel.for_asset_class(acmap.get(s, "equity")).round_trip_bps / 1e4
                      for s in universe])
 
@@ -121,6 +126,7 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
     port: list[float] = []
     gross_hist: list[float] = []
     turn = 0.0
+    eq_strat, peak_strat = 1.0, 1.0                  # equity stratégie (overlay risque)
     start = max(lookback, 50)
     for t in range(start, L - 1, step):
         win = rets[:, max(0, t - lookback):t]
@@ -140,20 +146,28 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
             gross *= _regime_mult(mkt, t)
         if breadth_gate:                                        # #8 ampleur de marché (rallye étroit → ↓)
             gross *= float(np.clip(_breadth(A, t) / 0.5, 0.0, 1.0))
+        if risk_overlay:                             # overlay : taper DD + vol prévue
+            dd_now = eq_strat / peak_strat - 1.0 if peak_strat > 0 else 0.0
+            gross *= drawdown_taper(dd_now, ro_dd_soft, ro_dd_hard)
+            if pv > 0 and len(port) >= 10:           # EWMA > réalisée → réduire
+                fv = ewma_vol(port[-60:], lam=ewma_lam, annualize=int(round(per_year)))
+                if fv > pv:
+                    gross *= pv / fv
         w = w * gross
         if band > 0 and prev_w.sum() > 0:                       # bande de non-trading
             w = np.where(np.abs(w - prev_w) < band, prev_w, w)
         nxt = min(t + step, L - 1)
         fwd = A[:, nxt] / A[:, t] - 1                           # rendement RÉALISÉ après t
         cost = float((np.abs(w - prev_w) * rt).sum())
-        port.append(float((w * fwd).sum()) - cost)
+        ret_step = float((w * fwd).sum()) - cost
+        port.append(ret_step)
+        eq_strat *= (1.0 + ret_step)                 # maj equity (taper au pas suivant)
+        peak_strat = max(peak_strat, eq_strat)
         turn += float(np.abs(w - prev_w).sum())
         gross_hist.append(float(w.sum()))
         prev_w = w
     if len(port) < 3:
         return {"available": False}
-
-    per_year = 252.0 / step
 
     def _cum(series: list) -> list:
         e = np.cumprod(1 + np.asarray(series, dtype=float))

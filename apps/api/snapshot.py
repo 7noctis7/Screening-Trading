@@ -1834,8 +1834,9 @@ def build_snapshot(seed: int = 7) -> dict:
     if len(_tradeable_data) < 30:                        # garde-fou (mode démo/synthétique) :
         # pas assez de réel → on retombe sur le négociable (la bannière « données factices » prévient)
         _tradeable_data = {s: b for s, b in data.items() if is_tradeable(s, acmap.get(s, "equity"))} or data
+    _ro = _os_hist.environ.get("QUANT_RISK_OVERLAY") == "1"   # opt-in overlay risque
     preset_bt = preset_backtest(_tradeable_data, _quality, asset_classes=acmap, swing_equity=equity,
-                                dd_target=_dd, band=0.03)
+                                dd_target=_dd, band=0.03, risk_overlay=_ro)
     recommended["preset_backtest"] = preset_bt          # rattaché à l'allocation recommandée affichée
     # JOURNAL DES TRADES DU PRESET (rebalancements) → page Trades (remplace le swing legacy)
     from packages.backtest.preset_backtest import preset_trade_log
