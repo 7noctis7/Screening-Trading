@@ -80,3 +80,40 @@ def summary(equity: list[float], pnls: list[float]) -> dict[str, float]:
         "max_drawdown": max_drawdown(equity),
         **trade_stats(pnls),
     }
+
+
+def perf_summary(returns, pnls: list[float] | None = None, rf: float = 0.0,
+                 ppy: int = _PPY) -> dict:
+    """SOURCE UNIQUE DE VÉRITÉ des métriques de perf, à partir de RENDEMENTS.
+
+    Tous les rapports (ledger, vault, dashboard, backtests) devraient passer par ici
+    pour éviter trois Sharpe différents. Formules identiques. `pnls` (P&L par trade)
+    optionnel → profit_factor/win_rate. numpy pur, déterministe.
+    """
+    seq = [] if returns is None else list(returns)
+    r = np.asarray([x for x in seq if x == x], float)               # drop NaN
+    n = int(r.size)
+    if n < 2:
+        return {"available": False, "n": n}
+    eq = np.cumprod(1.0 + r)
+    total = float(eq[-1] - 1.0)
+    years = n / ppy
+    cagr = float((1 + total) ** (1 / years) - 1) if years > 0 and total > -1 else 0.0
+    sd = float(r.std(ddof=1))
+    vol = sd * np.sqrt(ppy)
+    sharpe_v = float((r.mean() - rf / ppy) / sd * np.sqrt(ppy)) if sd > 0 else 0.0
+    dn = r[r < 0]
+    dsd = float(dn.std(ddof=1)) if dn.size > 1 else 0.0
+    sortino_v = float((r.mean() - rf / ppy) / dsd * np.sqrt(ppy)) if dsd > 0 else 0.0
+    mdd = max_drawdown(eq.tolist())
+    out = {"available": True, "n": n, "total_return": round(total, 4),
+           "cagr": round(cagr, 4), "vol": round(vol, 4), "sharpe": round(sharpe_v, 3),
+           "sortino": round(sortino_v, 3),
+           "calmar": round(cagr / abs(mdd), 3) if mdd < 0 else 0.0,
+           "max_drawdown": round(mdd, 4)}
+    if pnls is not None:
+        ts = trade_stats(pnls)
+        pf = ts["profit_factor"]
+        out["profit_factor"] = round(pf, 3) if pf != float("inf") else None
+        out["win_rate"] = round(ts["win_rate"], 4)
+    return out
