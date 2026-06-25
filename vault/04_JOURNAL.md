@@ -1,5 +1,35 @@
 # 04 — JOURNAL
 
+## Session 2026-06-25 — Recherche alt-data (4 négatifs) + couche risque + audit 3× → capital réel limité
+**Fait.** ~15 PR successives (CI verte → merge → resync), tout 0 €.
+- **Pipeline recherche alt-data** : event-study panier + benchmark + dé-chevauchement (#251-255),
+  insider Form 4 par CIK + achats nets XML (#250-256), backtest PEAD net de coûts + **PBO/CSCV**
+  réel (#254), funding crypto (#257), prediction-markets dé-biaisés favori-outsider (#253).
+- **4 hypothèses directionnelles testées → 4 NÉGATIFS propres** (placebo/DSR/PBO) : PEAD large
+  (p=0,21), PEAD small/mid (event-study ✅ p=0,019 **mais** backtest Sharpe 0,20 · PBO 0,76),
+  insider (t=8 brut = autocorrélation → p≥0,55 corrigé), funding crypto (t=-3,4 trompeur, p=0,16).
+  Documentés au manifeste — un négatif propre est un livrable.
+- **Couche risque** : overlay d'exposition (drawdown taper × vol prévue EWMA, #258), **câblé dans
+  le preset** opt-in (#263), concentration **corrélation-aware** (#264), `make risk-check`.
+- **Audit contradictoire 5 voix, 3 rounds (66 → 77 → 83/100)** : source unique de vérité métriques
+  (#259), audit data `warn` par défaut + survivorship honnête (#260), `_curve_stats` unifié +
+  dé-redondance screening (#261), harnais de sensibilité Jaccard+régime (#262), seed curée de
+  délistés incl. faillites bancaires SIVB/FRC/SBNY (#265).
+- **Runs réels Mac** : sensibilité tout-vert (Jaccard 0,94 → seuils NON sur-optimisés) ; A/B overlay
+  identique (preset MaxDD -4,8 % déjà géré → overlay = assurance tail) ; survivorship `undersampled:
+  False` après seed.
+
+**Décidé.** Pivot acté (ADR-0024) : on **arrête de chasser l'alpha directionnel** (DSR≈0 confirmé 4×)
+et on **durcit la gestion du risque** (l'edge prouvé). Overlay risque **défaut OFF** (opt-in
+`QUANT_RISK_OVERLAY=1`) car inerte sur un preset déjà peu drawdown. Survivorship corrigé
+partiellement (résidu = vintages point-in-time, non gratuits, assumé).
+
+**Verdict.** **PRÊT POUR CAPITAL RÉEL LIMITÉ** sous 3 conditions (sizing défensif `QUANT_DD_TARGET=0.15`,
+track record paper d'abord, caveat survivorship). Aucun blocage logiciel restant.
+
+**Prochaine étape.** Paper défensif lancé 2026-06-25 → **revue courbe paper vs backtest le 2026-08-06**
+(`make analytics` + `make ledger-sweep`) → décision premier euro réel limité OU re-calibrage.
+
 ## Session 2026-06-24 — Audit « 5 entités » + comité hedge fund → feuille de route 5 lots (0 €)
 **Fait.** Les 5 lots de la feuille de route d'audit, en PR successives → CI verte → merge. **567 tests.**
 - **Lot 1** [#242] : screener INVESTABLE only (exclut indices `^…`/class index — fin des candidats

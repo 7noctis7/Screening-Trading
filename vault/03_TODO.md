@@ -3,6 +3,15 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+## 📅 RENDEZ-VOUS — 2026-08-06 : REVUE COURBE PAPER (paper vs backtest)
+> Audit 3× passé (score ~83/100, **PRÊT POUR CAPITAL RÉEL LIMITÉ** sous conditions).
+> Paper défensif lancé le 2026-06-25 (`QUANT_DD_TARGET=0.15`). On laisse tourner ~6 semaines.
+- [ ] **2026-08-06** — comparer la courbe paper réelle au backtest preset (Sharpe/MaxDD/CAGR
+      concordent-ils ?). Décision : **premier euro réel limité** OU re-calibrage.
+  - sortir la courbe : `make analytics` (QuantStats) + `make ledger-sweep` (journal discret).
+  - critère GO : paper cohérent avec le backtest (pas de dérive Sharpe>1pt, MaxDD non dépassé).
+  - si concordant → engager un capital réel **limité** + sizing défensif ; sinon → re-calibrer.
+
 ## 🌙 EN RENTRANT SUR LE MAC (post-audit comité, 2026-06-25)
 > Suite à l'audit contradictoire (score ~66→~78/100, verdict **PRÊT POUR PAPER**). Le seul
 > reliquat avant « capital réel limité » est **opérationnel** (élargir les délistés), pas du code.
