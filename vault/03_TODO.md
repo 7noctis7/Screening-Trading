@@ -3,6 +3,30 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+## 🌙 EN RENTRANT SUR LE MAC (post-audit comité, 2026-06-25)
+> Suite à l'audit contradictoire (score ~66→~78/100, verdict **PRÊT POUR PAPER**). Le seul
+> reliquat avant « capital réel limité » est **opérationnel** (élargir les délistés), pas du code.
+
+- [ ] **Récupérer le code** : `qt && git pull origin main`.
+- [ ] **🔴 CRITIQUE — élargir le survivorship** (le seul vrai bloqueur capital réel) :
+  ```bash
+  make ingest-delisted                 # détecte les titres délistés sur ta base COMPLÈTE
+  python -c "from packages.data.survivorship import survivorship_audit, load_delisted; \
+  print(survivorship_audit(['AAPL'], load_delisted()))"   # vise undersampled=False (coverage ≥5%)
+  ```
+  → si `undersampled: true` persiste, relance l'ingest sur un historique plus long / plus large.
+- [ ] **Éprouver les seuils (anti sur-optim, audit #4)** : `make sensitivity`
+  → note tout filtre `⚠ FRAGILE` (Jaccard < 0.7) ou gate régime `⚠ sensible` et reporte-moi.
+- [ ] **Overlay de risque (edge prouvé)** : `make risk-check`
+  → note l'exposition recommandée du jour (drawdown taper × vol prévue).
+- [ ] **Activer le gate audit data en strict (optionnel, plus sévère)** :
+  `echo 'QUANT_AUDIT=strict' >> .env` puis `make audit ARGS=--strict` (refuse de servir des prix
+  à anomalie critique). Par défaut c'est déjà `warn` (audite + joint le rapport, sans bloquer).
+- [ ] **Rafraîchir les métriques de référence** (source unique de vérité = `perf_summary`) :
+  `make backtest-preset` → vérifie CAGR/Sharpe/MaxDD cohérents avec le manifeste (claim non sourcé
+  retiré). `make calibrate-preset` resynchronise le DSR au ledger.
+- [ ] **(rappel défensif)** `echo 'QUANT_DD_TARGET=0.15' >> .env` + 1 seul `make live-go` (annule le levier).
+
 ## 🎯 SPRINT « ALPHA / CALMAR » — à démarrer (2026-06-24)
 > Objectif : **Calmar 0.17 → 0.6-0.9** en **divisant le Max DD par 2** + alpha honnête.
 > Cible code : `packages/backtest/preset_backtest.py` (cœur de la stratégie de production).
