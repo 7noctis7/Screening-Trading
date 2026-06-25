@@ -84,24 +84,38 @@ def load_delisted(path: str | Path | None = None) -> list[dict]:
     return out
 
 
-def survivorship_audit(universe_symbols: list[str], delisted: list[dict] | None = None) -> dict:
-    """Audit : ampleur estimée du biais + statut de correction (selon présence de `delisted.csv`)."""
+def survivorship_audit(universe_symbols: list[str], delisted: list[dict] | None = None,
+                       min_coverage: float = 0.05) -> dict:
+    """Audit : ampleur du biais + statut. `min_coverage` = plancher de plausibilité ;
+    en-dessous, la « correction » est jugée sous-échantillonnée."""
     dl = delisted if delisted is not None else load_delisted()
     n_active = len(set(universe_symbols))
     n_dl = len({d["symbol"] for d in dl})
     total = n_active + n_dl
-    # Taux de délisting réaliste : ~3-5 %/an sur actions US → sur ~10 ans, biais notable.
+    # Délisting réel ~3-5 %/an actions US → sur ~10 ans, coverage attendu >> quelques %.
+    # En-dessous du plancher, la « correction » est un trompe-l'œil.
     corrected = n_dl > 0
     coverage = round(n_dl / total, 3) if total else 0.0
+    undersampled = corrected and coverage < min_coverage
+    if not corrected:
+        severity = "ÉLEVÉ — univers survivant uniquement"
+    elif undersampled:
+        severity = "ÉLEVÉ — délistés SOUS-ÉCHANTILLONNÉS (coverage < seuil plausible)"
+    else:
+        severity = "corrigé (partiel)"
     return {
         "available": True,
         "corrected": corrected,
+        "undersampled": undersampled,
         "n_active": n_active,
         "n_delisted": n_dl,
         "delisted_coverage": coverage,
-        "severity": "corrigé (partiel)" if corrected else "ÉLEVÉ — univers survivant uniquement",
+        "min_coverage": min_coverage,
+        "severity": severity,
         "bias_direction": "performances passées SURESTIMÉES (les disparus sont absents)",
-        "note": ("Biais corrigé partiellement via data/delisted.csv." if corrected else
+        "note": ("Coverage trop faible → lancer `make ingest-delisted` sur la base "
+                 "complète pour élargir data/delisted.csv." if undersampled else
+                 "Biais corrigé partiellement via data/delisted.csv." if corrected else
                  "Pour corriger : déposer data/delisted.csv (symbol,name,sector,delisted_on) "
                  "avec les titres sortis de l'univers. Sinon, lire les backtests longs comme "
                  "optimistes."),

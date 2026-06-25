@@ -1511,8 +1511,10 @@ def build_snapshot(seed: int = 7) -> dict:
     #                         le dernier snapshot sain ; un build corrompu n'atteint jamais l'écran).
     #   QUANT_AUDIT=warn|1  → audite et joint le rapport (`_audit`) au snapshot, sans bloquer.
     #   (défaut désactivé ; n'audite QUE des prix réels — le synthétique de démo n'a pas à passer.)
+    #   (défaut = `warn` : audite les prix réels + joint le rapport, sans bloquer ;
+    #    `strict` reste opt-in pour le gate CI ; `off` désactive.)
     _audit_report: dict | None = None
-    _audit_mode = _os_hist.environ.get("QUANT_AUDIT", "").lower()
+    _audit_mode = (_os_hist.environ.get("QUANT_AUDIT", "warn") or "warn").lower()
     if _audit_mode in ("strict", "warn", "1", "true") and real_syms and data_mode == "real":
         from packages.data.audit import assert_integrity, audit_and_report
         try:

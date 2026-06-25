@@ -44,3 +44,16 @@ def test_audit_reports_corrected_after_write(tmp_path):
     write_delisted([{"symbol": "Z", "name": "", "sector": "", "delisted_on": "2019-01-01"}], p)
     a = survivorship_audit(["AAPL", "MSFT"], delisted=load_delisted(p))
     assert a["corrected"] and a["n_delisted"] == 1
+
+
+def test_audit_flags_undersampling_honestly():
+    # 1 délisté pour 100 actifs → coverage ~1% << plancher → trompe-l'œil
+    dl = [{"symbol": "Z", "name": "", "sector": "", "delisted_on": "2019-01-01"}]
+    a = survivorship_audit([f"S{i}" for i in range(100)], delisted=dl)
+    assert a["corrected"] and a["undersampled"] is True
+    assert "SOUS-ÉCHANTILLONNÉS" in a["severity"]
+    # coverage suffisant → pas de drapeau sous-échantillonnage
+    big = [{"symbol": f"D{i}", "name": "", "sector": "", "delisted_on": "2019-01-01"}
+           for i in range(20)]
+    b = survivorship_audit(["AAPL", "MSFT"], delisted=big)
+    assert b["undersampled"] is False
