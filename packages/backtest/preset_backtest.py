@@ -36,10 +36,13 @@ def _cov_annual(win: np.ndarray) -> np.ndarray:
         return np.cov(win) * 252
 
 
-def _regime_mult(mkt: np.ndarray, t: int) -> float:
-    """#5 porte de régime + #6 frein de drawdown, sur l'indice de marché (moyenne de l'univers).
-    Plein risque en tendance haussière saine ; coupe en distribution / sous MM200 / gros DD de marché.
-    Data-driven (mêmes valeurs quels que soient les params) → ne réduit JAMAIS le gross au-dessus de 1."""
+def _regime_mult(mkt: np.ndarray, t: int, *, dd_hard: float = -0.15,
+                 dd_soft: float = -0.10, g_dist: float = 0.6,
+                 g_below: float = 0.2) -> float:
+    """#5 porte de régime + #6 frein de drawdown sur l'indice marché (moyenne univers).
+    Plein risque en tendance saine ; coupe en distribution / sous MM200 / gros DD.
+    Ne réduit jamais le gross au-dessus de 1. Seuils en kwargs (défauts inchangés) →
+    testables en sensibilité (audit) sans changer le comportement de prod."""
     if t < 25:
         return 1.0
     hist = mkt[:t + 1]
@@ -47,10 +50,10 @@ def _regime_mult(mkt: np.ndarray, t: int) -> float:
     slope = mkt[t] / mkt[t - 20] - 1.0
     peak = float(np.maximum.accumulate(hist)[-1])
     dd = mkt[t] / peak - 1.0 if peak > 0 else 0.0
-    if dd < -0.15:                                              # #6 frein DD : krach de marché → cash
+    if dd < dd_hard:                                       # #6 frein DD : krach → cash
         return 0.0
-    g = 1.0 if (mkt[t] > ma and slope > 0) else (0.6 if mkt[t] > ma else 0.2)   # #5 régime
-    if dd < -0.10:                                             # #6 demi-frein
+    g = 1.0 if (mkt[t] > ma and slope > 0) else (g_dist if mkt[t] > ma else g_below)
+    if dd < dd_soft:                                           # #6 demi-frein
         g *= 0.5
     return g
 
