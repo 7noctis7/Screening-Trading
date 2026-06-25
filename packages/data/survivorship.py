@@ -15,6 +15,7 @@ from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT = _ROOT / "data" / "delisted.csv"
+_SEED = _ROOT / "data" / "delisted_seed.csv"   # liste curée (délistés/faillis)
 
 
 def _as_date(v: object) -> date | None:
@@ -65,9 +66,7 @@ def write_delisted(rows: list[dict], path: str | Path | None = None) -> int:
     return len(merged)
 
 
-def load_delisted(path: str | Path | None = None) -> list[dict]:
-    """Lit la liste des titres délistés (vide si le fichier n'existe pas)."""
-    p = Path(path) if path else _DEFAULT
+def _read_csv(p: Path) -> list[dict]:
     if not p.exists():
         return []
     out: list[dict] = []
@@ -82,6 +81,18 @@ def load_delisted(path: str | Path | None = None) -> list[dict]:
     except Exception:  # noqa: BLE001
         return []
     return out
+
+
+def load_delisted(path: str | Path | None = None) -> list[dict]:
+    """Titres délistés. Sur le chemin par défaut, FUSIONNE la seed curée versionnée
+    (`delisted_seed.csv`) avec les détectés en local (`delisted.csv`) → coverage solide
+    même sans base (CI). Un chemin explicite ne lit QUE ce fichier."""
+    p = Path(path) if path else _DEFAULT
+    rows = _read_csv(p)
+    if path is None:                                  # défaut → ajoute la seed curée
+        seen = {r["symbol"] for r in rows}
+        rows += [r for r in _read_csv(_SEED) if r["symbol"] not in seen]
+    return rows
 
 
 def survivorship_audit(universe_symbols: list[str], delisted: list[dict] | None = None,

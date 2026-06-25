@@ -46,6 +46,13 @@ def test_audit_reports_corrected_after_write(tmp_path):
     assert a["corrected"] and a["n_delisted"] == 1
 
 
+def test_default_load_merges_curated_seed():
+    from packages.data.survivorship import load_delisted
+    syms = {r["symbol"] for r in load_delisted()}            # défaut → fusionne la seed
+    assert {"SIVB", "FRC", "SBNY"} <= syms          # faillites bancaires (survivorship)
+    assert len(syms) >= 30
+
+
 def test_audit_flags_undersampling_honestly():
     # 1 délisté pour 100 actifs → coverage ~1% << plancher → trompe-l'œil
     dl = [{"symbol": "Z", "name": "", "sector": "", "delisted_on": "2019-01-01"}]

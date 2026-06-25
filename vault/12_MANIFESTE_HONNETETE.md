@@ -18,6 +18,10 @@ et c'est **notre différenciation**.
   données détectée et corrigée (le « 6,9 % d'alpha » initial était un artefact de look-ahead).
 - **Auditabilité** : lignage de données (`packages/data/lineage.py`), manifeste de reproductibilité
   (`make repro`), gate de publication anti « site muet » (`scripts/check_build.py`).
+- **Survivorship partiellement corrigé** : seed curée de délistés/acquis/**faillis** (incl. SIVB,
+  FRC, SBNY) + détection des barres périmées (`make ingest-delisted`). Résidu assumé : la
+  correction complète exigerait des *vintages* point-in-time de l'univers (non gratuits) → les
+  backtests longs restent lus comme légèrement optimistes.
 - **Souveraineté & coût** : 0 €/$ d'infra (Mac éteint, Actions + Pages + cache HF gratuits).
 
 ## Ce que nous ne ferons jamais
