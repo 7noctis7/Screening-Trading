@@ -119,14 +119,15 @@ def main() -> int:
     print(f"\n  PBO (CSCV, {len(_GRID)} configs) : "
           f"{pbo_v:.3f}" if pbo_v is not None else "\n  PBO : indisponible")
 
-    edge = base["ann_return"] > 0
-    promu = bool(base["dsr"] > 0.5 and (pbo_v is not None and pbo_v < 0.5) and edge)
+    from packages.research.gate import promotion_verdict
+    v = promotion_verdict(dsr=base["dsr"], pbo=pbo_v, edge=base["ann_return"])
+    promu = v["promoted"]
     verdict = "✅ PROMU (edge net robuste)" if promu else "❌ REJETÉ"
     print(f"\n  → {verdict}")
     if promu:
         print("  GO : DSR>0.5 ET PBO<0.5 ET edge net>0 → 1er alpha net de frais.")
     else:
-        print("  STOP : ne survit pas (coûts / déflation / overfit) → pas tradable.")
+        print(f"  STOP : {', '.join(v['reasons']) or 'pas tradable'}.")
 
     _log(a, base, pbo_v, promu)
     _note(a, base, pbo_v, promu, sorted(data))

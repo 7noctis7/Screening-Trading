@@ -2,6 +2,34 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0024 — Arrêt de la chasse à l'alpha directionnel → durcissement du risque
+**Date :** 2026-06-25
+**Statut :** accepté
+
+**Contexte.** 4 hypothèses d'alpha directionnel (PEAD large, PEAD small/mid, clusters insiders,
+funding crypto) ont été testées avec le pipeline honnête (event-study → placebo → coûts → DSR → PBO).
+**Les 4 ont été rejetées.** Cas pédagogiques : un t-stat spectaculaire (insider t=8, funding t=-3,4)
+désamorcé par le placebo (chevauchement de fenêtres + queues épaisses gonflent le t naïf). Confirme
+DSR≈0 pour la 4ᵉ fois.
+
+**Décision.**
+- **On cesse de miner l'alpha directionnel dans la data gratuite** (rendements décroissants + risque
+  de p-hacking croissant). Toute nouvelle hypothèse reste possible mais doit franchir le gate.
+- **On industrialise l'edge prouvé** : gestion du risque. Overlay d'exposition (drawdown taper × vol
+  prévue EWMA) câblé dans le preset, **défaut OFF** (opt-in `QUANT_RISK_OVERLAY=1`) car inerte sur un
+  preset déjà peu drawdown — assurance tail, pas générateur de rendement.
+- **Intégrité du reporting** : une source unique de vérité des métriques (`perf_summary`) ; aucun
+  chiffre non reproductible dans le manifeste.
+- **Survivorship** : correction partielle (seed curée + détection stale) ; résidu assumé (vintages
+  point-in-time non gratuits) → backtests longs lus comme légèrement optimistes.
+
+**Conséquences.**
+- (+) Positionnement crédible : on ne vend pas un alpha inexistant ; la valeur (risque + beta) est
+  prouvée ET reproductible. Audit contradictoire 3 rounds : 66 → 83/100.
+- (+) Verdict **PRÊT POUR CAPITAL RÉEL LIMITÉ** sous conditions (sizing défensif + track record paper).
+- (−) Pas de promesse de surperformance ; le produit est la qualité du processus, pas l'oracle.
+- Négatifs documentés au ledger (`research/hypotheses.jsonl`) + manifeste → on ne re-teste pas en rond.
+
 ## ADR-0001 — Stack & architecture de fondation
 **Date :** session 0
 **Statut :** accepté
