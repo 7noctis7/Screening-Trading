@@ -109,7 +109,10 @@ export function Nav() {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
-  useEffect(() => { setMounted(true); }, []);
+  const [embed, setEmbed] = useState(false);
+  useEffect(() => { setMounted(true);
+    setEmbed(new URLSearchParams(window.location.search).get("embed") === "1");
+  }, []);
   // Ferme le tiroir au changement de page + verrouille le scroll du body quand il est ouvert.
   useEffect(() => { setOpen(false); }, [path]);
   useEffect(() => {
@@ -238,6 +241,8 @@ export function Nav() {
       </div>
     </div>
   );
+
+  if (embed) return null;                 // mode embed (?embed=1) : pas de nav
 
   return (
     <>

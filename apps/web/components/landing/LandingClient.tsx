@@ -109,11 +109,11 @@ export default function LandingClient() {
         {/* SECTION — preuves chiffrées (démo) */}
         <section className={`${s.section} ${s.reveal}`} aria-labelledby="ld-proof">
           <div className={s.eyebrow}>Preuves</div>
-          <h2 id="ld-proof" className={s.h2}>Cinq pistes. Cinq échecs. Tous publiés.</h2>
+          <h2 id="ld-proof" className={s.h2}>Sept pistes. Sept échecs. Tous publiés.</h2>
           <div className={`${s.grid} ${s.grid4}`}>
             {[
               ["83/100", "score audit (3 rounds)", true],
-              ["5/5", "hypothèses d'alpha rejetées", false],
+              ["7/7", "hypothèses d'alpha rejetées", false],
               ["0 €", "coût d'infra", true],
               ["−9 %", "MaxDD preset vs −23 % équipondéré", false],
             ].map(([n, l, teal]) => (
@@ -124,8 +124,9 @@ export default function LandingClient() {
             ))}
           </div>
           <p className={s.lead} style={{ marginTop: "2rem" }}>
-            Cinq pistes d'alpha — actions, insiders, funding, on-chain — testées, cinq
-            négatifs propres et documentés. Un négatif honnête vaut mille faux positifs.
+            Sept pistes d'alpha — actions, insiders, funding, on-chain, régime, breakout —
+            testées, sept négatifs propres et documentés. Un négatif honnête vaut mille
+            faux positifs.
             La performance, ici, c'est de <b>survivre</b> aux régimes que les autres
             n'ont pas vus venir.
           </p>

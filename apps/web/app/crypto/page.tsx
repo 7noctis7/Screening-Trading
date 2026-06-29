@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { useCryptoCockpit } from "@/lib/api";
 import { PageSkeleton, EmptyState } from "@/components/ui";
 import { InfoTip } from "@/components/InfoTip";
+import { ShareBar } from "@/components/crypto/ShareBar";
 
 // Jauge de sentiment live (au-dessus du graphe) — client-only.
 const LiveGauge = dynamic(() => import("@/components/crypto/LiveGauge"), { ssr: false });
@@ -486,7 +487,23 @@ function Derivatives({ ck }: { ck: any }) {
 export default function Crypto() {
   const { data, isLoading } = useCryptoCockpit();
   const [sel, setSel] = useState<any>(null);
+  const [embed, setEmbed] = useState(false);
+  useEffect(() => {                                  // mode embed (?embed=1) → vue compacte
+    setEmbed(new URLSearchParams(window.location.search).get("embed") === "1");
+  }, []);
   if (isLoading) return <PageSkeleton />;
+  if (embed) {                                       // widget embarquable read-only (M5)
+    return (
+      <main className="max-w-xl mx-auto p-4 space-y-4">
+        <LiveGauge />
+        <ExpertLive />
+        <a href="/Screening-Trading/crypto/" target="_blank" rel="noopener noreferrer"
+          className="block text-center text-sm px-3 py-2 rounded-lg border border-border hover:border-border2 hover:text-accent transition-colors">
+          Ouvrir dans Quant Terminal →
+        </a>
+      </main>
+    );
+  }
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -503,6 +520,7 @@ export default function Crypto() {
         Vue marché agrégée, 100 % gratuite et sans clé — reconstruite chaque jour ouvré.
         Contexte de marché, <b>pas un conseil financier</b>.
       </p>
+      <ShareBar sentiment={data?.sentiment} />
       {!data?.available ? (
         <EmptyState
           title="Cockpit crypto indisponible"
