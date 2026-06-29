@@ -1494,8 +1494,17 @@ def _onchain_section(held: list, acmap: dict) -> dict:
         syms = [s for s in COINS if s in held_root] or list(COINS)
         coins = {s: m for s, m in onchain_metrics(syms).items()
                  if any(v is not None for v in m.values())}
-        return {"available": bool(coins), "coins": coins} if coins else {
-            "available": False, "reason": "réseau"}
+        if not coins:
+            return {"available": False, "reason": "réseau"}
+        from packages.research.crypto_report import generate
+        eth_ctx = None
+        try:
+            from packages.data.growthepie import eth_context
+            eth_ctx = eth_context()
+        except Exception:  # noqa: BLE001 - enrichissement best-effort
+            eth_ctx = None
+        return {"available": True, "coins": coins,
+                "report": generate(coins, eth_ctx)}
     except Exception as e:  # noqa: BLE001
         return {"available": False, "reason": str(e)}
 
