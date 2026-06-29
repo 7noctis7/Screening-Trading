@@ -21,6 +21,11 @@ echo "→ Données : ${QUANT_PRICE_DB:-(aucune base → synthétique de démo)}"
 export QUANT_FUND="${QUANT_FUND:-yf}"
 export QUANT_MAX_REPORTS="${QUANT_MAX_REPORTS:-24}"   # notes pré-générées en local (rapide ; CI = 60)
 export QUANT_NO_LLM=1                                  # pas d'appel LLM pendant le build (anti-blocage)
+# Sources crypto/marchés GRATUITES (sans clé) — ON par défaut en local comme en CI ;
+# mettre QUANT_CRYPTO=0 etc. pour les couper (ex. hors-ligne). Best-effort : n/d si injoignable.
+export QUANT_CRYPTO="${QUANT_CRYPTO:-1}"               # cockpit crypto (/crypto)
+export QUANT_ONCHAIN="${QUANT_ONCHAIN:-1}"             # fondamentaux on-chain (/macro)
+export QUANT_PREDMKT="${QUANT_PREDMKT:-1}"             # marchés de prédiction (/macro)
 
 # [1/3] watchlist + top 200 (parcourt tout l'univers ~1-3 min) — skippable
 if [ "${SKIP_WATCHLIST:-0}" = "1" ] && [ -f config/mobile_universe.csv ]; then
