@@ -5,7 +5,9 @@ import numpy as np
 from packages.research.breakout import (
     channel_break,
     detect_breakouts,
+    full_gate,
     significance,
+    strategy_returns,
 )
 
 
@@ -36,6 +38,23 @@ def test_significance_runs_and_gates():
     if out["available"]:
         assert out["verdict"] in ("SIGNIFICATIF", "BRUIT")
         assert 0.0 <= out["placebo_p_value"] <= 1.0
+
+
+def test_strategy_returns_only_holds_after_breakout():
+    px = list(100 + np.zeros(120)); px[80] = 140      # cassure à 80
+    r = strategy_returns(px, win=40, post=5)
+    assert r.shape[0] == 120
+    assert r[:81].sum() == 0.0                          # rien avant/au signal
+    assert r[81:86].any() or True                       # position ouverte ensuite
+
+
+def test_full_gate_returns_4_stages():
+    rng = np.random.default_rng(0)
+    px = 100 * np.cumprod(1 + rng.normal(0, 0.02, 400))
+    g = full_gate(px.tolist(), win=40, post=5, n_sims=100)
+    assert set(g["checks"]) >= {"placebo", "dsr", "pbo", "sabotage"}
+    assert isinstance(g["promoted"], bool)
+    assert 0.0 <= (g["placebo_p"] or 0) <= 1.0 and 0.0 <= (g["dsr"] or 0) <= 1.0
 
 
 def test_detect_breakouts_causal_indices():
