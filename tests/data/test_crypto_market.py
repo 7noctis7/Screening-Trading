@@ -1,6 +1,7 @@
 """Tests cockpit crypto — parsers purs (hors-ligne)."""
 
 from packages.data.crypto_market import (
+    accumulation_score,
     altseason,
     cockpit,
     halving,
@@ -95,6 +96,23 @@ def test_altseason_proxy():
 
 def test_altseason_unavailable_without_btc():
     assert altseason([{"sym": "X", "mcap": 1, "spark7d": [1, 2]}])["available"] is False
+
+
+def test_accumulation_score():
+    # peur extrême + funding négatif + grosse part stable → score haut (accumulation)
+    acc = accumulation_score({
+        "fng": {"available": True, "value": 10.0},
+        "derivatives": {"sentiment": {"available": True, "avg": -0.0006}},
+        "global": {"total_mcap": 1e12},
+        "stablecoins": [{"mcap": 1.5e11}]})
+    assert acc["available"] and acc["score"] >= 60 and "ACCUMULATION" in acc["label"]
+    # avidité + funding positif → score bas (euphorie)
+    eu = accumulation_score({
+        "fng": {"available": True, "value": 90.0},
+        "derivatives": {"sentiment": {"available": True, "avg": 0.0008}},
+        "global": {"total_mcap": 1e12}, "stablecoins": [{"mcap": 1e10}]})
+    assert eu["score"] <= 40 and "EUPHORIE" in eu["label"]
+    assert accumulation_score({})["available"] is False
 
 
 def test_halving_countdown():

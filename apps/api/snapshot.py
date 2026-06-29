@@ -1526,6 +1526,8 @@ def _crypto_cockpit_section() -> dict:
             ck["derivatives"] = derivatives()
         except Exception:  # noqa: BLE001
             ck["derivatives"] = {"available": False}
+        from packages.data.crypto_market import accumulation_score
+        ck["accumulation"] = accumulation_score(ck)   # contrarian 0-100 (déterministe)
         return {"available": True, **ck}
     except Exception as e:  # noqa: BLE001
         return {"available": False, "reason": str(e)}

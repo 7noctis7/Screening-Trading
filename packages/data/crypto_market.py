@@ -269,6 +269,45 @@ def halving(height: Any) -> dict:
             "progress": round((interval - left) / interval, 4)}
 
 
+def _clip(x: float, lo: float = 0.0, hi: float = 1.0) -> float:
+    return max(lo, min(hi, x))
+
+
+def accumulation_score(ck: dict) -> dict:
+    """Score d'Accumulation Institutionnelle 0-100 — CONTRARIAN, déterministe.
+
+    Haut = conditions d'accumulation (peur, shorts surchauffés, poudre sèche élevée) ;
+    bas = euphorie/distribution. Pondère 3 signaux issus du cockpit (aucun inventé) :
+    peur (F&G), funding négatif (dérivés), part stablecoins (capital prêt à entrer).
+    """
+    parts: list[tuple[float, float]] = []          # (poids, signal 0-1)
+    drivers: list[str] = []
+    fng = ck.get("fng") or {}
+    if fng.get("available") and fng.get("value") is not None:
+        s = (100.0 - float(fng["value"])) / 100.0   # peur ↑ → accumulation ↑
+        parts.append((0.40, s))
+        drivers.append(f"peur (F&G {fng['value']:.0f})")
+    se = (ck.get("derivatives") or {}).get("sentiment") or {}
+    if se.get("available") and se.get("avg") is not None:
+        s = _clip(-se["avg"] / 0.0005)              # funding négatif → accumulation
+        parts.append((0.35, s))
+        drivers.append(f"funding {se['avg'] * 100:+.3f}%/8h")
+    g = ck.get("global") or {}
+    tot = g.get("total_mcap")
+    stab = sum(x["mcap"] for x in (ck.get("stablecoins") or []) if x.get("mcap"))
+    if tot and stab:
+        share = stab / tot
+        parts.append((0.25, _clip(share / 0.12)))   # part stable ↑ → poudre sèche ↑
+        drivers.append(f"poudre sèche {share * 100:.1f}% (stablecoins)")
+    if not parts:
+        return {"available": False}
+    wsum = sum(w for w, _ in parts)
+    score = round(sum(w * v for w, v in parts) / wsum * 100, 1)
+    label = ("🟢 ACCUMULATION" if score >= 60
+             else "🔴 EUPHORIE" if score <= 40 else "🟡 NEUTRE")
+    return {"available": True, "score": score, "label": label, "drivers": drivers}
+
+
 def cockpit() -> dict:
     """Assemble le cockpit (build-time). Chaque section best-effort (None/[] si KO)."""
     markets = parse_markets(_get_json(_MARKETS))

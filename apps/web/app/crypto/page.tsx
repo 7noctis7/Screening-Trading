@@ -121,6 +121,31 @@ function Overview({ ck }: { ck: any }) {
   );
 }
 
+// ---- Score d'Accumulation Institutionnelle (0-100, contrarian, déterministe) ----
+function Accumulation({ ck }: { ck: any }) {
+  const a = ck.accumulation;
+  if (!a?.available) return null;
+  const col = a.score >= 60 ? "var(--pos)" : a.score <= 40 ? "#f43f5e" : "var(--warn)";
+  return (
+    <Card title="Score d'Accumulation Institutionnelle" source="synthèse contrarian · déterministe"
+      hint="0–100 contrarian : haut = conditions d'accumulation (peur, shorts surchauffés, poudre sèche stablecoins élevée) ; bas = euphorie/distribution. Contexte, pas un signal d'alpha.">
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="text-sm font-semibold px-2.5 py-1 rounded-full"
+          style={{ color: col, background: "color-mix(in srgb, " + col + " 15%, transparent)" }}>{a.label}</span>
+        <span className="text-2xl mono font-semibold" style={{ color: col }}>{a.score}<span className="text-muted2 text-sm">/100</span></span>
+      </div>
+      <div className="mt-3 h-2 rounded-full overflow-hidden" style={{ background: "var(--surface2)" }}>
+        <div className="h-full rounded-full" style={{ width: `${a.score}%`, background: col }} />
+      </div>
+      <ul className="mt-2 space-y-0.5">
+        {(a.drivers ?? []).map((d: string, i: number) => (
+          <li key={i} className="text-sm text-muted flex gap-2"><span style={{ color: col }}>•</span>{d}</li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 // ---- Pouls : Fear & Greed, capitalisation, TVL DeFi, dominance ----
 function Pulse({ ck }: { ck: any }) {
   const g = ck.global ?? {};
@@ -480,6 +505,7 @@ export default function Crypto() {
       ) : (
         <>
           <Overview ck={data} />
+          <Accumulation ck={data} />
           <Pulse ck={data} />
           <Altseason ck={data} />
           <Derivatives ck={data} />
