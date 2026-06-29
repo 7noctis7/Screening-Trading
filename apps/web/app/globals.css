@@ -137,7 +137,17 @@ body::after {
   border:1px solid var(--border); border-radius:16px;
   transition:transform .2s ease, border-color .2s ease, box-shadow .2s ease;
 }
-.card:hover { border-color:var(--border2); box-shadow:var(--shadow); transform:translateY(-1px); }
+.card { box-shadow: inset 0 1px 0 color-mix(in srgb, var(--fg) 5%, transparent); } /* arête verre */
+.card:hover {
+  border-color:var(--border2);
+  box-shadow:var(--shadow), inset 0 1px 0 color-mix(in srgb, var(--accent) 22%, transparent);
+  transform:translateY(-1px);
+}
+/* Utilitaires premium (cohérence avec la landing) — opt-in, n'altèrent rien par défaut */
+.eyebrow { font-size:10.5px; letter-spacing:.28em; text-transform:uppercase;
+  color:var(--accent2); opacity:.85; }
+.display { font-variant-numeric:tabular-nums; letter-spacing:-.02em; font-weight:680;
+  font-optical-sizing:auto; }
 
 /* Chiffres alignés (lisibilité financière) */
 .mono { font-variant-numeric:tabular-nums; font-feature-settings:"tnum"; font-family:"SF Mono","JetBrains Mono",monospace; }
