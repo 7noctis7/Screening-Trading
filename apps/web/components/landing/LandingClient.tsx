@@ -63,17 +63,19 @@ export default function LandingClient() {
         {/* HERO — hybride : manifeste + accroche produit */}
         <header ref={heroRef} className={s.hero}>
           <div className={s.spotlight} />
-          <div className={s.kicker}>Quant Terminal · open-source · 0 €</div>
+          <div className={s.kicker}>Quant Terminal · open-source · paper-first · 0 €</div>
           <h1 className={s.title}>
             Pas d'alpha à vendre.<br /><em>Du risque, maîtrisé.</em>
           </h1>
           <p className={s.sub}>
-            Un terminal de screening &amp; trading systématique qui publie ses propres
-            limites. DSR ≈ 0 assumé : l'edge prouvé, c'est la gestion du risque — pas un oracle.
+            Le seul terminal quant qui publie ses propres limites. Screening multi-actifs,
+            risque institutionnel, IA gardée honnête. DSR ≈ 0 assumé — l'edge prouvé n'est
+            pas un oracle, c'est la <b>discipline</b>. Là où les autres vendent du rêve,
+            on publie nos échecs.
           </p>
           <div className={s.cta}>
-            <a className={`${s.btn} ${s.btnPrimary}`} href={`${BASE}/`}>Ouvrir le terminal →</a>
-            <a className={s.btn} href={`${BASE}/macro/`}>Voir la démo</a>
+            <a className={`${s.btn} ${s.btnPrimary}`} href={`${BASE}/accueil/`}>Ouvrir le terminal →</a>
+            <a className={s.btn} href={`${BASE}/dashboard/`}>Démo</a>
           </div>
           <div className={s.scrollCue}>scroll</div>
         </header>
@@ -83,8 +85,10 @@ export default function LandingClient() {
           <div className={s.eyebrow}>Méthode</div>
           <h2 className={s.h2}>Un signal ne passe que s'il survit à tout.</h2>
           <p className={s.lead}>
-            Chaque candidat franchit un gate déterministe avant la moindre exécution.
-            Quatre étages, zéro complaisance.
+            Pas de backtest flatteur, pas de courbe trop belle pour être vraie. Chaque
+            candidat affronte un gate déterministe avant le moindre ordre : hasard,
+            multiple-testing, surapprentissage, exécution dégradée. Quatre étages. Zéro
+            complaisance.
           </p>
           <div className={s.flow}>
             {[
@@ -109,7 +113,7 @@ export default function LandingClient() {
           <div className={`${s.grid} ${s.grid4}`}>
             {[
               ["83/100", "score audit (3 rounds)", true],
-              ["4/4", "hypothèses alpha rejetées", false],
+              ["5/5", "hypothèses d'alpha rejetées", false],
               ["0 €", "coût d'infra", true],
               ["−9 %", "MaxDD preset vs −23 % équipondéré", false],
             ].map(([n, l, teal]) => (
@@ -120,8 +124,10 @@ export default function LandingClient() {
             ))}
           </div>
           <p className={s.lead} style={{ marginTop: "2rem" }}>
-            Quatre pistes d'alpha testées, quatre négatifs propres et documentés. Un négatif
-            honnête vaut un faux positif coûteux. La valeur est ailleurs : survivre.
+            Cinq pistes d'alpha — actions, insiders, funding, on-chain — testées, cinq
+            négatifs propres et documentés. Un négatif honnête vaut mille faux positifs.
+            La performance, ici, c'est de <b>survivre</b> aux régimes que les autres
+            n'ont pas vus venir.
           </p>
         </section>
 
@@ -131,9 +137,12 @@ export default function LandingClient() {
           <h2 className={s.h2}>Screening → Risque → Paper.</h2>
           <div className={`${s.grid} ${s.grid3}`}>
             {[
-              ["Screening", "Filtres + z-score, univers investable, point-in-time."],
-              ["Risque", "Vol-target, kill-switch, overlay drawdown, corrélation de stress."],
-              ["Paper", "Exécution simulée par défaut. Aucun euro réel sans validation humaine."],
+              ["Screening", "Actions, ETF, crypto. Filtres + z-score, univers investable, "
+                + "100 % point-in-time — zéro look-ahead."],
+              ["Risque", "Vol-target, kill-switch, overlay drawdown, concentration "
+                + "corrélation-aware. L'edge réel, mesuré."],
+              ["Paper", "Exécution simulée par défaut. Aucun euro réel sans validation "
+                + "humaine. Le risque avant le rendement."],
             ].map(([t, d]) => (
               <div key={t} className={s.cell}>
                 <div className={s.stepT}>{t}</div>
@@ -146,7 +155,7 @@ export default function LandingClient() {
         <footer className={s.footer}>
           <h2 className={s.h2}>Le processus est le produit.</h2>
           <div className={s.cta} style={{ justifyContent: "center" }}>
-            <a className={`${s.btn} ${s.btnPrimary}`} href={`${BASE}/`}>Entrer dans le terminal →</a>
+            <a className={`${s.btn} ${s.btnPrimary}`} href={`${BASE}/accueil/`}>Entrer dans le terminal →</a>
           </div>
           <div className={s.footNote}>
             Paper par défaut · pas un conseil financier · 100 % open-source.
