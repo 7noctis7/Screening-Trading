@@ -12,6 +12,22 @@
   - critère GO : paper cohérent avec le backtest (pas de dérive Sharpe>1pt, MaxDD non dépassé).
   - si concordant → engager un capital réel **limité** + sizing défensif ; sinon → re-calibrer.
 
+## 🪙 CE SOIR SUR LE MAC — on-chain crypto (multi-sources gratuites, 2026-06-29)
+> Livré : fondamentaux on-chain (CoinGecko + DefiLlama, sans clé) + étude alt-data TVL/MCap.
+- [ ] **Récupérer** : `qt && git pull origin main`.
+- [ ] **Table fondamentaux on-chain** des 8 (turnover · float · TVL · TVL/MCap · DD-ATH · momentum) :
+  ```bash
+  make crypto-onchain
+  ```
+  → repère : **float bas** = overhang d'unlocks (ONDO/RENDER/HYPE) ; **TVL/MCap haut** = cap adossée.
+- [ ] **Tester l'edge on-chain** (TVL/MCap → rendements, via le gate placebo) :
+  ```bash
+  make onchain-study
+  ```
+  → reporte la **p-value placebo**. ⚠️ Attendu : ❌ non significatif (échantillon mince) — c'est
+  une info honnête, pas un échec. Loggé au ledger automatiquement.
+- [ ] **(option)** widget on-chain sur la page crypto du dashboard = **PR2 (A)**, en cours côté repo.
+
 ## 🎨 CE SOIR SUR LE MAC — tester la NOUVELLE UI (landing 3D + polish, 2026-06-25)
 > Livré : landing cinématique (R3F/Three.js + Lenis, route isolée `/landing`) + polish dashboard (CSS).
 - [ ] **Récupérer + installer les nouvelles deps front** (three, fiber, lenis) :

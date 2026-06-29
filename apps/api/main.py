@@ -199,6 +199,11 @@ def prediction_markets() -> dict:
     return _snap()["prediction_markets"]
 
 
+@app.get("/api/crypto_onchain")
+def crypto_onchain() -> dict:
+    return _snap()["crypto_onchain"]
+
+
 @app.get("/api/preset_ledger")
 def preset_ledger() -> dict:
     """Journal détaillé du preset (trades + P&L réel) qui justifie la perf du dashboard."""

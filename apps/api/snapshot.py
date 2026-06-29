@@ -1482,6 +1482,24 @@ def _prediction_section(held: list, acmap: dict, names: dict) -> dict:
         return {"available": False, "reason": str(e)}
 
 
+def _onchain_section(held: list, acmap: dict) -> dict:
+    """Fondamentaux on-chain crypto (CoinGecko + DefiLlama, sans clé).
+    Gate QUANT_ONCHAIN=1 (réseau) → OFF par défaut (tests/offline). Best-effort."""
+    import os
+    if os.environ.get("QUANT_ONCHAIN") != "1":
+        return {"available": False, "reason": "QUANT_ONCHAIN!=1"}
+    try:
+        from packages.data.crypto_onchain import COINS, onchain_metrics
+        held_root = {str(s).upper().replace("-USD", "") for s in (held or [])}
+        syms = [s for s in COINS if s in held_root] or list(COINS)
+        coins = {s: m for s, m in onchain_metrics(syms).items()
+                 if any(v is not None for v in m.values())}
+        return {"available": bool(coins), "coins": coins} if coins else {
+            "available": False, "reason": "réseau"}
+    except Exception as e:  # noqa: BLE001
+        return {"available": False, "reason": str(e)}
+
+
 def build_snapshot(seed: int = 7) -> dict:
     # --- univers COMPLET + fenêtre jusqu'à AUJOURD'HUI ---
     instruments = _seed_universe()
@@ -2316,6 +2334,7 @@ def build_snapshot(seed: int = 7) -> dict:
         "screen": screen_sec,
         "prediction_markets": safe_section("prediction_markets", _prediction_section,
                                            held, acmap, names),
+        "crypto_onchain": safe_section("crypto_onchain", _onchain_section, held, acmap),
         "portfolio": _port_payload,
         "trades": [PL.trade_payload(t) for t in recent],
         "open_trades": comp["rows"],
