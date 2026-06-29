@@ -54,6 +54,48 @@ function PredMarkets() {
   );
 }
 
+const SENTI: Record<string, { c: string; bg: string; label: string }> = {
+  BULLISH: { c: "var(--pos)", bg: "color-mix(in srgb, var(--pos) 15%, transparent)", label: "🟢 BULLISH" },
+  BEARISH: { c: "#f43f5e", bg: "color-mix(in srgb, #f43f5e 15%, transparent)", label: "🔴 BEARISH" },
+  NEUTRE: { c: "var(--warn)", bg: "color-mix(in srgb, var(--warn) 15%, transparent)", label: "🟡 NEUTRE" },
+};
+
+function OnchainReport({ report }: { report: any }) {
+  if (!report?.available) return null;
+  const s = SENTI[report.sentiment] ?? SENTI.NEUTRE;
+  const Block = ({ title, items }: { title: string; items?: string[] }) =>
+    !items?.length ? null : (
+      <div className="mt-3">
+        <div className="text-muted text-[11px] uppercase tracking-wide mb-1">{title}</div>
+        <ul className="space-y-1">
+          {items.map((t, i) => (
+            <li key={i} className="text-sm text-muted flex gap-2">
+              <span style={{ color: s.c }}>•</span><span>{t}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  const e = report.eth_context;
+  return (
+    <div className="mt-3 rounded-xl border border-border p-3" style={{ background: "var(--surface)" }}>
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
+          style={{ color: s.c, background: s.bg }}>{s.label}</span>
+        {e?.available && (
+          <span className="text-[11px] text-muted2">
+            Ethereum ≈ {e.tps ?? "—"} TPS · frais médian ${e.median_fee_usd ?? "—"} (Growthepie)
+          </span>
+        )}
+      </div>
+      <p className="text-sm mt-2" style={{ lineHeight: 1.5 }}>{report.flash}</p>
+      <Block title="Décryptage on-chain" items={report.decryptage} />
+      <Block title="L'œil de Hasheur" items={report.hasheur} />
+      <Block title="⚠ Vigilance" items={report.vigilance} />
+    </div>
+  );
+}
+
 function CryptoOnchain() {
   const { data: oc } = useCryptoOnchain();
   if (!oc?.available || !oc.coins) return null;
@@ -71,6 +113,7 @@ function CryptoOnchain() {
       <p className="text-muted2 text-xs mt-1">
         Contexte, pas un signal d'alpha. <b>float</b> bas = overhang d'unlocks · <b>TVL/MCap</b> haut = cap adossée à l'activité.
       </p>
+      <OnchainReport report={oc.report} />
       <div className="overflow-x-auto mt-3">
         <table className="w-full text-sm mono">
           <thead className="text-muted2 text-[11px]">
