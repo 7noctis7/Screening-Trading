@@ -1,12 +1,24 @@
 """Tests étude on-chain (parsers historiques + orchestration, hors-ligne)."""
 
 from packages.research.onchain_study import (
+    FACTORS,
     coin_series,
     parse_cg_chart,
+    parse_llama_fees,
     parse_llama_hist,
     parse_llama_proto,
     run_study,
 )
+
+
+def test_parse_llama_fees_chart():
+    chart = [[1700000000, 1.2e6], [1700086400, None], [1700172800, 1.5e6]]
+    out = parse_llama_fees({"totalDataChart": chart})
+    assert len(out) == 2 and 1.2e6 in out.values() and 1.5e6 in out.values()
+
+
+def test_factors_registry():
+    assert "tvl_mcap" in FACTORS and "fees_mcap" in FACTORS
 
 
 def test_parse_cg_chart_aligns_price_and_mcap():
