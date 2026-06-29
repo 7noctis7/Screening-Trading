@@ -35,6 +35,10 @@ print(sabotage_verdict(r, extra_cost_bps=50, latency=2, noise_mult=1.0))"
   → si même un (futur) edge survit à ça, il est vraiment robuste.
 - [ ] **Tester le watchdog paper** : `make paper-watch`
   → dira « trop tôt » (<20 j) ; à brancher au cron : `0 23 * * 1-5 cd <repo> && make paper-watch`.
+- [ ] **Linter le vault** (intégrité mémoire) : `make vault-lint`
+  → liens morts / orphelins = avertissements ; `make vault-lint ARGS=--strict` = gate dur.
+  Action : créer les notes `paper_*` manquantes OU retirer les `[[…]]` aspirationnels de
+  `08_Alphas/`, et lier les 4 orphelins (PEAD_smid, low_vol, overnight, ts_momentum).
 - [ ] **(rappel) confirmer le gate à 4 étages** sur un futur signal : placebo<0.05 ∧ DSR>0.5 ∧
       PBO<0.5 ∧ **survit au sabotage** → sinon il ne passe pas en prod.
 
