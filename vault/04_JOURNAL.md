@@ -1,5 +1,36 @@
 # 04 — JOURNAL
 
+## Session 2026-06-29 (suite) — Cockpit crypto (vue marché, contexte gratuit)
+**Fait.** Page `/crypto` + section snapshot `crypto_cockpit` (gatée `QUANT_CRYPTO=1`, best-effort,
+build-time → JSON statique). Sources **gratuites, sans clé côté client** : CoinGecko
+(global/markets/categories/trending), DefiLlama (chains TVL, stablecoins), alternative.me (Fear &
+Greed). Parsers **purs et testés hors-ligne** (`packages/data/crypto_market.py`, 9 tests).
+- 6 sections pédagogiques (chacune : donnée + source + explication + `n/d` si la source tombe,
+  skeleton, reveal IntersectionObserver respectant `prefers-reduced-motion`) : Aperçu (humeur
+  marché **déterministe** = moyenne F&G + cap 24 h + breadth), Pouls (cap/dominance/F&G/TVL),
+  Narratifs (catégories), Gagnants/Perdants 24 h, Tendances retail, Stablecoins (taille + écart peg).
+- `make crypto-cockpit` (CLI) + route `/api/crypto_cockpit` + lien Nav (groupe Marché).
+- Garde-fou maison : **jamais de chiffre inventé** — sentiment et score dérivés des seules données
+  réelles présentes ; tout absent → `n/d`. Contexte de marché, **pas un signal d'alpha**.
+
+**Complément ML + Obsidian (même session).** Question : ces données crypto peuvent-elles servir au
+ML et à Obsidian ? Réponse honnête, livrée :
+- **Obsidian** = oui (contexte, pas de gate) → `crypto_brief.py` (note Markdown **déterministe** depuis
+  le cockpit, front-matter, `n/d` si source absente) + `make crypto-brief` → `vault/11_Crypto/`.
+- **ML** = faisable mais sous gate. La plomberie existe (`FeatureBuilder` + `MacroStore.as_of`,
+  point-in-time). Seuls **F&G** (alternative.me, depuis 2018) et **TVL** (DefiLlama historique) ont
+  un vrai historique gratuit ; le reste du cockpit est snapshot-only → non ML-able. Construit :
+  `crypto_history.py` (parsers purs historiques) + `regime_study.py` qui **réutilise
+  `funding_study.significance`** pour tester le **F&G contrarian sur BTC** (fade |z|>1.5 + placebo).
+  `make regime-study`. **Rien câblé au ML/décision** tant que le gate n'est pas franchi (discipline).
+- **Contrainte réseau** : l'egress de l'agent **bloque** CoinGecko/DefiLlama/alternative.me (403
+  policy) → le verdict du gate se lance **sur le Mac**. Tout est pur + testé hors-ligne (19 tests).
+
+**Prochaine étape.** Lancer `make regime-study` sur le Mac → verdict F&G. Si BRUIT (prior bas, 5/5
+négatifs) : 6ᵉ négatif au manifeste. Si SIGNIFICATIF : DSR/PBO puis feature régime `FNG`. Puis
+phases suivantes du cockpit (dérivés/funding/OI, altseason, RWA, corrélations, unlocks, ETF, halving)
++ hybride client-live. Revue paper toujours au **2026-08-06**.
+
 ## Session 2026-06-29 — Loop Engineering, sabotage, UI cinématique & on-chain crypto (contexte, pas alpha)
 **Fait.** ~15 PR (#266→#280), CI verte → merge → resync, 0 €. Réponses *adaptées* à des prompts
 externes (Loop Engineering, validation paranoïaque, second-brain, UI Pro Max, Blockchain.com) —

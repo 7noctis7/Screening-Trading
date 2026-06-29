@@ -1,0 +1,251 @@
+"use client";
+// Cockpit crypto — vue marché agrégée, gratuite (sans clé). Chaque section est pédagogique :
+// une donnée, sa source, son explication. Aucun chiffre inventé : "n/d" si la source tombe.
+import { useEffect, useRef, useState } from "react";
+import { useCryptoCockpit } from "@/lib/api";
+import { PageSkeleton, EmptyState } from "@/components/ui";
+
+const SENTI: Record<string, { c: string; bg: string; label: string }> = {
+  BULLISH: { c: "var(--pos)", bg: "color-mix(in srgb, var(--pos) 15%, transparent)", label: "🟢 BULLISH" },
+  BEARISH: { c: "#f43f5e", bg: "color-mix(in srgb, #f43f5e 15%, transparent)", label: "🔴 BEARISH" },
+  NEUTRE: { c: "var(--warn)", bg: "color-mix(in srgb, var(--warn) 15%, transparent)", label: "🟡 NEUTRE" },
+};
+
+// Formatage défensif — jamais NaN/undefined à l'écran : "n/d" tant que la donnée manque.
+const usd = (x: any) =>
+  typeof x === "number"
+    ? x >= 1e12 ? `$${(x / 1e12).toFixed(2)} T`
+      : x >= 1e9 ? `$${(x / 1e9).toFixed(1)} Md`
+      : x >= 1e6 ? `$${(x / 1e6).toFixed(1)} M`
+      : `$${x.toLocaleString("fr-FR", { maximumFractionDigits: 2 })}`
+    : "n/d";
+const pct = (x: any, d = 1) => (typeof x === "number" ? `${x >= 0 ? "+" : ""}${x.toFixed(d)}%` : "n/d");
+const tone = (x: any) => (typeof x !== "number" ? undefined : x >= 0 ? "var(--pos)" : "#f43f5e");
+
+// Révélation au scroll (lazy, IntersectionObserver) — neutralisée si prefers-reduced-motion.
+function Reveal({ children }: { children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { setShown(true); return; }
+    const io = new IntersectionObserver(
+      (es) => es.forEach((e) => e.isIntersecting && (setShown(true), io.disconnect())),
+      { threshold: 0.12 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  return (
+    <div ref={ref} style={{
+      opacity: shown ? 1 : 0,
+      transform: shown ? "none" : "translateY(20px)",
+      transition: "opacity .6s cubic-bezier(.16,1,.3,1), transform .6s cubic-bezier(.16,1,.3,1)",
+    }}>{children}</div>
+  );
+}
+
+function Card({ title, source, hint, children }: {
+  title: string; source: string; hint: string; children: React.ReactNode;
+}) {
+  return (
+    <Reveal>
+      <section className="card p-4">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h2 className="text-sm uppercase tracking-wide text-muted">{title}</h2>
+          <span className="text-[11px] text-muted2">{source}</span>
+        </div>
+        <p className="text-muted2 text-xs mt-1">{hint}</p>
+        <div className="mt-3">{children}</div>
+      </section>
+    </Reveal>
+  );
+}
+
+// ---- Aperçu : sentiment marché synthétique (déterministe, dérivé du cockpit) ----
+function Overview({ ck }: { ck: any }) {
+  const se = ck.sentiment;
+  if (!se?.available) return null;
+  const s = SENTI[se.label] ?? SENTI.NEUTRE;
+  return (
+    <Card title="Aperçu — humeur du marché" source="synthèse déterministe · 0 chiffre inventé"
+      hint="Score 0–100 = moyenne des signaux disponibles (Fear & Greed, variation 24 h, breadth). Contexte, pas un signal d'alpha.">
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="text-sm font-semibold px-2.5 py-1 rounded-full"
+          style={{ color: s.c, background: s.bg }}>{s.label}</span>
+        <span className="text-2xl mono font-semibold" style={{ color: s.c }}>{se.score}<span className="text-muted2 text-sm">/100</span></span>
+      </div>
+      <ul className="mt-2 space-y-0.5">
+        {(se.drivers ?? []).map((d: string, i: number) => (
+          <li key={i} className="text-sm text-muted flex gap-2"><span style={{ color: s.c }}>•</span>{d}</li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
+// ---- Pouls : Fear & Greed, capitalisation, TVL DeFi, dominance ----
+function Pulse({ ck }: { ck: any }) {
+  const g = ck.global ?? {};
+  const fng = ck.fng ?? {};
+  const defi = ck.defi ?? {};
+  const stats: [string, string, string | undefined][] = [
+    ["Capitalisation totale", usd(g.total_mcap), undefined],
+    ["Variation cap 24 h", pct(g.mcap_chg_24h), tone(g.mcap_chg_24h)],
+    ["Dominance BTC", typeof g.btc_dom === "number" ? `${g.btc_dom.toFixed(1)}%` : "n/d", undefined],
+    ["Dominance ETH", typeof g.eth_dom === "number" ? `${g.eth_dom.toFixed(1)}%` : "n/d", undefined],
+    ["Fear & Greed", fng.available ? `${fng.value?.toFixed(0)} · ${fng.label ?? ""}` : "n/d", undefined],
+    ["TVL DeFi totale", usd(defi.total_tvl), undefined],
+  ];
+  return (
+    <Card title="Pouls du marché" source="CoinGecko · DefiLlama · alternative.me"
+      hint="Dominance BTC ↑ = repli vers la valeur refuge crypto ; ↓ = appétit pour le risque (altcoins). TVL = capital verrouillé en DeFi.">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        {stats.map(([l, v, c]) => (
+          <div key={l}>
+            <div className="text-muted text-xs">{l}</div>
+            <div className="text-lg mono" style={{ color: c }}>{v}</div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// ---- Narratifs : catégories par performance 24 h (où va l'argent) ----
+function Narratives({ ck }: { ck: any }) {
+  const cats = (ck.categories ?? []) as any[];
+  if (!cats.length) return null;
+  return (
+    <Card title="Narratifs du moment" source="CoinGecko · catégories"
+      hint="Quelle thématique surperforme aujourd'hui (IA, RWA, L2, memes…). Rotation sectorielle = où la liquidité se déplace.">
+      <div className="flex flex-wrap gap-2">
+        {cats.map((c) => (
+          <span key={c.name} className="text-xs px-2.5 py-1.5 rounded-lg border border-border"
+            style={{ background: "var(--surface)" }}>
+            {c.name} <b style={{ color: tone(c.chg24h) }}>{pct(c.chg24h)}</b>
+          </span>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// ---- Tendances : recherches en hausse (sentiment retail) ----
+function Trending({ ck }: { ck: any }) {
+  const tr = (ck.trending ?? []) as any[];
+  if (!tr.length) return null;
+  return (
+    <Card title="Tendances (attention retail)" source="CoinGecko · search/trending"
+      hint="Les actifs les plus recherchés. Signal d'attention, souvent tardif — à lire comme un thermomètre du retail, pas un signal d'entrée.">
+      <div className="flex flex-wrap gap-2">
+        {tr.map((t, i) => (
+          <span key={t.sym + i} className="text-xs px-2.5 py-1.5 rounded-lg border border-border"
+            style={{ background: "var(--surface)" }}>
+            <span className="text-muted2">#{t.rank ?? "—"}</span> <b>{t.sym}</b> <span className="text-muted">{t.name}</span>
+          </span>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// ---- Gagnants / Perdants 24 h (top 100 cap) ----
+function Movers({ ck }: { ck: any }) {
+  const gain = (ck.gainers ?? []) as any[];
+  const lose = (ck.losers ?? []) as any[];
+  if (!gain.length && !lose.length) return null;
+  const Col = ({ title, rows, up }: { title: string; rows: any[]; up: boolean }) => (
+    <div>
+      <div className="text-muted text-[11px] uppercase tracking-wide mb-1.5">{title}</div>
+      <div className="space-y-1">
+        {rows.map((m) => (
+          <div key={m.id} className="flex items-center justify-between text-sm border-t border-border py-1">
+            <span className="font-medium">{m.sym}</span>
+            <span className="text-muted2 text-xs mono">{usd(m.price)}</span>
+            <span className="mono" style={{ color: up ? "var(--pos)" : "#f43f5e" }}>{pct(m.chg24h)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+  return (
+    <Card title="Gagnants / Perdants 24 h" source="CoinGecko · top 100 cap"
+      hint="Mouvements extrêmes du jour parmi les 100 plus grosses capitalisations. Volatilité = opportunité et risque ; jamais de levier en paper.">
+      <div className="grid md:grid-cols-2 gap-4">
+        <Col title="📈 Gagnants" rows={gain} up />
+        <Col title="📉 Perdants" rows={lose} up={false} />
+      </div>
+    </Card>
+  );
+}
+
+// ---- Stablecoins : taille + écart au peg (santé de la liquidité) ----
+function Stablecoins({ ck }: { ck: any }) {
+  const st = (ck.stablecoins ?? []) as any[];
+  if (!st.length) return null;
+  return (
+    <Card title="Stablecoins — liquidité & peg" source="DefiLlama · stablecoins"
+      hint="La capitalisation stablecoin = poudre sèche prête à entrer. Un écart au peg (≠ $1.00) signale un stress de liquidité ou de confiance.">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm mono">
+          <thead className="text-muted2 text-[11px]">
+            <tr>
+              <th className="text-left font-normal">stablecoin</th>
+              <th className="text-right font-normal">capitalisation</th>
+              <th className="text-right font-normal">prix</th>
+              <th className="text-right font-normal">écart au peg</th>
+            </tr>
+          </thead>
+          <tbody>
+            {st.map((s) => {
+              const off = typeof s.peg_dev === "number" && Math.abs(s.peg_dev) > 0.005;
+              return (
+                <tr key={s.sym} className="border-t border-border">
+                  <td className="py-1.5 font-sans">{s.sym}</td>
+                  <td className="text-right">{usd(s.mcap)}</td>
+                  <td className="text-right">{typeof s.price === "number" ? `$${s.price.toFixed(4)}` : "n/d"}</td>
+                  <td className="text-right" style={{ color: off ? "#f43f5e" : "var(--muted2)" }}>
+                    {typeof s.peg_dev === "number" ? `${(s.peg_dev * 100).toFixed(2)}%` : "n/d"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+export default function Crypto() {
+  const { data, isLoading } = useCryptoCockpit();
+  if (isLoading) return <PageSkeleton />;
+  return (
+    <main className="max-w-5xl mx-auto p-6 space-y-4">
+      <h1 className="text-xl font-semibold tracking-tight">Cockpit crypto</h1>
+      <p className="text-muted text-sm">
+        Vue marché agrégée, 100 % gratuite et sans clé — reconstruite chaque jour ouvré.
+        Contexte de marché, <b>pas un conseil financier</b>.
+      </p>
+      {!data?.available ? (
+        <EmptyState
+          title="Cockpit crypto indisponible"
+          hint={data?.reason === "QUANT_CRYPTO!=1"
+            ? "Données réseau désactivées sur ce build (offline/tests). Activées au build quotidien des Pages."
+            : `Sources temporairement injoignables (${data?.reason ?? "réseau"}).`}
+        />
+      ) : (
+        <>
+          <Overview ck={data} />
+          <Pulse ck={data} />
+          <Narratives ck={data} />
+          <Movers ck={data} />
+          <Trending ck={data} />
+          <Stablecoins ck={data} />
+        </>
+      )}
+    </main>
+  );
+}

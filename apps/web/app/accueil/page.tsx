@@ -6,7 +6,7 @@ import { PipelineFull } from "@/components/Pipeline";
 // Page d'accueil : présentation, rôle de chaque fenêtre, et glossaire/méthodologie déroulant.
 
 const WINDOWS: [string, string, string][] = [
-  ["/", "Dashboard", "Vue d'ensemble : performance, régime de marché, playbook VIX, top screener (facteurs + ML), humeur de marché."],
+  ["/dashboard", "Dashboard", "Vue d'ensemble : performance, régime de marché, playbook VIX, top screener (facteurs + ML), humeur de marché."],
   ["/themes", "Thèmes de marché", "Heatmap de performance par secteur (4ᵉ révolution industrielle) — où va l'argent."],
   ["/events", "Événements", "Prochains résultats trimestriels (BPA & revenu estimés et annoncés) pour tes positions + le top 5 % des scores, et IPOs US (S-1/S-1/A SEC EDGAR + FMP). Recherche, filtres, tri."],
   ["/ml", "Signaux ML", "Probabilité de hausse à ~1 mois (modèle entraîné en CV purgée) + validation : walk-forward, calibration, conformal, meta-labeling, drift."],
