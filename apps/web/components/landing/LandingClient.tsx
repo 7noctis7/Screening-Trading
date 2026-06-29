@@ -57,13 +57,13 @@ export default function LandingClient() {
 
   return (
     <div className={s.root}>
-      <div className={s.canvas}><Scene /></div>
+      <div className={s.canvas} aria-hidden="true"><Scene /></div>
 
-      <div className={s.content}>
+      <main className={s.content}>
         {/* HERO — hybride : manifeste + accroche produit */}
         <header ref={heroRef} className={s.hero}>
-          <div className={s.spotlight} />
-          <div className={s.kicker}>Quant Terminal · open-source · paper-first · 0 €</div>
+          <div className={s.spotlight} aria-hidden="true" />
+          <p className={s.kicker}>Quant Terminal · open-source · paper-first · 0 €</p>
           <h1 className={s.title}>
             Pas d'alpha à vendre.<br /><em>Du risque, maîtrisé.</em>
           </h1>
@@ -74,16 +74,18 @@ export default function LandingClient() {
             on publie nos échecs.
           </p>
           <div className={s.cta}>
-            <a className={`${s.btn} ${s.btnPrimary}`} href={`${BASE}/accueil/`}>Ouvrir le terminal →</a>
-            <a className={s.btn} href={`${BASE}/dashboard/`}>Démo</a>
+            <a className={`${s.btn} ${s.btnPrimary}`} href={`${BASE}/accueil/`}
+              aria-label="Ouvrir le terminal — page Accueil">Ouvrir le terminal →</a>
+            <a className={s.btn} href={`${BASE}/dashboard/`}
+              aria-label="Voir la démo — Dashboard complet">Démo</a>
           </div>
-          <div className={s.scrollCue}>scroll</div>
+          <div className={s.scrollCue} aria-hidden="true">scroll</div>
         </header>
 
         {/* SECTION — le pipeline de validation (gate à 4 étages) */}
-        <section className={`${s.section} ${s.reveal}`}>
+        <section className={`${s.section} ${s.reveal}`} aria-labelledby="ld-method">
           <div className={s.eyebrow}>Méthode</div>
-          <h2 className={s.h2}>Un signal ne passe que s'il survit à tout.</h2>
+          <h2 id="ld-method" className={s.h2}>Un signal ne passe que s'il survit à tout.</h2>
           <p className={s.lead}>
             Pas de backtest flatteur, pas de courbe trop belle pour être vraie. Chaque
             candidat affronte un gate déterministe avant le moindre ordre : hasard,
@@ -107,9 +109,9 @@ export default function LandingClient() {
         </section>
 
         {/* SECTION — preuves chiffrées (démo) */}
-        <section className={`${s.section} ${s.reveal}`}>
+        <section className={`${s.section} ${s.reveal}`} aria-labelledby="ld-proof">
           <div className={s.eyebrow}>Preuves</div>
-          <h2 className={s.h2}>Audité trois fois. Rien à cacher.</h2>
+          <h2 id="ld-proof" className={s.h2}>Audité trois fois. Rien à cacher.</h2>
           <div className={`${s.grid} ${s.grid4}`}>
             {[
               ["83/100", "score audit (3 rounds)", true],
@@ -132,9 +134,9 @@ export default function LandingClient() {
         </section>
 
         {/* SECTION — démo produit */}
-        <section className={`${s.section} ${s.reveal}`}>
+        <section className={`${s.section} ${s.reveal}`} aria-labelledby="ld-product">
           <div className={s.eyebrow}>Le terminal</div>
-          <h2 className={s.h2}>Screening → Risque → Paper.</h2>
+          <h2 id="ld-product" className={s.h2}>Screening → Risque → Paper.</h2>
           <div className={`${s.grid} ${s.grid3}`}>
             {[
               ["Screening", "Actions, ETF, crypto. Filtres + z-score, univers investable, "
@@ -161,7 +163,7 @@ export default function LandingClient() {
             Paper par défaut · pas un conseil financier · 100 % open-source.
           </div>
         </footer>
-      </div>
+      </main>
     </div>
   );
 }

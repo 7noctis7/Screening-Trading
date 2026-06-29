@@ -2,8 +2,19 @@
 // Fond 3D immersif — champ de particules réactif souris + scroll. Client-only (jamais SSR :
 // importé via dynamic(ssr:false) dans LandingClient). Lean : three + fiber, sans drei.
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
+
+// Best practice perf : ne pas rendre la 3D quand l'onglet est caché (économie batterie/CPU).
+function usePageVisible(): boolean {
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    const on = () => setVisible(!document.hidden);
+    document.addEventListener("visibilitychange", on);
+    return () => document.removeEventListener("visibilitychange", on);
+  }, []);
+  return visible;
+}
 
 function Particles({ count }: { count: number }) {
   const ref = useRef<THREE.Points>(null!);
@@ -67,12 +78,13 @@ export default function Scene() {
     typeof window !== "undefined" &&
     window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const count = small ? 1500 : reduced ? 1200 : 3800;
+  const visible = usePageVisible();
   return (
     <Canvas
       camera={{ position: [0, 0, 9], fov: 55 }}
       dpr={[1, 1.8]}
       gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
-      frameloop={reduced ? "demand" : "always"}
+      frameloop={reduced || !visible ? "demand" : "always"}
     >
       <Particles count={count} />
       {!reduced && <Rig />}

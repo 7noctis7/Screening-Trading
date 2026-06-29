@@ -154,6 +154,8 @@
   .reveal { opacity: 1; transform: none; transition: none; }
   .scrollCue { animation: none; }
 }
+/* spotlight curseur : seulement sur appareils à survol (inutile/saccadé au tactile) */
+@media (hover: none) { .spotlight { display: none; } }
 
 .footer { padding: 12vh 6vw 6vh; text-align: center; border-top: 1px solid var(--hair); }
 .footNote { color: #6b7d86; font-size: 0.82rem; margin-top: 2rem; }
