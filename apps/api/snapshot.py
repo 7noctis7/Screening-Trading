@@ -1509,6 +1509,23 @@ def _onchain_section(held: list, acmap: dict) -> dict:
         return {"available": False, "reason": str(e)}
 
 
+def _crypto_cockpit_section() -> dict:
+    """Cockpit crypto marché (CoinGecko + DefiLlama + alternative.me, sans clé).
+    Gate QUANT_CRYPTO=1 (réseau) → OFF par défaut (tests/offline). Best-effort."""
+    import os
+    if os.environ.get("QUANT_CRYPTO") != "1":
+        return {"available": False, "reason": "QUANT_CRYPTO!=1"}
+    try:
+        from packages.data.crypto_market import cockpit
+        ck = cockpit()
+        ok = (ck.get("global") or {}).get("total_mcap") is not None
+        if not ok and not ck.get("gainers"):
+            return {"available": False, "reason": "réseau"}
+        return {"available": True, **ck}
+    except Exception as e:  # noqa: BLE001
+        return {"available": False, "reason": str(e)}
+
+
 def build_snapshot(seed: int = 7) -> dict:
     # --- univers COMPLET + fenêtre jusqu'à AUJOURD'HUI ---
     instruments = _seed_universe()
@@ -2344,6 +2361,7 @@ def build_snapshot(seed: int = 7) -> dict:
         "prediction_markets": safe_section("prediction_markets", _prediction_section,
                                            held, acmap, names),
         "crypto_onchain": safe_section("crypto_onchain", _onchain_section, held, acmap),
+        "crypto_cockpit": safe_section("crypto_cockpit", _crypto_cockpit_section),
         "portfolio": _port_payload,
         "trades": [PL.trade_payload(t) for t in recent],
         "open_trades": comp["rows"],

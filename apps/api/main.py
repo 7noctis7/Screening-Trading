@@ -204,6 +204,11 @@ def crypto_onchain() -> dict:
     return _snap()["crypto_onchain"]
 
 
+@app.get("/api/crypto_cockpit")
+def crypto_cockpit() -> dict:
+    return _snap().get("crypto_cockpit", {"available": False})
+
+
 @app.get("/api/preset_ledger")
 def preset_ledger() -> dict:
     """Journal détaillé du preset (trades + P&L réel) qui justifie la perf du dashboard."""

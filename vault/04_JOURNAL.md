@@ -1,5 +1,22 @@
 # 04 — JOURNAL
 
+## Session 2026-06-29 (suite) — Cockpit crypto (vue marché, contexte gratuit)
+**Fait.** Page `/crypto` + section snapshot `crypto_cockpit` (gatée `QUANT_CRYPTO=1`, best-effort,
+build-time → JSON statique). Sources **gratuites, sans clé côté client** : CoinGecko
+(global/markets/categories/trending), DefiLlama (chains TVL, stablecoins), alternative.me (Fear &
+Greed). Parsers **purs et testés hors-ligne** (`packages/data/crypto_market.py`, 9 tests).
+- 6 sections pédagogiques (chacune : donnée + source + explication + `n/d` si la source tombe,
+  skeleton, reveal IntersectionObserver respectant `prefers-reduced-motion`) : Aperçu (humeur
+  marché **déterministe** = moyenne F&G + cap 24 h + breadth), Pouls (cap/dominance/F&G/TVL),
+  Narratifs (catégories), Gagnants/Perdants 24 h, Tendances retail, Stablecoins (taille + écart peg).
+- `make crypto-cockpit` (CLI) + route `/api/crypto_cockpit` + lien Nav (groupe Marché).
+- Garde-fou maison : **jamais de chiffre inventé** — sentiment et score dérivés des seules données
+  réelles présentes ; tout absent → `n/d`. Contexte de marché, **pas un signal d'alpha**.
+
+**Prochaine étape.** Phases suivantes du cockpit (dérivés/funding/OI, altseason, RWA, corrélations
+macro, unlocks, ETF spot, halving) + hybride client-live pour les API CORS-friendly. Revue paper
+toujours au **2026-08-06**.
+
 ## Session 2026-06-29 — Loop Engineering, sabotage, UI cinématique & on-chain crypto (contexte, pas alpha)
 **Fait.** ~15 PR (#266→#280), CI verte → merge → resync, 0 €. Réponses *adaptées* à des prompts
 externes (Loop Engineering, validation paranoïaque, second-brain, UI Pro Max, Blockchain.com) —

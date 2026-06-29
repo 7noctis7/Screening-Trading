@@ -1,4 +1,4 @@
-.PHONY: install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto ingest-mktcap preset-report calibrate-preset screen repro kill-check log-alpha sync-alphas event-study event-study-smid backtest-pead-smid funding-study risk-check sensitivity paper-watch vault-lint crypto-onchain onchain-study screen-niche list-db live live-go clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull notion-sync contracts supabase-kpis
+.PHONY: install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto ingest-mktcap preset-report calibrate-preset screen repro kill-check log-alpha sync-alphas event-study event-study-smid backtest-pead-smid funding-study risk-check sensitivity paper-watch vault-lint crypto-onchain crypto-cockpit onchain-study screen-niche list-db live live-go clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull notion-sync contracts supabase-kpis
 # PYTHON : utilise AUTOMATIQUEMENT le venv s'il existe (.venv/bin/python), sinon python3 système.
 # Évite le piège « No module named numpy » quand le venv n'est pas activé. Surchargeable.
 TICKER ?= AAPL
@@ -106,6 +106,8 @@ vault-lint:          ## intégrité du vault (liens morts, orphelins, ADR en dou
 	$(PYTHON) scripts/vault_lint.py $(ARGS)
 crypto-onchain:      ## fondamentaux on-chain (CoinGecko + DefiLlama, sans clé) — table 8 cryptos
 	$(PYTHON) scripts/crypto_onchain_cli.py $(ARGS)
+crypto-cockpit:      ## cockpit crypto marché (cap, dominance, F&G, TVL, narratifs, movers)
+	$(PYTHON) scripts/crypto_cockpit_cli.py $(ARGS)
 onchain-study:       ## le TVL/MCap prédit-il les rendements crypto ? event-study + placebo
 	$(PYTHON) scripts/onchain_study_cli.py $(ARGS)
 screen-niche:        ## audit d'exploitabilité d'un univers/niche (score 0-100) avant de s'engager
