@@ -271,14 +271,24 @@ function Stablecoins({ ck }: { ck: any }) {
           </thead>
           <tbody>
             {st.map((s) => {
-              const off = typeof s.peg_dev === "number" && Math.abs(s.peg_dev) > 0.005;
+              const isYield = s.kind === "yield";
+              const off = !isYield && typeof s.peg_dev === "number" && Math.abs(s.peg_dev) > 0.005;
               return (
                 <tr key={s.sym} className="border-t border-border">
-                  <td className="py-1.5 font-sans">{s.sym}</td>
+                  <td className="py-1.5 font-sans">
+                    {s.sym}
+                    {isYield && (
+                      <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded align-middle"
+                        style={{ background: "var(--surface2)", color: "var(--muted2)" }}
+                        title="Token à rendement : sa valeur (NAV) dérive volontairement de 1 $ — ce n'est pas un dépeg.">
+                        rendement
+                      </span>
+                    )}
+                  </td>
                   <td className="text-right">{usd(s.mcap)}</td>
                   <td className="text-right">{typeof s.price === "number" ? `$${s.price.toFixed(4)}` : "n/d"}</td>
                   <td className="text-right" style={{ color: off ? "#f43f5e" : "var(--muted2)" }}>
-                    {typeof s.peg_dev === "number" ? `${(s.peg_dev * 100).toFixed(2)}%` : "n/d"}
+                    {isYield ? "—" : typeof s.peg_dev === "number" ? `${(s.peg_dev * 100).toFixed(2)}%` : "n/d"}
                   </td>
                 </tr>
               );
@@ -295,7 +305,16 @@ export default function Crypto() {
   if (isLoading) return <PageSkeleton />;
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-4">
-      <h1 className="text-xl font-semibold tracking-tight">Cockpit crypto</h1>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h1 className="text-xl font-semibold tracking-tight">Cockpit crypto</h1>
+        {data?.generated_at && (
+          <span className="text-[11px] text-muted2 mono px-2 py-1 rounded-md border border-border"
+            title="Horodatage du build (UTC). Le site est reconstruit chaque jour ouvré ; en cas de source indisponible, la dernière donnée valide est réutilisée.">
+            ⟳ {new Date(data.generated_at).toLocaleString("fr-FR", {
+              day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+          </span>
+        )}
+      </div>
       <p className="text-muted text-sm">
         Vue marché agrégée, 100 % gratuite et sans clé — reconstruite chaque jour ouvré.
         Contexte de marché, <b>pas un conseil financier</b>.

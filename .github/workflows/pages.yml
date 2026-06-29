@@ -94,6 +94,15 @@ jobs:
           # Ne bloque PAS sur l'absence de données (gérée séparément) → safe vs rate-limit yfinance.
           python scripts/contracts_check.py
 
+      # Cache crypto souverain : réutilise la dernière réponse valide si une API
+      # gratuite rate-limit/tombe le jour du build (anti « n/d » silencieux).
+      - name: Cache données crypto (anti rate-limit)
+        uses: actions/cache@v4
+        with:
+          path: .cache/crypto
+          key: crypto-cache-${{ github.run_id }}
+          restore-keys: crypto-cache-
+
       - name: Construire le site (front Next.js statique + données réelles)
         env:
           QUANT_PRICE_DB: ${{ github.workspace }}/data/market.db

@@ -8,8 +8,13 @@ séparés du réseau (testables hors-ligne, réutilisables côté client).
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
+import time
 import urllib.request
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 _CG = "https://api.coingecko.com/api/v3"
@@ -23,13 +28,53 @@ _STABLES = "https://stablecoins.llama.fi/stablecoins?includePrices=true"
 _FNG = "https://api.alternative.me/fng/?limit=1"
 
 
-def _get_json(url: str, timeout: float = 10.0) -> Any:
+_CACHE_DIR = Path(os.environ.get("QUANT_CACHE_DIR", ".cache/crypto"))
+
+
+def _cache_path(url: str) -> Path:
+    return _CACHE_DIR / (hashlib.sha1(url.encode()).hexdigest() + ".json")  # noqa: S324
+
+
+def _cache_read(url: str) -> Any:
+    """Dernière réponse valide connue (anti rate-limit). None si absente/illisible."""
+    p = _cache_path(url)
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "quant-terminal/1.0"})
-        with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310
-            return json.loads(r.read().decode("utf-8"))
+        return json.loads(p.read_text("utf-8")) if p.exists() else None
     except Exception:  # noqa: BLE001
         return None
+
+
+def _cache_write(url: str, data: Any) -> None:
+    try:
+        _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        _cache_path(url).write_text(json.dumps(data), "utf-8")
+    except OSError:
+        pass
+
+
+def _get_json(url: str, timeout: float = 10.0, retries: int | None = None) -> Any:
+    """GET JSON robuste : retries + backoff, puis repli sur le cache disque.
+
+    Best-effort souverain : si la source rate-limit/tombe, on RÉUTILISE la dernière
+    réponse valide (cache) plutôt que d'afficher du vide — jamais de chiffre inventé.
+    Tunable par env : QUANT_HTTP_RETRIES (déf. 3), QUANT_HTTP_BACKOFF (déf. 1.5 s ;
+    0 = pas d'attente, utile en tests hors-ligne).
+    """
+    if retries is None:
+        retries = int(os.environ.get("QUANT_HTTP_RETRIES", "3"))
+    backoff = float(os.environ.get("QUANT_HTTP_BACKOFF", "1.5"))
+    for attempt in range(max(1, retries)):
+        try:
+            req = urllib.request.Request(
+                url, headers={"User-Agent": "quant-terminal/1.0"})
+            with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310
+                data = json.loads(r.read().decode("utf-8"))
+            _cache_write(url, data)
+            return data
+        except Exception:  # noqa: BLE001
+            if attempt < retries - 1 and backoff > 0:
+                time.sleep(backoff * (attempt + 1))
+    return _cache_read(url)                                # repli : dernière donnée OK
 
 
 def _num(x: Any) -> float | None:
@@ -107,7 +152,11 @@ def parse_chains(data: Any, n: int = 8) -> dict:
 
 
 def parse_stablecoins(data: Any, n: int = 8) -> list[dict]:
-    """stablecoins.llama.fi → [{sym, mcap, price, peg_dev}] (écart au peg $1)."""
+    """stablecoins.llama.fi → [{sym, mcap, price, peg_dev, kind}].
+
+    `kind` distingue les vrais pegs $1 des tokens À RENDEMENT (NAV qui dérive
+    structurellement, ex. USYC ~1,13 $) : les flagger « décrochés » serait trompeur.
+    """
     out = []
     for s in ((data or {}).get("peggedAssets") or []):
         circ = (s.get("circulating") or {}).get("peggedUSD")
@@ -115,8 +164,11 @@ def parse_stablecoins(data: Any, n: int = 8) -> list[dict]:
         price = _num(s.get("price"))
         if s.get("symbol") and mcap:
             peg = round(price - 1.0, 4) if price is not None else None
+            # NAV structurellement loin de 1 $ → token à rendement, pas un dépeg.
+            kind = ("yield" if price is not None and (price >= 1.05 or price <= 0.5)
+                    else "peg")
             out.append({"sym": s["symbol"], "mcap": mcap, "price": price,
-                        "peg_dev": peg})
+                        "peg_dev": peg, "kind": kind})
     out.sort(key=lambda x: x["mcap"], reverse=True)
     return out[:n]
 
@@ -179,4 +231,5 @@ def cockpit() -> dict:
         "fng": parse_fng(_get_json(_FNG)),
     }
     ck["sentiment"] = market_sentiment(ck)
+    ck["generated_at"] = datetime.now(timezone.utc).isoformat(timespec="minutes")
     return ck

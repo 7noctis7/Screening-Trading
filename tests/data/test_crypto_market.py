@@ -63,6 +63,14 @@ def test_parse_stablecoins_peg_dev():
         {"symbol": "DAI", "circulating": {"peggedUSD": 5e9}, "price": 0.991}]})
     assert s[0]["sym"] == "USDT" and s[0]["peg_dev"] == 0.002
     assert s[1]["peg_dev"] == -0.009
+    assert s[0]["kind"] == "peg" and s[1]["kind"] == "peg"
+
+
+def test_parse_stablecoins_yield_token_not_depeg():
+    # USYC ~1,13 $ = token à rendement (NAV), pas un dépeg → kind="yield"
+    s = parse_stablecoins({"peggedAssets": [
+        {"symbol": "USYC", "circulating": {"peggedUSD": 3e9}, "price": 1.1295}]})
+    assert s[0]["kind"] == "yield"
 
 
 def test_parse_fng():
@@ -85,7 +93,10 @@ def test_market_sentiment_rules():
     assert market_sentiment({})["available"] is False
 
 
-def test_cockpit_offline_safe():
+def test_cockpit_offline_safe(monkeypatch, tmp_path):
+    monkeypatch.setenv("QUANT_HTTP_RETRIES", "1")    # pas de retry/backoff hors-ligne
+    monkeypatch.setenv("QUANT_HTTP_BACKOFF", "0")
+    monkeypatch.setenv("QUANT_CACHE_DIR", str(tmp_path))   # cache isolé/vide
     c = cockpit()                       # hors-ligne → structures vides, sans exception
     assert set(c) >= {"global", "top", "gainers", "fng", "stablecoins", "defi"}
     assert "sentiment" in c
