@@ -68,8 +68,9 @@ export default function LandingTicker() {
       {CRYPTO.map((s) => cell(s, crypto[`${s}-USD`], true))}
     </span>
   );
-  const n = stocks.length + CRYPTO.length;
-  const dur = `${Math.max(40, Math.round(n * 2.4))}s`;   // vitesse constante quel que soit n
+  // Durée CONSTANTE (ne dépend PAS du nombre d'items) → l'animation ne redémarre jamais
+  // quand les actions chargent ou que les prix changent (sinon : saut/bug de défilement).
+  const dur = "75s";
 
   return (
     <div aria-hidden="true" style={{

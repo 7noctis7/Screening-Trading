@@ -1538,21 +1538,35 @@ _TICKER_STOCKS = ("AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO
                   "CRM", "ADBE", "PG")
 
 
-def _ticker_section(data: dict, acmap: dict) -> dict:
+def _ticker_section(data: dict, acmap: dict, n: int = 20) -> dict:
     """Top actions pour le bandeau ticker : dernière clôture + variation J (build-time).
 
-    Données réelles du build (pas de live actions gratuit/CORS côté navigateur). Seules
-    les valeurs présentes dans l'univers sont incluses ; absentes → ignorées (jamais
-    inventées)."""
-    out = []
-    for s in _TICKER_STOCKS:
+    Données réelles du build (pas de live actions gratuit/CORS côté navigateur). On prend
+    d'abord les méga-caps reconnaissables présentes dans l'univers, puis on COMPLÈTE avec
+    les autres actions disponibles jusqu'à `n` (sinon le bandeau resterait vide si l'univers
+    ne contient pas ces tickers). Jamais de valeur inventée."""
+    def _quote(s: str):
         bars = data.get(s)
         if not bars or len(bars) < 2:
-            continue
+            return None
         last, prev = bars[-1].close, bars[-2].close
-        chg = round((last / prev - 1) * 100, 2) if prev else None
-        out.append({"sym": s, "price": round(last, 2), "chg": chg})
-    return {"available": bool(out), "stocks": out}
+        return {"sym": s, "price": round(last, 2),
+                "chg": round((last / prev - 1) * 100, 2) if prev else None}
+
+    seen, out = set(), []
+    for s in _TICKER_STOCKS:                       # 1) méga-caps reconnaissables
+        q = _quote(s)
+        if q:
+            out.append(q); seen.add(s)
+    for s in data:                                 # 2) complète avec les actions dispo
+        if len(out) >= n:
+            break
+        if s in seen or acmap.get(s) != "equity":
+            continue
+        q = _quote(s)
+        if q:
+            out.append(q); seen.add(s)
+    return {"available": bool(out), "stocks": out[:n]}
 
 
 def build_snapshot(seed: int = 7) -> dict:

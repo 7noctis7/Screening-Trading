@@ -7,6 +7,22 @@ import s from "@/app/landing/landing.module.css";
 const Scene = dynamic(() => import("./Scene"), { ssr: false });
 // Ticker LIVE façon Bloomberg (WebSocket navigateur) — client-only.
 const LandingTicker = dynamic(() => import("./LandingTicker"), { ssr: false });
+import {
+  VizPlacebo, VizDsr, VizPbo, VizSabotage, VizDrawdown, VizScreen, VizRisk, VizPaper,
+} from "./LandingViz";
+
+const GATE = [
+  ["01", "PLACEBO", "p < 0,05", <VizPlacebo key="p" />],
+  ["02", "DSR", "Sharpe déflaté", <VizDsr key="d" />],
+  ["03", "PBO", "Zéro surajustement", <VizPbo key="b" />],
+  ["04", "SABOTAGE", "Stress-test ×3", <VizSabotage key="s" />],
+] as const;
+
+const CARDS = [
+  ["SCREENING", "100 % point-in-time. Zéro look-ahead.", <VizScreen key="sc" />],
+  ["RISQUE", "Vol-target & kill-switch automatiques.", <VizRisk key="ri" />],
+  ["PAPER", "Exécution simulée par défaut. Sans exception.", <VizPaper key="pa" />],
+] as const;
 
 const BASE = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
@@ -65,119 +81,75 @@ export default function LandingClient() {
         {/* Bandeau terminal LIVE (Bloomberg) */}
         <LandingTicker />
 
-        {/* HERO — hybride : manifeste + accroche produit */}
+        {/* 1 — HERO (impact Jobs : 3 mots, données, formule maître) */}
         <header ref={heroRef} className={s.hero}>
           <div className={s.spotlight} aria-hidden="true" />
-          <p className={s.kicker}>Infrastructure quant · open-source · paper-first · 0 €</p>
+          <p className={s.kicker}>0 € · open source · infrastructure quant</p>
           <h1 className={s.title}>
             L'alpha se vend.<br /><em>La survie se prouve.</em>
           </h1>
-          <p className={s.sub}>
-            Infrastructure de screening multi-actifs et de gestion du risque. Chaque
-            signal franchit quatre portes — <b>Placebo · DSR · PBO · Sabotage</b> — ou
-            il est rejeté et publié comme échec. Pas d'oracle. Pas de promesse. De la
-            preuve, ou rien.
-          </p>
+          <p className={s.sub}>Gratuit. Il se mérite par la discipline.</p>
           <div className={s.cta}>
             <a className={`${s.btn} ${s.btnPrimary}`} href={`${BASE}/accueil/`}
-              aria-label="Ouvrir le terminal — page Accueil">Ouvrir le terminal →</a>
+              aria-label="Entrer dans le terminal">Entrer dans le terminal →</a>
             <a className={s.btn} href={`${BASE}/dashboard/`}
               aria-label="Voir la démo — tableau de bord">Voir la démo</a>
           </div>
           <div className={s.scrollCue} aria-hidden="true">scroll</div>
         </header>
 
-        {/* BANDEAU PALANTIR — déclaratif, austère, infrastructure */}
-        <section className={s.reveal} style={{
-          padding: "13vh 6vw", textAlign: "center",
-          borderTop: "1px solid rgba(94,234,212,.10)",
-          borderBottom: "1px solid rgba(94,234,212,.10)",
-        }}>
-          <p style={{
-            fontSize: "clamp(1.5rem, 3.4vw, 2.6rem)", fontWeight: 600,
-            letterSpacing: "-0.025em", lineHeight: 1.18, maxWidth: "24ch",
-            margin: "0 auto", color: "#eaf2f4",
-          }}>
-            Nous ne vendons pas de signaux.<br />
-            <span style={{
-              background: "linear-gradient(120deg,#5eead4,#22d3ee)",
-              WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent",
-            }}>Nous construisons l'infrastructure qui les réfute.</span>
-          </p>
-        </section>
-
-        {/* SECTION — le pipeline de validation (gate à 4 étages) */}
-        <section className={`${s.section} ${s.reveal}`} aria-labelledby="ld-method">
-          <div className={s.eyebrow}>Méthode</div>
-          <h2 id="ld-method" className={s.h2}>On essaie d'abord de le casser.</h2>
-          <p className={s.lead}>
-            Tout backtest gagnant est présumé chanceux. Avant le moindre ordre, le signal
-            affronte un gate déterministe — hasard, data-mining, surapprentissage,
-            exécution dégradée. Quatre étages. Aucun raccourci.
-          </p>
-          <div className={s.flow}>
-            {[
-              ["01", "Placebo", "Bat le hasard, ou rien. (p < 0,05)"],
-              ["02", "DSR", "Sharpe déflaté du data-mining (López de Prado)"],
-              ["03", "PBO / CSCV", "Zéro surajustement, prouvé hors-échantillon"],
-              ["04", "Sabotage", "Survit à coût ×3, bruit et latence ?"],
-            ].map(([k, t, d]) => (
-              <div key={k} className={s.step}>
-                <div className={s.stepK}>{k}</div>
-                <div className={s.stepT}>{t}</div>
-                <div className={s.stepD}>{d}</div>
+        {/* 2 — THE GATE (pipeline visuel, métrique + schéma par étage) */}
+        <section className={`${s.section} ${s.reveal}`} aria-labelledby="ld-gate">
+          <div className={s.eyebrow}>The Gate</div>
+          <h2 id="ld-gate" className={s.h2}>Quatre portes. Aucun raccourci.</h2>
+          <div className={`${s.grid} ${s.grid4}`}>
+            {GATE.map(([k, t, m, viz]) => (
+              <div key={k as string} className={s.cell}>
+                <div className={s.stepK}>{k} · {t}</div>
+                <div className={s.cellLabel} style={{ margin: ".25rem 0 .6rem" }}>{m}</div>
+                {viz}
               </div>
             ))}
           </div>
         </section>
 
-        {/* SECTION — preuves chiffrées (démo) */}
+        {/* 3 — MANIFESTE DE L'ÉCHEC (compteurs géants + drawdown comparé) */}
         <section className={`${s.section} ${s.reveal}`} aria-labelledby="ld-proof">
-          <div className={s.eyebrow}>Preuves</div>
-          <h2 id="ld-proof" className={s.h2}>Sept pistes. Sept échecs. Tous publiés.</h2>
-          <div className={`${s.grid} ${s.grid4}`}>
-            {[
-              ["83/100", "score audit (3 rounds)", true],
-              ["7/7", "hypothèses d'alpha rejetées", false],
-              ["0 €", "coût d'infra", true],
-              ["−9 %", "MaxDD preset vs −23 % équipondéré", false],
-            ].map(([n, l, teal]) => (
-              <div key={l as string} className={s.cell}>
-                <div className={`${s.cellNum} ${teal ? s.teal : ""}`}>{n}</div>
-                <div className={s.cellLabel}>{l}</div>
-              </div>
-            ))}
+          <div className={s.eyebrow}>Manifeste de l'échec</div>
+          <h2 id="ld-proof" className={s.h2}>7 pistes testées. 7 échecs publiés.</h2>
+          <div className={`${s.grid} ${s.grid3}`} style={{ alignItems: "center" }}>
+            <div className={s.cell}>
+              <div className={`${s.cellNum} ${s.teal}`}>−9 %</div>
+              <div className={s.cellLabel}>MaxDD — Quant Terminal</div>
+            </div>
+            <div className={s.cell}>
+              <div className={s.cellNum}>−23 %</div>
+              <div className={s.cellLabel}>MaxDD — marché équipondéré</div>
+            </div>
+            <div className={s.cell}><VizDrawdown /></div>
           </div>
           <p className={s.lead} style={{ marginTop: "2rem" }}>
-            Sept pistes d'alpha — actions, insiders, funding, on-chain, régime, breakout —
-            testées, sept négatifs propres et documentés. Un négatif honnête vaut mille
-            faux positifs.
-            La performance, ici, c'est de <b>survivre</b> aux régimes que les autres
-            n'ont pas vus venir.
+            Un négatif honnête vaut mille faux positifs. <b>Survivre</b> aux régimes que
+            les autres n'ont pas vus venir.
           </p>
         </section>
 
-        {/* SECTION — démo produit */}
-        <section className={`${s.section} ${s.reveal}`} aria-labelledby="ld-product">
+        {/* 4 — ARCHITECTURE (3 cards glassmorphism : titre, ligne tech, visuel) */}
+        <section className={`${s.section} ${s.reveal}`} aria-labelledby="ld-archi">
           <div className={s.eyebrow}>Le terminal</div>
-          <h2 id="ld-product" className={s.h2}>Du screening au paper, rien sous le tapis.</h2>
+          <h2 id="ld-archi" className={s.h2}>Trois modules. Une discipline.</h2>
           <div className={`${s.grid} ${s.grid3}`}>
-            {[
-              ["Screening", "Actions, ETF, crypto. Filtres + z-score, univers investable, "
-                + "100 % point-in-time — zéro look-ahead."],
-              ["Risque", "Vol-target, kill-switch, overlay drawdown, concentration "
-                + "corrélation-aware. L'edge réel, mesuré."],
-              ["Paper", "Exécution simulée par défaut. Aucun euro réel sans validation "
-                + "humaine. Le risque avant le rendement."],
-            ].map(([t, d]) => (
-              <div key={t} className={s.cell}>
+            {CARDS.map(([t, d, viz]) => (
+              <div key={t as string} className={s.cell}>
                 <div className={s.stepT}>{t}</div>
-                <div className={s.cellLabel} style={{ marginTop: ".6rem" }}>{d}</div>
+                <div className={s.cellLabel} style={{ margin: ".4rem 0 .7rem" }}>{d}</div>
+                {viz}
               </div>
             ))}
           </div>
         </section>
 
+        {/* 5 — FOOTER (promesse de discipline) */}
         <footer className={s.footer}>
           <h2 className={s.h2}>La discipline est le seul alpha.</h2>
           <div className={s.cta} style={{ justifyContent: "center" }}>
