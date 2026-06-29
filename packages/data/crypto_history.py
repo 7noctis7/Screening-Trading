@@ -18,7 +18,7 @@ from typing import Any
 
 _FNG = "https://api.alternative.me/fng/?limit=0&format=json"
 _BTC = ("https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
-        "?vs_currency=usd&days=max&interval=daily")
+        "?vs_currency=usd&days=max")            # PAS d'interval=daily (param payant CG)
 _TVL = "https://api.llama.fi/v2/historicalChainTvl"
 
 
