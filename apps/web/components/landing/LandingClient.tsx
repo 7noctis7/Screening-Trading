@@ -67,6 +67,15 @@ export default function LandingClient() {
   const heroRef = useRef<HTMLDivElement>(null);
   const [detail, setDetail] = useState<{ title: string; body: string[] } | null>(null);
 
+  // La landing est TOUJOURS sombre → force le thème sombre tant qu'elle est montée
+  // (scrollbar/contrôles natifs assortis) ; restaure l'état précédent en quittant.
+  useEffect(() => {
+    const el = document.documentElement;
+    const had = el.classList.contains("dark");
+    el.classList.add("dark");
+    return () => { if (!had) el.classList.remove("dark"); };
+  }, []);
+
   // Lenis : scroll inertiel soyeux (sync avec le 3D piloté par window.scrollY).
   useEffect(() => {
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;

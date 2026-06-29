@@ -12,6 +12,7 @@
   --border:#dde6e8; --border2:#cbd8db; --fg:#0a0f12; --muted:#52616a; --muted2:#86949b;
   --accent:#0891b2; --accent2:#06b6d4; --pos:#16a34a; --neg:#dc2626; --warn:#d97706;
   --shadow:0 1px 2px rgba(16,24,40,.06),0 8px 24px rgba(16,24,40,.08);
+  color-scheme: light;          /* scrollbar/contrôles natifs assortis au thème clair */
 }
 /* Accents en OKLCH (gamut perceptuellement uniforme, plus vifs sur écrans P3).
    PROGRESSIF : déclarés APRÈS les hex → un navigateur sans support oklch ignore ces lignes
@@ -28,6 +29,7 @@
   --border:#22303c; --border2:#2e3f4d; --fg:#eaf2f4; --muted:#93a7b1; --muted2:#637580;
   --accent:#22d3ee; --accent2:#5eead4; --pos:#22c55e; --neg:#f43f5e; --warn:#f59e0b;
   --shadow:0 1px 2px rgba(0,0,0,.45),0 10px 30px rgba(0,0,0,.3);
+  color-scheme: dark;           /* scrollbar/contrôles natifs sombres */
 }
 @supports (color: oklch(0.6 0.1 200)) {
   .dark {
@@ -125,8 +127,10 @@ body::after {
 
 /* Scrollbar discrète (déférence) */
 ::-webkit-scrollbar { width:9px; height:9px; }
+::-webkit-scrollbar-track { background:var(--bg); }   /* piste assortie au fond (plus de bande blanche) */
 ::-webkit-scrollbar-thumb { background:var(--border2); border-radius:6px; }
 ::-webkit-scrollbar-thumb:hover { background:var(--muted2); }
+html { scrollbar-color: var(--border2) var(--bg); scrollbar-width: thin; }  /* Firefox */
 
 /* Focus visible net (clarté / accessibilité) */
 :focus-visible { outline:2px solid var(--accent2); outline-offset:2px; border-radius:8px; }
