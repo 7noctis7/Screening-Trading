@@ -12,6 +12,27 @@
   - critère GO : paper cohérent avec le backtest (pas de dérive Sharpe>1pt, MaxDD non dépassé).
   - si concordant → engager un capital réel **limité** + sizing défensif ; sinon → re-calibrer.
 
+## 🪙 CE SOIR SUR LE MAC — cockpit crypto + test régime F&G (2026-06-29)
+> Livré : page `/crypto` (cockpit marché, gratuit), note Obsidian déterministe, et un TEST honnête
+> du Fear & Greed comme signal contrarian BTC (gate placebo). **Réseau bloqué côté agent** → ces 3
+> commandes doivent tourner sur ton Mac (les API crypto y sont joignables).
+- [ ] **Récupérer** : `qt && git pull origin main`.
+- [ ] **Note de marché crypto → Obsidian** (contexte, indexée par vault-search) :
+  ```bash
+  make crypto-brief        # → vault/11_Crypto/Cockpit.md (humeur, pouls, narratifs, movers)
+  ```
+- [ ] **⭐ Verdict du gate — F&G contrarian sur BTC** (LE test ML/régime) :
+  ```bash
+  make regime-study        # télécharge F&G (2018+) + prix BTC, lance placebo
+  ```
+  → reporte la **p-value placebo** et le **verdict** (SIGNIFICATIF / BRUIT). Loggé au ledger +
+  note `vault/10_Backtests/Regime_FearGreed.md`.
+  - **si BRUIT** (attendu, prior bas) → 6ᵉ négatif propre, **rien câblé au ML**. Ajoute-le au manifeste.
+  - **si SIGNIFICATIF** → candidat **overlay de régime** (pas alpha) : validation DSR/PBO ensuite,
+    puis branchement `FNG` dans `real_macro_store` (plomberie `FeatureBuilder`/`MacroStore.as_of`
+    déjà prête, point-in-time anti-fuite).
+- [ ] **(option)** voir le cockpit en ligne : `cd apps/web && npm run dev` → http://localhost:3000/crypto
+
 ## 🪙 CE SOIR SUR LE MAC — on-chain crypto (multi-sources gratuites, 2026-06-29)
 > Livré : fondamentaux on-chain (CoinGecko + DefiLlama, sans clé) + étude alt-data TVL/MCap.
 - [ ] **Récupérer** : `qt && git pull origin main`.
