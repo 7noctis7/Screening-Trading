@@ -17,12 +17,12 @@ from datetime import datetime, timezone
 from typing import Any
 
 _FNG = "https://api.alternative.me/fng/?limit=0&format=json"
-# Binance klines = source BTC PRIMAIRE (gratuit, sans clé, fiable ; déjà utilisé pour
-# le funding). CoinGecko market_chart en repli (souvent rate-limité/restreint en gratuit).
+# Binance klines = source BTC PRIMAIRE (gratuit, sans clé, fiable ; déjà utilisé
+# pour le funding). CoinGecko market_chart en repli (souvent rate-limité en gratuit).
 _BTC_BINANCE = ("https://api.binance.com/api/v3/klines"
                 "?symbol=BTCUSDT&interval=1d&limit=1000")
 _BTC = ("https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
-        "?vs_currency=usd&days=365")            # repli (PAS d'interval=daily : param payant)
+        "?vs_currency=usd&days=365")            # repli (sans interval=daily, payant)
 _TVL = "https://api.llama.fi/v2/historicalChainTvl"
 
 
@@ -75,7 +75,7 @@ def parse_market_chart(data: Any) -> list[tuple[str, float]]:
 
 
 def parse_klines(data: Any) -> list[tuple[str, float]]:
-    """Binance klines → [(date, close)] trié. close = index 4 ; openTime (ms) = index 0."""
+    """Binance klines → [(date, close)] trié. close = idx 4 ; openTime (ms) = idx 0."""
     out: dict[str, float] = {}
     for row in (data or []):
         if not isinstance(row, (list, tuple)) or len(row) < 5:
