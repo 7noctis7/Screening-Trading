@@ -300,6 +300,55 @@ function Stablecoins({ ck }: { ck: any }) {
   );
 }
 
+// ---- Jauge altseason (part du top 50 battant BTC sur 7 j) ----
+function Altseason({ ck }: { ck: any }) {
+  const a = ck.altseason;
+  if (!a?.available) return null;
+  const col = a.label === "Altseason" ? "var(--pos)" : a.label === "Bitcoin" ? "#f59e0b" : "var(--muted)";
+  return (
+    <Card title="Saison — Bitcoin vs Altcoins" source="dérivé CoinGecko · 7 j"
+      hint="Part du top 50 (hors stablecoins) qui surperforme BTC sur 7 jours. ≥75 % = « altseason » (l'argent va vers les altcoins) ; ≤25 % = domination Bitcoin.">
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="text-sm font-semibold px-2.5 py-1 rounded-full"
+          style={{ color: col, background: "color-mix(in srgb, " + col + " 15%, transparent)" }}>
+          {a.label}
+        </span>
+        <span className="text-2xl mono font-semibold" style={{ color: col }}>
+          {a.pct}%<span className="text-muted2 text-sm"> battent BTC</span>
+        </span>
+      </div>
+      <div className="mt-3 h-2 rounded-full overflow-hidden" style={{ background: "var(--surface2)" }}>
+        <div className="h-full rounded-full" style={{ width: `${a.pct}%`, background: col }} />
+      </div>
+      <div className="text-muted2 text-[11px] mt-1.5">
+        sur {a.n} actifs · BTC {pct((a.btc_ret7d ?? 0) * 100)} sur 7 j
+      </div>
+    </Card>
+  );
+}
+
+// ---- Compte à rebours du halving BTC ----
+function Halving({ ck }: { ck: any }) {
+  const h = ck.halving;
+  if (!h?.available) return null;
+  const eta = new Date(Date.now() + h.days_left * 86400_000);
+  return (
+    <Card title={`Halving Bitcoin — le ${h.number}ᵉ`} source="blockchain.info · hauteur de bloc réelle"
+      hint="Tous les 210 000 blocs (~4 ans), la récompense de minage est divisée par deux → choc d'offre. Estimation à ~10 min/bloc.">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div><div className="text-muted text-xs">Dans</div><div className="text-lg mono">≈ {h.days_left} j</div></div>
+        <div><div className="text-muted text-xs">Blocs restants</div><div className="text-lg mono">{h.blocks_left.toLocaleString("fr-FR")}</div></div>
+        <div><div className="text-muted text-xs">Bloc du halving</div><div className="text-lg mono">{h.halving_block.toLocaleString("fr-FR")}</div></div>
+        <div><div className="text-muted text-xs">Date estimée</div><div className="text-lg mono">{eta.toLocaleDateString("fr-FR", { month: "short", year: "numeric" })}</div></div>
+      </div>
+      <div className="mt-3 h-2 rounded-full overflow-hidden" style={{ background: "var(--surface2)" }}>
+        <div className="h-full rounded-full" style={{ width: `${(h.progress * 100).toFixed(1)}%`, background: "var(--accent)" }} />
+      </div>
+      <div className="text-muted2 text-[11px] mt-1.5">{(h.progress * 100).toFixed(1)} % du cycle parcouru · hauteur {h.height.toLocaleString("fr-FR")}</div>
+    </Card>
+  );
+}
+
 export default function Crypto() {
   const { data, isLoading } = useCryptoCockpit();
   if (isLoading) return <PageSkeleton />;
@@ -330,6 +379,8 @@ export default function Crypto() {
         <>
           <Overview ck={data} />
           <Pulse ck={data} />
+          <Altseason ck={data} />
+          <Halving ck={data} />
           <Narratives ck={data} />
           <Movers ck={data} />
           <Trending ck={data} />

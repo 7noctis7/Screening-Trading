@@ -26,6 +26,10 @@ _TRENDING = _CG + "/search/trending"
 _LLAMA_CHAINS = "https://api.llama.fi/v2/chains"
 _STABLES = "https://stablecoins.llama.fi/stablecoins?includePrices=true"
 _FNG = "https://api.alternative.me/fng/?limit=1"
+_BLOCKCOUNT = "https://blockchain.info/q/getblockcount"   # hauteur de bloc BTC (entier)
+
+_STABLE_SYMS = {"USDT", "USDC", "DAI", "USDE", "USDS", "USD1", "FDUSD", "TUSD",
+                "PYUSD", "USDD", "FRAX", "GUSD", "LUSD", "USDP", "BUSD"}
 
 
 _CACHE_DIR = Path(os.environ.get("QUANT_CACHE_DIR", ".cache/crypto"))
@@ -216,6 +220,55 @@ def market_sentiment(ck: dict) -> dict:
             "drivers": drivers}
 
 
+def _ret7d(spark: Any) -> float | None:
+    """Rendement 7 j depuis le sparkline (dernier/premier − 1). None si indispo."""
+    if not spark or len(spark) < 2:
+        return None
+    a, b = spark[0], spark[-1]
+    return (b / a - 1.0) if a else None
+
+
+def altseason(markets: list[dict], top: int = 50) -> dict:
+    """Part du top `top` (hors stablecoins) battant BTC sur 7 j → proxy altseason.
+
+    Dérivé des sparklines DÉJÀ récupérés (aucun appel réseau, aucun chiffre inventé).
+    ≥75 % battent BTC = « Altseason » ; ≤25 % = « Bitcoin » ; sinon « Mixte ».
+    """
+    btc = next((m for m in markets if m.get("sym") == "BTC"), None)
+    btc_r = _ret7d(btc.get("spark7d")) if btc else None
+    if btc_r is None:
+        return {"available": False}
+    valid = [m for m in markets if m.get("mcap") and m.get("sym") not in _STABLE_SYMS]
+    valid.sort(key=lambda m: m["mcap"], reverse=True)
+    rets = [r for m in valid[:top] if m.get("sym") != "BTC"
+            and (r := _ret7d(m.get("spark7d"))) is not None]
+    if len(rets) < 10:
+        return {"available": False}
+    beat = sum(1 for r in rets if r > btc_r)
+    pct = round(100 * beat / len(rets), 1)
+    label = "Altseason" if pct >= 75 else "Bitcoin" if pct <= 25 else "Mixte"
+    return {"available": True, "pct": pct, "n": len(rets),
+            "btc_ret7d": round(btc_r, 4), "label": label}
+
+
+def halving(height: Any) -> dict:
+    """Compte à rebours du halving BTC depuis la hauteur de bloc RÉELLE.
+
+    Halving tous les 210 000 blocs ; ~10 min/bloc. Aucune date inventée : on rend
+    `blocks_left` (exact) et `days_left` (estimation explicite à ~10 min/bloc).
+    """
+    if not isinstance(height, (int, float)) or height <= 0:
+        return {"available": False}
+    height = int(height)
+    interval = 210_000
+    nxt = (height // interval + 1) * interval
+    left = nxt - height
+    return {"available": True, "height": height, "halving_block": nxt,
+            "blocks_left": left, "days_left": round(left * 10 / 1440),
+            "number": nxt // interval,
+            "progress": round((interval - left) / interval, 4)}
+
+
 def cockpit() -> dict:
     """Assemble le cockpit (build-time). Chaque section best-effort (None/[] si KO)."""
     markets = parse_markets(_get_json(_MARKETS))
@@ -231,5 +284,7 @@ def cockpit() -> dict:
         "fng": parse_fng(_get_json(_FNG)),
     }
     ck["sentiment"] = market_sentiment(ck)
+    ck["altseason"] = altseason(markets)
+    ck["halving"] = halving(_get_json(_BLOCKCOUNT))
     ck["generated_at"] = datetime.now(timezone.utc).isoformat(timespec="minutes")
     return ck

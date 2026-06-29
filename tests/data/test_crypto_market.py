@@ -1,7 +1,9 @@
 """Tests cockpit crypto — parsers purs (hors-ligne)."""
 
 from packages.data.crypto_market import (
+    altseason,
     cockpit,
+    halving,
     market_sentiment,
     movers,
     parse_categories,
@@ -77,6 +79,30 @@ def test_parse_fng():
     assert parse_fng({"data": [{"value": "72", "value_classification": "Greed"}]}) == {
         "available": True, "value": 72.0, "label": "Greed"}
     assert parse_fng({})["available"] is False
+
+
+def test_altseason_proxy():
+    # BTC +0% sur 7j ; 2 alts montent, 1 baisse → 2/3 battent BTC (besoin ≥10 → top élargi)
+    mk = [{"sym": "BTC", "mcap": 1e12, "spark7d": [100, 100]}]
+    for i in range(12):
+        up = i % 3 != 0
+        mk.append({"sym": f"A{i}", "mcap": 1e9 - i,
+                   "spark7d": [100, 110 if up else 90]})
+    out = altseason(mk)
+    assert out["available"] and 0 <= out["pct"] <= 100 and out["n"] >= 10
+    assert out["label"] in ("Altseason", "Bitcoin", "Mixte")
+
+
+def test_altseason_unavailable_without_btc():
+    assert altseason([{"sym": "X", "mcap": 1, "spark7d": [1, 2]}])["available"] is False
+
+
+def test_halving_countdown():
+    h = halving(840_500)            # juste après le halving de 2024 (bloc 840 000)
+    assert h["available"] and h["halving_block"] == 1_050_000
+    assert h["blocks_left"] == 209_500 and h["number"] == 5
+    assert h["days_left"] > 0 and 0 <= h["progress"] <= 1
+    assert halving(0)["available"] is False
 
 
 def test_market_sentiment_rules():
