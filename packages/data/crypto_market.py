@@ -72,24 +72,25 @@ def movers(markets: list[dict], n: int = 8) -> dict:
 
 
 def parse_categories(data: Any, n: int = 10) -> list[dict]:
-    """/coins/categories → narratifs triés par perf 24 h [{name, chg24h, mcap}]."""
+    """/coins/categories → narratifs triés par perf 24 h [{id, name, chg24h, mcap}]."""
     out = []
     for c in data or []:
         chg = _num(c.get("market_cap_change_24h"))
         if c.get("name") and chg is not None:
-            out.append({"name": c["name"], "chg24h": chg,
+            out.append({"id": c.get("id"), "name": c["name"], "chg24h": chg,
                         "mcap": _num(c.get("market_cap"))})
     out.sort(key=lambda x: x["chg24h"], reverse=True)
     return out[:n]
 
 
 def parse_trending(data: Any) -> list[dict]:
-    """/search/trending → [{name, sym, rank}]."""
+    """/search/trending → [{id, name, sym, rank}]."""
     out = []
     for c in ((data or {}).get("coins") or []):
         it = c.get("item") or {}
         if it.get("name"):
-            out.append({"name": it["name"], "sym": str(it.get("symbol") or "").upper(),
+            out.append({"id": it.get("id"), "name": it["name"],
+                        "sym": str(it.get("symbol") or "").upper(),
                         "rank": it.get("market_cap_rank")})
     return out
 

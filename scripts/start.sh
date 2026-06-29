@@ -13,6 +13,11 @@ export QUANT_PRICE_DB="${QUANT_PRICE_DB:-$HOME/Desktop/YAHOO.db}"
 export QUANT_FUND="${QUANT_FUND:-yf}"
 export QUANT_NEWS="${QUANT_NEWS:-1}"
 export QUANT_HISTORY_DAYS="${QUANT_HISTORY_DAYS:-4015}"
+# Sources crypto/marchés GRATUITES (sans clé) — ON par défaut (comme en CI/`make site`) ;
+# mettre QUANT_CRYPTO=0 etc. pour couper (ex. hors-ligne). Best-effort : n/d si injoignable.
+export QUANT_CRYPTO="${QUANT_CRYPTO:-1}"               # cockpit crypto (/crypto)
+export QUANT_ONCHAIN="${QUANT_ONCHAIN:-1}"             # fondamentaux on-chain (/macro)
+export QUANT_PREDMKT="${QUANT_PREDMKT:-1}"             # marchés de prédiction (/macro)
 # QUANT_CORE_SPEC / QUANT_DD_TARGET : respectés s'ils sont définis dans l'environnement (sinon défaut code).
 
 BRANCH="claude/clever-lovelace-ognwya"

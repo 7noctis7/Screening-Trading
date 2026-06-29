@@ -37,15 +37,18 @@ def test_parse_markets_and_movers():
 
 
 def test_parse_categories_sorted_desc():
-    out = parse_categories([{"name": "AI", "market_cap_change_24h": 2.0},
-                            {"name": "RWA", "market_cap_change_24h": 5.0},
+    out = parse_categories([{"id": "ai", "name": "AI", "market_cap_change_24h": 2.0},
+                            {"id": "rwa", "name": "RWA", "market_cap_change_24h": 5.0},
                             {"bad": 1}])
     assert [c["name"] for c in out] == ["RWA", "AI"]
+    assert out[0]["id"] == "rwa"          # id propagé pour le lien CoinGecko
 
 
 def test_parse_trending():
-    out = parse_trending({"coins": [{"item": {"name": "Foo", "symbol": "foo"}}]})
+    out = parse_trending({"coins": [{"item": {"id": "foo", "name": "Foo",
+                                              "symbol": "foo"}}]})
     assert out[0]["name"] == "Foo" and out[0]["sym"] == "FOO"
+    assert out[0]["id"] == "foo"          # id propagé pour le lien CoinGecko
 
 
 def test_parse_chains_dominance():
