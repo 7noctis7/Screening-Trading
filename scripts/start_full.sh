@@ -30,9 +30,10 @@ else
   "$PY" scripts/build_watchlist.py || echo "  (watchlist ignorée — on continue)"
 fi
 
-# dépendances web (1re fois seulement)
-if [ ! -d apps/web/node_modules ]; then
-  echo "→ Installation des dépendances web (1re fois)…"
+# dépendances web : (ré)installe si absentes OU PÉRIMÉES (ex. après ajout de three/fiber)
+# `npm ls three` échoue si une dépendance déclarée manque → on réinstalle.
+if [ ! -d apps/web/node_modules ] || ! ( cd apps/web && npm ls three >/dev/null 2>&1 ); then
+  echo "→ (Ré)installation des dépendances web (manquantes ou périmées)…"
   ( cd apps/web && (npm ci || npm install) )
 fi
 
