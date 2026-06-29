@@ -119,15 +119,26 @@ def main() -> int:
     print(f"\n  PBO (CSCV, {len(_GRID)} configs) : "
           f"{pbo_v:.3f}" if pbo_v is not None else "\n  PBO : indisponible")
 
+    from packages.research.adversarial import sabotage_verdict
+    sab = sabotage_verdict(rets)                  # exécution dégradée (pire cas)
+    if sab.get("available"):
+        tag = "✅ survit" if sab["survives"] else "❌ s'effondre"
+        print(f"\n  Sabotage (coût×3 + bruit + latence) : Sharpe "
+              f"{sab['clean_sharpe']}→{sab['stressed_sharpe']} "
+              f"(rétention {sab['sharpe_retention']}) → {tag}")
+
     from packages.research.gate import promotion_verdict
     v = promotion_verdict(dsr=base["dsr"], pbo=pbo_v, edge=base["ann_return"])
-    promu = v["promoted"]
+    promu = v["promoted"] and (not sab.get("available") or sab["survives"])
     verdict = "✅ PROMU (edge net robuste)" if promu else "❌ REJETÉ"
     print(f"\n  → {verdict}")
     if promu:
         print("  GO : DSR>0.5 ET PBO<0.5 ET edge net>0 → 1er alpha net de frais.")
     else:
-        print(f"  STOP : {', '.join(v['reasons']) or 'pas tradable'}.")
+        reasons = list(v["reasons"])
+        if sab.get("available") and not sab["survives"]:
+            reasons.append("ne survit pas au sabotage (exécution dégradée)")
+        print(f"  STOP : {', '.join(reasons) or 'pas tradable'}.")
 
     _log(a, base, pbo_v, promu)
     _note(a, base, pbo_v, promu, sorted(data))
