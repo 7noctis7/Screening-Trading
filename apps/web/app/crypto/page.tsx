@@ -9,6 +9,8 @@ import { InfoTip } from "@/components/InfoTip";
 
 // Graphe live (WebSocket navigateur) — client-only, jamais SSR (compatible export statique).
 const LiveChart = dynamic(() => import("@/components/crypto/LiveChart"), { ssr: false });
+// Bloc « Analyse experte · Œil de Hasheur » LIVE (client-direct, auto-refresh visible-only).
+const ExpertLive = dynamic(() => import("@/components/crypto/ExpertLive"), { ssr: false });
 
 // Liens vers les fiches OFFICIELLES (infos complètes, fiables, gratuites) — nouvel onglet.
 const cgCoin = (id?: string) => (id ? `https://www.coingecko.com/en/coins/${id}` : null);
@@ -509,6 +511,7 @@ export default function Crypto() {
       ) : (
         <>
           <LiveChart />
+          <ExpertLive />
           <Overview ck={data} />
           <Accumulation ck={data} />
           <Pulse ck={data} />

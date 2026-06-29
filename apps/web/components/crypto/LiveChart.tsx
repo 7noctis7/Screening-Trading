@@ -4,7 +4,9 @@
 // bloque le backfill ; le WS part du navigateur (pas de géoblocage serveur). Éducatif, aucun conseil.
 import { useEffect, useRef, useState } from "react";
 
-const PAIRS = ["BTC-USD", "ETH-USD", "SOL-USD"] as const;
+// Uniquement les paires LISTÉES sur Coinbase (HYPE/ONDO n'y sont pas → exclus).
+const PAIRS = ["BTC-USD", "ETH-USD", "SOL-USD", "LINK-USD", "NEAR-USD",
+               "RENDER-USD"] as const;
 type Pair = (typeof PAIRS)[number];
 // v4 pinné : API stable (addCandlestickSeries). Fallback v5 géré plus bas.
 const V = "4.2.3";
@@ -42,6 +44,7 @@ export default function LiveChart() {
     let stop = false, backoff = 1000, cur: any = null, raf = 0;
     const el = box.current;
     if (!el) return;
+    setErr(null); setLive(false); setLast(null);    // reset à chaque changement de paire
 
     const start = async () => {
       let LWC: any;
@@ -110,6 +113,9 @@ export default function LiveChart() {
       ws.onmessage = (e) => {
         let m: any;
         try { m = JSON.parse(e.data); } catch { return; }
+        if (m.type === "error") {                  // ex. produit non listé sur Coinbase
+          setErr("non listé sur Coinbase — n/d"); setLive(false); return;
+        }
         if (m.type !== "ticker" || !m.price) return;
         const px = parseFloat(m.price);
         if (!raf) raf = requestAnimationFrame(() => { raf = 0; setLast(px); });
