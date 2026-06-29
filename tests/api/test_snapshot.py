@@ -11,7 +11,7 @@ def _snap():
 def test_snapshot_keys_and_json():
     snap = _snap()
     assert set(snap) == {"meta", "dashboard", "screener", "screen", "prediction_markets",
-                         "crypto_onchain", "crypto_cockpit", "portfolio", "trades",
+                         "crypto_onchain", "crypto_cockpit", "ticker", "portfolio", "trades",
                          "open_trades", "trade_stats", "universe", "data", "themes", "ml",
                          "sentiment", "fundamentals", "investors", "conviction", "live",
                          "preset_trades", "index_core_curves", "preset_ledger"}
