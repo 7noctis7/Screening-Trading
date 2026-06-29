@@ -165,10 +165,11 @@ export function Nav() {
           <DesktopMenu key={section} section={section} hrefs={hrefs} path={path} />
         ))}
         <span className="ml-auto" />
-        <Link href="/landing"
-          className="px-3 py-1.5 rounded-[10px] text-sm border border-transparent text-muted
-                     hover:text-fg transition-all duration-150"
-          title="Page de présentation cinématique">✦ Intro</Link>
+        <Link href="/dashboard"
+          className={`px-3 py-1.5 rounded-[10px] text-sm transition-all duration-150 border ${
+            isActive("/dashboard", path) ? "bg-surfaceAlt text-fg border-border2 shadow"
+                                         : "text-muted hover:text-fg hover:bg-surfaceAlt border-transparent"}`}
+          title="Tableau de bord complet">Dashboard</Link>
         <StatusDot meta={meta} />
         <LiveBadge />
         <span className="text-[11px] text-muted2 mono px-2 py-1 rounded-md border border-border">⌘K</span>
