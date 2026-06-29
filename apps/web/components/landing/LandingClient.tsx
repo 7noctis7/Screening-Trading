@@ -65,13 +65,12 @@ export default function LandingClient() {
           <div className={s.spotlight} aria-hidden="true" />
           <p className={s.kicker}>Quant Terminal · open-source · paper-first · 0 €</p>
           <h1 className={s.title}>
-            Pas d'alpha à vendre.<br /><em>Du risque, maîtrisé.</em>
+            L'alpha se vend.<br /><em>La survie se prouve.</em>
           </h1>
           <p className={s.sub}>
-            Le seul terminal quant qui publie ses propres limites. Screening multi-actifs,
-            risque institutionnel, IA gardée honnête. DSR ≈ 0 assumé — l'edge prouvé n'est
-            pas un oracle, c'est la <b>discipline</b>. Là où les autres vendent du rêve,
-            on publie nos échecs.
+            Screening multi-actifs, risque de niveau institutionnel, IA tenue en laisse.
+            Aucun oracle promis : on prouve la <b>discipline</b> et on publie ce qui
+            échoue. Le seul terminal quant assez honnête pour afficher ses limites.
           </p>
           <div className={s.cta}>
             <a className={`${s.btn} ${s.btnPrimary}`} href={`${BASE}/accueil/`}
@@ -85,19 +84,18 @@ export default function LandingClient() {
         {/* SECTION — le pipeline de validation (gate à 4 étages) */}
         <section className={`${s.section} ${s.reveal}`} aria-labelledby="ld-method">
           <div className={s.eyebrow}>Méthode</div>
-          <h2 id="ld-method" className={s.h2}>Un signal ne passe que s'il survit à tout.</h2>
+          <h2 id="ld-method" className={s.h2}>On essaie d'abord de le casser.</h2>
           <p className={s.lead}>
-            Pas de backtest flatteur, pas de courbe trop belle pour être vraie. Chaque
-            candidat affronte un gate déterministe avant le moindre ordre : hasard,
-            multiple-testing, surapprentissage, exécution dégradée. Quatre étages. Zéro
-            complaisance.
+            Tout backtest gagnant est présumé chanceux. Avant le moindre ordre, le signal
+            affronte un gate déterministe — hasard, data-mining, surapprentissage,
+            exécution dégradée. Quatre étages. Aucun raccourci.
           </p>
           <div className={s.flow}>
             {[
-              ["01", "Placebo", "L'effet bat-il le hasard ? (p < 0,05)"],
-              ["02", "DSR", "Sharpe déflaté du multiple-testing (López de Prado)"],
-              ["03", "PBO / CSCV", "Pas de surajustement du choix de config"],
-              ["04", "Sabotage", "Survit à coût ×3 + bruit + latence ?"],
+              ["01", "Placebo", "Bat le hasard, ou rien. (p < 0,05)"],
+              ["02", "DSR", "Sharpe déflaté du data-mining (López de Prado)"],
+              ["03", "PBO / CSCV", "Zéro surajustement, prouvé hors-échantillon"],
+              ["04", "Sabotage", "Survit à coût ×3, bruit et latence ?"],
             ].map(([k, t, d]) => (
               <div key={k} className={s.step}>
                 <div className={s.stepK}>{k}</div>
@@ -111,7 +109,7 @@ export default function LandingClient() {
         {/* SECTION — preuves chiffrées (démo) */}
         <section className={`${s.section} ${s.reveal}`} aria-labelledby="ld-proof">
           <div className={s.eyebrow}>Preuves</div>
-          <h2 id="ld-proof" className={s.h2}>Audité trois fois. Rien à cacher.</h2>
+          <h2 id="ld-proof" className={s.h2}>Cinq pistes. Cinq échecs. Tous publiés.</h2>
           <div className={`${s.grid} ${s.grid4}`}>
             {[
               ["83/100", "score audit (3 rounds)", true],
@@ -136,7 +134,7 @@ export default function LandingClient() {
         {/* SECTION — démo produit */}
         <section className={`${s.section} ${s.reveal}`} aria-labelledby="ld-product">
           <div className={s.eyebrow}>Le terminal</div>
-          <h2 id="ld-product" className={s.h2}>Screening → Risque → Paper.</h2>
+          <h2 id="ld-product" className={s.h2}>Du screening au paper, rien sous le tapis.</h2>
           <div className={`${s.grid} ${s.grid3}`}>
             {[
               ["Screening", "Actions, ETF, crypto. Filtres + z-score, univers investable, "
@@ -155,7 +153,7 @@ export default function LandingClient() {
         </section>
 
         <footer className={s.footer}>
-          <h2 className={s.h2}>Le processus est le produit.</h2>
+          <h2 className={s.h2}>La discipline est le seul alpha.</h2>
           <div className={s.cta} style={{ justifyContent: "center" }}>
             <a className={`${s.btn} ${s.btnPrimary}`} href={`${BASE}/accueil/`}>Entrer dans le terminal →</a>
           </div>
