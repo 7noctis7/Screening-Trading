@@ -23,7 +23,7 @@ const LINKS: [string, string][] = [
   ["/ml", "Signaux ML"],
   ["/sentiment", "Sentiment & news"],
   ["/conviction", "Conviction"],
-  ["/", "Dashboard"],
+  ["/dashboard", "Dashboard"],
   ["/portfolio", "Portefeuille & Analyse"],
   ["/risk", "Risque"],
   ["/positions", "Positions"],
@@ -35,7 +35,7 @@ const LINKS: [string, string][] = [
 const GROUPS: [string, string[]][] = [
   ["Marché", ["/data", "/universe", "/screener", "/macro", "/crypto", "/themes", "/events"]],
   ["Analyse", ["/fundamentals", "/notes", "/investors", "/ml", "/sentiment", "/conviction"]],
-  ["Portefeuille", ["/", "/portfolio", "/risk", "/positions", "/trades", "/live"]],
+  ["Portefeuille", ["/dashboard", "/portfolio", "/risk", "/positions", "/trades", "/live"]],
 ];
 const LABEL: Record<string, string> = Object.fromEntries(LINKS);
 
