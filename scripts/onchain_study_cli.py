@@ -21,43 +21,51 @@ if str(ROOT) not in sys.path:
 
 def main() -> int:
     from packages.data.crypto_onchain import COINS
-    from packages.research.onchain_study import run_study
-    ap = argparse.ArgumentParser(description="Étude alt-data on-chain (TVL/MCap)")
+    from packages.research.onchain_study import FACTORS, run_study
+    ap = argparse.ArgumentParser(description="Étude alt-data on-chain (multi-facteurs)")
     ap.add_argument("--symbols", default=",".join(COINS))
+    ap.add_argument("--factors", default=",".join(FACTORS),
+                    help="facteurs à tester (tvl_mcap, fees_mcap)")
     ap.add_argument("--post", type=int, default=5)
     ap.add_argument("--threshold", type=float, default=1.5)
     a = ap.parse_args()
     syms = [s.strip().upper() for s in a.symbols.split(",") if s.strip()]
+    factors = [f.strip() for f in a.factors.split(",") if f.strip()]
     print(f"Chargement historique on-chain (CoinGecko + DefiLlama) pour {len(syms)}…")
-    res = run_study(syms, post=a.post, threshold=a.threshold)
-    if not res.get("available"):
-        print(f"❌ trop peu d'actifs avec TVL+historique ({res.get('n_assets', 0)}). "
-              "Normal : peu de cryptos ont une série TVL exploitable.")
-        return 1
-    sig = res["significant"]
-    verdict = "✅ SIGNIFICATIF (cross-actif)" if sig else "❌ NON significatif"
-    print(f"\nOn-chain study · TVL/MCap · {res['n_assets']} actifs · "
-          f"{res['n_events']} events · post={a.post}j")
-    print(f"  CAR moyen poolé : {res['mean_car']*100:+.2f}%")
-    print(f"  t-stat          : {res['t_stat']}")
-    print(f"  p-value placebo : {res['placebo_p_value']}")
-    print(f"  → {verdict}")
-    print("  GO backtest net + DSR/PBO." if sig
-          else "  STOP : pas d'edge prouvé (attendu vu l'échantillon mince).")
-    _log(a, res)
-    return 0
+    any_ok = False
+    for factor in factors:
+        res = run_study(syms, factor=factor, post=a.post, threshold=a.threshold)
+        if not res.get("available"):
+            print(f"\n[{factor}] ❌ trop peu d'actifs ({res.get('n_assets', 0)}) "
+                  "avec série exploitable.")
+            _log(factor, res)
+            continue
+        any_ok = True
+        sig = res["significant"]
+        verdict = "✅ SIGNIFICATIF (cross-actif)" if sig else "❌ NON significatif"
+        print(f"\n[{factor}] {res['n_assets']} actifs · {res['n_events']} events · "
+              f"post={a.post}j")
+        print(f"  CAR moyen poolé : {res['mean_car']*100:+.2f}%")
+        print(f"  t-stat          : {res['t_stat']}")
+        print(f"  p-value placebo : {res['placebo_p_value']}")
+        print(f"  → {verdict}"
+              + ("  GO backtest net + DSR/PBO." if sig else "  STOP (attendu)."))
+        _log(factor, res)
+    return 0 if any_ok else 1
 
 
-def _log(a, res: dict) -> None:
+def _log(factor: str, res: dict) -> None:
     try:
         from packages.research.ledger import append_record
+        avail = res.get("available")
         append_record({
             "date": datetime.now(UTC).date().isoformat(),
-            "facteur": "onchain_tvl_mcap", "classe": ["crypto"], "horizon": "swing",
-            "dsr": None, "pbo": res["placebo_p_value"],
-            "statut": "en_test" if res["significant"] else "rejete",
-            "these": f"TVL/MCap cross-actif ({res['n_assets']} cryptos) : "
-                     f"CAR {res['mean_car']*100:+.2f}%, p={res['placebo_p_value']}.",
+            "facteur": f"onchain_{factor}", "classe": ["crypto"], "horizon": "swing",
+            "dsr": None, "pbo": res.get("placebo_p_value"),
+            "statut": ("en_test" if avail and res["significant"] else "rejete"),
+            "these": (f"{factor} cross-actif ({res.get('n_assets', 0)} cryptos) : "
+                      f"CAR {res.get('mean_car', 0)*100:+.2f}%, "
+                      f"p={res.get('placebo_p_value')}."),
         })
     except Exception:  # noqa: BLE001
         pass
