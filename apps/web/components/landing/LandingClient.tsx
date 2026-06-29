@@ -63,14 +63,15 @@ export default function LandingClient() {
         {/* HERO — hybride : manifeste + accroche produit */}
         <header ref={heroRef} className={s.hero}>
           <div className={s.spotlight} aria-hidden="true" />
-          <p className={s.kicker}>Quant Terminal · open-source · paper-first · 0 €</p>
+          <p className={s.kicker}>Infrastructure quant · open-source · paper-first · 0 €</p>
           <h1 className={s.title}>
             L'alpha se vend.<br /><em>La survie se prouve.</em>
           </h1>
           <p className={s.sub}>
-            Screening multi-actifs, risque de niveau institutionnel, IA tenue en laisse.
-            Aucun oracle promis : on prouve la <b>discipline</b> et on publie ce qui
-            échoue. Le seul terminal quant assez honnête pour afficher ses limites.
+            Infrastructure de screening multi-actifs et de gestion du risque. Chaque
+            signal franchit quatre portes — <b>Placebo · DSR · PBO · Sabotage</b> — ou
+            il est rejeté et publié comme échec. Pas d'oracle. Pas de promesse. De la
+            preuve, ou rien.
           </p>
           <div className={s.cta}>
             <a className={`${s.btn} ${s.btnPrimary}`} href={`${BASE}/accueil/`}
