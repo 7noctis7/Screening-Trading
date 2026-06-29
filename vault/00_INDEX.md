@@ -63,12 +63,16 @@ Plugins cœur à activer (Settings → Core plugins) : Graph view · Backlinks �
 reconstruit chaque jour ouvré par GitHub Actions. Mac éteint, 0 €. Positions réelles **local-only**.
 
 ## 📍 État actuel
-**2026-06-29** — **PRÊT POUR CAPITAL RÉEL LIMITÉ** (inchangé). Session : Loop Engineering (gate
-Checker unique + paper-watch), test de **sabotage** (gate à 4 étages), `vault-lint`, **landing 3D**
-cinématique + polish dashboard, et **dashboard crypto on-chain** (CoinGecko + DefiLlama + Growthepie +
-rapport dynamique style Hasheur). On-chain testé au gate → **5e négatif** (`tvl_mcap` ❌, `fees` non
-testable) → **rien câblé au ML** (contexte, pas alpha). Commandes : `make risk-check / sensitivity /
-paper-watch / vault-lint / crypto-onchain / onchain-study`. **RDV 2026-08-06 : revue courbe paper.**
+**2026-06-29** — **PRÊT POUR CAPITAL RÉEL LIMITÉ** (inchangé). **Cockpit crypto `/crypto` complet** :
+cockpit marché (robustesse/cache, peg, halving, altseason, **dérivés funding multi-CEX**, **Score
+d'Accumulation 0-100**), **mini-fiche** + items cliquables + glossaire, **trio LIVE** (jauge de
+sentiment + graphe Coinbase WebSocket + analyse « Œil de Hasheur ») en **client-direct** (cf.
+**ADR-0025**), **RAG vault cité** (`vault-ask`) + **text-to-filter** (`crypto-screen`), **partage/
+embed** (M5) + landing froide (M6). Gate : **7/7 négatifs** (F&G contrarian + cassure de canal
+ajoutés ; le breakout a passé le placebo mais DSR 0 / PBO 0,88 / sabotage → **rejeté**, cas d'école).
+Rebalancement **paper auto** quotidien (`make live-cron-install`). Commandes : `make crypto-cockpit /
+crypto-brief / crypto-screen / vault-ask / regime-study / breakout-study`. **RDV 2026-08-06 : revue
+courbe paper.**
 
 <details><summary>Historique (2026-06-25)</summary>
 

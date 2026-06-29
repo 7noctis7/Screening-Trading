@@ -2,6 +2,25 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0025 — Données crypto LIVE : client-direct (pas de proxy serveur) + growth minimal
+**Date :** 2026-06-29
+**Contexte.** Demande d'un module crypto temps réel (graphe, jauge, analyse) et de boucles de
+croissance (profils audités, parrainage débloquant de la compute). Or le site est **100 % statique**
+(GitHub Pages) : **aucun backend**, donc **aucun proxy serveur** possible (`?url=…`), aucun compte,
+aucune base de données serveur.
+**Décision.**
+1. **Live = client-direct** : WebSocket **navigateur** (Coinbase `ws-feed`, IP client → pas de
+   géoblocage serveur) + REST **uniquement si CORS** (CoinGecko, alternative.me, DefiLlama, Bybit,
+   OKX). Si une source bloque le CORS → **`n/d`**, jamais de chiffre inventé. Lib graphe en **UMD CDN
+   lazy** (0 dépendance npm, v4 pinné). Refresh lent 60-90s, auto-refresh **visible-only**.
+2. **Croissance : seule la boucle partage/embed** (URL encodée + X/Farcaster + iframe `?embed=1`
+   read-only) est retenue. **Refusés** : profils de perf « audités/infalsifiables » et parrainage
+   débloquant Dune/Glassnode/compute → exigent un backend (absent) **et** dégradent la marque
+   institutionnelle (mécanique hype, contraire à « la discipline est le seul alpha »).
+**Conséquences.** 0 €/statique préservé ; live réel mais best-effort (dégradation honnête) ; pas de
+Kafka/ClickHouse/matching-engine (on *consomme* les plateformes, on n'est pas un exchange). Si un jour
+un proxy est nécessaire → Cloudflare Worker gratuit (hors GitHub Pages), à rediscuter.
+
 ## ADR-0024 — Arrêt de la chasse à l'alpha directionnel → durcissement du risque
 **Date :** 2026-06-25
 **Statut :** accepté
