@@ -349,6 +349,53 @@ function Halving({ ck }: { ck: any }) {
   );
 }
 
+// ---- Dérivés : funding multi-CEX normalisé + sentiment levier ----
+function Derivatives({ ck }: { ck: any }) {
+  const d = ck.derivatives;
+  if (!d?.available || !d.rows?.length) return null;
+  const se = d.sentiment;
+  const fpct = (x: any) => (typeof x === "number" ? `${(x * 100).toFixed(4)}%` : "n/d");
+  const apct = (x: any) => (typeof x === "number" ? `${(x * 100).toFixed(1)}%` : "n/d");
+  return (
+    <Card title="Dérivés & levier — funding multi-CEX" source="Bybit · OKX · Binance (perp)"
+      hint="Le funding des perpétuels : positif = les longs paient les shorts (longs surchauffés, biais contrarian baissier) ; négatif = shorts surchauffés. Normalisé sur 3 exchanges.">
+      {se?.available && (
+        <div className="mb-3 flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-semibold px-2.5 py-1 rounded-full"
+            style={{ color: tone(-se.avg), background: "var(--surface2)" }}>{se.label}</span>
+          <span className="text-muted2 text-xs">funding moyen {fpct(se.avg)} /8h · annualisé {apct(se.annualized)}</span>
+        </div>
+      )}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm mono">
+          <thead className="text-muted2 text-[11px]">
+            <tr>
+              <th className="text-left font-normal">actif</th>
+              <th className="text-right font-normal">Bybit</th>
+              <th className="text-right font-normal">OKX</th>
+              <th className="text-right font-normal">Binance</th>
+              <th className="text-right font-normal">moyen /8h</th>
+              <th className="text-right font-normal">annualisé</th>
+            </tr>
+          </thead>
+          <tbody>
+            {d.rows.map((r: any) => (
+              <tr key={r.symbol} className="border-t border-border">
+                <td className="py-1.5 font-sans font-medium">{r.symbol}</td>
+                <td className="text-right text-muted2">{fpct(r.venues?.bybit)}</td>
+                <td className="text-right text-muted2">{fpct(r.venues?.okx)}</td>
+                <td className="text-right text-muted2">{fpct(r.venues?.binance)}</td>
+                <td className="text-right" style={{ color: tone(-r.mean) }}>{fpct(r.mean)}</td>
+                <td className="text-right" style={{ color: tone(-r.annualized) }}>{apct(r.annualized)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
 export default function Crypto() {
   const { data, isLoading } = useCryptoCockpit();
   if (isLoading) return <PageSkeleton />;
@@ -380,6 +427,7 @@ export default function Crypto() {
           <Overview ck={data} />
           <Pulse ck={data} />
           <Altseason ck={data} />
+          <Derivatives ck={data} />
           <Halving ck={data} />
           <Narratives ck={data} />
           <Movers ck={data} />

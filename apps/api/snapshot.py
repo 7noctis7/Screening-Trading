@@ -1521,6 +1521,11 @@ def _crypto_cockpit_section() -> dict:
         ok = (ck.get("global") or {}).get("total_mcap") is not None
         if not ok and not ck.get("gainers"):
             return {"available": False, "reason": "réseau"}
+        try:                                   # dérivés (funding multi-CEX) — best-effort
+            from packages.data.deriv_normalizer import derivatives
+            ck["derivatives"] = derivatives()
+        except Exception:  # noqa: BLE001
+            ck["derivatives"] = {"available": False}
         return {"available": True, **ck}
     except Exception as e:  # noqa: BLE001
         return {"available": False, "reason": str(e)}
