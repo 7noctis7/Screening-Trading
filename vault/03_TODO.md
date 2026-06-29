@@ -12,6 +12,26 @@
   - critère GO : paper cohérent avec le backtest (pas de dérive Sharpe>1pt, MaxDD non dépassé).
   - si concordant → engager un capital réel **limité** + sizing défensif ; sinon → re-calibrer.
 
+## 🎨 CE SOIR SUR LE MAC — tester la NOUVELLE UI (landing 3D + polish, 2026-06-25)
+> Livré : landing cinématique (R3F/Three.js + Lenis, route isolée `/landing`) + polish dashboard (CSS).
+- [ ] **Récupérer + installer les nouvelles deps front** (three, fiber, lenis) :
+  ```bash
+  qt && git pull origin main
+  cd apps/web && rm -rf .next && npm install && npm run dev
+  ```
+- [ ] **Voir la landing cinématique** : http://localhost:3000/landing
+  → bouge la souris dans le hero (✦ spotlight + particules 3D réactives) ; scroll (inertiel Lenis,
+  dolly caméra). Vérifie le 60fps + le rendu mobile (DevTools responsive).
+- [ ] **Voir le dashboard poli** : http://localhost:3000/ → survole les cartes (arête « verre » + lift).
+- [ ] **Vérifier le build statique** (comme la CI Pages) avant de te fier au déploiement :
+  ```bash
+  cd apps/web && STATIC_EXPORT=1 npm run build   # doit finir « 23/23 pages », /landing OK
+  ```
+- [ ] **(option) faire de la landing la page d'entrée publique** : si tu veux que `7noctis7.github.io`
+  ouvre sur la landing plutôt que le dashboard, dis-le-moi → je câble une redirection/rootswap propre.
+- [ ] **Reporter** : fluidité du 3D sur ton Mac (et mobile si testé) → si ça rame, je baisse le
+  nombre de particules / ajoute un toggle « perf ».
+
 ## 🌙 CE SOIR SUR LE MAC — tester le SABOTAGE + paper-watch (2026-06-25)
 > Nouvelles fonctionnalités mergées : gate de sabotage adverse (#268) + watchdog paper (#267).
 > But : voir le 4e étage du gate (placebo → DSR/PBO → **sabotage**) tourner sur tes données réelles.
