@@ -2,9 +2,13 @@
 // Cockpit crypto — vue marché agrégée, gratuite (sans clé). Chaque section est pédagogique :
 // une donnée, sa source, son explication. Aucun chiffre inventé : "n/d" si la source tombe.
 import { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { useCryptoCockpit } from "@/lib/api";
 import { PageSkeleton, EmptyState } from "@/components/ui";
 import { InfoTip } from "@/components/InfoTip";
+
+// Graphe live (WebSocket navigateur) — client-only, jamais SSR (compatible export statique).
+const LiveChart = dynamic(() => import("@/components/crypto/LiveChart"), { ssr: false });
 
 // Liens vers les fiches OFFICIELLES (infos complètes, fiables, gratuites) — nouvel onglet.
 const cgCoin = (id?: string) => (id ? `https://www.coingecko.com/en/coins/${id}` : null);
@@ -504,6 +508,7 @@ export default function Crypto() {
         />
       ) : (
         <>
+          <LiveChart />
           <Overview ck={data} />
           <Accumulation ck={data} />
           <Pulse ck={data} />
