@@ -100,6 +100,7 @@ jobs:
           QUANT_FUND: "yf"
           QUANT_NEWS: "0"
           QUANT_PREDMKT: "1"        # marchés de prédiction (Kalshi/Polymarket, sans clé) en ligne
+          QUANT_ONCHAIN: "1"        # fondamentaux on-chain crypto (CoinGecko/DefiLlama, sans clé)
         run: python scripts/build_static_site.py
 
       - name: Gate publication (andon — échec ROUGE si site vide ou périmé)
