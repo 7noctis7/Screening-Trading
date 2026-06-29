@@ -4,6 +4,42 @@
 import { useEffect, useRef, useState } from "react";
 import { useCryptoCockpit } from "@/lib/api";
 import { PageSkeleton, EmptyState } from "@/components/ui";
+import { InfoTip } from "@/components/InfoTip";
+
+// Liens vers les fiches OFFICIELLES (infos complètes, fiables, gratuites) — nouvel onglet.
+const cgCoin = (id?: string) => (id ? `https://www.coingecko.com/en/coins/${id}` : null);
+const cgCat = (id?: string) => (id ? `https://www.coingecko.com/en/categories/${id}` : null);
+const EXT = { target: "_blank", rel: "noopener noreferrer" } as const;
+
+// Glossaire pédagogique (définitions factuelles, pas de chiffre inventé).
+const GLOSSARY: Record<string, string> = {
+  "Capitalisation totale":
+    "Valeur de marché cumulée de toutes les cryptos (prix × offre en circulation). Le « PIB » du marché crypto.",
+  "Variation cap 24 h":
+    "Évolution de cette capitalisation sur 24 h. Positif = le marché global monte.",
+  "Dominance BTC":
+    "Part de Bitcoin dans la capitalisation totale. En hausse = repli vers la valeur refuge ; en baisse = appétit pour les altcoins (« altseason »).",
+  "Dominance ETH":
+    "Part d'Ethereum dans la capitalisation totale. Référence de l'écosystème des smart contracts.",
+  "Fear & Greed":
+    "Indice 0-100 d'humeur du marché (alternative.me). 0 = peur extrême (souvent un creux), 100 = avidité (souvent un sommet). Indicateur contrarian.",
+  "TVL DeFi totale":
+    "Total Value Locked : capital déposé dans les protocoles de finance décentralisée. Mesure l'usage réel de la DeFi.",
+  breadth:
+    "Ampleur du marché : combien d'actifs montent vs descendent. Une hausse « large » (beaucoup d'actifs verts) est plus saine qu'une hausse portée par quelques-uns.",
+  peg:
+    "Ancrage d'un stablecoin à sa valeur cible (en général 1,00 $). Un écart durable (≠ 0 %) signale un stress de liquidité ou de confiance.",
+};
+
+function Label({ text }: { text: string }) {
+  const def = GLOSSARY[text];
+  return (
+    <span className="inline-flex items-center gap-1">
+      {text}
+      {def && <InfoTip label={text}>{def}</InfoTip>}
+    </span>
+  );
+}
 
 const SENTI: Record<string, { c: string; bg: string; label: string }> = {
   BULLISH: { c: "var(--pos)", bg: "color-mix(in srgb, var(--pos) 15%, transparent)", label: "🟢 BULLISH" },
@@ -104,7 +140,7 @@ function Pulse({ ck }: { ck: any }) {
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         {stats.map(([l, v, c]) => (
           <div key={l}>
-            <div className="text-muted text-xs">{l}</div>
+            <div className="text-muted text-xs"><Label text={l} /></div>
             <div className="text-lg mono" style={{ color: c }}>{v}</div>
           </div>
         ))}
@@ -121,12 +157,19 @@ function Narratives({ ck }: { ck: any }) {
     <Card title="Narratifs du moment" source="CoinGecko · catégories"
       hint="Quelle thématique surperforme aujourd'hui (IA, RWA, L2, memes…). Rotation sectorielle = où la liquidité se déplace.">
       <div className="flex flex-wrap gap-2">
-        {cats.map((c) => (
-          <span key={c.name} className="text-xs px-2.5 py-1.5 rounded-lg border border-border"
-            style={{ background: "var(--surface)" }}>
-            {c.name} <b style={{ color: tone(c.chg24h) }}>{pct(c.chg24h)}</b>
-          </span>
-        ))}
+        {cats.map((c) => {
+          const href = cgCat(c.id);
+          const body = <>{c.name} <b style={{ color: tone(c.chg24h) }}>{pct(c.chg24h)}</b></>;
+          return href ? (
+            <a key={c.name} href={href} {...EXT}
+              title={`${c.name} — voir les actifs de cette catégorie sur CoinGecko`}
+              className="text-xs px-2.5 py-1.5 rounded-lg border border-border hover:border-border2 hover:text-accent transition-colors"
+              style={{ background: "var(--surface)" }}>{body}</a>
+          ) : (
+            <span key={c.name} className="text-xs px-2.5 py-1.5 rounded-lg border border-border"
+              style={{ background: "var(--surface)" }}>{body}</span>
+          );
+        })}
       </div>
     </Card>
   );
@@ -140,12 +183,24 @@ function Trending({ ck }: { ck: any }) {
     <Card title="Tendances (attention retail)" source="CoinGecko · search/trending"
       hint="Les actifs les plus recherchés. Signal d'attention, souvent tardif — à lire comme un thermomètre du retail, pas un signal d'entrée.">
       <div className="flex flex-wrap gap-2">
-        {tr.map((t, i) => (
-          <span key={t.sym + i} className="text-xs px-2.5 py-1.5 rounded-lg border border-border"
-            style={{ background: "var(--surface)" }}>
-            <span className="text-muted2">#{t.rank ?? "—"}</span> <b>{t.sym}</b> <span className="text-muted">{t.name}</span>
-          </span>
-        ))}
+        {tr.map((t, i) => {
+          const href = cgCoin(t.id);
+          const body = (
+            <>
+              <span className="text-muted2">#{t.rank ?? "—"}</span> <b>{t.sym}</b>{" "}
+              <span className="text-muted">{t.name}</span>
+            </>
+          );
+          return href ? (
+            <a key={t.sym + i} href={href} {...EXT}
+              title={`${t.name} — ouvrir la fiche complète sur CoinGecko`}
+              className="text-xs px-2.5 py-1.5 rounded-lg border border-border hover:border-border2 hover:text-accent transition-colors"
+              style={{ background: "var(--surface)" }}>{body}</a>
+          ) : (
+            <span key={t.sym + i} className="text-xs px-2.5 py-1.5 rounded-lg border border-border"
+              style={{ background: "var(--surface)" }}>{body}</span>
+          );
+        })}
       </div>
     </Card>
   );
@@ -160,13 +215,27 @@ function Movers({ ck }: { ck: any }) {
     <div>
       <div className="text-muted text-[11px] uppercase tracking-wide mb-1.5">{title}</div>
       <div className="space-y-1">
-        {rows.map((m) => (
-          <div key={m.id} className="flex items-center justify-between text-sm border-t border-border py-1">
-            <span className="font-medium">{m.sym}</span>
-            <span className="text-muted2 text-xs mono">{usd(m.price)}</span>
-            <span className="mono" style={{ color: up ? "var(--pos)" : "#f43f5e" }}>{pct(m.chg24h)}</span>
-          </div>
-        ))}
+        {rows.map((m) => {
+          const href = cgCoin(m.id);
+          const inner = (
+            <>
+              <span className="font-medium group-hover:text-accent transition-colors">{m.sym}</span>
+              <span className="text-muted2 text-xs mono">{usd(m.price)}</span>
+              <span className="mono" style={{ color: up ? "var(--pos)" : "#f43f5e" }}>{pct(m.chg24h)}</span>
+            </>
+          );
+          return href ? (
+            <a key={m.id} href={href} {...EXT}
+              title={`${m.name ?? m.sym} — ouvrir la fiche complète sur CoinGecko`}
+              className="group flex items-center justify-between text-sm border-t border-border py-1 hover:bg-surfaceAlt rounded px-1 -mx-1 transition-colors">
+              {inner}
+            </a>
+          ) : (
+            <div key={m.sym} className="flex items-center justify-between text-sm border-t border-border py-1 px-1 -mx-1">
+              {inner}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -195,7 +264,9 @@ function Stablecoins({ ck }: { ck: any }) {
               <th className="text-left font-normal">stablecoin</th>
               <th className="text-right font-normal">capitalisation</th>
               <th className="text-right font-normal">prix</th>
-              <th className="text-right font-normal">écart au peg</th>
+              <th className="text-right font-normal">
+                <span className="inline-flex items-center gap-1">écart au <InfoTip label="peg">{GLOSSARY.peg}</InfoTip></span>
+              </th>
             </tr>
           </thead>
           <tbody>
