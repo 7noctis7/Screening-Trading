@@ -6,9 +6,11 @@ import { useEffect, useRef, useState } from "react";
 
 const PAIRS = ["BTC-USD", "ETH-USD", "SOL-USD"] as const;
 type Pair = (typeof PAIRS)[number];
+// v4 pinné : API stable (addCandlestickSeries). Fallback v5 géré plus bas.
+const V = "4.2.3";
 const CDNS = [
-  "https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js",
-  "https://cdn.jsdelivr.net/npm/lightweight-charts/dist/lightweight-charts.standalone.production.js",
+  `https://unpkg.com/lightweight-charts@${V}/dist/lightweight-charts.standalone.production.js`,
+  `https://cdn.jsdelivr.net/npm/lightweight-charts@${V}/dist/lightweight-charts.standalone.production.js`,
 ];
 
 // Charge la lib TradingView en UMD (lazy, multi-CDN). Résout window.LightweightCharts.
@@ -58,10 +60,13 @@ export default function LiveChart() {
         timeScale: { borderColor: "rgba(255,255,255,.08)", timeVisible: true },
         height: 360,
       });
-      series = chart.addCandlestickSeries({
+      const opts = {
         upColor: "#22c55e", downColor: "#f43f5e", borderVisible: false,
         wickUpColor: "#22c55e", wickDownColor: "#f43f5e",
-      });
+      };
+      series = chart.addCandlestickSeries        // v4
+        ? chart.addCandlestickSeries(opts)
+        : chart.addSeries(LWC.CandlestickSeries, opts);   // v5 fallback
       ro = new ResizeObserver(() => chart.applyOptions({ width: el.clientWidth }));
       ro.observe(el);
       await backfill();
