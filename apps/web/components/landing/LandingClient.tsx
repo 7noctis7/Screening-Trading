@@ -5,6 +5,8 @@ import s from "@/app/landing/landing.module.css";
 
 // 3D chargé côté client uniquement (jamais SSR → compatible export statique).
 const Scene = dynamic(() => import("./Scene"), { ssr: false });
+// Ticker LIVE façon Bloomberg (WebSocket navigateur) — client-only.
+const LandingTicker = dynamic(() => import("./LandingTicker"), { ssr: false });
 
 const BASE = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
@@ -60,6 +62,9 @@ export default function LandingClient() {
       <div className={s.canvas} aria-hidden="true"><Scene /></div>
 
       <main className={s.content}>
+        {/* Bandeau terminal LIVE (Bloomberg) */}
+        <LandingTicker />
+
         {/* HERO — hybride : manifeste + accroche produit */}
         <header ref={heroRef} className={s.hero}>
           <div className={s.spotlight} aria-hidden="true" />
@@ -81,6 +86,25 @@ export default function LandingClient() {
           </div>
           <div className={s.scrollCue} aria-hidden="true">scroll</div>
         </header>
+
+        {/* BANDEAU PALANTIR — déclaratif, austère, infrastructure */}
+        <section className={s.reveal} style={{
+          padding: "13vh 6vw", textAlign: "center",
+          borderTop: "1px solid rgba(94,234,212,.10)",
+          borderBottom: "1px solid rgba(94,234,212,.10)",
+        }}>
+          <p style={{
+            fontSize: "clamp(1.5rem, 3.4vw, 2.6rem)", fontWeight: 600,
+            letterSpacing: "-0.025em", lineHeight: 1.18, maxWidth: "24ch",
+            margin: "0 auto", color: "#eaf2f4",
+          }}>
+            Nous ne vendons pas de signaux.<br />
+            <span style={{
+              background: "linear-gradient(120deg,#5eead4,#22d3ee)",
+              WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent",
+            }}>Nous construisons l'infrastructure qui les réfute.</span>
+          </p>
+        </section>
 
         {/* SECTION — le pipeline de validation (gate à 4 étages) */}
         <section className={`${s.section} ${s.reveal}`} aria-labelledby="ld-method">
