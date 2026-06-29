@@ -58,11 +58,14 @@ def _log(factor: str, res: dict) -> None:
     try:
         from packages.research.ledger import append_record
         avail = res.get("available")
+        # honnêteté : "non_teste" si données insuffisantes ≠ "rejete" (pas d'edge).
+        statut = ("non_teste" if not avail
+                  else "en_test" if res["significant"] else "rejete")
         append_record({
             "date": datetime.now(UTC).date().isoformat(),
             "facteur": f"onchain_{factor}", "classe": ["crypto"], "horizon": "swing",
             "dsr": None, "pbo": res.get("placebo_p_value"),
-            "statut": ("en_test" if avail and res["significant"] else "rejete"),
+            "statut": statut,
             "these": (f"{factor} cross-actif ({res.get('n_assets', 0)} cryptos) : "
                       f"CAR {res.get('mean_car', 0)*100:+.2f}%, "
                       f"p={res.get('placebo_p_value')}."),

@@ -98,7 +98,8 @@ def _tvl_hist(sym: str) -> dict[str, float]:
 def _fees_hist(sym: str) -> dict[str, float]:
     meta = COINS.get(sym, {})
     if "chain" in meta:
-        u = _LLAMA_FEES_CHAIN.format(chain=meta["chain"])
+        # l'endpoint fees attend un slug MINUSCULE (≠ le nom capitalisé du TVL).
+        u = _LLAMA_FEES_CHAIN.format(chain=meta["chain"].lower())
         return parse_llama_fees(_get_json(u))
     if "proto" in meta:
         u = _LLAMA_FEES_PROTO.format(slug=meta["proto"])
