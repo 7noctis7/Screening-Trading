@@ -7,6 +7,8 @@ import { useCryptoCockpit } from "@/lib/api";
 import { PageSkeleton, EmptyState } from "@/components/ui";
 import { InfoTip } from "@/components/InfoTip";
 
+// Jauge de sentiment live (au-dessus du graphe) — client-only.
+const LiveGauge = dynamic(() => import("@/components/crypto/LiveGauge"), { ssr: false });
 // Graphe live (WebSocket navigateur) — client-only, jamais SSR (compatible export statique).
 const LiveChart = dynamic(() => import("@/components/crypto/LiveChart"), { ssr: false });
 // Bloc « Analyse experte · Œil de Hasheur » LIVE (client-direct, auto-refresh visible-only).
@@ -510,6 +512,7 @@ export default function Crypto() {
         />
       ) : (
         <>
+          <LiveGauge />
           <LiveChart />
           <ExpertLive />
           <Overview ck={data} />
