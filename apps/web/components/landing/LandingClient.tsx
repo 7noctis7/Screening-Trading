@@ -76,8 +76,8 @@ export default function LandingClient() {
           <div className={s.cta}>
             <a className={`${s.btn} ${s.btnPrimary}`} href={`${BASE}/accueil/`}
               aria-label="Ouvrir le terminal — page Accueil">Ouvrir le terminal →</a>
-            <a className={s.btn} href={`${BASE}/dashboard/`}
-              aria-label="Voir la démo — Dashboard complet">Démo</a>
+            <a className={s.btn} href={`${BASE}/accueil/`}
+              aria-label="Voir la démo — page Accueil">Voir la démo</a>
           </div>
           <div className={s.scrollCue} aria-hidden="true">scroll</div>
         </header>
