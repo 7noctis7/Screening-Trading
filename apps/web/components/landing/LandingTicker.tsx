@@ -16,6 +16,7 @@ export default function LandingTicker() {
   const buf = useRef<Record<string, Row>>({});       // ticks crypto (mutable)
   const [crypto, setCrypto] = useState<Record<string, Row>>({});
   const [reduce, setReduce] = useState(false);
+  const [paused, setPaused] = useState(false);       // pause au survol → cliquable
 
   useEffect(() => {
     setReduce(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
@@ -46,6 +47,9 @@ export default function LandingTicker() {
       try { ws?.close(); } catch { /* noop */ } };
   }, []);
 
+  // Clic → fiche société/crypto sur TradingView (nouvel onglet).
+  const href = (sym: string, live: boolean) =>
+    `https://www.tradingview.com/symbols/${live ? sym + "USD" : sym.replace("-", ".")}/`;
   const cell = (sym: string, r: Row | null | undefined, live: boolean) => {
     // Vert si en gain sur la journée, rouge si en baisse (gris si donnée absente).
     const col = !r || r.chg == null ? "#9fb4bd" : r.chg >= 0 ? "#22c55e" : "#f43f5e";
@@ -54,10 +58,12 @@ export default function LandingTicker() {
       { maximumFractionDigits: r.price >= 100 ? 2 : 4 }) : "…";
     const pct = r && r.chg != null ? ` ${arr}${Math.abs(r.chg).toFixed(2)}%` : "";
     return (
-      <span key={(live ? "c-" : "s-") + sym}
-        style={{ marginRight: "2.2rem", color: col, fontVariantNumeric: "tabular-nums" }}>
+      <a key={(live ? "c-" : "s-") + sym} href={href(sym, live)} target="_blank"
+        rel="noopener noreferrer" title={`${sym} — plus d'informations`}
+        style={{ marginRight: "2.2rem", color: col, textDecoration: "none",
+          fontVariantNumeric: "tabular-nums" }}>
         <b style={{ letterSpacing: ".04em" }}>{sym}</b> {px}{pct}
-      </span>
+      </a>
     );
   };
 
@@ -73,16 +79,18 @@ export default function LandingTicker() {
   const dur = "75s";
 
   return (
-    <div aria-hidden="true" style={{
-      borderBottom: "1px solid rgba(94,234,212,.14)", background: "rgba(5,8,11,.85)",
-      overflow: "hidden", whiteSpace: "nowrap", fontFamily: "ui-monospace, monospace",
-      fontSize: ".74rem", padding: ".45rem 0", position: "relative", zIndex: 2,
-    }}>
+    <div onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}
+      title="Survol = pause · clic sur un actif = plus d'infos" style={{
+        borderBottom: "1px solid rgba(94,234,212,.14)", background: "rgba(5,8,11,.85)",
+        overflow: "hidden", whiteSpace: "nowrap", fontFamily: "ui-monospace, monospace",
+        fontSize: ".74rem", padding: ".45rem 0", position: "relative", zIndex: 2,
+      }}>
       {reduce ? (
         <div style={{ paddingLeft: "1.5rem", overflowX: "auto" }}>{Strip}</div>
       ) : (
         <div style={{ display: "inline-block", willChange: "transform",
-          animation: `qt-ticker ${dur} linear infinite` }}>
+          animation: `qt-ticker ${dur} linear infinite`,
+          animationPlayState: paused ? "paused" : "running" }}>
           {Strip}{Strip}
         </div>
       )}

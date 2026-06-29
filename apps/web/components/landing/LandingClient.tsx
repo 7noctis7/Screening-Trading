@@ -1,6 +1,6 @@
 "use client";
 import dynamic from "next/dynamic";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import s from "@/app/landing/landing.module.css";
 
 // 3D chargé côté client uniquement (jamais SSR → compatible export statique).
@@ -24,10 +24,48 @@ const CARDS = [
   ["PAPER", "Exécution simulée par défaut. Sans exception.", <VizPaper key="pa" />],
 ] as const;
 
+// Méthodologie détaillée (clic sur un visuel → modale). Froid, factuel, sans hype.
+const DETAILS: Record<string, { title: string; body: string[] }> = {
+  PLACEBO: { title: "01 · Placebo (test de permutation)", body: [
+    "Tout backtest gagnant est présumé chanceux jusqu'à preuve du contraire.",
+    "On rejoue le signal sur des milliers de dates ALÉATOIRES (hypothèse nulle H0). "
+    + "Si l'effet réel n'est pas distinguable du hasard (p ≥ 0,05), il est rejeté.",
+    "Désamorce les t-stats gonflés par les fenêtres d'événements qui se chevauchent."] },
+  DSR: { title: "02 · DSR — Deflated Sharpe Ratio", body: [
+    "Bailey & López de Prado. Le Sharpe est déflaté par le NOMBRE d'essais : chaque "
+    + "configuration testée relève le seuil de Sharpe attendu sous H0.",
+    "Exigence : DSR > 0,5. Punit le data-mining — essayer 100 stratégies en fait "
+    + "ressortir une par pur hasard.",
+    "Notre cassure de canal a passé le placebo (p=0,039) mais échoué ici (DSR 0)."] },
+  PBO: { title: "03 · PBO / CSCV — surajustement", body: [
+    "Probability of Backtest Overfitting (Combinatorially Symmetric Cross-Validation).",
+    "On découpe l'historique en blocs, on choisit la config championne IN-sample, puis "
+    + "on mesure son rang OUT-of-sample sur toutes les combinaisons.",
+    "PBO = fréquence où la championne IS finit sous la médiane OOS. < 0,5 = robuste "
+    + "(la nôtre : 0,88 → rejetée)."] },
+  SABOTAGE: { title: "04 · Sabotage — stress adversarial", body: [
+    "On dégrade VOLONTAIREMENT l'exécution : coûts ×3, bruit injecté, latence.",
+    "L'edge doit SURVIVRE : Sharpe stressé > 0 et rétention ≥ 50 % du Sharpe propre.",
+    "Un alpha brut mangé par les frais est éliminé (rétention −11,7 sur la cassure)."] },
+  SCREENING: { title: "Screening — point-in-time", body: [
+    "Chaque décision n'utilise QUE l'information connue à l'instant t (vintages, pas de "
+    + "révisions futures) → zéro look-ahead, pas de fuite du futur.",
+    "Filtres + z-score cross-sectionnel sur l'univers investable (actions, ETF, crypto)."] },
+  RISQUE: { title: "Risque — piloté, pas subi", body: [
+    "Vol-targeting : la taille s'ajuste à la volatilité prévue (cible de vol constante).",
+    "Kill-switch : coupe l'exposition si le drawdown ou le VIX franchit un seuil.",
+    "Overlay drawdown + concentration corrélation-aware (HRP / risk-budget)."] },
+  PAPER: { title: "Paper — exécution simulée par défaut", body: [
+    "Même interface que le live → parité backtest / paper / live (on échange le broker).",
+    "Aucun ordre réel sans --live --yes ET clés API. Ordres routés en sandbox broker.",
+    "Le risque avant le rendement. Pas un conseil en investissement."] },
+};
+
 const BASE = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
 export default function LandingClient() {
   const heroRef = useRef<HTMLDivElement>(null);
+  const [detail, setDetail] = useState<{ title: string; body: string[] } | null>(null);
 
   // Lenis : scroll inertiel soyeux (sync avec le 3D piloté par window.scrollY).
   useEffect(() => {
@@ -104,11 +142,12 @@ export default function LandingClient() {
           <h2 id="ld-gate" className={s.h2}>Quatre portes. Aucun raccourci.</h2>
           <div className={`${s.grid} ${s.grid4}`}>
             {GATE.map(([k, t, m, viz]) => (
-              <div key={k as string} className={s.cell}>
-                <div className={s.stepK}>{k} · {t}</div>
+              <button key={k as string} className={s.cell} onClick={() => setDetail(DETAILS[t as string])}
+                style={{ cursor: "pointer", textAlign: "left", font: "inherit", color: "inherit", border: 0 }}>
+                <div className={s.stepK}>{k} · {t} <span style={{ opacity: .5 }}>＋</span></div>
                 <div className={s.cellLabel} style={{ margin: ".25rem 0 .6rem" }}>{m}</div>
                 {viz}
-              </div>
+              </button>
             ))}
           </div>
         </section>
@@ -140,11 +179,12 @@ export default function LandingClient() {
           <h2 id="ld-archi" className={s.h2}>Trois modules. Une discipline.</h2>
           <div className={`${s.grid} ${s.grid3}`}>
             {CARDS.map(([t, d, viz]) => (
-              <div key={t as string} className={s.cell}>
-                <div className={s.stepT}>{t}</div>
+              <button key={t as string} className={s.cell} onClick={() => setDetail(DETAILS[t as string])}
+                style={{ cursor: "pointer", textAlign: "left", font: "inherit", color: "inherit", border: 0 }}>
+                <div className={s.stepT}>{t} <span style={{ opacity: .5 }}>＋</span></div>
                 <div className={s.cellLabel} style={{ margin: ".4rem 0 .7rem" }}>{d}</div>
                 {viz}
-              </div>
+              </button>
             ))}
           </div>
         </section>
@@ -160,6 +200,31 @@ export default function LandingClient() {
           </div>
         </footer>
       </main>
+
+      {/* Modale méthodologie (clic sur un visuel) */}
+      {detail && (
+        <div onClick={() => setDetail(null)} role="dialog" aria-modal="true"
+          style={{ position: "fixed", inset: 0, zIndex: 60, display: "grid",
+            placeItems: "center", padding: "1.5rem", background: "rgba(0,0,0,.6)" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            maxWidth: 520, width: "100%", borderRadius: 18, padding: "1.6rem 1.8rem",
+            background: "rgba(10,17,24,.96)", border: "1px solid rgba(94,234,212,.2)",
+            backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
+            boxShadow: "0 30px 80px rgba(0,0,0,.6)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem" }}>
+              <h3 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 600,
+                color: "#eaf2f4", letterSpacing: "-.01em" }}>{detail.title}</h3>
+              <button onClick={() => setDetail(null)} aria-label="Fermer"
+                style={{ background: "none", border: 0, color: "#8aa0a9",
+                  fontSize: "1.4rem", lineHeight: 1, cursor: "pointer" }}>×</button>
+            </div>
+            {detail.body.map((p, i) => (
+              <p key={i} style={{ color: "#aebfc7", fontSize: ".95rem", lineHeight: 1.6,
+                marginTop: ".8rem" }}>{p}</p>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

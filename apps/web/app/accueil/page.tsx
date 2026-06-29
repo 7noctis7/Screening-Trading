@@ -1,7 +1,12 @@
 "use client";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { AICommentary } from "@/components/AICommentary";
 import { PipelineFull } from "@/components/Pipeline";
+import { Reveal } from "@/components/Reveal";
+
+// Fond 3D particules subtil (R3F) — client-only, jamais SSR (compatible export statique).
+const Scene = dynamic(() => import("@/components/landing/Scene"), { ssr: false });
 
 // Page d'accueil : présentation, rôle de chaque fenêtre, et glossaire/méthodologie déroulant.
 
@@ -34,6 +39,8 @@ export default function Accueil() {
   return (
     <main className="max-w-4xl mx-auto p-6 space-y-6">
       <section className="card hero-photo p-8 md:p-10 relative overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none" aria-hidden="true"
+          style={{ opacity: 0.35 }}><Scene /></div>
         <div className="relative z-10">
           <div className="text-[11px] font-semibold tracking-[0.18em] uppercase"
             style={{ color: "var(--accent2)" }}>Hedge-fund grade · open source</div>
@@ -55,25 +62,27 @@ export default function Accueil() {
         </div>
       </section>
 
-      <AICommentary />
+      <Reveal><AICommentary /></Reveal>
 
-      <PipelineFull />
+      <Reveal delay={60}><PipelineFull /></Reveal>
 
       <section>
-        <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Les fenêtres</h2>
+        <Reveal><h2 className="text-sm uppercase tracking-wide text-muted mb-3">Les fenêtres</h2></Reveal>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {WINDOWS.map(([href, name, desc]) => (
-            <Link key={href} href={href} className="card p-4 hover:bg-surfaceAlt transition-colors min-w-0">
-              <div className="font-medium">{name}</div>
-              <div className="text-muted text-sm mt-1 break-words">{desc}</div>
-            </Link>
+          {WINDOWS.map(([href, name, desc], i) => (
+            <Reveal key={href} delay={(i % 4) * 70}>
+              <Link href={href} className="card p-4 hover:bg-surfaceAlt transition-colors min-w-0 block hover:-translate-y-0.5 hover:shadow-lg duration-200">
+                <div className="font-medium">{name}</div>
+                <div className="text-muted text-sm mt-1 break-words">{desc}</div>
+              </Link>
+            </Reveal>
           ))}
         </div>
       </section>
 
       <section>
-        <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Méthodologie & glossaire (clique pour déplier)</h2>
-        <div className="space-y-2">
+        <Reveal><h2 className="text-sm uppercase tracking-wide text-muted mb-3">Méthodologie & glossaire (clique pour déplier)</h2></Reveal>
+        <Reveal delay={60}><div className="space-y-2">
           <G term="Turnover annualisé (ex. 9,5×)">
             <p><b>Définition</b> : volume tradé sur l'année rapporté au capital. <b>9,5×</b> = sur un an, on a acheté/vendu l'équivalent de ~9,5 fois la taille du portefeuille.</p>
             <p><b>Calcul</b> : Σ(|qté×prix d'entrée| + |qté×prix de sortie|) / equity moyenne × (252 / nb de jours).</p>
@@ -112,7 +121,7 @@ export default function Accueil() {
           <G term="Playbook VIX">
             <p>Le VIX mesure la peur du marché. <b>&lt;20</b> calme (exposition pleine) · <b>20-30</b> tendu (réduite) · <b>&gt;30</b> panique (défensif). L'exposition du portefeuille est modulée automatiquement.</p>
           </G>
-        </div>
+        </div></Reveal>
       </section>
 
       <p className="text-muted2 text-xs">⚠️ Données synthétiques ou réelles selon votre configuration (YAHOO.db). Outil éducatif — aucune recommandation personnalisée. Paper trading par défaut.</p>
