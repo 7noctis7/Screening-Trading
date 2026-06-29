@@ -35,7 +35,7 @@ $$\mathbb{E}[r_{t+1}\mid \mathcal{F}_t,\, s] \approx 0 \;\Rightarrow\; \text{on 
 Aucun facteur n'entre en production sans franchir le gate DSR/PBO. La qualité du **processus** est
 le produit ; la survie (antifragilité) est l'objectif ; l'honnêteté est la marque.
 
-## Registre des hypothèses alt-data testées (2026-06) — 4 négatifs propres
+## Registre des hypothèses alt-data testées (2026-06) — 5 négatifs propres
 Pipeline honnête appliqué (event-study → placebo → coûts → DSR → PBO). **Un négatif documenté
 vaut un positif** : il ferme une impasse au lieu de vendre un mirage.
 
@@ -45,6 +45,7 @@ vaut un positif** : il ferme une impasse au lieu de vendre un mirage.
 | PEAD small/mid | event-study ✅ p=0,019 **mais** backtest net | ❌ Sharpe 0,20 · DSR 0 · **PBO 0,76** |
 | Insider Form 4 (large + small) | achats nets, dé-chevauchés, vs SPY | ❌ p≥0,55 (le t=8 brut = autocorrélation) |
 | Funding crypto | fade, z causal, placebo | ❌ p=0,16 (t=-3,4 trompeur : queues épaisses) |
+| On-chain TVL/MCap (crypto) | event-study cross-actif, placebo | ❌ p≈0,18 (4 actifs) ; fees/MCap *non testable* (data) |
 
 **Leçon transverse :** plusieurs fois un **t-stat spectaculaire** (insider t=8, funding t=-3,4) a été
 **désamorcé par le placebo** — fenêtres qui se chevauchent + queues épaisses gonflent le t naïf.

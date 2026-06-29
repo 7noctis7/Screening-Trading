@@ -1,5 +1,32 @@
 # 04 — JOURNAL
 
+## Session 2026-06-29 — Loop Engineering, sabotage, UI cinématique & on-chain crypto (contexte, pas alpha)
+**Fait.** ~15 PR (#266→#280), CI verte → merge → resync, 0 €. Réponses *adaptées* à des prompts
+externes (Loop Engineering, validation paranoïaque, second-brain, UI Pro Max, Blockchain.com) —
+fil conducteur : **voler l'idée utile, refuser le framework redondant**.
+- **Loop Engineering** → un seul vrai gap : `packages/research/gate.py` (Checker unique de
+  promotion, #266) + `paper-watch` (watchdog dérive paper vs backtest, #267).
+- **Validation paranoïaque** → `adversarial.py` : **test de sabotage** (coût×3 + bruit + latence,
+  #268) ; le gate de promotion est désormais à 4 étages (placebo→DSR→PBO→sabotage).
+- **Second-brain Obsidian** → volé une idée : `vault-lint` (liens morts/orphelins/ADR doublons, #270).
+- **UI Pro Max** → landing cinématique R3F/Lenis isolée + 3D code-split (#271) + polish dashboard
+  CSS (#272). 3D refusée sur les pages data.
+- **Blockchain.com → multi-sources on-chain** : `crypto_onchain.py` (CoinGecko + DefiLlama, sans
+  clé, #274) + widget (#276) + **rapport dynamique déterministe** (sentiment 🔴/🟢/🟡 + 3 sections
+  style Hasheur) + Growthepie ETH (#279). Paiements/wallet **refusés** (pas de business model,
+  dangereux sur site statique).
+- **On-chain comme alpha → testé au gate** : `onchain-study` (#275/#277). `tvl_mcap` ❌ (p≈0,18,
+  4 actifs) ; `fees_mcap` **non testable** (data DefiLlama non récupérée en gratuit). → **5e négatif**.
+- Correctifs : ledger honnête (`non_teste` ≠ `rejete`, #278) ; `make site` (ré)installe les deps
+  périmées (#280).
+
+**Décidé.** **Aucun facteur on-chain ne passe le gate → rien câblé au ML/décision** (anti-fuite,
+fidèle au manifeste). Le on-chain reste un **contexte analytique** (table + rapport `/macro`), pas
+un signal. Méta : l'alt-data crypto échoue systématiquement au gate, comme les 4 négatifs actions.
+
+**Prochaine étape.** Inchangée : **revue courbe paper le 2026-08-06** (paper-watch surveille). Le
+on-chain est **clos comme piste d'alpha** ; il vit comme contexte. ML pur.
+
 ## Session 2026-06-25 — Recherche alt-data (4 négatifs) + couche risque + audit 3× → capital réel limité
 **Fait.** ~15 PR successives (CI verte → merge → resync), tout 0 €.
 - **Pipeline recherche alt-data** : event-study panier + benchmark + dé-chevauchement (#251-255),
