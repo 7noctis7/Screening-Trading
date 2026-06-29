@@ -12,6 +12,32 @@
   - critère GO : paper cohérent avec le backtest (pas de dérive Sharpe>1pt, MaxDD non dépassé).
   - si concordant → engager un capital réel **limité** + sizing défensif ; sinon → re-calibrer.
 
+## 🌙 CE SOIR SUR LE MAC — tester le SABOTAGE + paper-watch (2026-06-25)
+> Nouvelles fonctionnalités mergées : gate de sabotage adverse (#268) + watchdog paper (#267).
+> But : voir le 4e étage du gate (placebo → DSR/PBO → **sabotage**) tourner sur tes données réelles.
+- [ ] **Récupérer** : `qt && git pull origin main`.
+- [ ] **Backtester le PEAD AVEC le sabotage** (la nouvelle ligne s'affiche automatiquement) :
+  ```bash
+  make backtest-pead-smid
+  ```
+  → lis la ligne **« Sabotage (coût×3 + bruit + latence) : Sharpe X→Y (rétention Z) → ✅/❌ »**.
+  Reporte-moi `rétention` et si l'edge survit. (Rappel : le PEAD est déjà REJETÉ au DSR/PBO ;
+  le sabotage confirme qu'il ne faut pas le trader.)
+- [ ] **Stresser plus fort** (voir où l'edge casse — règle « zéro confiance ») :
+  ```bash
+  # coût ×5 + latence 2 j via un petit probe Python sur la série du backtest
+  .venv/bin/python -c "from packages.research.adversarial import sabotage_verdict; \
+from scripts.backtest_pead_smid import _load, _SMID; \
+from packages.strategies.pead_portfolio import pead_daily_returns; \
+d,e=_load([t for t in _SMID.split(',')]); _,r=pead_daily_returns(d,e,hold=21,cost_bps=10); \
+print(sabotage_verdict(r, extra_cost_bps=50, latency=2, noise_mult=1.0))"
+  ```
+  → si même un (futur) edge survit à ça, il est vraiment robuste.
+- [ ] **Tester le watchdog paper** : `make paper-watch`
+  → dira « trop tôt » (<20 j) ; à brancher au cron : `0 23 * * 1-5 cd <repo> && make paper-watch`.
+- [ ] **(rappel) confirmer le gate à 4 étages** sur un futur signal : placebo<0.05 ∧ DSR>0.5 ∧
+      PBO<0.5 ∧ **survit au sabotage** → sinon il ne passe pas en prod.
+
 ## 🌙 EN RENTRANT SUR LE MAC (post-audit comité, 2026-06-25)
 > Suite à l'audit contradictoire (score ~66→~78/100, verdict **PRÊT POUR PAPER**). Le seul
 > reliquat avant « capital réel limité » est **opérationnel** (élargir les délistés), pas du code.
