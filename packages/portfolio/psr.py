@@ -47,6 +47,47 @@ def probabilistic_sharpe_ratio(sharpe: float, n: int, skew: float = 0.0,
     return round(_norm_cdf((sharpe - sr_benchmark) * math.sqrt(n - 1) / denom), 4)
 
 
+def bootstrap_sharpe_ci(returns, n_boot: int = 1000, alpha: float = 0.05,
+                        seed: int = 0) -> dict:
+    """IC bootstrap du Sharpe (rééchantillonnage i.i.d.) — barres d'incertitude.
+
+    Un Sharpe ponctuel ment ; son intervalle dit s'il est distinguable de 0.
+    Renvoie {sharpe, lo, hi, prob_positive}. Périodicité = celle des rendements.
+    """
+    import numpy as np
+    r = np.asarray(returns, float)
+    r = r[np.isfinite(r)]
+    if r.size < 10 or r.std(ddof=1) == 0:
+        return {"available": False}
+    rng = np.random.default_rng(seed)
+    sr = float(r.mean() / r.std(ddof=1))
+    boots = np.empty(n_boot)
+    for k in range(n_boot):
+        s = r[rng.integers(0, r.size, r.size)]
+        sd = s.std(ddof=1)
+        boots[k] = s.mean() / sd if sd > 0 else 0.0
+    lo, hi = np.quantile(boots, [alpha / 2, 1 - alpha / 2])
+    pp = round(float((boots > 0).mean()), 4)
+    return {"available": True, "sharpe": round(sr, 4), "lo": round(float(lo), 4),
+            "hi": round(float(hi), 4), "prob_positive": pp}
+
+
+def min_track_record_length(sharpe: float, sr_benchmark: float = 0.0,
+                            prob: float = 0.95, skew: float = 0.0,
+                            kurt: float = 3.0) -> float:
+    """MinTRL (López de Prado) : nb d'observations requis pour PSR > `prob`.
+
+    « Ton Sharpe est-il assez long pour être cru ? » Si l'historique < MinTRL, le Sharpe
+    n'est pas distinguable de `sr_benchmark`. Périodicité = celle du Sharpe. inf si
+    SR ≤ benchmark.
+    """
+    if sharpe <= sr_benchmark:
+        return float("inf")
+    num = 1.0 - skew * sharpe + (kurt - 1.0) / 4.0 * sharpe ** 2
+    z = _norm_ppf(prob)
+    return round(1.0 + num * (z / (sharpe - sr_benchmark)) ** 2, 1)
+
+
 def deflated_sharpe_ratio(sharpe: float, n: int, n_trials: int,
                           skew: float = 0.0, kurt: float = 3.0,
                           sr_std: float = 1.0) -> float:

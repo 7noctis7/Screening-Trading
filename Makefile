@@ -1,4 +1,4 @@
-.PHONY: install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto ingest-mktcap preset-report calibrate-preset screen repro kill-check log-alpha sync-alphas event-study event-study-smid backtest-pead-smid funding-study risk-check sensitivity paper-watch vault-lint crypto-onchain crypto-cockpit crypto-brief regime-study breakout-study vault-ask crypto-screen onchain-study screen-niche list-db live live-go live-cron-install live-cron-uninstall clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull notion-sync contracts supabase-kpis
+.PHONY: install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto ingest-mktcap preset-report calibrate-preset screen repro kill-check log-alpha sync-alphas event-study event-study-smid backtest-pead-smid funding-study risk-check sensitivity paper-watch vault-lint crypto-onchain crypto-cockpit crypto-brief regime-study breakout-study microstructure-poc vault-ask crypto-screen onchain-study screen-niche list-db live live-go live-cron-install live-cron-uninstall clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull notion-sync contracts supabase-kpis
 # PYTHON : utilise AUTOMATIQUEMENT le venv s'il existe (.venv/bin/python), sinon python3 système.
 # Évite le piège « No module named numpy » quand le venv n'est pas activé. Surchargeable.
 TICKER ?= AAPL
@@ -118,6 +118,8 @@ regime-study:        ## le Fear & Greed est-il un signal contrarian BTC ? gate p
 	$(PYTHON) scripts/regime_study_cli.py $(ARGS)
 breakout-study:      ## les cassures de canal BTC prédisent-elles un rendement ? gate placebo
 	$(PYTHON) scripts/breakout_study_cli.py $(ARGS)
+microstructure-poc:  ## POC OFI + vPIN crypto en direct (Binance, sans clé) — collecteur Mac
+	$(PYTHON) scripts/microstructure_poc.py --sym $(or $(SYM),BTCUSDT)
 onchain-study:       ## le TVL/MCap prédit-il les rendements crypto ? event-study + placebo
 	$(PYTHON) scripts/onchain_study_cli.py $(ARGS)
 screen-niche:        ## audit d'exploitabilité d'un univers/niche (score 0-100) avant de s'engager

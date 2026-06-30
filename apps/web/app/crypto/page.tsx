@@ -12,6 +12,8 @@ import { ShareBar } from "@/components/crypto/ShareBar";
 const LiveGauge = dynamic(() => import("@/components/crypto/LiveGauge"), { ssr: false });
 // Graphe live (WebSocket navigateur) — client-only, jamais SSR (compatible export statique).
 const LiveChart = dynamic(() => import("@/components/crypto/LiveChart"), { ssr: false });
+// Sonar — carnet d'ordres en densité (Binance WebSocket), client-only.
+const DepthLadder = dynamic(() => import("@/components/crypto/DepthLadder"), { ssr: false });
 // Bloc « Analyse experte · Œil de Hasheur » LIVE (client-direct, auto-refresh visible-only).
 const ExpertLive = dynamic(() => import("@/components/crypto/ExpertLive"), { ssr: false });
 
@@ -532,6 +534,7 @@ export default function Crypto() {
         <>
           <LiveGauge />
           <LiveChart />
+          <DepthLadder />
           <ExpertLive />
           <Overview ck={data} />
           <Accumulation ck={data} />

@@ -12,6 +12,57 @@
   - critère GO : paper cohérent avec le backtest (pas de dérive Sharpe>1pt, MaxDD non dépassé).
   - si concordant → engager un capital réel **limité** + sizing défensif ; sinon → re-calibrer.
 
+## 🔬 CE SOIR SUR LE MAC — audit top-1% : rigueur du gate + Registry (suite 5)
+> PR #288 (POCs quant + sonar + correctifs d'audit + page /echecs). Tout sous le gate, 0 €.
+- [ ] **Récupérer** : `qt && git fetch origin && git reset --hard origin/claude/clever-lovelace-ognwya`.
+- [ ] **Voir la page « Échecs publiés »** : `make stop && make start` → localhost:3000/echecs
+      (Negative Results Registry — tes 6 négatifs, citables/reproductibles = ton wedge).
+- [ ] **Re-lancer un gate** (DSR maintenant déflaté sur TOUT le ledger + PBO sur 20 configs) :
+  ```bash
+  make breakout-study      # vérifie : DSR ↓ (déflation N=ledger), PBO sur grille élargie
+  ```
+- [ ] **Microstructure (option ECDF, queues épaisses)** : `make microstructure-poc SYM=BTCUSDT`
+      (le vPIN peut être appelé en `method="ecdf"` côté code).
+- [ ] **Tests** : `make test` (lot d'audit ajouté : pit_guard, bootstrap CI, resolve, MinTRL,
+      roll/sweep, leak-sentinel — ~40 nouveaux tests verts attendus).
+- [ ] ⚠️ **Rien de câblé** : microstructure / peg / breakout restent en RECHERCHE (gate d'abord).
+- [ ] **Restants connus** (non bloquants) : N global aux autres gates, leak-sentinel auto sur
+      `build_features(as_of=…)` (petit refactor), univers membership PIT (constituants gratuits).
+
+## 🛰️ CE SOIR SUR LE MAC — blueprint quant : microstructure + sonar + alpha-decay (suite 4)
+> PR #288 (en plus de #287 déjà mergé). Microstructure crypto, sonar carnet, robustesse
+> backtest, déviation de peg xStocks. Tout sous le gate, 0 €. À faire :
+- [ ] **Récupérer** : `qt && git fetch origin && git reset --hard origin/claude/clever-lovelace-ognwya`.
+- [ ] **Voir le SONAR** (carnet d'ordres en densité live) : `make stop && make start` →
+      localhost:3000/crypto (section « Carnet d'ordres — densité (sonar) », murs de liquidité).
+- [ ] **POC microstructure** (OFI + vPIN en direct, Binance gratuit) :
+  ```bash
+  make microstructure-poc SYM=BTCUSDT      # OFI>0 = pression acheteuse · vPIN↑ = flux toxique
+  ```
+  → laisse tourner ~2 min ; note si vPIN grimpe avant un mouvement. **Signal de recherche → gate.**
+- [ ] **(option) xStocks peg** : si tu as une source token (Jupiter/Solana, Bybit) + sous-jacent,
+      `peg_study.run_study(...)` teste la mean-reversion au placebo. Sinon → plus tard.
+- [ ] **Robustesse** : `alpha_decay.ic_half_life` / `almgren_impact` dispo pour durcir un backtest.
+- [ ] ⚠️ **Aucun de ces signaux n'est câblé** : tout doit passer placebo/DSR/PBO/sabotage d'abord.
+
+## ✅ CE SOIR SUR LE MAC — #287 MERGÉ & DÉPLOYÉ (2026-06-29, suite 3)
+> PR #287 squash-mergée sur `main` → site reconstruit (~10 min). Trio live + landing/ticker +
+> gate 7e négatif + RAG + growth + Obsidian (ADR-0025). À faire, par ordre :
+- [ ] **Récupérer tout (code + Obsidian)** — s'aligner exactement sur le déployé :
+  ```bash
+  qt && git fetch origin && git reset --hard origin/claude/clever-lovelace-ognwya
+  ```
+- [ ] **Voir EN LIGNE** (après ~10 min) : https://7noctis7.github.io/Screening-Trading/crypto/
+      et la landing — recharger en forçant le cache (**Cmd + Shift + R**).
+- [ ] **Voir en LOCAL** : `make stop && make start` → localhost:3000 (landing+ticker) ·
+      /crypto (jauge + graphe Coinbase WS + Œil de Hasheur) · /accueil (scroll animé + 3D).
+- [ ] **Tester les interactions** : clic sur un ticker → fiche TradingView · clic sur un schéma
+      du Gate → méthodo · bouton « Partager sur X » · /crypto/?embed=1 (widget).
+- [ ] **Rebalancement paper auto** : déjà actif (launchd lun-ven 16h05). Vérifier :
+      `cat /tmp/quant_live.log` (ou `make live` pour un aperçu dry-run).
+- [ ] **(optionnel)** `make vault-ask Q="…"` · `make crypto-screen Q="cap > 5md top 10"` ·
+      `make regime-study` / `make breakout-study` (re-tester au gate).
+
 ## 🪙 CE SOIR SUR LE MAC — cockpit crypto LIVE + gate + croissance (2026-06-29, suite 2)
 > Tout est sur `claude/clever-lovelace-ognwya` (PR #287, auto-merge dès CI verte → redéploiement).
 - [ ] **Récupérer (pour voir l'Obsidian à jour + le code)** : `qt && git pull origin claude/clever-lovelace-ognwya`.

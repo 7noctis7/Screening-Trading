@@ -38,6 +38,7 @@ export const usePredictionMarkets = () => q("prediction_markets", "/api/predicti
 export const useCryptoOnchain = () => q("crypto_onchain", "/api/crypto_onchain", 600000);
 export const useCryptoCockpit = () => q("crypto_cockpit", "/api/crypto_cockpit", 600000);
 export const useTicker = () => q("ticker", "/api/ticker", 600000);
+export const useFailures = () => q("failures", "/api/failures", 600000);
 export const usePortfolio = () => q("portfolio", "/api/portfolio");
 export const usePositions = () => q("positions", "/api/positions");
 export const useTrades = () => q("trades", "/api/trades");

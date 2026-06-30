@@ -214,6 +214,19 @@ def ticker() -> dict:
     return _snap().get("ticker", {"available": False})
 
 
+@app.get("/api/failures")
+def failures() -> dict:
+    """Registre des négatifs (Negative Results Registry) — lu directement du ledger.
+
+    Autorité par la transparence : chaque hypothèse rejetée est citable/reproductible.
+    """
+    from packages.research.ledger import read_records
+    recs = read_records()
+    rejected = [r for r in recs if r.get("statut") == "rejete"]
+    return {"available": bool(rejected), "n_total": len(recs),
+            "n_rejected": len(rejected), "items": rejected}
+
+
 @app.get("/api/preset_ledger")
 def preset_ledger() -> dict:
     """Journal détaillé du preset (trades + P&L réel) qui justifie la perf du dashboard."""
