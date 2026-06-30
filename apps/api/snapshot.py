@@ -1582,6 +1582,16 @@ def build_snapshot(seed: int = 7) -> dict:
     start = end - timedelta(days=_HISTORY_DAYS)
     # prix RÉELS (base locale) si disponibles, sinon synthétique sectorisé (cohérence secteurs)
     data, data_mode, real_syms = _load_prices(instruments, sector_of, start, end, seed)
+    # NETTOYAGE UNIVERS : écarte les titres PÉRIMÉS (delisted/renommés, ex. FB→META) dont
+    # la dernière barre est trop ancienne → plus de 404 ni de cibles fantômes. Seuil RELATIF
+    # (vs la barre la plus fraîche) → ne vide jamais l'univers, même hors-ligne.
+    if data_mode == "real" and data:
+        _fresh = max(b[-1].ts for b in data.values() if b)
+        _cut = _fresh - timedelta(days=10)
+        _stale = [s for s, b in data.items() if b and b[-1].ts < _cut]
+        for s in _stale:
+            data.pop(s, None)
+            real_syms.discard(s)
     # INTÉGRITÉ DES DONNÉES : si une base réelle est branchée, on RETIRE TOUT symbole en repli
     # synthétique de l'univers de travail → screener, ML, thèmes, conviction, preset, graphes…
     # tournent UNIQUEMENT sur des prix réels (zéro donnée fictive). En mode démo (aucune base),
