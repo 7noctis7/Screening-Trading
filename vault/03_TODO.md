@@ -12,6 +12,22 @@
   - critère GO : paper cohérent avec le backtest (pas de dérive Sharpe>1pt, MaxDD non dépassé).
   - si concordant → engager un capital réel **limité** + sizing défensif ; sinon → re-calibrer.
 
+## 🛰️ CE SOIR SUR LE MAC — blueprint quant : microstructure + sonar + alpha-decay (suite 4)
+> PR #288 (en plus de #287 déjà mergé). Microstructure crypto, sonar carnet, robustesse
+> backtest, déviation de peg xStocks. Tout sous le gate, 0 €. À faire :
+- [ ] **Récupérer** : `qt && git fetch origin && git reset --hard origin/claude/clever-lovelace-ognwya`.
+- [ ] **Voir le SONAR** (carnet d'ordres en densité live) : `make stop && make start` →
+      localhost:3000/crypto (section « Carnet d'ordres — densité (sonar) », murs de liquidité).
+- [ ] **POC microstructure** (OFI + vPIN en direct, Binance gratuit) :
+  ```bash
+  make microstructure-poc SYM=BTCUSDT      # OFI>0 = pression acheteuse · vPIN↑ = flux toxique
+  ```
+  → laisse tourner ~2 min ; note si vPIN grimpe avant un mouvement. **Signal de recherche → gate.**
+- [ ] **(option) xStocks peg** : si tu as une source token (Jupiter/Solana, Bybit) + sous-jacent,
+      `peg_study.run_study(...)` teste la mean-reversion au placebo. Sinon → plus tard.
+- [ ] **Robustesse** : `alpha_decay.ic_half_life` / `almgren_impact` dispo pour durcir un backtest.
+- [ ] ⚠️ **Aucun de ces signaux n'est câblé** : tout doit passer placebo/DSR/PBO/sabotage d'abord.
+
 ## ✅ CE SOIR SUR LE MAC — #287 MERGÉ & DÉPLOYÉ (2026-06-29, suite 3)
 > PR #287 squash-mergée sur `main` → site reconstruit (~10 min). Trio live + landing/ticker +
 > gate 7e négatif + RAG + growth + Obsidian (ADR-0025). À faire, par ordre :
