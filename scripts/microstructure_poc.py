@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """POC microstructure crypto — OFI + vPIN en direct (Binance REST, gratuit, sans clé).
 
-Tourne sur ton Mac (always-on). Échantillonne le carnet L2 (depth) et les trades agrégés
-~1×/s, calcule l'Order Flow Imbalance cumulé et le vPIN (toxicité). Signal de RECHERCHE :
-à passer au gate avant tout câblage. WebSocket = upgrade (capture exhaustive). Ctrl+C arrête.
+Tourne sur ton Mac (always-on). Échantillonne le carnet L2 + trades agrégés ~1×/s,
+calcule l'Order Flow Imbalance cumulé et le vPIN (toxicité). Signal de RECHERCHE : à
+passer au gate avant tout câblage. WebSocket = upgrade. Ctrl+C arrête.
 
   make microstructure-poc SYM=BTCUSDT
 """
@@ -53,8 +53,8 @@ def main() -> int:
             vp = vpin(prices, vols, bucket=max(1e-6, vol_tot / 50), n_buckets=20)
             ofi = ofi_series(list(book))
             vps = vp.get("vpin") if vp.get("available") else "n/d"
-            print(f"  OFI(cumul {len(book)}) = {ofi:+.3f}  ·  vPIN = {vps}  "
-                  f"·  spread = {pa - pb:.2f}")
+            print(f"  OFI({len(book)}) = {ofi:+.3f} · vPIN = {vps} "
+                  f"· spread = {pa - pb:.2f}")
             time.sleep(1.0)
     except KeyboardInterrupt:
         print("\narrêté.")
