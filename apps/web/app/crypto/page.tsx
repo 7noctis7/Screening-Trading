@@ -7,6 +7,7 @@ import { useCryptoCockpit } from "@/lib/api";
 import { PageSkeleton, EmptyState } from "@/components/ui";
 import { InfoTip } from "@/components/InfoTip";
 import { ShareBar } from "@/components/crypto/ShareBar";
+import { MountWhenVisible } from "@/components/MountWhenVisible";
 
 // Jauge de sentiment live (au-dessus du graphe) — client-only.
 const LiveGauge = dynamic(() => import("@/components/crypto/LiveGauge"), { ssr: false });
@@ -532,10 +533,10 @@ export default function Crypto() {
         />
       ) : (
         <>
-          <LiveGauge />
-          <LiveChart />
-          <DepthLadder />
-          <ExpertLive />
+          <MountWhenVisible minHeight={120}><LiveGauge /></MountWhenVisible>
+          <MountWhenVisible minHeight={420}><LiveChart /></MountWhenVisible>
+          <MountWhenVisible minHeight={360}><DepthLadder /></MountWhenVisible>
+          <MountWhenVisible minHeight={300}><ExpertLive /></MountWhenVisible>
           <Overview ck={data} />
           <Accumulation ck={data} />
           <Pulse ck={data} />

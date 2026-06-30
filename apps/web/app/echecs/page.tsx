@@ -8,6 +8,19 @@ import { Reveal } from "@/components/Reveal";
 
 const num = (x: any, d = 3) => (typeof x === "number" ? x.toFixed(d) : "n/d");
 
+function exportCsv(items: any[]) {
+  const cols = ["date", "facteur", "classe", "horizon", "statut",
+    "placebo_p_value", "dsr", "pbo", "these"];
+  const esc = (v: any) => `"${String(Array.isArray(v) ? v.join("|") : v ?? "").replace(/"/g, '""')}"`;
+  const rows = [cols.join(","), ...items.map((r) => cols.map((c) => esc(r[c])).join(","))];
+  const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "quant-terminal-negative-results.csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 export default function Echecs() {
   const { data, isLoading } = useFailures();
   if (isLoading) return <PageSkeleton />;
@@ -27,6 +40,12 @@ export default function Echecs() {
             (<code className="mono">make &lt;facteur&gt;-study</code>). Un négatif honnête vaut
             mille faux positifs.
           </p>
+          {items.length > 0 && (
+            <button onClick={() => exportCsv(items)}
+              className="mt-3 text-xs px-3 py-1.5 rounded-lg border border-border hover:border-border2 hover:text-accent transition-colors">
+              ⤓ Télécharger le registre (CSV)
+            </button>
+          )}
         </div>
       </Reveal>
 
