@@ -54,8 +54,20 @@ def bulk_buy_fraction(dp: float, sigma: float) -> float:
     return _norm_cdf(dp / sigma)
 
 
+def bulk_buy_fraction_ecdf(dp: float, sample: list[float]) -> float:
+    """BVC non-paramétrique (ECDF) : part acheteur = rang de Δp dans l'échantillon.
+
+    La crypto n'est PAS gaussienne (queues épaisses) → l'ECDF classe buy/sell sans
+    hypothèse de normalité (plus juste sur les chocs extrêmes). 0.5 si échantillon vide.
+    """
+    s = [x for x in sample if x is not None]
+    if not s:
+        return 0.5
+    return sum(1 for x in s if x < dp) / len(s)
+
+
 def vpin(prices: list[float], volumes: list[float], bucket: float,
-         n_buckets: int = 50) -> dict:
+         n_buckets: int = 50, method: str = "normal") -> dict:
     """vPIN = toxicité du flux (probabilité de trading informé synchronisée au volume).
 
     Trades chronologiques (prix, volume) → buckets de volume `bucket` → par bucket
@@ -71,7 +83,8 @@ def vpin(prices: list[float], volumes: list[float], bucket: float,
     buckets: list[tuple[float, float]] = []          # (V_buy, V_sell)
     cv = bv = sv = 0.0
     for i in range(1, len(prices)):
-        frac = bulk_buy_fraction(dps[i - 1], sigma)
+        frac = (bulk_buy_fraction_ecdf(dps[i - 1], dps) if method == "ecdf"
+                else bulk_buy_fraction(dps[i - 1], sigma))
         v = volumes[i]
         bv += v * frac
         sv += v * (1 - frac)

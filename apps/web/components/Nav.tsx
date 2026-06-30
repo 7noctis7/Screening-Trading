@@ -23,6 +23,7 @@ const LINKS: [string, string][] = [
   ["/ml", "Signaux ML"],
   ["/sentiment", "Sentiment & news"],
   ["/conviction", "Conviction"],
+  ["/echecs", "Échecs publiés"],
   ["/dashboard", "Dashboard"],
   ["/portfolio", "Portefeuille & Analyse"],
   ["/risk", "Risque"],
@@ -34,7 +35,7 @@ const LINKS: [string, string][] = [
 // Regroupement par thème pour le tiroir mobile (lecture premium, style réglages iOS).
 const GROUPS: [string, string[]][] = [
   ["Marché", ["/data", "/universe", "/screener", "/macro", "/crypto", "/themes", "/events"]],
-  ["Analyse", ["/fundamentals", "/notes", "/investors", "/ml", "/sentiment", "/conviction"]],
+  ["Analyse", ["/fundamentals", "/notes", "/investors", "/ml", "/sentiment", "/conviction", "/echecs"]],
   ["Portefeuille", ["/dashboard", "/portfolio", "/risk", "/positions", "/trades", "/live"]],
 ];
 const LABEL: Record<string, string> = Object.fromEntries(LINKS);
