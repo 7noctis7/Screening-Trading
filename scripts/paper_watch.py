@@ -19,14 +19,24 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 
-def _paper_equity() -> list[float]:
-    """Courbe d'equity paper RÉELLE (Alpaca portfolio_history). [] si indispo."""
+def _paper_equity() -> tuple[list[float], str]:
+    """Courbe d'equity paper RÉELLE (Alpaca). → (equity, statut).
+
+    statut ∈ {ok, no_keys, error, empty} pour un message juste (clés absentes ≠ compte
+    paper sans historique encore).
+    """
+    import os
+    from packages.common.env import load_env
+    load_env()
+    if not (os.environ.get("ALPACA_API_KEY") and os.environ.get("ALPACA_API_SECRET")):
+        return [], "no_keys"
     try:
         from packages.execution.alpaca_broker import AlpacaBroker
         hist = AlpacaBroker(paper=True).portfolio_history()
-        return [float(p["v"]) for p in hist if p.get("v")]
-    except Exception:  # noqa: BLE001 - best-effort (clés absentes / hors-ligne)
-        return []
+        eq = [float(p["v"]) for p in hist if p.get("v")]
+        return (eq, "ok") if eq else ([], "empty")
+    except Exception as e:  # noqa: BLE001
+        return [], f"error:{type(e).__name__}"
 
 
 def _ref_from_ledger() -> dict:
@@ -58,9 +68,17 @@ def main() -> int:
     if a.ref_maxdd is not None:
         ref["max_drawdown"] = a.ref_maxdd
 
-    equity = _paper_equity()
-    if not equity:
-        print("paper indisponible (Alpaca non configuré / hors-ligne) — rien à voir.")
+    equity, status = _paper_equity()
+    if status == "no_keys":
+        print("Alpaca non configuré : ajoute ALPACA_API_KEY / ALPACA_API_SECRET dans "
+              ".env (racine) ou exporte-les. Clés PAPER gratuites sur alpaca.markets.")
+        return 0
+    if status == "empty":
+        print("Clés OK ✅ mais le compte paper n'a pas encore d'historique d'equity "
+              "(aucun ordre passé / compte neuf). Lance `make live` puis reviens.")
+        return 0
+    if status.startswith("error"):
+        print(f"Alpaca injoignable ({status}) — hors-ligne ou clés invalides.")
         return 0
     if not ref:
         print("⚠ pas de réf backtest (ledger vide) — passe --ref-sharpe/--ref-maxdd.")

@@ -36,6 +36,8 @@ class AlpacaBroker:
     def __init__(self, api_key: str | None = None, api_secret: str | None = None,
                  paper: bool = True) -> None:
         self.is_paper = paper
+        from packages.common.env import load_env
+        load_env()                                   # .env quel que soit le point d'entrée
         from alpaca.trading.client import TradingClient  # import local
         self._client = TradingClient(
             api_key or os.environ.get("ALPACA_API_KEY", ""),
