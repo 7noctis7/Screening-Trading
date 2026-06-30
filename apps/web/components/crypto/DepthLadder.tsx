@@ -81,7 +81,8 @@ export default function DepthLadder() {
         </div>
       </div>
       <p className="text-muted2 text-[11px] mt-1">
-        Murs de liquidité en direct (Binance WebSocket). Barre large = grosse taille passive.</p>
+        Murs de liquidité — <b>instantané</b> (carnet temps réel, pas de timeframe). Binance
+        WebSocket · barre large = grosse taille passive. (Les timeframes = le graphe au-dessus.)</p>
       {!book ? (
         <div className="shimmer rounded-md bg-surfaceAlt h-64 mt-3" />
       ) : (

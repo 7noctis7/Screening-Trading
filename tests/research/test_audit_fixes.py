@@ -10,13 +10,18 @@ from packages.research.ledger import deflation_params
 def test_deflation_params(tmp_path):
     from packages.research.ledger import append_record
     p = tmp_path / "h.jsonl"
-    for s in (0.2, 0.8, 1.4):
-        append_record({"facteur": "x", "sharpe": s}, path=p)
+    # 3 facteurs DISTINCTS → N=3 ; sr_std estimé sur leurs Sharpe
+    for f, s in (("a", 0.2), ("b", 0.8), ("c", 1.4)):
+        append_record({"facteur": f, "sharpe": s}, path=p)
     n, sr_std = deflation_params(path=p)
-    assert n == 3 and sr_std > 0          # N = nb d'essais, sr_std estimé inter-essais
-    # ledger vide → repli propre (N=min_trials, sr_std=1)
-    n2, s2 = deflation_params(path=tmp_path / "vide.jsonl", min_trials=9)
-    assert n2 == 9 and s2 == 1.0
+    assert n == 3 and sr_std > 0
+    # relancer le MÊME facteur 5× ne gonfle PAS N (essais ≠ runs)
+    for _ in range(5):
+        append_record({"facteur": "a", "sharpe": 0.3}, path=p)
+    n2, _ = deflation_params(path=p)
+    assert n2 == 3                        # toujours 3 hypothèses distinctes
+    # ledger vide → repli propre
+    assert deflation_params(path=tmp_path / "vide.jsonl", min_trials=9) == (9, 1.0)
 
 
 def test_min_track_record_length():
