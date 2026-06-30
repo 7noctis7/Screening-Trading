@@ -52,6 +52,25 @@ def trial_count(path: str | Path = DEFAULT_PATH, *, facteur: str | None = None,
     return len(recs)
 
 
+def deflation_params(path: str | Path = DEFAULT_PATH,
+                     min_trials: int = 1) -> tuple[int, float]:
+    """(N, sr_std) pour déflater le DSR sur TOUT le programme de recherche.
+
+    Faille corrigée : déflater par la grille d'un seul script sous-estime le mining.
+    N = nb total d'hypothèses testées (ledger) ; sr_std = dispersion inter-essais des
+    Sharpe (mesure réelle du data-mining ; 1.0 par défaut si <2 Sharpe connus).
+    """
+    recs = read_records(path)
+    n = max(min_trials, len(recs))
+    sharpes = [r["sharpe"] for r in recs
+               if isinstance(r.get("sharpe"), (int, float))]
+    if len(sharpes) < 2:
+        return n, 1.0
+    mean = sum(sharpes) / len(sharpes)
+    var = sum((s - mean) ** 2 for s in sharpes) / (len(sharpes) - 1)
+    return n, max(1e-6, var ** 0.5)
+
+
 def best_by_dsr(path: str | Path = DEFAULT_PATH, top: int = 5) -> list[dict]:
     """Meilleurs essais par Sharpe déflaté (DSR) décroissant."""
     recs = [r for r in read_records(path) if isinstance(r.get("dsr"), (int, float))]

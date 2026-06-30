@@ -47,6 +47,22 @@ def probabilistic_sharpe_ratio(sharpe: float, n: int, skew: float = 0.0,
     return round(_norm_cdf((sharpe - sr_benchmark) * math.sqrt(n - 1) / denom), 4)
 
 
+def min_track_record_length(sharpe: float, sr_benchmark: float = 0.0,
+                            prob: float = 0.95, skew: float = 0.0,
+                            kurt: float = 3.0) -> float:
+    """MinTRL (López de Prado) : nb d'observations requis pour PSR > `prob`.
+
+    « Ton Sharpe est-il assez long pour être cru ? » Si l'historique < MinTRL, le Sharpe
+    n'est pas distinguable de `sr_benchmark`. Périodicité = celle du Sharpe. inf si
+    SR ≤ benchmark.
+    """
+    if sharpe <= sr_benchmark:
+        return float("inf")
+    num = 1.0 - skew * sharpe + (kurt - 1.0) / 4.0 * sharpe ** 2
+    z = _norm_ppf(prob)
+    return round(1.0 + num * (z / (sharpe - sr_benchmark)) ** 2, 1)
+
+
 def deflated_sharpe_ratio(sharpe: float, n: int, n_trials: int,
                           skew: float = 0.0, kurt: float = 3.0,
                           sr_std: float = 1.0) -> float:

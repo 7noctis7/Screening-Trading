@@ -97,7 +97,14 @@ def full_gate(closes, win: int = 60, k: float = 2.0, post: int = 5,
     tmin = min(c.size for c in cols)
     mat = np.column_stack([c[-tmin:] for c in cols])
     pbo = pbo_cscv(mat)
-    dsr = deflated_sharpe_ratio(sharpe, ret.size, n_trials=len(grid))
+    # DSR déflaté sur TOUT le programme de recherche (ledger), pas la grille locale,
+    # + sr_std estimé inter-essais (correctif sous-déflation). Repli sur la grille.
+    try:
+        from packages.research.ledger import deflation_params
+        n_trials, sr_std = deflation_params(min_trials=len(grid))
+    except Exception:  # noqa: BLE001
+        n_trials, sr_std = len(grid), 1.0
+    dsr = deflated_sharpe_ratio(sharpe, ret.size, n_trials=n_trials, sr_std=sr_std)
     sab = sabotage_verdict(ret)
     verdict = promotion_verdict(dsr=dsr, pbo=pbo.get("pbo"),
                                 placebo_p=plac.get("placebo_p_value"))

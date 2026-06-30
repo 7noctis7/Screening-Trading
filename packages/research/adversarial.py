@@ -13,6 +13,46 @@ import numpy as np
 from packages.portfolio.metrics import perf_summary
 
 
+def roll_spread(prices) -> float:
+    """Spread effectif implicite (estimateur de Roll) : 2·√(−Cov(Δpₜ, Δpₜ₋₁)).
+
+    Ancre le coût du sabotage sur la microstructure RÉELLE de l'actif (au lieu d'un
+    bruit arbitraire). 0 si l'autocovariance est positive (pas de signature de spread).
+    """
+    p = np.asarray(prices, float)
+    if p.size < 3:
+        return 0.0
+    dp = np.diff(p)
+    cov = float(np.cov(dp[:-1], dp[1:])[0, 1])
+    return 2.0 * np.sqrt(-cov) if cov < 0 else 0.0
+
+
+def sabotage_sweep(returns, *, levels=(1.0, 2.0, 3.0, 5.0), base_cost_bps: float = 10.0,
+                   seed: int = 0) -> dict:
+    """Balayage de robustesse : rétention de Sharpe vs niveau de stress croissant.
+
+    Au lieu d'un pass/fail binaire à un calibrage arbitraire, on trace la dégradation
+    et on reporte le **niveau de rupture** (rétention < 0,5). Un edge robuste a une
+    marge ; un fragile casse tôt → élimine le risque de mauvais calibrage unique.
+    """
+    clean = perf_summary(returns)
+    if not clean.get("available") or clean["sharpe"] <= 0:
+        return {"available": False}
+    cs = clean["sharpe"]
+    curve, breakeven = [], None
+    for m in levels:
+        deg = stress_returns(returns, extra_cost_bps=base_cost_bps * m,
+                             noise_mult=0.25 * m, latency=1, seed=seed)
+        ss = perf_summary(deg)["sharpe"]
+        ret = round(ss / cs, 3) if cs > 0 else 0.0
+        curve.append({"stress": m, "sharpe": ss, "retention": ret})
+        if breakeven is None and ret < 0.5:
+            breakeven = m
+    robust = breakeven is None or breakeven >= 3.0
+    return {"available": True, "clean_sharpe": cs, "curve": curve,
+            "breakeven_stress": breakeven, "robust": robust}
+
+
 def stress_returns(returns, *, extra_cost_bps: float = 30.0, noise_mult: float = 0.5,
                    latency: int = 1, seed: int = 0) -> np.ndarray:
     """Dégrade une série de rendements (pire cas d'exécution).
