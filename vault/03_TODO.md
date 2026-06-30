@@ -12,6 +12,24 @@
   - critère GO : paper cohérent avec le backtest (pas de dérive Sharpe>1pt, MaxDD non dépassé).
   - si concordant → engager un capital réel **limité** + sizing défensif ; sinon → re-calibrer.
 
+## ✅ CE SOIR SUR LE MAC — #287 MERGÉ & DÉPLOYÉ (2026-06-29, suite 3)
+> PR #287 squash-mergée sur `main` → site reconstruit (~10 min). Trio live + landing/ticker +
+> gate 7e négatif + RAG + growth + Obsidian (ADR-0025). À faire, par ordre :
+- [ ] **Récupérer tout (code + Obsidian)** — s'aligner exactement sur le déployé :
+  ```bash
+  qt && git fetch origin && git reset --hard origin/claude/clever-lovelace-ognwya
+  ```
+- [ ] **Voir EN LIGNE** (après ~10 min) : https://7noctis7.github.io/Screening-Trading/crypto/
+      et la landing — recharger en forçant le cache (**Cmd + Shift + R**).
+- [ ] **Voir en LOCAL** : `make stop && make start` → localhost:3000 (landing+ticker) ·
+      /crypto (jauge + graphe Coinbase WS + Œil de Hasheur) · /accueil (scroll animé + 3D).
+- [ ] **Tester les interactions** : clic sur un ticker → fiche TradingView · clic sur un schéma
+      du Gate → méthodo · bouton « Partager sur X » · /crypto/?embed=1 (widget).
+- [ ] **Rebalancement paper auto** : déjà actif (launchd lun-ven 16h05). Vérifier :
+      `cat /tmp/quant_live.log` (ou `make live` pour un aperçu dry-run).
+- [ ] **(optionnel)** `make vault-ask Q="…"` · `make crypto-screen Q="cap > 5md top 10"` ·
+      `make regime-study` / `make breakout-study` (re-tester au gate).
+
 ## 🪙 CE SOIR SUR LE MAC — cockpit crypto LIVE + gate + croissance (2026-06-29, suite 2)
 > Tout est sur `claude/clever-lovelace-ognwya` (PR #287, auto-merge dès CI verte → redéploiement).
 - [ ] **Récupérer (pour voir l'Obsidian à jour + le code)** : `qt && git pull origin claude/clever-lovelace-ognwya`.
