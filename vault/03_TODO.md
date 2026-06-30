@@ -12,6 +12,23 @@
   - critère GO : paper cohérent avec le backtest (pas de dérive Sharpe>1pt, MaxDD non dépassé).
   - si concordant → engager un capital réel **limité** + sizing défensif ; sinon → re-calibrer.
 
+## 🔬 CE SOIR SUR LE MAC — audit top-1% : rigueur du gate + Registry (suite 5)
+> PR #288 (POCs quant + sonar + correctifs d'audit + page /echecs). Tout sous le gate, 0 €.
+- [ ] **Récupérer** : `qt && git fetch origin && git reset --hard origin/claude/clever-lovelace-ognwya`.
+- [ ] **Voir la page « Échecs publiés »** : `make stop && make start` → localhost:3000/echecs
+      (Negative Results Registry — tes 6 négatifs, citables/reproductibles = ton wedge).
+- [ ] **Re-lancer un gate** (DSR maintenant déflaté sur TOUT le ledger + PBO sur 20 configs) :
+  ```bash
+  make breakout-study      # vérifie : DSR ↓ (déflation N=ledger), PBO sur grille élargie
+  ```
+- [ ] **Microstructure (option ECDF, queues épaisses)** : `make microstructure-poc SYM=BTCUSDT`
+      (le vPIN peut être appelé en `method="ecdf"` côté code).
+- [ ] **Tests** : `make test` (lot d'audit ajouté : pit_guard, bootstrap CI, resolve, MinTRL,
+      roll/sweep, leak-sentinel — ~40 nouveaux tests verts attendus).
+- [ ] ⚠️ **Rien de câblé** : microstructure / peg / breakout restent en RECHERCHE (gate d'abord).
+- [ ] **Restants connus** (non bloquants) : N global aux autres gates, leak-sentinel auto sur
+      `build_features(as_of=…)` (petit refactor), univers membership PIT (constituants gratuits).
+
 ## 🛰️ CE SOIR SUR LE MAC — blueprint quant : microstructure + sonar + alpha-decay (suite 4)
 > PR #288 (en plus de #287 déjà mergé). Microstructure crypto, sonar carnet, robustesse
 > backtest, déviation de peg xStocks. Tout sous le gate, 0 €. À faire :
