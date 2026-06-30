@@ -61,9 +61,19 @@ def deflation_params(path: str | Path = DEFAULT_PATH,
     Sharpe (mesure réelle du data-mining ; 1.0 par défaut si <2 Sharpe connus).
     """
     recs = read_records(path)
-    n = max(min_trials, len(recs))
-    sharpes = [r["sharpe"] for r in recs
-               if isinstance(r.get("sharpe"), (int, float))]
+    # N = hypothèses DISTINCTES (par `facteur`), pas le nb de relances du même script :
+    # relancer 10× breakout ne doit pas gonfler N (essais ≠ runs). Best practice.
+    by_facteur: dict[str, float] = {}
+    distinct: set[str] = set()
+    for r in recs:
+        f = r.get("facteur")
+        if not f:
+            continue
+        distinct.add(f)
+        if isinstance(r.get("sharpe"), (int, float)):
+            by_facteur[f] = r["sharpe"]          # dernier Sharpe connu par facteur
+    n = max(min_trials, len(distinct) or len(recs))
+    sharpes = list(by_facteur.values())
     if len(sharpes) < 2:
         return n, 1.0
     mean = sum(sharpes) / len(sharpes)

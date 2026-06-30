@@ -107,7 +107,7 @@ jobs:
         env:
           QUANT_PRICE_DB: ${{ github.workspace }}/data/market.db
           QUANT_FUND: "yf"
-          QUANT_NEWS: "0"
+          QUANT_NEWS: "1"          # news RSS gratuites (sans clé) → page Sentiment & news alimentée
           QUANT_PREDMKT: "1"        # marchés de prédiction (Kalshi/Polymarket, sans clé) en ligne
           QUANT_ONCHAIN: "1"        # fondamentaux on-chain crypto (CoinGecko/DefiLlama, sans clé)
           QUANT_CRYPTO: "1"         # cockpit crypto marché (CoinGecko/DefiLlama/F&G, sans clé)

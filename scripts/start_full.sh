@@ -26,6 +26,7 @@ export QUANT_NO_LLM=1                                  # pas d'appel LLM pendant
 export QUANT_CRYPTO="${QUANT_CRYPTO:-1}"               # cockpit crypto (/crypto)
 export QUANT_ONCHAIN="${QUANT_ONCHAIN:-1}"             # fondamentaux on-chain (/macro)
 export QUANT_PREDMKT="${QUANT_PREDMKT:-1}"             # marchés de prédiction (/macro)
+export QUANT_NEWS="${QUANT_NEWS:-1}"                   # news RSS gratuites (/sentiment)
 
 # [1/3] watchlist + top 200 (parcourt tout l'univers ~1-3 min) — skippable
 if [ "${SKIP_WATCHLIST:-0}" = "1" ] && [ -f config/mobile_universe.csv ]; then
