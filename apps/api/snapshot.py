@@ -1521,9 +1521,52 @@ def _crypto_cockpit_section() -> dict:
         ok = (ck.get("global") or {}).get("total_mcap") is not None
         if not ok and not ck.get("gainers"):
             return {"available": False, "reason": "réseau"}
+        try:                                   # dérivés (funding multi-CEX) — best-effort
+            from packages.data.deriv_normalizer import derivatives
+            ck["derivatives"] = derivatives()
+        except Exception:  # noqa: BLE001
+            ck["derivatives"] = {"available": False}
+        from packages.data.crypto_market import accumulation_score
+        ck["accumulation"] = accumulation_score(ck)   # contrarian 0-100 (déterministe)
         return {"available": True, **ck}
     except Exception as e:  # noqa: BLE001
         return {"available": False, "reason": str(e)}
+
+
+_TICKER_STOCKS = ("AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO",
+                  "BRK-B", "JPM", "V", "WMT", "MA", "COST", "HD", "NFLX", "AMD",
+                  "CRM", "ADBE", "PG")
+
+
+def _ticker_section(data: dict, acmap: dict, n: int = 20) -> dict:
+    """Top actions pour le bandeau ticker : dernière clôture + variation J (build-time).
+
+    Données réelles du build (pas de live actions gratuit/CORS côté navigateur). On prend
+    d'abord les méga-caps reconnaissables présentes dans l'univers, puis on COMPLÈTE avec
+    les autres actions disponibles jusqu'à `n` (sinon le bandeau resterait vide si l'univers
+    ne contient pas ces tickers). Jamais de valeur inventée."""
+    def _quote(s: str):
+        bars = data.get(s)
+        if not bars or len(bars) < 2:
+            return None
+        last, prev = bars[-1].close, bars[-2].close
+        return {"sym": s, "price": round(last, 2),
+                "chg": round((last / prev - 1) * 100, 2) if prev else None}
+
+    seen, out = set(), []
+    for s in _TICKER_STOCKS:                       # 1) méga-caps reconnaissables
+        q = _quote(s)
+        if q:
+            out.append(q); seen.add(s)
+    for s in data:                                 # 2) complète avec les actions dispo
+        if len(out) >= n:
+            break
+        if s in seen or acmap.get(s) != "equity":
+            continue
+        q = _quote(s)
+        if q:
+            out.append(q); seen.add(s)
+    return {"available": bool(out), "stocks": out[:n]}
 
 
 def build_snapshot(seed: int = 7) -> dict:
@@ -2362,6 +2405,7 @@ def build_snapshot(seed: int = 7) -> dict:
                                            held, acmap, names),
         "crypto_onchain": safe_section("crypto_onchain", _onchain_section, held, acmap),
         "crypto_cockpit": safe_section("crypto_cockpit", _crypto_cockpit_section),
+        "ticker": safe_section("ticker", _ticker_section, data, acmap),
         "portfolio": _port_payload,
         "trades": [PL.trade_payload(t) for t in recent],
         "open_trades": comp["rows"],

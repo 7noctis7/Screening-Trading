@@ -35,7 +35,7 @@ $$\mathbb{E}[r_{t+1}\mid \mathcal{F}_t,\, s] \approx 0 \;\Rightarrow\; \text{on 
 Aucun facteur n'entre en production sans franchir le gate DSR/PBO. La qualité du **processus** est
 le produit ; la survie (antifragilité) est l'objectif ; l'honnêteté est la marque.
 
-## Registre des hypothèses alt-data testées (2026-06) — 5 négatifs propres
+## Registre des hypothèses alt-data testées (2026-06) — 7 négatifs propres
 Pipeline honnête appliqué (event-study → placebo → coûts → DSR → PBO). **Un négatif documenté
 vaut un positif** : il ferme une impasse au lieu de vendre un mirage.
 
@@ -46,8 +46,13 @@ vaut un positif** : il ferme une impasse au lieu de vendre un mirage.
 | Insider Form 4 (large + small) | achats nets, dé-chevauchés, vs SPY | ❌ p≥0,55 (le t=8 brut = autocorrélation) |
 | Funding crypto | fade, z causal, placebo | ❌ p=0,16 (t=-3,4 trompeur : queues épaisses) |
 | On-chain TVL/MCap (crypto) | event-study cross-actif, placebo | ❌ p≈0,18 (4 actifs) ; fees/MCap *non testable* (data) |
+| Fear & Greed contrarian (BTC) | fade z causal, placebo, 1000j Binance | ❌ p=0,905 (t=0,38 : aucun signal) |
+| Cassure de canal (BTC) | placebo ✅ p=0,039 → **gate complet** | ❌ **DSR 0 · PBO 0,88 · sabotage échoue** (rétention −11,7) — cas d'école du faux positif |
 
-**Leçon transverse :** plusieurs fois un **t-stat spectaculaire** (insider t=8, funding t=-3,4) a été
-**désamorcé par le placebo** — fenêtres qui se chevauchent + queues épaisses gonflent le t naïf.
-Le placebo (et le PBO) séparent la recherche de l'illusion. **Conclusion : pas d'alpha directionnel
-exploitable dans la data gratuite testée → on optimise la variance, pas l'espérance.**
+**Leçon transverse :** plusieurs fois un **t-stat/p-value spectaculaire** (insider t=8, funding
+t=-3,4, **cassure de canal p=0,039**) a été **désamorcé en aval** — le placebo gonflé par les
+fenêtres qui se chevauchent, puis le **DSR** (déflation tests multiples), le **PBO** (overfit des
+params) et le **sabotage** (coûts réels) qui achèvent le faux positif. La cassure de canal est
+l'exemple parfait : **placebo ✅ mais DSR 0 / PBO 0,88 / sabotage −11,7**. Le gate à 4 étages sépare
+la recherche de l'illusion. **Conclusion : pas d'alpha directionnel exploitable dans la data gratuite
+testée → on optimise la variance, pas l'espérance.**

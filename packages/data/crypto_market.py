@@ -8,8 +8,13 @@ séparés du réseau (testables hors-ligne, réutilisables côté client).
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
+import time
 import urllib.request
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 _CG = "https://api.coingecko.com/api/v3"
@@ -21,15 +26,59 @@ _TRENDING = _CG + "/search/trending"
 _LLAMA_CHAINS = "https://api.llama.fi/v2/chains"
 _STABLES = "https://stablecoins.llama.fi/stablecoins?includePrices=true"
 _FNG = "https://api.alternative.me/fng/?limit=1"
+_BLOCKCOUNT = "https://blockchain.info/q/getblockcount"   # hauteur de bloc BTC (entier)
+
+_STABLE_SYMS = {"USDT", "USDC", "DAI", "USDE", "USDS", "USD1", "FDUSD", "TUSD",
+                "PYUSD", "USDD", "FRAX", "GUSD", "LUSD", "USDP", "BUSD"}
 
 
-def _get_json(url: str, timeout: float = 10.0) -> Any:
+_CACHE_DIR = Path(os.environ.get("QUANT_CACHE_DIR", ".cache/crypto"))
+
+
+def _cache_path(url: str) -> Path:
+    return _CACHE_DIR / (hashlib.sha1(url.encode()).hexdigest() + ".json")  # noqa: S324
+
+
+def _cache_read(url: str) -> Any:
+    """Dernière réponse valide connue (anti rate-limit). None si absente/illisible."""
+    p = _cache_path(url)
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "quant-terminal/1.0"})
-        with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310
-            return json.loads(r.read().decode("utf-8"))
+        return json.loads(p.read_text("utf-8")) if p.exists() else None
     except Exception:  # noqa: BLE001
         return None
+
+
+def _cache_write(url: str, data: Any) -> None:
+    try:
+        _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        _cache_path(url).write_text(json.dumps(data), "utf-8")
+    except OSError:
+        pass
+
+
+def _get_json(url: str, timeout: float = 10.0, retries: int | None = None) -> Any:
+    """GET JSON robuste : retries + backoff, puis repli sur le cache disque.
+
+    Best-effort souverain : si la source rate-limit/tombe, on RÉUTILISE la dernière
+    réponse valide (cache) plutôt que d'afficher du vide — jamais de chiffre inventé.
+    Tunable par env : QUANT_HTTP_RETRIES (déf. 3), QUANT_HTTP_BACKOFF (déf. 1.5 s ;
+    0 = pas d'attente, utile en tests hors-ligne).
+    """
+    if retries is None:
+        retries = int(os.environ.get("QUANT_HTTP_RETRIES", "3"))
+    backoff = float(os.environ.get("QUANT_HTTP_BACKOFF", "1.5"))
+    for attempt in range(max(1, retries)):
+        try:
+            req = urllib.request.Request(
+                url, headers={"User-Agent": "quant-terminal/1.0"})
+            with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310
+                data = json.loads(r.read().decode("utf-8"))
+            _cache_write(url, data)
+            return data
+        except Exception:  # noqa: BLE001
+            if attempt < retries - 1 and backoff > 0:
+                time.sleep(backoff * (attempt + 1))
+    return _cache_read(url)                                # repli : dernière donnée OK
 
 
 def _num(x: Any) -> float | None:
@@ -107,7 +156,11 @@ def parse_chains(data: Any, n: int = 8) -> dict:
 
 
 def parse_stablecoins(data: Any, n: int = 8) -> list[dict]:
-    """stablecoins.llama.fi → [{sym, mcap, price, peg_dev}] (écart au peg $1)."""
+    """stablecoins.llama.fi → [{sym, mcap, price, peg_dev, kind}].
+
+    `kind` distingue les vrais pegs $1 des tokens À RENDEMENT (NAV qui dérive
+    structurellement, ex. USYC ~1,13 $) : les flagger « décrochés » serait trompeur.
+    """
     out = []
     for s in ((data or {}).get("peggedAssets") or []):
         circ = (s.get("circulating") or {}).get("peggedUSD")
@@ -115,8 +168,11 @@ def parse_stablecoins(data: Any, n: int = 8) -> list[dict]:
         price = _num(s.get("price"))
         if s.get("symbol") and mcap:
             peg = round(price - 1.0, 4) if price is not None else None
+            # NAV structurellement loin de 1 $ → token à rendement, pas un dépeg.
+            kind = ("yield" if price is not None and (price >= 1.05 or price <= 0.5)
+                    else "peg")
             out.append({"sym": s["symbol"], "mcap": mcap, "price": price,
-                        "peg_dev": peg})
+                        "peg_dev": peg, "kind": kind})
     out.sort(key=lambda x: x["mcap"], reverse=True)
     return out[:n]
 
@@ -164,6 +220,94 @@ def market_sentiment(ck: dict) -> dict:
             "drivers": drivers}
 
 
+def _ret7d(spark: Any) -> float | None:
+    """Rendement 7 j depuis le sparkline (dernier/premier − 1). None si indispo."""
+    if not spark or len(spark) < 2:
+        return None
+    a, b = spark[0], spark[-1]
+    return (b / a - 1.0) if a else None
+
+
+def altseason(markets: list[dict], top: int = 50) -> dict:
+    """Part du top `top` (hors stablecoins) battant BTC sur 7 j → proxy altseason.
+
+    Dérivé des sparklines DÉJÀ récupérés (aucun appel réseau, aucun chiffre inventé).
+    ≥75 % battent BTC = « Altseason » ; ≤25 % = « Bitcoin » ; sinon « Mixte ».
+    """
+    btc = next((m for m in markets if m.get("sym") == "BTC"), None)
+    btc_r = _ret7d(btc.get("spark7d")) if btc else None
+    if btc_r is None:
+        return {"available": False}
+    valid = [m for m in markets if m.get("mcap") and m.get("sym") not in _STABLE_SYMS]
+    valid.sort(key=lambda m: m["mcap"], reverse=True)
+    rets = [r for m in valid[:top] if m.get("sym") != "BTC"
+            and (r := _ret7d(m.get("spark7d"))) is not None]
+    if len(rets) < 10:
+        return {"available": False}
+    beat = sum(1 for r in rets if r > btc_r)
+    pct = round(100 * beat / len(rets), 1)
+    label = "Altseason" if pct >= 75 else "Bitcoin" if pct <= 25 else "Mixte"
+    return {"available": True, "pct": pct, "n": len(rets),
+            "btc_ret7d": round(btc_r, 4), "label": label}
+
+
+def halving(height: Any) -> dict:
+    """Compte à rebours du halving BTC depuis la hauteur de bloc RÉELLE.
+
+    Halving tous les 210 000 blocs ; ~10 min/bloc. Aucune date inventée : on rend
+    `blocks_left` (exact) et `days_left` (estimation explicite à ~10 min/bloc).
+    """
+    if not isinstance(height, (int, float)) or height <= 0:
+        return {"available": False}
+    height = int(height)
+    interval = 210_000
+    nxt = (height // interval + 1) * interval
+    left = nxt - height
+    return {"available": True, "height": height, "halving_block": nxt,
+            "blocks_left": left, "days_left": round(left * 10 / 1440),
+            "number": nxt // interval,
+            "progress": round((interval - left) / interval, 4)}
+
+
+def _clip(x: float, lo: float = 0.0, hi: float = 1.0) -> float:
+    return max(lo, min(hi, x))
+
+
+def accumulation_score(ck: dict) -> dict:
+    """Score d'Accumulation Institutionnelle 0-100 — CONTRARIAN, déterministe.
+
+    Haut = conditions d'accumulation (peur, shorts surchauffés, poudre sèche élevée) ;
+    bas = euphorie/distribution. Pondère 3 signaux issus du cockpit (aucun inventé) :
+    peur (F&G), funding négatif (dérivés), part stablecoins (capital prêt à entrer).
+    """
+    parts: list[tuple[float, float]] = []          # (poids, signal 0-1)
+    drivers: list[str] = []
+    fng = ck.get("fng") or {}
+    if fng.get("available") and fng.get("value") is not None:
+        s = (100.0 - float(fng["value"])) / 100.0   # peur ↑ → accumulation ↑
+        parts.append((0.40, s))
+        drivers.append(f"peur (F&G {fng['value']:.0f})")
+    se = (ck.get("derivatives") or {}).get("sentiment") or {}
+    if se.get("available") and se.get("avg") is not None:
+        s = _clip(-se["avg"] / 0.0005)              # funding négatif → accumulation
+        parts.append((0.35, s))
+        drivers.append(f"funding {se['avg'] * 100:+.3f}%/8h")
+    g = ck.get("global") or {}
+    tot = g.get("total_mcap")
+    stab = sum(x["mcap"] for x in (ck.get("stablecoins") or []) if x.get("mcap"))
+    if tot and stab:
+        share = stab / tot
+        parts.append((0.25, _clip(share / 0.12)))   # part stable ↑ → poudre sèche ↑
+        drivers.append(f"poudre sèche {share * 100:.1f}% (stablecoins)")
+    if not parts:
+        return {"available": False}
+    wsum = sum(w for w, _ in parts)
+    score = round(sum(w * v for w, v in parts) / wsum * 100, 1)
+    label = ("🟢 ACCUMULATION" if score >= 60
+             else "🔴 EUPHORIE" if score <= 40 else "🟡 NEUTRE")
+    return {"available": True, "score": score, "label": label, "drivers": drivers}
+
+
 def cockpit() -> dict:
     """Assemble le cockpit (build-time). Chaque section best-effort (None/[] si KO)."""
     markets = parse_markets(_get_json(_MARKETS))
@@ -179,4 +323,7 @@ def cockpit() -> dict:
         "fng": parse_fng(_get_json(_FNG)),
     }
     ck["sentiment"] = market_sentiment(ck)
+    ck["altseason"] = altseason(markets)
+    ck["halving"] = halving(_get_json(_BLOCKCOUNT))
+    ck["generated_at"] = datetime.now(timezone.utc).isoformat(timespec="minutes")
     return ck

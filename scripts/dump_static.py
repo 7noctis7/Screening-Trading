@@ -87,7 +87,7 @@ def main() -> int:
     routes = {
         "meta": M.meta, "dashboard": M.dashboard, "screener": M.screener, "screen": M.screen,
         "prediction_markets": M.prediction_markets, "crypto_onchain": M.crypto_onchain,
-        "crypto_cockpit": M.crypto_cockpit,
+        "crypto_cockpit": M.crypto_cockpit, "ticker": M.ticker,
         "preset_ledger": M.preset_ledger, "portfolio": M.portfolio, "positions": M.positions,
         "trades": M.trades, "sentiment": M.sentiment, "fundamentals": M.fundamentals,
         "universe": M.universe, "data": M.data, "themes": M.themes, "ml": M.ml,

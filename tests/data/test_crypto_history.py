@@ -3,9 +3,18 @@
 from packages.data.crypto_history import (
     align,
     parse_fng_history,
+    parse_klines,
     parse_market_chart,
     parse_tvl_history,
 )
+
+
+def test_parse_klines():
+    out = parse_klines([
+        [1517443200000, "9000", "9100", "8900", "9050", "12.3"],
+        [1517529600000, "9050", "9200", "9000", "9150", "8.1"],
+        ["bad"], [123, 1, 2, 3]])
+    assert out[0] == ("2018-02-01", 9050.0) and out[-1][1] == 9150.0
 
 
 def test_parse_fng_history_sorted_deduped():

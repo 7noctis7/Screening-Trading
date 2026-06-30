@@ -1,15 +1,80 @@
 "use client";
 import dynamic from "next/dynamic";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import s from "@/app/landing/landing.module.css";
 
 // 3D chargé côté client uniquement (jamais SSR → compatible export statique).
 const Scene = dynamic(() => import("./Scene"), { ssr: false });
+// Ticker LIVE façon Bloomberg (WebSocket navigateur) — client-only.
+const LandingTicker = dynamic(() => import("./LandingTicker"), { ssr: false });
+import {
+  VizPlacebo, VizDsr, VizPbo, VizSabotage, VizDrawdown, VizScreen, VizRisk, VizPaper,
+} from "./LandingViz";
+
+const GATE = [
+  ["01", "PLACEBO", "p < 0,05", <VizPlacebo key="p" />],
+  ["02", "DSR", "Sharpe déflaté", <VizDsr key="d" />],
+  ["03", "PBO", "Zéro surajustement", <VizPbo key="b" />],
+  ["04", "SABOTAGE", "Stress-test ×3", <VizSabotage key="s" />],
+] as const;
+
+const CARDS = [
+  ["SCREENING", "100 % point-in-time. Zéro look-ahead.", <VizScreen key="sc" />],
+  ["RISQUE", "Vol-target & kill-switch automatiques.", <VizRisk key="ri" />],
+  ["PAPER", "Exécution simulée par défaut. Sans exception.", <VizPaper key="pa" />],
+] as const;
+
+// Méthodologie détaillée (clic sur un visuel → modale). Froid, factuel, sans hype.
+const DETAILS: Record<string, { title: string; body: string[] }> = {
+  PLACEBO: { title: "01 · Placebo (test de permutation)", body: [
+    "Tout backtest gagnant est présumé chanceux jusqu'à preuve du contraire.",
+    "On rejoue le signal sur des milliers de dates ALÉATOIRES (hypothèse nulle H0). "
+    + "Si l'effet réel n'est pas distinguable du hasard (p ≥ 0,05), il est rejeté.",
+    "Désamorce les t-stats gonflés par les fenêtres d'événements qui se chevauchent."] },
+  DSR: { title: "02 · DSR — Deflated Sharpe Ratio", body: [
+    "Bailey & López de Prado. Le Sharpe est déflaté par le NOMBRE d'essais : chaque "
+    + "configuration testée relève le seuil de Sharpe attendu sous H0.",
+    "Exigence : DSR > 0,5. Punit le data-mining — essayer 100 stratégies en fait "
+    + "ressortir une par pur hasard.",
+    "Notre cassure de canal a passé le placebo (p=0,039) mais échoué ici (DSR 0)."] },
+  PBO: { title: "03 · PBO / CSCV — surajustement", body: [
+    "Probability of Backtest Overfitting (Combinatorially Symmetric Cross-Validation).",
+    "On découpe l'historique en blocs, on choisit la config championne IN-sample, puis "
+    + "on mesure son rang OUT-of-sample sur toutes les combinaisons.",
+    "PBO = fréquence où la championne IS finit sous la médiane OOS. < 0,5 = robuste "
+    + "(la nôtre : 0,88 → rejetée)."] },
+  SABOTAGE: { title: "04 · Sabotage — stress adversarial", body: [
+    "On dégrade VOLONTAIREMENT l'exécution : coûts ×3, bruit injecté, latence.",
+    "L'edge doit SURVIVRE : Sharpe stressé > 0 et rétention ≥ 50 % du Sharpe propre.",
+    "Un alpha brut mangé par les frais est éliminé (rétention −11,7 sur la cassure)."] },
+  SCREENING: { title: "Screening — point-in-time", body: [
+    "Chaque décision n'utilise QUE l'information connue à l'instant t (vintages, pas de "
+    + "révisions futures) → zéro look-ahead, pas de fuite du futur.",
+    "Filtres + z-score cross-sectionnel sur l'univers investable (actions, ETF, crypto)."] },
+  RISQUE: { title: "Risque — piloté, pas subi", body: [
+    "Vol-targeting : la taille s'ajuste à la volatilité prévue (cible de vol constante).",
+    "Kill-switch : coupe l'exposition si le drawdown ou le VIX franchit un seuil.",
+    "Overlay drawdown + concentration corrélation-aware (HRP / risk-budget)."] },
+  PAPER: { title: "Paper — exécution simulée par défaut", body: [
+    "Même interface que le live → parité backtest / paper / live (on échange le broker).",
+    "Aucun ordre réel sans --live --yes ET clés API. Ordres routés en sandbox broker.",
+    "Le risque avant le rendement. Pas un conseil en investissement."] },
+};
 
 const BASE = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
 export default function LandingClient() {
   const heroRef = useRef<HTMLDivElement>(null);
+  const [detail, setDetail] = useState<{ title: string; body: string[] } | null>(null);
+
+  // La landing est TOUJOURS sombre → force le thème sombre tant qu'elle est montée
+  // (scrollbar/contrôles natifs assortis) ; restaure l'état précédent en quittant.
+  useEffect(() => {
+    const el = document.documentElement;
+    const had = el.classList.contains("dark");
+    el.classList.add("dark");
+    return () => { if (!had) el.classList.remove("dark"); };
+  }, []);
 
   // Lenis : scroll inertiel soyeux (sync avec le 3D piloté par window.scrollY).
   useEffect(() => {
@@ -60,98 +125,80 @@ export default function LandingClient() {
       <div className={s.canvas} aria-hidden="true"><Scene /></div>
 
       <main className={s.content}>
-        {/* HERO — hybride : manifeste + accroche produit */}
+        {/* Bandeau terminal LIVE (Bloomberg) */}
+        <LandingTicker />
+
+        {/* 1 — HERO (impact Jobs : 3 mots, données, formule maître) */}
         <header ref={heroRef} className={s.hero}>
           <div className={s.spotlight} aria-hidden="true" />
-          <p className={s.kicker}>Quant Terminal · open-source · paper-first · 0 €</p>
+          <p className={s.kicker}>0 € · open source · infrastructure quant</p>
           <h1 className={s.title}>
             L'alpha se vend.<br /><em>La survie se prouve.</em>
           </h1>
-          <p className={s.sub}>
-            Screening multi-actifs, risque de niveau institutionnel, IA tenue en laisse.
-            Aucun oracle promis : on prouve la <b>discipline</b> et on publie ce qui
-            échoue. Le seul terminal quant assez honnête pour afficher ses limites.
-          </p>
+          <p className={s.sub}>Gratuit. Il se mérite par la discipline.</p>
           <div className={s.cta}>
             <a className={`${s.btn} ${s.btnPrimary}`} href={`${BASE}/accueil/`}
-              aria-label="Ouvrir le terminal — page Accueil">Ouvrir le terminal →</a>
+              aria-label="Entrer dans le terminal">Entrer dans le terminal →</a>
             <a className={s.btn} href={`${BASE}/dashboard/`}
               aria-label="Voir la démo — tableau de bord">Voir la démo</a>
           </div>
           <div className={s.scrollCue} aria-hidden="true">scroll</div>
         </header>
 
-        {/* SECTION — le pipeline de validation (gate à 4 étages) */}
-        <section className={`${s.section} ${s.reveal}`} aria-labelledby="ld-method">
-          <div className={s.eyebrow}>Méthode</div>
-          <h2 id="ld-method" className={s.h2}>On essaie d'abord de le casser.</h2>
-          <p className={s.lead}>
-            Tout backtest gagnant est présumé chanceux. Avant le moindre ordre, le signal
-            affronte un gate déterministe — hasard, data-mining, surapprentissage,
-            exécution dégradée. Quatre étages. Aucun raccourci.
-          </p>
-          <div className={s.flow}>
-            {[
-              ["01", "Placebo", "Bat le hasard, ou rien. (p < 0,05)"],
-              ["02", "DSR", "Sharpe déflaté du data-mining (López de Prado)"],
-              ["03", "PBO / CSCV", "Zéro surajustement, prouvé hors-échantillon"],
-              ["04", "Sabotage", "Survit à coût ×3, bruit et latence ?"],
-            ].map(([k, t, d]) => (
-              <div key={k} className={s.step}>
-                <div className={s.stepK}>{k}</div>
-                <div className={s.stepT}>{t}</div>
-                <div className={s.stepD}>{d}</div>
-              </div>
+        {/* 2 — THE GATE (pipeline visuel, métrique + schéma par étage) */}
+        <section className={`${s.section} ${s.reveal}`} aria-labelledby="ld-gate">
+          <div className={s.eyebrow}>The Gate</div>
+          <h2 id="ld-gate" className={s.h2}>Quatre portes. Aucun raccourci.</h2>
+          <div className={`${s.grid} ${s.grid4}`}>
+            {GATE.map(([k, t, m, viz]) => (
+              <button key={k as string} className={s.cell} onClick={() => setDetail(DETAILS[t as string])}
+                style={{ cursor: "pointer", textAlign: "left", font: "inherit", color: "inherit", border: 0 }}>
+                <div className={s.stepK}>{k} · {t} <span style={{ opacity: .5 }}>＋</span></div>
+                <div className={s.cellLabel} style={{ margin: ".25rem 0 .6rem" }}>{m}</div>
+                {viz}
+              </button>
             ))}
           </div>
         </section>
 
-        {/* SECTION — preuves chiffrées (démo) */}
+        {/* 3 — MANIFESTE DE L'ÉCHEC (compteurs géants + drawdown comparé) */}
         <section className={`${s.section} ${s.reveal}`} aria-labelledby="ld-proof">
-          <div className={s.eyebrow}>Preuves</div>
-          <h2 id="ld-proof" className={s.h2}>Cinq pistes. Cinq échecs. Tous publiés.</h2>
-          <div className={`${s.grid} ${s.grid4}`}>
-            {[
-              ["83/100", "score audit (3 rounds)", true],
-              ["5/5", "hypothèses d'alpha rejetées", false],
-              ["0 €", "coût d'infra", true],
-              ["−9 %", "MaxDD preset vs −23 % équipondéré", false],
-            ].map(([n, l, teal]) => (
-              <div key={l as string} className={s.cell}>
-                <div className={`${s.cellNum} ${teal ? s.teal : ""}`}>{n}</div>
-                <div className={s.cellLabel}>{l}</div>
-              </div>
-            ))}
+          <div className={s.eyebrow}>Manifeste de l'échec</div>
+          <h2 id="ld-proof" className={s.h2}>7 pistes testées. 7 échecs publiés.</h2>
+          <div className={`${s.grid} ${s.grid3}`} style={{ alignItems: "center" }}>
+            <div className={s.cell}>
+              <div className={`${s.cellNum} ${s.teal}`}>−9 %</div>
+              <div className={s.cellLabel}>MaxDD — Quant Terminal</div>
+            </div>
+            <div className={s.cell}>
+              <div className={s.cellNum}>−23 %</div>
+              <div className={s.cellLabel}>MaxDD — marché équipondéré</div>
+            </div>
+            <div className={s.cell}><VizDrawdown /></div>
           </div>
           <p className={s.lead} style={{ marginTop: "2rem" }}>
-            Cinq pistes d'alpha — actions, insiders, funding, on-chain — testées, cinq
-            négatifs propres et documentés. Un négatif honnête vaut mille faux positifs.
-            La performance, ici, c'est de <b>survivre</b> aux régimes que les autres
-            n'ont pas vus venir.
+            Un négatif honnête vaut mille faux positifs. <b>Survivre</b> aux régimes que
+            les autres n'ont pas vus venir.
           </p>
         </section>
 
-        {/* SECTION — démo produit */}
-        <section className={`${s.section} ${s.reveal}`} aria-labelledby="ld-product">
+        {/* 4 — ARCHITECTURE (3 cards glassmorphism : titre, ligne tech, visuel) */}
+        <section className={`${s.section} ${s.reveal}`} aria-labelledby="ld-archi">
           <div className={s.eyebrow}>Le terminal</div>
-          <h2 id="ld-product" className={s.h2}>Du screening au paper, rien sous le tapis.</h2>
+          <h2 id="ld-archi" className={s.h2}>Trois modules. Une discipline.</h2>
           <div className={`${s.grid} ${s.grid3}`}>
-            {[
-              ["Screening", "Actions, ETF, crypto. Filtres + z-score, univers investable, "
-                + "100 % point-in-time — zéro look-ahead."],
-              ["Risque", "Vol-target, kill-switch, overlay drawdown, concentration "
-                + "corrélation-aware. L'edge réel, mesuré."],
-              ["Paper", "Exécution simulée par défaut. Aucun euro réel sans validation "
-                + "humaine. Le risque avant le rendement."],
-            ].map(([t, d]) => (
-              <div key={t} className={s.cell}>
-                <div className={s.stepT}>{t}</div>
-                <div className={s.cellLabel} style={{ marginTop: ".6rem" }}>{d}</div>
-              </div>
+            {CARDS.map(([t, d, viz]) => (
+              <button key={t as string} className={s.cell} onClick={() => setDetail(DETAILS[t as string])}
+                style={{ cursor: "pointer", textAlign: "left", font: "inherit", color: "inherit", border: 0 }}>
+                <div className={s.stepT}>{t} <span style={{ opacity: .5 }}>＋</span></div>
+                <div className={s.cellLabel} style={{ margin: ".4rem 0 .7rem" }}>{d}</div>
+                {viz}
+              </button>
             ))}
           </div>
         </section>
 
+        {/* 5 — FOOTER (promesse de discipline) */}
         <footer className={s.footer}>
           <h2 className={s.h2}>La discipline est le seul alpha.</h2>
           <div className={s.cta} style={{ justifyContent: "center" }}>
@@ -162,6 +209,31 @@ export default function LandingClient() {
           </div>
         </footer>
       </main>
+
+      {/* Modale méthodologie (clic sur un visuel) */}
+      {detail && (
+        <div onClick={() => setDetail(null)} role="dialog" aria-modal="true"
+          style={{ position: "fixed", inset: 0, zIndex: 60, display: "grid",
+            placeItems: "center", padding: "1.5rem", background: "rgba(0,0,0,.6)" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            maxWidth: 520, width: "100%", borderRadius: 18, padding: "1.6rem 1.8rem",
+            background: "rgba(10,17,24,.96)", border: "1px solid rgba(94,234,212,.2)",
+            backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
+            boxShadow: "0 30px 80px rgba(0,0,0,.6)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem" }}>
+              <h3 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 600,
+                color: "#eaf2f4", letterSpacing: "-.01em" }}>{detail.title}</h3>
+              <button onClick={() => setDetail(null)} aria-label="Fermer"
+                style={{ background: "none", border: 0, color: "#8aa0a9",
+                  fontSize: "1.4rem", lineHeight: 1, cursor: "pointer" }}>×</button>
+            </div>
+            {detail.body.map((p, i) => (
+              <p key={i} style={{ color: "#aebfc7", fontSize: ".95rem", lineHeight: 1.6,
+                marginTop: ".8rem" }}>{p}</p>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -17,8 +17,12 @@ from datetime import datetime, timezone
 from typing import Any
 
 _FNG = "https://api.alternative.me/fng/?limit=0&format=json"
+# Binance klines = source BTC PRIMAIRE (gratuit, sans clé, fiable ; déjà utilisé
+# pour le funding). CoinGecko market_chart en repli (souvent rate-limité en gratuit).
+_BTC_BINANCE = ("https://api.binance.com/api/v3/klines"
+                "?symbol=BTCUSDT&interval=1d&limit=1000")
 _BTC = ("https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
-        "?vs_currency=usd&days=max&interval=daily")
+        "?vs_currency=usd&days=365")            # repli (sans interval=daily, payant)
 _TVL = "https://api.llama.fi/v2/historicalChainTvl"
 
 
@@ -70,6 +74,22 @@ def parse_market_chart(data: Any) -> list[tuple[str, float]]:
     return sorted(out.items())
 
 
+def parse_klines(data: Any) -> list[tuple[str, float]]:
+    """Binance klines → [(date, close)] trié. close = idx 4 ; openTime (ms) = idx 0."""
+    out: dict[str, float] = {}
+    for row in (data or []):
+        if not isinstance(row, (list, tuple)) or len(row) < 5:
+            continue
+        d = _day(row[0], "ms")
+        try:
+            v = float(row[4])
+        except (TypeError, ValueError):
+            v = None
+        if d and v is not None:
+            out[d] = v
+    return sorted(out.items())
+
+
 def parse_tvl_history(data: Any) -> list[tuple[str, float]]:
     """DefiLlama historicalChainTvl → [(date, tvl)] trié croissant."""
     out: dict[str, float] = {}
@@ -89,7 +109,9 @@ def fng_history() -> list[tuple[str, float]]:
 
 
 def btc_price_history() -> list[tuple[str, float]]:
-    return parse_market_chart(_get_json(_BTC))
+    """Prix BTC quotidien : Binance klines (primaire), CoinGecko en repli."""
+    out = parse_klines(_get_json(_BTC_BINANCE))
+    return out if out else parse_market_chart(_get_json(_BTC))
 
 
 def tvl_history() -> list[tuple[str, float]]:

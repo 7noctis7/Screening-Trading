@@ -12,6 +12,18 @@
   - critère GO : paper cohérent avec le backtest (pas de dérive Sharpe>1pt, MaxDD non dépassé).
   - si concordant → engager un capital réel **limité** + sizing défensif ; sinon → re-calibrer.
 
+## 🪙 CE SOIR SUR LE MAC — cockpit crypto LIVE + gate + croissance (2026-06-29, suite 2)
+> Tout est sur `claude/clever-lovelace-ognwya` (PR #287, auto-merge dès CI verte → redéploiement).
+- [ ] **Récupérer (pour voir l'Obsidian à jour + le code)** : `qt && git pull origin claude/clever-lovelace-ognwya`.
+- [ ] **Voir le trio LIVE** : `make stop && make start` → http://localhost:3000/crypto
+      (jauge de sentiment + graphe Coinbase WebSocket + analyse « Œil de Hasheur »).
+- [ ] **Tester l'embed** : http://localhost:3000/crypto/?embed=1 (widget read-only, nav masquée).
+- [ ] **Verdicts de gate déjà obtenus** : F&G contrarian ❌ p=0,905 (6e) · cassure de canal ❌
+      DSR 0/PBO 0,88/sabotage (7e). Rien câblé au ML. (Re-run : `make regime-study` / `breakout-study`.)
+- [ ] **RAG vault** : `make vault-ask Q="…"` · **screener NL** : `make crypto-screen Q="cap > 5md top 10"`.
+- [ ] **Rebalancement paper auto** : déjà activé (`make live-cron-install`, launchd lun-ven 16h05).
+- [ ] **Partager** : bouton « Partager sur X / Farcaster » + « Intégrer (iframe) » en haut de /crypto.
+
 ## 🪙 CE SOIR SUR LE MAC — cockpit crypto + test régime F&G (2026-06-29)
 > Livré : page `/crypto` (cockpit marché, gratuit), note Obsidian déterministe, et un TEST honnête
 > du Fear & Greed comme signal contrarian BTC (gate placebo). **Réseau bloqué côté agent** → ces 3

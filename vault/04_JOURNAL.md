@@ -1,5 +1,46 @@
 # 04 — JOURNAL
 
+## Session 2026-06-29 (suite 2) — Cockpit crypto LIVE + gate breakout + RAG + croissance
+**Fait (gros lot, ~12 PR-commits sur `claude/clever-lovelace-ognwya`, #285→#287).**
+
+**Cockpit crypto enrichi.** Robustesse `_get_json` (retries+backoff → repli **cache disque**
+`.cache/crypto`, persistant en CI via `actions/cache` → jamais de `n/d` silencieux) + badge de
+fraîcheur. Correctif **peg** (USYC/BUIDL = tokens à *rendement*, plus flaggés « décrochés »).
+Sections **Halving** (hauteur de bloc réelle), **Altseason** (dérivé des sparklines), **Dérivés**
+(funding multi-CEX normalisé Bybit/OKX/Binance, pattern Coinglass/Velodata en build-time),
+**Score d'Accumulation Institutionnelle 0-100** (contrarian déterministe). **Mini-fiche** in-page
+(clic → prix/24h/7j + graphe 7j) + items **cliquables** vers CoinGecko + **glossaire** (InfoTip).
+
+**ML honnête — 2 nouveaux négatifs (6e + 7e).** `regime_study` (F&G contrarian BTC) → **BRUIT**
+(p=0,905). `breakout` (cassure de canal) → placebo ✅ p=0,039 **mais gate complet** (DSR/PBO/
+sabotage via psr/pbo/adversarial) → **REJETÉ** (DSR 0 · PBO 0,88 · sabotage −11,7). **Cas d'école**
+du faux positif que le placebo seul aurait laissé passer. Bug corrigé : BTC history via **Binance
+klines** (CoinGecko gratuit renvoyait 0). `make regime-study` / `breakout-study`.
+
+**RAG ancré + text-to-filter (Fiscal.ai, mais déterministe).** `vault_rag` → réponse **extractive
+citée** [n]→fichier (0 hallucination), `make vault-ask`. `crypto_query` → NL→params→**le code
+filtre**, `make crypto-screen`.
+
+**Trio LIVE client-direct** (décision d'archi : proxy serveur **impossible** sur statique → WS
+navigateur + REST CORS, `n/d` sinon ; cf. ADR-0025) : **jauge de sentiment** (low-pass 0,25 :
+F&G+momentum WS+funding+ΔOI), **graphe** Lightweight Charts (UMD CDN, Coinbase WS, v4 pin),
+**analyse experte « Œil de Hasheur »** (CoinGecko+F&G+DefiLlama RWA+Bybit/OKX, sentiment composite
+transparent, auto-refresh 90s visible-only).
+
+**Croissance (M5) + landing (M6).** Boucle **partage/embed** (X/Farcaster + iframe `?embed=1`
+read-only) — seule loop compatible 0 €/statique/marque ; **profils audités + parrainage refusés**
+(backend obligatoire + anti-brand). Landing hero **froid/mathématique** (4 portes dans le hero),
+compteur **7 échecs publiés**.
+
+**Auto.** `make live-cron-install` (launchd) → rebalancement **paper** quotidien lun-ven (Alpaca
+forcé paper, crypto réel neutralisé).
+
+**Décidé.** Le gate à 4 étages reste **la valeur** : 7/7 hypothèses rejetées, 0 cachée, ML pur. Le
+live crypto est du **contexte** (pas un signal). On optimise la variance, pas l'espérance.
+
+**Prochaine étape.** Revue courbe paper **2026-08-06** (inchangée). Optionnel : RAG en outil MCP ;
+KDE/K-Means zones de liquidité (→ gate). 
+
 ## Session 2026-06-29 (suite) — Cockpit crypto (vue marché, contexte gratuit)
 **Fait.** Page `/crypto` + section snapshot `crypto_cockpit` (gatée `QUANT_CRYPTO=1`, best-effort,
 build-time → JSON statique). Sources **gratuites, sans clé côté client** : CoinGecko
