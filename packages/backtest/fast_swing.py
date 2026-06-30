@@ -153,6 +153,8 @@ def fast_swing_backtest(
                 b = data[s]
                 nxt = min(t + 1, len(b) - 1)
                 fillp = b[nxt].open if (next_open_fills and nxt > t) else price
+                if fillp <= 0:                              # prix d'exécution invalide
+                    continue                                # (barre open=0 d'un delisted) → skip
                 fill_ts = b[nxt].ts if (next_open_fills and nxt > t) else b[t].ts
                 qty = min(eq * min(frac_cap, target_annual_vol / inst_vol), room) / fillp
                 if qty * fillp < eq * 0.01:                 # ligne trop petite → on saute
