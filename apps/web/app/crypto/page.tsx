@@ -533,10 +533,10 @@ export default function Crypto() {
         />
       ) : (
         <>
-          <MountWhenVisible minHeight={120}><LiveGauge /></MountWhenVisible>
-          <MountWhenVisible minHeight={420}><LiveChart /></MountWhenVisible>
-          <MountWhenVisible minHeight={360}><DepthLadder /></MountWhenVisible>
-          <MountWhenVisible minHeight={300}><ExpertLive /></MountWhenVisible>
+          <MountWhenVisible minHeight={120} label="la jauge de sentiment"><LiveGauge /></MountWhenVisible>
+          <MountWhenVisible minHeight={420} label="le graphe live"><LiveChart /></MountWhenVisible>
+          <MountWhenVisible minHeight={360} label="le sonar du carnet"><DepthLadder /></MountWhenVisible>
+          <MountWhenVisible minHeight={300} label="l'analyse experte"><ExpertLive /></MountWhenVisible>
           <Overview ck={data} />
           <Accumulation ck={data} />
           <Pulse ck={data} />
