@@ -92,7 +92,8 @@ def full_gate(closes, win: int = 60, k: float = 2.0, post: int = 5,
     ret = strategy_returns(closes, win=win, k=k, post=post)
     mean, sd = float(ret.mean()), float(ret.std(ddof=1))
     sharpe = mean / sd if sd > 0 else 0.0
-    grid = [(w, p) for w in (40, 60, 80) for p in (3, 5, 10)]
+    # Grille ≥20 configs → PBO/CSCV moins bruité (9 configs = estimateur instable).
+    grid = [(w, p) for w in (30, 40, 50, 60, 80) for p in (3, 5, 8, 10)]
     cols = [strategy_returns(closes, win=w, post=p) for w, p in grid]
     tmin = min(c.size for c in cols)
     mat = np.column_stack([c[-tmin:] for c in cols])
