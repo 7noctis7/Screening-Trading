@@ -249,8 +249,10 @@ def _themes_section(data: dict, sector_of: dict, end) -> dict:
                            "setup": _setup_label(mom, trend)})
         if len(assets) < 3:
             continue
-        ytd_sec = sum(a["ytd"] for a in assets) / len(assets)
-        mom_sec = sum(a["momentum"] for a in assets) / len(assets)
+        # MÉDIANE (pas moyenne) → robuste : une seule valeur extrême (COIN/MSTR +1000 %
+        # ou glitch de base passé sous le garde-fou) ne fait plus exploser le secteur.
+        ytd_sec = float(np.median([a["ytd"] for a in assets]))
+        mom_sec = float(np.median([a["momentum"] for a in assets]))
         stance = "bullish" if ytd_sec > 0.05 else "bearish" if ytd_sec < -0.05 else "neutral"
         top = sorted(assets, key=lambda a: a["setup_score"], reverse=True)[:4]
         out.append({"sector": sec, "ytd": round(ytd_sec, 4), "momentum": round(mom_sec, 4),
