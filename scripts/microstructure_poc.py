@@ -58,7 +58,7 @@ def main() -> int:
             time.sleep(1.0)
     except KeyboardInterrupt:
         print("\narrêté.")
-    print("\nLecture : OFI>0 = pression acheteuse · vPIN↑ = flux toxique (risque de choc).")
+    print("\nLecture : OFI>0 = pression acheteuse · vPIN↑ = flux toxique.")
     print("⚠️ Signal de recherche — à valider au gate (placebo/DSR/PBO/sabotage).")
     return 0
 
