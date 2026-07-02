@@ -17,7 +17,7 @@ from packages.core.models import Order, OrderStatus, Position, Side
 
 class BitmartBroker:
     name = "bitmart"
-    is_paper = False                 # Bitmart n'a pas de vrai paper → dry_run protège
+    is_paper: bool = False           # Bitmart n'a pas de vrai paper → dry_run protège (défaut True)
 
     def __init__(self, api_key: str | None = None, api_secret: str | None = None,
                  memo: str | None = None, dry_run: bool = True, market: str | None = None) -> None:
@@ -29,6 +29,8 @@ class BitmartBroker:
         self.market = (market or os.environ.get("BITMART_MARKET", "spot")).lower()
         self._ex = None              # connexion ccxt paresseuse
         self._loaded = False
+        # Idempotence : client_id → statut RÉEL du 1er submit (rejoué tel quel sur retry).
+        self._seen: dict[str, OrderStatus] = {}
 
     def _live(self) -> bool:
         return not self.dry_run and bool(self._key and self._secret)
