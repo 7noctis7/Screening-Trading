@@ -20,6 +20,7 @@ from packages.data import data_providers  # noqa: E402
 from packages.execution import CostModel, LiveTradingEngine, SimBroker  # noqa: E402
 from packages.portfolio.sizing import sizers  # noqa: E402
 from packages.risk import RiskEngine, risk_rules  # noqa: E402
+from packages.storage import SqliteTradeJournal  # noqa: E402
 from packages.strategies import strategies  # noqa: E402
 
 
@@ -35,7 +36,7 @@ def main() -> int:
         risk_engine=RiskEngine([risk_rules.create("max_positions", max_positions=10),
                                 risk_rules.create("max_exposure_per_asset", max_pct=0.10)],
                                max_daily_drawdown_pct=0.05),
-        broker=broker)
+        broker=broker, journal=SqliteTradeJournal(":memory:"))  # démo synthétique : pas de journal réel
 
     n = max(len(b) for b in data.values())
     for i in range(60, n):                       # streaming : un pas par barre

@@ -3,6 +3,7 @@ from packages.data import data_providers
 from packages.execution import SimBroker, CostModel, LiveTradingEngine
 from packages.risk import RiskEngine, risk_rules
 from packages.portfolio.sizing import sizers
+from packages.storage import SqliteTradeJournal
 from packages.strategies import strategies
 
 
@@ -11,7 +12,7 @@ def _engine(broker):
         strategy=strategies.create("ma_crossover", fast=10, slow=30),
         sizer=sizers.create("vol_target", max_capital_frac=0.10),
         risk_engine=RiskEngine([risk_rules.create("max_exposure_per_asset", max_pct=0.10)]),
-        broker=broker)
+        broker=broker, journal=SqliteTradeJournal(":memory:"))  # isole du journal réel
 
 
 def test_live_step_runs_and_reconciles():
@@ -35,7 +36,8 @@ def test_kill_switch_blocks_entries():
     risk.mark_equity(50_000)                 # -50 % → kill-switch armé
     eng = LiveTradingEngine(
         strategy=strategies.create("ma_crossover"), risk_engine=risk, broker=broker,
-        sizer=sizers.create("vol_target", max_capital_frac=0.10))
+        sizer=sizers.create("vol_target", max_capital_frac=0.10),
+        journal=SqliteTradeJournal(":memory:"))
     assert eng.kill_switch is True
     ts = _dt(2021, 1, 4, tzinfo=timezone.utc)
     bar = Bar("AAPL", "1d", ts, 100, 101, 99, 100, 1000)
