@@ -1,5 +1,34 @@
 # 04 — JOURNAL
 
+## Session 2026-07-02 (soir) — Audit adverse institutionnel (6 axes, scoring double, preuves exécutées)
+**Contexte.** Audit technique ultra-sévère demandé (6 axes : Data / ML / Exécution / Portefeuille / Risque-Backtest /
+MLOps). Barème **recalibré sur le scope assumé** (daily/EOD, paper, 0 € infra, DSR≈0 = constat honnête) : HFT/tick-data/
+ML-lourd/infra-orchestrée = **(B) hors-scope, exclus du calcul** ; sévérité max sur l'in-scope (PIT, look-ahead, coûts,
+gates, qualité data, repro, secrets, honnêteté chiffres). Méthode : **preuve exécutée `fichier:ligne` obligatoire**, un
+finding non prouvé = retiré. Purge P0-2 en amont : manifeste dé-chiffré (commit `67df65d`), dashboard + `Preset_Performance.md`
+régénérés par le pipeline anti-fuite.
+
+**Fait.**
+- **Cartographie** des 6 axes par 6 agents d'inventaire read-only (`fichier:ligne`, y compris absences).
+- **6 findings capital/vérité prouvés ou retirés** : **#4 idempotence Bitmart** (`bitmart_broker.py:99`, retry redouble
+  l'ordre) → **CONFIRMÉ capital** (gaté `dry_run`/`QUANT_NO_CRYPTO_LIVE=1`) ; **#5 fills partiels** (`live_engine.py:111`,
+  `"filled"` strict → position non trackée) → **CONFIRMÉ** ; **#1 fuite Platt** (`snapshot.py:670-675`) → confirmé mais
+  **RÉTROGRADÉ LOW** (métrique in-sample, `cal`/`p_cal` n'atteignent ni probas servies ni sizing → prémisse « contamine
+  le sizing » réfutée) ; **#3 doublons DSR×3/PBO×2** → **reclassé dette** (2 impl. mortes, chaque call-site bien lié) ;
+  **#2 `calibrate.py:34`** → **RETIRÉ** (exécuté, bon `import` psr, pas de crash) ; **#6 `.env`** → **RETIRÉ PASS**
+  (gitignoré + jamais dans l'historique `git log --all`).
+- **Scoring /20** : Data 15 · Risque 15 · Portefeuille 15 · ML 13 · Prod 11 · Exécution 10. **Double moyenne : égal-pondéré
+  13,2 / pondéré-risque 13,7.** Écrit dans `vault/14_FULL_REVIEW.md` (section « Audit adverse 02/07 »).
+
+**Décidé.** **ADR-0029** : long-only = scope v1 assumé (pas une régression, `sim_broker.py:43`). Findings capital #4/#5
+classés **P0-SI-LIVE** (bloquants avant activation broker réel) ; #1/#3 en **P2**. Garde-fou ajouté à `CLAUDE.md` :
+« ne jamais passer un broker en live sans avoir fermé ses P0-SI-LIVE ».
+
+**Prochaine étape.** Corriger #4 (clientOrderId ccxt + court-circuit idempotent) et #5 (gérer `PARTIALLY_FILLED` +
+brancher l'alerte de réconciliation) — **demain, pas ce soir** (aucun code ce soir). Filet opérationnel : brancher
+l'alerting (Telegram/Discord codé mais non câblé) reste le plus gros trou prod (axe 6). P0 full-review (fuite univers
+preset) toujours en attente du re-run Mac complet.
+
 ## Session 2026-07-02 (suite) — Persistance du journal de trades + capture features (P1-1 clos)
 **Contexte.** Suite directe du full-review : le finding P1-1 (journal en mémoire, 0/100
 `features_snapshot`, calibrations UNCALIBRATED N=0). Branche `feat/journal-features-snapshot`.

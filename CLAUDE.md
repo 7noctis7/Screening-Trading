@@ -38,6 +38,8 @@ reconstruit chaque jour ouvré par GitHub Actions (`.github/workflows/pages.yml`
 
 ## GARDE-FOUS (ne jamais enfreindre)
 - **Paper par défaut.** Aucun ordre réel sans `--live --yes` **ET** clés API présentes.
+- **Ne jamais passer un broker en live sans avoir fermé les P0-SI-LIVE de ce broker** (cf. `vault/03_TODO.md`).
+  Aujourd'hui ouverts : #4 idempotence Bitmart, #5 fills partiels — bloquants avant toute activation broker réel.
 - **Jamais committer** `.env`, `*.db` (YAHOO/market/crypto), `.cache/`, `site/`, `apps/web/public/{data,reports}` — déjà gitignorés. Vérifier avant un `git add -A`.
 - **Repo PUBLIC** : aucune donnée confidentielle. Les **positions réelles courtier sont local-only**
   (le build CI n'a pas les clés). gitleaks tourne en CI + pre-commit.

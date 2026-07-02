@@ -12,6 +12,10 @@
 - [ ] **P0-2** : manifeste `12_MANIFESTE_HONNETETE.md:18` affirme « alpha 6,9 % corrigé » alors que dashboard
       affiche `alpha 6,79 %` fuité → régénérer après P0-1 ou retirer le claim.
 - [ ] **P0-3** : `preset_equity_daily` equity **brute sans coûts** (`preset_backtest.py:323`).
+### ⛔ P0-SI-LIVE — bloquants AVANT toute activation d'un broker réel (audit adverse 02/07, cf. `14_FULL_REVIEW.md`)
+> Prouvés, sévérité capital/ops. **Ne jamais passer le broker concerné en live tant que son P0-SI-LIVE n'est pas fermé** (garde-fou CLAUDE.md).
+- [ ] **#4 Idempotence Bitmart** (`bitmart_broker.py:99`) : `create_order` sans `clientOrderId` → un retry (`retry.py:28`, retente sur REJECTED) **redouble l'ordre marché crypto réel**. Correctif : passer `client_order_id` en `params` ccxt + court-circuiter les `client_id` déjà vus (comme `SimBroker`). *Gaté aujourd'hui par `dry_run=True` + `QUANT_NO_CRYPTO_LIVE=1`.*
+- [ ] **#5 Fills partiels** (`live_engine.py:111`) : ouverture sur `"filled"` strict → `PARTIALLY_FILLED` (mappé `:16`) ignoré = position broker **non trackée** (ni stop ni target), `reconcile.py:35` détecte mais alerte non branchée. Correctif : gérer `PARTIALLY_FILLED` (ouvrir à `filled_qty`, suivre le reliquat) + brancher l'alerte de réconciliation.
 ### 🟠 P1
 - [x] **P1-1** ✅ (2026-07-02, suite) : `SqliteTradeJournal` (`data/journal.db`, JSON features, UPSERT
       idempotent, flag `legacy` requêtable) + `LiveTradingEngine` persiste par défaut + `import_legacy_fills.py`
@@ -24,6 +28,10 @@
 - [ ] **P1-6** : 9 modules top1pct **orphelins** — câbler ou marquer « en attente » ; enregistrer `vol_target`/`kelly_uncertain` au registre Sizer.
 - [ ] **P1-7** : dérive vault — table état (`01_ARCHITECTURE.md:100-105`), diagramme Mermaid (~10 pkgs), entrée journal 2026-07-02, **ADR-0026** (ops-kit).
 ### 🟢 P2
+- [ ] **P2 (audit 02/07)** — **#1 Fuite Platt** (`snapshot.py:670-675`, LOW, non-capital) : fit Platt sur une tranche
+      60-80 % **distincte** du test 80-100 % (aujourd'hui `brier_calibrated` est in-sample = optimiste, mais n'atteint
+      ni les probas servies ni le sizing). **#3 Doublons DSR/PBO** : supprimer les 2 impl. **mortes** `validation/sharpe_stats.deflated_sr`
+      + `validation/pbo.pbo_cscv` (0 importeur hors `test_smoke_all.py`) — étend P1-5.
 - [ ] **P2** : câbler `macro_publication_lags.yaml` + `risk_top1pct.yaml` · crypto DB 13 j de retard + délistés ·
       tests `packages/macro` (0) · refactor `snapshot.py` (2526 l) · `overnight`/`ts_momentum` dans `factors.yaml` ·
       corriger `08_DATA_MODEL.md` (schéma flat prod v1).

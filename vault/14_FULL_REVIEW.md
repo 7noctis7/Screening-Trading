@@ -127,3 +127,83 @@
 `vault/15_CERTIFICATION.md` existe (protocole DRAFT→CANDIDATE→CERTIFIED→REVOKED) mais **registre vide** : aucun
 composant certifié. Par la règle CLAUDE.md « aucun composant en prod sans gate certif », le **preset en prod +
 dashboard = composant non-certifié servant des chiffres fuités = finding P0** (recouvre P0-1).
+
+---
+
+# Audit adverse — 02/07 (soir) — scoring institutionnel sévère
+
+> Second passage, barème **recalibré sur le scope ASSUMÉ** (daily/EOD, paper, 0 € infra, edge défensif
+> DSR≈0 = constat honnête, pas un défaut). Les axes HFT/tick-data/ML-lourd/infra-orchestrée sont **(B) hors-scope,
+> sortis du calcul**. Sévérité MAXIMALE sur l'in-scope (PIT, look-ahead, coûts, gates, qualité data, repro, secrets,
+> honnêteté des chiffres). **Chaque finding = preuve exécutée `fichier:ligne` ou requête ; un ⚠️ non prouvé est retiré.**
+> Cartographie complète des 6 axes par 6 agents d'inventaire (transcripts session 02/07).
+
+## Verdicts des 6 findings capital/vérité (prouvés ou retirés)
+
+| # | Sujet | Verdict | Sévérité | Capital ? | Preuve |
+|---|---|---|---|---|---|
+| 4 | Idempotence absente Bitmart | **CONFIRMÉ** | HIGH (si live-crypto) | **Oui** | `bitmart_broker.py:99` `create_order` sans `clientOrderId` ; `retry.py:28` retente sur REJECTED (`:103`) → retry redouble l'ordre marché réel. Gaté par `dry_run=True` + `QUANT_NO_CRYPTO_LIVE=1`. |
+| 5 | Fills partiels non gérés | **CONFIRMÉ** | MEDIUM | Oui (divergence) | `live_engine.py:111` n'ouvre que sur `"filled"` strict ; `PARTIALLY_FILLED` mappé (`:16`) mais ignoré → position broker non trackée, ni stop ni target ; `reconcile.py:35` détecte mais alerte non branchée. |
+| 1 | Fuite calibration Platt | Confirmé → **RÉTROGRADÉ** | LOW | **Non** | `snapshot.py:670` `PlattCalibrator().fit(p_te, y[cut:])` puis Brier sur le **même** `y[cut:]` (`:675`) = métrique in-sample optimiste. MAIS `cal`/`p_cal` meurent dans le dict reporting : les probas servies (`:657` `probs`) sont **brutes**, le sizing est VolTarget/Kelly, jamais la proba ML. Prémisse « contamine le sizing » **réfutée**. |
+| 3 | Doublons DSR ×3 / `pbo_cscv` ×2 | **RECLASSÉ** dette | LOW/P2 | Non | Call-sites tracés : `portfolio/psr` = canonique + prod (`snapshot.py:1860`) ; `backtest/statistics` = 1 appelant (`walkforward.py:91`) ; `validation/sharpe_stats.deflated_sr` + `validation/pbo.pbo_cscv` = **0 importeur hors `test_smoke_all.py`** = code mort. Chaque call-site bien lié → pas de risque « mauvaise impl ». |
+| 2 | `calibrate.py:34` signature DSR | **RETIRÉ** | — | — | Exécuté : `import` lie à `psr.py` `(sharpe,n,n_trials)` ; `deflated_sharpe_ratio(0.12,500,n_trials=27)` = `0.0`, aucun crash. Confusion agent avec `statistics.py`. |
+| 6 | `.env` à la racine | **RETIRÉ (PASS)** | — | — | `git check-ignore .env` = ignoré ; `git log --all -- .env` = vide ; `diff-filter=A` historique complet = jamais ajouté. Aucune fuite. |
+
+**Constat de tri** : les 2 seuls risques capital survivants (#4, #5) sont dans **l'exécution** — l'axe le plus (B)
+du scope. Le cœur data/backtest/risque tient ; la périphérie live-broker a les trous. **Short** = scope v1 assumé
+(`sim_broker.py:43`), **non documenté** dans le vault → dette de doc (cf. **ADR-0029**), pas une régression.
+
+## Notes par axe (/20, barème recalibré)
+
+- **Axe 1 — Data & Pipeline : 15/20.** PIT multi-couches prouvé (`pit_guard.py`, `macro_store` vintages ALFRED,
+  `universe_repo` snapshots datés), survivorship (délistés+audit), validation OHLCV double bloquante, gate contrats
+  CI, base réelle 1,99 M lignes/741 sym/2015→2026. Docké : retry/backoff **non câblé** aux scripts d'ingest (skip
+  sur échec), `adj_close` NULL (P1-4, non re-vérifié ce soir), pas de calendrier de cotation réel.
+- **Axe 2 — ML & Feature Eng : 13/20.** `PurgedKFold`+embargo réellement en prod (`snapshot.py:627`), triple-barrier,
+  méta-labeling, conformal, drift PSI. Docké : frac-diff/ADF codés mais **non appliqués en prod** (stationnarité des
+  features de niveau non garantie), Platt in-sample (#1), pas de CPCV pour l'entraînement, `FeatureBuilder` PIT hors pipeline.
+- **Axe 3 — Exécution : 10/20.** Parité backtest↔paper↔live, idempotence Alpaca/Sim, réconciliation, kill-switch armé
+  à chaque pas. Docké dur : **#4 Bitmart** + **#5 fills partiels** (2 trous capital/ops confirmés), `cancel()` no-op.
+  (async/WS/TWAP/routing/short = (B) exclus.)
+- **Axe 4 — Portefeuille : 15/20.** HRP/min-var/ERC/IVP/Black-Litterman tous câblés, **Ledoit-Wolf par défaut**,
+  concentration HHI + corrélation-aware, vol-target + Kelly bridé. Docké : sizers `kelly_capped`/`risk_parity` déclarés
+  mais **non enregistrés** (config morte), pas de coût dans l'objectif d'optim (bandes ex-ante à la place), HRP simplifié.
+- **Axe 5 — Risque & Backtest : 15/20.** Coûts réalistes appliqués (turnover, `broker_fee` réglementaire), métriques
+  complètes (Sharpe/Sortino/MDD/Calmar/VaR/CVaR/Cornish-Fisher/EVT/fragilité Taleb/Kupiec-Christoffersen), kill-switch +
+  **`DrawdownScaler` convexe** (borne max-DD par construction), stress MC/bootstrap, univers anti-fuite `_price_universe`.
+  Docké : VaR/CVaR/EVT **non branchés** au kill-switch (drawdown seul), **pas de replay historique 2008/2020** sur
+  séries réelles (données 2015+ disponibles → gap réel), anti-survivorship heuristique (univers figé début fenêtre),
+  et rappel : une fuite d'univers avait atteint le dashboard (P0-1, corrigée + artefacts régénérés le 02/07).
+- **Axe 6 — MLOps / Prod-readiness : 11/20.** CI pytest bloquant, gates de déploiement, gitleaks CI+pre-commit, logging
+  JSON, andon `safe_section`, audit-trail append-only, drift PSI exposé. Docké dur : **alerting Telegram/Discord codé mais
+  JAMAIS branché en prod** (démos seulement), **aucune détection de déconnexion API/reconnexion**, réentraînement cron
+  aveugle (drift ne déclenche rien), lint/mypy/pip-audit non bloquants, `/health` trivial. (Prometheus/K8s/compose = (B).)
+
+## Moyenne générale — double pondération (transparence)
+
+| Axe | Note /20 | Poids égal | Poids-risque |
+|---|---|---|---|
+| Data | 15 | 1/6 | 25 |
+| ML | 13 | 1/6 | 12 |
+| Exécution | 10 | 1/6 | 6 |
+| Portefeuille | 15 | 1/6 | 12 |
+| Risque/Backtest | 15 | 1/6 | 25 |
+| Prod-readiness | 11 | 1/6 | 20 |
+
+- **Égal-pondéré (académique pur)** : (15+13+10+15+15+11)/6 = **13,2 / 20**.
+- **Pondéré-risque** (Data25·Risque25·Prod20·ML12·Portef12·Exec6) : (375+156+60+180+375+220)/100 = **13,7 / 20**.
+
+Le pondéré-risque est **plus haut** : le seul axe faible (Exécution 10) est sous-pondéré à 6, et les deux socles forts
+(Data, Risque) portés à 25 — cohérent avec le fait que les trous survivants sont périphériques au scope.
+
+## Synthèse (3 phrases)
+1. **Viabilité live actuelle** : non viable pour du capital réel en l'état — cœur daily/backtest/risque de niveau
+   institutionnel, mais la périphérie live-broker porte 2 trous capital/ops confirmés (#4, #5) et le filet
+   opérationnel (alerting) est codé mais non branché ; **paper-ready, pas live-ready**.
+2. **Plus gros risque de ruine** : non pas un blow-up unique mais une **combinaison** — un retry Bitmart peut redoubler
+   un ordre crypto réel (#4) pendant qu'**aucune alerte branchée** ne capte une déconnexion / un kill-switch / une
+   divergence de réconciliation → un incident live pourrait courir **non observé**.
+3. **Potentiel si 100 % des correctifs appliqués** : #4/#5 fermés, VaR branchée au de-risking, alerting live, Platt/
+   stationnarité durcis → le système atteint un vrai niveau institutionnel pour un mandat **daily/défensif à 0 €** ;
+   mais son plafond reste défini par sa prémisse honnête (edge = gestion du risque, DSR≈0) : « 20/20 » = perfection
+   **opérationnelle**, pas un oracle d'alpha.
