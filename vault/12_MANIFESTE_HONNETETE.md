@@ -15,14 +15,12 @@ et c'est **notre différenciation**.
   cf. `vault/04_JOURNAL.md`). *(Aucun chiffre de stress non reproductible n'est revendiqué ici.)*
 - **Béta cœur assumé** : 50 % QQQ + satellite risk-managed (ADR-0023). Pas de prétention d'oracle.
 - **Anti-overfitting** : gate $DSR>0 \wedge PBO<0.5$, CV purgée/embargo (López de Prado), fuite de
-  données détectée et corrigée (le « 6,9 % d'alpha » initial était un artefact de look-ahead).
-  > ⚠️ **Rectificatif full-review 2026-07-02** : la correction anti-fuite n'était appliquée qu'à
-  > `preset_backtest()` ; elle avait silencieusement **ré-apparu** dans les fonctions qui alimentent le
-  > dashboard (`preset_equity_daily` / `preset_trade_log` / `preset_ledger`, univers = qualité du jour
-  > sur tout l'historique). **Corrigé en code** ce jour (univers momentum prix-only partagé, cf.
-  > `_price_universe`). Les chiffres affichés (`vault/Preset_Performance.md`, alpha ~6,79 %) sont
-  > **encore issus de l'ancien chemin fuité** tant que le dashboard n'a pas été **régénéré** (`make`) —
-  > à considérer comme des **artefacts** jusqu'à re-run. Voir `vault/14_FULL_REVIEW.md` (P0).
+  données détectée et corrigée. *(Aucune valeur de performance n'est codée en dur dans ce document :
+  elles périment ; la source de vérité datée est `vault/Preset_Performance.md`.)*
+  > **Constat audité (full-review 2026-07-02).** Alpha directionnel : **non démontré à ce jour**
+  > (DSR≈0 après correction d'une fuite d'univers le 02/07). Edge robuste vérifié : **réduction de
+  > drawdown ~2,6×**. Les chiffres affichés sont **régénérés quotidiennement** par le pipeline
+  > anti-fuite (voir `vault/Preset_Performance.md`, daté). Détails : `vault/14_FULL_REVIEW.md` (P0).
 - **Auditabilité** : lignage de données (`packages/data/lineage.py`), manifeste de reproductibilité
   (`make repro`), gate de publication anti « site muet » (`scripts/check_build.py`).
 - **Survivorship partiellement corrigé** : seed curée de délistés/acquis/**faillis** (incl. SIVB,

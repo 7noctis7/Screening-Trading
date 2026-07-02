@@ -2,6 +2,13 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0029 — Long-only = scope v1 assumé
+**Date :** 2026-07-02 · **Statut :** accepté
+Le système est **long-only** (`sim_broker.py:43` « v1 : pas de short » ; la vente ne fait que clôturer un long).
+`Side.SHORT`/`SignalDirection.SHORT` existent dans les modèles mais **aucun chemin d'exécution short** n'a jamais
+été implémenté — ce n'est **pas une régression**, c'est une frontière de scope v1 (audit adverse 02/07). Le short
+reste hors-scope tant qu'il n'est pas explicitement rouvert par un ADR dédié.
+
 ## ADR-0028 — Journal de trades persistant : `SqliteTradeJournal` + flag `legacy` en couche storage
 **Date :** 2026-07-02
 **Statut :** accepté
