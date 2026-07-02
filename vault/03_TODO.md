@@ -3,6 +3,29 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+## 🚨 FULL-REVIEW 2026-07-02 — findings (voir `vault/14_FULL_REVIEW.md`)
+> Revue complète multi-agents sur `ops-integration`. **P0 = invalide des résultats → avant toute feature.**
+### 🔴 P0 (bloqueurs capital réel)
+- [ ] **P0-1 FUITE** : `preset_equity_daily`/`preset_trade_log`/`preset_ledger` sélectionnent l'univers avec la
+      qualité **du jour** sur tout 2015+ (look-ahead+survivorship) → alimente le **dashboard** (`snapshot.py:2081`).
+      Porter `legacy_quality_universe=False` (`preset_backtest.py:276-277,372-373,445-446`), régénérer dashboard + `Preset_Performance.md`.
+- [ ] **P0-2** : manifeste `12_MANIFESTE_HONNETETE.md:18` affirme « alpha 6,9 % corrigé » alors que dashboard
+      affiche `alpha 6,79 %` fuité → régénérer après P0-1 ou retirer le claim.
+- [ ] **P0-3** : `preset_equity_daily` equity **brute sans coûts** (`preset_backtest.py:323`).
+### 🟠 P1
+- [ ] **P1-1** : journal réel **non persistant** + **0/100** `features_snapshot` → persister `data/journal.db`,
+      peupler à chaque fill, ajouter à `to_csv`. **Débloque MFE/MAE + expectancy + Kelly (aujourd'hui UNCALIBRATED N=0).**
+- [ ] **P1-2** : providers fondamentaux PIT — `fmp_provider.py:35` (`fillingDate`), `sec_provider.py` (filtrer `filed`). `as_of` trompeur.
+- [ ] **P1-3** : MacroStore `:memory:` → persister `data/macro.db` + vintages ALFRED réels.
+- [ ] **P1-4** : `adj_close` 99,7 % NULL → ré-ingérer `auto_adjust=True` (splits → momentum contaminé).
+- [ ] **P1-5** : `pbo` **dupliqué** — consolider en 1 (garder `portfolio/pbo.py`, retirer `backtest/validation/pbo.py`).
+- [ ] **P1-6** : 9 modules top1pct **orphelins** — câbler ou marquer « en attente » ; enregistrer `vol_target`/`kelly_uncertain` au registre Sizer.
+- [ ] **P1-7** : dérive vault — table état (`01_ARCHITECTURE.md:100-105`), diagramme Mermaid (~10 pkgs), entrée journal 2026-07-02, **ADR-0026** (ops-kit).
+### 🟢 P2
+- [ ] **P2** : câbler `macro_publication_lags.yaml` + `risk_top1pct.yaml` · crypto DB 13 j de retard + délistés ·
+      tests `packages/macro` (0) · refactor `snapshot.py` (2526 l) · `overnight`/`ts_momentum` dans `factors.yaml` ·
+      corriger `08_DATA_MODEL.md` (schéma flat prod v1).
+
 ## 📅 RENDEZ-VOUS — 2026-08-06 : REVUE COURBE PAPER (paper vs backtest)
 > Audit 3× passé (score ~83/100, **PRÊT POUR CAPITAL RÉEL LIMITÉ** sous conditions).
 > Paper défensif lancé le 2026-06-25 (`QUANT_DD_TARGET=0.15`). On laisse tourner ~6 semaines.

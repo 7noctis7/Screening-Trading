@@ -1,9 +1,16 @@
 """Volatility targeting : taille ∝ 1/volatilité pour viser une vol annualisée cible.
 
-Kelly bridé inclus en option (cap sur la fraction du capital). Jamais 'tout-in'.
+Deux niveaux, non exclusifs :
+  1. **Sizer plugin** `VolTarget` (enregistré dans le registre Sizer) — pilote le backtest/live via
+     l'interface `Sizer.size(signal, equity, price)`. Kelly bridé (cap sur la fraction du capital).
+  2. **Helpers top1pct** (fonctions pures) — vol-target pondéré par la conviction calibrée et les
+     multiplicateurs de risque (drawdown scaler × correlation shock), pour la construction de portefeuille.
 """
 
 from __future__ import annotations
+
+import numpy as np
+import pandas as pd
 
 from packages.portfolio.sizing.registry import sizers
 
@@ -29,3 +36,31 @@ class VolTarget:
             return 0.0
         capital_frac = min(self.max_frac, self.target / inst_annual_vol)
         return (equity * capital_frac) / price
+
+
+# --- Helpers top1pct (fonctions pures, construction de portefeuille) -------------------------------
+
+def realized_vol(prices: pd.Series, window: int = 20, ann: int = 252) -> float:
+    r = prices.pct_change().dropna().tail(window)
+    return float(r.std() * np.sqrt(ann))
+
+
+def vol_target_weight(asset_vol: float, target_vol: float = 0.10,
+                      max_weight: float = 0.20) -> float:
+    if asset_vol <= 0:
+        return 0.0
+    return float(min(target_vol / asset_vol, max_weight))
+
+
+def conviction_multiplier(p_calibrated: float, p0: float = 0.5,
+                          slope: float = 4.0, lo: float = 0.25,
+                          hi: float = 1.5) -> float:
+    """Calibrated win probability -> bounded size multiplier."""
+    return float(np.clip(1.0 + slope * (p_calibrated - p0), lo, hi))
+
+
+def final_weight(asset_vol: float, p_calibrated: float, dd_mult: float,
+                 corr_mult: float, target_vol: float = 0.10,
+                 max_weight: float = 0.20) -> float:
+    base = vol_target_weight(asset_vol, target_vol, max_weight)
+    return base * conviction_multiplier(p_calibrated) * dd_mult * corr_mult

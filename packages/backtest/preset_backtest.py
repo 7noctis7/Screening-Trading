@@ -84,6 +84,22 @@ def _breadth(A: np.ndarray, t: int) -> float:
     return float(np.mean(above)) if above else 1.0
 
 
+def _price_universe(data: dict, syms: list, lookback: int, top_k: int) -> list:
+    """#2 ANTI-FUITE (partagé) : univers = top-K par MOMENTUM prix-only mesuré au DÉBUT de la
+    fenêtre commune (aucune info future ; on n'applique JAMAIS le score qualité du JOUR à des dates
+    passées). Miroir exact de `preset_backtest(legacy_quality_universe=False)`, réutilisé par les
+    fonctions dashboard/ledger (sinon elles ré-introduisent le look-ahead + le biais du survivant)."""
+    if len(syms) < 5:
+        return syms[:top_k]
+    L = min(len(data[s]) for s in syms)
+    M = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in syms}
+    _s0 = max(lookback, 50)
+    sel = {s: float(M[s][_s0 - 1] / M[s][max(0, _s0 - 252 - 1)] - 1)
+           for s in syms if len(M[s]) > _s0}
+    return (sorted(sel, key=lambda s: sel[s], reverse=True)[:top_k]
+            if len(sel) >= 5 else syms[:top_k])
+
+
 def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict | None = None,
                     swing_equity: list | None = None, dd_target: float = 0.25, band: float = 0.03,
                     step: int = 21, lookback: int = 120, top_k: int = 30, k_dd: float = 1.6,
@@ -268,13 +284,13 @@ def preset_equity_daily(data: dict, quality: dict | None = None, asset_classes: 
                         init_cap: float = 10000.0) -> dict:
     """Courbe d'equity QUOTIDIENNE du preset (pour le dashboard) : rebalancement tous les `step`
     jours, accumulation des rendements quotidiens entre deux rebalancements. Renvoie
-    {equity:[$], dates:[iso], available}. Même logique que le backtest (anti-fuite)."""
+    {equity:[$], dates:[iso], available}. Univers ANTI-FUITE (momentum prix-only, cf. _price_universe)
+    et rendements quotidiens NETS des coûts de turnover (barème par classe d'actifs)."""
     syms = [s for s, b in data.items() if b and len(b) > lookback + step]
     if len(syms) < 5:
         return {"available": False}
-    quality = quality or {}
-    q = {s: quality.get(s) for s in syms if quality.get(s) is not None}
-    universe = (sorted(q, key=lambda s: q[s], reverse=True)[:top_k] if len(q) >= 5 else syms[:top_k])
+    quality = quality or {}  # conservé pour compat API ; PLUS utilisé pour l'univers (anti-fuite, cf. _price_universe)
+    universe = _price_universe(data, syms, lookback, top_k)
     # COURBE LA PLUS LONGUE POSSIBLE : on garde les `min_names` titres aux plus longs historiques →
     # la fenêtre remonte aussi loin que le permettent au moins min_names valeurs (au lieu d'un
     # seuil 60 % arbitraire qui coupait la courbe vers ~2021).
@@ -289,10 +305,14 @@ def preset_equity_daily(data: dict, quality: dict | None = None, asset_classes: 
     rets = A[:, 1:] / A[:, :-1] - 1
     tgt_vol = max(0.0, abs(dd_target)) / k_dd
     start = max(lookback, 50)
+    acmap = asset_classes or {}                           # #P0-3 : coûts par classe (fin de l'equity brute)
+    rt = np.asarray([CostModel.for_asset_class(acmap.get(s, "equity")).round_trip_bps / 1e4
+                     for s in universe])
     w = np.zeros(len(universe))
     eq = [init_cap]
     out_dates = [dts[start]]
     for t in range(start, L - 1):
+        reb_cost = 0.0
         if (t - start) % step == 0:                       # rebalancement
             win = rets[:, max(0, t - lookback):t]
             if win.shape[1] >= 20:
@@ -319,8 +339,9 @@ def preset_equity_daily(data: dict, quality: dict | None = None, asset_classes: 
                 nw = nw * gross
                 if band > 0 and w.sum() > 0:
                     nw = np.where(np.abs(nw - w) < band, w, nw)
+                reb_cost = float((np.abs(nw - w) * rt).sum())   # #P0-3 : coût du turnover ce jour-là
                 w = nw
-        r_d = float((w * (A[:, t + 1] / A[:, t] - 1)).sum())   # rendement quotidien réalisé
+        r_d = float((w * (A[:, t + 1] / A[:, t] - 1)).sum()) - reb_cost   # rendement quotidien NET de coûts
         eq.append(eq[-1] * (1 + r_d))
         out_dates.append(dts[t + 1])
     if len(eq) < 30:
@@ -368,9 +389,8 @@ def preset_trade_log(data: dict, quality: dict | None = None, asset_classes: dic
         return {"available": False}
     L = min(len(data[s]) for s in syms)
     M = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in syms}
-    quality = quality or {}
-    q = {s: quality.get(s) for s in syms if quality.get(s) is not None}
-    universe = (sorted(q, key=lambda s: q[s], reverse=True)[:top_k] if len(q) >= 5 else syms[:top_k])
+    quality = quality or {}  # conservé pour compat API ; PLUS utilisé pour l'univers (anti-fuite, cf. _price_universe)
+    universe = _price_universe(data, syms, lookback, top_k)
     # même logique « courbe la plus longue » que preset_equity_daily (min_names plus longs historiques)
     _lens = sorted((len(data[s]) for s in universe), reverse=True)
     _need = _lens[min(min_names, len(_lens)) - 1] if _lens else 0
@@ -441,9 +461,8 @@ def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict |
         return broker_fee(acmap.get(sym, "equity"), notional, side) if _fees_on else 0.0
 
     fees_paid = 0.0
-    quality = quality or {}
-    q = {s: quality.get(s) for s in syms if quality.get(s) is not None}
-    universe = (sorted(q, key=lambda s: q[s], reverse=True)[:top_k] if len(q) >= 5 else syms[:top_k])
+    quality = quality or {}  # conservé pour compat API ; PLUS utilisé pour l'univers (anti-fuite, cf. _price_universe)
+    universe = _price_universe(data, syms, lookback, top_k)
     _lens = sorted((len(data[s]) for s in universe), reverse=True)
     _need = _lens[min(min_names, len(_lens)) - 1] if _lens else 0
     universe = [s for s in universe if len(data[s]) >= _need] or universe

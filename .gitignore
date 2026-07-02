@@ -69,3 +69,16 @@ apps/web/tsconfig.tsbuildinfo
 
 # Anti clone-imbriqué accidentel (gitlink parasite)
 /Screening-Trading/
+
+# Obsidian local state (bruit, ne pas versionner)
+vault/.obsidian/workspace.json
+vault/.obsidian/workspace-mobile.json
+vault/.smart-env/
+.cache/
+
+# Obsidian local state (bruit)
+vault/.obsidian/workspace.json
+vault/.smart-env/
+.cache/
+.backups/
+.claude/ops/
