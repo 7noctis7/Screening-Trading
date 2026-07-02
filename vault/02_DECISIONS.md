@@ -273,3 +273,35 @@ Mesure sur données RÉELLES (`make backtest-preset` / `calibrate-preset`) :
    aucun gain attendu. Parcimonie.
 **Conséquences.** Objectif réaliste = **Calmar/Sharpe élevés** (préservation du capital), pas battre le
 QQQ en absolu sans sa bêta. Le gate #10 refuse toute combo non robuste → params défensifs par défaut.
+
+## ADR-0026 — Ops-kit : certification, sub-agents, hooks, dashboard (rétro-doc de 627a0e2)
+**Date :** 2026-07-02 (décision structurante du commit `627a0e2`, non documentée à l'origine — ADR créé au full-review).
+**Contexte.** Après le verdict « PRÊT POUR CAPITAL RÉEL LIMITÉ », la priorité passe de la recherche d'alpha
+à la **qualité opérationnelle**. CLAUDE.md référençait `vault/15_CERTIFICATION.md` comme gate de prod sans que
+le protocole existe formellement.
+**Décision.**
+1. **Certification formelle** (`vault/15_CERTIFICATION.md`) : DRAFT→CANDIDATE→CERTIFIED→REVOKED, vérifié par `/full-review` / `/certify`.
+2. **Sub-agents read-only** (`.claude/agents/`) : session-auditor, friction-clusterer, quant-critic, leakage-hunter, vault-architect, db-auditor — forkables pour l'analyse lourde.
+3. **Hooks PostToolUse** (`.claude/hooks/`) : `file_guard` (<400 l/fichier, <50 l/fonction), `friction_log`.
+4. **Dashboard ops** (`dashboard/claude_ops.py`) + **top1pct-pack** (modules quant durcis) + `config/risk_top1pct.yaml` + `config/macro_publication_lags.yaml`.
+**Conséquences.** (+) Chaque composant de prod doit avoir une preuve citée. (−) `risk_top1pct.yaml` /
+`macro_publication_lags.yaml` sont **orphelins** (aucun consommateur Python) ; 9/11 modules top1pct non câblés
+→ dette suivie en P1 (`vault/14_FULL_REVIEW.md`).
+
+## ADR-0027 — Full-review : invariant anti-fuite partagé + honnêteté « artefact » (2026-07-02)
+**Date :** 2026-07-02.
+**Contexte.** Le full-review a montré que le correctif anti-fuite `#2` (univers momentum prix-only) n'était
+appliqué qu'à `preset_backtest()` ; il avait **ré-apparu** dans les 3 fonctions alimentant le dashboard
+(`preset_equity_daily`/`preset_trade_log`/`preset_ledger`) → look-ahead + survivorship sur les chiffres AFFICHÉS
+(`snapshot.py:2081`). Par ailleurs le top1pct-pack avait écrasé le Sizer enregistré `VolTarget` → suite rouge.
+**Décision.**
+1. **Invariant unique** : la sélection d'univers anti-fuite est extraite en **une** fonction partagée
+   `_price_universe()` — plus jamais de logique de sélection dupliquée par fonction (source de la régression).
+2. **Coûts obligatoires** : aucune courbe d'equity de prod n'est servie en **brut** (`preset_equity_daily` nette désormais le turnover).
+3. **Honnêteté « artefact »** : tant qu'un chiffre affiché provient d'un chemin corrigé mais **non régénéré**,
+   il est explicitement flaggé comme artefact dans `12_MANIFESTE_HONNETETE.md` (pas de claim « corrigé » prématuré).
+4. **Régression = P0** : un composant de prod supprimé/cassé par un pack externe (ici le Sizer `vol_target`) est
+   traité comme P0 (suite rouge = bloqueur), pas comme une simple dette.
+**Conséquences.** (+) La fuite ne peut plus diverger entre backtest et dashboard. (−) Les chiffres affichés
+(`Preset_Performance.md`) restent des artefacts jusqu'à un `make` de régénération sur le Mac (données réelles).
+Voir `vault/14_FULL_REVIEW.md`.

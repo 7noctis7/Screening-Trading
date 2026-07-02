@@ -1,5 +1,36 @@
 # 04 — JOURNAL
 
+## Session 2026-07-02 — FULL-REVIEW (revue complète multi-agents) + correctifs P0
+**Contexte.** Skill `/full-review` sur la branche `ops-integration` (commit `627a0e2` : ops-kit +
+top1pct-pack + certification-kit). 3 sub-agents lancés en parallèle (leakage-hunter, db-auditor,
+vault-architect) + quant-critic. Rapport complet → `vault/14_FULL_REVIEW.md`.
+
+**Fait (analyse).** Scores santé : Architecture 6/10 · Données 3/10 · Discipline quant 4/10 · Sync vault 3/10.
+- **P0 confirmé (leakage-hunter + quant-critic)** : `preset_equity_daily`/`preset_trade_log`/`preset_ledger`
+  sélectionnaient l'univers via la **qualité du jour** sur tout 2015+ (look-ahead + survivorship). `preset_ledger`
+  alimente le **dashboard** (`snapshot.py:2081`). Le correctif `legacy_quality_universe=False` n'existait que
+  dans `preset_backtest()`. Le claim « alpha 6,9 % corrigé » du manifeste était donc **faux** pour le chemin livré.
+- **Mandat données-réelles** : journal = 100 fills Alpaca bruts, **0/100** features/stratégie/PnL, **en mémoire
+  uniquement** → MFE/MAE, expectancy, Kelly = **UNCALIBRATED (N=0)**. MacroStore aussi `:memory:`. `adj_close` 99,7 % NULL.
+- **top1pct-pack** : 11 modules, **9 orphelins** ; `pbo` dupliqué ; `vol_target` non enregistré.
+- **Régression découverte** : `627a0e2` avait écrasé le Sizer `VolTarget` → branche livrée **avec 4 tests rouges**.
+
+**Fait (correctifs P0, 3 commits atomiques).**
+- `f78e18f` fix(backtest) : `_price_universe()` partagé (momentum prix-only, PIT) appliqué aux 3 fonctions +
+  coûts de turnover nettés dans `preset_equity_daily` (P0-1, P0-3).
+- `10d25ff` fix(sizing) : restaure la classe `VolTarget` enregistrée **en conservant** les helpers top1pct
+  (suite 761→764 verts).
+- `8b5b654` docs(vault) : `14_FULL_REVIEW.md` + `03_TODO.md` + rectificatif `12_MANIFESTE_HONNETETE.md` (P0-2).
+- Clôture : ADR-0026 (ops-kit rétro-doc) + ADR-0027 (invariant anti-fuite + honnêteté « artefact »).
+
+**Bloqué / à faire (Mac, données réelles requises).**
+- **P0-2 résiduel** : régénérer le dashboard + `Preset_Performance.md` via `make` (les chiffres affichés
+  restent des **artefacts** de l'ancien chemin fuité jusqu'au re-run). **Pas de capital réel avant.**
+- 1 test rouge **pré-existant** non lié : `test_breakout.py` (off-by-one, code recherche = signal rejeté) → P1.
+
+**Prochaine étape.** P1 : persistance journal + features_snapshot (débloque calibrations) · providers
+fondamentaux PIT (`fmp`/`sec` ignorent `as_of`) · dédup `pbo` · câbler modules top1pct · dérive Mermaid/table état.
+
 ## Session 2026-06-29 (suite 2) — Cockpit crypto LIVE + gate breakout + RAG + croissance
 **Fait (gros lot, ~12 PR-commits sur `claude/clever-lovelace-ognwya`, #285→#287).**
 
