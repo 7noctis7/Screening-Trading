@@ -54,6 +54,10 @@ reconstruit chaque jour ouvré par GitHub Actions (`.github/workflows/pages.yml`
 - `pickle` chargé uniquement via `packages/common/safe_pickle` (anti-symlink + hash).
 - **Dev `localhost:3000`** : après un `make site` (build export), faire `cd apps/web && rm -rf .next && npm run dev`
   (sinon `Cannot find module './682.js'` / `/_document` — le `.next` export n'est pas relisible par `next dev`).
+- **Seuil sur `polyfit`/régression** : TOUJOURS une **tolérance relative** dans la comparaison
+  (`x > band + 1e-9*max(1,|band|)`). Un canal **plat** (dispersion ~0) fait dériver la bande sous le
+  niveau réel par erreur flottante → fausses cassures à chaque barre → capture du rendement de la barre
+  de cassure = **mini look-ahead** (cf. `channel_break`, corrigé `3c1c771`).
 
 ## Sécurité (acquis)
 CORS API verrouillé sur localhost (`QUANT_CORS_ORIGINS` pour élargir) · webhook protégé

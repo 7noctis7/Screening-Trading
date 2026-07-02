@@ -1,5 +1,39 @@
 # 04 — JOURNAL
 
+## Session 2026-07-02 (suite) — Persistance du journal de trades + capture features (P1-1 clos)
+**Contexte.** Suite directe du full-review : le finding P1-1 (journal en mémoire, 0/100
+`features_snapshot`, calibrations UNCALIBRATED N=0). Branche `feat/journal-features-snapshot`.
+
+**Fait (5 commits atomiques).**
+- `834338a` feat(storage) : **`SqliteTradeJournal`** — DB dédiée `data/journal.db` (séparée du cache
+  prix régénérable), interface drop-in de `TradeJournal` (append/all/pnls/to_csv), `features_snapshot`
+  en **JSON TEXT**, **UPSERT idempotent** sur `id`, migration auto du schéma, **colonne `legacy`
+  indexée & requêtable** (`WHERE legacy=0` pour la calibration), warning si trade live sans features.
+- `c2c4d36` feat(execution) : `LiveTradingEngine` persiste par défaut ; backtest garde l'in-memory.
+  Le `features_snapshot` transite **inchangé** depuis la couche décision (`Signal.features` → `_Open`
+  → `TradeRecord`), **jamais recalculé au fill** (anti look-ahead). Sites synthétiques (démo + tests)
+  isolés en `:memory:` pour ne pas polluer le journal réel.
+- `f64f5f6` feat(scripts) : `import_legacy_fills.py` — fills Alpaca existants → `features={}` + `legacy=1`,
+  id déterministe (idempotent), dry-run par défaut. **Aucune reconstruction a posteriori** (= anti-fuite).
+- `8dfe308` test(storage) : 8 tests — round-trip, idempotence, JSON round-trip, colonne legacy, warning
+  live vs silence legacy, + **contrat anti-fuite de bout en bout** (snapshot journalisé = dict de décision
+  + `ref_price` = prix d'entrée, jamais un prix futur).
+- `3c1c771` fix(research) : **corrige le test breakout rouge pré-existant** — verdict : le **code** était
+  bugué (canal plat → dérive flottante de la bande → fausse cassure à chaque barre → capture du rendement
+  de la barre de cassure = mini look-ahead). Tolérance relative sur la condition. Hygiène uniquement :
+  **la stratégie reste REJETÉE** (DSR 0 / PBO 0,88).
+
+**Décidé.** **ADR-0028** : `SqliteTradeJournal` (SQLite stdlib, DB séparée, UPSERT idempotent, flag
+`legacy` porté par la **couche storage** — pas par `TradeRecord` qui reste pur).
+
+**Fait (données réelles).** `import_legacy_fills.py --commit` → **137 fills** importés dans
+`data/journal.db` (`legacy=1`, features vides), réimport idempotent vérifié (reste 137), `data/journal.db`
+bien gitignoré. `make test` : **773 passed, 2 skipped, 0 failed** (suite entièrement verte).
+
+**Prochaine étape.** Laisser le paper live peupler `legacy=0` avec features réelles (RDV 2026-08-06 :
+la calibration MFE/MAE/expectancy/Kelly deviendra possible dès N>0 sur `legacy=0`). P0 full-review
+(fuite univers preset) toujours en attente du re-run Mac. Reste P1-2→P1-7.
+
 ## Session 2026-07-02 — FULL-REVIEW (revue complète multi-agents) + correctifs P0
 **Contexte.** Skill `/full-review` sur la branche `ops-integration` (commit `627a0e2` : ops-kit +
 top1pct-pack + certification-kit). 3 sub-agents lancés en parallèle (leakage-hunter, db-auditor,
