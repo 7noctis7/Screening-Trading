@@ -26,6 +26,7 @@ from packages.core.models import (
 from packages.execution.retry import submit_with_retries
 from packages.risk.engine import RiskEngine
 from packages.storage.journal import TradeJournal
+from packages.storage.journal_sqlite import SqliteTradeJournal
 
 
 @dataclass(slots=True)
@@ -40,13 +41,15 @@ class _Open:
 
 class LiveTradingEngine:
     def __init__(self, strategy, sizer, risk_engine: RiskEngine, broker,
-                 journal: TradeJournal | None = None, regime_classifier=None,
+                 journal=None, regime_classifier=None,
                  retry_attempts: int = 3) -> None:
         self.strategy = strategy
         self.sizer = sizer
         self.risk = risk_engine
         self.broker = broker
-        self.journal = journal or TradeJournal()
+        # LIVE = persistant par défaut (data/journal.db). Passer un TradeJournal()
+        # ou SqliteTradeJournal(":memory:") pour les runs synthétiques/tests.
+        self.journal = journal or SqliteTradeJournal()
         self.regime = regime_classifier
         self.retry_attempts = retry_attempts
         self._open: dict[str, _Open] = {}

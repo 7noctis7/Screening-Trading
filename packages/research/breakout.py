@@ -27,7 +27,11 @@ def channel_break(closes, win: int = 60, k: float = 2.0,
     slope, b = np.polyfit(x, seg, 1)
     resid = seg - (slope * x + b)
     upper = (slope * win + b) + k * resid.std(ddof=1)   # extrapolé à la barre courante
-    price_break = bool(c[-1] > upper)
+    # Tolérance : un canal DÉGÉNÉRÉ (dispersion ~0) fait dériver `upper` sous le niveau
+    # réel par erreur flottante → sinon une série plate déclenche une fausse cassure à
+    # CHAQUE barre (et capture le rendement de la barre de cassure = look-ahead).
+    tol = 1e-9 * max(1.0, abs(upper))
+    price_break = bool(c[-1] > upper + tol)
     onchain_ok = True
     z = None
     if confirm is not None:

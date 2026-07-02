@@ -13,8 +13,10 @@
       affiche `alpha 6,79 %` fuité → régénérer après P0-1 ou retirer le claim.
 - [ ] **P0-3** : `preset_equity_daily` equity **brute sans coûts** (`preset_backtest.py:323`).
 ### 🟠 P1
-- [ ] **P1-1** : journal réel **non persistant** + **0/100** `features_snapshot` → persister `data/journal.db`,
-      peupler à chaque fill, ajouter à `to_csv`. **Débloque MFE/MAE + expectancy + Kelly (aujourd'hui UNCALIBRATED N=0).**
+- [x] **P1-1** ✅ (2026-07-02, suite) : `SqliteTradeJournal` (`data/journal.db`, JSON features, UPSERT
+      idempotent, flag `legacy` requêtable) + `LiveTradingEngine` persiste par défaut + `import_legacy_fills.py`
+      (137 fills importés `legacy=1`) + 8 tests (dont contrat anti-fuite). Cf. **ADR-0028**, commits `834338a`→`3c1c771`.
+      **Reste** : la calibration MFE/MAE/expectancy/Kelly attend N>0 sur `legacy=0` (paper live → RDV 2026-08-06).
 - [ ] **P1-2** : providers fondamentaux PIT — `fmp_provider.py:35` (`fillingDate`), `sec_provider.py` (filtrer `filed`). `as_of` trompeur.
 - [ ] **P1-3** : MacroStore `:memory:` → persister `data/macro.db` + vintages ALFRED réels.
 - [ ] **P1-4** : `adj_close` 99,7 % NULL → ré-ingérer `auto_adjust=True` (splits → momentum contaminé).

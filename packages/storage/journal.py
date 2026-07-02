@@ -16,7 +16,8 @@ class TradeJournal:
     def __init__(self) -> None:
         self._trades: list[TradeRecord] = []
 
-    def append(self, trade: TradeRecord) -> None:
+    def append(self, trade: TradeRecord, *, legacy: bool = False) -> None:
+        # `legacy` accepté pour la parité d'interface avec SqliteTradeJournal (no-op ici).
         self._trades.append(trade)
 
     def all(self) -> list[TradeRecord]:

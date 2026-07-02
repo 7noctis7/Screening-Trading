@@ -2,6 +2,38 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0028 — Journal de trades persistant : `SqliteTradeJournal` + flag `legacy` en couche storage
+**Date :** 2026-07-02
+**Statut :** accepté
+
+**Contexte.** Le journal v1 (`TradeJournal`) était **en mémoire** → perdu à chaque process, et l'audit
+full-review le donnait à **0/100** `features_snapshot` (P1-1) : MFE/MAE, expectancy, Kelly restaient
+**UNCALIBRATED (N=0)**. Il fallait persister sans (a) mélanger le journal au cache prix régénérable,
+(b) polluer le domaine pur `TradeRecord`, (c) rouvrir une faille de look-ahead.
+
+**Décision.**
+1. **`SqliteTradeJournal`** (SQLite stdlib, testable offline) — DB **dédiée** `data/journal.db`, JAMAIS
+   mélangée aux `*.db` de prix (le journal n'est PAS régénérable : c'est de la donnée réelle). Interface
+   **drop-in** de `TradeJournal` (append/all/pnls/to_csv) → interchangeable dans le moteur.
+2. **`features_snapshot` en JSON TEXT** ; **UPSERT idempotent** sur `id` (retries/réimports sûrs) ;
+   migration auto du schéma au 1er lancement (comme `bars_repo`).
+3. **Flag `legacy` porté par la COUCHE STORAGE**, pas par `TradeRecord` : `append(trade, *, legacy=False)`
+   + colonne `legacy` **indexée**. Le domaine reste pur ; la calibration filtre `WHERE legacy=0`. Les
+   fills historiques (137, importés par `import_legacy_fills.py`) sont `legacy=1`, `features={}` —
+   **jamais reconstruits a posteriori** (ce serait une fuite).
+4. **`LiveTradingEngine` persiste par défaut** ; le backtest garde l'in-memory (paramétrable). Le dict de
+   features transite **inchangé** de la décision (`Signal.features`) jusqu'au `TradeRecord`, jamais
+   recalculé au fill — invariant vérifié par un **test contractuel de bout en bout**.
+
+**Conséquences.**
+- (+) Journal réel durable ; dès qu'un trade paper `legacy=0` arrive avec ses features, la calibration
+  (MFE/MAE/expectancy/Kelly) redevient possible (N>0) — débloque le RDV 2026-08-06.
+- (+) Séparation nette régénérable (prix) vs non-régénérable (journal) ; `TradeRecord` reste stdlib-pur.
+- (+) Warning explicite si un trade live arrive sans features → détecte une régression de capture ML.
+- (−) Cible prod ultérieure DuckDB/Postgres via la même interface (non fait, non bloquant).
+- Corollaire hygiène (même session) : bug look-ahead trouvé dans `channel_break` (seuil polyfit sans
+  tolérance → fausses cassures sur canal plat), corrigé `3c1c771`. La stratégie breakout **reste rejetée**.
+
 ## ADR-0025 — Données crypto LIVE : client-direct (pas de proxy serveur) + growth minimal
 **Date :** 2026-06-29
 **Contexte.** Demande d'un module crypto temps réel (graphe, jauge, analyse) et de boucles de
