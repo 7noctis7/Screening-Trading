@@ -1,0 +1,37 @@
+# Nested risk budgets + convex DD rule + correlation shock. Modules read this.
+portfolio:
+  target_vol: 0.10          # annualized
+  max_gross_exposure: 1.0   # no leverage by default
+  max_drawdown_hard: -0.35  # absolute limit; scaler acts long before
+per_trade:
+  max_risk_pct: 0.0075      # 0.75% of equity per trade
+  min_expectancy_R: 0.10
+  cost_R_default: 0.05
+  min_rr_floor: 1.0
+drawdown_scaler:
+  breakpoints: [0.0, -0.10, -0.20, -0.30]
+  multipliers: [1.0, 1.0, 0.50, 0.25]
+  kill_dd: -0.30
+correlation_shock:
+  window: 60
+  warn: 0.60
+  crisis: 0.80
+  floor: 0.30
+per_cluster:
+  max_weight: 0.30          # cap per correlation cluster, not per asset
+rebalancing:
+  mode: bands
+  band_k: 0.25
+  min_band: 0.01
+stops:
+  k_sl_atr: 2.5
+  break_even_at_R: 1.0
+  time_stop_bars: {swing: 20, intraday: 30}
+kelly:
+  fraction: 0.25
+  shrink_z: 1.0
+  cap: 0.05
+validation:
+  psr_min: 0.95
+  pbo_max: 0.50
+  mintrl_alpha: 0.05

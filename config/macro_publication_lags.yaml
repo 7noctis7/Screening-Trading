@@ -1,0 +1,14 @@
+# Publication-lag table: makes point-in-time mechanical, not remembered.
+# lag_days = typical delay between period end and first release.
+series:
+  CPIAUCSL:  {source: ALFRED, lag_days: 13, note: "CPI ~13d after month end"}
+  PCEPILFE:  {source: ALFRED, lag_days: 28, note: "Core PCE ~4 weeks"}
+  PAYEMS:    {source: ALFRED, lag_days: 7,  note: "NFP first Friday"}
+  UNRATE:    {source: ALFRED, lag_days: 7}
+  GDPC1:     {source: ALFRED, lag_days: 30, note: "advance estimate; heavy revisions"}
+  INDPRO:    {source: ALFRED, lag_days: 16}
+  UMCSENT:   {source: ALFRED, lag_days: 0,  note: "prelim mid-month"}
+  M2SL:      {source: ALFRED, lag_days: 25}
+  T10Y2Y:    {source: FRED,   lag_days: 0,  note: "market data - no revision"}
+  VIXCLS:    {source: FRED,   lag_days: 0}
+rule: "feature at t may only use vintages with release_date <= t"

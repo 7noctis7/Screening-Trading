@@ -58,3 +58,10 @@ reconstruit chaque jour ouvré par GitHub Actions (`.github/workflows/pages.yml`
 ## Sécurité (acquis)
 CORS API verrouillé sur localhost (`QUANT_CORS_ORIGINS` pour élargir) · webhook protégé
 (`QUANT_WEBHOOK_TOKEN` sinon localhost) · secrets en env (`.env.example` documente tout).
+
+## Discipline architecture & données (ajout ops-kit — 02/07)
+- **Taille des fichiers** : < 400 lignes/fichier, < 50 lignes/fonction. Un hook PostToolUse le signale ; refactorer immédiatement.
+- **Plugins** : nouvelle stratégie/indicateur/facteur/source = 1 fichier auto-enregistré, jamais modifier le cœur.
+- **Mandat données-réelles** : toute calibration, seuil ou recommandation vient de la DB/journal RÉELS. Données insuffisantes → dire "UNCALIBRATED", jamais inventer. Synthétique autorisé UNIQUEMENT dans tests/ pour valider la math.
+- **Certification** : aucun composant en prod sans passer les gates de `vault/15_CERTIFICATION.md` (skill `/certify`). Un composant non-certifié en prod = finding P0.
+- **Sub-agents dispo** : session-auditor, friction-clusterer, quant-critic, leakage-hunter, vault-architect, db-auditor. Les forker pour l'analyse lourde read-only.
