@@ -20,6 +20,7 @@ htmlcov/
 
 # Données & artefacts locaux
 *.db
+data/journal.db          # journal de trades persistant — local-only (fills réels courtier)
 *.sqlite
 *.parquet
 *.duckdb
