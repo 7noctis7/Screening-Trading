@@ -43,16 +43,20 @@
 - [ ] **P0-2** : manifeste `12_MANIFESTE_HONNETETE.md:18` affirme « alpha 6,9 % corrigé » alors que dashboard
       affiche `alpha 6,79 %` fuité → régénérer après P0-1 ou retirer le claim.
 - [ ] **P0-3** : `preset_equity_daily` equity **brute sans coûts** (`preset_backtest.py:323`).
-- [ ] **P0-4 JOURNAL LIVE VIDE** (découvert BLOC 4, 2026-07-04) : le chemin de prod du cron
-      (`cron_live.sh → run_live.py`) réconcilie chez le broker (`submit_notional`) puis sync Obsidian mais
-      **n'écrit JAMAIS dans `data/journal.db`**. Le seul code qui journalise `legacy=0` + `features_snapshot`
-      est `LiveEngine._close()` (`live_engine.py:160`), **non instancié en prod** (fantôme). Résultat :
-      **0 trade `legacy=0`** (137 tous `legacy=1`) → la calibration ML (MFE/MAE/expectancy/Kelly, cf. P1-1) est
-      **bloquée DÈS MAINTENANT en paper**, et le RDV 2026-08-06 trouvera un journal vide. **P0 (pas P0-SI-LIVE)** :
-      bloque la valeur ML sans attendre le live. Vérif : `make verify-journal` (retourne `UNCALIBRATED`).
-      Correctif : capturer `features_snapshot` **à la décision** dans `build_snapshot()` et le faire voyager avec
-      l'ordre jusqu'à la journalisation (JAMAIS reconstruit post-submit = look-ahead). Décision d'archi (a unifier
-      sur `LiveEngine` vs b journaliser direct via `SqliteTradeJournal`) à trancher dans le plan BLOC 5-journal.
+- [~] **P0-4 JOURNAL LIVE VIDE** (découvert BLOC 4, 2026-07-04) : le chemin de prod du cron
+      (`cron_live.sh → run_live.py`) réconciliait chez le broker sans **jamais** écrire dans `data/journal.db`
+      (seul `LiveEngine`, fantôme, journalisait) → **0 trade `legacy=0`** = calibration ML bloquée en paper.
+      **Décision d'archi : (b) journal direct via `SqliteTradeJournal`** (validée 2026-07-04 ; (a) unifier sur
+      LiveEngine = trop gros/risqué près de `--live`).
+      - ✅ **Phase 1 (fait, 2026-07-04)** : `packages/execution/live_journal.py` + refactor `run_live.py`
+        (main scindé en helpers ≤50 l) journalise chaque ACHAT envoyé (`legacy=0`). **Features figées à la
+        DÉCISION** dans `build_snapshot()` (screener `score`+facteurs, poids cible, régime), transportées via
+        le snapshot, **jamais reconstruites** ; **faits de fill** (prix/qté) lus des positions RÉELLES du broker
+        (lookup tolérant BTC/USD↔BTCUSD). `id` déterministe/jour → idempotent. 7 tests (`test_live_journal.py`).
+        `make verify-journal` passe de `UNCALIBRATED` à ✅ au 1er run réel.
+      - [ ] **Phase 2 (reste)** : round-trip — persister les lots ouverts, apparier les VENTES → renseigner
+        `exit_ts/exit_price/pnl/MFE/MAE` (débloque expectancy/Kelly, RDV 2026-08-06). Décider du sort de
+        `LiveEngine` (supprimer ou rétrograder en backtest/paper-loop) pour ne pas laisser 2 chemins.
 ### ⛔ P0-SI-LIVE — bloquants AVANT toute activation d'un broker réel (audit adverse 02/07, cf. `14_FULL_REVIEW.md`)
 > Prouvés, sévérité capital/ops. **Ne jamais passer le broker concerné en live tant que son P0-SI-LIVE n'est pas fermé** (garde-fou CLAUDE.md).
 - [ ] **#4 Idempotence Bitmart** (`bitmart_broker.py:99`) : `create_order` sans `clientOrderId` → un retry (`retry.py:28`, retente sur REJECTED) **redouble l'ordre marché crypto réel**. Correctif : passer `client_order_id` en `params` ccxt + court-circuiter les `client_id` déjà vus (comme `SimBroker`). *Gaté aujourd'hui par `dry_run=True` + `QUANT_NO_CRYPTO_LIVE=1`.*
