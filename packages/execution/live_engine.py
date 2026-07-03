@@ -85,7 +85,7 @@ class LiveTradingEngine:
         from packages.execution.reconcile import reconcile
         internal = internal_positions or [
             self._as_position(sym, ot) for sym, ot in self._open.items()]
-        return reconcile(self.broker.positions(), internal)
+        return reconcile(self.broker.positions(), internal, bus=self.bus)
 
     # -- interne -----------------------------------------------------------
     def _step_symbol(self, sym, bars) -> None:

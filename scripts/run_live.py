@@ -37,6 +37,15 @@ def main() -> None:
     if a.live and not a.yes:
         print("⚠️  --live exige --yes (confirmation explicite). Abandon."); return
 
+    # Alertes PROD (hors demo) : Console + Telegram/Discord si clés, branchées sur l'event bus.
+    # Seulement en mode réel — évite de spammer la console pendant un aperçu dry-run.
+    bus = alert_engine = None
+    if not dry:
+        from packages.alerts.wiring import attach_to_bus
+        from packages.common.event_bus import EventBus
+        bus = EventBus()
+        alert_engine = attach_to_bus(bus)
+
     # KILL-SWITCH : alertes TradingView (webhook) → veto / réduction d'exposition (sécurité live).
     from packages.mcp_tradingview.alerts import fetch_tv_technical_alerts, to_risk_veto
     risk = to_risk_veto(fetch_tv_technical_alerts())
@@ -44,6 +53,10 @@ def main() -> None:
     if risk.get("veto"):
         print(f"⛔ KILL-SWITCH ACTIF (alertes TV critiques) : {', '.join(risk['reasons']) or '—'}")
         print("   → exposition forcée à 0, aucun ordre ne sera envoyé.")
+        if bus:
+            from packages.common.event_bus import Topic
+            bus.publish(Topic.KILL_SWITCH,
+                        {"drawdown": "veto TV: " + (", ".join(risk["reasons"]) or "—")})
     elif reduce < 1.0:
         print(f"⚠️  Alertes TV : exposition réduite ×{reduce:.2f} ({', '.join(risk['reasons']) or '—'})")
 
@@ -120,6 +133,12 @@ def main() -> None:
                 print(tag + ("  ▲ achat" if delta > 0 else "  ▼ vente"))
             except Exception as e:  # noqa: BLE001
                 print(tag + f"  échec après retries ({str(e)[:40]})")
+                if alert_engine:
+                    from packages.alerts import Alert, Severity
+                    alert_engine.emit(Alert("execution", Severity.CRITICAL,
+                        f"Ordre {'achat' if delta > 0 else 'vente'} {bsym} ({bname}) échoué "
+                        f"après retries : {str(e)[:80]}",
+                        dedup_key=f"execution:submit_fail:{bsym}"))
     print(f"\nTerminé : {sent} ordre(s) de réconciliation envoyé(s) (paper, sans levier)." if not dry else
           "\nAperçu (dry-run). Réconciliation réelle : python3 scripts/run_live.py --live --yes")
 
