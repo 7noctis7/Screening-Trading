@@ -203,6 +203,7 @@ class Order:
     stop_price: float | None = None
     status: OrderStatus = OrderStatus.PENDING
     client_id: str | None = None  # pour l'idempotence (retries)
+    filled_qty: float | None = None  # qté réellement remplie (None = inconnu, jamais supposer plein)
     ts: datetime = field(default_factory=utcnow)
 
 
