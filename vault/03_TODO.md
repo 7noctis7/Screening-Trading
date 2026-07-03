@@ -43,6 +43,16 @@
 - [ ] **P0-2** : manifeste `12_MANIFESTE_HONNETETE.md:18` affirme « alpha 6,9 % corrigé » alors que dashboard
       affiche `alpha 6,79 %` fuité → régénérer après P0-1 ou retirer le claim.
 - [ ] **P0-3** : `preset_equity_daily` equity **brute sans coûts** (`preset_backtest.py:323`).
+- [ ] **P0-4 JOURNAL LIVE VIDE** (découvert BLOC 4, 2026-07-04) : le chemin de prod du cron
+      (`cron_live.sh → run_live.py`) réconcilie chez le broker (`submit_notional`) puis sync Obsidian mais
+      **n'écrit JAMAIS dans `data/journal.db`**. Le seul code qui journalise `legacy=0` + `features_snapshot`
+      est `LiveEngine._close()` (`live_engine.py:160`), **non instancié en prod** (fantôme). Résultat :
+      **0 trade `legacy=0`** (137 tous `legacy=1`) → la calibration ML (MFE/MAE/expectancy/Kelly, cf. P1-1) est
+      **bloquée DÈS MAINTENANT en paper**, et le RDV 2026-08-06 trouvera un journal vide. **P0 (pas P0-SI-LIVE)** :
+      bloque la valeur ML sans attendre le live. Vérif : `make verify-journal` (retourne `UNCALIBRATED`).
+      Correctif : capturer `features_snapshot` **à la décision** dans `build_snapshot()` et le faire voyager avec
+      l'ordre jusqu'à la journalisation (JAMAIS reconstruit post-submit = look-ahead). Décision d'archi (a unifier
+      sur `LiveEngine` vs b journaliser direct via `SqliteTradeJournal`) à trancher dans le plan BLOC 5-journal.
 ### ⛔ P0-SI-LIVE — bloquants AVANT toute activation d'un broker réel (audit adverse 02/07, cf. `14_FULL_REVIEW.md`)
 > Prouvés, sévérité capital/ops. **Ne jamais passer le broker concerné en live tant que son P0-SI-LIVE n'est pas fermé** (garde-fou CLAUDE.md).
 - [ ] **#4 Idempotence Bitmart** (`bitmart_broker.py:99`) : `create_order` sans `clientOrderId` → un retry (`retry.py:28`, retente sur REJECTED) **redouble l'ordre marché crypto réel**. Correctif : passer `client_order_id` en `params` ccxt + court-circuiter les `client_id` déjà vus (comme `SimBroker`). *Gaté aujourd'hui par `dry_run=True` + `QUANT_NO_CRYPTO_LIVE=1`.*
@@ -123,7 +133,8 @@
 - [ ] **Tester les interactions** : clic sur un ticker → fiche TradingView · clic sur un schéma
       du Gate → méthodo · bouton « Partager sur X » · /crypto/?embed=1 (widget).
 - [ ] **Rebalancement paper auto** : déjà actif (launchd lun-ven 16h05). Vérifier :
-      `cat /tmp/quant_live.log` (ou `make live` pour un aperçu dry-run).
+      `make verify-journal` (planif + alimentation journal.db) · log `~/Library/Logs/quant_live.log`
+      (relancer `make live-cron-install` pour migrer l'ancien chemin `/tmp`, purgé au reboot).
 - [ ] **(optionnel)** `make vault-ask Q="…"` · `make crypto-screen Q="cap > 5md top 10"` ·
       `make regime-study` / `make breakout-study` (re-tester au gate).
 

@@ -29,7 +29,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DB = ROOT / "data" / "journal.db"
-LIVE_LOG = Path("/tmp/quant_live.log")
+# ~/Library/Logs = emplacement persistant au reboot (macOS purge /tmp) ; /tmp = fallback
+# pour un LaunchAgent installé avant le fix, ou pour Linux.
+LIVE_LOGS = [Path.home() / "Library" / "Logs" / "quant_live.log", Path("/tmp/quant_live.log")]
 LAUNCHD_LABEL = "com.quant.live"
 
 OK, WARN, BAD, INFO = "  ✓", "  ⚠", "  ✗", "  ·"
@@ -59,12 +61,14 @@ def check_schedule() -> bool:
     else:
         print(f"{BAD} LaunchAgent {LAUNCHD_LABEL} NON chargé → `make live-cron-install`"); ok = False
 
-    if LIVE_LOG.exists():
-        age_h = (time.time() - LIVE_LOG.stat().st_mtime) / 3600.0
+    log = next((p for p in LIVE_LOGS if p.exists()), None)
+    if log is not None:
+        age_h = (time.time() - log.stat().st_mtime) / 3600.0
         tag = OK if age_h < 24 else WARN
-        print(f"{tag} log {LIVE_LOG} présent (dernière écriture il y a {age_h:.1f} h)")
+        print(f"{tag} log {log} présent (dernière écriture il y a {age_h:.1f} h)")
     else:
-        print(f"{INFO} {LIVE_LOG} absent — le cron n'a pas encore tourné (ou /tmp purgé au reboot)")
+        print(f"{INFO} log absent ({' / '.join(str(p) for p in LIVE_LOGS)}) — "
+              f"le cron n'a pas encore tourné")
     return ok
 
 
