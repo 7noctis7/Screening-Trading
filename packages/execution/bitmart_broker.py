@@ -87,23 +87,36 @@ class BitmartBroker:
             order.status = OrderStatus.REJECTED
         return order
 
+    def _remember(self, order: Order) -> Order:
+        """Mémorise le statut RÉEL et définitif d'un submit live (rejoué tel quel sur retry)."""
+        if order.client_id:
+            self._seen[order.client_id] = order.status
+        return order
+
     def submit(self, order: Order) -> Order:
+        # Idempotence : ce client_id a déjà un résultat définitif → le REJOUER tel quel,
+        # sans renvoyer d'ordre. Jamais de FILLED fabriqué ; un rejet reste un rejet.
+        if order.client_id and order.client_id in self._seen:
+            order.status = self._seen[order.client_id]
+            return order
         s = "buy" if order.side is Side.LONG else "sell"
         if not self._live():
-            order.status = OrderStatus.SUBMITTED
+            order.status = OrderStatus.SUBMITTED          # dry-run : rien envoyé, rien mémorisé
             return order
         qty = self._round_qty(order.instrument, order.qty)    # précision/lot-size
         if qty <= 0:
             order.status = OrderStatus.REJECTED
-            return order
+            return self._remember(order)
         order.qty = qty
+        # clientOrderId → dédup côté exchange (ceinture+bretelles si la mémo locale est perdue).
+        params = {"clientOrderId": order.client_id} if order.client_id else {}
         try:
-            res = self._client().create_order(order.instrument, "market", s, qty)
+            res = self._client().create_order(order.instrument, "market", s, qty, params=params)
             order.status = OrderStatus.FILLED if res.get("status") in ("closed", "filled") \
                 else OrderStatus.SUBMITTED
         except Exception:  # noqa: BLE001
             order.status = OrderStatus.REJECTED
-        return order
+        return self._remember(order)
 
     def last_price(self, symbol: str) -> float:
         """Dernier prix (ccxt) pour dimensionner un ordre ; 0.0 si indisponible/dry-run."""
