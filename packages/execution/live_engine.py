@@ -34,6 +34,11 @@ from packages.storage.journal_sqlite import SqliteTradeJournal
 log = get_logger("execution.live_engine")
 
 
+def _asset_class_for(sym: str) -> AssetClass:
+    """Classe d'actif d'après le symbole : les paires crypto contiennent un '/' (BTC/USD)."""
+    return AssetClass.CRYPTO if "/" in (sym or "") else AssetClass.EQUITY
+
+
 @dataclass(slots=True)
 class _Open:
     signal: Signal
@@ -153,7 +158,7 @@ class LiveTradingEngine:
         pnl = (price - ot.entry_price) * ot.qty
         self._tid += 1
         self.journal.append(TradeRecord(
-            id=f"L{self._tid:04d}", instrument=sym, asset_class=AssetClass.EQUITY,
+            id=f"L{self._tid:04d}", instrument=sym, asset_class=_asset_class_for(sym),
             venue=self.broker.name, side=Side.LONG, qty=ot.qty, entry_ts=ot.entry_ts,
             entry_price=ot.entry_price, avg_price=ot.entry_price, exit_ts=ts,
             exit_price=price, entry_reason=ot.signal.reason, exit_reason=reason,

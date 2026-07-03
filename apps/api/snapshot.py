@@ -462,13 +462,20 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
             targets.append({"symbol": s, "broker": r["broker"], "broker_symbol": r["broker_symbol"],
                             "asset_class": acmap.get(s, ""), "weight_pct": round(w, 4),
                             "side": "long", "tradeable": r["tradeable"], "capital": "alpaca"})
+        # Ère paper (ADR-0029) : crypto → capital ALPACA. Base hors whitelist Alpaca → EXCLUE
+        # de l'univers papier (log explicite), jamais routée vers Bitmart (OFF, futur-live gated).
+        from packages.common.logging import get_logger as _get_logger
+        _clog = _get_logger("snapshot.routing")
         for s, w in sorted((crypto_weights or {}).items(), key=lambda kv: -kv[1]):
             if w <= 0:
                 continue
             r = _route(s, "crypto")
+            if not r["tradeable"]:
+                _clog.info("crypto exclue de l'univers papier : %s (%s)", s, r["reason"])
+                continue
             targets.append({"symbol": s, "broker": r["broker"], "broker_symbol": r["broker_symbol"],
                             "asset_class": "crypto", "weight_pct": round(w, 4),
-                            "side": "long", "tradeable": r["tradeable"], "capital": "bitmart"})
+                            "side": "long", "tradeable": True, "capital": "alpaca"})
     else:                                         # repli : poids du portefeuille modèle (swing)
         tot = sum(p["current_value"] for p in positions) or 1.0
         targets = [{"symbol": p["symbol"], "broker": "Bitmart" if acmap.get(p["symbol"]) == "crypto" else "Alpaca",
@@ -482,10 +489,10 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
         "model_weights_only": not (alp or bit),
         "mode": "paper",                          # paper par défaut, JAMAIS d'ordre réel non confirmé
         "brokers": [
-            {"name": "Alpaca", "scope": "Actions & ETF US", "connected": alp, "paper": True,
-             "env": ["ALPACA_API_KEY", "ALPACA_API_SECRET"]},
-            {"name": "Bitmart", "scope": "Crypto (paires /USDC)", "connected": bit, "paper": False,
-             "env": ["BITMART_API_KEY", "BITMART_API_SECRET"]},
+            {"name": "Alpaca", "scope": "Actions & ETF US + Crypto paper (paires /USD)", "connected": alp,
+             "paper": True, "env": ["ALPACA_API_KEY", "ALPACA_API_SECRET"]},
+            {"name": "Bitmart", "scope": "Crypto — adaptateur futur-live (OFF, gated)", "connected": bit,
+             "paper": False, "env": ["BITMART_API_KEY", "BITMART_API_SECRET"]},
         ],
         "target_orders": targets,
         "note": "Brancher les clés API (variables d'environnement) puis valider en mode paper "
