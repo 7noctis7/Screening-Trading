@@ -16,6 +16,7 @@ from dataclasses import dataclass
 
 from packages.core.models import (
     Order,
+    OrderStatus,
     OrderType,
     Side,
     Signal,
@@ -23,10 +24,19 @@ from packages.core.models import (
     TradeRecord,
     AssetClass,
 )
+from packages.common.event_bus import Topic
+from packages.common.logging import get_logger
 from packages.execution.retry import submit_with_retries
 from packages.risk.engine import RiskEngine
 from packages.storage.journal import TradeJournal
 from packages.storage.journal_sqlite import SqliteTradeJournal
+
+log = get_logger("execution.live_engine")
+
+
+def _asset_class_for(sym: str) -> AssetClass:
+    """Classe d'actif d'après le symbole : les paires crypto contiennent un '/' (BTC/USD)."""
+    return AssetClass.CRYPTO if "/" in (sym or "") else AssetClass.EQUITY
 
 
 @dataclass(slots=True)
@@ -42,7 +52,7 @@ class _Open:
 class LiveTradingEngine:
     def __init__(self, strategy, sizer, risk_engine: RiskEngine, broker,
                  journal=None, regime_classifier=None,
-                 retry_attempts: int = 3) -> None:
+                 retry_attempts: int = 3, bus=None) -> None:
         self.strategy = strategy
         self.sizer = sizer
         self.risk = risk_engine
@@ -52,6 +62,7 @@ class LiveTradingEngine:
         self.journal = journal or SqliteTradeJournal()
         self.regime = regime_classifier
         self.retry_attempts = retry_attempts
+        self.bus = bus                                  # câblé aux alertes en prod (BLOC 1c)
         self._open: dict[str, _Open] = {}
         self._tid = 0
         self._day = None
@@ -79,7 +90,7 @@ class LiveTradingEngine:
         from packages.execution.reconcile import reconcile
         internal = internal_positions or [
             self._as_position(sym, ot) for sym, ot in self._open.items()]
-        return reconcile(self.broker.positions(), internal)
+        return reconcile(self.broker.positions(), internal, bus=self.bus)
 
     # -- interne -----------------------------------------------------------
     def _step_symbol(self, sym, bars) -> None:
@@ -108,8 +119,34 @@ class LiveTradingEngine:
         if not self.risk.approve(order, self.broker.positions(), equity, regime, sig).approved:
             return
         res = submit_with_retries(self.broker, order, attempts=self.retry_attempts)
-        if res.status.value == "filled":
-            self._open[sym] = _Open(sig, bar.close, qty, bar.ts, sig.stop, sig.target)
+        self._record_open(sym, res, sig, bar, qty)
+
+    def _record_open(self, sym, res: Order, sig, bar, qty: float) -> None:
+        """Ouvre une position à la qté RÉELLEMENT remplie. Ne jamais supposer un fill plein :
+        un PARTIALLY_FILLED sans `filled_qty` connu → aucune position + alerte CRITICAL."""
+        if res.status is OrderStatus.FILLED:
+            filled = res.filled_qty if res.filled_qty is not None else qty  # plein = plein
+            if filled > 0:
+                self._open[sym] = _Open(sig, bar.close, filled, bar.ts, sig.stop, sig.target)
+            return
+        if res.status is OrderStatus.PARTIALLY_FILLED:
+            if res.filled_qty is None:
+                self._alert_partial_unknown(sym, qty)   # inconnu → NE PAS ouvrir
+                return
+            if res.filled_qty > 0:
+                self._open[sym] = _Open(sig, bar.close, res.filled_qty, bar.ts, sig.stop, sig.target)
+                log.warning("fill partiel — reliquat non exécuté", extra={"extra": {
+                    "symbol": sym, "filled": res.filled_qty, "requested": qty,
+                    "remainder": qty - res.filled_qty}})
+            return
+        # SUBMITTED / REJECTED / autre → rien ouvert (position seulement sur fill réel)
+
+    def _alert_partial_unknown(self, sym, qty: float) -> None:
+        """PARTIALLY_FILLED sans qté remplie connue : position non ouverte, alerte CRITICAL."""
+        log.critical("PARTIALLY_FILLED sans filled_qty — position NON ouverte", extra={"extra": {
+            "symbol": sym, "requested": qty}})
+        if self.bus is not None:
+            self.bus.publish(Topic.PARTIAL_FILL_UNKNOWN, {"symbol": sym, "requested": qty})
 
     def _close(self, sym, price, ts, reason) -> None:
         ot = self._open.pop(sym, None)
@@ -121,7 +158,7 @@ class LiveTradingEngine:
         pnl = (price - ot.entry_price) * ot.qty
         self._tid += 1
         self.journal.append(TradeRecord(
-            id=f"L{self._tid:04d}", instrument=sym, asset_class=AssetClass.EQUITY,
+            id=f"L{self._tid:04d}", instrument=sym, asset_class=_asset_class_for(sym),
             venue=self.broker.name, side=Side.LONG, qty=ot.qty, entry_ts=ot.entry_ts,
             entry_price=ot.entry_price, avg_price=ot.entry_price, exit_ts=ts,
             exit_price=price, entry_reason=ot.signal.reason, exit_reason=reason,

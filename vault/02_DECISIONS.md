@@ -344,3 +344,27 @@ appliqué qu'à `preset_backtest()` ; il avait **ré-apparu** dans les 3 fonctio
 **Conséquences.** (+) La fuite ne peut plus diverger entre backtest et dashboard. (−) Les chiffres affichés
 (`Preset_Performance.md`) restent des artefacts jusqu'à un `make` de régénération sur le Mac (données réelles).
 Voir `vault/14_FULL_REVIEW.md`.
+
+## ADR-0029 — Ère paper = mono-broker Alpaca ; Bitmart = adaptateur futur-live gated (2026-07-03)
+**Date :** 2026-07-03.
+**Contexte.** La crypto était routée vers **Bitmart** (`routing.py`, `broker_symbol` en `/USDT`), un
+courtier sans vrai mode paper (protégé seulement par `dry_run`). Objectif : accumuler des trades crypto
+**paper réels** pour la calibration, sans exposer de capital. Alpaca offre un paper natif, le
+fractionnement, l'idempotence `client_order_id` et la crypto spot en paires `/USD`.
+**Décision.**
+1. **Pendant l'ère paper, TOUTE la crypto passe par Alpaca paper.** `routing.route()` renvoie
+   `broker=Alpaca`, `broker_symbol="{BASE}/USD"` pour les bases de la **whitelist** `ALPACA_CRYPTO_BASES`.
+2. **TIF asset-class-aware** : `AlpacaBroker` envoie `TimeInForce.GTC` pour la crypto (24/7 ; `DAY` rejeté),
+   `DAY` inchangé pour les actions.
+3. **Bases hors whitelist Alpaca → EXCLUES de l'univers papier** (log explicite `snapshot.routing`),
+   **jamais** routées vers Bitmart. Mieux vaut exclure une base supportée que router l'impossible.
+4. **Bitmart reste un adaptateur *futur-live gated*** : code intact et testé, OFF par défaut (triple verrou,
+   cf. `16_BROKER_ACTIVATION.md`). P0-SI-LIVE fermés (idempotence 1a, fills partiels 1b) ≠ autorisation
+   d'activer — l'activation reste une décision explicite (garde-fou CLAUDE.md).
+5. **Journal** : `LiveTradingEngine` enregistre désormais l'`asset_class` d'après le symbole (`/` → CRYPTO),
+   plus d'`EQUITY` codé en dur → les trades crypto atterrissent correctement dans `journal.db` avec `features_snapshot`.
+**Conséquences.** (+) Crypto paper réelle, journalisée, sans capital exposé ; un seul courtier à opérer.
+(+) `vol_target` voit la vol réelle de l'instrument (ATR/prix, agnostique). (−) La whitelist Alpaca est
+statique et conservatrice — à réconcilier au besoin avec `get_all_assets(asset_class=CRYPTO)`. (−) La vérif
+d'un **vrai** fill crypto paper attend un run quotidien avec clés `ALPACA_*` (SELECT dans `journal.db`).
+Voir `packages/execution/routing.py`, `alpaca_broker.py`, `live_engine.py`, `16_BROKER_ACTIVATION.md`.

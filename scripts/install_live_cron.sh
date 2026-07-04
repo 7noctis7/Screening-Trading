@@ -10,12 +10,19 @@ CRON_SH="$ROOT/scripts/cron_live.sh"
 chmod +x "$CRON_SH" 2>/dev/null || true
 LABEL="com.quant.live"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
-LOG="/tmp/quant_live.log"
 HOUR=16
 MIN=5
 ACTION="${1:-install}"
 
 is_macos() { [ "$(uname -s)" = "Darwin" ]; }
+
+# Log PERSISTANT au reboot : sur macOS `/tmp` est purgé au redémarrage → on écrit dans
+# ~/Library/Logs (emplacement standard, survit au reboot). Sur Linux, /tmp convient.
+if is_macos; then
+  LOG="$HOME/Library/Logs/quant_live.log"; mkdir -p "$HOME/Library/Logs"
+else
+  LOG="/tmp/quant_live.log"
+fi
 
 if is_macos; then
   if [ "$ACTION" = "--uninstall" ]; then

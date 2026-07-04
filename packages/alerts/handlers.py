@@ -46,6 +46,13 @@ def on_reconcile_divergence(payload: dict) -> Alert:
                  dedup_key="execution:divergence", data=payload)
 
 
+def on_partial_fill_unknown(payload: dict) -> Alert:
+    return Alert("execution", Severity.CRITICAL,
+                 f"Fill partiel de qté INCONNUE {payload.get('symbol', '?')} "
+                 f"(demandé {payload.get('requested', '?')}) — position NON ouverte",
+                 dedup_key=f"execution:partial_unknown:{payload.get('symbol', '')}", data=payload)
+
+
 def register_on_bus(engine, bus: EventBus) -> None:
     """Abonne le moteur d'alertes aux topics de l'event bus."""
     mapping = {
@@ -55,6 +62,7 @@ def register_on_bus(engine, bus: EventBus) -> None:
         Topic.DATA_QUALITY_FAILED: on_data_quality_failed,
         Topic.ORDER_FILLED: on_order_filled,
         "execution.reconcile_divergence": on_reconcile_divergence,
+        Topic.PARTIAL_FILL_UNKNOWN: on_partial_fill_unknown,
     }
     for topic, builder in mapping.items():
         bus.subscribe(topic, lambda ev, b=builder: engine.emit(b(ev.payload)))

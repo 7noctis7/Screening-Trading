@@ -46,3 +46,4 @@ class Topic:
     REGIME_CHANGED = "regime.changed"
     DATA_QUALITY_FAILED = "data.quality_failed"
     KILL_SWITCH = "risk.kill_switch"
+    PARTIAL_FILL_UNKNOWN = "execution.partial_fill_unknown"

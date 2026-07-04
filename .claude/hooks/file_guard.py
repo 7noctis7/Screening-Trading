@@ -15,7 +15,7 @@ MAX_FUNC_LINES = 50
 
 RISK_PATTERNS = [
     (r"\.shift\(\s*-\d", "possible look-ahead: negative shift() uses future data"),
-    (r"paper\s*=\s*False|live\s*=\s*True|APCA-API.*live", "LIVE TRADING flag detected — paper only without explicit GO LIVE"),
+    (r"\bpaper\s*=\s*False|\blive\s*=\s*True|APCA-API.*live", "LIVE TRADING flag detected — paper only without explicit GO LIVE"),
     (r"(api[_-]?key|secret)\s*=\s*['\"][A-Za-z0-9]{16,}", "hardcoded credential — move to .env"),
     (r"fillna\(method=['\"]bfill|\.bfill\(", "bfill leaks future values into the past"),
 ]

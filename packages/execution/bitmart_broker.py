@@ -17,7 +17,7 @@ from packages.core.models import Order, OrderStatus, Position, Side
 
 class BitmartBroker:
     name = "bitmart"
-    is_paper = False                 # Bitmart n'a pas de vrai paper → dry_run protège
+    is_paper: bool = False           # Bitmart n'a pas de vrai paper → dry_run protège (défaut True)
 
     def __init__(self, api_key: str | None = None, api_secret: str | None = None,
                  memo: str | None = None, dry_run: bool = True, market: str | None = None) -> None:
@@ -29,6 +29,8 @@ class BitmartBroker:
         self.market = (market or os.environ.get("BITMART_MARKET", "spot")).lower()
         self._ex = None              # connexion ccxt paresseuse
         self._loaded = False
+        # Idempotence : client_id → (statut, filled_qty) RÉELS du 1er submit (rejoués tels quels).
+        self._seen: dict[str, tuple[OrderStatus, float | None]] = {}
 
     def _live(self) -> bool:
         return not self.dry_run and bool(self._key and self._secret)
@@ -79,29 +81,41 @@ class BitmartBroker:
             return order
         try:
             res = self._client().create_order(symbol, "market", s, qty)
-            order.status = OrderStatus.FILLED if res.get("status") in ("closed", "filled") \
-                else OrderStatus.SUBMITTED
+            order.status, order.filled_qty = _map_fill(res, qty)
         except Exception:  # noqa: BLE001
             order.status = OrderStatus.REJECTED
         return order
 
+    def _remember(self, order: Order) -> Order:
+        """Mémorise le résultat RÉEL et définitif d'un submit live (rejoué tel quel sur retry)."""
+        if order.client_id:
+            self._seen[order.client_id] = (order.status, order.filled_qty)
+        return order
+
     def submit(self, order: Order) -> Order:
+        # Idempotence : ce client_id a déjà un résultat définitif → le REJOUER tel quel,
+        # sans renvoyer d'ordre. Jamais de FILLED fabriqué ; un rejet reste un rejet ;
+        # une qté partielle rejouée reste partielle (pas de fill plein supposé).
+        if order.client_id and order.client_id in self._seen:
+            order.status, order.filled_qty = self._seen[order.client_id]
+            return order
         s = "buy" if order.side is Side.LONG else "sell"
         if not self._live():
-            order.status = OrderStatus.SUBMITTED
+            order.status = OrderStatus.SUBMITTED          # dry-run : rien envoyé, rien mémorisé
             return order
         qty = self._round_qty(order.instrument, order.qty)    # précision/lot-size
         if qty <= 0:
             order.status = OrderStatus.REJECTED
-            return order
+            return self._remember(order)
         order.qty = qty
+        # clientOrderId → dédup côté exchange (ceinture+bretelles si la mémo locale est perdue).
+        params = {"clientOrderId": order.client_id} if order.client_id else {}
         try:
-            res = self._client().create_order(order.instrument, "market", s, qty)
-            order.status = OrderStatus.FILLED if res.get("status") in ("closed", "filled") \
-                else OrderStatus.SUBMITTED
+            res = self._client().create_order(order.instrument, "market", s, qty, params=params)
+            order.status, order.filled_qty = _map_fill(res, qty)
         except Exception:  # noqa: BLE001
             order.status = OrderStatus.REJECTED
-        return order
+        return self._remember(order)
 
     def last_price(self, symbol: str) -> float:
         """Dernier prix (ccxt) pour dimensionner un ordre ; 0.0 si indisponible/dry-run."""
@@ -233,6 +247,23 @@ class BitmartBroker:
 
     def cancel(self, client_id: str) -> bool:
         return True
+
+
+def _map_fill(res: dict, qty: float) -> tuple[OrderStatus, float | None]:
+    """Réponse ccxt → (statut, qté remplie). `filled_qty=None` = inconnu (jamais supposé plein).
+
+    Un ordre `closed/filled` dont `filled < qty` est PARTIELLEMENT rempli ; un ordre encore
+    ouvert avec une part déjà remplie l'est aussi ; sinon simplement SUBMITTED.
+    """
+    raw = res.get("filled")
+    filled = float(raw) if raw is not None else None
+    if res.get("status") in ("closed", "filled"):
+        if filled is not None and filled + 1e-12 < qty:
+            return OrderStatus.PARTIALLY_FILLED, filled
+        return OrderStatus.FILLED, filled
+    if filled and filled > 0:
+        return OrderStatus.PARTIALLY_FILLED, filled
+    return OrderStatus.SUBMITTED, filled
 
 
 def position_from_ccxt(p) -> Position:

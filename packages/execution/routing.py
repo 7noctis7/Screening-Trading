@@ -1,9 +1,13 @@
-"""Routage & mapping des tickers vers les brokers (Alpaca actions US, Bitmart crypto).
+"""Routage & mapping des tickers vers les brokers (ère PAPER = mono-broker Alpaca).
 
 La base YAHOO.db contient des actions du MONDE entier (.AS Amsterdam, .PA Paris, .L Londres…)
-qu'Alpaca ne peut PAS négocier (US uniquement), et des cryptos à router vers Bitmart au bon format.
-Ce module dit, pour chaque symbole : quel broker, quel symbole côté broker, et s'il est négociable.
-Sans ça, la production enverrait des ordres impossibles (ex. AKZA.AS chez Alpaca).
+qu'Alpaca ne peut PAS négocier (US uniquement). Ce module dit, pour chaque symbole : quel broker,
+quel symbole côté broker, et s'il est négociable — sinon la production enverrait des ordres
+impossibles (ex. AKZA.AS chez Alpaca).
+
+Crypto (cf. ADR-0029) : pendant l'ère paper, TOUTE la crypto passe par **Alpaca paper** (paires
+`/USD`, `TimeInForce.GTC`). Les bases non supportées par Alpaca sont **exclues de l'univers papier**
+(jamais routées vers Bitmart, qui reste un adaptateur *futur-live gated* — OFF par défaut).
 """
 
 from __future__ import annotations
@@ -13,6 +17,14 @@ _FOREIGN_SUFFIXES = (".AS", ".PA", ".L", ".DE", ".MI", ".MC", ".BR", ".SW", ".ST
                      ".OL", ".CO", ".VI", ".LS", ".F", ".BE", ".HK", ".T", ".TO", ".V",
                      ".AX", ".NZ", ".SI", ".KS", ".KQ", ".TW", ".SS", ".SZ", ".BO", ".NS",
                      ".SA", ".MX", ".JO", ".IS", ".PA", ".MA")
+
+# Bases crypto négociables sur Alpaca (paires /USD). Liste CONSERVATRICE, à réconcilier au besoin
+# avec l'API Alpaca `get_all_assets(asset_class=CRYPTO)`. Toute base absente est EXCLUE de l'univers
+# papier (jamais routée vers Bitmart). Mieux vaut exclure une base supportée que router l'impossible.
+ALPACA_CRYPTO_BASES = frozenset({
+    "AAVE", "AVAX", "BAT", "BCH", "BTC", "CRV", "DOGE", "DOT", "ETH", "GRT", "LINK", "LTC",
+    "MKR", "PEPE", "SHIB", "SOL", "SUSHI", "UNI", "USDC", "USDT", "XRP", "XTZ", "YFI",
+})
 
 
 def _is_crypto(su: str, ac: str) -> bool:
@@ -26,8 +38,14 @@ def route(symbol: str, asset_class: str = "") -> dict:
     ac = (asset_class or "").lower()
     if _is_crypto(su, ac):
         base = symbol.replace("-", "/").split("/")[0].upper()
-        return {"broker": "Bitmart", "broker_symbol": f"{base}/USDT", "tradeable": bool(base),
-                "reason": "" if base else "symbole crypto invalide"}
+        if base and base in ALPACA_CRYPTO_BASES:
+            # ère paper : crypto → Alpaca paper (paire /USD, TIF GTC côté broker).
+            return {"broker": "Alpaca", "broker_symbol": f"{base}/USD", "tradeable": True, "reason": ""}
+        # base non supportée par Alpaca → exclue de l'univers papier (JAMAIS vers Bitmart-OFF).
+        return {"broker": "Alpaca", "broker_symbol": f"{base}/USD" if base else symbol,
+                "tradeable": False,
+                "reason": "crypto hors whitelist Alpaca — exclue de l'univers papier"
+                          if base else "symbole crypto invalide"}
     if any(su.endswith(s) for s in _FOREIGN_SUFFIXES):
         return {"broker": "Alpaca", "broker_symbol": symbol, "tradeable": False,
                 "reason": "action hors-US (non négociable sur Alpaca)"}

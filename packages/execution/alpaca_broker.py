@@ -18,6 +18,12 @@ _STATUS = {
 }
 
 
+def _is_crypto_symbol(symbol: str) -> bool:
+    """Alpaca : les paires crypto contiennent un '/' (ex. BTC/USD, ETH/USD) ; les actions non (AAPL).
+    Le crypto se négocie 24/7 et exige `TimeInForce.GTC` (DAY est REJETÉ pour la crypto)."""
+    return "/" in (symbol or "")
+
+
 def position_from_alpaca(p) -> Position:
     """Objet position Alpaca (duck-typed) → Position interne."""
     qty = abs(float(p.qty))
@@ -47,10 +53,12 @@ class AlpacaBroker:
     def submit(self, order: Order) -> Order:
         from alpaca.trading.requests import MarketOrderRequest
         from alpaca.trading.enums import OrderSide, TimeInForce
+        # TIF asset-class-aware : crypto (24/7) exige GTC ; actions gardent DAY.
+        tif = TimeInForce.GTC if _is_crypto_symbol(order.instrument) else TimeInForce.DAY
         req = MarketOrderRequest(
             symbol=order.instrument, qty=order.qty,
             side=OrderSide.BUY if order.side is Side.LONG else OrderSide.SELL,
-            time_in_force=TimeInForce.DAY,
+            time_in_force=tif,
             client_order_id=order.client_id)  # idempotence native Alpaca
         res = self._client.submit_order(req)
         order.status = order_status_from_alpaca(res)
@@ -61,10 +69,11 @@ class AlpacaBroker:
         une allocation cible en %. Reste en paper si paper=True."""
         from alpaca.trading.requests import MarketOrderRequest
         from alpaca.trading.enums import OrderSide, TimeInForce
+        tif = TimeInForce.GTC if _is_crypto_symbol(symbol) else TimeInForce.DAY
         req = MarketOrderRequest(
             symbol=symbol, notional=round(notional, 2),
             side=OrderSide.BUY if side is Side.LONG else OrderSide.SELL,
-            time_in_force=TimeInForce.DAY)
+            time_in_force=tif)
         return self._client.submit_order(req)
 
     def positions(self) -> list[Position]:

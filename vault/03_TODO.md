@@ -3,6 +3,37 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+## 🚧 EN COURS — reprise 2026-07-03 (branche `feat/broker-hardening`)
+> Journée broker-hardening (BLOC 1→4) démarrée. Base : `origin/main` à jour (#292 mergée = `323e53a`).
+> Carry-over local non commité : `config/mobile_universe.csv` (data régénérée, hors périmètre — laisser tel quel).
+> **Amendements validés** : 1a `_seen` rejoue le résultat RÉEL (y c. rejet), jamais de FILLED fabriqué ·
+> 1b ouverture seule (sortie partielle → P2) + si `filled_qty=None` → NE PAS ouvrir + alerte CRITICAL · 1c OK.
+
+- [~] **BLOC 1a — idempotence Bitmart** (`bitmart_broker.py`) — *commencé* :
+  - ✅ Fait : `self._seen: dict[str, OrderStatus]` init ; `is_paper: bool = False` annoté (contourne un **faux
+    positif** du hook `file_guard.py:18`, regex `paper=False` — hook NON modifié ; fix propre = word-boundary, à voir).
+  - ⏳ Reste : dans `submit()` — court-circuit en tête (si `client_id ∈ _seen` → rejouer le statut, **jamais** fabriquer
+    FILLED) ; `params={"clientOrderId": order.client_id}` sur `create_order` (`:99`) ; `_remember()` après chaque submit
+    définitif (succès **ET** rejet). Test `tests/execution/test_bitmart_idempotency.py` (faux exchange, sans réseau) :
+    (1) timeout→retry ⇒ **1 seul ordre net** ; (2) 2× `submit` même `client_id` ⇒ 1 seul `create_order` ; (3) 1er rejet
+    exchange ⇒ 2e `submit` rejoue REJECTED, n'ouvre rien ; (4) `clientOrderId` bien transmis dans `params`.
+- [ ] **BLOC 1b — fills partiels** : `Order.filled_qty` (`models.py:196`) ; `live_engine.py:110-112` accepter
+      `PARTIALLY_FILLED` (ouvrir à `filled_qty` réel + warning reliquat) ; si `filled_qty=None` → **ne pas ouvrir +
+      alerte CRITICAL** (jamais supposer un fill plein). Test `tests/execution/test_partial_fills.py` (les 2 cas + FILLED plein). Sortie partielle → P2.
+- [ ] **BLOC 1c — brancher l'alerte de réconciliation** : `packages/alerts/wiring.py` (`default_engine` Console +
+      Telegram/Discord si clés + `attach_to_bus`) ; `LiveTradingEngine` reçoit un `bus`, le passe à `reconcile()`
+      (`:78`) et au `RiskEngine` ; hook dans `scripts/run_live.py` ; documenter clés dans `.env.example`. Test
+      `tests/alerts/test_reconcile_wiring.py` (divergence simulée ⇒ 1 alerte CRITICAL via `InMemorySink`).
+- [ ] **BLOC 2** — Diagnostic Bitmart (LECTURE SEULE, Bitmart reste OFF) : confirmer les 3 verrous (dry_run défaut,
+      `QUANT_NO_CRYPTO_LIVE`, clés `.env`), documenter la procédure d'activation future dans le vault.
+- [ ] **BLOC 3** — Crypto paper via Alpaca (BTC/USD, ETH/USD), sizing vol-target adapté (vol crypto ≫ actions),
+      trades crypto → journal SQLite avec `features_snapshot`.
+- [ ] **BLOC 4** — Optimisation Alpaca paper (opérationnel, PAS de tuning stratégie) : cron `cron_live.sh`, limit vs
+      market, fractional shares, **chaque run alimente `journal.db`** (accumuler des trades avec features = calibration).
+- [ ] **BLOC 5** — UI/Analytics institutionnel : branche **SÉPARÉE** `feat/ui-analytics` (ne pas mélanger aux brokers).
+      Mode plan **écran par écran**, commencer par le **Dashboard principal** (plan avant code). Cf. brief détaillé du 02/07.
+> Contraintes : `make test` vert entre chaque bloc · commits atomiques · rien qui touche `--live` · garde-fous intacts.
+
 ## 🚨 FULL-REVIEW 2026-07-02 — findings (voir `vault/14_FULL_REVIEW.md`)
 > Revue complète multi-agents sur `ops-integration`. **P0 = invalide des résultats → avant toute feature.**
 ### 🔴 P0 (bloqueurs capital réel)
@@ -12,6 +43,20 @@
 - [ ] **P0-2** : manifeste `12_MANIFESTE_HONNETETE.md:18` affirme « alpha 6,9 % corrigé » alors que dashboard
       affiche `alpha 6,79 %` fuité → régénérer après P0-1 ou retirer le claim.
 - [ ] **P0-3** : `preset_equity_daily` equity **brute sans coûts** (`preset_backtest.py:323`).
+- [~] **P0-4 JOURNAL LIVE VIDE** (découvert BLOC 4, 2026-07-04) : le chemin de prod du cron
+      (`cron_live.sh → run_live.py`) réconciliait chez le broker sans **jamais** écrire dans `data/journal.db`
+      (seul `LiveEngine`, fantôme, journalisait) → **0 trade `legacy=0`** = calibration ML bloquée en paper.
+      **Décision d'archi : (b) journal direct via `SqliteTradeJournal`** (validée 2026-07-04 ; (a) unifier sur
+      LiveEngine = trop gros/risqué près de `--live`).
+      - ✅ **Phase 1 (fait, 2026-07-04)** : `packages/execution/live_journal.py` + refactor `run_live.py`
+        (main scindé en helpers ≤50 l) journalise chaque ACHAT envoyé (`legacy=0`). **Features figées à la
+        DÉCISION** dans `build_snapshot()` (screener `score`+facteurs, poids cible, régime), transportées via
+        le snapshot, **jamais reconstruites** ; **faits de fill** (prix/qté) lus des positions RÉELLES du broker
+        (lookup tolérant BTC/USD↔BTCUSD). `id` déterministe/jour → idempotent. 7 tests (`test_live_journal.py`).
+        `make verify-journal` passe de `UNCALIBRATED` à ✅ au 1er run réel.
+      - [ ] **Phase 2 (reste)** : round-trip — persister les lots ouverts, apparier les VENTES → renseigner
+        `exit_ts/exit_price/pnl/MFE/MAE` (débloque expectancy/Kelly, RDV 2026-08-06). Décider du sort de
+        `LiveEngine` (supprimer ou rétrograder en backtest/paper-loop) pour ne pas laisser 2 chemins.
 ### ⛔ P0-SI-LIVE — bloquants AVANT toute activation d'un broker réel (audit adverse 02/07, cf. `14_FULL_REVIEW.md`)
 > Prouvés, sévérité capital/ops. **Ne jamais passer le broker concerné en live tant que son P0-SI-LIVE n'est pas fermé** (garde-fou CLAUDE.md).
 - [ ] **#4 Idempotence Bitmart** (`bitmart_broker.py:99`) : `create_order` sans `clientOrderId` → un retry (`retry.py:28`, retente sur REJECTED) **redouble l'ordre marché crypto réel**. Correctif : passer `client_order_id` en `params` ccxt + court-circuiter les `client_id` déjà vus (comme `SimBroker`). *Gaté aujourd'hui par `dry_run=True` + `QUANT_NO_CRYPTO_LIVE=1`.*
@@ -92,7 +137,8 @@
 - [ ] **Tester les interactions** : clic sur un ticker → fiche TradingView · clic sur un schéma
       du Gate → méthodo · bouton « Partager sur X » · /crypto/?embed=1 (widget).
 - [ ] **Rebalancement paper auto** : déjà actif (launchd lun-ven 16h05). Vérifier :
-      `cat /tmp/quant_live.log` (ou `make live` pour un aperçu dry-run).
+      `make verify-journal` (planif + alimentation journal.db) · log `~/Library/Logs/quant_live.log`
+      (relancer `make live-cron-install` pour migrer l'ancien chemin `/tmp`, purgé au reboot).
 - [ ] **(optionnel)** `make vault-ask Q="…"` · `make crypto-screen Q="cap > 5md top 10"` ·
       `make regime-study` / `make breakout-study` (re-tester au gate).
 
