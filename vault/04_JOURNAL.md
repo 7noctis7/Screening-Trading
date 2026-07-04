@@ -1,5 +1,37 @@
 # 04 — JOURNAL
 
+## Session 2026-07-04 — BLOC 5 : dashboard institutionnel (equity+underwater synchronisés) [PR #294]
+**Contexte.** Branche isolée `feat/ui-analytics` (BLOC 5, jamais mélangée aux brokers). Reprise d'un travail en
+cours non commité : refonte du **Dashboard principal** en écran d'analyse institutionnel, 100 % données réelles
+via l'API existante (`useDashboard`/`usePositions`/`useAnalytics`). Aucun `packages/` ni `--live` touché.
+
+**Fait (1 commit `d2d11c1`, 8 fichiers `apps/web`).**
+- **`PerformancePanel`** (nouveau) : `EquityChart` au-dessus du `DrawdownChart` underwater, fenêtre de zoom
+  `win` partagée → axes X synchronisés + `syncId` recharts (crosshair commun).
+- **`EquityChart`** refondu : downsampling **LTTB** (~600 pts, 60 fps sur 2644 pts), zoom par glisser-sélection
+  (`ReferenceArea`), `memo`. Rétrocompatible (sans `onWin` → zoom off).
+- **`DrawdownChart`** (nouveau) : underwater dérivé client (`v/running_max−1`).
+- **`PositionsAlertsTable`** (nouveau) : positions réelles triées par exposition (P&L plein), alertes
+  `earnings_risk`, liens `/positions` et `/trades`.
+- **`MetricCard`** : delta discret vs N−1. **`RegimeBanner`** : tokens régime outline + `pulse-dot`, zéro hex.
+  **`globals.css`** : route `.plain` (dashboard sobre, coupe le décor animé global).
+
+**Bug trouvé & corrigé (à la reprise).** `DrawdownChart` échantillonnait LTTB sur des objets renommés `{t, dd}`
+alors que `lttb` clé sur `.v` (masqué par `as any`) → aires `NaN` → LTTB dégénérait en « 1er point par bucket »,
+**creux perdus, pire DD sous-estimé**. Fix : downsampler sur `underwater()` (porte `.v`) puis référencer `v`.
+
+**Vérifié.** `tsc --noEmit` : 0 erreur sur les fichiers du dashboard (seules erreurs pré-existantes hors périmètre :
+`landing/Scene.tsx`, three.js). Contrôle **visuel headless** (Chrome) du dashboard rendu avec données réelles
+(2644 pts equity, 2 benchmarks, 39 positions, régime expansion/risk-on) : les 6 composants s'affichent, underwater
+synchronisé, et **« pire : −25,4 % » = KPI Max DD** (`metrics.max_drawdown = −0.254`) → preuve que le fix LTTB
+préserve le creux.
+
+**Décidé.** **ADR-0030** : underwater dérivé client + downsampling LTTB partagé (invariant « clé sur `.v`,
+jamais après renommage »).
+
+**Prochaine étape.** PR #294 ouverte (vers `main`). Écran suivant de BLOC 5 (candidats : `/positions`, `/screener`,
+analyse portefeuille dédiée) — plan avant code. Reste hors branche : P0-SI-LIVE #4/#5 brokers, P0 full-review preset.
+
 ## Session 2026-07-02 (soir) — Audit adverse institutionnel (6 axes, scoring double, preuves exécutées)
 **Contexte.** Audit technique ultra-sévère demandé (6 axes : Data / ML / Exécution / Portefeuille / Risque-Backtest /
 MLOps). Barème **recalibré sur le scope assumé** (daily/EOD, paper, 0 € infra, DSR≈0 = constat honnête) : HFT/tick-data/

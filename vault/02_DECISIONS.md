@@ -368,3 +368,24 @@ fractionnement, l'idempotence `client_order_id` et la crypto spot en paires `/US
 statique et conservatrice — à réconcilier au besoin avec `get_all_assets(asset_class=CRYPTO)`. (−) La vérif
 d'un **vrai** fill crypto paper attend un run quotidien avec clés `ALPACA_*` (SELECT dans `journal.db`).
 Voir `packages/execution/routing.py`, `alpaca_broker.py`, `live_engine.py`, `16_BROKER_ACTIVATION.md`.
+
+## ADR-0030 — Dashboard : underwater dérivé client + downsampling LTTB partagé (2026-07-04)
+**Date :** 2026-07-04. **Branche :** `feat/ui-analytics` (BLOC 5, isolée des brokers). PR #294.
+**Contexte.** Le dashboard doit tracer l'equity (~2644 pts, 10 ans) **et** son drawdown underwater à 60 fps,
+avec zoom et crosshair cohérents entre les deux. Deux options de plomberie : (a) nouveau champ API `drawdown`
+servi par le backend ; (b) dériver l'underwater **côté client** depuis la série equity déjà servie.
+**Décision.**
+1. **Underwater dérivé client** (`lib/metrics.underwater` : `v/running_max − 1 ≤ 0`) — zéro nouveau champ API,
+   la source de vérité reste l'equity unique (pas de risque de désync backend↔front).
+2. **Downsampling LTTB partagé** (`lib/metrics.lttb`, ~600 pts) recalculé à chaque fenêtre de zoom, sur equity
+   ET underwater → forme (pics/creux) préservée, 60 fps. **Invariant :** LTTB échantillonne sur le champ `.v` ;
+   downsampler **sur `underwater()` (qui porte `.v`), jamais après renommage** — sinon aires `NaN`, LTTB dégénère
+   en « 1er point par bucket » et le **pire DD est sous-estimé** (bug trouvé et corrigé cette session).
+3. **Fenêtre de zoom unique** (`win` levée dans `PerformancePanel`) pilote les deux graphes + `syncId` recharts
+   commun → axes X synchronisés et crosshair partagé. `EquityChart`/`DrawdownChart` `memo`ïsés.
+4. **Sémantique couleur stricte** (rappel ADR design) : `--pos`/`--neg` = P&L plein UNIQUEMENT ; régime =
+   tokens **outline** désaturés (`cyclePalette`, `badge-regime`). Aucun hex en dur dans les composants.
+**Conséquences.** (+) Un seul contrat de données (equity) ; underwater toujours cohérent avec la KPI Max DD
+(validé : « pire » affiché = −25,4 % = `metrics.max_drawdown`). (+) Pas de charge backend supplémentaire.
+(−) Le calcul underwater + LTTB est refait à chaque render/zoom côté client (borné par `useMemo`, négligeable à 2644 pts).
+Voir `apps/web/components/{PerformancePanel,EquityChart,DrawdownChart}.tsx`, `apps/web/lib/metrics.ts`.

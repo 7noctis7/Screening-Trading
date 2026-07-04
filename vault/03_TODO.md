@@ -30,8 +30,12 @@
       trades crypto → journal SQLite avec `features_snapshot`.
 - [ ] **BLOC 4** — Optimisation Alpaca paper (opérationnel, PAS de tuning stratégie) : cron `cron_live.sh`, limit vs
       market, fractional shares, **chaque run alimente `journal.db`** (accumuler des trades avec features = calibration).
-- [ ] **BLOC 5** — UI/Analytics institutionnel : branche **SÉPARÉE** `feat/ui-analytics` (ne pas mélanger aux brokers).
-      Mode plan **écran par écran**, commencer par le **Dashboard principal** (plan avant code). Cf. brief détaillé du 02/07.
+- [~] **BLOC 5** — UI/Analytics institutionnel : branche **SÉPARÉE** `feat/ui-analytics` (ne pas mélanger aux brokers).
+      Mode plan **écran par écran** (plan avant code). Cf. brief détaillé du 02/07.
+  - [x] **Dashboard principal** (2026-07-04, PR #294, commit `d2d11c1`) : `PerformancePanel` (equity+underwater
+        synchronisés, zoom LTTB partagé `syncId`), `DrawdownChart`/`PositionsAlertsTable` nouveaux, `MetricCard`
+        delta N−1, `RegimeBanner` tokens outline. Fix bug LTTB (pire DD sous-estimé). Cf. **ADR-0030**. `tsc` vert + contrôle visuel headless.
+  - [ ] **Écran suivant** (à planifier) : candidats `/positions`, `/screener`, ou analyse portefeuille dédiée — plan avant code.
 > Contraintes : `make test` vert entre chaque bloc · commits atomiques · rien qui touche `--live` · garde-fous intacts.
 
 ## 🚨 FULL-REVIEW 2026-07-02 — findings (voir `vault/14_FULL_REVIEW.md`)
