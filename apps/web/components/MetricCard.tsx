@@ -2,9 +2,10 @@
 import { useEffect, useRef, useState } from "react";
 
 // Carte KPI avec compteur animé (count-up) sur la partie numérique, préfixe/suffixe préservés.
-// Respecte prefers-reduced-motion (affichage direct). tone = couleur sémantique P&L/risque.
-export function MetricCard({ label, value, tone, hero }:
-  { label: string; value: string; tone?: "pos" | "neg"; hero?: boolean }) {
+// `delta` = variation vs période précédente, rendue DISCRÈTE (gris, signe seul, pas de flèche criarde).
+// Respecte prefers-reduced-motion (affichage direct). tone = couleur sémantique P&L UNIQUEMENT.
+export function MetricCard({ label, value, tone, hero, delta }:
+  { label: string; value: string; tone?: "pos" | "neg"; hero?: boolean; delta?: string }) {
   const color = tone === "pos" ? "text-pos" : tone === "neg" ? "text-neg" : "text-fg";
   const display = useCountUp(value);
   return (
@@ -13,6 +14,11 @@ export function MetricCard({ label, value, tone, hero }:
       <div className={`mono mt-1 ${color} ${hero ? "text-3xl md:text-4xl font-semibold tracking-tight" : "text-2xl"}`}>
         {display}
       </div>
+      {delta != null && (
+        <div className="mono text-[11px] text-muted2 mt-0.5" title="Variation vs période précédente de même durée">
+          {delta} <span className="not-italic">vs N−1</span>
+        </div>
+      )}
     </div>
   );
 }

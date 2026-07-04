@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { StepBanner } from "@/components/Pipeline";
 import { useDashboard, useScreener, useSentiment, usePresetLedger, usePositions, useAnalytics } from "@/lib/api";
 import { MetricCard } from "@/components/MetricCard";
@@ -7,39 +7,28 @@ import { RegimeBanner } from "@/components/RegimeBanner";
 import { VixPlaybook } from "@/components/VixPlaybook";
 import { SentimentBanner } from "@/components/SentimentBanner";
 import { EquityChart } from "@/components/EquityChart";
+import { PerformancePanel } from "@/components/PerformancePanel";
+import { PositionsAlertsTable } from "@/components/PositionsAlertsTable";
 import { TechnicalChart } from "@/components/TechnicalChart";
 import { PageSkeleton } from "@/components/ui";
+import { statsFrom, rebase } from "@/lib/metrics";
 
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 const PERIODS: [string, number][] = [["1A", 1], ["2A", 2], ["3A", 3], ["5A", 5], ["Tout", 0]];
-
-// Recalcule les métriques sur la fenêtre sélectionnée (annualisé, base 252 j).
-function statsFrom(eq: { t: string; v: number }[]) {
-  if (eq.length < 2) return null;
-  const v = eq.map((p) => p.v);
-  const r: number[] = [];
-  for (let i = 1; i < v.length; i++) if (v[i - 1] > 0) r.push(v[i] / v[i - 1] - 1);
-  const mean = r.reduce((a, b) => a + b, 0) / (r.length || 1);
-  const sd = Math.sqrt(r.reduce((a, b) => a + (b - mean) ** 2, 0) / (r.length || 1));
-  const dn = r.filter((x) => x < 0);
-  const dsd = Math.sqrt(dn.reduce((a, b) => a + b * b, 0) / (dn.length || 1));
-  let peak = v[0], mdd = 0;
-  for (const x of v) { peak = Math.max(peak, x); mdd = Math.min(mdd, x / peak - 1); }
-  const total = v[v.length - 1] / v[0] - 1;
-  const cagr = r.length > 1 ? Math.pow(1 + total, 252 / r.length) - 1 : total;
-  return {
-    total_return: total, cagr,
-    sharpe: sd > 0 ? (mean / sd) * Math.sqrt(252) : 0,
-    sortino: dsd > 0 ? (mean / dsd) * Math.sqrt(252) : 0,
-    max_drawdown: mdd,
-  };
-}
+// Deltas vs période N−1 (même durée) — DISCRETS : signe seul, gris. En points de % ou en absolu (ratios).
+const dPts = (cur?: number, prev?: number | null) => (cur == null || prev == null) ? undefined : `${cur - prev >= 0 ? "+" : ""}${((cur - prev) * 100).toFixed(1)} pt`;
+const dAbs = (cur?: number, prev?: number | null) => (cur == null || prev == null) ? undefined : `${cur - prev >= 0 ? "+" : ""}${(cur - prev).toFixed(2)}`;
 
 export default function Dashboard() {
   const { data: d } = useDashboard();
   const { data: s } = useScreener();
   const { data: sent } = useSentiment();
   const [years, setYears] = useState(0);   // 0 = tout
+  // Route sobre : coupe le décor animé global sur le dashboard (la donnée est la star).
+  useEffect(() => {
+    document.documentElement.classList.add("plain");
+    return () => document.documentElement.classList.remove("plain");
+  }, []);
   const [showLedger, setShowLedger] = useState(false);
   const [showReal, setShowReal] = useState(false);
   const [ledgerQ, setLedgerQ] = useState("");
@@ -55,13 +44,16 @@ export default function Dashboard() {
     const cut = new Date(last); cut.setFullYear(cut.getFullYear() - years);
     return eqFull.filter((p) => new Date(p.t) >= cut);
   }, [eqFull, years]);
-  // rebase une série pour qu'elle démarre à 10 000 $ au début de la fenêtre (comparaison équitable)
-  const rebase = (arr?: { t: string; v: number }[]) => {
-    if (!arr?.length || !arr[0].v) return arr ?? [];
-    const f = 10000 / arr[0].v;
-    return arr.map((p) => ({ t: p.t, v: Math.round(p.v * f * 100) / 100 }));
-  };
   const chartEquity = useMemo(() => rebase(sliced), [sliced]);
+  // Fenêtre N−1 (même durée, juste avant) → deltas KPI. Nulle si période = « Tout » (pas d'antérieur).
+  const prevStats = useMemo(() => {
+    if (!years || eqFull.length < 2) return null;
+    const last = new Date(eqFull[eqFull.length - 1].t);
+    const curCut = new Date(last); curCut.setFullYear(curCut.getFullYear() - years);
+    const prevCut = new Date(last); prevCut.setFullYear(prevCut.getFullYear() - 2 * years);
+    const win = eqFull.filter((p) => { const dt = new Date(p.t); return dt >= prevCut && dt < curCut; });
+    return statsFrom(win);
+  }, [eqFull, years]);
   const chartBench = useMemo(() => {
     const src = d?.benchmarks as Record<string, any[]> | undefined;
     if (!src) return src;
@@ -96,11 +88,11 @@ export default function Dashboard() {
         ))}
       </div>
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <MetricCard hero label="Rendement" value={pct(m.total_return)} tone={m.total_return >= 0 ? "pos" : "neg"} />
-        <MetricCard hero label="CAGR" value={pct(m.cagr ?? 0)} tone={(m.cagr ?? 0) >= 0 ? "pos" : "neg"} />
-        <MetricCard hero label="Sharpe" value={m.sharpe?.toFixed(2)} />
-        <MetricCard hero label="Sortino" value={m.sortino?.toFixed(2)} />
-        <MetricCard hero label="Max DD" value={pct(m.max_drawdown)} tone="neg" />
+        <MetricCard hero label="Rendement" value={pct(m.total_return)} tone={m.total_return >= 0 ? "pos" : "neg"} delta={dPts(m.total_return, prevStats?.total_return)} />
+        <MetricCard hero label="CAGR" value={pct(m.cagr ?? 0)} tone={(m.cagr ?? 0) >= 0 ? "pos" : "neg"} delta={dPts(m.cagr, prevStats?.cagr)} />
+        <MetricCard hero label="Sharpe" value={m.sharpe?.toFixed(2)} delta={dAbs(m.sharpe, prevStats?.sharpe)} />
+        <MetricCard hero label="Sortino" value={m.sortino?.toFixed(2)} delta={dAbs(m.sortino, prevStats?.sortino)} />
+        <MetricCard hero label="Max DD" value={pct(m.max_drawdown)} tone="neg" delta={dPts(m.max_drawdown, prevStats?.max_drawdown)} />
       </div>
 
       {/* Honnêteté statistique (manifeste) : PSR affiché, DSR multi-essais ≈ 0 assumé. */}
@@ -118,7 +110,8 @@ export default function Dashboard() {
         </div>
       )}
 
-      <EquityChart series={chartEquity} benchmarks={chartBench} />
+      <PerformancePanel equity={chartEquity} benchmarks={chartBench} />
+      <PositionsAlertsTable positions={d.real_positions} alerts={d.earnings_risk} />
 
       {/* Comparaison KPI : portefeuille vs benchmarks, sur la période choisie */}
       <section className="card p-4 overflow-x-auto">
