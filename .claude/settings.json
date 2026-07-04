@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/file_guard.py",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/file_guard.py",
             "timeout": 15
           }
         ]
@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/friction_log.py",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/friction_log.py",
             "timeout": 10
           }
         ]
@@ -38,7 +38,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/friction_log.py --event stop",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/friction_log.py --event stop",
             "timeout": 10
           }
         ]
