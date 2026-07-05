@@ -8,6 +8,7 @@ const config: Config = {
     border: "var(--border)", border2: "var(--border2)",
     fg: "var(--fg)", muted: "var(--muted)", accent: "var(--accent)", accent2: "var(--accent2)",
     pos: "var(--pos)", neg: "var(--neg)",
+    "regime-on": "var(--regime-on)", "regime-off": "var(--regime-off)",
   }, borderRadius: { md: "12px", lg: "16px" },
   boxShadow: { DEFAULT: "var(--shadow)" } } },
   plugins: [],

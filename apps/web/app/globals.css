@@ -11,6 +11,9 @@
   --bg:#f4f7f8; --bg2:#eaf0f1; --surface:#ffffff; --surface2:#f5f8f9; --surface3:#e9eff1;
   --border:#dde6e8; --border2:#cbd8db; --fg:#0a0f12; --muted:#52616a; --muted2:#86949b;
   --accent:#0891b2; --accent2:#06b6d4; --pos:#16a34a; --neg:#dc2626; --warn:#d97706;
+  /* Régime = vert/rouge DÉSATURÉS, rendus en outline (border+texte). JAMAIS le fill plein de --pos/--neg
+     (réservés au P&L). Chroma volontairement basse → sémantique « contexte marché », pas « gain/perte ». */
+  --regime-on:#3f8f6b; --regime-off:#b85c5c;
   --shadow:0 1px 2px rgba(16,24,40,.06),0 8px 24px rgba(16,24,40,.08);
   color-scheme: light;          /* scrollbar/contrôles natifs assortis au thème clair */
 }
@@ -21,6 +24,7 @@
   :root {
     --accent:oklch(0.62 0.115 217); --accent2:oklch(0.72 0.125 207);
     --pos:oklch(0.63 0.17 150); --neg:oklch(0.58 0.22 27); --warn:oklch(0.68 0.16 60);
+    --regime-on:oklch(0.58 0.09 155); --regime-off:oklch(0.56 0.11 25);
   }
 }
 .dark {
@@ -28,6 +32,7 @@
   --bg:#0a1118; --bg2:#0e1721; --surface:#121c26; --surface2:#16212d; --surface3:#1b2935;
   --border:#22303c; --border2:#2e3f4d; --fg:#eaf2f4; --muted:#93a7b1; --muted2:#637580;
   --accent:#22d3ee; --accent2:#5eead4; --pos:#22c55e; --neg:#f43f5e; --warn:#f59e0b;
+  --regime-on:#7fce9f; --regime-off:#e59a9a;   /* vert/rouge désaturés (outline) — cf. thème clair */
   --shadow:0 1px 2px rgba(0,0,0,.45),0 10px 30px rgba(0,0,0,.3);
   color-scheme: dark;           /* scrollbar/contrôles natifs sombres */
 }
@@ -35,11 +40,17 @@
   .dark {
     --accent:oklch(0.79 0.135 200); --accent2:oklch(0.86 0.115 175);
     --pos:oklch(0.76 0.18 149); --neg:oklch(0.67 0.215 13); --warn:oklch(0.78 0.16 70);
+    --regime-on:oklch(0.80 0.09 155); --regime-off:oklch(0.78 0.10 20);
   }
 }
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
+/* Route SOBRE (ex. /dashboard) : la donnée est la star → on coupe tout le décor animé global
+   (photo ken-burns, halos, aurora, grille tech). Appliqué via <html class="plain"> par la page. */
+html.plain::before, html.plain::after,
+html.plain body::before, html.plain body::after { display:none !important; }
+html.plain body { background:var(--bg); }
 /* Photo taureau/ours en ARRIÈRE-PLAN de tout le site (dépose apps/web/public/hero.jpg).
    Couche la plus basse ; si le fichier est absent, le dégradé du body prend le relais. */
 html::before {
@@ -166,7 +177,16 @@ h2 { letter-spacing:-.01em; }
 table { border-collapse:collapse; width:100%; }
 thead th { font-weight:600; letter-spacing:.04em; text-transform:uppercase; font-size:10.5px;
   color:var(--muted2); padding:6px 10px; border-bottom:1px solid var(--border); position:sticky; }
-tbody td { padding:8px 10px; border-top:1px solid var(--border); font-size:13px; }
+tbody td { padding:8px 10px; border-top:1px solid var(--border); font-size:13px; font-variant-numeric:tabular-nums; }
+/* Chiffres alignés partout où on ne passe pas par .mono (util générique). */
+.tnum { font-variant-numeric:tabular-nums; font-feature-settings:"tnum"; }
+
+/* Badge RÉGIME (risk-on/off) : outline désaturé — visuellement distinct du P&L plein (--pos/--neg). */
+.badge-regime { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600;
+  padding:2px 9px; border-radius:999px; background:transparent; border:1px solid currentColor;
+  letter-spacing:.02em; text-transform:capitalize; }
+.badge-regime.on  { color:var(--regime-on); }
+.badge-regime.off { color:var(--regime-off); }
 /* tableau dense : tout voir d'un coup, sans scroll horizontal */
 .dense th { padding:4px 6px; font-size:9.5px; }
 .dense td { padding:3px 6px; font-size:11.5px; }
