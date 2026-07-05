@@ -35,7 +35,14 @@
   - [x] **Dashboard principal** (2026-07-04, PR #294, commit `d2d11c1`) : `PerformancePanel` (equity+underwater
         synchronisés, zoom LTTB partagé `syncId`), `DrawdownChart`/`PositionsAlertsTable` nouveaux, `MetricCard`
         delta N−1, `RegimeBanner` tokens outline. Fix bug LTTB (pire DD sous-estimé). Cf. **ADR-0030**. `tsc` vert + contrôle visuel headless.
-  - [ ] **Écran suivant** (à planifier) : candidats `/positions`, `/screener`, ou analyse portefeuille dédiée — plan avant code.
+  - [x] **Écran 2 — /positions « réel vs cible »** (2026-07-05) : fusion positions réelles × cible preset
+        (poids par poche de capital), barre d'écart divergente + bande de non-trading 3 %, HHI/N effectif/top 3,
+        badge earnings, SortableTable (tri/filtre/CSV), route `/api/positions` expose `preset_allocation` +
+        `earnings_risk`. Build statique + tests API verts.
+  - [ ] **Écran suivant** (à planifier) : candidats `/screener` ou analyse portefeuille dédiée — plan avant code.
+  - [ ] **Dette signalée par le hook (02/07, préexistante)** : `apps/api/main.py` 953 l > 400 + 3 fonctions
+        >50 l (`_top_syms`, `_build_company_report_cached`, `_enrich_cross_source`) — même famille que le
+        god-object `snapshot.py` (P2). Extraire en modules `apps/api/routes/*` lors du refactor sections.
 > Contraintes : `make test` vert entre chaque bloc · commits atomiques · rien qui touche `--live` · garde-fous intacts.
 
 ## 🚨 FULL-REVIEW 2026-07-02 — findings (voir `vault/14_FULL_REVIEW.md`)
