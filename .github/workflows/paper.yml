@@ -1,0 +1,85 @@
+name: Rebalancement paper cloud (Mac éteint, 0 €)
+
+# Réplique le portefeuille modèle chez Alpaca PAPER chaque jour de bourse, même Mac éteint.
+# Idempotent : si le launchd du Mac a déjà rebalancé (ou l'inverse), le second run voit des
+# deltas ~0 et n'envoie rien. Journal (features + round-trips) persisté sur un dataset HF PRIVÉ.
+#
+# SÉCURITÉ (garde-fous CLAUDE.md) :
+#   - Alpaca est TOUJOURS paper (AlpacaBroker force paper=True) → aucun ordre réel possible ;
+#   - QUANT_NO_CRYPTO_LIVE=1 + aucune clé Bitmart fournie → crypto 100 % neutralisée ;
+#   - secrets chiffrés GitHub Actions (jamais dans le code, repo public sans clé en clair) ;
+#   - sans secrets Alpaca → le run s'arrête proprement (aucun défaut dangereux).
+#
+# Secrets à créer (Settings → Secrets and variables → Actions) :
+#   ALPACA_API_KEY / ALPACA_API_SECRET  (clés du compte PAPER Alpaca)
+#   HF_TOKEN  (optionnel mais recommandé : persistance du journal sur HF privé)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "35 14 * * 1-5"   # 14:35 UTC = 10:35 ET été / 9:35 ET hiver → marché US ouvert
+
+permissions:
+  contents: read
+
+concurrency:
+  group: paper-live
+  cancel-in-progress: false   # jamais interrompre un rebalancement en cours
+
+jobs:
+  rebalance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Gate secrets (sortie propre si non configuré)
+        env:
+          AK: ${{ secrets.ALPACA_API_KEY }}
+        run: |
+          if [ -z "$AK" ]; then
+            echo "::warning::ALPACA_API_KEY absent — runner cloud non configuré, rien à faire."
+            echo "skip=1" >> "$GITHUB_ENV"
+          fi
+
+      - name: Setup Python
+        if: env.skip != '1'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Dépendances
+        if: env.skip != '1'
+        run: |
+          python -m pip install -U pip
+          pip install -e ".[data,quant,api]"
+
+      - name: Cache OHLCV (socle HF public) + top-up prix du jour
+        if: env.skip != '1'
+        env:
+          QUANT_PRICE_DB: ${{ github.workspace }}/data/market.db
+        run: |
+          python scripts/hf_cache.py pull || true
+          python scripts/ingest_prices.py --daily || true
+
+      - name: Journal ← HF privé (round-trips accumulés)
+        if: env.skip != '1'
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: python scripts/hf_journal.py pull
+
+      - name: Rebalancement Alpaca PAPER (réconciliation + journal)
+        if: env.skip != '1'
+        env:
+          QUANT_PRICE_DB: ${{ github.workspace }}/data/market.db
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_API_SECRET: ${{ secrets.ALPACA_API_SECRET }}
+          QUANT_NO_CRYPTO_LIVE: "1"   # ceinture+bretelles : aucune clé Bitmart de toute façon
+          QUANT_NO_LLM: "1"
+        run: python scripts/run_live.py --live --yes
+
+      - name: Journal → HF privé (persistance)
+        if: env.skip != '1'
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: python scripts/hf_journal.py push

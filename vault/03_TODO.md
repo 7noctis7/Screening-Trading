@@ -40,6 +40,21 @@
         god-object `snapshot.py` (P2). Extraire en modules `apps/api/routes/*` lors du refactor sections.
 > Contraintes : `make test` vert entre chaque bloc · commits atomiques · rien qui touche `--live` · garde-fous intacts.
 
+## ☁️ RUNNER PAPER CLOUD (Mac éteint, 0 €) — 2 actions à faire par TOI (5 min)
+> Livré 2026-07-05 : `.github/workflows/paper.yml` (lun-ven 14h35 UTC, Alpaca PAPER forcé,
+> crypto neutralisée) + `scripts/hf_journal.py` (journal persisté sur dataset HF **PRIVÉ**).
+> Idempotent vs le launchd du Mac : le 2ᵉ runner du jour voit des deltas ~0 et n'envoie rien.
+- [ ] **Créer les secrets GitHub** (repo → Settings → Secrets and variables → Actions → New) :
+      `ALPACA_API_KEY` + `ALPACA_API_SECRET` (les clés du compte **paper**) et, recommandé,
+      `HF_TOKEN` (token huggingface.co « write » → persistance du journal, dataset créé PRIVÉ
+      automatiquement : `Noctis777/quant-journal`).
+- [ ] **Tester une fois** : onglet Actions → « Rebalancement paper cloud » → Run workflow ;
+      vérifier dans le log « Terminé : N ordre(s) » puis « journal poussé … (privé) ».
+- [ ] (Option) **Choisir le runner principal** : garder les deux est SANS DANGER (idempotent),
+      mais le journal du Mac et celui du cloud divergent (chacun journalise SES ordres envoyés).
+      Recommandé : cloud = principal → `make live-cron-uninstall` sur le Mac, et pour consulter :
+      `make journal-pull && make verify-journal`.
+
 ## 🚨 FULL-REVIEW 2026-07-02 — findings (voir `vault/14_FULL_REVIEW.md`)
 > Revue complète multi-agents sur `ops-integration`. **P0 = invalide des résultats → avant toute feature.**
 ### 🔴 P0 (bloqueurs capital réel)
