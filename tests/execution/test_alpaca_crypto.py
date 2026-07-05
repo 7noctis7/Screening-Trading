@@ -7,7 +7,10 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from alpaca.trading.enums import TimeInForce
+import pytest
+
+pytest.importorskip("alpaca", reason="SDK alpaca-py absent (env minimal) — couvert en CI")
+from alpaca.trading.enums import TimeInForce  # noqa: E402
 
 from packages.core.models import Order, Side
 from packages.execution.alpaca_broker import AlpacaBroker, _is_crypto_symbol
