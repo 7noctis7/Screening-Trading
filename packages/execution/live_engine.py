@@ -1,12 +1,17 @@
-"""Moteur de trading LIVE (paper par défaut) — parité avec le backtest.
+"""Moteur de SIMULATION barre-par-barre (paper-loop/démo) — PAS le chemin de production.
+
+⚠️ STATUT (ADR-0031, 2026-07-05) : RÉTROGRADÉ. Le chemin de PROD unique est
+`scripts/run_live.py` (réconciliation cible↔broker + journal `data/journal.db` avec
+features de décision et round-trip, cf. `live_journal.py`/`live_roundtrip.py`).
+Ce moteur reste maintenu pour : valider la logique stop/target/kill-switch en
+simulation (`scripts/demo_paper_loop.py`) et les tests d'exécution. Il ne doit
+JAMAIS être branché sur un broker réel — toute évolution prod va dans `run_live.py`.
 
 Réutilise les MÊMES composants/interfaces que le backtest (Strategy, Sizer,
 RiskEngine, Broker, TradeJournal). Différence : il réagit barre par barre (streaming)
-au lieu d'itérer l'historique. Donc une stratégie validée en backtest tourne en paper
-sans réécriture → parité garantie.
-
-Sécurité : PAPER par défaut, retries idempotents, **kill-switch** vérifié à chaque pas
-(drawdown quotidien → blocage des entrées). Réconciliation broker↔interne via `reconcile`.
+au lieu d'itérer l'historique → une stratégie validée en backtest tourne ici sans
+réécriture (parité). Sécurité : paper par défaut, retries idempotents, kill-switch
+à chaque pas, réconciliation broker↔interne via `reconcile`.
 """
 
 from __future__ import annotations

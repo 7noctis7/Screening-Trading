@@ -122,9 +122,11 @@ def check_journal(db: Path, max_age_days: float) -> int:
 
         if n_live == 0:
             print(f"{WARN} UNCALIBRATED : aucun trade legacy=0 — le run quotidien n'a encore "
-                  f"RIEN journalisé.\n       ⚠ run_live.py réconcilie chez le broker mais n'écrit "
-                  f"PAS dans journal.db\n         (seul LiveEngine journalise, non câblé en prod). "
-                  f"Voir le rapport de session.")
+                  f"RIEN journalisé.\n       · Normal tant que le cron (lun-ven 16h05) n'a pas "
+                  f"tourné depuis le déploiement\n         du journal de prod (P0-4 : run_live "
+                  f"journalise ACHATS + round-trip des VENTES).\n       · Si un run de semaine "
+                  f"est passé SANS rien écrire : soit aucun ordre envoyé (déjà\n         aligné), "
+                  f"soit fill non exploitable — voir ~/Library/Logs/quant_live.log.")
             return 2
 
         return 0 if _assert_live_trades(conn, n_live, max_ts, max_age_days) else 1

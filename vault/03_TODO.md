@@ -40,6 +40,21 @@
         god-object `snapshot.py` (P2). Extraire en modules `apps/api/routes/*` lors du refactor sections.
 > Contraintes : `make test` vert entre chaque bloc · commits atomiques · rien qui touche `--live` · garde-fous intacts.
 
+## ☁️ RUNNER PAPER CLOUD (Mac éteint, 0 €) — 2 actions à faire par TOI (5 min)
+> Livré 2026-07-05 : `.github/workflows/paper.yml` (lun-ven 14h35 UTC, Alpaca PAPER forcé,
+> crypto neutralisée) + `scripts/hf_journal.py` (journal persisté sur dataset HF **PRIVÉ**).
+> Idempotent vs le launchd du Mac : le 2ᵉ runner du jour voit des deltas ~0 et n'envoie rien.
+- [ ] **Créer les secrets GitHub** (repo → Settings → Secrets and variables → Actions → New) :
+      `ALPACA_API_KEY` + `ALPACA_API_SECRET` (les clés du compte **paper**) et, recommandé,
+      `HF_TOKEN` (token huggingface.co « write » → persistance du journal, dataset créé PRIVÉ
+      automatiquement : `Noctis777/quant-journal`).
+- [ ] **Tester une fois** : onglet Actions → « Rebalancement paper cloud » → Run workflow ;
+      vérifier dans le log « Terminé : N ordre(s) » puis « journal poussé … (privé) ».
+- [ ] (Option) **Choisir le runner principal** : garder les deux est SANS DANGER (idempotent),
+      mais le journal du Mac et celui du cloud divergent (chacun journalise SES ordres envoyés).
+      Recommandé : cloud = principal → `make live-cron-uninstall` sur le Mac, et pour consulter :
+      `make journal-pull && make verify-journal`.
+
 ## 🚨 FULL-REVIEW 2026-07-02 — findings (voir `vault/14_FULL_REVIEW.md`)
 > Revue complète multi-agents sur `ops-integration`. **P0 = invalide des résultats → avant toute feature.**
 ### 🔴 P0 (bloqueurs capital réel)
@@ -75,8 +90,9 @@
         snapshot). Prix de sortie = FAIT broker (fill du jour via `orders()` → `last_price` →
         prix de position ; introuvable = lot laissé OUVERT, jamais estimé). 6 tests
         (`test_live_roundtrip.py`), suite 811 verts. Débloque expectancy/Kelly au RDV 2026-08-06.
-      - [ ] **Reste (décision, pas du code)** : sort de `LiveEngine` (supprimer ou rétrograder en
-        backtest/paper-loop) pour ne pas laisser 2 chemins de prod.
+      - [x] **Décision prise (2026-07-05, validée utilisateur)** : `LiveTradingEngine` **RÉTROGRADÉ**
+        en moteur de simulation (docstring de statut, exports conservés, zéro churn tests/démos).
+        Chemin de prod UNIQUE = `run_live.py`. Cf. **ADR-0031**.
 ### ⛔ P0-SI-LIVE — bloquants AVANT toute activation d'un broker réel (audit adverse 02/07, cf. `14_FULL_REVIEW.md`)
 > Prouvés, sévérité capital/ops. **Ne jamais passer le broker concerné en live tant que son P0-SI-LIVE n'est pas fermé** (garde-fou CLAUDE.md).
 - [x] **#4 Idempotence Bitmart — FERMÉ** (via #293, vérifié 2026-07-05) : `clientOrderId` en `params`
