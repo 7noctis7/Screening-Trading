@@ -9,21 +9,16 @@
 > **Amendements validés** : 1a `_seen` rejoue le résultat RÉEL (y c. rejet), jamais de FILLED fabriqué ·
 > 1b ouverture seule (sortie partielle → P2) + si `filled_qty=None` → NE PAS ouvrir + alerte CRITICAL · 1c OK.
 
-- [~] **BLOC 1a — idempotence Bitmart** (`bitmart_broker.py`) — *commencé* :
-  - ✅ Fait : `self._seen: dict[str, OrderStatus]` init ; `is_paper: bool = False` annoté (contourne un **faux
-    positif** du hook `file_guard.py:18`, regex `paper=False` — hook NON modifié ; fix propre = word-boundary, à voir).
-  - ⏳ Reste : dans `submit()` — court-circuit en tête (si `client_id ∈ _seen` → rejouer le statut, **jamais** fabriquer
-    FILLED) ; `params={"clientOrderId": order.client_id}` sur `create_order` (`:99`) ; `_remember()` après chaque submit
-    définitif (succès **ET** rejet). Test `tests/execution/test_bitmart_idempotency.py` (faux exchange, sans réseau) :
-    (1) timeout→retry ⇒ **1 seul ordre net** ; (2) 2× `submit` même `client_id` ⇒ 1 seul `create_order` ; (3) 1er rejet
-    exchange ⇒ 2e `submit` rejoue REJECTED, n'ouvre rien ; (4) `clientOrderId` bien transmis dans `params`.
-- [ ] **BLOC 1b — fills partiels** : `Order.filled_qty` (`models.py:196`) ; `live_engine.py:110-112` accepter
-      `PARTIALLY_FILLED` (ouvrir à `filled_qty` réel + warning reliquat) ; si `filled_qty=None` → **ne pas ouvrir +
-      alerte CRITICAL** (jamais supposer un fill plein). Test `tests/execution/test_partial_fills.py` (les 2 cas + FILLED plein). Sortie partielle → P2.
-- [ ] **BLOC 1c — brancher l'alerte de réconciliation** : `packages/alerts/wiring.py` (`default_engine` Console +
-      Telegram/Discord si clés + `attach_to_bus`) ; `LiveTradingEngine` reçoit un `bus`, le passe à `reconcile()`
-      (`:78`) et au `RiskEngine` ; hook dans `scripts/run_live.py` ; documenter clés dans `.env.example`. Test
-      `tests/alerts/test_reconcile_wiring.py` (divergence simulée ⇒ 1 alerte CRITICAL via `InMemorySink`).
+- [x] **BLOC 1a — idempotence Bitmart** — LIVRÉ dans `main` via **#293** (audit 2026-07-05) :
+      `_seen` rejoue le résultat RÉEL (y c. rejet, y c. qté partielle), `clientOrderId` passé en
+      `params` ccxt (dédup côté exchange), `_remember()` après chaque submit définitif.
+      Tests `test_bitmart_idempotency.py` verts.
+- [x] **BLOC 1b — fills partiels** — LIVRÉ via **#293** : `live_engine.py` gère `PARTIALLY_FILLED`
+      (ouvre à `filled_qty` réel + warning reliquat) ; `filled_qty=None` → position NON ouverte +
+      alerte CRITICAL. Tests `test_partial_fills.py` verts.
+- [x] **BLOC 1c — alerte de réconciliation branchée** — LIVRÉ via **#293** : `packages/alerts/wiring.py`
+      (`default_engine` + `attach_to_bus`), `LiveTradingEngine(bus=…)` → `reconcile(bus=…)`,
+      hook dans `run_live.py` (`_setup_alerts`).
 - [ ] **BLOC 2** — Diagnostic Bitmart (LECTURE SEULE, Bitmart reste OFF) : confirmer les 3 verrous (dry_run défaut,
       `QUANT_NO_CRYPTO_LIVE`, clés `.env`), documenter la procédure d'activation future dans le vault.
 - [ ] **BLOC 3** — Crypto paper via Alpaca (BTC/USD, ETH/USD), sizing vol-target adapté (vol crypto ≫ actions),
@@ -35,7 +30,14 @@
   - [x] **Dashboard principal** (2026-07-04, PR #294, commit `d2d11c1`) : `PerformancePanel` (equity+underwater
         synchronisés, zoom LTTB partagé `syncId`), `DrawdownChart`/`PositionsAlertsTable` nouveaux, `MetricCard`
         delta N−1, `RegimeBanner` tokens outline. Fix bug LTTB (pire DD sous-estimé). Cf. **ADR-0030**. `tsc` vert + contrôle visuel headless.
-  - [ ] **Écran suivant** (à planifier) : candidats `/positions`, `/screener`, ou analyse portefeuille dédiée — plan avant code.
+  - [x] **Écran 2 — /positions « réel vs cible »** (2026-07-05) : fusion positions réelles × cible preset
+        (poids par poche de capital), barre d'écart divergente + bande de non-trading 3 %, HHI/N effectif/top 3,
+        badge earnings, SortableTable (tri/filtre/CSV), route `/api/positions` expose `preset_allocation` +
+        `earnings_risk`. Build statique + tests API verts.
+  - [ ] **Écran suivant** (à planifier) : candidats `/screener` ou analyse portefeuille dédiée — plan avant code.
+  - [ ] **Dette signalée par le hook (02/07, préexistante)** : `apps/api/main.py` 953 l > 400 + 3 fonctions
+        >50 l (`_top_syms`, `_build_company_report_cached`, `_enrich_cross_source`) — même famille que le
+        god-object `snapshot.py` (P2). Extraire en modules `apps/api/routes/*` lors du refactor sections.
 > Contraintes : `make test` vert entre chaque bloc · commits atomiques · rien qui touche `--live` · garde-fous intacts.
 
 ## 🚨 FULL-REVIEW 2026-07-02 — findings (voir `vault/14_FULL_REVIEW.md`)
@@ -66,13 +68,24 @@
         le snapshot, **jamais reconstruites** ; **faits de fill** (prix/qté) lus des positions RÉELLES du broker
         (lookup tolérant BTC/USD↔BTCUSD). `id` déterministe/jour → idempotent. 7 tests (`test_live_journal.py`).
         `make verify-journal` passe de `UNCALIBRATED` à ✅ au 1er run réel.
-      - [ ] **Phase 2 (reste)** : round-trip — persister les lots ouverts, apparier les VENTES → renseigner
-        `exit_ts/exit_price/pnl/MFE/MAE` (débloque expectancy/Kelly, RDV 2026-08-06). Décider du sort de
-        `LiveEngine` (supprimer ou rétrograder en backtest/paper-loop) pour ne pas laisser 2 chemins.
+      - [x] **Phase 2 (fait, 2026-07-05)** : round-trip — `packages/execution/live_roundtrip.py`
+        (`open_lots`/`close_sells` FIFO, vente partielle = scission de lot id `-Xn` déterministe,
+        UPSERT idempotent) + `run_live.py` capture les VENTES envoyées et ferme les lots
+        (`exit_ts/exit_price/pnl/pnl_pct/is_win/duration_s` + **MFE/MAE** depuis la série OHLC du
+        snapshot). Prix de sortie = FAIT broker (fill du jour via `orders()` → `last_price` →
+        prix de position ; introuvable = lot laissé OUVERT, jamais estimé). 6 tests
+        (`test_live_roundtrip.py`), suite 811 verts. Débloque expectancy/Kelly au RDV 2026-08-06.
+      - [ ] **Reste (décision, pas du code)** : sort de `LiveEngine` (supprimer ou rétrograder en
+        backtest/paper-loop) pour ne pas laisser 2 chemins de prod.
 ### ⛔ P0-SI-LIVE — bloquants AVANT toute activation d'un broker réel (audit adverse 02/07, cf. `14_FULL_REVIEW.md`)
 > Prouvés, sévérité capital/ops. **Ne jamais passer le broker concerné en live tant que son P0-SI-LIVE n'est pas fermé** (garde-fou CLAUDE.md).
-- [ ] **#4 Idempotence Bitmart** (`bitmart_broker.py:99`) : `create_order` sans `clientOrderId` → un retry (`retry.py:28`, retente sur REJECTED) **redouble l'ordre marché crypto réel**. Correctif : passer `client_order_id` en `params` ccxt + court-circuiter les `client_id` déjà vus (comme `SimBroker`). *Gaté aujourd'hui par `dry_run=True` + `QUANT_NO_CRYPTO_LIVE=1`.*
-- [ ] **#5 Fills partiels** (`live_engine.py:111`) : ouverture sur `"filled"` strict → `PARTIALLY_FILLED` (mappé `:16`) ignoré = position broker **non trackée** (ni stop ni target), `reconcile.py:35` détecte mais alerte non branchée. Correctif : gérer `PARTIALLY_FILLED` (ouvrir à `filled_qty`, suivre le reliquat) + brancher l'alerte de réconciliation.
+- [x] **#4 Idempotence Bitmart — FERMÉ** (via #293, vérifié 2026-07-05) : `clientOrderId` en `params`
+      ccxt + court-circuit `_seen` (rejoue le résultat réel, jamais de FILLED fabriqué). Tests verts.
+- [x] **#5 Fills partiels — FERMÉ** (via #293, vérifié 2026-07-05) : `PARTIALLY_FILLED` ouvre à
+      `filled_qty` réel (reliquat loggé) ; `filled_qty=None` → pas d'ouverture + alerte CRITICAL ;
+      alerte de réconciliation branchée (bus → `default_engine`). Tests verts.
+> ✅ Plus aucun P0-SI-LIVE ouvert. L'activation d'un broker réel reste conditionnée au RDV paper
+> du 2026-08-06 (cf. garde-fou CLAUDE.md : jamais de live sans décision explicite).
 ### 🟠 P1
 - [x] **P1-1** ✅ (2026-07-02, suite) : `SqliteTradeJournal` (`data/journal.db`, JSON features, UPSERT
       idempotent, flag `legacy` requêtable) + `LiveTradingEngine` persiste par défaut + `import_legacy_fills.py`

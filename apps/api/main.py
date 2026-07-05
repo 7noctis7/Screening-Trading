@@ -247,6 +247,8 @@ def positions() -> dict:
             "connected": real.get("connected", False),
             "accounts": {"alpaca": real.get("alpaca", {}), "bitmart": real.get("bitmart", {})},
             "alloc_capital": dash.get("alloc_capital", {}),
+            "preset_allocation": dash.get("preset_allocation", []),  # cible modèle → écart de réplication
+            "earnings_risk": dash.get("earnings_risk", []),          # résultats imminents (risque binaire)
             "series": dash.get("chart_series", {}),
             "markers": dash.get("real_markers", {})}
 

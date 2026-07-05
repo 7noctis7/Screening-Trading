@@ -89,25 +89,32 @@ def _current_values(alpaca, bitmart) -> tuple[dict, dict]:
     return cur_alp, cur_bit
 
 
-def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list]:
-    """Réconciliation idempotente + ANTI-LEVIER. Retourne (nb ordres envoyés, ouvertures à journaliser).
+def _broker_targets(targets, bname: str, cap: float, reduce: float, cur: dict) -> tuple[dict, float]:
+    """Carte cible {broker_symbol: {o, val}} d'UN broker + bande d'inaction (anti micro-deltas).
 
-    On n'échange que le DELTA (cible − détenu) ; cibles plafonnées à 100 % du capital PAR broker
-    (Σ poids ≤ 1) → jamais de levier. `opened` = achats RÉELLEMENT envoyés (à journaliser, `legacy=0`)."""
+    ANTI-LEVIER : Σ cibles plafonnée à 100 % du capital du broker. Le détenu hors-cible
+    est ajouté avec val=0 (liquidation)."""
+    tgs = [o for o in targets if (o.get("capital") == "bitmart") == (bname == "Bitmart")]
+    sw = sum(o["weight_pct"] for o in tgs)
+    scale = min(1.0, 1.0 / sw) if sw > 1.0 else 1.0
+    tgt: dict[str, dict] = {}
+    for o in tgs:
+        tgt[o.get("broker_symbol", o["symbol"])] = {"o": o, "val": o["weight_pct"] * cap * reduce * scale}
+    for bsym in cur:                                      # détenu hors-cible → liquidation (cible 0)
+        tgt.setdefault(bsym, {"o": None, "val": 0.0})
+    return tgt, max(0.005 * cap, 5.0)                     # bande : 0,5 % du capital, min 5 $
+
+
+def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, list]:
+    """Réconciliation idempotente + ANTI-LEVIER. Retourne (nb ordres, ouvertures, ventes).
+
+    On n'échange que le DELTA (cible − détenu). `opened` = achats RÉELLEMENT envoyés (à
+    journaliser, `legacy=0`) ; `sold` = ventes RÉELLEMENT envoyées (round-trip Phase 2)."""
     from packages.common.retry import retry
     from packages.core.models import Side
-    sent, opened = 0, []
-    band_frac = 0.005                                         # ignore les micro-deltas (< 0,5 % du capital)
+    sent, opened, sold = 0, [], []
     for bname, broker, cap, cur in brokers:
-        tgs = [o for o in targets if (o.get("capital") == "bitmart") == (bname == "Bitmart")]
-        sw = sum(o["weight_pct"] for o in tgs)
-        scale = min(1.0, 1.0 / sw) if sw > 1.0 else 1.0       # ANTI-LEVIER : Σ cibles ≤ capital
-        tgt: dict[str, dict] = {}
-        for o in tgs:
-            tgt[o.get("broker_symbol", o["symbol"])] = {"o": o, "val": o["weight_pct"] * cap * reduce * scale}
-        for bsym in cur:                                      # détenu hors-cible → liquidation (cible 0)
-            tgt.setdefault(bsym, {"o": None, "val": 0.0})
-        band = max(band_frac * cap, 5.0)
+        tgt, band = _broker_targets(targets, bname, cap, reduce, cur)
         for bsym, info in sorted(tgt.items(), key=lambda kv: -kv[1]["val"]):
             o = info["o"]
             delta = info["val"] - cur.get(bsym, 0.0)          # >0 acheter · <0 vendre
@@ -126,6 +133,9 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list]:
                 if delta > 0 and o is not None:               # ACHAT/ADD → ouverture à journaliser
                     opened.append({"symbol": o["symbol"], "venue": bname, "broker_symbol": bsym,
                                    "asset_class": o.get("asset_class"), "weight_pct": o.get("weight_pct")})
+                elif delta < 0:                               # VENTE/REDUCE → round-trip à fermer
+                    sold.append({"symbol": (o or {}).get("symbol", bsym), "venue": bname,
+                                 "broker_symbol": bsym, "notional": abs(delta)})
             except Exception as e:  # noqa: BLE001
                 print(tag + f"  échec après retries ({str(e)[:40]})")
                 if alert_engine:
@@ -134,7 +144,7 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list]:
                         f"Ordre {'achat' if delta > 0 else 'vente'} {bsym} ({bname}) échoué "
                         f"après retries : {str(e)[:80]}",
                         dedup_key=f"execution:submit_fail:{bsym}"))
-    return sent, opened
+    return sent, opened, sold
 
 
 def _journal_opens(snap: dict, opened: list, alpaca, bitmart) -> None:
@@ -170,6 +180,53 @@ def _journal_opens(snap: dict, opened: list, alpaca, bitmart) -> None:
               + (f" · {skipped} sans fill exploitable (capturé au prochain run)." if skipped else "."))
     except Exception as e:  # noqa: BLE001
         print(f"Journal : journalisation ignorée ({str(e)[:60]}).")
+
+
+def _exit_price(br, bsym: str) -> float:
+    """Prix de sortie FACTUEL, par ordre de fiabilité : fill VENTE du jour (`orders`),
+    sinon ticker broker (`last_price`), sinon prix courant de la position. 0.0 = inconnu
+    (le lot restera OUVERT — on n'invente jamais un prix)."""
+    from datetime import datetime, timezone
+    if br is None:
+        return 0.0
+    try:
+        today = datetime.now(timezone.utc).date().isoformat()
+        for o in (br.orders(limit=50) if hasattr(br, "orders") else []):
+            if (o.get("symbol") == bsym and o.get("side") == "sell"
+                    and float(o.get("price") or 0) > 0 and (o.get("date") or "")[:10] == today):
+                return float(o["price"])
+        if hasattr(br, "last_price"):
+            px = float(br.last_price(bsym) or 0.0)
+            if px > 0:
+                return px
+        for p in br.positions_detailed():
+            if p.get("symbol") == bsym and float(p.get("price") or 0) > 0:
+                return float(p["price"])
+    except Exception:  # noqa: BLE001
+        pass
+    return 0.0
+
+
+def _journal_sells(snap: dict, sold: list, alpaca, bitmart) -> None:
+    """Round-trip (P0-4 Phase 2) : ferme les lots du journal touchés par les VENTES envoyées.
+
+    Prix de sortie = FAIT broker (cf. `_exit_price`) ; introuvable → lot laissé OUVERT.
+    Best-effort strict : ne lève jamais → ne peut pas bloquer l'exécution."""
+    if not sold:
+        return
+    try:
+        from packages.execution.live_roundtrip import close_sells
+        from packages.storage import SqliteTradeJournal
+        brokers = {"Alpaca": alpaca, "Bitmart": bitmart}
+        for s in sold:
+            s["exit_price"] = _exit_price(brokers.get(s["venue"]), s["broker_symbol"])
+        series = (snap.get("dashboard") or {}).get("chart_series") or {}
+        n = close_sells(SqliteTradeJournal(), sold, series)
+        skipped = sum(1 for s in sold if not s.get("exit_price"))
+        print(f"Journal : {n} lot(s) fermé(s) (round-trip, PnL/MFE/MAE)"
+              + (f" · {skipped} vente(s) sans prix broker (lots laissés ouverts)." if skipped else "."))
+    except Exception as e:  # noqa: BLE001
+        print(f"Journal : round-trip ignoré ({str(e)[:60]}).")
 
 
 def _sync_obsidian() -> None:
@@ -212,12 +269,13 @@ def main() -> None:
         return
 
     brokers = (("Alpaca", alpaca, alp_cap, cur_alp), ("Bitmart", bitmart, bit_cap, cur_bit))
-    sent, opened = _reconcile(targets, brokers, reduce, alert_engine, dry)
+    sent, opened, sold = _reconcile(targets, brokers, reduce, alert_engine, dry)
     print(f"\nTerminé : {sent} ordre(s) de réconciliation envoyé(s) (paper, sans levier)." if not dry else
           "\nAperçu (dry-run). Réconciliation réelle : python3 scripts/run_live.py --live --yes")
 
     if not dry:
         _journal_opens(snap, opened, alpaca, bitmart)
+        _journal_sells(snap, sold, alpaca, bitmart)
     _sync_obsidian()
 
 

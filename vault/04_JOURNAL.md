@@ -28,6 +28,31 @@ sélectionnent l'univers par momentum prix-only (`_price_universe`) ; aucun appe
 **Prochaine étape.** Écran suivant UI (BLOC 5, plan avant code) sur `feat/ui-analytics` — PR #294
 (dashboard) toujours ouverte à merger d'abord. P0-4 Phase 2 (round-trip journal) en file.
 
+## Session 2026-07-05 (suite) — #294/#295 mergées · écran /positions · P0-4 Phase 2 (round-trip)
+**Fait.**
+- **Merges** : #294 (dashboard) + #295 (verrou anti-fuite + vault) squash-mergées, branche resynchronisée
+  → rebuild Pages déclenché (dernière version en ligne).
+- **Écran 2 BLOC 5 — `/positions` « réel vs cible »** (PR #296) : fusion positions réelles × cible preset
+  par poche de capital, barre d'écart divergente + bande de non-trading 3 %, HHI/N effectif/top 3, badge
+  earnings, SortableTable (tri/filtre/CSV) ; route `/api/positions` expose `preset_allocation` +
+  `earnings_risk`. `tsc` + build statique 25 pages + 27 tests API verts.
+- **Audit avant code (anti-doublon)** : BLOC 1a/1b/1c et P0-SI-LIVE #4/#5 étaient DÉJÀ livrés dans `main`
+  via **#293** (idempotence + clientOrderId, fills partiels + alerte CRITICAL, wiring alertes). TODO et
+  CLAUDE.md mis à jour (plus aucun P0-SI-LIVE ouvert ; live toujours conditionné au RDV 2026-08-06).
+- **P0-4 Phase 2 — round-trip du journal** : `packages/execution/live_roundtrip.py` (FIFO, scission de
+  lot `-Xn` déterministe, UPSERT idempotent, MFE/MAE depuis la série OHLC du snapshot) + `run_live.py`
+  capture les VENTES et ferme les lots. Prix de sortie = FAIT broker (fill du jour → ticker → position ;
+  sinon lot laissé ouvert). Refactor `_reconcile` (extraction `_broker_targets`, règle 50 l).
+  6 tests round-trip ; **suite complète 811 verts**. Fix annexe : `test_alpaca_crypto` importorskip
+  (env sans SDK alpaca).
+
+**Décidé.** Round-trip côté chemin de PROD uniquement (`run_live`) — cohérent avec la décision (b) du
+2026-07-04 (journal direct, pas de 2e chemin via LiveEngine). Reste une DÉCISION ouverte : sort de
+`LiveEngine` (supprimer ou rétrograder) — pas de code tant que non tranché.
+
+**Prochaine étape.** Merge #296 (pilote CI armé) → expectancy/Kelly calibrables dès que des round-trips
+réels s'accumulent (RDV 2026-08-06). Écran 3 UI à planifier (`/screener` ou analyse portefeuille).
+
 ## Session 2026-07-04 — BLOC 5 : dashboard institutionnel (equity+underwater synchronisés) [PR #294]
 **Contexte.** Branche isolée `feat/ui-analytics` (BLOC 5, jamais mélangée aux brokers). Reprise d'un travail en
 cours non commité : refonte du **Dashboard principal** en écran d'analyse institutionnel, 100 % données réelles
