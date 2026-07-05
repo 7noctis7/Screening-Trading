@@ -389,3 +389,20 @@ servi par le backend ; (b) dériver l'underwater **côté client** depuis la sé
 (validé : « pire » affiché = −25,4 % = `metrics.max_drawdown`). (+) Pas de charge backend supplémentaire.
 (−) Le calcul underwater + LTTB est refait à chaque render/zoom côté client (borné par `useMemo`, négligeable à 2644 pts).
 Voir `apps/web/components/{PerformancePanel,EquityChart,DrawdownChart}.tsx`, `apps/web/lib/metrics.ts`.
+
+## ADR-0031 — LiveTradingEngine RÉTROGRADÉ en moteur de simulation ; run_live.py = chemin de prod unique (2026-07-05)
+**Contexte.** Depuis P0-4 (Phase 1 : journal direct à la décision, Phase 2 : round-trip des ventes),
+le chemin de production réel est `scripts/run_live.py` (cron launchd 16h05) : réconciliation
+cible↔broker, journal `data/journal.db` (`legacy=0`, features figées à la DÉCISION), fermeture FIFO
+des lots. `LiveTradingEngine` (`packages/execution/live_engine.py`) n'est plus appelé par aucun
+chemin de prod — uniquement `scripts/demo_paper_loop.py` et les tests. Laisser deux « moteurs live »
+créait un risque de divergence (lequel journalise ? lequel porte les garde-fous ?).
+**Décision.** **Rétrograder** (pas supprimer) : docstring de statut explicite (« PAS le chemin de
+production »), classe et exports conservés (aucun churn de tests/démos). Il reste le banc d'essai
+de la logique stop/target/kill-switch barre-par-barre — de la valeur de test, zéro ambiguïté de prod.
+**Alternatives rejetées.** (a) Supprimer : perd le banc de simulation et casse démos/tests pour un
+gain nul ; (b) Unifier run_live sur LiveEngine : refonte risquée près du RDV paper (déjà rejetée
+le 2026-07-04, décision (b) journal direct).
+**Conséquences.** (+) UN chemin de prod, journalisé et alerté ; (+) évolution prod = `run_live.py`
+uniquement ; (−) parité stop/target entre simulateur et prod à re-vérifier si on ajoute des stops
+au chemin réel (aujourd'hui le preset n'en émet pas — réconciliation par poids).

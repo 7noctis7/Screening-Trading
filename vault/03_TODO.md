@@ -75,8 +75,9 @@
         snapshot). Prix de sortie = FAIT broker (fill du jour via `orders()` → `last_price` →
         prix de position ; introuvable = lot laissé OUVERT, jamais estimé). 6 tests
         (`test_live_roundtrip.py`), suite 811 verts. Débloque expectancy/Kelly au RDV 2026-08-06.
-      - [ ] **Reste (décision, pas du code)** : sort de `LiveEngine` (supprimer ou rétrograder en
-        backtest/paper-loop) pour ne pas laisser 2 chemins de prod.
+      - [x] **Décision prise (2026-07-05, validée utilisateur)** : `LiveTradingEngine` **RÉTROGRADÉ**
+        en moteur de simulation (docstring de statut, exports conservés, zéro churn tests/démos).
+        Chemin de prod UNIQUE = `run_live.py`. Cf. **ADR-0031**.
 ### ⛔ P0-SI-LIVE — bloquants AVANT toute activation d'un broker réel (audit adverse 02/07, cf. `14_FULL_REVIEW.md`)
 > Prouvés, sévérité capital/ops. **Ne jamais passer le broker concerné en live tant que son P0-SI-LIVE n'est pas fermé** (garde-fou CLAUDE.md).
 - [x] **#4 Idempotence Bitmart — FERMÉ** (via #293, vérifié 2026-07-05) : `clientOrderId` en `params`
