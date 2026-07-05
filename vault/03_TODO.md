@@ -41,12 +41,20 @@
 ## 🚨 FULL-REVIEW 2026-07-02 — findings (voir `vault/14_FULL_REVIEW.md`)
 > Revue complète multi-agents sur `ops-integration`. **P0 = invalide des résultats → avant toute feature.**
 ### 🔴 P0 (bloqueurs capital réel)
-- [ ] **P0-1 FUITE** : `preset_equity_daily`/`preset_trade_log`/`preset_ledger` sélectionnent l'univers avec la
-      qualité **du jour** sur tout 2015+ (look-ahead+survivorship) → alimente le **dashboard** (`snapshot.py:2081`).
-      Porter `legacy_quality_universe=False` (`preset_backtest.py:276-277,372-373,445-446`), régénérer dashboard + `Preset_Performance.md`.
-- [ ] **P0-2** : manifeste `12_MANIFESTE_HONNETETE.md:18` affirme « alpha 6,9 % corrigé » alors que dashboard
-      affiche `alpha 6,79 %` fuité → régénérer après P0-1 ou retirer le claim.
-- [ ] **P0-3** : `preset_equity_daily` equity **brute sans coûts** (`preset_backtest.py:323`).
+- [x] **P0-1 FUITE — CODE CORRIGÉ** (fix `f78e18f`, 2026-07-02, dans `main`) : les 3 fonctions dashboard +
+      `preset_backtest` sélectionnent désormais l'univers par **momentum prix-only** (`_price_universe`),
+      jamais par le score `quality` du jour. Aucun appelant ne réactive la fuite (`legacy_quality_universe`
+      reste `False` partout). **Verrou de non-régression ajouté** : `tests/backtest/test_dashboard_no_leak.py`
+      (2 dicts `quality` opposés → sortie identique ; le mode legacy diverge = le test a du mordant).
+  - [x] **Reliquat FERMÉ (2026-07-05, sur le Mac)** : `make vault-sync` a régénéré `Preset_Performance.md` →
+        **`alpha_annual` 0.0755 → 0.0445** (la fuite gonflait l'alpha de ~3 pts — preuve empirique de P0-1).
+        Lecture honnête : le 4,45 % restant est un **alpha d'attribution** (régression vs QQQ, beta 0.37,
+        R² 0.63), **PAS un alpha gaté** (placebo/DSR/PBO/sabotage jamais passés dessus) — DSR≈0 reste le
+        claim public. Edge prouvé = réduction du drawdown, pas la direction.
+- [x] **P0-2 — FERMÉ (2026-07-05)** : manifeste honnête (« DSR≈0 après correction d'une fuite d'univers le
+      02/07 ») + artefact local régénéré post-fix (alpha 4,45 % non gaté, cohérent avec le claim).
+- [x] **P0-3 — coûts déduits** : `preset_equity_daily`/`preset_ledger` déduisent le coût de turnover par classe
+      (`reb_cost`/`_tc`) à chaque rebalancement → equity NETTE, plus « brute ». (Vérifié dans le code courant.)
 - [~] **P0-4 JOURNAL LIVE VIDE** (découvert BLOC 4, 2026-07-04) : le chemin de prod du cron
       (`cron_live.sh → run_live.py`) réconciliait chez le broker sans **jamais** écrire dans `data/journal.db`
       (seul `LiveEngine`, fantôme, journalisait) → **0 trade `legacy=0`** = calibration ML bloquée en paper.
