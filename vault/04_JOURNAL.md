@@ -1,5 +1,33 @@
 # 04 — JOURNAL
 
+## Session 2026-07-05 — Clôture P0-1/P0-2 : verrou anti-fuite + alpha réel post-fix mesuré
+**Contexte.** Reprise après limites d'usage. Demande initiale « écran suivant UI » ré-arbitrée par
+l'utilisateur en « d'abord corrige la fuite de données » (P0-1, marqué « avant toute feature »).
+
+**Constat d'audit (vérifié, pas supposé).** Le correctif *code* de P0-1 était **déjà dans `main`**
+(`f78e18f`, 02/07) : `preset_equity_daily`/`preset_trade_log`/`preset_ledger` + `preset_backtest`
+sélectionnent l'univers par momentum prix-only (`_price_universe`) ; aucun appelant ne passe
+`legacy_quality_universe=True` ; le manifeste était déjà dé-chiffré. Le TODO n'avait juste pas été coché.
+**Trou réel identifié : aucun test ne verrouillait la non-régression** (la fuite pouvait revenir en silence).
+
+**Fait.**
+- `1f51dde` test(backtest) : **`tests/backtest/test_dashboard_no_leak.py`** — 2 dicts `quality`
+  OPPOSÉS ⇒ sortie strictement identique pour les 3 fonctions dashboard + `preset_backtest` (défaut) ;
+  et le mode `legacy_quality_universe=True` **diverge** bien (le test a du mordant, pas un faux positif).
+  4 tests verts ; suite backtest 47/47.
+- **Mac** : `make vault-sync` → `Preset_Performance.md` régénéré post-fix :
+  **`alpha_annual` 0.0755 → 0.0445** (la fuite gonflait l'alpha d'~3 pts — preuve empirique de P0-1).
+  Beta QQQ 0.37, R² 0.63, maj 2026-07-05.
+- Matin : #289 squash-mergée + branche resynchronisée (mobile tap-to-load des lives crypto,
+  `QUANT_NEWS=1` en ligne, YTD secteurs en médiane, univers sans délistés, registre cliquable).
+
+**Décidé (lecture honnête).** Le 4,45 % restant est un **alpha d'attribution** (régression vs QQQ),
+**pas un alpha gaté** (placebo/DSR/PBO/sabotage jamais passés dessus). Claim public inchangé :
+**DSR≈0, edge prouvé = réduction du drawdown**, pas la direction. P0-1/P0-2/P0-3 fermés au TODO.
+
+**Prochaine étape.** Écran suivant UI (BLOC 5, plan avant code) sur `feat/ui-analytics` — PR #294
+(dashboard) toujours ouverte à merger d'abord. P0-4 Phase 2 (round-trip journal) en file.
+
 ## Session 2026-07-04 — BLOC 5 : dashboard institutionnel (equity+underwater synchronisés) [PR #294]
 **Contexte.** Branche isolée `feat/ui-analytics` (BLOC 5, jamais mélangée aux brokers). Reprise d'un travail en
 cours non commité : refonte du **Dashboard principal** en écran d'analyse institutionnel, 100 % données réelles

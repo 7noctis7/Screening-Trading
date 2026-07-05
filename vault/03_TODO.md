@@ -46,11 +46,13 @@
       jamais par le score `quality` du jour. Aucun appelant ne réactive la fuite (`legacy_quality_universe`
       reste `False` partout). **Verrou de non-régression ajouté** : `tests/backtest/test_dashboard_no_leak.py`
       (2 dicts `quality` opposés → sortie identique ; le mode legacy diverge = le test a du mordant).
-  - [ ] **Reliquat (SUR LE MAC)** : `vault/Preset_Performance.md` est un artefact **local non tracké**, encore
-        daté du 22/06 avec l'ancien `alpha_annual: 0.0755` (fuité). Le régénérer post-fix : `make vault-sync`
-        (lit `YAHOO.db`) → l'alpha doit chuter vers ~0 (DSR≈0). Impossible côté agent (pas de data, réseau bloqué).
-- [x] **P0-2 — manifeste déjà honnête** : `12_MANIFESTE_HONNETETE.md` ne revendique plus l'alpha fuité →
-      « DSR≈0 après correction d'une fuite d'univers le 02/07 ». (Se referme définitivement au `make vault-sync` ci-dessus.)
+  - [x] **Reliquat FERMÉ (2026-07-05, sur le Mac)** : `make vault-sync` a régénéré `Preset_Performance.md` →
+        **`alpha_annual` 0.0755 → 0.0445** (la fuite gonflait l'alpha de ~3 pts — preuve empirique de P0-1).
+        Lecture honnête : le 4,45 % restant est un **alpha d'attribution** (régression vs QQQ, beta 0.37,
+        R² 0.63), **PAS un alpha gaté** (placebo/DSR/PBO/sabotage jamais passés dessus) — DSR≈0 reste le
+        claim public. Edge prouvé = réduction du drawdown, pas la direction.
+- [x] **P0-2 — FERMÉ (2026-07-05)** : manifeste honnête (« DSR≈0 après correction d'une fuite d'univers le
+      02/07 ») + artefact local régénéré post-fix (alpha 4,45 % non gaté, cohérent avec le claim).
 - [x] **P0-3 — coûts déduits** : `preset_equity_daily`/`preset_ledger` déduisent le coût de turnover par classe
       (`reb_cost`/`_tc`) à chaque rebalancement → equity NETTE, plus « brute ». (Vérifié dans le code courant.)
 - [~] **P0-4 JOURNAL LIVE VIDE** (découvert BLOC 4, 2026-07-04) : le chemin de prod du cron
