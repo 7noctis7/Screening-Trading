@@ -27,6 +27,11 @@
   python scripts/ingest_prices.py --since 2015-01-01   # OHLC ajustés splits+dividendes
   make ingest-crypto && make hf-push                    # reconstruit le cache HF en AJUSTÉ
   ```
+- [ ] **6. Vintages macro RÉELS (P1-3, ~5 min)** : clé gratuite sur
+      fred.stlouisfed.org/docs/api/api_key.html → `echo 'FRED_API_KEY=...' >> .env` puis :
+  ```bash
+  make ingest-macro    # ALFRED → data/macro.db (révisions datées de LEUR publication)
+  ```
 - [ ] **5. Vérifier le PREMIER run journalisant du jour** (lundi = cron 16h05 a tourné) :
   ```bash
   tail -30 ~/Library/Logs/quant_live.log   # attendu : « Journal : N ouverture(s)/lot(s) fermé(s) »
@@ -140,7 +145,9 @@
       **Reste** : la calibration MFE/MAE/expectancy/Kelly attend N>0 sur `legacy=0` (paper live → RDV 2026-08-06).
 - [x] **P1-2 — FERMÉ côté FMP (2026-07-06)** : `as_of` = `fillingDate` (dépôt public), plus la
       clôture d'exercice (look-ahead). Test dédié. Reste `sec_provider` (filtrer `filed`) → P2.
-- [ ] **P1-3** : MacroStore `:memory:` → persister `data/macro.db` + vintages ALFRED réels.
+- [x] **P1-3 — CODE FERMÉ (2026-07-06)** : MacroStore persistant (`data/macro.db`, env
+      `QUANT_MACRO_DB`) + `make ingest-macro` (vintages ALFRED réels, `published` = realtime_start).
+      Test PIT à travers une réouverture. Reste : lancer l'ingestion sur Mac (CE SOIR 6).
 - [x] **P1-4 — CODE FERMÉ (2026-07-06)** : ingestion `auto_adjust=True` + détection de couture
       post-split (`_split_drift` → re-backfill auto du symbole). ⚠️ Historique corrigé seulement
       après le re-backfill complet sur Mac + `make hf-push` (cf. CE SOIR 5bis).

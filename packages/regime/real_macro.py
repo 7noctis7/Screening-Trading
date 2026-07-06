@@ -31,7 +31,15 @@ def _dt(d) -> datetime:
 def real_macro_store(vix_vals, vix_dates, sp_closes, sp_dates,
                      fred_key: str | None = None) -> tuple[MacroStore, dict, bool]:
     """Renvoie (store, sources, is_real). `sources` = {série: provenance} pour l'affichage."""
-    store = MacroStore(":memory:")
+    # P1-3 (2026-07-06) : PERSISTANT par défaut → les vintages ALFRED ingérés par
+    # `make ingest-macro` (Mac, FRED_API_KEY) survivent entre les builds et priment
+    # sur les proxys. QUANT_MACRO_DB=':memory:' pour un store jetable (tests/offline).
+    import os
+    from pathlib import Path as _P
+    _db = os.environ.get("QUANT_MACRO_DB", "data/macro.db")
+    if _db != ":memory:":
+        _P(_db).parent.mkdir(parents=True, exist_ok=True)
+    store = MacroStore(_db)
     sources: dict[str, str] = {}
 
     # Alignement défensif valeurs↔dates : le calendrier univers peut être plus court que la série
