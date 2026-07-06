@@ -3,6 +3,31 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+## 🌙 CE SOIR SUR LE MAC — 2026-07-06 (post-audit 3 volets, ~10 min)
+> Les 4 gestes que l'agent ne peut pas faire à ta place (token Notion local, proxy git, clics GitHub).
+- [ ] **1. Resynchroniser le repo local** (récupère #299 : remédiation audit + constraints) :
+  ```bash
+  qt && git fetch origin && git reset --hard origin/main
+  ```
+- [ ] **2. Rattraper le miroir Notion** (2 semaines de retard constatées à l'audit) :
+  ```bash
+  make notion-sync
+  ```
+- [ ] **3. Supprimer les 3 branches distantes fusionnées** (l'agent a été bloqué par le proxy, 403) :
+  ```bash
+  git push origin --delete ops-integration feat/ui-analytics feat/journal-features-snapshot
+  ```
+- [ ] **4. Runner cloud — secrets GitHub** (clics, pas de terminal) : repo → Settings →
+      Secrets and variables → Actions → New : `ALPACA_API_KEY` + `ALPACA_API_SECRET` (compte
+      **paper**) + `HF_TOKEN` (fine-grained, limité au dataset `Noctis777/quant-journal`).
+      Puis Actions → « Rebalancement paper cloud » → **Run workflow** (test).
+- [ ] **5. Vérifier le PREMIER run journalisant du jour** (lundi = cron 16h05 a tourné) :
+  ```bash
+  tail -30 ~/Library/Logs/quant_live.log   # attendu : « Journal : N ouverture(s)/lot(s) fermé(s) »
+  make verify-journal                       # legacy=0 doit enfin être > 0 si des ordres sont partis
+  ```
+  (Si « ✓ déjà aligné » partout = aucun ordre → journal inchangé, c'est normal et honnête.)
+
 ## 🚧 EN COURS — reprise 2026-07-03 (branche `feat/broker-hardening`)
 > Journée broker-hardening (BLOC 1→4) démarrée. Base : `origin/main` à jour (#292 mergée = `323e53a`).
 > Carry-over local non commité : `config/mobile_universe.csv` (data régénérée, hors périmètre — laisser tel quel).
