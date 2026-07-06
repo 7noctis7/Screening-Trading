@@ -149,9 +149,9 @@
 - [x] **P1-7 — FERMÉ (2026-07-05, audit 3 volets)** : `01_ARCHITECTURE.md` réécrit (table d'état
       + Mermaid = 14 packages réels), ADR-0029 dédoublonné (→0032), TODO purgé (469→~300 l),
       `vault-lint` câblé en CI (informatif), orphelins liés, notes `paper_*` créées (09_References).
-- [ ] **P1-8 (audit 05/07)** : peupler le REGISTRE de `15_CERTIFICATION.md` (vide depuis ADR-0026
-      du 02/07 — le gate viole sa propre règle). Commencer par les composants réellement en prod :
-      `SqliteTradeJournal`, `AlpacaBroker`, gate DSR/PBO, `live_journal`/`live_roundtrip`.
+- [~] **P1-8 — passe 1 FAITE (2026-07-06)** : gates « exécution/infra » ajoutés au protocole +
+      5 composants prod évalués sur preuves → **CANDIDATE** (registre daté). Reste la promotion
+      CERTIFIED, mécanique après 20 j paper + drills (≈ RDV 2026-08-06).
 ### 🟢 P2
 - [ ] **P2 (audit 02/07)** — **#1 Fuite Platt** (`snapshot.py:670-675`, LOW, non-capital) : fit Platt sur une tranche
       60-80 % **distincte** du test 80-100 % (aujourd'hui `brier_calibrated` est in-sample = optimiste, mais n'atteint
