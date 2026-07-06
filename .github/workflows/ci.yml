@@ -33,7 +33,7 @@ jobs:
           python -m pip install -U pip
           # Set minimal mais suffisant : les tests gardent torch/vectorbt/xgboost… via importorskip.
           # weasyprint exclu (libs système cairo/pango) ; reportlab installé directement pour ses tests.
-          pip install -e ".[common,data,quant,api]" reportlab scikit-learn pytest hypothesis
+          pip install -e ".[common,data,quant,api]" -c constraints.txt reportlab scikit-learn pytest hypothesis
       - name: pytest
         run: python -m pytest -q
 
@@ -59,3 +59,6 @@ jobs:
         run: |
           pip install pip-audit
           pip-audit --progress-spinner off || true
+      - name: vault-lint (intégrité mémoire Obsidian — non bloquant, audit 05/07)
+        continue-on-error: true
+        run: python scripts/vault_lint.py

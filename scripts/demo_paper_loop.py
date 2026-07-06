@@ -4,7 +4,7 @@
 
 Le LiveTradingEngine réutilise les MÊMES Strategy/Sizer/RiskEngine/Broker/Journal
 que le backtest, mais réagit barre par barre (streaming). Réconciliation broker↔interne
-à la fin. Pour le vrai paper Alpaca : remplacer SimBroker par AlpacaBroker (cf. verify_alpaca).
+à la fin. Pour le vrai paper Alpaca : remplacer SimBroker par AlpacaBroker (AlpacaBroker(paper=True)).
 """
 
 from __future__ import annotations

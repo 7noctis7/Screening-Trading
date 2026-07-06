@@ -179,6 +179,20 @@ vault-architect) + quant-critic. Rapport complet → `vault/14_FULL_REVIEW.md`.
 **Prochaine étape.** P1 : persistance journal + features_snapshot (débloque calibrations) · providers
 fondamentaux PIT (`fmp`/`sec` ignorent `as_of`) · dédup `pbo` · câbler modules top1pct · dérive Mermaid/table état.
 
+## Session 2026-06-30 — Multi-timeframe + mobile + rigueur DSR (rétro-documenté le 07-05)
+> Entrée écrite a posteriori (trou détecté par l'audit vault du 2026-07-05) — faits tirés des commits.
+
+**Fait.**
+- `e38fe3d` (#288) : POC **microstructure** (OFI Cont-Kukanov-Stoikov, vPIN + variante ECDF),
+  **sonar** carnet d'ordres (/crypto), alpha-decay/roll-spread/sabotage-sweep, correctifs d'audit
+  5 personas (DSR déflaté sur essais DISTINCTS, leak-sentinel `pit_guard`, resolve 3-tiers),
+  page « Échecs publiés » (/echecs).
+- `a0f7c55` (#289) : graphe live **multi-timeframe** (1h/4h/1j/1sem/1mois, Binance klines + WS),
+  sélecteur d'actif, sonar précisé « instantané », `deflation_params` compte les hypothèses
+  distinctes par `facteur` (relances ≠ essais), mobile tap-to-load (préparation), QUANT_NEWS=1.
+
+**Décidé.** Rien de câblé au ML : microstructure/peg/breakout restent en RECHERCHE (gate d'abord).
+
 ## Session 2026-06-29 (suite 2) — Cockpit crypto LIVE + gate breakout + RAG + croissance
 **Fait (gros lot, ~12 PR-commits sur `claude/clever-lovelace-ognwya`, #285→#287).**
 

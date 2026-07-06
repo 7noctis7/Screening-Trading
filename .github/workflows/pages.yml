@@ -18,10 +18,9 @@ on:
   schedule:
     - cron: "30 5 * * 1-6"
 
+# Permissions minimales par défaut ; pages/id-token portées par le seul job deploy (audit 05/07).
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
@@ -54,7 +53,7 @@ jobs:
       - name: Dépendances Python
         run: |
           python -m pip install -U pip
-          pip install -e ".[data,quant,api]"
+          pip install -e ".[data,quant,api]" -c constraints.txt
 
       - name: Dépendances web
         run: cd apps/web && (npm ci || npm install)
@@ -124,6 +123,9 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

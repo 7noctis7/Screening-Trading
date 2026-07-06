@@ -17,8 +17,8 @@ et c'est **notre différenciation**.
 - **Anti-overfitting** : gate $DSR>0 \wedge PBO<0.5$, CV purgée/embargo (López de Prado), fuite de
   données détectée et corrigée. *(Aucune valeur de performance n'est codée en dur dans ce document :
   elles périment ; la source de vérité datée est `vault/Preset_Performance.md`.)*
-  > **Constat audité (full-review 2026-07-02).** Alpha directionnel : **non démontré à ce jour**
-  > (DSR≈0 après correction d'une fuite d'univers le 02/07). Edge robuste vérifié : **réduction de
+  > **Constat audité (full-review 2026-07-02 ; clôtures P0-1→P0-4 le 2026-07-05).** Alpha directionnel : **non démontré à ce jour**
+  > (DSR≈0 après correction d'une fuite d'univers le 02/07 ; alpha d'attribution résiduel 4,45 % vs QQQ mesuré post-fix le 05/07 — **non gaté**, la fuite gonflait l'ancien chiffre de ~3 pts). Edge robuste vérifié : **réduction de
   > drawdown ~2,6×**. Les chiffres affichés sont **régénérés quotidiennement** par le pipeline
   > anti-fuite (voir `vault/Preset_Performance.md`, daté). Détails : `vault/14_FULL_REVIEW.md` (P0).
 - **Auditabilité** : lignage de données (`packages/data/lineage.py`), manifeste de reproductibilité

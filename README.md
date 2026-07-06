@@ -153,6 +153,19 @@ Clés optionnelles dans `.env` (cf. `.env.example`) : `OLLAMA_HOST`, `QUANT_LOCA
 
 ---
 
+## 🧭 Les écrans (routes du front)
+| Route | Rôle |
+|---|---|
+| `/` | Landing (le Gate en 4 étages, manifeste, ticker live) |
+| `/dashboard` | Dashboard institutionnel : equity+underwater synchronisés, KPI, régime |
+| `/positions` | **Réel vs cible** : écart de réplication par poche, HHI/N effectif, badge earnings |
+| `/screener` | Entonnoir de sélection + score **explicable** (z-scores factoriels par titre) |
+| `/crypto` | Cockpit crypto live : jauge sentiment, graphe multi-timeframe, sonar carnet, analyse |
+| `/echecs` | **Negative Results Registry** — les hypothèses rejetées au gate, publiées |
+| `/methode` | La méthode : gate placebo→DSR→PBO→sabotage (références López de Prado) |
+| `/accueil` | Présentation pédagogique + glossaire (PSR/DSR, HRP, VaR/CVaR…) |
+| `/portfolio` `/risk` `/trades` `/universe` `/sentiment` `/macro` `/themes` `/notes` … | analyse portefeuille, risque, journal, univers, news, macro, secteurs, notes sociétés |
+
 ## 🚀 Démarrage
 
 ```bash

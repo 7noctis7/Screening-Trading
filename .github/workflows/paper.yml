@@ -52,7 +52,7 @@ jobs:
         if: env.skip != '1'
         run: |
           python -m pip install -U pip
-          pip install -e ".[data,quant,api]"
+          pip install -e ".[data,quant,api]" -c constraints.txt
 
       - name: Cache OHLCV (socle HF public) + top-up prix du jour
         if: env.skip != '1'
