@@ -161,6 +161,11 @@ def _journal_opens(snap: dict, opened: list, alpaca, bitmart) -> None:
             return (s or "").replace("/", "").replace("-", "").upper()
         feats_by_sym = feature_map(snap)
         regime_lbl, regime_ctx = regime_context(snap)
+        _series = (snap.get("dashboard") or {}).get("chart_series") or {}
+
+        def _decision_px(sym):                        # dernier close CONNU à la décision
+            bars = _series.get(sym) or []
+            return float(bars[-1]["c"]) if bars else None
         pos: dict = {}                                        # faits d'exécution : positions RÉELLES post-fill
         for bn, br in (("Alpaca", alpaca), ("Bitmart", bitmart)):
             if br is None:
@@ -171,7 +176,11 @@ def _journal_opens(snap: dict, opened: list, alpaca, bitmart) -> None:
             "symbol": op["symbol"], "venue": op["venue"], "asset_class": op.get("asset_class"),
             "fill": pos.get((op["venue"], _norm(op["broker_symbol"]))),
             "features": {**feats_by_sym.get(op["symbol"], {}), **regime_ctx,
-                         "target_weight": op.get("weight_pct")},
+                         "target_weight": op.get("weight_pct"),
+                         # prix de DÉCISION (close du snapshot) → slippage réel mesurable
+                         # au fill (exec_costs.py). None si série absente (jamais inventé).
+                         **({"decision_price": _decision_px(op["symbol"])}
+                            if _decision_px(op["symbol"]) else {})},
             "regime": regime_lbl,
         } for op in opened]
         n = journal_opens(SqliteTradeJournal(), opens)
