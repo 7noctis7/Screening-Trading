@@ -42,6 +42,7 @@ export const useFailures = () => q("failures", "/api/failures", 600000);
 export const usePortfolio = () => q("portfolio", "/api/portfolio");
 export const usePositions = () => q("positions", "/api/positions");
 export const useTrades = () => q("trades", "/api/trades");
+export const useJournal = () => q("journal", "/api/journal", 60000);
 export const usePresetLedger = () => q("preset_ledger", "/api/preset_ledger", 60000);
 export const useUniverse = () => q("universe", "/api/universe", 120000);
 export const useData = () => q("data", "/api/data");

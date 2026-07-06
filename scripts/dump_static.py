@@ -89,7 +89,7 @@ def main() -> int:
         "prediction_markets": M.prediction_markets, "crypto_onchain": M.crypto_onchain,
         "crypto_cockpit": M.crypto_cockpit, "ticker": M.ticker, "failures": M.failures,
         "preset_ledger": M.preset_ledger, "portfolio": M.portfolio, "positions": M.positions,
-        "trades": M.trades, "sentiment": M.sentiment, "fundamentals": M.fundamentals,
+        "trades": M.trades, "journal": M.journal_roundtrips, "sentiment": M.sentiment, "fundamentals": M.fundamentals,
         "universe": M.universe, "data": M.data, "themes": M.themes, "ml": M.ml,
         "live": M.live, "conviction": M.conviction, "investors": M.investors,
         "macro": M.macro, "events": M.events, "analytics": M.analytics,

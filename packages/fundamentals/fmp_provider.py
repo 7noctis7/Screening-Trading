@@ -32,8 +32,15 @@ def _f(d: dict, *keys: str, default: float = 0.0) -> float:
 def build_financials(symbol: str, income: dict, balance: dict,
                      cashflow: dict, profile: dict) -> Financials:
     """Mapping pur JSON FMP → Financials (dernier exercice). Défensif sur champs manquants."""
-    date_str = income.get("date") or balance.get("date")
-    as_of = (datetime.fromisoformat(date_str).replace(tzinfo=timezone.utc)
+    # POINT-IN-TIME (fix P1-2, 2026-07-06) : l'info n'existe publiquement qu'au DÉPÔT
+    # (fillingDate, +30-90 j après la clôture), pas à la fin d'exercice. Dater par la
+    # clôture = look-ahead pour tout filtre `as_of`. Ordre : fillingDate > acceptedDate
+    # > date de clôture (repli honnête, mieux que rien mais optimiste — loggé nulle part
+    # car champ absent = rare sur FMP).
+    date_str = (income.get("fillingDate") or income.get("acceptedDate")
+                or balance.get("fillingDate") or balance.get("acceptedDate")
+                or income.get("date") or balance.get("date"))
+    as_of = (datetime.fromisoformat(str(date_str)[:10]).replace(tzinfo=timezone.utc)
              if date_str else datetime.now(timezone.utc))
     price = _f(profile, "price")
     shares = _f(income, "weightedAverageShsOutDil", "weightedAverageShsOut")

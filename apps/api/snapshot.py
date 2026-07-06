@@ -1737,6 +1737,8 @@ def build_snapshot(seed: int = 7) -> dict:
     from packages.risk.limits import concentration_report
     invested_now = comp["totals"]["current_value"] or 1.0
     w_by_name = {r["symbol"]: r["current_value"] / invested_now for r in comp["rows"]}
+    # Véhicules indiciels larges (cœur core-satellite) : plafond dédié, pas la limite 20 %/nom
+    _index_names = {r["symbol"] for r in comp["rows"] if (r.get("asset_class") or "") == "etf"}
     w_by_sector: dict[str, float] = {}
     for r in comp["rows"]:
         w_by_sector[r["sector"]] = w_by_sector.get(r["sector"], 0.0) + r["current_value"] / invested_now
@@ -1781,13 +1783,14 @@ def build_snapshot(seed: int = 7) -> dict:
             _proxy = [float(x) for x in _np_lim.mean(list(_aligned.values()), axis=0)]
             _corr_cond = conditional_correlation(_aligned, _proxy)
             limits = concentration_report_adaptive(w_by_name, w_by_sector, _corr_cond,
-                                                   max_name=0.20, max_sector=0.40)
+                                                   max_name=0.20, max_sector=0.40,
+                                                   index_names=_index_names)
         else:
             limits = concentration_report(w_by_name, w_by_sector, max_name=0.20,
-                                          max_sector=0.40)
+                                          max_sector=0.40, index_names=_index_names)
     except Exception:  # noqa: BLE001 — repli sur le rapport fixe
         limits = concentration_report(w_by_name, w_by_sector, max_name=0.20,
-                                      max_sector=0.40)
+                                      max_sector=0.40, index_names=_index_names)
 
     # --- STRESS-TESTS MACRO + COUVERTURE (axe 11) ---
     from packages.portfolio.scenarios import hedge_suggestion, scenario_analysis

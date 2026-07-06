@@ -21,6 +21,12 @@
       Secrets and variables → Actions → New : `ALPACA_API_KEY` + `ALPACA_API_SECRET` (compte
       **paper**) + `HF_TOKEN` (fine-grained, limité au dataset `Noctis777/quant-journal`).
       Puis Actions → « Rebalancement paper cloud » → **Run workflow** (test).
+- [ ] **5bis. ⚠️ RE-BACKFILL AJUSTÉ (une fois, ~10 min)** — le fix P1-4 (splits) ne corrige
+      l'HISTORIQUE qu'après ré-ingestion complète :
+  ```bash
+  python scripts/ingest_prices.py --since 2015-01-01   # OHLC ajustés splits+dividendes
+  make ingest-crypto && make hf-push                    # reconstruit le cache HF en AJUSTÉ
+  ```
 - [ ] **5. Vérifier le PREMIER run journalisant du jour** (lundi = cron 16h05 a tourné) :
   ```bash
   tail -30 ~/Library/Logs/quant_live.log   # attendu : « Journal : N ouverture(s)/lot(s) fermé(s) »
@@ -132,9 +138,12 @@
       idempotent, flag `legacy` requêtable) + `LiveTradingEngine` persiste par défaut + `import_legacy_fills.py` (script one-shot, retiré 05/07)
       (137 fills importés `legacy=1`) + 8 tests (dont contrat anti-fuite). Cf. **ADR-0028**, commits `834338a`→`3c1c771`.
       **Reste** : la calibration MFE/MAE/expectancy/Kelly attend N>0 sur `legacy=0` (paper live → RDV 2026-08-06).
-- [ ] **P1-2** : providers fondamentaux PIT — `fmp_provider.py:35` (`fillingDate`), `sec_provider.py` (filtrer `filed`). `as_of` trompeur.
+- [x] **P1-2 — FERMÉ côté FMP (2026-07-06)** : `as_of` = `fillingDate` (dépôt public), plus la
+      clôture d'exercice (look-ahead). Test dédié. Reste `sec_provider` (filtrer `filed`) → P2.
 - [ ] **P1-3** : MacroStore `:memory:` → persister `data/macro.db` + vintages ALFRED réels.
-- [ ] **P1-4** : `adj_close` 99,7 % NULL → ré-ingérer `auto_adjust=True` (splits → momentum contaminé).
+- [x] **P1-4 — CODE FERMÉ (2026-07-06)** : ingestion `auto_adjust=True` + détection de couture
+      post-split (`_split_drift` → re-backfill auto du symbole). ⚠️ Historique corrigé seulement
+      après le re-backfill complet sur Mac + `make hf-push` (cf. CE SOIR 5bis).
 - [ ] **P1-5** : `pbo` **dupliqué** — consolider en 1 (garder `portfolio/pbo.py`, retirer `backtest/validation/pbo.py`).
 - [ ] **P1-6** : 9 modules top1pct **orphelins** — câbler ou marquer « en attente » ; enregistrer `vol_target`/`kelly_uncertain` au registre Sizer.
 - [x] **P1-7 — FERMÉ (2026-07-05, audit 3 volets)** : `01_ARCHITECTURE.md` réécrit (table d'état
