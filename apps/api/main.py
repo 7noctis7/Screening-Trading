@@ -253,6 +253,40 @@ def positions() -> dict:
             "markers": dash.get("real_markers", {})}
 
 
+@app.get("/api/journal")
+def journal_roundtrips() -> dict:
+    """Round-trips RÉELS du journal paper (legacy=0) : lots ouverts + fermés + stats honnêtes.
+
+    Lecture directe de data/journal.db (absente en CI publique → available=False, n/d)."""
+    try:
+        from packages.research.exec_costs import measured_slippage
+        from packages.storage import SqliteTradeJournal
+        j = SqliteTradeJournal()
+        trades = j.all(legacy=False)
+        rows = [{
+            "id": t.id, "symbol": t.instrument, "venue": t.venue, "qty": t.qty,
+            "entry_ts": t.entry_ts.isoformat(), "entry_price": t.entry_price,
+            "exit_ts": t.exit_ts.isoformat() if t.exit_ts else None,
+            "exit_price": t.exit_price, "pnl_net": t.pnl_net, "pnl_pct": t.pnl_pct,
+            "mfe": t.mfe, "mae": t.mae, "is_win": t.is_win,
+            "duration_d": round(t.duration_s / 86400, 1) if t.duration_s else None,
+            "regime": t.regime,
+            "decision_price": (t.features_snapshot or {}).get("decision_price"),
+        } for t in trades]
+        closed = [r for r in rows if r["exit_ts"]]
+        wins = [r for r in closed if r["is_win"]]
+        stats = {"n_open": len(rows) - len(closed), "n_closed": len(closed)}
+        if len(closed) >= 20:                     # expectancy gatée (mandat données réelles)
+            stats["win_rate"] = round(len(wins) / len(closed), 3)
+            stats["expectancy"] = round(sum(r["pnl_net"] or 0 for r in closed) / len(closed), 2)
+        else:
+            stats["status"] = f"UNCALIBRATED (expectancy à N≥20 fermés ; actuel {len(closed)})"
+        return {"available": True, "rows": rows, "stats": stats,
+                "slippage": measured_slippage(j)}
+    except Exception as e:  # noqa: BLE001
+        return {"available": False, "reason": str(e)[:80], "rows": [], "stats": {}}
+
+
 @app.get("/api/trades")
 def trades() -> dict:
     snap = _snap()
