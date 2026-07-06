@@ -111,9 +111,23 @@ class BitmartBroker:
         # clientOrderId → dédup côté exchange (ceinture+bretelles si la mémo locale est perdue).
         params = {"clientOrderId": order.client_id} if order.client_id else {}
         try:
-            res = self._client().create_order(order.instrument, "market", s, qty, params=params)
+            # ⚠️ ACHAT MARCHÉ spot BitMart : l'API veut le COÛT (quote), pas la quantité —
+            # ccxt lève `createMarketBuyOrderRequiresPrice` sans prix (bug corrigé 06/07 :
+            # le except avalait l'erreur → REJECTED silencieux, "aucun trade ne part").
+            # On passe `price` : ccxt calcule cost = qty × price. VENTE : quantité, inchangé.
+            price = None
+            if s == "buy":
+                price = self.last_price(order.instrument) or None
+                if price is None:
+                    order.status = OrderStatus.REJECTED   # pas de prix → pas de coût fiable
+                    return self._remember(order)
+            res = self._client().create_order(order.instrument, "market", s, qty,
+                                              price, params=params)
             order.status, order.filled_qty = _map_fill(res, qty)
-        except Exception:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001
+            import logging
+            logging.getLogger("execution.bitmart").warning(
+                "submit %s %s rejeté : %s", s, order.instrument, str(e)[:120])
             order.status = OrderStatus.REJECTED
         return self._remember(order)
 

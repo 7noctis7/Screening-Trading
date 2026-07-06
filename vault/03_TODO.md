@@ -55,8 +55,10 @@
 - [x] **BLOC 1c — alerte de réconciliation branchée** — LIVRÉ via **#293** : `packages/alerts/wiring.py`
       (`default_engine` + `attach_to_bus`), `LiveTradingEngine(bus=…)` → `reconcile(bus=…)`,
       hook dans `run_live.py` (`_setup_alerts`).
-- [ ] **BLOC 2** — Diagnostic Bitmart (LECTURE SEULE, Bitmart reste OFF) : confirmer les 3 verrous (dry_run défaut,
-      `QUANT_NO_CRYPTO_LIVE`, clés `.env`), documenter la procédure d'activation future dans le vault.
+- [x] **BLOC 2 — FAIT (2026-07-06)** : `make bitmart-check` (lecture seule) affiche les 3 verrous +
+      teste la connexion (equity/positions, zéro ordre). Au passage, **vrai bug corrigé** : achat
+      marché spot sans prix → `createMarketBuyOrderRequiresPrice` avalé = REJECTED **silencieux**
+      (désormais : prix passé pour le coût + rejet LOGGÉ). Activation = décision post-RDV 06/08.
 - [ ] **BLOC 3** — Crypto paper via Alpaca (BTC/USD, ETH/USD), sizing vol-target adapté (vol crypto ≫ actions),
       trades crypto → journal SQLite avec `features_snapshot`.
 - [ ] **BLOC 4** — Optimisation Alpaca paper (opérationnel, PAS de tuning stratégie) : cron `cron_live.sh`, limit vs

@@ -21,7 +21,13 @@ class FakeExchange:
     def amount_to_precision(self, symbol, qty):   # noqa: D401
         return qty
 
+    def fetch_ticker(self, symbol):
+        return {"last": 100.0}                        # prix fake -> cout d'achat calculable
+
     def create_order(self, symbol, type, side, amount, price=None, params=None):  # noqa: A002
+        # Regression 06/07 : un ACHAT marche DOIT porter un prix (BitMart veut le cout,
+        # sinon ccxt leve createMarketBuyOrderRequiresPrice -> REJECTED silencieux).
+        assert side != "buy" or price, "achat marche sans prix = bug cout BitMart"
         self.calls.append({"symbol": symbol, "type": type, "side": side,
                            "amount": amount, "params": params or {}})
         return self._behavior(len(self.calls) - 1)
