@@ -27,6 +27,11 @@
   python scripts/ingest_prices.py --since 2015-01-01   # OHLC ajustés splits+dividendes
   make ingest-crypto && make hf-push                    # reconstruit le cache HF en AJUSTÉ
   ```
+- [ ] **6. Vintages macro RÉELS (P1-3, ~5 min)** : clé gratuite sur
+      fred.stlouisfed.org/docs/api/api_key.html → `echo 'FRED_API_KEY=...' >> .env` puis :
+  ```bash
+  make ingest-macro    # ALFRED → data/macro.db (révisions datées de LEUR publication)
+  ```
 - [ ] **5. Vérifier le PREMIER run journalisant du jour** (lundi = cron 16h05 a tourné) :
   ```bash
   tail -30 ~/Library/Logs/quant_live.log   # attendu : « Journal : N ouverture(s)/lot(s) fermé(s) »
@@ -50,8 +55,10 @@
 - [x] **BLOC 1c — alerte de réconciliation branchée** — LIVRÉ via **#293** : `packages/alerts/wiring.py`
       (`default_engine` + `attach_to_bus`), `LiveTradingEngine(bus=…)` → `reconcile(bus=…)`,
       hook dans `run_live.py` (`_setup_alerts`).
-- [ ] **BLOC 2** — Diagnostic Bitmart (LECTURE SEULE, Bitmart reste OFF) : confirmer les 3 verrous (dry_run défaut,
-      `QUANT_NO_CRYPTO_LIVE`, clés `.env`), documenter la procédure d'activation future dans le vault.
+- [x] **BLOC 2 — FAIT (2026-07-06)** : `make bitmart-check` (lecture seule) affiche les 3 verrous +
+      teste la connexion (equity/positions, zéro ordre). Au passage, **vrai bug corrigé** : achat
+      marché spot sans prix → `createMarketBuyOrderRequiresPrice` avalé = REJECTED **silencieux**
+      (désormais : prix passé pour le coût + rejet LOGGÉ). Activation = décision post-RDV 06/08.
 - [ ] **BLOC 3** — Crypto paper via Alpaca (BTC/USD, ETH/USD), sizing vol-target adapté (vol crypto ≫ actions),
       trades crypto → journal SQLite avec `features_snapshot`.
 - [ ] **BLOC 4** — Optimisation Alpaca paper (opérationnel, PAS de tuning stratégie) : cron `cron_live.sh`, limit vs
@@ -140,7 +147,9 @@
       **Reste** : la calibration MFE/MAE/expectancy/Kelly attend N>0 sur `legacy=0` (paper live → RDV 2026-08-06).
 - [x] **P1-2 — FERMÉ côté FMP (2026-07-06)** : `as_of` = `fillingDate` (dépôt public), plus la
       clôture d'exercice (look-ahead). Test dédié. Reste `sec_provider` (filtrer `filed`) → P2.
-- [ ] **P1-3** : MacroStore `:memory:` → persister `data/macro.db` + vintages ALFRED réels.
+- [x] **P1-3 — CODE FERMÉ (2026-07-06)** : MacroStore persistant (`data/macro.db`, env
+      `QUANT_MACRO_DB`) + `make ingest-macro` (vintages ALFRED réels, `published` = realtime_start).
+      Test PIT à travers une réouverture. Reste : lancer l'ingestion sur Mac (CE SOIR 6).
 - [x] **P1-4 — CODE FERMÉ (2026-07-06)** : ingestion `auto_adjust=True` + détection de couture
       post-split (`_split_drift` → re-backfill auto du symbole). ⚠️ Historique corrigé seulement
       après le re-backfill complet sur Mac + `make hf-push` (cf. CE SOIR 5bis).
@@ -149,9 +158,9 @@
 - [x] **P1-7 — FERMÉ (2026-07-05, audit 3 volets)** : `01_ARCHITECTURE.md` réécrit (table d'état
       + Mermaid = 14 packages réels), ADR-0029 dédoublonné (→0032), TODO purgé (469→~300 l),
       `vault-lint` câblé en CI (informatif), orphelins liés, notes `paper_*` créées (09_References).
-- [ ] **P1-8 (audit 05/07)** : peupler le REGISTRE de `15_CERTIFICATION.md` (vide depuis ADR-0026
-      du 02/07 — le gate viole sa propre règle). Commencer par les composants réellement en prod :
-      `SqliteTradeJournal`, `AlpacaBroker`, gate DSR/PBO, `live_journal`/`live_roundtrip`.
+- [~] **P1-8 — passe 1 FAITE (2026-07-06)** : gates « exécution/infra » ajoutés au protocole +
+      5 composants prod évalués sur preuves → **CANDIDATE** (registre daté). Reste la promotion
+      CERTIFIED, mécanique après 20 j paper + drills (≈ RDV 2026-08-06).
 ### 🟢 P2
 - [ ] **P2 (audit 02/07)** — **#1 Fuite Platt** (`snapshot.py:670-675`, LOW, non-capital) : fit Platt sur une tranche
       60-80 % **distincte** du test 80-100 % (aujourd'hui `brier_calibrated` est in-sample = optimiste, mais n'atteint
