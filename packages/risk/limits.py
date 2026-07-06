@@ -14,13 +14,20 @@ def _hhi(weights: list[float]) -> float:
 
 def concentration_report(weights_by_name: dict[str, float],
                          weights_by_sector: dict[str, float] | None = None,
-                         max_name: float = 0.20, max_sector: float = 0.40) -> dict:
+                         max_name: float = 0.20, max_sector: float = 0.40,
+                         index_names: set[str] | frozenset[str] | None = None,
+                         max_index: float = 0.60) -> dict:
     """Rapport de concentration + dépassements.
 
     Args:
         weights_by_name: poids par actif (fraction du portefeuille, somme ≈ 1).
         weights_by_sector: poids agrégés par secteur (optionnel).
         max_name / max_sector: plafonds réglementaires/internes.
+        index_names: véhicules INDICIELS larges (ETF trackers, ex. QQQ). Un tracker n'est
+            pas un risque d'émetteur unique (look-through, esprit UCITS) → plafond dédié
+            `max_index` (0.60 = cible structurelle du cœur 45 % + marge, PAS un plafond
+            de stock-picking). Fix audit 06/07 : le cœur QQQ déclenchait à tort la
+            limite « nom » 20 % → n_breaches=2 permanent, alarme devenue bruit.
     Returns:
         {hhi, effective_n, top_name, top_name_weight, breaches:[{type,label,weight,limit}]}.
     """
@@ -29,9 +36,11 @@ def concentration_report(weights_by_name: dict[str, float],
     hhi = _hhi(ws) if ws else 0.0
     eff_n = round(1.0 / hhi, 1) if hhi > 0 else 0.0
     breaches: list[dict] = []
+    idx = index_names or set()
     for nm, w in sorted(names.items(), key=lambda kv: -kv[1]):
-        if w > max_name:
-            breaches.append({"type": "nom", "label": nm, "weight": round(w, 4), "limit": max_name})
+        cap, kind = (max_index, "indice") if nm in idx else (max_name, "nom")
+        if w > cap:
+            breaches.append({"type": kind, "label": nm, "weight": round(w, 4), "limit": cap})
     for sec, w in sorted((weights_by_sector or {}).items(), key=lambda kv: -kv[1]):
         if w > max_sector:
             breaches.append({"type": "secteur", "label": sec, "weight": round(w, 4),
@@ -69,7 +78,9 @@ def concentration_report_adaptive(weights_by_name: dict[str, float],
                                   corr_report: dict | None = None,
                                   max_name: float = 0.20, max_sector: float = 0.40,
                                   tighten: float = 0.5,
-                                  stress_corr: float = 0.75) -> dict:
+                                  stress_corr: float = 0.75,
+                                  index_names: set[str] | frozenset[str] | None = None,
+                                  max_index: float = 0.60) -> dict:
     """`concentration_report` avec plafonds RESSERRÉS si breakdown de corrélation.
 
     Ferme le gap d'audit : `conditional_correlation` ne faisait que signaler ; ici il
@@ -77,7 +88,8 @@ def concentration_report_adaptive(weights_by_name: dict[str, float],
     """
     mn, ms, tightened = correlation_aware_caps(max_name, max_sector, corr_report,
                                                tighten, stress_corr)
-    rep = concentration_report(weights_by_name, weights_by_sector, mn, ms)
+    rep = concentration_report(weights_by_name, weights_by_sector, mn, ms,
+                               index_names=index_names, max_index=max_index)
     rep["tightened"] = tightened
     rep["base_max_name"] = max_name
     rep["base_max_sector"] = max_sector

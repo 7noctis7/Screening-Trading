@@ -46,3 +46,16 @@ def test_adaptive_report_breaches_only_when_tightened():
         pos, None, {"available": True, "diversification_breakdown": True})
     # à 0.10 resserré, A/B/C/D dépassent tous
     assert stress["tightened"] and len(stress["breaches"]) == 4
+
+
+def test_index_vehicle_uses_dedicated_cap():
+    """Fix audit 06/07 : un cœur indiciel (QQQ 45 %) ne doit PAS déclencher la limite
+    20 %/nom (stock-picking) — mais un dépassement du plafond indice (60 %) doit alerter."""
+    from packages.risk.limits import concentration_report
+    w = {"QQQ": 0.45, "NVDA": 0.10, "AAPL": 0.10, "BTC/USD": 0.35}
+    rep = concentration_report(w, max_name=0.20, index_names={"QQQ"})
+    labels = {(b["type"], b["label"]) for b in rep["breaches"]}
+    assert ("nom", "QQQ") not in labels and ("indice", "QQQ") not in labels
+    assert ("nom", "BTC/USD") in labels          # 35 % sur UN actif non-indiciel = vraie alerte
+    rep2 = concentration_report({"QQQ": 0.70}, index_names={"QQQ"})
+    assert rep2["breaches"][0]["type"] == "indice"   # au-delà de 60 %, l'indice alerte aussi
