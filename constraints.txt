@@ -156,7 +156,7 @@ pydantic==2.13.4
     # via
     #   alpaca-py
     #   fastapi
-pydantic-core==2.46.4
+pydantic-core==2.47.0
     # via pydantic
 pygments==2.20.0
     # via rich
