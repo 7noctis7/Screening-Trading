@@ -32,6 +32,23 @@
   ```bash
   make ingest-macro    # ALFRED → data/macro.db (révisions datées de LEUR publication)
   ```
+- [ ] **7. ⚡ BITMART — vérifier que les trades FONCTIONNENT (micro-test, ARGENT RÉEL)**
+      ⚠️ Bitmart n'a pas de paper : tout ordre est réel. Protocole minimal (≈12 $, aller-retour) :
+  ```bash
+  make bitmart-check            # 1) verrous + connexion + MEMO (obligatoire) en lecture seule
+  # 2) micro-test CONSCIENT (achat ~6 $ puis revente — teste le fix coût d'achat du 06/07) :
+  .venv/bin/python -c "
+  from packages.common.env import load_env; load_env()
+  from packages.execution.bitmart_broker import BitmartBroker
+  from packages.core.models import Side
+  b = BitmartBroker(dry_run=False)
+  print('ACHAT :', b.submit_notional('BTC/USDT', Side.LONG, 6.0).status)
+  print('VENTE :', b.submit_notional('BTC/USDT', Side.SHORT, 6.0).status)"
+  ```
+      → attendu : FILLED/SUBMITTED aux 2 sens (le bug d'achat silencieux est corrigé). Si REJECTED :
+      lire le log (désormais la CAUSE est affichée) — memo manquant = suspect n° 1.
+      **Activation PERMANENTE dans le cron** (QUANT_NO_CRYPTO_LIVE=0 + réviser le routage ADR-0032) :
+      NON recommandée avant le RDV 2026-08-06 — c'est une décision explicite à part (garde-fou CLAUDE.md).
 - [ ] **5. Vérifier le PREMIER run journalisant du jour** (lundi = cron 16h05 a tourné) :
   ```bash
   tail -30 ~/Library/Logs/quant_live.log   # attendu : « Journal : N ouverture(s)/lot(s) fermé(s) »
