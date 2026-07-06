@@ -68,11 +68,28 @@ def _last_date(conn, symbol: str) -> str | None:
     return r[0] if r and r[0] else None
 
 
+def _split_drift(conn, symbol: str, rows: list[tuple], tol: float = 5e-3) -> bool:
+    """True si, sur les dates de chevauchement, le close FRAIS (ajusté) dévie du close STOCKÉ
+    (> tol relatif) → un split/dividende est passé depuis le dernier ingest, la série stockée
+    n'est plus dans le même référentiel d'ajustement."""
+    for r in rows:
+        stored = conn.execute("SELECT close FROM prices WHERE symbol=? AND date=?",
+                              (symbol, r[1])).fetchone()
+        if stored and stored[0] and r[5]:
+            if abs(r[5] - stored[0]) > tol * max(1.0, abs(stored[0])):
+                return True
+    return False
+
+
 def _fetch_yf(symbol: str, start: str, end: str, ysym: str | None = None) -> list[tuple]:
     """Bougies réelles via Ticker.history (colonnes simples, robuste — évite le multi-index de
-    yf.download qui cassait l'extraction). `symbol` = clé stockée ; `ysym` = ticker Yahoo interrogé."""
+    yf.download qui cassait l'extraction). `symbol` = clé stockée ; `ysym` = ticker Yahoo interrogé.
+
+    ⚠️ `auto_adjust=True` (fix P1-4, 2026-07-06) : OHLC AJUSTÉS splits+dividendes. Sans ça, le
+    momentum prix-only (sélecteur d'univers du preset depuis P0-1) voyait un split 10:1 comme
+    -90 % → faux signal. L'incrémental gère la couture post-split via `_split_drift` (re-backfill)."""
     import yfinance as yf
-    df = yf.Ticker(ysym or symbol).history(start=start, end=end, auto_adjust=False)
+    df = yf.Ticker(ysym or symbol).history(start=start, end=end, auto_adjust=True)
     if df is None or df.empty:
         return []
 
@@ -104,8 +121,11 @@ def ingest(symbols: list[tuple[str, str]], since: str, daily: bool) -> None:
         if daily:
             last = _last_date(conn, sym)
             if last:
-                start = (datetime.strptime(last, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
-                if start >= end:
+                # Chevauchement volontaire de 7 j : si un split/dividende est passé depuis le
+                # dernier ingest, les closes ajustés divergent des closes stockés → on repart
+                # de `since` (re-backfill complet du symbole) au lieu de coller une série cassée.
+                start = (datetime.strptime(last, "%Y-%m-%d") - timedelta(days=7)).strftime("%Y-%m-%d")
+                if last >= end[:10]:
                     continue
         try:
             rows = _fetch_yf(sym, start, end, ysym=ysym)
@@ -115,7 +135,11 @@ def ingest(symbols: list[tuple[str, str]], since: str, daily: bool) -> None:
                 print(f"[{i}/{len(symbols)}] {sym}: échec ({str(e)[:60]})")
             continue
         if rows:
-            conn.executemany("INSERT OR IGNORE INTO prices VALUES(?,?,?,?,?,?,?,?)", rows)
+            if daily and _split_drift(conn, sym, rows):
+                print(f"  ↺ {sym}: ajustement rétroactif détecté (split/dividende) → re-backfill")
+                rows = _fetch_yf(sym, since, end, ysym=ysym)
+                conn.execute("DELETE FROM prices WHERE symbol=?", (sym,))
+            conn.executemany("INSERT OR REPLACE INTO prices VALUES(?,?,?,?,?,?,?,?)", rows)
             conn.commit()
             total += len(rows)
             ok += 1
