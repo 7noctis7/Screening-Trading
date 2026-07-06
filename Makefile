@@ -1,4 +1,4 @@
-.PHONY: install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto ingest-mktcap preset-report calibrate-preset screen repro kill-check log-alpha sync-alphas event-study event-study-smid backtest-pead-smid funding-study risk-check sensitivity paper-watch vault-lint crypto-onchain crypto-cockpit crypto-brief regime-study breakout-study microstructure-poc vault-ask crypto-screen onchain-study screen-niche list-db live live-go live-cron-install live-cron-uninstall verify-journal rdv-paper slippage clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull journal-pull journal-push notion-sync contracts supabase-kpis
+.PHONY: install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto ingest-mktcap preset-report calibrate-preset screen repro kill-check log-alpha sync-alphas event-study event-study-smid backtest-pead-smid funding-study risk-check sensitivity paper-watch vault-lint crypto-onchain crypto-cockpit crypto-brief regime-study breakout-study microstructure-poc vault-ask crypto-screen onchain-study screen-niche list-db live live-go live-cron-install live-cron-uninstall verify-journal rdv-paper slippage alerts-test clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull journal-pull journal-push notion-sync contracts supabase-kpis
 # PYTHON : utilise AUTOMATIQUEMENT le venv s'il existe (.venv/bin/python), sinon python3 système.
 # Évite le piège « No module named numpy » quand le venv n'est pas activé. Surchargeable.
 TICKER ?= AAPL
@@ -138,6 +138,11 @@ verify-journal:      ## vérifie que le cron paper ALIMENTE journal.db (legacy=0
 	$(PYTHON) scripts/verify_journal.py $(ARGS)
 rdv-paper:           ## verdict GO/NO-GO mécanique du RDV 2026-08-06 (paper réel vs backtest)
 	$(PYTHON) scripts/rdv_paper.py
+alerts-test:         ## envoie une alerte de TEST sur les canaux configurés (Console + Telegram/Discord si clés .env)
+	$(PYTHON) -c "from packages.common.env import load_env; load_env(); \
+from packages.alerts.wiring import default_engine; from packages.alerts import Alert, Severity; \
+e = default_engine(); e.emit(Alert('ops', Severity.WARNING, 'TEST alertes — si tu lis ceci sur Telegram/Discord, le filet ops est branché.', dedup_key='ops:test')); \
+print('→ alerte émise sur', len(e.sinks), 'canal/canaux (Console seul = clés Telegram/Discord absentes du .env)')"
 slippage:            ## slippage RÉEL mesuré (décision→fill) depuis journal.db — calibre le sabotage
 	$(PYTHON) -c "from packages.research.exec_costs import measured_slippage; from packages.storage import SqliteTradeJournal; import json; print(json.dumps(measured_slippage(SqliteTradeJournal()), indent=2, ensure_ascii=False))"
 mcp-tv:           ## lance le serveur MCP TradingView (overlays, Pine, alertes) — stdio, en parallèle de l'API/front
