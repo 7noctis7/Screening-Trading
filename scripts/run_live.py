@@ -285,7 +285,23 @@ def main() -> None:
     if not dry:
         _journal_opens(snap, opened, alpaca, bitmart)
         _journal_sells(snap, sold, alpaca, bitmart)
+        _record_equity(alp_cap, bit_cap)
     _sync_obsidian()
+
+
+def _record_equity(alp_cap: float, bit_cap: float) -> None:
+    """Enregistre l'equity RÉELLE du jour → alimente la courbe paper de `make rdv-paper`.
+
+    Corrige un trou (06/07) : l'equity_history n'était écrite que par `build_snapshot()`
+    (donc seulement à un `make start`). Le chemin de PROD (cron Mac + runner cloud) ne
+    l'alimentait pas → la courbe paper du RDV 2026-08-06 ne se serait jamais accumulée
+    si le Mac restait éteint. Best-effort strict."""
+    try:
+        from packages.execution.equity_history import record
+        record({"alpaca": alp_cap, "bitmart": bit_cap})
+        print(f"Equity : point du jour enregistré (Alpaca {alp_cap:,.0f} $ · Bitmart {bit_cap:,.0f} $).")
+    except Exception as e:  # noqa: BLE001
+        print(f"Equity : enregistrement ignoré ({str(e)[:50]}).")
 
 
 if __name__ == "__main__":
