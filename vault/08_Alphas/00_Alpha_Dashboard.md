@@ -34,3 +34,10 @@ WHERE type = "alpha_hypothesis" AND statut = "promu" AND dsr <= 0.5
 **Ledger d'essais** (anti p-hacking) : `research/hypotheses.jsonl` — chaque calibration loguée via
 `make log-alpha`. Le nombre d'essais `N` déflate le seuil DSR (López de Prado). Voir aussi
 `packages/research/ledger.py` (`trial_count`, `summary`, `best_by_dsr`).
+
+## Liens directs (graphe & backlinks — en plus de Dataview)
+Hypothèses : [[momentum_12_1]] · [[trend_ma200]] · [[low_vol]] · [[quality]] · [[value_multiples]] ·
+[[pead]] · [[overnight]] · [[ts_momentum]] · [[insider_form4]]
+Backtests & verdicts de gate : [[PEAD_smid]] · [[Regime_FearGreed]]
+Références : [[paper_jegadeesh_titman_1993]] · [[paper_moskowitz_tsmom_2012]] ·
+[[paper_bernard_thomas_1989]] · [[paper_cooper_overnight]] · [[paper_lakonishok_lee_2001]]

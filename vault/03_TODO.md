@@ -3,6 +3,31 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+## 🌙 CE SOIR SUR LE MAC — 2026-07-06 (post-audit 3 volets, ~10 min)
+> Les 4 gestes que l'agent ne peut pas faire à ta place (token Notion local, proxy git, clics GitHub).
+- [ ] **1. Resynchroniser le repo local** (récupère #299 : remédiation audit + constraints) :
+  ```bash
+  qt && git fetch origin && git reset --hard origin/main
+  ```
+- [ ] **2. Rattraper le miroir Notion** (2 semaines de retard constatées à l'audit) :
+  ```bash
+  make notion-sync
+  ```
+- [ ] **3. Supprimer les 3 branches distantes fusionnées** (l'agent a été bloqué par le proxy, 403) :
+  ```bash
+  git push origin --delete ops-integration feat/ui-analytics feat/journal-features-snapshot
+  ```
+- [ ] **4. Runner cloud — secrets GitHub** (clics, pas de terminal) : repo → Settings →
+      Secrets and variables → Actions → New : `ALPACA_API_KEY` + `ALPACA_API_SECRET` (compte
+      **paper**) + `HF_TOKEN` (fine-grained, limité au dataset `Noctis777/quant-journal`).
+      Puis Actions → « Rebalancement paper cloud » → **Run workflow** (test).
+- [ ] **5. Vérifier le PREMIER run journalisant du jour** (lundi = cron 16h05 a tourné) :
+  ```bash
+  tail -30 ~/Library/Logs/quant_live.log   # attendu : « Journal : N ouverture(s)/lot(s) fermé(s) »
+  make verify-journal                       # legacy=0 doit enfin être > 0 si des ordres sont partis
+  ```
+  (Si « ✓ déjà aligné » partout = aucun ordre → journal inchangé, c'est normal et honnête.)
+
 ## 🚧 EN COURS — reprise 2026-07-03 (branche `feat/broker-hardening`)
 > Journée broker-hardening (BLOC 1→4) démarrée. Base : `origin/main` à jour (#292 mergée = `323e53a`).
 > Carry-over local non commité : `config/mobile_universe.csv` (data régénérée, hors périmètre — laisser tel quel).
@@ -104,7 +129,7 @@
 > du 2026-08-06 (cf. garde-fou CLAUDE.md : jamais de live sans décision explicite).
 ### 🟠 P1
 - [x] **P1-1** ✅ (2026-07-02, suite) : `SqliteTradeJournal` (`data/journal.db`, JSON features, UPSERT
-      idempotent, flag `legacy` requêtable) + `LiveTradingEngine` persiste par défaut + `import_legacy_fills.py`
+      idempotent, flag `legacy` requêtable) + `LiveTradingEngine` persiste par défaut + `import_legacy_fills.py` (script one-shot, retiré 05/07)
       (137 fills importés `legacy=1`) + 8 tests (dont contrat anti-fuite). Cf. **ADR-0028**, commits `834338a`→`3c1c771`.
       **Reste** : la calibration MFE/MAE/expectancy/Kelly attend N>0 sur `legacy=0` (paper live → RDV 2026-08-06).
 - [ ] **P1-2** : providers fondamentaux PIT — `fmp_provider.py:35` (`fillingDate`), `sec_provider.py` (filtrer `filed`). `as_of` trompeur.
@@ -112,7 +137,12 @@
 - [ ] **P1-4** : `adj_close` 99,7 % NULL → ré-ingérer `auto_adjust=True` (splits → momentum contaminé).
 - [ ] **P1-5** : `pbo` **dupliqué** — consolider en 1 (garder `portfolio/pbo.py`, retirer `backtest/validation/pbo.py`).
 - [ ] **P1-6** : 9 modules top1pct **orphelins** — câbler ou marquer « en attente » ; enregistrer `vol_target`/`kelly_uncertain` au registre Sizer.
-- [ ] **P1-7** : dérive vault — table état (`01_ARCHITECTURE.md:100-105`), diagramme Mermaid (~10 pkgs), entrée journal 2026-07-02, **ADR-0026** (ops-kit).
+- [x] **P1-7 — FERMÉ (2026-07-05, audit 3 volets)** : `01_ARCHITECTURE.md` réécrit (table d'état
+      + Mermaid = 14 packages réels), ADR-0029 dédoublonné (→0032), TODO purgé (469→~300 l),
+      `vault-lint` câblé en CI (informatif), orphelins liés, notes `paper_*` créées (09_References).
+- [ ] **P1-8 (audit 05/07)** : peupler le REGISTRE de `15_CERTIFICATION.md` (vide depuis ADR-0026
+      du 02/07 — le gate viole sa propre règle). Commencer par les composants réellement en prod :
+      `SqliteTradeJournal`, `AlpacaBroker`, gate DSR/PBO, `live_journal`/`live_roundtrip`.
 ### 🟢 P2
 - [ ] **P2 (audit 02/07)** — **#1 Fuite Platt** (`snapshot.py:670-675`, LOW, non-capital) : fit Platt sur une tranche
       60-80 % **distincte** du test 80-100 % (aujourd'hui `brier_calibrated` est in-sample = optimiste, mais n'atteint
@@ -131,180 +161,12 @@
   - critère GO : paper cohérent avec le backtest (pas de dérive Sharpe>1pt, MaxDD non dépassé).
   - si concordant → engager un capital réel **limité** + sizing défensif ; sinon → re-calibrer.
 
-## 🔬 CE SOIR SUR LE MAC — audit top-1% : rigueur du gate + Registry (suite 5)
-> PR #288 (POCs quant + sonar + correctifs d'audit + page /echecs). Tout sous le gate, 0 €.
-- [ ] **Récupérer** : `qt && git fetch origin && git reset --hard origin/claude/clever-lovelace-ognwya`.
-- [ ] **Voir la page « Échecs publiés »** : `make stop && make start` → localhost:3000/echecs
-      (Negative Results Registry — tes 6 négatifs, citables/reproductibles = ton wedge).
-- [ ] **Re-lancer un gate** (DSR maintenant déflaté sur TOUT le ledger + PBO sur 20 configs) :
-  ```bash
-  make breakout-study      # vérifie : DSR ↓ (déflation N=ledger), PBO sur grille élargie
-  ```
-- [ ] **Microstructure (option ECDF, queues épaisses)** : `make microstructure-poc SYM=BTCUSDT`
-      (le vPIN peut être appelé en `method="ecdf"` côté code).
-- [ ] **Tests** : `make test` (lot d'audit ajouté : pit_guard, bootstrap CI, resolve, MinTRL,
-      roll/sweep, leak-sentinel — ~40 nouveaux tests verts attendus).
-- [ ] ⚠️ **Rien de câblé** : microstructure / peg / breakout restent en RECHERCHE (gate d'abord).
-- [ ] **Restants connus** (non bloquants) : N global aux autres gates, leak-sentinel auto sur
-      `build_features(as_of=…)` (petit refactor), univers membership PIT (constituants gratuits).
-
-## 🛰️ CE SOIR SUR LE MAC — blueprint quant : microstructure + sonar + alpha-decay (suite 4)
-> PR #288 (en plus de #287 déjà mergé). Microstructure crypto, sonar carnet, robustesse
-> backtest, déviation de peg xStocks. Tout sous le gate, 0 €. À faire :
-- [ ] **Récupérer** : `qt && git fetch origin && git reset --hard origin/claude/clever-lovelace-ognwya`.
-- [ ] **Voir le SONAR** (carnet d'ordres en densité live) : `make stop && make start` →
-      localhost:3000/crypto (section « Carnet d'ordres — densité (sonar) », murs de liquidité).
-- [ ] **POC microstructure** (OFI + vPIN en direct, Binance gratuit) :
-  ```bash
-  make microstructure-poc SYM=BTCUSDT      # OFI>0 = pression acheteuse · vPIN↑ = flux toxique
-  ```
-  → laisse tourner ~2 min ; note si vPIN grimpe avant un mouvement. **Signal de recherche → gate.**
-- [ ] **(option) xStocks peg** : si tu as une source token (Jupiter/Solana, Bybit) + sous-jacent,
-      `peg_study.run_study(...)` teste la mean-reversion au placebo. Sinon → plus tard.
-- [ ] **Robustesse** : `alpha_decay.ic_half_life` / `almgren_impact` dispo pour durcir un backtest.
-- [ ] ⚠️ **Aucun de ces signaux n'est câblé** : tout doit passer placebo/DSR/PBO/sabotage d'abord.
-
-## ✅ CE SOIR SUR LE MAC — #287 MERGÉ & DÉPLOYÉ (2026-06-29, suite 3)
-> PR #287 squash-mergée sur `main` → site reconstruit (~10 min). Trio live + landing/ticker +
-> gate 7e négatif + RAG + growth + Obsidian (ADR-0025). À faire, par ordre :
-- [ ] **Récupérer tout (code + Obsidian)** — s'aligner exactement sur le déployé :
-  ```bash
-  qt && git fetch origin && git reset --hard origin/claude/clever-lovelace-ognwya
-  ```
-- [ ] **Voir EN LIGNE** (après ~10 min) : https://7noctis7.github.io/Screening-Trading/crypto/
-      et la landing — recharger en forçant le cache (**Cmd + Shift + R**).
-- [ ] **Voir en LOCAL** : `make stop && make start` → localhost:3000 (landing+ticker) ·
-      /crypto (jauge + graphe Coinbase WS + Œil de Hasheur) · /accueil (scroll animé + 3D).
-- [ ] **Tester les interactions** : clic sur un ticker → fiche TradingView · clic sur un schéma
-      du Gate → méthodo · bouton « Partager sur X » · /crypto/?embed=1 (widget).
-- [ ] **Rebalancement paper auto** : déjà actif (launchd lun-ven 16h05). Vérifier :
-      `make verify-journal` (planif + alimentation journal.db) · log `~/Library/Logs/quant_live.log`
-      (relancer `make live-cron-install` pour migrer l'ancien chemin `/tmp`, purgé au reboot).
-- [ ] **(optionnel)** `make vault-ask Q="…"` · `make crypto-screen Q="cap > 5md top 10"` ·
-      `make regime-study` / `make breakout-study` (re-tester au gate).
-
-## 🪙 CE SOIR SUR LE MAC — cockpit crypto LIVE + gate + croissance (2026-06-29, suite 2)
-> Tout est sur `claude/clever-lovelace-ognwya` (PR #287, auto-merge dès CI verte → redéploiement).
-- [ ] **Récupérer (pour voir l'Obsidian à jour + le code)** : `qt && git pull origin claude/clever-lovelace-ognwya`.
-- [ ] **Voir le trio LIVE** : `make stop && make start` → http://localhost:3000/crypto
-      (jauge de sentiment + graphe Coinbase WebSocket + analyse « Œil de Hasheur »).
-- [ ] **Tester l'embed** : http://localhost:3000/crypto/?embed=1 (widget read-only, nav masquée).
-- [ ] **Verdicts de gate déjà obtenus** : F&G contrarian ❌ p=0,905 (6e) · cassure de canal ❌
-      DSR 0/PBO 0,88/sabotage (7e). Rien câblé au ML. (Re-run : `make regime-study` / `breakout-study`.)
-- [ ] **RAG vault** : `make vault-ask Q="…"` · **screener NL** : `make crypto-screen Q="cap > 5md top 10"`.
-- [ ] **Rebalancement paper auto** : déjà activé (`make live-cron-install`, launchd lun-ven 16h05).
-- [ ] **Partager** : bouton « Partager sur X / Farcaster » + « Intégrer (iframe) » en haut de /crypto.
-
-## 🪙 CE SOIR SUR LE MAC — cockpit crypto + test régime F&G (2026-06-29)
-> Livré : page `/crypto` (cockpit marché, gratuit), note Obsidian déterministe, et un TEST honnête
-> du Fear & Greed comme signal contrarian BTC (gate placebo). **Réseau bloqué côté agent** → ces 3
-> commandes doivent tourner sur ton Mac (les API crypto y sont joignables).
-- [ ] **Récupérer** : `qt && git pull origin main`.
-- [ ] **Note de marché crypto → Obsidian** (contexte, indexée par vault-search) :
-  ```bash
-  make crypto-brief        # → vault/11_Crypto/Cockpit.md (humeur, pouls, narratifs, movers)
-  ```
-- [ ] **⭐ Verdict du gate — F&G contrarian sur BTC** (LE test ML/régime) :
-  ```bash
-  make regime-study        # télécharge F&G (2018+) + prix BTC, lance placebo
-  ```
-  → reporte la **p-value placebo** et le **verdict** (SIGNIFICATIF / BRUIT). Loggé au ledger +
-  note `vault/10_Backtests/Regime_FearGreed.md`.
-  - **si BRUIT** (attendu, prior bas) → 6ᵉ négatif propre, **rien câblé au ML**. Ajoute-le au manifeste.
-  - **si SIGNIFICATIF** → candidat **overlay de régime** (pas alpha) : validation DSR/PBO ensuite,
-    puis branchement `FNG` dans `real_macro_store` (plomberie `FeatureBuilder`/`MacroStore.as_of`
-    déjà prête, point-in-time anti-fuite).
-- [ ] **(option)** voir le cockpit en ligne : `cd apps/web && npm run dev` → http://localhost:3000/crypto
-
-## 🪙 CE SOIR SUR LE MAC — on-chain crypto (multi-sources gratuites, 2026-06-29)
-> Livré : fondamentaux on-chain (CoinGecko + DefiLlama, sans clé) + étude alt-data TVL/MCap.
-- [ ] **Récupérer** : `qt && git pull origin main`.
-- [ ] **Table fondamentaux on-chain** des 8 (turnover · float · TVL · TVL/MCap · DD-ATH · momentum) :
-  ```bash
-  make crypto-onchain
-  ```
-  → repère : **float bas** = overhang d'unlocks (ONDO/RENDER/HYPE) ; **TVL/MCap haut** = cap adossée.
-- [ ] **Tester l'edge on-chain** (TVL/MCap → rendements, via le gate placebo) :
-  ```bash
-  make onchain-study
-  ```
-  → reporte la **p-value placebo**. ⚠️ Attendu : ❌ non significatif (échantillon mince) — c'est
-  une info honnête, pas un échec. Loggé au ledger automatiquement.
-- [ ] **(option)** widget on-chain sur la page crypto du dashboard = **PR2 (A)**, en cours côté repo.
-
-## 🎨 CE SOIR SUR LE MAC — tester la NOUVELLE UI (landing 3D + polish, 2026-06-25)
-> Livré : landing cinématique (R3F/Three.js + Lenis, route isolée `/landing`) + polish dashboard (CSS).
-- [ ] **Récupérer + installer les nouvelles deps front** (three, fiber, lenis) :
-  ```bash
-  qt && git pull origin main
-  cd apps/web && rm -rf .next && npm install && npm run dev
-  ```
-- [ ] **Voir la landing cinématique** : http://localhost:3000/landing
-  → bouge la souris dans le hero (✦ spotlight + particules 3D réactives) ; scroll (inertiel Lenis,
-  dolly caméra). Vérifie le 60fps + le rendu mobile (DevTools responsive).
-- [ ] **Voir le dashboard poli** : http://localhost:3000/ → survole les cartes (arête « verre » + lift).
-- [ ] **Vérifier le build statique** (comme la CI Pages) avant de te fier au déploiement :
-  ```bash
-  cd apps/web && STATIC_EXPORT=1 npm run build   # doit finir « 23/23 pages », /landing OK
-  ```
-- [ ] **(option) faire de la landing la page d'entrée publique** : si tu veux que `7noctis7.github.io`
-  ouvre sur la landing plutôt que le dashboard, dis-le-moi → je câble une redirection/rootswap propre.
-- [ ] **Reporter** : fluidité du 3D sur ton Mac (et mobile si testé) → si ça rame, je baisse le
-  nombre de particules / ajoute un toggle « perf ».
-
-## 🌙 CE SOIR SUR LE MAC — tester le SABOTAGE + paper-watch (2026-06-25)
-> Nouvelles fonctionnalités mergées : gate de sabotage adverse (#268) + watchdog paper (#267).
-> But : voir le 4e étage du gate (placebo → DSR/PBO → **sabotage**) tourner sur tes données réelles.
-- [ ] **Récupérer** : `qt && git pull origin main`.
-- [ ] **Backtester le PEAD AVEC le sabotage** (la nouvelle ligne s'affiche automatiquement) :
-  ```bash
-  make backtest-pead-smid
-  ```
-  → lis la ligne **« Sabotage (coût×3 + bruit + latence) : Sharpe X→Y (rétention Z) → ✅/❌ »**.
-  Reporte-moi `rétention` et si l'edge survit. (Rappel : le PEAD est déjà REJETÉ au DSR/PBO ;
-  le sabotage confirme qu'il ne faut pas le trader.)
-- [ ] **Stresser plus fort** (voir où l'edge casse — règle « zéro confiance ») :
-  ```bash
-  # coût ×5 + latence 2 j via un petit probe Python sur la série du backtest
-  .venv/bin/python -c "from packages.research.adversarial import sabotage_verdict; \
-from scripts.backtest_pead_smid import _load, _SMID; \
-from packages.strategies.pead_portfolio import pead_daily_returns; \
-d,e=_load([t for t in _SMID.split(',')]); _,r=pead_daily_returns(d,e,hold=21,cost_bps=10); \
-print(sabotage_verdict(r, extra_cost_bps=50, latency=2, noise_mult=1.0))"
-  ```
-  → si même un (futur) edge survit à ça, il est vraiment robuste.
-- [ ] **Tester le watchdog paper** : `make paper-watch`
-  → dira « trop tôt » (<20 j) ; à brancher au cron : `0 23 * * 1-5 cd <repo> && make paper-watch`.
-- [ ] **Linter le vault** (intégrité mémoire) : `make vault-lint`
-  → liens morts / orphelins = avertissements ; `make vault-lint ARGS=--strict` = gate dur.
-  Action : créer les notes `paper_*` manquantes OU retirer les `[[…]]` aspirationnels de
-  `08_Alphas/`, et lier les 4 orphelins (PEAD_smid, low_vol, overnight, ts_momentum).
-- [ ] **(rappel) confirmer le gate à 4 étages** sur un futur signal : placebo<0.05 ∧ DSR>0.5 ∧
-      PBO<0.5 ∧ **survit au sabotage** → sinon il ne passe pas en prod.
-
-## 🌙 EN RENTRANT SUR LE MAC (post-audit comité, 2026-06-25)
-> Suite à l'audit contradictoire (score ~66→~78/100, verdict **PRÊT POUR PAPER**). Le seul
-> reliquat avant « capital réel limité » est **opérationnel** (élargir les délistés), pas du code.
-
-- [ ] **Récupérer le code** : `qt && git pull origin main`.
-- [ ] **🔴 CRITIQUE — élargir le survivorship** (le seul vrai bloqueur capital réel) :
-  ```bash
-  make ingest-delisted                 # détecte les titres délistés sur ta base COMPLÈTE
-  python -c "from packages.data.survivorship import survivorship_audit, load_delisted; \
-  print(survivorship_audit(['AAPL'], load_delisted()))"   # vise undersampled=False (coverage ≥5%)
-  ```
-  → si `undersampled: true` persiste, relance l'ingest sur un historique plus long / plus large.
-- [ ] **Éprouver les seuils (anti sur-optim, audit #4)** : `make sensitivity`
-  → note tout filtre `⚠ FRAGILE` (Jaccard < 0.7) ou gate régime `⚠ sensible` et reporte-moi.
-- [ ] **Overlay de risque (edge prouvé)** : `make risk-check`
-  → note l'exposition recommandée du jour (drawdown taper × vol prévue).
-- [ ] **Activer le gate audit data en strict (optionnel, plus sévère)** :
-  `echo 'QUANT_AUDIT=strict' >> .env` puis `make audit ARGS=--strict` (refuse de servir des prix
-  à anomalie critique). Par défaut c'est déjà `warn` (audite + joint le rapport, sans bloquer).
-- [ ] **Rafraîchir les métriques de référence** (source unique de vérité = `perf_summary`) :
-  `make backtest-preset` → vérifie CAGR/Sharpe/MaxDD cohérents avec le manifeste (claim non sourcé
-  retiré). `make calibrate-preset` resynchronise le DSR au ledger.
-- [ ] **(rappel défensif)** `echo 'QUANT_DD_TARGET=0.15' >> .env` + 1 seul `make live-go` (annule le levier).
+## 🗄️ Sessions « CE SOIR SUR LE MAC » de juin — CLÔTURÉES (purge 2026-07-05)
+> 9 sections opérationnelles (2026-06-24 → 06-30) purgées : tout est LIVRÉ et mergé
+> (PR #287/#288/#289 + suivantes). Les faits sont consignés là où ils doivent vivre :
+> verdicts de gate → `12_MANIFESTE_HONNETETE.md` (F&G p=0,905 · cassure canal DSR 0/PBO 0,88…) ·
+> récits de session → `04_JOURNAL.md` · reliquats réels repris ci-dessus (RDV 06-08, runner cloud).
+> Historique complet : `git log vault/03_TODO.md`.
 
 ## 🎯 SPRINT « ALPHA / CALMAR » — à démarrer (2026-06-24)
 > Objectif : **Calmar 0.17 → 0.6-0.9** en **divisant le Max DD par 2** + alpha honnête.

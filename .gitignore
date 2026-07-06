@@ -83,3 +83,6 @@ vault/.smart-env/
 .cache/
 .backups/
 .claude/ops/
+
+# Plugins Obsidian (JS compilé tiers, ~3 Mo — local-only, audit 05/07)
+vault/.obsidian/plugins/

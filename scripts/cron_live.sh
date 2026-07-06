@@ -33,4 +33,6 @@ fi
 echo "[$(date '+%F %T')] rebalancement paper — début"
 $PY scripts/ingest_prices.py --daily || true       # prix frais (best-effort)
 $PY scripts/run_live.py --live --yes                # Alpaca paper ; Bitmart neutralisé
+# Miroir Notion (audit 05/07) : best-effort, uniquement si NOTION_TOKEN présent dans .env.
+$PY scripts/notion_sync.py >/dev/null 2>&1 || true
 echo "[$(date '+%F %T')] rebalancement paper — fin"

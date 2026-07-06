@@ -41,3 +41,15 @@
 ## Registre
 Tenir ici le tableau : composant | type | statut | date certif | preuves (liens tests/rapports) | prochaine re-certif.
 Le /full-review vérifie ce registre ; tout composant en prod non-CERTIFIED = finding P0.
+
+> ⚠️ **DETTE ASSUMÉE (audit 2026-07-05, P1-8 au TODO)** : registre non peuplé depuis ADR-0026
+> (02/07) alors que des composants tournent en prod — le gate viole sa propre règle. À peupler
+> en priorité (statut honnête plutôt que tableau vide silencieux) :
+
+| Composant | Type | Statut | Date | Preuves | Re-certif |
+|---|---|---|---|---|---|
+| `SqliteTradeJournal` | storage | **UNCERTIFIED** (en prod) | — | 8 tests + contrat anti-fuite (`test_journal_sqlite.py`) — protocole /certify PAS déroulé | P1-8 |
+| `AlpacaBroker` (paper) | execution | **UNCERTIFIED** (en prod) | — | tests TIF/mappers/crypto — protocole PAS déroulé | P1-8 |
+| `live_journal` + `live_roundtrip` | execution | **UNCERTIFIED** (en prod) | — | 13 tests (Phases 1+2) — protocole PAS déroulé | P1-8 |
+| Gate DSR/PBO (`psr.py`/`pbo.py`) | research | **UNCERTIFIED** (en prod) | — | tests + 8 négatifs publiés — protocole PAS déroulé | P1-8 |
+| `run_live.py` (chemin prod) | script | **UNCERTIFIED** (en prod) | — | dry-run vérifié + garde-fous — protocole PAS déroulé | P1-8 |

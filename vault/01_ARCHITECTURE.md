@@ -24,43 +24,55 @@ graph TD
   subgraph EXT[Sources externes]
     A1[APIs marche: yfinance/Finnhub/CCXT/Alpaca]
     A2[Macro: FRED/ALFRED/FMI/OCDE]
-    A3[Fondamental: OpenBB/FMP]
-    A4[Brokers: Alpaca/Binance/BitMart]
+    A3[Fondamental: OpenBB/FMP/SEC EDGAR]
+    A4[Brokers: Alpaca paper / Bitmart gated]
+    A5[News RSS + crypto: CoinGecko/DefiLlama/Binance]
   end
   subgraph CORE[packages/core - interfaces and models]
     C1[DataProvider / Broker / Strategy]
     C2[RiskRule / Factor / Sizer / Indicator]
   end
   subgraph PIPE[Chaine de traitement]
-    D[data] --> R[macro and regime]
-    R --> S[screening technique]
+    D[data + pit_guard anti-fuite] --> R[macro and regime]
+    R --> S[screening: filtres YAML + z-score]
     R --> F[fondamental and valo]
+    SENT[sentiment: FinBERT/RSS PIT] --> K
     S --> K[ranking multi-facteur]
     F --> K
     K --> ST[strategies]
     ST --> PF[portefeuille and risque]
-    PF --> EX[execution]
+    PF --> EX[execution: run_live.py = chemin PROD unique]
+  end
+  subgraph RESEARCH[packages/research - gate 4 etages]
+    GATE[placebo -> DSR -> PBO -> sabotage]
+    LEDGER[(ledger hypotheses.jsonl)]
+    LEDGER -.-> GATE
   end
   subgraph STORE[Stockage]
-    DB[(DuckDB/Parquet/PostgreSQL)]
-    FS[feature store]
+    DB[(SQLite/DuckDB/Parquet)]
+    FS[feature store GOLD]
+    JRNL[(journal.db: live_journal + live_roundtrip FIFO)]
   end
   subgraph LEARN[Apprentissage]
-    J[journal de trades] --> ML[ML triple-barrier and meta-labeling]
+    JRNL --> ML[ML triple-barrier and meta-labeling, CV purgee]
     ML -. boucle .-> K
   end
   subgraph APP[Interface]
-    API[API FastAPI] --> WEB[Front Next.js]
+    API[API FastAPI + snapshot] --> WEB[Front Next.js + export statique Pages]
   end
   EXT --> D
   A4 --> EX
-  EX --> J
+  EX --> JRNL
   D --> DB
   ML --> FS
   PF --> API
-  J --> API
-  ALERTS[alertes]:::x -.-> API
-  classDef x fill:#eee,stroke:#999;
+  JRNL --> API
+  GATE -. rien ne passe en prod sans verdict .-> ST
+  ALERTS[alertes: engine+sinks+throttle] --> EX
+  ALERTS --> API
+  LLMG[llm: garde anti-hallucination] -.-> API
+  MCPTV[mcp_tradingview: overlays + kill-switch TV] -.-> EX
+  CERT[testing/certification] -.-> PF
 ```
 
 ## Diagramme 2 — Flux de fonctionnement (bout en bout)
@@ -97,12 +109,19 @@ flowchart LR
 | Stratégies | `packages/strategies` | ✅ 2 plugins (S1) |
 | Backtest | `packages/backtest` | ✅ event-driven + walk-forward + DSR (S5) |
 | Risque (engine + règles) | `packages/risk` | ✅ engine+veto+kill-switch (S1) |
-| Portefeuille | `packages/portfolio` | 🟡 sizing+métriques (S1) |
-| Exécution (paper) | `packages/execution` | ✅ SimBroker+AlpacaBroker+LiveEngine (S8) |
-| ML | `packages/ml` | ⬜ à venir (P2) |
-| Alertes | `packages/alerts` | ⬜ à venir (P2) |
-| Reporting | `packages/reporting` | ⬜ à venir (P2) |
-| API / Web | `apps/` | ⬜ à venir (P2) |
+| Portefeuille | `packages/portfolio` | ✅ HRP/ERC/min-var, VaR/CVaR/EVT, PSR/DSR, stress (S11) |
+| Exécution (paper) | `packages/execution` | ✅ SimBroker+AlpacaBroker+Bitmart gated · journal décision + round-trip FIFO (ADR-0028/0031) · LiveEngine = simulateur |
+| ML | `packages/ml` | ✅ triple-barrier, CV purgée/embargo, calibration, conformal, champion/challenger (S9) |
+| Alertes | `packages/alerts` | ✅ engine+sinks+throttle+wiring — BRANCHÉ sur `run_live.py` (BLOC 1c) |
+| Reporting | `packages/reporting` | ✅ analytics, tearsheet, notes sociétés, miroir Obsidian (S13) |
+| API / Web | `apps/` | ✅ FastAPI snapshot + Next.js (dashboard, /positions réel-vs-cible, /screener explicable, /crypto live, /echecs) + export statique Pages |
+| Recherche & gate | `packages/research` | ✅ gate 4 étages (placebo→DSR→PBO→sabotage), ledger, microstructure OFI/vPIN, alpha-decay (ADR-0024) |
+| Screening | `packages/screening` | ✅ filtres YAML + composite z-score → `/screener` |
+| Sentiment | `packages/sentiment` | ✅ FinBERT+lexique+RSS point-in-time + risk gate |
+| Événements | `packages/events` | ✅ earnings (blackout) + IPOs |
+| LLM | `packages/llm` | ✅ garde anti-hallucination + routeur local Ollama |
+| MCP TradingView | `packages/mcp_tradingview` | ✅ overlays risque + alertes → kill-switch `run_live` |
+| Certification | `packages/testing` | 🟡 protocole posé (`15_CERTIFICATION.md`) — registre à peupler (P1-8) |
 
 > **Test de validation de l'archi** : *« ajouter un exchange / une stratégie /
 > un indicateur / un facteur = 1 fichier, sans toucher au reste ».* Couvert par

@@ -1,0 +1,29 @@
+# Suivi automatique des mises à jour (audit 05/07). Les actions GitHub restent épinglées par tag
+# (l'épinglage SHA exige une vérification en ligne — Dependabot proposera les bumps en PR, la CI
+# gate) ; l'écosystème pip surveille pyproject.toml (versions majoritairement ouvertes → alerte
+# sécurité au moins). PRs groupées le lundi pour ne pas polluer.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+  - package-ecosystem: npm
+    directory: /apps/web
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      npm-minor:
+        update-types: ["minor", "patch"]

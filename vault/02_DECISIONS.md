@@ -345,7 +345,8 @@ appliqué qu'à `preset_backtest()` ; il avait **ré-apparu** dans les 3 fonctio
 (`Preset_Performance.md`) restent des artefacts jusqu'à un `make` de régénération sur le Mac (données réelles).
 Voir `vault/14_FULL_REVIEW.md`.
 
-## ADR-0029 — Ère paper = mono-broker Alpaca ; Bitmart = adaptateur futur-live gated (2026-07-03)
+## ADR-0032 — Ère paper = mono-broker Alpaca ; Bitmart = adaptateur futur-live gated (2026-07-03)
+> *Renuméroté 0029→0032 le 2026-07-05 (collision : ADR-0029 = « long-only v1 », détectée par `vault_lint`).*
 **Date :** 2026-07-03.
 **Contexte.** La crypto était routée vers **Bitmart** (`routing.py`, `broker_symbol` en `/USDT`), un
 courtier sans vrai mode paper (protégé seulement par `dry_run`). Objectif : accumuler des trades crypto
@@ -406,3 +407,34 @@ le 2026-07-04, décision (b) journal direct).
 **Conséquences.** (+) UN chemin de prod, journalisé et alerté ; (+) évolution prod = `run_live.py`
 uniquement ; (−) parité stop/target entre simulateur et prod à re-vérifier si on ajoute des stops
 au chemin réel (aujourd'hui le preset n'en émet pas — réconciliation par poids).
+
+
+## ADR-0033 — Runner paper CLOUD (GitHub Actions) en 2e canal d'exécution, journal persisté sur HF privé (2026-07-05)
+**Contexte.** Le rebalancement paper dépendait du Mac allumé (launchd 16h05). Besoin utilisateur :
+tourner Mac éteint, à 0 €. Contrainte : le journal `data/journal.db` (features de décision +
+round-trips, P0-4) doit SURVIVRE entre des runners CI éphémères, sans exposer son contenu
+(repo public, positions = confidentiel).
+**Décision.** `.github/workflows/paper.yml` (lun-ven 14h35 UTC, marché US ouvert été/hiver) exécute
+le MÊME chemin de prod (`run_live.py --live --yes`) avec les clés Alpaca **paper** en secrets
+chiffrés ; `scripts/hf_journal.py` pull/push le journal vers un dataset Hugging Face **PRIVÉ**
+(refus de push si le dataset est public). Gate propre si secrets absents.
+**Sûreté du double-run.** Mac + cloud le même jour = sans danger : la réconciliation est par
+DELTA sur les positions broker (source de vérité) → le 2e passage voit ~0 et n'envoie rien.
+MAIS chaque runner ne journalise que SES ordres → les deux journaux divergent. Règle : choisir
+UN runner principal (recommandé : cloud) ; le Mac consulte via `make journal-pull`.
+**Frontière définitive.** Cloud public = paper POUR TOUJOURS. Le trading réel (post-RDV
+2026-08-06, si GO) restera local-only (clés dans `.env` Mac, jamais en CI publique) — surface
+supply-chain (pip + actions tierces) inacceptable pour des clés réelles.
+
+## ADR-0034 — Anonymat du dépôt public : statu quo assumé (option b) (2026-07-05)
+**Contexte.** L'audit GitHub du 2026-07-05 a montré : vitrine sous le pseudonyme `7noctis7`
+(canonique, l'ancienne URL redirige) mais des commits historiques portent un nom d'auteur
+relié à l'identité réelle → le lien pseudonyme↔identité est trouvable par archéologie git.
+Options : (a) assumer publiquement l'identité ; (b) statu quo ; (c) réécrire l'historique des
+auteurs (`git filter-repo` + force-push destructif).
+**Décision (utilisateur, 2026-07-05) : (b) statu quo.** Le lien reste techniquement trouvable
+mais non affiché. Pas de réécriture d'historique (destructif, casse les clones, bénéfice
+limité : toute copie antérieure conserve l'info). Conséquence assumée : le projet ne doit
+JAMAIS contenir de donnée dont la sensibilité dépendrait de l'anonymat (déjà le cas :
+positions réelles local-only, zéro secret tracké — vérifié par audit + gitleaks CI).
+Si la posture change un jour → nouvel ADR (option a : simple ; option c : opération dédiée).
