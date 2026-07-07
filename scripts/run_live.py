@@ -254,6 +254,15 @@ def main() -> None:
         print("⚠️  --live exige --yes (confirmation explicite). Abandon."); return
     dry = not (a.live and a.yes)
 
+    # Snapshot de DÉCISION en mode LÉGER : la réconciliation n'a besoin que des poids
+    # cibles + régime + prix. On coupe les sections réseau lentes (fondamentaux, news, ML…)
+    # → le build passe de plusieurs minutes (souvent interrompu) à quelques secondes.
+    # Forçable en complet avec QUANT_LIVE_LITE=0 (ex. debug).
+    import os
+    os.environ.setdefault("QUANT_LIVE_LITE", "1")
+    if os.environ["QUANT_LIVE_LITE"] == "1":
+        print("Snapshot : mode léger (sections réseau non essentielles coupées pour l'exécution).")
+
     from apps.api.snapshot import build_snapshot
     snap = build_snapshot()                                # DÉCISION unique (features figées ici)
     targets = snap["live"]["target_orders"]                # poids cibles (% du portefeuille)
