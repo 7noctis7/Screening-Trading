@@ -23,7 +23,7 @@ _FOREIGN_SUFFIXES = (".AS", ".PA", ".L", ".DE", ".MI", ".MC", ".BR", ".SW", ".ST
 # papier (jamais routée vers Bitmart). Mieux vaut exclure une base supportée que router l'impossible.
 ALPACA_CRYPTO_BASES = frozenset({
     "AAVE", "AVAX", "BAT", "BCH", "BTC", "CRV", "DOGE", "DOT", "ETH", "GRT", "LINK", "LTC",
-    "MKR", "PEPE", "SHIB", "SOL", "SUSHI", "UNI", "USDC", "USDT", "XRP", "XTZ", "YFI",
+    "PEPE", "SHIB", "SOL", "SUSHI", "UNI", "USDC", "USDT", "XRP", "XTZ", "YFI",
 })
 
 
