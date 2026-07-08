@@ -219,7 +219,7 @@ def preset_latest_weights(data: dict, quality: dict | None = None, asset_classes
                           top_k: int = 30, k_dd: float = 1.6, blackout_move: float = 0.12,
                           max_weight: float = 0.10, min_names: int = 12,
                           regime_gate: bool = True, mom_tilt: bool = True,
-                          breadth_gate: bool = True) -> dict:
+                          breadth_gate: bool = True, min_weight: float = 0.025) -> dict:
     """Poids cibles ACTUELS du preset (dernière barre) — pilote la PRODUCTION (make live).
 
     Même logique que le backtest (qualité top-K -> risk-parity ERC -> DD-target -> blackout), mais
@@ -274,7 +274,20 @@ def preset_latest_weights(data: dict, quality: dict | None = None, asset_classes
     if breadth_gate:                                            # #8 ampleur de marché (production)
         gross *= float(np.clip(_breadth(A, t) / 0.5, 0.0, 1.0))
     w = w * gross
+    w = _concentrate(w, min_weight)     # jette la poussière → moins d'actifs, mieux dimensionnés
     return {universe[i]: round(float(w[i]), 4) for i in range(len(universe)) if w[i] > 1e-4}
+
+
+def _concentrate(w: "np.ndarray", min_weight: float) -> "np.ndarray":
+    """Élimine les positions sous `min_weight` (fraction de l'investi) et redistribue leur poids
+    aux survivants → portefeuille CONCENTRÉ sur les meilleures convictions, même gross investi.
+    Anti-« poussière » : fini les dizaines de lignes à quelques dollars."""
+    inv = float(w.sum())
+    if inv <= 0 or min_weight <= 0:
+        return w
+    w = np.where(w / inv < min_weight, 0.0, w)
+    keep = float(w.sum())
+    return w * (inv / keep) if keep > 0 else w
 
 
 def preset_equity_daily(data: dict, quality: dict | None = None, asset_classes: dict | None = None,

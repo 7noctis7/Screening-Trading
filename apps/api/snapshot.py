@@ -1973,7 +1973,7 @@ def build_snapshot(seed: int = 7) -> dict:
     # ALLOCATION DE PRODUCTION = poids ACTUELS du preset (ce que make live réplique en paper)
     from packages.backtest.preset_backtest import preset_latest_weights
     _preset_weights = preset_latest_weights(_tradeable_data, _quality, asset_classes=acmap,
-                                            dd_target=_dd, band=0.03)
+                                            dd_target=_dd, band=0.03, top_k=20, min_weight=0.025)
     # SLEEVE CRYPTO (best practice, risk-parity) — poche SÉPARÉE, dimensionnée sur le capital BITMART.
     # Comptes distincts : les actions sont dimensionnées sur le capital ALPACA, la crypto sur Bitmart.
     _crypto_weights = {}
