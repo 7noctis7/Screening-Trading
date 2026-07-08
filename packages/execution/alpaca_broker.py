@@ -19,9 +19,14 @@ _STATUS = {
 
 
 def _is_crypto_symbol(symbol: str) -> bool:
-    """Alpaca : les paires crypto contiennent un '/' (ex. BTC/USD, ETH/USD) ; les actions non (AAPL).
-    Le crypto se négocie 24/7 et exige `TimeInForce.GTC` (DAY est REJETÉ pour la crypto)."""
-    return "/" in (symbol or "")
+    """Alpaca : paires crypto avec '/' (BTC/USD) MAIS les POSITIONS reviennent SANS slash
+    (BTCUSD) — fix 07/07 : les ventes de positions héritées partaient en TIF=DAY →
+    « invalid crypto time_in_force » (42210000). Une action ne se termine jamais par
+    USD/USDT/USDC avec ≥2 lettres devant → heuristique sûre sur ce périmètre."""
+    s = (symbol or "").upper()
+    if "/" in s:
+        return True
+    return any(s.endswith(q) and len(s) >= len(q) + 2 for q in ("USDT", "USDC", "USD"))
 
 
 def position_from_alpaca(p) -> Position:

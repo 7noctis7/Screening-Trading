@@ -89,19 +89,28 @@ def _current_values(alpaca, bitmart) -> tuple[dict, dict]:
     return cur_alp, cur_bit
 
 
+def _nsym(s: str) -> str:
+    """Clé de matching : Alpaca renvoie les POSITIONS sans slash (BTCUSD) mais les CIBLES
+    sont en BTC/USD → sans normalisation, le même actif compte 2 fois (fix 07/07 : la
+    réconciliation RACHETAIT BTC chaque jour tout en échouant à vendre « l'autre »)."""
+    return (s or "").replace("/", "").replace("-", "").upper()
+
+
 def _broker_targets(targets, bname: str, cap: float, reduce: float, cur: dict) -> tuple[dict, float]:
-    """Carte cible {broker_symbol: {o, val}} d'UN broker + bande d'inaction (anti micro-deltas).
+    """Carte cible {clé normalisée: {o, val, sym}} d'UN broker + bande d'inaction.
 
     ANTI-LEVIER : Σ cibles plafonnée à 100 % du capital du broker. Le détenu hors-cible
-    est ajouté avec val=0 (liquidation)."""
+    est ajouté avec val=0 (liquidation). `sym` = symbole à ENVOYER au broker (format
+    cible « BTC/USD » si connue, sinon le format position)."""
     tgs = [o for o in targets if (o.get("capital") == "bitmart") == (bname == "Bitmart")]
     sw = sum(o["weight_pct"] for o in tgs)
     scale = min(1.0, 1.0 / sw) if sw > 1.0 else 1.0
     tgt: dict[str, dict] = {}
     for o in tgs:
-        tgt[o.get("broker_symbol", o["symbol"])] = {"o": o, "val": o["weight_pct"] * cap * reduce * scale}
+        bsym = o.get("broker_symbol", o["symbol"])
+        tgt[_nsym(bsym)] = {"o": o, "val": o["weight_pct"] * cap * reduce * scale, "sym": bsym}
     for bsym in cur:                                      # détenu hors-cible → liquidation (cible 0)
-        tgt.setdefault(bsym, {"o": None, "val": 0.0})
+        tgt.setdefault(_nsym(bsym), {"o": None, "val": 0.0, "sym": bsym})
     return tgt, max(0.005 * cap, 5.0)                     # bande : 0,5 % du capital, min 5 $
 
 
@@ -115,10 +124,13 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, 
     sent, opened, sold = 0, [], []
     for bname, broker, cap, cur in brokers:
         tgt, band = _broker_targets(targets, bname, cap, reduce, cur)
-        for bsym, info in sorted(tgt.items(), key=lambda kv: -kv[1]["val"]):
-            o = info["o"]
-            delta = info["val"] - cur.get(bsym, 0.0)          # >0 acheter · <0 vendre
-            tag = f"  {bsym:14s} {bname:8s} cible {info['val']:8.0f}$ détenu {cur.get(bsym,0.0):8.0f}$ Δ {delta:+8.0f}$"
+        curn = {}                                             # détenu par clé NORMALISÉE (cumul)
+        for k, v in cur.items():
+            curn[_nsym(k)] = curn.get(_nsym(k), 0.0) + v
+        for nkey, info in sorted(tgt.items(), key=lambda kv: -kv[1]["val"]):
+            o, bsym = info["o"], info["sym"]
+            delta = info["val"] - curn.get(nkey, 0.0)         # >0 acheter · <0 vendre
+            tag = f"  {bsym:14s} {bname:8s} cible {info['val']:8.0f}$ détenu {curn.get(nkey,0.0):8.0f}$ Δ {delta:+8.0f}$"
             if o is not None and o.get("tradeable") is False:
                 print(tag + "  non négociable"); continue
             if abs(delta) < band:
