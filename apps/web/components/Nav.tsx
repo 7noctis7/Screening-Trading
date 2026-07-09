@@ -31,14 +31,19 @@ const LINKS: [string, string][] = [
   ["/positions", "Positions"],
   ["/trades", "Trades"],
   ["/journal", "Journal (round-trips)"],
+  ["/fiche", "Fiche 360 (instrument)"],
   ["/live", "Portefeuille réel"],
 ];
 
 // Regroupement par thème pour le tiroir mobile (lecture premium, style réglages iOS).
+// SIMPLICITÉ RADICALE (audit 07/09) : 6 destinations, organisées par OBJET métier
+// (ontologie), plus 23 onglets plats. Les pages absorbées restent routables (URL directe,
+// liens contextuels, ⌘K) — seule la SURFACE visible se réduit. La Fiche 360 (/fiche?sym=X)
+// remplace la navigation par tables : on clique un ticker, on voit tout l'objet.
 const GROUPS: [string, string[]][] = [
-  ["Marché", ["/data", "/universe", "/screener", "/macro", "/crypto", "/themes", "/events"]],
-  ["Analyse", ["/fundamentals", "/notes", "/investors", "/ml", "/sentiment", "/conviction", "/echecs", "/methode"]],
-  ["Portefeuille", ["/dashboard", "/portfolio", "/risk", "/positions", "/trades", "/journal", "/live"]],
+  ["Marché", ["/screener", "/universe", "/macro", "/themes", "/crypto"]],
+  ["Le Gate", ["/methode", "/echecs", "/journal"]],
+  ["Portefeuille", ["/dashboard", "/positions", "/risk"]],
 ];
 const LABEL: Record<string, string> = Object.fromEntries(LINKS);
 
@@ -171,6 +176,12 @@ export function Nav() {
         {GROUPS.map(([section, hrefs]) => (
           <DesktopMenu key={section} section={section} hrefs={hrefs} path={path} />
         ))}
+        <Link href="/crypto"
+          className={`px-3 py-1.5 rounded-[10px] text-sm transition-all duration-150 border ${
+            isActive("/crypto", path) ? "bg-surfaceAlt text-fg border-border2 shadow"
+                                      : "text-muted hover:text-fg hover:bg-surfaceAlt border-transparent"}`}>
+          Crypto
+        </Link>
         <span className="ml-auto" />
         <Link href="/dashboard"
           className={`px-3 py-1.5 rounded-[10px] text-sm transition-all duration-150 border ${
