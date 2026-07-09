@@ -253,6 +253,20 @@ def positions() -> dict:
             "markers": dash.get("real_markers", {})}
 
 
+@app.get("/api/object/{obj_type}/{obj_id}")
+def object_360(obj_type: str, obj_id: str) -> dict:
+    """Endpoint ONTOLOGIQUE générique : un objet métier + ses relations résolues.
+
+    (instrument/NVDA → screen+ranking+fondamentaux+sentiment+position+cible ;
+    portfolio/main → cible vs réel + risque + régime.) Pure projection du snapshot
+    en cache — aucun recalcul. Type/id inconnu → available: False (jamais 500)."""
+    from packages.ontology import resolve
+    obj = resolve(_snap(), obj_type, obj_id)
+    return obj if obj is not None else {
+        "available": False, "type": obj_type, "id": obj_id,
+        "reason": "objet inconnu (type non enregistré ou id absent du snapshot)"}
+
+
 @app.get("/api/journal")
 def journal_roundtrips() -> dict:
     """Round-trips RÉELS du journal paper (legacy=0) : lots ouverts + fermés + stats honnêtes.
