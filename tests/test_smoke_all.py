@@ -11,8 +11,18 @@ from packages.portfolio.sizing.vol_target import final_weight, realized_vol
 from packages.portfolio.sizing.kelly_uncertain import sized_kelly, kelly_fraction
 from packages.portfolio.rebalance_bands import rebalance_orders
 from packages.screening.expectancy_filter import evaluate_setup
-from packages.backtest.validation.sharpe_stats import sr_moments, psr, deflated_sr, min_trl
-from packages.backtest.validation.pbo import pbo_cscv
+from packages.portfolio.pbo import pbo_cscv
+from packages.portfolio.psr import (deflated_sharpe_ratio, min_track_record_length,
+                                    probabilistic_sharpe_ratio)
+
+
+def sr_moments(x):
+    """Moments Sharpe (impl. locale au smoke — remplace l'ex-module validation supprimé)."""
+    x = np.asarray(x, float); n = len(x)
+    mu, sd = x.mean(), x.std(ddof=1)
+    sk = float(((x - mu) ** 3).mean() / sd ** 3)
+    ku = float(((x - mu) ** 4).mean() / sd ** 4)
+    return float(mu / sd), sk, ku, n
 from packages.reporting.mfe_mae import analyze
 from packages.data.quality.cross_provider import diff_report
 
@@ -65,12 +75,13 @@ assert not evaluate_setup(0.30, 2.0).accept and evaluate_setup(0.55, 1.5).accept
 skilled = rng.normal(0.001, 0.01, 1000)   # SR_daily = 0.1
 noise = rng.normal(0.0, 0.01, 1000)
 sr, sk, ku, n = sr_moments(skilled)
-assert psr(sr, sk, ku, n) > 0.95
+assert probabilistic_sharpe_ratio(sr, n, sk, ku) > 0.95
 sr2, sk2, ku2, n2 = sr_moments(noise)
-assert psr(sr2, sk2, ku2, n2) < 0.95
-assert deflated_sr(skilled, n_trials=1, var_sr_across_trials=0.0) > 0.95
-assert deflated_sr(skilled, n_trials=10000, var_sr_across_trials=0.02) < deflated_sr(skilled, 2, 0.001)
-m = min_trl(sr, sk, ku)
+assert probabilistic_sharpe_ratio(sr2, n2, sk2, ku2) < 0.95
+assert deflated_sharpe_ratio(sr, n, n_trials=1, sr_std=0.0, skew=sk, kurt=ku) > 0.95
+assert (deflated_sharpe_ratio(sr, n, n_trials=10000, sr_std=0.14, skew=sk, kurt=ku)
+        < deflated_sharpe_ratio(sr, n, n_trials=2, sr_std=0.03, skew=sk, kurt=ku))
+m = min_track_record_length(sr, skew=sk, kurt=ku)
 assert 100 < m < 1000; ok += 1  # ~ (1.645/0.1)^2 ≈ 271 days
 
 # 9. PBO: pure-noise config family => PBO ~ 0.5 ; one truly skilled config => low PBO
