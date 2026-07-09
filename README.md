@@ -1,19 +1,38 @@
-# Quant Terminal — Screening & Trading systématique multi-actifs
+# Quant Terminal — le terminal quant qui publie ce qui **ne marche pas**
 
-*Dernière mise à jour : 2026-06-23.*
+[![CI](https://github.com/7noctis7/Screening-Trading/actions/workflows/ci.yml/badge.svg)](https://github.com/7noctis7/Screening-Trading/actions/workflows/ci.yml)
+[![Pages](https://github.com/7noctis7/Screening-Trading/actions/workflows/pages.yml/badge.svg)](https://github.com/7noctis7/Screening-Trading/actions/workflows/pages.yml)
+[![gitleaks](https://github.com/7noctis7/Screening-Trading/actions/workflows/gitleaks.yml/badge.svg)](https://github.com/7noctis7/Screening-Trading/actions/workflows/gitleaks.yml)
+![tests](https://img.shields.io/badge/tests-825%20passed-brightgreen)
+![python](https://img.shields.io/badge/python-3.11-blue)
+![licence](https://img.shields.io/badge/licence-MIT-green)
+![paper](https://img.shields.io/badge/mode-paper%20par%20défaut-orange)
 
-> 🌐📱 **EN LIGNE, GRATUIT, SUR TÉLÉPHONE, MAC ÉTEINT** : **https://7noctis7.github.io/Screening-Trading/**
-> — la PWA complète (vrai front Next.js) est reconstruite chaque jour ouvré par GitHub Actions avec des
-> **données réelles** récupérées dans le cloud (yfinance / SEC EDGAR). Aucune base privée, aucune clé.
-> Voir « [Site en ligne gratuit](#-site-en-ligne-gratuit-github-pages--pwa) » plus bas.
+> **La plupart des projets quant vendent un alpha imaginaire. Celui-ci prouve statistiquement
+> ce qui ne marche pas — et le publie.** Screening & trading systématique multi-actifs (actions,
+> ETF, forex, crypto, commodités), méthodologie niveau institutionnel (López de Prado), 100 %
+> open-source, **infra 0 €**, **paper par défaut**.
 
-Plateforme **open-source** de **screening** et de **trading systématique** (actions, ETF, forex,
-crypto, commodités, indices) de niveau institutionnel, avec un **terminal web premium** (style
-hedge-fund). Priorités : **robustesse & reproductibilité > maintenabilité > gestion du risque >
-alpha > produit**. Architecture en **plugins** (« ajouter un fichier, jamais toucher au cœur »),
-**config-driven** (YAML), **point-in-time partout** (anti-fuite du futur). **Paper trading par défaut.**
+**🌐 Démo live (Mac éteint, 0 €) :** **https://7noctis7.github.io/Screening-Trading/** — PWA Next.js
+reconstruite chaque jour ouvré par GitHub Actions sur données réelles (yfinance / SEC EDGAR).
+
+### Ce qui rend ce projet différent
+- **🔬 Gate d'honnêteté à 4 étages** — aucune stratégie n'entre en prod sans passer *placebo →
+  Deflated Sharpe → PBO/CSCV → sabotage adverse*. **8 hypothèses rejetées**, publiées dans le
+  [**Registre des échecs**](https://7noctis7.github.io/Screening-Trading/echecs) (`packages/research/`).
+- **📉 Edge honnête** : DSR≈0 assumé (pas d'alpha directionnel prouvé) — le seul edge vérifié est la
+  **réduction du drawdown (~2,6×)**. On ne vend pas de rêve : donnée absente → `n/d`, jamais inventé.
+- **🛡️ Rigueur anti-fuite** : point-in-time partout (vintages ALFRED réels, prix ajustés splits),
+  purged/embargoed CV, verrous de non-régression testés (`packages/common/pit_guard.py`).
+- **⚙️ Ingénierie** : **825 tests**, gate CI, ADRs, architecture en plugins (« 1 fichier, jamais
+  toucher au cœur »), config-driven YAML. Voir [`vault/01_ARCHITECTURE.md`](vault/01_ARCHITECTURE.md)
+  et l'**[étude de cas du Gate anti-fuite](docs/CASE_STUDY.md)**.
+- **🤖 Exécution paper réelle** : réconciliation idempotente vers Alpaca (paper), journal des trades
+  avec features figées à la décision + round-trip PnL/MFE/MAE → verdict GO/NO-GO **mécanique**
+  (`make rdv-paper`).
 
 > ⚠️ Aide à la décision — **pas un conseil en investissement**. Risque de perte en capital.
+> Priorités : **robustesse & reproductibilité > risque > alpha > produit**.
 
 ---
 
