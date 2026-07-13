@@ -59,7 +59,7 @@ duckdb==1.5.4
     # via quant-trading-system (pyproject.toml)
 fastapi==0.139.0
     # via quant-trading-system (pyproject.toml)
-filelock==3.29.5
+filelock==3.29.7
     # via huggingface-hub
 finnhub-python==2.4.29
     # via quant-trading-system (pyproject.toml)
