@@ -35,8 +35,11 @@ class MacroStore:
         self.conn.commit()
 
     def upsert(self, obs: list[MacroObservation]) -> int:
+        # Valeur non finie (NaN/inf/None) = observation inexistante → ignorée, jamais NULL
+        # en base (sqlite lie NaN comme NULL → IntegrityError). Honnêteté : on n'invente pas.
         rows = [(o.series_id, _iso(o.obs_date), o.value, _iso(o.realtime_start))
-                for o in obs]
+                for o in obs
+                if o.value is not None and o.value == o.value and abs(o.value) != float("inf")]
         self.conn.executemany(
             "INSERT OR REPLACE INTO macro_obs VALUES (?,?,?,?)", rows)
         self.conn.commit()

@@ -1885,7 +1885,9 @@ def build_snapshot(seed: int = 7) -> dict:
     screen_sec = safe_section("screen", _screen_section, data, acmap, names, sector_of, n - 1)
     now = datetime.now(timezone.utc)
     last_bar = ts_list[-1]
-    vix_now = vix[-1]
+    # dernière valeur FINIE : une barre ^VIX NaN du jour (yfinance) rendait vix_now NaN
+    # → playbook/tests cassés. NaN = pas de donnée, on sert la dernière connue.
+    vix_now = next((v for v in reversed(vix) if v == v), 0.0)
     init_cap = 10_000
     pf_value = round(equity[-1], 2)
     pf_pnl = round(pf_value - init_cap, 2)
@@ -2481,6 +2483,16 @@ def _bench_series(benches: dict, dates: list, init_cap: float) -> dict:
     """Rebasera chaque benchmark sur le capital initial, aligné sur les dates de l'equity (overlay)."""
     out = {}
     for name, px in benches.items():
+        if not px:
+            continue
+        # ffill anti-NaN (barres yfinance du jour parfois NaN) : courbe d'AFFICHAGE →
+        # dernière valeur connue ; jamais de NaN servi au front (JSON NaN-safe + tests).
+        clean, last = [], None
+        for v in px:
+            if v == v and v is not None:
+                last = v
+            clean.append(last)
+        px = [v for v in clean if v is not None]
         if not px:
             continue
         L = min(len(px), len(dates))

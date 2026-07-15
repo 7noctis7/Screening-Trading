@@ -62,7 +62,9 @@ def real_macro_store(vix_vals, vix_dates, sp_closes, sp_dates,
     c = np.asarray(sp_closes, dtype=float)
     iobs = []
     for i in range(126, len(c)):
-        if c[i - 126] <= 0:
+        # Garde anti-NaN (CI 15/07) : une barre yfinance NaN → mom NaN → sqlite lie NaN
+        # comme NULL → IntegrityError qui tuait le snapshot. Obs non finie = n'existe pas.
+        if c[i - 126] <= 0 or not np.isfinite(c[i]) or not np.isfinite(c[i - 126]):
             continue
         mom = c[i] / c[i - 126] - 1.0
         pmi = float(np.clip(50.0 + 100.0 * mom, 35.0, 65.0))   # +10 % / 6 mois → ~60 ; -10 % → ~40
