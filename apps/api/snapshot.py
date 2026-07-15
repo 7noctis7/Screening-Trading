@@ -1426,58 +1426,8 @@ def _psr_block(equity: list) -> dict:
     }
 
 
-def _prediction_section(held: list, acmap: dict, names: dict) -> dict:
-    """Marchés de prédiction (Kalshi+Polymarket) : probas macro + actifs + résultats.
-    Gate QUANT_PREDMKT=1 (réseau) → OFF par défaut (tests/offline). Best-effort."""
-    import os
-    if os.environ.get("QUANT_PREDMKT") != "1":
-        return {"available": False, "reason": "QUANT_PREDMKT!=1"}
-    try:
-        from packages.data.prediction_markets import (
-            DEBIAS_ALPHA,
-            asset_detail,
-            earnings_detail,
-            fetch_markets,
-            macro_detail,
-        )
-        recs = fetch_markets(300)
-        if not recs:
-            return {"available": False, "reason": "réseau"}
-        eq = [s for s in held if acmap.get(s) == "equity"][:25]
-        nm = {s: names.get(s, s) for s in eq}
-        return {"available": True, "n_markets": len(recs), "alpha": DEBIAS_ALPHA,
-                "macro": macro_detail(records=recs),
-                "assets": asset_detail(held[:40], records=recs),
-                "earnings": earnings_detail(eq, records=recs, names=nm)}
-    except Exception as e:  # noqa: BLE001
-        return {"available": False, "reason": str(e)}
-
-
-def _onchain_section(held: list, acmap: dict) -> dict:
-    """Fondamentaux on-chain crypto (CoinGecko + DefiLlama, sans clé).
-    Gate QUANT_ONCHAIN=1 (réseau) → OFF par défaut (tests/offline). Best-effort."""
-    import os
-    if os.environ.get("QUANT_ONCHAIN") != "1":
-        return {"available": False, "reason": "QUANT_ONCHAIN!=1"}
-    try:
-        from packages.data.crypto_onchain import COINS, onchain_metrics
-        held_root = {str(s).upper().replace("-USD", "") for s in (held or [])}
-        syms = [s for s in COINS if s in held_root] or list(COINS)
-        coins = {s: m for s, m in onchain_metrics(syms).items()
-                 if any(v is not None for v in m.values())}
-        if not coins:
-            return {"available": False, "reason": "réseau"}
-        from packages.research.crypto_report import generate
-        eth_ctx = None
-        try:
-            from packages.data.growthepie import eth_context
-            eth_ctx = eth_context()
-        except Exception:  # noqa: BLE001 - enrichissement best-effort
-            eth_ctx = None
-        return {"available": True, "coins": coins,
-                "report": generate(coins, eth_ctx)}
-    except Exception as e:  # noqa: BLE001
-        return {"available": False, "reason": str(e)}
+# Audit 07/15 (réduction 50 %) : sections prediction_markets et crypto_onchain SUPPRIMÉES —
+# aucune décision du système ne les consommait (finding siège B : décor, pas signal).
 
 
 def _crypto_cockpit_section() -> dict:
@@ -1829,7 +1779,14 @@ def build_snapshot(seed: int = 7) -> dict:
     sr = rm.get("sharpe", 0.0) / (252 ** 0.5) if rm.get("sharpe") else 0.0   # Sharpe journalier
     nobs = len(rets)
     rm["psr"] = probabilistic_sharpe_ratio(sr, nobs, sr_benchmark=0.0)
-    rm["dsr"] = deflated_sharpe_ratio(sr, nobs, n_trials=20)   # ~20 configs essayées
+    # N d'essais RÉEL depuis le ledger de recherche (≥20 : configs preset historiques) ;
+    # sr_std=None → seuil √(1/n), falsifiable (fix audit : sr_std=1.0 ≈ Sharpe 7 requis).
+    try:
+        from packages.research.ledger import deflation_params
+        _n_trials, _ = deflation_params(min_trials=20)
+    except Exception:  # noqa: BLE001
+        _n_trials = 20
+    rm["dsr"] = deflated_sharpe_ratio(sr, nobs, n_trials=_n_trials)
 
     # EVT (risque de queue extrême) + risque de LIQUIDITÉ
     from packages.portfolio.evt import evt_var_es
@@ -2387,9 +2344,6 @@ def build_snapshot(seed: int = 7) -> dict:
         },
         "screener": screener,
         "screen": screen_sec,
-        "prediction_markets": safe_section("prediction_markets", _prediction_section,
-                                           held, acmap, names),
-        "crypto_onchain": safe_section("crypto_onchain", _onchain_section, held, acmap),
         "crypto_cockpit": safe_section("crypto_cockpit", _crypto_cockpit_section),
         "ticker": safe_section("ticker", _ticker_section, data, acmap),
         "portfolio": _port_payload,

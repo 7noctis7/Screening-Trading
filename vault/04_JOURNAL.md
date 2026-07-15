@@ -1,5 +1,40 @@
 # 04 — JOURNAL
 
+## Session 2026-07-15 — Remédiation audit comité (4 critiques + P0) · ménage sections · labo Sharpe
+**Contexte.** Audit hedge-fund 5 sièges rendu (moyenne 69/100) : DSR non falsifiable, fail-safe
+d'exécution inversé, kill-switch manuel, prod pouvant mourir en vert. Demande : « corrige tout,
+supprime prediction markets + crypto onchain, améliore Sharpe/Sortino/alpha ».
+
+**Fait (tout testé, 818 tests verts).**
+- **DSR réparé (CRITIQUE #1)** : `psr.py` — `sr_std` par défaut passe de 1.0 (seuil ≈ Sharpe 7
+  annualisé, « DSR≈0 » vrai par construction) à **√(1/n)** (hypothèse H0 Bailey-LdP). Vérifié :
+  Sharpe 1,6 ann. → DSR 0.999 ; Sharpe 0 → 0.03. `ledger.deflation_params` replie sur None ;
+  snapshot déflate avec le N réel du ledger. **⚠️ re-runner les 8 hypothèses rejetées (TODO C).**
+- **Fail-safe d'exécution corrigé (CRITIQUE #2)** : `packages/execution/live_guards.py` —
+  positions/equity illisibles ⇒ broker ÉCARTÉ (inconnu ≠ zéro ; l'ancien « détenu=0 » rachetait
+  tout le portefeuille). + suppression du repli 10 000 $ en live (broker à clé morte ne trade plus).
+- **Kill-switch DD RÉEL (CRITIQUE #3)** : `dd_kill_switch` branché dans `run_live` — drawdown du
+  compte depuis le pic (equity_history) ≤ `QUANT_INTRADAY_DD` (−15 %) ⇒ exposition 0 + CRITICAL.
+- **Fail-loud (P0)** : run_live exit 3/4 si broker mort/positions KO ; cron_live.sh propage le code ;
+  paper.yml step Telegram `if: failure()` + secrets TELEGRAM_* ; **keepalive.yml** mensuel (crons
+  GitHub auto-désactivés après 60 j sans commit — condition n°1 du « NON » CTO).
+- **Courbe du RDV 06/08 sauvée (P0)** : `hf_journal.py` pousse/tire aussi `equity_history.json`.
+- **Badge « MODÉLISÉ » (P0 produit)** : nature des KPIs héros du dashboard affichée AVANT les chiffres.
+- **Mismatch T10Y2Y/T10Y3M (1 mot ×4)** : classifieur/real_macro/synthetic alignés sur T10Y3M ingéré.
+- **Ménage (réduction 50 %)** : prediction_markets + crypto_onchain supprimés PARTOUT (12 fichiers
+  supprimés dont growthepie/crypto_report orphelins ; snapshot/main/dump_static/api.ts/macro page/
+  Makefile/pages.yml nettoyés).
+- **Sharpe/Sortino/alpha (gaté, pas d'overfit)** : `_cap_weights` (déduplique 3 copies) +
+  `_adaptive_cap` corr-aware **branché sur le rail prod** (`preset_latest_weights` : cap 10 %→5 %
+  si corr moyenne > 0,60) ; params `max_weight`/`corr_tighten` dans `preset_backtest` ;
+  **`make preset-lab`** : 4 configs a priori (base/+cap/+overlay DD-vol/+les deux) mesurées puis
+  GATÉES (mieux sur Sharpe ET maxDD), essais logués au ledger. Données réelles absentes du
+  conteneur → **UNCALIBRATED ici, à runner sur le Mac (TODO A)**.
+
+**Décidé.** Aucun levier de rendement activé sans mesure : le cap adaptatif est un CONTRÔLE DE
+RISQUE (défensif, prod-only), les leviers de Sharpe attendent le verdict `preset-lab` sur données
+réelles. L'amélioration honnête du Sharpe commence par un thermomètre réparé.
+
 ## Session 2026-07-05 — Clôture P0-1/P0-2 : verrou anti-fuite + alpha réel post-fix mesuré
 **Contexte.** Reprise après limites d'usage. Demande initiale « écran suivant UI » ré-arbitrée par
 l'utilisateur en « d'abord corrige la fuite de données » (P0-1, marqué « avant toute feature »).

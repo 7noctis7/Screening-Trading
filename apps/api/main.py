@@ -194,16 +194,6 @@ def screen() -> dict:
     return _snap()["screen"]
 
 
-@app.get("/api/prediction_markets")
-def prediction_markets() -> dict:
-    return _snap()["prediction_markets"]
-
-
-@app.get("/api/crypto_onchain")
-def crypto_onchain() -> dict:
-    return _snap()["crypto_onchain"]
-
-
 @app.get("/api/crypto_cockpit")
 def crypto_cockpit() -> dict:
     return _snap().get("crypto_cockpit", {"available": False})

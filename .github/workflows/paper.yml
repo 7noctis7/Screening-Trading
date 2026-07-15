@@ -76,10 +76,30 @@ jobs:
           ALPACA_API_SECRET: ${{ secrets.ALPACA_API_SECRET }}
           QUANT_NO_CRYPTO_LIVE: "1"   # ceinture+bretelles : aucune clé Bitmart de toute façon
           QUANT_NO_LLM: "1"
+          # Alertes CRITICAL hors-bande (audit 07/15 F2) : sans ces secrets, les échecs
+          # d'ordre finissaient en ConsoleSink dans un log Actions que personne ne lit.
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        # FAIL-LOUD : run_live sort ≠ 0 si broker mort / positions illisibles → job ROUGE
+        # (l'ancien run restait vert avec une clé Alpaca invalide, pour toujours).
         run: python scripts/run_live.py --live --yes
 
-      - name: Journal → HF privé (persistance)
-        if: env.skip != '1'
+      - name: Journal + equity → HF privé (persistance, courbe du RDV 06/08)
+        if: env.skip != '1' && always()
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: python scripts/hf_journal.py push
+
+      - name: Alerte Telegram si le run est ROUGE (fail-loud hors-bande)
+        if: failure()
+        env:
+          TG: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ -n "$TG" ] && [ -n "$CHAT" ]; then
+            curl -s "https://api.telegram.org/bot${TG}/sendMessage" \
+              -d chat_id="$CHAT" \
+              -d text="🔴 Runner paper cloud EN ÉCHEC : ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >/dev/null
+          else
+            echo "::warning::Run rouge et pas de TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID — personne ne sera notifié hors GitHub."
+          fi

@@ -87,6 +87,15 @@ export default function Dashboard() {
           </button>
         ))}
       </div>
+      {/* NATURE des chiffres AVANT les chiffres (audit 07/15 F4) : les KPIs héros sont un
+          BACKTEST — sans étiquette, un visiteur les lisait comme de l'argent réel. */}
+      <div className="flex items-center gap-2 flex-wrap text-[11px]">
+        <span className="px-2 py-0.5 rounded-full uppercase tracking-[0.08em] font-semibold"
+          style={{ background: "color-mix(in srgb, var(--warn) 18%, transparent)", color: "var(--warn)" }}>
+          Modélisé
+        </span>
+        <span className="text-muted2">backtest preset ~10 ans, net de frais — pas un compte réel · le réel est sur <a href="/positions" className="text-accent">/positions</a></span>
+      </div>
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <MetricCard hero label="Rendement" value={pct(m.total_return)} tone={m.total_return >= 0 ? "pos" : "neg"} delta={dPts(m.total_return, prevStats?.total_return)} />
         <MetricCard hero label="CAGR" value={pct(m.cagr ?? 0)} tone={(m.cagr ?? 0) >= 0 ? "pos" : "neg"} delta={dPts(m.cagr, prevStats?.cagr)} />

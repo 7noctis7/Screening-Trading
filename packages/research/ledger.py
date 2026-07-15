@@ -53,12 +53,13 @@ def trial_count(path: str | Path = DEFAULT_PATH, *, facteur: str | None = None,
 
 
 def deflation_params(path: str | Path = DEFAULT_PATH,
-                     min_trials: int = 1) -> tuple[int, float]:
+                     min_trials: int = 1) -> tuple[int, float | None]:
     """(N, sr_std) pour déflater le DSR sur TOUT le programme de recherche.
 
     Faille corrigée : déflater par la grille d'un seul script sous-estime le mining.
     N = nb total d'hypothèses testées (ledger) ; sr_std = dispersion inter-essais des
-    Sharpe (mesure réelle du data-mining ; 1.0 par défaut si <2 Sharpe connus).
+    Sharpe (mesure réelle du data-mining ; None si <2 Sharpe connus → le DSR replie
+    alors sur √(1/n), falsifiable — l'ancien repli 1.0 plaçait le seuil hors d'atteinte).
     """
     recs = read_records(path)
     # N = hypothèses DISTINCTES (par `facteur`), pas le nb de relances du même script :
@@ -75,7 +76,7 @@ def deflation_params(path: str | Path = DEFAULT_PATH,
     n = max(min_trials, len(distinct) or len(recs))
     sharpes = list(by_facteur.values())
     if len(sharpes) < 2:
-        return n, 1.0
+        return n, None
     mean = sum(sharpes) / len(sharpes)
     var = sum((s - mean) ** 2 for s in sharpes) / (len(sharpes) - 1)
     return n, max(1e-6, var ** 0.5)

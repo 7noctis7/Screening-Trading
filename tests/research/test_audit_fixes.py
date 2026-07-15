@@ -21,7 +21,8 @@ def test_deflation_params(tmp_path):
     n2, _ = deflation_params(path=p)
     assert n2 == 3                        # toujours 3 hypothèses distinctes
     # ledger vide → repli propre
-    assert deflation_params(path=tmp_path / "vide.jsonl", min_trials=9) == (9, 1.0)
+    # ledger vide → sr_std=None (le DSR replie alors sur √(1/n), falsifiable — fix audit 07/15)
+    assert deflation_params(path=tmp_path / "vide.jsonl", min_trials=9) == (9, None)
 
 
 def test_min_track_record_length():

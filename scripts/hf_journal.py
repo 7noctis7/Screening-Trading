@@ -23,8 +23,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DB = ROOT / "data" / "journal.db"
+# Courbe d'equity paper (audit 07/15 F5) : sans elle, le runner éphémère perdait chaque
+# point du jour → le RDV 2026-08-06 n'aurait JAMAIS eu sa courbe. Persistée avec le journal.
+EQ = ROOT / ".cache" / "equity_history.json"
 DEFAULT_DATASET = "Noctis777/quant-journal"
 FILENAME = "journal.db"
+EQ_FILENAME = "equity_history.json"
 
 
 def _dataset() -> str:
@@ -46,17 +50,21 @@ def pull() -> int:
         print("· HF_TOKEN absent → pas de pull journal (dataset privé). "
               "Journal local inchangé.")
         return 0
-    try:
-        from huggingface_hub import hf_hub_download
-        p = hf_hub_download(repo_id=_dataset(), repo_type="dataset",
-                            filename=FILENAME, token=token)
-        DB.parent.mkdir(parents=True, exist_ok=True)
-        DB.write_bytes(Path(p).read_bytes())
-        print(f"✓ journal récupéré ({DB.stat().st_size:,} octets) ← {_dataset()}")
-        return 0
-    except Exception as e:  # noqa: BLE001 — 1er run : dataset/fichier inexistant = normal
-        print(f"· pas de journal distant ({type(e).__name__}) — départ local propre.")
-        return 0
+    from huggingface_hub import hf_hub_download
+
+    def _fetch(fname: str, dest: Path, label: str) -> None:
+        try:
+            p = hf_hub_download(repo_id=_dataset(), repo_type="dataset",
+                                filename=fname, token=token)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(Path(p).read_bytes())
+            print(f"✓ {label} récupéré ({dest.stat().st_size:,} octets) ← {_dataset()}")
+        except Exception as e:  # noqa: BLE001 — 1er run : dataset/fichier inexistant = normal
+            print(f"· pas de {label} distant ({type(e).__name__}) — départ local propre.")
+
+    _fetch(FILENAME, DB, "journal")
+    _fetch(EQ_FILENAME, EQ, "equity_history")          # courbe paper du RDV 06/08
+    return 0
 
 
 def push() -> int:
@@ -65,8 +73,8 @@ def push() -> int:
         print("· HF_TOKEN absent → journal NON persisté "
               "(le prochain run cloud repartira sans lui).")
         return 0
-    if not DB.exists():
-        print("· data/journal.db absent — rien à pousser.")
+    if not DB.exists() and not EQ.exists():
+        print("· ni journal.db ni equity_history.json — rien à pousser.")
         return 0
     try:
         from huggingface_hub import HfApi
@@ -78,10 +86,16 @@ def push() -> int:
             print(f"⛔ {_dataset()} est PUBLIC — push refusé (journal confidentiel). "
                   f"Passe le dataset en privé sur huggingface.co puis relance.")
             return 1
-        api.upload_file(path_or_fileobj=str(DB), path_in_repo=FILENAME,
-                        repo_id=_dataset(), repo_type="dataset",
-                        commit_message="journal paper (runner cloud)")
-        print(f"✓ journal poussé ({DB.stat().st_size:,} octets) → {_dataset()} (privé)")
+        if DB.exists():
+            api.upload_file(path_or_fileobj=str(DB), path_in_repo=FILENAME,
+                            repo_id=_dataset(), repo_type="dataset",
+                            commit_message="journal paper (runner cloud)")
+            print(f"✓ journal poussé ({DB.stat().st_size:,} octets) → {_dataset()} (privé)")
+        if EQ.exists():                                # courbe d'equity paper (RDV 06/08)
+            api.upload_file(path_or_fileobj=str(EQ), path_in_repo=EQ_FILENAME,
+                            repo_id=_dataset(), repo_type="dataset",
+                            commit_message="equity paper (runner cloud)")
+            print(f"✓ equity_history poussée ({EQ.stat().st_size:,} octets) → {_dataset()} (privé)")
         return 0
     except Exception as e:  # noqa: BLE001
         print(f"⚠ push journal échoué ({str(e)[:80]}) — le run n'est PAS invalidé.")

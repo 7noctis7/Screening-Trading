@@ -75,18 +75,8 @@ def _make_brokers(dry: bool):
     return alpaca, bitmart
 
 
-def _current_values(alpaca, bitmart) -> tuple[dict, dict]:
-    """Valeurs de marché détenues par broker (pour le calcul des deltas de réconciliation)."""
-    cur_alp: dict[str, float] = {}
-    cur_bit: dict[str, float] = {}
-    try:
-        if alpaca:
-            cur_alp = {p["symbol"]: float(p.get("market_value", 0) or 0) for p in alpaca.positions_detailed()}
-        if bitmart:
-            cur_bit = {p["symbol"]: float(p.get("market_value", 0) or 0) for p in bitmart.positions_detailed()}
-    except Exception as e:  # noqa: BLE001
-        print(f"⚠️  lecture des positions échouée ({str(e)[:50]}) — réconciliation prudente (détenu=0).")
-    return cur_alp, cur_bit
+# Garde-fous d'exécution (audit 07/15) : inconnu ≠ zéro, fail-loud, kill-switch DD réel.
+# Extraits dans packages/execution/live_guards.py (règle <400 l./fichier).
 
 
 def _nsym(s: str) -> str:
@@ -260,37 +250,54 @@ def _sync_obsidian() -> None:
         pass
 
 
+def _decision_snapshot() -> dict:
+    """Snapshot de DÉCISION en mode LÉGER : la réconciliation n'a besoin que des poids
+    cibles + régime + prix. On coupe les sections réseau lentes (fondamentaux, news, ML…)
+    → le build passe de plusieurs minutes (souvent interrompu) à quelques secondes.
+    Forçable en complet avec QUANT_LIVE_LITE=0 (ex. debug)."""
+    import os
+    os.environ.setdefault("QUANT_LIVE_LITE", "1")
+    if os.environ["QUANT_LIVE_LITE"] == "1":
+        print("Snapshot : mode léger (sections réseau non essentielles coupées pour l'exécution).")
+    from apps.api.snapshot import build_snapshot
+    return build_snapshot()                                # DÉCISION unique (features figées ici)
+
+
+def _prepare_brokers(dry: bool, cli_equity: float | None, alert_engine):
+    """Brokers vétés + positions lues (inconnu ⇒ broker écarté). Cf. live_guards."""
+    from packages.execution.live_guards import current_values, fail_loud, vet_brokers
+    alpaca, bitmart = _make_brokers(dry)
+    alpaca, bitmart, alp_cap, bit_cap, fatal = vet_brokers(alpaca, bitmart, dry, cli_equity)
+    print(f"Réplication · capital Alpaca {alp_cap:,.0f} $ · Bitmart {bit_cap:,.0f} $ · "
+          f"mode {'DRY-RUN (aucun ordre)' if dry else 'LIVE (paper)'}")
+    print(f"  {'SENS':4s} {'ACTIF':14s} {'BROKER':8s} {'POIDS':>7s} {'MONTANT':>10s}  statut")
+    cur_alp, cur_bit = current_values(alpaca, bitmart) if not dry else ({}, {})
+    if cur_alp is None:                                        # inconnu ≠ zéro : broker écarté
+        fatal.append("lecture positions Alpaca échouée → broker écarté (0 ordre)")
+        alpaca, cur_alp = None, {}
+    if cur_bit is None:
+        fatal.append("lecture positions Bitmart échouée → broker écarté (0 ordre)")
+        bitmart, cur_bit = None, {}
+    if not dry and alpaca is None and bitmart is None:
+        fail_loud(fatal or ["aucun broker actif en mode LIVE"], alert_engine, code=3)
+    return alpaca, bitmart, alp_cap, bit_cap, cur_alp, cur_bit, fatal
+
+
 def main() -> None:
     a = _parse_args()
     if a.live and not a.yes:
         print("⚠️  --live exige --yes (confirmation explicite). Abandon."); return
     dry = not (a.live and a.yes)
-
-    # Snapshot de DÉCISION en mode LÉGER : la réconciliation n'a besoin que des poids
-    # cibles + régime + prix. On coupe les sections réseau lentes (fondamentaux, news, ML…)
-    # → le build passe de plusieurs minutes (souvent interrompu) à quelques secondes.
-    # Forçable en complet avec QUANT_LIVE_LITE=0 (ex. debug).
-    import os
-    os.environ.setdefault("QUANT_LIVE_LITE", "1")
-    if os.environ["QUANT_LIVE_LITE"] == "1":
-        print("Snapshot : mode léger (sections réseau non essentielles coupées pour l'exécution).")
-
-    from apps.api.snapshot import build_snapshot
-    snap = build_snapshot()                                # DÉCISION unique (features figées ici)
+    snap = _decision_snapshot()
     targets = snap["live"]["target_orders"]                # poids cibles (% du portefeuille)
 
+    from packages.execution.live_guards import dd_kill_switch, fail_loud
     bus, alert_engine = _setup_alerts(dry)
     reduce = _kill_switch(bus)
-    alpaca, bitmart = _make_brokers(dry)
-
-    # CAPITAL PAR COMPTE (comptes distincts) : actions ← Alpaca, crypto ← Bitmart.
-    alp_cap = (alpaca.equity() if (alpaca and not dry) else 0.0) or a.equity or 10_000.0
-    bit_cap = (bitmart.equity() if (bitmart and not dry) else 0.0) or 0.0
-    print(f"Réplication · capital Alpaca {alp_cap:,.0f} $ · Bitmart {bit_cap:,.0f} $ · "
-          f"mode {'DRY-RUN (aucun ordre)' if dry else 'LIVE (paper)'}")
-    print(f"  {'SENS':4s} {'ACTIF':14s} {'BROKER':8s} {'POIDS':>7s} {'MONTANT':>10s}  statut")
-
-    cur_alp, cur_bit = _current_values(alpaca, bitmart) if not dry else ({}, {})
+    alpaca, bitmart, alp_cap, bit_cap, cur_alp, cur_bit, fatal = \
+        _prepare_brokers(dry, a.equity, alert_engine)
+    if not dry:                                                # kill-switch DRAWDOWN RÉEL (pas que TV)
+        reduce = min(reduce, dd_kill_switch(alp_cap + bit_cap, bus, alert_engine))
     if reduce <= 0.0:                                          # kill-switch total : on n'envoie rien
         for o in targets:
             print(f"  {o['side'].upper():4s} {o.get('broker_symbol', o['symbol']):14s} "
@@ -308,6 +315,8 @@ def main() -> None:
         _journal_sells(snap, sold, alpaca, bitmart)
         _record_equity(alp_cap, bit_cap)
     _sync_obsidian()
+    if fatal:                                        # après journal/equity : rien n'est perdu, mais le run est ROUGE
+        fail_loud(fatal, alert_engine, code=4)
 
 
 def _record_equity(alp_cap: float, bit_cap: float) -> None:

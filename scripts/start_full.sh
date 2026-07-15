@@ -24,7 +24,6 @@ export QUANT_NO_LLM=1                                  # pas d'appel LLM pendant
 # Sources crypto/marchés GRATUITES (sans clé) — ON par défaut en local comme en CI ;
 # mettre QUANT_CRYPTO=0 etc. pour les couper (ex. hors-ligne). Best-effort : n/d si injoignable.
 export QUANT_CRYPTO="${QUANT_CRYPTO:-1}"               # cockpit crypto (/crypto)
-export QUANT_ONCHAIN="${QUANT_ONCHAIN:-1}"             # fondamentaux on-chain (/macro)
 export QUANT_PREDMKT="${QUANT_PREDMKT:-1}"             # marchés de prédiction (/macro)
 export QUANT_NEWS="${QUANT_NEWS:-1}"                   # news RSS gratuites (/sentiment)
 

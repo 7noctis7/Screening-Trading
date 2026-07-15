@@ -32,7 +32,13 @@ fi
 
 echo "[$(date '+%F %T')] rebalancement paper — début"
 $PY scripts/ingest_prices.py --daily || true       # prix frais (best-effort)
-$PY scripts/run_live.py --live --yes                # Alpaca paper ; Bitmart neutralisé
+# FAIL-LOUD (audit 07/15) : l'échec de run_live est PROPAGÉ (l'ancien script sortait
+# toujours 0 → launchd/Actions ne voyaient jamais une prod morte).
+rc=0
+$PY scripts/run_live.py --live --yes || rc=$?       # Alpaca paper ; Bitmart neutralisé
 # Miroir Notion (audit 05/07) : best-effort, uniquement si NOTION_TOKEN présent dans .env.
 $PY scripts/notion_sync.py >/dev/null 2>&1 || true
+if [ "$rc" -ne 0 ]; then
+  echo "[$(date '+%F %T')] rebalancement paper — ÉCHEC (code $rc)"; exit "$rc"
+fi
 echo "[$(date '+%F %T')] rebalancement paper — fin"

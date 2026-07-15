@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 # Les sections NÉCESSAIRES au live (screen, ticker via prix, honesty…) ne sont PAS ici.
 _LITE_SKIP = frozenset({
     "fundamentals", "investors", "conviction", "sentiment", "ml", "themes",
-    "prediction_markets", "crypto_onchain", "crypto_cockpit", "events", "analytics",
+    "crypto_cockpit", "events", "analytics",
 })
 
 
