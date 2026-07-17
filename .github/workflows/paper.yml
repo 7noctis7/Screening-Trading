@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Gate secrets (sortie propre si non configuré)
         env:
@@ -44,7 +44,7 @@ jobs:
 
       - name: Setup Python
         if: env.skip != '1'
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
