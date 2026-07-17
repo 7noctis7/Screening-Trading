@@ -1,5 +1,25 @@
 # 04 — JOURNAL
 
+## Session 2026-07-17 — Dashboard qualité des trades + simulateur Monte Carlo navigateur
+**Contexte.** Demande : tuiles KPI façon terminal (trades, win rate, profit factor, gains/pertes)
++ simulation Monte Carlo interactive, inspirées de captures d'un autre outil.
+
+**Fait (tsc + next build verts).**
+- `components/DashboardStrips.tsx` : `TradeStatsRow` (count, win rate, profit factor, gain/perte
+  moyens, meilleur/pire — depuis `trade_stats` déjà calculé, étiqueté « backtest ») + `HonestyStrip`
+  extrait (page dashboard repassée sous 400 l.).
+- `components/McFan.tsx` : fan chart réutilisable (bandes p5–p95/p25–p75 en UNE teinte accent,
+  médiane 2 px, labels directs des finals, crosshair+tooltip, ligne capital de départ).
+- `components/Simulator.tsx` sur `/risk` : Monte Carlo **100 % navigateur** (marche sur le site
+  statique, zéro endpoint) — bootstrap par BLOCS 10 j (préserve le clustering de vol ; mode iid
+  affiché comme « naïf ») des rendements passés (backtest preset, ou courbe réelle si ≥60 j),
+  contrôles horizon/itérations/capital/frais/seed, sorties médiane/p5/p95, proba de perte, proba
+  de ruine (−50 %), DD médian/p95. Note d'honnêteté : distribution conditionnelle au passé, PAS
+  une prédiction.
+
+**Décidé.** Pas de simulateur côté API : le client-side est la seule voie compatible GitHub Pages
+0 € — et le backend `mc_projection` existant reste la référence reproductible (seed fixe).
+
 ## Session 2026-07-15 — Remédiation audit comité (4 critiques + P0) · ménage sections · labo Sharpe
 **Contexte.** Audit hedge-fund 5 sièges rendu (moyenne 69/100) : DSR non falsifiable, fail-safe
 d'exécution inversé, kill-switch manuel, prod pouvant mourir en vert. Demande : « corrige tout,
