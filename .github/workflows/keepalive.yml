@@ -1,0 +1,29 @@
+name: Keepalive (les crons GitHub meurent après 60 j d'inactivité)
+
+# GitHub DÉSACTIVE tous les workflows `schedule` d'un repo sans commit depuis 60 jours
+# → la prod 0 € (paper.yml + pages.yml) mourrait TOTALEMENT et EN SILENCE (audit 07/15,
+# siège CTO, condition n°1 du verdict « 2 ans sans intervention : NON »).
+# Ce job commite un timestamp une fois par mois → le repo reste « actif », les crons vivent.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 9 1 * *"   # le 1er de chaque mois, 09:17 UTC (créneau creux)
+
+permissions:
+  contents: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Commit keepalive (timestamp, aucun code touché)
+        run: |
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > .github/.keepalive
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/.keepalive
+          git commit -m "chore: keepalive mensuel (garde les crons Actions actifs)" || exit 0
+          git push

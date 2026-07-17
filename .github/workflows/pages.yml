@@ -108,7 +108,6 @@ jobs:
           QUANT_FUND: "yf"
           QUANT_NEWS: "1"          # news RSS gratuites (sans clé) → page Sentiment & news alimentée
           QUANT_PREDMKT: "1"        # marchés de prédiction (Kalshi/Polymarket, sans clé) en ligne
-          QUANT_ONCHAIN: "1"        # fondamentaux on-chain crypto (CoinGecko/DefiLlama, sans clé)
           QUANT_CRYPTO: "1"         # cockpit crypto marché (CoinGecko/DefiLlama/F&G, sans clé)
         run: python scripts/build_static_site.py
 

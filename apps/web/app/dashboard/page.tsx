@@ -9,6 +9,7 @@ import { SentimentBanner } from "@/components/SentimentBanner";
 import { EquityChart } from "@/components/EquityChart";
 import { PerformancePanel } from "@/components/PerformancePanel";
 import { PositionsAlertsTable } from "@/components/PositionsAlertsTable";
+import { HonestyStrip, TradeStatsRow } from "@/components/DashboardStrips";
 import { TechnicalChart } from "@/components/TechnicalChart";
 import { PageSkeleton } from "@/components/ui";
 import { statsFrom, rebase } from "@/lib/metrics";
@@ -87,6 +88,15 @@ export default function Dashboard() {
           </button>
         ))}
       </div>
+      {/* NATURE des chiffres AVANT les chiffres (audit 07/15 F4) : les KPIs héros sont un
+          BACKTEST — sans étiquette, un visiteur les lisait comme de l'argent réel. */}
+      <div className="flex items-center gap-2 flex-wrap text-[11px]">
+        <span className="px-2 py-0.5 rounded-full uppercase tracking-[0.08em] font-semibold"
+          style={{ background: "color-mix(in srgb, var(--warn) 18%, transparent)", color: "var(--warn)" }}>
+          Modélisé
+        </span>
+        <span className="text-muted2">backtest preset ~10 ans, net de frais — pas un compte réel · le réel est sur <a href="/positions" className="text-accent">/positions</a></span>
+      </div>
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <MetricCard hero label="Rendement" value={pct(m.total_return)} tone={m.total_return >= 0 ? "pos" : "neg"} delta={dPts(m.total_return, prevStats?.total_return)} />
         <MetricCard hero label="CAGR" value={pct(m.cagr ?? 0)} tone={(m.cagr ?? 0) >= 0 ? "pos" : "neg"} delta={dPts(m.cagr, prevStats?.cagr)} />
@@ -95,20 +105,8 @@ export default function Dashboard() {
         <MetricCard hero label="Max DD" value={pct(m.max_drawdown)} tone="neg" delta={dPts(m.max_drawdown, prevStats?.max_drawdown)} />
       </div>
 
-      {/* Honnêteté statistique (manifeste) : PSR affiché, DSR multi-essais ≈ 0 assumé. */}
-      {d.honesty?.available && (
-        <div className="card p-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs" title={d.honesty.note}>
-          <span className="px-2 py-0.5 rounded-full text-[10px] uppercase tracking-[0.08em] font-semibold"
-            style={{ background: "color-mix(in srgb, var(--accent) 18%, transparent)", color: "var(--accent2)" }}>
-            Honnêteté
-          </span>
-          <span className="mono">PSR <b className="text-fg">{Math.round((d.honesty.psr ?? 0) * 100)}%</b>{" "}
-            <span className="text-muted2">P(Sharpe&gt;0)</span></span>
-          <span className="mono text-muted">Sharpe ann. {d.honesty.sharpe_annualized}</span>
-          <span className="mono text-muted">n={d.honesty.n_obs}</span>
-          <span className="text-muted2 basis-full md:basis-auto md:flex-1 md:min-w-0">{d.honesty.note}</span>
-        </div>
-      )}
+      <TradeStatsRow ts={d.trade_stats} />
+      <HonestyStrip honesty={d.honesty} />
 
       <PerformancePanel equity={chartEquity} benchmarks={chartBench} />
       <PositionsAlertsTable positions={d.real_positions} alerts={d.earnings_risk} />

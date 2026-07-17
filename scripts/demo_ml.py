@@ -43,7 +43,7 @@ def main() -> int:
     entries = list(range(250, len(bars) - 25, 3))
     labels = triple_barrier(close, entries, pt=2, sl=2, vol=ewm_volatility(close), horizon=20)
     y = meta_labels(labels, side=1)
-    X, names = FeatureBuilder(fs, ms, macro_series=("T10Y2Y", "ISM", "VIXCLS")).build(
+    X, names = FeatureBuilder(fs, ms, macro_series=("T10Y3M", "ISM", "VIXCLS")).build(
         "AAPL", "1d", [ts[e] for e in entries])
     t0 = np.array(entries)
     t1 = np.array([lab.exit_idx for lab in labels])

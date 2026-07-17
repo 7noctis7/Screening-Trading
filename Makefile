@@ -1,4 +1,4 @@
-.PHONY: install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto ingest-mktcap preset-report calibrate-preset screen repro kill-check log-alpha sync-alphas event-study event-study-smid backtest-pead-smid funding-study risk-check sensitivity paper-watch vault-lint crypto-onchain crypto-cockpit crypto-brief regime-study breakout-study microstructure-poc vault-ask crypto-screen onchain-study screen-niche list-db live live-go live-cron-install live-cron-uninstall verify-journal rdv-paper slippage alerts-test ingest-macro bitmart-check clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull journal-pull journal-push notion-sync contracts supabase-kpis
+.PHONY: install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto ingest-mktcap preset-report calibrate-preset preset-lab screen repro kill-check log-alpha sync-alphas event-study event-study-smid backtest-pead-smid funding-study risk-check sensitivity paper-watch vault-lint crypto-cockpit crypto-brief regime-study breakout-study microstructure-poc vault-ask crypto-screen screen-niche list-db live live-go live-cron-install live-cron-uninstall verify-journal rdv-paper slippage alerts-test ingest-macro bitmart-check clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull journal-pull journal-push notion-sync contracts supabase-kpis
 # PYTHON : utilise AUTOMATIQUEMENT le venv s'il existe (.venv/bin/python), sinon python3 système.
 # Évite le piège « No module named numpy » quand le venv n'est pas activé. Surchargeable.
 TICKER ?= AAPL
@@ -77,6 +77,8 @@ preset-report:       ## rapport HTML autonome du backtest preset (courbes + draw
 	$(PYTHON) scripts/export_preset_report.py
 calibrate-preset:    ## calibre le preset (DD × top-K × bande) par Sharpe déflaté (anti-overfit)
 	$(PYTHON) scripts/calibrate_preset.py
+preset-lab:          ## labo Sharpe/Sortino : cap adaptatif + overlay risque, mesurés puis gatés
+	$(PYTHON) scripts/preset_lab.py
 screen:              ## screener à filtres (config/screening.yaml) → candidats triés par z-score
 	$(PYTHON) scripts/run_screen.py
 repro:               ## manifeste de reproductibilité (git sha + config/data hash + env) → out/repro.json
@@ -104,8 +106,6 @@ paper-watch:         ## watchdog dérive paper vs backtest (cron nocturne) — e
 	$(PYTHON) scripts/paper_watch.py $(ARGS)
 vault-lint:          ## intégrité du vault (liens morts, orphelins, ADR en double)
 	$(PYTHON) scripts/vault_lint.py $(ARGS)
-crypto-onchain:      ## fondamentaux on-chain (CoinGecko + DefiLlama, sans clé) — table 8 cryptos
-	$(PYTHON) scripts/crypto_onchain_cli.py $(ARGS)
 crypto-cockpit:      ## cockpit crypto marché (cap, dominance, F&G, TVL, narratifs, movers)
 	$(PYTHON) scripts/crypto_cockpit_cli.py $(ARGS)
 crypto-brief:        ## note de marché crypto → Obsidian (vault/11_Crypto), contexte
@@ -120,8 +120,6 @@ breakout-study:      ## les cassures de canal BTC prédisent-elles un rendement 
 	$(PYTHON) scripts/breakout_study_cli.py $(ARGS)
 microstructure-poc:  ## POC OFI + vPIN crypto en direct (Binance, sans clé) — collecteur Mac
 	$(PYTHON) scripts/microstructure_poc.py --sym $(or $(SYM),BTCUSDT)
-onchain-study:       ## le TVL/MCap prédit-il les rendements crypto ? event-study + placebo
-	$(PYTHON) scripts/onchain_study_cli.py $(ARGS)
 screen-niche:        ## audit d'exploitabilité d'un univers/niche (score 0-100) avant de s'engager
 	$(PYTHON) scripts/screen_niche.py
 list-db:             ## liste ce que contient YAHOO.db (classes/secteurs) → pour bâtir une vraie niche

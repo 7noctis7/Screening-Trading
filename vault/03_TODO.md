@@ -3,6 +3,22 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+## 🌙 CE SOIR SUR LE MAC — 2026-07-15 (post-remédiation audit comité, ~10 min)
+- [ ] **A. Labo Sharpe/Sortino (données réelles requises — l'agent cloud n'a pas la DB)** :
+  ```bash
+  qt && git fetch origin && git reset --hard origin/main
+  make preset-lab      # cap adaptatif corr + overlay DD/vol, mesurés puis GATÉS (ledger)
+  ```
+  → si un levier est ✅ CANDIDAT : me demander la PR d'activation AVEC ces chiffres.
+- [ ] **B. Secrets alerting hors-bande (fail-loud, audit F2)** : repo → Settings → Secrets →
+      Actions → New : `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` (bot via @BotFather, 2 min).
+      Sans eux, un run rouge ne notifie que dans l'onglet Actions.
+- [ ] **C. Re-runner les 8 hypothèses rejetées avec le DSR RÉPARÉ** (le seuil n'est plus
+      Sharpe≈7 ; certaines peuvent changer de verdict — dans les 2 sens) :
+  ```bash
+  make vault-sync      # recalcul + notes ; publier tout changement sur /echecs
+  ```
+
 ## 🌙 CE SOIR SUR LE MAC — 2026-07-06 (post-audit 3 volets, ~10 min)
 > Les 4 gestes que l'agent ne peut pas faire à ta place (token Notion local, proxy git, clics GitHub).
 - [ ] **1. Resynchroniser le repo local** (récupère #299 : remédiation audit + constraints) :

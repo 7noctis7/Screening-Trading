@@ -10,8 +10,9 @@ def _snap():
 
 def test_snapshot_keys_and_json():
     snap = _snap()
-    assert set(snap) == {"meta", "dashboard", "screener", "screen", "prediction_markets",
-                         "crypto_onchain", "crypto_cockpit", "ticker", "portfolio", "trades",
+    # prediction_markets / crypto_onchain SUPPRIMÉS (audit 07/15 : aucune décision ne les lisait)
+    assert set(snap) == {"meta", "dashboard", "screener", "screen",
+                         "crypto_cockpit", "ticker", "portfolio", "trades",
                          "open_trades", "trade_stats", "universe", "data", "themes", "ml",
                          "sentiment", "fundamentals", "investors", "conviction", "live",
                          "preset_trades", "index_core_curves", "preset_ledger"}
@@ -19,10 +20,6 @@ def test_snapshot_keys_and_json():
     scr = snap["screen"]
     assert scr["available"] and scr["universe_size"] > 0 and isinstance(scr["rows"], list)
     assert scr["filters"] and scr["weights"]
-    # prediction-markets : présent, gaté OFF par défaut (pas de réseau en test)
-    assert snap["prediction_markets"]["available"] is False
-    # on-chain crypto : présent, gaté OFF par défaut (QUANT_ONCHAIN!=1)
-    assert snap["crypto_onchain"]["available"] is False
     # cockpit crypto : présent, gaté OFF par défaut (QUANT_CRYPTO!=1)
     assert snap["crypto_cockpit"]["available"] is False
     # cœur(s) indiciel(s) + satellite : bloc présent sur le dashboard

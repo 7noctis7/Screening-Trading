@@ -108,7 +108,7 @@ def full_gate(closes, win: int = 60, k: float = 2.0, post: int = 5,
         from packages.research.ledger import deflation_params
         n_trials, sr_std = deflation_params(min_trials=len(grid))
     except Exception:  # noqa: BLE001
-        n_trials, sr_std = len(grid), 1.0
+        n_trials, sr_std = len(grid), None      # None → √(1/n), falsifiable (fix audit 07/15)
     dsr = deflated_sharpe_ratio(sharpe, ret.size, n_trials=n_trials, sr_std=sr_std)
     sab = sabotage_verdict(ret)
     verdict = promotion_verdict(dsr=dsr, pbo=pbo.get("pbo"),

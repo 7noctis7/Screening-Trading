@@ -90,10 +90,19 @@ def min_track_record_length(sharpe: float, sr_benchmark: float = 0.0,
 
 def deflated_sharpe_ratio(sharpe: float, n: int, n_trials: int,
                           skew: float = 0.0, kurt: float = 3.0,
-                          sr_std: float = 1.0) -> float:
-    """DSR : PSR avec seuil relevé pour `n_trials` essais (Bailey & López de Prado)."""
+                          sr_std: float | None = None) -> float:
+    """DSR : PSR avec seuil relevé pour `n_trials` essais (Bailey & López de Prado).
+
+    `sr_std` = dispersion des Sharpe (MÊME périodicité que `sharpe`) entre essais.
+    Si None : √(1/n), l'écart-type de l'estimateur de Sharpe sous H0 pour des essais
+    de longueur n (hypothèse Bailey-LdP). Audit 07/15 : l'ancien défaut 1.0 (par
+    période) plaçait le seuil à un Sharpe annualisé ≈ 7 → « DSR≈0 » était vrai par
+    construction, donc NON falsifiable. Avec √(1/n), le seuil redevient informatif
+    (ex. n=2500, 20 essais → seuil ≈ 0.75 annualisé)."""
     if n_trials < 1 or n < 2:
         return 0.0
+    if sr_std is None:
+        sr_std = math.sqrt(1.0 / n)
     e = 0.5772156649                                  # Euler-Mascheroni
     # seuil de Sharpe attendu sous H0 par le maximum de n_trials essais
     z1 = _norm_ppf(1 - 1.0 / n_trials)

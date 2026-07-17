@@ -1,7 +1,9 @@
 """Classifieur de cycle MACRO (nowcasting) — point-in-time via MacroStore.
 
 Combine des signaux macro lus tels que connus à `t` :
-- courbe des taux 2s10s (T10Y2Y) : inversion = signal de récession ;
+- courbe des taux 10a−3m (T10Y3M) : inversion = signal de récession (fix audit 07/15 :
+  le classifieur lisait T10Y2Y alors que l'ingestion ALFRED écrit T10Y3M → la série
+  point-in-time persistée n'était JAMAIS consommée) ;
 - activité (ISM/PMI) : < 50 = contraction ;
 - emploi (UNRATE) : tendance haussière du chômage = ralentissement ;
 - VIX : stress de marché → risk-off.
@@ -21,7 +23,7 @@ from packages.storage.macro_store import MacroStore
 class MacroRegimeClassifier:
     name = "macro_nowcast_v1"
 
-    def __init__(self, store: MacroStore, curve_id: str = "T10Y2Y",
+    def __init__(self, store: MacroStore, curve_id: str = "T10Y3M",
                  activity_id: str = "ISM", unrate_id: str = "UNRATE",
                  vix_id: str = "VIXCLS", high_vix: float = 25.0) -> None:
         self.store = store

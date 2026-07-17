@@ -2,6 +2,7 @@
 import { StepBanner } from "@/components/Pipeline";
 import { usePortfolio, useMeta } from "@/lib/api";
 import { PageSkeleton } from "@/components/ui";
+import { Simulator } from "@/components/Simulator";
 
 const pct = (x?: number) => `${((x ?? 0) * 100).toFixed(1)}%`;
 
@@ -104,6 +105,8 @@ export default function Risk() {
         )}
         <p className="text-muted2 text-xs mt-2">EVT = théorie des valeurs extrêmes (Peaks-Over-Threshold + GPD) pour le risque de queue ; liquidité estimée via l'ADV (participation 10 %).</p>
       </section>
+
+      <Simulator />
 
       {rm.vol_managed?.available && (
         <section className="card p-4 overflow-x-auto">

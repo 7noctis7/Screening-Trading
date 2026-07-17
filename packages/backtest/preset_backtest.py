@@ -84,6 +84,41 @@ def _breadth(A: np.ndarray, t: int) -> float:
     return float(np.mean(above)) if above else 1.0
 
 
+def _cap_weights(w: np.ndarray, max_weight: float) -> np.ndarray:
+    """Plafond de concentration itéré : aucune position > max_weight, excès redistribué
+    au prorata des positions libres, puis renormalisation (gross conservé).
+    Extrait (audit 07/15) : cette boucle vivait en 3 copies divergentes."""
+    for _ in range(3):
+        over = w > max_weight
+        if not over.any():
+            break
+        excess = (w[over] - max_weight).sum()
+        w[over] = max_weight
+        free = ~over & (w > 0)
+        if free.any():
+            w[free] += excess * w[free] / w[free].sum()
+        else:
+            break
+    s = w.sum()
+    return w / s if s > 0 else w
+
+
+def _adaptive_cap(cov: np.ndarray, max_weight: float, corr_tighten: bool,
+                  stress_corr: float = 0.60, tighten: float = 0.5,
+                  floor: float = 0.05) -> float:
+    """Plafond par nom RESSERRÉ quand la corrélation moyenne de l'univers monte
+    (diversification qui s'effondre → le portefeuille devient un pseudo-indice).
+    Branche `correlation_aware_caps` (packages/risk/limits) sur le RAIL DE PROD —
+    audit 07/15 : « la sophistication était de l'étagère »."""
+    if not corr_tighten or cov.shape[0] < 3:
+        return max_weight
+    d = np.sqrt(np.clip(np.diag(cov), 1e-12, None))
+    corr = cov / np.outer(d, d)
+    n = corr.shape[0]
+    avg = float((corr.sum() - n) / (n * (n - 1)))
+    return max(floor, round(max_weight * tighten, 4)) if avg > stress_corr else max_weight
+
+
 def _price_universe(data: dict, syms: list, lookback: int, top_k: int) -> list:
     """#2 ANTI-FUITE (partagé) : univers = top-K par MOMENTUM prix-only mesuré au DÉBUT de la
     fenêtre commune (aucune info future ; on n'applique JAMAIS le score qualité du JOUR à des dates
@@ -107,7 +142,8 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
                     mom_tilt: bool = True, legacy_quality_universe: bool = False,
                     breadth_gate: bool = True, risk_overlay: bool = False,
                     ro_dd_soft: float = -0.08, ro_dd_hard: float = -0.20,
-                    ewma_lam: float = 0.94) -> dict:
+                    ewma_lam: float = 0.94, max_weight: float | None = None,
+                    corr_tighten: bool = False) -> dict:
     syms = [s for s, b in data.items() if b and len(b) > lookback + 2 * step]
     if len(syms) < 5:
         return {"available": False}
@@ -156,6 +192,8 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
         w = w / ssum if ssum > 0 else w
         if mom_tilt:                                            # #4 incline vers les leaders (momentum)
             w = _mom_tilt(A, t, w)
+        if max_weight:                                          # plafond (adaptatif si corr_tighten)
+            w = _cap_weights(w, _adaptive_cap(cov, max_weight, corr_tighten))
         pv = float(np.sqrt(max(0.0, w @ cov @ w)))              # DD-target : exposition pilotée par la vol
         gross = 0.0 if pv <= 0 else min(1.0, tgt_vol / pv)
         if regime_gate:                                         # #5 régime + #6 frein DD (≤ 1, jamais de levier)
@@ -219,7 +257,8 @@ def preset_latest_weights(data: dict, quality: dict | None = None, asset_classes
                           top_k: int = 30, k_dd: float = 1.6, blackout_move: float = 0.12,
                           max_weight: float = 0.10, min_names: int = 12,
                           regime_gate: bool = True, mom_tilt: bool = True,
-                          breadth_gate: bool = True, min_weight: float = 0.025) -> dict:
+                          breadth_gate: bool = True, min_weight: float = 0.025,
+                          corr_tighten: bool = True) -> dict:
     """Poids cibles ACTUELS du preset (dernière barre) — pilote la PRODUCTION (make live).
 
     Même logique que le backtest (qualité top-K -> risk-parity ERC -> DD-target -> blackout), mais
@@ -252,20 +291,9 @@ def preset_latest_weights(data: dict, quality: dict | None = None, asset_classes
     w = w / ssum if ssum > 0 else w
     if mom_tilt:                                                # #4 tilt momentum (avant le plafond)
         w = _mom_tilt(A, t, w)
-    # PLAFOND DE CONCENTRATION : aucune position > max_weight (anti-sur-concentration), itéré
-    for _ in range(3):
-        over = w > max_weight
-        if not over.any():
-            break
-        excess = (w[over] - max_weight).sum()
-        w[over] = max_weight
-        free = ~over & (w > 0)
-        if free.any():
-            w[free] += excess * w[free] / w[free].sum()
-        else:
-            break
-    s2 = w.sum()
-    w = w / s2 if s2 > 0 else w
+    # PLAFOND DE CONCENTRATION (rail prod) : resserré ×0,5 si la corrélation moyenne de
+    # l'univers dépasse 0,60 (diversification en breakdown → plus de noms imposés).
+    w = _cap_weights(w, _adaptive_cap(cov, max_weight, corr_tighten))
     tgt_vol = max(0.0, abs(dd_target)) / k_dd
     pv = float(np.sqrt(max(0.0, w @ cov @ w)))
     gross = 0.0 if pv <= 0 else min(1.0, tgt_vol / pv)
@@ -336,17 +364,7 @@ def preset_equity_daily(data: dict, quality: dict | None = None, asset_classes: 
                 if int((nw_bl > 0).sum()) >= min_names:
                     nw = nw_bl
                 s1 = nw.sum(); nw = nw / s1 if s1 > 0 else nw
-                for _ in range(3):
-                    over = nw > max_weight
-                    if not over.any():
-                        break
-                    exc = (nw[over] - max_weight).sum(); nw[over] = max_weight
-                    free = ~over & (nw > 0)
-                    if free.any():
-                        nw[free] += exc * nw[free] / nw[free].sum()
-                    else:
-                        break
-                s2 = nw.sum(); nw = nw / s2 if s2 > 0 else nw
+                nw = _cap_weights(nw, max_weight)
                 pv = float(np.sqrt(max(0.0, nw @ cov @ nw)))
                 gross = 0.0 if pv <= 0 else min(1.0, tgt_vol / pv)
                 nw = nw * gross
@@ -374,17 +392,7 @@ def _weights_at(A, rets, t, lookback, blackout_move, max_weight, min_names, tgt_
     if int((w_bl > 0).sum()) >= min_names:
         w = w_bl
     s1 = w.sum(); w = w / s1 if s1 > 0 else w
-    for _ in range(3):
-        over = w > max_weight
-        if not over.any():
-            break
-        exc = (w[over] - max_weight).sum(); w[over] = max_weight
-        free = ~over & (w > 0)
-        if free.any():
-            w[free] += exc * w[free] / w[free].sum()
-        else:
-            break
-    s2 = w.sum(); w = w / s2 if s2 > 0 else w
+    w = _cap_weights(w, max_weight)
     pv = float(np.sqrt(max(0.0, w @ cov @ w)))
     gross = 0.0 if pv <= 0 else min(1.0, tgt_vol / pv)
     return w * gross

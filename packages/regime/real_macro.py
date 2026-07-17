@@ -5,7 +5,8 @@ Sources (toutes gratuites) :
 - **VIXCLS**  ← VIX réel (^VIX) déjà chargé dans le snapshot ;
 - **ISM**     ← proxy d'activité dérivé de la **tendance S&P 500** (momentum 6 mois mappé
                autour de 50 : marché qui monte = expansion, qui baisse = contraction) ;
-- **T10Y2Y** et **UNRATE** ← **FRED** point-in-time (vintages ALFRED) si `FRED_API_KEY`.
+- **T10Y3M** et **UNRATE** ← **FRED** point-in-time (vintages ALFRED) si `FRED_API_KEY`
+  (T10Y3M = même série que `make ingest-macro` — fix audit 07/15 du mismatch T10Y2Y).
 
 Le classifieur (`MacroRegimeClassifier`) lit ces IDs. Tout est dégradable : sans clé FRED on
 garde VIX + tendance S&P (déjà bien meilleur que le synthétique) ; sans rien → l'appelant
@@ -80,7 +81,7 @@ def real_macro_store(vix_vals, vix_dates, sp_closes, sp_dates,
         try:
             from packages.regime.fred_provider import FredProvider
             fp = FredProvider(fred_key)
-            for sid in ("T10Y2Y", "UNRATE"):
+            for sid in ("T10Y3M", "UNRATE"):
                 try:
                     obs = fp.fetch(sid, vintages=True)
                     if obs:
