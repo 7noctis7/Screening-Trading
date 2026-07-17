@@ -23,8 +23,9 @@ function mulberry32(seed: number) {
 const q = (sorted: number[], p: number) =>
   sorted[Math.min(sorted.length - 1, Math.max(0, Math.round((p / 100) * (sorted.length - 1))))];
 
-type SimOut = { fan: FanData; median: number; p5: number; p95: number;
-  pLoss: number; pRuin: number; ddMed: number; ddP95: number };
+type SimOut = { fan: FanData; median: number; p5: number; p95: number; es95: number;
+  cagrMed: number; pLoss: number; pRuin: number; pRuinSe: number;
+  ddMed: number; ddP95: number; ddWorst: number };
 
 function simulate(rets: number[], horizon: number, nSims: number, block: number,
                   capital: number, feesPct: number, ruin: number, seed: number): SimOut {
@@ -34,33 +35,40 @@ function simulate(rets: number[], horizon: number, nSims: number, block: number,
   const idx = Array.from({ length: nPts }, (_, k) => Math.round(((k + 1) / nPts) * horizon) - 1);
   const bands: number[][] = idx.map(() => []);
   const finals: number[] = [], dds: number[] = [];
+  const n = rets.length, pNew = 1 / Math.max(1, block);
   let ruined = 0;
   for (let s = 0; s < nSims; s++) {
-    let v = capital, peak = capital, dd = 0, j = 0;
-    for (let t = 0; t < horizon; ) {
-      const start = Math.floor(rng() * Math.max(1, rets.length - block));
-      for (let b = 0; b < block && t < horizon; b++, t++) {
-        v *= 1 + rets[start + b] - drag;
-        if (v > peak) peak = v;
-        const d = v / peak - 1;
-        if (d < dd) dd = d;
-        if (j < nPts && t === idx[j]) { bands[j].push(v); j++; }
-      }
+    let v = capital, peak = capital, dd = 0, j = 0, i = 0;
+    for (let t = 0; t < horizon; t++) {
+      // Bootstrap STATIONNAIRE (Politis-Romano) : longueur de bloc géométrique
+      // d'espérance `block` — pas d'artefact de bord des blocs fixes. block=1 ⇔ iid.
+      i = t === 0 || rng() < pNew ? Math.floor(rng() * n) : (i + 1) % n;
+      v *= 1 + rets[i] - drag;
+      if (v > peak) peak = v;
+      const d = v / peak - 1;
+      if (d < dd) dd = d;
+      if (j < nPts && t === idx[j]) { bands[j].push(v); j++; }
     }
     finals.push(v); dds.push(dd);
     if (dd <= ruin) ruined++;
   }
   for (const b of bands) b.sort((a, z) => a - z);
   finals.sort((a, z) => a - z); dds.sort((a, z) => a - z);
+  const tail = finals.slice(0, Math.max(1, Math.ceil(0.05 * nSims)));   // pires 5 %
+  const pR = ruined / nSims, med = q(finals, 50);
   return {
-    fan: { steps: idx.map((i) => i + 1),
+    fan: { steps: idx.map((i2) => i2 + 1),
       p5: bands.map((b) => q(b, 5)), p25: bands.map((b) => q(b, 25)),
       p50: bands.map((b) => q(b, 50)), p75: bands.map((b) => q(b, 75)),
       p95: bands.map((b) => q(b, 95)) },
-    median: q(finals, 50), p5: q(finals, 5), p95: q(finals, 95),
+    median: med, p5: q(finals, 5), p95: q(finals, 95),
+    es95: tail.reduce((a, z) => a + z, 0) / tail.length,       // CVaR : moyenne de la queue 5 %
+    cagrMed: Math.pow(med / capital, 252 / horizon) - 1,
     pLoss: finals.filter((v) => v < capital).length / nSims,
-    pRuin: ruined / nSims,
+    pRuin: pR,
+    pRuinSe: Math.sqrt(Math.max(0, pR * (1 - pR)) / nSims),    // erreur d'échantillonnage MC
     ddMed: q(dds, 50), ddP95: q(dds, 5),                       // p95 du PIRE cas = 5e centile
+    ddWorst: dds[0],
   };
 }
 
@@ -88,6 +96,7 @@ export function Simulator() {
   const [fees, setFees] = useState("0");
   const [capital, setCapital] = useState("10000");
   const [seed, setSeed] = useState(1);
+  const [table, setTable] = useState(false);
 
   const real: number[] = (d?.real_portfolio?.curve ?? [])
     .map((p: any) => Number(p?.v)).filter((v: number) => v > 0);
@@ -119,7 +128,7 @@ export function Simulator() {
         <Sel label="Itérations" value={nSims} onChange={setNSims}
           opts={[["500", "500"], ["1000", "1 000"], ["2000", "2 000"]]} />
         <Sel label="Bootstrap" value={block} onChange={setBlock}
-          opts={[["10", "blocs 10 j"], ["1", "iid (naïf)"]]} />
+          opts={[["10", "stationnaire ~10 j"], ["21", "stationnaire ~21 j"], ["1", "iid (naïf)"]]} />
         <label className="flex items-center gap-1.5 text-xs text-muted">Capital
           <input value={capital} onChange={(e) => setCapital(e.target.value.replace(/[^\d]/g, ""))}
             className="w-20 rounded-md border border-border px-1.5 py-1 text-xs mono text-fg"
@@ -131,28 +140,65 @@ export function Simulator() {
         <button onClick={() => setSeed((s) => s + 1)}
           className="px-2.5 py-1 rounded-md border border-border text-xs hover:bg-surfaceAlt transition-colors"
           title="Nouveau tirage aléatoire (seed suivante)">↻ Relancer (seed {seed})</button>
+        <button onClick={() => setTable((t) => !t)} aria-pressed={table}
+          className="px-2.5 py-1 rounded-md border border-border text-xs hover:bg-surfaceAlt transition-colors"
+          title="Basculer graphique / table des percentiles (accessibilité)">{table ? "graphique" : "table"}</button>
       </div>
       {!out ? (
         <p className="text-muted2 text-sm mt-3">Historique insuffisant pour simuler (≥ 60 jours requis).</p>
       ) : (
         <>
-          <div className="mt-3"><McFan data={out.fan} startValue={+capital || 10000} /></div>
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mt-3 text-sm">
-            <div><div className="text-muted text-[11px]">Médiane</div><div className="mono text-lg">{usd(out.median)}</div></div>
-            <div><div className="text-muted text-[11px]">p5 (défavorable)</div><div className="mono text-lg" style={{ color: "#f43f5e" }}>{usd(out.p5)}</div></div>
-            <div><div className="text-muted text-[11px]">p95 (favorable)</div><div className="mono text-lg" style={{ color: "var(--pos)" }}>{usd(out.p95)}</div></div>
-            <div><div className="text-muted text-[11px]">Proba de perte</div><div className="mono text-lg">{pctF(out.pLoss)}</div></div>
-            <div><div className="text-muted text-[11px]">Proba ruine (−50 %)</div><div className="mono text-lg" style={{ color: out.pRuin > 0.05 ? "#f43f5e" : undefined }}>{pctF(out.pRuin)}</div></div>
-            <div><div className="text-muted text-[11px]">DD médian / p95</div><div className="mono text-lg">{pctF(out.ddMed)} / {pctF(out.ddP95)}</div></div>
+          {table ? <FanTable fan={out.fan} /> :
+            <div className="mt-3"><McFan data={out.fan} startValue={+capital || 10000} /></div>}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3 text-sm">
+            <div><div className="text-muted text-[11px]">Médiane (CAGR)</div>
+              <div className="mono text-lg">{usd(out.median)} <span className="text-muted2 text-xs">({pctF(out.cagrMed)}/an)</span></div></div>
+            <div><div className="text-muted text-[11px]">p5 / ES 95 (CVaR)</div>
+              <div className="mono text-lg" style={{ color: "#f43f5e" }}>{usd(out.p5)} <span className="text-muted2 text-xs">/ {usd(out.es95)}</span></div></div>
+            <div><div className="text-muted text-[11px]">p95 (favorable)</div>
+              <div className="mono text-lg" style={{ color: "var(--pos)" }}>{usd(out.p95)}</div></div>
+            <div><div className="text-muted text-[11px]">Proba de perte</div>
+              <div className="mono text-lg">{pctF(out.pLoss)}</div></div>
+            <div><div className="text-muted text-[11px]">Proba ruine (−50 %)</div>
+              <div className="mono text-lg" style={{ color: out.pRuin > 0.05 ? "#f43f5e" : undefined }}>
+                {pctF(out.pRuin)} <span className="text-muted2 text-xs">± {(out.pRuinSe * 100).toFixed(1)} pt</span></div></div>
+            <div><div className="text-muted text-[11px]">DD médian</div><div className="mono text-lg">{pctF(out.ddMed)}</div></div>
+            <div><div className="text-muted text-[11px]">DD p95</div><div className="mono text-lg" style={{ color: "#f43f5e" }}>{pctF(out.ddP95)}</div></div>
+            <div><div className="text-muted text-[11px]">Pire DD simulé</div><div className="mono text-lg" style={{ color: "#f43f5e" }}>{pctF(out.ddWorst)}</div></div>
           </div>
           <p className="text-muted2 text-[11px] mt-2">
-            Bootstrap de rendements <b>passés</b> ({src === "real" ? "compte réel" : "backtest preset"},
-            {" "}{rets.length} j) — distribution d&apos;incertitude conditionnelle au passé, <b>pas une prédiction</b>.
-            Les blocs 10 j préservent le clustering de volatilité ; le mode iid sous-estime les queues.
-            Frais déduits au prorata quotidien. Aide à la décision — pas un conseil en investissement.
+            Bootstrap <b>stationnaire</b> (Politis-Romano, blocs d&apos;espérance {block} j) de rendements <b>passés</b>
+            {" "}({src === "real" ? "compte réel" : "backtest preset"}, {rets.length} j) — distribution d&apos;incertitude
+            conditionnelle au passé, <b>pas une prédiction</b>. Les blocs préservent le clustering de volatilité ;
+            le mode iid le casse et sous-estime les queues. ES 95 = moyenne des 5 % pires finals. ± = erreur
+            d&apos;échantillonnage Monte Carlo. Frais déduits au prorata quotidien. Aide à la décision — pas un conseil
+            en investissement.
           </p>
         </>
       )}
     </section>
+  );
+}
+
+// Vue TABLE des percentiles (accessibilité / lecteurs d'écran / export œil nu) — même donnée que le fan.
+function FanTable({ fan }: { fan: FanData }) {
+  const rows = fan.steps.map((_, i) => i).filter((i) => i % 5 === 4 || i === fan.steps.length - 1);
+  return (
+    <div className="overflow-x-auto mt-3">
+      <table className="w-full text-sm mono">
+        <thead className="text-muted text-xs"><tr>
+          <th className="text-left font-normal">Jour</th>
+          {["p5", "p25", "médiane", "p75", "p95"].map((h) => <th key={h} className="text-right font-normal">{h}</th>)}
+        </tr></thead>
+        <tbody>
+          {rows.map((i) => (
+            <tr key={i} className="border-t border-border">
+              <td className="py-1">j+{fan.steps[i]}</td>
+              {[fan.p5, fan.p25, fan.p50, fan.p75, fan.p95].map((arr, k) => (
+                <td key={k} className="text-right">{Math.round(arr[i]).toLocaleString("fr-FR")}</td>))}
+            </tr>))}
+        </tbody>
+      </table>
+    </div>
   );
 }

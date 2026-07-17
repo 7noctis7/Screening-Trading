@@ -70,8 +70,10 @@ export function McFan({ data, startValue, height = 240 }:
         {hov != null && (
           <line x1={X(hov)} x2={X(hov)} y1={padT} y2={H - padB} stroke="var(--muted2)" strokeWidth="1" opacity="0.7" />
         )}
-        <text x={padL} y={H - 6} fontSize="9" fill="var(--muted2)">j+{data.steps[0]}</text>
-        <text x={W - padR} y={H - 6} fontSize="9" fill="var(--muted2)" textAnchor="end">j+{data.steps[last]}</text>
+        <text x={padL} y={H - 6} fontSize="9" fill="var(--muted2)">aujourd&apos;hui</text>
+        <text x={W - padR} y={H - 6} fontSize="9" fill="var(--muted2)" textAnchor="end">
+          {data.steps[last] >= 42 ? `+${Math.round(data.steps[last] / 21)} mois` : `+${data.steps[last]} j`} ({data.steps[last]} j ouvrés)
+        </text>
       </svg>
       {hov != null && (
         <div className="absolute top-2 pointer-events-none rounded-lg border border-border px-2.5 py-1.5 text-[11px] mono"
