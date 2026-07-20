@@ -3,21 +3,54 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
-## 🌙 CE SOIR SUR LE MAC — 2026-07-15 (post-remédiation audit comité, ~10 min)
-- [ ] **A. Labo Sharpe/Sortino (données réelles requises — l'agent cloud n'a pas la DB)** :
+## 🌙 CE SOIR SUR LE MAC — 2026-07-17 (post-merge #320)
+- [ ] **0. Récupérer le merge #320** (audit + dashboard trades + simulateur MC) :
   ```bash
-  qt && git fetch origin && git reset --hard origin/main
-  make preset-lab      # cap adaptatif corr + overlay DD/vol, mesurés puis GATÉS (ledger)
+  cd ~/Screening-Trading && git fetch origin && git reset --hard origin/main
   ```
-  → si un levier est ✅ CANDIDAT : me demander la PR d'activation AVEC ces chiffres.
-- [ ] **B. Secrets alerting hors-bande (fail-loud, audit F2)** : repo → Settings → Secrets →
-      Actions → New : `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` (bot via @BotFather, 2 min).
-      Sans eux, un run rouge ne notifie que dans l'onglet Actions.
-- [ ] **C. Re-runner les 8 hypothèses rejetées avec le DSR RÉPARÉ** (le seuil n'est plus
-      Sharpe≈7 ; certaines peuvent changer de verdict — dans les 2 sens) :
+- [ ] **A. Labo Sharpe/Sortino (LE cœur de « rendre performant » — données réelles requises)** :
   ```bash
-  make vault-sync      # recalcul + notes ; publier tout changement sur /echecs
+  make preset-lab
   ```
+  → me coller la sortie. Si un levier est ✅ CANDIDAT : je fais la PR d'activation AVEC ces chiffres.
+- [ ] **B. Confirmer que le bug de rachat BTC (fin juin→8 juil, ‑5,7 %) est bien clos** (lecture seule) :
+  ```bash
+  make verify-journal
+  ```
+  → cherche des BTC buy répétés chaque jour ouvré avant le 8/7 ; si plus rien après, le bug est fermé.
+- [ ] **C. Re-runner les 8 hypothèses avec le DSR RÉPARÉ** (verdicts peuvent basculer, 2 sens) :
+  ```bash
+  make vault-sync
+  ```
+  → regarder `/echecs` ensuite.
+- [ ] **D. Voir le nouveau dashboard + simulateur en local** (optionnel) :
+  ```bash
+  make start
+  ```
+  → `localhost:3000/dashboard` (qualité des trades) et `/risk` (simulateur Monte Carlo).
+- [ ] **E. Secrets alerting (clics GitHub, 2 min)** : Settings → Secrets → Actions → New :
+      `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` (bot via @BotFather). Sinon un run rouge ne notifie personne.
+
+## 🎯 ROADMAP GROSSES AMÉLIORATIONS (priorité = RDV paper 2026-08-06)
+> Ce qui reste APRÈS #320. Deadline forçante = le RDV du 06/08 (verdict GO/NO-GO du paper).
+- [ ] **XL-1 · Univers backtest point-in-time avec délistés** (`data/delisted.csv` déjà semé) :
+      `preset_backtest.py:111` prend `data.items()` = survivants actuels → Sharpe/DD optimistes.
+      Câbler les délistés + PUBLIER le delta de Sharpe sur `/echecs`. C'est LA crédibilité du backtest.
+- [ ] **XL-2 · Refactor god-objects** : `snapshot.py` 2467 l + `main.py` 991 l (le hook bloque chaque
+      edit ; 2500 l = drapeau rouge pour tout recruteur technique). Découper en modules `sections/` + `routes/`.
+- [ ] **L-1 · Preuves terrain du 06/08** : N≥20 round-trips réconciliés au relevé Alpaca + courbe equity
+      accumulée (equity_history → HF, fait #320). `make rdv-paper` doit sortir GO, pas INSUFFISANT.
+- [ ] **L-2 · Gater l'edge DD÷2,6** (jamais passé au PBO) + brancher VaR-backtest sur le rail prod
+      (les caps corr-aware le sont depuis #320 ; le gate VaR ne l'est pas).
+- [ ] **L-3 · Fusion pages front** /live + /trades → /positions ; /portfolio → /risk (finding produit :
+      4 pages pour « qu'est-ce que je détiens ? » = parcours cassé). Redirects, nav inchangée.
+- [ ] **L-4 · ML : trancher honnêtement** — soit gater (CV CALENDAIRE pas par index, Brier OOS),
+      soit dégrader en « indicateur » assumé (0 trade réel attribuable aujourd'hui, finding B).
+- [ ] **M-1 · Fill t+1** (`preset_backtest.py:176` exécute au close de la barre de signal = mini
+      biais optimiste) → variante open t+1, chiffrer l'écart.
+- [ ] **M-2 · Sabotage coût sur Δposition** seulement (`adversarial.py`), pas par barre.
+- [ ] **M-3 · Attribution par actif + « pourquoi » par round-trip** sur le front (contributeurs/
+      détracteurs existent déjà dans `obsidian.py`, jamais exposés en ligne).
 
 ## 🌙 CE SOIR SUR LE MAC — 2026-07-06 (post-audit 3 volets, ~10 min)
 > Les 4 gestes que l'agent ne peut pas faire à ta place (token Notion local, proxy git, clics GitHub).
