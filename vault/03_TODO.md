@@ -33,9 +33,14 @@
 
 ## 🎯 ROADMAP GROSSES AMÉLIORATIONS (priorité = RDV paper 2026-08-06)
 > Ce qui reste APRÈS #320. Deadline forçante = le RDV du 06/08 (verdict GO/NO-GO du paper).
-- [ ] **XL-1 · Univers backtest point-in-time avec délistés** (`data/delisted.csv` déjà semé) :
-      `preset_backtest.py:111` prend `data.items()` = survivants actuels → Sharpe/DD optimistes.
-      Câbler les délistés + PUBLIER le delta de Sharpe sur `/echecs`. C'est LA crédibilité du backtest.
+- [~] **XL-1 · Univers backtest point-in-time avec délistés** — MÉCANISME LIVRÉ (#PR suivante) :
+      `survivorship_delta()` + section dans `make preset-lab`. RESTE À TOI : `make ingest-delisted`
+      (ingère l'OHLCV des délistés en base — delisted.csv n'a que noms+dates), puis `make preset-lab`
+      affiche le Δ Sharpe → PUBLIER sur `/echecs`. C'est LA crédibilité du backtest.
+- [x] **M-1 · Fill t+1** — LIVRÉ : param `exec_lag` (défaut 0 inchangé) ; config « fill t+1 » dans
+      `make preset-lab` chiffre le mini look-ahead (~‑0,05 Sharpe sur synthétique, à confirmer réel).
+- [x] **M-2 · Sabotage sur Δposition** — LIVRÉ : `stress_returns`/`sabotage_verdict` acceptent
+      `turnover` (coût ∝ |Δpoids|, plus par barre). Tests verts.
 - [ ] **XL-2 · Refactor god-objects** : `snapshot.py` 2467 l + `main.py` 991 l (le hook bloque chaque
       edit ; 2500 l = drapeau rouge pour tout recruteur technique). Découper en modules `sections/` + `routes/`.
 - [ ] **L-1 · Preuves terrain du 06/08** : N≥20 round-trips réconciliés au relevé Alpaca + courbe equity
