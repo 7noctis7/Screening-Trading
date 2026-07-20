@@ -28,6 +28,7 @@ CONFIGS = [
     ("+overlay DD/vol EWMA", {"risk_overlay": True}),
     ("+cap adaptatif + overlay", {"max_weight": 0.10, "corr_tighten": True,
                                   "risk_overlay": True}),
+    ("fill t+1 (réaliste, M-1)", {"exec_lag": 1}),   # écart vs fill au signal = mini look-ahead
 ]
 
 
@@ -118,6 +119,31 @@ def _log_ledger(rows: list[dict], promoted: list[dict]) -> None:
         print(f"(ledger non mis à jour : {e})")
 
 
+def _survivorship(data, acmap) -> None:
+    """XL-1 : delta de biais du survivant si des prix de délistés sont EN BASE (sinon skip honnête)."""
+    from apps.api.snapshot import (_HISTORY_DAYS, _load_prices, _sector_of,
+                                   datetime, timedelta, timezone)
+    from packages.backtest.survivorship_delta import survivorship_delta
+    from packages.data.survivorship import load_delisted
+    dl = load_delisted()
+    if not dl:
+        return
+    instr = [{"symbol": d["symbol"], "sector": d.get("sector", ""), "asset_class": "equity"} for d in dl]
+    end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    dd_data, _mode, real = _load_prices(instr, {i["symbol"]: _sector_of(i) for i in instr},
+                                        end - timedelta(days=_HISTORY_DAYS), end, 7)
+    dd_real = {s: b for s, b in dd_data.items() if s in real}     # prix RÉELS uniquement
+    print("\n" + "=" * 60 + "\nBIAIS DU SURVIVANT (XL-1)\n" + "=" * 60)
+    out = survivorship_delta(data, delisted_data=dd_real, top_k=30)
+    if not out.get("available"):
+        print(f"  Indisponible : {out.get('reason')}")
+        return
+    d = out["delta"]
+    print(f"  {out['n_delisted']} délistés réels ajoutés · Δ Sharpe {d['sharpe']:+.2f} · "
+          f"Δ CAGR {d['annualized']*100:+.1f} pts · Δ maxDD {d['max_drawdown']*100:+.1f} pts")
+    print("  → un Δ Sharpe NÉGATIF confirme que le backtest survivant était optimiste. À publier sur /echecs.")
+
+
 def main() -> int:
     data, acmap = _load_real_data()
     if data is None:
@@ -127,6 +153,10 @@ def main() -> int:
         print("Rien à comparer."); return 1
     promoted = _verdict(rows)
     _log_ledger(rows, promoted)
+    try:
+        _survivorship(data, acmap)
+    except Exception as e:  # noqa: BLE001 — mesure best-effort, ne casse pas le labo
+        print(f"\n(survivorship non calculé : {str(e)[:80]})")
     return 0
 
 

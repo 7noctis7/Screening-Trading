@@ -1,5 +1,27 @@
 # 04 — JOURNAL
 
+## Session 2026-07-17 (2) — Research-integrity : fill t+1, sabotage Δposition, delta survivorship
+**Contexte.** « fait tout selon best practices » sur la roadmap XL/L/M. Décision honnête : NE PAS
+big-bang le god-object (2500 l., non vérifiable depuis le cloud) ni raser des pages front riches
+sans app runnable. Fait le lot **backend research-integrity**, 100 % testable ici — c'est le wedge.
+
+**Fait (828 tests verts, +11 nouveaux).**
+- **M-1 · Fill t+1** : param `exec_lag` dans `preset_backtest` (défaut 0 = comportement historique
+  EXACT, non-régression testée). exec_lag=1 → exécution au close t+1 (le close du jour de signal
+  n'est pas exécutable = mini look-ahead). Config « fill t+1 » ajoutée à `make preset-lab` (chiffre
+  l'écart : ~‑0,05 Sharpe sur synthétique).
+- **M-2 · Sabotage sur Δposition** : `stress_returns`/`sabotage_verdict` acceptent `turnover`
+  (scalaire ou tableau) → coût ∝ |Δposition|, plus « à chaque barre » (qui surfacturait un faible
+  turnover comme un B&H). Rétro-compatible (None = worst-case documenté).
+- **XL-1 · Delta de survivorship** : nouveau module `survivorship_delta.py` (séparé — ne grossit
+  pas le god-object) : relance le preset survivants-seuls vs +délistés, publie Δ Sharpe/CAGR/maxDD.
+  Câblé dans `make preset-lab`. Dépendance dure : prix des délistés en base (`make ingest-delisted`) ;
+  sinon message honnête, jamais de chiffre inventé.
+
+**Stagé explicitement (raisons).** XL-2 refactor snapshot/main (risque de casse silencieuse sans
+app runnable → par tranches) ; L-3 fusion pages front (contenu riche, exige vérif visuelle) ;
+L-4 ML CV calendaire (touche la section ML de snapshot, à vérifier sur données réelles).
+
 ## Session 2026-07-17 — Dashboard qualité des trades + simulateur Monte Carlo navigateur
 **Contexte.** Demande : tuiles KPI façon terminal (trades, win rate, profit factor, gains/pertes)
 + simulation Monte Carlo interactive, inspirées de captures d'un autre outil.

@@ -143,7 +143,11 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
                     breadth_gate: bool = True, risk_overlay: bool = False,
                     ro_dd_soft: float = -0.08, ro_dd_hard: float = -0.20,
                     ewma_lam: float = 0.94, max_weight: float | None = None,
-                    corr_tighten: bool = False) -> dict:
+                    corr_tighten: bool = False, exec_lag: int = 0) -> dict:
+    """`exec_lag` (audit 07/17, M-1) : nb de barres entre la DÉCISION (close t, sur info ≤t)
+    et l'EXÉCUTION. 0 = fill au close de la barre de signal (défaut historique — mini
+    look-ahead : le close du jour de signal n'est pas exécutable). 1 = fill au close t+1
+    (réaliste). La fenêtre de détention est décalée d'autant ; `make preset-lab` chiffre l'écart."""
     syms = [s for s, b in data.items() if b and len(b) > lookback + 2 * step]
     if len(syms) < 5:
         return {"available": False}
@@ -210,8 +214,9 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
         w = w * gross
         if band > 0 and prev_w.sum() > 0:                       # bande de non-trading
             w = np.where(np.abs(w - prev_w) < band, prev_w, w)
-        nxt = min(t + step, L - 1)
-        fwd = A[:, nxt] / A[:, t] - 1                           # rendement RÉALISÉ après t
+        entry = min(t + exec_lag, L - 1)                        # M-1 : exécution à t+exec_lag
+        nxt = min(entry + step, L - 1)
+        fwd = A[:, nxt] / A[:, entry] - 1                       # rendement RÉALISÉ après l'exécution
         cost = float((np.abs(w - prev_w) * rt).sum())
         ret_step = float((w * fwd).sum()) - cost
         port.append(ret_step)

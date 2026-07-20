@@ -54,12 +54,16 @@ def sabotage_sweep(returns, *, levels=(1.0, 2.0, 3.0, 5.0), base_cost_bps: float
 
 
 def stress_returns(returns, *, extra_cost_bps: float = 30.0, noise_mult: float = 0.5,
-                   latency: int = 1, seed: int = 0) -> np.ndarray:
+                   latency: int = 1, seed: int = 0, turnover=None) -> np.ndarray:
     """Dégrade une série de rendements (pire cas d'exécution).
 
     - `latency` : tu agis en RETARD → décalage des rendements (tu rates le début).
     - `noise_mult` : bruit de prix ~ N(0, noise_mult·σ).
-    - `extra_cost_bps` : spread/slippage aggravés → haircut/période (~3× RT actions).
+    - `extra_cost_bps` : spread/slippage aggravés.
+    - `turnover` (audit 07/17, M-2) : coût facturé sur le **Δposition** de la barre
+      (|Δpoids| ∈ [0,2]), PAS à chaque barre. Un scalaire = turnover moyen appliqué
+      uniformément ; un tableau aligné = coût par barre. None → coût à CHAQUE barre
+      (worst-case historique : surfacture une stratégie faible turnover comme un B&H).
     """
     r = np.asarray([x for x in returns if x == x], float)
     if r.size == 0:
@@ -71,14 +75,23 @@ def stress_returns(returns, *, extra_cost_bps: float = 30.0, noise_mult: float =
     if noise_mult > 0:
         rng = np.random.default_rng(seed)
         out = out + rng.normal(0.0, noise_mult * float(r.std()), r.size)
-    return out - extra_cost_bps / 1e4
+    haircut = extra_cost_bps / 1e4
+    if turnover is None:
+        return out - haircut
+    to = np.asarray(turnover, float)
+    if to.ndim == 0:                                    # scalaire → turnover moyen/barre
+        return out - haircut * float(to)
+    to = to[:out.size] if to.size >= out.size else np.pad(to, (0, out.size - to.size))
+    return out - haircut * to                           # coût ∝ |Δposition| de la barre
 
 
 def sabotage_verdict(returns, *, retention_min: float = 0.5,
                      extra_cost_bps: float = 30.0, noise_mult: float = 0.5,
-                     latency: int = 1, seed: int = 0) -> dict:
+                     latency: int = 1, seed: int = 0, turnover=None) -> dict:
     """Binaire : l'edge SURVIT-il au sabotage ? (Sharpe > 0 ET ≥ `retention_min`).
 
+    `turnover` (M-2) : facture le coût sur le Δposition (cf. `stress_returns`) — sans lui,
+    le coût est prélevé à chaque barre (worst-case, pénalise à tort le faible turnover).
     Renvoie {available, survives, clean_sharpe, stressed_sharpe, sharpe_retention,
     stressed_maxdd}. Rétention = Sharpe stressé / Sharpe propre.
     """
@@ -86,7 +99,7 @@ def sabotage_verdict(returns, *, retention_min: float = 0.5,
     if not clean.get("available"):
         return {"available": False}
     deg = stress_returns(returns, extra_cost_bps=extra_cost_bps, noise_mult=noise_mult,
-                         latency=latency, seed=seed)
+                         latency=latency, seed=seed, turnover=turnover)
     s = perf_summary(deg)
     cs, ss = clean["sharpe"], s["sharpe"]
     retention = round(ss / cs, 3) if cs > 0 else (1.0 if ss >= cs else 0.0)
