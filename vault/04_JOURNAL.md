@@ -1,5 +1,47 @@
 # 04 — JOURNAL
 
+## Session 2026-08-20 — Audit institutionnel 5 axes + 4 modules de référence
+**Contexte.** Demande d'audit « MD quant » sur le corpus Grinold-Kahn / Isichenko / Paleologo /
+Chan / Taleb / Mandelbrot / Wilmott, traduit en spécifications pour la plateforme et les robots
+multi-timeframes (1 h → Monthly).
+
+**Livré — guide (vault).** [[17_AUDIT_INSTITUTIONNEL]] (scorecard, 10 findings de code datés
+avec chemin/ligne, séquence de travail) + `vault/17_UPGRADE/` : [[AXE1_DATA_PIT]] (schéma
+bitemporel, algorithme d'ajustement corporate actions, security master, conventions intraday),
+[[AXE2_ALPHA_LOI_FONDAMENTALE]] (alpha = vol·IC·z, souffle effectif, chevauchement/Newey-West,
+orthogonalisation par projection + Marchenko-Pastur), [[AXE3_QUEUES_REGIMES]] (Hill, GPD par
+PWM, CVaR, HMM causal, cointégration), [[AXE4_SIZING_FRICTIONS]] (Kelly à queues épaisses,
+impact racine carrée, admission), [[AXE5_EXECUTION]] (fill L1/L2, machine à états, dead-man).
+
+**Livré — code (851 tests verts, +32 nouveaux, aucun câblage prod).**
+- `packages/research/breadth.py` : N_eff/T_eff, coefficient de TRANSFERT, IR = IC·√BR·TC,
+  `ic_required`, `optimal_horizon` (h* ≈ 1,81 × demi-vie, dérivé et vérifié numériquement).
+- `packages/execution/impact.py` : impact en racine carrée avec vol ET volume **de la fenêtre**
+  d'exécution, taille max sous budget, plafond POV, test d'admission alpha vs coût.
+- `packages/research/cointegration.py` : ADF avec valeurs critiques **Engle-Granger**, ratio de
+  couverture, demi-vie OU, correction multi-tests, verdict bidirectionnel.
+- `packages/portfolio/sizing/kelly_fat_tail.py` : Kelly sur distribution empirique + queue GPD,
+  borne de ruine, fraction dérivée d'un budget de drawdown (λ = 2/(1 + ln ε / ln b)).
+
+**Trois findings qui changent des décisions.**
+1. **F1** — `auto_adjust=True` + `_split_drift` : l'historique de prix MUTE après chaque split
+   ou dividende. Deux backtests lancés à deux dates ne sont pas comparables — or DSR et PBO
+   comparent exactement cela. Correctif : prix bruts immuables + table `corporate_action`,
+   facteur calculé à la lecture avec `as_of`.
+2. **F2 / axe 4 § 4.5** — avec les barèmes RÉELS déjà encodés dans `costs.py`, l'horizon minimal
+   viable est ≈ 34 h (actions/Alpaca), ≈ 64 h (Binance), ≈ 219 h (**BitMart**). Aucun robot
+   1 h / 4 h ne passe le test d'admission avec les courtiers configurés : le levier n'est pas le
+   signal, c'est le coût (venue moins chère + exécution maker).
+3. **F10** — `fraction=0.25` du Kelly correspond à un budget de drawdown de 50 %, pas au
+   `QUANT_DD_TARGET=0.25` affiché ailleurs (qui impose λ ≈ 0,175). Deux appétits pour le risque
+   contradictoires dans le même dépôt.
+
+**Décidé.** Aucun des 4 modules n'est câblé : ils entrent en production par le gate
+(`15_CERTIFICATION.md`) comme n'importe quel candidat. Tous les paramètres (Y de l'impact, κ de
+la bande, seuils de demi-vie, IC supposés du tableau d'admission) sont **UNCALIBRATED** — les
+ordres de grandeur suffisent à trancher la question du 1 h, pas à dimensionner une position.
+
+
 ## Session 2026-07-17 (2) — Research-integrity : fill t+1, sabotage Δposition, delta survivorship
 **Contexte.** « fait tout selon best practices » sur la roadmap XL/L/M. Décision honnête : NE PAS
 big-bang le god-object (2500 l., non vérifiable depuis le cloud) ni raser des pages front riches

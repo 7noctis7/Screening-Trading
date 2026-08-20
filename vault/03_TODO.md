@@ -3,6 +3,47 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+## 🏛️ AUDIT INSTITUTIONNEL 2026-08-20 — suites (cf. [[17_AUDIT_INSTITUTIONNEL]])
+> Ordre imposé par les dépendances, pas par préférence : sans la vague 1, aucune mesure ne vaut.
+
+**Vague 1 — rendre le passé immuable (P0)**
+- [ ] **F1 · prix bruts + `corporate_action`** : arrêter `auto_adjust=True` en écriture, stocker
+      l'OHLCV AS-TRADED, calculer le facteur à la lecture avec `as_of` (algo : [[AXE1_DATA_PIT]] § 2).
+      Étendre `pit_guard.stable_prefix` aux PRIX (test CI `pit_replay`).
+- [ ] **F9 · `index_membership` datée** + `symbol_history` (FB→META) + `security_master` avec
+      `delist_return` (convention CRSP −30 % si inconnu) → débloque enfin `survivorship_delta()`.
+
+**Vague 2 — installer le thermomètre (P1)**
+- [ ] Mesurer **IC réalisé par facteur et par horizon** (rendement RÉSIDUEL, CV purgée), puis
+      `breadth.ir_report(...)` : N_eff, T_eff, TC. Publier `ic_required` pour l'IR cible.
+- [ ] **TC dans `preset_backtest`** : corrélation(alphas, poids réels) — 2 lignes, répond à
+      « le problème vient-il du signal ou de mes contraintes ? ».
+- [ ] F5 · aligner `psr.bootstrap_sharpe_ci` sur un bootstrap **par blocs** (le front le fait déjà).
+- [ ] F6 · z-score robuste (médiane/MAD + winsorisation ±3 + taille de groupe ≥ 10) dans `ranking/engine.py`.
+- [ ] F7 · `evt.fit_pot` par **PWM** au lieu des moments (formules fermées dans [[AXE3_QUEUES_REGIMES]] § 1.2).
+- [ ] Estimateur de **Hill** + Hill plot : afficher l'indice de queue α à côté des KPI héros.
+
+**Vague 3 — coût non linéaire partout (P0)**
+- [ ] Brancher `impact.total_cost_bps` dans `preset_backtest`, `screening/expectancy_filter`
+      et le sabotage. **Peut inverser des verdicts existants** → à faire avant tout nouveau signal.
+- [ ] Calibrer `Y` par régression sur les fills réels (`tca.py` + `exec_costs.py`), N ≥ 100.
+- [ ] F10 · trancher l'appétit pour le risque : `fraction=0.25` (budget DD 50 %) vs
+      `QUANT_DD_TARGET=0.25` (impose λ ≈ 0,175). Un seul nombre doit gouverner les deux.
+
+**Vague 4 — alpha non directionnel (P1)**
+- [ ] **Décision préalable** : lever ou non le long-only (ADR-0029). Sans short, pas de paire.
+- [ ] Si oui : univers de candidats à prior économique (jamais toutes les paires), fenêtre de
+      formation figée, filtre « ≥ 12 traversées de la moyenne », puis gate 4 étages.
+- [ ] Kalman causal pour le ratio de couverture ([[AXE3_QUEUES_REGIMES]] § 3).
+
+**Vague 5 — exécution (P0 avant tout live/intraday)**
+- [ ] **F4 · `exec_lag = 1` par défaut** (0 = option « optimiste » étiquetée).
+- [ ] `FillModel` injectable derrière `Broker` : `NextBarPOVFill` (L1) puis `QueueFill` (L2).
+- [ ] **Dead-man switch** + machine à états NORMAL/REDUCED/FLATTEN_ONLY/HALTED.
+- [ ] Disjoncteur de slippage (médiane glissante 20 fills > 3× le coût modélisé → HALTED).
+- [ ] F3 · verrouiller `vol_regime` (fenêtre expansive, probabilité FILTRÉE, réordonnancement
+      des états par vol) **avant** tout câblage dans une boucle de backtest.
+
 ## 🌙 CE SOIR SUR LE MAC — 2026-07-17 (post-merge #320)
 - [ ] **0. Récupérer le merge #320** (audit + dashboard trades + simulateur MC) :
   ```bash

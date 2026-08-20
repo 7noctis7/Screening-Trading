@@ -11,6 +11,7 @@
 - 🔌 [[05_DATA_SOURCES]] · 📈 [[06_STRATEGIES]] · 🛡️ [[07_RISK_POLICY]]
 - 🗃️ [[08_DATA_MODEL]] · 🔬 [[09_RESEARCH]] · 📊 [[10_BACKTEST_RESULTS]]
 - 🎨 [[11_DESIGN_SYSTEM]] · 🧮 [[12_FACTORS]] · 🪞 [[12_MANIFESTE_HONNETETE]] (DSR≈0 assumé = le wedge)
+- 🏛️ [[17_AUDIT_INSTITUTIONNEL]] — audit 5 axes (PIT · loi fondamentale · queues/régimes · frictions · exécution) + `17_UPGRADE/`
 
 ## Mission
 Screening & trading systématique multi-actifs (actions, ETF, forex, crypto, commodities, indices),
