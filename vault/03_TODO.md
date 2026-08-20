@@ -3,6 +3,35 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+## 🔬 MODULES AVANCÉS 2026-08-20 — branchements (cf. [[18_MODULES_AVANCES]])
+> Code livré et testé, **non câblé**. Chaque branchement passe par le gate.
+
+- [ ] **M1 · covariance** : brancher `denoise_covariance()` en amont d'`equal_risk_contribution`
+      dans `preset_backtest` ; **refuser** l'optimisation quand `k_signal < 2` ou `q > 0,5`
+      (aujourd'hui on optimise silencieusement du bruit). Mesurer l'effet sur Sharpe ET turnover.
+- [ ] **M2 · labellisation** : corriger `ml/labeling.triple_barrier` — barrières en
+      `pt·sigma·sqrt(h)` (aujourd'hui `pt·sigma` : barrière touchée quasi sûrement),
+      détection sur `high`/`low` (aujourd'hui close seul = biais optimiste), ex-æquo résolu
+      en faveur du stop, barrières inversées pour les shorts.
+- [ ] **M2 · CV** : remplacer `PurgedKFold` par `CombinatorialPurgedCV(6, 2)` dans
+      `ml_walkforward` → distribution de Sharpe sur 5 chemins → PBO calculé sur cette
+      distribution, DSR avec `n_eff` (`uniqueness.effective_sample_size`) et non `n`.
+- [ ] **M3 · TC et souffle** : instrumenter `preset_backtest` (2 lignes) — `transfer_coefficient`
+      et `ir_report`. Répond à « le problème vient-il du signal ou de mes contraintes ? ».
+- [ ] **M4 · exécution** : `trajectory()` dans le chemin d'exécution des blocs, avec
+      `cap_by_participation` ; calibrer `eta`/`gamma` sur le TCA réel (N ≥ 100 fills).
+- [ ] **M5 · portage** : `carry_costs()` dans le PnL du backtest dès qu'un short existe ;
+      exiger `max_borrow_fee()` du courtier AVANT d'ouvrir la moindre position vendeuse.
+- [ ] **M5 · EVT** : passer `evt.fit_pot` aux moments pondérés par les probabilités (formules
+      fermées vérifiées en [[M5_QUEUES_ET_FINANCEMENT]] § 2) ; ajouter l'estimateur de Hill.
+- [ ] **M6 · sentiment** : journaliser le MOTEUR (FinBERT vs lexique) avec chaque score —
+      un historique mixte est inexploitable ; puis `neutralize()` sur la surprise de résultats
+      avant de mesurer l'IC (sinon le facteur est du PEAD déguisé).
+- [ ] **M7 · alt-data** : rien à brancher avant F1 et F2. Quand ce sera le cas : une source à
+      la fois, prior écrit d'abord, `granger_both_ways` + `mi_permutation_test` + Šidák.
+- [ ] **Décision de périmètre** : options (surface de vol, grecques) — dans le projet ou pas ?
+      Aucune chaîne d'options n'est ingérée aujourd'hui ; c'est un choix, pas un oubli.
+
 ## 🏛️ AUDIT INSTITUTIONNEL 2026-08-20 — suites (cf. [[17_AUDIT_INSTITUTIONNEL]])
 > Ordre imposé par les dépendances, pas par préférence : sans la vague 1, aucune mesure ne vaut.
 

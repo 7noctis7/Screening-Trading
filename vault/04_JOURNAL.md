@@ -1,5 +1,51 @@
 # 04 — JOURNAL
 
+## Session 2026-08-20 (2) — 7 modules avancés : RMT, CPCV, Almgren-Chriss, portage, alt-data
+**Contexte.** Suite de l'audit 5 axes : demande de spécifications exécutables sur 7 modules
+(matrices aléatoires, labellisation/CV combinatoire, décroissance d'alpha, exécution optimale,
+queues + financement, quantamental NLP, pipeline alt-data + overlays).
+
+**Livré — code (901 tests verts, +50 nouveaux, aucun câblage prod).**
+- `packages/portfolio/rmt_denoise.py` : bornes de Marčenko-Pastur, nombre de facteurs par
+  point fixe **et** écart spectral, débruitage à valeur propre résiduelle constante (trace
+  préservée), détonage, rang effectif, chaîne MP → Ledoit-Wolf, **verdict** d'exploitabilité.
+- `packages/ml/cpcv.py` : CV combinatoire purgée + embargo, `phi = C(n,k)·k/n` chemins,
+  refus explicite d'échantillons non triés (la purge serait illusoire).
+- `packages/ml/uniqueness.py` : concurrence, unicité moyenne, poids par attribution de
+  rendement, décroissance temporelle, **taille d'échantillon effective**.
+- `packages/execution/almgren_chriss.py` : `kappa` par résolution de cosh, trajectoire sinh,
+  coût espéré/variance, frontière efficiente d'exécution, plafond de participation.
+- `packages/execution/funding_costs.py` : marge, rebate de prêt de titres, dividendes short,
+  coût du capital bloqué, **frais d'emprunt maximal supportable**.
+- `packages/ranking/orthogonalize.py` : z robuste médiane/MAD, z intra-groupe avec taille
+  minimale, QR séquentiel centré, projection de neutralisation, combinaison `Omega⁻¹·ic`.
+- `packages/research/causality.py` : bêta incomplète + p-value de Fisher **sans scipy**,
+  Granger bidirectionnel, information mutuelle Miller-Madow + permutation, `pit_align`, Šidák.
+
+**Livré — guide.** [[18_MODULES_AVANCES]] (index, blueprint d'assemblage, correspondance avec
+le framework de screening en 5 modules) + `vault/18_UPGRADE/` : M1 RMT, M2 labellisation/CPCV,
+M3+M4 décroissance et exécution, M5 queues et financement, M6 quantamental, M7 alt-data.
+
+**Trois résultats non triviaux.**
+1. **Le seuil MP seul sur-détecte** quand quelques facteurs absorbent la trace (5 facteurs
+   vrais → `k_mp = 15`, mesuré). L'écart spectral retrouve k exactement sur 1, 3 et 5 facteurs :
+   le module renvoie les deux, et `k_mp` est documenté comme borne supérieure.
+2. **200 labels de 10 barres décalés de 1 valent moins de 30 observations** (`n_eff` mesuré).
+   Tout test de significativité utilisant 200 se trompe d'un facteur 2,6 sur les écarts-types.
+3. **Le temps caractéristique d'exécution `1/kappa` ne dépend pas de la taille de l'ordre**
+   (testé) : la taille change le coût, jamais le rythme. `lambda` est une décision de
+   politique de risque, pas un paramètre à optimiser sur l'historique.
+
+**Deux trous assumés, non comblés.** Surface de volatilité et couverture optionnelle (aucune
+chaîne d'options ingérée — c'est une décision de périmètre, pas une tâche) ; optimisation CVaR
+par programmation linéaire (Rockafellar-Uryasev spécifiée en M5 § 3, non codée car non
+testable dans ce conteneur — `scipy` est déclaré dans le groupe `quant`).
+
+**Décidé.** Priorité inchangée malgré l'attrait des 7 modules : tant que l'historique de prix
+mute (F1) et que le coût est un forfait linéaire (F2), ajouter des sources exogènes ajoute des
+occasions de se tromper avec plus de conviction. L'alt-data est le **dernier** chantier.
+
+
 ## Session 2026-08-20 — Audit institutionnel 5 axes + 4 modules de référence
 **Contexte.** Demande d'audit « MD quant » sur le corpus Grinold-Kahn / Isichenko / Paleologo /
 Chan / Taleb / Mandelbrot / Wilmott, traduit en spécifications pour la plateforme et les robots
