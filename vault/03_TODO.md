@@ -6,9 +6,16 @@
 ## 🔬 MODULES AVANCÉS 2026-08-20 — branchements (cf. [[18_MODULES_AVANCES]])
 > Code livré et testé, **non câblé**. Chaque branchement passe par le gate.
 
-- [ ] **M1 · covariance** : brancher `denoise_covariance()` en amont d'`equal_risk_contribution`
-      dans `preset_backtest` ; **refuser** l'optimisation quand `k_signal < 2` ou `q > 0,5`
-      (aujourd'hui on optimise silencieusement du bruit). Mesurer l'effet sur Sharpe ET turnover.
+- [x] **M1 · covariance — BRANCHÉ (opt-in)** : `packages/backtest/cov_risk.py` (porte d'entrée
+      unique des 2 rails) + flag `cov_denoise` dans `preset_backtest` ET `preset_latest_weights`.
+      **Défaut inchangé au bit près** (non-régression testée) ; le DIAGNOSTIC, lui, est toujours
+      calculé et publié dans `cov_diag`. Repli inverse-vol quand `k_signal < 2`.
+      Config `+covariance débruitée RMT` ajoutée à `make preset-lab`, section « exploitabilité ».
+- [ ] **M1 · CE SOIR SUR LE MAC** : `make preset-lab` → me coller la section
+      « COVARIANCE — EXPLOITABILITÉ » + la ligne `+covariance débruitée RMT`.
+      C'est LA mesure qui dit si l'ERC du preset répartit du signal ou du bruit.
+      Si `k` médian < 2 sur données réelles : l'ERC n'est pas justifiée et le levier RMT
+      (ou l'inverse-vol pure) devient le défaut — PR d'activation AVEC ces chiffres.
 - [ ] **M2 · labellisation** : corriger `ml/labeling.triple_barrier` — barrières en
       `pt·sigma·sqrt(h)` (aujourd'hui `pt·sigma` : barrière touchée quasi sûrement),
       détection sur `high`/`low` (aujourd'hui close seul = biais optimiste), ex-æquo résolu

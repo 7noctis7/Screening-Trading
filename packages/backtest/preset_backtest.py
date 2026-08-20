@@ -21,21 +21,12 @@ import os
 import numpy as np
 
 from packages.backtest.conviction_backtest import _stats
+from packages.backtest.cov_risk import cov_annual as _cov_annual
+from packages.backtest.cov_risk import cov_for_step, summarize
 from packages.execution.costs import CostModel
 from packages.portfolio.optimize import equal_risk_contribution
 from packages.portfolio.risk_advanced import ewma_vol
 from packages.portfolio.risk_overlay import drawdown_taper
-
-
-def _cov_annual(win: np.ndarray) -> np.ndarray:
-    if win.shape[0] == 1:
-        return np.array([[float(win.var()) * 252]])
-    try:                                                        # #3 Ledoit-Wolf : covariance shrinkée
-        from packages.data.engine import ledoit_wolf_shrinkage  # (n×T) → Σ stabilisée
-        cov, _ = ledoit_wolf_shrinkage(win)
-        return cov * 252
-    except Exception:  # noqa: BLE001 — repli covariance empirique si indispo
-        return np.cov(win) * 252
 
 
 def _regime_mult(mkt: np.ndarray, t: int, *, dd_hard: float = -0.15,
@@ -143,8 +134,14 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
                     breadth_gate: bool = True, risk_overlay: bool = False,
                     ro_dd_soft: float = -0.08, ro_dd_hard: float = -0.20,
                     ewma_lam: float = 0.94, max_weight: float | None = None,
-                    corr_tighten: bool = False, exec_lag: int = 0) -> dict:
-    """`exec_lag` (audit 07/17, M-1) : nb de barres entre la DÉCISION (close t, sur info ≤t)
+                    corr_tighten: bool = False, exec_lag: int = 0,
+                    cov_denoise: bool = False) -> dict:
+    """`cov_denoise` (M1, 08/20) : covariance DÉBRUITÉE par théorie des matrices aléatoires,
+    avec repli inverse-vol quand moins de 2 directions sont distinguables du bruit. Défaut
+    False = chiffres historiques inchangés au bit près ; le DIAGNOSTIC (`cov_diag`), lui, est
+    toujours calculé et publié — mesurer d'abord, changer ensuite.
+
+    `exec_lag` (audit 07/17, M-1) : nb de barres entre la DÉCISION (close t, sur info ≤t)
     et l'EXÉCUTION. 0 = fill au close de la barre de signal (défaut historique — mini
     look-ahead : le close du jour de signal n'est pas exécutable). 1 = fill au close t+1
     (réaliste). La fenêtre de détention est décalée d'autant ; `make preset-lab` chiffre l'écart."""
@@ -181,6 +178,8 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
     prev_w = np.zeros(len(universe))
     port: list[float] = []
     gross_hist: list[float] = []
+    cov_diags: list[dict] = []                   # M1 : exploitabilité de la covariance
+    n_degraded = 0
     turn = 0.0
     eq_strat, peak_strat = 1.0, 1.0                  # equity stratégie (overlay risque)
     start = max(lookback, 50)
@@ -188,7 +187,9 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
         win = rets[:, max(0, t - lookback):t]
         if win.shape[1] < 20:
             continue
-        cov = _cov_annual(win)
+        cov, _cd, _deg = cov_for_step(win, denoise=cov_denoise)
+        cov_diags.append(_cd)
+        n_degraded += int(_deg)
         w = np.asarray(equal_risk_contribution(cov), float)     # risk-parity
         last2 = A[:, t] / A[:, t - 2] - 1                       # blackout : évite le post-choc binaire
         w = np.where(np.abs(last2) > blackout_move, 0.0, w)
@@ -233,6 +234,7 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
         return [1.0] + [round(float(x), 4) for x in e]
 
     out = {"available": True, "step_days": step, "top_k": len(universe),
+           "cov_diag": summarize(cov_diags, n_degraded, cov_denoise),
            "preset": _stats(port, per_year),
            "turnover_annual": round(turn / len(port) * per_year, 2),
            "dd_target": dd_target, "band": band, "target_vol": round(tgt_vol, 4),
@@ -263,7 +265,7 @@ def preset_latest_weights(data: dict, quality: dict | None = None, asset_classes
                           max_weight: float = 0.10, min_names: int = 12,
                           regime_gate: bool = True, mom_tilt: bool = True,
                           breadth_gate: bool = True, min_weight: float = 0.025,
-                          corr_tighten: bool = True) -> dict:
+                          corr_tighten: bool = True, cov_denoise: bool = False) -> dict:
     """Poids cibles ACTUELS du preset (dernière barre) — pilote la PRODUCTION (make live).
 
     Même logique que le backtest (qualité top-K -> risk-parity ERC -> DD-target -> blackout), mais
@@ -285,7 +287,7 @@ def preset_latest_weights(data: dict, quality: dict | None = None, asset_classes
     win = rets[:, max(0, t - lookback):t]
     if win.shape[1] < 20:
         return {}
-    cov = _cov_annual(win)
+    cov, _, _ = cov_for_step(win, denoise=cov_denoise)   # défaut : covariance historique
     w = np.asarray(equal_risk_contribution(cov), float)
     last2 = A[:, t] / A[:, t - 2] - 1
     w_bl = np.where(np.abs(last2) > blackout_move, 0.0, w)

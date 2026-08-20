@@ -1,5 +1,38 @@
 # 04 — JOURNAL
 
+## Session 2026-08-20 (3) — M1 branché au preset : diagnostic d'abord, levier ensuite
+**Contexte.** Suite « best practice » : premier branchement d'un des 7 modules, choisi pour son
+rapport valeur/risque — la covariance décide de tout ce qui est en aval.
+
+**Fait (910 tests verts, +9).**
+- **Nouveau module `packages/backtest/cov_risk.py`** (95 l.) : extraction de `_cov_annual` hors de
+  `preset_backtest.py` (661 l., au-dessus du plafond de 400 — on ne l'aggrave pas), plus
+  `cov_diagnostic`, `cov_diag_annual` et la **porte d'entrée unique `cov_for_step`** partagée par
+  le rail backtest ET le rail production, pour qu'ils ne puissent plus diverger.
+- **Le diagnostic est TOUJOURS calculé, le débruitage JAMAIS par défaut.** Décision structurante :
+  on veut savoir si le preset optimise du signal ou du bruit **sans toucher aux chiffres publiés**.
+  `cov_diag` (k médian, q, % de pas dégradés, verdict) apparaît dans la sortie de `preset_backtest` ;
+  `cov_denoise=True` est le seul chemin qui modifie la covariance.
+- **Dégradation honnête** : moins de 2 directions distinguables du bruit ⇒ covariance DIAGONALE,
+  donc ERC = inverse-vol. C'est ce que la matrice permet d'affirmer, ni plus ni moins.
+- **`make preset-lab`** : config `+covariance débruitée RMT` + section « COVARIANCE —
+  EXPLOITABILITÉ » imprimée même sans activer le levier.
+
+**Deux défauts trouvés par mes propres tests, corrigés.**
+1. `cov_for_step` appelait le diagnostic sans garde : un diagnostic KO tuait le backtest. Un calcul
+   purement observationnel ne doit JAMAIS pouvoir casser un run → try/except + test dédié.
+2. Le Sharpe publié est arrondi à 0,1 : il ne discrimine pas deux configurations proches. Les tests
+   de non-régression comparent désormais les COURBES, pas les métriques arrondies.
+
+**Observation (synthétique, donc UNCALIBRATED).** Sur 8 marches aléatoires indépendantes,
+`k_signal` médian = 0 et le débruitage replie sur l'inverse-vol à 100 % des pas — comportement
+attendu et correct : sans structure commune, il n'y a rien à optimiser transversalement.
+Le chiffre qui compte est celui des **données réelles**, à produire sur le Mac (TODO M1).
+
+**Décidé.** Aucune activation en production : le flag reste à False des deux côtés. L'activation
+passera par une PR portant les chiffres de `make preset-lab` sur données réelles, comme pour tout
+levier (garde-fou CLAUDE.md : jamais d'activation silencieuse).
+
 ## Session 2026-08-20 (2) — 7 modules avancés : RMT, CPCV, Almgren-Chriss, portage, alt-data
 **Contexte.** Suite de l'audit 5 axes : demande de spécifications exécutables sur 7 modules
 (matrices aléatoires, labellisation/CV combinatoire, décroissance d'alpha, exécution optimale,
