@@ -3,6 +3,29 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+## 🏦 AUDIT BOARD 2026-08-20 — 4 piliers (cf. [[19_AUDIT_BOARD_4_PILIERS]])
+- [x] **Hurst R/S** — LIVRÉ `packages/regime/hurst.py` : correction Anis-Lloyd (le R/S brut sort
+      H=0,566 sur du BRUIT PUR → « tendance » à tort), bande nulle par permutation, verdict
+      opérationnel (momentum / arbitrage stat / aucune allocation), H glissant causal.
+- [x] **HMM causal** — LIVRÉ `packages/regime/hmm_causal.py` : Baum-Welch, fenêtre expansive,
+      probabilité FILTRÉE, réordonnancement des états par volatilité, hystérésis. Sentinelle de
+      non-fuite testée (troncature ⇒ chemin identique). **Correctif du finding F3.**
+- [x] **Netting Core/Satellite** — LIVRÉ `packages/portfolio/netting.py` : net vs brut vs
+      exécuté, coût du conflit en bps, 3 politiques (net / core_priority / block), livres
+      virtuels pour l'attribution. **Correctif du finding F13.**
+- [ ] **F11 · calendrier de marché (P0 avant tout intraday)** : `MarketCalendar` par place
+      (XNYS/XETR/24-7) — `is_open`, `session_minutes`, demi-séances, enchères, jours fériés.
+      Sans lui, l'agrégation 1 h → 4 h → Weekly est une source de fuite structurelle.
+- [ ] **F12 · boucle asynchrone** : une seule boucle d'E/S, cœur de décision synchrone et
+      déterministe, file BORNÉE, détection de flux mort, dead-man switch. Refonte du chemin de
+      prod → ne pas mener sans un vrai flux pour la valider.
+- [ ] **F14 · log d'événements d'ordre** append-only (INTENT→SUBMITTED→ACKED→PARTIAL→FILLED
+      /REJECTED/CANCELED), reconstruction par rejeu, écart d'horloge suivi. Schéma en § 4.2.
+- [ ] **Cockpit** : 5 vues manquantes (exposition factorielle, CVaR/Hill, attribution Core vs
+      Satellite, exploitabilité covariance, régime filtré) — toutes les sources existent déjà.
+- [ ] **Business** : mesurer avant de valoriser — 5 interlocuteurs paieraient-ils un rapport
+      d'intégrité de backtest ? Précondition : le RDV paper.
+
 ## 🔬 MODULES AVANCÉS 2026-08-20 — branchements (cf. [[18_MODULES_AVANCES]])
 > Code livré et testé, **non câblé**. Chaque branchement passe par le gate.
 

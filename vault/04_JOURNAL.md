@@ -1,5 +1,47 @@
 # 04 — JOURNAL
 
+## Session 2026-08-20 (4) — Audit board 4 piliers : Hurst, HMM causal, netting Core/Satellite
+**Contexte.** « fais-le toi » + audit de `main` selon les 4 piliers (quant, architecture,
+cockpit, business). PR **#324** ouverte pour les travaux précédents.
+
+**Fait (+22 tests).**
+- `packages/regime/hurst.py` : R/S avec correction **Anis-Lloyd** et bande nulle par
+  permutation. Piège figé en test : le R/S BRUT renvoie H = 0,566 sur du bruit pur (on
+  conclurait « tendance » sur une marche aléatoire) ; corrigé, 0,507. Verdict opérationnel :
+  persistant → momentum, anti-persistant → arbitrage statistique, dans la bande → **aucune
+  allocation**.
+- `packages/regime/hmm_causal.py` : Baum-Welch complet, fenêtre expansive, probabilité
+  **filtrée** (jamais lissée ni Viterbi), réordonnancement des états par volatilité,
+  hystérésis. **Correctif du finding F3.** Vérifié sur 2 régimes connus : σ [0,50 ; 2,51] pour
+  [0,5 ; 2,5], diagonale 0,97 pour 0,97. Sentinelle de non-fuite : troncature ⇒ chemin
+  identique. Écart chiffré du lissage : Viterbi 96,9 % contre 94,5 % pour le filtre causal —
+  c'est le prix de l'honnêteté, et il est petit.
+- `packages/portfolio/netting.py` : net / brut / exécuté, coût du conflit en bps, politiques
+  `net` · `core_priority` · `block`, livres virtuels. **Correctif du finding F13.**
+- [[19_AUDIT_BOARD_4_PILIERS]] : note d'audit des 4 piliers.
+
+**Trois findings nouveaux.**
+- **F11** — aucun calendrier de marché dans le dépôt (grep vide). Crypto 24/7 et séances
+  régulées partagent la même boucle : l'agrégation 1 h → 4 h → Weekly est une **fuite
+  structurelle** (barre Weekly étiquetée lundi mais close vendredi).
+- **F12** — le moteur d'exécution est **synchrone et piloté par cron** ; `asyncio` n'existe que
+  dans `apps/api` et le serveur MCP. Une poche crypto 24/7 ne peut pas réagir à une cascade.
+- **F14** — pas de machine à états d'ordre ni de log d'événements immuable (le journal
+  enregistre des trades, pas des transitions).
+
+**Décidé.**
+- **Moteur C++20 lock-free écarté** : à l'horizon 1 h, le budget de latence est de plusieurs
+  secondes ; la contrainte est la donnée et le coût, pas le jitter. Ce serait optimiser le seul
+  poste non limitant en ajoutant une frontière de langage à un projet d'une personne.
+- **Business** : l'actif défendable n'est pas l'alpha (DSR ≈ 0 assumé) mais l'infrastructure
+  d'intégrité de recherche. Le produit correspondant est « prouvez que votre backtest n'est pas
+  surajusté », pas la vente de signaux — laquelle est en outre une activité réglementée. Les
+  multiples d'ARR sont une conséquence, pas un objectif.
+- F11 et F12 spécifiés mais **non implémentés** : le calendrier exige une source de jours fériés
+  (décision de périmètre), la boucle asynchrone est une refonte du chemin de prod à ne pas mener
+  sans un vrai flux pour la valider.
+
+
 ## Session 2026-08-20 (3) — M1 branché au preset : diagnostic d'abord, levier ensuite
 **Contexte.** Suite « best practice » : premier branchement d'un des 7 modules, choisi pour son
 rapport valeur/risque — la covariance décide de tout ce qui est en aval.

@@ -13,6 +13,7 @@
 - 🎨 [[11_DESIGN_SYSTEM]] · 🧮 [[12_FACTORS]] · 🪞 [[12_MANIFESTE_HONNETETE]] (DSR≈0 assumé = le wedge)
 - 🏛️ [[17_AUDIT_INSTITUTIONNEL]] — audit 5 axes (PIT · loi fondamentale · queues/régimes · frictions · exécution) + `17_UPGRADE/`
 - 🔬 [[18_MODULES_AVANCES]] — 7 modules (RMT · CPCV · Almgren-Chriss · portage · quantamental · alt-data) + `18_UPGRADE/`
+- 🏦 [[19_AUDIT_BOARD_4_PILIERS]] — quant · architecture (calendrier, async, netting) · cockpit · business
 
 ## Mission
 Screening & trading systématique multi-actifs (actions, ETF, forex, crypto, commodities, indices),
