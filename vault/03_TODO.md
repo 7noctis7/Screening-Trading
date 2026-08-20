@@ -3,6 +3,21 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+## 🎯 ALPHA — `make alpha-lab` (2026-08-20)
+- [x] **Labo d'alpha livré** : 5 hypothèses pré-enregistrées + gate 4 étages + ledger.
+- [ ] **CE SOIR SUR LE MAC — la commande qui répond à « où est l'alpha ? »** :
+  ```bash
+  git fetch origin && git reset --hard origin/main   # après merge de la PR #324
+  make alpha-lab
+  ```
+  → me coller le tableau + le bloc VERDICT. Trois issues possibles, toutes utiles :
+  1. **un candidat passe** → re-runner sur une période DISJOINTE avant toute activation ;
+  2. **rien ne passe** → c'est un résultat, à publier sur `/echecs` (et cohérent avec le
+     manifeste d'honnêteté : le wedge n'est pas l'alpha directionnel) ;
+  3. **univers < 30 titres** → le labo refuse de conclure, il faut élargir la base.
+- [ ] Après la vague 1 (prix bruts + délistés) : **re-runner alpha-lab**. Les verdicts obtenus
+      sur un univers survivant et des prix rétro-ajustés ne sont pas définitifs.
+
 ## 🏦 AUDIT BOARD 2026-08-20 — 4 piliers (cf. [[19_AUDIT_BOARD_4_PILIERS]])
 - [x] **Hurst R/S** — LIVRÉ `packages/regime/hurst.py` : correction Anis-Lloyd (le R/S brut sort
       H=0,566 sur du BRUIT PUR → « tendance » à tort), bande nulle par permutation, verdict

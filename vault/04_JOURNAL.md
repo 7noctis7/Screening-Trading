@@ -1,5 +1,45 @@
 # 04 — JOURNAL
 
+## Session 2026-08-20 (5) — `make alpha-lab` : 5 hypothèses pré-enregistrées, passées au gate
+**Contexte.** « je veux de l'alpha ». Constat honnête d'abord : la seule source de données
+réelles dans le conteneur est l'outil MCP FMP, dont chaque réponse transite par le contexte —
+impossible d'y construire un panel crédible. Les autres hôtes (stooq, yahoo, binance, nasdaq)
+sont refusés par la politique du proxy. Donc : livrer un LABO que le Mac exécute en une
+commande, plutôt que fabriquer un résultat.
+
+**Livré.**
+- `packages/research/alpha_hypotheses.py` : 5 hypothèses **pré-enregistrées** (paramètres figés
+  a priori, aucune grille) — H1 momentum 12-1 (contrôle), H2 momentum RÉSIDUEL
+  (Blitz-Huij-Martens), H3 basse vol idiosyncratique (Ang), H4 reversal 5 j, H5 proximité au
+  plus-haut 52 semaines (George-Hwang) — plus un moteur transversal commun : quintiles,
+  z robuste, dollar-neutre ou long-only, `exec_lag=1`, coût sur |Δposition|.
+- `scripts/alpha_lab.py` + `make alpha-lab` : chaque hypothèse × {long/short, long-only} passe
+  les 4 étages (placebo par **permutation du classement en coupe** → DSR déflaté par le ledger
+  → PBO/CSCV sur les 10 configurations → sabotage), verdict compact, essais logués.
+
+**Un vrai bug trouvé et corrigé en cours de route.** La première version résidualisait H2 et H3
+sur la fenêtre où le signal est ensuite MESURÉ. Retirer des composantes ajustées sur les mêmes
+points rend le résidu cumulé anti-persistant **par construction** : le signal devient contrarian
+sans qu'aucune information de marché n'intervienne. Mesuré : Sharpe brut **−0,68 sur un panel
+sans alpha** avant correction, ≈ 0 après. Correctif : loadings estimés sur une fenêtre
+**antérieure** puis appliqués hors échantillon. C'est la même faute que résidualiser un alpha
+sur des facteurs plein-échantillon, à une échelle plus discrète — et elle est désormais figée
+en test.
+
+**Validation du banc (synthétique, aucune mesure d'alpha).**
+- *Calibration* : sans signal implanté, les Sharpes bruts des 5 hypothèses restent autour de 0
+  sur 3 tirages.
+- *Puissance* : avec une dérive idiosyncratique implantée, H1 passe de +0,19 à +0,44 — si le
+  banc ne voyait pas un effet PRÉSENT, ses négatifs ne vaudraient rien.
+- *Démonstration du gate* : sur un panel quasi-bruit, H1 long-only affiche **Sharpe 1,44 et
+  CAGR 28,8 %** — et le gate le **rejette** (DSR 3 %). C'est exactement ce que le labo doit
+  faire, et l'illustration la plus utile de pourquoi les backtests flatteurs abondent.
+
+**Ce que ce labo NE corrige PAS, et qui est écrit en tête du script** : univers d'aujourd'hui
+(biais du survivant, F9) et prix rétro-ajustés (F1). Un positif ici est un CANDIDAT à re-tester
+après la vague 1, jamais une conclusion.
+
+
 ## Session 2026-08-20 (4) — Audit board 4 piliers : Hurst, HMM causal, netting Core/Satellite
 **Contexte.** « fais-le toi » + audit de `main` selon les 4 piliers (quant, architecture,
 cockpit, business). PR **#324** ouverte pour les travaux précédents.

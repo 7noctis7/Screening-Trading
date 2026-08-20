@@ -1,4 +1,4 @@
-.PHONY: install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto ingest-mktcap preset-report calibrate-preset preset-lab screen repro kill-check log-alpha sync-alphas event-study event-study-smid backtest-pead-smid funding-study risk-check sensitivity paper-watch vault-lint crypto-cockpit crypto-brief regime-study breakout-study microstructure-poc vault-ask crypto-screen screen-niche list-db live live-go live-cron-install live-cron-uninstall verify-journal rdv-paper slippage alerts-test ingest-macro bitmart-check clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull journal-pull journal-push notion-sync contracts supabase-kpis
+.PHONY: install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto ingest-mktcap preset-report calibrate-preset preset-lab alpha-lab screen repro kill-check log-alpha sync-alphas event-study event-study-smid backtest-pead-smid funding-study risk-check sensitivity paper-watch vault-lint crypto-cockpit crypto-brief regime-study breakout-study microstructure-poc vault-ask crypto-screen screen-niche list-db live live-go live-cron-install live-cron-uninstall verify-journal rdv-paper slippage alerts-test ingest-macro bitmart-check clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull journal-pull journal-push notion-sync contracts supabase-kpis
 # PYTHON : utilise AUTOMATIQUEMENT le venv s'il existe (.venv/bin/python), sinon python3 système.
 # Évite le piège « No module named numpy » quand le venv n'est pas activé. Surchargeable.
 TICKER ?= AAPL
@@ -79,6 +79,8 @@ calibrate-preset:    ## calibre le preset (DD × top-K × bande) par Sharpe déf
 	$(PYTHON) scripts/calibrate_preset.py
 preset-lab:          ## labo Sharpe/Sortino : cap adaptatif + overlay risque, mesurés puis gatés
 	$(PYTHON) scripts/preset_lab.py
+alpha-lab:           ## labo d'ALPHA : 5 hypothèses pré-enregistrées passées au gate 4 étages
+	$(PYTHON) scripts/alpha_lab.py
 screen:              ## screener à filtres (config/screening.yaml) → candidats triés par z-score
 	$(PYTHON) scripts/run_screen.py
 repro:               ## manifeste de reproductibilité (git sha + config/data hash + env) → out/repro.json
