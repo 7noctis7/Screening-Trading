@@ -77,11 +77,17 @@ def _gate(name: str, A, long_only: bool, cost_bps: float) -> dict | None:
         n_trials, sr_std = deflation_params(min_trials=10)
     except Exception:  # noqa: BLE001
         n_trials, sr_std = 10, None
-    dsr = deflated_sharpe_ratio(r["sharpe"], ret.size, n_trials=n_trials, sr_std=sr_std)
+    # PSR/DSR exigent le Sharpe et le seuil dans la MÊME périodicité : on passe donc le
+    # Sharpe PAR PÉRIODE (le Sharpe annualisé n'est qu'un affichage).
+    sd = float(ret.std(ddof=1))
+    sr_period = float(ret.mean() / sd) if sd > 0 else 0.0
+    dsr = deflated_sharpe_ratio(sr_period, ret.size, n_trials=n_trials, sr_std=sr_std)
     sab = sabotage_verdict(ret, turnover=r["turnover_annual"] / (252.0 / r["step"]))
     v = promotion_verdict(dsr=dsr, placebo_p=placebo_p, edge=float(ret.mean()))
     v["checks"]["sabotage"] = bool(sab.get("survives"))
     return {"nom": name, "long_only": long_only, "sharpe": r["sharpe"],
+            "sharpe_period": round(sr_period, 4),
+            "periods_per_year": round(252.0 / r["step"], 4),
             "cagr": r["annualized"], "maxdd": r["max_drawdown"],
             "turnover": r["turnover_annual"], "n_steps": r["n_steps"],
             "dsr": dsr, "placebo_p": placebo_p, "sabotage": bool(sab.get("survives")),
@@ -141,7 +147,10 @@ def _log(rows: list[dict], promus: list[dict], pbo: float | None) -> None:
                            "facteur": f"alpha_lab_{r['nom']}"
                                       f"{'_LO' if r['long_only'] else ''}",
                            "classe": ["equity"], "horizon": "mensuel",
-                           "dsr": r["dsr"], "sharpe": r["sharpe"], "maxdd": r["maxdd"],
+                           "dsr": r["dsr"], "sharpe": r["sharpe"],
+                           "sharpe_period": r["sharpe_period"],
+                           "periods_per_year": r["periods_per_year"],
+                           "maxdd": r["maxdd"],
                            "pbo": pbo, "placebo_p": r["placebo_p"],
                            "statut": "en_test" if r in promus else "rejete",
                            "these": "Hypothèse pré-enregistrée (alpha-lab)."})

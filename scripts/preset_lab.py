@@ -76,6 +76,7 @@ def _run_configs(data, acmap) -> list[dict]:
         st, per_year = r["preset"], 252.0 / r["step_days"]
         rows.append({"label": label, "kw": kw, "cagr": st["annualized"],
                      "sharpe": st["sharpe"], "dsr": st["dsr"],
+                     "periods_per_year": round(per_year, 4),
                      "sortino": _sortino(r["curves"]["preset"], per_year),
                      "maxdd": st["max_drawdown"], "turnover": r["turnover_annual"],
                      "cov_diag": r.get("cov_diag")})
@@ -136,6 +137,7 @@ def _log_ledger(rows: list[dict], promoted: list[dict]) -> None:
                            "facteur": f"preset_lab_{'_'.join(sorted(r['kw']))}",
                            "classe": ["equity", "etf", "crypto"], "horizon": "swing",
                            "dsr": r["dsr"], "sharpe": r["sharpe"], "maxdd": r["maxdd"],
+                           "periods_per_year": r.get("periods_per_year"),
                            "params": r["kw"],
                            "statut": "en_test" if r in promoted else "rejete",
                            "these": "Levier risque preset (labo Sharpe/Sortino)."})

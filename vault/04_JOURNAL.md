@@ -1,5 +1,31 @@
 # 04 — JOURNAL
 
+## Session 2026-08-20 (6) — Le gate était inatteignable : artefact d'unités dans le DSR (ADR-0035)
+**Contexte.** Question posée : « peut-on produire de l'alpha plutôt que de seulement démontrer ce
+qui échoue ? » En cherchant POURQUOI rien ne passe jamais, j'ai trouvé la réponse dans le code,
+pas dans les marchés.
+
+**Le défaut, mesuré.** `deflation_params` calcule `sr_std` sur les Sharpe **annualisés** stockés au
+ledger, et le DSR le compare à un Sharpe **par période**. Sur le ledger réel : `sr_std = 0,972`
+⇒ `sr_star = 1,721` par barre ⇒ il fallait un Sharpe **annualisé de 27** (quotidien) pour franchir
+le gate. Aucun candidat ne pouvait passer. Latent jusqu'à ce que le ledger contienne 2 Sharpe —
+le correctif de juillet avait réparé le repli, pas le chemin nominal.
+
+**Correctif (ADR-0035).** Seuls les essais à périodicité CONNUE entrent dans `sr_std` ; les autres
+sont exclus, jamais devinés. Moins de deux ⇒ repli `√(1/n)` (H0 de Bailey-LdP). `preset_lab` et
+`alpha_lab` enregistrent `periods_per_year` ; `alpha_lab` passe désormais un Sharpe par période au
+DSR. `deflation_diagnostic()` rend la déflation auditable. 6 tests de non-régression.
+
+**Effet.** Le seuil passe à ~0,65 de Sharpe annualisé sur 7 ans mensuels. Sharpe 1,5 : DSR 0,00 la
+veille, 0,98 aujourd'hui. Sharpe 0,30 : toujours rejeté. Le gate redevient falsifiable — ni
+complaisant, ni impossible.
+
+**Conséquence de méthode.** Tous les verdicts DSR antérieurs sont invalides sur cette composante.
+Un rejet qui tenait par le placebo, le PBO ou le sabotage reste un rejet ; les autres sont à
+ré-établir. C'est exactement ce que `make alpha-lab` et `make preset-lab` produiront au prochain
+run sur données réelles.
+
+
 ## Session 2026-08-20 (5) — `make alpha-lab` : 5 hypothèses pré-enregistrées, passées au gate
 **Contexte.** « je veux de l'alpha ». Constat honnête d'abord : la seule source de données
 réelles dans le conteneur est l'outil MCP FMP, dont chaque réponse transite par le contexte —

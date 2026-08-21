@@ -56,23 +56,41 @@ def deflation_params(path: str | Path = DEFAULT_PATH,
                      min_trials: int = 1) -> tuple[int, float | None]:
     """(N, sr_std) pour déflater le DSR sur TOUT le programme de recherche.
 
-    Faille corrigée : déflater par la grille d'un seul script sous-estime le mining.
-    N = nb total d'hypothèses testées (ledger) ; sr_std = dispersion inter-essais des
-    Sharpe (mesure réelle du data-mining ; None si <2 Sharpe connus → le DSR replie
-    alors sur √(1/n), falsifiable — l'ancien repli 1.0 plaçait le seuil hors d'atteinte).
+    `sr_std` doit être exprimé dans la MÊME PÉRIODICITÉ que le Sharpe passé au DSR
+    (les appelants passent un Sharpe PAR PÉRIODE). Or les scripts historiques
+    enregistrent au ledger un Sharpe **annualisé** : les mélanger plaçait le seuil à
+    ~1,72 par barre, soit un Sharpe annualisé de **27** en quotidien — inatteignable
+    par construction, donc un DSR jamais franchissable dès que le ledger contenait
+    deux Sharpes. C'était un artefact d'unités, pas un verdict de marché
+    (audit 2026-08-20, ADR à écrire).
+
+    Règle désormais : n'entrent dans `sr_std` que les enregistrements dont la
+    périodicité est CONNUE — `sharpe_period` explicite, ou `sharpe` accompagné de
+    `periods_per_year`. Les autres sont **exclus**, jamais devinés. Moins de deux
+    utilisables ⇒ None ⇒ le DSR replie sur √(1/n) (hypothèse H0 de Bailey-LdP), qui
+    est falsifiable.
+
+    `N` (nombre d'essais) reste compté sur TOUS les facteurs distincts : la déflation
+    par le multiple testing ne dépend pas, elle, de la périodicité.
     """
     recs = read_records(path)
-    # N = hypothèses DISTINCTES (par `facteur`), pas le nb de relances du même script :
-    # relancer 10× breakout ne doit pas gonfler N (essais ≠ runs). Best practice.
     by_facteur: dict[str, float] = {}
     distinct: set[str] = set()
+    ignores = 0
     for r in recs:
         f = r.get("facteur")
         if not f:
             continue
         distinct.add(f)
-        if isinstance(r.get("sharpe"), (int, float)):
-            by_facteur[f] = r["sharpe"]          # dernier Sharpe connu par facteur
+        sp = r.get("sharpe_period")
+        if isinstance(sp, (int, float)):
+            by_facteur[f] = float(sp)
+            continue
+        ppy, sh = r.get("periods_per_year"), r.get("sharpe")
+        if isinstance(ppy, (int, float)) and ppy > 0 and isinstance(sh, (int, float)):
+            by_facteur[f] = float(sh) / float(ppy) ** 0.5
+        elif isinstance(sh, (int, float)):
+            ignores += 1                      # périodicité inconnue → EXCLU, jamais deviné
     n = max(min_trials, len(distinct) or len(recs))
     sharpes = list(by_facteur.values())
     if len(sharpes) < 2:
@@ -80,6 +98,29 @@ def deflation_params(path: str | Path = DEFAULT_PATH,
     mean = sum(sharpes) / len(sharpes)
     var = sum((s - mean) ** 2 for s in sharpes) / (len(sharpes) - 1)
     return n, max(1e-6, var ** 0.5)
+
+
+def deflation_diagnostic(path: str | Path = DEFAULT_PATH) -> dict:
+    """Pourquoi le seuil du DSR vaut ce qu'il vaut — rend la déflation auditable."""
+    recs = read_records(path)
+    connus, inconnus = 0, 0
+    for r in recs:
+        if not r.get("facteur"):
+            continue
+        if isinstance(r.get("sharpe_period"), (int, float)) or (
+                isinstance(r.get("periods_per_year"), (int, float))
+                and isinstance(r.get("sharpe"), (int, float))):
+            connus += 1
+        elif isinstance(r.get("sharpe"), (int, float)):
+            inconnus += 1
+    n, sr_std = deflation_params(path)
+    return {"n_trials": n, "sr_std": sr_std,
+            "records_periodicite_connue": connus,
+            "records_exclus_periodicite_inconnue": inconnus,
+            "repli_bailey": sr_std is None,
+            "note": ("sr_std mesuré sur les essais à périodicité connue"
+                     if sr_std is not None else
+                     "moins de 2 essais à périodicité connue → repli √(1/n) (Bailey-LdP)")}
 
 
 def best_by_dsr(path: str | Path = DEFAULT_PATH, top: int = 5) -> list[dict]:
