@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { StepBanner } from "@/components/Pipeline";
 import { useDashboard, useScreener, useSentiment, usePresetLedger, usePositions, useAnalytics } from "@/lib/api";
 import { MetricCard } from "@/components/MetricCard";
+import { expliqueDrawdown, expliqueSharpe } from "@/lib/plain";
 import { RegimeBanner } from "@/components/RegimeBanner";
 import { VixPlaybook } from "@/components/VixPlaybook";
 import { SentimentBanner } from "@/components/SentimentBanner";
@@ -98,11 +99,16 @@ export default function Dashboard() {
         <span className="text-muted2">backtest preset ~10 ans, net de frais — pas un compte réel · le réel est sur <a href="/positions" className="text-accent">/positions</a></span>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <MetricCard hero label="Rendement" value={pct(m.total_return)} tone={m.total_return >= 0 ? "pos" : "neg"} delta={dPts(m.total_return, prevStats?.total_return)} />
-        <MetricCard hero label="CAGR" value={pct(m.cagr ?? 0)} tone={(m.cagr ?? 0) >= 0 ? "pos" : "neg"} delta={dPts(m.cagr, prevStats?.cagr)} />
-        <MetricCard hero label="Sharpe" value={m.sharpe?.toFixed(2)} delta={dAbs(m.sharpe, prevStats?.sharpe)} />
-        <MetricCard hero label="Sortino" value={m.sortino?.toFixed(2)} delta={dAbs(m.sortino, prevStats?.sortino)} />
-        <MetricCard hero label="Max DD" value={pct(m.max_drawdown)} tone="neg" delta={dPts(m.max_drawdown, prevStats?.max_drawdown)} />
+        <MetricCard hero label="Gain total" value={pct(m.total_return)} tone={m.total_return >= 0 ? "pos" : "neg"} delta={dPts(m.total_return, prevStats?.total_return)}
+          explication="Depuis le début de la période mesurée." />
+        <MetricCard hero label="Gain par an" terme="CAGR" value={pct(m.cagr ?? 0)} tone={(m.cagr ?? 0) >= 0 ? "pos" : "neg"} delta={dPts(m.cagr, prevStats?.cagr)}
+          explication="Rythme moyen, une fois lissées les bonnes et les mauvaises années." />
+        <MetricCard hero label="Gain / risque" terme="Sharpe" value={m.sharpe?.toFixed(2)} delta={dAbs(m.sharpe, prevStats?.sharpe)}
+          explication={expliqueSharpe(m.sharpe).phrase} />
+        <MetricCard hero label="Gain / baisses" terme="Sortino" value={m.sortino?.toFixed(2)} delta={dAbs(m.sortino, prevStats?.sortino)}
+          explication="Même idée que le rapport gain / risque, mais ne compte que les baisses." />
+        <MetricCard hero label="Pire baisse" terme="Max DD" value={pct(m.max_drawdown)} tone="neg" delta={dPts(m.max_drawdown, prevStats?.max_drawdown)}
+          explication={expliqueDrawdown(m.max_drawdown).phrase} />
       </div>
 
       <TradeStatsRow ts={d.trade_stats} />

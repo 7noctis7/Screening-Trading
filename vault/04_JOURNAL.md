@@ -1,5 +1,46 @@
 # 04 — JOURNAL
 
+## Session 2026-08-21 (2) — Accessibilité du site : l'accueil accueille au lieu d'enseigner
+**Contexte.** « Beaucoup trop technique, épure-le, rends les données interprétables par le plus
+grand nombre. »
+
+**Le constat.** La page d'accueil ÉTAIT un glossaire : le premier écran d'un visiteur affichait
+GARCH(1,1), Cornish-Fisher, PSR/DSR, HRP, CV purgée. C'est une RÉFÉRENCE — elle suppose déjà
+connu ce qu'elle explique. La navigation parlait « Le Gate », « Journal (round-trips) »,
+« Fiche 360 », « Signaux ML ». Et les chiffres héros du tableau de bord étaient « CAGR /
+Sharpe / Sortino / Max DD » : justes, mais muets pour qui n'a pas fait de finance quantitative.
+
+**Fait.**
+- `apps/web/lib/plain.ts` : traduction des métriques en langage courant — verdict
+  (favorable / correct / vigilance), phrase sans jargon, et **équivalent en euros**. C'est la
+  conversion qui rend un pourcentage concret : « pire baisse 14,6 % » devient « voir 1 460 €
+  partir sur 10 000 € avant que ça remonte ». Une valeur absente reste absente, jamais
+  remplacée par une valeur plausible.
+- `/glossaire` (nouvelle page) : les 9 termes déplacés SANS RIEN PERDRE, chacun précédé d'une
+  ligne « En clair » d'une phrase.
+- `/accueil` refondu : une phrase qui dit ce que fait l'outil, **trois portes d'entrée** dans
+  l'ordre où l'on se pose les questions (« Est-ce que ça marche ? » / « Qu'est-ce que je
+  détiens ? » / « Que faudrait-il regarder ? »), et une section « Comment lire les chiffres »
+  qui explique les trois repères suffisants.
+- `MetricCard` accepte `explication` (phrase en clair sous le chiffre) et `terme` (le mot
+  technique conservé entre parenthèses, pour qui le connaît). Tableau de bord : « Gain / risque
+  (Sharpe) », « Pire baisse (Max DD) », avec la phrase issue de `plain.ts`.
+- Navigation : libellés en français courant — « Le Gate » → « Méthode & preuves », « Journal
+  (round-trips) » → « Historique des opérations », « Signaux ML » → « Signaux automatiques »,
+  « Fiche 360 » → « Fiche d'un titre », « Échecs publiés » → « Ce qui n'a pas marché ».
+
+**Méthode de vérification** (le front n'a pas de tests) : dépendances installées, **build de
+référence pris AVANT toute modification** (vert), puis à chaque étape `tsc --noEmit` comparé à
+la référence (2 erreurs préexistantes dans `Scene.tsx`, aucune nouvelle) et `next build` vert.
+Contrôle final : les phrases attendues sont bien présentes dans le bundle compilé, y compris
+celle générée à l'exécution par `plain.ts`.
+
+**Principe retenu — divulgation progressive plutôt que mode « simple/expert ».** Aucune donnée
+n'est retirée : le vocabulaire technique reste accessible (entre parenthèses, dans le
+glossaire, sur les pages dédiées). C'était moins risqué qu'un système de modes sur un export
+statique, et cela évite de créer un site au rabais pour les débutants.
+
+
 ## Session 2026-08-21 — Correction P/S (contradiction d'identité), note pondérée, journal de décision
 **Contexte.** Audit utilisateur sur le pipeline fondamental livré la veille. Trois points, dont
 un **défaut de conception réel** que j'avais implémenté sans le voir.
