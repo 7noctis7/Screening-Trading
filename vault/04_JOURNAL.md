@@ -1,5 +1,275 @@
 # 04 — JOURNAL
 
+## Session 2026-08-20 (7) — Pipeline fondamental 4 couches + l'entonnoir qui dit la vérité
+**Contexte.** Cahier des charges reçu : screening qualité → DCF → momentum → dimensionnement ES,
+avec des seuils durs (marge > 20 %, croissance > 15 %, D/E < 0,60, quick ratio > 1, P/S < 7,
+PER < 25, décote DCF ≥ 30 %). 70 % des briques existaient déjà en pièces détachées
+(`fundamentals/ratios`, `valuation.dcf_intrinsic_per_share`, `scoring.piotroski/altman`,
+`risk_metrics.cvar_historical`, `risk/atr_stops`, `sizing/kelly_fat_tail`). Ce qui manquait :
+l'assemblage — et quatre corrections.
+
+**Livré : `packages/screening/alpha_pipeline.py` (314 l., 9 tests).**
+Les 4 couches du cahier des charges, avec :
+1. **Classement par défaut, couperets en option.** Mesuré sur un univers synthétique réaliste
+   de 60 sociétés (les sociétés de qualité y sont pricées à 40× les bénéfices, comme dans la
+   vraie vie) : le mode **strict laisse passer ZÉRO titre dès la couche 1**. Le mode
+   classement donne 12 → 6 → 3. Marge > 20 % ET croissance > 15 % ET PER < 25 est presque
+   contradictoire : le marché price précisément la qualité-croissance au-dessus de 25×.
+2. **Le DCF devient un SCORE avec bande de sensibilité** (WACC ±1 pt, croissance ±2 pts) et un
+   drapeau `fragile` quand le SIGNE de la décote s'inverse dans la bande — c'est-à-dire quand
+   le DCF ne tranche rien. Exiger « décote ≥ 30 % » sur une estimation dont la valeur
+   terminale domine tout est de la précision fictive.
+3. **L'entonnoir est publié** à chaque couche (entrent / sortent / pourquoi). C'est lui qui
+   dit si le screener produit un portefeuille ou trois lignes.
+4. **Le quick ratio n'est PAS calculable** depuis `Financials` (ni actif ni passif courant dans
+   le modèle) : renvoyé `None` et **exclu** de la conjonction, jamais approximé en silence. Un
+   critère non mesuré n'est ni violé ni satisfait.
+
+**Dimensionnement.** Budget d'**Expected Shortfall** : `w = budget_ES / ES_95(actif)`, ce qui
+égalise la contribution au risque de queue entre un indice à 15 % de vol et une crypto à 70 %
+(testé : le produit poids × ES est identique). Puis fraction de Kelly **dérivée d'un budget de
+drawdown** si les round-trips réels existent, sinon UNCALIBRATED assumé. Plafond dur à 5 %.
+Trailing stop à 2 × ATR(14).
+
+**Conclusion opérationnelle chiffrée.** Même en mode classement, 60 titres en entrée ne
+donnent que 3 positions — insuffisant pour un IR mesurable. **Il faut 500+ noms en entrée**
+pour sortir 20-30 lignes. C'est la même conclusion que l'axe 2 : le souffle est la matière
+première, et c'est pour ça que `make alpha-lab` charge désormais l'univers large.
+
+**Limite écrite en tête du module.** Les fondamentaux ne sont pas point-in-time : c'est un
+screener LIVE honnête, pas une stratégie backtestable. Backtester des états financiers actuels
+appliqués au passé produirait une courbe magnifique et fausse.
+
+
+## Session 2026-08-20 (6) — Le gate était inatteignable : artefact d'unités dans le DSR (ADR-0035)
+**Contexte.** Question posée : « peut-on produire de l'alpha plutôt que de seulement démontrer ce
+qui échoue ? » En cherchant POURQUOI rien ne passe jamais, j'ai trouvé la réponse dans le code,
+pas dans les marchés.
+
+**Le défaut, mesuré.** `deflation_params` calcule `sr_std` sur les Sharpe **annualisés** stockés au
+ledger, et le DSR le compare à un Sharpe **par période**. Sur le ledger réel : `sr_std = 0,972`
+⇒ `sr_star = 1,721` par barre ⇒ il fallait un Sharpe **annualisé de 27** (quotidien) pour franchir
+le gate. Aucun candidat ne pouvait passer. Latent jusqu'à ce que le ledger contienne 2 Sharpe —
+le correctif de juillet avait réparé le repli, pas le chemin nominal.
+
+**Correctif (ADR-0035).** Seuls les essais à périodicité CONNUE entrent dans `sr_std` ; les autres
+sont exclus, jamais devinés. Moins de deux ⇒ repli `√(1/n)` (H0 de Bailey-LdP). `preset_lab` et
+`alpha_lab` enregistrent `periods_per_year` ; `alpha_lab` passe désormais un Sharpe par période au
+DSR. `deflation_diagnostic()` rend la déflation auditable. 6 tests de non-régression.
+
+**Effet.** Le seuil passe à ~0,65 de Sharpe annualisé sur 7 ans mensuels. Sharpe 1,5 : DSR 0,00 la
+veille, 0,98 aujourd'hui. Sharpe 0,30 : toujours rejeté. Le gate redevient falsifiable — ni
+complaisant, ni impossible.
+
+**Conséquence de méthode.** Tous les verdicts DSR antérieurs sont invalides sur cette composante.
+Un rejet qui tenait par le placebo, le PBO ou le sabotage reste un rejet ; les autres sont à
+ré-établir. C'est exactement ce que `make alpha-lab` et `make preset-lab` produiront au prochain
+run sur données réelles.
+
+
+## Session 2026-08-20 (5) — `make alpha-lab` : 5 hypothèses pré-enregistrées, passées au gate
+**Contexte.** « je veux de l'alpha ». Constat honnête d'abord : la seule source de données
+réelles dans le conteneur est l'outil MCP FMP, dont chaque réponse transite par le contexte —
+impossible d'y construire un panel crédible. Les autres hôtes (stooq, yahoo, binance, nasdaq)
+sont refusés par la politique du proxy. Donc : livrer un LABO que le Mac exécute en une
+commande, plutôt que fabriquer un résultat.
+
+**Livré.**
+- `packages/research/alpha_hypotheses.py` : 5 hypothèses **pré-enregistrées** (paramètres figés
+  a priori, aucune grille) — H1 momentum 12-1 (contrôle), H2 momentum RÉSIDUEL
+  (Blitz-Huij-Martens), H3 basse vol idiosyncratique (Ang), H4 reversal 5 j, H5 proximité au
+  plus-haut 52 semaines (George-Hwang) — plus un moteur transversal commun : quintiles,
+  z robuste, dollar-neutre ou long-only, `exec_lag=1`, coût sur |Δposition|.
+- `scripts/alpha_lab.py` + `make alpha-lab` : chaque hypothèse × {long/short, long-only} passe
+  les 4 étages (placebo par **permutation du classement en coupe** → DSR déflaté par le ledger
+  → PBO/CSCV sur les 10 configurations → sabotage), verdict compact, essais logués.
+
+**Un vrai bug trouvé et corrigé en cours de route.** La première version résidualisait H2 et H3
+sur la fenêtre où le signal est ensuite MESURÉ. Retirer des composantes ajustées sur les mêmes
+points rend le résidu cumulé anti-persistant **par construction** : le signal devient contrarian
+sans qu'aucune information de marché n'intervienne. Mesuré : Sharpe brut **−0,68 sur un panel
+sans alpha** avant correction, ≈ 0 après. Correctif : loadings estimés sur une fenêtre
+**antérieure** puis appliqués hors échantillon. C'est la même faute que résidualiser un alpha
+sur des facteurs plein-échantillon, à une échelle plus discrète — et elle est désormais figée
+en test.
+
+**Validation du banc (synthétique, aucune mesure d'alpha).**
+- *Calibration* : sans signal implanté, les Sharpes bruts des 5 hypothèses restent autour de 0
+  sur 3 tirages.
+- *Puissance* : avec une dérive idiosyncratique implantée, H1 passe de +0,19 à +0,44 — si le
+  banc ne voyait pas un effet PRÉSENT, ses négatifs ne vaudraient rien.
+- *Démonstration du gate* : sur un panel quasi-bruit, H1 long-only affiche **Sharpe 1,44 et
+  CAGR 28,8 %** — et le gate le **rejette** (DSR 3 %). C'est exactement ce que le labo doit
+  faire, et l'illustration la plus utile de pourquoi les backtests flatteurs abondent.
+
+**Ce que ce labo NE corrige PAS, et qui est écrit en tête du script** : univers d'aujourd'hui
+(biais du survivant, F9) et prix rétro-ajustés (F1). Un positif ici est un CANDIDAT à re-tester
+après la vague 1, jamais une conclusion.
+
+
+## Session 2026-08-20 (4) — Audit board 4 piliers : Hurst, HMM causal, netting Core/Satellite
+**Contexte.** « fais-le toi » + audit de `main` selon les 4 piliers (quant, architecture,
+cockpit, business). PR **#324** ouverte pour les travaux précédents.
+
+**Fait (+22 tests).**
+- `packages/regime/hurst.py` : R/S avec correction **Anis-Lloyd** et bande nulle par
+  permutation. Piège figé en test : le R/S BRUT renvoie H = 0,566 sur du bruit pur (on
+  conclurait « tendance » sur une marche aléatoire) ; corrigé, 0,507. Verdict opérationnel :
+  persistant → momentum, anti-persistant → arbitrage statistique, dans la bande → **aucune
+  allocation**.
+- `packages/regime/hmm_causal.py` : Baum-Welch complet, fenêtre expansive, probabilité
+  **filtrée** (jamais lissée ni Viterbi), réordonnancement des états par volatilité,
+  hystérésis. **Correctif du finding F3.** Vérifié sur 2 régimes connus : σ [0,50 ; 2,51] pour
+  [0,5 ; 2,5], diagonale 0,97 pour 0,97. Sentinelle de non-fuite : troncature ⇒ chemin
+  identique. Écart chiffré du lissage : Viterbi 96,9 % contre 94,5 % pour le filtre causal —
+  c'est le prix de l'honnêteté, et il est petit.
+- `packages/portfolio/netting.py` : net / brut / exécuté, coût du conflit en bps, politiques
+  `net` · `core_priority` · `block`, livres virtuels. **Correctif du finding F13.**
+- [[19_AUDIT_BOARD_4_PILIERS]] : note d'audit des 4 piliers.
+
+**Trois findings nouveaux.**
+- **F11** — aucun calendrier de marché dans le dépôt (grep vide). Crypto 24/7 et séances
+  régulées partagent la même boucle : l'agrégation 1 h → 4 h → Weekly est une **fuite
+  structurelle** (barre Weekly étiquetée lundi mais close vendredi).
+- **F12** — le moteur d'exécution est **synchrone et piloté par cron** ; `asyncio` n'existe que
+  dans `apps/api` et le serveur MCP. Une poche crypto 24/7 ne peut pas réagir à une cascade.
+- **F14** — pas de machine à états d'ordre ni de log d'événements immuable (le journal
+  enregistre des trades, pas des transitions).
+
+**Décidé.**
+- **Moteur C++20 lock-free écarté** : à l'horizon 1 h, le budget de latence est de plusieurs
+  secondes ; la contrainte est la donnée et le coût, pas le jitter. Ce serait optimiser le seul
+  poste non limitant en ajoutant une frontière de langage à un projet d'une personne.
+- **Business** : l'actif défendable n'est pas l'alpha (DSR ≈ 0 assumé) mais l'infrastructure
+  d'intégrité de recherche. Le produit correspondant est « prouvez que votre backtest n'est pas
+  surajusté », pas la vente de signaux — laquelle est en outre une activité réglementée. Les
+  multiples d'ARR sont une conséquence, pas un objectif.
+- F11 et F12 spécifiés mais **non implémentés** : le calendrier exige une source de jours fériés
+  (décision de périmètre), la boucle asynchrone est une refonte du chemin de prod à ne pas mener
+  sans un vrai flux pour la valider.
+
+
+## Session 2026-08-20 (3) — M1 branché au preset : diagnostic d'abord, levier ensuite
+**Contexte.** Suite « best practice » : premier branchement d'un des 7 modules, choisi pour son
+rapport valeur/risque — la covariance décide de tout ce qui est en aval.
+
+**Fait (910 tests verts, +9).**
+- **Nouveau module `packages/backtest/cov_risk.py`** (95 l.) : extraction de `_cov_annual` hors de
+  `preset_backtest.py` (661 l., au-dessus du plafond de 400 — on ne l'aggrave pas), plus
+  `cov_diagnostic`, `cov_diag_annual` et la **porte d'entrée unique `cov_for_step`** partagée par
+  le rail backtest ET le rail production, pour qu'ils ne puissent plus diverger.
+- **Le diagnostic est TOUJOURS calculé, le débruitage JAMAIS par défaut.** Décision structurante :
+  on veut savoir si le preset optimise du signal ou du bruit **sans toucher aux chiffres publiés**.
+  `cov_diag` (k médian, q, % de pas dégradés, verdict) apparaît dans la sortie de `preset_backtest` ;
+  `cov_denoise=True` est le seul chemin qui modifie la covariance.
+- **Dégradation honnête** : moins de 2 directions distinguables du bruit ⇒ covariance DIAGONALE,
+  donc ERC = inverse-vol. C'est ce que la matrice permet d'affirmer, ni plus ni moins.
+- **`make preset-lab`** : config `+covariance débruitée RMT` + section « COVARIANCE —
+  EXPLOITABILITÉ » imprimée même sans activer le levier.
+
+**Deux défauts trouvés par mes propres tests, corrigés.**
+1. `cov_for_step` appelait le diagnostic sans garde : un diagnostic KO tuait le backtest. Un calcul
+   purement observationnel ne doit JAMAIS pouvoir casser un run → try/except + test dédié.
+2. Le Sharpe publié est arrondi à 0,1 : il ne discrimine pas deux configurations proches. Les tests
+   de non-régression comparent désormais les COURBES, pas les métriques arrondies.
+
+**Observation (synthétique, donc UNCALIBRATED).** Sur 8 marches aléatoires indépendantes,
+`k_signal` médian = 0 et le débruitage replie sur l'inverse-vol à 100 % des pas — comportement
+attendu et correct : sans structure commune, il n'y a rien à optimiser transversalement.
+Le chiffre qui compte est celui des **données réelles**, à produire sur le Mac (TODO M1).
+
+**Décidé.** Aucune activation en production : le flag reste à False des deux côtés. L'activation
+passera par une PR portant les chiffres de `make preset-lab` sur données réelles, comme pour tout
+levier (garde-fou CLAUDE.md : jamais d'activation silencieuse).
+
+## Session 2026-08-20 (2) — 7 modules avancés : RMT, CPCV, Almgren-Chriss, portage, alt-data
+**Contexte.** Suite de l'audit 5 axes : demande de spécifications exécutables sur 7 modules
+(matrices aléatoires, labellisation/CV combinatoire, décroissance d'alpha, exécution optimale,
+queues + financement, quantamental NLP, pipeline alt-data + overlays).
+
+**Livré — code (901 tests verts, +50 nouveaux, aucun câblage prod).**
+- `packages/portfolio/rmt_denoise.py` : bornes de Marčenko-Pastur, nombre de facteurs par
+  point fixe **et** écart spectral, débruitage à valeur propre résiduelle constante (trace
+  préservée), détonage, rang effectif, chaîne MP → Ledoit-Wolf, **verdict** d'exploitabilité.
+- `packages/ml/cpcv.py` : CV combinatoire purgée + embargo, `phi = C(n,k)·k/n` chemins,
+  refus explicite d'échantillons non triés (la purge serait illusoire).
+- `packages/ml/uniqueness.py` : concurrence, unicité moyenne, poids par attribution de
+  rendement, décroissance temporelle, **taille d'échantillon effective**.
+- `packages/execution/almgren_chriss.py` : `kappa` par résolution de cosh, trajectoire sinh,
+  coût espéré/variance, frontière efficiente d'exécution, plafond de participation.
+- `packages/execution/funding_costs.py` : marge, rebate de prêt de titres, dividendes short,
+  coût du capital bloqué, **frais d'emprunt maximal supportable**.
+- `packages/ranking/orthogonalize.py` : z robuste médiane/MAD, z intra-groupe avec taille
+  minimale, QR séquentiel centré, projection de neutralisation, combinaison `Omega⁻¹·ic`.
+- `packages/research/causality.py` : bêta incomplète + p-value de Fisher **sans scipy**,
+  Granger bidirectionnel, information mutuelle Miller-Madow + permutation, `pit_align`, Šidák.
+
+**Livré — guide.** [[18_MODULES_AVANCES]] (index, blueprint d'assemblage, correspondance avec
+le framework de screening en 5 modules) + `vault/18_UPGRADE/` : M1 RMT, M2 labellisation/CPCV,
+M3+M4 décroissance et exécution, M5 queues et financement, M6 quantamental, M7 alt-data.
+
+**Trois résultats non triviaux.**
+1. **Le seuil MP seul sur-détecte** quand quelques facteurs absorbent la trace (5 facteurs
+   vrais → `k_mp = 15`, mesuré). L'écart spectral retrouve k exactement sur 1, 3 et 5 facteurs :
+   le module renvoie les deux, et `k_mp` est documenté comme borne supérieure.
+2. **200 labels de 10 barres décalés de 1 valent moins de 30 observations** (`n_eff` mesuré).
+   Tout test de significativité utilisant 200 se trompe d'un facteur 2,6 sur les écarts-types.
+3. **Le temps caractéristique d'exécution `1/kappa` ne dépend pas de la taille de l'ordre**
+   (testé) : la taille change le coût, jamais le rythme. `lambda` est une décision de
+   politique de risque, pas un paramètre à optimiser sur l'historique.
+
+**Deux trous assumés, non comblés.** Surface de volatilité et couverture optionnelle (aucune
+chaîne d'options ingérée — c'est une décision de périmètre, pas une tâche) ; optimisation CVaR
+par programmation linéaire (Rockafellar-Uryasev spécifiée en M5 § 3, non codée car non
+testable dans ce conteneur — `scipy` est déclaré dans le groupe `quant`).
+
+**Décidé.** Priorité inchangée malgré l'attrait des 7 modules : tant que l'historique de prix
+mute (F1) et que le coût est un forfait linéaire (F2), ajouter des sources exogènes ajoute des
+occasions de se tromper avec plus de conviction. L'alt-data est le **dernier** chantier.
+
+
+## Session 2026-08-20 — Audit institutionnel 5 axes + 4 modules de référence
+**Contexte.** Demande d'audit « MD quant » sur le corpus Grinold-Kahn / Isichenko / Paleologo /
+Chan / Taleb / Mandelbrot / Wilmott, traduit en spécifications pour la plateforme et les robots
+multi-timeframes (1 h → Monthly).
+
+**Livré — guide (vault).** [[17_AUDIT_INSTITUTIONNEL]] (scorecard, 10 findings de code datés
+avec chemin/ligne, séquence de travail) + `vault/17_UPGRADE/` : [[AXE1_DATA_PIT]] (schéma
+bitemporel, algorithme d'ajustement corporate actions, security master, conventions intraday),
+[[AXE2_ALPHA_LOI_FONDAMENTALE]] (alpha = vol·IC·z, souffle effectif, chevauchement/Newey-West,
+orthogonalisation par projection + Marchenko-Pastur), [[AXE3_QUEUES_REGIMES]] (Hill, GPD par
+PWM, CVaR, HMM causal, cointégration), [[AXE4_SIZING_FRICTIONS]] (Kelly à queues épaisses,
+impact racine carrée, admission), [[AXE5_EXECUTION]] (fill L1/L2, machine à états, dead-man).
+
+**Livré — code (851 tests verts, +32 nouveaux, aucun câblage prod).**
+- `packages/research/breadth.py` : N_eff/T_eff, coefficient de TRANSFERT, IR = IC·√BR·TC,
+  `ic_required`, `optimal_horizon` (h* ≈ 1,81 × demi-vie, dérivé et vérifié numériquement).
+- `packages/execution/impact.py` : impact en racine carrée avec vol ET volume **de la fenêtre**
+  d'exécution, taille max sous budget, plafond POV, test d'admission alpha vs coût.
+- `packages/research/cointegration.py` : ADF avec valeurs critiques **Engle-Granger**, ratio de
+  couverture, demi-vie OU, correction multi-tests, verdict bidirectionnel.
+- `packages/portfolio/sizing/kelly_fat_tail.py` : Kelly sur distribution empirique + queue GPD,
+  borne de ruine, fraction dérivée d'un budget de drawdown (λ = 2/(1 + ln ε / ln b)).
+
+**Trois findings qui changent des décisions.**
+1. **F1** — `auto_adjust=True` + `_split_drift` : l'historique de prix MUTE après chaque split
+   ou dividende. Deux backtests lancés à deux dates ne sont pas comparables — or DSR et PBO
+   comparent exactement cela. Correctif : prix bruts immuables + table `corporate_action`,
+   facteur calculé à la lecture avec `as_of`.
+2. **F2 / axe 4 § 4.5** — avec les barèmes RÉELS déjà encodés dans `costs.py`, l'horizon minimal
+   viable est ≈ 34 h (actions/Alpaca), ≈ 64 h (Binance), ≈ 219 h (**BitMart**). Aucun robot
+   1 h / 4 h ne passe le test d'admission avec les courtiers configurés : le levier n'est pas le
+   signal, c'est le coût (venue moins chère + exécution maker).
+3. **F10** — `fraction=0.25` du Kelly correspond à un budget de drawdown de 50 %, pas au
+   `QUANT_DD_TARGET=0.25` affiché ailleurs (qui impose λ ≈ 0,175). Deux appétits pour le risque
+   contradictoires dans le même dépôt.
+
+**Décidé.** Aucun des 4 modules n'est câblé : ils entrent en production par le gate
+(`15_CERTIFICATION.md`) comme n'importe quel candidat. Tous les paramètres (Y de l'impact, κ de
+la bande, seuils de demi-vie, IC supposés du tableau d'admission) sont **UNCALIBRATED** — les
+ordres de grandeur suffisent à trancher la question du 1 h, pas à dimensionner une position.
+
+
 ## Session 2026-07-17 (2) — Research-integrity : fill t+1, sabotage Δposition, delta survivorship
 **Contexte.** « fait tout selon best practices » sur la roadmap XL/L/M. Décision honnête : NE PAS
 big-bang le god-object (2500 l., non vérifiable depuis le cloud) ni raser des pages front riches

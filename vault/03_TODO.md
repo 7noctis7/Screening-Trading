@@ -3,6 +3,131 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+## 🎯 ALPHA — pipeline fondamental + labo (2026-08-20)
+- [x] **Pipeline 4 couches livré** (`screening/alpha_pipeline.py`) : qualité → DCF avec bande de
+      sensibilité → momentum → dimensionnement par budget d'ES. Entonnoir publié.
+- [ ] **Brancher le pipeline sur les fondamentaux réels** (`fundamentals/fmp_provider` ou
+      `sec_provider`) et le lancer sur 500+ tickers → si l'entonnoir sort < 10 lignes, élargir
+      l'univers AVANT d'assouplir les seuils.
+- [ ] **Ajouter actif/passif courant à `Financials`** pour rendre le quick ratio calculable
+      (aujourd'hui `None`, donc exclu de la conjonction — c'est honnête mais incomplet).
+- [ ] Ne PAS backtester ce pipeline tant que les fondamentaux ne sont pas point-in-time (F1/F9).
+
+## 🎯 ALPHA — `make alpha-lab` (2026-08-20)
+- [x] **Labo d'alpha livré** : 5 hypothèses pré-enregistrées + gate 4 étages + ledger.
+- [ ] **CE SOIR SUR LE MAC — la commande qui répond à « où est l'alpha ? »** :
+  ```bash
+  git fetch origin && git reset --hard origin/main   # après merge de la PR #324
+  make alpha-lab
+  ```
+  → me coller le tableau + le bloc VERDICT. Trois issues possibles, toutes utiles :
+  1. **un candidat passe** → re-runner sur une période DISJOINTE avant toute activation ;
+  2. **rien ne passe** → c'est un résultat, à publier sur `/echecs` (et cohérent avec le
+     manifeste d'honnêteté : le wedge n'est pas l'alpha directionnel) ;
+  3. **univers < 30 titres** → le labo refuse de conclure, il faut élargir la base.
+- [ ] Après la vague 1 (prix bruts + délistés) : **re-runner alpha-lab**. Les verdicts obtenus
+      sur un univers survivant et des prix rétro-ajustés ne sont pas définitifs.
+
+## 🏦 AUDIT BOARD 2026-08-20 — 4 piliers (cf. [[19_AUDIT_BOARD_4_PILIERS]])
+- [x] **Hurst R/S** — LIVRÉ `packages/regime/hurst.py` : correction Anis-Lloyd (le R/S brut sort
+      H=0,566 sur du BRUIT PUR → « tendance » à tort), bande nulle par permutation, verdict
+      opérationnel (momentum / arbitrage stat / aucune allocation), H glissant causal.
+- [x] **HMM causal** — LIVRÉ `packages/regime/hmm_causal.py` : Baum-Welch, fenêtre expansive,
+      probabilité FILTRÉE, réordonnancement des états par volatilité, hystérésis. Sentinelle de
+      non-fuite testée (troncature ⇒ chemin identique). **Correctif du finding F3.**
+- [x] **Netting Core/Satellite** — LIVRÉ `packages/portfolio/netting.py` : net vs brut vs
+      exécuté, coût du conflit en bps, 3 politiques (net / core_priority / block), livres
+      virtuels pour l'attribution. **Correctif du finding F13.**
+- [ ] **F11 · calendrier de marché (P0 avant tout intraday)** : `MarketCalendar` par place
+      (XNYS/XETR/24-7) — `is_open`, `session_minutes`, demi-séances, enchères, jours fériés.
+      Sans lui, l'agrégation 1 h → 4 h → Weekly est une source de fuite structurelle.
+- [ ] **F12 · boucle asynchrone** : une seule boucle d'E/S, cœur de décision synchrone et
+      déterministe, file BORNÉE, détection de flux mort, dead-man switch. Refonte du chemin de
+      prod → ne pas mener sans un vrai flux pour la valider.
+- [ ] **F14 · log d'événements d'ordre** append-only (INTENT→SUBMITTED→ACKED→PARTIAL→FILLED
+      /REJECTED/CANCELED), reconstruction par rejeu, écart d'horloge suivi. Schéma en § 4.2.
+- [ ] **Cockpit** : 5 vues manquantes (exposition factorielle, CVaR/Hill, attribution Core vs
+      Satellite, exploitabilité covariance, régime filtré) — toutes les sources existent déjà.
+- [ ] **Business** : mesurer avant de valoriser — 5 interlocuteurs paieraient-ils un rapport
+      d'intégrité de backtest ? Précondition : le RDV paper.
+
+## 🔬 MODULES AVANCÉS 2026-08-20 — branchements (cf. [[18_MODULES_AVANCES]])
+> Code livré et testé, **non câblé**. Chaque branchement passe par le gate.
+
+- [x] **M1 · covariance — BRANCHÉ (opt-in)** : `packages/backtest/cov_risk.py` (porte d'entrée
+      unique des 2 rails) + flag `cov_denoise` dans `preset_backtest` ET `preset_latest_weights`.
+      **Défaut inchangé au bit près** (non-régression testée) ; le DIAGNOSTIC, lui, est toujours
+      calculé et publié dans `cov_diag`. Repli inverse-vol quand `k_signal < 2`.
+      Config `+covariance débruitée RMT` ajoutée à `make preset-lab`, section « exploitabilité ».
+- [ ] **M1 · CE SOIR SUR LE MAC** : `make preset-lab` → me coller la section
+      « COVARIANCE — EXPLOITABILITÉ » + la ligne `+covariance débruitée RMT`.
+      C'est LA mesure qui dit si l'ERC du preset répartit du signal ou du bruit.
+      Si `k` médian < 2 sur données réelles : l'ERC n'est pas justifiée et le levier RMT
+      (ou l'inverse-vol pure) devient le défaut — PR d'activation AVEC ces chiffres.
+- [ ] **M2 · labellisation** : corriger `ml/labeling.triple_barrier` — barrières en
+      `pt·sigma·sqrt(h)` (aujourd'hui `pt·sigma` : barrière touchée quasi sûrement),
+      détection sur `high`/`low` (aujourd'hui close seul = biais optimiste), ex-æquo résolu
+      en faveur du stop, barrières inversées pour les shorts.
+- [ ] **M2 · CV** : remplacer `PurgedKFold` par `CombinatorialPurgedCV(6, 2)` dans
+      `ml_walkforward` → distribution de Sharpe sur 5 chemins → PBO calculé sur cette
+      distribution, DSR avec `n_eff` (`uniqueness.effective_sample_size`) et non `n`.
+- [ ] **M3 · TC et souffle** : instrumenter `preset_backtest` (2 lignes) — `transfer_coefficient`
+      et `ir_report`. Répond à « le problème vient-il du signal ou de mes contraintes ? ».
+- [ ] **M4 · exécution** : `trajectory()` dans le chemin d'exécution des blocs, avec
+      `cap_by_participation` ; calibrer `eta`/`gamma` sur le TCA réel (N ≥ 100 fills).
+- [ ] **M5 · portage** : `carry_costs()` dans le PnL du backtest dès qu'un short existe ;
+      exiger `max_borrow_fee()` du courtier AVANT d'ouvrir la moindre position vendeuse.
+- [ ] **M5 · EVT** : passer `evt.fit_pot` aux moments pondérés par les probabilités (formules
+      fermées vérifiées en [[M5_QUEUES_ET_FINANCEMENT]] § 2) ; ajouter l'estimateur de Hill.
+- [ ] **M6 · sentiment** : journaliser le MOTEUR (FinBERT vs lexique) avec chaque score —
+      un historique mixte est inexploitable ; puis `neutralize()` sur la surprise de résultats
+      avant de mesurer l'IC (sinon le facteur est du PEAD déguisé).
+- [ ] **M7 · alt-data** : rien à brancher avant F1 et F2. Quand ce sera le cas : une source à
+      la fois, prior écrit d'abord, `granger_both_ways` + `mi_permutation_test` + Šidák.
+- [ ] **Décision de périmètre** : options (surface de vol, grecques) — dans le projet ou pas ?
+      Aucune chaîne d'options n'est ingérée aujourd'hui ; c'est un choix, pas un oubli.
+
+## 🏛️ AUDIT INSTITUTIONNEL 2026-08-20 — suites (cf. [[17_AUDIT_INSTITUTIONNEL]])
+> Ordre imposé par les dépendances, pas par préférence : sans la vague 1, aucune mesure ne vaut.
+
+**Vague 1 — rendre le passé immuable (P0)**
+- [ ] **F1 · prix bruts + `corporate_action`** : arrêter `auto_adjust=True` en écriture, stocker
+      l'OHLCV AS-TRADED, calculer le facteur à la lecture avec `as_of` (algo : [[AXE1_DATA_PIT]] § 2).
+      Étendre `pit_guard.stable_prefix` aux PRIX (test CI `pit_replay`).
+- [ ] **F9 · `index_membership` datée** + `symbol_history` (FB→META) + `security_master` avec
+      `delist_return` (convention CRSP −30 % si inconnu) → débloque enfin `survivorship_delta()`.
+
+**Vague 2 — installer le thermomètre (P1)**
+- [ ] Mesurer **IC réalisé par facteur et par horizon** (rendement RÉSIDUEL, CV purgée), puis
+      `breadth.ir_report(...)` : N_eff, T_eff, TC. Publier `ic_required` pour l'IR cible.
+- [ ] **TC dans `preset_backtest`** : corrélation(alphas, poids réels) — 2 lignes, répond à
+      « le problème vient-il du signal ou de mes contraintes ? ».
+- [ ] F5 · aligner `psr.bootstrap_sharpe_ci` sur un bootstrap **par blocs** (le front le fait déjà).
+- [ ] F6 · z-score robuste (médiane/MAD + winsorisation ±3 + taille de groupe ≥ 10) dans `ranking/engine.py`.
+- [ ] F7 · `evt.fit_pot` par **PWM** au lieu des moments (formules fermées dans [[AXE3_QUEUES_REGIMES]] § 1.2).
+- [ ] Estimateur de **Hill** + Hill plot : afficher l'indice de queue α à côté des KPI héros.
+
+**Vague 3 — coût non linéaire partout (P0)**
+- [ ] Brancher `impact.total_cost_bps` dans `preset_backtest`, `screening/expectancy_filter`
+      et le sabotage. **Peut inverser des verdicts existants** → à faire avant tout nouveau signal.
+- [ ] Calibrer `Y` par régression sur les fills réels (`tca.py` + `exec_costs.py`), N ≥ 100.
+- [ ] F10 · trancher l'appétit pour le risque : `fraction=0.25` (budget DD 50 %) vs
+      `QUANT_DD_TARGET=0.25` (impose λ ≈ 0,175). Un seul nombre doit gouverner les deux.
+
+**Vague 4 — alpha non directionnel (P1)**
+- [ ] **Décision préalable** : lever ou non le long-only (ADR-0029). Sans short, pas de paire.
+- [ ] Si oui : univers de candidats à prior économique (jamais toutes les paires), fenêtre de
+      formation figée, filtre « ≥ 12 traversées de la moyenne », puis gate 4 étages.
+- [ ] Kalman causal pour le ratio de couverture ([[AXE3_QUEUES_REGIMES]] § 3).
+
+**Vague 5 — exécution (P0 avant tout live/intraday)**
+- [ ] **F4 · `exec_lag = 1` par défaut** (0 = option « optimiste » étiquetée).
+- [ ] `FillModel` injectable derrière `Broker` : `NextBarPOVFill` (L1) puis `QueueFill` (L2).
+- [ ] **Dead-man switch** + machine à états NORMAL/REDUCED/FLATTEN_ONLY/HALTED.
+- [ ] Disjoncteur de slippage (médiane glissante 20 fills > 3× le coût modélisé → HALTED).
+- [ ] F3 · verrouiller `vol_regime` (fenêtre expansive, probabilité FILTRÉE, réordonnancement
+      des états par vol) **avant** tout câblage dans une boucle de backtest.
+
 ## 🌙 CE SOIR SUR LE MAC — 2026-07-17 (post-merge #320)
 - [ ] **0. Récupérer le merge #320** (audit + dashboard trades + simulateur MC) :
   ```bash

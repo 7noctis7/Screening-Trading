@@ -4,7 +4,10 @@ Leviers testés (paramètres fixés A PRIORI — aucune grille, donc pas de sél
   1. base                  : preset de prod actuel (référence) ;
   2. +cap adaptatif        : plafond 10 % resserré ×0,5 si corr moyenne > 0,60 (corr_tighten) ;
   3. +overlay risque       : taper drawdown + frein vol EWMA (risk_overlay, déjà codé, jamais gaté) ;
-  4. +les deux.
+  4. +les deux ;
+  5. fill t+1              : exécution au close t+1 (chiffre le mini look-ahead) ;
+  6. +covariance débruitée : Marcenko-Pastur + repli inverse-vol si moins de 2 directions
+                             exploitables (M1). Le DIAGNOSTIC est imprimé même sans le levier.
 
 VERDICT honnête : un levier n'est PROMU que si son Sharpe déflaté (DSR, N du ledger) et son
 maxDD s'améliorent — sinon il reste « rejeté » et se publie sur /echecs comme les autres.
@@ -29,6 +32,7 @@ CONFIGS = [
     ("+cap adaptatif + overlay", {"max_weight": 0.10, "corr_tighten": True,
                                   "risk_overlay": True}),
     ("fill t+1 (réaliste, M-1)", {"exec_lag": 1}),   # écart vs fill au signal = mini look-ahead
+    ("+covariance débruitée RMT", {"cov_denoise": True}),   # M1 : repli inverse-vol si k < 2
 ]
 
 
@@ -72,9 +76,31 @@ def _run_configs(data, acmap) -> list[dict]:
         st, per_year = r["preset"], 252.0 / r["step_days"]
         rows.append({"label": label, "kw": kw, "cagr": st["annualized"],
                      "sharpe": st["sharpe"], "dsr": st["dsr"],
+                     "periods_per_year": round(per_year, 4),
                      "sortino": _sortino(r["curves"]["preset"], per_year),
-                     "maxdd": st["max_drawdown"], "turnover": r["turnover_annual"]})
+                     "maxdd": st["max_drawdown"], "turnover": r["turnover_annual"],
+                     "cov_diag": r.get("cov_diag")})
     return rows
+
+
+def _cov_report(rows: list[dict]) -> None:
+    """LA question de M1 : le preset optimise-t-il du signal ou du bruit ?
+
+    Diagnostic OBSERVATIONNEL de la configuration de base — il ne change aucun chiffre.
+    k = nombre de directions distinguables du bruit (Marcenko-Pastur + écart spectral) ;
+    q = n/T. k < 2 signifie qu'aucune optimisation transversale n'est justifiée.
+    """
+    d = (rows[0].get("cov_diag") or {}) if rows else {}
+    print("\n" + "=" * 60 + "\nCOVARIANCE — EXPLOITABILITÉ (M1, observationnel)\n" + "=" * 60)
+    if not d.get("available"):
+        print("  Diagnostic indisponible (échantillon trop court)."); return
+    print(f"  q = n/T médian        : {d['q_median']}")
+    print(f"  directions fiables k  : médiane {d['k_signal_median']:.0f} "
+          f"(min {d['k_signal_min']}, max {d['k_signal_max']}) sur {d['n_steps']} rebalancements")
+    print(f"  verdict               : {d['verdict']}")
+    if d["k_signal_median"] < 2:
+        print("  → l'ERC répartit un risque estimé sur du bruit. Le levier « covariance")
+        print("    débruitée RMT » replie alors sur l'inverse-vol : comparer sa ligne ci-dessus.")
 
 
 def _verdict(rows: list[dict]) -> list[dict]:
@@ -111,6 +137,7 @@ def _log_ledger(rows: list[dict], promoted: list[dict]) -> None:
                            "facteur": f"preset_lab_{'_'.join(sorted(r['kw']))}",
                            "classe": ["equity", "etf", "crypto"], "horizon": "swing",
                            "dsr": r["dsr"], "sharpe": r["sharpe"], "maxdd": r["maxdd"],
+                           "periods_per_year": r.get("periods_per_year"),
                            "params": r["kw"],
                            "statut": "en_test" if r in promoted else "rejete",
                            "these": "Levier risque preset (labo Sharpe/Sortino)."})
@@ -151,6 +178,7 @@ def main() -> int:
     rows = _run_configs(data, acmap)
     if not rows:
         print("Rien à comparer."); return 1
+    _cov_report(rows)
     promoted = _verdict(rows)
     _log_ledger(rows, promoted)
     try:

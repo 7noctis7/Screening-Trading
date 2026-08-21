@@ -438,3 +438,43 @@ limité : toute copie antérieure conserve l'info). Conséquence assumée : le p
 JAMAIS contenir de donnée dont la sensibilité dépendrait de l'anonymat (déjà le cas :
 positions réelles local-only, zéro secret tracké — vérifié par audit + gitleaks CI).
 Si la posture change un jour → nouvel ADR (option a : simple ; option c : opération dédiée).
+
+## ADR-0035 — DSR : le seuil de déflation était inatteignable par artefact d'unités (2026-08-20)
+**Date :** 2026-08-20.
+**Contexte.** Le gate exige `DSR > 0,5`. Le seuil `sr_star` est construit à partir de `sr_std`,
+la dispersion des Sharpe entre essais, lue au ledger par `deflation_params`. Or les scripts
+enregistrent au ledger un Sharpe **ANNUALISÉ** (`_stats` multiplie par √per_year), tandis que les
+appelants du DSR (`breakout.py`, puis `alpha_lab.py`) passent un Sharpe **PAR PÉRIODE** — ce que
+la docstring de `deflated_sharpe_ratio` exige explicitement (« MÊME périodicité »).
+
+**Mesure du défaut (2026-08-20, ledger réel de 18 essais / 15 facteurs distincts).**
+`sr_std = 0,972` (dispersion des Sharpe annualisés stockés : 0,20 · 1,90 · 2,10 · 2,44 · 2,66)
+⇒ `sr_star = 1,721` **par barre** ⇒ il fallait un Sharpe **annualisé de 27** en quotidien
+(ou 6,0 en mensuel) pour franchir le gate. **Aucun candidat ne pouvait passer.** Les rejets
+successifs n'étaient donc pas, pour cette composante, des verdicts de marché mais un artefact.
+
+Le défaut était **latent** : il ne s'active que lorsque le ledger contient ≥ 2 Sharpe. Le
+correctif de juillet (repli `sr_std = √(1/n)` au lieu de 1,0) avait réparé le CHEMIN DE REPLI ;
+il n'avait pas vu que le chemin nominal, lui, mélangeait deux unités.
+
+**Décision.**
+1. `deflation_params` n'admet dans `sr_std` que les enregistrements dont la **périodicité est
+   connue** : `sharpe_period` explicite, ou `sharpe` accompagné de `periods_per_year`. Les
+   autres sont **exclus — jamais devinés** (deviner 252 pour un essai mensuel diviserait le
+   seuil par 4,6 sans le dire).
+2. Moins de deux essais utilisables ⇒ `None` ⇒ repli sur `√(1/n)`, l'H0 de Bailey-López de Prado,
+   qui est falsifiable.
+3. Les scripts (`preset_lab`, `alpha_lab`) enregistrent désormais `periods_per_year` et, quand
+   c'est naturel, `sharpe_period`. Le ledger redeviendra progressivement exploitable.
+4. `deflation_diagnostic()` rend la déflation **auditable** : combien d'essais comptent, combien
+   sont exclus, et si l'on est en repli.
+
+**Conséquence assumée — le gate devient MOINS sévère, et c'est voulu.** Avec le repli Bailey et
+15 essais, le seuil passe à un Sharpe annualisé d'environ **0,65 sur ~7 ans mensuels**. Un
+Sharpe annualisé de 1,5 donne désormais DSR ≈ 0,98 ; il donnait ≈ 0,00 la veille. Ce n'est pas
+un assouplissement de confort : c'est le retour à un seuil qui a un sens statistique. Un Sharpe
+de 0,30 reste rejeté (test de non-régression).
+
+**À faire.** Re-runner les hypothèses historiquement rejetées : leurs verdicts DSR sont invalides
+sur cette composante. Un rejet reste un rejet s'il tenait par le placebo, le PBO ou le sabotage —
+mais il doit être re-établi, pas supposé.
