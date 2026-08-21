@@ -1,5 +1,43 @@
 # 04 — JOURNAL
 
+## Session 2026-08-21 (3) — La chaîne décisionnelle : des données à l'ordre
+**Contexte.** « Je veux que toutes les données du site soient reliées entre elles intelligemment
+pour l'analyse jusqu'à la décision de trading. »
+
+**Le constat.** Le site savait déjà TOUT sur un titre — score du filtre, contributions
+factorielles, fondamentaux (Piotroski, Altman, DCF), sentiment, conviction fusionnée, position
+réelle, poids cible — et la fiche affichait tout cela côte à côte. Mais elle s'arrêtait juste
+avant la seule question qui intéresse le visiteur : **et donc, j'achète ou pas, pour combien ?**
+Les données étaient jointes, pas conclues.
+
+**Fait.**
+- `apps/web/lib/decision.ts` (nouveau) : assemble les données EXISTANTES en une décision
+  traçable. Six étages — qualité des comptes, solidité financière, prix payé, tendance, signal
+  d'ensemble, actualité — chacun avec sa question en français, sa valeur observée, son vote et
+  sa lecture.
+- `/fiche` : bloc « La décision » en tête de page — verdict, résumé, les six étages en clair,
+  puis « Et concrètement ? » qui convertit l'écart cible ↔ détention en **euros à acheter ou à
+  alléger**. Labels traduits (« Ret 12 m » → « Évolution sur 1 an », « Cible preset » → « Ce que
+  je devrais détenir », « Piotroski » → « Qualité des comptes »…).
+
+**Trois règles tenues, identiques à la logique Python (`decision_journal.py`).**
+1. **Aucune donnée inventée.** Un étage sans donnée est déclaré *non mesuré* et NE VOTE PAS. Il
+   n'est jamais remplacé par une valeur neutre plausible — ce qui reviendrait à voter.
+2. **Véto de solvabilité.** Un critère graduel manqué (cherté, momentum) se compense par la note
+   d'ensemble ; un Altman Z < 1,81 bloque, quel que soit le reste. On compense de la performance,
+   jamais la solvabilité. Vérifié : tout au vert sauf Altman 1,2 → « Écarté », aucun achat.
+3. **Confiance décroissante avec l'ignorance.** Un verdict *favorable* exige au moins quatre
+   étages mesurés. Trois étages verts sur six plafonnent à « moyen » — le compteur `n/6` est
+   affiché pour que le lecteur voie sur quoi le verdict repose.
+
+**Bande de non-action.** Sous 1 point de pourcentage d'écart à la cible : « conserver ». Le
+va-et-vient coûterait plus que l'écart ne rapporte.
+
+**Vérifié.** 12 cas de la logique passés (véto, ignorance totale, ignorance partielle, dossier
+complet, bande, sur-pondération, hors portefeuille, majorité défavorable, NaN/Inf jamais
+comptés comme mesurés). `tsc` : aucune erreur nouvelle (2 pré-existantes dans `Scene.tsx`).
+`next build` vert, chaînes présentes dans le bundle compilé.
+
 ## Session 2026-08-21 (2) — Accessibilité du site : l'accueil accueille au lieu d'enseigner
 **Contexte.** « Beaucoup trop technique, épure-le, rends les données interprétables par le plus
 grand nombre. »
