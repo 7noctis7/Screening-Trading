@@ -33,6 +33,74 @@ sys.path.insert(0, str(ROOT))
 
 N_PLACEBO = 60          # permutations du classement transversal
 MIN_NAMES = 30          # sous ce seuil, aucune coupe transversale n'a de sens
+MIN_DOLLAR_VOL = 2e6    # liquidité minimale : sous ce seuil, les coûts modélisés sont faux
+MIN_DAYS = 1300         # ~5 ans : en deçà, aucun IC n'est mesurable
+MAX_NAMES = 600         # plafond mémoire/temps
+
+
+def _wide_panel() -> "tuple":
+    """Panel LARGE lu directement dans la base de prix — le souffle est la matière première.
+
+    `IR = IC·√BR` : avec 30 noms, aucun IR mesurable n'est atteignable quel que soit le
+    signal. On charge donc TOUT ce que la base contient, filtré sur deux critères qui ne
+    sont pas des préférences mais des conditions de validité :
+      - historique suffisant (sinon l'IC n'est pas mesurable) ;
+      - liquidité suffisante (sinon le coût modélisé est une fiction).
+    """
+    import os
+
+    import numpy as np
+
+    from packages.data.engine import read_prices_rows
+    db = os.environ.get("QUANT_PRICE_DB")
+    if not db:
+        from apps.api.snapshot import _price_db_path
+        p = _price_db_path()
+        db = str(p) if p else None
+    if not db:
+        return None, [], "aucune base de prix trouvée (QUANT_PRICE_DB)"
+    rows = read_prices_rows(db)
+    if not rows:
+        return None, [], f"base illisible ou vide : {db}"
+    par_sym: dict[str, list] = {}
+    for r in rows:
+        c, ts = r.get("close"), r.get("ts")
+        if c and c > 0 and ts:
+            par_sym.setdefault(r["symbol"], []).append((str(ts)[:10], float(c),
+                                                        float(r.get("volume") or 0.0)))
+    retenus = {}
+    for sym, obs in par_sym.items():
+        if len(obs) < MIN_DAYS:
+            continue
+        obs.sort()
+        dv = np.median([c * v for _, c, v in obs[-252:]])
+        if dv < MIN_DOLLAR_VOL:
+            continue
+        retenus[sym] = (obs, dv)
+    if len(retenus) < MIN_NAMES:
+        return None, [], (f"{len(retenus)} titres passent les filtres "
+                          f"(≥ {MIN_DAYS} j et ≥ {MIN_DOLLAR_VOL/1e6:.0f} M$/j)")
+    # grille de dates = celles présentes chez au moins 80 % des titres retenus
+    from collections import Counter
+    cnt = Counter(d for obs, _ in retenus.values() for d, _, _ in obs)
+    seuil = 0.8 * len(retenus)
+    grille = sorted(d for d, k in cnt.items() if k >= seuil)
+    if len(grille) < MIN_DAYS:
+        return None, [], f"seulement {len(grille)} dates communes (≥ {MIN_DAYS} requis)"
+    idx = {d: i for i, d in enumerate(grille)}
+    ordre = sorted(retenus, key=lambda s: -retenus[s][1])[:MAX_NAMES]   # les plus liquides
+    lignes, syms = [], []
+    for sym in ordre:
+        serie = np.full(len(grille), np.nan)
+        for d, c, _ in retenus[sym][0]:
+            if d in idx:
+                serie[idx[d]] = c
+        if np.isfinite(serie).all():
+            lignes.append(serie)
+            syms.append(sym)
+    if len(syms) < MIN_NAMES:
+        return None, [], f"{len(syms)} titres complets sur la grille commune"
+    return np.asarray(lignes), syms, ""
 
 
 def _panel(data: dict) -> "tuple":
@@ -137,6 +205,70 @@ def _print(rows: list[dict], pbo: float | None, n: int, L: int) -> list[dict]:
     return promus
 
 
+def _combinaison(A, cost: float) -> dict | None:
+    """Le livre COMBINÉ : IC par signal, décorrélation, plafond d'IR, puis gate."""
+    import numpy as np
+
+    from packages.portfolio.psr import deflated_sharpe_ratio
+    from packages.research.adversarial import sabotage_verdict
+    from packages.research.alpha_combine import (breadth_report, combined_backtest,
+                                                 measure_ics, signal_correlation)
+    from packages.research.alpha_hypotheses import SIGNALS
+    from packages.research.gate import promotion_verdict
+
+    names = list(SIGNALS)
+    ics = measure_ics(A, names)
+    if not ics.get("available"):
+        print("\n(combinaison impossible : IC non mesurables sur cet historique)")
+        return None
+    print("\n" + "=" * 60 + "\nIC RÉALISÉS PAR SIGNAL (le thermomètre)\n" + "=" * 60)
+    print(f"  {'Signal':24s} {'IC moyen':>9s} {'t-stat':>7s} {'hit':>6s} {'n dates':>8s}")
+    for k in names:
+        v = ics["par_signal"].get(k)
+        if v:
+            print(f"  {k:24s} {v['ic_mean']:+9.4f} {v['t_stat']:+7.2f} "
+                  f"{v['hit_rate']:6.2f} {v['n']:8d}")
+    O = signal_correlation(A, names)
+    off = O[~np.eye(len(names), dtype=bool)]
+    print(f"\n  Corrélation moyenne entre signaux : {float(off.mean()):+.3f} "
+          f"(min {float(off.min()):+.3f}, max {float(off.max()):+.3f})")
+    print("  → c'est la DÉCORRÉLATION qui crée la valeur de la combinaison, pas la force.")
+    br = breadth_report(A, names, ics)
+    print(f"\n  IC combiné {br['ic_combine']:.4f} vs meilleur seul {br['ic_meilleur_seul']:.4f}"
+          f"  ·  IR plafond (TC=1) {br['ir_theorique_TC1']}"
+          f"  ·  IR réaliste (TC=0,5) {br['ir_realiste_TC05']}")
+    print(f"  IC requis pour un IR de 1 avec TC=0,5 : {br['ic_requis_pour_IR1']:.4f}")
+
+    print("\n" + "=" * 60 + "\nLIVRE COMBINÉ (pondération ré-estimée en fenêtre expansive)\n"
+          + "=" * 60)
+    out = []
+    for lo in (False, True):
+        c = combined_backtest(A, names, long_only=lo, cost_rt_bps=cost)
+        if not c.get("available"):
+            continue
+        ret = c["returns"]
+        sd = float(ret.std(ddof=1))
+        sr_period = float(ret.mean() / sd) if sd > 0 else 0.0
+        try:
+            from packages.research.ledger import deflation_params
+            n_trials, sr_std = deflation_params(min_trials=10)
+        except Exception:  # noqa: BLE001
+            n_trials, sr_std = 10, None
+        dsr = deflated_sharpe_ratio(sr_period, ret.size, n_trials=n_trials, sr_std=sr_std)
+        sab = sabotage_verdict(ret, turnover=c["turnover_annual"] / (252.0 / c["step"]))
+        v = promotion_verdict(dsr=dsr, edge=float(ret.mean()))
+        v["checks"]["sabotage"] = bool(sab.get("survives"))
+        ok = bool(v["checks"]) and all(v["checks"].values())
+        print(f"  {'long-only' if lo else 'long/short':11s} Sharpe {c['sharpe']:6.2f} "
+              f"CAGR {c['annualized']*100:6.1f}% maxDD {c['max_drawdown']*100:6.1f}% "
+              f"turn {c['turnover_annual']:4.1f}× DSR {dsr*100:3.0f}% "
+              f"sabot. {'oui' if sab.get('survives') else 'non'}  "
+              f"{'✅ CANDIDAT' if ok else '❌ rejeté'}")
+        print(f"              poids des signaux : {c['poids_finaux']}")
+        out.append({"long_only": lo, "res": c, "dsr": dsr, "ok": ok})
+    return {"ics": ics, "breadth": br, "livres": out}
+
+
 def _log(rows: list[dict], promus: list[dict], pbo: float | None) -> None:
     try:
         from datetime import UTC, datetime
@@ -165,14 +297,19 @@ def main() -> int:
     from scripts.preset_lab import _load_real_data
     from packages.research.alpha_hypotheses import SIGNALS
 
-    data, _acmap = _load_real_data()
-    if data is None:
-        return 1
-    A, syms = _panel(data)
+    print("Chargement de l'univers LARGE depuis la base de prix…")
+    A, syms, err = _wide_panel()
+    if A is None:
+        print(f"  (univers large indisponible : {err}) — repli sur l'univers curé.")
+        data, _acmap = _load_real_data()
+        if data is None:
+            return 1
+        A, syms = _panel(data)
     if A is None or A.shape[0] < MIN_NAMES:
         print(f"⛔ Univers insuffisant ({0 if A is None else A.shape[0]} titres, "
               f"{MIN_NAMES} requis) : aucune coupe transversale possible.")
         return 1
+    print(f"  Univers retenu : {A.shape[0]} titres × {A.shape[1]} jours")
     cost = CostModel.for_asset_class("equity").round_trip_bps
     print(f"Coût aller-retour appliqué : {cost:.1f} bps (barème {['equity']})")
     rows = []
@@ -186,6 +323,10 @@ def main() -> int:
         return 1
     pbo = _pbo(rows)
     promus = _print(rows, pbo, A.shape[0], A.shape[1])
+    try:
+        _combinaison(A, cost)
+    except Exception as e:  # noqa: BLE001 — la combinaison ne doit pas casser le labo
+        print(f"\n(combinaison non calculée : {str(e)[:120]})")
     _log(rows, promus, pbo)
     return 0
 
