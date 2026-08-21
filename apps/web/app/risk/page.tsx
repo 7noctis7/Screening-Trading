@@ -48,10 +48,17 @@ function SystemHealth({ meta, cd }: { meta: any; cd: any }) {
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
+// `terme` garde le nom technique visible pour qui le connaît ; `aide` explique en une phrase.
+function Stat({ label, value, tone, terme, aide }:
+  { label: string; value: string; tone?: string; terme?: string; aide?: string }) {
   return (
-    <div><div className="text-muted text-xs">{label}</div>
-      <div className="text-lg mono" style={{ color: tone }}>{value}</div></div>
+    <div title={aide}>
+      <div className="text-muted text-xs">
+        {label}{terme && <span className="ml-1 opacity-60">({terme})</span>}
+      </div>
+      <div className="text-lg mono" style={{ color: tone }}>{value}</div>
+      {aide && <div className="text-[11px] leading-snug mt-0.5" style={{ color: "var(--muted2)" }}>{aide}</div>}
+    </div>
   );
 }
 
@@ -78,16 +85,26 @@ export default function Risk() {
       <section className="card p-4">
         <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Mesures de risque</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Stat label="VaR 95%" value={pct(rm.var_95)} tone="#f43f5e" />
-          <Stat label="CVaR 95%" value={pct(rm.cvar_95)} tone="#f43f5e" />
-          <Stat label="VaR Cornish-Fisher" value={pct(rm.var_cornish_fisher_95)} />
-          <Stat label="Volatilité" value={pct(rm.vol)} />
-          <Stat label="Vol EWMA" value={pct(rm.vol_ewma)} />
-          {g?.available && <Stat label="Vol prévue (GARCH)" value={pct(g.forecast_vol)} />}
-          <Stat label="Proba ruine (MC)" value={pct(a.monte_carlo?.p_ruin)} />
-          <Stat label="Sharpe probabiliste" value={pct(rm.psr)} />
-          <Stat label="Sharpe déflaté" value={pct(rm.dsr)} tone={rm.dsr >= 0.9 ? "#22c55e" : undefined} />
-          {rm.evt?.available && <Stat label="VaR 99.9% (EVT)" value={pct(rm.evt.var)} tone="#f43f5e" />}
+          <Stat label="Mauvaise journée" terme="VaR 95 %" value={pct(rm.var_95)} tone="#f43f5e"
+            aide="Perte qu'on ne dépasse pas 95 jours sur 100." />
+          <Stat label="Les pires journées" terme="CVaR 95 %" value={pct(rm.cvar_95)} tone="#f43f5e"
+            aide="Perte MOYENNE lors des 5 journées les plus mauvaises sur 100." />
+          <Stat label="Mauvaise journée, corrigée" terme="Cornish-Fisher" value={pct(rm.var_cornish_fisher_95)}
+            aide="Même calcul, corrigé du fait que les krachs sont plus fréquents que ne le dit la courbe en cloche." />
+          <Stat label="Agitation" terme="volatilité" value={pct(rm.vol)}
+            aide="Amplitude habituelle des variations sur un an." />
+          <Stat label="Agitation récente" terme="EWMA" value={pct(rm.vol_ewma)}
+            aide="Même mesure, en donnant plus de poids aux jours récents." />
+          {g?.available && <Stat label="Agitation prévue" terme="GARCH" value={pct(g.forecast_vol)}
+            aide="Estimation pour les jours à venir : une période agitée en appelle une autre." />}
+          <Stat label="Risque de tout perdre" terme="Monte-Carlo" value={pct(a.monte_carlo?.p_ruin)}
+            aide="Probabilité de perdre la moitié du capital, sur des milliers de scénarios rejoués." />
+          <Stat label="Le gain est-il réel ?" terme="PSR" value={pct(rm.psr)}
+            aide="Probabilité que le rapport gain/risque soit vraiment positif, et pas un hasard d'échantillon." />
+          <Stat label="Solidité du résultat" terme="DSR" value={pct(rm.dsr)} tone={rm.dsr >= 0.9 ? "#22c55e" : undefined}
+            aide="Même question, corrigée du nombre de stratégies essayées. Plus on cherche, plus on trouve par chance." />
+          {rm.evt?.available && <Stat label="Scénario extrême" terme="EVT 99,9 %" value={pct(rm.evt.var)} tone="#f43f5e"
+            aide="Perte lors d'un événement rare : environ un jour sur mille." />}
           {rm.evt?.available && <Stat label="ES 99.9% (EVT)" value={pct(rm.evt.es)} tone="#f43f5e" />}
           {rm.liquidity?.available && <Stat label="Liquidation (jours pond.)" value={String(rm.liquidity.weighted_days)} />}
           {rm.liquidity?.available && <Stat label="Part illiquide" value={pct(rm.liquidity.illiquid_pct)} tone={rm.liquidity.illiquid_pct > 0.2 ? "#f59e0b" : undefined} />}
