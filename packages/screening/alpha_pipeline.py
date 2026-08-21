@@ -21,6 +21,18 @@ imposerait, chacune documentée là où elle s'applique :
    courant dans le modèle). Il est donc renvoyé `None` et **exclu** de la conjonction stricte,
    au lieu d'être approximé en silence. Un critère non mesuré ne doit jamais compter comme
    satisfait.
+5. **Le seuil P/S absolu est SUPPRIMÉ : il contredisait le filtre de marge.** Par identité
+   comptable, `P/S = P/E × marge nette` (vérifié : GOOGL 16,92 × 0,548 = 9,27 pour 9,25
+   publié). Imposer simultanément marge > 20 %, P/E < 25 et P/S < 7 sur-détermine le système :
+   au-delà de **28 % de marge**, c'est le P/S qui devient contraignant et il plafonne le P/E
+   à 12,8 pour une marge de 55 % — donc il **rejette précisément les sociétés très rentables
+   que le filtre qualité cherche** (GOOGL rejeté par le seul P/S). Le plafond est désormais
+   RELATIF au secteur : `ps_max = pe_max × marge moyenne du secteur`, mesurée sur la coupe
+   transversale du jour. Les deux filtres deviennent cohérents au lieu de se contredire.
+6. **Compensation par note pondérée, avec véto.** Mode `score` : un titre peut manquer un
+   critère et rester retenu si sa note globale est bonne — sauf sur ce qui porte un risque de
+   RUINE (levier extrême), où aucune note ne compense. Une bonne note ne rachète pas une
+   dette insoutenable.
 
 ⚠️ **Limite structurelle à connaître avant tout backtest** : les fondamentaux disponibles ici
 ne sont PAS point-in-time. Ce pipeline est un **screener LIVE** honnête ; le backtester sur
@@ -38,6 +50,7 @@ import numpy as np
 
 from packages.fundamentals.models import Financials
 from packages.fundamentals.valuation import dcf_intrinsic_per_share, market_cap
+from packages.screening.decision_journal import journal_decision, note_ponderee
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,10 +60,13 @@ class Seuils:
     revenue_growth_min: float = 0.15
     debt_to_equity_max: float = 0.60
     quick_ratio_min: float = 1.0
-    ps_max: float = 7.0
     pe_max: float = 25.0
     marge_securite_min: float = 0.30
     quintile: float = 0.20              # mode `rank` : part de l'univers conservée
+    # P/S : PLUS de seuil absolu (cf. correction 5). Le plafond est déduit du P/E et de la
+    # marge SECTORIELLE observée : ps_max_effectif = pe_max × marge_moyenne_du_secteur.
+    note_min: float = 0.60              # mode `score` : note pondérée minimale
+    debt_to_equity_veto: float = 2.50   # VÉTO : au-delà, aucune note ne compense
 
 
 @dataclass
@@ -70,7 +86,8 @@ def metriques_qualite(f: Financials) -> dict:
     mc = market_cap(f)
     def _r(num, den):
         return float(num / den) if den else None
-    return {"net_margin": _r(f.net_income, f.revenue),
+    return {"secteur": f.sector or "?",
+            "net_margin": _r(f.net_income, f.revenue),
             "revenue_growth": f.revenue_growth,          # None si la source ne la fournit pas
             "debt_to_equity": _r(f.total_debt, f.total_equity),
             "quick_ratio": None,                          # non calculable (cf. correction 4)
@@ -79,7 +96,28 @@ def metriques_qualite(f: Financials) -> dict:
             "market_cap": mc}
 
 
-def _viole(m: dict, s: Seuils) -> list[str]:
+def marges_sectorielles(financials: list[Financials]) -> dict[str, float]:
+    """Marge nette MOYENNE par secteur, mesurée sur la coupe du jour (pas de table figée)."""
+    par_sec: dict[str, list[float]] = {}
+    for f in financials:
+        if f.revenue:
+            par_sec.setdefault(f.sector or "?", []).append(f.net_income / f.revenue)
+    return {k: float(np.median(v)) for k, v in par_sec.items() if v}
+
+
+def ps_max_effectif(m: dict, s: Seuils, marges: dict[str, float] | None) -> float | None:
+    """Plafond de P/S DÉDUIT du P/E et de la marge du secteur — jamais un nombre absolu.
+
+    `P/S = P/E × marge` : fixer P/E et la marge fixe déjà le P/S. Un plafond absolu de 7
+    revient à imposer un second plafond de P/E, plus sévère à mesure que la marge monte.
+    """
+    if not marges:
+        return None
+    mg = marges.get(m.get("secteur", "?"))
+    return float(s.pe_max * mg) if mg and mg > 0 else None
+
+
+def _viole(m: dict, s: Seuils, marges: dict[str, float] | None = None) -> list[str]:
     """Critères STRICTEMENT violés. Un critère non mesuré n'est ni violé ni satisfait."""
     out = []
     if m["net_margin"] is not None and m["net_margin"] < s.net_margin_min:
@@ -88,8 +126,10 @@ def _viole(m: dict, s: Seuils) -> list[str]:
         out.append(f"croissance {m['revenue_growth']:.1%} < {s.revenue_growth_min:.0%}")
     if m["debt_to_equity"] is not None and m["debt_to_equity"] > s.debt_to_equity_max:
         out.append(f"D/E {m['debt_to_equity']:.2f} > {s.debt_to_equity_max}")
-    if m["price_to_sales"] is not None and m["price_to_sales"] > s.ps_max:
-        out.append(f"P/S {m['price_to_sales']:.1f} > {s.ps_max}")
+    ps_cap = ps_max_effectif(m, s, marges)
+    if m["price_to_sales"] is not None and ps_cap is not None and m["price_to_sales"] > ps_cap:
+        out.append(f"P/S {m['price_to_sales']:.1f} > {ps_cap:.1f} (plafond sectoriel déduit "
+                   f"de P/E {s.pe_max:.0f} × marge médiane du secteur)")
     if m["price_to_earnings"] is None:
         out.append("PER non calculable (bénéfice ≤ 0)")
     elif m["price_to_earnings"] > s.pe_max:
@@ -157,10 +197,7 @@ def signal_momentum(closes, volumes=None) -> dict:
 
 
 # --------------------------------------------------------------------------- couche 4
-def expected_shortfall(returns, alpha: float = 0.95) -> float:
-    """ES historique (perte moyenne dans les pires 1−alpha) — jamais de VaR gaussienne."""
-    from packages.portfolio.risk_metrics import cvar_historical
-    return float(cvar_historical(returns, alpha=alpha))
+from packages.screening.decision_journal import expected_shortfall  # noqa: E402,F401
 
 
 def taille_position(returns, roundtrips=None, es_budget: float = 0.01,
@@ -222,16 +259,19 @@ def run_pipeline(financials: list[Financials], prices: dict[str, dict],
     souffle. `mode="strict"` : couperets du cahier des charges — à comparer, car c'est
     l'entonnoir qui montre si la conjonction laisse passer un portefeuille ou trois lignes.
     """
-    if mode not in ("rank", "strict"):
-        raise ValueError("mode ∈ {'rank', 'strict'}")
+    if mode not in ("rank", "strict", "score"):
+        raise ValueError("mode ∈ {'rank', 'strict', 'score'}")
     s = seuils or Seuils()
+    marges = marges_sectorielles(financials)      # plafond P/S déduit, jamais absolu
     entonnoir = [{"couche": "univers", "entrent": len(financials), "sortent": len(financials)}]
     cands = {f.symbol: Candidat(f.symbol, metriques=metriques_qualite(f)) for f in financials}
 
     # ---- couche 1 : qualité & solvabilité
-    if mode == "strict":
+    if mode == "score":
+        garde1 = [f.symbol for f in financials]        # aucune élimination : la NOTE tranchera
+    elif mode == "strict":
         for f in financials:
-            v = _viole(cands[f.symbol].metriques, s)
+            v = _viole(cands[f.symbol].metriques, s, marges)
             cands[f.symbol].rejets += v
         garde1 = [f.symbol for f in financials if not cands[f.symbol].rejets]
     else:
@@ -262,12 +302,15 @@ def run_pipeline(financials: list[Financials], prices: dict[str, dict],
         if v["fragile"]:
             fragiles += 1
             cands[f.symbol].rejets.append("DCF fragile (le signe de la décote s'inverse)")
-            continue
+            if mode != "score":
+                continue
         if mode == "strict" and v["marge_securite"] < s.marge_securite_min:
             cands[f.symbol].rejets.append(
                 f"décote {v['marge_securite']:.1%} < {s.marge_securite_min:.0%}")
             continue
         garde2.append(f.symbol)
+    if mode == "score":
+        garde2 = [f.symbol for f in financials]        # la note décidera, pas ce couperet
     if mode == "rank" and garde2:
         garde2.sort(key=lambda x: -cands[x].valorisation["marge_securite"])
         garde2 = garde2[:max(1, int(round(len(garde2) * 0.5)))]     # moitié la moins chère
@@ -282,11 +325,34 @@ def run_pipeline(financials: list[Financials], prices: dict[str, dict],
         cands[x].momentum = m
         if m.get("available") and m["valide"]:
             garde3.append(x)
+        elif mode == "score":
+            garde3.append(x)                           # le momentum devient une SOUS-NOTE
         else:
             cands[x].rejets.append("momentum non validé" if m.get("available")
                                    else f"momentum : {m.get('raison')}")
     entonnoir.append({"couche": "3 · momentum", "entrent": len(garde2),
                       "sortent": len(garde3)})
+
+    # ---- couche 3bis : NOTE PONDÉRÉE (mode `score` seulement)
+    if mode == "score":
+        notes = []
+        for x in garde3:
+            c = cands[x]
+            n = note_ponderee(c.metriques, c.valorisation or None, c.momentum or None, s)
+            c.score = n["note"]
+            c.metriques["_note"] = n
+            if n["veto"]:
+                c.rejets.append(n["raison_veto"])
+            elif n["note"] < s.note_min:
+                c.rejets.append(f"note {n['note']:.2f} < {s.note_min}")
+            else:
+                notes.append(x)
+                if n["compenses"]:
+                    c.rejets.append("retenu MALGRÉ : " + ", ".join(n["compenses"])
+                                    + " (compensé par la note globale)")
+        garde3 = sorted(notes, key=lambda x: -cands[x].score)
+        entonnoir.append({"couche": "3bis · note pondérée", "entrent": len(financials),
+                          "sortent": len(garde3)})
 
     # ---- couche 4 : dimensionnement
     retenus = []
@@ -304,8 +370,13 @@ def run_pipeline(financials: list[Financials], prices: dict[str, dict],
     entonnoir.append({"couche": "4 · dimensionnement", "entrent": len(garde3),
                       "sortent": len(retenus)})
 
-    brut = sum(cands[x].taille.get("poids", 0.0) for x in retenus)
-    return {"mode": mode, "entonnoir": entonnoir,
+    poids = {x: cands[x].taille.get("poids", 0.0) for x in retenus}
+    jd = journal_decision(retenus, poids, prices)
+    retenus = jd["conserves"]
+    entonnoir.append({"couche": "5 · corrélation", "entrent": len(poids),
+                      "sortent": len(retenus)})
+    brut = sum(poids.get(x, 0.0) for x in retenus)
+    return {"mode": mode, "entonnoir": entonnoir, "journal_decision": jd,
             "candidats": [cands[x] for x in retenus],
             "rejetes": {x: cands[x].rejets for x in cands if x not in retenus},
             "gross_expose": round(brut, 4),
