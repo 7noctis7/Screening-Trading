@@ -1,5 +1,125 @@
 # 04 — JOURNAL
 
+## Session 2026-08-21 (3) — La chaîne décisionnelle : des données à l'ordre
+**Contexte.** « Je veux que toutes les données du site soient reliées entre elles intelligemment
+pour l'analyse jusqu'à la décision de trading. »
+
+**Le constat.** Le site savait déjà TOUT sur un titre — score du filtre, contributions
+factorielles, fondamentaux (Piotroski, Altman, DCF), sentiment, conviction fusionnée, position
+réelle, poids cible — et la fiche affichait tout cela côte à côte. Mais elle s'arrêtait juste
+avant la seule question qui intéresse le visiteur : **et donc, j'achète ou pas, pour combien ?**
+Les données étaient jointes, pas conclues.
+
+**Fait.**
+- `apps/web/lib/decision.ts` (nouveau) : assemble les données EXISTANTES en une décision
+  traçable. Six étages — qualité des comptes, solidité financière, prix payé, tendance, signal
+  d'ensemble, actualité — chacun avec sa question en français, sa valeur observée, son vote et
+  sa lecture.
+- `/fiche` : bloc « La décision » en tête de page — verdict, résumé, les six étages en clair,
+  puis « Et concrètement ? » qui convertit l'écart cible ↔ détention en **euros à acheter ou à
+  alléger**. Labels traduits (« Ret 12 m » → « Évolution sur 1 an », « Cible preset » → « Ce que
+  je devrais détenir », « Piotroski » → « Qualité des comptes »…).
+
+**Trois règles tenues, identiques à la logique Python (`decision_journal.py`).**
+1. **Aucune donnée inventée.** Un étage sans donnée est déclaré *non mesuré* et NE VOTE PAS. Il
+   n'est jamais remplacé par une valeur neutre plausible — ce qui reviendrait à voter.
+2. **Véto de solvabilité.** Un critère graduel manqué (cherté, momentum) se compense par la note
+   d'ensemble ; un Altman Z < 1,81 bloque, quel que soit le reste. On compense de la performance,
+   jamais la solvabilité. Vérifié : tout au vert sauf Altman 1,2 → « Écarté », aucun achat.
+3. **Confiance décroissante avec l'ignorance.** Un verdict *favorable* exige au moins quatre
+   étages mesurés. Trois étages verts sur six plafonnent à « moyen » — le compteur `n/6` est
+   affiché pour que le lecteur voie sur quoi le verdict repose.
+
+**Bande de non-action.** Sous 1 point de pourcentage d'écart à la cible : « conserver ». Le
+va-et-vient coûterait plus que l'écart ne rapporte.
+
+**Vérifié.** 12 cas de la logique passés (véto, ignorance totale, ignorance partielle, dossier
+complet, bande, sur-pondération, hors portefeuille, majorité défavorable, NaN/Inf jamais
+comptés comme mesurés). `tsc` : aucune erreur nouvelle (2 pré-existantes dans `Scene.tsx`).
+`next build` vert, chaînes présentes dans le bundle compilé.
+
+## Session 2026-08-21 (2) — Accessibilité du site : l'accueil accueille au lieu d'enseigner
+**Contexte.** « Beaucoup trop technique, épure-le, rends les données interprétables par le plus
+grand nombre. »
+
+**Le constat.** La page d'accueil ÉTAIT un glossaire : le premier écran d'un visiteur affichait
+GARCH(1,1), Cornish-Fisher, PSR/DSR, HRP, CV purgée. C'est une RÉFÉRENCE — elle suppose déjà
+connu ce qu'elle explique. La navigation parlait « Le Gate », « Journal (round-trips) »,
+« Fiche 360 », « Signaux ML ». Et les chiffres héros du tableau de bord étaient « CAGR /
+Sharpe / Sortino / Max DD » : justes, mais muets pour qui n'a pas fait de finance quantitative.
+
+**Fait.**
+- `apps/web/lib/plain.ts` : traduction des métriques en langage courant — verdict
+  (favorable / correct / vigilance), phrase sans jargon, et **équivalent en euros**. C'est la
+  conversion qui rend un pourcentage concret : « pire baisse 14,6 % » devient « voir 1 460 €
+  partir sur 10 000 € avant que ça remonte ». Une valeur absente reste absente, jamais
+  remplacée par une valeur plausible.
+- `/glossaire` (nouvelle page) : les 9 termes déplacés SANS RIEN PERDRE, chacun précédé d'une
+  ligne « En clair » d'une phrase.
+- `/accueil` refondu : une phrase qui dit ce que fait l'outil, **trois portes d'entrée** dans
+  l'ordre où l'on se pose les questions (« Est-ce que ça marche ? » / « Qu'est-ce que je
+  détiens ? » / « Que faudrait-il regarder ? »), et une section « Comment lire les chiffres »
+  qui explique les trois repères suffisants.
+- `MetricCard` accepte `explication` (phrase en clair sous le chiffre) et `terme` (le mot
+  technique conservé entre parenthèses, pour qui le connaît). Tableau de bord : « Gain / risque
+  (Sharpe) », « Pire baisse (Max DD) », avec la phrase issue de `plain.ts`.
+- Navigation : libellés en français courant — « Le Gate » → « Méthode & preuves », « Journal
+  (round-trips) » → « Historique des opérations », « Signaux ML » → « Signaux automatiques »,
+  « Fiche 360 » → « Fiche d'un titre », « Échecs publiés » → « Ce qui n'a pas marché ».
+
+**Méthode de vérification** (le front n'a pas de tests) : dépendances installées, **build de
+référence pris AVANT toute modification** (vert), puis à chaque étape `tsc --noEmit` comparé à
+la référence (2 erreurs préexistantes dans `Scene.tsx`, aucune nouvelle) et `next build` vert.
+Contrôle final : les phrases attendues sont bien présentes dans le bundle compilé, y compris
+celle générée à l'exécution par `plain.ts`.
+
+**Principe retenu — divulgation progressive plutôt que mode « simple/expert ».** Aucune donnée
+n'est retirée : le vocabulaire technique reste accessible (entre parenthèses, dans le
+glossaire, sur les pages dédiées). C'était moins risqué qu'un système de modes sur un export
+statique, et cela évite de créer un site au rabais pour les débutants.
+
+
+## Session 2026-08-21 — Correction P/S (contradiction d'identité), note pondérée, journal de décision
+**Contexte.** Audit utilisateur sur le pipeline fondamental livré la veille. Trois points, dont
+un **défaut de conception réel** que j'avais implémenté sans le voir.
+
+**Le défaut : les seuils P/S et marge se contredisaient.** Par identité comptable,
+`P/S = P/E × marge nette` — vérifié sur les chiffres publiés : GOOGL 16,92 × 0,548 = 9,27 pour
+9,25 publié ; NVDA 20,85 vs 20,70 ; META 6,05 vs 6,09. Imposer simultanément marge > 20 %,
+P/E < 25 **et** P/S < 7 sur-détermine le système : le P/S impose un plafond de P/E implicite
+de `7 / marge`, qui devient plus contraignant que le P/E dès **28 % de marge** (7/25). À 55 %
+de marge il plafonne le P/E à 12,8 — donc **il rejette exactement les sociétés très rentables
+que le filtre qualité cherche**. GOOGL était rejeté par le seul P/S malgré un P/E de 16,9.
+
+**Correctif.** Le seuil P/S absolu est supprimé. Le plafond devient RELATIF au secteur :
+`ps_max = pe_max × marge médiane du secteur`, mesurée sur la coupe transversale du jour (pas
+de table figée — donc cohérent point-in-time). Les deux filtres deviennent cohérents au lieu
+de se contredire.
+
+**Note pondérée avec véto (mode `score`).** Réponse à « et si un critère n'est pas rempli mais
+que la note globale est bonne ? » : oui pour les critères GRADUELS (marge, croissance, cherté,
+momentum) — un excellent bilan compense une croissance moyenne. **Non** pour ce qui porte un
+risque de RUINE : au-delà de D/E 2,5, aucune note ne compense. On compense de la performance,
+jamais de la solvabilité. Pondérations pré-enregistrées : qualité 0,30 · solvabilité 0,20 ·
+valorisation 0,30 · momentum 0,20 ; retenu à partir de 0,60.
+
+**Journal de décision** (`packages/screening/decision_journal.py`) — rend visible ce que le
+risque a ÉVITÉ : positions écartées pour doublon de corrélation (« X écarté : corrélé à 87 %
+avec Y — deux fois le même pari, pas deux paris »), concentration en nombre EFFECTIF de lignes,
+et budget de risque de queue consommé, exprimé en euros. Nouvelle couche 5 dans l'entonnoir.
+
+**Point non traitable.** `engine.mjs`, `PtfBot`, `bot_public.json` et `SECTOR_AVG_NET` n'existent
+nulle part dans ce dépôt (recherche exhaustive : seul `next.config.mjs` est un `.mjs`). Ces
+éléments visent un autre codebase — signalé plutôt que deviné.
+
+**Accessibilité (démarré).** `apps/web/lib/plain.ts` : traduction des métriques en langage
+courant avec verdict et **équivalent en euros** (« pire baisse 14,6 % → voir 1 460 € partir sur
+10 000 € »). C'est la brique de base ; la refonte de l'accueil et le glossaire séparé restent
+à faire. Dépendances front installées et build de référence vert AVANT toute modification.
+
+**971 tests verts (+8).**
+
+
 ## Session 2026-08-20 (7) — Pipeline fondamental 4 couches + l'entonnoir qui dit la vérité
 **Contexte.** Cahier des charges reçu : screening qualité → DCF → momentum → dimensionnement ES,
 avec des seuils durs (marge > 20 %, croissance > 15 %, D/E < 0,60, quick ratio > 1, P/S < 7,

@@ -4,16 +4,28 @@ import { useEffect, useRef, useState } from "react";
 // Carte KPI avec compteur animé (count-up) sur la partie numérique, préfixe/suffixe préservés.
 // `delta` = variation vs période précédente, rendue DISCRÈTE (gris, signe seul, pas de flèche criarde).
 // Respecte prefers-reduced-motion (affichage direct). tone = couleur sémantique P&L UNIQUEMENT.
-export function MetricCard({ label, value, tone, hero, delta }:
-  { label: string; value: string; tone?: "pos" | "neg"; hero?: boolean; delta?: string }) {
+// `explication` = une phrase en langage courant sous le chiffre (cf. lib/plain.ts). Un nombre
+// seul ne dit rien à qui n'a pas fait de finance : « Sharpe 1,32 » devient « bon rapport entre
+// le gain et les secousses ». `terme` garde le mot technique visible pour qui le connaît.
+export function MetricCard({ label, value, tone, hero, delta, explication, terme }:
+  { label: string; value: string; tone?: "pos" | "neg"; hero?: boolean; delta?: string;
+    explication?: string; terme?: string }) {
   const color = tone === "pos" ? "text-pos" : tone === "neg" ? "text-neg" : "text-fg";
   const display = useCountUp(value);
   return (
     <div className={`card ${hero ? "p-5" : "p-4"}`}>
-      <div className="text-muted text-[11px] uppercase tracking-[0.08em]">{label}</div>
+      <div className="text-muted text-[11px] uppercase tracking-[0.08em]">
+        {label}
+        {terme && <span className="ml-1 normal-case tracking-normal opacity-60">({terme})</span>}
+      </div>
       <div className={`mono mt-1 ${color} ${hero ? "text-3xl md:text-4xl font-semibold tracking-tight" : "text-2xl"}`}>
         {display}
       </div>
+      {explication && (
+        <div className="text-[11.5px] leading-snug mt-1.5" style={{ color: "var(--muted)" }}>
+          {explication}
+        </div>
+      )}
       {delta != null && (
         <div className="mono text-[11px] text-muted2 mt-0.5" title="Variation vs période précédente de même durée">
           {delta} <span className="not-italic">vs N−1</span>

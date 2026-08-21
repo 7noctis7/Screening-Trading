@@ -151,8 +151,10 @@ export default function Positions() {
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <MetricCard label="Capital réel" value={`$${usd(aEq + bEq)}`} />
         <MetricCard label="Valeur positions" value={`$${usd(mv)}`} />
-        <MetricCard label="P&L latent" value={`$${usd(pnl)}`} tone={pnl >= 0 ? "pos" : "neg"} />
-        <MetricCard label="N effectif (diversif.)" value={nEff ? nEff.toFixed(1) : "n/d"} />
+        <MetricCard label="Gain / perte en cours" terme="P&L latent" value={`$${usd(pnl)}`} tone={pnl >= 0 ? "pos" : "neg"}
+          explication="Ce qu'on gagnerait ou perdrait en vendant tout maintenant." />
+        <MetricCard label="Vraie diversification" terme="N effectif" value={nEff ? nEff.toFixed(1) : "n/d"}
+          explication="Nombre de positions RÉELLEMENT indépendantes. Dix lignes très corrélées en valent trois." />
       </section>
       <section className="card p-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted">
         <span title="Somme des poids au carré (HHI) : 1/N si équipondéré. N effectif = 1/HHI.">

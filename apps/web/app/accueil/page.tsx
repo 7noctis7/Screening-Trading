@@ -2,99 +2,117 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { AICommentary } from "@/components/AICommentary";
-import { PipelineFull } from "@/components/Pipeline";
 import { Reveal } from "@/components/Reveal";
 
-// Fond 3D particules subtil (R3F) — client-only, jamais SSR (compatible export statique).
+// ACCUEIL — refonte accessibilité (2026-08-21).
+// Avant : la première chose que voyait un visiteur était un glossaire (GARCH(1,1),
+// Cornish-Fisher, PSR/DSR, HRP…). C'est une RÉFÉRENCE, pas une porte d'entrée : elle
+// suppose déjà connu ce qu'elle explique. Le glossaire vit désormais sur /glossaire.
+// Ici on répond à trois questions, dans l'ordre où on se les pose vraiment.
+
 const Scene = dynamic(() => import("@/components/landing/Scene"), { ssr: false });
 
-// Page d'accueil : présentation, raisonnement étape par étape, glossaire/méthodologie déroulant.
-
-function G({ term, children }: { term: string; children: React.ReactNode }) {
-  return (
-    <details className="card p-3">
-      <summary className="cursor-pointer text-sm font-medium select-none">{term}</summary>
-      <div className="text-sm text-muted mt-2 space-y-1 font-sans">{children}</div>
-    </details>
-  );
-}
+const PORTES: { href: string; titre: string; question: string; detail: string }[] = [
+  {
+    href: "/dashboard",
+    titre: "Est-ce que ça marche ?",
+    question: "Voir les résultats",
+    detail: "La courbe de performance, la pire baisse traversée, et ce que cela représente en euros.",
+  },
+  {
+    href: "/positions",
+    titre: "Qu'est-ce que je détiens ?",
+    question: "Voir le portefeuille",
+    detail: "Les positions actuelles, leur poids, et la raison pour laquelle chacune est là.",
+  },
+  {
+    href: "/screener",
+    titre: "Que faudrait-il regarder ?",
+    question: "Explorer le marché",
+    detail: "Les titres qui ressortent aujourd'hui, avec le détail de ce qui les a retenus ou écartés.",
+  },
+];
 
 export default function Accueil() {
   return (
-    <main className="max-w-4xl mx-auto p-6 space-y-6">
+    <main className="max-w-4xl mx-auto p-6 space-y-8">
       <section className="card hero-photo p-8 md:p-10 relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none" aria-hidden="true"
           style={{ opacity: 0.35 }}><Scene /></div>
         <div className="relative z-10">
-          <div className="text-[11px] font-semibold tracking-[0.18em] uppercase"
-            style={{ color: "var(--accent2)" }}>Hedge-fund grade · open source</div>
-          <h1 className="text-3xl md:text-4xl font-bold tracking-tight mt-2"
+          <h1 className="text-3xl md:text-4xl font-bold tracking-tight"
             style={{ background: "linear-gradient(100deg,#22d3ee,#5eead4 45%,#22c55e)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>
             Quant Terminal
           </h1>
-          <p className="mt-3 max-w-2xl" style={{ color: "var(--muted)" }}>
-            Screening &amp; trading systématique multi-actifs (actions, ETF, forex, crypto, commodités).
-            Données réelles, ML anti-fuite, risque institutionnel, exécution paper.
-            <b className="text-fg"> Aide à la décision — pas un conseil en investissement.</b>
+          <p className="mt-3 max-w-2xl text-lg" style={{ color: "var(--fg)" }}>
+            Un outil qui trie les marchés à votre place, explique chacun de ses choix,
+            et dit franchement ce qu'il ne sait pas.
           </p>
-          <div className="flex gap-2 mt-4 text-xs flex-wrap">
-            {["Paper par défaut", "Point-in-time (anti-fuite)", "⌘K pour naviguer", "IA locale (LM Studio)"].map((t) => (
-              <span key={t} className="px-2.5 py-1 rounded-full border"
-                style={{ background: "color-mix(in srgb, var(--accent) 12%, transparent)", borderColor: "color-mix(in srgb, var(--accent) 35%, transparent)" }}>{t}</span>
-            ))}
-          </div>
+          <p className="mt-3 max-w-2xl text-sm" style={{ color: "var(--muted)" }}>
+            Actions, ETF, crypto et devises. Les décisions sont simulées — aucun argent réel
+            n'est engagé. <b className="text-fg">Aide à la décision, pas un conseil en investissement.</b>
+          </p>
+        </div>
+      </section>
+
+      <section>
+        <Reveal><h2 className="text-sm uppercase tracking-wide text-muted mb-3">Par où commencer</h2></Reveal>
+        <div className="grid gap-3 md:grid-cols-3">
+          {PORTES.map((p, i) => (
+            <Reveal key={p.href} delay={i * 60}>
+              <Link href={p.href} className="card p-4 block h-full hover:border-border2 transition-colors">
+                <div className="text-base font-semibold">{p.titre}</div>
+                <div className="text-sm mt-1.5" style={{ color: "var(--muted)" }}>{p.detail}</div>
+                <div className="text-xs mt-3" style={{ color: "var(--accent)" }}>{p.question} →</div>
+              </Link>
+            </Reveal>
+          ))}
         </div>
       </section>
 
       <Reveal><AICommentary /></Reveal>
 
-      <Reveal delay={60}><PipelineFull /></Reveal>
+      <Reveal>
+        <section className="card p-5 space-y-3">
+          <h2 className="text-base font-semibold">Comment lire les chiffres</h2>
+          <p className="text-sm" style={{ color: "var(--muted)" }}>
+            Trois repères suffisent pour comprendre l'essentiel de ce site.
+          </p>
+          <dl className="space-y-2.5 text-sm">
+            <div>
+              <dt className="font-medium">La pire baisse</dt>
+              <dd style={{ color: "var(--muted)" }}>
+                Combien on aurait vu partir, au pire moment, avant que ça remonte. Une baisse de
+                15 % sur 10 000 €, c'est voir 1 500 € disparaître temporairement. C'est le chiffre
+                qui décide si l'on tient le plan ou si l'on vend au mauvais moment.
+              </dd>
+            </div>
+            <div>
+              <dt className="font-medium">Le rapport gain / risque</dt>
+              <dd style={{ color: "var(--muted)" }}>
+                Est-ce que le gain obtenu valait les secousses traversées ? Au-dessus de 1, oui.
+                En dessous de 0,5, on est surtout payé en émotions.
+              </dd>
+            </div>
+            <div>
+              <dt className="font-medium">La solidité du résultat</dt>
+              <dd style={{ color: "var(--muted)" }}>
+                Un bon résultat peut n'être qu'un coup de chance. Ce site calcule la probabilité
+                que ce n'en soit pas un, et refuse de mettre en avant ce qui n'atteint pas le seuil.
+                C'est pourquoi il publie aussi ses échecs.
+              </dd>
+            </div>
+          </dl>
+          <p className="text-sm pt-1">
+            <Link href="/glossaire" className="text-accent">Tous les termes expliqués →</Link>
+          </p>
+        </section>
+      </Reveal>
 
-      <section>
-        <Reveal><h2 className="text-sm uppercase tracking-wide text-muted mb-3">Méthodologie & glossaire (clique pour déplier)</h2></Reveal>
-        <Reveal delay={60}><div className="space-y-2">
-          <G term="Turnover annualisé (ex. 9,5×)">
-            <p><b>Définition</b> : volume tradé sur l'année rapporté au capital. <b>9,5×</b> = sur un an, on a acheté/vendu l'équivalent de ~9,5 fois la taille du portefeuille.</p>
-            <p><b>Calcul</b> : Σ(|qté×prix d'entrée| + |qté×prix de sortie|) / equity moyenne × (252 / nb de jours).</p>
-            <p><b>Interprétation</b> : élevé = rotation rapide → plus de frais/slippage. À surveiller : un alpha brut peut être mangé par les coûts. La <Link href="/live" className="text-accent">bande de non-trading</Link> sert justement à réduire ce churn.</p>
-          </G>
-          <G term="VaR / CVaR 95 %">
-            <p><b>VaR 95 %</b> : perte qu'on ne dépasse pas dans 95 % des cas (sur l'horizon). <b>CVaR</b> : perte moyenne dans les 5 % pires cas (plus prudent).</p>
-            <p><b>Sources/calcul</b> : historique (quantile des rendements) + paramétrique. La <b>VaR Cornish-Fisher</b> corrige l'asymétrie/épaisseur des queues ; l'<b>EVT</b> modélise les extrêmes (99,9 %).</p>
-            <p><b>Interprétation</b> : plus la VaR/CVaR est élevée, plus le risque de perte est grand. À croiser avec le <b>backtest de VaR (Kupiec)</b> qui vérifie que le modèle est fiable.</p>
-          </G>
-          <G term="GARCH(1,1)">
-            <p><b>Rôle</b> : prévoir la volatilité de demain en tenant compte du « volatility clustering » (les chocs s'enchaînent).</p>
-            <p><b>Interprétation</b> : une vol prévue qui grimpe = marché qui se tend → réduire l'exposition.</p>
-          </G>
-          <G term="Risque factoriel (ACP) & budget de risque">
-            <p><b>ACP</b> : part du risque expliquée par quelques facteurs communs (= risque systématique, non diversifiable).</p>
-            <p><b>Budget de risque</b> : contribution de chaque position à la volatilité totale (≠ poids en capital). Permet d'équilibrer le <i>risque</i>, pas seulement le montant investi.</p>
-          </G>
-          <G term="Sharpe probabiliste (PSR) & déflaté (DSR)">
-            <p><b>PSR</b> : probabilité que le vrai Sharpe soit positif (tient compte de la taille d'échantillon et des queues).</p>
-            <p><b>DSR</b> : PSR corrigé du nombre de stratégies essayées → garde-fou anti-« data mining ». Proche de 1 = robuste, proche de 0 = sans doute de la chance.</p>
-          </G>
-          <G term="HRP / Min-variance / Risk parity (allocation optimale)">
-            <p><b>HRP</b> (López de Prado) : alloue par grappes de corrélation, sans inverser la covariance (stable). <b>Min-variance</b> : minimise la vol. <b>Risk parity (ERC)</b> : chaque actif contribue également au risque.</p>
-            <p><b>Usage</b> : compare ton allocation actuelle à ces 3 références pour rééquilibrer.</p>
-          </G>
-          <G term="ML : CV purgée, calibration, conformal, meta-labeling">
-            <p><b>CV purgée + embargo</b> : validation sans fuite du futur (labels chevauchants neutralisés).</p>
-            <p><b>Calibration (Brier)</b> : une proba 0,8 doit se réaliser ~80 % du temps. <b>Conformal</b> : garantit un taux de couverture. <b>Meta-labeling</b> : un 2ᵉ modèle filtre les faux positifs ; le <b>sizing</b> module la taille selon la confiance.</p>
-          </G>
-          <G term="Fondamentaux : DCF, Piotroski, Altman Z">
-            <p><b>DCF</b> : valeur intrinsèque par actualisation des flux → marge de sécurité (intrinsèque/prix − 1).</p>
-            <p><b>Piotroski (0-9)</b> : solidité financière (rentabilité, levier, marges). <b>Altman Z</b> : risque de faillite (Z&gt;2,99 sûr, &lt;1,81 détresse).</p>
-            <p><b>Note combinée</b> = 60 % fondamental + 40 % technique.</p>
-          </G>
-          <G term="Playbook VIX">
-            <p>Le VIX mesure la peur du marché. <b>&lt;20</b> calme (exposition pleine) · <b>20-30</b> tendu (réduite) · <b>&gt;30</b> panique (défensif). L'exposition du portefeuille est modulée automatiquement.</p>
-          </G>
-        </div></Reveal>
-      </section>
-
-      <p className="text-muted2 text-xs">⚠️ Données synthétiques ou réelles selon votre configuration (YAHOO.db). Outil éducatif — aucune recommandation personnalisée. Paper trading par défaut.</p>
+      <p className="text-muted2 text-xs">
+        ⚠️ Outil éducatif, aucune recommandation personnalisée. Les positions sont simulées
+        (« paper trading ») par défaut.
+      </p>
     </main>
   );
 }
