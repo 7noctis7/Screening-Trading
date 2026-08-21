@@ -136,6 +136,18 @@ from apps.api.sections_data import SECTOR_DV as _SECTOR_DV  # noqa: E402
 from apps.api.sections_data import THEME_TICKERS as _THEME_TICKERS  # noqa: E402
 
 
+def is_real_mode(mode: str | None) -> bool:
+    """Le chargement des prix tourne-t-il sur des données RÉELLES (pas de repli synthétique) ?
+
+    `_load_prices` renvoie un libellé LISIBLE (« réel (YAHOO.db) », « mixte (...) »,
+    « synthetic »), jamais la chaîne « real ». Trois gardes comparaient pourtant `mode == "real"` :
+    elles étaient donc TOUJOURS fausses, et silencieusement — le nettoyage des titres périmés,
+    l'audit PwC du snapshot et son rapport d'affichage ne s'exécutaient jamais en production.
+    Une comparaison de chaînes n'est pas un contrat ; ce prédicat en est un, et il est testé.
+    """
+    return bool(mode) and str(mode).startswith("réel")
+
+
 def _sector_of(m: dict) -> str:
     """Secteur/thème d'un instrument (cohérent entre génération de données et heatmap)."""
     ac = m.get("asset_class")
@@ -257,7 +269,7 @@ def _data_section(data: dict, acmap: dict[str, str], universe_total: int = 0,
     # AUDIT PwC complet (complétude / exactitude / point-in-time) — toujours calculé sur données
     # réelles pour affichage (la gate bloquante reste séparée, pilotée par QUANT_AUDIT). Best-effort.
     audit_summary: dict | None = None
-    if mode == "real":
+    if is_real_mode(mode):
         try:
             from packages.data.audit import audit_and_report
             _ar = audit_and_report(data, universe=symbols)
@@ -1504,7 +1516,7 @@ def build_snapshot(seed: int = 7) -> dict:
     # NETTOYAGE UNIVERS : écarte les titres PÉRIMÉS (delisted/renommés, ex. FB→META) dont
     # la dernière barre est trop ancienne → plus de 404 ni de cibles fantômes. Seuil RELATIF
     # (vs la barre la plus fraîche) → ne vide jamais l'univers, même hors-ligne.
-    if data_mode == "real" and data:
+    if is_real_mode(data_mode) and data:
         _fresh = max(b[-1].ts for b in data.values() if b)
         _cut = _fresh - timedelta(days=10)
         _stale = [s for s, b in data.items() if b and b[-1].ts < _cut]
@@ -1531,7 +1543,7 @@ def build_snapshot(seed: int = 7) -> dict:
     #    `strict` reste opt-in pour le gate CI ; `off` désactive.)
     _audit_report: dict | None = None
     _audit_mode = (_os_hist.environ.get("QUANT_AUDIT", "warn") or "warn").lower()
-    if _audit_mode in ("strict", "warn", "1", "true") and real_syms and data_mode == "real":
+    if _audit_mode in ("strict", "warn", "1", "true") and real_syms and is_real_mode(data_mode):
         from packages.data.audit import assert_integrity, audit_and_report
         try:
             _ar = audit_and_report(data, universe=symbols)

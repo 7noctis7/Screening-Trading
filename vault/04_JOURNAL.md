@@ -1,5 +1,39 @@
 # 04 — JOURNAL
 
+## Session 2026-08-21 (4) — Trois gardes d'intégrité éteintes depuis toujours
+**Contexte.** « Pourquoi je n'ai pas les mêmes % que lorsque je vérifie sur finance ? »
+
+**Ce que la question a fait remonter.** `_load_prices` renvoie un libellé LISIBLE —
+« réel (YAHOO.db) », « mixte (N réels / M) », « synthetic » — et ne produit JAMAIS la chaîne
+« real ». Or trois gardes comparaient `mode == "real"` :
+1. le nettoyage des titres périmés (délistés/renommés) — jamais exécuté ;
+2. la gate d'audit PwC du snapshot (`QUANT_AUDIT`) — jamais exécutée ;
+3. le rapport d'intégrité joint au snapshot (`meta.audit`) — donc toujours `None` à l'écran.
+
+Trois protections éteintes par une comparaison de chaînes, sans erreur ni log. Le filet restant
+est en CI (`data_audit.py`, non bloquant ; `contracts_check.py`, bloquant) : l'impossible était
+donc toujours barré, mais le snapshot servi n'était pas audité et n'affichait pas son propre
+rapport. Corrigé par un prédicat `is_real_mode()` testé (5 cas, dont « real » explicitement
+refusé pour que la régression saute aux yeux).
+
+**Écarts d'affichage corrigés sur `/themes`** (aucun calcul modifié — c'était de la lecture) :
+- Le « ↗ » accolé au ticker est le pictogramme de LIEN externe du composant `IR`, pas une
+  direction. « ZS ↗ −44,5 % » se lisait comme une hausse. Le pourcentage est désormais **signé
+  et coloré**.
+- La colonne « YTD » du secteur est la **médiane de TOUS** les titres du secteur, alors que les
+  puces à droite sont le **top 4 par score de setup**. Les deux ensembles ne coïncident pas :
+  d'où « Crypto −0,7 % » à côté de « RIOT +121,8 % ». Colonne renommée « médiane du secteur »,
+  et le décalage est écrit noir sur blanc.
+- Le pourcentage est une performance **depuis janvier** ; le verdict qui suit juge les
+  **3 derniers mois** + la position vs MM50. Deux horizons, une seule ligne — c'est voulu (on
+  cherche les retournements), mais ce n'était écrit nulle part.
+
+**Non corrigé, à décider** (listé au TODO) : garde-fou anti-split asymétrique (un split 4:1 fait
+−75 %, sous le seuil de 150 % → il passe et corrompt les rendements qui le traversent) ; base YTD
+qui retombe sur la première barre disponible quand l'historique ne remonte pas à décembre.
+
+976 tests passés, 8 ignorés (+5).
+
 ## Session 2026-08-21 (3) — La chaîne décisionnelle : des données à l'ordre
 **Contexte.** « Je veux que toutes les données du site soient reliées entre elles intelligemment
 pour l'analyse jusqu'à la décision de trading. »
