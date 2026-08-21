@@ -1342,9 +1342,16 @@ def _index_closes(aliases: list[str], start, end, fallback: list[float]) -> tupl
     return fallback, False
 
 
-def _curve_stats(eq: list[float]) -> dict:
+def _curve_stats(eq: list[float], *, compte_reel: bool = False,
+                 dates: list[str] | None = None) -> dict:
     """KPIs d'une courbe d'equity. Ratios via perf_summary (SOURCE UNIQUE DE VÉRITÉ) ;
-    profit_factor/win_rate dérivés des rendements quotidiens (gains/pertes)."""
+    profit_factor/win_rate dérivés des rendements quotidiens (gains/pertes).
+
+    `compte_reel=True` → la courbe est la valeur d'un COMPTE, pas une simulation : elle peut
+    contenir des versements et des retraits. On les neutralise (rendement pondéré dans le temps,
+    cf. packages/portfolio/twr) avant tout calcul. Sans cela, un virement se retrouve compté
+    comme un gain ou une perte, et contamine rendement, Sharpe ET drawdown maximum.
+    """
     import numpy as _np
 
     from packages.portfolio.metrics import perf_summary
@@ -1352,14 +1359,24 @@ def _curve_stats(eq: list[float]) -> dict:
     if e.size < 30:
         return {"available": False}
     r = e[1:] / e[:-1] - 1
+    _flux: dict | None = None
+    if compte_reel:
+        from packages.portfolio.twr import flow_report, twr
+        _t = twr([float(x) for x in e])
+        if _t.get("available"):
+            r = _np.asarray(_t["returns"], dtype=float)   # sous-périodes, versements exclus
+            _flux = flow_report([float(x) for x in e], dates=dates)
     ps = perf_summary(r)                                  # cagr/sharpe/sortino/maxdd unifiés
     if not ps.get("available"):
         return {"available": False}
     gains, losses = float(r[r > 0].sum()), float(-r[r < 0].sum())
-    return {"available": True, "cagr": ps["cagr"], "total_return": ps["total_return"],
-            "sharpe": ps["sharpe"], "sortino": ps["sortino"],
-            "max_drawdown": ps["max_drawdown"], "win_rate": round(float((r > 0).mean()), 3),
-            "profit_factor": round(gains / losses, 2) if losses > 0 else 0.0}
+    out = {"available": True, "cagr": ps["cagr"], "total_return": ps["total_return"],
+           "sharpe": ps["sharpe"], "sortino": ps["sortino"],
+           "max_drawdown": ps["max_drawdown"], "win_rate": round(float((r > 0).mean()), 3),
+           "profit_factor": round(gains / losses, 2) if losses > 0 else 0.0}
+    if _flux is not None:
+        out["flux"] = _flux                               # mouvements neutralisés, montants, dates
+    return out
 
 
 def _r(x, nd=3):
@@ -2152,7 +2169,9 @@ def build_snapshot(seed: int = 7) -> dict:
             if len(rc) < 10:
                 rc = _eq_series(broker_key)                # sinon suivi quotidien persistant
             if len(rc) >= 10:
-                return {**_curve_stats([p["v"] for p in rc]), "curve": rc, "source": "réel"}
+                return {**_curve_stats([p["v"] for p in rc], compte_reel=True,
+                                       dates=[str(p.get("t", ""))[:10] for p in rc]),
+                        "curve": rc, "source": "réel"}
             return {"available": False, "source": "réel-court",
                     "note": "Compte récent : historique réel en cours de constitution "
                             "(quelques jours de suivi nécessaires)."}
@@ -2190,15 +2209,29 @@ def build_snapshot(seed: int = 7) -> dict:
         _rdates = sorted(set(p["t"][:10] for p in _alp_c) | set(p["t"][:10] for p in _cr_c))
 
         def _ffill(cv):
+            """Report en avant. AVANT le premier point connu → None (et non 0) : un compte pas
+            encore suivi n'a pas une valeur nulle, il a une valeur INCONNUE. Le zéro faisait
+            bondir la combinaison de toute la valeur du compte le jour de son apparition, saut
+            aussitôt compté comme un rendement."""
             m = {p["t"][:10]: p["v"] for p in cv}
             out, last = [], None
             for d in _rdates:
                 last = m.get(d, last)
-                out.append(last if last is not None else 0.0)
+                out.append(last)
             return out
-        _comb = [a + b for a, b in zip(_ffill(_alp_c), _ffill(_cr_c))]
+        _a_f, _b_f = _ffill(_alp_c), _ffill(_cr_c)
+        # On ne démarre la courbe combinée qu'une fois TOUS les comptes suivis connus : avant,
+        # la somme mélangerait un compte mesuré et un compte ignoré.
+        _dep = next((i for i, (a, b) in enumerate(zip(_a_f, _b_f))
+                     if (a is not None or not _alp_c) and (b is not None or not _cr_c)), None)
+        if _dep is None:
+            _rdates, _comb = [], []
+        else:
+            _rdates = _rdates[_dep:]
+            _comb = [(a or 0.0) + (b or 0.0) for a, b in zip(_a_f[_dep:], _b_f[_dep:])]
         if len(_comb) >= 2:
-            _real_portfolio = {"available": True, "stats": _curve_stats(_comb),
+            _real_portfolio = {"available": True,
+                               "stats": _curve_stats(_comb, compte_reel=True, dates=_rdates),
                                "curve": [{"t": d, "v": round(v, 2)} for d, v in zip(_rdates, _comb)]}
     # BLACK-LITTERMAN : prior équipondéré + vues = conviction z-scorée → poids postérieurs
     try:

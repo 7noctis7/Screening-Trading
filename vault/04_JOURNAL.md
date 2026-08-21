@@ -1,5 +1,48 @@
 # 04 — JOURNAL
 
+## Session 2026-08-21 (5) — Un virement n'est pas une performance
+**Contexte.** « Je ne suis pas sûr que le rendement du portefeuille Alpaca+Bitmart soit correct. »
+Doute justifié : le chiffre était faux, et la démonstration ne demande pas la base.
+
+**La preuve arithmétique.** Le dashboard affichait, sur le compte réel : rendement −1,5 %,
+CAGR −7,3 %, **Sharpe +0,24**, maxDD −22,8 %. Un Sharpe POSITIF avec un rendement NÉGATIF exige
+une moyenne arithmétique positive et une moyenne géométrique négative — donc une volatilité
+énorme. En inversant `total ≈ n·µ − n·σ²/2` avec µ = 0,0151·σ et n ≈ 45 : σ ≈ 4,5 %/jour, soit
+**71 % annualisés**. Or le compte est à 65 % QQQ (vol ~20 %) et 29 % crypto (~65 %) : au plus
+~28 %. L'écart d'un facteur 2,6 n'est pas du marché. Et un maxDD de −22,8 % sur deux mois où QQQ
+a fait −0,3 % et la crypto +10 à +45 % est impossible.
+
+**La cause.** `_curve_stats` dérivait les rendements de la valeur du compte : `r = eq[t]/eq[t-1]−1`.
+Tout dépôt, retrait ou transfert était donc compté comme un gain ou une perte. Défaut classique de
+mesure de performance, réponse normalisée par GIPS : le rendement **pondéré dans le temps**.
+
+**Fait.**
+- `packages/portfolio/twr.py` : découpe la série à chaque mouvement et CHAÎNE les sous-périodes.
+  Les courtiers utilisés ne publiant pas leurs mouvements, on les REPÈRE par écart-type **robuste**
+  (MAD × 1,4826) — robuste au sens propre : les sauts ne gonflent pas le seuil censé les détecter.
+  Seuil 5 σ, volontairement conservateur : mieux vaut manquer un petit virement que confisquer une
+  vraie séance. Dans le doute, on ne booke pas.
+- Propriété testée qui DÉFINIT le TWR : déplacer la date du versement ne change pas le résultat.
+  Onze cas, dont « −8 % de krach reste de la performance ».
+- **Couture des comptes** : dans la combinaison Alpaca+Bitmart, un compte absent des premières
+  dates valait `0.0`. La courbe bondissait donc de toute sa valeur le jour de son apparition —
+  saut aussitôt compté comme un rendement. Un compte non suivi n'a pas une valeur nulle, il a une
+  valeur INCONNUE : la courbe combinée ne démarre plus qu'une fois tous les comptes connus.
+
+**Fraîcheur de la base (`audit_freshness`).** L'audit vérifiait l'intégrité de ce qui est là,
+jamais que quelque chose ARRIVE encore. Cron mort ou fournisseur qui limite le débit laissaient
+une base intacte et périmée, publiée avec le même aplomb — faux ET confiant. Deux angles :
+jeu entier périmé (critique) vs série isolée en retard sur le reste (majeur : délistée/renommée).
+Placé dans `audit_and_report` seulement : trois tests ont eu raison contre moi en montrant qu'une
+tranche historique qui s'arrête dans le passé est parfaitement saine pour `audit_dataset`.
+
+**Deux affichages faux.**
+- Monte Carlo « historique insuffisant » : `dashboard.equity` est une série d'OBJETS `{t, v}`,
+  filtrée comme des nombres → tableau vidé à chaque rendu. ~2 600 points étaient disponibles.
+- « Turnover annualisé NaN× » : `NaN != null` vaut `true` en JS, le garde laissait passer.
+
+994 tests passés, 8 ignorés (+18).
+
 ## Session 2026-08-21 (4) — Trois gardes d'intégrité éteintes depuis toujours
 **Contexte.** « Pourquoi je n'ai pas les mêmes % que lorsque je vérifie sur finance ? »
 
