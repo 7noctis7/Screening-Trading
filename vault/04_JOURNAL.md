@@ -1,5 +1,46 @@
 # 04 — JOURNAL
 
+## Session 2026-08-20 (7) — Pipeline fondamental 4 couches + l'entonnoir qui dit la vérité
+**Contexte.** Cahier des charges reçu : screening qualité → DCF → momentum → dimensionnement ES,
+avec des seuils durs (marge > 20 %, croissance > 15 %, D/E < 0,60, quick ratio > 1, P/S < 7,
+PER < 25, décote DCF ≥ 30 %). 70 % des briques existaient déjà en pièces détachées
+(`fundamentals/ratios`, `valuation.dcf_intrinsic_per_share`, `scoring.piotroski/altman`,
+`risk_metrics.cvar_historical`, `risk/atr_stops`, `sizing/kelly_fat_tail`). Ce qui manquait :
+l'assemblage — et quatre corrections.
+
+**Livré : `packages/screening/alpha_pipeline.py` (314 l., 9 tests).**
+Les 4 couches du cahier des charges, avec :
+1. **Classement par défaut, couperets en option.** Mesuré sur un univers synthétique réaliste
+   de 60 sociétés (les sociétés de qualité y sont pricées à 40× les bénéfices, comme dans la
+   vraie vie) : le mode **strict laisse passer ZÉRO titre dès la couche 1**. Le mode
+   classement donne 12 → 6 → 3. Marge > 20 % ET croissance > 15 % ET PER < 25 est presque
+   contradictoire : le marché price précisément la qualité-croissance au-dessus de 25×.
+2. **Le DCF devient un SCORE avec bande de sensibilité** (WACC ±1 pt, croissance ±2 pts) et un
+   drapeau `fragile` quand le SIGNE de la décote s'inverse dans la bande — c'est-à-dire quand
+   le DCF ne tranche rien. Exiger « décote ≥ 30 % » sur une estimation dont la valeur
+   terminale domine tout est de la précision fictive.
+3. **L'entonnoir est publié** à chaque couche (entrent / sortent / pourquoi). C'est lui qui
+   dit si le screener produit un portefeuille ou trois lignes.
+4. **Le quick ratio n'est PAS calculable** depuis `Financials` (ni actif ni passif courant dans
+   le modèle) : renvoyé `None` et **exclu** de la conjonction, jamais approximé en silence. Un
+   critère non mesuré n'est ni violé ni satisfait.
+
+**Dimensionnement.** Budget d'**Expected Shortfall** : `w = budget_ES / ES_95(actif)`, ce qui
+égalise la contribution au risque de queue entre un indice à 15 % de vol et une crypto à 70 %
+(testé : le produit poids × ES est identique). Puis fraction de Kelly **dérivée d'un budget de
+drawdown** si les round-trips réels existent, sinon UNCALIBRATED assumé. Plafond dur à 5 %.
+Trailing stop à 2 × ATR(14).
+
+**Conclusion opérationnelle chiffrée.** Même en mode classement, 60 titres en entrée ne
+donnent que 3 positions — insuffisant pour un IR mesurable. **Il faut 500+ noms en entrée**
+pour sortir 20-30 lignes. C'est la même conclusion que l'axe 2 : le souffle est la matière
+première, et c'est pour ça que `make alpha-lab` charge désormais l'univers large.
+
+**Limite écrite en tête du module.** Les fondamentaux ne sont pas point-in-time : c'est un
+screener LIVE honnête, pas une stratégie backtestable. Backtester des états financiers actuels
+appliqués au passé produirait une courbe magnifique et fausse.
+
+
 ## Session 2026-08-20 (6) — Le gate était inatteignable : artefact d'unités dans le DSR (ADR-0035)
 **Contexte.** Question posée : « peut-on produire de l'alpha plutôt que de seulement démontrer ce
 qui échoue ? » En cherchant POURQUOI rien ne passe jamais, j'ai trouvé la réponse dans le code,

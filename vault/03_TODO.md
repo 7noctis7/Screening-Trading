@@ -3,6 +3,16 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+## 🎯 ALPHA — pipeline fondamental + labo (2026-08-20)
+- [x] **Pipeline 4 couches livré** (`screening/alpha_pipeline.py`) : qualité → DCF avec bande de
+      sensibilité → momentum → dimensionnement par budget d'ES. Entonnoir publié.
+- [ ] **Brancher le pipeline sur les fondamentaux réels** (`fundamentals/fmp_provider` ou
+      `sec_provider`) et le lancer sur 500+ tickers → si l'entonnoir sort < 10 lignes, élargir
+      l'univers AVANT d'assouplir les seuils.
+- [ ] **Ajouter actif/passif courant à `Financials`** pour rendre le quick ratio calculable
+      (aujourd'hui `None`, donc exclu de la conjonction — c'est honnête mais incomplet).
+- [ ] Ne PAS backtester ce pipeline tant que les fondamentaux ne sont pas point-in-time (F1/F9).
+
 ## 🎯 ALPHA — `make alpha-lab` (2026-08-20)
 - [x] **Labo d'alpha livré** : 5 hypothèses pré-enregistrées + gate 4 étages + ledger.
 - [ ] **CE SOIR SUR LE MAC — la commande qui répond à « où est l'alpha ? »** :
