@@ -1,5 +1,32 @@
 # 04 — JOURNAL
 
+## Session 2026-08-22 (2) — `make start` ramenait un code vieux de quatre PR
+**Contexte.** « Pourquoi j'ai encore des positions Bitmart ? » — alors que Bitmart avait été
+retiré la veille. Réponse dans sa sortie de terminal :
+`→ Mise à jour du code (origin/claude/clever-lovelace-ognwya)… ✓ à jour`.
+
+**Le défaut.** `scripts/start.sh` faisait `git reset --hard` sur une **branche de travail** codée
+en dur. Or une branche de travail n'est resynchronisée qu'après SON merge : celle-ci était restée
+à `149055a`, soit **quatre PR en arrière** (#324, #325, #326). Chaque `make start` effaçait donc
+silencieusement tout ce qui avait été livré — et affichait « ✓ à jour », ce qui est le pire des
+messages : rassurant et faux.
+
+**Correctif.** `BRANCH="${QUANT_BRANCH:-main}"`. `main` porte toujours ce qui est mergé, quelle
+que soit la branche de travail qui l'a produit. Et le script DIT ce qu'il a fait : `abc123 →
+def456 (3 commit(s))` au lieu d'un « ✓ à jour » indistinct du vrai cas à jour. Un `reset --hard`
+muet est le meilleur moyen de tourner des jours sur du code qu'on croit courant.
+
+**Deux affichages faux, remontés par la même capture d'écran.**
+- `ONDO/USDT · 80,0 %` : le poids est rapporté au capital de SA poche. Avec une poche à 0,10 $,
+  une ligne à 0,08 $ vaut « 80 % » — affiché juste à côté d'un QQQ à 49,8 % d'un capital de
+  100 000 $. Les deux nombres ne mesurent pas la même chose. Sous 500 $ de capital de poche, on
+  ne calcule plus de poids.
+- Une quarantaine de résidus noyaient les quelques lignes sur lesquelles on peut agir. Le tableau
+  montre par défaut ce qui est actionnable ; les résidus restent à un clic, et le bloc « Lignes
+  trop petites pour compter » les résume déjà.
+
+1019 tests passés, 8 ignorés.
+
 ## Session 2026-08-22 — Le plancher de ligne, et Bitmart retiré du site
 **Contexte.** « Je ne veux plus voir Bitmart dans mes positions. Et pourquoi j'ai des actifs hors
 scope ou sous 500–1000 $ ? J'ai des positions qui n'ont même pas 50 $. »

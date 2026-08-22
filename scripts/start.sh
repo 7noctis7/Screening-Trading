@@ -2,7 +2,8 @@
 # Démarre Quant Terminal EN UNE COMMANDE : met à jour le code, tue les vieux process,
 # lance l'API (en arrière-plan) puis le front. Plus besoin de 3 commandes/fenêtres.
 #   make start        (ou : bash scripts/start.sh)
-# Variables surchargeables : QUANT_PRICE_DB, QUANT_HISTORY_DAYS, QUANT_NO_UPDATE=1 (saute le git reset),
+# Variables surchargeables : QUANT_BRANCH (défaut main), QUANT_PRICE_DB, QUANT_HISTORY_DAYS,
+#   QUANT_NO_UPDATE=1 (saute le git reset),
 # QUANT_REFRESH=1 (lance aussi make daily + ingest-crypto avant de démarrer).
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -19,10 +20,27 @@ export QUANT_CRYPTO="${QUANT_CRYPTO:-1}"               # cockpit crypto (/crypto
 export QUANT_PREDMKT="${QUANT_PREDMKT:-1}"             # marchés de prédiction (/macro)
 # QUANT_CORE_SPEC / QUANT_DD_TARGET : respectés s'ils sont définis dans l'environnement (sinon défaut code).
 
-BRANCH="claude/clever-lovelace-ognwya"
+# On se cale sur MAIN, pas sur une branche de travail. Une branche de travail n'est resynchronisée
+# qu'après SON merge ; si une session en a utilisé une autre, celle-ci reste en arrière et le
+# `git reset --hard` ci-dessous efface silencieusement tout ce qui a été livré entre-temps.
+# C'est arrivé : `make start` ramenait un code vieux de quatre PR sans rien signaler.
+# `main` porte toujours ce qui est mergé, quelle que soit la branche qui l'a produit.
+BRANCH="${QUANT_BRANCH:-main}"
 if [ "${QUANT_NO_UPDATE:-0}" != "1" ]; then
   echo "→ Mise à jour du code (origin/$BRANCH)…"
-  git fetch origin >/dev/null 2>&1 && git reset --hard "origin/$BRANCH" >/dev/null 2>&1 && echo "  ✓ à jour" || echo "  ⚠ maj ignorée (hors-ligne ?)"
+  _avant="$(git rev-parse --short HEAD 2>/dev/null || echo '?')"
+  if git fetch origin "$BRANCH" >/dev/null 2>&1 && git reset --hard "origin/$BRANCH" >/dev/null 2>&1; then
+    _apres="$(git rev-parse --short HEAD)"
+    if [ "$_avant" = "$_apres" ]; then
+      echo "  ✓ déjà à jour ($_apres)"
+    else
+      # On DIT ce qui a changé : un reset --hard silencieux est le meilleur moyen de tourner
+      # pendant des jours sur du code qu'on croit à jour.
+      echo "  ✓ $_avant → $_apres ($(git log --oneline "$_avant".."$_apres" 2>/dev/null | wc -l | tr -d ' ') commit(s))"
+    fi
+  else
+    echo "  ⚠ maj ignorée (hors-ligne ?) — le code local reste sur $(git rev-parse --short HEAD 2>/dev/null || echo '?')"
+  fi
 fi
 
 echo "→ Arrêt des anciens process (API/front)…"
