@@ -133,6 +133,7 @@ def _universe_section(instruments: list[dict]) -> dict:
 # Alias privés conservés → le reste du fichier est inchangé.
 from apps.api.sections_data import GICS_MAP as _GICS_MAP  # noqa: E402
 from apps.api.sections_data import SECTOR_DV as _SECTOR_DV  # noqa: E402
+from packages.execution.rebalance_plan import min_ligne as _min_ligne  # noqa: E402
 from apps.api.sections_data import THEME_TICKERS as _THEME_TICKERS  # noqa: E402
 
 
@@ -189,7 +190,12 @@ def _themes_section(data: dict, sector_of: dict, end) -> dict:
     (4ᵉ révolution + GICS, hors forex/indices/etf) alimentent la heatmap d'actifs."""
     import numpy as np
 
+    from packages.data.corporate_actions import ajuster as _ca_ajuster
+    from packages.data.corporate_actions import exploitable as _ca_exploitable
+
     skip = {"Forex", "Indices", "ETF", "Commodités"}
+    _splits_ajustes: list[str] = []      # publiés : un ajustement silencieux n'est pas auditable
+    _splits_ecartes: list[str] = []
     buckets: dict[str, list] = {}
     for s, bars in data.items():
         sec = sector_of.get(s, "Actions diverses")
@@ -206,11 +212,24 @@ def _themes_section(data: dict, sector_of: dict, end) -> dict:
             c = np.array([b.close for b in bars], float)
             if c.size < 64:
                 continue
-            # GARDE-FOU DATA : saut quotidien aberrant (>150 % en 1 jour = split non ajusté /
-            # glitch / discontinuité de fusion) → on écarte le titre (évite les SPCX +627 % faux).
+            # GARDE-FOU DATA. Le seuil de 150 % attrape les REGROUPEMENTS (1:10 = +900 %) mais
+            # laissait passer les SPLITS : un 4:1 fait -75 %, donc sous le seuil. C'était le cas
+            # fréquent, et il frappe les valeurs qui ont beaucoup monté — celles que le momentum
+            # sélectionne. Détection dédiée (packages/data/corporate_actions) : on ajuste quand
+            # prix ET volume concordent, on ÉCARTE quand le doute subsiste. Jamais de rendement
+            # inventé au milieu d'un historique.
             rr = c[1:] / c[:-1] - 1.0
             if rr.size and (np.nanmax(np.abs(rr)) > 1.5 or not np.all(np.isfinite(c)) or c.min() <= 0):
                 continue
+            _vols = [float(getattr(b, "volume", 0.0) or 0.0) for b in bars]
+            _ok, _motif = _ca_exploitable([float(x) for x in c], _vols)
+            if not _ok:
+                _splits_ecartes.append(f"{s} : {_motif}")
+                continue
+            _c_adj, _cands = _ca_ajuster([float(x) for x in c], _vols)
+            if any(x.certain for x in _cands):
+                c = np.array(_c_adj, float)
+                _splits_ajustes.append(f"{s} : {sum(1 for x in _cands if x.certain)} split(s)")
             # YTD CALENDAIRE RÉEL : base = dernier cours de l'année précédente (sinon 1ʳᵉ barre dispo)
             _bidx = next((i for i, b in enumerate(bars) if b.ts.year == _cur_year), None)
             base = bars[_bidx - 1].close if (_bidx and _bidx > 0) else float(c[0])
@@ -234,6 +253,8 @@ def _themes_section(data: dict, sector_of: dict, end) -> dict:
     out.sort(key=lambda s: s["ytd"], reverse=True)
     return {
         "as_of": end.isoformat(),
+        "splits_ajustes": _splits_ajustes,     # ce qui a été corrigé, et sur quels titres
+        "splits_ecartes": _splits_ecartes,     # ce qui n'a pas pu être tranché → titre écarté
         "sectors": out,
         "bullish": [s["sector"] for s in out if s["stance"] == "bullish"],
         "bearish": [s["sector"] for s in out if s["stance"] == "bearish"],
@@ -2385,6 +2406,9 @@ def build_snapshot(seed: int = 7) -> dict:
             "dates": _dash_dates,
             "positions": comp["rows"], "totals": comp["totals"],
             "preset_allocation": _preset_alloc,        # allocation PRESET (production) → page Positions
+            # Plancher de ligne PUBLIÉ : le front l'affichait en dur de son côté. Deux sources
+            # pour un même seuil, c'est une dérive garantie au premier changement.
+            "min_position": _min_ligne(),
             "alloc_capital": {"alpaca": round(_alp_cap, 2), "crypto": round(_bit_cap, 2),
                               "total": round(_alp_cap + _bit_cap, 2)},  # base réelle par compte
             "chart_series": _chart_series,             # OHLC cliquables (preset + positions réelles)
