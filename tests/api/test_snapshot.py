@@ -109,12 +109,18 @@ def test_vix_playbook_and_live():
     assert d["vix"] > 0 and d["vix_playbook"]["regime"] in {"calme", "normal", "tendu", "panique"}
     assert d["vix_playbook"]["exposure"] in {1.2, 1.0, 0.6, 0.3}
     live = snap["live"]
-    assert {b["name"] for b in live["brokers"]} == {"Alpaca", "Bitmart"}
+    # La place crypto n'est plus un nom figé : on vérifie qu'elle correspond à la place ACTIVE
+    # (QUANT_CRYPTO_VENUE, défaut Binance). Figer « Bitmart » ici redeviendrait faux à la
+    # prochaine bascule, en donnant l'illusion d'une couverture.
+    from packages.execution.venues import venue_crypto
+    assert {b["name"] for b in live["brokers"]} == {"Alpaca", venue_crypto().nom}
+    assert [b["venue"] for b in live["brokers"] if b["name"] != "Alpaca"] == [venue_crypto().cle]
     assert live["mode"] == "paper"
     # « non connecté » garanti UNIQUEMENT sans clés (CI). Si des clés sont présentes (machine
     # configurée), l'état dépend du broker/réseau → on n'assert pas.
     import os as _os
-    if not (_os.environ.get("ALPACA_API_KEY") or _os.environ.get("BITMART_API_KEY")):
+    if not (_os.environ.get("ALPACA_API_KEY")
+            or any(_os.environ.get(k) for k in venue_crypto().env)):
         assert live["connected"] is False
     # projection Monte-Carlo : bandes de percentiles ordonnées
     mp = snap["portfolio"]["analysis"]["mc_projection"]

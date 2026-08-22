@@ -1,5 +1,51 @@
 # 04 — JOURNAL
 
+## Session 2026-08-21 (6) — La poussière, la fenêtre, et la place crypto
+**Contexte.** « Performance réelle et dashboard. Puis remplace Bitmart par Binance. »
+
+### Performance réelle : la poussière était CRÉÉE puis PROTÉGÉE À VIE
+Le compte affichait 49 positions dont une trentaine sous 3 $ (ASML 1,67 $, HST 0,01 $, KSS 0,01 $…),
+~17 $ au total. Deux mécanismes se renforçaient :
+1. On solde en MONTANT (« vends pour 812 $ »), jamais en quantité. Le cours bouge entre la
+   cotation et l'exécution → il reste une miette.
+2. La miette vaut moins que la bande d'inaction (0,5 % du capital, soit ~385 $) → la sortie
+   suivante la déclare « déjà alignée ». **Elle ne partira plus jamais.**
+
+`packages/execution/rebalance_plan.py` : décision extraite en fonction pure et testée.
+Une **sortie complète ne passe pas par la bande** — c'est la règle qui empêche un résidu de
+devenir immortel — et part **en quantité** (`AlpacaBroker.close_position`, ordre exact côté
+courtier). Symétriquement, on **n'ouvre pas** une ligne sous 25 $ : c'est la poussière de demain.
+La bande garde tout son rôle entre les deux.
+
+Choix corrigé en cours de route : j'avais mis un epsilon à 0,01 $ « pour les arrondis » — il
+aurait rendu immortelles précisément les lignes à 0,01 $ qu'on veut solder. Si le courtier
+déclare une position, elle existe.
+
+### Dashboard : la colonne qui manquait s'appelle « Fenêtre »
+Le tableau comparait « Portefeuille (backtest preset) 401,4 % » et « Portefeuille RÉEL −1,5 % »
+sur la même ligne, sans dire que l'un couvre dix ans et l'autre deux mois. Chaque ligne affiche
+désormais sa **fenêtre réelle** (`n` remonté par `_curve_stats`), et le texte dit franchement que
+ces rendements ne se comparent pas. Pastille « N mouvements neutralisés » sur les comptes réels :
+le correctif TWR de la session précédente devient visible au lieu d'être silencieux.
+
+### Bitmart → Binance : le vrai défaut était le nom en dur
+« Bitmart » apparaissait ~150 fois dans 27 fichiers. Renommer à la main, c'était en oublier.
+`packages/execution/venues.py` isole ce que la place EST (nom, clés, fabrique, portée) de ce que
+le code en FAIT. Bascule par `QUANT_CRYPTO_VENUE`, **défaut Binance** : taker 0,10 % contre
+0,25 % chez Bitmart — frais crypto divisés par 2,5 à rotation égale, carnet plus profond donc
+moins de glissement. Bitmart reste disponible, sans code mort. Un nom inconnu retombe sur le
+défaut : une faute de frappe ne doit pas priver de courtier.
+
+Payload : clé `crypto` (place active), `bitmart` conservée en **alias** — renommer une clé d'un
+coup casse silencieusement tout ce qui la lit encore. Front : `lib/venue.ts` lit le nom dans les
+DONNÉES ; plus une seule page ne l'écrit en dur.
+
+Un test figeait `{"Alpaca", "Bitmart"}` : réécrit pour vérifier la place **active**, sinon il
+redeviendrait faux à la prochaine bascule en donnant l'illusion d'une couverture.
+
+**Erreur commise et corrigée** : `_VC` défini dans le bloc *live*, utilisé dans le constructeur
+principal — autre portée. Neuf tests l'ont attrapée.
+
 ## Session 2026-08-21 (5) — Un virement n'est pas une performance
 **Contexte.** « Je ne suis pas sûr que le rendement du portefeuille Alpaca+Bitmart soit correct. »
 Doute justifié : le chiffre était faux, et la démonstration ne demande pas la base.

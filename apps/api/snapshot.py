@@ -361,7 +361,9 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
     sinon on réplique les poids du portefeuille modèle (swing)."""
     import os
     alp = bool(os.environ.get("ALPACA_API_KEY") and os.environ.get("ALPACA_API_SECRET"))
-    bit = bool(os.environ.get("BITMART_API_KEY") and os.environ.get("BITMART_API_SECRET"))
+    from packages.execution.venues import venue_crypto as _venue_crypto
+    _VC = _venue_crypto()                      # place crypto active (QUANT_CRYPTO_VENUE, déf. Binance)
+    bit = _VC.configuree()
     # --- DONNÉES RÉELLES PAR BROKER (séparées, avec diagnostic d'erreur) ---
     def _alpaca():
         d = {"name": "Alpaca", "configured": alp, "ok": False, "equity": 0.0, "positions": [], "error": None}
@@ -381,19 +383,23 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
         return d
 
     def _bitmart():
-        d = {"name": "Bitmart", "configured": bit, "ok": False, "equity": 0.0, "positions": [], "error": None}
+        """Place crypto ACTIVE (Binance par défaut). Le nom vient de la place, plus du code :
+        changer de place ne demande plus de renommer une trentaine de fichiers."""
+        d = {"name": _VC.nom, "venue": _VC.cle, "configured": bit, "ok": False,
+             "equity": 0.0, "positions": [], "error": None}
         if not bit:
-            d["error"] = "clés absentes (.env)"; return d
+            d["error"] = f"clés absentes (.env) : {', '.join(_VC.env)}"; return d
         try:
-            from packages.execution.bitmart_broker import BitmartBroker
-            b = BitmartBroker(dry_run=False)
+            b = _VC.broker(dry_run=False)
             d["equity"] = round(float(b.equity()), 2)
             d["positions"] = b.positions_detailed()   # positions SPOT RÉELLES enrichies
-            d["orders"] = b.orders()                   # transactions RÉELLES (page Trades)
-            d["open_orders"] = b.open_orders()         # ordres SPOT en attente d'exécution (non remplis)
-            # bougies réelles (Bitmart) pour les graphes des positions/ordres crypto (absents de YAHOO.db)
+            # Toutes les places n'exposent pas le même surface : une méthode absente donne une
+            # section VIDE, jamais une exception qui priverait le site de la poche crypto.
+            d["orders"] = b.orders() if hasattr(b, "orders") else []
+            d["open_orders"] = b.open_orders() if hasattr(b, "open_orders") else []
             _csyms = {p["symbol"] for p in d["positions"]} | {o.get("symbol") for o in d["orders"]}
-            d["ohlcv"] = {s: bars for s in _csyms if s and (bars := b.ohlcv(s))}
+            d["ohlcv"] = ({s: bars for s in _csyms if s and (bars := b.ohlcv(s))}
+                          if hasattr(b, "ohlcv") else {})
             d["ok"] = True
         except Exception as e:  # noqa: BLE001
             d["error"] = str(e)[:160]
@@ -416,13 +422,17 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
         "positions": a_d["positions"] + b_d["positions"],
         "trades": _real_trades,                    # ordres RÉELS exécutés (Alpaca + Bitmart)
         "open_orders": _real_open,                 # ordres RÉELS en attente d'exécution (non remplis)
-        "alpaca": a_d, "bitmart": b_d,
+        # « crypto » = la place ACTIVE, quelle qu'elle soit. La clé « bitmart » reste servie en
+        # ALIAS le temps que les consommateurs migrent : renommer une clé de payload d'un coup
+        # casse silencieusement tout ce qui la lit encore.
+        "alpaca": a_d, "crypto": b_d, "bitmart": b_d,
     }
     # enregistre l'equity réelle du jour (construit l'historique réel par broker)
     try:
         from packages.execution.equity_history import record as _eq_record
         if a_d["ok"] or b_d["ok"]:
-            _eq_record({"alpaca": a_d["equity"], "bitmart": b_d["equity"]})
+            _eq_record({"alpaca": a_d["equity"], _VC.cle: b_d["equity"],
+                        "bitmart": b_d["equity"]})   # alias historique, même valeur
     except Exception:  # noqa: BLE001
         pass
     if target_weights or crypto_weights:          # allocation PRESET (2 poches : actions + crypto)
@@ -465,8 +475,9 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
         "brokers": [
             {"name": "Alpaca", "scope": "Actions & ETF US + Crypto paper (paires /USD)", "connected": alp,
              "paper": True, "env": ["ALPACA_API_KEY", "ALPACA_API_SECRET"]},
-            {"name": "Bitmart", "scope": "Crypto — adaptateur futur-live (OFF, gated)", "connected": bit,
-             "paper": False, "env": ["BITMART_API_KEY", "BITMART_API_SECRET"]},
+            {"name": _VC.nom, "venue": _VC.cle,
+             "scope": f"{_VC.portee} — adaptateur futur-live (OFF, gated)", "connected": bit,
+             "paper": False, "env": list(_VC.env)},
         ],
         "target_orders": targets,
         "note": "Brancher les clés API (variables d'environnement) puis valider en mode paper "
@@ -1370,7 +1381,8 @@ def _curve_stats(eq: list[float], *, compte_reel: bool = False,
     if not ps.get("available"):
         return {"available": False}
     gains, losses = float(r[r > 0].sum()), float(-r[r < 0].sum())
-    out = {"available": True, "cagr": ps["cagr"], "total_return": ps["total_return"],
+    out = {"available": True, "n": ps["n"],           # fenêtre réelle → affichable, comparable
+           "cagr": ps["cagr"], "total_return": ps["total_return"],
            "sharpe": ps["sharpe"], "sortino": ps["sortino"],
            "max_drawdown": ps["max_drawdown"], "win_rate": round(float((r > 0).mean()), 3),
            "profit_factor": round(gains / losses, 2) if losses > 0 else 0.0}
@@ -2059,7 +2071,7 @@ def build_snapshot(seed: int = 7) -> dict:
     _live = _live_with_rebalance(comp["rows"], acmap, portfolio_kpis, w_by_name,
                                  target_weights=_preset_weights, crypto_weights=_crypto_weights)
     _alp_cap = (_live["real"]["alpaca"]["equity"] or 0.0) or init_cap
-    _bit_cap = _live["real"]["bitmart"]["equity"] or 0.0
+    _bit_cap = _live["real"]["crypto"]["equity"] or 0.0
     # Allocation PRESET détaillée (page Positions) : 2 poches, chacune sur le capital de son broker
     _preset_alloc = []
     _px_override = {_core_sym: _core_px} if _core_px > 0 else {}
@@ -2149,7 +2161,7 @@ def build_snapshot(seed: int = 7) -> dict:
         _chart_series[s] = [{"t": x.ts.isoformat()[:10], "o": round(x.open, 4), "h": round(x.high, 4),
                              "l": round(x.low, 4), "c": round(x.close, 4), "v": round(x.volume, 0)} for x in bb]
     # bougies RÉELLES Bitmart pour les positions/ordres crypto (absents de YAHOO.db)
-    for _sym, _bars in (_live["real"].get("bitmart", {}).get("ohlcv", {}) or {}).items():
+    for _sym, _bars in (_live["real"].get("crypto", {}).get("ohlcv", {}) or {}).items():
         if _bars and _sym not in _chart_series:
             _chart_series[_sym] = _bars
     # le cœur QQQ n'est pas dans l'univers → courbe cliquable depuis ses closes réels
@@ -2193,17 +2205,19 @@ def build_snapshot(seed: int = 7) -> dict:
     except Exception:  # noqa: BLE001
         pass
     _live["alpaca_perf"] = _broker_perf(_live["real"]["alpaca"], "alpaca", _eq_model)
-    _live["bitmart_perf"] = _broker_perf(_live["real"]["bitmart"], "bitmart", _cr_model)
+    from packages.execution.venues import venue_crypto as _vc_here   # autre portée que le bloc live
+    _live["crypto_perf"] = _broker_perf(_live["real"]["crypto"], _vc_here().cle, _cr_model)
+    _live["bitmart_perf"] = _live["crypto_perf"]          # alias historique
     # COMPARAISON COMPTES RÉELS vs INDICES (Alpaca vs Crypto vs S&P vs Nasdaq) pour le dashboard
     _cal_full = [b.ts for b in max(data.values(), key=len)]
     _account_cmp = _account_compare(
         _live["alpaca_perf"].get("curve", []) if _live["alpaca_perf"].get("source") == "réel" else [],
-        _live["bitmart_perf"].get("curve", []) if _live["bitmart_perf"].get("source") == "réel" else [],
+        _live["crypto_perf"].get("curve", []) if _live["crypto_perf"].get("source") == "réel" else [],
         sp, ndx, _cal_full)
     # PORTEFEUILLE RÉEL combiné (Alpaca + Bitmart) : courbe d'equity réelle + stats → ligne cliquable
     # du dashboard (réconcilie avec les ORDRES réellement exécutés + positions réelles).
     _alp_c = _live["alpaca_perf"].get("curve", []) if _live["alpaca_perf"].get("source") == "réel" else []
-    _cr_c = _live["bitmart_perf"].get("curve", []) if _live["bitmart_perf"].get("source") == "réel" else []
+    _cr_c = _live["crypto_perf"].get("curve", []) if _live["crypto_perf"].get("source") == "réel" else []
     _real_portfolio = {"available": False}
     if _alp_c or _cr_c:
         _rdates = sorted(set(p["t"][:10] for p in _alp_c) | set(p["t"][:10] for p in _cr_c))
@@ -2374,7 +2388,8 @@ def build_snapshot(seed: int = 7) -> dict:
             "dates": _dash_dates,
             "positions": comp["rows"], "totals": comp["totals"],
             "preset_allocation": _preset_alloc,        # allocation PRESET (production) → page Positions
-            "alloc_capital": {"alpaca": round(_alp_cap, 2), "bitmart": round(_bit_cap, 2),
+            "alloc_capital": {"alpaca": round(_alp_cap, 2), "crypto": round(_bit_cap, 2),
+                              "bitmart": round(_bit_cap, 2),   # alias historique
                               "total": round(_alp_cap + _bit_cap, 2)},  # base réelle par compte
             "chart_series": _chart_series,             # OHLC cliquables (preset + positions réelles)
             "portfolio": portfolio_kpis,

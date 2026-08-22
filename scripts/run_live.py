@@ -61,18 +61,27 @@ def _kill_switch(bus):
 
 
 def _make_brokers(dry: bool):
-    """(alpaca paper, bitmart) en mode réel ; (None, None) en dry-run. Alpaca best-effort."""
+    """(alpaca paper, place crypto) en mode réel ; (None, None) en dry-run. Alpaca best-effort.
+
+    La place crypto n'est plus codée en dur : elle vient de QUANT_CRYPTO_VENUE (défaut Binance,
+    taker 0,10 % contre 0,25 % chez Bitmart). Cf. packages/execution/venues.
+    """
     if dry:
         return None, None
-    from packages.execution.bitmart_broker import BitmartBroker
-    bitmart = BitmartBroker(dry_run=False)
+    from packages.execution.venues import venue_crypto
+    _v = venue_crypto()
+    try:
+        crypto = _v.broker(dry_run=False)
+    except Exception as e:  # noqa: BLE001 — dépendance ou clés absentes : on continue sans crypto
+        print(f"{_v.nom} indisponible ({str(e)[:60]}) → poche crypto ignorée")
+        crypto = None
     alpaca = None
     try:
         from packages.execution.alpaca_broker import AlpacaBroker
         alpaca = AlpacaBroker(paper=True)                 # actions TOUJOURS en paper
     except Exception as e:  # noqa: BLE001
         print(f"Alpaca indisponible ({str(e)[:60]}) → actions ignorées")
-    return alpaca, bitmart
+    return alpaca, crypto
 
 
 # Garde-fous d'exécution (audit 07/15) : inconnu ≠ zéro, fail-loud, kill-switch DD réel.
@@ -117,21 +126,30 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, 
         curn = {}                                             # détenu par clé NORMALISÉE (cumul)
         for k, v in cur.items():
             curn[_nsym(k)] = curn.get(_nsym(k), 0.0) + v
+        from packages.execution.rebalance_plan import decider
         for nkey, info in sorted(tgt.items(), key=lambda kv: -kv[1]["val"]):
             o, bsym = info["o"], info["sym"]
-            delta = info["val"] - curn.get(nkey, 0.0)         # >0 acheter · <0 vendre
-            tag = f"  {bsym:14s} {bname:8s} cible {info['val']:8.0f}$ détenu {curn.get(nkey,0.0):8.0f}$ Δ {delta:+8.0f}$"
+            detenu = curn.get(nkey, 0.0)
+            delta = info["val"] - detenu                      # >0 acheter · <0 vendre
+            tag = f"  {bsym:14s} {bname:8s} cible {info['val']:8.0f}$ détenu {detenu:8.0f}$ Δ {delta:+8.0f}$"
             if o is not None and o.get("tradeable") is False:
                 print(tag + "  non négociable"); continue
-            if abs(delta) < band:
-                print(tag + "  ✓ déjà aligné"); continue
-            side = Side.LONG if delta > 0 else Side.SHORT     # SHORT = vendre le surplus (spot/long-only)
+            # Décision déléguée (testée) : solder hors bande, ne pas ouvrir sous le plancher.
+            intention = decider(info["val"], detenu, band)
+            if not intention.agit:
+                print(tag + f"  ✓ {intention.motif}"); continue
+            side = Side.LONG if intention.action == "acheter" else Side.SHORT
             if dry or broker is None:
-                print(tag + "  " + ("aperçu" if dry else "broker absent")); continue
+                print(tag + f"  {'aperçu' if dry else 'broker absent'} ({intention.action})"); continue
             try:
-                retry(lambda: broker.submit_notional(bsym, side, abs(delta)), attempts=3)
+                if intention.liquidation and hasattr(broker, "close_position"):
+                    # Sortie totale EN QUANTITÉ : aucun résidu, donc aucune poussière future.
+                    retry(lambda: broker.close_position(bsym), attempts=3)
+                else:
+                    retry(lambda: broker.submit_notional(bsym, side, intention.montant), attempts=3)
                 sent += 1
-                print(tag + ("  ▲ achat" if delta > 0 else "  ▼ vente"))
+                print(tag + {"acheter": "  ▲ achat", "alleger": "  ▼ vente",
+                             "solder": "  ▼ SOLDE (quantité)"}[intention.action])
                 if delta > 0 and o is not None:               # ACHAT/ADD → ouverture à journaliser
                     opened.append({"symbol": o["symbol"], "venue": bname, "broker_symbol": bsym,
                                    "asset_class": o.get("asset_class"), "weight_pct": o.get("weight_pct")})

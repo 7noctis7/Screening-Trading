@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useTrades, useOverlays } from "@/lib/api";
 import { TechnicalChart } from "@/components/TechnicalChart";
 import { PageSkeleton } from "@/components/ui";
+import { compteCrypto, nomVenue } from "@/lib/venue";
 
 const usd = (x?: number) => (x ?? 0).toLocaleString("fr-FR", { maximumFractionDigits: 2 });
 const dt = (s?: string) => (s ? String(s).slice(0, 10) : "—");
@@ -21,15 +22,15 @@ export default function Trades() {
     <main className="max-w-5xl mx-auto p-6 space-y-4">
       <h1 className="text-xl font-semibold tracking-tight">Trades
         <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full align-middle"
-          style={{ background: "color-mix(in srgb, #22c55e 16%, transparent)", color: "#22c55e" }}>RÉEL · Alpaca + Bitmart</span></h1>
+          style={{ background: "color-mix(in srgb, #22c55e 16%, transparent)", color: "#22c55e" }}>RÉEL · Alpaca + {nomVenue(acc)}</span></h1>
       <p className="text-muted text-xs">Ordres <b>réellement exécutés</b> (fills) <b>et ordres en attente</b> (non encore exécutés, ex. marché fermé) sur tes comptes. Aucune donnée modèle, backtest ou synthétique.</p>
 
       {!data.connected ? (
         <section className="card p-6 text-center">
           <p className="text-sm">Aucun compte connecté.</p>
           <p className="text-muted text-xs mt-1">Renseigne tes clés API dans <code>.env</code> puis relance l'API.</p>
-          {(acc.alpaca?.error || acc.bitmart?.error) && (
-            <p className="text-muted2 text-[11px] mt-2">Alpaca : {acc.alpaca?.error || "ok"} · Bitmart : {acc.bitmart?.error || "ok"}</p>)}
+          {(acc.alpaca?.error || compteCrypto(acc)?.error) && (
+            <p className="text-muted2 text-[11px] mt-2">Alpaca : {acc.alpaca?.error || "ok"} · {nomVenue(acc)} : {compteCrypto(acc)?.error || "ok"}</p>)}
         </section>
       ) : (
       <>
