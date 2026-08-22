@@ -3,37 +3,100 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { AICommentary } from "@/components/AICommentary";
 import { Reveal } from "@/components/Reveal";
+import { useDashboard } from "@/lib/api";
+import {
+  euros, expliqueDrawdown, expliqueSharpe, VERDICT_LABEL, type Verdict,
+} from "@/lib/plain";
 
-// ACCUEIL — refonte accessibilité (2026-08-21).
-// Avant : la première chose que voyait un visiteur était un glossaire (GARCH(1,1),
-// Cornish-Fisher, PSR/DSR, HRP…). C'est une RÉFÉRENCE, pas une porte d'entrée : elle
-// suppose déjà connu ce qu'elle explique. Le glossaire vit désormais sur /glossaire.
-// Ici on répond à trois questions, dans l'ordre où on se les pose vraiment.
+// ACCUEIL — l'état du système, pas une brochure.
+//
+// Deux refontes successives. La première (2026-08-21) a sorti le glossaire de la page d'accueil :
+// le premier écran affichait GARCH(1,1), Cornish-Fisher, PSR/DSR — une RÉFÉRENCE, qui suppose
+// déjà connu ce qu'elle explique.
+//
+// Celle-ci corrige le défaut restant : la page était entièrement STATIQUE. Un visiteur du mardi
+// voyait exactement ce qu'il avait vu lundi. Une porte d'entrée de terminal doit dire où en est
+// le système MAINTENANT — sinon elle ne se lit qu'une fois.
+//
+// Ce qu'on garde du cahier des charges institutionnel : aucun espace mort, chaque élément gagne
+// sa place, et chaque chiffre mène à la page qui l'explique. Ce qu'on écarte : la densité type
+// terminal. Un terminal Bloomberg n'a pas de page d'accueil, il a une ligne de commande — parce
+// que ses utilisateurs sont formés. La densité appartient aux pages de travail.
+//
+// Règle d'affichage : la couleur ne porte JAMAIS seule une information. Le verdict est écrit en
+// toutes lettres ; la pastille n'est qu'un rappel, en contour, jamais en aplat (convention du
+// dépôt pour les états, cf. globals.css).
 
 const Scene = dynamic(() => import("@/components/landing/Scene"), { ssr: false });
 
+const TON: Record<Verdict, string> = {
+  bon: "var(--pos)", moyen: "var(--accent)", prudence: "var(--warn)", inconnu: "var(--muted2)",
+};
+
+/** Une tuile d'état : un chiffre, son verdict EN TOUTES LETTRES, une phrase, une sortie. */
+function Etat({ label, valeur, verdict, phrase, href, lien }: {
+  label: string; valeur: string; verdict: Verdict; phrase: string; href: string; lien: string;
+}) {
+  return (
+    <Link href={href} className="card p-4 block h-full hover:border-border2 transition-colors">
+      <div className="text-muted text-[11px] uppercase tracking-[0.08em]">{label}</div>
+      {/* Le chiffre porte un jeton de TEXTE, jamais la couleur d'état : c'est la pastille et le
+          mot du verdict qui portent l'information, donc elle reste lisible sans la couleur. */}
+      <div className="mono text-2xl mt-1 text-fg">{valeur}</div>
+      <div className="flex items-center gap-1.5 mt-1.5">
+        <span aria-hidden className="inline-block w-2 h-2 rounded-full shrink-0"
+          style={{ border: `1.5px solid ${TON[verdict]}` }} />
+        <span className="text-[11px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+          {VERDICT_LABEL[verdict]}
+        </span>
+      </div>
+      <div className="text-[11.5px] leading-snug mt-1.5" style={{ color: "var(--muted)" }}>{phrase}</div>
+      <div className="text-xs mt-2.5" style={{ color: "var(--accent)" }}>{lien} →</div>
+    </Link>
+  );
+}
+
 const PORTES: { href: string; titre: string; question: string; detail: string }[] = [
-  {
-    href: "/dashboard",
-    titre: "Est-ce que ça marche ?",
-    question: "Voir les résultats",
-    detail: "La courbe de performance, la pire baisse traversée, et ce que cela représente en euros.",
-  },
-  {
-    href: "/positions",
-    titre: "Qu'est-ce que je détiens ?",
-    question: "Voir le portefeuille",
-    detail: "Les positions actuelles, leur poids, et la raison pour laquelle chacune est là.",
-  },
-  {
-    href: "/screener",
-    titre: "Que faudrait-il regarder ?",
-    question: "Explorer le marché",
-    detail: "Les titres qui ressortent aujourd'hui, avec le détail de ce qui les a retenus ou écartés.",
-  },
+  { href: "/dashboard", titre: "Est-ce que ça marche ?", question: "Voir les résultats",
+    detail: "La courbe de performance, la pire baisse traversée, et ce que cela représente en euros." },
+  { href: "/positions", titre: "Qu'est-ce que je détiens ?", question: "Voir le portefeuille",
+    detail: "Les positions actuelles, leur poids, et la raison pour laquelle chacune est là." },
+  { href: "/screener", titre: "Que faudrait-il regarder ?", question: "Explorer le marché",
+    detail: "Les titres qui ressortent aujourd'hui, avec le détail de ce qui les a retenus ou écartés." },
 ];
 
+/** Régime de marché → verdict. Le VIX pilote l'exposition, donc il pilote la lecture. */
+function etatRegime(vix?: number | null, playbook?: any): { v: Verdict; phrase: string } {
+  const expo = Number(playbook?.exposure);
+  if (!Number.isFinite(Number(vix))) {
+    return { v: "inconnu", phrase: "L'indice de nervosité du marché n'est pas disponible." };
+  }
+  if (expo >= 1.2) return { v: "bon", phrase: "Marché calme : le système accepte de s'exposer davantage que d'ordinaire." };
+  if (expo >= 1) return { v: "moyen", phrase: "Nervosité ordinaire : exposition normale, on suit le plan." };
+  if (expo >= 0.6) return { v: "prudence", phrase: "Marché tendu : l'exposition est réduite automatiquement." };
+  return { v: "prudence", phrase: "Marché en panique : l'exposition est fortement coupée." };
+}
+
+/** PSR = probabilité que le gain ne soit pas un coup de chance. */
+function etatSolidite(psr?: number | null): { v: Verdict; phrase: string; valeur: string } {
+  if (psr == null || !Number.isFinite(psr)) {
+    return { v: "inconnu", valeur: "n/d", phrase: "Pas encore assez d'historique pour se prononcer." };
+  }
+  const p = Math.round(psr * 100);
+  if (p >= 95) return { v: "bon", valeur: `${p} %`, phrase: "Il est très probable que ce résultat ne soit pas dû au hasard." };
+  if (p >= 80) return { v: "moyen", valeur: `${p} %`, phrase: "Le résultat tient, sans être hors de doute." };
+  return { v: "prudence", valeur: `${p} %`, phrase: "Le hasard reste une explication crédible de ce résultat." };
+}
+
 export default function Accueil() {
+  const { data: d } = useDashboard();
+  const m = d?.metrics ?? {};
+  const reg = etatRegime(d?.vix, d?.vix_playbook);
+  const sol = etatSolidite(d?.honesty?.available ? d.honesty.psr : null);
+  const sharpe = expliqueSharpe(m.sharpe);
+  const dd = expliqueDrawdown(m.max_drawdown);
+  const frais = d?.as_of ? String(d.as_of).slice(0, 10) : null;
+
   return (
     <main className="max-w-4xl mx-auto p-6 space-y-8">
       <section className="card hero-photo p-8 md:p-10 relative overflow-hidden">
@@ -56,6 +119,37 @@ export default function Accueil() {
       </section>
 
       <section>
+        <div className="flex items-baseline justify-between flex-wrap gap-2 mb-3">
+          <h2 className="text-sm uppercase tracking-wide text-muted">Où en est le système aujourd'hui</h2>
+          {/* La fraîcheur est une information, pas un détail : un chiffre juste sur des données
+              d'il y a trois semaines reste un chiffre faux pour qui décide aujourd'hui. */}
+          <span className="text-[11px]" style={{ color: "var(--muted2)" }}>
+            {frais ? `données au ${frais}` : "chargement…"}
+          </span>
+        </div>
+        {!d ? (
+          <div className="grid gap-3 md:grid-cols-4">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="card p-4 h-[132px] animate-pulse" aria-hidden />
+            ))}
+          </div>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-4">
+            <Etat label="Climat de marché" valeur={d.vix != null ? `VIX ${Number(d.vix).toFixed(0)}` : "n/d"}
+              verdict={reg.v} phrase={reg.phrase} href="/macro" lien="Voir le contexte" />
+            <Etat label="Gain / risque" valeur={m.sharpe != null ? Number(m.sharpe).toFixed(2) : "n/d"}
+              verdict={sharpe.verdict} phrase={sharpe.phrase} href="/dashboard" lien="Voir les résultats" />
+            <Etat label="Pire baisse" valeur={m.max_drawdown != null ? `${(m.max_drawdown * 100).toFixed(1)} %` : "n/d"}
+              verdict={dd.verdict}
+              phrase={euros(m.max_drawdown) ? `Soit ${euros(m.max_drawdown)} sur 10 000 € avant que ça remonte.` : dd.phrase}
+              href="/risk" lien="Voir le risque" />
+            <Etat label="Le gain est-il réel ?" valeur={sol.valeur} verdict={sol.v}
+              phrase={sol.phrase} href="/methode" lien="Voir la méthode" />
+          </div>
+        )}
+      </section>
+
+      <section>
         <Reveal><h2 className="text-sm uppercase tracking-wide text-muted mb-3">Par où commencer</h2></Reveal>
         <div className="grid gap-3 md:grid-cols-3">
           {PORTES.map((p, i) => (
@@ -73,38 +167,19 @@ export default function Accueil() {
       <Reveal><AICommentary /></Reveal>
 
       <Reveal>
-        <section className="card p-5 space-y-3">
+        <section className="card p-5">
           <h2 className="text-base font-semibold">Comment lire les chiffres</h2>
-          <p className="text-sm" style={{ color: "var(--muted)" }}>
-            Trois repères suffisent pour comprendre l'essentiel de ce site.
+          <p className="text-sm mt-1.5" style={{ color: "var(--muted)" }}>
+            Les quatre tuiles ci-dessus suffisent à comprendre l'essentiel : le climat du marché,
+            si le gain a valu les secousses, ce qu'on aurait vu partir au pire moment, et si tout
+            cela peut n'être qu'un coup de chance. Ce dernier point est le plus important, et
+            c'est celui que la plupart des outils passent sous silence — ce site publie aussi ses
+            échecs pour cette raison.
           </p>
-          <dl className="space-y-2.5 text-sm">
-            <div>
-              <dt className="font-medium">La pire baisse</dt>
-              <dd style={{ color: "var(--muted)" }}>
-                Combien on aurait vu partir, au pire moment, avant que ça remonte. Une baisse de
-                15 % sur 10 000 €, c'est voir 1 500 € disparaître temporairement. C'est le chiffre
-                qui décide si l'on tient le plan ou si l'on vend au mauvais moment.
-              </dd>
-            </div>
-            <div>
-              <dt className="font-medium">Le rapport gain / risque</dt>
-              <dd style={{ color: "var(--muted)" }}>
-                Est-ce que le gain obtenu valait les secousses traversées ? Au-dessus de 1, oui.
-                En dessous de 0,5, on est surtout payé en émotions.
-              </dd>
-            </div>
-            <div>
-              <dt className="font-medium">La solidité du résultat</dt>
-              <dd style={{ color: "var(--muted)" }}>
-                Un bon résultat peut n'être qu'un coup de chance. Ce site calcule la probabilité
-                que ce n'en soit pas un, et refuse de mettre en avant ce qui n'atteint pas le seuil.
-                C'est pourquoi il publie aussi ses échecs.
-              </dd>
-            </div>
-          </dl>
-          <p className="text-sm pt-1">
+          <p className="text-sm mt-3">
             <Link href="/glossaire" className="text-accent">Tous les termes expliqués →</Link>
+            <span className="mx-2" style={{ color: "var(--muted2)" }}>·</span>
+            <Link href="/echecs" className="text-accent">Ce qui n'a pas marché →</Link>
           </p>
         </section>
       </Reveal>
