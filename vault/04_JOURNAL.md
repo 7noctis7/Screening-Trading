@@ -1,5 +1,39 @@
 # 04 — JOURNAL
 
+## Session 2026-08-22 (4) — L'accueil montre l'état du système, pas une brochure
+**Contexte.** « Remets à jour la page d'accueil selon les best practices du Board. »
+
+**Une tension à trancher d'abord.** Le cahier des charges institutionnel réclame une densité
+maximale, style terminal Bloomberg. L'utilisateur avait demandé l'inverse deux jours plus tôt :
+« rends le site accessible au commun des utilisateurs, épure-le ». Ces deux exigences ne
+s'opposent pas partout — elles s'opposent **sur la page d'accueil**.
+
+Arbitrage retenu : un terminal Bloomberg n'a pas de page d'accueil, il a une ligne de commande,
+parce que ses utilisateurs sont formés. La densité appartient aux pages de travail. Ce qui
+TRANSFÈRE du Board vers une porte d'entrée est ailleurs : aucun espace mort, chaque élément
+gagne sa place, chaque chiffre mène à la page qui l'explique — et surtout de l'ÉTAT VIVANT
+plutôt que de la prose figée.
+
+**Le défaut réel.** La page était entièrement statique : un visiteur du mardi voyait exactement
+ce qu'il avait vu lundi. Une porte d'entrée qui ne se lit qu'une fois n'est plus une porte.
+
+**Fait.** Bandeau « Où en est le système aujourd'hui » — quatre tuiles branchées sur les données
+réelles : climat de marché (VIX → exposition), gain/risque (Sharpe), pire baisse (convertie en
+euros), et « le gain est-il réel ? » (PSR). Chacune porte son verdict EN TOUTES LETTRES, une
+phrase sans jargon, et un lien vers la page qui l'explique. La **fraîcheur des données** est
+affichée : un chiffre juste sur des données d'il y a trois semaines reste faux pour qui décide
+aujourd'hui.
+
+**Règle d'affichage tenue** (convention du dépôt + standard dataviz) : la couleur ne porte JAMAIS
+seule une information. Le chiffre garde un jeton de TEXTE ; c'est le mot du verdict qui informe,
+la pastille n'est qu'un rappel, en contour et jamais en aplat. La page reste lisible en
+niveaux de gris.
+
+Le bloc « Comment lire les chiffres » a été resserré : il répétait en trois paragraphes ce que
+les tuiles montrent désormais en direct, et doublonnait `/glossaire`.
+
+Front compilé, aucune erreur `tsc` nouvelle, chaînes vérifiées dans le bundle.
+
 ## Session 2026-08-22 (3) — Plancher de ligne à 1 000 $, et une source unique
 **Contexte.** Choix de l'utilisateur : ne rien détenir sous 1 000 $ dans le portefeuille réel.
 
