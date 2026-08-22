@@ -31,7 +31,19 @@ export default function Macro() {
                   <div key={it.label}>
                     <div className="text-muted text-xs">{it.label}</div>
                     <div className="text-lg mono">{it.value}{it.unit}</div>
-                    <div className="text-muted2 text-[11px]">{it.date}{it.delta != null ? ` · Δ ${it.delta >= 0 ? "+" : ""}${it.delta}` : ""}</div>
+                    {/* Une série morte se lit comme une série vivante : le chômage zone euro
+                        affichait 6,7 % daté de 2023 au milieu de chiffres du mois. La date était
+                        là, mais qui parcourt une grille lit le chiffre, pas la date. */}
+                    <div className="text-muted2 text-[11px]">
+                      {it.date}{it.delta != null ? ` · Δ ${it.delta >= 0 ? "+" : ""}${it.delta}` : ""}
+                    </div>
+                    {it.perimee && (
+                      <div className="text-[11px] mt-1 px-1.5 py-0.5 rounded inline-block"
+                        style={{ background: "color-mix(in srgb, var(--warn) 16%, transparent)", color: "var(--warn)" }}
+                        title={`Dernière publication il y a ${it.retard_jours} jours, très au-delà de la cadence habituelle de cette série.`}>
+                        ⚠ série arrêtée — ne reflète plus la situation actuelle
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

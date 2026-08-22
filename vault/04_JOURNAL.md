@@ -1,5 +1,39 @@
 # 04 — JOURNAL
 
+## Session 2026-08-22 (5) — Trois défauts remontés par une capture d'écran
+**Contexte.** Six questions de l'utilisateur sur macro / accueil / crypto / méthode / dashboard /
+positions. Trois d'entre elles cachaient un défaut vérifiable.
+
+**1. Mon correctif de la veille était INCOMPLET.** La colonne « Fenêtre » du tableau comparatif
+affichait `—` pour trois lignes sur quatre. J'avais ajouté `n` dans `_curve_stats` côté API, mais
+le dashboard recalcule ses statistiques CÔTÉ CLIENT via `lib/metrics::statsFrom`, qui ne le
+renvoyait pas. La colonne censée empêcher de comparer dix ans à deux mois ne servait donc qu'à
+une seule ligne — et faisait passer le portefeuille réel pour l'exception. Corrigé (`n: r.length`).
+
+**2. Une série macro morte se lisait comme une série vivante.** Chômage zone euro : **6,7 %
+daté de janvier 2023**, au milieu de chiffres du mois. La série OCDE `LRHUTTTTEZM156S` a cessé
+d'être publiée ; FRED sert encore sa dernière valeur et le code la prenait sans broncher. La date
+était affichée, mais qui parcourt une grille de tuiles lit le chiffre, pas la date.
+
+Détecteur ajouté, **auto-calibré** : la cadence est déduite de l'espacement RÉEL entre les
+dernières observations, pas d'une table de fréquences à maintenir. Au-delà de trois fois cette
+cadence, la série est déclarée arrêtée et signalée à l'écran. Une série mensuelle publiée avec un
+mois de retard reste normale ; une série quotidienne muette depuis vingt jours ne l'est pas.
+
+Corrigé au passage : une série qui ne répondait pas était **silencieusement ignorée**. Un
+identifiant erroné ou une série retirée disparaissait du tableau sans laisser de trace. Elles sont
+désormais listées (`manquantes`).
+
+**3. Les « positions fantômes » n'en étaient pas.** PATH, THC, VLO, NEM… affichaient `réel 0,0 %`
+avec une cible et un écart négatif. Ce ne sont pas des lignes mortes : ce sont les **cibles du
+modèle non encore achetées** — l'inverse exact de ce que l'affichage laissait croire. Badge
+« à acheter » ajouté.
+
+**Un test a eu raison contre moi** : une liste de dates vide passait la conversion sans lever,
+puis plantait sur l'index `[0]`.
+
+1050 tests passés, 8 ignorés (+7).
+
 ## Session 2026-08-22 (4) — L'accueil montre l'état du système, pas une brochure
 **Contexte.** « Remets à jour la page d'accueil selon les best practices du Board. »
 
