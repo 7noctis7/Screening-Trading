@@ -166,6 +166,54 @@ def audit_series(symbol: str, bars: Iterable[Any], *, now: date | None = None,
     return out
 
 
+# Retard toléré avant de déclarer une série périmée. 4 jours ouvrés couvre un week-end prolongé
+# par un férié US ; au-delà, ce n'est plus le calendrier, c'est la collecte qui s'est arrêtée.
+MAX_RETARD_OUVRE = 4
+MAX_RETARD_CRYPTO = 2      # la crypto cote 7 j/7 : deux jours sans barre est déjà anormal
+
+
+def audit_freshness(data: dict[str, Iterable[Any]], *, now: date | None = None) -> list[Anomaly]:
+    """La base CONTINUE-T-ELLE de se remplir ?
+
+    L'audit vérifiait l'intégrité de ce qui est là, jamais que quelque chose ARRIVE encore. Une
+    collecte interrompue (cron mort, fournisseur qui limite le débit, jeton expiré) laisse donc
+    une base parfaitement valide — et parfaitement périmée. Le site continue alors de publier des
+    prix anciens avec le même aplomb, ce qui est le pire des deux mondes : faux ET confiant.
+
+    Deux angles, parce qu'ils échouent différemment :
+      - JEU ENTIER périmé  → la collecte s'est arrêtée (critique : rien n'est à jour) ;
+      - SÉRIE isolée périmée alors que les autres avancent → titre délisté, renommé, ou tombé
+        du périmètre de collecte (majeur : le reste du site reste utilisable).
+    """
+    today = now or datetime.now(timezone.utc).date()
+    out: list[Anomaly] = []
+    derniers: dict[str, date] = {}
+    for sym, bars in data.items():
+        ds = [d for d in (_ts(b) for b in bars) if d is not None]
+        if ds:
+            derniers[sym] = max(ds)
+    if not derniers:
+        return [Anomaly("*", "freshness", "critical", "aucune barre datée dans le jeu de données")]
+
+    frais = max(derniers.values())
+    retard_global = _business_days(frais, today) - 1
+    if retard_global > MAX_RETARD_OUVRE:
+        out.append(Anomaly("*", "freshness", "critical",
+                           f"collecte arrêtée : barre la plus fraîche {frais}, "
+                           f"soit {retard_global} j ouvrés de retard sur {today}"))
+
+    # Série isolée en retard PAR RAPPORT AU RESTE (et non par rapport à aujourd'hui) : compare
+    # ce qui est comparable même si toute la base a un jour de décalage.
+    for sym, d in sorted(derniers.items()):
+        seuil = MAX_RETARD_CRYPTO if _is_crypto(sym) else MAX_RETARD_OUVRE
+        retard = (_calendar_days(d, frais) if _is_crypto(sym) else _business_days(d, frais)) - 1
+        if retard > seuil:
+            out.append(Anomaly(sym, "freshness", "major",
+                               f"série arrêtée le {d} ({retard} j de retard sur le reste de la base) "
+                               "— délistée, renommée, ou sortie de la collecte"))
+    return out
+
+
 def audit_dataset(data: dict[str, Iterable[Any]], *, now: date | None = None, **kw: Any) -> AuditReport:
     """Audite TOUT le jeu de données (par symbole). Renvoie un rapport agrégé."""
     rep = AuditReport(n_symbols=len(data))
@@ -197,6 +245,10 @@ def audit_and_report(data: dict, *, universe: Iterable[str] | None = None,
                      now: date | None = None) -> AuditReport:
     """Point d'entrée pipeline : audite données + biais du survivant. Best-effort (ne lève pas)."""
     rep = audit_dataset(data, now=now)
+    # La FRAÎCHEUR n'appartient qu'ici, pas à audit_dataset : celui-ci audite l'INTÉGRITÉ d'une
+    # tranche, et une tranche historique qui s'arrête dans le passé est parfaitement saine. Seul
+    # le point d'entrée du pipeline pose la question « ces données sont-elles celles d'aujourd'hui ».
+    rep.anomalies.extend(audit_freshness(data, now=now))
     surv = survivorship_check(universe or list(data))
     if surv:
         rep.anomalies.append(surv)

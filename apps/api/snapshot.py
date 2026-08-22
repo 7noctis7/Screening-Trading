@@ -136,6 +136,18 @@ from apps.api.sections_data import SECTOR_DV as _SECTOR_DV  # noqa: E402
 from apps.api.sections_data import THEME_TICKERS as _THEME_TICKERS  # noqa: E402
 
 
+def is_real_mode(mode: str | None) -> bool:
+    """Le chargement des prix tourne-t-il sur des données RÉELLES (pas de repli synthétique) ?
+
+    `_load_prices` renvoie un libellé LISIBLE (« réel (YAHOO.db) », « mixte (...) »,
+    « synthetic »), jamais la chaîne « real ». Trois gardes comparaient pourtant `mode == "real"` :
+    elles étaient donc TOUJOURS fausses, et silencieusement — le nettoyage des titres périmés,
+    l'audit PwC du snapshot et son rapport d'affichage ne s'exécutaient jamais en production.
+    Une comparaison de chaînes n'est pas un contrat ; ce prédicat en est un, et il est testé.
+    """
+    return bool(mode) and str(mode).startswith("réel")
+
+
 def _sector_of(m: dict) -> str:
     """Secteur/thème d'un instrument (cohérent entre génération de données et heatmap)."""
     ac = m.get("asset_class")
@@ -257,7 +269,7 @@ def _data_section(data: dict, acmap: dict[str, str], universe_total: int = 0,
     # AUDIT PwC complet (complétude / exactitude / point-in-time) — toujours calculé sur données
     # réelles pour affichage (la gate bloquante reste séparée, pilotée par QUANT_AUDIT). Best-effort.
     audit_summary: dict | None = None
-    if mode == "real":
+    if is_real_mode(mode):
         try:
             from packages.data.audit import audit_and_report
             _ar = audit_and_report(data, universe=symbols)
@@ -349,7 +361,9 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
     sinon on réplique les poids du portefeuille modèle (swing)."""
     import os
     alp = bool(os.environ.get("ALPACA_API_KEY") and os.environ.get("ALPACA_API_SECRET"))
-    bit = bool(os.environ.get("BITMART_API_KEY") and os.environ.get("BITMART_API_SECRET"))
+    from packages.execution.venues import venue_crypto as _venue_crypto
+    _VC = _venue_crypto()                      # place crypto active (QUANT_CRYPTO_VENUE, déf. Binance)
+    bit = _VC.configuree()
     # --- DONNÉES RÉELLES PAR BROKER (séparées, avec diagnostic d'erreur) ---
     def _alpaca():
         d = {"name": "Alpaca", "configured": alp, "ok": False, "equity": 0.0, "positions": [], "error": None}
@@ -368,20 +382,24 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
             d["error"] = str(e)[:160]
         return d
 
-    def _bitmart():
-        d = {"name": "Bitmart", "configured": bit, "ok": False, "equity": 0.0, "positions": [], "error": None}
+    def _place_crypto():
+        """Place crypto ACTIVE (Binance par défaut). Le nom vient de la place, plus du code :
+        changer de place ne demande plus de renommer une trentaine de fichiers."""
+        d = {"name": _VC.nom, "venue": _VC.cle, "configured": bit, "ok": False,
+             "equity": 0.0, "positions": [], "error": None}
         if not bit:
-            d["error"] = "clés absentes (.env)"; return d
+            d["error"] = f"clés absentes (.env) : {', '.join(_VC.env)}"; return d
         try:
-            from packages.execution.bitmart_broker import BitmartBroker
-            b = BitmartBroker(dry_run=False)
+            b = _VC.broker(dry_run=False)
             d["equity"] = round(float(b.equity()), 2)
             d["positions"] = b.positions_detailed()   # positions SPOT RÉELLES enrichies
-            d["orders"] = b.orders()                   # transactions RÉELLES (page Trades)
-            d["open_orders"] = b.open_orders()         # ordres SPOT en attente d'exécution (non remplis)
-            # bougies réelles (Bitmart) pour les graphes des positions/ordres crypto (absents de YAHOO.db)
+            # Toutes les places n'exposent pas le même surface : une méthode absente donne une
+            # section VIDE, jamais une exception qui priverait le site de la poche crypto.
+            d["orders"] = b.orders() if hasattr(b, "orders") else []
+            d["open_orders"] = b.open_orders() if hasattr(b, "open_orders") else []
             _csyms = {p["symbol"] for p in d["positions"]} | {o.get("symbol") for o in d["orders"]}
-            d["ohlcv"] = {s: bars for s in _csyms if s and (bars := b.ohlcv(s))}
+            d["ohlcv"] = ({s: bars for s in _csyms if s and (bars := b.ohlcv(s))}
+                          if hasattr(b, "ohlcv") else {})
             d["ok"] = True
         except Exception as e:  # noqa: BLE001
             d["error"] = str(e)[:160]
@@ -392,7 +410,7 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
     # déjà isolé/try-except → non bloquant et sortie identique au mode série.
     from concurrent.futures import ThreadPoolExecutor
     with ThreadPoolExecutor(max_workers=2) as _ex:
-        _fa, _fb = _ex.submit(_alpaca), _ex.submit(_bitmart)
+        _fa, _fb = _ex.submit(_alpaca), _ex.submit(_place_crypto)
         a_d, b_d = _fa.result(), _fb.result()
     _real_trades = sorted((a_d.get("orders", []) + b_d.get("orders", [])),
                           key=lambda o: o.get("date", ""), reverse=True)
@@ -404,13 +422,15 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
         "positions": a_d["positions"] + b_d["positions"],
         "trades": _real_trades,                    # ordres RÉELS exécutés (Alpaca + Bitmart)
         "open_orders": _real_open,                 # ordres RÉELS en attente d'exécution (non remplis)
-        "alpaca": a_d, "bitmart": b_d,
+        # « crypto » = la place ACTIVE, quelle qu'elle soit. L'alias « bitmart » a été retiré :
+        # le front lit la place dans les données, plus aucun consommateur ne dépend du nom.
+        "alpaca": a_d, "crypto": b_d,
     }
     # enregistre l'equity réelle du jour (construit l'historique réel par broker)
     try:
         from packages.execution.equity_history import record as _eq_record
         if a_d["ok"] or b_d["ok"]:
-            _eq_record({"alpaca": a_d["equity"], "bitmart": b_d["equity"]})
+            _eq_record({"alpaca": a_d["equity"], _VC.cle: b_d["equity"]})
     except Exception:  # noqa: BLE001
         pass
     if target_weights or crypto_weights:          # allocation PRESET (2 poches : actions + crypto)
@@ -453,8 +473,9 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
         "brokers": [
             {"name": "Alpaca", "scope": "Actions & ETF US + Crypto paper (paires /USD)", "connected": alp,
              "paper": True, "env": ["ALPACA_API_KEY", "ALPACA_API_SECRET"]},
-            {"name": "Bitmart", "scope": "Crypto — adaptateur futur-live (OFF, gated)", "connected": bit,
-             "paper": False, "env": ["BITMART_API_KEY", "BITMART_API_SECRET"]},
+            {"name": _VC.nom, "venue": _VC.cle,
+             "scope": f"{_VC.portee} — adaptateur futur-live (OFF, gated)", "connected": bit,
+             "paper": False, "env": list(_VC.env)},
         ],
         "target_orders": targets,
         "note": "Brancher les clés API (variables d'environnement) puis valider en mode paper "
@@ -1330,9 +1351,16 @@ def _index_closes(aliases: list[str], start, end, fallback: list[float]) -> tupl
     return fallback, False
 
 
-def _curve_stats(eq: list[float]) -> dict:
+def _curve_stats(eq: list[float], *, compte_reel: bool = False,
+                 dates: list[str] | None = None) -> dict:
     """KPIs d'une courbe d'equity. Ratios via perf_summary (SOURCE UNIQUE DE VÉRITÉ) ;
-    profit_factor/win_rate dérivés des rendements quotidiens (gains/pertes)."""
+    profit_factor/win_rate dérivés des rendements quotidiens (gains/pertes).
+
+    `compte_reel=True` → la courbe est la valeur d'un COMPTE, pas une simulation : elle peut
+    contenir des versements et des retraits. On les neutralise (rendement pondéré dans le temps,
+    cf. packages/portfolio/twr) avant tout calcul. Sans cela, un virement se retrouve compté
+    comme un gain ou une perte, et contamine rendement, Sharpe ET drawdown maximum.
+    """
     import numpy as _np
 
     from packages.portfolio.metrics import perf_summary
@@ -1340,14 +1368,25 @@ def _curve_stats(eq: list[float]) -> dict:
     if e.size < 30:
         return {"available": False}
     r = e[1:] / e[:-1] - 1
+    _flux: dict | None = None
+    if compte_reel:
+        from packages.portfolio.twr import flow_report, twr
+        _t = twr([float(x) for x in e])
+        if _t.get("available"):
+            r = _np.asarray(_t["returns"], dtype=float)   # sous-périodes, versements exclus
+            _flux = flow_report([float(x) for x in e], dates=dates)
     ps = perf_summary(r)                                  # cagr/sharpe/sortino/maxdd unifiés
     if not ps.get("available"):
         return {"available": False}
     gains, losses = float(r[r > 0].sum()), float(-r[r < 0].sum())
-    return {"available": True, "cagr": ps["cagr"], "total_return": ps["total_return"],
-            "sharpe": ps["sharpe"], "sortino": ps["sortino"],
-            "max_drawdown": ps["max_drawdown"], "win_rate": round(float((r > 0).mean()), 3),
-            "profit_factor": round(gains / losses, 2) if losses > 0 else 0.0}
+    out = {"available": True, "n": ps["n"],           # fenêtre réelle → affichable, comparable
+           "cagr": ps["cagr"], "total_return": ps["total_return"],
+           "sharpe": ps["sharpe"], "sortino": ps["sortino"],
+           "max_drawdown": ps["max_drawdown"], "win_rate": round(float((r > 0).mean()), 3),
+           "profit_factor": round(gains / losses, 2) if losses > 0 else 0.0}
+    if _flux is not None:
+        out["flux"] = _flux                               # mouvements neutralisés, montants, dates
+    return out
 
 
 def _r(x, nd=3):
@@ -1504,7 +1543,7 @@ def build_snapshot(seed: int = 7) -> dict:
     # NETTOYAGE UNIVERS : écarte les titres PÉRIMÉS (delisted/renommés, ex. FB→META) dont
     # la dernière barre est trop ancienne → plus de 404 ni de cibles fantômes. Seuil RELATIF
     # (vs la barre la plus fraîche) → ne vide jamais l'univers, même hors-ligne.
-    if data_mode == "real" and data:
+    if is_real_mode(data_mode) and data:
         _fresh = max(b[-1].ts for b in data.values() if b)
         _cut = _fresh - timedelta(days=10)
         _stale = [s for s, b in data.items() if b and b[-1].ts < _cut]
@@ -1531,7 +1570,7 @@ def build_snapshot(seed: int = 7) -> dict:
     #    `strict` reste opt-in pour le gate CI ; `off` désactive.)
     _audit_report: dict | None = None
     _audit_mode = (_os_hist.environ.get("QUANT_AUDIT", "warn") or "warn").lower()
-    if _audit_mode in ("strict", "warn", "1", "true") and real_syms and data_mode == "real":
+    if _audit_mode in ("strict", "warn", "1", "true") and real_syms and is_real_mode(data_mode):
         from packages.data.audit import assert_integrity, audit_and_report
         try:
             _ar = audit_and_report(data, universe=symbols)
@@ -2030,7 +2069,7 @@ def build_snapshot(seed: int = 7) -> dict:
     _live = _live_with_rebalance(comp["rows"], acmap, portfolio_kpis, w_by_name,
                                  target_weights=_preset_weights, crypto_weights=_crypto_weights)
     _alp_cap = (_live["real"]["alpaca"]["equity"] or 0.0) or init_cap
-    _bit_cap = _live["real"]["bitmart"]["equity"] or 0.0
+    _bit_cap = _live["real"]["crypto"]["equity"] or 0.0
     # Allocation PRESET détaillée (page Positions) : 2 poches, chacune sur le capital de son broker
     _preset_alloc = []
     _px_override = {_core_sym: _core_px} if _core_px > 0 else {}
@@ -2120,7 +2159,7 @@ def build_snapshot(seed: int = 7) -> dict:
         _chart_series[s] = [{"t": x.ts.isoformat()[:10], "o": round(x.open, 4), "h": round(x.high, 4),
                              "l": round(x.low, 4), "c": round(x.close, 4), "v": round(x.volume, 0)} for x in bb]
     # bougies RÉELLES Bitmart pour les positions/ordres crypto (absents de YAHOO.db)
-    for _sym, _bars in (_live["real"].get("bitmart", {}).get("ohlcv", {}) or {}).items():
+    for _sym, _bars in (_live["real"].get("crypto", {}).get("ohlcv", {}) or {}).items():
         if _bars and _sym not in _chart_series:
             _chart_series[_sym] = _bars
     # le cœur QQQ n'est pas dans l'univers → courbe cliquable depuis ses closes réels
@@ -2140,7 +2179,9 @@ def build_snapshot(seed: int = 7) -> dict:
             if len(rc) < 10:
                 rc = _eq_series(broker_key)                # sinon suivi quotidien persistant
             if len(rc) >= 10:
-                return {**_curve_stats([p["v"] for p in rc]), "curve": rc, "source": "réel"}
+                return {**_curve_stats([p["v"] for p in rc], compte_reel=True,
+                                       dates=[str(p.get("t", ""))[:10] for p in rc]),
+                        "curve": rc, "source": "réel"}
             return {"available": False, "source": "réel-court",
                     "note": "Compte récent : historique réel en cours de constitution "
                             "(quelques jours de suivi nécessaires)."}
@@ -2162,31 +2203,46 @@ def build_snapshot(seed: int = 7) -> dict:
     except Exception:  # noqa: BLE001
         pass
     _live["alpaca_perf"] = _broker_perf(_live["real"]["alpaca"], "alpaca", _eq_model)
-    _live["bitmart_perf"] = _broker_perf(_live["real"]["bitmart"], "bitmart", _cr_model)
+    from packages.execution.venues import venue_crypto as _vc_here   # autre portée que le bloc live
+    _live["crypto_perf"] = _broker_perf(_live["real"]["crypto"], _vc_here().cle, _cr_model)
     # COMPARAISON COMPTES RÉELS vs INDICES (Alpaca vs Crypto vs S&P vs Nasdaq) pour le dashboard
     _cal_full = [b.ts for b in max(data.values(), key=len)]
     _account_cmp = _account_compare(
         _live["alpaca_perf"].get("curve", []) if _live["alpaca_perf"].get("source") == "réel" else [],
-        _live["bitmart_perf"].get("curve", []) if _live["bitmart_perf"].get("source") == "réel" else [],
+        _live["crypto_perf"].get("curve", []) if _live["crypto_perf"].get("source") == "réel" else [],
         sp, ndx, _cal_full)
     # PORTEFEUILLE RÉEL combiné (Alpaca + Bitmart) : courbe d'equity réelle + stats → ligne cliquable
     # du dashboard (réconcilie avec les ORDRES réellement exécutés + positions réelles).
     _alp_c = _live["alpaca_perf"].get("curve", []) if _live["alpaca_perf"].get("source") == "réel" else []
-    _cr_c = _live["bitmart_perf"].get("curve", []) if _live["bitmart_perf"].get("source") == "réel" else []
+    _cr_c = _live["crypto_perf"].get("curve", []) if _live["crypto_perf"].get("source") == "réel" else []
     _real_portfolio = {"available": False}
     if _alp_c or _cr_c:
         _rdates = sorted(set(p["t"][:10] for p in _alp_c) | set(p["t"][:10] for p in _cr_c))
 
         def _ffill(cv):
+            """Report en avant. AVANT le premier point connu → None (et non 0) : un compte pas
+            encore suivi n'a pas une valeur nulle, il a une valeur INCONNUE. Le zéro faisait
+            bondir la combinaison de toute la valeur du compte le jour de son apparition, saut
+            aussitôt compté comme un rendement."""
             m = {p["t"][:10]: p["v"] for p in cv}
             out, last = [], None
             for d in _rdates:
                 last = m.get(d, last)
-                out.append(last if last is not None else 0.0)
+                out.append(last)
             return out
-        _comb = [a + b for a, b in zip(_ffill(_alp_c), _ffill(_cr_c))]
+        _a_f, _b_f = _ffill(_alp_c), _ffill(_cr_c)
+        # On ne démarre la courbe combinée qu'une fois TOUS les comptes suivis connus : avant,
+        # la somme mélangerait un compte mesuré et un compte ignoré.
+        _dep = next((i for i, (a, b) in enumerate(zip(_a_f, _b_f))
+                     if (a is not None or not _alp_c) and (b is not None or not _cr_c)), None)
+        if _dep is None:
+            _rdates, _comb = [], []
+        else:
+            _rdates = _rdates[_dep:]
+            _comb = [(a or 0.0) + (b or 0.0) for a, b in zip(_a_f[_dep:], _b_f[_dep:])]
         if len(_comb) >= 2:
-            _real_portfolio = {"available": True, "stats": _curve_stats(_comb),
+            _real_portfolio = {"available": True,
+                               "stats": _curve_stats(_comb, compte_reel=True, dates=_rdates),
                                "curve": [{"t": d, "v": round(v, 2)} for d, v in zip(_rdates, _comb)]}
     # BLACK-LITTERMAN : prior équipondéré + vues = conviction z-scorée → poids postérieurs
     try:
@@ -2329,7 +2385,7 @@ def build_snapshot(seed: int = 7) -> dict:
             "dates": _dash_dates,
             "positions": comp["rows"], "totals": comp["totals"],
             "preset_allocation": _preset_alloc,        # allocation PRESET (production) → page Positions
-            "alloc_capital": {"alpaca": round(_alp_cap, 2), "bitmart": round(_bit_cap, 2),
+            "alloc_capital": {"alpaca": round(_alp_cap, 2), "crypto": round(_bit_cap, 2),
                               "total": round(_alp_cap + _bit_cap, 2)},  # base réelle par compte
             "chart_series": _chart_series,             # OHLC cliquables (preset + positions réelles)
             "portfolio": portfolio_kpis,

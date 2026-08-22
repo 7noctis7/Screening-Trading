@@ -98,6 +98,19 @@ class AlpacaBroker:
                 "pnl_pct": float(getattr(p, "unrealized_plpc", 0) or 0)})
         return out
 
+    def close_position(self, symbol: str) -> bool:
+        """Solde INTÉGRALEMENT une position (ordre en quantité, côté courtier).
+
+        Indispensable pour ne pas laisser de résidu : `submit_notional` demande « vends pour
+        812 $ » et le cours bouge entre la cotation et l'exécution, il reste toujours une miette.
+        Cette miette tombe alors sous la bande d'inaction et n'est plus jamais vendue.
+        """
+        try:
+            self._client.close_position(symbol)
+            return True
+        except Exception:  # noqa: BLE001 — position déjà fermée / inconnue : rien à solder
+            return False
+
     def orders(self, limit: int = 100) -> list[dict]:
         """Ordres RÉELS exécutés (fills) du compte — pour la page Trades. [] si indispo."""
         try:

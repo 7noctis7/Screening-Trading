@@ -1,5 +1,6 @@
 "use client";
-// Positions — écran de contrôle de RÉPLICATION : positions réellement détenues (Alpaca/Bitmart)
+// Positions — écran de contrôle de RÉPLICATION : positions réellement détenues
+// (Alpaca + place crypto active). Le nom de la place vient des données, jamais du code.
 // confrontées à la cible du preset (poids modèle). L'écart dit ce que le prochain rebalancement
 // corrigera. 100 % données réelles côté « réel » ; la cible est le modèle (étiquetée comme telle).
 import { StepBanner } from "@/components/Pipeline";
@@ -9,6 +10,7 @@ import { TechnicalChart } from "@/components/TechnicalChart";
 import { MetricCard } from "@/components/MetricCard";
 import { SortableTable, type Col } from "@/components/SortableTable";
 import { PageSkeleton } from "@/components/ui";
+import { compteCrypto, envVenue, nomVenue } from "@/lib/venue";
 
 const usd = (x?: number | null) => (x ?? 0).toLocaleString("fr-FR", { maximumFractionDigits: 2 });
 const pctf = (x?: number | null, d = 1) => (x == null ? "—" : `${(x * 100).toFixed(d)}%`);
@@ -26,8 +28,9 @@ type Row = {
 // Fusionne positions réelles et cible preset par actif (poids par POCHE : chaque poids est
 // rapporté au capital de SON broker, comme le fait le preset — comparabilité stricte).
 function buildRows(pos: any[], alloc: any[], accounts: any, earnings: any[]): Row[] {
-  const aEq = accounts?.alpaca?.equity || 0, bEq = accounts?.bitmart?.equity || 0;
-  const capOf = (broker: string) => (/bitmart/i.test(broker) ? bEq : aEq);
+  const aEq = accounts?.alpaca?.equity || 0, bEq = compteCrypto(accounts)?.equity || 0;
+  const vName = nomVenue(accounts);
+  const capOf = (broker: string) => (broker && vName && broker.toLowerCase() === vName.toLowerCase() ? bEq : aEq);
   const eDays = new Map(earnings.map((e: any) => [norm(e.symbol), e.days]));
   const bySym = new Map<string, Row>();
   for (const p of pos) {
@@ -81,6 +84,13 @@ export default function Positions() {
   const { data } = usePositions();
   const [sel, setSel] = useState<string | null>(null);
   const pos = data?.real_positions ?? [];
+  // Plancher de ligne, aligné sur packages/execution/rebalance_plan (QUANT_MIN_POSITION).
+  const PLANCHER = 500;
+  const sousPlancher = pos
+    .filter((p: any) => Math.abs(Number(p?.market_value) || 0) < PLANCHER)
+    .sort((a: any, b: any) => (Number(b.market_value) || 0) - (Number(a.market_value) || 0));
+  const totalPlancher = sousPlancher.reduce(
+    (t: number, p: any) => t + (Number(p?.market_value) || 0), 0);
   const alloc = data?.preset_allocation ?? [];
   const earnings = data?.earnings_risk ?? [];
   const series = data?.series ?? {}, markers = data?.markers ?? {};
@@ -92,7 +102,8 @@ export default function Positions() {
   }, [pos, alloc, acc, earnings, series]);
   if (!data) return <PageSkeleton />;
 
-  const aEq = acc.alpaca?.equity ?? 0, bEq = acc.bitmart?.equity ?? 0;
+  const aEq = acc.alpaca?.equity ?? 0, bEq = compteCrypto(acc)?.equity ?? 0;
+  const vName = nomVenue(acc), vCrypto = compteCrypto(acc);
   const mv = pos.reduce((a: number, r: any) => a + (r.market_value ?? 0), 0);
   const pnl = pos.reduce((a: number, r: any) => a + (r.pnl ?? 0), 0);
   // Concentration (sur les poids réels, toutes poches confondues rapportées au total)
@@ -134,7 +145,7 @@ export default function Positions() {
     <main className="max-w-5xl mx-auto p-6 space-y-4">
       <h1 className="text-xl font-semibold tracking-tight">Positions
         <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full align-middle"
-          style={{ background: "color-mix(in srgb, #22c55e 16%, transparent)", color: "#22c55e" }}>RÉEL · Alpaca + Bitmart</span></h1>
+          style={{ background: "color-mix(in srgb, #22c55e 16%, transparent)", color: "#22c55e" }}>RÉEL · Alpaca + {vName}</span></h1>
       <p className="text-muted text-xs">Positions <b>réellement détenues</b>, confrontées à la <b>cible du preset</b> (modèle).
         L'écart montre ce que le prochain rebalancement corrigera (bande de non-trading : {BAND * 100} %). Aucun chiffre inventé : « n/d » si un compte est déconnecté.</p>
       <StepBanner active="portfolio" />
@@ -142,9 +153,9 @@ export default function Positions() {
       {!data.connected ? (
         <section className="card p-6 text-center">
           <p className="text-sm">Aucun compte connecté.</p>
-          <p className="text-muted text-xs mt-1">Renseigne <code>ALPACA_API_KEY</code>/<code>ALPACA_API_SECRET</code> et/ou <code>BITMART_API_KEY</code>/<code>BITMART_API_SECRET</code> dans <code>.env</code>, puis relance l'API.</p>
-          {(acc.alpaca?.error || acc.bitmart?.error) && (
-            <p className="text-muted2 text-[11px] mt-2">Alpaca : {acc.alpaca?.error || "ok"} · Bitmart : {acc.bitmart?.error || "ok"}</p>)}
+          <p className="text-muted text-xs mt-1">Renseigne <code>ALPACA_API_KEY</code>/<code>ALPACA_API_SECRET</code> et/ou <code>{envVenue(acc).join(" / ")}</code> dans <code>.env</code>, puis relance l'API.</p>
+          {(acc.alpaca?.error || vCrypto?.error) && (
+            <p className="text-muted2 text-[11px] mt-2">Alpaca : {acc.alpaca?.error || "ok"} · {vName} : {vCrypto?.error || "ok"}</p>)}
         </section>
       ) : (
       <>
@@ -159,10 +170,39 @@ export default function Positions() {
       <section className="card p-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted">
         <span title="Somme des poids au carré (HHI) : 1/N si équipondéré. N effectif = 1/HHI.">
           Concentration : HHI <b className="mono text-fg">{hhi ? hhi.toFixed(3) : "n/d"}</b> · top 3 <b className="mono text-fg">{pctf(top3)}</b> sur {pos.length} lignes</span>
-        <span>Poches : Alpaca <b className="mono text-fg">${usd(aEq)}</b> · Bitmart <b className="mono text-fg">${usd(bEq)}</b></span>
+        <span>Poches : Alpaca <b className="mono text-fg">${usd(aEq)}</b> · {vName} <b className="mono text-fg">${usd(bEq)}</b></span>
         <span title="Lignes dont l'écart réel−cible dépasse la bande de non-trading de 3 %">
           Hors bande ({BAND * 100} %) : <b className="mono" style={{ color: nOut ? "#f59e0b" : "var(--pos)" }}>{nOut}</b> ligne{nOut > 1 ? "s" : ""}</span>
       </section>
+
+      {/* LIGNES SOUS LE PLANCHER — répond directement à « pourquoi j'ai ces positions ? ».
+          Ce sont des restes d'une allocation précédente : soldées en MONTANT, elles laissaient
+          une miette, et la miette passait ensuite sous la bande d'inaction, donc plus jamais
+          vendue. Le prochain rééquilibrage les solde en QUANTITÉ. */}
+      {sousPlancher.length > 0 && (
+        <section className="card p-4" style={{ borderColor: "#f59e0b" }}>
+          <div className="flex flex-wrap items-baseline gap-x-3">
+            <h2 className="text-sm uppercase tracking-wide text-muted">Lignes trop petites pour compter</h2>
+            <span className="mono text-sm" style={{ color: "#f59e0b" }}>
+              {sousPlancher.length} ligne{sousPlancher.length > 1 ? "s" : ""} · ${usd(totalPlancher)}
+            </span>
+          </div>
+          <p className="text-muted text-xs mt-1">
+            Sous le plancher de <b>${usd(PLANCHER)}</b> par ligne. Ce sont des restes d'allocations
+            précédentes : la sortie se faisait en <i>montant</i>, le cours bougeait entre la
+            cotation et l'exécution, il restait une miette — et cette miette, plus petite que la
+            bande d'inaction, n'était ensuite plus jamais vendue. Le prochain rééquilibrage les
+            solde en <i>quantité</i>, donc intégralement.
+          </p>
+          <div className="flex flex-wrap gap-1.5 mt-3">
+            {sousPlancher.map((p: any) => (
+              <span key={p.symbol} className="text-xs px-2 py-0.5 rounded-full border border-border mono">
+                {p.symbol} <span className="text-muted2">${usd(p.market_value)}</span>
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
 
       {sel && series[sel] && (
         <section className="card p-4">

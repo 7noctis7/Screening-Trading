@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useLive } from "@/lib/api";
 import { PageSkeleton } from "@/components/ui";
+import { nomVenue } from "@/lib/venue";
 import { StepBanner } from "@/components/Pipeline";
 import { EquityChart } from "@/components/EquityChart";
 import { TechnicalChart } from "@/components/TechnicalChart";
@@ -95,21 +96,22 @@ export default function Live() {
   const [sel, setSel] = useState<string | null>(null);
   if (!l) return <PageSkeleton />;
   const real = l.real ?? {}, series = l.series ?? {};
-  const a = real.alpaca, b = real.bitmart;
+  const a = real.alpaca, b = real.crypto ?? real.bitmart;
+  const vName = nomVenue(real);
   const pick = (s: string) => setSel(series[s] ? s : null);
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-4">
       <h1 className="text-xl font-semibold tracking-tight">Portefeuille réel</h1>
       <StepBanner active="live" />
-      <p className="text-muted text-xs">Données <b>réelles</b> de tes comptes Alpaca / Bitmart. KPI, perf &amp; positions séparés par broker.</p>
+      <p className="text-muted text-xs">Données <b>réelles</b> de tes comptes Alpaca / {vName}. KPI, perf &amp; positions séparés par broker.</p>
       <div className="card p-3 text-xs" style={{ borderColor: "color-mix(in srgb, var(--accent) 35%, transparent)" }}>
-        ℹ️ <b>Comptes distincts</b> : actions/ETF → <b>Alpaca</b> (capital Alpaca) · crypto → <b>Bitmart</b> (capital Bitmart). Trading <b>SPOT uniquement</b>. Les KPI de perf sont le backtest du sleeve de chaque compte.
+        ℹ️ <b>Comptes distincts</b> : actions/ETF → <b>Alpaca</b> (capital Alpaca) · crypto → <b>{vName}</b> (capital {vName}). Trading <b>SPOT uniquement</b>. Les KPI de perf sont le backtest du sleeve de chaque compte.
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="card p-4"><div className="text-muted text-xs uppercase">Equity totale</div><div className="text-xl mono mt-1">{eur(real.equity)} $</div></div>
         <div className="card p-4"><div className="text-muted text-xs uppercase">Alpaca</div><div className="text-lg mono mt-1">{eur(a?.equity)} $</div></div>
-        <div className="card p-4"><div className="text-muted text-xs uppercase">Bitmart</div><div className="text-lg mono mt-1">{eur(b?.equity)} $</div></div>
+        <div className="card p-4"><div className="text-muted text-xs uppercase">{vName}</div><div className="text-lg mono mt-1">{eur(b?.equity)} $</div></div>
         <div className="card p-4"><div className="text-muted text-xs uppercase">Positions réelles</div><div className="text-lg mono mt-1">{(real.positions ?? []).length}</div></div>
       </div>
 
@@ -125,7 +127,7 @@ export default function Live() {
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {a && <BrokerCard b={a} perf={l.alpaca_perf} accent="#3b82f6" series={series} onPick={pick} />}
-        {b && <BrokerCard b={b} perf={l.bitmart_perf} accent="#f59e0b" series={series} onPick={pick} />}
+        {b && <BrokerCard b={b} perf={l.crypto_perf ?? l.bitmart_perf} accent="#f59e0b" series={series} onPick={pick} />}
       </section>
 
       <section className="card p-4 text-sm">

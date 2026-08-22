@@ -19,7 +19,7 @@ export const STEPS: { n: number; key: string; page: string; title: string; desc:
   { n: 14, key: "screener", page: "/dashboard", title: "Dashboard", desc: "Synthèse : performance, régime macro, playbook VIX, top screener." },
   { n: 15, key: "portfolio", page: "/positions", title: "Sélection & portefeuille", desc: "Allocation 50 % QQQ + 50 % preset (risk-parity + DD-target + blackout, plafonnée 10 %/ligne)." },
   { n: 16, key: "risk", page: "/risk", title: "Risque", desc: "VaR/EVT/GARCH, limites, stress-tests, allocation optimale." },
-  { n: 17, key: "live", page: "/live", title: "Exécution", desc: "Réplication chez le broker (Alpaca/BitMart), positions réelles, frais & TCA." },
+  { n: 17, key: "live", page: "/live", title: "Exécution", desc: "Réplication chez le broker (actions + place crypto active), positions réelles, frais & TCA." },
 ];
 const N = STEPS.length;
 

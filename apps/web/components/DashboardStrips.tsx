@@ -37,7 +37,9 @@ export function TradeStatsRow({ ts }: { ts: any }) {
           <div className="mono text-lg" style={{ color: "#f43f5e" }}>{usd(ts.avg_loss ?? 0)}</div></div>
         <div><div className="text-muted text-[11px]">Meilleur / pire</div>
           <div className="mono text-lg">{usd(ts.best ?? 0)} / {usd(ts.worst ?? 0)}</div></div>
-        {ts.turnover != null && <div><div className="text-muted text-[11px]">Turnover annualisé</div>
+        {/* `NaN != null` vaut true en JS : le garde laissait passer un NaN, affiché « NaN× ».
+            Une valeur non calculable doit être ABSENTE, pas affichée comme un chiffre. */}
+        {Number.isFinite(Number(ts.turnover)) && <div><div className="text-muted text-[11px]">Turnover annualisé</div>
           <div className="mono text-lg">{Number(ts.turnover).toFixed(2)}×</div>
           <div className="text-muted2 text-[11px]">friction & capacité</div></div>}
       </div>

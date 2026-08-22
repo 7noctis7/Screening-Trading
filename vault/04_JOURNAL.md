@@ -1,5 +1,160 @@
 # 04 — JOURNAL
 
+## Session 2026-08-22 — Le plancher de ligne, et Bitmart retiré du site
+**Contexte.** « Je ne veux plus voir Bitmart dans mes positions. Et pourquoi j'ai des actifs hors
+scope ou sous 500–1000 $ ? J'ai des positions qui n'ont même pas 50 $. »
+
+**Bitmart.** Fonctionnellement déjà parti : depuis la bascule de place, le bloc crypto est
+construit depuis la place ACTIVE (Binance). Restaient les clés d'alias `bitmart` dans le payload
+et le nom de la fonction `_bitmart()`. Retirés — le front lit la place dans les données, plus
+aucun consommateur ne dépend du nom.
+
+**Le plancher de ligne : le correctif précédent était incomplet.** J'avais traité la poussière
+(0,01–3 $) mais laissé un plancher qui ne gardait que l'OUVERTURE. Conséquence : une ligne déjà
+détenue sous le plancher survivait indéfiniment, protégée par la bande d'inaction. Exactement le
+défaut que je venais de corriger, à un cran au-dessus.
+
+Changement de fond : **une cible sous le plancher vaut une cible NULLE**. Le plancher décide si
+la ligne DOIT EXISTER, la bande décide seulement ensuite si l'écart mérite un ordre. L'inverse
+laisse vivre ce qui ne devrait pas être là.
+- `QUANT_MIN_POSITION`, défaut **500 $** — sur ~77 000 $, « une ligne pèse au moins 0,65 %,
+  sinon elle n'a pas sa place ». Une valeur illisible retombe sur le défaut : une faute de frappe
+  ne doit pas désactiver silencieusement le garde-fou.
+- **Hystérésis** (sortie à 80 % du plancher) : sans zone morte, une cible qui oscille autour du
+  seuil ferait acheter puis solder la même ligne un jour sur deux — le va-et-vient coûterait bien
+  plus que la ligne ne rapporte.
+
+**Rendu visible.** Page Positions : bloc « Lignes trop petites pour compter » — nombre, total, et
+l'explication de leur origine. La question « pourquoi ai-je ces positions ? » trouve sa réponse à
+l'endroit où elle se pose.
+
+**Hors scope.** Les lignes bancaires/REIT observées (ZION, TFC, USB, SLG, VNO, HST…) ne sont pas
+dans les cibles actuelles : ce sont des restes d'allocations précédentes. Toute ligne détenue
+hors cibles est désormais soldée — plus aucune position ne peut se cacher du rééquilibrage.
+
+## Session 2026-08-21 (6) — La poussière, la fenêtre, et la place crypto
+**Contexte.** « Performance réelle et dashboard. Puis remplace Bitmart par Binance. »
+
+### Performance réelle : la poussière était CRÉÉE puis PROTÉGÉE À VIE
+Le compte affichait 49 positions dont une trentaine sous 3 $ (ASML 1,67 $, HST 0,01 $, KSS 0,01 $…),
+~17 $ au total. Deux mécanismes se renforçaient :
+1. On solde en MONTANT (« vends pour 812 $ »), jamais en quantité. Le cours bouge entre la
+   cotation et l'exécution → il reste une miette.
+2. La miette vaut moins que la bande d'inaction (0,5 % du capital, soit ~385 $) → la sortie
+   suivante la déclare « déjà alignée ». **Elle ne partira plus jamais.**
+
+`packages/execution/rebalance_plan.py` : décision extraite en fonction pure et testée.
+Une **sortie complète ne passe pas par la bande** — c'est la règle qui empêche un résidu de
+devenir immortel — et part **en quantité** (`AlpacaBroker.close_position`, ordre exact côté
+courtier). Symétriquement, on **n'ouvre pas** une ligne sous 25 $ : c'est la poussière de demain.
+La bande garde tout son rôle entre les deux.
+
+Choix corrigé en cours de route : j'avais mis un epsilon à 0,01 $ « pour les arrondis » — il
+aurait rendu immortelles précisément les lignes à 0,01 $ qu'on veut solder. Si le courtier
+déclare une position, elle existe.
+
+### Dashboard : la colonne qui manquait s'appelle « Fenêtre »
+Le tableau comparait « Portefeuille (backtest preset) 401,4 % » et « Portefeuille RÉEL −1,5 % »
+sur la même ligne, sans dire que l'un couvre dix ans et l'autre deux mois. Chaque ligne affiche
+désormais sa **fenêtre réelle** (`n` remonté par `_curve_stats`), et le texte dit franchement que
+ces rendements ne se comparent pas. Pastille « N mouvements neutralisés » sur les comptes réels :
+le correctif TWR de la session précédente devient visible au lieu d'être silencieux.
+
+### Bitmart → Binance : le vrai défaut était le nom en dur
+« Bitmart » apparaissait ~150 fois dans 27 fichiers. Renommer à la main, c'était en oublier.
+`packages/execution/venues.py` isole ce que la place EST (nom, clés, fabrique, portée) de ce que
+le code en FAIT. Bascule par `QUANT_CRYPTO_VENUE`, **défaut Binance** : taker 0,10 % contre
+0,25 % chez Bitmart — frais crypto divisés par 2,5 à rotation égale, carnet plus profond donc
+moins de glissement. Bitmart reste disponible, sans code mort. Un nom inconnu retombe sur le
+défaut : une faute de frappe ne doit pas priver de courtier.
+
+Payload : clé `crypto` (place active), `bitmart` conservée en **alias** — renommer une clé d'un
+coup casse silencieusement tout ce qui la lit encore. Front : `lib/venue.ts` lit le nom dans les
+DONNÉES ; plus une seule page ne l'écrit en dur.
+
+Un test figeait `{"Alpaca", "Bitmart"}` : réécrit pour vérifier la place **active**, sinon il
+redeviendrait faux à la prochaine bascule en donnant l'illusion d'une couverture.
+
+**Erreur commise et corrigée** : `_VC` défini dans le bloc *live*, utilisé dans le constructeur
+principal — autre portée. Neuf tests l'ont attrapée.
+
+## Session 2026-08-21 (5) — Un virement n'est pas une performance
+**Contexte.** « Je ne suis pas sûr que le rendement du portefeuille Alpaca+Bitmart soit correct. »
+Doute justifié : le chiffre était faux, et la démonstration ne demande pas la base.
+
+**La preuve arithmétique.** Le dashboard affichait, sur le compte réel : rendement −1,5 %,
+CAGR −7,3 %, **Sharpe +0,24**, maxDD −22,8 %. Un Sharpe POSITIF avec un rendement NÉGATIF exige
+une moyenne arithmétique positive et une moyenne géométrique négative — donc une volatilité
+énorme. En inversant `total ≈ n·µ − n·σ²/2` avec µ = 0,0151·σ et n ≈ 45 : σ ≈ 4,5 %/jour, soit
+**71 % annualisés**. Or le compte est à 65 % QQQ (vol ~20 %) et 29 % crypto (~65 %) : au plus
+~28 %. L'écart d'un facteur 2,6 n'est pas du marché. Et un maxDD de −22,8 % sur deux mois où QQQ
+a fait −0,3 % et la crypto +10 à +45 % est impossible.
+
+**La cause.** `_curve_stats` dérivait les rendements de la valeur du compte : `r = eq[t]/eq[t-1]−1`.
+Tout dépôt, retrait ou transfert était donc compté comme un gain ou une perte. Défaut classique de
+mesure de performance, réponse normalisée par GIPS : le rendement **pondéré dans le temps**.
+
+**Fait.**
+- `packages/portfolio/twr.py` : découpe la série à chaque mouvement et CHAÎNE les sous-périodes.
+  Les courtiers utilisés ne publiant pas leurs mouvements, on les REPÈRE par écart-type **robuste**
+  (MAD × 1,4826) — robuste au sens propre : les sauts ne gonflent pas le seuil censé les détecter.
+  Seuil 5 σ, volontairement conservateur : mieux vaut manquer un petit virement que confisquer une
+  vraie séance. Dans le doute, on ne booke pas.
+- Propriété testée qui DÉFINIT le TWR : déplacer la date du versement ne change pas le résultat.
+  Onze cas, dont « −8 % de krach reste de la performance ».
+- **Couture des comptes** : dans la combinaison Alpaca+Bitmart, un compte absent des premières
+  dates valait `0.0`. La courbe bondissait donc de toute sa valeur le jour de son apparition —
+  saut aussitôt compté comme un rendement. Un compte non suivi n'a pas une valeur nulle, il a une
+  valeur INCONNUE : la courbe combinée ne démarre plus qu'une fois tous les comptes connus.
+
+**Fraîcheur de la base (`audit_freshness`).** L'audit vérifiait l'intégrité de ce qui est là,
+jamais que quelque chose ARRIVE encore. Cron mort ou fournisseur qui limite le débit laissaient
+une base intacte et périmée, publiée avec le même aplomb — faux ET confiant. Deux angles :
+jeu entier périmé (critique) vs série isolée en retard sur le reste (majeur : délistée/renommée).
+Placé dans `audit_and_report` seulement : trois tests ont eu raison contre moi en montrant qu'une
+tranche historique qui s'arrête dans le passé est parfaitement saine pour `audit_dataset`.
+
+**Deux affichages faux.**
+- Monte Carlo « historique insuffisant » : `dashboard.equity` est une série d'OBJETS `{t, v}`,
+  filtrée comme des nombres → tableau vidé à chaque rendu. ~2 600 points étaient disponibles.
+- « Turnover annualisé NaN× » : `NaN != null` vaut `true` en JS, le garde laissait passer.
+
+994 tests passés, 8 ignorés (+18).
+
+## Session 2026-08-21 (4) — Trois gardes d'intégrité éteintes depuis toujours
+**Contexte.** « Pourquoi je n'ai pas les mêmes % que lorsque je vérifie sur finance ? »
+
+**Ce que la question a fait remonter.** `_load_prices` renvoie un libellé LISIBLE —
+« réel (YAHOO.db) », « mixte (N réels / M) », « synthetic » — et ne produit JAMAIS la chaîne
+« real ». Or trois gardes comparaient `mode == "real"` :
+1. le nettoyage des titres périmés (délistés/renommés) — jamais exécuté ;
+2. la gate d'audit PwC du snapshot (`QUANT_AUDIT`) — jamais exécutée ;
+3. le rapport d'intégrité joint au snapshot (`meta.audit`) — donc toujours `None` à l'écran.
+
+Trois protections éteintes par une comparaison de chaînes, sans erreur ni log. Le filet restant
+est en CI (`data_audit.py`, non bloquant ; `contracts_check.py`, bloquant) : l'impossible était
+donc toujours barré, mais le snapshot servi n'était pas audité et n'affichait pas son propre
+rapport. Corrigé par un prédicat `is_real_mode()` testé (5 cas, dont « real » explicitement
+refusé pour que la régression saute aux yeux).
+
+**Écarts d'affichage corrigés sur `/themes`** (aucun calcul modifié — c'était de la lecture) :
+- Le « ↗ » accolé au ticker est le pictogramme de LIEN externe du composant `IR`, pas une
+  direction. « ZS ↗ −44,5 % » se lisait comme une hausse. Le pourcentage est désormais **signé
+  et coloré**.
+- La colonne « YTD » du secteur est la **médiane de TOUS** les titres du secteur, alors que les
+  puces à droite sont le **top 4 par score de setup**. Les deux ensembles ne coïncident pas :
+  d'où « Crypto −0,7 % » à côté de « RIOT +121,8 % ». Colonne renommée « médiane du secteur »,
+  et le décalage est écrit noir sur blanc.
+- Le pourcentage est une performance **depuis janvier** ; le verdict qui suit juge les
+  **3 derniers mois** + la position vs MM50. Deux horizons, une seule ligne — c'est voulu (on
+  cherche les retournements), mais ce n'était écrit nulle part.
+
+**Non corrigé, à décider** (listé au TODO) : garde-fou anti-split asymétrique (un split 4:1 fait
+−75 %, sous le seuil de 150 % → il passe et corrompt les rendements qui le traversent) ; base YTD
+qui retombe sur la première barre disponible quand l'historique ne remonte pas à décembre.
+
+976 tests passés, 8 ignorés (+5).
+
 ## Session 2026-08-21 (3) — La chaîne décisionnelle : des données à l'ordre
 **Contexte.** « Je veux que toutes les données du site soient reliées entre elles intelligemment
 pour l'analyse jusqu'à la décision de trading. »

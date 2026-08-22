@@ -100,7 +100,12 @@ export function Simulator() {
 
   const real: number[] = (d?.real_portfolio?.curve ?? [])
     .map((p: any) => Number(p?.v)).filter((v: number) => v > 0);
-  const model: number[] = (d?.equity ?? []).filter((v: number) => v > 0);
+  // dashboard.equity est une série d'OBJETS {t, v} — la filtrer comme des nombres vidait le
+  // tableau à chaque rendu, d'où le faux « historique insuffisant » alors que ~2 600 points
+  // étaient disponibles. On extrait la valeur, comme pour la courbe réelle juste au-dessus.
+  const model: number[] = (d?.equity ?? [])
+    .map((p: any) => (typeof p === "number" ? p : Number(p?.v)))
+    .filter((v: number) => Number.isFinite(v) && v > 0);
   const curve = src === "real" ? real : model;
   const rets = useMemo(() => curve.slice(1).map((v, i) => v / curve[i] - 1), [curve]);
 
@@ -145,7 +150,7 @@ export function Simulator() {
           title="Basculer graphique / table des percentiles (accessibilité)">{table ? "graphique" : "table"}</button>
       </div>
       {!out ? (
-        <p className="text-muted2 text-sm mt-3">Historique insuffisant pour simuler (≥ 60 jours requis).</p>
+        <p className="text-muted2 text-sm mt-3">Historique insuffisant pour simuler : il faut au moins 60 jours de valeurs, cette source en compte {curve.length}.</p>
       ) : (
         <>
           {table ? <FanTable fan={out.fan} /> :

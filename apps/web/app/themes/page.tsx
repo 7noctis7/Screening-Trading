@@ -5,6 +5,10 @@ import { StepBanner } from "@/components/Pipeline";
 import { IR } from "@/lib/ir";
 
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
+// % SIGNÉ et coloré. Le « ↗ » accolé au ticker est le pictogramme de LIEN externe du composant
+// IR, pas une direction : sans signe explicite, « ZS ↗ -44,5 % » se lisait comme une hausse.
+const signe = (x: number) => `${x >= 0 ? "+" : "−"}${Math.abs(x * 100).toFixed(1)} %`;
+const couleur = (x: number) => (x > 0 ? "var(--pos)" : x < 0 ? "#f43f5e" : "#9aa1ab");
 const STANCE: Record<string, [string, string]> = {
   bullish: ["#22c55e", "▲ bullish"],
   bearish: ["#ef4444", "▼ bearish"],
@@ -30,7 +34,7 @@ export default function Themes() {
       </div>
 
       <section className="card p-4">
-        <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Performance YTD par secteur</h2>
+        <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Performance depuis janvier, par secteur (médiane)</h2>
         <div className="space-y-1.5">
           {sectors.map((s: any) => {
             const col = STANCE[s.stance]?.[0] ?? "#9aa1ab";
@@ -46,10 +50,19 @@ export default function Themes() {
       </section>
 
       <section className="card p-4 overflow-x-auto">
-        <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Meilleurs setups par secteur (momentum + tendance vs MM50)</h2>
+        <h2 className="text-sm uppercase tracking-wide text-muted mb-1">Meilleurs setups par secteur</h2>
+        <p className="text-muted2 text-xs mb-3">
+          Deux horizons différents sur la même ligne, et c'est voulu : le pourcentage est la
+          performance <b>depuis le 1<sup>er</sup> janvier</b>, le verdict qui suit juge les
+          <b> 3 derniers mois</b> et la position vis-à-vis de la moyenne 50 jours. Un titre peut
+          donc être négatif depuis janvier et haussier depuis trois mois — c'est exactement ce
+          qu'on cherche à repérer. La colonne « médiane du secteur » est calculée sur <b>tous</b>
+          les titres du secteur, pas seulement les quelques-uns affichés ici : elle ne sera donc
+          presque jamais la moyenne de ce que vous lisez à droite.
+        </p>
         <table className="w-full text-sm">
           <thead className="text-muted text-xs">
-            <tr><th className="text-left font-normal">Secteur</th><th className="text-right font-normal">YTD</th>
+            <tr><th className="text-left font-normal">Secteur</th><th className="text-right font-normal">Médiane du secteur</th>
             <th className="text-left font-normal pl-3">Top actifs / setup</th></tr>
           </thead>
           <tbody>{sectors.map((s: any) => {
@@ -64,7 +77,8 @@ export default function Themes() {
                 <td className="pl-3">
                   {(s.top_assets ?? []).map((a: any) => (
                     <span key={a.symbol} className="inline-block mr-1.5 mb-1 px-2 py-0.5 rounded-full bg-surfaceAlt text-xs">
-                      <IR ticker={a.symbol} name={a.name} assetClass={a.asset_class} className="font-bold text-accent hover:underline" /> {pct(a.ytd)} · {a.setup}
+                      <IR ticker={a.symbol} name={a.name} assetClass={a.asset_class} className="font-bold text-accent hover:underline" />{" "}
+                      <b style={{ color: couleur(a.ytd) }}>{signe(a.ytd)}</b> <span className="text-muted2">depuis janvier</span> · {a.setup}
                     </span>
                   ))}
                 </td>

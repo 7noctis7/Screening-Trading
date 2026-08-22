@@ -6,7 +6,7 @@ import { IR } from "@/lib/ir";
 
 // étiquettes de suivi : couleur, emoji et description (pour la légende + filtre)
 const TAGS: Record<string, { c: string; bg: string; emoji: string; desc: string }> = {
-  position: { c: "#22c55e", bg: "color-mix(in srgb,#22c55e 16%,transparent)", emoji: "💼", desc: "Tu détiens ce titre (Alpaca / Bitmart)" },
+  position: { c: "#22c55e", bg: "color-mix(in srgb,#22c55e 16%,transparent)", emoji: "💼", desc: "Tu détiens ce titre (compte réel)" },
   conviction: { c: "#a78bfa", bg: "color-mix(in srgb,#8b5cf6 16%,transparent)", emoji: "⭐", desc: "Top 5 % de la note de conviction (fusion des lentilles)" },
   ML: { c: "#22d3ee", bg: "color-mix(in srgb,#22d3ee 16%,transparent)", emoji: "🤖", desc: "Top 5 % du score Machine Learning" },
   "fond.": { c: "#f59e0b", bg: "color-mix(in srgb,#f59e0b 16%,transparent)", emoji: "📊", desc: "Top 5 % du score fondamental" },

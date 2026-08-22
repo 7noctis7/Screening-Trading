@@ -16,6 +16,17 @@ import { PageSkeleton } from "@/components/ui";
 import { statsFrom, rebase } from "@/lib/metrics";
 
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
+// Fenêtre lisible à partir du nombre de points quotidiens. Affichée sur CHAQUE ligne : sans
+// elle, un rendement de 401 % sur dix ans se lit à côté d'un -1,5 % sur deux mois comme s'ils
+// étaient comparables. Ils ne le sont pas.
+function fenetre(n?: number): string {
+  if (!Number.isFinite(Number(n)) || Number(n) < 1) return "—";
+  const j = Number(n), a = j / 252;
+  if (a >= 1) return `${a.toFixed(a >= 10 ? 0 : 1)} an${a >= 2 ? "s" : ""}`;
+  const m = j / 21;
+  return m >= 1 ? `${m.toFixed(0)} mois` : `${j} j`;
+}
+
 const PERIODS: [string, number][] = [["1A", 1], ["2A", 2], ["3A", 3], ["5A", 5], ["Tout", 0]];
 // Deltas vs période N−1 (même durée) — DISCRETS : signe seul, gris. En points de % ou en absolu (ratios).
 const dPts = (cur?: number, prev?: number | null) => (cur == null || prev == null) ? undefined : `${cur - prev >= 0 ? "+" : ""}${((cur - prev) * 100).toFixed(1)} pt`;
@@ -123,12 +134,13 @@ export default function Dashboard() {
         <table className="w-full text-sm">
           <thead className="text-muted text-xs"><tr>
             <th className="text-left font-normal">Série</th>
+            <th className="text-right font-normal">Fenêtre</th>
             <th className="text-right font-normal">Rendement</th><th className="text-right font-normal">CAGR</th>
             <th className="text-right font-normal">Sharpe</th><th className="text-right font-normal">Sortino</th>
             <th className="text-right font-normal">Max DD</th></tr></thead>
           <tbody className="mono">
             {([["Portefeuille (backtest preset)", m, "#22d3ee", "backtest"],
-               ...(d.real_portfolio?.available ? [["Portefeuille RÉEL (Alpaca+Bitmart)", d.real_portfolio.stats, "#22c55e", "real"]] : []),
+               ...(d.real_portfolio?.available ? [["Portefeuille RÉEL (comptes)", d.real_portfolio.stats, "#22c55e", "real"]] : []),
                ...Object.entries(chartBench ?? {}).map(([n, arr]) => [n, statsFrom(arr as any), n === "S&P 500" ? "#f59e0b" : "#a855f7", ""])] as any[])
               .filter((row) => row[1]).map(([name, st, col, kind]: any) => {
                 const click = kind === "backtest" ? () => setShowLedger(v => !v) : kind === "real" ? () => setShowReal(v => !v) : undefined;
@@ -136,7 +148,11 @@ export default function Dashboard() {
                 return (
                 <tr key={name} className={`border-t border-border ${click ? "cursor-pointer hover:bg-surfaceAlt" : ""}`} onClick={click}>
                   <td className="py-1.5 font-sans" style={{ color: col }}>{name}
-                    {click && <span className="ml-1 text-accent border-b border-dotted border-border text-xs">journal {open ? "▲" : "▼"}</span>}</td>
+                    {click && <span className="ml-1 text-accent border-b border-dotted border-border text-xs">journal {open ? "▲" : "▼"}</span>}
+                    {st.flux?.contamine && (
+                      <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded border border-border text-muted2"
+                        title={st.flux.note}>{st.flux.n_flows} mouvement{st.flux.n_flows > 1 ? "s" : ""} neutralisé{st.flux.n_flows > 1 ? "s" : ""}</span>)}</td>
+                  <td className="text-right text-muted2 text-xs">{fenetre(st.n)}</td>
                   <td className="text-right">{(st.total_return * 100).toFixed(1)}%</td>
                   <td className="text-right">{((st.cagr ?? 0) * 100).toFixed(1)}%</td>
                   <td className="text-right">{st.sharpe?.toFixed(2)}</td>
@@ -146,7 +162,18 @@ export default function Dashboard() {
               })}
           </tbody>
         </table>
-        <p className="text-muted2 text-xs mt-2"><b>Backtest preset</b> = simulation de la stratégie sur prix RÉELS (~10 ans). <b>Portefeuille RÉEL</b> = ton compte Alpaca+Bitmart (historique court car récent). Clique une ligne pour son journal de trades.</p>
+        <p className="text-muted2 text-xs mt-2">
+          <b>Lis d'abord la colonne « Fenêtre »</b> : ces lignes ne couvrent pas la même durée, donc
+          leurs rendements ne se comparent pas directement. Le <b>backtest preset</b> simule la
+          stratégie sur ~10 ans de prix réels ; le <b>portefeuille RÉEL</b> ne compte que depuis
+          l'ouverture des comptes. Un rendement sur dix ans face à un rendement sur deux mois ne
+          dit rien — seuls le CAGR et le Sharpe restent lisibles côte à côte, et encore : sur une
+          fenêtre courte ils sont très instables.
+          <br />
+          Sur les comptes réels, versements et retraits sont <b>neutralisés</b> (rendement pondéré
+          dans le temps) : un virement n'est ni un gain ni une perte. La pastille indique combien
+          de mouvements ont été écartés. Clique une ligne pour son journal de trades.
+        </p>
       </section>
 
       {/* Attribution Alpha / Bêta (vision Citadel) : compétence vs exposition marché */}
@@ -209,13 +236,13 @@ export default function Dashboard() {
         </section>);
       })()}
 
-      {/* Journal RÉEL : ordres réellement exécutés (Alpaca+Bitmart) + positions réelles */}
+      {/* Journal RÉEL : ordres réellement exécutés + positions réelles */}
       {showReal && (() => {
         const rt = d.real_trades ?? [], rp = d.real_positions ?? [], rps = d.real_portfolio?.stats ?? {};
         const dlt = (x?: number) => (x ?? 0).toLocaleString("fr-FR", { maximumFractionDigits: 2 });
         return (
           <section className="card p-4 overflow-x-auto">
-            <h2 className="text-sm uppercase tracking-wide text-muted mb-1">Journal RÉEL — compte Alpaca + Bitmart</h2>
+            <h2 className="text-sm uppercase tracking-wide text-muted mb-1">Journal RÉEL — comptes réels</h2>
             {rt.length === 0 && rp.length === 0 ? (
               <p className="text-muted text-sm">Aucun trade/position réel (comptes non connectés ou aucun ordre passé). Passe des ordres en paper : <code>make live-go</code>.</p>
             ) : (<>
