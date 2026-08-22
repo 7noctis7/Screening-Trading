@@ -84,6 +84,13 @@ export default function Positions() {
   const { data } = usePositions();
   const [sel, setSel] = useState<string | null>(null);
   const pos = data?.real_positions ?? [];
+  // Plancher de ligne, aligné sur packages/execution/rebalance_plan (QUANT_MIN_POSITION).
+  const PLANCHER = 500;
+  const sousPlancher = pos
+    .filter((p: any) => Math.abs(Number(p?.market_value) || 0) < PLANCHER)
+    .sort((a: any, b: any) => (Number(b.market_value) || 0) - (Number(a.market_value) || 0));
+  const totalPlancher = sousPlancher.reduce(
+    (t: number, p: any) => t + (Number(p?.market_value) || 0), 0);
   const alloc = data?.preset_allocation ?? [];
   const earnings = data?.earnings_risk ?? [];
   const series = data?.series ?? {}, markers = data?.markers ?? {};
@@ -167,6 +174,35 @@ export default function Positions() {
         <span title="Lignes dont l'écart réel−cible dépasse la bande de non-trading de 3 %">
           Hors bande ({BAND * 100} %) : <b className="mono" style={{ color: nOut ? "#f59e0b" : "var(--pos)" }}>{nOut}</b> ligne{nOut > 1 ? "s" : ""}</span>
       </section>
+
+      {/* LIGNES SOUS LE PLANCHER — répond directement à « pourquoi j'ai ces positions ? ».
+          Ce sont des restes d'une allocation précédente : soldées en MONTANT, elles laissaient
+          une miette, et la miette passait ensuite sous la bande d'inaction, donc plus jamais
+          vendue. Le prochain rééquilibrage les solde en QUANTITÉ. */}
+      {sousPlancher.length > 0 && (
+        <section className="card p-4" style={{ borderColor: "#f59e0b" }}>
+          <div className="flex flex-wrap items-baseline gap-x-3">
+            <h2 className="text-sm uppercase tracking-wide text-muted">Lignes trop petites pour compter</h2>
+            <span className="mono text-sm" style={{ color: "#f59e0b" }}>
+              {sousPlancher.length} ligne{sousPlancher.length > 1 ? "s" : ""} · ${usd(totalPlancher)}
+            </span>
+          </div>
+          <p className="text-muted text-xs mt-1">
+            Sous le plancher de <b>${usd(PLANCHER)}</b> par ligne. Ce sont des restes d'allocations
+            précédentes : la sortie se faisait en <i>montant</i>, le cours bougeait entre la
+            cotation et l'exécution, il restait une miette — et cette miette, plus petite que la
+            bande d'inaction, n'était ensuite plus jamais vendue. Le prochain rééquilibrage les
+            solde en <i>quantité</i>, donc intégralement.
+          </p>
+          <div className="flex flex-wrap gap-1.5 mt-3">
+            {sousPlancher.map((p: any) => (
+              <span key={p.symbol} className="text-xs px-2 py-0.5 rounded-full border border-border mono">
+                {p.symbol} <span className="text-muted2">${usd(p.market_value)}</span>
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
 
       {sel && series[sel] && (
         <section className="card p-4">

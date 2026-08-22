@@ -21,12 +21,36 @@ La bande garde tout son sens entre les deux : un écart trop petit ne paie pas s
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
-# Plancher d'ouverture : sous ce montant, une ligne coûte plus en frottement et en attention
-# qu'elle n'apporte en diversification. Volontairement bas — il écarte la poussière, pas une
-# position modeste assumée.
-MIN_OUVERTURE = 25.0
+# PLANCHER DE LIGNE. Une position que la stratégie veut à moins de ce montant ne devrait pas
+# exister : elle ne déplace pas le résultat, mais elle consomme du frottement, de l'attention et
+# une ligne de journal. Le compte réel en comptait une quarantaine sous 500 $, dont une trentaine
+# sous 3 $ — ni diversification ni performance, seulement du bruit.
+#
+# Réglable par QUANT_MIN_POSITION. À 500 $ sur un portefeuille de 77 000 $, cela revient à dire :
+# « une ligne pèse au moins 0,65 %, sinon elle n'a pas sa place ».
+MIN_LIGNE_DEFAUT = 500.0
+
+# HYSTÉRÉSIS. Ouvrir au-dessus du plancher mais ne solder qu'en dessous de 80 % de celui-ci crée
+# une zone morte. Sans elle, une cible qui oscille autour du plancher ferait acheter et solder la
+# même ligne un jour sur deux — le va-et-vient coûterait bien plus que la ligne ne rapporte.
+RATIO_SORTIE = 0.8
+
+
+def min_ligne() -> float:
+    """Plancher de ligne effectif (QUANT_MIN_POSITION). Une valeur illisible retombe sur le
+    défaut : une faute de frappe ne doit pas désactiver silencieusement le garde-fou."""
+    try:
+        v = float(os.environ.get("QUANT_MIN_POSITION", "") or MIN_LIGNE_DEFAUT)
+        return v if v >= 0 else MIN_LIGNE_DEFAUT
+    except ValueError:
+        return MIN_LIGNE_DEFAUT
+
+
+# Rétrocompatibilité de nom : l'ancien seuil ne servait qu'à l'ouverture.
+MIN_OUVERTURE = MIN_LIGNE_DEFAUT
 # Une position existe dès que le courtier la déclare — même à un centime. Aucun seuil ici : un
 # epsilon « raisonnable » laisserait justement immortelles les lignes à 0,01 $ qu'on veut solder.
 # La liquidation part en QUANTITÉ, donc le courtier sait fermer une fraction que son montant
@@ -48,30 +72,39 @@ class Intention:
 
 
 def decider(cible: float, detenu: float, bande: float,
-            min_ouverture: float = MIN_OUVERTURE) -> Intention:
+            min_ouverture: float | None = None) -> Intention:
     """Décide pour UNE ligne. `cible` et `detenu` en monnaie, `bande` = seuil d'inaction.
 
-    L'ordre des règles porte le sens : solder prime sur la bande, la bande prime sur le plancher.
+    L'ordre des règles porte le sens : le plancher décide si la ligne DOIT EXISTER, et seulement
+    ensuite la bande décide si l'écart mérite un ordre. L'inverse laisserait vivre indéfiniment
+    des lignes trop petites, protégées par la bande — c'est exactement ce qui s'était produit.
     """
+    plancher = min_ligne() if min_ouverture is None else float(min_ouverture)
     cible = max(0.0, float(cible))
     detenu = max(0.0, float(detenu))
-    delta = cible - detenu
 
-    # 1. SORTIE COMPLÈTE — hors bande, toujours. C'est la règle qui empêche la poussière de
-    #    devenir permanente : sans elle, tout résidu sous la bande est immortel.
-    if cible <= 0.0:
+    # 1. LA LIGNE A-T-ELLE SA PLACE ? Une cible sous le plancher vaut une cible NULLE. C'est le
+    #    changement de fond : auparavant le plancher n'empêchait que l'ouverture, donc une ligne
+    #    déjà trop petite restait pour toujours.
+    if cible < plancher:
         if detenu <= EPS_DETENU:
-            return Intention("rien", 0.0, "aucune position à solder")
-        return Intention("solder", detenu, "sortie complète — la bande ne s'applique pas "
-                                           "à une liquidation, sinon le résidu est immortel",
-                         liquidation=True)
+            return Intention("rien", 0.0,
+                             f"cible {cible:.0f} sous le plancher de ligne ({plancher:.0f}) "
+                             "— on n'ouvre pas ce qui deviendrait de la poussière")
+        # Hystérésis : on ne solde qu'en dessous de 80 % du plancher, pour qu'une cible qui
+        # oscille autour du seuil ne fasse pas acheter puis solder la même ligne en boucle.
+        if cible > plancher * RATIO_SORTIE:
+            return Intention("rien", 0.0,
+                             f"cible {cible:.0f} dans la zone morte du plancher "
+                             f"({plancher * RATIO_SORTIE:.0f}–{plancher:.0f}) — on ne fait rien")
+        motif = ("sortie complète — la bande ne s'applique pas à une liquidation, "
+                 "sinon le résidu est immortel" if cible <= 0.0 else
+                 f"cible {cible:.0f} sous le plancher de ligne ({plancher:.0f}) "
+                 "— cette ligne ne pèse rien et coûte du frottement")
+        return Intention("solder", detenu, motif, liquidation=True)
 
-    # 2. OUVERTURE SOUS LE PLANCHER — ne pas créer la poussière de demain.
-    if detenu <= EPS_DETENU and cible < min_ouverture:
-        return Intention("rien", 0.0,
-                         f"cible {cible:.2f} sous le plancher d'ouverture ({min_ouverture:.0f})")
-
-    # 3. BANDE D'INACTION — l'écart ne paie pas son aller-retour.
+    # 2. BANDE D'INACTION — la ligne a sa place ; l'écart paie-t-il son aller-retour ?
+    delta = cible - detenu
     if abs(delta) < bande:
         return Intention("rien", 0.0, "écart sous la bande d'inaction")
 
@@ -80,7 +113,7 @@ def decider(cible: float, detenu: float, bande: float,
 
 
 def plan(cibles: dict[str, float], detenus: dict[str, float], bande: float,
-         min_ouverture: float = MIN_OUVERTURE) -> dict[str, Intention]:
+         min_ouverture: float | None = None) -> dict[str, Intention]:
     """Plan complet. Toute ligne DÉTENUE hors cibles est traitée comme une cible à zéro —
     c'est ce qui garantit qu'aucune position ne peut se cacher du rééquilibrage."""
     clefs = set(cibles) | set(detenus)
@@ -88,6 +121,7 @@ def plan(cibles: dict[str, float], detenus: dict[str, float], bande: float,
             for k in sorted(clefs)}
 
 
-def poussiere(detenus: dict[str, float], seuil: float = MIN_OUVERTURE) -> dict[str, float]:
+def poussiere(detenus: dict[str, float], seuil: float | None = None) -> dict[str, float]:
     """Lignes résiduelles : détenues, mais trop petites pour compter. Diagnostic pur."""
-    return {k: v for k, v in detenus.items() if EPS_DETENU < v < seuil}
+    s = min_ligne() if seuil is None else float(seuil)
+    return {k: v for k, v in detenus.items() if EPS_DETENU < v < s}

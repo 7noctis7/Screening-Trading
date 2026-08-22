@@ -5,7 +5,7 @@ règles qui l'empêchent : une sortie complète ignore la bande, une ouverture s
 n'a pas lieu.
 """
 from packages.execution.rebalance_plan import (
-    MIN_OUVERTURE, Intention, decider, plan, poussiere,
+    MIN_LIGNE_DEFAUT, RATIO_SORTIE, Intention, decider, min_ligne, plan, poussiere,
 )
 
 BANDE = 385.0        # 0,5 % d'un capital de ~77 000 $, comme en production
@@ -30,13 +30,37 @@ def test_on_nouvre_pas_une_ligne_qui_sera_la_poussiere_de_demain():
     assert i.action == "rien" and "plancher" in i.motif
 
 
-def test_le_plancher_ne_bloque_pas_un_renforcement_dune_ligne_existante():
-    """Le plancher vise l'OUVERTURE. Une ligne déjà tenue peut être ajustée finement."""
+def test_une_ligne_deja_tenue_sous_le_plancher_est_soldee_pas_reduite():
+    """LE changement de fond : le plancher ne gardait que l'ouverture, donc une ligne trop
+    petite survivait indéfiniment, protégée par la bande. Elle est désormais soldée."""
     i = decider(cible=20.0, detenu=800.0, bande=1.0)
-    assert i.action == "alleger" and abs(i.montant - 780.0) < 1e-9
+    assert i.action == "solder" and i.liquidation
+    assert i.montant == 800.0
 
 
-def test_la_bande_garde_son_role_entre_les_deux():
+def test_hysteresis_pas_de_va_et_vient_autour_du_plancher():
+    """Une cible qui oscille autour du plancher ne doit pas faire acheter puis solder en boucle."""
+    p = MIN_LIGNE_DEFAUT
+    assert decider(cible=p * 0.9, detenu=p, bande=1.0).action == "rien"      # zone morte
+    assert decider(cible=p * 0.5, detenu=p, bande=1.0).action == "solder"    # franchement dessous
+    assert decider(cible=p * 1.1, detenu=p, bande=1.0).action == "acheter"   # franchement dessus
+
+
+def test_le_plancher_est_reglable(monkeypatch):
+    monkeypatch.setenv("QUANT_MIN_POSITION", "1000")
+    assert min_ligne() == 1000.0
+    assert decider(cible=700.0, detenu=0.0, bande=1.0).action == "rien"
+
+
+def test_un_plancher_illisible_retombe_sur_le_defaut(monkeypatch):
+    """Une faute de frappe ne doit pas désactiver silencieusement le garde-fou."""
+    monkeypatch.setenv("QUANT_MIN_POSITION", "cinq-cents")
+    assert min_ligne() == MIN_LIGNE_DEFAUT
+    monkeypatch.setenv("QUANT_MIN_POSITION", "-40")
+    assert min_ligne() == MIN_LIGNE_DEFAUT
+
+
+def test_la_bande_garde_son_role_au_dessus_du_plancher():
     assert decider(10_000.0, 10_200.0, BANDE).action == "rien"
     assert decider(10_000.0, 10_500.0, BANDE).action == "alleger"
     assert decider(10_500.0, 10_000.0, BANDE).action == "acheter"
@@ -56,22 +80,28 @@ def test_une_ligne_detenue_hors_cibles_est_toujours_soldee():
 
 
 def test_le_cas_reel_complet():
-    """Les lignes réellement observées sur le compte, passées au plan."""
-    detenus = {"QQQ": 50_056.0, "SOLUSD": 3_634.0, "TEN": 3.01, "TSM": 2.26, "OSCR": 2.30,
-               "ASML": 1.67, "PBI": 1.06, "STT": 0.63, "SAN": 0.61, "HOOD": 0.56, "M": 0.50,
-               "KSS": 0.01, "HST": 0.01, "VNO": 0.01, "PSA": 0.01}
+    """Les lignes réellement observées sur le compte, passées au plan.
+
+    Y compris les positions de quelques centaines de dollars : sous le plancher, elles ne
+    pèsent rien et doivent partir aussi — pas seulement la poussière à 0,01 $.
+    """
+    detenus = {"QQQ": 50_056.0, "SOLUSD": 3_634.0, "PHM": 780.0, "SPG": 983.0, "SJM": 1_223.0,
+               "TEN": 3.01, "TSM": 2.26, "OSCR": 2.30, "ASML": 1.67, "PBI": 1.06, "STT": 0.63,
+               "HOOD": 0.56, "M": 0.50, "KSS": 0.01, "HST": 0.01, "VNO": 0.01}
     cibles = {"QQQ": 50_000.0, "SOLUSD": 3_600.0}
     p = plan(cibles, detenus, BANDE)
-    soldees = sorted(k for k, v in p.items() if v.action == "solder")
-    assert soldees == ["ASML", "HOOD", "HST", "KSS", "M", "OSCR", "PBI", "PSA",
-                       "SAN", "STT", "TEN", "TSM", "VNO"]
+    gardees = sorted(k for k, v in p.items() if v.action == "rien")
+    assert gardees == ["QQQ", "SOLUSD"]
+    # Tout le reste part, quelle que soit la taille : 0,01 $ comme 1 223 $.
+    soldees = {k for k, v in p.items() if v.action == "solder"}
+    assert soldees == set(detenus) - {"QQQ", "SOLUSD"}
     assert all(p[k].liquidation for k in soldees)
-    assert p["QQQ"].action == "rien" and p["SOLUSD"].action == "rien"
 
 
 def test_le_diagnostic_de_poussiere_nomme_les_lignes():
-    d = {"QQQ": 50_056.0, "TEN": 3.01, "ASML": 1.67, "GROS": 900.0, "ZERO": 0.0}
-    assert poussiere(d) == {"TEN": 3.01, "ASML": 1.67}
+    d = {"QQQ": 50_056.0, "TEN": 3.01, "ASML": 1.67, "PETIT": 400.0, "ZERO": 0.0}
+    assert poussiere(d) == {"TEN": 3.01, "ASML": 1.67, "PETIT": 400.0}
+    assert poussiere(d, seuil=5.0) == {"TEN": 3.01, "ASML": 1.67}
 
 
 def test_montants_negatifs_ne_cassent_rien():
@@ -87,4 +117,6 @@ def test_intention_expose_agit():
 
 
 def test_plancher_par_defaut_documente():
-    assert MIN_OUVERTURE == 25.0
+    """500 $ sur ~77 000 $ = « une ligne pèse au moins 0,65 %, sinon elle n'a pas sa place »."""
+    assert MIN_LIGNE_DEFAUT == 500.0
+    assert RATIO_SORTIE == 0.8

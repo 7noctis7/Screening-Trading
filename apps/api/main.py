@@ -235,8 +235,7 @@ def positions() -> dict:
     real = snap["live"]["real"]
     return {"real_positions": real.get("positions", []),    # positions RÉELLES (Alpaca + Bitmart)
             "connected": real.get("connected", False),
-            "accounts": {"alpaca": real.get("alpaca", {}), "crypto": real.get("crypto", {}),
-                         "bitmart": real.get("crypto", {})},   # alias historique
+            "accounts": {"alpaca": real.get("alpaca", {}), "crypto": real.get("crypto", {})},
             "alloc_capital": dash.get("alloc_capital", {}),
             "preset_allocation": dash.get("preset_allocation", []),  # cible modèle → écart de réplication
             "earnings_risk": dash.get("earnings_risk", []),          # résultats imminents (risque binaire)
@@ -300,8 +299,7 @@ def trades() -> dict:
     return {"real_trades": real.get("trades", []),          # ordres RÉELS exécutés (Alpaca + Bitmart)
             "real_open_orders": real.get("open_orders", []),  # ordres RÉELS en attente d'exécution (non remplis)
             "connected": real.get("connected", False),
-            "accounts": {"alpaca": real.get("alpaca", {}), "crypto": real.get("crypto", {}),
-                         "bitmart": real.get("crypto", {})},   # alias historique
+            "accounts": {"alpaca": real.get("alpaca", {}), "crypto": real.get("crypto", {})},
             "series": d.get("chart_series", {}),
             "markers": d.get("real_markers", {})}
 

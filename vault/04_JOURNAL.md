@@ -1,5 +1,37 @@
 # 04 — JOURNAL
 
+## Session 2026-08-22 — Le plancher de ligne, et Bitmart retiré du site
+**Contexte.** « Je ne veux plus voir Bitmart dans mes positions. Et pourquoi j'ai des actifs hors
+scope ou sous 500–1000 $ ? J'ai des positions qui n'ont même pas 50 $. »
+
+**Bitmart.** Fonctionnellement déjà parti : depuis la bascule de place, le bloc crypto est
+construit depuis la place ACTIVE (Binance). Restaient les clés d'alias `bitmart` dans le payload
+et le nom de la fonction `_bitmart()`. Retirés — le front lit la place dans les données, plus
+aucun consommateur ne dépend du nom.
+
+**Le plancher de ligne : le correctif précédent était incomplet.** J'avais traité la poussière
+(0,01–3 $) mais laissé un plancher qui ne gardait que l'OUVERTURE. Conséquence : une ligne déjà
+détenue sous le plancher survivait indéfiniment, protégée par la bande d'inaction. Exactement le
+défaut que je venais de corriger, à un cran au-dessus.
+
+Changement de fond : **une cible sous le plancher vaut une cible NULLE**. Le plancher décide si
+la ligne DOIT EXISTER, la bande décide seulement ensuite si l'écart mérite un ordre. L'inverse
+laisse vivre ce qui ne devrait pas être là.
+- `QUANT_MIN_POSITION`, défaut **500 $** — sur ~77 000 $, « une ligne pèse au moins 0,65 %,
+  sinon elle n'a pas sa place ». Une valeur illisible retombe sur le défaut : une faute de frappe
+  ne doit pas désactiver silencieusement le garde-fou.
+- **Hystérésis** (sortie à 80 % du plancher) : sans zone morte, une cible qui oscille autour du
+  seuil ferait acheter puis solder la même ligne un jour sur deux — le va-et-vient coûterait bien
+  plus que la ligne ne rapporte.
+
+**Rendu visible.** Page Positions : bloc « Lignes trop petites pour compter » — nombre, total, et
+l'explication de leur origine. La question « pourquoi ai-je ces positions ? » trouve sa réponse à
+l'endroit où elle se pose.
+
+**Hors scope.** Les lignes bancaires/REIT observées (ZION, TFC, USB, SLG, VNO, HST…) ne sont pas
+dans les cibles actuelles : ce sont des restes d'allocations précédentes. Toute ligne détenue
+hors cibles est désormais soldée — plus aucune position ne peut se cacher du rééquilibrage.
+
 ## Session 2026-08-21 (6) — La poussière, la fenêtre, et la place crypto
 **Contexte.** « Performance réelle et dashboard. Puis remplace Bitmart par Binance. »
 

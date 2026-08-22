@@ -382,7 +382,7 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
             d["error"] = str(e)[:160]
         return d
 
-    def _bitmart():
+    def _place_crypto():
         """Place crypto ACTIVE (Binance par défaut). Le nom vient de la place, plus du code :
         changer de place ne demande plus de renommer une trentaine de fichiers."""
         d = {"name": _VC.nom, "venue": _VC.cle, "configured": bit, "ok": False,
@@ -410,7 +410,7 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
     # déjà isolé/try-except → non bloquant et sortie identique au mode série.
     from concurrent.futures import ThreadPoolExecutor
     with ThreadPoolExecutor(max_workers=2) as _ex:
-        _fa, _fb = _ex.submit(_alpaca), _ex.submit(_bitmart)
+        _fa, _fb = _ex.submit(_alpaca), _ex.submit(_place_crypto)
         a_d, b_d = _fa.result(), _fb.result()
     _real_trades = sorted((a_d.get("orders", []) + b_d.get("orders", [])),
                           key=lambda o: o.get("date", ""), reverse=True)
@@ -422,17 +422,15 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
         "positions": a_d["positions"] + b_d["positions"],
         "trades": _real_trades,                    # ordres RÉELS exécutés (Alpaca + Bitmart)
         "open_orders": _real_open,                 # ordres RÉELS en attente d'exécution (non remplis)
-        # « crypto » = la place ACTIVE, quelle qu'elle soit. La clé « bitmart » reste servie en
-        # ALIAS le temps que les consommateurs migrent : renommer une clé de payload d'un coup
-        # casse silencieusement tout ce qui la lit encore.
-        "alpaca": a_d, "crypto": b_d, "bitmart": b_d,
+        # « crypto » = la place ACTIVE, quelle qu'elle soit. L'alias « bitmart » a été retiré :
+        # le front lit la place dans les données, plus aucun consommateur ne dépend du nom.
+        "alpaca": a_d, "crypto": b_d,
     }
     # enregistre l'equity réelle du jour (construit l'historique réel par broker)
     try:
         from packages.execution.equity_history import record as _eq_record
         if a_d["ok"] or b_d["ok"]:
-            _eq_record({"alpaca": a_d["equity"], _VC.cle: b_d["equity"],
-                        "bitmart": b_d["equity"]})   # alias historique, même valeur
+            _eq_record({"alpaca": a_d["equity"], _VC.cle: b_d["equity"]})
     except Exception:  # noqa: BLE001
         pass
     if target_weights or crypto_weights:          # allocation PRESET (2 poches : actions + crypto)
@@ -2207,7 +2205,6 @@ def build_snapshot(seed: int = 7) -> dict:
     _live["alpaca_perf"] = _broker_perf(_live["real"]["alpaca"], "alpaca", _eq_model)
     from packages.execution.venues import venue_crypto as _vc_here   # autre portée que le bloc live
     _live["crypto_perf"] = _broker_perf(_live["real"]["crypto"], _vc_here().cle, _cr_model)
-    _live["bitmart_perf"] = _live["crypto_perf"]          # alias historique
     # COMPARAISON COMPTES RÉELS vs INDICES (Alpaca vs Crypto vs S&P vs Nasdaq) pour le dashboard
     _cal_full = [b.ts for b in max(data.values(), key=len)]
     _account_cmp = _account_compare(
@@ -2389,7 +2386,6 @@ def build_snapshot(seed: int = 7) -> dict:
             "positions": comp["rows"], "totals": comp["totals"],
             "preset_allocation": _preset_alloc,        # allocation PRESET (production) → page Positions
             "alloc_capital": {"alpaca": round(_alp_cap, 2), "crypto": round(_bit_cap, 2),
-                              "bitmart": round(_bit_cap, 2),   # alias historique
                               "total": round(_alp_cap + _bit_cap, 2)},  # base réelle par compte
             "chart_series": _chart_series,             # OHLC cliquables (preset + positions réelles)
             "portfolio": portfolio_kpis,
