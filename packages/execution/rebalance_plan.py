@@ -29,9 +29,11 @@ from dataclasses import dataclass
 # une ligne de journal. Le compte réel en comptait une quarantaine sous 500 $, dont une trentaine
 # sous 3 $ — ni diversification ni performance, seulement du bruit.
 #
-# Réglable par QUANT_MIN_POSITION. À 500 $ sur un portefeuille de 77 000 $, cela revient à dire :
-# « une ligne pèse au moins 0,65 %, sinon elle n'a pas sa place ».
-MIN_LIGNE_DEFAUT = 500.0
+# Réglable par QUANT_MIN_POSITION. À 1 000 $ sur un portefeuille de 100 000 $, cela revient à
+# dire : « une ligne pèse au moins 1 %, sinon elle n'a pas sa place ». Seuil choisi par
+# l'utilisateur — en dessous, une ligne ne déplace pas le résultat mais consomme du frottement,
+# de l'attention et une ligne de journal.
+MIN_LIGNE_DEFAUT = 1000.0
 
 # HYSTÉRÉSIS. Ouvrir au-dessus du plancher mais ne solder qu'en dessous de 80 % de celui-ci crée
 # une zone morte. Sans elle, une cible qui oscille autour du plancher ferait acheter et solder la

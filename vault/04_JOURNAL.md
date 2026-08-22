@@ -1,5 +1,28 @@
 # 04 — JOURNAL
 
+## Session 2026-08-22 (3) — Plancher de ligne à 1 000 $, et une source unique
+**Contexte.** Choix de l'utilisateur : ne rien détenir sous 1 000 $ dans le portefeuille réel.
+
+**Fait.** `MIN_LIGNE_DEFAUT` passe de 500 à **1 000 $** — sur ~100 000 $, « une ligne pèse au
+moins 1 %, sinon elle n'a pas sa place ». `QUANT_MIN_POSITION` surcharge toujours.
+
+**Duplication supprimée.** J'avais laissé le plancher codé en dur DEUX fois : dans le module
+Python et dans `app/positions/page.tsx`. Deux sources pour un même seuil, c'est une dérive
+garantie dès qu'on en change une — et je venais précisément d'en changer une. Le plancher est
+désormais **publié** par l'API (`dashboard.min_position`, relayé par `/api/positions`) et le
+front le lit. Le repli en dur ne sert que si l'API est plus ancienne que le front.
+
+**Erreur répétée, attrapée avant commit.** J'ai importé `min_ligne` dans la portée du bloc *live*
+alors que je l'utilisais dans le constructeur principal — exactement la faute commise hier avec
+`_VC`, que neuf tests avaient dû rattraper. Import remonté au niveau du module (le module est en
+stdlib pur, aucun coût de chargement).
+
+**Commentaire de test corrigé.** J'avais écrit « SJM à 1 223 $ passe le plancher » à côté d'une
+ligne qui EST soldée : elle l'est parce qu'elle est hors cible, pas à cause du plancher. Deux
+raisons distinctes de solder — un lecteur pressé aurait conclu que le plancher ne marche pas.
+
+1019 tests passés, 8 ignorés.
+
 ## Session 2026-08-22 (2) — `make start` ramenait un code vieux de quatre PR
 **Contexte.** « Pourquoi j'ai encore des positions Bitmart ? » — alors que Bitmart avait été
 retiré la veille. Réponse dans sa sortie de terminal :

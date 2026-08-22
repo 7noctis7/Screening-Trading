@@ -88,8 +88,10 @@ export default function Positions() {
   const { data } = usePositions();
   const [sel, setSel] = useState<string | null>(null);
   const pos = data?.real_positions ?? [];
-  // Plancher de ligne, aligné sur packages/execution/rebalance_plan (QUANT_MIN_POSITION).
-  const PLANCHER = 500;
+  // Plancher de ligne PUBLIÉ par l'API (packages/execution/rebalance_plan, QUANT_MIN_POSITION).
+  // Il était codé en dur ici : deux sources pour un même seuil, donc dérive garantie dès qu'on
+  // en change une. Le repli n'existe que si l'API est plus ancienne que ce front.
+  const PLANCHER = Number(data?.min_position) > 0 ? Number(data.min_position) : 1000;
   const sousPlancher = pos
     .filter((p: any) => Math.abs(Number(p?.market_value) || 0) < PLANCHER)
     .sort((a: any, b: any) => (Number(b.market_value) || 0) - (Number(a.market_value) || 0));

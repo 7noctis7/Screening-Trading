@@ -233,9 +233,10 @@ def positions() -> dict:
     snap = _snap()
     dash = snap["dashboard"]
     real = snap["live"]["real"]
-    return {"real_positions": real.get("positions", []),    # positions RÉELLES (Alpaca + Bitmart)
+    return {"real_positions": real.get("positions", []),    # positions RÉELLES (tous comptes)
             "connected": real.get("connected", False),
             "accounts": {"alpaca": real.get("alpaca", {}), "crypto": real.get("crypto", {})},
+            "min_position": dash.get("min_position"),        # plancher de ligne → affiché par le front
             "alloc_capital": dash.get("alloc_capital", {}),
             "preset_allocation": dash.get("preset_allocation", []),  # cible modèle → écart de réplication
             "earnings_risk": dash.get("earnings_risk", []),          # résultats imminents (risque binaire)

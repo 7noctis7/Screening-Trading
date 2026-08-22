@@ -47,9 +47,9 @@ def test_hysteresis_pas_de_va_et_vient_autour_du_plancher():
 
 
 def test_le_plancher_est_reglable(monkeypatch):
-    monkeypatch.setenv("QUANT_MIN_POSITION", "1000")
-    assert min_ligne() == 1000.0
-    assert decider(cible=700.0, detenu=0.0, bande=1.0).action == "rien"
+    monkeypatch.setenv("QUANT_MIN_POSITION", "250")
+    assert min_ligne() == 250.0
+    assert decider(cible=700.0, detenu=0.0, bande=1.0).action == "acheter"
 
 
 def test_un_plancher_illisible_retombe_sur_le_defaut(monkeypatch):
@@ -86,6 +86,8 @@ def test_le_cas_reel_complet():
     pèsent rien et doivent partir aussi — pas seulement la poussière à 0,01 $.
     """
     detenus = {"QQQ": 50_056.0, "SOLUSD": 3_634.0, "PHM": 780.0, "SPG": 983.0, "SJM": 1_223.0,
+               # SJM (1 223 $) passe le plancher, mais est soldée quand même : elle est HORS
+               # CIBLE. Deux raisons distinctes de solder — ne pas les confondre en lisant.
                "TEN": 3.01, "TSM": 2.26, "OSCR": 2.30, "ASML": 1.67, "PBI": 1.06, "STT": 0.63,
                "HOOD": 0.56, "M": 0.50, "KSS": 0.01, "HST": 0.01, "VNO": 0.01}
     cibles = {"QQQ": 50_000.0, "SOLUSD": 3_600.0}
@@ -117,6 +119,6 @@ def test_intention_expose_agit():
 
 
 def test_plancher_par_defaut_documente():
-    """500 $ sur ~77 000 $ = « une ligne pèse au moins 0,65 %, sinon elle n'a pas sa place »."""
-    assert MIN_LIGNE_DEFAUT == 500.0
+    """1 000 $ sur ~100 000 $ = « une ligne pèse au moins 1 %, sinon elle n'a pas sa place »."""
+    assert MIN_LIGNE_DEFAUT == 1000.0
     assert RATIO_SORTIE == 0.8

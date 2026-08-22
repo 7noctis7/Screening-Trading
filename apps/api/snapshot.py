@@ -133,6 +133,7 @@ def _universe_section(instruments: list[dict]) -> dict:
 # Alias privés conservés → le reste du fichier est inchangé.
 from apps.api.sections_data import GICS_MAP as _GICS_MAP  # noqa: E402
 from apps.api.sections_data import SECTOR_DV as _SECTOR_DV  # noqa: E402
+from packages.execution.rebalance_plan import min_ligne as _min_ligne  # noqa: E402
 from apps.api.sections_data import THEME_TICKERS as _THEME_TICKERS  # noqa: E402
 
 
@@ -2385,6 +2386,9 @@ def build_snapshot(seed: int = 7) -> dict:
             "dates": _dash_dates,
             "positions": comp["rows"], "totals": comp["totals"],
             "preset_allocation": _preset_alloc,        # allocation PRESET (production) → page Positions
+            # Plancher de ligne PUBLIÉ : le front l'affichait en dur de son côté. Deux sources
+            # pour un même seuil, c'est une dérive garantie au premier changement.
+            "min_position": _min_ligne(),
             "alloc_capital": {"alpaca": round(_alp_cap, 2), "crypto": round(_bit_cap, 2),
                               "total": round(_alp_cap + _bit_cap, 2)},  # base réelle par compte
             "chart_series": _chart_series,             # OHLC cliquables (preset + positions réelles)
