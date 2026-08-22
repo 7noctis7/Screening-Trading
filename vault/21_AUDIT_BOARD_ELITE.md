@@ -1,5 +1,8 @@
 # 21 — Audit board élite (2026-08-22)
 
+> **Suite donnée le même jour** : les quatre défauts (A, B, C, D) sont CORRIGÉS et testés.
+> Voir la section « Corrections apportées » en fin de note. 1043 tests verts (+24).
+
 Audit du dépôt à l'aune du cahier des charges « conseil d'administration quantitatif ».
 Chaque exigence a été **vérifiée dans le code**, pas supposée. Les références sont des chemins
 réels. Ce qui est déjà en place est dit tel quel — un audit qui ne trouve que des problèmes est
@@ -132,3 +135,40 @@ Redis Pub/Sub. Ce serait une erreur d'ingénierie ici. Le système rééquilibre
 jour**, sur des barres quotidiennes, avec une bande d'inaction. Une architecture événementielle
 ajouterait un mode de panne permanent pour une information que la stratégie n'utilise pas. La
 recommandation est bonne pour de la haute fréquence ; ce système n'en fait pas.
+
+
+---
+
+## 5. Corrections apportées (2026-08-22)
+
+**B — Plafond de croissance perpétuelle** (`MAX_CROISSANCE_PERPETUELLE = 0.03`). Appliqué
+**dans** `_dcf`, pas dans la signature : une contrainte économique n'a pas à être négociable par
+l'appelant. Aucune entreprise ne croît indéfiniment plus vite que l'économie qui la contient —
+au-delà, elle finirait par la représenter en entier. `damodaran_scenarios` publie désormais la
+croissance **effectivement utilisée** : annoncer l'hypothèse demandée plutôt que celle retenue
+ferait mentir le rapport.
+
+**A — Capitaux employés moyens.** `capital_employed(f, precedent)` moyenne les deux bilans quand
+la période précédente est disponible ; `base_capitaux_employes()` déclare laquelle des deux bases
+a servi (« moyenne » / « clôture »), pour que le chiffre ne soit jamais lu comme plus solide
+qu'il ne l'est. Test figé : sur un bilan saisonnier, l'écart de ROCE dépasse 15 % — matériel,
+pas cosmétique.
+
+**D — Impôt par juridiction** (`taux_impot`), approché par la devise des états financiers. TSM
+20 %, ASML 26 %, Suisse 15 %. Devise inconnue → taux moyen assumé : on ne devine pas une
+juridiction, mieux vaut un taux moyen qu'un faux précis. Test : deux sociétés identiques dans
+deux pays n'ont plus le même ROCE — sans quoi le classement qualité récompensait la
+domiciliation.
+
+**C — Splits** (`packages/data/corporate_actions.py`). Le piège de cette correction est qu'un
+ajustement appliqué à tort à un vrai krach transforme une perte réelle en rendement inventé.
+D'où la règle : on n'ajuste que si **deux** signaux concordent — ratio proche d'une fraction
+simple (un krach tombe rarement pile sur 0,250) **et** volume qui change d'échelle dans le sens
+inverse. Sans volume exploitable, on ne tranche pas : le titre est écarté et le motif publié
+(`splits_ajustes` / `splits_ecartes` dans la section thèmes). Un titre écarté coûte une occasion ;
+un rendement inventé coûte la confiance dans tous les autres.
+
+Un test a eu raison contre un premier réglage : avec une tolérance volume de ±50 %, un volume
+**inchangé** confirmait un split 2:1 — alors qu'un volume inchangé est précisément la signature
+d'un mouvement de marché. Critère resserré : proche de l'échelle attendue **et** franchement
+différent de « inchangé ».
