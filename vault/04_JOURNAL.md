@@ -1,5 +1,47 @@
 # 04 — JOURNAL
 
+## Session 2026-08-22 (6) — Auto-hébergement : profil d'investisseur, clé IA, garde-fous
+**Contexte.** Faire du terminal un outil que chacun héberge chez soi, avec SES clés — IA et
+courtiers — plutôt qu'un service qui détiendrait les clés d'autrui.
+
+**`packages/profile/investor.py`.** Traduit ce que l'utilisateur déclare en CONTRAINTES sur son
+propre outil. Le mot compte : un conseil dit « achetez ceci », une contrainte dit « vous avez
+déclaré ne pas supporter plus de 20 % de baisse, l'outil s'y tient ». C'est aussi la seule
+formulation qui ne bascule pas dans le conseil en investissement réglementé.
+
+Trois règles, contre trois erreurs répandues :
+1. **Capacité ≠ tolérance, et c'est la plus petite qui lie.** La capacité est objective
+   (horizon, liquidité, stabilité des revenus) ; la tolérance est déclarative. Les fondre en un
+   « score de risque » autorise un investisseur audacieux à deux ans d'horizon à prendre un
+   risque que son horizon ne permet pas. Test figé : horizon 2 ans + tolérance 50 % → c'est la
+   capacité qui lie.
+2. **La sortie est un budget de perte, pas une étiquette.** « Profil dynamique » n'est pas
+   vérifiable ; « baisse maximale 25 % » l'est, et alimente `vol_target_from_drawdown` déjà
+   présent dans le dépôt.
+3. **L'allocation est VÉRIFIÉE contre son budget**, pas seulement promise. C'est ce que les
+   questionnaires oublient : une allocation 100 % actions ne peut pas promettre −15 %, les
+   actions développées ont fait −55 % en 2008. Ici l'allocation est désensibilisée vers le cash
+   jusqu'à tenir dans le budget, et l'écart est déclaré.
+
+Crédit de diversification volontairement **faible** (15 %) : en crise les corrélations convergent
+vers 1 — actions, émergentes, crédit et or ont chuté ensemble en 2008. Accorder un large crédit
+à un budget de perte, c'est se tromper au moment précis où il compte. Plafonds DURS sur crypto
+(20 %), émergentes (30 %), or (20 %) : un risque de ruine ne se compense pas.
+
+**Clé IA — un défaut bloquant trouvé.** `packages/llm/client.py` n'envoyait **aucun en-tête
+`Authorization`**. Le client ne savait donc parler qu'à un modèle local : brancher OpenAI,
+Anthropic, Mistral ou Gemini échouait en 401 sans explication. `LLM_API_KEY` ajoutée, posée aussi
+sur la requête de découverte `/models` — sans quoi la détection du modèle échouait avant le
+premier appel. Clé vide = pas de clé (un modèle local n'en réclame pas).
+
+Pour Gemini, c'est la couche **compatible OpenAI** de Google qu'il faut, pas l'URL native
+`/v1beta/models` — celle-ci parle un autre protocole et renverrait une erreur de format.
+
+**`.env.example`** complété : 89 → 144 lignes. Courtiers, place crypto, plancher de ligne,
+branche suivie, base de prix, et le rappel que les ordres réels exigent `--live --yes`.
+
+1070 tests passés, 8 ignorés (+20).
+
 ## Session 2026-08-22 (5) — Trois défauts remontés par une capture d'écran
 **Contexte.** Six questions de l'utilisateur sur macro / accueil / crypto / méthode / dashboard /
 positions. Trois d'entre elles cachaient un défaut vérifiable.
