@@ -31,13 +31,17 @@ function buildRows(pos: any[], alloc: any[], accounts: any, earnings: any[]): Ro
   const aEq = accounts?.alpaca?.equity || 0, bEq = compteCrypto(accounts)?.equity || 0;
   const vName = nomVenue(accounts);
   const capOf = (broker: string) => (broker && vName && broker.toLowerCase() === vName.toLowerCase() ? bEq : aEq);
+  // Une poche quasi vide rend le pourcentage ABSURDE : une ligne à 0,08 $ dans une poche à
+  // 0,10 $ s'affichait « 80 % », juste à côté d'un QQQ à 49,8 % d'un capital de 100 000 $.
+  // Les deux nombres ne mesurent pas la même chose. Sous ce seuil, on ne calcule pas de poids.
+  const CAP_MIN_POCHE = 500;
   const eDays = new Map(earnings.map((e: any) => [norm(e.symbol), e.days]));
   const bySym = new Map<string, Row>();
   for (const p of pos) {
     const cap = capOf(p.broker ?? "");
     bySym.set(norm(p.symbol), {
       symbol: p.symbol, broker: p.broker ?? "—",
-      wReal: cap > 0 && p.market_value != null ? p.market_value / cap : null,
+      wReal: cap >= CAP_MIN_POCHE && p.market_value != null ? p.market_value / cap : null,
       wTarget: null, gap: null, qty: p.qty ?? null, value: p.market_value ?? null,
       pnl: p.pnl ?? null, pnlPct: p.pnl_pct ?? null,
       earningsDays: eDays.get(norm(p.symbol)) ?? null, hasChart: false,
@@ -91,6 +95,7 @@ export default function Positions() {
     .sort((a: any, b: any) => (Number(b.market_value) || 0) - (Number(a.market_value) || 0));
   const totalPlancher = sousPlancher.reduce(
     (t: number, p: any) => t + (Number(p?.market_value) || 0), 0);
+  const [montrerPetites, setMontrerPetites] = useState(false);
   const alloc = data?.preset_allocation ?? [];
   const earnings = data?.earnings_risk ?? [];
   const series = data?.series ?? {}, markers = data?.markers ?? {};
@@ -112,6 +117,13 @@ export default function Positions() {
   const nEff = hhi > 0 ? 1 / hhi : 0;
   const top3 = [...wTot].sort((a, b) => b - a).slice(0, 3).reduce((a, b) => a + b, 0);
   const nOut = rows.filter((r) => r.gap != null && Math.abs(r.gap) > BAND).length;
+  // Le tableau montre par défaut ce sur quoi on peut AGIR. Une quarantaine de résidus sous le
+  // plancher noyaient les quelques lignes qui comptent ; ils restent accessibles d'un clic, et
+  // le bloc au-dessus les résume déjà.
+  const rowsVisibles = montrerPetites
+    ? rows
+    : rows.filter((r) => Math.abs(Number(r.value) || 0) >= PLANCHER || r.wTarget != null);
+  const nMasquees = rows.length - rowsVisibles.length;
 
   const cols: Col[] = [
     { key: "symbol", label: "Actif", render: (v, r) => (
@@ -217,7 +229,15 @@ export default function Positions() {
       <section className="card p-4">
         <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
           <h2 className="text-sm uppercase tracking-wide text-muted">Réel vs cible — écart de réplication</h2>
-          <span className="text-[11px] text-muted2">réel = brokers · cible = preset (poids par poche)</span>
+          <div className="flex items-center gap-3">
+            {nMasquees > 0 && (
+              <button onClick={() => setMontrerPetites((v) => !v)}
+                className="text-[11px] px-2 py-0.5 rounded-md border border-border hover:bg-surfaceAlt transition-colors"
+                title={`Lignes sous ${PLANCHER} $ et hors cible — résidus d'allocations précédentes`}>
+                {montrerPetites ? "masquer" : "afficher"} {nMasquees} ligne{nMasquees > 1 ? "s" : ""} résiduelle{nMasquees > 1 ? "s" : ""}
+              </button>)}
+            <span className="text-[11px] text-muted2">réel = brokers · cible = preset (poids par poche)</span>
+          </div>
         </div>
         {rows.length === 0 ? (
           <p className="text-muted text-sm">Aucune position ni cible. Passe des ordres en paper : <code>make live-go</code>.</p>
@@ -227,7 +247,7 @@ export default function Positions() {
             const sym = tr?.querySelector("td")?.textContent?.trim().split(/\s/)[0];
             if (sym && series[sym]) setSel(sym);
           }}>
-            <SortableTable rows={rows} cols={cols} filterKeys={["symbol", "broker"]}
+            <SortableTable rows={rowsVisibles} cols={cols} filterKeys={["symbol", "broker"]}
               csvName="positions_reel_vs_cible.csv" initialSort={{ key: "value", dir: "desc" }} />
           </div>
         )}
