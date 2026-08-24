@@ -982,6 +982,48 @@ def _cfg_llm(request: Request):
                   model=h.get("x-llm-model", ""))
 
 
+@app.get("/api/profil")
+def profil(horizon_annees: float = 10.0, perte_max_toleree: float = 0.25,
+           part_du_patrimoine: float = 0.5, besoin_liquidite: float = 0.0,
+           revenus_stables: bool = True, experience_annees: float = 0.0) -> dict:
+    """Profil d'investisseur → CONTRAINTES chiffrées. Ne conseille pas, contraint.
+
+    Pur calcul : rien n'est stocké côté serveur. Les réponses de l'utilisateur restent chez lui
+    (le front les garde dans son navigateur) et ne servent qu'à borner SON propre outil.
+    """
+    from packages.profile.investor import (
+        Profil, allocation_strategique, budget_perte, risque_retenu,
+    )
+    from packages.profile.tilts import force_preuve, incliner, vues_depuis_regime
+
+    pr = Profil(horizon_annees=horizon_annees, perte_max_toleree=perte_max_toleree,
+                part_du_patrimoine=part_du_patrimoine, besoin_liquidite=besoin_liquidite,
+                revenus_stables=revenus_stables, experience_annees=experience_annees)
+    strat = allocation_strategique(pr)
+
+    # Inclinaison tactique : la DIRECTION vient du régime macro réel du snapshot, l'AMPLITUDE de
+    # la force de la preuve. Sharpe déflaté proche de zéro → inclinaison quasi nulle, et c'est
+    # exactement ce que le site publie par ailleurs.
+    tact: dict = {"applique": False, "note": "régime indisponible"}
+    try:
+        d = _snap()["dashboard"]
+        reg = d.get("regime", {})
+        hon = d.get("honesty", {})
+        pv = force_preuve(t_stat=hon.get("t_stat"), n_obs=hon.get("n_obs"),
+                          dsr=hon.get("dsr"))
+        tact = {**incliner(strat["poids"], vues_depuis_regime(reg.get("cycle"),
+                                                              reg.get("risk_mode")),
+                           pv["force"], pr),
+                "preuve": pv, "cycle": reg.get("cycle"), "risk_mode": reg.get("risk_mode")}
+    except Exception as e:  # noqa: BLE001 — le profil doit répondre même sans snapshot
+        tact = {"applique": False, "note": f"contexte macro indisponible ({str(e)[:60]})"}
+
+    return {"available": True, "risque": risque_retenu(pr), "budget_perte": budget_perte(pr),
+            "strategique": strat, "tactique": tact,
+            "avertissement": ("Ces chiffres CONTRAIGNENT votre outil ; ils ne constituent pas "
+                              "une recommandation personnalisée.")}
+
+
 @app.get("/api/ai/diagnostic")
 def ai_diagnostic(request: Request) -> dict:
     """Teste la connexion au fournisseur et DIT pourquoi elle échoue.

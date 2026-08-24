@@ -1,5 +1,40 @@
 # 04 — JOURNAL
 
+## Session 2026-08-22 (8) — Profil investisseur à l'écran, et l'arbitrage des inclinaisons tranché
+**Contexte.** Finir ce que je devais : l'écran de profil, et l'arbitrage sur les inclinaisons
+sectorielles.
+
+**L'arbitrage, tranché en faveur de la version bornée** (`packages/profile/tilts.py`).
+On pouvait incliner de deux façons : affirmative (« le cycle est en expansion, on surpondère la
+technologie de 15 points ») ou bornée (« le signal existe, sa force statistique est faible, on
+incline de 2 points »). La première est plus vendeuse. Elle est aussi **incompatible avec ce que
+ce site publie deux pages plus loin** : un Sharpe déflaté proche de zéro, c'est-à-dire aucun alpha
+directionnel démontré. Un outil qui affiche son absence de preuve puis incline fortement sur cette
+même absence se contredit — et c'est le lecteur attentif qui le remarquera en premier.
+
+**Règle retenue : l'amplitude suit la force de la PREUVE, pas celle du signal.** Un signal
+spectaculaire sans preuve statistique produit une inclinaison quasi nulle. C'est l'inverse de
+l'intuition, et c'est le point.
+
+La preuve combine trois exigences qui échouent différemment : `|t| > 2` (distinguable de zéro),
+un échantillon suffisant (un t de 3 sur 20 points est un accident, pas une découverte), et le
+**Sharpe déflaté** — le seul des trois qui punisse la recherche répétée jusqu'à trouver. Vérifié :
+`t = 4` sur 500 points donne une preuve de 1,00 ; le même signal avec un DSR de 0,01 tombe à 0,01.
+
+Trois garde-fous testés : les inclinaisons somment à zéro (on déplace du poids, on n'en crée
+pas) ; elles ne franchissent jamais les plafonds durs du profil ; et une inclinaison qui
+dégraderait le budget de perte est **annulée** — une vue tactique ne consomme pas la marge de
+sécurité fixée par le profil.
+
+**`/profil`** — six curseurs, et trois blocs de sortie : ce qui vous lie (capacité vs tolérance,
+et laquelle des deux), l'allocation de politique avec son budget vérifié, et l'inclinaison du
+moment avec son motif. Les réponses restent dans le navigateur ; l'API ne fait qu'un calcul sans
+rien conserver.
+
+Le vocabulaire est tenu partout : ces chiffres **contraignent** l'outil, ils ne recommandent pas.
+
+1089 tests passés, 8 ignorés (+15).
+
 ## Session 2026-08-22 (7) — Connecter son IA depuis le site, sans toucher au `.env`
 **Contexte.** « Est-il possible de mettre les clés API directement sur le site plutôt que de
 passer par le terminal et `.env` ? Ce serait plus simple. » Oui — et le choix de l'endroit où vit
