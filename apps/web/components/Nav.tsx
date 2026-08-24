@@ -26,6 +26,7 @@ const LINKS: [string, string][] = [
   ["/echecs", "Ce qui n'a pas marché"],
   ["/methode", "Notre méthode"],
   ["/glossaire", "Glossaire"],
+  ["/profil", "Mon profil"],
   ["/dashboard", "Résultats"],
   ["/portfolio", "Analyse du portefeuille"],
   ["/risk", "Risque"],
@@ -43,7 +44,7 @@ const LINKS: [string, string][] = [
 // remplace la navigation par tables : on clique un ticker, on voit tout l'objet.
 const GROUPS: [string, string[]][] = [
   ["Marché", ["/screener", "/universe", "/macro", "/themes", "/crypto"]],
-  ["Méthode & preuves", ["/methode", "/glossaire", "/echecs", "/journal"]],
+  ["Méthode & preuves", ["/methode", "/glossaire", "/echecs", "/journal", "/profil"]],
   ["Portefeuille", ["/dashboard", "/positions", "/risk"]],
 ];
 const LABEL: Record<string, string> = Object.fromEntries(LINKS);

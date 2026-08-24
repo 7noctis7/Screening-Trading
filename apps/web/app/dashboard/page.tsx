@@ -32,6 +32,80 @@ const PERIODS: [string, number][] = [["1A", 1], ["2A", 2], ["3A", 3], ["5A", 5],
 const dPts = (cur?: number, prev?: number | null) => (cur == null || prev == null) ? undefined : `${cur - prev >= 0 ? "+" : ""}${((cur - prev) * 100).toFixed(1)} pt`;
 const dAbs = (cur?: number, prev?: number | null) => (cur == null || prev == null) ? undefined : `${cur - prev >= 0 ? "+" : ""}${(cur - prev).toFixed(2)}`;
 
+
+// COMPOSITION — MODÈLE vs RÉEL.
+//
+// Le portefeuille réel avait un tableau complet ; le portefeuille du backtest était écrasé en
+// UNE LIGNE de texte (« QQQ (167%) · AMCR (437%) … »), alors que les mêmes champs existent des
+// deux côtés (qty, prix, valeur, P&L). Impossible de comparer ce qu'on ne peut pas aligner.
+//
+// On compare des POIDS, pas des montants : le backtest part de 10 000 $ et le compte réel en
+// vaut 100 000. Mettre « 2 400 $ » face à « 3 700 $ » ne dit rien ; « 24 % contre 3,7 % » dit
+// tout. L'écart de poids est la seule quantité qui répond à « est-ce que je réplique ? ».
+function CompositionModeleVsReel({ modele, reel }: { modele: any[]; reel: any[] }) {
+  const norm = (x: string) => (x || "").toUpperCase().replace(/[/\-]/g, "").replace(/(USDT|USDC|USD)$/, "");
+  const totM = modele.reduce((t, p) => t + (Number(p?.value) || 0), 0);
+  const totR = reel.reduce((t, p) => t + (Number(p?.market_value) || 0), 0);
+  const map = new Map<string, any>();
+  for (const p of modele) {
+    map.set(norm(p.symbol), { symbol: p.symbol, wM: totM > 0 ? (Number(p.value) || 0) / totM : null,
+      pnlM: p.pnl_pct ?? null, wR: null, pnlR: null });
+  }
+  for (const p of reel) {
+    const k = norm(p.symbol);
+    const w = totR > 0 ? (Number(p.market_value) || 0) / totR : null;
+    const e = map.get(k);
+    if (e) { e.wR = w; e.pnlR = p.pnl_pct ?? null; }
+    else map.set(k, { symbol: p.symbol, wM: null, pnlM: null, wR: w, pnlR: p.pnl_pct ?? null });
+  }
+  const rows = [...map.values()].sort((a, b) => (b.wM ?? b.wR ?? 0) - (a.wM ?? a.wR ?? 0));
+  if (!rows.length) return null;
+  const pc = (x: number | null) => (x == null ? "—" : `${(x * 100).toFixed(1)}%`);
+  const col = (x: number | null) => (x == null ? "#9aa1ad" : x >= 0 ? "#22c55e" : "#ef4444");
+  return (
+    <div className="mt-4 pt-3 border-t border-border">
+      <h3 className="text-sm uppercase tracking-wide text-muted mb-1">Composition — modèle vs réel</h3>
+      <p className="text-muted2 text-xs mb-3">
+        Comparaison en <b>poids</b>, pas en montants : le backtest part de 10 000 $ et le compte réel
+        en vaut dix fois plus. L'écart de poids est la seule quantité qui répond à
+        « est-ce que je réplique le modèle ? ». Une ligne présente d'un seul côté est un écart de
+        réplication, pas une erreur.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-muted text-xs"><tr>
+            <th className="text-left font-normal">Actif</th>
+            <th className="text-right font-normal">Poids modèle</th>
+            <th className="text-right font-normal">Poids réel</th>
+            <th className="text-right font-normal">Écart</th>
+            <th className="text-right font-normal">P&amp;L modèle</th>
+            <th className="text-right font-normal">P&amp;L réel</th>
+          </tr></thead>
+          <tbody className="mono">
+            {rows.map((r) => {
+              const ecart = r.wM != null && r.wR != null ? r.wR - r.wM : null;
+              return (
+                <tr key={r.symbol} className="border-t border-border">
+                  <td className="py-1.5">{r.symbol}
+                    {r.wM == null && <span className="ml-1.5 text-[10px] font-sans text-muted2">réel seul</span>}
+                    {r.wR == null && <span className="ml-1.5 text-[10px] font-sans text-muted2">modèle seul</span>}
+                  </td>
+                  <td className="text-right">{pc(r.wM)}</td>
+                  <td className="text-right">{pc(r.wR)}</td>
+                  <td className="text-right" style={{ color: ecart == null ? "#9aa1ad" : Math.abs(ecart) > 0.03 ? "#f59e0b" : "var(--muted)" }}>
+                    {ecart == null ? "—" : `${ecart >= 0 ? "+" : ""}${(ecart * 100).toFixed(1)} pt`}
+                  </td>
+                  <td className="text-right" style={{ color: col(r.pnlM) }}>{pc(r.pnlM)}</td>
+                  <td className="text-right" style={{ color: col(r.pnlR) }}>{pc(r.pnlR)}</td>
+                </tr>);
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const { data: d } = useDashboard();
   const { data: s } = useScreener();
@@ -323,7 +397,7 @@ export default function Dashboard() {
                   <td className="pl-3 text-muted font-sans text-xs">{t.reason}</td>
                 </tr>))}</tbody>
             </table>
-            <p className="text-muted2 text-xs mt-2">Positions ouvertes : {(ledger.open_positions ?? []).map((p: any) => `${p.symbol} (${(p.pnl_pct != null ? (p.pnl_pct * 100).toFixed(0) : "—")}%)`).join(" · ")}</p>
+            <CompositionModeleVsReel modele={ledger.open_positions ?? []} reel={d.real_positions ?? []} />
           </section>
         );
       })()}

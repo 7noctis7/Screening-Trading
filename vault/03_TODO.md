@@ -3,6 +3,57 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+## 🔴 P0 — DualMarketScreening : deux défauts qui invalident des verdicts (2026-08-22)
+Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
+- [ ] **Correction pour tests multiples (Benjamini-Hochberg)** sur le criblage de paires.
+      Cribler N paires à `p < 0,05` produit 5 % de faux positifs PAR CONSTRUCTION : sur 100
+      paires, ~5 verdicts « tradable » qui ne sont que du bruit. BH plutôt que Bonferroni (sur
+      des paires corrélées, Bonferroni ne laisse rien passer). **Publier le nombre de paires
+      testées avec le verdict** — un « tradable » issu d'un criblage de 500 ne vaut pas celui
+      issu de 5.
+- [ ] **Coût dépendant de la DURÉE dans `optimal_band`** : `c(u) = c_fixe + c_portage × E[T(u)]`.
+      `E[T(u)]` est déjà calculé par `ou_mfpt`. Sur 2-8 jours en perpétuels, le funding domine et
+      change de signe — un spread brut positif peut être négatif net de portage, et le modèle
+      actuel ne peut pas le voir puisque le coût ne dépend pas du temps.
+- [ ] **CCXT** — prérequis du point précédent : sans funding rates ni open interest, le
+      correctif n'a pas de données.
+- [ ] P1 — **Calibration Kalman sans look-ahead** : `kalman_calibrate` cherche (δ, r) par MLE sur
+      TOUTE la série. Le z-score est sans look-ahead *étant donné* (δ, r), mais (δ, r) a vu le
+      futur. Calibrer sur une fenêtre d'apprentissage seule.
+
+## 🟢 Écarté volontairement (avec justification)
+- **FinRL / RL profond** : multiplie les degrés de liberté là où le problème est le manque de
+  preuve (DSR ≈ 0). Le RL brille quand les données sont abondantes et le signal net.
+- **QRL** : aucun apport identifiable. Complexité visible, gain non mesurable.
+- **TA-Lib** : doublon de `quant/metrics.py`, qui est en stdlib pure — qualité qu'on perdrait.
+- **WebSocket / Redis Pub-Sub** : le système rééquilibre une fois par jour. Une architecture
+  événementielle ajouterait un mode de panne permanent pour une information inutilisée.
+
+## 🟡 Screening-Trading — reste ouvert (2026-08-22)
+- [ ] **Câbler `impact.py` / `almgren_chriss.py` à l'exécution réelle** — écrits et testés, non
+      branchés : les coûts d'impact sont ignorés au dimensionnement.
+- [ ] **Décider du débruitage RMT sur données réelles** (k médian). Si k < 2, l'ERC répartit du
+      risque estimé sur du bruit — le défaut devrait devenir l'inverse-vol.
+- [ ] **Capitaux employés moyens** : le code sait moyenner, mais les fournisseurs ne remontent pas
+      la période précédente. Câbler l'historique trimestriel pour que le correctif prenne effet.
+- [ ] **Séries macro à ajouter** (identifiants à vérifier depuis le Mac, FRED joignable) :
+      conditions financières NFCI, anticipations d'inflation 5a5a, dollar index, inscriptions
+      hebdomadaires au chômage (seul indicateur haute fréquence), spread investment grade.
+- [ ] **Accessibilité** : `/ml`, `/conviction`, `/portfolio` gardent leur vocabulaire technique.
+- [ ] **Unifier les fenêtres du dashboard** : Sharpe 2,43 en haut, 1,07 dans le bloc honnêteté,
+      0,98 pour le preset pur — trois fenêtres, aucune ne le dit dans les tuiles héros.
+- [ ] **Bloc décision sur le screener** : il classe mais ne conclut pas (la fiche, elle, conclut).
+- [ ] **Registre d'essais complet** sur `/methode` : publier ce qui a marché ET ce qui n'a pas —
+      un lecteur ne peut pas juger un taux de réussite s'il ne voit qu'un côté.
+
+## 🔵 Décisions en attente de l'utilisateur
+- [ ] **Bot Discord** (projet distinct) : vendre des signaux à des abonnés payants est une
+      activité réglementée (conseil en investissement, agrément AMF). Décision à prendre AVANT
+      de développer, pas après.
+- [ ] **Nouvelles classes d'actifs** : le forex est en base mais marqué non négociable (aucun
+      courtier branché) ; les dérivés demandent Grecs, surface de volatilité et échéances — une
+      modélisation que l'architecture actuelle ne porte pas.
+
 ## 🎯 ALPHA — pipeline fondamental + labo (2026-08-20)
 - [x] **Pipeline 4 couches livré** (`screening/alpha_pipeline.py`) : qualité → DCF avec bande de
       sensibilité → momentum → dimensionnement par budget d'ES. Entonnoir publié.

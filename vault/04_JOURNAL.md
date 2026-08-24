@@ -1,5 +1,187 @@
 # 04 — JOURNAL
 
+## Session 2026-08-22 (9) — Audit DualMarketScreening, sur le vrai code
+**Contexte.** Le système d'arbitrage statistique décrit dans le brief n'était pas dans ce dépôt.
+Il est dans `DualMarketScreening`, cloné et lu.
+
+**Ce qui est déjà juste, et qui est rare.** Un audit qui ne trouve que des problèmes n'a pas
+regardé. Quatre choses sont correctes, dont trois sont ratées par la plupart des implémentations
+publiées : les **valeurs critiques Engle-Granger** (−3,90/−3,34/−3,04) au lieu des ADF standard,
+avec le commentaire qui explique pourquoi ; la **correction de Kendall** sur le biais AR(1) ; le
+**z-score de Kalman sans look-ahead** ; et `optimal_band` qui maximise un **taux** de profit via
+le temps moyen de premier passage, pas un profit par trade — « 2σ par convention » est un choix
+non argumenté, celui-ci ne l'est pas.
+
+**P0 — aucune correction pour tests multiples.** Zéro occurrence de Bonferroni ou FDR. Cribler N
+paires à p < 0,05 produit 5 % de faux positifs PAR CONSTRUCTION : sur 100 paires, ~5 verdicts
+« tradable » qui ne sont que du bruit. L'ironie est instructive — le code corrige scrupuleusement
+un biais d'un facteur ~2 (EG vs ADF) et laisse ouvert un biais d'un facteur ~5. Benjamini-Hochberg
+plutôt que Bonferroni : sur des paires corrélées entre elles, Bonferroni ne laisse rien passer.
+
+**P0 — le coût est un scalaire, le portage dépend du TEMPS.** `optimal_band` reçoit un coût
+d'aller-retour fixe. Sur 2 à 8 jours en perpétuels, ce n'est pas la friction d'exécution qui
+domine, c'est le **funding** — variable, et de signe changeant. Un spread brut positif peut être
+négatif net de portage, et le modèle ne peut pas le voir puisque le coût ne dépend pas de la
+durée. Le correctif tient en un terme : `c(u) = c_fixe + c_portage × E[T(u)]`, et `E[T(u)]` est
+**déjà calculé** à la ligne suivante.
+
+**P1 — la calibration du Kalman voit tout l'échantillon.** `kalman_calibrate` cherche (δ, r) par
+maximum de vraisemblance sur toute la série. Le z-score est sans look-ahead *étant donné* (δ, r),
+mais (δ, r) a vu le futur. Subtil, ne casse rien, gonfle la performance mesurée.
+
+**Écarté avec justification** : FinRL et QRL (multiplient les degrés de liberté là où le problème
+est le manque de preuve), TA-Lib (doublon d'un module stdlib pur). **Recommandé** : CCXT, qui est
+le prérequis du correctif P0 — sans funding rates ni open interest, il n'a pas de données.
+
+**Vault mis à jour** : note 22, index, et TODO refondu — P0 DualMarket, reste ouvert
+Screening-Trading, écarté-avec-justification, et décisions en attente.
+
+1089 tests passés, 8 ignorés.
+
+## Session 2026-08-22 (8) — Profil investisseur à l'écran, et l'arbitrage des inclinaisons tranché
+**Contexte.** Finir ce que je devais : l'écran de profil, et l'arbitrage sur les inclinaisons
+sectorielles.
+
+**L'arbitrage, tranché en faveur de la version bornée** (`packages/profile/tilts.py`).
+On pouvait incliner de deux façons : affirmative (« le cycle est en expansion, on surpondère la
+technologie de 15 points ») ou bornée (« le signal existe, sa force statistique est faible, on
+incline de 2 points »). La première est plus vendeuse. Elle est aussi **incompatible avec ce que
+ce site publie deux pages plus loin** : un Sharpe déflaté proche de zéro, c'est-à-dire aucun alpha
+directionnel démontré. Un outil qui affiche son absence de preuve puis incline fortement sur cette
+même absence se contredit — et c'est le lecteur attentif qui le remarquera en premier.
+
+**Règle retenue : l'amplitude suit la force de la PREUVE, pas celle du signal.** Un signal
+spectaculaire sans preuve statistique produit une inclinaison quasi nulle. C'est l'inverse de
+l'intuition, et c'est le point.
+
+La preuve combine trois exigences qui échouent différemment : `|t| > 2` (distinguable de zéro),
+un échantillon suffisant (un t de 3 sur 20 points est un accident, pas une découverte), et le
+**Sharpe déflaté** — le seul des trois qui punisse la recherche répétée jusqu'à trouver. Vérifié :
+`t = 4` sur 500 points donne une preuve de 1,00 ; le même signal avec un DSR de 0,01 tombe à 0,01.
+
+Trois garde-fous testés : les inclinaisons somment à zéro (on déplace du poids, on n'en crée
+pas) ; elles ne franchissent jamais les plafonds durs du profil ; et une inclinaison qui
+dégraderait le budget de perte est **annulée** — une vue tactique ne consomme pas la marge de
+sécurité fixée par le profil.
+
+**`/profil`** — six curseurs, et trois blocs de sortie : ce qui vous lie (capacité vs tolérance,
+et laquelle des deux), l'allocation de politique avec son budget vérifié, et l'inclinaison du
+moment avec son motif. Les réponses restent dans le navigateur ; l'API ne fait qu'un calcul sans
+rien conserver.
+
+Le vocabulaire est tenu partout : ces chiffres **contraignent** l'outil, ils ne recommandent pas.
+
+1089 tests passés, 8 ignorés (+15).
+
+## Session 2026-08-22 (7) — Connecter son IA depuis le site, sans toucher au `.env`
+**Contexte.** « Est-il possible de mettre les clés API directement sur le site plutôt que de
+passer par le terminal et `.env` ? Ce serait plus simple. » Oui — et le choix de l'endroit où vit
+la clé est la seule vraie question.
+
+**Décision : la clé reste dans le NAVIGATEUR.** Elle voyage par en-tête (`X-LLM-Key`) à chaque
+requête et s'arrête là : ni écrite sur disque, ni journalisée, ni renvoyée dans une réponse.
+
+Le raisonnement tient en une phrase : **une clé qu'on n'écrit jamais ne peut pas être commitée
+par erreur.** Le dépôt est public, gitleaks tourne en CI — l'écrire côté serveur aurait ajouté un
+chemin de fuite pour gagner de la persistance dont personne n'a besoin.
+
+Ce que ce n'est PAS : une protection contre un script malveillant sur la page — `localStorage`
+lui serait lisible. Sur une instance auto-hébergée mono-utilisateur, sans objet ; sur une instance
+exposée à des tiers, à revoir. C'est écrit dans le module plutôt que sous-entendu.
+
+**`packages/llm/client.py`** : config résolue à CHAQUE appel (`Config.resolue()`), l'appelant
+primant sur l'environnement, les champs vides retombant dessus. Test figé : la config n'est jamais
+conservée d'un appel au suivant — une clé mémorisée serait une clé qui fuit d'un utilisateur à
+l'autre.
+
+**`/api/ai/diagnostic`** — le point qui fait toute l'ergonomie. Un « indisponible » muet laisse
+l'utilisateur deviner s'il s'est trompé d'URL, de clé, ou si son modèle local n'est pas lancé.
+Le diagnostic distingue : clé refusée (401/403), adresse introuvable (404), aucun serveur. Il ne
+renvoie jamais la clé.
+
+**Panneau `ReglagesIA`** : fournisseur pré-rempli (local, Gemini, OpenAI, Anthropic, Mistral),
+bouton « Tester la connexion » qui liste les modèles disponibles, « Oublier ma clé », et clé
+masquée à l'affichage. Le refus de stockage local (navigation privée) est annoncé au lieu
+d'échouer en silence.
+
+1074 tests passés, 8 ignorés (+4).
+
+## Session 2026-08-22 (6) — Auto-hébergement : profil d'investisseur, clé IA, garde-fous
+**Contexte.** Faire du terminal un outil que chacun héberge chez soi, avec SES clés — IA et
+courtiers — plutôt qu'un service qui détiendrait les clés d'autrui.
+
+**`packages/profile/investor.py`.** Traduit ce que l'utilisateur déclare en CONTRAINTES sur son
+propre outil. Le mot compte : un conseil dit « achetez ceci », une contrainte dit « vous avez
+déclaré ne pas supporter plus de 20 % de baisse, l'outil s'y tient ». C'est aussi la seule
+formulation qui ne bascule pas dans le conseil en investissement réglementé.
+
+Trois règles, contre trois erreurs répandues :
+1. **Capacité ≠ tolérance, et c'est la plus petite qui lie.** La capacité est objective
+   (horizon, liquidité, stabilité des revenus) ; la tolérance est déclarative. Les fondre en un
+   « score de risque » autorise un investisseur audacieux à deux ans d'horizon à prendre un
+   risque que son horizon ne permet pas. Test figé : horizon 2 ans + tolérance 50 % → c'est la
+   capacité qui lie.
+2. **La sortie est un budget de perte, pas une étiquette.** « Profil dynamique » n'est pas
+   vérifiable ; « baisse maximale 25 % » l'est, et alimente `vol_target_from_drawdown` déjà
+   présent dans le dépôt.
+3. **L'allocation est VÉRIFIÉE contre son budget**, pas seulement promise. C'est ce que les
+   questionnaires oublient : une allocation 100 % actions ne peut pas promettre −15 %, les
+   actions développées ont fait −55 % en 2008. Ici l'allocation est désensibilisée vers le cash
+   jusqu'à tenir dans le budget, et l'écart est déclaré.
+
+Crédit de diversification volontairement **faible** (15 %) : en crise les corrélations convergent
+vers 1 — actions, émergentes, crédit et or ont chuté ensemble en 2008. Accorder un large crédit
+à un budget de perte, c'est se tromper au moment précis où il compte. Plafonds DURS sur crypto
+(20 %), émergentes (30 %), or (20 %) : un risque de ruine ne se compense pas.
+
+**Clé IA — un défaut bloquant trouvé.** `packages/llm/client.py` n'envoyait **aucun en-tête
+`Authorization`**. Le client ne savait donc parler qu'à un modèle local : brancher OpenAI,
+Anthropic, Mistral ou Gemini échouait en 401 sans explication. `LLM_API_KEY` ajoutée, posée aussi
+sur la requête de découverte `/models` — sans quoi la détection du modèle échouait avant le
+premier appel. Clé vide = pas de clé (un modèle local n'en réclame pas).
+
+Pour Gemini, c'est la couche **compatible OpenAI** de Google qu'il faut, pas l'URL native
+`/v1beta/models` — celle-ci parle un autre protocole et renverrait une erreur de format.
+
+**`.env.example`** complété : 89 → 144 lignes. Courtiers, place crypto, plancher de ligne,
+branche suivie, base de prix, et le rappel que les ordres réels exigent `--live --yes`.
+
+1070 tests passés, 8 ignorés (+20).
+
+## Session 2026-08-22 (5) — Trois défauts remontés par une capture d'écran
+**Contexte.** Six questions de l'utilisateur sur macro / accueil / crypto / méthode / dashboard /
+positions. Trois d'entre elles cachaient un défaut vérifiable.
+
+**1. Mon correctif de la veille était INCOMPLET.** La colonne « Fenêtre » du tableau comparatif
+affichait `—` pour trois lignes sur quatre. J'avais ajouté `n` dans `_curve_stats` côté API, mais
+le dashboard recalcule ses statistiques CÔTÉ CLIENT via `lib/metrics::statsFrom`, qui ne le
+renvoyait pas. La colonne censée empêcher de comparer dix ans à deux mois ne servait donc qu'à
+une seule ligne — et faisait passer le portefeuille réel pour l'exception. Corrigé (`n: r.length`).
+
+**2. Une série macro morte se lisait comme une série vivante.** Chômage zone euro : **6,7 %
+daté de janvier 2023**, au milieu de chiffres du mois. La série OCDE `LRHUTTTTEZM156S` a cessé
+d'être publiée ; FRED sert encore sa dernière valeur et le code la prenait sans broncher. La date
+était affichée, mais qui parcourt une grille de tuiles lit le chiffre, pas la date.
+
+Détecteur ajouté, **auto-calibré** : la cadence est déduite de l'espacement RÉEL entre les
+dernières observations, pas d'une table de fréquences à maintenir. Au-delà de trois fois cette
+cadence, la série est déclarée arrêtée et signalée à l'écran. Une série mensuelle publiée avec un
+mois de retard reste normale ; une série quotidienne muette depuis vingt jours ne l'est pas.
+
+Corrigé au passage : une série qui ne répondait pas était **silencieusement ignorée**. Un
+identifiant erroné ou une série retirée disparaissait du tableau sans laisser de trace. Elles sont
+désormais listées (`manquantes`).
+
+**3. Les « positions fantômes » n'en étaient pas.** PATH, THC, VLO, NEM… affichaient `réel 0,0 %`
+avec une cible et un écart négatif. Ce ne sont pas des lignes mortes : ce sont les **cibles du
+modèle non encore achetées** — l'inverse exact de ce que l'affichage laissait croire. Badge
+« à acheter » ajouté.
+
+**Un test a eu raison contre moi** : une liste de dates vide passait la conversion sans lever,
+puis plantait sur l'index `[0]`.
+
+1050 tests passés, 8 ignorés (+7).
+
 ## Session 2026-08-22 (4) — L'accueil montre l'état du système, pas une brochure
 **Contexte.** « Remets à jour la page d'accueil selon les best practices du Board. »
 

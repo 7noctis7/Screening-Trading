@@ -17,6 +17,11 @@ export function statsFrom(eq: Point[]) {
   const total = v[v.length - 1] / v[0] - 1;
   const cagr = r.length > 1 ? Math.pow(1 + total, 252 / r.length) - 1 : total;
   return {
+    // `n` = nombre de rendements, donc la FENÊTRE réelle de la ligne. Sans lui, la colonne
+    // « Fenêtre » du tableau comparatif affichait « — » pour toute série recalculée côté client
+    // (backtest et benchmarks) : seul le portefeuille réel, calculé côté API, portait sa durée.
+    // La colonne censée empêcher de comparer dix ans à deux mois ne servait donc qu'à une ligne.
+    n: r.length,
     total_return: total, cagr,
     sharpe: sd > 0 ? (mean / sd) * Math.sqrt(252) : 0,
     sortino: dsd > 0 ? (mean / dsd) * Math.sqrt(252) : 0,

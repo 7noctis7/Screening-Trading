@@ -23,6 +23,7 @@ type Row = {
   symbol: string; broker: string; wReal: number | null; wTarget: number | null;
   gap: number | null; qty: number | null; value: number | null;
   pnl: number | null; pnlPct: number | null; earningsDays: number | null; hasChart: boolean;
+  aAcheter?: boolean;      // cible du modèle non encore détenue (≠ position morte)
 };
 
 // Fusionne positions réelles et cible preset par actif (poids par POCHE : chaque poids est
@@ -52,7 +53,11 @@ function buildRows(pos: any[], alloc: any[], accounts: any, earnings: any[]): Ro
     const r = bySym.get(k) ?? bySym.get(norm(a.symbol));
     if (r) r.wTarget = a.weight ?? null;
     else bySym.set(k, {
+      // CIBLE SANS POSITION : le modèle veut cette ligne, elle n'est pas encore achetée.
+      // Affichée sans marqueur, elle se lisait comme une position morte à 0 % — alors que c'est
+      // exactement l'inverse : un ordre d'achat à venir.
       symbol: a.symbol, broker: a.broker ?? "—", wReal: 0, wTarget: a.weight ?? null,
+      aAcheter: true,
       gap: null, qty: null, value: null, pnl: null, pnlPct: null,
       earningsDays: eDays.get(norm(a.symbol)) ?? null, hasChart: false,
     });
@@ -129,8 +134,14 @@ export default function Positions() {
 
   const cols: Col[] = [
     { key: "symbol", label: "Actif", render: (v, r) => (
-        <span className="inline-flex items-center gap-1.5">
+        <span className="inline-flex items-center gap-1.5 flex-wrap">
           <span className={r.hasChart ? "text-accent border-b border-dotted border-border" : ""}>{v}</span>
+          {r.aAcheter && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded font-sans border border-border"
+              style={{ color: "var(--accent)" }}
+              title="Cible du modèle non encore détenue — le prochain rééquilibrage l'achètera.">
+              à acheter
+            </span>)}
           {r.earningsDays != null && (
             <span className="text-[10px] px-1.5 py-0.5 rounded font-sans"
               style={{ background: "color-mix(in srgb, #f59e0b 18%, transparent)", color: "#f59e0b" }}

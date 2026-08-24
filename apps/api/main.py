@@ -960,16 +960,88 @@ def note_file(date: str, symbol: str, ext: str = "html") -> Any:
 
 
 @app.get("/api/ai/status")
-def ai_status() -> dict:
+def ai_status(request: Request) -> dict:
     """Disponibilité d'un LLM local (LM Studio / Ollama)."""
-    from packages.llm import available
-    return {"available": available()}
+    from packages.llm.client import available
+    return {"available": available(_cfg_llm(request))}
+
+
+def _cfg_llm(request: Request):
+    """Config IA transmise par l'appelant, via en-têtes. Priorité sur l'environnement.
+
+    La clé traverse la requête et s'arrête là : elle n'est ni écrite sur disque, ni journalisée,
+    ni renvoyée dans une réponse. Une clé qu'on n'écrit jamais ne peut pas être commitée par
+    erreur — c'est la raison du choix, sur un dépôt public.
+
+    L'API n'écoute que localhost par défaut (QUANT_CORS_ORIGINS) : sur une instance
+    auto-hébergée, l'en-tête ne quitte pas la machine.
+    """
+    from packages.llm.client import Config
+    h = request.headers
+    return Config(base=h.get("x-llm-base", ""), key=h.get("x-llm-key", ""),
+                  model=h.get("x-llm-model", ""))
+
+
+@app.get("/api/profil")
+def profil(horizon_annees: float = 10.0, perte_max_toleree: float = 0.25,
+           part_du_patrimoine: float = 0.5, besoin_liquidite: float = 0.0,
+           revenus_stables: bool = True, experience_annees: float = 0.0) -> dict:
+    """Profil d'investisseur → CONTRAINTES chiffrées. Ne conseille pas, contraint.
+
+    Pur calcul : rien n'est stocké côté serveur. Les réponses de l'utilisateur restent chez lui
+    (le front les garde dans son navigateur) et ne servent qu'à borner SON propre outil.
+    """
+    from packages.profile.investor import (
+        Profil, allocation_strategique, budget_perte, risque_retenu,
+    )
+    from packages.profile.tilts import force_preuve, incliner, vues_depuis_regime
+
+    pr = Profil(horizon_annees=horizon_annees, perte_max_toleree=perte_max_toleree,
+                part_du_patrimoine=part_du_patrimoine, besoin_liquidite=besoin_liquidite,
+                revenus_stables=revenus_stables, experience_annees=experience_annees)
+    strat = allocation_strategique(pr)
+
+    # Inclinaison tactique : la DIRECTION vient du régime macro réel du snapshot, l'AMPLITUDE de
+    # la force de la preuve. Sharpe déflaté proche de zéro → inclinaison quasi nulle, et c'est
+    # exactement ce que le site publie par ailleurs.
+    tact: dict = {"applique": False, "note": "régime indisponible"}
+    try:
+        d = _snap()["dashboard"]
+        reg = d.get("regime", {})
+        hon = d.get("honesty", {})
+        pv = force_preuve(t_stat=hon.get("t_stat"), n_obs=hon.get("n_obs"),
+                          dsr=hon.get("dsr"))
+        tact = {**incliner(strat["poids"], vues_depuis_regime(reg.get("cycle"),
+                                                              reg.get("risk_mode")),
+                           pv["force"], pr),
+                "preuve": pv, "cycle": reg.get("cycle"), "risk_mode": reg.get("risk_mode")}
+    except Exception as e:  # noqa: BLE001 — le profil doit répondre même sans snapshot
+        tact = {"applique": False, "note": f"contexte macro indisponible ({str(e)[:60]})"}
+
+    return {"available": True, "risque": risque_retenu(pr), "budget_perte": budget_perte(pr),
+            "strategique": strat, "tactique": tact,
+            "avertissement": ("Ces chiffres CONTRAIGNENT votre outil ; ils ne constituent pas "
+                              "une recommandation personnalisée.")}
+
+
+@app.get("/api/ai/diagnostic")
+def ai_diagnostic(request: Request) -> dict:
+    """Teste la connexion au fournisseur et DIT pourquoi elle échoue.
+
+    Un « indisponible » sans motif laisse l'utilisateur deviner s'il s'est trompé d'URL, de clé,
+    ou si son modèle local n'est pas lancé. La réponse ne contient jamais la clé.
+    """
+    from packages.llm.client import diagnostic
+    return diagnostic(_cfg_llm(request))
 
 
 @app.get("/api/ai/commentary")
-def ai_commentary() -> dict:
-    """Commentaire IA en langage naturel sur l'état du portefeuille (LLM local uniquement)."""
-    from packages.llm import complete
+def ai_commentary(request: Request) -> dict:
+    """Commentaire IA en langage naturel sur l'état du portefeuille.
+
+    Le fournisseur vient de l'appelant (en-têtes) ou de l'environnement — modèle local par défaut.
+    """
+    from packages.llm.client import complete
     s = _snap()
     d, p = s["dashboard"], s["portfolio"]
     rm = p.get("analysis", {}).get("risk", {})
@@ -987,6 +1059,6 @@ def ai_commentary() -> dict:
     system = ("Tu es un analyste quant senior. Réponds DIRECTEMENT en français, 4-6 phrases "
               "claires et actionnables, sans afficher ton raisonnement. Commente l'état du "
               "portefeuille (risque, régime, idées). Ton factuel et prudent, pas de conseil personnalisé.")
-    res = complete(facts, system=system, max_tokens=1100)
+    res = complete(facts, system=system, max_tokens=1100, cfg=_cfg_llm(request))
     return {"available": res.get("available", False), "text": res.get("text", ""),
             "reason": res.get("reason", "")}
