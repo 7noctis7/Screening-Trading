@@ -1,5 +1,43 @@
 # 04 — JOURNAL
 
+## Session 2026-08-22 (9) — Audit DualMarketScreening, sur le vrai code
+**Contexte.** Le système d'arbitrage statistique décrit dans le brief n'était pas dans ce dépôt.
+Il est dans `DualMarketScreening`, cloné et lu.
+
+**Ce qui est déjà juste, et qui est rare.** Un audit qui ne trouve que des problèmes n'a pas
+regardé. Quatre choses sont correctes, dont trois sont ratées par la plupart des implémentations
+publiées : les **valeurs critiques Engle-Granger** (−3,90/−3,34/−3,04) au lieu des ADF standard,
+avec le commentaire qui explique pourquoi ; la **correction de Kendall** sur le biais AR(1) ; le
+**z-score de Kalman sans look-ahead** ; et `optimal_band` qui maximise un **taux** de profit via
+le temps moyen de premier passage, pas un profit par trade — « 2σ par convention » est un choix
+non argumenté, celui-ci ne l'est pas.
+
+**P0 — aucune correction pour tests multiples.** Zéro occurrence de Bonferroni ou FDR. Cribler N
+paires à p < 0,05 produit 5 % de faux positifs PAR CONSTRUCTION : sur 100 paires, ~5 verdicts
+« tradable » qui ne sont que du bruit. L'ironie est instructive — le code corrige scrupuleusement
+un biais d'un facteur ~2 (EG vs ADF) et laisse ouvert un biais d'un facteur ~5. Benjamini-Hochberg
+plutôt que Bonferroni : sur des paires corrélées entre elles, Bonferroni ne laisse rien passer.
+
+**P0 — le coût est un scalaire, le portage dépend du TEMPS.** `optimal_band` reçoit un coût
+d'aller-retour fixe. Sur 2 à 8 jours en perpétuels, ce n'est pas la friction d'exécution qui
+domine, c'est le **funding** — variable, et de signe changeant. Un spread brut positif peut être
+négatif net de portage, et le modèle ne peut pas le voir puisque le coût ne dépend pas de la
+durée. Le correctif tient en un terme : `c(u) = c_fixe + c_portage × E[T(u)]`, et `E[T(u)]` est
+**déjà calculé** à la ligne suivante.
+
+**P1 — la calibration du Kalman voit tout l'échantillon.** `kalman_calibrate` cherche (δ, r) par
+maximum de vraisemblance sur toute la série. Le z-score est sans look-ahead *étant donné* (δ, r),
+mais (δ, r) a vu le futur. Subtil, ne casse rien, gonfle la performance mesurée.
+
+**Écarté avec justification** : FinRL et QRL (multiplient les degrés de liberté là où le problème
+est le manque de preuve), TA-Lib (doublon d'un module stdlib pur). **Recommandé** : CCXT, qui est
+le prérequis du correctif P0 — sans funding rates ni open interest, il n'a pas de données.
+
+**Vault mis à jour** : note 22, index, et TODO refondu — P0 DualMarket, reste ouvert
+Screening-Trading, écarté-avec-justification, et décisions en attente.
+
+1089 tests passés, 8 ignorés.
+
 ## Session 2026-08-22 (8) — Profil investisseur à l'écran, et l'arbitrage des inclinaisons tranché
 **Contexte.** Finir ce que je devais : l'écran de profil, et l'arbitrage sur les inclinaisons
 sectorielles.

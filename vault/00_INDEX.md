@@ -14,6 +14,11 @@
 - 🏛️ [[17_AUDIT_INSTITUTIONNEL]] — audit 5 axes (PIT · loi fondamentale · queues/régimes · frictions · exécution) + `17_UPGRADE/`
 - 🔬 [[18_MODULES_AVANCES]] — 7 modules (RMT · CPCV · Almgren-Chriss · portage · quantamental · alt-data) + `18_UPGRADE/`
 - 🏦 [[19_AUDIT_BOARD_4_PILIERS]] — quant · architecture (calendrier, async, netting) · cockpit · business
+- 🧭 [[20_COMMENT_ILS_FONT]] — comment les institutions produisent réellement de l'alpha
+- ⚖️ [[21_AUDIT_BOARD_ELITE]] — 4 biais de la chaîne de valorisation (bilan de clôture, croissance
+  perpétuelle, impôt, splits) — **corrigés**, cf. section 5 de la note
+- 🔀 [[22_AUDIT_DUALMARKET]] — arbitrage statistique : tests multiples non corrigés (P0), coût
+  indépendant de la durée (P0), calibration Kalman en look-ahead (P1)
 
 ## Mission
 Screening & trading systématique multi-actifs (actions, ETF, forex, crypto, commodities, indices),
