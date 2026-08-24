@@ -960,16 +960,46 @@ def note_file(date: str, symbol: str, ext: str = "html") -> Any:
 
 
 @app.get("/api/ai/status")
-def ai_status() -> dict:
+def ai_status(request: Request) -> dict:
     """Disponibilité d'un LLM local (LM Studio / Ollama)."""
-    from packages.llm import available
-    return {"available": available()}
+    from packages.llm.client import available
+    return {"available": available(_cfg_llm(request))}
+
+
+def _cfg_llm(request: Request):
+    """Config IA transmise par l'appelant, via en-têtes. Priorité sur l'environnement.
+
+    La clé traverse la requête et s'arrête là : elle n'est ni écrite sur disque, ni journalisée,
+    ni renvoyée dans une réponse. Une clé qu'on n'écrit jamais ne peut pas être commitée par
+    erreur — c'est la raison du choix, sur un dépôt public.
+
+    L'API n'écoute que localhost par défaut (QUANT_CORS_ORIGINS) : sur une instance
+    auto-hébergée, l'en-tête ne quitte pas la machine.
+    """
+    from packages.llm.client import Config
+    h = request.headers
+    return Config(base=h.get("x-llm-base", ""), key=h.get("x-llm-key", ""),
+                  model=h.get("x-llm-model", ""))
+
+
+@app.get("/api/ai/diagnostic")
+def ai_diagnostic(request: Request) -> dict:
+    """Teste la connexion au fournisseur et DIT pourquoi elle échoue.
+
+    Un « indisponible » sans motif laisse l'utilisateur deviner s'il s'est trompé d'URL, de clé,
+    ou si son modèle local n'est pas lancé. La réponse ne contient jamais la clé.
+    """
+    from packages.llm.client import diagnostic
+    return diagnostic(_cfg_llm(request))
 
 
 @app.get("/api/ai/commentary")
-def ai_commentary() -> dict:
-    """Commentaire IA en langage naturel sur l'état du portefeuille (LLM local uniquement)."""
-    from packages.llm import complete
+def ai_commentary(request: Request) -> dict:
+    """Commentaire IA en langage naturel sur l'état du portefeuille.
+
+    Le fournisseur vient de l'appelant (en-têtes) ou de l'environnement — modèle local par défaut.
+    """
+    from packages.llm.client import complete
     s = _snap()
     d, p = s["dashboard"], s["portfolio"]
     rm = p.get("analysis", {}).get("risk", {})
@@ -987,6 +1017,6 @@ def ai_commentary() -> dict:
     system = ("Tu es un analyste quant senior. Réponds DIRECTEMENT en français, 4-6 phrases "
               "claires et actionnables, sans afficher ton raisonnement. Commente l'état du "
               "portefeuille (risque, régime, idées). Ton factuel et prudent, pas de conseil personnalisé.")
-    res = complete(facts, system=system, max_tokens=1100)
+    res = complete(facts, system=system, max_tokens=1100, cfg=_cfg_llm(request))
     return {"available": res.get("available", False), "text": res.get("text", ""),
             "reason": res.get("reason", "")}

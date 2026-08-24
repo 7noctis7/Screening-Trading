@@ -1,5 +1,38 @@
 # 04 — JOURNAL
 
+## Session 2026-08-22 (7) — Connecter son IA depuis le site, sans toucher au `.env`
+**Contexte.** « Est-il possible de mettre les clés API directement sur le site plutôt que de
+passer par le terminal et `.env` ? Ce serait plus simple. » Oui — et le choix de l'endroit où vit
+la clé est la seule vraie question.
+
+**Décision : la clé reste dans le NAVIGATEUR.** Elle voyage par en-tête (`X-LLM-Key`) à chaque
+requête et s'arrête là : ni écrite sur disque, ni journalisée, ni renvoyée dans une réponse.
+
+Le raisonnement tient en une phrase : **une clé qu'on n'écrit jamais ne peut pas être commitée
+par erreur.** Le dépôt est public, gitleaks tourne en CI — l'écrire côté serveur aurait ajouté un
+chemin de fuite pour gagner de la persistance dont personne n'a besoin.
+
+Ce que ce n'est PAS : une protection contre un script malveillant sur la page — `localStorage`
+lui serait lisible. Sur une instance auto-hébergée mono-utilisateur, sans objet ; sur une instance
+exposée à des tiers, à revoir. C'est écrit dans le module plutôt que sous-entendu.
+
+**`packages/llm/client.py`** : config résolue à CHAQUE appel (`Config.resolue()`), l'appelant
+primant sur l'environnement, les champs vides retombant dessus. Test figé : la config n'est jamais
+conservée d'un appel au suivant — une clé mémorisée serait une clé qui fuit d'un utilisateur à
+l'autre.
+
+**`/api/ai/diagnostic`** — le point qui fait toute l'ergonomie. Un « indisponible » muet laisse
+l'utilisateur deviner s'il s'est trompé d'URL, de clé, ou si son modèle local n'est pas lancé.
+Le diagnostic distingue : clé refusée (401/403), adresse introuvable (404), aucun serveur. Il ne
+renvoie jamais la clé.
+
+**Panneau `ReglagesIA`** : fournisseur pré-rempli (local, Gemini, OpenAI, Anthropic, Mistral),
+bouton « Tester la connexion » qui liste les modèles disponibles, « Oublier ma clé », et clé
+masquée à l'affichage. Le refus de stockage local (navigation privée) est annoncé au lieu
+d'échouer en silence.
+
+1074 tests passés, 8 ignorés (+4).
+
 ## Session 2026-08-22 (6) — Auto-hébergement : profil d'investisseur, clé IA, garde-fous
 **Contexte.** Faire du terminal un outil que chacun héberge chez soi, avec SES clés — IA et
 courtiers — plutôt qu'un service qui détiendrait les clés d'autrui.

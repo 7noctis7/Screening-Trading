@@ -19,25 +19,59 @@ def _recharge(**env):
 def test_sans_cle_aucun_en_tete_dautorisation():
     """Un modèle local (LM Studio, Ollama) n'en demande pas — en envoyer un serait du bruit."""
     c = _recharge()
-    assert "Authorization" not in c._headers(json=True)
-    assert c._headers(json=True)["Content-Type"] == "application/json"
+    cfg = c.Config().resolue()
+    assert "Authorization" not in c._headers(cfg, json=True)
+    assert c._headers(cfg, json=True)["Content-Type"] == "application/json"
 
 
 def test_avec_cle_len_tete_est_pose():
     c = _recharge(LLM_API_KEY="sk-abc123")
-    assert c._headers(json=True)["Authorization"] == "Bearer sk-abc123"
+    assert c._headers(c.Config().resolue(), json=True)["Authorization"] == "Bearer sk-abc123"
 
 
 def test_len_tete_est_pose_aussi_sur_les_requetes_de_decouverte():
     """La détection du modèle interroge /models : sans clé, elle échouait avant même le premier appel."""
     c = _recharge(LLM_API_KEY="sk-abc123")
-    assert c._headers()["Authorization"] == "Bearer sk-abc123"
-    assert "Content-Type" not in c._headers()
+    cfg = c.Config().resolue()
+    assert c._headers(cfg)["Authorization"] == "Bearer sk-abc123"
+    assert "Content-Type" not in c._headers(cfg)
 
 
 def test_une_cle_vide_equivaut_a_pas_de_cle():
     c = _recharge(LLM_API_KEY="")
-    assert "Authorization" not in c._headers(json=True)
+    assert "Authorization" not in c._headers(c.Config().resolue(), json=True)
+
+
+# --- Config PAR APPEL : l'appelant prime sur l'environnement ---------------------------------
+
+def test_la_config_de_lappelant_prime_sur_lenvironnement():
+    """C'est ce qui permet de changer de fournisseur depuis l'interface, sans toucher au .env."""
+    c = _recharge(LLM_API_KEY="sk-env", LLM_BASE_URL="http://local/v1")
+    cfg = c.Config(base="https://api.exemple.test/v1", key="sk-appelant", model="m").resolue()
+    assert cfg.base == "https://api.exemple.test/v1"
+    assert cfg.key == "sk-appelant"
+    assert c._headers(cfg)["Authorization"] == "Bearer sk-appelant"
+
+
+def test_les_champs_vides_retombent_sur_lenvironnement():
+    """Une config partielle ne doit pas effacer ce qui est déjà configuré sur la machine."""
+    c = _recharge(LLM_API_KEY="sk-env", LLM_BASE_URL="http://local/v1")
+    cfg = c.Config(model="autre-modele").resolue()
+    assert cfg.base == "http://local/v1" and cfg.key == "sk-env"
+    assert cfg.model == "autre-modele"
+
+
+def test_la_barre_finale_de_lurl_est_normalisee():
+    """Sans cela, « .../v1/ » produirait « .../v1//chat/completions » et un 404 obscur."""
+    c = _recharge()
+    assert c.Config(base="https://x.test/v1/").resolue().base == "https://x.test/v1"
+
+
+def test_la_config_nest_jamais_conservee_entre_deux_appels():
+    """Une clé mémorisée serait une clé qui fuit d'un utilisateur à l'autre."""
+    c = _recharge(LLM_API_KEY="sk-env")
+    c.Config(key="sk-jetable").resolue()
+    assert c.Config().resolue().key == "sk-env"
 
 
 def test_lurl_de_base_reste_surchargeable():
