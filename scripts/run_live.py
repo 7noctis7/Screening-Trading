@@ -118,6 +118,8 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, 
 
     On n'échange que le DELTA (cible − détenu). `opened` = achats RÉELLEMENT envoyés (à
     journaliser, `legacy=0`) ; `sold` = ventes RÉELLEMENT envoyées (round-trip Phase 2)."""
+    from dataclasses import replace
+
     from packages.common.retry import retry
     from packages.core.models import Side
     sent, opened, sold = 0, [], []
@@ -127,6 +129,15 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, 
         for k, v in cur.items():
             curn[_nsym(k)] = curn.get(_nsym(k), 0.0) + v
         from packages.execution.rebalance_plan import decider
+        from packages.risk.order_gate import EtatCompte, Limites, evaluer, ligne_journal
+        # PORTAIL DE RISQUE — indépendant de la stratégie, lu depuis l'environnement seul.
+        # Jusqu'ici les limites du projet (`packages.risk`) n'existaient que dans les démos :
+        # le chemin de production n'avait aucun veto PAR ORDRE.
+        _lim = Limites.depuis_env()
+        _expo = sum(abs(v) for v in curn.values())
+        _npos = sum(1 for v in curn.values() if abs(v) > 0)
+        if not dry:
+            print(f"  portail de risque : {_lim.resume()} · brut actuel {_expo:.0f}$ / {cap:.0f}$")
         for nkey, info in sorted(tgt.items(), key=lambda kv: -kv[1]["val"]):
             o, bsym = info["o"], info["sym"]
             detenu = curn.get(nkey, 0.0)
@@ -138,6 +149,24 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, 
             intention = decider(info["val"], detenu, band)
             if not intention.agit:
                 print(tag + f"  ✓ {intention.motif}"); continue
+            # DERNIÈRE BARRIÈRE : le portail peut réduire ou refuser, jamais augmenter. Un
+            # désengagement le traverse toujours (le bloquer augmenterait le risque).
+            _etat = EtatCompte(equity=cap, exposition_brute=_expo, n_positions=_npos,
+                               detenu_ligne=detenu)
+            _v = evaluer(intention.action, intention.montant, _etat, _lim,
+                         liquidation=intention.liquidation)
+            if not _v.autorise:
+                print(tag + f"  ⛔ REFUSÉ par le portail [{_v.regle}] {_v.motif}")
+                if alert_engine:
+                    from packages.alerts import Alert, Severity
+                    alert_engine.emit(Alert("risk", Severity.WARNING,
+                        f"Ordre {bsym} refusé par le portail de risque : {_v.motif}"))
+                continue
+            if _v.reduit:
+                print(tag + f"  ⚠️  {_v.motif}")
+                intention = replace(intention, montant=_v.montant)
+            if not dry:
+                print("  " + ligne_journal(bsym, intention.action, _v.montant, _v))
             side = Side.LONG if intention.action == "acheter" else Side.SHORT
             if dry or broker is None:
                 print(tag + f"  {'aperçu' if dry else 'broker absent'} ({intention.action})"); continue
@@ -148,6 +177,11 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, 
                 else:
                     retry(lambda: broker.submit_notional(bsym, side, intention.montant), attempts=3)
                 sent += 1
+                # Le plafond d'exposition doit voir les ordres DÉJÀ envoyés dans cette boucle,
+                # sinon chacun est jugé contre l'état initial et la somme dépasse la limite.
+                _expo += intention.montant if intention.action == "acheter" else -intention.montant
+                if intention.action == "acheter" and detenu <= 0:
+                    _npos += 1
                 print(tag + {"acheter": "  ▲ achat", "alleger": "  ▼ vente",
                              "solder": "  ▼ SOLDE (quantité)"}[intention.action])
                 if delta > 0 and o is not None:               # ACHAT/ADD → ouverture à journaliser

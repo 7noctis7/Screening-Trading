@@ -86,7 +86,7 @@ def ecarts(modele: list[dict], reel: list[dict], *, champ_modele: str = "value",
         a, b = wm.get(k), wr.get(k)
         statut = "commune" if a and b else ("modele_seul" if a else "hors_modele")
         out.append(LigneEcart(noms.get(k, k), a, b, statut))
-    return sorted(out, key=lambda l: -abs(l.ecart))
+    return sorted(out, key=lambda ligne: -abs(ligne.ecart))
 
 
 def _cibles_replicables(wm: dict[str, float], equity: float,

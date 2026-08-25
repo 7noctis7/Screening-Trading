@@ -317,26 +317,138 @@ make cron-uninstall    # la désactive
 (`make api-lan` → `uvicorn … --host 0.0.0.0`), puis ouvrez `http://IP_DU_MAC:8000` /
 le front depuis le navigateur du téléphone (même Wi-Fi). Détails et cron : `docs/REAL_DATA.md`.
 
-## 🤖 Répliquer l'allocation en paper (Alpaca + Bitmart)
+## 🤖 Répliquer l'allocation en paper (Alpaca + Binance)
+
 ```bash
 make live          # APERÇU (dry-run) : affiche les ordres cibles, n'envoie RIEN
-make live-go       # EXÉCUTE en paper (clés API .env requises) — Alpaca reste en paper
+make live-go       # EXÉCUTE en PAPER (clés API .env requises) — Alpaca reste en paper
 ```
-Routage : actions/ETF → **Alpaca (paper)** · crypto → **Bitmart** (ccxt). Le mode réel exige
-`--live --yes` ET des clés API présentes. Clés dans `.env` (jamais committées).
 
-## 🛡️ Garde-fous
-Paper par défaut · aucun ordre réel sans feu vert + capital plafonné + stops · permissions API
-minimales (jamais retrait) · `.env`/`*.db` jamais committés · kill-switch drawdown testé.
+Routage : actions/ETF → **Alpaca (paper)** · crypto → **Binance** par défaut
+(`QUANT_CRYPTO_VENUE=bitmart` pour changer de place). Le mode réel exige **`--live` ET `--yes`**
+ET des clés API présentes : si l'un des trois manque, on retombe en dry-run.
 
-## 🔍 Audit du site (UI/UX, ML, finance, trading, data, risque)
-Audit transversal honnête, noté /20 par critère avec axes de correction priorisés :
-[`docs/AUDIT_SITE.md`](docs/AUDIT_SITE.md).
+### Backtest → Paper → Live
 
-## 🔭 Pistes d'amélioration & écosystème
-Voir [`docs/ROADMAP.md`](docs/ROADMAP.md) : moteur de backtest vectorisé (vectorbt/qlib),
-charts pro (lightweight-charts/TradingView), exécution crypto (ccxt), data (polygon/tiingo),
-features techniques (pandas-ta), PWA mobile, et durcissement MLOps.
+```
+BACKTEST              PAPER                    LIVE
+make backtest-*   →   make live-go        →    NON ACTIVÉ
+aucun ordre           Alpaca paper             exige une décision humaine explicite
+```
+
+L'activation d'un courtier réel est conditionnée à un rendez-vous d'évaluation daté et à une
+décision explicite du propriétaire (`vault/03_TODO.md`). Aucun agent ne peut la déclencher.
+
+## 🛡️ Risk Management
+
+Le portail pré-trade (`packages/risk/order_gate.py`) s'insère **après la stratégie et avant le
+courtier**. Il ne connaît rien de la stratégie : il ne voit qu'un ordre, un état de compte, et
+des limites lues **dans l'environnement seul**. C'est ce qui le rend non contournable.
+
+| Variable | Défaut | Effet |
+|---|---:|---|
+| `QUANT_RISK_MAX_WEIGHT` | `0.20` | une ligne ne dépasse pas 20 % du compte |
+| `QUANT_RISK_MAX_POSITIONS` | `40` | au-delà, plus aucune ouverture |
+| `QUANT_RISK_MAX_ORDER_PCT` | `0.15` | un ordre ne dépasse pas 15 % du compte |
+| `QUANT_RISK_MAX_GROSS` | `1.00` | **aucun levier, jamais** |
+| `QUANT_MIN_POSITION` | `1000` | plancher de ligne |
+
+Deux principes encodés et testés :
+
+1. **Le portail ne peut que réduire ou refuser, jamais augmenter.**
+2. **Un désengagement n'est jamais bloqué** — même compte saturé, même equity illisible. Un
+   portail qui refuse une vente augmente le risque au lieu de le réduire.
+
+S'y ajoutent deux kill-switches indépendants : drawdown intraday réel et alertes techniques
+TradingView. Chacun peut ramener l'exposition à zéro.
+
+**L'IA n'est pas dans la chaîne d'ordres.** `packages/llm` n'est importé que par les endpoints de
+génération de texte ; `packages/intelligence` n'importe ni `packages.execution` ni
+`packages.risk`, et un test le vérifie sur l'arbre syntaxique à chaque exécution de la suite.
+
+## 🛰️ Market Intelligence / X Intelligence
+
+`packages/intelligence` qualifie l'information de marché avant qu'elle n'atteigne l'analyse :
+
+```
+source → authentification → score de source → nature (fait/opinion/rumeur)
+       → corroboration croisée → pertinence → statut + confiance
+```
+
+Point d'entrée unique : `qualifier()`. Le verdict nomme toujours la raison d'un refus.
+
+Règles encodées : une **opinion ne devient jamais un fait** ; le **nombre d'abonnés** vaut au
+maximum 0,08 sur 1,00 ; un compte **non authentifié** est plafonné à 0,60 ; les niveaux **D et E
+ne confirment jamais** ; les **reprises d'une même origine** comptent pour une seule ; l'exigence
+de corroboration **croît avec l'impact** (1 / 2 / 3 sources indépendantes).
+
+**Watchlist X : 66 comptes, zéro authentifié.** Le statut de vérification et le nombre d'abonnés
+ne sont pas renseignés — les inventer produirait exactement le défaut que cette couche existe
+pour empêcher. Tous sont plafonnés à 0,60 et aucun n'est utilisable seul sur une information à
+impact.
+
+**État : architecture complète et testée, aucun collecteur.** Il n'y a ni accès à X, ni flux de
+news, ni persistance. C'est le premier livrable attendu de la couche d'intelligence.
+
+## 📊 État du projet
+
+| Niveau | Verdict |
+|---|---|
+| **CODE READY** | ✅ oui — 1160 tests passent, aucun échec, lint et gates CI verts |
+| **PAPER TRADING READY** | ⚠️ sous conditions — les 3 P0 de `docs/ROADMAP.md` d'abord |
+| **LIVE TRADING READY** | ❌ non — et ce n'est pas une question de code |
+
+Détail : [`docs/PROJECT_AUDIT.md`](docs/PROJECT_AUDIT.md) ·
+[`docs/TEST_REPORT.md`](docs/TEST_REPORT.md)
+
+## ⚠️ Problèmes connus
+
+1. **13 sites `min(len(data[s]))` non migrés** vers `packages/backtest/panel` — les chiffres
+   publiés par ces modules sont suspects (le même défaut faisait tourner un backtest sur 7
+   rebalancements au lieu de 126).
+2. **Le test de biais du survivant ne mesure rien** : les délistés ingérés n'entrent jamais dans
+   le top-30. Il passe ; ce n'est pas la même chose que valider quelque chose.
+3. **`k_signal` médian = 1** sur 126 rebalancements : l'optimisation ERC répartit du risque sur
+   une covariance à une seule direction fiable.
+4. **La bande d'inaction bloque 99 % des pas** et ne laisse trader que ~7 % des noms.
+5. **`mcp_tradingview`** pilote un kill-switch avec 2 fichiers de test pour 7 modules.
+6. **Couverture de tests non mesurée** (`pytest-cov` absent de l'environnement).
+
+Liste complète et priorisée : [`docs/ROADMAP.md`](docs/ROADMAP.md).
+
+## 🔍 Audits
+
+- [`docs/PROJECT_AUDIT.md`](docs/PROJECT_AUDIT.md) — architecture, état par module, risques
+  techniques et trading, dette technique
+- [`docs/AUDIT_SITE.md`](docs/AUDIT_SITE.md) — audit transversal UI/UX, ML, finance, data
+- [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) — campagne de tests réelle
+
+## 🔭 Roadmap
+
+[`docs/ROADMAP.md`](docs/ROADMAP.md) — priorisée P0 → P3, avec difficulté, dépendances et risques
+pour chaque élément.
+
+## 🤝 Contribution
+
+Voir [`CONTRIBUTING.md`](CONTRIBUTING.md). En résumé : `make test` avant tout commit, moins de
+400 lignes par fichier et 50 par fonction, une nouvelle stratégie ou source = **un fichier
+auto-enregistré** (jamais de modification du cœur).
+
+## 🔐 Sécurité
+
+Voir [`SECURITY.md`](SECURITY.md). Dépôt **public** : `.env`, `*.db`, `.cache/` et les données
+exportées ne sont jamais committés ; gitleaks tourne en CI et en pre-commit ; les positions
+réelles du courtier sont local-only. CORS de l'API verrouillé sur localhost, webhook protégé par
+jeton. Aucun secret n'a jamais été ajouté à l'historique git (vérifié).
+
+## 🧭 Instructions pour les agents IA
+
+[`AGENTS.md`](AGENTS.md) — architecture, commandes, fichiers critiques, règles de modification,
+et la convention la plus importante du dépôt : **tout garde-fou publie son compteur de
+déclenchements**.
+
+Passation détaillée : [`docs/GROK_BOT_HANDOFF.md`](docs/GROK_BOT_HANDOFF.md).
 
 ## Licence
+
 MIT recommandé (usage personnel open-source).
