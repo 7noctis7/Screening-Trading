@@ -77,7 +77,7 @@ def adaptive_cap(cov: np.ndarray, max_weight: float, corr_tighten: bool,
 
 
 def select_rolling_universe(M: dict, t: int, top_k: int, lookback: int) -> list:
-    """Sélectionne top-K actifs par momentum à l'instant t (point-in-time, pas de fuite)."""
+    """Top-K actifs par momentum à l'instant t (point-in-time, pas de fuite)."""
     if len(M) < 5:
         return list(M.keys())[:top_k]
     _s0 = max(lookback, 50)

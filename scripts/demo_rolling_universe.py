@@ -5,11 +5,13 @@ Compares static universe (locked at t=0) vs rolling universe (re-selected
 every N periods) to show expected alpha impact of the architectural improvement.
 """
 
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
+
 from packages.backtest.preset_helpers import select_rolling_universe
 
 
@@ -96,7 +98,7 @@ if __name__ == "__main__":
     print("=" * 60)
 
     data = synthetic_market(n_assets=30, n_periods=250)
-    print(f"Generated synthetic market: 30 assets, 250 periods")
+    print("Generated synthetic market: 30 assets, 250 periods")
     print()
 
     static = backtest_static_universe(data, lookback=50, top_k=10, step=21)
@@ -108,4 +110,4 @@ if __name__ == "__main__":
     print()
     print("Note: On this synthetic data with clear momentum phases,")
     print("rolling universe adaptation captures phase changes better.")
-    print(f"Real data impact expected to be similar or stronger.")
+    print("Real data impact expected to be similar or stronger.")
