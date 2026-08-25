@@ -11,8 +11,12 @@ from __future__ import annotations
 
 import numpy as np
 
-from packages.portfolio.optimize import (equal_risk_contribution, inverse_variance_weights,
-                                          min_variance_weights)
+from packages.backtest.panel import fenetre_commune
+from packages.portfolio.optimize import (
+    equal_risk_contribution,
+    inverse_variance_weights,
+    min_variance_weights,
+)
 from packages.portfolio.psr import deflated_sharpe_ratio
 
 
@@ -67,7 +71,11 @@ def weighting_backtest(data: dict, step: int = 21, lookback_cov: int = 126, max_
     syms = [s for s, b in data.items() if b and len(b) > lookback_cov + 2 * step][:max_assets]
     if len(syms) < 8:
         return {"available": False}
-    L = min(len(data[s]) for s in syms)
+    # `min` laissait la série la plus courte fixer la profondeur de tout le panel : une seule
+    # cotation récente réduisait la comparaison des schémas de pondération à quelques mois.
+    syms, L, panel_diag = fenetre_commune(data, syms, min_noms=8)
+    if len(syms) < 8:
+        return {"available": False}
     M = np.array([[b.close for b in data[s]][-L:] for s in syms], dtype=float)
     rets = M[:, 1:] / M[:, :-1] - 1
     n = len(syms)
@@ -102,7 +110,8 @@ def weighting_backtest(data: dict, step: int = 21, lookback_cov: int = 126, max_
     if rebs < 3:
         return {"available": False}
     res = {"available": True, "n_rebalances": rebs, "n_assets": n, "step_days": step,
-           "lookback_cov": lookback_cov, "band": band, "cost_bps": cost_bps, "schemes": {}}
+           "lookback_cov": lookback_cov, "band": band, "cost_bps": cost_bps,
+           "panel": panel_diag, "schemes": {}}
     for name in schemes:
         m = _metrics(out[name]["rets"], py, n_trials=4)
         m["turnover_annual"] = round(out[name]["turn"] / rebs * py, 2)

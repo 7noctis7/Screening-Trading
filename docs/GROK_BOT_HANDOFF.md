@@ -89,7 +89,7 @@ TON SIGNAL / TON ANALYSE
 | Module | Rôle | À savoir |
 |---|---|---|
 | `packages/data` | Lecture OHLCV, audit d'intégrité | Deux schémas de base supportés (LONG et normalisé). Ne pas ajouter de 3ᵉ détection de schéma : il y en a eu deux qui divergeaient, ça a coûté un crash. |
-| `packages/backtest` | Moteurs de backtest | **`panel.fenetre_commune` est obligatoire.** Ne jamais écrire `L = min(len(data[s]) for s in syms)` : c'est le bug qui a fait tourner un backtest sur 7 rebalancements au lieu de 126. |
+| `packages/backtest` | Moteurs de backtest | **Ne jamais écrire `L = min(len(data[s]) for s in syms)`** — c'est le bug qui a fait tourner un backtest sur 7 rebalancements au lieu de 126. Deux règles selon l'usage : `panel.fenetre_commune` (profondeur par COUVERTURE, pour mesurer un signal en coupe) et `panel.fenetre_par_rang` (profondeur par RANG, pour la courbe du tableau de bord). Le compromis est un choix, pas un accident. |
 | `packages/research` | Ledger, DSR, PBO, gate 4 étages, attribution | Chaque essai s'ajoute au ledger et déflate le DSR. C'est délibéré : le p-hacking doit coûter cher. |
 | `packages/portfolio` | TWR (GIPS), ERC, réplication | `replication.py` chiffre l'écart modèle↔réel en active share. |
 | `packages/risk` | Portail pré-trade, limites, kill-switch | **Voir §6.** |
@@ -347,10 +347,12 @@ Utilise les sous-agents dédiés déjà présents dans le dépôt : `quant-criti
 
 ## 14. Problèmes connus — la liste honnête
 
-1. **13 sites `min(len(data[s]))` non migrés.** Le bug qui faisait tourner un backtest sur 7 pas
-   au lieu de 126 existe encore dans `conviction_backtest`, `megacap`, `crypto_sleeve`,
-   `sector_momentum`, `weighting_backtest`, `ml_walkforward` et 4 fonctions de `preset_backtest`.
-   **Tout chiffre publié par ces modules est suspect.**
+1. ~~13 sites `min(len(data[s]))` non migrés~~ — **fermé le 25/08**, 0 site restant. Retiens-en
+   la leçon plutôt que le fait : sur les 13, un seul était invisible au raisonnement.
+   `preset_latest_weights` semblait à l'abri (tout y est ancré sur la fin de la série) et
+   déplaçait pourtant les **poids envoyés au courtier** de 2 points, parce que `_regime_mult`
+   lit une MM200 qu'un panel tronqué transforme silencieusement en MM125. **Mesure, ne déduis
+   pas.**
 2. **Le test de biais du survivant ne mesure rien.** Les 7 délistés ingérés ne sont jamais entrés
    dans le top-30. Il passe, il ne valide rien.
 3. **`k_signal` médian = 1** sur 126 rebalancements : l'optimisation ERC répartit du risque sur

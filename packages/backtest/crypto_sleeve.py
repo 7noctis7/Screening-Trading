@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from packages.backtest.panel import fenetre_commune
 from packages.backtest.preset_backtest import _weights_at
 
 
@@ -30,7 +31,11 @@ def crypto_weights(data: dict, asset_classes: dict | None = None, dd_target: flo
         c = np.asarray([x.close for x in data[s]][-60:], float)
         return float(np.mean(c)) * float(np.std(c) / (np.mean(c) + 1e-9))
     universe = sorted(syms, key=_liq, reverse=True)[:top_k]
-    L = min(len(data[s]) for s in universe)
+    # La crypto compte beaucoup de cotations récentes : sans fenêtre commune, un seul jeton
+    # listé il y a trois mois ramenait toute la poche à trois mois d'historique.
+    universe, L, _panel = fenetre_commune(data, universe, min_noms=2)
+    if len(universe) < 2:
+        return {}
     A = np.asarray([[x.close for x in data[s]][-L:] for s in universe], float)
     rets = A[:, 1:] / A[:, :-1] - 1
     tgt_vol = max(0.0, abs(dd_target)) / k_dd

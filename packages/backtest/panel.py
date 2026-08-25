@@ -44,6 +44,29 @@ def fenetre_commune(data: dict, syms: list[str], couverture: float = COUVERTURE_
     return retenus, L, diag
 
 
+def fenetre_par_rang(data: dict, syms: list[str], min_noms: int) -> tuple[list[str], int]:
+    """Variante par RANG : garder les `min_noms` séries aux plus longs historiques.
+
+    Pourquoi deux règles coexistent — et ce n'est pas un oubli. `fenetre_commune` fixe la
+    profondeur par la COUVERTURE (garder 80 % des noms) : c'est ce qu'il faut pour mesurer un
+    signal en coupe transversale, où la largeur fait l'information. Cette variante-ci fixe la
+    profondeur par le RANG (garder les 12 plus anciens sur 30) : c'est ce qu'il faut pour la
+    courbe d'equity du tableau de bord et le journal de trades, où l'on préfère un historique
+    long sur moins de titres à un historique court sur tous — sinon la courbe affichée
+    démarrait vers 2021 alors que la base remonte à 2015.
+
+    Le compromis profondeur/largeur est donc un CHOIX explicite selon l'usage, pas un accident.
+    Ce bloc vivait en trois copies identiques dans `preset_backtest` ; la sémantique est
+    inchangée, seul l'endroit où elle est écrite a changé.
+    """
+    longueurs = sorted((len(data[s]) for s in syms), reverse=True)
+    if not longueurs:
+        return list(syms), 0
+    requis = longueurs[min(max(1, min_noms), len(longueurs)) - 1]
+    retenus = [s for s in syms if len(data[s]) >= requis] or list(syms)
+    return retenus, min(len(data[s]) for s in retenus)
+
+
 def rebalancements(L: int, start: int, step: int) -> int:
     """Nombre de pas qu'une fenêtre de longueur L autorise — à publier AVANT tout ratio.
 
