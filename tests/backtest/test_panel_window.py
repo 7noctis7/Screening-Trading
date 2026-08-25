@@ -97,3 +97,77 @@ def test_compteur_plafond_mord_quand_le_cap_est_serre():
     d = _panel_avec_ipo()
     serre = preset_backtest(d, top_k=30, max_weight=0.02)     # 30 noms → 1/30 > 2 % impossible
     assert serre["declenchements"]["plafond"] > 0
+
+
+# --- MIGRATION DES 13 SITES RESTANTS (P0-1) --------------------------------------------------
+
+def test_les_poids_de_PRODUCTION_ignorent_une_serie_courte():
+    """LE test qui a démenti mon raisonnement.
+
+    Je pensais `preset_latest_weights` à l'abri : tout y est ancré sur la FIN (`[-L:]`,
+    `t = L-1`), donc une troncature semblait inoffensive. Mesure : une seule série de 125 barres,
+    incapable d'entrer dans le top-12 par qualité, déplaçait les poids envoyés au courtier de
+    2 points. Cause : `_regime_mult` lit `hist[-200:]` et le PIC historique de l'indice — sur un
+    panel tronqué la « MM200 » devient une MM125 et le pic ignore tout ce qui précède.
+    """
+    from packages.backtest.preset_backtest import preset_latest_weights
+
+    base = {f"S{i}": _serie(2500, i) for i in range(40)}
+    q = {s: float(i) for i, s in enumerate(base)}
+    avant = preset_latest_weights(base, q, top_k=12)
+    assert avant, "l'allocation de référence ne doit pas être vide"
+
+    avec_ipo = dict(base, IPO=_serie(125, 999))
+    q_ipo = dict(q, IPO=-1.0)                     # qualité minimale → jamais dans le top-12
+    apres = preset_latest_weights(avec_ipo, q_ipo, top_k=12)
+
+    assert set(avant) == set(apres)
+    for k in set(avant) | set(apres):
+        assert abs(avant.get(k, 0.0) - apres.get(k, 0.0)) < 1e-9
+
+
+def test_l_eligibilite_exige_de_quoi_calculer_une_MM200():
+    """Un univers dont AUCUNE série n'atteint 200 barres ne peut pas produire de poids :
+    la porte de régime serait calculée sur une moyenne qui n'est pas celle qu'elle annonce."""
+    from packages.backtest.preset_backtest import MIN_BARRES_REGIME, preset_latest_weights
+
+    assert MIN_BARRES_REGIME == 200
+    court = {f"S{i}": _serie(180, i) for i in range(20)}
+    assert preset_latest_weights(court, {s: 1.0 for s in court}) == {}
+
+
+def test_fenetre_par_rang_garde_les_plus_anciens():
+    """Profondeur par RANG : 12 séries longues l'emportent sur 18 séries courtes — c'est le
+    compromis inverse de `fenetre_commune`, et il est délibéré (courbe du tableau de bord)."""
+    from packages.backtest.panel import fenetre_par_rang
+
+    d = {f"L{i}": [0] * 2500 for i in range(12)}
+    d.update({f"C{i}": [0] * 300 for i in range(18)})
+    retenus, L = fenetre_par_rang(d, list(d), min_noms=12)
+    assert L == 2500 and len(retenus) == 12
+    # la même donnée par COUVERTURE privilégie la largeur : plus de noms, moins de profondeur
+    _, L_couv, _ = fenetre_commune(d, list(d), couverture=0.8)
+    assert L_couv < L
+
+
+def test_fenetre_par_rang_ne_vide_jamais_le_panel():
+    from packages.backtest.panel import fenetre_par_rang
+
+    assert fenetre_par_rang({}, [], min_noms=12) == ([], 0)
+    d = {"A": [0] * 100}
+    assert fenetre_par_rang(d, ["A"], min_noms=99) == (["A"], 100)
+
+
+def test_tous_les_backtests_publient_leur_profondeur():
+    """Un ratio annualisé sans le nombre de pas qui l'a produit n'est pas contestable."""
+    from packages.backtest.conviction_backtest import conviction_backtest
+    from packages.backtest.megacap import megacap_rotation
+    from packages.backtest.weighting_backtest import weighting_backtest
+
+    d = _panel_avec_ipo(n_longs=40, long=1200)
+    for nom, res in [("conviction", conviction_backtest(d, top_n=10)),
+                     ("megacap", megacap_rotation(d, top_n=10)),
+                     ("weighting", weighting_backtest(d, max_assets=40))]:
+        if res.get("available"):
+            assert res.get("panel", {}).get("available"), f"{nom} ne publie pas sa profondeur"
+            assert res["panel"]["n_ecartes"] >= 0

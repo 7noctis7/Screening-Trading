@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from packages.backtest.panel import fenetre_commune
 from packages.ml.model import LogitModel
 from packages.portfolio.psr import deflated_sharpe_ratio
 
@@ -73,7 +74,11 @@ def ml_walkforward(data: dict, step: int = 21, H: int = 21, lookback: int = 63,
     syms = [s for s, b in data.items() if b and len(b) > lookback + H + 2 * step][:max_assets]
     if len(syms) < 8:
         return {"available": False}
-    L = min(len(data[s]) for s in syms)
+    # Une seule cotation récente réduisait l'entraînement walk-forward à quelques fenêtres :
+    # le modèle apprenait alors sur un régime unique et son IC n'était pas mesurable.
+    syms, L, panel_diag = fenetre_commune(data, syms, min_noms=8)
+    if len(syms) < 8:
+        return {"available": False}
     M = np.array([[b.close for b in data[s]][-L:] for s in syms], dtype=float)
     rets = M[:, 1:] / M[:, :-1] - 1
     rng = np.random.default_rng(seed)
@@ -139,7 +144,8 @@ def ml_walkforward(data: dict, step: int = 21, H: int = 21, lookback: int = 63,
         m, s = float(a.mean()), float(a.std())
         return {"ic_mean": round(m, 4), "ic_tstat": round(m / s * np.sqrt(a.size), 2) if s else 0.0}
 
-    return {"available": True, "n_rebalances": rebs, "step_days": step, "n_assets": len(syms),
+    return {"available": True, "panel": panel_diag,
+            "n_rebalances": rebs, "step_days": step, "n_assets": len(syms),
             "ml": _metrics(ml_r, py, n_trials=30), "ml_net": _metrics(ml_r_net, py, n_trials=30),
             "tech": _metrics(tech_r, py, n_trials=15), "benchmark": _metrics(bench_r, py, n_trials=1),
             "turnover_annual": round(turn / rebs * py, 2),

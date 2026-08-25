@@ -14,6 +14,7 @@ from __future__ import annotations
 import numpy as np
 
 from packages.backtest.conviction_backtest import _stats
+from packages.backtest.panel import fenetre_commune
 
 
 def sector_momentum_equity_daily(data: dict, sectors: dict, asset_classes: dict | None = None,
@@ -27,10 +28,13 @@ def sector_momentum_equity_daily(data: dict, sectors: dict, asset_classes: dict 
             and sectors.get(s)]
     if len(syms) < 5:
         return {"available": False}
-    # courbe longue (écarte les IPO récentes) → fenêtre commune profonde, comme le preset
-    lmax = max(len(data[s]) for s in syms)
-    syms = [s for s in syms if len(data[s]) >= 0.6 * lmax] or syms
-    L = min(len(data[s]) for s in syms)
+    # Fenêtre commune (cf. packages/backtest/panel) : une seule convention dans le projet.
+    # Remplace un filtre maison « ≥ 60 % de la plus longue série » qui laissait passer une
+    # troncature de 40 % — et qui n'était plus « comme le preset » depuis que celui-ci est
+    # passé à la couverture par les noms.
+    syms, L, panel_diag = fenetre_commune(data, syms)
+    if len(syms) < 5:
+        return {"available": False}
     closes = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in syms}
     ref = max(syms, key=lambda s: len(data[s]))
     dts = [b.ts.isoformat() for b in data[ref]][-L:]
@@ -69,7 +73,10 @@ def sector_momentum_equity_daily(data: dict, sectors: dict, asset_classes: dict 
         return {"available": False}
     return {"available": True, "equity": [round(x, 2) for x in eq], "dates": out_dates,
             "stats": _stats([eq[i + 1] / eq[i] - 1 for i in range(len(eq) - 1)], 252.0),
-            "current_sectors": cur_secs, "current_holdings": holds, "weighting": "equal"}
+            "current_sectors": cur_secs, "current_holdings": holds, "weighting": "equal",
+            # Profondeur EFFECTIVE : un ratio annualisé sans le nombre de pas qui l'a produit
+            # n'est pas contestable, donc il ne vaut rien.
+            "panel": panel_diag}
 
 
 def _sma(x: np.ndarray, w: int) -> np.ndarray:

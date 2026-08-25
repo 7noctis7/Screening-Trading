@@ -23,11 +23,16 @@ import numpy as np
 from packages.backtest.conviction_backtest import _stats
 from packages.backtest.cov_risk import cov_annual as _cov_annual
 from packages.backtest.cov_risk import cov_for_step, summarize
+from packages.backtest.panel import COUVERTURE_DEFAUT, fenetre_commune, fenetre_par_rang
 from packages.execution.costs import CostModel
 from packages.portfolio.optimize import equal_risk_contribution
 from packages.portfolio.risk_advanced import ewma_vol
-from packages.backtest.panel import COUVERTURE_DEFAUT, fenetre_commune
 from packages.portfolio.risk_overlay import drawdown_taper
+
+# `_regime_mult` calcule une MM200 (`hist[-200:]`) et un pic historique. En dessous de ce
+# nombre de barres, les deux sont silencieusement faux : la « MM200 » devient une moyenne plus
+# courte, et le pic ignore tout ce qui précède la fenêtre.
+MIN_BARRES_REGIME = 200
 
 
 def _regime_mult(mkt: np.ndarray, t: int, *, dd_hard: float = -0.15,
@@ -340,10 +345,17 @@ def preset_latest_weights(data: dict, quality: dict | None = None, asset_classes
     Même logique que le backtest (qualité top-K -> risk-parity ERC -> DD-target -> blackout), mais
     calculée au dernier point seulement. Renvoie {symbol: poids} (somme <= 1, le reste en cash).
     """
-    syms = [s for s, b in data.items() if b and len(b) > lookback]
+    # `_regime_mult` lit une MM200 et le PIC historique de l'indice : il lui faut au moins
+    # 200 barres. Le seuil d'éligibilité était à `lookback` (120), et `min(len)` laissait
+    # ensuite la série la plus courte fixer L pour tout le monde. Mesuré : une seule série de
+    # 125 barres, incapable d'entrer dans le top-K, déplaçait les poids de PRODUCTION de
+    # 2 points — la MM200 devenait une MM125 et le pic se calculait sur 125 jours.
+    syms = [s for s, b in data.items() if b and len(b) > max(lookback, MIN_BARRES_REGIME)]
     if len(syms) < 5:
         return {}
-    L = min(len(data[s]) for s in syms)
+    syms, L, _panel = fenetre_commune(data, syms)
+    if len(syms) < 5 or L < MIN_BARRES_REGIME:
+        return {}
     M = {s: np.asarray([x.close for x in data[s]][-L:], float) for s in syms}
     quality = quality or {}
     q = {s: quality.get(s) for s in syms if quality.get(s) is not None}
@@ -421,13 +433,9 @@ def preset_equity_daily(data: dict, quality: dict | None = None, asset_classes: 
         return {"available": False}
     quality = quality or {}  # conservé pour compat API ; PLUS utilisé pour l'univers (anti-fuite, cf. _price_universe)
     universe = _price_universe(data, syms, lookback, top_k)
-    # COURBE LA PLUS LONGUE POSSIBLE : on garde les `min_names` titres aux plus longs historiques →
-    # la fenêtre remonte aussi loin que le permettent au moins min_names valeurs (au lieu d'un
-    # seuil 60 % arbitraire qui coupait la courbe vers ~2021).
-    _lens = sorted((len(data[s]) for s in universe), reverse=True)
-    _need = _lens[min(min_names, len(_lens)) - 1] if _lens else 0
-    universe = [s for s in universe if len(data[s]) >= _need] or universe
-    L = min(len(data[s]) for s in universe)
+    # COURBE LA PLUS LONGUE POSSIBLE : profondeur par RANG, pas par couverture — cf.
+    # packages/backtest/panel.fenetre_par_rang pour le pourquoi des deux règles.
+    universe, L = fenetre_par_rang(data, universe, min_names)
     M = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in universe}
     ref = max(universe, key=lambda s: len(data[s]))
     dts = [b.ts.isoformat() for b in data[ref]][-L:]
@@ -497,15 +505,10 @@ def preset_trade_log(data: dict, quality: dict | None = None, asset_classes: dic
     syms = [s for s, b in data.items() if b and len(b) > lookback + step]
     if len(syms) < 5:
         return {"available": False}
-    L = min(len(data[s]) for s in syms)
-    M = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in syms}
     quality = quality or {}  # conservé pour compat API ; PLUS utilisé pour l'univers (anti-fuite, cf. _price_universe)
     universe = _price_universe(data, syms, lookback, top_k)
     # même logique « courbe la plus longue » que preset_equity_daily (min_names plus longs historiques)
-    _lens = sorted((len(data[s]) for s in universe), reverse=True)
-    _need = _lens[min(min_names, len(_lens)) - 1] if _lens else 0
-    universe = [s for s in universe if len(data[s]) >= _need] or universe
-    L = min(len(data[s]) for s in universe)
+    universe, L = fenetre_par_rang(data, universe, min_names)
     M = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in universe}
     # dates PAR SYMBOLE (chacun aligné sur SES propres barres) → un marqueur tombe toujours dans la
     # fenêtre du titre (sinon le signal d'entrée précède le début des données du titre = invisible).
@@ -574,10 +577,7 @@ def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict |
     ouvert_depuis: dict[str, str] = {}       # symbole → date d'ouverture de la ligne EN COURS
     quality = quality or {}  # conservé pour compat API ; PLUS utilisé pour l'univers (anti-fuite, cf. _price_universe)
     universe = _price_universe(data, syms, lookback, top_k)
-    _lens = sorted((len(data[s]) for s in universe), reverse=True)
-    _need = _lens[min(min_names, len(_lens)) - 1] if _lens else 0
-    universe = [s for s in universe if len(data[s]) >= _need] or universe
-    L = min(len(data[s]) for s in universe)
+    universe, L = fenetre_par_rang(data, universe, min_names)
     M = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in universe}
     ref = max(universe, key=lambda s: len(data[s]))
     dts = [b.ts.isoformat()[:10] for b in data[ref]][-L:]

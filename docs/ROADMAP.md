@@ -9,7 +9,7 @@
 
 ## P0 — Critique
 
-### P0-1 · Migrer les 13 sites `min(len(data[s]))` restants
+### ~~P0-1 · Migrer les 13 sites `min(len(data[s]))` restants~~ — ✅ FERMÉ le 25/08
 **Description.** Le motif `L = min(len(data[s]) for s in syms)` laisse la série la plus courte
 fixer la profondeur de tout le panel. Corrigé le 25/08 dans `preset_backtest` et
 `_price_universe` (7 → 126 rebalancements sur données réelles) ; le même motif subsiste dans
@@ -17,8 +17,11 @@ fixer la profondeur de tout le panel. Corrigé le 25/08 dans `preset_backtest` e
 `ml_walkforward` et 4 fonctions de `preset_backtest`.
 **Difficulté.** Faible par site, moyenne au total (chaque site a ses invariants de test).
 **Dépendances.** `packages/backtest/panel.fenetre_commune` — déjà écrit et testé.
-**Risques.** Les chiffres publiés vont changer, parfois beaucoup. C'est le but : les chiffres
-actuels sont faux. Prévoir de republier les résultats du vault.
+**Résultat.** 0 site restant. 7 portaient le défaut, 3 implémentaient déjà une fenêtre par rang
+(extraite dans `panel.fenetre_par_rang`), 1 était du calcul mort, 1 était un défaut invisible au
+raisonnement : `preset_latest_weights` déplaçait les **poids de production** de 2 points à cause
+d'une série de 125 barres qui transformait la MM200 de `_regime_mult` en MM125. Le seuil
+d'éligibilité passe à 200 barres. 5 tests ajoutés.
 
 ### P0-2 · Rendre mesurable le biais du survivant
 **Description.** 7 délistés sont ingérés, aucun n'entre jamais dans le top-30 : le test s'exécute

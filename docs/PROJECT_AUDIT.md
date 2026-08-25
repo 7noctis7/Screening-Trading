@@ -91,7 +91,7 @@ test_la_couche_intelligence_ne_peut_pas_atteindre_un_courtier`.
 
 | # | Risque | Gravité | État |
 |---|---|---|---|
-| T1 | 13 sites `min(len(data[s]))` non migrés vers `packages/backtest/panel` | **ÉLEVÉ** | ouvert |
+| T1 | ~~13 sites `min(len(data[s]))` non migrés~~ | ÉLEVÉ | **fermé le 25/08** — 0 site restant |
 | T2 | `RiskEngine` (règles reward/risk, stops) hors du chemin de production | MOYEN | partiellement couvert par `order_gate` |
 | T3 | `mcp_tradingview` alimente le kill-switch avec 2 fichiers de test | MOYEN | ouvert |
 | T4 | Modules d'exécution avancés jamais exécutés sur données réelles | MOYEN | ouvert |
@@ -99,11 +99,22 @@ test_la_couche_intelligence_ne_peut_pas_atteindre_un_courtier`.
 | T6 | `apps/web/app/dashboard/page.tsx` à 435 lignes (limite projet : 400) | FAIBLE | ouvert |
 | T7 | `make lint` échoue : 4333 erreurs ruff dont 3847 `E501` — la CI l'exécute en **non bloquant** | FAIBLE | préexistant, assumé |
 
-**T1 est le risque technique n°1.** Le défaut corrigé le 25/08 dans `preset_backtest` — la série
-la plus courte fixait la profondeur de tout le panel — existe à l'identique dans
-`conviction_backtest`, `megacap`, `crypto_sleeve`, `sector_momentum`, `weighting_backtest`,
-`ml_walkforward` et quatre fonctions de `preset_backtest`. Tout chiffre publié par ces modules
-est suspect tant qu'ils n'ont pas été migrés.
+**T1 est fermé.** Les 13 sites ont été migrés. L'audit site par site a révélé que le problème
+n'était pas uniforme :
+
+- **7 sites** portaient bien le défaut (`conviction_backtest` ×2, `megacap` ×2, `crypto_sleeve`,
+  `sector_momentum`, `weighting_backtest`, `ml_walkforward`) → migrés vers `fenetre_commune`.
+- **3 sites** de `preset_backtest` n'étaient PAS le défaut : le bloc `_lens`/`_need` qui les
+  précédait implémentait déjà une fenêtre commune, par RANG au lieu de par couverture, et ce
+  compromis profondeur/largeur était délibéré. Extraits dans `panel.fenetre_par_rang`, sémantique
+  inchangée — la triplication était la dette, pas la règle.
+- **1 site** était du calcul mort (`L` et `M` écrasés quatre lignes plus bas) → supprimé.
+- **1 site** était un défaut que le raisonnement seul ne voyait pas : `preset_latest_weights`
+  semblait à l'abri puisque tout y est ancré sur la fin de la série. **Mesure : une seule série de
+  125 barres, incapable d'entrer dans le top-12, déplaçait les poids envoyés au courtier de
+  2 points.** Cause : `_regime_mult` lit `hist[-200:]` et le pic historique — sur un panel tronqué
+  la « MM200 » devient une MM125. Corrigé, et le seuil d'éligibilité passe à 200 barres
+  (`MIN_BARRES_REGIME`).
 
 ---
 

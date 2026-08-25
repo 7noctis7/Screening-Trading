@@ -7,16 +7,16 @@
 
 ```
 $ python3 -m pytest -q
-1165 passed, 8 skipped, 2 warnings in 222.57s
+1170 passed, 8 skipped, 2 warnings in 198.52s
 ```
 
 | Mesure | Valeur |
 |---|---:|
-| Tests collectés | 1 173 |
-| **Réussis** | **1 165** |
+| Tests collectés | 1 178 |
+| **Réussis** | **1 170** |
 | Échecs | **0** |
 | Ignorés | 8 |
-| Durée | 3 min 42 s |
+| Durée | 3 min 19 s |
 
 ## Les 8 tests ignorés — et pourquoi
 
@@ -44,7 +44,7 @@ Recherche de tests volontairement neutralisés : **une seule occurrence** de `sk
 | `tests/execution/test_run_live_risk_gate.py` | 5 | Le portail est réellement CÂBLÉ dans le chemin d'ordres — une règle correcte mais non branchée ne protège rien. |
 | `tests/risk/test_order_gate.py` | 18 | Le portail ne peut que réduire ; un désengagement n'est jamais bloqué ; inconnu ≠ zéro ; limites illisibles → défaut. |
 | `tests/intelligence/test_intelligence.py` | 25 | Une opinion ne devient jamais un fait ; les échos ne sont pas des confirmations ; 5 M d'abonnés ne battent pas une source officielle ; la couche ne peut pas importer l'exécution. |
-| `tests/backtest/test_panel_window.py` | 8 | Une série courte ne tronque plus le panel ; compteurs de garde-fous. |
+| `tests/backtest/test_panel_window.py` | 13 | Une série courte ne tronque plus le panel ; compteurs de garde-fous ; **les poids de PRODUCTION sont insensibles à une série courte** (mesuré : 2 points d'écart avant correctif). |
 | `tests/research/test_attribution.py` | 6 | Un levier pur (1,5× le benchmark) doit être refusé comme candidat. |
 | `tests/portfolio/test_replication.py` | 10 | L'écart de réplication ne peut pas descendre sous la poche hors modèle. |
 | `tests/data/test_engine_schema_normalise.py` | 4 | Les deux schémas de base sont lus. |
@@ -76,8 +76,7 @@ Pour l'obtenir : `pip install pytest-cov && pytest --cov=packages --cov-report=t
 
 ## Problèmes restant ouverts
 
-1. **13 sites `min(len)` non migrés** — leurs chiffres restent suspects. Aucun test ne les couvre
-   aujourd'hui sur ce point précis.
+1. ~~13 sites `min(len)` non migrés~~ — **fermé**, 0 site restant.
 2. **`mcp_tradingview`** : 7 modules, 2 fichiers de test, et il pilote un kill-switch.
 3. **`packages/testing`** : aucun test dédié.
 4. Le test de biais du survivant **s'exécute et ne mesure rien** (les délistés ingérés n'entrent

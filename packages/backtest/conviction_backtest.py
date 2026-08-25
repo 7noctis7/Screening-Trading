@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from packages.backtest.panel import fenetre_commune
 from packages.portfolio.psr import deflated_sharpe_ratio, probabilistic_sharpe_ratio
 
 
@@ -38,7 +39,9 @@ def conviction_backtest(data: dict, step: int = 21, top_n: int = 15, lookback: i
     syms = [s for s, b in data.items() if b and len(b) > lookback + 2 * step]
     if len(syms) < 5:
         return {"available": False}
-    L = min(len(data[s]) for s in syms)
+    syms, L, panel_diag = fenetre_commune(data, syms)
+    if len(syms) < 5:
+        return {"available": False}
     M = np.array([[b.close for b in data[s]][-L:] for s in syms], dtype=float)   # actifs × temps
     rets = M[:, 1:] / M[:, :-1] - 1
 
@@ -79,7 +82,8 @@ def conviction_backtest(data: dict, step: int = 21, top_n: int = 15, lookback: i
     return {"available": True, "strategy": strat, "benchmark": base,
             "n_rebalances": rebs, "step_days": step,
             "turnover_annual": round(turnover / rebs * per_year, 2),
-            "alpha": round((strat.get("annualized", 0) - base.get("annualized", 0)), 4)}
+            "alpha": round((strat.get("annualized", 0) - base.get("annualized", 0)), 4),
+            "panel": panel_diag}
 
 
 def multi_lens_backtest(data: dict, lenses: dict, step: int = 21, top_n: int = 10,
@@ -95,7 +99,9 @@ def multi_lens_backtest(data: dict, lenses: dict, step: int = 21, top_n: int = 1
     syms_all = [s for s, b in data.items() if b and len(b) > lookback + 2 * step]
     if len(syms_all) < 5:
         return {"available": False}
-    L = min(len(data[s]) for s in syms_all)
+    syms_all, L, _panel = fenetre_commune(data, syms_all)
+    if len(syms_all) < 5:
+        return {"available": False}
     closes = {s: [b.close for b in data[s]][-L:] for s in syms_all}
     per_year = 252.0 / step
     out: dict[str, dict] = {}

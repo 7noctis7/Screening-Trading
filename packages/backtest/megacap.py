@@ -9,6 +9,7 @@ from __future__ import annotations
 import numpy as np
 
 from packages.backtest.conviction_backtest import _stats
+from packages.backtest.panel import fenetre_commune
 
 # Doubles classes d'actions (même SOCIÉTÉ) → on n'en garde qu'UNE dans le top-N (sinon Alphabet,
 # Fox… sont comptés deux fois et volent une place). On garde la 1re rencontrée (= plus grosse).
@@ -45,7 +46,9 @@ def megacap_rotation(data: dict, asset_classes: dict | None = None, top_n: int =
             if b and len(b) > lookback + 2 * step and ac.get(s, "equity") in ("equity", "etf")]
     if len(syms) < top_n:
         return {"available": False}
-    L = min(len(data[s]) for s in syms)
+    syms, L, panel_diag = fenetre_commune(data, syms, min_noms=top_n)
+    if len(syms) < top_n:
+        return {"available": False}
     closes = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in syms}
     dvol = {s: closes[s] * np.asarray([getattr(b, "volume", 0.0) for b in data[s]][-L:], float)
             for s in syms}
@@ -63,7 +66,8 @@ def megacap_rotation(data: dict, asset_classes: dict | None = None, top_n: int =
     per_year = 252.0 / step
     return {"available": True, "stats": _stats(port, per_year), "n_rebalances": rebs,
             "step_days": step, "top_n": top_n,
-            "turnover_per_rebal": round(turn / rebs, 2), "current_top": last_top}
+            "turnover_per_rebal": round(turn / rebs, 2), "current_top": last_top,
+            "panel": panel_diag}
 
 
 def megacap_equity_daily(data: dict, asset_classes: dict | None = None, top_n: int = 10,
@@ -89,11 +93,9 @@ def megacap_equity_daily(data: dict, asset_classes: dict | None = None, top_n: i
     # COURBE LONGUE (même règle que le preset) : on écarte les historiques courts (IPO récentes)
     # qui tronqueraient toute la courbe au plus court → la fenêtre commune remonte aussi loin que
     # les sociétés établies (sinon une IPO 2023 ramène tout le dashboard à 2023).
-    lmax = max(len(data[s]) for s in syms)
-    syms = [s for s in syms if len(data[s]) >= 0.6 * lmax] or syms
+    syms, L, panel_diag = fenetre_commune(data, syms, min_noms=top_n)
     if len(syms) < top_n:
         return {"available": False}
-    L = min(len(data[s]) for s in syms)
     closes = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in syms}
     ref = max(syms, key=lambda s: len(data[s]))
     dts = [b.ts.isoformat() for b in data[ref]][-L:]
@@ -131,4 +133,5 @@ def megacap_equity_daily(data: dict, asset_classes: dict | None = None, top_n: i
         return {"available": False}
     return {"available": True, "equity": [round(x, 2) for x in eq], "dates": out_dates,
             "current_top": cur, "current_weights": {s: round(w, 4) for s, w in curw.items()},
-            "weighting": "market_cap" if use_cap else "dollar_volume"}
+            "weighting": "market_cap" if use_cap else "dollar_volume",
+            "panel": panel_diag}
