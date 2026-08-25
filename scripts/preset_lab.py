@@ -42,7 +42,8 @@ DECLENCHEURS = {
 
 # Lignes DIAGNOSTIQUES : imprimées pour chiffrer un défaut connu, jamais promues, jamais loguées
 # au ledger (ce ne sont pas des essais d'alpha — les compter déflaterait le DSR pour rien).
-DIAGNOSTICS = {"panel tronqué (ancien min)", "empilement positionnel (ancien)"}
+DIAGNOSTICS = {"panel tronqué (ancien min)", "empilement positionnel (ancien)",
+               "fill au signal (ancien, biaisé)"}
 
 CONFIGS = [
     ("base (prod actuelle)", {}),
@@ -61,7 +62,9 @@ CONFIGS = [
     ("bande 1 % (au lieu de 3 %)", {"band": 0.01}),
     ("bande 0,5 %", {"band": 0.005}),
     ("sans bande", {"band": 0.0}),
-    ("fill t+1 (réaliste, M-1)", {"exec_lag": 1}),   # écart vs fill au signal = mini look-ahead
+    # `exec_lag=1` (réaliste) est le DÉFAUT depuis le 25/08 : la ligne de comparaison épingle donc
+    # l'ancien fill au close du signal, dont le dépôt documentait lui-même le mini look-ahead.
+    ("fill au signal (ancien, biaisé)", {"exec_lag": 0}),
     ("+covariance débruitée RMT", {"cov_denoise": True}),   # M1 : repli inverse-vol si k < 2
     # ALIGNEMENT PAR DATE — P0-2. Sur calendrier uniforme, chiffres identiques au bit près ; la
     # ligne ne bouge donc QUE si des séries ne se terminent pas le même jour (introductions

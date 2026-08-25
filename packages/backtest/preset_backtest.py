@@ -50,6 +50,24 @@ from packages.execution.costs import CostModel
 #
 # `aligner_dates=False` reproduit l'ancien comportement, pour comparaison uniquement.
 ALIGNEMENT_PAR_DEFAUT = True
+
+# EXÉCUTION DÉCALÉE D'UNE BARRE — activée le 25/08 au soir.
+#
+# `exec_lag = 0` remplissait au close de la barre de SIGNAL : un cours qui n'était pas
+# exécutable au moment de la décision. Le dépôt le documentait lui-même comme un « mini
+# look-ahead » et attendait de le chiffrer avant de le retirer.
+#
+# Chiffré sur données réelles, une fois l'alignement par date en place :
+#     base (fill au signal)     Sharpe 1,34 · Sortino 2,95 · maxDD −11,0 % · turn. 1,48×
+#     fill t+1 (réaliste)       Sharpe 1,35 · Sortino 3,06 · maxDD  −8,5 % · turn. 1,48×
+#
+# Meilleur sur TOUTES les colonnes. Le gate du labo l'avait pourtant rejeté, parce qu'il exige
+# +0,05 de Sharpe : il demande « ce levier apporte-t-il de la valeur ? ». Ce n'est pas la bonne
+# question ici. `exec_lag=0` n'est pas un levier, c'est un biais connu — et on ne garde pas un
+# biais au motif que le retirer ne rapporte pas assez. Surtout quand le retirer ne coûte rien.
+#
+# `exec_lag=0` reste disponible pour reproduire l'ancien comportement.
+EXEC_LAG_PAR_DEFAUT = 1
 from packages.portfolio.optimize import equal_risk_contribution
 from packages.portfolio.risk_advanced import ewma_vol
 from packages.portfolio.risk_overlay import drawdown_taper
@@ -189,7 +207,7 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
                     breadth_gate: bool = True, risk_overlay: bool = False,
                     ro_dd_soft: float = -0.08, ro_dd_hard: float = -0.20,
                     ewma_lam: float = 0.94, max_weight: float | None = None,
-                    corr_tighten: bool = False, exec_lag: int = 0,
+                    corr_tighten: bool = False, exec_lag: int = EXEC_LAG_PAR_DEFAUT,
                     cov_denoise: bool = False,
                     panel_couverture: float = COUVERTURE_DEFAUT,
                     aligner_dates: bool = ALIGNEMENT_PAR_DEFAUT) -> dict:
@@ -199,9 +217,10 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
     toujours calculé et publié — mesurer d'abord, changer ensuite.
 
     `exec_lag` (audit 07/17, M-1) : nb de barres entre la DÉCISION (close t, sur info ≤t)
-    et l'EXÉCUTION. 0 = fill au close de la barre de signal (défaut historique — mini
-    look-ahead : le close du jour de signal n'est pas exécutable). 1 = fill au close t+1
-    (réaliste). La fenêtre de détention est décalée d'autant ; `make preset-lab` chiffre l'écart."""
+    et l'EXÉCUTION. **1 par défaut depuis le 25/08** = fill au close t+1, réaliste.
+    0 = fill au close de la barre de signal — ancien défaut, mini look-ahead documenté : ce
+    cours n'était pas exécutable au moment de la décision. Mesuré meilleur sur toutes les
+    colonnes une fois l'alignement par date en place (cf. EXEC_LAG_PAR_DEFAUT)."""
     eligibles = [s for s, b in data.items() if b and len(b) > lookback + 2 * step]
     if len(eligibles) < 5:
         return {"available": False}

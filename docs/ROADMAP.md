@@ -154,6 +154,15 @@ plus de 40 caractères — une série dont on ne sait plus dire ce qu'elle infor
 
 ---
 
+### P0-4 · Migrer la courbe et le ledger vers l'alignement par date — **NOUVEAU**
+**Description.** `preset_equity_daily`, `preset_trade_log` et `preset_ledger` héritent de
+l'univers corrigé (via `_price_universe`) mais calculent encore leurs rendements par empilement
+positionnel. La courbe du tableau de bord peut donc diverger du tableau du backtest — deux
+chiffres pour la même stratégie sur le même site.
+**Difficulté.** Élevée : le ledger fait de la comptabilité parts/cash, et un NaN mal géré y
+produit un P&L **faux** plutôt qu'une erreur visible.
+**Risques.** Ne pas le faire laisse une incohérence affichée ; le faire vite en crée une pire.
+
 ## P2 — Optimisation
 
 ### P2-1 · Exécuter `impact.py` et `almgren_chriss.py` sur données réelles

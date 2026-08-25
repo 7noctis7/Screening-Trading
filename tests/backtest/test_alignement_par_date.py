@@ -157,3 +157,32 @@ def test_les_seances_horodatees_differemment_sont_la_meme_date():
          "E": [Bar(j.replace(hour=23), 50.0)]}
     noms, dates, A, _ = aligner_par_date(d, list(d), min_noms=5)
     assert dates == ["2026-01-05"] and A.shape == (5, 1) and np.isfinite(A).all()
+
+
+# --- EXÉCUTION RÉALISTE PAR DÉFAUT ------------------------------------------------------------
+
+def test_l_execution_est_decalee_d_une_barre_par_defaut():
+    """`exec_lag=0` remplissait au close de la barre de SIGNAL — un cours non exécutable au
+    moment de la décision, que le dépôt documentait lui-même comme un mini look-ahead.
+
+    Mesuré sur données réelles une fois l'alignement en place, `exec_lag=1` est meilleur sur
+    TOUTES les colonnes (Sharpe, Sortino, maxDD, à turnover égal). Le gate du labo l'avait
+    rejeté car il exige +0,05 de Sharpe : il demande « ce levier apporte-t-il de la valeur ? ».
+    Mauvaise question — on ne garde pas un biais connu au motif que le retirer ne rapporte pas
+    assez."""
+    import inspect
+
+    from packages.backtest.preset_backtest import EXEC_LAG_PAR_DEFAUT, preset_backtest
+
+    assert EXEC_LAG_PAR_DEFAUT == 1
+    assert inspect.signature(preset_backtest).parameters["exec_lag"].default == 1
+
+
+def test_l_ancien_fill_reste_reproductible():
+    """On doit pouvoir refaire tourner l'ancien comportement pour comparer — sinon l'écart
+    n'est plus vérifiable et le chiffre publié devient un acte de foi."""
+    d = _uniforme(n=20, longueur=800)
+    ancien = preset_backtest(d, top_k=10, exec_lag=0)
+    nouveau = preset_backtest(d, top_k=10)
+    assert ancien["available"] and nouveau["available"]
+    assert ancien["curves"]["preset"] != nouveau["curves"]["preset"]
