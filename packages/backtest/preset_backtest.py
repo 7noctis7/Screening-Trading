@@ -30,6 +30,13 @@ from packages.backtest.panel import (
     dernier_connu,
     fenetre_commune,
 )
+from packages.backtest.preset_helpers import (
+    adaptive_cap as _adaptive_cap_fn,
+    breadth as _breadth_fn,
+    cap_weights as _cap_weights_fn,
+    mom_tilt as _mom_tilt_fn,
+    regime_mult as _regime_mult_fn,
+)
 from packages.execution.costs import CostModel
 from packages.portfolio.optimize import equal_risk_contribution
 from packages.portfolio.risk_advanced import ewma_vol
@@ -72,91 +79,10 @@ ALIGNEMENT_PAR_DEFAUT = True
 # `exec_lag=0` reste disponible pour reproduire l'ancien comportement.
 EXEC_LAG_PAR_DEFAUT = 1
 
-# `_regime_mult` calcule une MM200 (`hist[-200:]`) et un pic historique. En dessous de ce
+# `regime_mult` calcule une MM200 (`hist[-200:]`) et un pic historique. En dessous de ce
 # nombre de barres, les deux sont silencieusement faux : la « MM200 » devient une moyenne plus
 # courte, et le pic ignore tout ce qui précède la fenêtre.
 MIN_BARRES_REGIME = 200
-
-
-def _regime_mult(mkt: np.ndarray, t: int, *, dd_hard: float = -0.15,
-                 dd_soft: float = -0.10, g_dist: float = 0.6,
-                 g_below: float = 0.2) -> float:
-    """#5 porte de régime + #6 frein de drawdown sur l'indice marché (moyenne univers).
-    Plein risque en tendance saine ; coupe en distribution / sous MM200 / gros DD.
-    Ne réduit jamais le gross au-dessus de 1. Seuils en kwargs (défauts inchangés) →
-    testables en sensibilité (audit) sans changer le comportement de prod."""
-    if t < 25:
-        return 1.0
-    hist = mkt[:t + 1]
-    ma = hist[-200:].mean()
-    slope = mkt[t] / mkt[t - 20] - 1.0
-    peak = float(np.maximum.accumulate(hist)[-1])
-    dd = mkt[t] / peak - 1.0 if peak > 0 else 0.0
-    if dd < dd_hard:                                       # #6 frein DD : krach → cash
-        return 0.0
-    g = 1.0 if (mkt[t] > ma and slope > 0) else (g_dist if mkt[t] > ma else g_below)
-    if dd < dd_soft:                                           # #6 demi-frein
-        g *= 0.5
-    return g
-
-
-def _mom_tilt(A: np.ndarray, t: int, w: np.ndarray, gamma: float = 1.0) -> np.ndarray:
-    """#4 incline les poids ERC vers le momentum 12 mois (capte les leaders type NVDA), SANS toucher
-    au gross : on renormalise à la même somme. Réduit le « low-vol drag » de l'ERC pur."""
-    base = A[:, max(0, t - 252)]
-    mom = np.where(base > 0, A[:, t] / base - 1.0, 0.0)
-    tilt = np.clip(mom, 0.0, None) ** gamma
-    if float(tilt.sum()) <= 0:
-        return w
-    f = 0.5 + 0.5 * tilt / (tilt.mean() + 1e-9)                  # 0.5×base + 0.5×momentum
-    w2 = w * f
-    s = float(w2.sum())
-    return w2 / s if s > 0 else w
-
-
-def _breadth(A: np.ndarray, t: int) -> float:
-    """#8 ampleur de marché : fraction de l'univers au-dessus de sa MM200 (santé interne du marché).
-    Faible breadth = rallye étroit/fragile → on réduit le gross. Data-driven, dans [0,1]."""
-    if t < 25:
-        return 1.0
-    lo = max(0, t - 200)
-    above = [A[i, t] > A[i, lo:t].mean() for i in range(A.shape[0]) if t - lo > 5]
-    return float(np.mean(above)) if above else 1.0
-
-
-def _cap_weights(w: np.ndarray, max_weight: float) -> np.ndarray:
-    """Plafond de concentration itéré : aucune position > max_weight, excès redistribué
-    au prorata des positions libres, puis renormalisation (gross conservé).
-    Extrait (audit 07/15) : cette boucle vivait en 3 copies divergentes."""
-    for _ in range(3):
-        over = w > max_weight
-        if not over.any():
-            break
-        excess = (w[over] - max_weight).sum()
-        w[over] = max_weight
-        free = ~over & (w > 0)
-        if free.any():
-            w[free] += excess * w[free] / w[free].sum()
-        else:
-            break
-    s = w.sum()
-    return w / s if s > 0 else w
-
-
-def _adaptive_cap(cov: np.ndarray, max_weight: float, corr_tighten: bool,
-                  stress_corr: float = 0.60, tighten: float = 0.5,
-                  floor: float = 0.05) -> float:
-    """Plafond par nom RESSERRÉ quand la corrélation moyenne de l'univers monte
-    (diversification qui s'effondre → le portefeuille devient un pseudo-indice).
-    Branche `correlation_aware_caps` (packages/risk/limits) sur le RAIL DE PROD —
-    audit 07/15 : « la sophistication était de l'étagère »."""
-    if not corr_tighten or cov.shape[0] < 3:
-        return max_weight
-    d = np.sqrt(np.clip(np.diag(cov), 1e-12, None))
-    corr = cov / np.outer(d, d)
-    n = corr.shape[0]
-    avg = float((corr.sum() - n) / (n * (n - 1)))
-    return max(floor, round(max_weight * tighten, 4)) if avg > stress_corr else max_weight
 
 
 def _price_universe(data: dict, syms: list, lookback: int, top_k: int,
@@ -325,12 +251,12 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
         ssum = w.sum()
         w = w / ssum if ssum > 0 else w
         if mom_tilt:                                            # #4 incline vers les leaders (momentum)
-            w = _mom_tilt(A, t, w)
+            w = _mom_tilt_fn(A, t, w)
         if max_weight:                                          # plafond (adaptatif si corr_tighten)
-            _cap = _adaptive_cap(cov, max_weight, corr_tighten)   # cov = sous-ensemble négociable
+            _cap = _adaptive_cap_fn(cov, max_weight, corr_tighten)   # cov = sous-ensemble négociable
             decl["plafond"] += int((w > _cap + 1e-12).any())     # a-t-il MORDU, ou juste tourné ?
             _avant = w.copy()
-            w = _cap_weights(w, _cap)
+            w = _cap_weights_fn(w, _cap)
             ampl["plafond"].append(1.0 - 0.5 * float(np.abs(w - _avant).sum()))
         # `cov` porte le SOUS-ENSEMBLE négociable : la forme quadratique doit utiliser les mêmes
         # indices. Identique à `w @ cov @ w` quand tout est négociable (le cas d'un panel complet).
@@ -340,12 +266,12 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
         decl["vol_target"] += int(pv > 0 and tgt_vol < pv)       # la cible de vol a-t-elle bridé ?
         ampl["vol_target"].append(gross if pv > 0 else 1.0)
         if regime_gate:                                         # #5 régime + #6 frein DD (≤ 1, jamais de levier)
-            _rm = _regime_mult(mkt, t)
+            _rm = _regime_mult_fn(mkt, t)
             decl["regime"] += int(_rm < 1.0 - 1e-12)
             ampl["regime"].append(_rm)
             gross *= _rm
         if breadth_gate:                                        # #8 ampleur de marché (rallye étroit → ↓)
-            _am = float(np.clip(_breadth(A, t) / 0.5, 0.0, 1.0))
+            _am = float(np.clip(_breadth_fn(A, t) / 0.5, 0.0, 1.0))
             decl["ampleur"] += int(_am < 1.0 - 1e-12)
             ampl["ampleur"].append(_am)
             gross *= _am
@@ -442,7 +368,7 @@ def preset_latest_weights(data: dict, quality: dict | None = None, asset_classes
     Même logique que le backtest (qualité top-K -> risk-parity ERC -> DD-target -> blackout), mais
     calculée au dernier point seulement. Renvoie {symbol: poids} (somme <= 1, le reste en cash).
     """
-    # `_regime_mult` lit une MM200 et le PIC historique de l'indice : il lui faut au moins
+    # `regime_mult` lit une MM200 et le PIC historique de l'indice : il lui faut au moins
     # 200 barres. Le seuil d'éligibilité était à `lookback` (120), et `min(len)` laissait
     # ensuite la série la plus courte fixer L pour tout le monde. Mesuré : une seule série de
     # 125 barres, incapable d'entrer dans le top-K, déplaçait les poids de PRODUCTION de
@@ -475,17 +401,17 @@ def preset_latest_weights(data: dict, quality: dict | None = None, asset_classes
     ssum = w.sum()
     w = w / ssum if ssum > 0 else w
     if mom_tilt:                                                # #4 tilt momentum (avant le plafond)
-        w = _mom_tilt(A, t, w)
+        w = _mom_tilt_fn(A, t, w)
     # PLAFOND DE CONCENTRATION (rail prod) : resserré ×0,5 si la corrélation moyenne de
     # l'univers dépasse 0,60 (diversification en breakdown → plus de noms imposés).
-    w = _cap_weights(w, _adaptive_cap(cov, max_weight, corr_tighten))
+    w = _cap_weights_fn(w, _adaptive_cap_fn(cov, max_weight, corr_tighten))
     tgt_vol = max(0.0, abs(dd_target)) / k_dd
     pv = float(np.sqrt(max(0.0, w @ cov @ w)))
     gross = 0.0 if pv <= 0 else min(1.0, tgt_vol / pv)
     if regime_gate:                                             # #5 régime + #6 frein DD (production)
-        gross *= _regime_mult(mkt, t)
+        gross *= _regime_mult_fn(mkt, t)
     if breadth_gate:                                            # #8 ampleur de marché (production)
-        gross *= float(np.clip(_breadth(A, t) / 0.5, 0.0, 1.0))
+        gross *= float(np.clip(_breadth_fn(A, t) / 0.5, 0.0, 1.0))
     w = w * gross
     w = _concentrate(w, min_weight)     # jette la poussière → moins d'actifs, mieux dimensionnés
     return {universe[i]: round(float(w[i]), 4) for i in range(len(universe)) if w[i] > 1e-4}
@@ -561,7 +487,7 @@ def preset_equity_daily(data: dict, quality: dict | None = None, asset_classes: 
                 if int((nw_bl > 0).sum()) >= min_names:
                     nw = nw_bl
                 s1 = nw.sum(); nw = nw / s1 if s1 > 0 else nw
-                nw = _cap_weights(nw, max_weight)
+                nw = _cap_weights_fn(nw, max_weight)
                 pv = float(np.sqrt(max(0.0, nw @ cov @ nw)))
                 gross = 0.0 if pv <= 0 else min(1.0, tgt_vol / pv)
                 nw = nw * gross
@@ -589,7 +515,7 @@ def _weights_at(A, rets, t, lookback, blackout_move, max_weight, min_names, tgt_
     if int((w_bl > 0).sum()) >= min_names:
         w = w_bl
     s1 = w.sum(); w = w / s1 if s1 > 0 else w
-    w = _cap_weights(w, max_weight)
+    w = _cap_weights_fn(w, max_weight)
     pv = float(np.sqrt(max(0.0, w @ cov @ w)))
     gross = 0.0 if pv <= 0 else min(1.0, tgt_vol / pv)
     return w * gross
