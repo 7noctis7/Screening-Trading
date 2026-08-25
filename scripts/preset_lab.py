@@ -27,10 +27,14 @@ sys.path.insert(0, str(ROOT))
 
 # Quel compteur de déclenchement prouve qu'un levier a réellement AGI ? Sans ça, « rejeté »
 # et « jamais activé » s'impriment à l'identique — c'est ce qui s'est passé le 24/08.
+# « sans bande » est ABSENT de cette table à dessein. Cette configuration DÉSACTIVE le garde-fou :
+# sa clé de compteur est donc absente, ce qui la faisait étiqueter « ⚪ INERTE — jamais déclenché,
+# non testé ». C'était faux : elle a bien été testée, c'est le garde-fou qui n'existe pas dans
+# cette configuration. Confondre « désactivé par construction » et « actif mais silencieux » est
+# exactement l'erreur que ces compteurs existent pour éviter.
 DECLENCHEURS = {
     "bande 1 % (au lieu de 3 %)": ("bande",),
     "bande 0,5 %": ("bande",),
-    "sans bande": ("bande",),
     "+cap adaptatif corr": ("plafond",),
     "+overlay DD/vol EWMA": ("taper_dd", "frein_vol"),
     "+cap adaptatif + overlay": ("plafond", "taper_dd", "frein_vol"),

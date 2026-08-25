@@ -79,6 +79,8 @@ preset-report:       ## rapport HTML autonome du backtest preset (courbes + draw
 	$(PYTHON) scripts/export_preset_report.py
 calibrate-preset:    ## calibre le preset (DD × top-K × bande) par Sharpe déflaté (anti-overfit)
 	$(PYTHON) scripts/calibrate_preset.py
+diag-alignement:     ## d'OÙ vient le gain de l'alignement par date ? (correction réelle vs tirage d'univers)
+	$(PYTHON) scripts/diag_alignement.py
 preset-lab:          ## labo Sharpe/Sortino : cap adaptatif + overlay risque, mesurés puis gatés
 	$(PYTHON) scripts/preset_lab.py
 alpha-lab:           ## labo d'ALPHA : 5 hypothèses pré-enregistrées passées au gate 4 étages
