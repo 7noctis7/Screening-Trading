@@ -87,7 +87,8 @@ def _run_configs(data, acmap) -> list[dict]:
         if not r.get("available"):
             print(f"  {label:28s} indisponible (échantillon insuffisant)"); continue
         st, per_year = r["preset"], 252.0 / r["step_days"]
-        rows.append({"label": label, "kw": kw, "cagr": st["annualized"],
+        rows.append({"ampleur": r.get("ampleur") or {},
+                     "label": label, "kw": kw, "cagr": st["annualized"],
                      "sharpe": st["sharpe"], "dsr": st["dsr"],
                      "periods_per_year": round(per_year, 4),
                      "sortino": _sortino(r["curves"]["preset"], per_year),
@@ -122,12 +123,22 @@ def _decl_report(rows: list[dict]) -> None:
     n = rows[0].get("n_steps") or 0
     if not d:
         return
+    amp = (rows[0].get("ampleur") or {}) if rows else {}
     print("\n" + "=" * 60 + f"\nDÉCLENCHEMENTS (base, sur {n} pas)\n" + "=" * 60)
+    print(f"  {'garde-fou':12s}   {'fréquence':>18s}   {'effet moyen':>12s}")
     for k, v in d.items():
         etat = ("ACTIF mais jamais déclenché ⚠️" if v == 0
                 else f"{v}/{n} pas ({v / n:.0%})" if n else str(v))
-        print(f"  {k:12s} : {etat}")
-    print("  (un garde-fou absent de cette liste est DÉSACTIVÉ dans la config de base)")
+        a = amp.get(k)
+        # Un garde-fou peut se déclencher souvent et ne rien déplacer : c'est exactement ce qui
+        # produisait « 38 déclenchements » pour un ΔSharpe de +0,00.
+        # `bande` ne mesure pas un multiplicateur d'exposition mais la PART des noms réellement
+        # tradés : l'afficher comme les autres ferait lire « ×0,067 » pour « 6,7 % des noms ».
+        eff = ("—" if a is None else
+               f"{a:.1%} tradés" if k == "bande" else
+               f"×{a:.3f}" + (" ⚠️ nul" if a > 0.999 else ""))
+        print(f"  {k:12s}   {etat:>18s}   {eff:>12s}")
+    print("  (garde-fou absent de la liste = DÉSACTIVÉ · effet ×1,000 = déclenché sans rien changer)")
 
 
 def _cov_report(rows: list[dict]) -> None:
@@ -174,7 +185,9 @@ def _verdict(rows: list[dict]) -> list[dict]:
               f"  (ΔSharpe {r['sharpe']-base['sharpe']:+.2f}, ΔmaxDD "
               f"{(r['maxdd']-base['maxdd'])*100:+.1f} pts"
               + (", jamais déclenché — non testé, pas rejeté)" if inerte
-                 else f", {tirs} déclenchements)" if cles else ")"))
+                 else f", {tirs} déclenchements, effet moyen "
+                      f"×{min((r.get('ampleur') or {}).get(k, 1.0) for k in cles):.3f})"
+                 if cles else ")"))
         if ok and not inerte:
             promoted.append(r)
     print("\n→ " + ("Activer le(s) flag(s) en prod via une PR avec CES chiffres, puis make "

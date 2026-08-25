@@ -217,6 +217,10 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
         decl["taper_dd"] = decl["frein_vol"] = 0
     if band > 0:
         decl["bande"] = 0
+    # AMPLEUR, pas seulement fréquence. « 38 déclenchements » avec un ΔSharpe de +0,00 ne dit pas
+    # si le garde-fou a été neutralisé ou s'il n'a rien eu à corriger. On accumule donc l'effet
+    # multiplicatif appliqué (1,0 = sans effet) pour publier une moyenne à côté du compte.
+    ampl: dict[str, list[float]] = {k: [] for k in decl}
     start = max(lookback, 50)
     for t in range(start, L - 1, step):
         win = rets[:, max(0, t - lookback):t]
@@ -229,6 +233,7 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
         last2 = A[:, t] / A[:, t - 2] - 1                       # blackout : évite le post-choc binaire
         _bl = (np.abs(last2) > blackout_move) & (w > 0)
         decl["blackout"] += int(_bl.any())
+        ampl["blackout"].append(1.0 - float(w[_bl].sum()))     # poids retiré par le blackout
         w = np.where(np.abs(last2) > blackout_move, 0.0, w)
         ssum = w.sum()
         w = w / ssum if ssum > 0 else w
@@ -237,32 +242,43 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
         if max_weight:                                          # plafond (adaptatif si corr_tighten)
             _cap = _adaptive_cap(cov, max_weight, corr_tighten)
             decl["plafond"] += int((w > _cap + 1e-12).any())     # a-t-il MORDU, ou juste tourné ?
+            _avant = w.copy()
             w = _cap_weights(w, _cap)
+            ampl["plafond"].append(1.0 - 0.5 * float(np.abs(w - _avant).sum()))
         pv = float(np.sqrt(max(0.0, w @ cov @ w)))              # DD-target : exposition pilotée par la vol
         gross = 0.0 if pv <= 0 else min(1.0, tgt_vol / pv)
         decl["vol_target"] += int(pv > 0 and tgt_vol < pv)       # la cible de vol a-t-elle bridé ?
+        ampl["vol_target"].append(gross if pv > 0 else 1.0)
         if regime_gate:                                         # #5 régime + #6 frein DD (≤ 1, jamais de levier)
             _rm = _regime_mult(mkt, t)
             decl["regime"] += int(_rm < 1.0 - 1e-12)
+            ampl["regime"].append(_rm)
             gross *= _rm
         if breadth_gate:                                        # #8 ampleur de marché (rallye étroit → ↓)
             _am = float(np.clip(_breadth(A, t) / 0.5, 0.0, 1.0))
             decl["ampleur"] += int(_am < 1.0 - 1e-12)
+            ampl["ampleur"].append(_am)
             gross *= _am
         if risk_overlay:                             # overlay : taper DD + vol prévue
             dd_now = eq_strat / peak_strat - 1.0 if peak_strat > 0 else 0.0
             _tp = drawdown_taper(dd_now, ro_dd_soft, ro_dd_hard)
             decl["taper_dd"] += int(_tp < 1.0 - 1e-12)
+            ampl["taper_dd"].append(_tp)
             gross *= _tp
             if pv > 0 and len(port) >= 10:           # EWMA > réalisée → réduire
                 fv = ewma_vol(port[-60:], lam=ewma_lam, annualize=int(round(per_year)))
                 if fv > pv:
                     decl["frein_vol"] += 1
+                    ampl["frein_vol"].append(pv / fv)
                     gross *= pv / fv
         w = w * gross
         if band > 0 and prev_w.sum() > 0:                       # bande de non-trading
-            decl["bande"] += int((np.abs(w - prev_w) < band).any())
-            w = np.where(np.abs(w - prev_w) < band, prev_w, w)
+            # « au moins un nom bloqué » est vrai à presque chaque pas et n'apprend rien : on
+            # mesure la PART des noms que la bande ramène à leur poids précédent.
+            _dans = np.abs(w - prev_w) < band
+            decl["bande"] += int(_dans.any())
+            ampl["bande"].append(1.0 - float(_dans.mean()))
+            w = np.where(_dans, prev_w, w)
         entry = min(t + exec_lag, L - 1)                        # M-1 : exécution à t+exec_lag
         nxt = min(entry + step, L - 1)
         fwd = A[:, nxt] / A[:, entry] - 1                       # rendement RÉALISÉ après l'exécution
@@ -285,6 +301,9 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
            "cov_diag": summarize(cov_diags, n_degraded, cov_denoise),
            "panel": panel_diag, "n_steps": len(port),
            "declenchements": {k: v for k, v in decl.items()},
+           # Effet MOYEN appliqué (1,0 = aucun). Un garde-fou à 0,999 s'est déclenché sans rien
+           # déplacer : c'est ce qu'il fallait pouvoir lire à côté du compte de déclenchements.
+           "ampleur": {k: round(float(sum(v) / len(v)), 4) for k, v in ampl.items() if v},
            "preset": _stats(port, per_year),
            "turnover_annual": round(turn / len(port) * per_year, 2),
            "dd_target": dd_target, "band": band, "target_vol": round(tgt_vol, 4),
