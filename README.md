@@ -324,6 +324,29 @@ make live          # APERÇU (dry-run) : affiche les ordres cibles, n'envoie RIE
 make live-go       # EXÉCUTE en PAPER (clés API .env requises) — Alpaca reste en paper
 ```
 
+### Interactive Brokers — compte DÉMO uniquement
+
+`packages/execution/ibkr_broker.py` **ne peut pas** passer d'ordre sur un compte IBKR réel.
+Trois verrous indépendants, un seul suffit pour refuser :
+
+| Verrou | Ce qu'il contrôle |
+|---|---|
+| **Port** | 7496 / 4001 = ports RÉELS → refusés avant toute connexion |
+| **Identifiant de compte** | lu **après** connexion. `DU…` / `DF…` = démo. Tout le reste est refusé, **y compris un identifiant vide** |
+| **Opt-in** | `QUANT_IBKR_ENABLE=1` requis |
+
+Le port n'est qu'un **indice** : il se reconfigure dans les réglages de TWS. Le verrou décisif
+est l'identifiant renvoyé par la passerelle, qui ne se falsifie pas depuis le poste client — et
+il est re-contrôlé **avant chaque ordre**, parce qu'une passerelle peut être relancée sur un
+autre compte pendant que le processus tourne.
+
+Il n'existe **aucun** paramètre ni variable d'environnement qui ouvrirait le réel. En ajouter un
+exigerait de modifier le fichier source : un geste visible, revu, tracé dans l'historique git.
+Un test le vérifie.
+
+État : **lecture seule** (equity, positions). L'émission d'ordres est refusée explicitement —
+IBKR raisonne en quantité et non en montant, et un ordre approximatif est pire qu'un ordre absent.
+
 Routage : actions/ETF → **Alpaca (paper)** · crypto → **Binance** par défaut
 (`QUANT_CRYPTO_VENUE=bitmart` pour changer de place). Le mode réel exige **`--live` ET `--yes`**
 ET des clés API présentes : si l'un des trois manque, on retombe en dry-run.

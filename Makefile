@@ -175,6 +175,8 @@ analytics:        ## rapport de perf QuantStats (Sortino/Calmar/Alpha-Beta vs QQ
 	$(PYTHON) scripts/perf_report.py
 brief:            ## brief unifié (priorités + journal + changements + audit) → stdout (ARGS=--write → vault/_BRIEF.md)
 	$(PYTHON) scripts/daily_brief.py $(ARGS)
+macro-verify:      ## vérifie que chaque identifiant FRED existe et publie encore (FRED_API_KEY requise)
+	$(PYTHON) scripts/macro_verify.py
 vault-search:     ## recherche sémantique locale du vault — make vault-search Q="ta question" (TF-IDF ; QUANT_EMBED=ollama)
 	$(PYTHON) scripts/vault_search.py search "$(Q)" -k $(or $(K),5)
 hf-push:          ## pousse le cache OHLCV (market+crypto) vers le dataset HuggingFace (HF_TOKEN requis)

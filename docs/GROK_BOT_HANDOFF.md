@@ -169,6 +169,12 @@ BACKTEST                PAPER                     LIVE
 L'activation réelle d'un courtier est conditionnée à un rendez-vous d'évaluation daté et à une
 décision explicite du propriétaire (`vault/03_TODO.md`).
 
+**Interactive Brokers est verrouillé sur compte DÉMO par construction** : port réel refusé,
+identifiant de compte contrôlé après connexion (`DU…`/`DF…` seuls acceptés, un identifiant vide
+est refusé), et re-contrôlé avant chaque ordre. Aucun paramètre n'ouvre le réel — en ajouter un
+demanderait de modifier `packages/execution/ibkr_broker.py`, ce qu'un test interdit de faire
+discrètement. **Ne cherche pas à contourner ce module ; propose une revue humaine.**
+
 ---
 
 ## 8. Market Intelligence — comment ta couche fonctionne

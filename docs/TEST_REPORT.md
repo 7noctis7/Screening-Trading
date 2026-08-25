@@ -7,16 +7,16 @@
 
 ```
 $ python3 -m pytest -q
-1215 passed, 8 skipped, 2 warnings in 172.64s
+1241 passed, 8 skipped, 2 warnings in 182.88s
 ```
 
 | Mesure | Valeur |
 |---|---:|
-| Tests collectés | 1 223 |
-| **Réussis** | **1 215** |
+| Tests collectés | 1 249 |
+| **Réussis** | **1 241** |
 | Échecs | **0** |
 | Ignorés | 8 |
-| Durée | 2 min 53 s |
+| Durée | 3 min 03 s |
 
 ## Les 8 tests ignorés — et pourquoi
 
@@ -48,6 +48,7 @@ Recherche de tests volontairement neutralisés : **une seule occurrence** de `sk
 | `tests/research/test_attribution.py` | 6 | Un levier pur (1,5× le benchmark) doit être refusé comme candidat. |
 | `tests/portfolio/test_replication.py` | 10 | L'écart de réplication ne peut pas descendre sous la poche hors modèle. |
 | `tests/data/test_engine_schema_normalise.py` | 4 | Les deux schémas de base sont lus. |
+| `tests/execution/test_ibkr_demo_only.py` | 21 | IBKR ne peut pas atteindre un compte réel : port, identifiant de compte, opt-in — et **aucun argument n'ouvre le réel** (vérifié par introspection de la signature). |
 | `tests/mcp_tradingview/test_alerts_kill_switch.py` | 26 | Le filtre d'âge des alertes existe vraiment ; une sévérité inconnue vaut `warning`, jamais `info` ; une alerte non datable est conservée mais signalée. |
 | `tests/backtest/test_alignement_par_date.py` | 11 | Sur calendrier uniforme, l'alignement par date donne des courbes **identiques au bit près** — c'est la propriété qui rend la migration sûre. Un délisté a des NaN, jamais des zéros. |
 | `tests/backtest/test_survivorship_validity.py` | 8 | Le test de biais du survivant dit quand il ne mesure rien, au lieu de renvoyer 0. |
