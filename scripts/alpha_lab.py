@@ -106,16 +106,17 @@ def _wide_panel() -> "tuple":
 def _panel(data: dict) -> "tuple":
     """dict{symbole: barres} → matrice n × L alignée sur l'historique commun."""
     import numpy as np
+    from packages.backtest.panel import fenetre_commune
     syms = [s for s, b in data.items() if b and len(b) > 600]
     if len(syms) < MIN_NAMES:
         return None, []
-    L = min(len(data[s]) for s in syms)
+    syms, L, _ = fenetre_commune(data, syms)     # jamais `min` : cf. packages/backtest/panel
     A = np.asarray([[b.close for b in data[s]][-L:] for s in syms], dtype=float)
     ok = np.isfinite(A).all(axis=1) & (A > 0).all(axis=1)
     return A[ok], [s for s, k in zip(syms, ok) if k]
 
 
-def _gate(name: str, A, long_only: bool, cost_bps: float) -> dict | None:
+def _gate(name: str, A, long_only: bool, cost_bps: float, bench=None) -> dict | None:
     """Backtest + les quatre étages du gate. Renvoie une ligne de résultat, ou None."""
     import numpy as np
 
@@ -153,7 +154,19 @@ def _gate(name: str, A, long_only: bool, cost_bps: float) -> dict | None:
     sab = sabotage_verdict(ret, turnover=r["turnover_annual"] / (252.0 / r["step"]))
     v = promotion_verdict(dsr=dsr, placebo_p=placebo_p, edge=float(ret.mean()))
     v["checks"]["sabotage"] = bool(sab.get("survives"))
-    return {"nom": name, "long_only": long_only, "sharpe": r["sharpe"],
+    # BÊTA OU ALPHA ? Un long-only sur une période haussière monte parce que le marché monte.
+    # Sans cette comparaison, « Sharpe 1,70 » ne dit pas si le signal apporte quoi que ce soit.
+    att = {"available": False}
+    if bench is not None and bench.get("available"):
+        from packages.research.attribution import attribution, bat_le_benchmark
+        att = attribution(ret, bench["returns"], 252.0 / r["step"])
+        if long_only:      # sur un long/short le bêta est déjà neutralisé par construction
+            v["checks"]["bat_benchmark"] = bat_le_benchmark(att)
+            if not v["checks"]["bat_benchmark"]:
+                v["reasons"].append(
+                    f"ne bat pas l'univers équipondéré (alpha {att.get('alpha_annuel', 0)*100:+.1f} %/an, "
+                    f"IR excès {att.get('ir_exces', 0):+.2f})")
+    return {"nom": name, "long_only": long_only, "sharpe": r["sharpe"], "attribution": att,
             "sharpe_period": round(sr_period, 4),
             "periods_per_year": round(252.0 / r["step"], 4),
             "cagr": r["annualized"], "maxdd": r["max_drawdown"],
@@ -177,13 +190,18 @@ def _pbo(rows: list[dict]) -> float | None:
 def _print(rows: list[dict], pbo: float | None, n: int, L: int) -> list[dict]:
     print(f"\nUnivers : {n} titres × {L} jours · rebalancement mensuel · exécution t+1")
     print(f"\n  {'Hypothèse':24s} {'sens':11s} {'Sharpe':>7s} {'CAGR':>7s} {'maxDD':>7s} "
-          f"{'turn':>6s} {'DSR':>6s} {'placebo':>8s} {'sabot.':>7s}")
+          f"{'turn':>6s} {'DSR':>6s} {'placebo':>8s} {'sabot.':>7s} {'bêta':>6s} "
+          f"{'alpha':>7s} {'IRexc':>6s}")
     for r in rows:
         pp = f"{r['placebo_p']:.3f}" if r["placebo_p"] is not None else "  n/a"
+        a = r.get("attribution") or {}
+        bt = f"{a['beta']:6.2f}" if a.get("available") else "     —"
+        al = f"{a['alpha_annuel']*100:+6.1f}%" if a.get("available") else "      —"
+        ir = f"{a['ir_exces']:+6.2f}" if a.get("available") else "     —"
         print(f"  {r['nom']:24s} {'long-only' if r['long_only'] else 'long/short':11s} "
               f"{r['sharpe']:7.2f} {r['cagr']*100:6.1f}% {r['maxdd']*100:6.1f}% "
               f"{r['turnover']:5.1f}× {r['dsr']*100:5.0f}% {pp:>8s} "
-              f"{'oui' if r['sabotage'] else 'non':>7s}")
+              f"{'oui' if r['sabotage'] else 'non':>7s} {bt} {al} {ir}")
     print(f"\nPBO (CSCV sur les {len(rows)} configurations) : {pbo:.2f}"
           if pbo is not None else "\nPBO : non calculable")
     promus = []
@@ -312,10 +330,17 @@ def main() -> int:
     print(f"  Univers retenu : {A.shape[0]} titres × {A.shape[1]} jours")
     cost = CostModel.for_asset_class("equity").round_trip_bps
     print(f"Coût aller-retour appliqué : {cost:.1f} bps (barème {['equity']})")
+    # BENCHMARK : détenir l'univers, équipondéré, même grille et mêmes coûts. Sans lui, un
+    # Sharpe long-only de 1,70 sur une période haussière se lit comme de l'alpha.
+    from packages.research.alpha_hypotheses import benchmark_equipondere
+    bench = benchmark_equipondere(A, cost_rt_bps=cost)
+    if bench.get("available"):
+        print(f"Benchmark (univers équipondéré, buy & hold) : Sharpe {bench['sharpe']:.2f} · "
+              f"CAGR {bench['annualized']*100:.1f}% · maxDD {bench['max_drawdown']*100:.1f}%")
     rows = []
     for name in SIGNALS:
         for lo in (False, True):
-            r = _gate(name, A, lo, cost)
+            r = _gate(name, A, lo, cost, bench=bench)
             if r:
                 rows.append(r)
     if not rows:

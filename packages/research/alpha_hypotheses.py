@@ -161,6 +161,43 @@ def _weights(score: np.ndarray, long_only: bool, top_frac: float,
     return np.clip(w, -max_weight, max_weight)
 
 
+def benchmark_equipondere(A: np.ndarray, step: int = STEP, cost_rt_bps: float = 10.0,
+                          exec_lag: int = 1) -> dict:
+    """Détention équipondérée de l'UNIVERS, sur la même grille et avec les mêmes coûts.
+
+    C'est le point de comparaison qui manquait aux hypothèses long-only : sans lui, un Sharpe de
+    1,70 sur une période haussière se lit comme de l'alpha alors qu'il peut n'être que du bêta.
+    Même `start`, même `step`, même `exec_lag` que `cross_sectional_backtest` — sinon les deux
+    séries ne sont pas comparables et l'écart mesuré serait un artefact de calendrier."""
+    n, L = A.shape
+    start = 520
+    if L < start + 3 * step:
+        return {"available": False, "status": "UNCALIBRATED", "L": int(L)}
+    w = np.full(n, 1.0 / n)
+    prev = np.zeros(n)
+    rets, turn = [], 0.0
+    for t in range(start, L - 1 - exec_lag, step):
+        entry = min(t + exec_lag, L - 1)
+        nxt = min(entry + step, L - 1)
+        fwd = A[:, nxt] / np.where(A[:, entry] == 0, np.nan, A[:, entry]) - 1.0
+        fwd = np.nan_to_num(fwd)
+        cout = float(np.abs(w - prev).sum()) * cost_rt_bps / 1e4
+        rets.append(float((w * fwd).sum()) - cout)
+        turn += float(np.abs(w - prev).sum())
+        prev = w
+    if len(rets) < 8:
+        return {"available": False, "status": "UNCALIBRATED", "n_steps": len(rets)}
+    r = np.asarray(rets)
+    per_year = 252.0 / step
+    sd = float(r.std(ddof=1))
+    eq = np.cumprod(1 + r)
+    return {"available": True, "returns": r, "n_steps": int(r.size),
+            "sharpe": round(float(r.mean() / sd * np.sqrt(per_year)) if sd > 0 else 0.0, 3),
+            "annualized": round(float(eq[-1] ** (per_year / r.size) - 1), 4),
+            "max_drawdown": round(float((eq / np.maximum.accumulate(eq) - 1).min()), 4),
+            "turnover_annual": round(turn / r.size * per_year, 2), "step": step}
+
+
 def cross_sectional_backtest(A: np.ndarray, name: str, long_only: bool = False,
                              step: int = STEP, cost_rt_bps: float = 10.0,
                              exec_lag: int = 1, top_frac: float = TOP_FRAC,
