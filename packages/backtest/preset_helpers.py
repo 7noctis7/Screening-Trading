@@ -74,3 +74,19 @@ def adaptive_cap(cov: np.ndarray, max_weight: float, corr_tighten: bool,
     n = corr.shape[0]
     avg = float((corr.sum() - n) / (n * (n - 1)))
     return max(floor, round(max_weight * tighten, 4)) if avg > stress_corr else max_weight
+
+
+def select_rolling_universe(M: dict, t: int, top_k: int, lookback: int) -> list:
+    """Sélectionne top-K actifs par momentum à l'instant t (point-in-time, pas de fuite)."""
+    if len(M) < 5:
+        return list(M.keys())[:top_k]
+    _s0 = max(lookback, 50)
+    if t < _s0:
+        return list(M.keys())[:top_k]
+    _b0 = max(0, t - 252 - 1)
+    sel = {s: float(M[s][t - 1] / M[s][_b0] - 1)
+           for s in M
+           if len(M[s]) > t and np.isfinite(M[s][t - 1])
+           and np.isfinite(M[s][_b0]) and M[s][_b0] > 0}
+    return (sorted(sel, key=lambda s: sel[s], reverse=True)[:top_k]
+            if len(sel) >= 5 else list(M.keys())[:top_k])
