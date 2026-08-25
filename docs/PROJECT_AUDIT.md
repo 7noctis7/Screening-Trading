@@ -72,7 +72,7 @@ test_la_couche_intelligence_ne_peut_pas_atteindre_un_courtier`.
 | `backtest` | 2508 | **NEEDS_IMPROVEMENT** | Fenêtre de panel corrigée le 25/08 ; **13 autres sites `min(len)` non migrés**. |
 | `execution` | 2225 | **NEEDS_IMPROVEMENT** | `impact.py` et `almgren_chriss.py` écrits, testés, **jamais exécutés sur données réelles**. |
 | `fundamentals` | 1182 | **STABLE** | Vernimmen/Damodaran, plafond de croissance perpétuelle, ROCE après impôt. |
-| `mcp_tradingview` | 1133 | **EXPERIMENTAL** | 2 fichiers de test pour 7 modules. Alimente le kill-switch — à couvrir davantage. |
+| `mcp_tradingview` | 1133 | **STABLE** | Couvert le 25/08 : le filtre d'âge des alertes était inerte (veto permanent) et une sévérité inconnue était dégradée en `info`. Corrigés. |
 | `ml` | 1109 | **EXPERIMENTAL** | Walk-forward point-in-time correct ; `sklearn` optionnel. |
 | `storage` | 891 | **STABLE** | Journal SQLite, `safe_pickle` (anti-symlink + hash). |
 | `screening` | 816 | **STABLE** | |
@@ -93,7 +93,7 @@ test_la_couche_intelligence_ne_peut_pas_atteindre_un_courtier`.
 |---|---|---|---|
 | T1 | ~~13 sites `min(len(data[s]))` non migrés~~ | ÉLEVÉ | **fermé le 25/08** — 0 site restant |
 | T2 | `RiskEngine` (règles reward/risk, stops) hors du chemin de production | MOYEN | partiellement couvert par `order_gate` |
-| T3 | `mcp_tradingview` alimente le kill-switch avec 2 fichiers de test | MOYEN | ouvert |
+| T3 | ~~`mcp_tradingview` sous-testé~~ | MOYEN | **fermé le 25/08** — 2 défauts actifs trouvés et corrigés |
 | T4 | Modules d'exécution avancés jamais exécutés sur données réelles | MOYEN | ouvert |
 | T5 | Aucune mesure de couverture de tests (outil absent de l'environnement) | FAIBLE | ouvert |
 | T6 | `apps/web/app/dashboard/page.tsx` à 435 lignes (limite projet : 400) | FAIBLE | ouvert |
@@ -129,6 +129,7 @@ n'était pas uniforme :
 | **Signaux** | `k_signal` médian = **1** sur 126 rebalancements : l'optimisation transversale (ERC) répartit du risque sur une matrice à une seule direction fiable | **ouvert** |
 | **Signaux** | les 5 hypothèses d'alpha sont rejetées en long/short et « promues » en long-only — écart imputable au bêta, désormais mesuré | corrigé le 25/08 |
 | **Position sizing** | plancher de ligne 1 000 $ + bande d'inaction 3 % ; la bande bloque **99 % des pas** et ne laisse trader que ~7 % des noms | **à instruire** |
+| **Exécution** | kill-switch TradingView : une alerte critique périmée vetoait **à vie** (filtre d'âge déclaré, jamais appliqué) | **corrigé le 25/08** |
 | **Exécution** | `exec_lag` par défaut = 0 (fill au close du signal) → mini look-ahead ; `exec_lag=1` mesuré, ΔSharpe 0,00 | mesuré |
 | **API** | equity illisible ⇒ broker écarté (`vet_brokers`) ; inconnu ≠ zéro | contrôlé |
 | **Levier** | `QUANT_RISK_MAX_GROSS = 1.00` — aucun levier possible via le portail | contrôlé |

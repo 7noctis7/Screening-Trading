@@ -87,7 +87,11 @@ def _h_generate_pine(args: dict) -> dict:
 
 
 def _h_fetch_alerts(args: dict) -> dict:
-    alerts = fetch_tv_technical_alerts()
+    """`max_age_s` : filtre d'âge, actif par défaut. `0` ou `null` demande TOUT l'historique —
+    utile pour inspecter le drop, jamais pour décider (une alerte périmée vetoerait à vie)."""
+    age = args.get("max_age_s", "absent")
+    alerts = (fetch_tv_technical_alerts() if age == "absent"
+              else fetch_tv_technical_alerts(max_age_s=float(age) if age else None))
     veto = to_risk_veto(alerts)
     return {"ok": True, "alerts": [a.to_dict() for a in alerts], "risk": veto}
 
@@ -116,7 +120,11 @@ def _h_compare_pine_python(args: dict) -> dict:
 
 def _h_overlay_triple_barrier(args: dict) -> dict:
     """Trace les barrières ML (TP/SL/temps) du dernier achat d'un ticker (prix réels via API)."""
-    from packages.mcp_tradingview.risk_overlays import _bars_to_series, _get_json, triple_barrier_overlay
+    from packages.mcp_tradingview.risk_overlays import (
+        _bars_to_series,
+        _get_json,
+        triple_barrier_overlay,
+    )
     from packages.mcp_tradingview.store import OverlayStore
     ticker = str(args.get("ticker", "")).strip().upper()
     if not ticker:
@@ -170,7 +178,11 @@ def _h_query_market_db(args: dict) -> dict:
 def _h_auto_risk_bands(args: dict) -> dict:
     """Calcule le cône VaR/EVT depuis les prix RÉELS (via l'API) et l'écrit comme overlay.
     Sans ticker → traite tous les titres détenus. Découplé : lit l'API, n'importe pas le cœur."""
-    from packages.mcp_tradingview.risk_overlays import Z_VAR95, Z_VAR99, populate_from_api
+    from packages.mcp_tradingview.risk_overlays import (
+        Z_VAR95,
+        Z_VAR99,
+        populate_from_api,
+    )
     z = Z_VAR99 if str(args.get("var", "95")) in ("99", "var99") else Z_VAR95
     res = populate_from_api(
         base_url=args.get("base_url", "http://localhost:8000"),

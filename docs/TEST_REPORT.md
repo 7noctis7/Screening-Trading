@@ -7,16 +7,16 @@
 
 ```
 $ python3 -m pytest -q
-1170 passed, 8 skipped, 2 warnings in 198.52s
+1203 passed, 8 skipped, 2 warnings in 211.39s
 ```
 
 | Mesure | Valeur |
 |---|---:|
-| Tests collectés | 1 178 |
-| **Réussis** | **1 170** |
+| Tests collectés | 1 211 |
+| **Réussis** | **1 203** |
 | Échecs | **0** |
 | Ignorés | 8 |
-| Durée | 3 min 19 s |
+| Durée | 3 min 31 s |
 
 ## Les 8 tests ignorés — et pourquoi
 
@@ -48,6 +48,8 @@ Recherche de tests volontairement neutralisés : **une seule occurrence** de `sk
 | `tests/research/test_attribution.py` | 6 | Un levier pur (1,5× le benchmark) doit être refusé comme candidat. |
 | `tests/portfolio/test_replication.py` | 10 | L'écart de réplication ne peut pas descendre sous la poche hors modèle. |
 | `tests/data/test_engine_schema_normalise.py` | 4 | Les deux schémas de base sont lus. |
+| `tests/mcp_tradingview/test_alerts_kill_switch.py` | 26 | Le filtre d'âge des alertes existe vraiment ; une sévérité inconnue vaut `warning`, jamais `info` ; une alerte non datable est conservée mais signalée. |
+| `tests/backtest/test_survivorship_validity.py` | 7 | Le test de biais du survivant dit quand il ne mesure rien, au lieu de renvoyer 0. |
 
 ## Couverture des composants critiques
 
@@ -77,7 +79,8 @@ Pour l'obtenir : `pip install pytest-cov && pytest --cov=packages --cov-report=t
 ## Problèmes restant ouverts
 
 1. ~~13 sites `min(len)` non migrés~~ — **fermé**, 0 site restant.
-2. **`mcp_tradingview`** : 7 modules, 2 fichiers de test, et il pilote un kill-switch.
+2. ~~`mcp_tradingview` sous-testé~~ — **fermé**. Écrire les tests a révélé deux défauts actifs
+   sur le chemin du kill-switch (filtre d'âge inerte, sévérité inconnue dégradée en `info`).
 3. **`packages/testing`** : aucun test dédié.
 4. Le test de biais du survivant **s'exécute et ne mesure rien** (les délistés ingérés n'entrent
    jamais dans le top-30). Il passe — ce n'est pas la même chose que « il valide quelque chose ».

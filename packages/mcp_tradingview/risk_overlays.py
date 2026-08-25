@@ -106,6 +106,7 @@ def triple_barrier_overlay(times: list[str], closes: list[float], entry_dates: l
 def _load_cached_snapshot() -> dict | None:
     """Charge le snapshot persisté par l'API (.cache/snapshot.pkl) — évite de le reconstruire."""
     from pathlib import Path
+
     from packages.common import safe_pickle
     p = Path(__file__).resolve().parents[2] / ".cache" / "snapshot.pkl"
     try:

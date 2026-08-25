@@ -364,7 +364,11 @@ Utilise les sous-agents dédiés déjà présents dans le dépôt : `quant-criti
    instruit.
 5. **`RiskEngine`** (règles reward/risk, stops) reste hors du chemin de production ; seul
    `order_gate` y est branché.
-6. **`mcp_tradingview`** pilote un kill-switch avec 2 fichiers de test pour 7 modules.
+6. ~~`mcp_tradingview` sous-testé~~ — **fermé le 25/08**, et le résultat mérite d'être retenu :
+   écrire les tests a révélé que le filtre d'âge des alertes était **déclaré et jamais appliqué**
+   (une alerte critique de juillet vetoait encore fin août) et qu'une sévérité inconnue était
+   dégradée en `info`. Le module « marchait » depuis des mois. **Un module non testé n'est pas
+   un module dont on ignore la qualité : c'est un module dont on ignore le comportement.**
 7. **`impact.py` / `almgren_chriss.py`** : écrits, testés, jamais exécutés sur données réelles.
 8. **Couverture de tests non mesurée** (`pytest-cov` absent).
 9. **Fondamentaux non point-in-time.**

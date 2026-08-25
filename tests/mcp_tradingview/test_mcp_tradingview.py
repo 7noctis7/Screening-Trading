@@ -75,8 +75,14 @@ def test_alerts_parse_and_veto(tmp_path):
 
 
 def test_alerts_missing_file_is_safe(tmp_path):
+    """Drop absent → aucune alerte, aucune réduction d'exposition.
+
+    On vérifie la DÉCISION, pas la forme exacte du dict : l'égalité stricte cassait dès qu'un
+    champ de diagnostic était ajouté, ce qui décourageait précisément d'en ajouter."""
     assert A.fetch_tv_technical_alerts(path=tmp_path / "nope.json") == []
-    assert A.to_risk_veto([]) == {"veto": False, "reduce": 1.0, "reasons": [], "by_ticker": {}, "n_alerts": 0}
+    v = A.to_risk_veto([])
+    assert v["veto"] is False and v["reduce"] == 1.0
+    assert v["reasons"] == [] and v["by_ticker"] == {} and v["n_alerts"] == 0
 
 
 # ── server tool dispatch ──────────────────────────────────────────────────

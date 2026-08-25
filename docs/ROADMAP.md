@@ -64,11 +64,20 @@ explicitement réservées au moteur de streaming.
 **Difficulté.** Moyenne. **Dépendances.** `scripts/run_live.py`, `order_gate`.
 **Risques.** Doubler les couches sans clarifier les responsabilités produirait deux vérités.
 
-### P1-2 · Couvrir `mcp_tradingview`
-**Description.** 7 modules, 2 fichiers de test, et il pilote un kill-switch qui peut ramener
-l'exposition à zéro. Un faux positif coupe tout le portefeuille ; un faux négatif désarme la
-protection.
-**Difficulté.** Faible. **Risques.** Aucun à écrire des tests ; élevé à ne pas le faire.
+### ~~P1-2 · Couvrir `mcp_tradingview`~~ — ✅ FERMÉ le 25/08
+**Ce que la couverture a révélé.** Écrire les tests n'a pas seulement documenté le module, il a
+mis au jour **deux défauts actifs sur le chemin du kill-switch** :
+
+1. `max_age_s` était déclaré, documenté dans la docstring, et **jamais appliqué**. `run_live.py`
+   appelait la fonction sans argument : une alerte `critical` reçue le 1er juillet vetoait encore
+   tout le portefeuille fin août, jusqu'à effacement manuel du drop. Le filtre est maintenant
+   actif par défaut (`AGE_MAX_DEFAUT` = 24 h) ; `None` reste possible mais doit être explicite.
+2. Une sévérité non reconnue était **dégradée en `info`**. Une alerte Pine étiquetée « CRITIQUE »
+   — le mot français, plausible ici — ne déclenchait rien. Inconnu vaut désormais `warning`, et
+   la sévérité reçue est conservée pour qu'une faute de frappe devienne visible.
+
+**26 tests ajoutés.** C'est l'illustration la plus nette du principe : le module « marchait »
+depuis des mois, personne ne l'avait testé, et il ne faisait pas ce qu'il annonçait.
 
 ### P1-3 · Alimenter `Source.exactitude_passee`
 **Description.** Le champ existe dans `packages/intelligence/sources.py`, contribue jusqu'à ±0,20
