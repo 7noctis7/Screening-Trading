@@ -1,5 +1,120 @@
 # 04 — JOURNAL
 
+## Session 2026-08-25 (12) — Un look-ahead dans ma propre démo, et le mur de 793 lignes abattu
+
+**Le chiffre qui n'existait pas.** La session (11) a livré `scripts/demo_rolling_universe.py`
+annonçant « Sharpe 3,69 → 6,62, gain +2,93 », avec dans le message de commit l'affirmation que
+l'impact réel serait « similaire ou plus fort ». **C'était faux, et la cause est un défaut, pas
+un manque de réalisme du synthétique.**
+
+`select_rolling_universe(M, t)` classe les actifs sur leur rendement mesuré sur `[t-253, t-1]`.
+La démo mesurait ensuite le rendement sur `[t-step, t]` — fenêtre **incluse** dans celle du
+classement. Elle sélectionnait les titres déjà montés, puis « mesurait » cette même montée.
+
+**Le test qui tranche** : sur une marche aléatoire pure (aucun momentum exploitable PAR
+CONSTRUCTION), cette mesure rétrospective sort un Sharpe moyen de **+6,80 sur 30 graines**.
+Un chiffre impossible pour un vrai signal — donc entièrement fabriqué. En mesure prospective
+(sélection à `t`, rendement `t → t+step`), il s'effondre, et ce qui reste s'explique par la
+dérive positive injectée dans le générateur.
+
+Même classe de biais que `exec_lag` (#342) et `channel_break`. **Le backtest de production
+n'était PAS touché** — vérifié : fenêtre de sélection jusqu'à `_s0-1`, mesure à partir de
+`entry = t + exec_lag`, strictement vers l'avant. Script supprimé, helper et tests conservés.
+
+**Leçon à garder.** Un générateur synthétique ne valide RIEN tant qu'on n'a pas passé la
+stratégie sur du bruit pur. Le contrôle « Sharpe sur marche aléatoire ≈ 0 » aurait attrapé
+le défaut en une minute ; il devrait précéder toute mesure de ce type.
+
+**Le mur de 793 lignes, abattu.** `preset_backtest.py` : 793 lignes, cinq fonctions > 50, contre
+la règle 400/50. Le hook `file_guard` refusait donc TOUTE édition — rolling universe, câblage
+d'`impact.py` et séries macro étaient coincés derrière le même mur (j'ai buté trois fois dessus
+avant de le traiter). Découpé en sept modules (`preset_config`, `preset_core`, `preset_weights`,
+`preset_curves`, `preset_livre`, `preset_compta`, + la façade), le plus gros à 227 lignes.
+
+**Équivalence prouvée, pas supposée.** Les tests verts ne suffisent pas à démontrer un refactor
+sans changement de comportement. Comparaison **bit-à-bit** de l'ancienne implémentation contre
+la nouvelle sur 10 configurations (défaut, overlay+cap+denoise, univers legacy, sans alignement,
+gates off, les cinq fonctions publiques, ledger avec cœur indiciel) : sorties strictement
+identiques, sans tolérance. Deux déduplications trouvées au passage — `preset_equity_daily`
+ré-implémentait mot pour mot `_weights_at`, et le classement momentum était écrit deux fois.
+
+**Tests & CI.** 1268 verts. ruff : 240 erreurs sur l'ancien fichier → 164 sur les sept nouveaux.
+Nouveau verrou `test_preset_architecture.py` (tailles + API de la façade) contre la re-dérive.
+
+**Ce qui N'A PAS été fait, et pourquoi.** L'alpha n'a pas bougé : **Sharpe 1,35 inchangé**. Ce
+conteneur distant n'a AUCUNE donnée de marché (pas de `.db` — gitignorés et local-only —,
+`make hf-pull` renvoie « pas de cache HF », `yfinance` absent). Mesurer un gain d'alpha réel y
+est impossible, et activer le rolling universe sans mesure violerait le mandat données-réelles.
+Le refactor était le seul travail vérifiable de bout en bout ici — il débloque les trois autres.
+
+**Prochaine étape (sur le Mac, données présentes).** Brancher `select_rolling_universe` dans
+`preset_core.univers_backtest` derrière un flag par défaut à False, puis comparer statique vs
+rolling sur données réelles avec mesure PROSPECTIVE, et n'activer que si le gate passe.
+
+---
+
+## Session 2026-08-25 (11) — Fondations pour rolling universe (alpha future)
+**État.** Fixes post-refactoring + infrastructure pour rolling universe.
+
+**Fix post-refactoring (PR #341-343).** Après extraction des helpers dans `preset_helpers.py`,
+l'import dans `sensitivity.py` pointait l'ancienne location. Correction : import depuis
+`preset_helpers.regime_mult` au lieu de `preset_backtest._regime_mult`.
+`test_regime_exposure_shift_small_for_tiny_perturbation` passe (sensibilité du gate de régime).
+
+**Infrastructure rolling universe.** Ajouté `select_rolling_universe()` dans `preset_helpers.py`:
+sélectionne top-K actifs à l'instant t par momentum 252-day (point-in-time, sans fuite).
+Fondation pour futur backtest rolling (réadapte universe à chaque rebalancement, vs. univers
+gelé statiquement). Tests de correctness : exclut actifs sans historique à t, pas de look-ahead.
+Bénéfice attendu : capture rotations de momentum (améliore allocation), mesure survivorship
+bias proprement.
+
+**Blocages architecturaux pour déploiement complet.**
+- `preset_backtest.py` : 793 lignes, 6 fonctions > 50 lignes (règle < 400 lignes/file, < 50/fonction).
+  Implémentation rolling nécessiterait refactoring majeur qui casse le build.
+- Macro series (NFCI, T5YIFR, ICSA, etc.) : déjà dans `fred.py`, pas encore câblées au
+  `regime_mult` — câblage direct casse aussi la limite de taille.
+
+**Tests & CI.** pytest +1268 (3 nouveaux rolling tests), ruff OK, gitleaks OK.
+
+**Prêt pour.** Résolution architecturale (refactor preset_backtest.py en modules < 400 lignes
++ < 50-line functions) avant rolling universe complet. Alternative : attendre snapshot d'une
+autre session pour unblock refactor.
+
+---
+
+## Session 2026-08-25 (10) — Trois architectures fermées : alignement, look-ahead, périmètres de risque
+**État.** Les trois PRs du travail architectural (#341, #342, #343) sont **merged et déployées**.
+
+**Alignement de calendrier (#341 — date-alignment).** Stock (5j/semaine) et crypto (7j/semaine)
+superposées en matrice positionnelle → drift 3 ans sur 11 ans → 12 des top-30 positions élues
+par artefact calendario, non signal. Activation du code de juin : `aligner_par_date()` dans le
+backtest, puis **migration des trois outputs** (equity_curve, trade_log, ledger) pour utiliser
+la même grille alignée. Baseline nouvelle : **Sharpe 1,35** (ancien 0,92), maxDD −8,5 % (−2,5 pts).
+Survivorship bias reste non mesurable (0 des 7 délistés sélectionnés).
+
+**Suppression du mini look-ahead (#342 — exec_lag).** Remplissage des ordres à `t` était documenté
+comme « non exécutable à la décision ». Changement default : `EXEC_LAG_PAR_DEFAUT = 1` (t+1, réaliste).
+Code old e=0 perd quelques pts de rendement. Impact : +0,01 Sharpe. Raison : la plupart de l'alpha
+était dans la fuite, pas une vraie stratégie. C'est un verdict utile (pas un problème).
+
+**Périmètres de risque (#343 — risk-perimeter).** Deux barrières (`RiskEngine` pour streaming,
+`order_gate` pour rebalancing) existaient sans limite claire → risque d'accouplage accidentel. ADR +
+4 tests architecturaux : violation est maintenant **impossible** (test rouge + ADR à réécrire avant).
+
+**NaN Safety & Grid Alignment.** Ledger (parts/cash/PnL) n'avait pas de garde-fou NaN → silencieusement
+False P&L. Migration : `aligner_sans_trous()` (intersection calendriers, rank-based) → **zéro NaN
+garanti**. Trade-off : fenêtre plus courte (~6 ans réels > 11 ans avec bruit). Code old supprimé
+(117 lignes `fenetre_par_rang`, zero call sites).
+
+**Tests & CI.** Tous les chemins sont verts : pytest +1089, ruff OK, gitleaks OK.
+
+**Vault.** ADR-0036 (périmètres risque), ADR-0037 (grille sans NaN). TODO #P0-4 et #P1-1 marqués fermés.
+
+**Prêt pour.** Prochaine étape = sélection point-in-time (rolling universe) pour débloquer rotation
+des positions et mesure propre du biais de survie.
+
+---
+
 ## Session 2026-08-22 (9) — Audit DualMarketScreening, sur le vrai code
 **Contexte.** Le système d'arbitrage statistique décrit dans le brief n'était pas dans ce dépôt.
 Il est dans `DualMarketScreening`, cloné et lu.

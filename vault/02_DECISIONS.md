@@ -478,3 +478,107 @@ de 0,30 reste rejeté (test de non-régression).
 **À faire.** Re-runner les hypothèses historiquement rejetées : leurs verdicts DSR sont invalides
 sur cette composante. Un rejet reste un rejet s'il tenait par le placebo, le PBO ou le sabotage —
 mais il doit être re-établi, pas supposé.
+
+## ADR-0036 — Périmètres de risque : RiskEngine (streaming), order_gate (rebalancing) (2026-08-25)
+**Contexte.** Deux barrières de risque coexistaient sans frontière claire :
+- `RiskEngine` : moteur événementiel de streaming, stops/récompense-risque par signal.
+- `order_gate` : limite de position, utilisée UNIQUEMENT en production (`run_live.py`).
+
+Risque : un développeur aurait pu brancher `RiskEngine` dans le rebalancing sans voir le
+problème : interface mismatch fatal (RiskEngine attend signal/barre/stop par ordre ; rebalancing
+reçoit une cible de portefeuille).
+
+**Décision.**
+1. **Périmètre explicite dans le module** `packages/risk/engine.py` : docstring (~50 lignes)
+   formalisent que `RiskEngine` est RÉSERVÉ au streaming, `order_gate` au rebalancing.
+2. **4 tests architecturaux** (`tests/risk/test_perimetres.py`) pinning la limite :
+   - Le rebalancing utilise `order_gate`, jamais `RiskEngine`.
+   - `RiskEngine` n'est appelé que du moteur streaming.
+   - Rationale : événementiel vs stationnaire (cible).
+   - Chaque test porte le message : « Ce test doit être supprimé ET l'ADR mis à jour avant
+     de violer cette limite. »
+3. **Pas de nouvelle couche** : les 2 barriers restent indépendantes, l'absence de `RiskEngine`
+   en rebalancing est DESIGNED, pas oversight.
+
+**Conséquence.** (+) Violation accidentelle est impossible (test rouge + ADR à réécrire). (+) La
+raison est documentée (contexte = moteur événementiel vs batch). (−) Deux chemins de risque
+coexistent (mais ils opèrent en série, pas en parallèle : rebalancing → order_gate → broker).
+
+**Déploiement.** PR #343, commit `caed949`.
+
+## ADR-0037 — Grille d'alignement sans NaN : intersection de calendriers vs union (2026-08-25)
+**Contexte.** Date-alignment #341 a révélé que les trois fonctions de reporting (equity_curve,
+trade_log, ledger) utilisaient une **fenêtre par rang** (union de dates, remplie par NaN).
+
+Problème critique : le ledger (parts/cash/PnL) n'a pas de garde-fou NaN → une valeur nulle
+devient silencieusement une plausible valeur de P&L, FALSE POSITIVE incomparablement plus grave
+qu'une vraie exception (donne du bruit « joli »).
+
+Comparaison empirique (data réelle) : ancien code (NaN) = Sharpe 0,92 ; nouveau (intersection
+sans NaN) = Sharpe 1,34. ~12 des top-30 positions étaient choisies par artefact de calendrier
+(stock 5j/semaine, crypto 7j/semaine, 11 ans = 3 ans de drift).
+
+**Décision.**
+1. **`aligner_sans_trous(data, syms, min_noms)`** : retourne intersection des calendriers (rank-
+   based subset par couverture, décroissante). **Garantie : zéro NaN** aux trois sorties.
+2. **Trade-off accepté** : la fenêtre est plus COURTE (plus long = plus de trous = moins de noms)
+   mais **bulletproof** (aucun NaN ne s'échappe pour devenir faux P&L).
+3. Les trois presets (`preset_equity_daily`, `preset_trade_log`, `preset_ledger`) l'utilisent
+   depuis #341, chaînées avec le backtest `aligner_par_date` → grille homogène partout.
+4. **Vieux code supprimé** : `fenetre_par_rang` (117 lignes, zero call sites restants).
+5. Tests migrants : 7 vieux tests → nouveaux tests mêmes intents (`test_aligner_sans_trous_*`).
+
+**Conséquence.** (+) Ledger **totalement cohérent** avec les courbes d'equity affichées. (+)
+Baseline performance réelle mesurable (DSR, max DD) sans leurre de NaN. (+) Calendrier stock vs
+crypto enfin séparé proprement (intersection = respecte les deux univers). (−) Fenêtre moyenne
+plus courte (~6 ans au lieu de 11 ans, dépend du top-N) — acceptable car mieux vaut 6 ans VRAIS
+que 11 ans FAUX.
+
+**Déploiement.** PR #341, commits `fb4d380` + refactoring dans `fb4d380`.
+
+## ADR-0038 — `preset_backtest.py` devient une façade : découpage en sept modules (2026-08-25)
+
+**Contexte.** Le fichier avait atteint **793 lignes avec cinq fonctions au-dessus de 50**, contre
+la règle d'architecture 400/50. La conséquence n'était pas esthétique : le hook `file_guard`
+refuse toute édition d'un fichier hors règle, donc **le rolling universe, le câblage d'`impact.py`
+et les séries macro étaient tous bloqués derrière ce mur unique**. Trois tentatives d'ajout de
+fonctionnalité ont été rejetées par le hook avant que le mur soit traité pour lui-même.
+
+**Décision.** Découpage par responsabilité, `preset_backtest.py` devenant la **façade** :
+
+| module | responsabilité |
+|---|---|
+| `preset_config.py` | constantes de gating + `momentum_rank` + `_price_universe` |
+| `preset_core.py` | panel, univers, garde-fous (classe `Compteurs`), poids et gross du pas |
+| `preset_weights.py` | poids de production, `_weights_at`, `_concentrate` |
+| `preset_curves.py` | equity quotidienne, journal de trades |
+| `preset_livre.py` | livre de comptes parts/cash (achat/vente, PRU, frais) |
+| `preset_compta.py` | ledger : déroulé, FIFO latent, réconciliation |
+| `preset_backtest.py` | façade (`__all__`) + boucle du backtest |
+
+1. **API publique inchangée.** Les onze noms importés par `apps/api/snapshot.py`, les scripts et
+   les tests restent importables depuis `preset_backtest`. Protégé par `__all__` **et** par
+   `tests/backtest/test_preset_architecture.py`, qui échoue si un nom disparaît.
+2. **Équivalence bit-à-bit exigée, et vérifiée.** Les tests verts ne démontrent PAS l'absence de
+   changement de comportement — ils couvrent ce qu'ils couvrent. Comparaison directe de
+   l'ancienne implémentation contre la nouvelle sur **10 configurations** (défaut,
+   overlay+cap+denoise, univers legacy, sans alignement, gates off, les cinq fonctions publiques,
+   ledger avec cœur indiciel), comparaison récursive **sans tolérance**. Sorties identiques.
+3. **Deux déduplications.** `preset_equity_daily` ré-implémentait mot pour mot `_weights_at` ;
+   le classement momentum était écrit deux fois (backtest + `_price_universe`). Une seule source.
+4. **L'ordre des écritures du ledger est préservé** (cœur avant satellite à chaque rééquilibrage) :
+   l'attribution du P&L latent se fait en FIFO sur la liste `trades`, donc l'ordre est du
+   comportement, pas de la mise en forme.
+
+**Conséquence.** (+) Les trois chantiers bloqués deviennent éditables. (+) Le ledger, jusqu'ici la
+partie la plus dense (207 lignes d'affilée), est isolé derrière un objet `Livre` testable seul.
+(+) ruff : 240 erreurs sur l'ancien fichier → 164 sur les sept nouveaux. (−) Sept fichiers à
+parcourir au lieu d'un : la façade et ce tableau sont là pour ça. (−) Un import de plus en
+profondeur pour qui voudrait un interne (`preset_core.univers_backtest`, par exemple) — assumé,
+c'est la contrepartie d'une frontière publique explicite.
+
+**Non fait, et pourquoi.** Ce découpage **ne change pas l'alpha** : Sharpe 1,35 inchangé, par
+construction (équivalence bit-à-bit). Il ne prétend pas être une amélioration de performance,
+seulement la levée du blocage qui empêchait d'en tenter une.
+
+**Déploiement.** Commit `4984ecb`.
