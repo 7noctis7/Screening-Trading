@@ -26,6 +26,7 @@ from packages.backtest.cov_risk import cov_for_step, summarize
 from packages.execution.costs import CostModel
 from packages.portfolio.optimize import equal_risk_contribution
 from packages.portfolio.risk_advanced import ewma_vol
+from packages.backtest.panel import COUVERTURE_DEFAUT, fenetre_commune
 from packages.portfolio.risk_overlay import drawdown_taper
 
 
@@ -110,14 +111,26 @@ def _adaptive_cap(cov: np.ndarray, max_weight: float, corr_tighten: bool,
     return max(floor, round(max_weight * tighten, 4)) if avg > stress_corr else max_weight
 
 
-def _price_universe(data: dict, syms: list, lookback: int, top_k: int) -> list:
+def _price_universe(data: dict, syms: list, lookback: int, top_k: int,
+                    couverture: float = COUVERTURE_DEFAUT) -> list:
     """#2 ANTI-FUITE (partagé) : univers = top-K par MOMENTUM prix-only mesuré au DÉBUT de la
     fenêtre commune (aucune info future ; on n'applique JAMAIS le score qualité du JOUR à des dates
     passées). Miroir exact de `preset_backtest(legacy_quality_universe=False)`, réutilisé par les
-    fonctions dashboard/ledger (sinon elles ré-introduisent le look-ahead + le biais du survivant)."""
+    fonctions dashboard/ledger (sinon elles ré-introduisent le look-ahead + le biais du survivant).
+
+    La fenêtre est celle du panel (cf. `packages/backtest/panel`) et non `min(len)` : sinon une
+    seule introduction récente ramenait la fenêtre à ~13 mois et l'univers de TOUTES les fonctions
+    dashboard/ledger était sélectionné sur ce moignon.
+
+    NB sur l'horizon : `_s0 - 252 - 1` est presque toujours négatif, donc l'indice est ramené à 0
+    et le classement porte sur l'historique DISPONIBLE avant le premier pas (~`lookback` barres),
+    pas sur 12 mois. Ce n'est pas un bug : 252 barres antérieures à `start` n'existent pas sans
+    décaler le premier rebalancement — les prendre serait une fuite."""
     if len(syms) < 5:
         return syms[:top_k]
-    L = min(len(data[s]) for s in syms)
+    syms, L, _ = fenetre_commune(data, list(syms), couverture=couverture)
+    if len(syms) < 5:
+        return list(syms)[:top_k]
     M = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in syms}
     _s0 = max(lookback, 50)
     sel = {s: float(M[s][_s0 - 1] / M[s][max(0, _s0 - 252 - 1)] - 1)
@@ -135,7 +148,8 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
                     ro_dd_soft: float = -0.08, ro_dd_hard: float = -0.20,
                     ewma_lam: float = 0.94, max_weight: float | None = None,
                     corr_tighten: bool = False, exec_lag: int = 0,
-                    cov_denoise: bool = False) -> dict:
+                    cov_denoise: bool = False,
+                    panel_couverture: float = COUVERTURE_DEFAUT) -> dict:
     """`cov_denoise` (M1, 08/20) : covariance DÉBRUITÉE par théorie des matrices aléatoires,
     avec repli inverse-vol quand moins de 2 directions sont distinguables du bruit. Défaut
     False = chiffres historiques inchangés au bit près ; le DIAGNOSTIC (`cov_diag`), lui, est
@@ -145,10 +159,15 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
     et l'EXÉCUTION. 0 = fill au close de la barre de signal (défaut historique — mini
     look-ahead : le close du jour de signal n'est pas exécutable). 1 = fill au close t+1
     (réaliste). La fenêtre de détention est décalée d'autant ; `make preset-lab` chiffre l'écart."""
-    syms = [s for s, b in data.items() if b and len(b) > lookback + 2 * step]
+    eligibles = [s for s, b in data.items() if b and len(b) > lookback + 2 * step]
+    if len(eligibles) < 5:
+        return {"available": False}
+    # `min(len)` laissait la série la plus COURTE fixer la profondeur du panel entier (24/08 :
+    # 929 titres, 10 ans en base, 7 rebalancements). On garde la fenêtre la plus longue couverte
+    # par `panel_couverture` des noms ; `panel_couverture=1.0` restaure l'ancien comportement.
+    syms, L, panel_diag = fenetre_commune(data, eligibles, couverture=panel_couverture)
     if len(syms) < 5:
         return {"available": False}
-    L = min(len(data[s]) for s in syms)
     M = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in syms}
     acmap = asset_classes or {}
     quality = quality or {}
@@ -182,6 +201,22 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
     n_degraded = 0
     turn = 0.0
     eq_strat, peak_strat = 1.0, 1.0                  # equity stratégie (overlay risque)
+    # COMPTEURS DE DÉCLENCHEMENT — un garde-fou qui ne s'est jamais déclenché est soit inutile,
+    # soit cassé, et dans les deux cas il faut le savoir. Sans ces compteurs, « levier rejeté »
+    # et « levier jamais activé » produisent EXACTEMENT la même ligne de résultat (24/08).
+    # Seuls les garde-fous ACTIFS reçoivent un compteur : une clé absente = « désactivé »,
+    # une clé à 0 = « actif mais jamais déclenché ». Confondre les deux, c'est crier au loup.
+    decl = {"blackout": 0, "vol_target": 0}
+    if max_weight:
+        decl["plafond"] = 0
+    if regime_gate:
+        decl["regime"] = 0
+    if breadth_gate:
+        decl["ampleur"] = 0
+    if risk_overlay:
+        decl["taper_dd"] = decl["frein_vol"] = 0
+    if band > 0:
+        decl["bande"] = 0
     start = max(lookback, 50)
     for t in range(start, L - 1, step):
         win = rets[:, max(0, t - lookback):t]
@@ -192,28 +227,41 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
         n_degraded += int(_deg)
         w = np.asarray(equal_risk_contribution(cov), float)     # risk-parity
         last2 = A[:, t] / A[:, t - 2] - 1                       # blackout : évite le post-choc binaire
+        _bl = (np.abs(last2) > blackout_move) & (w > 0)
+        decl["blackout"] += int(_bl.any())
         w = np.where(np.abs(last2) > blackout_move, 0.0, w)
         ssum = w.sum()
         w = w / ssum if ssum > 0 else w
         if mom_tilt:                                            # #4 incline vers les leaders (momentum)
             w = _mom_tilt(A, t, w)
         if max_weight:                                          # plafond (adaptatif si corr_tighten)
-            w = _cap_weights(w, _adaptive_cap(cov, max_weight, corr_tighten))
+            _cap = _adaptive_cap(cov, max_weight, corr_tighten)
+            decl["plafond"] += int((w > _cap + 1e-12).any())     # a-t-il MORDU, ou juste tourné ?
+            w = _cap_weights(w, _cap)
         pv = float(np.sqrt(max(0.0, w @ cov @ w)))              # DD-target : exposition pilotée par la vol
         gross = 0.0 if pv <= 0 else min(1.0, tgt_vol / pv)
+        decl["vol_target"] += int(pv > 0 and tgt_vol < pv)       # la cible de vol a-t-elle bridé ?
         if regime_gate:                                         # #5 régime + #6 frein DD (≤ 1, jamais de levier)
-            gross *= _regime_mult(mkt, t)
+            _rm = _regime_mult(mkt, t)
+            decl["regime"] += int(_rm < 1.0 - 1e-12)
+            gross *= _rm
         if breadth_gate:                                        # #8 ampleur de marché (rallye étroit → ↓)
-            gross *= float(np.clip(_breadth(A, t) / 0.5, 0.0, 1.0))
+            _am = float(np.clip(_breadth(A, t) / 0.5, 0.0, 1.0))
+            decl["ampleur"] += int(_am < 1.0 - 1e-12)
+            gross *= _am
         if risk_overlay:                             # overlay : taper DD + vol prévue
             dd_now = eq_strat / peak_strat - 1.0 if peak_strat > 0 else 0.0
-            gross *= drawdown_taper(dd_now, ro_dd_soft, ro_dd_hard)
+            _tp = drawdown_taper(dd_now, ro_dd_soft, ro_dd_hard)
+            decl["taper_dd"] += int(_tp < 1.0 - 1e-12)
+            gross *= _tp
             if pv > 0 and len(port) >= 10:           # EWMA > réalisée → réduire
                 fv = ewma_vol(port[-60:], lam=ewma_lam, annualize=int(round(per_year)))
                 if fv > pv:
+                    decl["frein_vol"] += 1
                     gross *= pv / fv
         w = w * gross
         if band > 0 and prev_w.sum() > 0:                       # bande de non-trading
+            decl["bande"] += int((np.abs(w - prev_w) < band).any())
             w = np.where(np.abs(w - prev_w) < band, prev_w, w)
         entry = min(t + exec_lag, L - 1)                        # M-1 : exécution à t+exec_lag
         nxt = min(entry + step, L - 1)
@@ -235,6 +283,8 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
 
     out = {"available": True, "step_days": step, "top_k": len(universe),
            "cov_diag": summarize(cov_diags, n_degraded, cov_denoise),
+           "panel": panel_diag, "n_steps": len(port),
+           "declenchements": {k: v for k, v in decl.items()},
            "preset": _stats(port, per_year),
            "turnover_annual": round(turn / len(port) * per_year, 2),
            "dd_target": dd_target, "band": band, "target_vol": round(tgt_vol, 4),
@@ -311,6 +361,19 @@ def preset_latest_weights(data: dict, quality: dict | None = None, asset_classes
     w = w * gross
     w = _concentrate(w, min_weight)     # jette la poussière → moins d'actifs, mieux dimensionnés
     return {universe[i]: round(float(w[i]), 4) for i in range(len(universe)) if w[i] > 1e-4}
+
+
+def _jours(debut: str | None, fin: str | None) -> int | None:
+    """Durée de détention en jours calendaires — le dénominateur manquant de tout P&L affiché."""
+    if not debut or not fin:
+        return None
+    try:
+        from datetime import date
+        d0 = date.fromisoformat(str(debut)[:10])
+        d1 = date.fromisoformat(str(fin)[:10])
+    except ValueError:
+        return None
+    return max(0, (d1 - d0).days)
 
 
 def _concentrate(w: "np.ndarray", min_weight: float) -> "np.ndarray":
@@ -489,6 +552,7 @@ def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict |
         return broker_fee(acmap.get(sym, "equity"), notional, side) if _fees_on else 0.0
 
     fees_paid = 0.0
+    ouvert_depuis: dict[str, str] = {}       # symbole → date d'ouverture de la ligne EN COURS
     quality = quality or {}  # conservé pour compat API ; PLUS utilisé pour l'univers (anti-fuite, cf. _price_universe)
     universe = _price_universe(data, syms, lookback, top_k)
     _lens = sorted((len(data[s]) for s in universe), reverse=True)
@@ -565,7 +629,10 @@ def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict |
                         cost[s] = (cost[s] * shares[s] + price * dq) / tot if tot > 0 else price
                         _fee = _tc(s, d_val); fees_paid += _fee
                         shares[s], cash = tot, cash - d_val - _fee
-                        reason = "entrée (univers qualité, risk-parity)" if (shares[s] - dq) <= 1e-9 else "renforcement (risk-parity)"
+                        _ouverture = (shares[s] - dq) <= 1e-9
+                        if _ouverture:
+                            ouvert_depuis[s] = dts[t]      # date d'OUVERTURE de la ligne courante
+                        reason = "entrée (univers qualité, risk-parity)" if _ouverture else "renforcement (risk-parity)"
                         trades.append({"date": dts[t], "symbol": s, "side": "BUY", "qty": round(dq, 4),
                                        "price": round(price, 2), "notional": round(d_val, 2),
                                        "avg_cost": round(cost[s], 2), "pnl": None, "pnl_pct": None,
@@ -578,6 +645,8 @@ def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict |
                         realized += pnl
                         _fee = _tc(s, sq * price, "SELL"); fees_paid += _fee
                         shares[s], cash = shares[s] - sq, cash + sq * price - _fee
+                        if shares[s] <= 1e-6:
+                            ouvert_depuis.pop(s, None)     # ligne soldée → l'horloge repart à zéro
                         reason = ("sortie (hors univers / blackout)" if (nw[i] <= 1e-4 or shares[s] <= 1e-6)
                                   else "allègement (DD-target/risk-parity)")
                         trades.append({"date": dts[t], "symbol": s, "side": "SELL", "qty": round(sq, 4),
@@ -591,9 +660,12 @@ def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict |
         eq_curve.append(cash + val)
         out_dates.append(dts[t + 1])
     pxf = A[:, L - 1]
+    # `depuis` : sans la date d'ouverture, un P&L modèle de +158 % (dix ans) s'affiche à côté d'un
+    # P&L courtier de −1,1 % (trois semaines) comme s'ils étaient comparables. Ils ne le sont pas.
     open_pos = [{"symbol": s, "qty": round(shares[s], 4), "avg_cost": round(cost[s], 2),
                  "price": round(float(pxf[idx[s]]), 2), "value": round(shares[s] * float(pxf[idx[s]]), 2),
                  "pnl": round((float(pxf[idx[s]]) - cost[s]) * shares[s], 2),
+                 "depuis": ouvert_depuis.get(s), "jours": _jours(ouvert_depuis.get(s), dts[L - 1]),
                  "pnl_pct": round(float(pxf[idx[s]]) / cost[s] - 1, 4) if cost[s] > 0 else None}
                 for s in universe if shares[s] > 1e-6]
     if core_on and qsh > 1e-9:                            # ligne du cœur indiciel (QQQ)
@@ -601,6 +673,7 @@ def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict |
         open_pos.insert(0, {"symbol": core_sym, "qty": round(qsh, 4), "avg_cost": round(qcost, 2),
                             "price": round(_cpx, 2), "value": round(qsh * _cpx, 2),
                             "pnl": round((_cpx - qcost) * qsh, 2),
+                            "depuis": dts[start], "jours": _jours(dts[start], dts[L - 1]),
                             "pnl_pct": round(_cpx / qcost - 1, 4) if qcost > 0 else None})
     final_eq = cash + sum(p["value"] for p in open_pos)
     unrealized = sum(p["pnl"] for p in open_pos)

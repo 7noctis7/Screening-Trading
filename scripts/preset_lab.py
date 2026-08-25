@@ -25,8 +25,21 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+# Quel compteur de déclenchement prouve qu'un levier a réellement AGI ? Sans ça, « rejeté »
+# et « jamais activé » s'impriment à l'identique — c'est ce qui s'est passé le 24/08.
+DECLENCHEURS = {
+    "+cap adaptatif corr": ("plafond",),
+    "+overlay DD/vol EWMA": ("taper_dd", "frein_vol"),
+    "+cap adaptatif + overlay": ("plafond", "taper_dd", "frein_vol"),
+}
+
+# Lignes DIAGNOSTIQUES : imprimées pour chiffrer un défaut connu, jamais promues, jamais loguées
+# au ledger (ce ne sont pas des essais d'alpha — les compter déflaterait le DSR pour rien).
+DIAGNOSTICS = {"panel tronqué (ancien min)"}
+
 CONFIGS = [
     ("base (prod actuelle)", {}),
+    ("panel tronqué (ancien min)", {"panel_couverture": 1.0}),   # chiffre la troncature du panel
     ("+cap adaptatif corr", {"max_weight": 0.10, "corr_tighten": True}),
     ("+overlay DD/vol EWMA", {"risk_overlay": True}),
     ("+cap adaptatif + overlay", {"max_weight": 0.10, "corr_tighten": True,
@@ -79,8 +92,42 @@ def _run_configs(data, acmap) -> list[dict]:
                      "periods_per_year": round(per_year, 4),
                      "sortino": _sortino(r["curves"]["preset"], per_year),
                      "maxdd": st["max_drawdown"], "turnover": r["turnover_annual"],
-                     "cov_diag": r.get("cov_diag")})
+                     "cov_diag": r.get("cov_diag"), "panel": r.get("panel"),
+                     "n_steps": r.get("n_steps"), "decl": r.get("declenchements") or {}})
     return rows
+
+
+def _panel_report(rows: list[dict]) -> None:
+    """Profondeur EFFECTIVE du backtest — à lire avant tout ratio.
+
+    `min(len)` laissait la série la plus courte fixer la fenêtre de tout le panel. Un Sharpe
+    annualisé sur 7 rebalancements n'a pas d'intervalle de confiance utilisable ; le publier
+    sans ce compte, c'est publier un chiffre qu'on ne peut pas contredire."""
+    d = (rows[0].get("panel") or {}) if rows else {}
+    print("\n" + "=" * 60 + "\nPANEL — PROFONDEUR EFFECTIVE\n" + "=" * 60)
+    if not d.get("available"):
+        print("  Diagnostic indisponible."); return
+    print(f"  fenêtre commune L     : {d['L']} barres "
+          f"(série la plus courte : {d['L_min']} → ×{d['gain_vs_min']})")
+    print(f"  noms retenus          : {d['n_retenus']}/{d['n_eligibles']} "
+          f"({d['n_ecartes']} écartés : historique trop court, filtre d'ancienneté de cotation)")
+    print(f"  rebalancements        : {rows[0].get('n_steps')}")
+    if (rows[0].get("n_steps") or 0) < 20:
+        print("  ⚠️  moins de 20 pas : AUCUN ratio ci-dessous n'est interprétable.")
+
+
+def _decl_report(rows: list[dict]) -> None:
+    """Chaque garde-fou a-t-il MORDU ? Un filtre qui n'a jamais filtré est inutile ou cassé."""
+    d = (rows[0].get("decl") or {}) if rows else {}
+    n = rows[0].get("n_steps") or 0
+    if not d:
+        return
+    print("\n" + "=" * 60 + f"\nDÉCLENCHEMENTS (base, sur {n} pas)\n" + "=" * 60)
+    for k, v in d.items():
+        etat = ("ACTIF mais jamais déclenché ⚠️" if v == 0
+                else f"{v}/{n} pas ({v / n:.0%})" if n else str(v))
+        print(f"  {k:12s} : {etat}")
+    print("  (un garde-fou absent de cette liste est DÉSACTIVÉ dans la config de base)")
 
 
 def _cov_report(rows: list[dict]) -> None:
@@ -114,11 +161,21 @@ def _verdict(rows: list[dict]) -> list[dict]:
               f"{r['turnover']:5.2f}×")
     print("\nVERDICT (gate honnête — mieux sur Sharpe ET maxDD, sinon rejeté) :")
     for r in rows[1:]:
+        if r["label"] in DIAGNOSTICS:
+            print(f"  🔎 diagnostic {r['label']}  (ΔSharpe {r['sharpe']-base['sharpe']:+.2f} — "
+                  f"{r.get('n_steps')} pas contre {base.get('n_steps')})")
+            continue
         ok = r["sharpe"] >= base["sharpe"] + 0.05 and r["maxdd"] >= base["maxdd"] - 1e-9
-        print(f"  {'✅ CANDIDAT' if ok else '❌ rejeté  '} {r['label']}"
+        cles = DECLENCHEURS.get(r["label"], ())
+        tirs = sum(int((r.get("decl") or {}).get(k, 0)) for k in cles)
+        inerte = bool(cles) and tirs == 0
+        tag = "⚪ INERTE  " if inerte else ("✅ CANDIDAT" if ok else "❌ rejeté  ")
+        print(f"  {tag} {r['label']}"
               f"  (ΔSharpe {r['sharpe']-base['sharpe']:+.2f}, ΔmaxDD "
-              f"{(r['maxdd']-base['maxdd'])*100:+.1f} pts)")
-        if ok:
+              f"{(r['maxdd']-base['maxdd'])*100:+.1f} pts"
+              + (", jamais déclenché — non testé, pas rejeté)" if inerte
+                 else f", {tirs} déclenchements)" if cles else ")"))
+        if ok and not inerte:
             promoted.append(r)
     print("\n→ " + ("Activer le(s) flag(s) en prod via une PR avec CES chiffres, puis make "
                     "vault-sync (jamais d'activation silencieuse)." if promoted else
@@ -133,6 +190,8 @@ def _log_ledger(rows: list[dict], promoted: list[dict]) -> None:
         from datetime import UTC, datetime
         from packages.research.ledger import append_record, trial_count
         for r in rows[1:]:
+            if r["label"] in DIAGNOSTICS:
+                continue
             append_record({"date": datetime.now(UTC).date().isoformat(),
                            "facteur": f"preset_lab_{'_'.join(sorted(r['kw']))}",
                            "classe": ["equity", "etf", "crypto"], "horizon": "swing",
@@ -168,7 +227,14 @@ def _survivorship(data, acmap) -> None:
     d = out["delta"]
     print(f"  {out['n_delisted']} délistés réels ajoutés · Δ Sharpe {d['sharpe']:+.2f} · "
           f"Δ CAGR {d['annualized']*100:+.1f} pts · Δ maxDD {d['max_drawdown']*100:+.1f} pts")
-    print("  → un Δ Sharpe NÉGATIF confirme que le backtest survivant était optimiste. À publier sur /echecs.")
+    if abs(d["sharpe"]) < 1e-9 and abs(d["annualized"]) < 1e-9:
+        print("  → Δ nul : les délistés ne sont JAMAIS entrés dans le top-30 — le test ne mesure")
+        print("    donc rien. Il faut des délistés qui auraient été SÉLECTIONNÉS pour conclure.")
+    elif d["sharpe"] < 0:
+        print("  → Δ Sharpe négatif : le backtest survivant était bien optimiste. À publier sur /echecs.")
+    else:
+        print("  → Δ Sharpe positif : les délistés AIDAIENT le portefeuille sur la période —")
+        print("    contre-intuitif, à instruire avant d'en tirer quoi que ce soit.")
 
 
 def main() -> int:
@@ -178,6 +244,8 @@ def main() -> int:
     rows = _run_configs(data, acmap)
     if not rows:
         print("Rien à comparer."); return 1
+    _panel_report(rows)
+    _decl_report(rows)
     _cov_report(rows)
     promoted = _verdict(rows)
     _log_ledger(rows, promoted)

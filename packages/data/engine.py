@@ -51,16 +51,71 @@ def _detect_bars_table(con: sqlite3.Connection) -> tuple[str, dict[str, str]]:
     raise ValueError("aucune table de barres exploitable (colonnes symbol/ts/close introuvables)")
 
 
+def _read_schema_normalise(path: Path, symbols: list[str] | None, start, end,
+                           limit: int) -> list[dict] | None:
+    """Repli pour les bases NORMALISÉES : table de prix (date+close+id) + table méta (symbole→id).
+
+    C'est le schéma réel de YAHOO.db : la table de barres ne porte AUCUNE colonne `symbol`, le
+    lien passe par un identifiant entier. `_detect_bars_table` ne sait lire que le format LONG et
+    levait donc `ValueError` — alors que `DBPriceProvider` lisait la même base sans problème
+    (d'où un `make preset-lab` qui tourne et un `make alpha-lab` qui plante sur la MÊME base).
+    On réutilise ici la détection de `DBPriceProvider` (jamais deux détections divergentes) et on
+    fait la jointure en UN scan, au lieu de N requêtes par symbole."""
+    try:
+        from packages.data.providers.db_provider import DBPriceProvider
+        prov = DBPriceProvider(path)
+    except Exception:  # noqa: BLE001 — base illisible/verrouillée
+        return None
+    norm = getattr(prov, "_norm", None)
+    if not norm:
+        prov._conn.close()
+        return None
+    pt, link, dat, o, sym2id = norm
+    id2sym = {v: k for k, v in (sym2id or {}).items()}
+    where, params = [], []
+    if symbols:
+        ids = [sym2id.get(s.upper(), s) if sym2id else s for s in symbols]
+        where.append(f'"{link}" IN ({",".join("?" * len(ids))})'); params += list(ids)
+    if start:
+        where.append(f'"{dat}" >= ?'); params.append(str(start)[:10])
+    if end:
+        where.append(f'"{dat}" <= ?'); params.append(str(end)[:10])
+    col = lambda c: f'"{c}"' if c else "NULL"  # noqa: E731 — colonne absente → NULL
+    sel = (f'"{link}", "{dat}", {col(o["open"])}, {col(o["high"])}, '
+           f'{col(o["low"])}, {col(o["close"])}, {col(o["volume"])}')
+    sql = (f'SELECT {sel} FROM "{pt}"' + (f' WHERE {" AND ".join(where)}' if where else "")
+           + f' LIMIT {int(limit)}')
+    try:
+        rows = prov._conn.execute(sql, params).fetchall()
+    except sqlite3.Error:
+        return None
+    finally:
+        prov._conn.close()
+    out = []
+    for r in rows:
+        sym = id2sym.get(r[0], r[0])
+        out.append({"symbol": str(sym), "ts": r[1], "open": r[2], "high": r[3],
+                    "low": r[4], "close": r[5], "volume": r[6]})
+    return out
+
+
 def read_prices_rows(db: str | Path, symbols: list[str] | None = None,
                      start: str | datetime | None = None, end: str | datetime | None = None,
                      limit: int = 5_000_000) -> list[dict]:
-    """Repli SQLite (toujours dispo) : renvoie des lignes normalisées {symbol,ts,open,high,low,close,volume}."""
+    """Repli SQLite (toujours dispo) : renvoie des lignes normalisées {symbol,ts,open,high,low,close,volume}.
+
+    Deux schémas acceptés : LONG (colonne symbole dans la table de barres) et NORMALISÉ
+    (jointure par identifiant). Une base illisible renvoie [] ; elle ne lève plus."""
     path = _resolve_db(db)
     if not path.exists():
         return []
     con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
     try:
-        t, m = _detect_bars_table(con)
+        try:
+            t, m = _detect_bars_table(con)
+        except ValueError:
+            con.close()
+            return _read_schema_normalise(path, symbols, start, end, limit) or []
         sel = ", ".join(f'"{m[k]}" AS {k}' for k in ("symbol", "ts", "open", "high", "low", "close", "volume") if m.get(k))
         where, params = [], []
         if symbols:

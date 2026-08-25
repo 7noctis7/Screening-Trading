@@ -10,6 +10,9 @@ const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 // l'API. La clé reste dans le navigateur et voyage par en-tête (cf. lib/ia.ts).
 export function AICommentary() {
   const [status, setStatus] = useState<"checking" | "on" | "off">("checking");
+  // Motif d'indisponibilité renvoyé par l'API. Un voyant rouge sans raison oblige l'utilisateur
+  // à deviner s'il s'est trompé d'URL, de clé ou de modèle.
+  const [motif, setMotif] = useState("");
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
   // Incrémenté à chaque enregistrement de réglages → re-teste la connexion sans recharger la page.
@@ -18,8 +21,8 @@ export function AICommentary() {
   useEffect(() => {
     setStatus("checking");
     fetch(`${BASE}/api/ai/status`, { headers: enTetesIA() }).then((r) => r.json())
-      .then((d) => setStatus(d.available ? "on" : "off"))
-      .catch(() => setStatus("off"));
+      .then((d) => { setStatus(d.available ? "on" : "off"); setMotif(d.motif ?? ""); })
+      .catch(() => { setStatus("off"); setMotif("l'API locale ne répond pas (make start)"); });
   }, [version]);
 
   const generate = async () => {
@@ -41,6 +44,11 @@ export function AICommentary() {
           Deux voies : lancer un modèle <b>local</b> (LM Studio, onglet « Local Server »), ou
           connecter <b>votre propre service</b> ci-dessous — Gemini, OpenAI, Anthropic, Mistral.
         </div>
+        {motif && (
+          <p className="text-xs mt-2" style={{ color: "#f59e0b" }}>
+            <b>Motif :</b> {motif}
+          </p>
+        )}
         <div className="mt-2"><ReglagesIA onChange={() => setVersion((v) => v + 1)} /></div>
       </div>
     );

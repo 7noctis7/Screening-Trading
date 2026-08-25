@@ -64,12 +64,29 @@ def _get(path: str, cfg: Config | None = None):
         return json.loads(r.read().decode())
 
 
+def _connu(modele: str, catalogue: list[str]) -> bool:
+    """Le modèle demandé figure-t-il au catalogue du fournisseur ?
+
+    Comparaison tolérante au préfixe : Google annonce ses modèles sous `models/gemini-2.5-flash`
+    et les accepte sous les deux formes. Un catalogue vide ne prouve rien → on ne bloque pas."""
+    if not modele or not catalogue:
+        return True
+    cible = modele.split("/")[-1].strip().lower()
+    return any(m.split("/")[-1].strip().lower() == cible for m in catalogue)
+
+
 def available(cfg: Config | None = None) -> bool:
-    """True si le fournisseur répond (modèle local chargé, ou clé distante valide)."""
+    """True si le fournisseur répond ET sert le modèle demandé.
+
+    Tester seulement `/models` produisait un « ● connecté » suivi d'un 404 à la génération : le
+    fournisseur répondait bien, mais pas pour CE modèle. Un voyant vert doit tester ce que fera
+    le bouton, pas autre chose (cas réel du 25/08 : base d'un fournisseur, modèle d'un autre)."""
+    c = (cfg or Config()).resolue()
     try:
-        return bool(_get("/models", cfg).get("data"))
+        catalogue = [m.get("id") for m in (_get("/models", c).get("data") or []) if m.get("id")]
     except Exception:  # noqa: BLE001
         return False
+    return bool(catalogue) and _connu(c.model, catalogue)
 
 
 def diagnostic(cfg: Config | None = None) -> dict:
@@ -82,14 +99,23 @@ def diagnostic(cfg: Config | None = None) -> dict:
     try:
         data = _get("/models", c)
         modeles = [m.get("id") for m in (data.get("data") or []) if m.get("id")]
+        if modeles and not _connu(c.model, modeles):
+            # LE cas qui produisait « connecté » puis « 404 » : l'URL d'un fournisseur avec le
+            # nom de modèle d'un autre (base LM Studio + modèle « gemini-… », par exemple).
+            return {"ok": False, "modeles": modeles[:20], "base": c.base,
+                    "cle_fournie": bool(c.key), "modele": c.model,
+                    "motif": f"le fournisseur répond sur {c.base} mais ne connaît pas le modèle "
+                             f"« {c.model} » — base et modèle doivent venir du MÊME fournisseur. "
+                             f"Modèles servis ici : {', '.join(modeles[:5])}"}
         return {"ok": bool(modeles), "modeles": modeles[:20], "base": c.base,
-                "cle_fournie": bool(c.key),
+                "cle_fournie": bool(c.key), "modele": c.model,
                 "motif": "" if modeles else "le fournisseur répond mais n'annonce aucun modèle"}
     except Exception as e:  # noqa: BLE001
         msg = str(e)
         motif = ("clé refusée (401/403) — vérifiez la clé et qu'elle correspond bien au "
                  "fournisseur de l'URL" if "401" in msg or "403" in msg else
-                 "adresse introuvable (404) — vérifiez l'URL de base" if "404" in msg else
+                 f"adresse introuvable (404) sur {c.base}/models — vérifiez l'URL de base"
+                 if "404" in msg else
                  "aucun serveur ne répond — modèle local non lancé, ou URL inaccessible"
                  if "refus" in msg.lower() or "urlopen" in msg.lower() else msg[:160])
         return {"ok": False, "modeles": [], "base": c.base, "cle_fournie": bool(c.key),
@@ -124,4 +150,9 @@ def complete(prompt: str, system: str = "", temperature: float = 0.3,
         txt = (msg.get("content") or "").strip() or (msg.get("reasoning_content") or "").strip()
         return {"available": True, "text": txt}
     except Exception as e:  # noqa: BLE001
-        return {"available": False, "text": "", "reason": str(e)[:120]}
+        # Un « HTTP Error 404: Not Found » nu ne dit pas ce qui a été appelé. L'utilisateur ne
+        # peut alors pas savoir si c'est l'URL, le modèle, ou la clé — il devine. On nomme donc
+        # toujours l'URL ET le modèle effectivement demandés.
+        return {"available": False, "text": "",
+                "reason": f"{str(e)[:100]} — appel POST {c.base}/chat/completions, "
+                          f"modèle « {_default_model(c) or '(auto)'} »"}
