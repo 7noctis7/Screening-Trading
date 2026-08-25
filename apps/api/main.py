@@ -961,9 +961,16 @@ def note_file(date: str, symbol: str, ext: str = "html") -> Any:
 
 @app.get("/api/ai/status")
 def ai_status(request: Request) -> dict:
-    """Disponibilité d'un LLM local (LM Studio / Ollama)."""
-    from packages.llm.client import available
-    return {"available": available(_cfg_llm(request))}
+    """Disponibilité du fournisseur ET du modèle demandé.
+
+    Le voyant doit tester ce que fera le bouton « Générer ». Un statut fondé sur `/models` seul
+    affichait « ● connecté » puis échouait en 404 dès qu'on générait, parce que le modèle
+    demandé n'appartenait pas au fournisseur de l'URL. Le motif accompagne donc le statut."""
+    from packages.llm.client import diagnostic
+    d = diagnostic(_cfg_llm(request))
+    return {"available": bool(d.get("ok")), "motif": d.get("motif", ""),
+            "base": d.get("base", ""), "modele": d.get("modele", ""),
+            "modeles": d.get("modeles", [])}
 
 
 def _cfg_llm(request: Request):

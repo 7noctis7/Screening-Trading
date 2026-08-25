@@ -2087,6 +2087,7 @@ def build_snapshot(seed: int = 7) -> dict:
     _honesty = safe_section("honesty", _psr_block, _dash_eq_curve)
     # Exécution réelle (lit les comptes brokers) — calculée TÔT pour dimensionner chaque poche
     # sur le capital de SON compte (actions ← Alpaca, crypto ← Bitmart).
+    _replication = {"available": False}
     _live = _live_with_rebalance(comp["rows"], acmap, portfolio_kpis, w_by_name,
                                  target_weights=_preset_weights, crypto_weights=_crypto_weights)
     _alp_cap = (_live["real"]["alpaca"]["equity"] or 0.0) or init_cap
@@ -2094,6 +2095,22 @@ def build_snapshot(seed: int = 7) -> dict:
     # Allocation PRESET détaillée (page Positions) : 2 poches, chacune sur le capital de son broker
     _preset_alloc = []
     _px_override = {_core_sym: _core_px} if _core_px > 0 else {}
+
+    def _extension(bars) -> dict:
+        """Distance aux moyennes mobiles + parcours récent. Diagnostic, jamais un filtre.
+
+        Rien dans la chaîne de production ne regarde ces chiffres pour décider d'acheter : le
+        preset classe par score composite puis dimensionne en risk-parity. Les afficher permet
+        de voir ce que le classement ne dit pas — qu'un titre retenu peut être très étendu."""
+        cl = [b.close for b in (bars or []) if b and b.close and b.close > 0]
+        if len(cl) < 60:
+            return {"ext_ma50": None, "ext_ma200": None, "ret_20j": None}
+        px = cl[-1]
+        ma = lambda n: (sum(cl[-n:]) / n) if len(cl) >= n else None  # noqa: E731
+        m50, m200 = ma(50), ma(200)
+        return {"ext_ma50": round(px / m50 - 1, 4) if m50 else None,
+                "ext_ma200": round(px / m200 - 1, 4) if m200 else None,
+                "ret_20j": round(px / cl[-21] - 1, 4) if len(cl) > 21 else None}
     def _alloc_rows(weights, cap, ac_default):
         for s, w in sorted(weights.items(), key=lambda kv: -kv[1]):
             if w <= 0:
@@ -2105,7 +2122,13 @@ def build_snapshot(seed: int = 7) -> dict:
                                   "asset_class": acmap.get(s, ac_default), "broker": r["broker"],
                                   "broker_symbol": r["broker_symbol"], "tradeable": r["tradeable"],
                                   "weight": round(w, 4), "notional": notion, "price": round(px, 2),
-                                  "qty": round(notion / px, 4) if px else 0.0})
+                                  "qty": round(notion / px, 4) if px else 0.0,
+                                  # EXTENSION : « à acheter » vient d'un CLASSEMENT (score composite)
+                                  # et d'un DIMENSIONNEMENT (risk-parity), jamais d'un signal
+                                  # d'entrée. Le score contient du momentum : il retient donc des
+                                  # titres qui ont DÉJÀ monté. Publier l'extension rend ce fait
+                                  # visible au lieu de le laisser deviner sur le graphe.
+                                  **_extension(data.get(s))})
     _alloc_rows(_preset_weights, _alp_cap, "equity")     # actions/ETF → capital Alpaca
     _alloc_rows(_crypto_weights, _bit_cap, "crypto")     # crypto → capital Bitmart
     # Séries OHLC pour les graphiques cliquables (Positions/Trades/Réel) — bornées (~500 barres)
@@ -2364,6 +2387,22 @@ def build_snapshot(seed: int = 7) -> dict:
                                           "multi_strategy": multi_strategy}}
         except Exception:  # noqa: BLE001 — au moindre souci, on garde l'analyse swing (jamais de page cassée)
             pass
+
+    # ÉCART DE RÉPLICATION : combien du compte réel ne suit PAS le modèle, et quels ordres le
+    # réduiraient. Sans ce chiffre, la table « modèle vs réel » laisse croire à un écart de
+    # PERFORMANCE là où il y a un écart de COMPOSITION (cf. packages/portfolio/replication).
+    try:
+        from packages.portfolio.replication import plan_convergence
+        _pos_reelles = _live["real"].get("positions", []) or []
+        _eq_reel = float(_live["real"].get("equity") or 0.0)
+        if not _eq_reel:                       # repli : capital investi (le courtier n'a pas répondu)
+            _eq_reel = sum(float(p.get("market_value") or 0.0) for p in _pos_reelles)
+        _modele_pos = (_preset_ledger.get("open_positions") or []) if _preset_ledger.get("available") else []
+        if _modele_pos and _pos_reelles and _eq_reel > 0:
+            _replication = plan_convergence(_modele_pos, _pos_reelles, _eq_reel,
+                                            plancher=_min_ligne())
+    except Exception:  # noqa: BLE001 — diagnostic, jamais bloquant
+        _replication = {"available": False}
     return {
         "meta": {
             "generated_at": now.isoformat(),
@@ -2395,6 +2434,11 @@ def build_snapshot(seed: int = 7) -> dict:
             "real_portfolio": _real_portfolio,         # courbe RÉELLE combinée (Alpaca+Bitmart) + stats
             "real_trades": _live["real"].get("trades", []),     # ordres RÉELS exécutés (journal réel)
             "real_positions": _live["real"].get("positions", []),  # positions RÉELLES + P&L
+            # ÉCART DE RÉPLICATION CHIFFRÉ + plan d'ordres. La table « modèle vs réel » montrait
+            # l'écart sans le mesurer ni dire quoi en faire : on lisait « +158 % contre −1,1 % »
+            # et on en concluait une sous-performance, alors que c'est une différence de
+            # COMPOSITION (une seule ligne commune) et de DURÉE de détention.
+            "replication": _replication,
             "index_core": _index_core_info,            # cœur(s) indiciel(s) + satellite preset
             "strategy_label": (
                 " + ".join([f"{int(round(_qqq_pct*100))}% QQQ"] * (_qqq_pct > 0)

@@ -24,6 +24,8 @@ type Row = {
   gap: number | null; qty: number | null; value: number | null;
   pnl: number | null; pnlPct: number | null; earningsDays: number | null; hasChart: boolean;
   aAcheter?: boolean;      // cible du modèle non encore détenue (≠ position morte)
+  extMa200?: number | null; // extension vs MM200 — diagnostic, PAS un critère de sélection
+  ret20j?: number | null;
 };
 
 // Fusionne positions réelles et cible preset par actif (poids par POCHE : chaque poids est
@@ -57,7 +59,7 @@ function buildRows(pos: any[], alloc: any[], accounts: any, earnings: any[]): Ro
       // Affichée sans marqueur, elle se lisait comme une position morte à 0 % — alors que c'est
       // exactement l'inverse : un ordre d'achat à venir.
       symbol: a.symbol, broker: a.broker ?? "—", wReal: 0, wTarget: a.weight ?? null,
-      aAcheter: true,
+      aAcheter: true, extMa200: a.ext_ma200 ?? null, ret20j: a.ret_20j ?? null,
       gap: null, qty: null, value: null, pnl: null, pnlPct: null,
       earningsDays: eDays.get(norm(a.symbol)) ?? null, hasChart: false,
     });
@@ -139,8 +141,17 @@ export default function Positions() {
           {r.aAcheter && (
             <span className="text-[10px] px-1.5 py-0.5 rounded font-sans border border-border"
               style={{ color: "var(--accent)" }}
-              title="Cible du modèle non encore détenue — le prochain rééquilibrage l'achètera.">
+              title={"Cible du modèle non encore détenue. Ce n'est PAS un signal d'entrée : la "
+                + "ligne est retenue par son rang au score composite (top-12), puis dimensionnée "
+                + "en risk-parity. Aucune étape de la chaîne ne regarde si le titre est étendu."}>
               à acheter
+            </span>)}
+          {r.aAcheter && r.extMa200 != null && r.extMa200 > 0.25 && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded font-sans border border-border"
+              style={{ color: "#f59e0b" }}
+              title={"Le score composite contient du momentum : il retient donc des titres qui "
+                + "ont déjà monté. Cette étiquette le rend visible, elle ne l'interdit pas."}>
+              étendu +{Math.round(r.extMa200 * 100)} % / MM200
             </span>)}
           {r.earningsDays != null && (
             <span className="text-[10px] px-1.5 py-0.5 rounded font-sans"
