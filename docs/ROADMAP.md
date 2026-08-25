@@ -134,8 +134,13 @@ plus de 40 caractères — une série dont on ne sait plus dire ce qu'elle infor
 Écrits et testés, jamais exécutés hors des tests. Tant qu'ils n'ont pas tourné, ils ne sont pas
 validés — `impact.py` porte d'ailleurs un défaut de calibration explicitement documenté.
 
-### P2-2 · Mesurer la couverture de tests
-`pip install pytest-cov`, puis publier le chiffre. Aujourd'hui **non mesurée**.
+### ~~P2-2 · Mesurer la couverture de tests~~ — ✅ FERMÉ le 25/08 : **81 %** (`make coverage`)
+Écrire les tests du seul module non couvert qui pouvait fausser des chiffres en silence
+(`data/fx.py`, 0 %) a révélé un défaut réel : TTL de cache au FICHIER et non à l'entrée, donc
+un taux de change de plusieurs mois pouvait être servi comme frais. Corrigé.
+
+**Reste ouvert : `packages/regime/real_macro.py` à 0 %** — 53 lignes, et il alimente la porte de
+régime qui pilote l'exposition. Prochain candidat évident.
 
 ### P2-3 · CCXT pour l'exécution crypto
 API unifiée sur 100+ places, en miroir d'`AlpacaBroker`. Paper par défaut, sans exception.

@@ -7,16 +7,16 @@
 
 ```
 $ python3 -m pytest -q
-1241 passed, 8 skipped, 2 warnings in 182.88s
+1251 passed, 8 skipped, 2 warnings in 173.52s
 ```
 
 | Mesure | Valeur |
 |---|---:|
-| Tests collectés | 1 249 |
-| **Réussis** | **1 241** |
+| Tests collectés | 1 259 |
+| **Réussis** | **1 251** |
 | Échecs | **0** |
 | Ignorés | 8 |
-| Durée | 3 min 03 s |
+| Durée | 2 min 54 s |
 
 ## Les 8 tests ignorés — et pourquoi
 
@@ -70,13 +70,39 @@ Recherche de tests volontairement neutralisés : **une seule occurrence** de `sk
 | Anti-fuite backtest | `tests/backtest/test_dashboard_no_leak.py`, `test_ml_walkforward.py` | couvert |
 | Synchronisation broker | `tests/execution/test_reconcile.py` | couvert |
 
-## Couverture chiffrée : NON MESURÉE
+## Couverture : **81 %** — mesurée le 25/08
 
-`pytest-cov` n'est pas installé dans cet environnement et n'a pas pu l'être. **Aucun pourcentage
-de couverture n'est publié** : en inventer un serait précisément le genre d'affirmation que ce
-rapport existe pour éviter.
+```
+$ make coverage
+TOTAL   15632 lignes   2983 non couvertes   81%
+```
 
-Pour l'obtenir : `pip install pytest-cov && pytest --cov=packages --cov-report=term-missing`.
+`pytest-cov` a finalement pu être installé (PyPI est autorisé par le proxy). Le chiffre était
+publié comme « NON MESURÉ » — il ne l'est plus.
+
+### Où sont les trous, et lesquels comptent
+
+La majorité des modules faiblement couverts sont des **adaptateurs réseau** (yfinance, SEC, RSS,
+IMF, SDK courtiers) : leurs lignes non couvertes sont les appels HTTP eux-mêmes. C'est attendu
+et défendable.
+
+Deux exceptions méritaient un examen, toutes deux à **0 %** :
+
+| Module | Avant | Après | Pourquoi ça comptait |
+|---|---:|---:|---|
+| `packages/data/fx.py` | 0 % | **80 %** | Convertit les comptes d'un ADR vers la devise de son cours. Un taux faux ne lève rien : il produit un P/E, un DCF et une marge de sécurité crédibles et **erronés**. Écrire les tests a révélé un défaut réel (cf. ci-dessous). |
+| `packages/regime/real_macro.py` | 0 % | 0 % | **Toujours ouvert.** Alimente la porte de régime, qui pilote l'exposition. 53 lignes sans un seul test. |
+
+### Le défaut trouvé en écrivant les tests de `fx.py`
+
+Le TTL de cache portait sur le **fichier**, pas sur l'entrée. Comme `_save` réécrit tout le
+fichier, récupérer une paire quelconque remettait le compteur de fraîcheur à zéro pour **toutes**
+les autres : une paire peu utilisée (TWD, JPY) pouvait être servie indéfiniment avec un taux de
+plusieurs mois. Le code ne stockait aucun horodatage par entrée — il ne *pouvait* donc pas
+distinguer un taux d'une minute d'un taux d'un semestre.
+
+Chaque entrée porte désormais sa date, `age_heures()` la rend lisible, et l'ancien format
+(valeur nue, sans date) est traité comme périmé plutôt que présumé frais.
 
 ## Problèmes restant ouverts
 
@@ -84,6 +110,8 @@ Pour l'obtenir : `pip install pytest-cov && pytest --cov=packages --cov-report=t
 2. ~~`mcp_tradingview` sous-testé~~ — **fermé**. Écrire les tests a révélé deux défauts actifs
    sur le chemin du kill-switch (filtre d'âge inerte, sévérité inconnue dégradée en `info`).
 3. **`packages/testing`** : aucun test dédié.
+3 bis. **`packages/regime/real_macro.py` à 0 %** : 53 lignes non testées sur un module qui
+   alimente la porte de régime, donc l'exposition. Même famille que `mcp_tradingview`.
 4. Le test de biais du survivant **s'exécute et ne mesure rien** (les délistés ingérés n'entrent
    jamais dans le top-30). Il passe — ce n'est pas la même chose que « il valide quelque chose ».
 
