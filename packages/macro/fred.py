@@ -31,7 +31,41 @@ SERIES: list[tuple] = [
     ("VIXCLS", "VIX (volatilité)", "🛢️ Marchés", "lin", ""),
     ("T10Y2Y", "Courbe 10a − 2a", "🛢️ Marchés", "lin", " pts"),
     ("BAMLH0A0HYM2", "Spread haut rendement", "🛢️ Marchés", "lin", "%"),
+    # --- AJOUTS DU 25/08 : séries qui informent une DÉCISION, pas un tableau de bord ---
+    # Le critère de sélection n'est pas « c'est de la macro » mais « par quel canal ceci
+    # peut-il déplacer une exposition ? ». Chacune répond à une question que le régime actuel
+    # (MM200 + drawdown) ne sait pas poser.
+    #
+    # ⚠️ IDENTIFIANTS NON VÉRIFIÉS contre l'API depuis l'environnement de développement : le
+    # policy réseau y refuse api.stlouisfed.org. `make macro-verify` les contrôle en une
+    # commande. Un identifiant erroné n'est pas silencieux — il apparaît dans `manquantes`.
+    ("ICSA", "Inscriptions chômage (hebdo)", "🇺🇸 États-Unis", "lin", ""),
+    ("SAHMREALTIME", "Règle de Sahm (récession)", "🇺🇸 États-Unis", "lin", " pts"),
+    ("T5YIFR", "Inflation anticipée 5a dans 5a", "🇺🇸 États-Unis", "lin", "%"),
+    ("NFCI", "Conditions financières (Chicago Fed)", "💧 Liquidité & crédit", "lin", ""),
+    ("BAMLC0A0CM", "Spread investment grade", "💧 Liquidité & crédit", "lin", "%"),
+    ("WALCL", "Bilan de la Fed", "💧 Liquidité & crédit", "lin", " M$"),
+    ("DTWEXBGS", "Indice dollar (large)", "🛢️ Marchés", "lin", ""),
 ]
+
+# Ce que chaque série APPORTE — écrit ici plutôt que dans une note séparée, pour que la
+# justification vieillisse avec le code. Une série dont on ne sait plus dire ce qu'elle informe
+# est une série à retirer.
+POURQUOI: dict[str, str] = {
+    "ICSA": "signal du marché du travail le plus RAPIDE (hebdomadaire) : le chômage mensuel "
+            "confirme un retournement que celui-ci a déjà signalé",
+    "SAHMREALTIME": "règle mécanique de détection de récession, en temps réel — pas une opinion "
+                    "d'économiste mais un seuil sur le chômage",
+    "T5YIFR": "ce que le marché anticipe de l'inflation À LONG TERME, donc la contrainte réelle "
+              "qui pèse sur la Fed ; l'IPC publié, lui, est du passé",
+    "NFCI": "conditions financières agrégées : se resserre AVANT que les actions ne baissent",
+    "BAMLC0A0CM": "spread investment grade. Le dépôt suivait déjà le haut rendement ; c'est leur "
+                  "ÉCART qui distingue un stress de crédit généralisé d'une aversion au risque "
+                  "cantonnée aux émetteurs fragiles",
+    "WALCL": "bilan de la Fed : la liquidité qui entre ou sort du système",
+    "DTWEXBGS": "dollar large. Un dollar qui monte resserre les conditions hors des États-Unis "
+                "et pèse sur les matières premières",
+}
 
 
 # Au-delà de ce multiple de sa CADENCE habituelle, une série est déclarée périmée. Trois fois
@@ -102,5 +136,5 @@ def macro_snapshot() -> dict:
     if not groups:
         return {"available": False, "reason": "FRED injoignable (réseau ou clé invalide)"}
     return {"available": True, "groups": groups,
-            "manquantes": manquantes, "perimees": perimees,
+            "manquantes": manquantes, "perimees": perimees, "pourquoi": POURQUOI,
             "source": "FRED (Réserve fédérale de St. Louis) — agrège OCDE/Eurostat/BCE. Dernière valeur publiée."}

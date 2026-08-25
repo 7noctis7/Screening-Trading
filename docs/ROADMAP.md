@@ -110,11 +110,21 @@ nom). Chaque compte doit être vérifié individuellement avant tout usage.
 **Difficulté.** Faible mais fastidieuse. **Risques.** Marquer `verifie=True` sans vérification
 réelle détruirait la valeur du scoring.
 
-### P1-6 · Séries macro additionnelles
-**Description.** NFCI, point mort d'inflation 5a5a, indice dollar, ICSA, spread IG. Les
-identifiants FRED doivent être vérifiés sur la machine de l'utilisateur.
-**Difficulté.** Faible. **Dépendances.** `packages/macro/fred.py` (détection de péremption déjà
-en place).
+### P1-6 · Séries macro additionnelles — ⚠️ LIVRÉ, À VÉRIFIER le 25/08
+**Livré.** Sept séries ajoutées, chacune avec sa justification écrite dans `POURQUOI` et publiée
+dans le snapshot : ICSA (signal d'emploi hebdomadaire), SAHMREALTIME (récession, règle mécanique),
+T5YIFR (inflation anticipée → contrainte réelle sur la Fed), NFCI (conditions financières),
+BAMLC0A0CM (spread IG — c'est son ÉCART avec le haut rendement déjà suivi qui distingue un stress
+généralisé d'une aversion cantonnée), WALCL (bilan Fed), DTWEXBGS (dollar large).
+
+**Réserve, et elle compte.** Les identifiants **n'ont PAS pu être vérifiés** contre l'API depuis
+l'environnement de développement : le policy réseau y refuse `api.stlouisfed.org`. `make
+macro-verify` les contrôle en une commande. Un identifiant erroné n'est pas silencieux — il
+apparaît dans `manquantes`, le filet existait déjà.
+
+**Critère d'ajout appliqué.** Pas « c'est de la macro » mais « par quel canal ceci peut-il
+déplacer une exposition ? ». Un test impose qu'une série ajoutée ait une justification écrite de
+plus de 40 caractères — une série dont on ne sait plus dire ce qu'elle informe est à retirer.
 
 ---
 
