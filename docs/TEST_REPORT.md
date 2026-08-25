@@ -7,16 +7,16 @@
 
 ```
 $ python3 -m pytest -q
-1203 passed, 8 skipped, 2 warnings in 211.39s
+1215 passed, 8 skipped, 2 warnings in 172.64s
 ```
 
 | Mesure | Valeur |
 |---|---:|
-| Tests collectés | 1 211 |
-| **Réussis** | **1 203** |
+| Tests collectés | 1 223 |
+| **Réussis** | **1 215** |
 | Échecs | **0** |
 | Ignorés | 8 |
-| Durée | 3 min 31 s |
+| Durée | 2 min 53 s |
 
 ## Les 8 tests ignorés — et pourquoi
 
@@ -49,7 +49,8 @@ Recherche de tests volontairement neutralisés : **une seule occurrence** de `sk
 | `tests/portfolio/test_replication.py` | 10 | L'écart de réplication ne peut pas descendre sous la poche hors modèle. |
 | `tests/data/test_engine_schema_normalise.py` | 4 | Les deux schémas de base sont lus. |
 | `tests/mcp_tradingview/test_alerts_kill_switch.py` | 26 | Le filtre d'âge des alertes existe vraiment ; une sévérité inconnue vaut `warning`, jamais `info` ; une alerte non datable est conservée mais signalée. |
-| `tests/backtest/test_survivorship_validity.py` | 7 | Le test de biais du survivant dit quand il ne mesure rien, au lieu de renvoyer 0. |
+| `tests/backtest/test_alignement_par_date.py` | 11 | Sur calendrier uniforme, l'alignement par date donne des courbes **identiques au bit près** — c'est la propriété qui rend la migration sûre. Un délisté a des NaN, jamais des zéros. |
+| `tests/backtest/test_survivorship_validity.py` | 8 | Le test de biais du survivant dit quand il ne mesure rien, au lieu de renvoyer 0. |
 
 ## Couverture des composants critiques
 

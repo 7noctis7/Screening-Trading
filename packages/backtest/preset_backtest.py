@@ -23,7 +23,13 @@ import numpy as np
 from packages.backtest.conviction_backtest import _stats
 from packages.backtest.cov_risk import cov_annual as _cov_annual
 from packages.backtest.cov_risk import cov_for_step, summarize
-from packages.backtest.panel import COUVERTURE_DEFAUT, fenetre_commune, fenetre_par_rang
+from packages.backtest.panel import (
+    COUVERTURE_DEFAUT,
+    aligner_par_date,
+    dernier_connu,
+    fenetre_commune,
+    fenetre_par_rang,
+)
 from packages.execution.costs import CostModel
 from packages.portfolio.optimize import equal_risk_contribution
 from packages.portfolio.risk_advanced import ewma_vol
@@ -154,7 +160,8 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
                     ewma_lam: float = 0.94, max_weight: float | None = None,
                     corr_tighten: bool = False, exec_lag: int = 0,
                     cov_denoise: bool = False,
-                    panel_couverture: float = COUVERTURE_DEFAUT) -> dict:
+                    panel_couverture: float = COUVERTURE_DEFAUT,
+                    aligner_dates: bool = False) -> dict:
     """`cov_denoise` (M1, 08/20) : covariance DÉBRUITÉE par théorie des matrices aléatoires,
     avec repli inverse-vol quand moins de 2 directions sont distinguables du bruit. Défaut
     False = chiffres historiques inchangés au bit près ; le DIAGNOSTIC (`cov_diag`), lui, est
@@ -170,10 +177,22 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
     # `min(len)` laissait la série la plus COURTE fixer la profondeur du panel entier (24/08 :
     # 929 titres, 10 ans en base, 7 rebalancements). On garde la fenêtre la plus longue couverte
     # par `panel_couverture` des noms ; `panel_couverture=1.0` restaure l'ancien comportement.
-    syms, L, panel_diag = fenetre_commune(data, eligibles, couverture=panel_couverture)
-    if len(syms) < 5:
-        return {"available": False}
-    M = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in syms}
+    if aligner_dates:
+        # ALIGNEMENT PAR DATE (cf. panel.aligner_par_date). L'empilement positionnel suppose que
+        # toutes les séries se terminent le même jour : faux pour un délisté, dont la dernière
+        # barre est sa radiation. Sur un calendrier uniforme, les deux produisent la MÊME
+        # matrice — les chiffres ne bougent donc que là où le positionnel était faux.
+        syms, _dates, _Ad, panel_diag = aligner_par_date(data, eligibles,
+                                                         couverture=panel_couverture)
+        if len(syms) < 5:
+            return {"available": False}
+        L = _Ad.shape[1]
+        M = {s: _Ad[i] for i, s in enumerate(syms)}
+    else:
+        syms, L, panel_diag = fenetre_commune(data, eligibles, couverture=panel_couverture)
+        if len(syms) < 5:
+            return {"available": False}
+        M = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in syms}
     acmap = asset_classes or {}
     quality = quality or {}
 
@@ -187,12 +206,16 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
                     if len(q) >= 5 else syms[:top_k])
     else:
         _s0 = max(lookback, 50)
+        # Un titre non coté à l'une des deux bornes n'a pas de momentum mesurable : l'exclure
+        # est la seule réponse honnête (neutre si la matrice est complète).
         _sel = {s: float(M[s][_s0 - 1] / M[s][max(0, _s0 - 252 - 1)] - 1)
-                for s in syms if len(M[s]) > _s0}
+                for s in syms if len(M[s]) > _s0
+                and np.isfinite(M[s][_s0 - 1]) and np.isfinite(M[s][max(0, _s0 - 252 - 1)])
+                and M[s][max(0, _s0 - 252 - 1)] > 0}
         universe = (sorted(_sel, key=lambda s: _sel[s], reverse=True)[:top_k]
                     if len(_sel) >= 5 else syms[:top_k])
     A = np.asarray([M[s] for s in universe])                    # n × L
-    mkt = A.mean(axis=0)                                         # indice de marché (porte régime + frein DD)
+    mkt = np.nanmean(A, axis=0) if aligner_dates else A.mean(axis=0)   # indice marché (régime + frein DD)
     rets = A[:, 1:] / A[:, :-1] - 1
     tgt_vol = max(0.0, abs(dd_target)) / k_dd
     per_year = 252.0 / step
@@ -231,11 +254,20 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
         win = rets[:, max(0, t - lookback):t]
         if win.shape[1] < 20:
             continue
-        cov, _cd, _deg = cov_for_step(win, denoise=cov_denoise)
+        # NÉGOCIABILITÉ À CE PAS : un titre pas encore introduit, ou déjà radié, n'a pas de
+        # fenêtre de covariance exploitable. On le met à poids nul plutôt que de propager des
+        # NaN dans l'ERC. Sur une matrice complète, `dispo` est tout à True → aucun changement.
+        dispo = np.isfinite(win).all(axis=1) & np.isfinite(A[:, t]) & np.isfinite(A[:, t - 2])
+        if dispo.sum() < 2:
+            continue
+        cov, _cd, _deg = cov_for_step(win[dispo], denoise=cov_denoise)
         cov_diags.append(_cd)
         n_degraded += int(_deg)
-        w = np.asarray(equal_risk_contribution(cov), float)     # risk-parity
-        last2 = A[:, t] / A[:, t - 2] - 1                       # blackout : évite le post-choc binaire
+        w = np.zeros(len(universe))
+        w[dispo] = np.asarray(equal_risk_contribution(cov), float)   # risk-parity
+        # `last2` d'un titre non négociable vaut NaN : on le neutralise pour que la comparaison
+        # du blackout ne devienne pas False par propagation (son poids est déjà nul).
+        last2 = np.nan_to_num(A[:, t] / A[:, t - 2] - 1, nan=0.0)   # blackout : post-choc binaire
         _bl = (np.abs(last2) > blackout_move) & (w > 0)
         decl["blackout"] += int(_bl.any())
         ampl["blackout"].append(1.0 - float(w[_bl].sum()))     # poids retiré par le blackout
@@ -245,12 +277,15 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
         if mom_tilt:                                            # #4 incline vers les leaders (momentum)
             w = _mom_tilt(A, t, w)
         if max_weight:                                          # plafond (adaptatif si corr_tighten)
-            _cap = _adaptive_cap(cov, max_weight, corr_tighten)
+            _cap = _adaptive_cap(cov, max_weight, corr_tighten)   # cov = sous-ensemble négociable
             decl["plafond"] += int((w > _cap + 1e-12).any())     # a-t-il MORDU, ou juste tourné ?
             _avant = w.copy()
             w = _cap_weights(w, _cap)
             ampl["plafond"].append(1.0 - 0.5 * float(np.abs(w - _avant).sum()))
-        pv = float(np.sqrt(max(0.0, w @ cov @ w)))              # DD-target : exposition pilotée par la vol
+        # `cov` porte le SOUS-ENSEMBLE négociable : la forme quadratique doit utiliser les mêmes
+        # indices. Identique à `w @ cov @ w` quand tout est négociable (le cas d'un panel complet).
+        _wd = w[dispo]
+        pv = float(np.sqrt(max(0.0, _wd @ cov @ _wd)))           # DD-target : exposition pilotée par la vol
         gross = 0.0 if pv <= 0 else min(1.0, tgt_vol / pv)
         decl["vol_target"] += int(pv > 0 and tgt_vol < pv)       # la cible de vol a-t-elle bridé ?
         ampl["vol_target"].append(gross if pv > 0 else 1.0)
@@ -286,7 +321,16 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
             w = np.where(_dans, prev_w, w)
         entry = min(t + exec_lag, L - 1)                        # M-1 : exécution à t+exec_lag
         nxt = min(entry + step, L - 1)
-        fwd = A[:, nxt] / A[:, entry] - 1                       # rendement RÉALISÉ après l'exécution
+        # Une ligne dont la cotation s'arrête entre l'entrée et la sortie est soldée au DERNIER
+        # cours connu — sinon son rendement serait NaN et contaminerait tout le pas. C'est une
+        # approximation optimiste pour une faillite (le dernier cours coté n'est pas zéro) :
+        # le biais du survivant ainsi mesuré est un MINORANT. Neutre si la matrice est complète.
+        if aligner_dates:
+            px_e, px_n = dernier_connu(A, entry), dernier_connu(A, nxt)
+            fwd = np.nan_to_num(np.divide(px_n, px_e, out=np.full_like(px_n, np.nan),
+                                          where=np.isfinite(px_e) & (px_e > 0)) - 1.0, nan=0.0)
+        else:
+            fwd = A[:, nxt] / A[:, entry] - 1                   # rendement RÉALISÉ après exécution
         cost = float((np.abs(w - prev_w) * rt).sum())
         ret_step = float((w * fwd).sum()) - cost
         port.append(ret_step)
