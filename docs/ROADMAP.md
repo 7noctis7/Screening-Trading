@@ -79,13 +79,19 @@ l'intuition.
 
 ## P1 — Important
 
-### P1-1 · Brancher ou supprimer `RiskEngine`
-**Description.** `packages/risk/engine.py` (reward/risk, stops, max positions) n'est instancié
-que dans `scripts/demo_*.py`. `order_gate` couvre désormais le chemin de production, mais les
-règles de stop et de reward/risk restent hors circuit. Décider : les brancher, ou les déclarer
-explicitement réservées au moteur de streaming.
-**Difficulté.** Moyenne. **Dépendances.** `scripts/run_live.py`, `order_gate`.
-**Risques.** Doubler les couches sans clarifier les responsabilités produirait deux vérités.
+### ~~P1-1 · Brancher ou supprimer `RiskEngine`~~ — ✅ TRANCHÉ le 25/08 : **option A**
+`RiskEngine` est déclaré réservé au moteur ÉVÉNEMENTIEL et le périmètre est écrit dans son
+module, pas seulement dans un ticket.
+
+**Pourquoi A.** Ce moteur raisonne par SIGNAL et par STOP, barre après barre. `run_live.py`
+réconcilie un portefeuille cible en une passe : il n'a ni signal, ni stop, ni barre. L'y brancher
+exigerait de fabriquer des `Order` et des `signal` factices pour satisfaire une interface conçue
+pour autre chose — un adaptateur factice au milieu d'une barrière de sécurité, et deux vérités
+sur le risque là où il en faut une.
+
+Le rééquilibrage a sa barrière propre, adaptée à sa sémantique : `order_gate`. Quatre tests
+d'architecture (`tests/risk/test_perimetres.py`) fixent la frontière — elle ne sera pas franchie
+par accident.
 
 ### ~~P1-2 · Couvrir `mcp_tradingview`~~ — ✅ FERMÉ le 25/08
 **Ce que la couverture a révélé.** Écrire les tests n'a pas seulement documenté le module, il a
@@ -154,14 +160,20 @@ plus de 40 caractères — une série dont on ne sait plus dire ce qu'elle infor
 
 ---
 
-### P0-4 · Migrer la courbe et le ledger vers l'alignement par date — **NOUVEAU**
+### ~~P0-4 · Migrer la courbe et le ledger vers l'alignement par date~~ — ✅ FERMÉ le 25/08
 **Description.** `preset_equity_daily`, `preset_trade_log` et `preset_ledger` héritent de
 l'univers corrigé (via `_price_universe`) mais calculent encore leurs rendements par empilement
 positionnel. La courbe du tableau de bord peut donc diverger du tableau du backtest — deux
 chiffres pour la même stratégie sur le même site.
-**Difficulté.** Élevée : le ledger fait de la comptabilité parts/cash, et un NaN mal géré y
-produit un P&L **faux** plutôt qu'une erreur visible.
-**Risques.** Ne pas le faire laisse une incohérence affichée ; le faire vite en crée une pire.
+**Fait**, avec le choix de conception qui rendait la migration sûre : `panel.aligner_sans_trous`
+produit une grille alignée par date **garantie sans NaN**. Plutôt que d'apprendre à la
+comptabilité parts/cash à gérer des NaN — où une erreur produirait un P&L *faux* et non une
+exception —, on garde les `min_noms` séries les mieux couvertes et on restreint à l'intersection
+de leurs dates. Grille plus étroite, mais sûre.
+
+Effet de bord assumé : `fenetre_par_rang` n'était plus appelé que par ses propres tests. 117
+lignes retirées, intention reportée sur son remplaçant. Un helper que rien n'utilise, protégé
+par sept tests, est du code mort avec un alibi.
 
 ## P2 — Optimisation
 

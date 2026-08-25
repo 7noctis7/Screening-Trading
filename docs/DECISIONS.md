@@ -90,3 +90,42 @@ stratégie long-only qui fait moins bien que l'équipondéré du même univers e
 d'acheter le marché.
 **Conséquences** : des candidats précédemment promus seront probablement rejetés au prochain run.
 C'est l'objectif.
+
+---
+
+**Date** : 2026-08-25 (soir)
+**Décision** : `RiskEngine` reste réservé au moteur événementiel ; le rééquilibrage garde
+`order_gate` comme seule barrière.
+**Contexte** : deux couches de risque coexistaient sans se rencontrer. `order_gate` a été branché
+sur le chemin de production le matin ; les règles de stop et de reward/risk de `RiskEngine`
+restaient hors circuit.
+**Alternatives** : (A) déclarer `RiskEngine` réservé au streaming et l'écrire ; (B) le brancher
+sur `run_live.py` via un adaptateur.
+**Choix** : (A).
+**Pourquoi** : `RiskEngine.approve(order, positions, equity, regime, signal)` suppose un ordre
+unitaire, le signal qui l'a produit et le stop qui le borne. Le rééquilibrage n'a aucun des
+trois : il réconcilie un portefeuille cible en une passe. Fabriquer des objets factices pour
+satisfaire l'interface placerait un adaptateur fictif au cœur d'une barrière de sécurité, et
+produirait deux vérités sur le risque là où il en faut une.
+**Conséquences** : les règles de stop et de reward/risk ne s'appliquent toujours pas au
+rééquilibrage — c'est assumé, pas oublié. Le périmètre est écrit dans le module lui-même, et
+quatre tests d'architecture le fixent. Si quelqu'un branche `RiskEngine` un jour, il devra
+retirer un test et mettre à jour cet ADR : ce sera délibéré.
+
+---
+
+**Date** : 2026-08-25 (soir)
+**Décision** : la courbe, le journal de trades et le ledger sont alignés par date sur une grille
+**sans NaN**, et non sur la matrice à NaN du backtest.
+**Contexte** : ces trois fonctions prenaient les dates d'UNE série de référence et supposaient
+que les autres partageaient son calendrier. Avec des actions et des cryptos dans le même panier,
+cette supposition décalait les colonnes de plusieurs années.
+**Alternatives** : (a) leur apprendre à gérer les NaN comme `preset_backtest` ; (b) leur donner
+une grille garantie sans NaN.
+**Choix** : (b).
+**Pourquoi** : le ledger fait de la comptabilité parts/cash. Un NaN mal géré y produit un P&L
+**faux** — pas une exception, pas un avertissement : un chiffre crédible et erroné. Le coût de
+(b) est une grille plus étroite ; le coût de (a) est un risque de fausseté silencieuse dans la
+seule fonction censée justifier la performance affichée.
+**Conséquences** : la fenêtre peut être plus courte quand une série a des trous. `fenetre_par_rang`
+devient du code mort et est retiré.
