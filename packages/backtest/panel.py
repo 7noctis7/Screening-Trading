@@ -44,29 +44,6 @@ def fenetre_commune(data: dict, syms: list[str], couverture: float = COUVERTURE_
     return retenus, L, diag
 
 
-def fenetre_par_rang(data: dict, syms: list[str], min_noms: int) -> tuple[list[str], int]:
-    """Variante par RANG : garder les `min_noms` séries aux plus longs historiques.
-
-    Pourquoi deux règles coexistent — et ce n'est pas un oubli. `fenetre_commune` fixe la
-    profondeur par la COUVERTURE (garder 80 % des noms) : c'est ce qu'il faut pour mesurer un
-    signal en coupe transversale, où la largeur fait l'information. Cette variante-ci fixe la
-    profondeur par le RANG (garder les 12 plus anciens sur 30) : c'est ce qu'il faut pour la
-    courbe d'equity du tableau de bord et le journal de trades, où l'on préfère un historique
-    long sur moins de titres à un historique court sur tous — sinon la courbe affichée
-    démarrait vers 2021 alors que la base remonte à 2015.
-
-    Le compromis profondeur/largeur est donc un CHOIX explicite selon l'usage, pas un accident.
-    Ce bloc vivait en trois copies identiques dans `preset_backtest` ; la sémantique est
-    inchangée, seul l'endroit où elle est écrite a changé.
-    """
-    longueurs = sorted((len(data[s]) for s in syms), reverse=True)
-    if not longueurs:
-        return list(syms), 0
-    requis = longueurs[min(max(1, min_noms), len(longueurs)) - 1]
-    retenus = [s for s in syms if len(data[s]) >= requis] or list(syms)
-    return retenus, min(len(data[s]) for s in retenus)
-
-
 def _jour(barre) -> str:
     """Clé de date d'une barre, à la journée. Deux sources peuvent horodater la même séance à
     des heures différentes (clôture locale, UTC) : comparer les instants créerait des dates
@@ -159,6 +136,53 @@ def dernier_connu(A, t: int) -> "object":
     ok = idx >= 0
     out[ok] = fenetre[np.arange(A.shape[0])[ok], idx[ok]]
     return out
+
+
+def aligner_sans_trous(data: dict, syms: list[str],
+                       min_noms: int) -> tuple[list[str], list[str], "object"]:
+    """Grille alignée par DATE et garantie SANS NaN. Renvoie (noms, dates, matrice n×T).
+
+    POURQUOI UNE RÈGLE DE PLUS. `aligner_par_date` produit une matrice avec des NaN là où un
+    titre n'est pas coté ; c'est correct pour un backtest qui sait les traiter. Mais la courbe du
+    tableau de bord, le journal de trades et le LEDGER font de la comptabilité parts/cash : un
+    NaN y produirait un P&L **faux** plutôt qu'une erreur visible. On préfère donc une grille plus
+    étroite et sûre à une grille large et piégeuse.
+
+    Méthode : garder les `min_noms` séries les mieux couvertes, puis restreindre aux dates où
+    TOUTES sont cotées. L'intersection de calendriers d'actions américaines est l'ensemble des
+    séances américaines ; elle ne se réduit que des trous réels.
+
+    LE COMPROMIS PROFONDEUR/LARGEUR EST UN CHOIX, pas un accident. `fenetre_commune` fixe la
+    profondeur par la COUVERTURE (garder 80 % des noms) : c'est ce qu'il faut pour mesurer un
+    signal en coupe transversale, où la largeur fait l'information. Cette fonction-ci la fixe par
+    le RANG (les 12 mieux couverts sur 30) : c'est ce qu'il faut pour une courbe affichée, où l'on
+    préfère un historique long sur moins de titres — sinon elle démarrerait vers 2021 alors que la
+    base remonte à 2015. Elle remplace `fenetre_par_rang`, devenu du code mort le 25/08.
+
+    Ce que ça corrige : ces fonctions prenaient les dates d'UNE série de référence (la plus
+    longue) et supposaient que les autres partageaient son calendrier. Avec des actions et des
+    cryptos dans le même panier, cette supposition décalait les colonnes de plusieurs années.
+    """
+    import numpy as np
+
+    par_sym: dict[str, dict[str, float]] = {}
+    for s in syms:
+        serie = {j: float(b.close) for b in (data.get(s) or [])
+                 if (j := _jour(b)) and getattr(b, "close", None)}
+        if serie:
+            par_sym[s] = serie
+    if not par_sym:
+        return [], [], np.empty((0, 0))
+
+    retenus = sorted(par_sym, key=lambda s: -len(par_sym[s]))[:max(1, min_noms)]
+    dates_communes = set(par_sym[retenus[0]])
+    for s in retenus[1:]:
+        dates_communes &= set(par_sym[s])
+    dates = sorted(dates_communes)
+    if not dates:
+        return [], [], np.empty((0, 0))
+    A = np.asarray([[par_sym[s][j] for j in dates] for s in retenus], dtype=float)
+    return retenus, dates, A
 
 
 def rebalancements(L: int, start: int, step: int) -> int:

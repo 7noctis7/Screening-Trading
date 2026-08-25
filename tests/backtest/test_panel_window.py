@@ -138,26 +138,61 @@ def test_l_eligibilite_exige_de_quoi_calculer_une_MM200():
     assert preset_latest_weights(court, {s: 1.0 for s in court}) == {}
 
 
-def test_fenetre_par_rang_garde_les_plus_anciens():
-    """Profondeur par RANG : 12 séries longues l'emportent sur 18 séries courtes — c'est le
-    compromis inverse de `fenetre_commune`, et il est délibéré (courbe du tableau de bord)."""
-    from packages.backtest.panel import fenetre_par_rang
+def test_aligner_sans_trous_garde_les_mieux_couverts():
+    """Profondeur par RANG : douze séries longues l'emportent sur dix-huit courtes — le compromis
+    inverse de `fenetre_commune`, et il est délibéré (courbe du tableau de bord).
 
-    d = {f"L{i}": [0] * 2500 for i in range(12)}
-    d.update({f"C{i}": [0] * 300 for i in range(18)})
-    retenus, L = fenetre_par_rang(d, list(d), min_noms=12)
-    assert L == 2500 and len(retenus) == 12
+    Remplace `fenetre_par_rang`, retiré le 25/08 : il n'était plus appelé que par ses propres
+    tests une fois la migration vers l'alignement par date faite. Un helper que rien n'utilise,
+    protégé par sept tests, est du code mort avec un alibi."""
+    from packages.backtest.panel import aligner_sans_trous
+
+    d = {f"L{i}": _serie(1200, i) for i in range(12)}
+    d.update({f"C{i}": _serie(300, 100 + i) for i in range(18)})
+    noms, dates, A = aligner_sans_trous(d, list(d), min_noms=12)
+    assert set(noms) == {f"L{i}" for i in range(12)}
+    assert len(dates) == 1200 and A.shape == (12, 1200)
     # la même donnée par COUVERTURE privilégie la largeur : plus de noms, moins de profondeur
     _, L_couv, _ = fenetre_commune(d, list(d), couverture=0.8)
-    assert L_couv < L
+    assert L_couv < len(dates)
 
 
-def test_fenetre_par_rang_ne_vide_jamais_le_panel():
-    from packages.backtest.panel import fenetre_par_rang
+def test_aligner_sans_trous_ne_laisse_AUCUN_NaN():
+    """C'est sa raison d'être : en aval, la comptabilité parts/cash du ledger produirait un P&L
+    FAUX sur un NaN, pas une erreur visible."""
+    import numpy as np
 
-    assert fenetre_par_rang({}, [], min_noms=12) == ([], 0)
-    d = {"A": [0] * 100}
-    assert fenetre_par_rang(d, ["A"], min_noms=99) == (["A"], 100)
+    from packages.backtest.panel import aligner_sans_trous
+
+    d = {f"L{i}": _serie(800, i) for i in range(6)}
+    d["COURT"] = _serie(120, 99)
+    _noms, _dates, A = aligner_sans_trous(d, list(d), min_noms=5)
+    assert A.size and bool(np.isfinite(A).all())
+
+
+def test_aligner_sans_trous_aligne_des_calendriers_DIFFERENTS():
+    """Le cas réel : des actions (séances ouvrées) et des cryptos (7 j/7) dans le même panier.
+    L'empilement positionnel décalait les colonnes de trois ans ; ici, l'intersection des dates
+    est commune par construction."""
+    from datetime import timedelta
+
+    from packages.backtest.panel import aligner_sans_trous
+
+    actions = {f"ACT{i}": _serie(300, i) for i in range(6)}
+    # crypto : mêmes bornes, mais des séances supplémentaires (week-ends)
+    crypto = {"CRY": [Bar(b.ts, b.close) for b in _serie(420, 77)]}
+    noms, dates, A = aligner_sans_trous({**actions, **crypto}, list(actions) + list(crypto),
+                                        min_noms=7)
+    assert A.shape[1] == len(dates)
+    assert len(set(dates)) == len(dates), "aucune date en double"
+    assert dates == sorted(dates)
+
+
+def test_aligner_sans_trous_ne_leve_pas_sur_un_panel_vide():
+    from packages.backtest.panel import aligner_sans_trous
+
+    noms, dates, A = aligner_sans_trous({}, [], min_noms=5)
+    assert noms == [] and dates == [] and A.size == 0
 
 
 def test_tous_les_backtests_publient_leur_profondeur():

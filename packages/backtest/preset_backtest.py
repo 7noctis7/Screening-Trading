@@ -26,11 +26,14 @@ from packages.backtest.cov_risk import cov_for_step, summarize
 from packages.backtest.panel import (
     COUVERTURE_DEFAUT,
     aligner_par_date,
+    aligner_sans_trous,
     dernier_connu,
     fenetre_commune,
-    fenetre_par_rang,
 )
 from packages.execution.costs import CostModel
+from packages.portfolio.optimize import equal_risk_contribution
+from packages.portfolio.risk_advanced import ewma_vol
+from packages.portfolio.risk_overlay import drawdown_taper
 
 # ALIGNEMENT PAR DATE ACTIVÉ — mesuré puis gaté le 25/08 au soir, jamais activé en silence.
 #
@@ -68,9 +71,6 @@ ALIGNEMENT_PAR_DEFAUT = True
 #
 # `exec_lag=0` reste disponible pour reproduire l'ancien comportement.
 EXEC_LAG_PAR_DEFAUT = 1
-from packages.portfolio.optimize import equal_risk_contribution
-from packages.portfolio.risk_advanced import ewma_vol
-from packages.portfolio.risk_overlay import drawdown_taper
 
 # `_regime_mult` calcule une MM200 (`hist[-200:]`) et un pic historique. En dessous de ce
 # nombre de barres, les deux sont silencieusement faux : la « MM200 » devient une moyenne plus
@@ -530,13 +530,16 @@ def preset_equity_daily(data: dict, quality: dict | None = None, asset_classes: 
         return {"available": False}
     quality = quality or {}  # conservé pour compat API ; PLUS utilisé pour l'univers (anti-fuite, cf. _price_universe)
     universe = _price_universe(data, syms, lookback, top_k)
-    # COURBE LA PLUS LONGUE POSSIBLE : profondeur par RANG, pas par couverture — cf.
-    # packages/backtest/panel.fenetre_par_rang pour le pourquoi des deux règles.
-    universe, L = fenetre_par_rang(data, universe, min_names)
-    M = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in universe}
-    ref = max(universe, key=lambda s: len(data[s]))
-    dts = [b.ts.isoformat() for b in data[ref]][-L:]
-    A = np.asarray([M[s] for s in universe])
+    # Grille alignée par DATE et SANS NaN (cf. panel.aligner_sans_trous). Ces fonctions
+    # prenaient les dates d'UNE série de référence et supposaient que les autres partageaient
+    # son calendrier ; avec des actions et des cryptos dans le même panier, cette supposition
+    # décalait les colonnes de plusieurs années. On refuse ici les NaN plutôt que de les gérer :
+    # la comptabilité parts/cash en aval produirait un P&L FAUX, pas une erreur visible.
+    universe, dts, A = aligner_sans_trous(data, universe, min_names)
+    if len(universe) < 2 or A.shape[1] < lookback + step:
+        return {"available": False}
+    L = A.shape[1]
+    M = {s: A[i] for i, s in enumerate(universe)}
     rets = A[:, 1:] / A[:, :-1] - 1
     tgt_vol = max(0.0, abs(dd_target)) / k_dd
     start = max(lookback, 50)
@@ -605,12 +608,20 @@ def preset_trade_log(data: dict, quality: dict | None = None, asset_classes: dic
     quality = quality or {}  # conservé pour compat API ; PLUS utilisé pour l'univers (anti-fuite, cf. _price_universe)
     universe = _price_universe(data, syms, lookback, top_k)
     # même logique « courbe la plus longue » que preset_equity_daily (min_names plus longs historiques)
-    universe, L = fenetre_par_rang(data, universe, min_names)
-    M = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in universe}
-    # dates PAR SYMBOLE (chacun aligné sur SES propres barres) → un marqueur tombe toujours dans la
-    # fenêtre du titre (sinon le signal d'entrée précède le début des données du titre = invisible).
-    D = {s: [b.ts.isoformat()[:10] for b in data[s]][-L:] for s in universe}
-    A = np.asarray([M[s] for s in universe])
+    # Grille alignée par DATE et SANS NaN (cf. panel.aligner_sans_trous). Ces fonctions
+    # prenaient les dates d'UNE série de référence et supposaient que les autres partageaient
+    # son calendrier ; avec des actions et des cryptos dans le même panier, cette supposition
+    # décalait les colonnes de plusieurs années. On refuse ici les NaN plutôt que de les gérer :
+    # la comptabilité parts/cash en aval produirait un P&L FAUX, pas une erreur visible.
+    universe, _dts, A = aligner_sans_trous(data, universe, min_names)
+    if len(universe) < 2 or A.shape[1] < lookback + step:
+        return {"available": False}
+    L = A.shape[1]
+    M = {s: A[i] for i, s in enumerate(universe)}
+    # Les dates PAR SYMBOLE deviennent inutiles : sur une grille commune sans trous, chaque
+    # titre est coté à chaque date. Le marqueur ne peut plus tomber hors de la fenêtre du titre —
+    # c'était le contournement d'un désalignement, pas une propriété souhaitable.
+    D = {s: list(_dts) for s in universe}
     rets = A[:, 1:] / A[:, :-1] - 1
     tgt_vol = max(0.0, abs(dd_target)) / k_dd
     start = max(lookback, 50)
@@ -674,11 +685,16 @@ def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict |
     ouvert_depuis: dict[str, str] = {}       # symbole → date d'ouverture de la ligne EN COURS
     quality = quality or {}  # conservé pour compat API ; PLUS utilisé pour l'univers (anti-fuite, cf. _price_universe)
     universe = _price_universe(data, syms, lookback, top_k)
-    universe, L = fenetre_par_rang(data, universe, min_names)
-    M = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in universe}
-    ref = max(universe, key=lambda s: len(data[s]))
-    dts = [b.ts.isoformat()[:10] for b in data[ref]][-L:]
-    A = np.asarray([M[s] for s in universe])
+    # Grille alignée par DATE et SANS NaN (cf. panel.aligner_sans_trous). Ces fonctions
+    # prenaient les dates d'UNE série de référence et supposaient que les autres partageaient
+    # son calendrier ; avec des actions et des cryptos dans le même panier, cette supposition
+    # décalait les colonnes de plusieurs années. On refuse ici les NaN plutôt que de les gérer :
+    # la comptabilité parts/cash en aval produirait un P&L FAUX, pas une erreur visible.
+    universe, dts, A = aligner_sans_trous(data, universe, min_names)
+    if len(universe) < 2 or A.shape[1] < lookback + step:
+        return {"available": False}
+    L = A.shape[1]
+    M = {s: A[i] for i, s in enumerate(universe)}
     rets = A[:, 1:] / A[:, :-1] - 1
     idx = {s: i for i, s in enumerate(universe)}
     tgt_vol = max(0.0, abs(dd_target)) / k_dd
