@@ -42,11 +42,14 @@ DECLENCHEURS = {
 
 # Lignes DIAGNOSTIQUES : imprimées pour chiffrer un défaut connu, jamais promues, jamais loguées
 # au ledger (ce ne sont pas des essais d'alpha — les compter déflaterait le DSR pour rien).
-DIAGNOSTICS = {"panel tronqué (ancien min)"}
+DIAGNOSTICS = {"panel tronqué (ancien min)", "empilement positionnel (ancien)"}
 
 CONFIGS = [
     ("base (prod actuelle)", {}),
-    ("panel tronqué (ancien min)", {"panel_couverture": 1.0}),   # chiffre la troncature du panel
+    # L'alignement par date est désormais le DÉFAUT (gaté le 25/08 : ΔSharpe +0,59 à univers
+    # comparable). Les lignes de comparaison épinglent donc l'ancien comportement.
+    ("empilement positionnel (ancien)", {"aligner_dates": False}),
+    ("panel tronqué (ancien min)", {"panel_couverture": 1.0, "aligner_dates": False}),
     ("+cap adaptatif corr", {"max_weight": 0.10, "corr_tighten": True}),
     ("+overlay DD/vol EWMA", {"risk_overlay": True}),
     ("+cap adaptatif + overlay", {"max_weight": 0.10, "corr_tighten": True,
@@ -63,7 +66,6 @@ CONFIGS = [
     # ALIGNEMENT PAR DATE — P0-2. Sur calendrier uniforme, chiffres identiques au bit près ; la
     # ligne ne bouge donc QUE si des séries ne se terminent pas le même jour (introductions
     # récentes, radiations). C'est le préalable à toute mesure du biais du survivant.
-    ("+alignement par date", {"aligner_dates": True}),
 ]
 
 
@@ -124,9 +126,12 @@ def _run_configs(data, acmap) -> list[dict]:
 
 
 def _alignement_report(rows: list[dict]) -> None:
-    """Ce que l'alignement par date change — et sur quelle population."""
-    ligne = next((r for r in rows if r["label"] == "+alignement par date"), None)
-    base = rows[0] if rows else None
+    """Ce que l'alignement par date change — et sur quelle population.
+
+    L'alignement est le DÉFAUT depuis le 25/08 : la ligne de référence est donc la base, et la
+    ligne de comparaison est l'ANCIEN empilement positionnel."""
+    ligne = rows[0] if rows else None
+    base = next((r for r in rows if r["label"] == "empilement positionnel (ancien)"), None)
     if not ligne or not base:
         return
     d = ligne.get("panel") or {}
@@ -137,7 +142,8 @@ def _alignement_report(rows: list[dict]) -> None:
     print(f"  noms retenus          : {d.get('n_retenus')}/{d.get('n_eligibles')}")
     print(f"  séries PARTIELLES     : {d.get('n_partielles')} (introduites en cours de route, "
           f"ou radiées) · remplissage {d.get('taux_remplissage', 0):.1%}")
-    print(f"  ΔSharpe vs positionnel: {ligne['sharpe'] - base['sharpe']:+.2f}")
+    print(f"  ΔSharpe vs positionnel: {ligne['sharpe'] - base['sharpe']:+.2f} "
+          f"(base {base['sharpe']:.2f} → {ligne['sharpe']:.2f})")
     if not d.get("n_partielles"):
         print("  → aucune série partielle : les deux alignements DOIVENT donner le même chiffre.")
     else:
@@ -155,10 +161,18 @@ def _panel_report(rows: list[dict]) -> None:
     print("\n" + "=" * 60 + "\nPANEL — PROFONDEUR EFFECTIVE\n" + "=" * 60)
     if not d.get("available"):
         print("  Diagnostic indisponible."); return
-    print(f"  fenêtre commune L     : {d['L']} barres "
-          f"(série la plus courte : {d['L_min']} → ×{d['gain_vs_min']})")
-    print(f"  noms retenus          : {d['n_retenus']}/{d['n_eligibles']} "
-          f"({d['n_ecartes']} écartés : historique trop court, filtre d'ancienneté de cotation)")
+    # Deux formes de diagnostic coexistent — fenêtre commune (positionnel) et grille de dates.
+    # Les distinguer par une CLÉ plutôt que par un drapeau : la donnée dit ce qu'elle est.
+    if "n_dates" in d:
+        print(f"  grille de dates       : {d['n_dates']} séances "
+              f"({d.get('debut')} → {d.get('fin')})")
+        print(f"  noms retenus          : {d['n_retenus']}/{d['n_eligibles']} "
+              f"({d.get('n_partielles', 0)} partielles — introduites en cours de route, ou radiées)")
+    else:
+        print(f"  fenêtre commune L     : {d['L']} barres "
+              f"(série la plus courte : {d['L_min']} → ×{d['gain_vs_min']})")
+        print(f"  noms retenus          : {d['n_retenus']}/{d['n_eligibles']} "
+              f"({d['n_ecartes']} écartés : historique trop court, filtre d'ancienneté de cotation)")
     print(f"  rebalancements        : {rows[0].get('n_steps')}")
     if (rows[0].get("n_steps") or 0) < 20:
         print("  ⚠️  moins de 20 pas : AUCUN ratio ci-dessous n'est interprétable.")

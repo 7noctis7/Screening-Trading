@@ -31,6 +31,25 @@ from packages.backtest.panel import (
     fenetre_par_rang,
 )
 from packages.execution.costs import CostModel
+
+# ALIGNEMENT PAR DATE ACTIVÉ — mesuré puis gaté le 25/08 au soir, jamais activé en silence.
+#
+# `make diag-alignement` sur les données réelles (929 instruments) a décomposé le gain :
+#     effet ALIGNEMENT, à univers comparable : ΔSharpe +0,59 (0,92 → 1,51)
+#                                              maxDD  −19,4 % → −8,7 %
+#     effet UNIVERS (le reste)               : ΔSharpe −0,17
+# L'essentiel vient donc de la CORRECTION, pas d'un tirage d'univers plus chanceux — l'effet
+# univers jouait même contre.
+#
+# LE MÉCANISME, vérifié par l'arithmétique. L'empilement positionnel prend les L dernières
+# barres de chaque série et les superpose. Avec L = 2761 : une action (5 séances/semaine)
+# remonte à 2015, une crypto (7 j/7) remonte à 2018. Les deux occupaient la MÊME colonne,
+# décalées de TROIS ANS. Conséquence visible dans le diagnostic : le momentum crypto, mesuré
+# sur une fenêtre 2018-2026, écrasait celui des actions, et le top-30 comptait douze paires
+# crypto sélectionnées par pur artefact de calendrier.
+#
+# `aligner_dates=False` reproduit l'ancien comportement, pour comparaison uniquement.
+ALIGNEMENT_PAR_DEFAUT = True
 from packages.portfolio.optimize import equal_risk_contribution
 from packages.portfolio.risk_advanced import ewma_vol
 from packages.portfolio.risk_overlay import drawdown_taper
@@ -139,13 +158,25 @@ def _price_universe(data: dict, syms: list, lookback: int, top_k: int,
     décaler le premier rebalancement — les prendre serait une fuite."""
     if len(syms) < 5:
         return syms[:top_k]
-    syms, L, _ = fenetre_commune(data, list(syms), couverture=couverture)
-    if len(syms) < 5:
-        return list(syms)[:top_k]
-    M = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in syms}
+    if ALIGNEMENT_PAR_DEFAUT:
+        # Le classement de momentum comparait des fenêtres de calendriers DIFFÉRENTS : trois ans
+        # d'écart entre une crypto et une action au même index, ce qui plaçait douze paires
+        # crypto dans le top-30 par artefact. La sélection doit porter sur des dates communes.
+        syms, _dates, A, _diag = aligner_par_date(data, list(syms), couverture=couverture)
+        if len(syms) < 5:
+            return list(syms)[:top_k]
+        M = {s: A[i] for i, s in enumerate(syms)}
+    else:
+        syms, L, _ = fenetre_commune(data, list(syms), couverture=couverture)
+        if len(syms) < 5:
+            return list(syms)[:top_k]
+        M = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in syms}
     _s0 = max(lookback, 50)
-    sel = {s: float(M[s][_s0 - 1] / M[s][max(0, _s0 - 252 - 1)] - 1)
-           for s in syms if len(M[s]) > _s0}
+    _b0 = lambda a: max(0, _s0 - 252 - 1)  # noqa: E731 — borne basse, ramenée à 0 (cf. docstring)
+    sel = {s: float(M[s][_s0 - 1] / M[s][_b0(M[s])] - 1)
+           for s in syms
+           if len(M[s]) > _s0 and np.isfinite(M[s][_s0 - 1])
+           and np.isfinite(M[s][_b0(M[s])]) and M[s][_b0(M[s])] > 0}
     return (sorted(sel, key=lambda s: sel[s], reverse=True)[:top_k]
             if len(sel) >= 5 else syms[:top_k])
 
@@ -161,7 +192,7 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
                     corr_tighten: bool = False, exec_lag: int = 0,
                     cov_denoise: bool = False,
                     panel_couverture: float = COUVERTURE_DEFAUT,
-                    aligner_dates: bool = False) -> dict:
+                    aligner_dates: bool = ALIGNEMENT_PAR_DEFAUT) -> dict:
     """`cov_denoise` (M1, 08/20) : covariance DÉBRUITÉE par théorie des matrices aléatoires,
     avec repli inverse-vol quand moins de 2 directions sont distinguables du bruit. Défaut
     False = chiffres historiques inchangés au bit près ; le DIAGNOSTIC (`cov_diag`), lui, est

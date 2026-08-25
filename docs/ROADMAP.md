@@ -46,8 +46,21 @@ des courbes **identiques au bit près** à l'empilement positionnel. Les chiffre
 QUE là où le positionnel était faux — c'est-à-dire sur les séries partielles (introductions en
 cours de route, radiations). Cette propriété est testée.
 
-**Défaut : `aligner_dates=False`.** Pas par timidité : le levier est mesuré par `make preset-lab`
-(ligne « +alignement par date ») avant toute activation, comme `cov_denoise` avant lui.
+**ACTIVÉ le 25/08 au soir**, après mesure et gate — jamais en silence. `make diag-alignement` a
+décomposé le gain sur les données réelles : **effet alignement +0,59** de Sharpe à univers
+comparable (0,92 → 1,51 ; maxDD −19,4 % → −8,7 %), **effet univers −0,17**. L'essentiel vient de
+la correction, et l'effet univers jouait même contre.
+
+**Le mécanisme, vérifié par l'arithmétique.** Avec L = 2761 barres, une action (5 séances par
+semaine) remonte à 2015 et une crypto (7 j/7) à 2018 : les deux occupaient la même colonne,
+**décalées de trois ans**. Le momentum crypto, mesuré sur une fenêtre 2018-2026, écrasait celui
+des actions — le top-30 comptait douze paires crypto sélectionnées par pur artefact de calendrier.
+
+**Reste à migrer** : `preset_equity_daily`, `preset_trade_log` et `preset_ledger` héritent de
+l'univers corrigé (via `_price_universe`) mais calculent encore leurs rendements par empilement
+positionnel. Leur courbe et le tableau du backtest peuvent donc diverger. Migrer la comptabilité
+parts/cash du ledger vers une matrice à NaN demande de la prudence — c'est un **P0 de suite**,
+pas un détail.
 
 **Limite assumée du chiffre obtenu.** Une ligne radiée est soldée à son DERNIER COURS COTÉ, qui
 n'est presque jamais zéro pour une société en liquidation. Le delta publié est un **MINORANT**
