@@ -9,6 +9,8 @@ setup:            ## installation locale guidée (venv, détection YAHOO.db, bui
 	bash scripts/setup_local.sh
 test:             ## lance la suite de tests
 	$(PYTHON) -m pytest -q
+coverage:         ## couverture de tests réelle (pytest-cov) → terme + rappel des trous
+	$(PYTHON) -m pytest -q --cov=packages --cov-report=term-missing
 lint:             ## ruff + mypy
 	ruff check packages apps && mypy packages
 demos:            ## exécute les démos offline

@@ -95,7 +95,7 @@ test_la_couche_intelligence_ne_peut_pas_atteindre_un_courtier`.
 | T2 | `RiskEngine` (règles reward/risk, stops) hors du chemin de production | MOYEN | partiellement couvert par `order_gate` |
 | T3 | ~~`mcp_tradingview` sous-testé~~ | MOYEN | **fermé le 25/08** — 2 défauts actifs trouvés et corrigés |
 | T4 | Modules d'exécution avancés jamais exécutés sur données réelles | MOYEN | ouvert |
-| T5 | Aucune mesure de couverture de tests (outil absent de l'environnement) | FAIBLE | ouvert |
+| T5 | ~~Couverture non mesurée~~ | FAIBLE | **fermé le 25/08 — 81 %**. Reste `regime/real_macro.py` à 0 % (53 l., alimente la porte de régime) |
 | T6 | `apps/web/app/dashboard/page.tsx` à 435 lignes (limite projet : 400) | FAIBLE | ouvert |
 | T7 | `make lint` échoue : 4333 erreurs ruff dont 3847 `E501` — la CI l'exécute en **non bloquant** | FAIBLE | préexistant, assumé |
 
@@ -155,8 +155,7 @@ n'était pas uniforme :
 
 ## 6. Ce que cet audit n'a PAS pu établir
 
-- **La couverture de tests** : `pytest-cov` n'est pas installé dans cet environnement. Le ratio
-  fichiers de test / fichiers source est publié à la place — ce n'est pas une couverture.
+- ~~La couverture de tests~~ — **mesurée : 81 %** (`make coverage`).
 - **La validité des chiffres publiés par les 13 modules non migrés.**
 - **L'ampleur du biais du survivant sur les données RÉELLES.** Le moteur sait maintenant la
   mesurer (`make preset-lab`, ligne « +alignement par date »), mais aucun chiffre réel n'a encore

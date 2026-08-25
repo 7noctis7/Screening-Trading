@@ -2,7 +2,19 @@
 
 Sert à convertir les états financiers d'un ADR (devise locale, ex. TWD) dans la devise de son cours
 (ex. USD) afin que la valorisation (multiples, DCF) soit cohérente. Hors-ligne / paire inconnue →
-renvoie None et l'appelant retombe sur le comportement « valorisation masquée »."""
+renvoie None et l'appelant retombe sur le comportement « valorisation masquée ».
+
+DÉFAUT CORRIGÉ LE 25/08 : le TTL portait sur le FICHIER, pas sur l'entrée. Le cache était un
+simple `{paire: valeur}` et `_save` réécrivait tout le fichier — donc récupérer une paire
+quelconque remettait le compteur de fraîcheur à zéro pour TOUTES les autres. Une paire peu
+utilisée (TWD, par exemple) pouvait ainsi être servie indéfiniment avec un taux de plusieurs
+mois, et rien ne permettait de le savoir : le code ne stockait aucun horodatage par entrée, il
+ne POUVAIT donc pas distinguer un taux d'une minute d'un taux d'un semestre.
+
+Un taux de change périmé ne fait pas échouer une valorisation, il la fausse silencieusement —
+c'est le pire des deux mondes. Chaque entrée porte désormais sa propre date, et `age_heures()`
+la rend lisible.
+"""
 
 from __future__ import annotations
 
@@ -15,9 +27,11 @@ _TTL = 86_400.0     # 24 h : un taux journalier suffit pour une note fondamental
 
 
 def _load() -> dict:
+    """Cache brut, SANS filtrage d'âge — la fraîcheur se juge entrée par entrée (cf. `rate`)."""
     try:
-        if _CACHE.exists() and time.time() - _CACHE.stat().st_mtime < _TTL:
-            return json.loads(_CACHE.read_text())
+        if _CACHE.exists():
+            d = json.loads(_CACHE.read_text())
+            return d if isinstance(d, dict) else {}
     except Exception:  # noqa: BLE001
         pass
     return {}
@@ -31,20 +45,45 @@ def _save(d: dict) -> None:
         pass
 
 
+def _lire_entree(brut) -> tuple[float, float] | None:
+    """(valeur, horodatage) d'une entrée de cache, ou None si inexploitable.
+
+    L'ANCIEN format était une valeur nue, sans date. Une telle entrée est traitée comme
+    d'ÂGE INCONNU, donc périmée : on la re-récupère. Lui accorder le bénéfice du doute
+    reviendrait à conserver exactement le défaut qu'on corrige."""
+    if isinstance(brut, dict):
+        try:
+            return float(brut["v"]), float(brut["t"])
+        except (KeyError, TypeError, ValueError):
+            return None
+    return None
+
+
+def age_heures(base: str, quote: str = "USD") -> float | None:
+    """Âge du taux en cache, en heures. None si absent ou d'âge inconnu (ancien format).
+
+    Publié pour que l'appelant puisse DIRE qu'il utilise un taux de trois jours plutôt que de
+    le supposer frais."""
+    e = _lire_entree(_load().get(f"{(base or '').upper().strip()}{(quote or 'USD').upper().strip()}"))
+    return round((time.time() - e[1]) / 3600.0, 2) if e else None
+
+
 def rate(base: str, quote: str = "USD") -> float | None:
     """1 unité de `base` = ? `quote` (ex. rate('TWD','USD') ≈ 0.031). None si indisponible/hors-ligne.
-    Identité si base == quote. Cache disque 24 h ; source yfinance `BASEQUOTE=X`."""
+
+    Identité si base == quote. Cache disque avec TTL de 24 h **par entrée** ; source yfinance
+    `BASEQUOTE=X`."""
     base = (base or "").upper().strip()
     quote = (quote or "USD").upper().strip()
-    if not base or not quote or base == quote:
-        return 1.0 if base == quote and base else None
+    if not base or not quote:
+        return None
+    if base == quote:
+        return 1.0
     cache = _load()
     key = f"{base}{quote}"
-    if key in cache:
-        try:
-            return float(cache[key])
-        except (TypeError, ValueError):
-            pass
+    entree = _lire_entree(cache.get(key))
+    if entree is not None and (time.time() - entree[1]) < _TTL:
+        return entree[0]
     try:
         import yfinance as yf
         hist = yf.Ticker(f"{base}{quote}=X").history(period="5d")
@@ -52,7 +91,7 @@ def rate(base: str, quote: str = "USD") -> float | None:
             return None
         val = float(hist["Close"].dropna().iloc[-1])
         if val > 0:
-            cache[key] = val
+            cache[key] = {"v": val, "t": time.time()}
             _save(cache)
             return val
     except Exception:  # noqa: BLE001
