@@ -126,6 +126,8 @@ n'était pas uniforme :
 | **Données** | mode « mixte » : 788 séries réelles sur 929 — le reste est en repli. Les symboles synthétiques sont exclus de l'allocation. | contrôlé |
 | **Backtesting** | biais du survivant **mesurable** depuis le 25/08 (`aligner_dates=True`). Le chiffre obtenu est un **MINORANT** : une ligne radiée est soldée à son dernier cours coté, qui surestime la récupération d'une faillite. | **à mesurer sur données réelles** |
 | **Backtesting** | fondamentaux **non point-in-time** : le score du jour est appliqué à des dates passées en production (légitime) mais l'univers de backtest est sélectionné par momentum prix-only pour l'éviter | contrôlé |
+| **Données** | ~~calendriers mêlés~~ : l'empilement positionnel superposait une colonne crypto de 2018 à une colonne action de 2015 (**3 ans d'écart**), ce qui plaçait 12 paires crypto dans le top-30 par artefact | **corrigé le 25/08** |
+| **Backtesting** | `preset_equity_daily` / `trade_log` / `ledger` calculent encore leurs rendements par empilement positionnel : leur courbe peut diverger du tableau | **ouvert — P0** |
 | **Signaux** | `k_signal` médian = **1** sur 126 rebalancements : l'optimisation transversale (ERC) répartit du risque sur une matrice à une seule direction fiable | **ouvert** |
 | **Signaux** | les 5 hypothèses d'alpha sont rejetées en long/short et « promues » en long-only — écart imputable au bêta, désormais mesuré | corrigé le 25/08 |
 | **Position sizing** | plancher de ligne 1 000 $ + bande d'inaction 3 % ; la bande bloque **99 % des pas** et ne laisse trader que ~7 % des noms | **à instruire** |

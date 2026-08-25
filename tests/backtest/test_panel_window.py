@@ -71,8 +71,10 @@ def test_rebalancements_compte_les_pas_reels():
 
 def test_preset_gagne_des_rebalancements():
     d = _panel_avec_ipo()
-    tronque = preset_backtest(d, top_k=30, panel_couverture=1.0)
-    complet = preset_backtest(d, top_k=30)
+    # Ce test porte sur la fenêtre COMMUNE (empilement positionnel) : depuis l'activation de
+    # l'alignement par date, il faut épingler ce mode, sinon on teste autre chose.
+    tronque = preset_backtest(d, top_k=30, panel_couverture=1.0, aligner_dates=False)
+    complet = preset_backtest(d, top_k=30, aligner_dates=False)
     assert tronque["n_steps"] < 10                       # le bug tel qu'il se manifestait
     assert complet["n_steps"] > 4 * tronque["n_steps"]
     assert complet["panel"]["n_ecartes"] == 6
