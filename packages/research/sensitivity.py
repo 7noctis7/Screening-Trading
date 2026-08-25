@@ -41,12 +41,12 @@ def regime_exposure_shift(mkt, base_kwargs: dict, perturbed_kwargs: dict,
     """
     import numpy as np
 
-    from packages.backtest.preset_backtest import _regime_mult
+    from packages.backtest.preset_helpers import regime_mult
     m = np.asarray(mkt, float)
     if m.size <= start:
         return {"available": False}
-    diffs = [abs(_regime_mult(m, t, **base_kwargs)
-                 - _regime_mult(m, t, **perturbed_kwargs))
+    diffs = [abs(regime_mult(m, t, **base_kwargs)
+                 - regime_mult(m, t, **perturbed_kwargs))
              for t in range(start, m.size)]
     mean_shift = float(sum(diffs) / len(diffs)) if diffs else 0.0
     return {"available": True, "mean_exposure_shift": round(mean_shift, 4),
