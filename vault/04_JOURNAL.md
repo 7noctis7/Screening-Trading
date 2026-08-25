@@ -1,5 +1,34 @@
 # 04 — JOURNAL
 
+## Session 2026-08-25 (11) — Fondations pour rolling universe (alpha future)
+**État.** Fixes post-refactoring + infrastructure pour rolling universe.
+
+**Fix post-refactoring (PR #341-343).** Après extraction des helpers dans `preset_helpers.py`,
+l'import dans `sensitivity.py` pointait l'ancienne location. Correction : import depuis
+`preset_helpers.regime_mult` au lieu de `preset_backtest._regime_mult`.
+`test_regime_exposure_shift_small_for_tiny_perturbation` passe (sensibilité du gate de régime).
+
+**Infrastructure rolling universe.** Ajouté `select_rolling_universe()` dans `preset_helpers.py`:
+sélectionne top-K actifs à l'instant t par momentum 252-day (point-in-time, sans fuite).
+Fondation pour futur backtest rolling (réadapte universe à chaque rebalancement, vs. univers
+gelé statiquement). Tests de correctness : exclut actifs sans historique à t, pas de look-ahead.
+Bénéfice attendu : capture rotations de momentum (améliore allocation), mesure survivorship
+bias proprement.
+
+**Blocages architecturaux pour déploiement complet.**
+- `preset_backtest.py` : 793 lignes, 6 fonctions > 50 lignes (règle < 400 lignes/file, < 50/fonction).
+  Implémentation rolling nécessiterait refactoring majeur qui casse le build.
+- Macro series (NFCI, T5YIFR, ICSA, etc.) : déjà dans `fred.py`, pas encore câblées au
+  `regime_mult` — câblage direct casse aussi la limite de taille.
+
+**Tests & CI.** pytest +1268 (3 nouveaux rolling tests), ruff OK, gitleaks OK.
+
+**Prêt pour.** Résolution architecturale (refactor preset_backtest.py en modules < 400 lignes
++ < 50-line functions) avant rolling universe complet. Alternative : attendre snapshot d'une
+autre session pour unblock refactor.
+
+---
+
 ## Session 2026-08-25 (10) — Trois architectures fermées : alignement, look-ahead, périmètres de risque
 **État.** Les trois PRs du travail architectural (#341, #342, #343) sont **merged et déployées**.
 
