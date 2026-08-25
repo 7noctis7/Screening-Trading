@@ -110,17 +110,30 @@ nom). Chaque compte doit être vérifié individuellement avant tout usage.
 **Difficulté.** Faible mais fastidieuse. **Risques.** Marquer `verifie=True` sans vérification
 réelle détruirait la valeur du scoring.
 
-### P1-6 · Séries macro additionnelles — ⚠️ LIVRÉ, À VÉRIFIER le 25/08
+### ~~P1-6 · Séries macro additionnelles~~ — ✅ VÉRIFIÉ le 25/08 au soir
 **Livré.** Sept séries ajoutées, chacune avec sa justification écrite dans `POURQUOI` et publiée
 dans le snapshot : ICSA (signal d'emploi hebdomadaire), SAHMREALTIME (récession, règle mécanique),
 T5YIFR (inflation anticipée → contrainte réelle sur la Fed), NFCI (conditions financières),
 BAMLC0A0CM (spread IG — c'est son ÉCART avec le haut rendement déjà suivi qui distingue un stress
 généralisé d'une aversion cantonnée), WALCL (bilan Fed), DTWEXBGS (dollar large).
 
-**Réserve, et elle compte.** Les identifiants **n'ont PAS pu être vérifiés** contre l'API depuis
-l'environnement de développement : le policy réseau y refuse `api.stlouisfed.org`. `make
-macro-verify` les contrôle en une commande. Un identifiant erroné n'est pas silencieux — il
-apparaît dans `manquantes`, le filet existait déjà.
+**Vérifié sur la machine de l'utilisateur** : 21 séries contrôlées, **0 morte**. Les sept
+identifiants ajoutés sont bons.
+
+**Ce que le contrôle a révélé en revanche, et qui n'était pas prévu :** 4 des 5 séries signalées
+« PÉRIMÉE » l'étaient **à tort**. DGS2, DGS10 et DTWEXBGS à 4 jours de retard un mardi — un
+vendredi plus un week-end. La cadence était estimée par le plus PETIT espacement (1 jour pour une
+série quotidienne), donc trois jours suffisaient à dépasser le seuil de 3×. Un détecteur qui se
+trompe 4 fois sur 5 n'est pas prudent : il apprend à être ignoré.
+
+Corrigé : 12 observations lues au lieu de 4 (assez pour VOIR un week-end) et cadence estimée par
+un quantile haut plutôt que par le minimum. Le maximum aurait été trop indulgent — une
+interruption exceptionnelle relèverait le seuil pour toujours.
+
+**Une série était réellement morte** : `LRHUTTTTEZM156S` (chômage zone euro), 1332 jours de
+retard, arrêtée en 2023. Retirée. **Aucun remplaçant n'est proposé** : je ne sais pas en vérifier
+un depuis l'environnement de développement, et remplacer une série morte par une série
+peut-être morte n'améliore rien. **À re-sourcer.**
 
 **Critère d'ajout appliqué.** Pas « c'est de la macro » mais « par quel canal ceci peut-il
 déplacer une exposition ? ». Un test impose qu'une série ajoutée ait une justification écrite de

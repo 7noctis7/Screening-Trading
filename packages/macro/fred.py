@@ -24,7 +24,11 @@ SERIES: list[tuple] = [
     ("DGS10", "Taux 10 ans", "🇺🇸 États-Unis", "lin", "%"),
     ("INDPRO", "Production indus. (a/a)", "🇺🇸 États-Unis", "pc1", "%"),
     ("UMCSENT", "Confiance ménages", "🇺🇸 États-Unis", "lin", ""),
-    ("LRHUTTTTEZM156S", "Chômage", "🇪🇺 Zone euro", "lin", "%"),
+    # ("LRHUTTTTEZM156S", "Chômage", "🇪🇺 Zone euro", …) — RETIRÉE le 25/08 : dernière observation
+    # 2023-01-01, soit 1332 jours de retard au contrôle. Série arrêtée, pas en retard. Aucun
+    # remplaçant n'est proposé ici : je ne sais pas en vérifier un depuis l'environnement de
+    # développement, et deviner un identifiant reviendrait à remplacer une série morte par une
+    # série peut-être morte. À re-sourcer (cf. docs/ROADMAP.md).
     ("CP0000EZ19M086NEST", "Inflation (IPCH, a/a)", "🇪🇺 Zone euro", "pc1", "%"),
     ("IRLTLT01DEM156N", "Taux 10 ans (Bund)", "🇩🇪 Allemagne", "lin", "%"),
     ("DCOILWTICO", "Pétrole WTI", "🛢️ Marchés", "lin", "$"),
@@ -73,6 +77,20 @@ POURQUOI: dict[str, str] = {
 # une série mensuelle) sans laisser passer une série morte.
 _FACTEUR_RETARD = 3.0
 
+# Nombre d'observations lues pour estimer la cadence. Il en faut assez pour VOIR un week-end :
+# avec 4 observations d'une série quotidienne on ne voit que des espacements de 1 jour, et le
+# lundi suivant la série paraît morte. 12 observations couvrent au moins deux week-ends.
+_N_OBS_CADENCE = 12
+
+# Quantile des espacements retenu comme cadence. Le MINIMUM était le mauvais choix : pour une
+# série quotidienne il vaut 1 jour, si bien qu'un simple week-end (3 jours) dépassait déjà le
+# seuil de 3×. Contrôle du 25/08 : 4 des 5 séries signalées « périmées » l'étaient à tort —
+# DGS2, DGS10 et DTWEXBGS à 4 jours un mardi, c'est-à-dire un vendredi plus un week-end.
+# Un détecteur qui se trompe 4 fois sur 5 n'est pas prudent, il apprend à être ignoré.
+# Le maximum serait trop indulgent (une interruption exceptionnelle relèverait le seuil pour
+# toujours) ; un quantile haut absorbe les week-ends et les jours fériés sans absorber un arrêt.
+_QUANTILE_CADENCE = 0.9
+
 
 def _retard(dates: list[str]) -> tuple[int, bool]:
     """(jours depuis la dernière observation, périmée ?) — cadence déduite de la série elle-même.
@@ -90,16 +108,20 @@ def _retard(dates: list[str]) -> tuple[int, bool]:
     retard = (date.today() - ds[0]).days
     if len(ds) < 2:
         return retard, False
-    espacements = [(ds[i] - ds[i + 1]).days for i in range(len(ds) - 1)]
-    cadence = max(1, min(e for e in espacements if e > 0) if any(e > 0 for e in espacements) else 1)
+    espacements = sorted(e for e in ((ds[i] - ds[i + 1]).days for i in range(len(ds) - 1)) if e > 0)
+    if not espacements:
+        return retard, False
+    rang = min(len(espacements) - 1, int(_QUANTILE_CADENCE * len(espacements)))
+    cadence = max(1, espacements[rang])
     return retard, retard > _FACTEUR_RETARD * cadence
 
 
 def _fetch(series_id: str, units: str, key: str) -> dict | None:
     try:
-        # limit=4 (et non 2) : il faut au moins deux ESPACEMENTS pour estimer une cadence.
+        # Assez d'observations pour VOIR un week-end (cf. _N_OBS_CADENCE) : avec 4 points,
+        # une série quotidienne n'exhibe que des espacements de 1 jour et paraît morte le lundi.
         url = (f"{_BASE}?series_id={series_id}&api_key={key}&file_type=json"
-               f"&units={units}&sort_order=desc&limit=4")
+               f"&units={units}&sort_order=desc&limit={_N_OBS_CADENCE}")
         with urllib.request.urlopen(url, timeout=6) as r:  # noqa: S310
             obs = json.loads(r.read().decode()).get("observations", [])
         vals = [(o["date"], float(o["value"])) for o in obs if o.get("value") not in (".", None, "")]
