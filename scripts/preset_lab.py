@@ -28,6 +28,9 @@ sys.path.insert(0, str(ROOT))
 # Quel compteur de déclenchement prouve qu'un levier a réellement AGI ? Sans ça, « rejeté »
 # et « jamais activé » s'impriment à l'identique — c'est ce qui s'est passé le 24/08.
 DECLENCHEURS = {
+    "bande 1 % (au lieu de 3 %)": ("bande",),
+    "bande 0,5 %": ("bande",),
+    "sans bande": ("bande",),
     "+cap adaptatif corr": ("plafond",),
     "+overlay DD/vol EWMA": ("taper_dd", "frein_vol"),
     "+cap adaptatif + overlay": ("plafond", "taper_dd", "frein_vol"),
@@ -44,6 +47,13 @@ CONFIGS = [
     ("+overlay DD/vol EWMA", {"risk_overlay": True}),
     ("+cap adaptatif + overlay", {"max_weight": 0.10, "corr_tighten": True,
                                   "risk_overlay": True}),
+    # BANDE D'INACTION — P0-3. Sur données réelles elle bloque 99 % des pas et ne laisse trader
+    # que ~7 % des noms : à 30 lignes, une position pèse ~3,3 % et la bande vaut 3 points, soit
+    # presque une position entière. On MESURE avant de conclure — l'intuition ne tranche pas un
+    # compromis entre coût de frottement et fidélité au signal.
+    ("bande 1 % (au lieu de 3 %)", {"band": 0.01}),
+    ("bande 0,5 %", {"band": 0.005}),
+    ("sans bande", {"band": 0.0}),
     ("fill t+1 (réaliste, M-1)", {"exec_lag": 1}),   # écart vs fill au signal = mini look-ahead
     ("+covariance débruitée RMT", {"cov_denoise": True}),   # M1 : repli inverse-vol si k < 2
 ]
@@ -235,14 +245,22 @@ def _survivorship(data, acmap) -> None:
     print("\n" + "=" * 60 + "\nBIAIS DU SURVIVANT (XL-1)\n" + "=" * 60)
     out = survivorship_delta(data, delisted_data=dd_real, top_k=30)
     if not out.get("available"):
-        print(f"  Indisponible : {out.get('reason')}")
+        # « Indisponible » est un RÉSULTAT, pas un échec : c'est ce qui distingue « pas de biais »
+        # de « on n'a pas pu mesurer ». Le zéro affiché jusqu'au 25/08 confondait les deux.
+        print(f"  ⛔ NON MESURABLE — {out.get('reason')}")
+        if out.get("decalage_jours"):
+            print(f"     décalage temporel : {out['decalage_jours']} jours")
+        if out.get("n_delisted_selectionnes") == 0:
+            print(f"     {out.get('n_delisted', 0)} délistés fournis, 0 sélectionné")
         return
     d = out["delta"]
     print(f"  {out['n_delisted']} délistés réels ajoutés · Δ Sharpe {d['sharpe']:+.2f} · "
           f"Δ CAGR {d['annualized']*100:+.1f} pts · Δ maxDD {d['max_drawdown']*100:+.1f} pts")
+    print(f"  dont {out.get('n_delisted_selectionnes', 0)} réellement SÉLECTIONNÉS : "
+          f"{', '.join(out.get('delistes_selectionnes', [])[:8]) or '—'}")
     if abs(d["sharpe"]) < 1e-9 and abs(d["annualized"]) < 1e-9:
-        print("  → Δ nul : les délistés ne sont JAMAIS entrés dans le top-30 — le test ne mesure")
-        print("    donc rien. Il faut des délistés qui auraient été SÉLECTIONNÉS pour conclure.")
+        print("  → Δ nul alors que des délistés ont été sélectionnés : à instruire, ce n'est pas")
+        print("    le cas trivial (celui-là est désormais refusé en amont).")
     elif d["sharpe"] < 0:
         print("  → Δ Sharpe négatif : le backtest survivant était bien optimiste. À publier sur /echecs.")
     else:

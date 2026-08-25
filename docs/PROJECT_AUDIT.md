@@ -124,7 +124,7 @@ n'était pas uniforme :
 |---|---|---|
 | **Marché** | maxDD réel du preset mesuré à **−19,4 %** sur 126 rebalancements (contre −5,1 % affiché sur un panel tronqué à 7 pas) | **mesuré le 25/08** |
 | **Données** | mode « mixte » : 788 séries réelles sur 929 — le reste est en repli. Les symboles synthétiques sont exclus de l'allocation. | contrôlé |
-| **Backtesting** | biais du survivant **NON MESURÉ** : les 7 délistés ingérés ne sont jamais entrés dans le top-30, le test ne mesure donc rien | **ouvert** |
+| **Backtesting** | biais du survivant **NON MESURABLE** : le panel s'aligne par POSITION, pas par date — un délisté verrait ses prix superposés aux mauvaises dates. Le module le refuse désormais explicitement au lieu de renvoyer 0. | **ouvert — préalable : panel aligné par date** |
 | **Backtesting** | fondamentaux **non point-in-time** : le score du jour est appliqué à des dates passées en production (légitime) mais l'univers de backtest est sélectionné par momentum prix-only pour l'éviter | contrôlé |
 | **Signaux** | `k_signal` médian = **1** sur 126 rebalancements : l'optimisation transversale (ERC) répartit du risque sur une matrice à une seule direction fiable | **ouvert** |
 | **Signaux** | les 5 hypothèses d'alpha sont rejetées en long/short et « promues » en long-only — écart imputable au bêta, désormais mesuré | corrigé le 25/08 |
@@ -157,7 +157,8 @@ n'était pas uniforme :
 - **La couverture de tests** : `pytest-cov` n'est pas installé dans cet environnement. Le ratio
   fichiers de test / fichiers source est publié à la place — ce n'est pas une couverture.
 - **La validité des chiffres publiés par les 13 modules non migrés.**
-- **L'ampleur du biais du survivant.**
+- **L'ampleur du biais du survivant.** Et l'audit a montré qu'elle ne pourra pas l'être avant
+  qu'un panel aligné par DATE remplace l'alignement positionnel actuel.
 - **Le comportement réel des brokers** : aucun ordre n'a été envoyé pendant cet audit, conformément
   à la consigne. Le câblage du portail de risque est vérifié par des courtiers factices
   (`tests/execution/test_run_live_risk_gate.py`), pas contre une API réelle.
