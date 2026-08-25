@@ -172,7 +172,7 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
 - [ ] Kalman causal pour le ratio de couverture ([[AXE3_QUEUES_REGIMES]] § 3).
 
 **Vague 5 — exécution (P0 avant tout live/intraday)**
-- [ ] **F4 · `exec_lag = 1` par défaut** (0 = option « optimiste » étiquetée).
+- [x] **F4 · `exec_lag = 1` par défaut** (0 = option « optimiste » étiquetée) — LIVRÉ PR #342 (2026-08-25).
 - [ ] `FillModel` injectable derrière `Broker` : `NextBarPOVFill` (L1) puis `QueueFill` (L2).
 - [ ] **Dead-man switch** + machine à états NORMAL/REDUCED/FLATTEN_ONLY/HALTED.
 - [ ] Disjoncteur de slippage (médiane glissante 20 fills > 3× le coût modélisé → HALTED).
@@ -213,10 +213,18 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       `survivorship_delta()` + section dans `make preset-lab`. RESTE À TOI : `make ingest-delisted`
       (ingère l'OHLCV des délistés en base — delisted.csv n'a que noms+dates), puis `make preset-lab`
       affiche le Δ Sharpe → PUBLIER sur `/echecs`. C'est LA crédibilité du backtest.
-- [x] **M-1 · Fill t+1** — LIVRÉ : param `exec_lag` (défaut 0 inchangé) ; config « fill t+1 » dans
-      `make preset-lab` chiffre le mini look-ahead (~‑0,05 Sharpe sur synthétique, à confirmer réel).
+- [x] **M-1 · Fill t+1** — LIVRÉ : param `exec_lag` (défaut **1** depuis PR #342, 2026-08-25) ; ancien
+      « fill t+0 » étiquetée « optimiste » dans `make preset-lab` pour comparaison (mini look-ahead ~‑0,01 Sharpe).
 - [x] **M-2 · Sabotage sur Δposition** — LIVRÉ : `stress_returns`/`sabotage_verdict` acceptent
       `turnover` (coût ∝ |Δpoids|, plus par barre). Tests verts.
+- [x] **ARC-1 · Alignement par calendrier (PR #341, 2026-08-25)** — LIVRÉ : `aligner_par_date()` + migration
+      des trois outputs (equity_curve, trade_log, ledger) vers grille homogène. Stock vs crypto enfin séparé.
+      Impact : Sharpe 0,92→1,35 (3 ans de drift ancien calendrier). Cf. ADR-0037.
+- [x] **ARC-2 · Périmètres risque fermés (PR #343, 2026-08-25)** — LIVRÉ : `RiskEngine` (streaming) vs
+      `order_gate` (rebalancing) avec 4 tests architecturaux + ADR-0036. Violation impossible (test rouge).
+- [x] **ARC-3 · Grille sans NaN (PR #341 refactoring, 2026-08-25)** — LIVRÉ : `aligner_sans_trous()` garantit
+      zéro NaN au ledger (intersection calendrier, rank-based). Ledger = domaine d'accueil, jamais d'artefact P&L.
+      Cf. ADR-0037.
 - [ ] **XL-2 · Refactor god-objects** : `snapshot.py` 2467 l + `main.py` 991 l (le hook bloque chaque
       edit ; 2500 l = drapeau rouge pour tout recruteur technique). Découper en modules `sections/` + `routes/`.
 - [ ] **L-1 · Preuves terrain du 06/08** : N≥20 round-trips réconciliés au relevé Alpaca + courbe equity

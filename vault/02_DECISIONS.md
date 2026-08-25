@@ -478,3 +478,60 @@ de 0,30 reste rejeté (test de non-régression).
 **À faire.** Re-runner les hypothèses historiquement rejetées : leurs verdicts DSR sont invalides
 sur cette composante. Un rejet reste un rejet s'il tenait par le placebo, le PBO ou le sabotage —
 mais il doit être re-établi, pas supposé.
+
+## ADR-0036 — Périmètres de risque : RiskEngine (streaming), order_gate (rebalancing) (2026-08-25)
+**Contexte.** Deux barrières de risque coexistaient sans frontière claire :
+- `RiskEngine` : moteur événementiel de streaming, stops/récompense-risque par signal.
+- `order_gate` : limite de position, utilisée UNIQUEMENT en production (`run_live.py`).
+
+Risque : un développeur aurait pu brancher `RiskEngine` dans le rebalancing sans voir le
+problème : interface mismatch fatal (RiskEngine attend signal/barre/stop par ordre ; rebalancing
+reçoit une cible de portefeuille).
+
+**Décision.**
+1. **Périmètre explicite dans le module** `packages/risk/engine.py` : docstring (~50 lignes)
+   formalisent que `RiskEngine` est RÉSERVÉ au streaming, `order_gate` au rebalancing.
+2. **4 tests architecturaux** (`tests/risk/test_perimetres.py`) pinning la limite :
+   - Le rebalancing utilise `order_gate`, jamais `RiskEngine`.
+   - `RiskEngine` n'est appelé que du moteur streaming.
+   - Rationale : événementiel vs stationnaire (cible).
+   - Chaque test porte le message : « Ce test doit être supprimé ET l'ADR mis à jour avant
+     de violer cette limite. »
+3. **Pas de nouvelle couche** : les 2 barriers restent indépendantes, l'absence de `RiskEngine`
+   en rebalancing est DESIGNED, pas oversight.
+
+**Conséquence.** (+) Violation accidentelle est impossible (test rouge + ADR à réécrire). (+) La
+raison est documentée (contexte = moteur événementiel vs batch). (−) Deux chemins de risque
+coexistent (mais ils opèrent en série, pas en parallèle : rebalancing → order_gate → broker).
+
+**Déploiement.** PR #343, commit `caed949`.
+
+## ADR-0037 — Grille d'alignement sans NaN : intersection de calendriers vs union (2026-08-25)
+**Contexte.** Date-alignment #341 a révélé que les trois fonctions de reporting (equity_curve,
+trade_log, ledger) utilisaient une **fenêtre par rang** (union de dates, remplie par NaN).
+
+Problème critique : le ledger (parts/cash/PnL) n'a pas de garde-fou NaN → une valeur nulle
+devient silencieusement une plausible valeur de P&L, FALSE POSITIVE incomparablement plus grave
+qu'une vraie exception (donne du bruit « joli »).
+
+Comparaison empirique (data réelle) : ancien code (NaN) = Sharpe 0,92 ; nouveau (intersection
+sans NaN) = Sharpe 1,34. ~12 des top-30 positions étaient choisies par artefact de calendrier
+(stock 5j/semaine, crypto 7j/semaine, 11 ans = 3 ans de drift).
+
+**Décision.**
+1. **`aligner_sans_trous(data, syms, min_noms)`** : retourne intersection des calendriers (rank-
+   based subset par couverture, décroissante). **Garantie : zéro NaN** aux trois sorties.
+2. **Trade-off accepté** : la fenêtre est plus COURTE (plus long = plus de trous = moins de noms)
+   mais **bulletproof** (aucun NaN ne s'échappe pour devenir faux P&L).
+3. Les trois presets (`preset_equity_daily`, `preset_trade_log`, `preset_ledger`) l'utilisent
+   depuis #341, chaînées avec le backtest `aligner_par_date` → grille homogène partout.
+4. **Vieux code supprimé** : `fenetre_par_rang` (117 lignes, zero call sites restants).
+5. Tests migrants : 7 vieux tests → nouveaux tests mêmes intents (`test_aligner_sans_trous_*`).
+
+**Conséquence.** (+) Ledger **totalement cohérent** avec les courbes d'equity affichées. (+)
+Baseline performance réelle mesurable (DSR, max DD) sans leurre de NaN. (+) Calendrier stock vs
+crypto enfin séparé proprement (intersection = respecte les deux univers). (−) Fenêtre moyenne
+plus courte (~6 ans au lieu de 11 ans, dépend du top-N) — acceptable car mieux vaut 6 ans VRAIS
+que 11 ans FAUX.
+
+**Déploiement.** PR #341, commits `fb4d380` + refactoring dans `fb4d380`.

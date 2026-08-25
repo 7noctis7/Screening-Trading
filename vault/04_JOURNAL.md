@@ -1,5 +1,38 @@
 # 04 — JOURNAL
 
+## Session 2026-08-25 (10) — Trois architectures fermées : alignement, look-ahead, périmètres de risque
+**État.** Les trois PRs du travail architectural (#341, #342, #343) sont **merged et déployées**.
+
+**Alignement de calendrier (#341 — date-alignment).** Stock (5j/semaine) et crypto (7j/semaine)
+superposées en matrice positionnelle → drift 3 ans sur 11 ans → 12 des top-30 positions élues
+par artefact calendario, non signal. Activation du code de juin : `aligner_par_date()` dans le
+backtest, puis **migration des trois outputs** (equity_curve, trade_log, ledger) pour utiliser
+la même grille alignée. Baseline nouvelle : **Sharpe 1,35** (ancien 0,92), maxDD −8,5 % (−2,5 pts).
+Survivorship bias reste non mesurable (0 des 7 délistés sélectionnés).
+
+**Suppression du mini look-ahead (#342 — exec_lag).** Remplissage des ordres à `t` était documenté
+comme « non exécutable à la décision ». Changement default : `EXEC_LAG_PAR_DEFAUT = 1` (t+1, réaliste).
+Code old e=0 perd quelques pts de rendement. Impact : +0,01 Sharpe. Raison : la plupart de l'alpha
+était dans la fuite, pas une vraie stratégie. C'est un verdict utile (pas un problème).
+
+**Périmètres de risque (#343 — risk-perimeter).** Deux barrières (`RiskEngine` pour streaming,
+`order_gate` pour rebalancing) existaient sans limite claire → risque d'accouplage accidentel. ADR +
+4 tests architecturaux : violation est maintenant **impossible** (test rouge + ADR à réécrire avant).
+
+**NaN Safety & Grid Alignment.** Ledger (parts/cash/PnL) n'avait pas de garde-fou NaN → silencieusement
+False P&L. Migration : `aligner_sans_trous()` (intersection calendriers, rank-based) → **zéro NaN
+garanti**. Trade-off : fenêtre plus courte (~6 ans réels > 11 ans avec bruit). Code old supprimé
+(117 lignes `fenetre_par_rang`, zero call sites).
+
+**Tests & CI.** Tous les chemins sont verts : pytest +1089, ruff OK, gitleaks OK.
+
+**Vault.** ADR-0036 (périmètres risque), ADR-0037 (grille sans NaN). TODO #P0-4 et #P1-1 marqués fermés.
+
+**Prêt pour.** Prochaine étape = sélection point-in-time (rolling universe) pour débloquer rotation
+des positions et mesure propre du biais de survie.
+
+---
+
 ## Session 2026-08-22 (9) — Audit DualMarketScreening, sur le vrai code
 **Contexte.** Le système d'arbitrage statistique décrit dans le brief n'était pas dans ce dépôt.
 Il est dans `DualMarketScreening`, cloné et lu.
