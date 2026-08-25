@@ -45,8 +45,16 @@ def _setup_alerts(dry: bool):
 
 def _kill_switch(bus):
     """Alertes TradingView → veto / réduction d'exposition. Retourne le facteur `reduce` ∈ [0,1]."""
-    from packages.mcp_tradingview.alerts import fetch_tv_technical_alerts, to_risk_veto
-    risk = to_risk_veto(fetch_tv_technical_alerts())
+    from packages.mcp_tradingview.alerts import (AGE_MAX_DEFAUT, fetch_tv_technical_alerts,
+                                                  to_risk_veto)
+    # Appel SANS filtre d'âge jusqu'au 25/08 : une alerte critique reçue des semaines plus tôt
+    # bloquait encore tout le portefeuille, jusqu'à effacement manuel du drop.
+    risk = to_risk_veto(fetch_tv_technical_alerts(max_age_s=AGE_MAX_DEFAUT))
+    if risk.get("n_sans_date"):
+        print(f"⚠️  {risk['n_sans_date']} alerte(s) TV sans date lisible — conservées par "
+              "prudence (elles pèsent sur la décision sans pouvoir être périmées)")
+    for r in risk.get("severites_reinterpretees", []):
+        print(f"⚠️  sévérité TV réinterprétée : {r}")
     reduce = 0.0 if risk.get("veto") else float(risk.get("reduce", 1.0))
     if risk.get("veto"):
         print(f"⛔ KILL-SWITCH ACTIF (alertes TV critiques) : {', '.join(risk['reasons']) or '—'}")
