@@ -29,9 +29,20 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
 - **WebSocket / Redis Pub-Sub** : le système rééquilibre une fois par jour. Une architecture
   événementielle ajouterait un mode de panne permanent pour une information inutilisée.
 
+## 🔧 Dette d'architecture — levée le 2026-08-25 (ADR-0038)
+- [x] **`preset_backtest.py` découpé** : 793 l. / 5 fonctions > 50 → 7 modules, le plus gros à 227.
+      Équivalence **bit-à-bit** vérifiée sur 10 configurations. Verrou anti-re-dérive :
+      `tests/backtest/test_preset_architecture.py`. **Débloque les trois chantiers ci-dessous**,
+      qui butaient tous sur le même hook `file_guard`.
+- [ ] **P1 — Brancher le rolling universe** (`preset_helpers.select_rolling_universe`, écrit et
+      testé) dans `preset_core.univers_backtest`, derrière un flag **par défaut à False**.
+      ⚠️ **Mesurer en PROSPECTIF** (sélection à `t`, rendement `t → t+step`) : la mesure
+      rétrospective fabrique un Sharpe de +6,8 sur une marche aléatoire pure (cf. journal (12)).
+      **Contrôle obligatoire avant toute conclusion : Sharpe sur bruit pur ≈ 0.**
+
 ## 🟡 Screening-Trading — reste ouvert (2026-08-22)
 - [ ] **Câbler `impact.py` / `almgren_chriss.py` à l'exécution réelle** — écrits et testés, non
-      branchés : les coûts d'impact sont ignorés au dimensionnement.
+      branchés : les coûts d'impact sont ignorés au dimensionnement. (Débloqué par ADR-0038.)
 - [ ] **Décider du débruitage RMT sur données réelles** (k médian). Si k < 2, l'ERC répartit du
       risque estimé sur du bruit — le défaut devrait devenir l'inverse-vol.
 - [ ] **Capitaux employés moyens** : le code sait moyenner, mais les fournisseurs ne remontent pas

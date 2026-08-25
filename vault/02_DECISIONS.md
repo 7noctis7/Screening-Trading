@@ -535,3 +535,50 @@ plus courte (~6 ans au lieu de 11 ans, dépend du top-N) — acceptable car mieu
 que 11 ans FAUX.
 
 **Déploiement.** PR #341, commits `fb4d380` + refactoring dans `fb4d380`.
+
+## ADR-0038 — `preset_backtest.py` devient une façade : découpage en sept modules (2026-08-25)
+
+**Contexte.** Le fichier avait atteint **793 lignes avec cinq fonctions au-dessus de 50**, contre
+la règle d'architecture 400/50. La conséquence n'était pas esthétique : le hook `file_guard`
+refuse toute édition d'un fichier hors règle, donc **le rolling universe, le câblage d'`impact.py`
+et les séries macro étaient tous bloqués derrière ce mur unique**. Trois tentatives d'ajout de
+fonctionnalité ont été rejetées par le hook avant que le mur soit traité pour lui-même.
+
+**Décision.** Découpage par responsabilité, `preset_backtest.py` devenant la **façade** :
+
+| module | responsabilité |
+|---|---|
+| `preset_config.py` | constantes de gating + `momentum_rank` + `_price_universe` |
+| `preset_core.py` | panel, univers, garde-fous (classe `Compteurs`), poids et gross du pas |
+| `preset_weights.py` | poids de production, `_weights_at`, `_concentrate` |
+| `preset_curves.py` | equity quotidienne, journal de trades |
+| `preset_livre.py` | livre de comptes parts/cash (achat/vente, PRU, frais) |
+| `preset_compta.py` | ledger : déroulé, FIFO latent, réconciliation |
+| `preset_backtest.py` | façade (`__all__`) + boucle du backtest |
+
+1. **API publique inchangée.** Les onze noms importés par `apps/api/snapshot.py`, les scripts et
+   les tests restent importables depuis `preset_backtest`. Protégé par `__all__` **et** par
+   `tests/backtest/test_preset_architecture.py`, qui échoue si un nom disparaît.
+2. **Équivalence bit-à-bit exigée, et vérifiée.** Les tests verts ne démontrent PAS l'absence de
+   changement de comportement — ils couvrent ce qu'ils couvrent. Comparaison directe de
+   l'ancienne implémentation contre la nouvelle sur **10 configurations** (défaut,
+   overlay+cap+denoise, univers legacy, sans alignement, gates off, les cinq fonctions publiques,
+   ledger avec cœur indiciel), comparaison récursive **sans tolérance**. Sorties identiques.
+3. **Deux déduplications.** `preset_equity_daily` ré-implémentait mot pour mot `_weights_at` ;
+   le classement momentum était écrit deux fois (backtest + `_price_universe`). Une seule source.
+4. **L'ordre des écritures du ledger est préservé** (cœur avant satellite à chaque rééquilibrage) :
+   l'attribution du P&L latent se fait en FIFO sur la liste `trades`, donc l'ordre est du
+   comportement, pas de la mise en forme.
+
+**Conséquence.** (+) Les trois chantiers bloqués deviennent éditables. (+) Le ledger, jusqu'ici la
+partie la plus dense (207 lignes d'affilée), est isolé derrière un objet `Livre` testable seul.
+(+) ruff : 240 erreurs sur l'ancien fichier → 164 sur les sept nouveaux. (−) Sept fichiers à
+parcourir au lieu d'un : la façade et ce tableau sont là pour ça. (−) Un import de plus en
+profondeur pour qui voudrait un interne (`preset_core.univers_backtest`, par exemple) — assumé,
+c'est la contrepartie d'une frontière publique explicite.
+
+**Non fait, et pourquoi.** Ce découpage **ne change pas l'alpha** : Sharpe 1,35 inchangé, par
+construction (équivalence bit-à-bit). Il ne prétend pas être une amélioration de performance,
+seulement la levée du blocage qui empêchait d'en tenter une.
+
+**Déploiement.** Commit `4984ecb`.

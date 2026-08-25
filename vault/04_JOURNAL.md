@@ -1,5 +1,58 @@
 # 04 — JOURNAL
 
+## Session 2026-08-25 (12) — Un look-ahead dans ma propre démo, et le mur de 793 lignes abattu
+
+**Le chiffre qui n'existait pas.** La session (11) a livré `scripts/demo_rolling_universe.py`
+annonçant « Sharpe 3,69 → 6,62, gain +2,93 », avec dans le message de commit l'affirmation que
+l'impact réel serait « similaire ou plus fort ». **C'était faux, et la cause est un défaut, pas
+un manque de réalisme du synthétique.**
+
+`select_rolling_universe(M, t)` classe les actifs sur leur rendement mesuré sur `[t-253, t-1]`.
+La démo mesurait ensuite le rendement sur `[t-step, t]` — fenêtre **incluse** dans celle du
+classement. Elle sélectionnait les titres déjà montés, puis « mesurait » cette même montée.
+
+**Le test qui tranche** : sur une marche aléatoire pure (aucun momentum exploitable PAR
+CONSTRUCTION), cette mesure rétrospective sort un Sharpe moyen de **+6,80 sur 30 graines**.
+Un chiffre impossible pour un vrai signal — donc entièrement fabriqué. En mesure prospective
+(sélection à `t`, rendement `t → t+step`), il s'effondre, et ce qui reste s'explique par la
+dérive positive injectée dans le générateur.
+
+Même classe de biais que `exec_lag` (#342) et `channel_break`. **Le backtest de production
+n'était PAS touché** — vérifié : fenêtre de sélection jusqu'à `_s0-1`, mesure à partir de
+`entry = t + exec_lag`, strictement vers l'avant. Script supprimé, helper et tests conservés.
+
+**Leçon à garder.** Un générateur synthétique ne valide RIEN tant qu'on n'a pas passé la
+stratégie sur du bruit pur. Le contrôle « Sharpe sur marche aléatoire ≈ 0 » aurait attrapé
+le défaut en une minute ; il devrait précéder toute mesure de ce type.
+
+**Le mur de 793 lignes, abattu.** `preset_backtest.py` : 793 lignes, cinq fonctions > 50, contre
+la règle 400/50. Le hook `file_guard` refusait donc TOUTE édition — rolling universe, câblage
+d'`impact.py` et séries macro étaient coincés derrière le même mur (j'ai buté trois fois dessus
+avant de le traiter). Découpé en sept modules (`preset_config`, `preset_core`, `preset_weights`,
+`preset_curves`, `preset_livre`, `preset_compta`, + la façade), le plus gros à 227 lignes.
+
+**Équivalence prouvée, pas supposée.** Les tests verts ne suffisent pas à démontrer un refactor
+sans changement de comportement. Comparaison **bit-à-bit** de l'ancienne implémentation contre
+la nouvelle sur 10 configurations (défaut, overlay+cap+denoise, univers legacy, sans alignement,
+gates off, les cinq fonctions publiques, ledger avec cœur indiciel) : sorties strictement
+identiques, sans tolérance. Deux déduplications trouvées au passage — `preset_equity_daily`
+ré-implémentait mot pour mot `_weights_at`, et le classement momentum était écrit deux fois.
+
+**Tests & CI.** 1268 verts. ruff : 240 erreurs sur l'ancien fichier → 164 sur les sept nouveaux.
+Nouveau verrou `test_preset_architecture.py` (tailles + API de la façade) contre la re-dérive.
+
+**Ce qui N'A PAS été fait, et pourquoi.** L'alpha n'a pas bougé : **Sharpe 1,35 inchangé**. Ce
+conteneur distant n'a AUCUNE donnée de marché (pas de `.db` — gitignorés et local-only —,
+`make hf-pull` renvoie « pas de cache HF », `yfinance` absent). Mesurer un gain d'alpha réel y
+est impossible, et activer le rolling universe sans mesure violerait le mandat données-réelles.
+Le refactor était le seul travail vérifiable de bout en bout ici — il débloque les trois autres.
+
+**Prochaine étape (sur le Mac, données présentes).** Brancher `select_rolling_universe` dans
+`preset_core.univers_backtest` derrière un flag par défaut à False, puis comparer statique vs
+rolling sur données réelles avec mesure PROSPECTIVE, et n'activer que si le gate passe.
+
+---
+
 ## Session 2026-08-25 (11) — Fondations pour rolling universe (alpha future)
 **État.** Fixes post-refactoring + infrastructure pour rolling universe.
 
