@@ -67,6 +67,100 @@ def fenetre_par_rang(data: dict, syms: list[str], min_noms: int) -> tuple[list[s
     return retenus, min(len(data[s]) for s in retenus)
 
 
+def _jour(barre) -> str:
+    """Clé de date d'une barre, à la journée. Deux sources peuvent horodater la même séance à
+    des heures différentes (clôture locale, UTC) : comparer les instants créerait des dates
+    distinctes pour une même séance."""
+    ts = getattr(barre, "ts", None)
+    if ts is None:
+        return ""
+    d = getattr(ts, "date", None)
+    return (d().isoformat() if callable(d) else str(ts)[:10])
+
+
+def aligner_par_date(data: dict, syms: list[str], couverture: float = COUVERTURE_DEFAUT,
+                     min_noms: int = MIN_NOMS) -> tuple[list[str], list[str], "object", dict]:
+    """Aligne les séries PAR DATE. Renvoie (noms, dates, matrice n×T, diagnostic).
+
+    POURQUOI CE MODULE EXISTE. `fenetre_commune` corrige la profondeur du panel mais garde
+    l'alignement POSITIONNEL : on prend les `L` dernières barres de chaque série et on les
+    empile. Cela suppose que toutes les séries se terminent le même jour — vrai entre titres
+    encore cotés, **faux par construction pour un délisté**, dont la dernière barre est sa date
+    de radiation. Empiler positionnellement collerait ses prix de 2020 sur les dates de 2026.
+    C'est ce qui rend aujourd'hui le biais du survivant NON MESURABLE.
+
+    La grille de dates est celle couverte par au moins `couverture` des noms — même convention
+    que `fenetre_commune`, une seule règle dans le projet. Les cases sans cotation valent NaN :
+    un titre pas encore introduit, ou déjà radié, n'a pas un prix nul, il n'a **pas de prix**.
+    Écrire zéro produirait un rendement de −100 % le jour de la radiation.
+
+    PROPRIÉTÉ D'ÉQUIVALENCE, et c'est elle qui rend la migration sûre : quand toutes les séries
+    partagent le même calendrier, la matrice produite est identique à l'empilement positionnel.
+    Les chiffres ne bougent donc QUE là où l'alignement positionnel était faux.
+    """
+    import numpy as np
+
+    if not syms:
+        return [], [], np.empty((0, 0)), {"available": False, "n_eligibles": 0}
+    par_sym = {}
+    for s in syms:
+        serie = {}
+        for b in data.get(s) or []:
+            j = _jour(b)
+            if j and getattr(b, "close", None):
+                serie[j] = float(b.close)
+        if serie:
+            par_sym[s] = serie
+    if len(par_sym) < min_noms:
+        return [], [], np.empty((0, 0)), {"available": False, "n_eligibles": len(par_sym)}
+
+    from collections import Counter
+    compte = Counter(j for serie in par_sym.values() for j in serie)
+    seuil = max(1, int(round(max(0.0, min(1.0, couverture)) * len(par_sym))))
+    dates = sorted(j for j, n in compte.items() if n >= seuil)
+    if not dates:
+        return [], [], np.empty((0, 0)), {"available": False, "n_eligibles": len(par_sym)}
+
+    noms = sorted(par_sym)
+    A = np.full((len(noms), len(dates)), np.nan)
+    for i, s in enumerate(noms):
+        serie = par_sym[s]
+        for t, j in enumerate(dates):
+            v = serie.get(j)
+            if v is not None:
+                A[i, t] = v
+    couvert = np.isfinite(A).mean(axis=1)
+    diag = {"available": True, "n_eligibles": len(syms), "n_retenus": len(noms),
+            "n_dates": len(dates), "debut": dates[0], "fin": dates[-1],
+            "couverture": round(couverture, 3),
+            "taux_remplissage": round(float(np.isfinite(A).mean()), 4),
+            # Séries qui ne couvrent pas toute la grille : introduites en cours de route, ou
+            # radiées. C'est exactement la population que l'alignement positionnel écrasait.
+            "n_partielles": int((couvert < 1.0).sum())}
+    return noms, dates, A, diag
+
+
+def dernier_connu(A, t: int) -> "object":
+    """Dernier prix CONNU de chaque titre à la date `t` (report en avant du passé seulement).
+
+    Sert à valoriser une ligne dont la cotation s'arrête en cours de période : on la solde au
+    dernier cours observé. C'est une approximation OPTIMISTE pour une faillite — le dernier
+    cours coté d'une société en liquidation est rarement zéro — et elle doit être lue comme
+    telle : le biais du survivant ainsi mesuré est un MINORANT, pas la vérité.
+
+    Neutre sur une matrice complète : renvoie exactement `A[:, t]`.
+    """
+    import numpy as np
+
+    fenetre = A[:, : t + 1]
+    fini = np.isfinite(fenetre)
+    idx = np.where(fini.any(axis=1), fini.shape[1] - 1 - np.argmax(fini[:, ::-1], axis=1), -1)
+    out = np.full(A.shape[0], np.nan)
+    ok = idx >= 0
+    out[ok] = fenetre[np.arange(A.shape[0])[ok], idx[ok]]
+    return out
+
+
 def rebalancements(L: int, start: int, step: int) -> int:
     """Nombre de pas qu'une fenêtre de longueur L autorise — à publier AVANT tout ratio.
 

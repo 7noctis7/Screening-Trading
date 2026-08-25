@@ -7,19 +7,25 @@ univers — survivants seuls vs survivants + délistés — et on publie l'écar
 DEUX CONDITIONS DE VALIDITÉ, ajoutées le 25/08 après avoir constaté un `Δ Sharpe +0,00`
 sur données réelles qui ne prouvait rien du tout.
 
-1. ALIGNEMENT TEMPOREL. `preset_backtest` aligne les séries par POSITION (`[-L:]`), pas par
-   date : il suppose que toutes se terminent le même jour. C'est vrai entre survivants, faux
-   par construction pour un délisté — sa dernière barre est sa date de radiation. Fusionner
-   les deux superposerait les prix de 2020 aux dates de 2026. Le delta obtenu ne serait pas
-   imprécis, il serait dénué de sens.
+1. ALIGNEMENT TEMPOREL — **résolu**. `preset_backtest` empilait les séries par POSITION
+   (`[-L:]`), supposant qu'elles se terminent toutes le même jour : vrai entre survivants, faux
+   par construction pour un délisté dont la dernière barre est sa radiation. Ce module demande
+   désormais `aligner_dates=True` (défaut) : la grille est indexée par DATE, et une ligne non
+   cotée vaut NaN — pas zéro, qui inventerait une perte de 100 % le jour de la radiation.
+   `aligner_dates=False` reproduit l'ancien moteur, et le module refuse alors de conclure dès
+   qu'un décalage dépasse `TOLERANCE_JOURS`.
 
-2. SÉLECTION EFFECTIVE. Un délisté qui n'entre jamais dans le top-K ne change rien au
-   résultat : le `Δ = 0` mesure alors la sélection, pas le biais. Et il y entre d'autant moins
-   qu'il est plus court que les survivants, donc écarté par la fenêtre commune du panel.
+2. SÉLECTION EFFECTIVE — **toujours vérifiée**. Un délisté qui n'entre jamais dans le top-K ne
+   change rien au résultat : le `Δ = 0` mesure alors la sélection, pas le biais. Le module
+   publie `n_delisted_selectionnes` et refuse de conclure quand il vaut zéro.
 
-Quand l'une des deux conditions n'est pas remplie, ce module renvoie `available=False` avec le
-motif. Un « on ne peut pas mesurer » vaut infiniment mieux qu'un zéro qu'on prendrait pour une
-absence de biais.
+Un « on ne peut pas mesurer » vaut infiniment mieux qu'un zéro qu'on prendrait pour une absence
+de biais.
+
+LIMITE ASSUMÉE DU CHIFFRE PRODUIT. Une ligne radiée est soldée à son DERNIER COURS COTÉ. Le
+dernier cours d'une société en liquidation n'est presque jamais zéro : la perte réelle est donc
+sous-estimée. Le delta publié est un **MINORANT** du biais du survivant — le vrai biais est au
+moins aussi défavorable, jamais moins. C'est publié dans la clé `limite`.
 
 Dépendance dure : les délistés doivent avoir leur OHLCV en base (`make ingest-delisted`).
 Sans leurs prix, `delisted_data` est vide → delta indisponible (jamais inventé). numpy pur.
@@ -52,7 +58,7 @@ def _decalage_max(survivants: dict, delistes: dict) -> int | None:
 
 
 def survivorship_delta(survivor_data: dict, delisted_data: dict | None = None,
-                       **preset_kw) -> dict:
+                       aligner_dates: bool = True, **preset_kw) -> dict:
     """Compare le preset SANS vs AVEC les délistés. Renvoie l'écart de Sharpe/CAGR/maxDD.
 
     Args:
@@ -65,6 +71,10 @@ def survivorship_delta(survivor_data: dict, delisted_data: dict | None = None,
          with_delisted, delta:{sharpe, cagr, max_drawdown}} — ou available=False si
          les données délistées manquent (leurs prix ne sont pas en base).
     """
+    # ALIGNEMENT PAR DATE par défaut : c'est la seule façon de mêler des séries qui ne se
+    # terminent pas le même jour. Le désactiver (`aligner_dates=False`) reste possible pour
+    # comparaison, mais le module refusera alors de conclure dès qu'un décalage existe.
+    preset_kw = {**preset_kw, "aligner_dates": aligner_dates}
     base = preset_backtest(survivor_data, **preset_kw)
     if not base.get("available"):
         return {"available": False, "reason": "backtest survivants indisponible"}
@@ -76,9 +86,10 @@ def survivorship_delta(survivor_data: dict, delisted_data: dict | None = None,
             "n_survivors": len(survivor_data),
             "with_survivors_only": base.get("preset"),
         }
-    # CONDITION 1 — alignement temporel. On compare les dernières dates connues.
+    # CONDITION 1 — alignement temporel. Sans alignement par date, un décalage rend la
+    # comparaison absurde ; avec, il est justement ce qu'on veut représenter.
     decalage = _decalage_max(survivor_data, delisted_data)
-    if decalage is not None and decalage > TOLERANCE_JOURS:
+    if not aligner_dates and decalage is not None and decalage > TOLERANCE_JOURS:
         return {"available": False, "n_survivors": len(survivor_data),
                 "n_delisted": len(delisted_data), "decalage_jours": decalage,
                 "with_survivors_only": base.get("preset"),
@@ -111,6 +122,14 @@ def survivorship_delta(survivor_data: dict, delisted_data: dict | None = None,
     return {
         "available": True,
         "corrected": True,
+        "aligne_par_date": aligner_dates,
+        "decalage_jours": decalage,
+        # Le dernier cours coté d'une société en liquidation n'est pas zéro : la ligne est
+        # soldée à ce cours, donc la perte est SOUS-ESTIMÉE. Le chiffre est un MINORANT du
+        # biais réel, et doit être lu comme tel.
+        "limite": ("delta MINORANT : une ligne radiée est soldée à son DERNIER COURS COTÉ, qui "
+                   "surestime la valeur de récupération d'une faillite. Le biais réel est donc "
+                   "au moins aussi défavorable que ce chiffre, jamais moins"),
         "n_survivors": len(survivor_data),
         "n_delisted": len(delisted_data),
         "n_delisted_selectionnes": len(retenus),

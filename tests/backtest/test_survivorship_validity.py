@@ -36,14 +36,30 @@ def _survivants(n=40, longueur=1200):
     return {f"S{i}": _serie(longueur, i) for i in range(n)}
 
 
-def test_un_delisté_desaligne_dans_le_temps_est_refuse():
-    """Sa dernière barre date de sa radiation. Le panel alignant par position, ses prix de 2023
-    seraient superposés aux dates de 2026 : le delta ne serait pas imprécis, il serait absurde."""
+def test_un_delisté_desaligne_est_refuse_SANS_alignement_par_date():
+    """Sa dernière barre date de sa radiation. Empilé par POSITION, ses prix de 2023 seraient
+    superposés aux dates de 2026 : le delta ne serait pas imprécis, il serait absurde.
+
+    `aligner_dates=False` reproduit l'ancien moteur — et le module doit alors refuser plutôt
+    que de produire un chiffre. C'est la moitié « garde-fou » du contrat."""
     mort = {"DEAD": _serie(800, 999, fin=datetime(2023, 1, 1, tzinfo=timezone.utc))}
-    out = survivorship_delta(_survivants(), delisted_data=mort, top_k=30)
+    out = survivorship_delta(_survivants(), delisted_data=mort, top_k=30, aligner_dates=False)
     assert out["available"] is False
     assert out["decalage_jours"] > 300
     assert "aligne" in out["reason"].lower() or "PAR DATE" in out["reason"]
+
+
+def test_le_meme_decalage_est_ABSORBÉ_par_l_alignement_par_date():
+    """L'autre moitié du contrat : ce qui bloquait le moteur positionnel est exactement ce que
+    l'alignement par date sait représenter. Le décalage reste publié, il n'est plus un veto."""
+    surv = {f"S{i}": _serie(1200, i) for i in range(30)}
+    mort = {f"D{i}": _serie(900, 500 + i, fin=datetime(2024, 6, 1, tzinfo=timezone.utc))
+            for i in range(5)}
+    out = survivorship_delta(surv, delisted_data=mort, top_k=20, panel_couverture=0.5)
+    assert out["available"] is True and out["aligne_par_date"] is True
+    assert out["decalage_jours"] > 300              # le décalage existe toujours…
+    assert out["n_delisted_selectionnes"] >= 1      # …et n'empêche plus de mesurer
+    assert "MINORANT" in out["limite"]              # la limite de la mesure reste dite
 
 
 def test_un_delisté_jamais_selectionne_est_signale_comme_tel():
@@ -51,7 +67,7 @@ def test_un_delisté_jamais_selectionne_est_signale_comme_tel():
     surv = _survivants()
     # même date de fin (donc aligné) mais historique court → écarté par la fenêtre du panel
     mort = {"DEAD": _serie(120, 999)}
-    out = survivorship_delta(surv, delisted_data=mort, top_k=30)
+    out = survivorship_delta(surv, delisted_data=mort, top_k=30, aligner_dates=False)
     assert out["available"] is False
     assert out["n_delisted_selectionnes"] == 0
     assert "ne mesure rien" in out["reason"]

@@ -23,7 +23,7 @@ raisonnement : `preset_latest_weights` déplaçait les **poids de production** d
 d'une série de 125 barres qui transformait la MM200 de `_regime_mult` en MM125. Le seuil
 d'éligibilité passe à 200 barres. 5 tests ajoutés.
 
-### P0-2 · Rendre mesurable le biais du survivant — ⚠️ PARTIELLEMENT TRAITÉ le 25/08
+### ~~P0-2 · Rendre mesurable le biais du survivant~~ — ✅ FERMÉ le 25/08
 **Description.** 7 délistés sont ingérés, aucun n'entre jamais dans le top-30 : le test s'exécute
 et ne mesure rien. Il faut ingérer des délistés qui **auraient été sélectionnés** — c'est-à-dire
 bien classés avant leur disparition.
@@ -37,11 +37,21 @@ suppose donc que toutes se terminent le même jour — vrai entre survivants, **
 construction pour un délisté**, dont la dernière barre est sa date de radiation. Fusionner les
 deux superposerait des prix de 2020 aux dates de 2026.
 
-Le préalable n'est donc pas « ingérer de meilleurs délistés » mais **un panel aligné par DATE**.
-C'est un changement de fond dans `preset_backtest` et ses fonctions sœurs.
-**Difficulté.** Élevée. **Dépendances.** Aucune — mais touche le cœur du moteur.
-**Risques.** Tous les chiffres publiés changeront à nouveau. Et tant que ce n'est pas fait,
-**l'ampleur du biais du survivant reste inconnue**, ce qui est en soi un argument contre le live.
+**Le préalable est livré** : `panel.aligner_par_date` indexe la grille par DATE et met NaN —
+pas zéro — sur les séances non cotées. `preset_backtest(aligner_dates=True)` rend un délisté
+sélectionnable, et `survivorship_delta` produit désormais un chiffre.
+
+**Ce qui a rendu la migration sûre** : sur un calendrier uniforme, l'alignement par date donne
+des courbes **identiques au bit près** à l'empilement positionnel. Les chiffres ne bougent donc
+QUE là où le positionnel était faux — c'est-à-dire sur les séries partielles (introductions en
+cours de route, radiations). Cette propriété est testée.
+
+**Défaut : `aligner_dates=False`.** Pas par timidité : le levier est mesuré par `make preset-lab`
+(ligne « +alignement par date ») avant toute activation, comme `cov_denoise` avant lui.
+
+**Limite assumée du chiffre obtenu.** Une ligne radiée est soldée à son DERNIER COURS COTÉ, qui
+n'est presque jamais zéro pour une société en liquidation. Le delta publié est un **MINORANT**
+du biais réel — jamais un majorant. C'est écrit dans la clé `limite` du résultat.
 
 ### P0-3 · Instruire la bande d'inaction
 **Description.** La bande de 3 % en poids absolu bloque 99 % des pas et ne laisse trader que ~7 %

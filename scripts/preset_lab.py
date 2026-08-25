@@ -56,6 +56,10 @@ CONFIGS = [
     ("sans bande", {"band": 0.0}),
     ("fill t+1 (réaliste, M-1)", {"exec_lag": 1}),   # écart vs fill au signal = mini look-ahead
     ("+covariance débruitée RMT", {"cov_denoise": True}),   # M1 : repli inverse-vol si k < 2
+    # ALIGNEMENT PAR DATE — P0-2. Sur calendrier uniforme, chiffres identiques au bit près ; la
+    # ligne ne bouge donc QUE si des séries ne se terminent pas le même jour (introductions
+    # récentes, radiations). C'est le préalable à toute mesure du biais du survivant.
+    ("+alignement par date", {"aligner_dates": True}),
 ]
 
 
@@ -72,8 +76,15 @@ def _load_real_data():
     """(data, acmap) RÉELS ou None (synthétique interdit — mandat données-réelles)."""
     import os
 
-    from apps.api.snapshot import (_HISTORY_DAYS, _load_prices, _seed_universe,
-                                   _sector_of, datetime, timedelta, timezone)
+    from apps.api.snapshot import (
+        _HISTORY_DAYS,
+        _load_prices,
+        _sector_of,
+        _seed_universe,
+        datetime,
+        timedelta,
+        timezone,
+    )
     instruments = _seed_universe()
     sector_of = {m["symbol"]: _sector_of(m) for m in instruments}
     acmap = {m["symbol"]: m.get("asset_class", "equity") for m in instruments}
@@ -106,6 +117,28 @@ def _run_configs(data, acmap) -> list[dict]:
                      "cov_diag": r.get("cov_diag"), "panel": r.get("panel"),
                      "n_steps": r.get("n_steps"), "decl": r.get("declenchements") or {}})
     return rows
+
+
+def _alignement_report(rows: list[dict]) -> None:
+    """Ce que l'alignement par date change — et sur quelle population."""
+    ligne = next((r for r in rows if r["label"] == "+alignement par date"), None)
+    base = rows[0] if rows else None
+    if not ligne or not base:
+        return
+    d = ligne.get("panel") or {}
+    print("\n" + "=" * 60 + "\nALIGNEMENT PAR DATE (P0-2)\n" + "=" * 60)
+    if not d.get("available"):
+        print("  Diagnostic indisponible."); return
+    print(f"  dates couvertes       : {d.get('n_dates')} ({d.get('debut')} → {d.get('fin')})")
+    print(f"  noms retenus          : {d.get('n_retenus')}/{d.get('n_eligibles')}")
+    print(f"  séries PARTIELLES     : {d.get('n_partielles')} (introduites en cours de route, "
+          f"ou radiées) · remplissage {d.get('taux_remplissage', 0):.1%}")
+    print(f"  ΔSharpe vs positionnel: {ligne['sharpe'] - base['sharpe']:+.2f}")
+    if not d.get("n_partielles"):
+        print("  → aucune série partielle : les deux alignements DOIVENT donner le même chiffre.")
+    else:
+        print("  → l'écart ci-dessus vient exactement de ces séries partielles, que l'empilement")
+        print("    positionnel écartait ou superposait aux mauvaises dates.")
 
 
 def _panel_report(rows: list[dict]) -> None:
@@ -211,6 +244,7 @@ def _log_ledger(rows: list[dict], promoted: list[dict]) -> None:
     """Trace anti p-hacking : chaque essai compte dans N (déflation du DSR)."""
     try:
         from datetime import UTC, datetime
+
         from packages.research.ledger import append_record, trial_count
         for r in rows[1:]:
             if r["label"] in DIAGNOSTICS:
@@ -230,8 +264,14 @@ def _log_ledger(rows: list[dict], promoted: list[dict]) -> None:
 
 def _survivorship(data, acmap) -> None:
     """XL-1 : delta de biais du survivant si des prix de délistés sont EN BASE (sinon skip honnête)."""
-    from apps.api.snapshot import (_HISTORY_DAYS, _load_prices, _sector_of,
-                                   datetime, timedelta, timezone)
+    from apps.api.snapshot import (
+        _HISTORY_DAYS,
+        _load_prices,
+        _sector_of,
+        datetime,
+        timedelta,
+        timezone,
+    )
     from packages.backtest.survivorship_delta import survivorship_delta
     from packages.data.survivorship import load_delisted
     dl = load_delisted()
@@ -276,6 +316,7 @@ def main() -> int:
     if not rows:
         print("Rien à comparer."); return 1
     _panel_report(rows)
+    _alignement_report(rows)
     _decl_report(rows)
     _cov_report(rows)
     promoted = _verdict(rows)
