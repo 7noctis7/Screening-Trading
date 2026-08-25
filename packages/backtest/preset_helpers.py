@@ -73,6 +73,4 @@ def adaptive_cap(cov: np.ndarray, max_weight: float, corr_tighten: bool,
     corr = cov / np.outer(d, d)
     n = corr.shape[0]
     avg = float((corr.sum() - n) / (n * (n - 1)))
-    if avg < stress_corr:
-        return max_weight
-    return max(floor, max_weight * (1.0 - tighten * (avg - stress_corr) / (1.0 - stress_corr)))
+    return max(floor, round(max_weight * tighten, 4)) if avg > stress_corr else max_weight
