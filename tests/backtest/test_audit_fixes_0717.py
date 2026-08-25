@@ -36,12 +36,27 @@ def _data(n=400, k=12):
 
 
 # ---------------- M-1 : fill t+1 -----------------------------------------------
-def test_exec_lag_defaut_inchange():
-    """exec_lag=0 (défaut) = comportement historique EXACT (non-régression)."""
+def test_exec_lag_defaut_est_l_execution_REALISTE():
+    """Le défaut est passé de 0 à 1 le 25/08, délibérément.
+
+    `exec_lag=0` remplissait au close de la barre de SIGNAL — un cours non exécutable au moment
+    de la décision, que ce dépôt documentait lui-même comme un mini look-ahead. Une fois
+    l'alignement par date en place, `exec_lag=1` s'est révélé meilleur sur toutes les colonnes
+    (Sharpe, Sortino, maxDD, à turnover égal) : il n'y avait plus aucune raison de conserver le
+    biais. Ce test épingle la nouvelle intention à la place de l'ancienne."""
     data = _data()
     a = preset_backtest(data, top_k=8)
-    b = preset_backtest(data, top_k=8, exec_lag=0)
+    b = preset_backtest(data, top_k=8, exec_lag=1)
     assert a["preset"]["sharpe"] == b["preset"]["sharpe"]
+
+
+def test_l_ancien_fill_au_signal_reste_reproductible():
+    """Non-régression dans l'autre sens : l'ancien comportement doit rester atteignable, sinon
+    l'écart mesuré ne serait plus vérifiable."""
+    data = _data()
+    ancien = preset_backtest(data, top_k=8, exec_lag=0)
+    assert ancien.get("available")
+    assert ancien["preset"]["sharpe"] != preset_backtest(data, top_k=8)["preset"]["sharpe"]
 
 
 def test_exec_lag_1_modifie_le_resultat():

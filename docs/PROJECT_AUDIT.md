@@ -129,10 +129,11 @@ n'était pas uniforme :
 | **Données** | ~~calendriers mêlés~~ : l'empilement positionnel superposait une colonne crypto de 2018 à une colonne action de 2015 (**3 ans d'écart**), ce qui plaçait 12 paires crypto dans le top-30 par artefact | **corrigé le 25/08** |
 | **Backtesting** | `preset_equity_daily` / `trade_log` / `ledger` calculent encore leurs rendements par empilement positionnel : leur courbe peut diverger du tableau | **ouvert — P0** |
 | **Signaux** | `k_signal` médian = **1** sur 126 rebalancements : l'optimisation transversale (ERC) répartit du risque sur une matrice à une seule direction fiable | **ouvert** |
+| **Signaux** | deux garde-fous réagissaient à l'artefact de calendrier : la cible de vol bridait **89 %** des pas (×0,743) et la porte de régime coupait **73 %** de l'exposition, parce que l'indice de marché et la covariance étaient dominés par 12 paires crypto. Après correction : 7 % (×0,990) et ×0,697. | **corrigé le 25/08** |
 | **Signaux** | les 5 hypothèses d'alpha sont rejetées en long/short et « promues » en long-only — écart imputable au bêta, désormais mesuré | corrigé le 25/08 |
 | **Position sizing** | plancher de ligne 1 000 $ + bande d'inaction 3 % ; la bande bloque **99 % des pas** et ne laisse trader que ~7 % des noms | **à instruire** |
 | **Exécution** | kill-switch TradingView : une alerte critique périmée vetoait **à vie** (filtre d'âge déclaré, jamais appliqué) | **corrigé le 25/08** |
-| **Exécution** | `exec_lag` par défaut = 0 (fill au close du signal) → mini look-ahead ; `exec_lag=1` mesuré, ΔSharpe 0,00 | mesuré |
+| **Exécution** | ~~`exec_lag=0`, mini look-ahead~~ : `exec_lag=1` (fill t+1, réaliste) est le défaut depuis le 25/08 — meilleur sur toutes les colonnes une fois l'alignement en place | **corrigé** |
 | **API** | equity illisible ⇒ broker écarté (`vet_brokers`) ; inconnu ≠ zéro | contrôlé |
 | **Levier** | `QUANT_RISK_MAX_GROSS = 1.00` — aucun levier possible via le portail | contrôlé |
 | **Drawdown** | kill-switch DD réel intraday + kill-switch alertes TradingView | contrôlé |
