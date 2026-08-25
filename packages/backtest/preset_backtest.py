@@ -303,6 +303,9 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
         return [1.0] + [round(float(x), 4) for x in e]
 
     out = {"available": True, "step_days": step, "top_k": len(universe),
+           # L'univers RETENU, pas seulement son cardinal : sans les noms, impossible de savoir
+           # si un titre donné (un délisté, par exemple) a réellement été sélectionné.
+           "univers": list(universe),
            "cov_diag": summarize(cov_diags, n_degraded, cov_denoise),
            "panel": panel_diag, "n_steps": len(port),
            "declenchements": {k: v for k, v in decl.items()},

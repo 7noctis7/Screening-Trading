@@ -353,8 +353,11 @@ Utilise les sous-agents dédiés déjà présents dans le dépôt : `quant-criti
    déplaçait pourtant les **poids envoyés au courtier** de 2 points, parce que `_regime_mult`
    lit une MM200 qu'un panel tronqué transforme silencieusement en MM125. **Mesure, ne déduis
    pas.**
-2. **Le test de biais du survivant ne mesure rien.** Les 7 délistés ingérés ne sont jamais entrés
-   dans le top-30. Il passe, il ne valide rien.
+2. **Le biais du survivant est NON MESURABLE**, et pas seulement non mesuré. `preset_backtest`
+   aligne les séries **par position** (`[-L:]`) : il suppose qu'elles se terminent toutes le même
+   jour. C'est faux par construction pour un délisté, dont la dernière barre est sa radiation.
+   Le module refuse maintenant de produire un chiffre plutôt que de renvoyer un `0` qu'on
+   prendrait pour une absence de biais. **Le préalable est un panel aligné par DATE.**
 3. **`k_signal` médian = 1** sur 126 rebalancements : l'optimisation ERC répartit du risque sur
    une covariance à une seule direction fiable.
 4. **La bande d'inaction bloque 99 % des pas** et ne laisse trader que ~7 % des noms. Non

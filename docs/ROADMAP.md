@@ -23,13 +23,25 @@ raisonnement : `preset_latest_weights` déplaçait les **poids de production** d
 d'une série de 125 barres qui transformait la MM200 de `_regime_mult` en MM125. Le seuil
 d'éligibilité passe à 200 barres. 5 tests ajoutés.
 
-### P0-2 · Rendre mesurable le biais du survivant
+### P0-2 · Rendre mesurable le biais du survivant — ⚠️ PARTIELLEMENT TRAITÉ le 25/08
 **Description.** 7 délistés sont ingérés, aucun n'entre jamais dans le top-30 : le test s'exécute
 et ne mesure rien. Il faut ingérer des délistés qui **auraient été sélectionnés** — c'est-à-dire
 bien classés avant leur disparition.
-**Difficulté.** Moyenne — l'obstacle est la donnée, pas le code.
-**Dépendances.** `packages/data/survivorship`, source de délistés historiques avec prix.
-**Risques.** Le résultat sera probablement défavorable. C'est une information, pas un échec.
+**Fait le 25/08.** Le module refuse désormais de produire un chiffre quand il ne peut pas
+mesurer, et dit lequel des deux obstacles bloque. Le `Δ +0,00` qui se lisait « pas de biais »
+devient un `⛔ NON MESURABLE` explicite.
+
+**Ce qui reste, et c'est plus lourd que prévu.** L'audit a révélé un obstacle qui n'était pas
+identifié : `preset_backtest` aligne les séries **par position** (`[-L:]`), pas par date. Il
+suppose donc que toutes se terminent le même jour — vrai entre survivants, **faux par
+construction pour un délisté**, dont la dernière barre est sa date de radiation. Fusionner les
+deux superposerait des prix de 2020 aux dates de 2026.
+
+Le préalable n'est donc pas « ingérer de meilleurs délistés » mais **un panel aligné par DATE**.
+C'est un changement de fond dans `preset_backtest` et ses fonctions sœurs.
+**Difficulté.** Élevée. **Dépendances.** Aucune — mais touche le cœur du moteur.
+**Risques.** Tous les chiffres publiés changeront à nouveau. Et tant que ce n'est pas fait,
+**l'ampleur du biais du survivant reste inconnue**, ce qui est en soi un argument contre le live.
 
 ### P0-3 · Instruire la bande d'inaction
 **Description.** La bande de 3 % en poids absolu bloque 99 % des pas et ne laisse trader que ~7 %
