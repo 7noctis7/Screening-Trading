@@ -27,15 +27,27 @@ def _run_live():
     return m
 
 
+class _Reponse:
+    """Réponse courtier minimale. Depuis le 26/08 `run_live` LIT le statut renvoyé : une
+    doublure qui renvoie None est classée « issue inconnue » et l'ordre n'est pas
+    compté —
+    ce qui est le comportement voulu, mais rendrait ces tests trompeurs."""
+
+    def __init__(self, status):
+        self.status = status
+
+
 class CourtierFactice:
     def __init__(self):
         self.ordres = []
 
     def submit_notional(self, sym, side, montant):
         self.ordres.append(("notional", sym, montant))
+        return _Reponse("accepted")     # un courtier RÉPOND toujours quelque chose
 
     def close_position(self, sym):
         self.ordres.append(("close", sym, None))
+        return True                     # AlpacaBroker.close_position renvoie un booléen
 
 
 def _cible(sym, poids, classe="equity"):
@@ -96,3 +108,43 @@ def test_echappatoire_explicite(rl, monkeypatch):
     b = CourtierFactice()
     sent, _, _ = rl._reconcile([_cible("AAA", 0.50)], _brokers(b), 1.0, None, dry=False)
     assert sent == 1 and b.ordres
+
+
+# --- issue de l'ordre : un rejet ne compte pas ------------------------------
+
+class CourtierQuiRefuse(CourtierFactice):
+    """Le courtier ACCEPTE l'appel (aucune exception) puis REJETTE l'ordre.
+
+    C'est le cas réel qui était invisible : `sent += 1` dès l'absence d'exception
+    comptait comme réussi un ordre que le courtier venait de refuser.
+    """
+
+    def submit_notional(self, sym, side, montant):
+        self.ordres.append(("notional", sym, montant))
+        return _Reponse("rejected")
+
+
+def test_un_rejet_courtier_ne_compte_pas_comme_envoye(rl, monkeypatch, capsys):
+    monkeypatch.setenv("QUANT_IGNORE_SESSION", "1")
+    b = CourtierQuiRefuse()
+    sent, opened, _ = rl._reconcile([_cible("AAA", 0.10)], _brokers(b), 1.0, None,
+                                    dry=False)
+    assert b.ordres, "l'ordre a bien été tenté"
+    assert sent == 0, "un ordre REJETÉ ne doit pas être compté comme envoyé"
+    assert opened == [], "un rejet ne doit pas être journalisé comme une ouverture"
+    sortie = capsys.readouterr().out
+    assert "REJETÉ" in sortie and "REFUSÉ(S) par le courtier" in sortie
+
+
+def test_une_reponse_inexploitable_ne_compte_pas(rl, monkeypatch):
+    """Un courtier qui ne répond rien ne prouve pas que l'ordre est parti."""
+    monkeypatch.setenv("QUANT_IGNORE_SESSION", "1")
+
+    class Muet(CourtierFactice):
+        def submit_notional(self, sym, side, montant):
+            self.ordres.append(("notional", sym, montant))
+            return None
+
+    sent, _, _ = rl._reconcile([_cible("AAA", 0.10)], _brokers(Muet()), 1.0, None,
+                               dry=False)
+    assert sent == 0

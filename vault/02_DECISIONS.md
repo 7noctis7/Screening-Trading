@@ -704,3 +704,59 @@ inspecte les IMPORTS effectifs du module (pas son texte — le nom de l'ancienne
 cité dans la docstring qui explique la migration).
 
 **Déploiement.** 1330 tests verts.
+
+## ADR-0042 — Un ordre a QUATRE issues, pas deux (2026-08-26)
+
+**Contexte.** `run_live` incrémentait `sent` dès que l'appel courtier ne levait pas
+d'exception, sans lire la réponse. Alpaca accepte un ordre puis peut le rejeter : le
+récapitulatif annonçait des ordres partis alors que rien n'était passé. C'est le trou resté
+ouvert à la fin d'ADR-0040.
+
+**Décision.** `packages/execution/order_outcome.py`, duck-typé et sans dépendance :
+
+| issue | sens |
+|---|---|
+| `REJETE` | le courtier refuse — ne se remplira JAMAIS. L'angle mort. |
+| `REMPLI` | exécution confirmée (totale ou partielle) |
+| `EN_COURS` | accepté, remplissage non confirmé — **cas normal** à la soumission |
+| `INCONNU` | réponse inexploitable : ni succès ni échec, et surtout pas un succès |
+
+La distinction `REJETE` / `EN_COURS` est tout l'intérêt : sans elle, on choisit entre ignorer
+les rejets (l'ancien comportement) et crier au loup à chaque ordre normal. Un rejet ne compte
+plus comme envoyé et n'est plus journalisé comme une ouverture.
+
+**Deux régressions évitées de justesse, et c'est le point méthodologique.** Le module a été
+confronté aux QUATRE courtiers du dépôt avant activation : Bitmart et Binance renvoient
+`OrderStatus.SUBMITTED` (vocabulaire interne, absent du vocabulaire Alpaca) et
+`AlpacaBroker.close_position` renvoie un **booléen**, pas un ordre. Sans ces deux cas, le
+correctif aurait cessé de compter tous les ordres crypto et toutes les liquidations — soit
+le défaut inverse de celui qu'il corrige.
+
+**Une docstring démentie par son test.** `classer()` affirmait « ne lève JAMAIS » ; un objet
+exposant `status` en propriété qui lève traversait. La garantie est désormais tenue par un
+`try`, pas par la prudence supposée du code appelant.
+
+**Conséquence.** (+) Un rejet devient visible et chiffré. (−) Le compteur d'ordres envoyés
+baissera : c'est le but, il était faux.
+
+## ADR-0043 — L'écran ne promet pas ce que l'exécuteur refusera (2026-08-26)
+
+**Contexte.** `/positions` badgeait « à acheter » toute cible du modèle non détenue, sans
+jamais consulter le plancher de ligne que `decider()` applique. Une cible sous le plancher
+n'est jamais ouverte — l'écran affirmait donc une action qui n'aurait pas lieu. C'est la
+question de l'utilisateur qui a révélé le défaut : « pourquoi ça me dit d'acheter mais ça ne
+rebalance pas ? »
+
+**Décision.**
+1. Badge **« bloqué · sous le plancher »** avec le montant qui manque, au lieu de
+   « à acheter ».
+2. **Bandeau** quand AUCUNE cible ne peut partir — le cas qui rend la liste trompeuse :
+   elle ressemble à des achats imminents alors qu'aucun ordre ne partira. Le bandeau nomme
+   les deux leviers (capital de la poche, `QUANT_MIN_POSITION`) et rappelle qu'une exposition
+   brute réduite par la porte de régime fait aussi passer des lignes sous le plancher.
+3. Le plancher vient de l'API (`min_position`), **jamais recodé côté front** : deux sources
+   pour une même règle garantissent la dérive.
+
+**Conséquence.** (+) Une famille entière de confusion disparaît : l'écran et l'exécuteur disent
+la même chose. (−) Sur un petit capital, la page affichera surtout des lignes bloquées — c'est
+l'information juste, pas un régression d'affichage.

@@ -1,5 +1,50 @@
 # 04 — JOURNAL
 
+## Session 2026-08-26 (15) — Fermer le chemin d'exécution : l'issue de l'ordre, et l'écran qui ment
+
+Suite directe de (14). Deux trous du même chemin, tous deux du genre « le système affirme
+quelque chose qui n'arrivera pas ».
+
+**L'ordre envoyé n'était pas l'ordre exécuté.** `run_live` faisait `sent += 1` dès que l'appel
+courtier ne levait pas d'exception, sans jamais lire la RÉPONSE. Or Alpaca accepte un ordre puis
+peut le rejeter : le compteur annonçait « 12 ordres envoyés » là où douze avaient été refusés.
+
+`packages/execution/order_outcome.py` classe en **quatre** issues, pas deux. « Envoyé/échoué »
+est trop grossier pour un ordre au marché : `REJETE` (ne se remplira jamais — c'était l'angle
+mort), `REMPLI`, `EN_COURS` (accepté, remplissage non confirmé — le cas NORMAL à la soumission,
+exiger « rempli » ici crierait au loup à chaque ordre), `INCONNU`. Un rejet ne compte plus comme
+envoyé et n'est plus journalisé comme une ouverture.
+
+**Deux régressions que j'allais introduire, attrapées avant.** Bitmart et Binance renvoient
+`OrderStatus.SUBMITTED` (vocabulaire interne) : l'oublier aurait classé INCONNU tous les ordres
+crypto, donc cessé de les compter. Et `AlpacaBroker.close_position` renvoie un **booléen**, pas
+un ordre : sans ce cas, toute liquidation devenait INCONNUE. Le correctif aurait créé le défaut
+inverse de celui qu'il corrige. Vérifié contre les quatre courtiers du dépôt avant d'activer.
+
+**Un test a démenti ma propre docstring.** `classer()` affirmait « ne lève JAMAIS » ; un objet
+exposant `status` en propriété qui lève traversait. La garantie est maintenant tenue par un
+`try`, pas par la prudence supposée du code en amont.
+
+**Et un bug de câblage qui s'est déguisé en panne courtier.** Mon import d'`order_outcome`
+n'avait pas atterri (le `replace` ne correspondait plus après une édition antérieure, et je
+n'avais pas mis d'`assert` dessus). Le `NameError` est tombé dans le `except` de l'envoi et
+s'est affiché « ÉCHEC après retries » — exactement le masquage qu'on cherche à supprimer.
+
+**L'écran de positions promettait des achats impossibles.** La page badgeait « à acheter » toute
+cible non détenue sans jamais consulter le plancher de ligne que `decider()` applique. Même
+famille que le satellite vide : l'écran affirme une action qui n'aura pas lieu. Désormais
+« bloqué · sous le plancher » avec le montant manquant, et un bandeau quand AUCUNE cible ne peut
+partir — le cas qui a mené au diagnostic. Le plancher vient de l'API, jamais recodé côté front.
+
+**Tests & CI.** 1356 verts (+26). ruff propre sur tout le neuf ; `run_live` descend de 75 à 72
+E501. TypeScript : 2 erreurs, les mêmes qu'avant (three.js, sans rapport).
+
+**Reste ouvert.** Le rolling universe (aucune preuve qu'il aide), le câblage d'`impact.py`
+(données ADV manquantes), le biais du survivant (liste de délistés à élargir) et surtout la
+**fenêtre du labo** — tant qu'elle ne résout que ±0,14, aucun levier ne peut être départagé.
+
+---
+
 ## Session 2026-08-26 (14) — Le satellite actions était vide, et personne ne le disait
 
 **Le symptôme.** Compte paper : cœur QQQ 50 602 $ (50,4 %), huit lignes crypto 21 673 $

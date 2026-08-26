@@ -24,6 +24,7 @@ type Row = {
   gap: number | null; qty: number | null; value: number | null;
   pnl: number | null; pnlPct: number | null; earningsDays: number | null; hasChart: boolean;
   aAcheter?: boolean;      // cible du modèle non encore détenue (≠ position morte)
+  notionnel?: number | null; // $ visé par le modèle — décide si l'ordre PEUT partir
   extMa200?: number | null; // extension vs MM200 — diagnostic, PAS un critère de sélection
   ret20j?: number | null;
 };
@@ -53,13 +54,14 @@ function buildRows(pos: any[], alloc: any[], accounts: any, earnings: any[]): Ro
   for (const a of alloc) {
     const k = norm(a.broker_symbol || a.symbol);
     const r = bySym.get(k) ?? bySym.get(norm(a.symbol));
-    if (r) r.wTarget = a.weight ?? null;
+    if (r) { r.wTarget = a.weight ?? null; r.notionnel = a.notional ?? null; }
     else bySym.set(k, {
       // CIBLE SANS POSITION : le modèle veut cette ligne, elle n'est pas encore achetée.
       // Affichée sans marqueur, elle se lisait comme une position morte à 0 % — alors que c'est
       // exactement l'inverse : un ordre d'achat à venir.
       symbol: a.symbol, broker: a.broker ?? "—", wReal: 0, wTarget: a.weight ?? null,
-      aAcheter: true, extMa200: a.ext_ma200 ?? null, ret20j: a.ret_20j ?? null,
+      aAcheter: true, notionnel: a.notional ?? null,
+      extMa200: a.ext_ma200 ?? null, ret20j: a.ret_20j ?? null,
       gap: null, qty: null, value: null, pnl: null, pnlPct: null,
       earningsDays: eDays.get(norm(a.symbol)) ?? null, hasChart: false,
     });
@@ -109,6 +111,12 @@ export default function Positions() {
   const earnings = data?.earnings_risk ?? [];
   const series = data?.series ?? {}, markers = data?.markers ?? {};
   const acc = data?.accounts ?? {};
+  // MÊME RÈGLE QUE L'EXÉCUTEUR. `decider()` refuse d'ouvrir une ligne dont la cible est sous
+  // le plancher (packages/execution/rebalance_plan) : la page doit dire « bloqué », pas
+  // « à acheter ». Deux sources pour une même règle = dérive garantie, donc le plancher vient
+  // de l'API (`min_position`) et n'est jamais recodé ici.
+  const bloque = (r: Row) => !!r.aAcheter && r.notionnel != null && r.notionnel < PLANCHER;
+
   const rows = useMemo(() => {
     const r = buildRows(pos, alloc, acc, earnings);
     for (const x of r) x.hasChart = !!series[x.symbol];
@@ -134,18 +142,41 @@ export default function Positions() {
     : rows.filter((r) => Math.abs(Number(r.value) || 0) >= PLANCHER || r.wTarget != null);
   const nMasquees = rows.length - rowsVisibles.length;
 
+  const aAcheterRows = rows.filter((r) => r.aAcheter);
+  const bloquees = aAcheterRows.filter(bloque);
+  // « Toutes bloquées » est le cas qui mérite un bandeau : le rebalancement ne peut RIEN
+  // ouvrir, et sans le dire l'écran ressemble à une liste d'achats imminents.
+  const toutBloque = aAcheterRows.length > 0 && bloquees.length === aAcheterRows.length;
+
   const cols: Col[] = [
     { key: "symbol", label: "Actif", render: (v, r) => (
         <span className="inline-flex items-center gap-1.5 flex-wrap">
           <span className={r.hasChart ? "text-accent border-b border-dotted border-border" : ""}>{v}</span>
-          {r.aAcheter && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded font-sans border border-border"
-              style={{ color: "var(--accent)" }}
-              title={"Cible du modèle non encore détenue. Ce n'est PAS un signal d'entrée : la "
-                + "ligne est retenue par son rang au score composite (top-12), puis dimensionnée "
-                + "en risk-parity. Aucune étape de la chaîne ne regarde si le titre est étendu."}>
-              à acheter
-            </span>)}
+          {r.aAcheter && (bloque(r)
+            ? (
+              // L'ÉCRAN NE DOIT PAS PROMETTRE CE QUE L'EXÉCUTEUR REFUSERA. `decider()`
+              // (packages/execution/rebalance_plan) n'ouvre pas une ligne dont la cible est
+              // sous le plancher : elle deviendrait la poussière de demain. La page badgeait
+              // pourtant « à acheter » sans jamais consulter ce plancher — même famille de
+              // défaut que le satellite actions vide (ADR-0040) : l'écran affirmait une action
+              // qui n'aurait jamais lieu.
+              <span className="text-[10px] px-1.5 py-0.5 rounded font-sans border border-border"
+                style={{ color: "var(--muted)" }}
+                title={`Cible ${usd(r.notionnel)} $ sous le plancher de ${usd(PLANCHER)} $ par `
+                  + `ligne (QUANT_MIN_POSITION). Le rebalancement N'OUVRIRA PAS cette ligne : `
+                  + `elle ne pèserait rien et coûterait du frottement. Il manque `
+                  + `${usd(PLANCHER - (r.notionnel ?? 0))} $ de cible pour qu'elle parte.`}>
+                bloqué · sous le plancher
+              </span>
+            ) : (
+              <span className="text-[10px] px-1.5 py-0.5 rounded font-sans border border-border"
+                style={{ color: "var(--accent)" }}
+                title={"Cible du modèle non encore détenue. Ce n'est PAS un signal d'entrée : la "
+                  + "ligne est retenue par son rang au score composite (top-12), puis dimensionnée "
+                  + "en risk-parity. Aucune étape de la chaîne ne regarde si le titre est étendu."}>
+                à acheter
+              </span>
+            ))}
           {r.aAcheter && r.extMa200 != null && r.extMa200 > 0.25 && (
             <span className="text-[10px] px-1.5 py-0.5 rounded font-sans border border-border"
               style={{ color: "#f59e0b" }}
@@ -185,6 +216,29 @@ export default function Positions() {
       <p className="text-muted text-xs">Positions <b>réellement détenues</b>, confrontées à la <b>cible du preset</b> (modèle).
         L'écart montre ce que le prochain rebalancement corrigera (bande de non-trading : {BAND * 100} %). Aucun chiffre inventé : « n/d » si un compte est déconnecté.</p>
       <StepBanner active="portfolio" />
+
+      {toutBloque && (
+        // Le rebalancement ne peut RIEN ouvrir. Sans ce bandeau, la liste ressemble à des
+        // achats imminents alors qu'aucun ordre ne partira — c'est la question qui a mené
+        // au diagnostic du 26/08.
+        <section className="card p-4" style={{ borderColor: "#f59e0b" }}>
+          <p className="text-sm">
+            <b>Aucune des {aAcheterRows.length} cibles ne peut être ouverte.</b> Toutes visent
+            moins de ${usd(PLANCHER)} par ligne, le plancher sous lequel le rebalancement
+            n'ouvre pas de position (elle ne pèserait rien et coûterait du frottement).
+          </p>
+          <p className="text-muted text-xs mt-1">
+            Deux leviers : augmenter le capital de la poche, ou abaisser le plancher via
+            <code> QUANT_MIN_POSITION</code>. À capital constant, une exposition brute
+            réduite par la porte de régime fait aussi passer des lignes sous le plancher.
+          </p>
+        </section>)}
+
+      {!toutBloque && bloquees.length > 0 && (
+        <p className="text-muted text-xs">
+          {bloquees.length} cible(s) sous le plancher de ${usd(PLANCHER)} par ligne : elles
+          restent affichées mais <b>ne seront pas ouvertes</b> au prochain rebalancement.
+        </p>)}
 
       {!data.connected ? (
         <section className="card p-6 text-center">

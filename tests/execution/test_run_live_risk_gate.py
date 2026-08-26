@@ -33,6 +33,15 @@ def _run_live():
     return m
 
 
+class _Reponse:
+    """Réponse courtier minimale. Depuis le 26/08 `run_live` LIT le statut renvoyé : une
+    doublure qui renvoie None est classée « issue inconnue » et l'ordre n'est pas compté —
+    ce qui est le comportement voulu, mais rendrait ces tests trompeurs."""
+
+    def __init__(self, status):
+        self.status = status
+
+
 class CourtierFactice:
     """Enregistre ce qu'on lui demande, n'exécute rien."""
 
@@ -41,9 +50,11 @@ class CourtierFactice:
 
     def submit_notional(self, sym, side, montant):
         self.ordres.append(("notional", sym, montant))
+        return _Reponse("accepted")     # un courtier RÉPOND ; None serait « issue inconnue »
 
     def close_position(self, sym):
         self.ordres.append(("close", sym, None))
+        return True                     # AlpacaBroker.close_position renvoie un booléen
 
 
 def _cible(symbole, poids):
