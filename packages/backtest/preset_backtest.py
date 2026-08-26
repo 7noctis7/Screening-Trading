@@ -128,7 +128,8 @@ def _cum(series: list) -> list:
 
 
 def _sortie(res: dict, cpt: Compteurs, universe, A, L, start, step, *, cov_denoise,
-            panel_diag, dd_target, band, tgt_vol, per_year, swing_equity) -> dict:
+            panel_diag, dd_target, band, tgt_vol, per_year, swing_equity,
+            aligner_dates) -> dict:
     """Assemble le résultat : preset, bench équipondéré (même univers) et swing éventuel."""
     port, turn = res["port"], res["turn"]
     out = {"available": True, "step_days": step, "top_k": len(universe),
@@ -148,7 +149,14 @@ def _sortie(res: dict, cpt: Compteurs, universe, A, L, start, step, *, cov_denoi
            "curves": {"preset": _cum(port)}}
     # bench équipondéré sur le MÊME univers (apples-to-apples : isole l'apport de la construction
     # risk-parity + DD-target + blackout + band vs un simple équipondéré plein-investi)
-    bench = [float((A[:, min(t + step, L - 1)] / A[:, t] - 1).mean())
+    #
+    # `A[:, n] / A[:, t]` en BRUT donnait NaN dès qu'un titre SÉLECTIONNÉ était radié : sa colonne
+    # vaut NaN après sa dernière cotation, `.mean()` propage, et toute la courbe de benchmark
+    # partait en NaN à partir de ce pas — d'où le « −100,0 % / nan% » observé le 25/08 sur données
+    # réelles. La stratégie, elle, traitait déjà le cas (`dernier_connu`, #341) ; c'est la ligne de
+    # comparaison qui n'avait pas été migrée, donc le preset se comparait à RIEN sans le dire.
+    # On lui applique exactement le même traitement — sinon le benchmark n'est plus apples-to-apples.
+    bench = [float(np.nanmean(_fwd(A, t, min(t + step, L - 1), aligner_dates)))
              for t in range(start, L - 1, step)]
     out["benchmark"] = _stats(bench, per_year)
     out["curves"]["benchmark"] = _cum(bench)
@@ -224,4 +232,5 @@ def preset_backtest(data: dict, quality: dict | None = None, asset_classes: dict
         return {"available": False}
     return _sortie(res, cpt, universe, A, L, start, step, cov_denoise=cov_denoise,
                    panel_diag=panel_diag, dd_target=dd_target, band=band,
-                   tgt_vol=tgt_vol, per_year=per_year, swing_equity=swing_equity)
+                   tgt_vol=tgt_vol, per_year=per_year, swing_equity=swing_equity,
+                   aligner_dates=aligner_dates)
