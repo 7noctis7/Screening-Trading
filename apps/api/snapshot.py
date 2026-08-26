@@ -7,7 +7,7 @@ routes liront l'état live (broker, DB, régime du jour) au lieu de ce snapshot.
 from __future__ import annotations
 
 import csv
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from packages.common.env import load_env as _load_env
@@ -17,11 +17,19 @@ _load_env()   # charge .env (clés brokers, FMP, QUANT_PRICE_DB, QUANT_NEWS, LLM
 from apps.api import payloads as PL
 from packages.backtest.fast_swing import fast_swing_backtest
 from packages.common import load_yaml
+from packages.common.safe_section import safe_section
 from packages.data import data_providers
 from packages.execution import CostModel
-from packages.portfolio import (attribution, correlation_matrix, cluster, expert_review,
-                                mc_projection, monte_carlo, relative_metrics, risk_metrics_fn)
-from packages.common.safe_section import safe_section
+from packages.portfolio import (
+    attribution,
+    cluster,
+    correlation_matrix,
+    expert_review,
+    mc_projection,
+    monte_carlo,
+    relative_metrics,
+    risk_metrics_fn,
+)
 from packages.portfolio.metrics import returns_from_equity
 from packages.ranking import RankingEngine
 from packages.regime import MacroImpactMap, MacroRegimeClassifier, synthetic_macro
@@ -30,6 +38,7 @@ from packages.storage import MacroStore
 ROOT = Path(__file__).resolve().parents[2]
 _NETWORK_KINDS = {"wikipedia", "ishares_holdings", "nasdaq_trader", "coingecko"}
 import os as _os_hist
+
 # Profondeur d'historique (jours calendaires). Défaut ≈ depuis 2015 (~11 ans) si ta base le permet ;
 # sinon la fenêtre est tronquée à l'historique réel disponible. Surchargeable : QUANT_HISTORY_DAYS.
 _HISTORY_DAYS = int(_os_hist.environ.get("QUANT_HISTORY_DAYS", "4015"))
@@ -112,10 +121,10 @@ def _universe_section(instruments: list[dict]) -> dict:
             cnt = sum(1 for _ in csv.DictReader(f))
         seeds.append({"file": path.name, "count": cnt,
                       "as_of": datetime.fromtimestamp(path.stat().st_mtime,
-                                                      timezone.utc).isoformat()})
+                                                      UTC).isoformat()})
     rows = sorted(instruments, key=lambda r: (r["asset_class"], r["symbol"]))
     return {
-        "as_of": datetime.now(timezone.utc).isoformat(),
+        "as_of": datetime.now(UTC).isoformat(),
         "rebuild_cadence_days": cfg.get("rebuild_cadence_days"),
         "sources": src_rows,
         "sources_enabled": sum(1 for s in src_rows if s["enabled"]),
@@ -133,8 +142,8 @@ def _universe_section(instruments: list[dict]) -> dict:
 # Alias privés conservés → le reste du fichier est inchangé.
 from apps.api.sections_data import GICS_MAP as _GICS_MAP  # noqa: E402
 from apps.api.sections_data import SECTOR_DV as _SECTOR_DV  # noqa: E402
-from packages.execution.rebalance_plan import min_ligne as _min_ligne  # noqa: E402
 from apps.api.sections_data import THEME_TICKERS as _THEME_TICKERS  # noqa: E402
+from packages.execution.rebalance_plan import min_ligne as _min_ligne  # noqa: E402
 
 
 def is_real_mode(mode: str | None) -> bool:
@@ -556,7 +565,6 @@ def _ml_model():
 
 def _feat_importance(model, names, X, y):
     """Importance des variables : native (arbres) sinon |poids| (logit) sinon permutation."""
-    import numpy as np
     clf = getattr(getattr(model, "pipe", None), "named_steps", {}).get("clf") if hasattr(model, "pipe") else None
     if clf is not None and hasattr(clf, "feature_importances_"):
         vals = [float(v) for v in clf.feature_importances_]
@@ -672,7 +680,11 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
     # Validation temporelle : 80 % entraînement / 20 % test (X déjà trié par T0).
     calibration = {"available": False}
     try:
-        from packages.ml.calibration import PlattCalibrator, brier_score, reliability_curve
+        from packages.ml.calibration import (
+            PlattCalibrator,
+            brier_score,
+            reliability_curve,
+        )
         cut = int(len(X) * 0.8)
         if cut > 100 and len(X) - cut > 50:
             mcal, _ = _ml_model()
@@ -885,7 +897,9 @@ def _fund_provider():
         try:
             from packages.common.net import online
             if mode == "yf" or online():
-                from packages.fundamentals.yfinance_provider import YFinanceFundamentalsProvider
+                from packages.fundamentals.yfinance_provider import (
+                    YFinanceFundamentalsProvider,
+                )
                 return YFinanceFundamentalsProvider(), "yfinance (réel, gratuit)"
         except Exception:  # noqa: BLE001
             pass
@@ -907,7 +921,9 @@ def _fund_provider_chain() -> list:
             net = False
         if net:
             try:
-                from packages.fundamentals.yfinance_provider import YFinanceFundamentalsProvider
+                from packages.fundamentals.yfinance_provider import (
+                    YFinanceFundamentalsProvider,
+                )
                 out.append(("yfinance (réel)", YFinanceFundamentalsProvider()))
             except Exception:  # noqa: BLE001
                 pass
@@ -957,10 +973,10 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
     """Analyse FONDAMENTALE : ratios (PER, EV/EBITDA, P/B, ROE/ROIC, marges), valorisation DCF
     (marge de sécurité) et score composite value+quality. Equities/ETF uniquement.
     FMP si `FMP_API_KEY`, sinon fondamentaux synthétiques déterministes (offline-safe)."""
+    import os as _osf
+
     from packages.fundamentals import ratios, valuation
     from packages.fundamentals.scoring import altman_z, f_score, f_score_label
-
-    import os as _osf
 
     all_eq = [s for s in symbols if acmap.get(s) in ("equity", "etf")]
     if not all_eq:
@@ -977,7 +993,9 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
             _net = False
         if _net:
             try:
-                from packages.fundamentals.yfinance_provider import YFinanceFundamentalsProvider
+                from packages.fundamentals.yfinance_provider import (
+                    YFinanceFundamentalsProvider,
+                )
                 _providers.append(("yfinance", YFinanceFundamentalsProvider()))
             except Exception:  # noqa: BLE001
                 pass
@@ -1149,7 +1167,10 @@ def _conviction_section(held: list, screener: dict, ml_scores: dict, sentiment: 
     ranked = conviction_rank(signals)
     w = conviction_weights(ranked, vol, top_n=15, max_weight=0.20)
     # backtest POINT-IN-TIME (technique, sans fuite) : conviction vs équipondéré
-    from packages.backtest.conviction_backtest import conviction_backtest, multi_lens_backtest
+    from packages.backtest.conviction_backtest import (
+        conviction_backtest,
+        multi_lens_backtest,
+    )
     backtest = conviction_backtest(data)
     # comparaison des top-10 par LENTILLE (fondamentaux / investisseurs / ML / toutes catégories)
     lens_backtest = multi_lens_backtest(data, {
@@ -1209,7 +1230,7 @@ def _investor_section(symbols: list, acmap: dict, names: dict, sector_of: dict) 
                       "Overall = moyenne des 4."}
 
 
-def _price_db_path() -> "Path | None":
+def _price_db_path() -> Path | None:
     """Chemin d'une base de prix réelle. Priorité : env QUANT_PRICE_DB, puis emplacements
     usuels (data/, Bureau/Desktop) → branche automatiquement votre ~/Desktop/YAHOO.db."""
     import os
@@ -1557,7 +1578,7 @@ def build_snapshot(seed: int = 7) -> dict:
     acmap = {m["symbol"]: m["asset_class"] for m in instruments}
     names = {m["symbol"]: m["name"] for m in instruments}
     sector_of = {m["symbol"]: _sector_of(m) for m in instruments}
-    end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    end = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
     start = end - timedelta(days=_HISTORY_DAYS)
     # prix RÉELS (base locale) si disponibles, sinon synthétique sectorisé (cohérence secteurs)
     data, data_mode, real_syms = _load_prices(instruments, sector_of, start, end, seed)
@@ -1722,9 +1743,14 @@ def build_snapshot(seed: int = 7) -> dict:
     try:
         import numpy as _npd
 
-        from packages.data.engine import (auto_ttl_days, covariance_diagnostics,
-                                          covariance_matrix, ledoit_wolf_shrinkage,
-                                          persist_cov_cache_stats, purge_cov_disk_cache)
+        from packages.data.engine import (
+            auto_ttl_days,
+            covariance_diagnostics,
+            covariance_matrix,
+            ledoit_wolf_shrinkage,
+            persist_cov_cache_stats,
+            purge_cov_disk_cache,
+        )
         purge_cov_disk_cache(auto_ttl_days())              # purge TTL auto-réglé (1×/build)
         _rets = {s: list(rets_by[s]) for s in syms}
         _, _cov_raw = covariance_matrix(_rets, shrink=False)
@@ -1794,7 +1820,11 @@ def build_snapshot(seed: int = 7) -> dict:
     # skfolio (optionnel, qualité recherche) : max-diversification si la lib est installée
     try:
         import numpy as _np
-        from packages.portfolio.skfolio_adapter import skfolio_available, skfolio_weights
+
+        from packages.portfolio.skfolio_adapter import (
+            skfolio_available,
+            skfolio_weights,
+        )
         if skfolio_available() and len(cb_syms) >= 3:
             _ml = min(len(rets_by[s]) for s in cb_syms)
             if _ml >= 30:
@@ -1806,8 +1836,12 @@ def build_snapshot(seed: int = 7) -> dict:
         pass
     # allocation RECOMMANDÉE : risk-parity + bande de non-trading + exposition pilotée par DD-cible
     import os as _os
-    from packages.portfolio.construction import (build_target, tail_adjusted_dd_target,
-                                                 vol_target_from_drawdown)
+
+    from packages.portfolio.construction import (
+        build_target,
+        tail_adjusted_dd_target,
+        vol_target_from_drawdown,
+    )
     _dd = float(_os.environ.get("QUANT_DD_TARGET", "0.25"))   # best practice (DSR≈0 → risk-managed) :
     # DD-cible 0.25 (équilibre exposition/DD). 0.15 = max-défensif · 0.45 = agressif. Le cœur QQQ
     # (QUANT_CORE_SPEC) porte la bêta/le rendement ; le preset = satellite à risque maîtrisé.
@@ -1900,7 +1934,7 @@ def build_snapshot(seed: int = 7) -> dict:
         r["sector"] = sector_of.get(r["symbol"], "")
     # Screener à FILTRES (packages.screening) — univers réduit aux candidats éligibles.
     screen_sec = safe_section("screen", _screen_section, data, acmap, names, sector_of, n - 1)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     last_bar = ts_list[-1]
     # dernière valeur FINIE : une barre ^VIX NaN du jour (yfinance) rendait vix_now NaN
     # → playbook/tests cassés. NaN = pas de donnée, on sert la dernière connue.
@@ -1952,9 +1986,14 @@ def build_snapshot(seed: int = 7) -> dict:
     _preset_trades = preset_trade_log(_tradeable_data, _quality, asset_classes=acmap,
                                       dd_target=_dd, band=0.03, init_cap=init_cap)
     # ALLOCATION DE PRODUCTION = poids ACTUELS du preset (ce que make live réplique en paper)
-    from packages.backtest.preset_backtest import preset_latest_weights
-    _preset_weights = preset_latest_weights(_tradeable_data, _quality, asset_classes=acmap,
-                                            dd_target=_dd, band=0.03, top_k=12, min_weight=0.025)
+    from packages.backtest.preset_weights import preset_latest_weights_explique
+    # POURQUOI, pas seulement QUOI. Un satellite vide avait exactement la même
+    # sortie qu'un satellite plein de zéros : rien. Le 26/08, trois hypothèses
+    # successives sur la cause se sont révélées fausses faute de trace. Le
+    # diagnostic est désormais publié à côté des poids.
+    _preset_weights, _preset_diag = preset_latest_weights_explique(
+        _tradeable_data, _quality, asset_classes=acmap,
+        dd_target=_dd, band=0.03, top_k=12, min_weight=0.025)
     # SLEEVE CRYPTO (best practice, risk-parity) — poche SÉPARÉE, dimensionnée sur le capital BITMART.
     # Comptes distincts : les actions sont dimensionnées sur le capital ALPACA, la crypto sur Bitmart.
     _crypto_weights = {}
@@ -2247,7 +2286,9 @@ def build_snapshot(seed: int = 7) -> dict:
     except Exception:  # noqa: BLE001
         pass
     _live["alpaca_perf"] = _broker_perf(_live["real"]["alpaca"], "alpaca", _eq_model)
-    from packages.execution.venues import venue_crypto as _vc_here   # autre portée que le bloc live
+    from packages.execution.venues import (
+        venue_crypto as _vc_here,  # autre portée que le bloc live
+    )
     _live["crypto_perf"] = _broker_perf(_live["real"]["crypto"], _vc_here().cle, _cr_model)
     # COMPARAISON COMPTES RÉELS vs INDICES (Alpaca vs Crypto vs S&P vs Nasdaq) pour le dashboard
     _cal_full = [b.ts for b in max(data.values(), key=len)]
@@ -2291,7 +2332,11 @@ def build_snapshot(seed: int = 7) -> dict:
     # BLACK-LITTERMAN : prior équipondéré + vues = conviction z-scorée → poids postérieurs
     try:
         import numpy as _np2
-        from packages.portfolio.black_litterman import black_litterman, views_from_scores
+
+        from packages.portfolio.black_litterman import (
+            black_litterman,
+            views_from_scores,
+        )
         _wm = _np2.array([1.0 / len(cb_syms)] * len(cb_syms))
         if _edge_proven:                         # ticket #7 : vues seulement si edge prouvé
             _conv = {r["symbol"]: r.get("conviction") for r in conviction_sec.get("rows", [])}
@@ -2450,6 +2495,8 @@ def build_snapshot(seed: int = 7) -> dict:
             "dates": _dash_dates,
             "positions": comp["rows"], "totals": comp["totals"],
             "preset_allocation": _preset_alloc,        # allocation PRESET (production) → page Positions
+            # Journal des étages : dit POURQUOI l'allocation est vide.
+            "preset_diagnostic": _preset_diag.as_dict(),
             # Plancher de ligne PUBLIÉ : le front l'affichait en dur de son côté. Deux sources
             # pour un même seuil, c'est une dérive garantie au premier changement.
             "min_position": _min_ligne(),

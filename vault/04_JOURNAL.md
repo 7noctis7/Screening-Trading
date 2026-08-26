@@ -1,5 +1,46 @@
 # 04 — JOURNAL
 
+## Session 2026-08-26 (16) — Trois hypothèses fausses : arrêter de deviner, instrumenter
+
+**Le fait.** Compte paper : cœur QQQ, huit lignes crypto, **zéro action du satellite**. Sur ce
+seul symptôme, j'ai proposé successivement trois causes, et **les trois étaient fausses** :
+
+1. **Plancher de ligne à 1000 $** — réfuté par le capital réel (100 302 $, très au-dessus du
+   seuil de 18 519 $ que j'avais calculé).
+2. **Horaires de marché** (actions en `TimeInForce.DAY` hors séance) — plausible et vérifié dans
+   le code, mais `crontab -l` a montré qu'il n'y a **aucun cron** : rien ne tourne
+   automatiquement. Le garde-fou livré reste juste ; il ne répondait pas à la question.
+3. **Mode léger coupant `fundamentals`** — réfuté par la mesure : le mode COMPLET donne
+   **0 cible**, le mode léger en donne 8. L'inverse de ma prédiction.
+
+**Le vrai enseignement n'est aucune de ces trois causes.** C'est qu'aucune trace ne disait où la
+chaîne s'arrêtait. `preset_latest_weights` renvoie `{}` pour **au moins six raisons** et n'en
+distingue aucune : trop peu d'éligibles, aucun score qualité (repli silencieux sur un univers
+ARBITRAIRE), panel trop court après intersection, fenêtre de covariance insuffisante, exposition
+brute annulée par une porte, ou concentration qui balaie tout. Trois allers-retours avec
+l'utilisateur pour un diagnostic qu'une ligne de journal aurait donné immédiatement.
+
+**Livré : `packages/backtest/preset_diag.py`.** Journal des étages, publié dans le snapshot
+(`preset_diagnostic`) et affiché par `run_live` **quand le satellite actions est vide**. Chaque
+porte publie son multiplicateur, et le PREMIER étage bloquant est nommé comme la cause.
+
+Le repli le plus dangereux est désormais tracé : `len(q) >= 5` bascule sur `syms[:top_k]` — un
+univers dans l'ordre arbitraire du dictionnaire — **sans un mot**. C'est un incident, pas un
+défaut acceptable, et il le dit maintenant.
+
+**Aucun chiffre ne change.** Vérifié explicitement : `preset_latest_weights` délègue à
+`preset_latest_weights_explique` et renvoie les mêmes poids, testé sur 5 tirages.
+
+**Ce qui reste ouvert, et c'est le point.** Je ne sais toujours PAS pourquoi ton satellite est
+vide. La différence entre tes deux mesures porte sur DEUX variables à la fois (mode léger vs
+complet, et clé `preset_allocation` vs `live.target_orders`) : aucune conclusion n'est possible.
+Le diagnostic livré donnera la réponse au prochain run, sans nouvelle hypothèse.
+
+**Tests & CI.** 1368 verts (+12), dont 10 pour le diagnostic. ruff propre sur le neuf ;
+`preset_weights` passe de 22 à 14 E501.
+
+---
+
 ## Session 2026-08-26 (15) — Fermer le chemin d'exécution : l'issue de l'ordre, et l'écran qui ment
 
 Suite directe de (14). Deux trous du même chemin, tous deux du genre « le système affirme

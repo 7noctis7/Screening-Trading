@@ -40,6 +40,16 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       rétrospective fabrique un Sharpe de +6,8 sur une marche aléatoire pure (cf. journal (12)).
       **Contrôle obligatoire avant toute conclusion : Sharpe sur bruit pur ≈ 0.**
 
+## 🔴 P0 — satellite actions VIDE, cause inconnue (2026-08-26)
+- [ ] **Lancer `make live` et lire le bloc DIAGNOSTIC DU SATELLITE ACTIONS** (livré ADR-0044).
+      Trois hypothèses ont été réfutées : plancher de ligne, horaires de marché, mode léger.
+      Le diagnostic nomme l'étage bloquant — ne pas formuler de 4e hypothèse avant de l'avoir lu.
+- [ ] **Comparer à variables séparées** : le mode COMPLET donne 0 cible, le mode LÉGER en donne 8.
+      Mais les deux mesures lisaient des clés différentes (`preset_allocation` vs
+      `live.target_orders`) : deux variables ont changé à la fois, aucune conclusion possible.
+- [ ] **Aucun cron installé** (`crontab -l` vide) : le rebalancement n'a jamais tourné seul.
+      À décider — cron dans la séance NYSE (15:30-22:00 CEST), ou lancement manuel assumé.
+
 ## 🟡 Screening-Trading — reste ouvert (2026-08-22)
 - [ ] **Câbler `impact.py` / `almgren_chriss.py` à l'exécution réelle** — écrits et testés, non
       branchés : les coûts d'impact sont ignorés au dimensionnement. (Débloqué par ADR-0038.)

@@ -12,6 +12,7 @@ from packages.backtest.cov_risk import cov_annual as _cov_annual
 from packages.backtest.cov_risk import cov_for_step
 from packages.backtest.panel import aligner_sans_trous
 from packages.backtest.preset_config import MIN_BARRES_REGIME
+from packages.backtest.preset_diag import Diag
 from packages.backtest.preset_helpers import (
     adaptive_cap as _adaptive_cap_fn,
 )
@@ -73,6 +74,28 @@ def _eligibles(data: dict, lookback: int) -> list:
     return [s for s, b in data.items() if b and len(b) > max(lookback, MIN_BARRES_REGIME)]
 
 
+def _selection(data: dict, quality: dict, lookback: int, top_k: int, d: Diag):
+    """Univers de production.
+
+    Le REPLI `syms[:top_k]` est un INCIDENT, pas un défaut normal : sans score
+    qualité, la sélection devient l'ordre arbitraire du dictionnaire. Il était
+    silencieux ; il est désormais tracé.
+    """
+    syms = _eligibles(data, lookback)
+    _seuil = max(lookback, MIN_BARRES_REGIME)
+    d.note("éligibles", f"{len(syms)} titres (> {_seuil} barres)")
+    if len(syms) < 5:
+        d.stop(f"{len(syms)} titres éligibles (< 5) — historique insuffisant")
+        return None
+    q = {s: quality.get(s) for s in syms if quality.get(s) is not None}
+    if len(q) >= 5:
+        d.note("score qualité", f"{len(q)} titres scorés → top-{top_k} par qualité")
+        return sorted(q, key=lambda s: q[s], reverse=True)[:top_k]
+    d.note("score qualité", f"⚠️  {len(q)} titre(s) scoré(s) (< 5) → REPLI sur les "
+                            f"{top_k} premiers, ordre ARBITRAIRE")
+    return syms[:top_k]
+
+
 def _prod_panel(data: dict, universe: list, min_names: int):
     """Matrice de prix de PRODUCTION, alignée PAR DATE et sans NaN.
 
@@ -106,39 +129,79 @@ def preset_latest_weights(data: dict, quality: dict | None = None,
                           corr_tighten: bool = True, cov_denoise: bool = False) -> dict:
     """Poids cibles ACTUELS du preset (dernière barre) — pilote la PRODUCTION (make live).
 
-    Même logique que le backtest (qualité top-K -> risk-parity ERC -> DD-target -> blackout), mais
-    calculée au dernier point seulement. Renvoie {symbol: poids} (somme <= 1, le reste en cash).
+    Même logique que le backtest (qualité top-K -> ERC -> DD-target -> blackout),
+    mais calculée au dernier point. Renvoie {symbol: poids}, reste en cash.
+
+    Pour savoir POURQUOI c'est vide : `preset_latest_weights_explique`.
     """
-    syms = _eligibles(data, lookback)
-    if len(syms) < 5:
-        return {}
-    quality = quality or {}
-    q = {s: quality.get(s) for s in syms if quality.get(s) is not None}
-    universe = (sorted(q, key=lambda s: q[s], reverse=True)[:top_k]
-                if len(q) >= 5 else syms[:top_k])
+    poids, _ = preset_latest_weights_explique(
+        data, quality, asset_classes, dd_target, band, lookback, top_k, k_dd,
+        blackout_move, max_weight, min_names, regime_gate, mom_tilt, breadth_gate,
+        min_weight, corr_tighten, cov_denoise)
+    return poids
+
+
+def preset_latest_weights_explique(
+        data: dict, quality: dict | None = None, asset_classes: dict | None = None,
+        dd_target: float = 0.35, band: float = 0.03, lookback: int = 120,
+        top_k: int = 30, k_dd: float = 1.6, blackout_move: float = 0.12,
+        max_weight: float = 0.10, min_names: int = 12, regime_gate: bool = True,
+        mom_tilt: bool = True, breadth_gate: bool = True, min_weight: float = 0.025,
+        corr_tighten: bool = True, cov_denoise: bool = False) -> tuple[dict, Diag]:
+    """Identique, mais renvoie AUSSI le journal des étages. Aucun chiffre ne change."""
+    d = Diag()
+    universe = _selection(data, quality or {}, lookback, top_k, d)
+    if universe is None:
+        return {}, d
     universe, A = _prod_panel(data, universe, min_names)
     if A is None:
-        return {}
-    L = A.shape[1]
-    mkt = A.mean(axis=0)                            # indice de marché (porte régime + frein DD)
+        d.stop("panel inexploitable : après intersection des dates, moins de 2 "
+               f"noms ou moins de {MIN_BARRES_REGIME} dates communes")
+        return {}, d
+    d.note("panel aligné",
+           f"{len(universe)} noms × {A.shape[1]} dates communes (sans NaN)")
+    L, t = A.shape[1], A.shape[1] - 1
     rets = A[:, 1:] / A[:, :-1] - 1
-    t = L - 1
     win = rets[:, max(0, t - lookback):t]
     if win.shape[1] < 20:
-        return {}
-    cov, _, _ = cov_for_step(win, denoise=cov_denoise)   # défaut : covariance historique
+        d.stop(f"fenêtre de covariance de {win.shape[1]} barres (< 20)")
+        return {}, d
+    cov, _, _ = cov_for_step(win, denoise=cov_denoise)
     w = _erc_blackout(A, cov, t, blackout_move, min_names)
-    if mom_tilt:                                    # #4 tilt momentum (avant le plafond)
+    if mom_tilt:
         w = _mom_tilt_fn(A, t, w)
-    # PLAFOND DE CONCENTRATION (rail prod) : resserré ×0,5 si la corrélation moyenne de
-    # l'univers dépasse 0,60 (diversification en breakdown → plus de noms imposés).
     w = _cap_weights_fn(w, _adaptive_cap_fn(cov, max_weight, corr_tighten))
+    gross = _exposition(A, cov, w, np.asarray(A.mean(axis=0)), t, d, k_dd=k_dd,
+                        dd_target=dd_target, regime_gate=regime_gate,
+                        breadth_gate=breadth_gate)
+    w = _concentrate(w * gross, min_weight)
+    poids = {universe[i]: round(float(w[i]), 4)
+             for i in range(len(universe)) if w[i] > 1e-4}
+    if not poids:
+        d.stop("aucun poids au-dessus du seuil après exposition brute et concentration")
+    else:
+        d.note("poids retenus",
+               f"{len(poids)} ligne(s), somme {sum(poids.values()):.1%}")
+    return poids, d
+
+
+def _exposition(A, cov, w, mkt, t, d: Diag, *, k_dd, dd_target, regime_gate,
+                breadth_gate):
+    """Exposition brute et effet de CHAQUE porte — ce qui manquait le plus."""
     tgt_vol = max(0.0, abs(dd_target)) / k_dd
     pv = float(np.sqrt(max(0.0, w @ cov @ w)))
     gross = 0.0 if pv <= 0 else min(1.0, tgt_vol / pv)
-    if regime_gate:                                 # #5 régime + #6 frein DD (production)
-        gross *= _regime_mult_fn(mkt, t)
-    if breadth_gate:                                # #8 ampleur de marché (production)
-        gross *= float(np.clip(_breadth_fn(A, t) / 0.5, 0.0, 1.0))
-    w = _concentrate(w * gross, min_weight)  # jette la poussière → moins d'actifs, mieux dimensionnés
-    return {universe[i]: round(float(w[i]), 4) for i in range(len(universe)) if w[i] > 1e-4}
+    d.porte("DD-target", gross)
+    if regime_gate:
+        rm = _regime_mult_fn(mkt, t)
+        d.porte("régime", rm)
+        gross *= rm
+    if breadth_gate:
+        am = float(np.clip(_breadth_fn(A, t) / 0.5, 0.0, 1.0))
+        d.porte("ampleur", am)
+        gross *= am
+    if gross <= 0:
+        zero = [k for k, v in d.gross.items() if v <= 0]
+        noms = ", ".join(zero) or "DD-target"
+        d.stop(f"exposition brute NULLE — porte(s) à zéro : {noms}")
+    return gross
