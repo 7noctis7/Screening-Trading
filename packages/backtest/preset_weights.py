@@ -10,7 +10,7 @@ import numpy as np
 
 from packages.backtest.cov_risk import cov_annual as _cov_annual
 from packages.backtest.cov_risk import cov_for_step
-from packages.backtest.panel import fenetre_commune
+from packages.backtest.panel import aligner_sans_trous
 from packages.backtest.preset_config import MIN_BARRES_REGIME
 from packages.backtest.preset_helpers import (
     adaptive_cap as _adaptive_cap_fn,
@@ -65,21 +65,35 @@ def _weights_at(A, rets, t, lookback, blackout_move, max_weight, min_names, tgt_
     return w * gross
 
 
-def _prod_panel(data: dict, lookback: int):
-    """Panel de PRODUCTION : exige MIN_BARRES_REGIME barres (MM200 + pic historique).
+def _eligibles(data: dict, lookback: int) -> list:
+    """Titres assez profonds pour la PRODUCTION : `regime_mult` lit une MM200 et le PIC
+    historique, il lui faut au moins MIN_BARRES_REGIME barres. Le seuil était à `lookback`
+    (120) : mesuré, une seule série de 125 barres, incapable d'entrer dans le top-K,
+    déplaçait les poids de PRODUCTION de 2 points — la MM200 devenait une MM125."""
+    return [s for s, b in data.items() if b and len(b) > max(lookback, MIN_BARRES_REGIME)]
 
-    Le seuil d'éligibilité était à `lookback` (120), et `min(len)` laissait ensuite la série
-    la plus courte fixer L pour tout le monde. Mesuré : une seule série de 125 barres,
-    incapable d'entrer dans le top-K, déplaçait les poids de PRODUCTION de 2 points — la
-    MM200 devenait une MM125 et le pic se calculait sur 125 jours.
+
+def _prod_panel(data: dict, universe: list, min_names: int):
+    """Matrice de prix de PRODUCTION, alignée PAR DATE et sans NaN.
+
+    MIGRATION DU 26/08. Cette fonction empilait les séries POSITIONNELLEMENT
+    (`fenetre_commune`) alors que le backtest était passé à l'alignement par date en #341.
+    Production et backtest ne mesuraient donc pas la même chose : sur un panier mêlant
+    actions (5 séances/semaine) et crypto (7 j/7), les colonnes des deux familles portaient
+    des dates différentes — jusqu'à trois ans d'écart sur onze ans. La covariance de l'ERC,
+    l'indice de marché de la porte de régime et le tilt momentum étaient tous calculés sur
+    ce mélange.
+
+    `aligner_sans_trous` plutôt qu'`aligner_par_date` : la production dimensionne des ordres
+    réels, un NaN y produirait un poids FAUX plutôt qu'une erreur visible. Même choix que
+    pour le ledger et les courbes du dashboard (ADR-0037).
     """
-    syms = [s for s, b in data.items() if b and len(b) > max(lookback, MIN_BARRES_REGIME)]
-    if len(syms) < 5:
-        return None, None, None
-    syms, L, _panel = fenetre_commune(data, syms)
-    if len(syms) < 5 or L < MIN_BARRES_REGIME:
-        return None, None, None
-    return syms, L, {s: np.asarray([x.close for x in data[s]][-L:], float) for s in syms}
+    if len(universe) < 2:
+        return None, None
+    noms, _dates, A = aligner_sans_trous(data, list(universe), min_names)
+    if len(noms) < 2 or A.shape[1] < MIN_BARRES_REGIME:
+        return None, None
+    return noms, A
 
 
 def preset_latest_weights(data: dict, quality: dict | None = None,
@@ -95,14 +109,17 @@ def preset_latest_weights(data: dict, quality: dict | None = None,
     Même logique que le backtest (qualité top-K -> risk-parity ERC -> DD-target -> blackout), mais
     calculée au dernier point seulement. Renvoie {symbol: poids} (somme <= 1, le reste en cash).
     """
-    syms, L, M = _prod_panel(data, lookback)
-    if M is None:
+    syms = _eligibles(data, lookback)
+    if len(syms) < 5:
         return {}
     quality = quality or {}
     q = {s: quality.get(s) for s in syms if quality.get(s) is not None}
     universe = (sorted(q, key=lambda s: q[s], reverse=True)[:top_k]
                 if len(q) >= 5 else syms[:top_k])
-    A = np.asarray([M[s] for s in universe])
+    universe, A = _prod_panel(data, universe, min_names)
+    if A is None:
+        return {}
+    L = A.shape[1]
     mkt = A.mean(axis=0)                            # indice de marché (porte régime + frein DD)
     rets = A[:, 1:] / A[:, :-1] - 1
     t = L - 1
