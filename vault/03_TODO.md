@@ -43,10 +43,21 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
 ## 🟡 Screening-Trading — reste ouvert (2026-08-22)
 - [ ] **Câbler `impact.py` / `almgren_chriss.py` à l'exécution réelle** — écrits et testés, non
       branchés : les coûts d'impact sont ignorés au dimensionnement. (Débloqué par ADR-0038.)
-- [ ] **Décider du débruitage RMT sur données réelles** (k médian). Si k < 2, l'ERC répartit du
-      risque estimé sur du bruit — le défaut devrait devenir l'inverse-vol.
+- [x] **Débruitage RMT — TRANCHÉ le 26/08 (ADR-0039), sans changement de défaut.** Sur données
+      réelles k médian = 1, donc le diagnostic dit « préférer l'inverse-vol » — mais la mesure
+      rejette le RMT (ΔSharpe −0,07). Avec l'erreur-type, la contradiction se dissout : −0,07 est
+      **indiscernable de zéro**. Ni le diagnostic ni la mesure ne justifient de bouger. On garde
+      l'ERC et on documente.
+- [ ] **P1 — Allonger la fenêtre du labo.** Le gate promeut à +0,05 alors que 126 pas ne résolvent
+      que ~+0,14 (ADR-0039) : à ce seuil, promouvoir ou rejeter est un tirage au sort. C'est le
+      vrai blocage de la recherche d'alpha — pas le manque de leviers à tester, mais l'incapacité
+      à distinguer un levier réel du bruit. Piste : pas plus court (step 5 ou 10 au lieu de 21)
+      pour multiplier les observations à fenêtre calendaire égale.
 - [ ] **Capitaux employés moyens** : le code sait moyenner, mais les fournisseurs ne remontent pas
       la période précédente. Câbler l'historique trimestriel pour que le correctif prenne effet.
+- [ ] **Biais du survivant : élargir la liste des délistés, pas relancer le test.** 0 sur 8
+      sélectionné → le test ne mesure rien, et le relancer ne changera pas ça. Il faut des
+      délistés qui auraient été BIEN CLASSÉS avant leur disparition.
 - [ ] **Séries macro à ajouter** (identifiants à vérifier depuis le Mac, FRED joignable) :
       conditions financières NFCI, anticipations d'inflation 5a5a, dollar index, inscriptions
       hebdomadaires au chômage (seul indicateur haute fréquence), spread investment grade.

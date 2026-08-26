@@ -582,3 +582,53 @@ construction (équivalence bit-à-bit). Il ne prétend pas être une améliorati
 seulement la levée du blocage qui empêchait d'en tenter une.
 
 **Déploiement.** Commit `4984ecb`.
+
+## ADR-0039 — Tout verdict du labo porte son incertitude (2026-08-26)
+
+**Contexte.** Le gate du labo compare des estimations **ponctuelles** de Sharpe à un seuil fixe
+(+0,05) et conclut « promu » ou « rejeté ». Le run du 25/08 a produit neuf « rejeté » avec des
+ΔSharpe de −0,01 à −0,12, lus comme neuf verdicts distincts. Aucun ne portait d'erreur-type, donc
+rien ne disait s'ils étaient distinguables de zéro — ni les uns des autres.
+
+**Ce que la mesure a révélé.** Test de Jobson-Korkie (1981) avec correction de Memmel (2003), sur
+Sharpe **appariés**. L'appariement est le point technique : deux variantes tournent sur les mêmes
+dates avec des positions largement communes (ρ > 0,95) ; les traiter comme indépendantes
+surestimerait massivement l'incertitude et rendrait tout indiscernable. Puissance sur 126 pas :
+
+| ΔSharpe vrai | détecté |
+|---|---|
+| +0,05 (**seuil du gate**) | **7,3 %** |
+| +0,15 | 30,2 % |
+| +0,32 | 85,1 % |
+| +0,60 | 100 % |
+
+**Le seuil de promotion est trois fois sous le plancher de détection** (~+0,14 à ρ = 0,99). À
++0,05, le taux de détection dépasse à peine le taux de faux positifs (5 %) : la décision est un
+tirage au sort déguisé en verdict.
+
+**Décision.**
+1. Chaque verdict porte une ligne d'incertitude : ΔSharpe ± SE, IC95, ρ, p, et un verdict à trois
+   états — `meilleur` / `pire` / **`indiscernable`**. « Indiscernable » n'est PAS « équivalent » :
+   c'est « cet échantillon ne permet pas de trancher ».
+2. Un bloc **PUISSANCE** s'affiche **avant** les verdicts. On lit ce que l'échantillon peut voir
+   avant de lire ce qu'il prétend montrer.
+3. **Le seuil de +0,05 n'est PAS relevé.** Le relever à +0,15 rendrait le gate cohérent avec sa
+   puissance, mais fermerait la porte à tout levier réel de taille modeste. Le bon correctif est
+   d'allonger la fenêtre, pas de durcir un seuil sur un échantillon trop court. On documente
+   l'écart plutôt que de le maquiller ; `test_le_gate_a_005_est_sous_le_plancher_de_detection`
+   casse le jour où la fenêtre s'allonge assez pour rouvrir la question.
+4. **Calibration vérifiée dans la suite de tests**, pas dans un script jetable. Monte-Carlo sous
+   H0 : 4,95 %–5,33 % de rejets à ρ = 0,99 / 0,95 / 0,80 / 0,00. Un test non calibré est pire
+   qu'aucun test — il donne une autorité chiffrée à une décision arbitraire.
+
+**Conséquence sur l'arbitrage `k médian = 1`.** Le diagnostic de covariance recommande
+l'inverse-vol ; la mesure rejette le débruitage RMT (ΔSharpe −0,07). Avec l'erreur-type, la
+contradiction se dissout : **−0,07 est indiscernable de zéro**. Ni le diagnostic ni la mesure ne
+justifient de changer le défaut. Point fermé, sans changement de comportement.
+
+**Ce que cet ADR ne fait pas.** Il ne corrige PAS la multiplicité des essais — c'est le rôle du
+DSR et du ledger (N = 25). Il suppose des rendements i.i.d. : l'autocorrélation gonfle le Sharpe
+et resserre à tort l'intervalle. Et il **n'améliore aucun chiffre** : Sharpe 1,35 inchangé. Il
+change ce qu'on a le droit de conclure, pas ce que la stratégie produit.
+
+**Déploiement.** Commit `9e475d3`.

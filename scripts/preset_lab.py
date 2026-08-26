@@ -118,6 +118,7 @@ def _run_configs(data, acmap) -> list[dict]:
             print(f"  {label:28s} indisponible (échantillon insuffisant)"); continue
         st, per_year = r["preset"], 252.0 / r["step_days"]
         rows.append({"ampleur": r.get("ampleur") or {},
+                     "rendements": r.get("rendements") or [],
                      "label": label, "kw": kw, "cagr": st["annualized"],
                      "sharpe": st["sharpe"], "dsr": st["dsr"],
                      "periods_per_year": round(per_year, 4),
@@ -225,6 +226,63 @@ def _cov_report(rows: list[dict]) -> None:
         print("    débruitée RMT » replie alors sur l'inverse-vol : comparer sa ligne ci-dessus.")
 
 
+def _significativite(base: dict, r: dict) -> str:
+    """Incertitude sous chaque verdict : le ΔSharpe est-il distinguable de zéro ?
+
+    Le gate compare des estimations PONCTUELLES à un seuil fixe. Sans erreur-type,
+    « rejeté : ΔSharpe -0,01 » et « rejeté : ΔSharpe -0,12 » se lisent comme deux
+    verdicts différents alors que l'échantillon ne permet peut-être de distinguer
+    ni l'un ni l'autre de zéro.
+    """
+    try:
+        from packages.research.sharpe_diff import comparer
+        out = comparer(base.get("rendements") or [], r.get("rendements") or [],
+                       base.get("periods_per_year") or 12.0)
+    except Exception:  # noqa: BLE001 — un diagnostic ne fait pas tomber le labo
+        return ""
+    if not out.get("disponible"):
+        return f"↳ incertitude non calculable ({out.get('raison', '?')})"
+    if out.get("degenere"):
+        return "↳ séries IDENTIQUES à la base — ce levier ne change aucun pas"
+    lo, hi = out["ic95"]
+    mot = {"indiscernable": "INDISCERNABLE de la base",
+           "meilleur": "significativement MEILLEUR",
+           "pire": "significativement PIRE"}[out["verdict"]]
+    return (f"↳ ΔSharpe {out['delta']:+.2f} ± {out['se']:.2f} · "
+            f"IC95 [{lo:+.2f}, {hi:+.2f}] · ρ={out['correlation']:.2f} · "
+            f"p={out['p']:.3f} → {mot}")
+
+
+def _plancher_detection(rows: list[dict]) -> None:
+    """Ce que cet échantillon PEUT voir — à lire AVANT les verdicts.
+
+    Si le plus petit écart détectable dépasse le seuil de promotion du gate,
+    promouvoir ou rejeter à ce seuil relève du tirage au sort, et les verdicts
+    doivent se lire « rien de distinguable », pas « ces leviers sont mauvais ».
+    """
+    try:
+        from packages.research.sharpe_diff import seuil_detectable
+    except Exception:  # noqa: BLE001
+        return
+    base = rows[0]
+    n = int(base.get("n_steps") or 0)
+    if n < 30:
+        return
+    ppa = base.get("periods_per_year") or 12.0
+    seuil = seuil_detectable(n, base.get("sharpe") or 1.0, 0.99, ppa)
+    print("\n" + "=" * 60)
+    print("PUISSANCE — CE QUE CET ÉCHANTILLON PEUT VOIR")
+    print("=" * 60)
+    print(f"  pas disponibles                     : {n}")
+    print(f"  plus petit ΔSharpe détectable à 5 % : ±{seuil:.2f}")
+    print("  seuil de promotion du gate          : ±0.05")
+    if seuil > 0.05:
+        print(f"  ⚠️  le gate promeut à +0,05, soit {seuil / 0.05:.0f}× SOUS ce que")
+        print("     la donnée résout. À ce niveau, promouvoir ou rejeter est un")
+        print("     tirage au sort — les verdicts ci-dessous disent « rien de")
+        print("     distinguable », PAS « c'est mauvais ».")
+
+
 def _verdict(rows: list[dict]) -> list[dict]:
     """Gate honnête : promu seulement si mieux sur Sharpe ET maxDD. Sinon rejeté (→ /echecs)."""
     base, promoted = rows[0], []
@@ -240,6 +298,7 @@ def _verdict(rows: list[dict]) -> list[dict]:
             print(f"  🔎 diagnostic {r['label']}  (ΔSharpe {r['sharpe']-base['sharpe']:+.2f} — "
                   f"{r.get('n_steps')} pas contre {base.get('n_steps')})")
             continue
+        stat = _significativite(base, r)
         ok = r["sharpe"] >= base["sharpe"] + 0.05 and r["maxdd"] >= base["maxdd"] - 1e-9
         cles = DECLENCHEURS.get(r["label"], ())
         tirs = sum(int((r.get("decl") or {}).get(k, 0)) for k in cles)
@@ -252,6 +311,8 @@ def _verdict(rows: list[dict]) -> list[dict]:
                  else f", {tirs} déclenchements, effet moyen "
                       f"×{min((r.get('ampleur') or {}).get(k, 1.0) for k in cles):.3f})"
                  if cles else ")"))
+        if stat:
+            print(f"       {stat}")
         if ok and not inerte:
             promoted.append(r)
     print("\n→ " + ("Activer le(s) flag(s) en prod via une PR avec CES chiffres, puis make "
@@ -340,6 +401,7 @@ def main() -> int:
     _alignement_report(rows)
     _decl_report(rows)
     _cov_report(rows)
+    _plancher_detection(rows)   # ce que l'échantillon peut voir, avant les verdicts
     promoted = _verdict(rows)
     _log_ledger(rows, promoted)
     try:
