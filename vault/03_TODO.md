@@ -40,13 +40,16 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       rétrospective fabrique un Sharpe de +6,8 sur une marche aléatoire pure (cf. journal (12)).
       **Contrôle obligatoire avant toute conclusion : Sharpe sur bruit pur ≈ 0.**
 
-## 🔴 P0 — satellite actions VIDE, cause inconnue (2026-08-26)
-- [ ] **Lancer `make live` et lire le bloc DIAGNOSTIC DU SATELLITE ACTIONS** (livré ADR-0044).
-      Trois hypothèses ont été réfutées : plancher de ligne, horaires de marché, mode léger.
-      Le diagnostic nomme l'étage bloquant — ne pas formuler de 4e hypothèse avant de l'avoir lu.
-- [ ] **Comparer à variables séparées** : le mode COMPLET donne 0 cible, le mode LÉGER en donne 8.
-      Mais les deux mesures lisaient des clés différentes (`preset_allocation` vs
-      `live.target_orders`) : deux variables ont changé à la fois, aucune conclusion possible.
+## 🔴 P0 — satellite actions vide : CAUSE TROUVÉE ET CORRIGÉE (2026-08-26, ADR-0045)
+- [x] **Le repli sans score qualité prenait les 12 premiers symboles du DICTIONNAIRE.**
+      `make live` tourne en mode léger, qui coupe `fundamentals` → `quality` toujours vide en
+      exécution. `mkt` (l'indice des portes régime/ampleur) était la moyenne de ces 12 noms
+      arbitraires → portes à zéro → exposition brute nulle. Corrigé : repli par MOMENTUM
+      (`_price_universe`, aligné par date, sans fondamentaux).
+- [ ] **P1 — Décider : `fundamentals` doit-elle rester dans `_LITE_SKIP` ?** Le repli momentum
+      rend la production correcte, mais l'univers reste sélectionné par momentum et non par
+      qualité — ce n'est pas ce que le design prévoyait. Arbitrage justesse du signal vs durée
+      du snapshot, à trancher explicitement plutôt que par effet de bord.
 - [ ] **Aucun cron installé** (`crontab -l` vide) : le rebalancement n'a jamais tourné seul.
       À décider — cron dans la séance NYSE (15:30-22:00 CEST), ou lancement manuel assumé.
 

@@ -11,7 +11,7 @@ import numpy as np
 from packages.backtest.cov_risk import cov_annual as _cov_annual
 from packages.backtest.cov_risk import cov_for_step
 from packages.backtest.panel import aligner_sans_trous
-from packages.backtest.preset_config import MIN_BARRES_REGIME
+from packages.backtest.preset_config import MIN_BARRES_REGIME, _price_universe
 from packages.backtest.preset_diag import Diag
 from packages.backtest.preset_helpers import (
     adaptive_cap as _adaptive_cap_fn,
@@ -91,9 +91,30 @@ def _selection(data: dict, quality: dict, lookback: int, top_k: int, d: Diag):
     if len(q) >= 5:
         d.note("score qualité", f"{len(q)} titres scorés → top-{top_k} par qualité")
         return sorted(q, key=lambda s: q[s], reverse=True)[:top_k]
-    d.note("score qualité", f"⚠️  {len(q)} titre(s) scoré(s) (< 5) → REPLI sur les "
-                            f"{top_k} premiers, ordre ARBITRAIRE")
-    return syms[:top_k]
+    # REPLI PAR MOMENTUM, plus jamais par l'ordre du dictionnaire.
+    #
+    # Constaté en production le 26/08 : `make live` tourne en mode LÉGER, qui coupe la
+    # section `fundamentals` — donc `quality` est TOUJOURS vide à l'exécution, et le
+    # repli
+    # tirait les 12 premiers symboles de `data`. Conséquence en chaîne : `mkt`
+    # (l'indice de
+    # marché des portes de régime et d'ampleur) était la moyenne de ces 12 noms
+    # arbitraires.
+    # Les portes concluaient « marché en chute > 15 %, aucun titre au-dessus de sa
+    # MM200 »
+    # et mettaient l'exposition brute à ZÉRO. Le satellite actions était donc vide
+    # non par
+    # décision de risque, mais parce qu'on mesurait le risque d'un panier tiré au
+    # hasard.
+    #
+    # `_price_universe` est le MÊME classement momentum que le backtest, aligné par
+    # date et
+    # sans fondamentaux : il fonctionne quelle que soit la raison de l'absence de scores
+    # (mode léger, réseau coupé, quota d'API), au lieu de dépendre d'un ordre de
+    # dictionnaire.
+    d.note("score qualité", f"⚠️  {len(q)} scoré(s) (< 5) → repli MOMENTUM "
+                            f"(prix seuls, aligné par date)")
+    return _price_universe(data, syms, lookback, top_k)
 
 
 def _prod_panel(data: dict, universe: list, min_names: int):

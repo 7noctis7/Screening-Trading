@@ -1,5 +1,56 @@
 # 04 — JOURNAL
 
+## Session 2026-08-26 (17) — La cause, enfin : les portes mesuraient un panier tiré au hasard
+
+**Le diagnostic a parlé.** Après deux correctifs de l'outil lui-même (garde-fou bogué, puis
+mauvais chemin de lecture), le run de production a donné le fait :
+
+```
+    éligibles          633 titres (> 200 barres)
+    score qualité      ⚠️  0 titre(s) scoré(s) → REPLI sur les 12 premiers, ordre ARBITRAIRE
+    panel aligné       12 noms × 1907 dates communes
+    exposition brute   DD-target 0.255 × régime 0.000 × ampleur 0.000  =  0.0000
+    ⛔ ARRÊT : exposition brute NULLE — porte(s) à zéro : régime, ampleur
+```
+
+**La chaîne causale, complète.** `make live` tourne en mode LÉGER, qui coupe la section
+`fundamentals` : `quality` est donc **toujours vide à l'exécution**. Le repli prenait alors
+les 12 premiers symboles du dictionnaire. Et `mkt = A.mean(axis=0)` — l'indice de marché que
+lisent les portes de régime et d'ampleur — était la moyenne de **ces 12 noms arbitraires**.
+
+Les portes concluaient « marché en chute de plus de 15 %, aucun titre au-dessus de sa MM200 »
+et mettaient l'exposition brute à zéro. **Le satellite actions n'était pas vide par décision
+de risque : il était vide parce qu'on mesurait le risque d'un panier tiré au hasard.**
+
+Toutes les exécutions de production passaient par ce repli, depuis toujours.
+
+**Correctif.** Le repli utilise désormais `_price_universe` — le MÊME classement momentum que
+le backtest, aligné par date, sans fondamentaux. Il fonctionne quelle que soit la raison de
+l'absence de scores (mode léger, réseau coupé, quota d'API) au lieu de dépendre d'un ordre de
+dictionnaire. Vérifié sur un panier où les 12 premiers du dict sont les PIRES titres : l'ancien
+repli les retenait et fermait les portes (gross 0,00) ; le nouveau retient les meilleurs et
+l'exposition remonte à 1,00.
+
+**Mon hypothèse n°3 était juste, et je l'avais déclarée réfutée à tort.** « Le mode léger coupe
+`fundamentals` » était exact. Je l'ai abandonnée parce que la mesure censée la tester lisait
+`snap["preset_allocation"]` à la racine, où cette clé n'existe pas — elle est sous `dashboard`.
+La réfutation était fausse, pas l'hypothèse. C'est la leçon la plus coûteuse de la journée :
+**j'ai écarté une bonne piste sur la foi d'une mesure que je n'avais pas validée.**
+
+**Bilan de l'enquête** : trois hypothèses annoncées (une juste, écartée à tort), deux défauts
+dans mon propre outil de diagnostic, un défaut de fond trouvé. Toutes les corrections sont
+venues de la mesure de l'utilisateur, aucune de ma lecture du code.
+
+**Tests & CI.** 1376 verts. Deux tests reproduisent le défaut de production : rouges sans le
+correctif, verts avec.
+
+**Reste à décider.** Faut-il aussi retirer `fundamentals` de `_LITE_SKIP` ? Le repli momentum
+rend la production correcte sans cela, mais l'univers de production reste sélectionné par
+momentum plutôt que par qualité — ce n'est pas ce que le design prévoyait. Arbitrage entre
+justesse du signal et durée du snapshot, à trancher explicitement.
+
+---
+
 ## Session 2026-08-26 (16) — Trois hypothèses fausses : arrêter de deviner, instrumenter
 
 **Le fait.** Compte paper : cœur QQQ, huit lignes crypto, **zéro action du satellite**. Sur ce
