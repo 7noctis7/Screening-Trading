@@ -429,7 +429,11 @@ def _diag_preset(snap: dict, targets: list) -> None:
     Le 26/08, un compte paper sans AUCUNE action a résisté à trois hypothèses
     successives (plancher, horaires de marché, mode léger) simplement parce que
     rien ne disait où la chaîne s'arrêtait. Affiché seulement en cas de problème."""
-    d = snap.get("preset_diagnostic") or {}
+    # CHEMIN EXACT. `preset_diagnostic` est publié sous `dashboard`, pas à la racine :
+    # le lire à la racine renvoyait toujours {} et affichait « aucun diagnostic publié »
+    # alors qu'il existait. Repli sur la racine au cas où le schéma évoluerait.
+    d = ((snap.get("dashboard") or {}).get("preset_diagnostic")
+         or snap.get("preset_diagnostic") or {})
     # NE PAS compter les cibles par classe d'actifs : le CŒUR indiciel (QQQ) est
     # une action, donc un satellite vide passait pour rempli et le diagnostic se
     # taisait — le défaut qu'il devait justement révéler. Le signal direct est
