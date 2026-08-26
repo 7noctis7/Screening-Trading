@@ -632,3 +632,75 @@ et resserre à tort l'intervalle. Et il **n'améliore aucun chiffre** : Sharpe 1
 change ce qu'on a le droit de conclure, pas ce que la stratégie produit.
 
 **Déploiement.** Commit `9e475d3`.
+
+## ADR-0040 — Un ordre qui ne peut pas se remplir est REPORTÉ, jamais envoyé (2026-08-26)
+
+**Contexte.** Le compte paper contenait le cœur QQQ, huit lignes crypto et **zéro action du
+satellite**, avec 28 % de cash exactement à la place manquante. `alpaca_broker` envoie les
+actions en `TimeInForce.DAY` sans `extended_hours` et la crypto en `GTC` (24/7) : hors séance,
+seule la crypto peut se remplir. Aucun contrôle d'horaires n'existait dans le chemin
+d'exécution — vérifié par recherche exhaustive.
+
+**Ce qui a rendu le défaut durable.** Pas le défaut lui-même, mais le SILENCE autour : l'erreur
+de courtier était tronquée à 40 caractères, et le statut de l'ordre n'était jamais relu après
+envoi. Un satellite vide pendant des semaines ne produisait aucune ligne de journal.
+
+**Décision.**
+1. **`packages/execution/market_calendar.py`** — périmètre volontairement étroit : répondre
+   « peut-on envoyer cet ordre maintenant ? », rien de plus. Pas de demi-séances, pas
+   d'enchères, pas de `session_minutes` : ce n'est PAS le F11 complet, et le prétendre serait
+   pire que l'absence. stdlib pure, sans réseau — un garde-fou d'exécution ne doit pas
+   dépendre d'un appel qui peut échouer.
+2. **Fériés en table EXPLICITE**, pas calculés : une règle de calcul fausse est silencieuse,
+   une date manquante est visible. `feries_a_jour()` + un test qui casse à la péremption.
+3. **Reporter, pas bloquer, et le DIRE** : compte, montant total, et le conseil de décaler le
+   cron. Un ordre reporté n'est pas une erreur ; un ordre reporté en silence en est une.
+4. **Les liquidations sont reportées aussi.** Contrairement au portail de risque — où un
+   désengagement passe toujours, parce que le bloquer augmenterait le risque — il ne s'agit
+   pas ici d'une décision de risque mais de physique : hors séance, une vente ne se remplit
+   pas davantage qu'un achat.
+5. **Échappatoire explicite** `QUANT_IGNORE_SESSION=1`, jamais le défaut.
+6. **Erreur de courtier complète** à l'écran (200 car.) et dans le journal structuré.
+
+**Conséquence.** (+) Le cas observé devient impossible à rater. (+) Deux tests du portail de
+risque ont viré au rouge sous le nouveau garde-fou — leur rôle exact ; isolés par une fixture
+explicite. (−) Un run hors séance ne fait plus rien côté actions : c'est le comportement voulu,
+mais il faut décaler le cron pour que le rebalancement ait lieu (séance = 15:30-22:00 CEST).
+
+**Ce que cet ADR ne fait PAS.** Le statut de l'ordre n'est toujours pas relu après envoi : un
+ordre accepté puis rejeté reste compté comme réussi. Trou connu, laissé ouvert et inscrit au
+TODO plutôt que masqué.
+
+**Déploiement.** Voir aussi ADR-0041 (alignement du panel de production).
+
+## ADR-0041 — Le panel de PRODUCTION s'aligne comme le backtest (2026-08-26)
+
+**Contexte.** `preset_latest_weights`, la fonction qui pilote `make live`, empilait les séries
+POSITIONNELLEMENT (`fenetre_commune`) alors que le backtest était passé à l'alignement par date
+en #341. **Production et backtest ne mesuraient donc pas la même chose** — le backtest qui
+valide la stratégie ne validait pas ce que la production exécute.
+
+Sur un panier mêlant actions (5 séances/semaine) et crypto (7 j/7), les colonnes des deux
+familles portaient des dates différentes. La covariance de l'ERC, l'indice de marché de la
+porte de régime et le tilt momentum étaient tous calculés sur ce mélange.
+
+**Décision.** Migration sur **`aligner_sans_trous`** — aligné par date ET garanti sans NaN.
+Pas `aligner_par_date` : la production dimensionne des ordres réels, un NaN y produirait un
+poids FAUX plutôt qu'une erreur visible. Même arbitrage que pour le ledger (ADR-0037).
+
+**Mesure.** Deux familles aux économies STRICTEMENT identiques (même dérive et même volatilité
+annuelles), ne différant que par leur calendrier : toute préférence est un artefact par
+construction. Rapport de poids par ligne crypto/action, neutre = 1,00 :
+
+| | médiane | étendue |
+|---|---|---|
+| avant | 0,88 | [0,63 ; 1,31] |
+| après | **0,97** | [0,77 ; 1,16] |
+
+**Honnêteté sur la portée.** Ce biais est RÉEL mais **n'explique pas** le satellite vide —
+l'effet est trop faible et sans direction nette. Il a été trouvé en cherchant autre chose, et
+corrigé pour lui-même. Deux verrous : le test statistique ci-dessus, et un test structurel qui
+inspecte les IMPORTS effectifs du module (pas son texte — le nom de l'ancienne fonction reste
+cité dans la docstring qui explique la migration).
+
+**Déploiement.** 1330 tests verts.

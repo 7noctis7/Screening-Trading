@@ -17,7 +17,9 @@ Chaque run réel JOURNALISE ses ouvertures (`data/journal.db`, `legacy=0`) avec 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
+from datetime import UTC
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -45,8 +47,11 @@ def _setup_alerts(dry: bool):
 
 def _kill_switch(bus):
     """Alertes TradingView → veto / réduction d'exposition. Retourne le facteur `reduce` ∈ [0,1]."""
-    from packages.mcp_tradingview.alerts import (AGE_MAX_DEFAUT, fetch_tv_technical_alerts,
-                                                  to_risk_veto)
+    from packages.mcp_tradingview.alerts import (
+        AGE_MAX_DEFAUT,
+        fetch_tv_technical_alerts,
+        to_risk_veto,
+    )
     # Appel SANS filtre d'âge jusqu'au 25/08 : une alerte critique reçue des semaines plus tôt
     # bloquait encore tout le portefeuille, jusqu'à effacement manuel du drop.
     risk = to_risk_veto(fetch_tv_technical_alerts(max_age_s=AGE_MAX_DEFAUT))
@@ -130,7 +135,20 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, 
 
     from packages.common.retry import retry
     from packages.core.models import Side
-    sent, opened, sold = 0, [], []
+    from packages.execution.market_calendar import (
+        feries_a_jour,
+        is_open,
+        prochaine_ouverture,
+        raison_fermeture,
+    )
+    # ÉCHAPPATOIRE EXPLICITE. `QUANT_IGNORE_SESSION=1` envoie quand même hors séance —
+    # utile pour empiler des ordres avant l'ouverture en connaissance de cause, et pour
+    # les tests qui isolent le PORTAIL DE RISQUE du calendrier. Jamais le défaut : un
+    # ordre qui ne peut pas se remplir doit être dit, pas envoyé dans le vide.
+    _verif_seance = os.environ.get("QUANT_IGNORE_SESSION", "") != "1"
+    sent, opened, sold, differes = 0, [], [], []
+    if _verif_seance and not feries_a_jour():
+        print("  ⚠️  fériés NYSE périmés — voir packages/execution/market_calendar")
     for bname, broker, cap, cur in brokers:
         tgt, band = _broker_targets(targets, bname, cap, reduce, cur)
         curn = {}                                             # détenu par clé NORMALISÉE (cumul)
@@ -153,6 +171,20 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, 
             tag = f"  {bsym:14s} {bname:8s} cible {info['val']:8.0f}$ détenu {detenu:8.0f}$ Δ {delta:+8.0f}$"
             if o is not None and o.get("tradeable") is False:
                 print(tag + "  non négociable"); continue
+            # SÉANCE OUVERTE ? Les actions partent en TimeInForce.DAY sans
+            # extended_hours :
+            # hors séance l'ordre ne peut PAS se remplir. La crypto (GTC, 24/7) passe.
+            # Constat du 26/08 : sans ce contrôle, un run lancé d'Europe (03 h à NY)
+            # remplissait tout le crypto et AUCUNE action — 28 % de cash restaient à
+            # la place du satellite, sans un mot au journal. On REPORTE en le disant.
+            _ac = (o or {}).get("asset_class") or "equity"
+            if _verif_seance and not is_open(asset_class=_ac):
+                _pq = prochaine_ouverture()
+                print(tag + f"  ⏸  REPORTÉ — {raison_fermeture(asset_class=_ac)}"
+                            f" · prochaine ouverture {_pq:%d/%m %H:%M ET}")
+                differes.append({"symbol": bsym, "broker": bname, "asset_class": _ac,
+                                 "montant": round(info["val"] - detenu, 2)})
+                continue
             # Décision déléguée (testée) : solder hors bande, ne pas ouvrir sous le plancher.
             intention = decider(info["val"], detenu, band)
             if not intention.agit:
@@ -199,13 +231,34 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, 
                     sold.append({"symbol": (o or {}).get("symbol", bsym), "venue": bname,
                                  "broker_symbol": bsym, "notional": abs(delta)})
             except Exception as e:  # noqa: BLE001
-                print(tag + f"  échec après retries ({str(e)[:40]})")
+                # `str(e)[:40]` tronquait le message : un rejet de courtier (« invalid
+                # time_in_force », « market closed »…) devenait illisible, et c'est
+                # exactement pourquoi le satellite actions vide est resté invisible.
+                # Le motif COMPLET va au journal structuré, un extrait large à l'écran.
+                _msg = str(e).replace("\n", " ")
+                print(tag + f"  ❌ ÉCHEC après retries : {_msg[:200]}")
+                try:
+                    import logging
+                    logging.getLogger("live.execution").error(
+                        "ordre refusé",
+                        extra={"symbole": bsym, "broker": bname,
+                               "action": intention.action,
+                               "montant": intention.montant, "erreur": _msg})
+                except Exception:  # noqa: BLE001 — journaliser ne casse jamais le run
+                    pass
                 if alert_engine:
                     from packages.alerts import Alert, Severity
                     alert_engine.emit(Alert("execution", Severity.CRITICAL,
                         f"Ordre {'achat' if delta > 0 else 'vente'} {bsym} ({bname}) échoué "
                         f"après retries : {str(e)[:80]}",
                         dedup_key=f"execution:submit_fail:{bsym}"))
+    if differes:
+        _tot = sum(abs(d["montant"]) for d in differes)
+        print(f"\n  ⏸  {len(differes)} ordre(s) REPORTÉ(S) hors séance,"
+              f" {_tot:,.0f}$ au total.".replace(",", " "))
+        print("     Pas une erreur : ils partiront à la prochaine séance.")
+        print("     S'ils reviennent chaque jour, le rebalancement tourne hors des")
+        print("     de marché — décaler le cron (séance NYSE = 15:30–22:00 CEST).")
     return sent, opened, sold
 
 
@@ -216,7 +269,11 @@ def _journal_opens(snap: dict, opened: list, alpaca, bitmart) -> None:
     if not opened:
         return
     try:
-        from packages.execution.live_journal import feature_map, journal_opens, regime_context
+        from packages.execution.live_journal import (
+            feature_map,
+            journal_opens,
+            regime_context,
+        )
         from packages.storage import SqliteTradeJournal
 
         def _norm(s):                                        # BTC/USD ↔ BTCUSD (format broker vs routing)
@@ -257,11 +314,11 @@ def _exit_price(br, bsym: str) -> float:
     """Prix de sortie FACTUEL, par ordre de fiabilité : fill VENTE du jour (`orders`),
     sinon ticker broker (`last_price`), sinon prix courant de la position. 0.0 = inconnu
     (le lot restera OUVERT — on n'invente jamais un prix)."""
-    from datetime import datetime, timezone
+    from datetime import datetime
     if br is None:
         return 0.0
     try:
-        today = datetime.now(timezone.utc).date().isoformat()
+        today = datetime.now(UTC).date().isoformat()
         for o in (br.orders(limit=50) if hasattr(br, "orders") else []):
             if (o.get("symbol") == bsym and o.get("side") == "sell"
                     and float(o.get("price") or 0) > 0 and (o.get("date") or "")[:10] == today):

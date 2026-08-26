@@ -1,5 +1,56 @@
 # 04 — JOURNAL
 
+## Session 2026-08-26 (14) — Le satellite actions était vide, et personne ne le disait
+
+**Le symptôme.** Compte paper : cœur QQQ 50 602 $ (50,4 %), huit lignes crypto 21 673 $
+(21,6 %), cash 28 027 $ (27,9 %) — et **zéro action du satellite**. Les 28 % de cash étaient
+exactement à la place de la part actions manquante.
+
+**La cause, vérifiée.** `alpaca_broker.py:62` envoie les actions en `TimeInForce.DAY` sans
+`extended_hours`, la crypto en `GTC` (24/7). Hors séance, une action ne PEUT pas se remplir.
+Or **aucun contrôle d'horaires n'existait** — vérifié : zéro occurrence de `is_open`, `clock`
+ou `market_open` dans `run_live`, `alpaca_broker` et `live_guards`. Un rebalancement lancé
+depuis l'Europe tombe à 03 h à New York : la crypto passe, les actions jamais.
+
+**Ce qui a rendu le défaut invisible est plus grave que le défaut.** L'erreur était tronquée à
+40 caractères (`str(e)[:40]`) : un rejet de courtier devenait illisible. Et le code ne vérifie
+jamais le statut de l'ordre après envoi — un ordre accepté puis rejeté est compté comme réussi.
+Le satellite pouvait donc rester vide des semaines sans une ligne dans le journal.
+
+**Livré.**
+- `packages/execution/market_calendar.py` — F11 partiel, le strict nécessaire pour répondre
+  « peut-on envoyer cet ordre maintenant ? » : XNYS 09:30-16:00 ET, week-ends, fériés, 24/7
+  crypto. stdlib pure, sans réseau (un garde-fou ne doit pas dépendre d'un appel faillible).
+  Table des fériés EXPLICITE, avec un test qui casse quand elle se périme — un garde-fou qui
+  se périme en silence rassure sans protéger.
+- `run_live` REPORTE les ordres hors séance au lieu de les envoyer dans le vide, avec un
+  récapitulatif chiffré et le conseil de décaler le cron (séance = 15:30-22:00 CEST).
+  Échappatoire explicite `QUANT_IGNORE_SESSION=1`.
+- Erreur de courtier COMPLÈTE à l'écran (200 car.) et dans le journal structuré.
+
+**Troisième défaut trouvé en chemin.** `preset_latest_weights` — la fonction qui pilote
+`make live` — empilait les séries POSITIONNELLEMENT (`fenetre_commune`) alors que le backtest
+était passé à l'alignement par date en #341. **Production et backtest ne mesuraient pas la
+même chose.** Migré sur `aligner_sans_trous` (aligné par date ET sans NaN, comme le ledger).
+Mesuré sur deux familles aux économies identiques ne différant que par leur calendrier :
+rapport de poids par ligne **0,88 → 0,97** (neutre = 1,00), dispersion [0,63 ; 1,31] → [0,77 ; 1,16].
+
+**Deux hypothèses à moi, réfutées en route**, et c'est le bon ordre des choses : le plancher de
+1000 $ par ligne (faux — 100 302 $ d'equity, très au-dessus du seuil de 18 519 $ que j'avais
+calculé), et le désalignement de calendrier comme cause du portefeuille (réel, mais l'effet
+mesuré est trop faible et sans direction nette pour l'expliquer). Un premier test que j'avais
+écrit était lui-même biaisé — qualité uniforme à 1,0, donc tri par ordre d'insertion : il
+mesurait mon générateur, pas le système.
+
+**Tests & CI.** 1330 verts (+18). Deux tests existants du portail de risque ont viré au rouge
+sous le nouveau garde-fou — exactement leur rôle. Isolés par une fixture explicite ; le
+calendrier a ses propres tests. ruff : aucune dette ajoutée (`run_live` passe même de 75 à 73).
+
+**Reste ouvert.** Le statut de l'ordre n'est toujours pas relu après envoi : un ordre accepté
+puis rejeté par le courtier reste compté comme réussi. C'est le prochain trou de ce chemin.
+
+---
+
 ## Session 2026-08-26 (13) — Le labo promeut sous son propre plancher de détection
 
 **Deux défauts que seule la vraie base pouvait montrer.** Le run du Mac a fait tomber deux

@@ -111,7 +111,14 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
 - [x] **Netting Core/Satellite** — LIVRÉ `packages/portfolio/netting.py` : net vs brut vs
       exécuté, coût du conflit en bps, 3 politiques (net / core_priority / block), livres
       virtuels pour l'attribution. **Correctif du finding F13.**
-- [ ] **F11 · calendrier de marché (P0 avant tout intraday)** : `MarketCalendar` par place
+- [x] **F11 · calendrier de marché — PARTIE EXÉCUTION LIVRÉE le 26/08 (ADR-0040).**
+      `packages/execution/market_calendar.py` répond « peut-on envoyer cet ordre maintenant ? »
+      (XNYS 09:30-16:00 ET, week-ends, fériés, 24/7 crypto) et `run_live` REPORTE au lieu
+      d'envoyer dans le vide. Reste ouvert ci-dessous pour l'intraday.
+- [ ] **P1 — Relire le STATUT de l'ordre après envoi.** Un ordre accepté puis rejeté par le
+      courtier est aujourd'hui compté comme réussi (`sent += 1`). C'est le trou qui a permis
+      au satellite actions de rester vide sans une ligne de journal (ADR-0040).
+- [ ] **F11 (suite) · calendrier complet (P0 avant tout intraday)** : `MarketCalendar` par place
       (XNYS/XETR/24-7) — `is_open`, `session_minutes`, demi-séances, enchères, jours fériés.
       Sans lui, l'agrégation 1 h → 4 h → Weekly est une source de fuite structurelle.
 - [ ] **F12 · boucle asynchrone** : une seule boucle d'E/S, cœur de décision synchrone et

@@ -14,6 +14,18 @@ import pytest
 RACINE = pathlib.Path(__file__).resolve().parents[2]
 
 
+@pytest.fixture(autouse=True)
+def _hors_calendrier(monkeypatch):
+    """Ces tests isolent le PORTAIL DE RISQUE, pas le calendrier de marché.
+
+    Sans cela ils dépendraient de l'heure d'exécution : le garde-fou de séance
+    ajouté le 26/08 reporte les ordres hors séance, donc la suite virerait au
+    rouge la nuit et le week-end. Le calendrier a ses propres tests, dans
+    `tests/execution/test_market_calendar.py`.
+    """
+    monkeypatch.setenv("QUANT_IGNORE_SESSION", "1")
+
+
 def _run_live():
     spec = importlib.util.spec_from_file_location("run_live", RACINE / "scripts" / "run_live.py")
     m = importlib.util.module_from_spec(spec)
