@@ -69,12 +69,21 @@ def age_heures(base: str, quote: str = "USD") -> float | None:
 
 
 def rate(base: str, quote: str = "USD") -> float | None:
-    """1 unité de `base` = ? `quote` (ex. rate('TWD','USD') ≈ 0.031). None si indisponible/hors-ligne.
+    """1 unité de `base` = ? `quote` (ex. rate('TWD','USD') ≈ 0.031).
+
+    None si indisponible, hors-ligne, ou si l'une des deux devises est VIDE.
 
     Identité si base == quote. Cache disque avec TTL de 24 h **par entrée** ; source yfinance
     `BASEQUOTE=X`."""
+    # `quote or "USD"` réécrivait en silence une chaîne vide en « USD » (une chaîne
+    # vide est falsy) : rate("TWD", "") renvoyait le taux TWD/USD au lieu de None, et
+    # le garde-fou ci-dessous ne voyait jamais le cas. Une devise cible vide n'est pas
+    # une demande d'USD, c'est une devise INCONNUE — convertir des comptes à un taux
+    # qu'on prétend être celui d'une autre devise fausse la valorisation sans rien
+    # signaler. Le défaut USD reste porté par la signature, pour l'appelant qui OMET
+    # l'argument.
     base = (base or "").upper().strip()
-    quote = (quote or "USD").upper().strip()
+    quote = (quote or "").upper().strip()
     if not base or not quote:
         return None
     if base == quote:
