@@ -430,8 +430,14 @@ def _diag_preset(snap: dict, targets: list) -> None:
     successives (plancher, horaires de marché, mode léger) simplement parce que
     rien ne disait où la chaîne s'arrêtait. Affiché seulement en cas de problème."""
     d = snap.get("preset_diagnostic") or {}
-    actions = [o for o in targets if (o.get("asset_class") or "equity") != "crypto"]
-    if actions and not d.get("bloque"):
+    # NE PAS compter les cibles par classe d'actifs : le CŒUR indiciel (QQQ) est
+    # une action, donc un satellite vide passait pour rempli et le diagnostic se
+    # taisait — le défaut qu'il devait justement révéler. Le signal direct est
+    # l'étage « poids retenus », inscrit seulement si au moins une ligne sort.
+    _ = targets          # conservé pour la signature ; le signal vient du diagnostic
+    a_des_poids = any(e.get("etape") == "poids retenus"
+                      for e in (d.get("etapes") or []))
+    if a_des_poids and not d.get("bloque"):
         return
     print("\n  DIAGNOSTIC DU SATELLITE ACTIONS")
     for e in d.get("etapes") or []:
@@ -445,9 +451,10 @@ def _diag_preset(snap: dict, targets: list) -> None:
         print(f"    {'exposition brute':<22} {detail}  =  {tot:.4f}")
     if d.get("arret"):
         print(f"    ⛔ ARRÊT : {d['arret']}")
-    elif not actions:
-        print("    (aucune action ciblée, sans arrêt signalé —"
-              " vérifier le cœur indiciel)")
+    elif not d.get("etapes"):
+        print("    (aucun diagnostic publié — snapshot antérieur à l'ADR-0044 ?)")
+    elif not a_des_poids:
+        print("    (aucun poids produit, sans étage bloquant signalé — anomalie)")
 
 
 def _prepare_brokers(dry: bool, cli_equity: float | None, alert_engine):

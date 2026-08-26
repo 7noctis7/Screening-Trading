@@ -148,3 +148,46 @@ def test_une_reponse_inexploitable_ne_compte_pas(rl, monkeypatch):
     sent, _, _ = rl._reconcile([_cible("AAA", 0.10)], _brokers(Muet()), 1.0, None,
                                dry=False)
     assert sent == 0
+
+
+# --- diagnostic du satellite : le cœur indiciel ne doit pas le masquer -------
+
+def _snap(etapes, bloque=False, arret=""):
+    return {"preset_diagnostic": {"etapes": etapes, "portes": {}, "arret": arret,
+                                  "bloque": bloque}}
+
+
+def test_le_coeur_indiciel_ne_masque_pas_un_satellite_vide(rl, capsys):
+    """LE défaut du 26/08 : le filtre comptait les cibles par CLASSE D'ACTIFS, or QQQ
+    (le cœur indiciel) est une action. Un satellite vide passait donc pour rempli et le
+    diagnostic se taisait — exactement ce qu'il devait révéler. Le signal correct est
+    l'étage « poids retenus », que le preset n'inscrit que s'il produit une ligne."""
+    targets = [{"symbol": "QQQ", "asset_class": "equity", "weight_pct": 0.5}]
+    snap = _snap([{"etape": "éligibles", "detail": "788 titres"},
+                  {"etape": "score qualité", "detail": "0 scoré → REPLI"}])
+    rl._diag_preset(snap, targets)
+    sortie = capsys.readouterr().out
+    assert "DIAGNOSTIC DU SATELLITE ACTIONS" in sortie
+    assert "REPLI" in sortie
+
+
+def test_diagnostic_muet_quand_le_satellite_produit_des_poids(rl, capsys):
+    """Un diagnostic permanent serait du bruit : il ne parle qu'en cas de souci."""
+    targets = [{"symbol": "AAPL", "asset_class": "equity", "weight_pct": 0.1}]
+    snap = _snap([{"etape": "éligibles", "detail": "788 titres"},
+                  {"etape": "poids retenus", "detail": "12 lignes, somme 48%"}])
+    rl._diag_preset(snap, targets)
+    assert capsys.readouterr().out == ""
+
+
+def test_diagnostic_parle_meme_avec_des_poids_si_un_etage_bloque(rl, capsys):
+    snap = _snap([{"etape": "poids retenus", "detail": "1 ligne"}],
+                 bloque=True, arret="exposition brute NULLE")
+    rl._diag_preset(snap, [{"symbol": "AAPL", "asset_class": "equity"}])
+    assert "ARRÊT" in capsys.readouterr().out
+
+
+def test_diagnostic_absent_ne_leve_pas(rl, capsys):
+    """Un snapshot ancien (sans la clé) ne doit pas casser l'exécution."""
+    rl._diag_preset({}, [])
+    assert "DIAGNOSTIC" in capsys.readouterr().out     # rien à cacher : il le dit
