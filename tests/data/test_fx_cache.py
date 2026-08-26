@@ -83,11 +83,20 @@ def test_identite_sans_appel_reseau(tmp_path, monkeypatch):
 
 def test_devise_vide_renvoie_None_jamais_1(tmp_path):
     """Renvoyer 1.0 pour une devise inconnue convertirait au taux identité — donc pas du tout,
-    en le prétendant. `None` laisse l'appelant masquer la valorisation."""
-    _cache(tmp_path, {})
+    en le prétendant. `None` laisse l'appelant masquer la valorisation.
+
+    CACHE PRÉ-REMPLI, et c'est le point. Avec un cache vide, `rate("TWD", "")`
+    retombait sur yfinance : absent ou hors-ligne, l'appel levait et renvoyait `None`
+    — le test passait pour la MAUVAISE raison, et ne virait au rouge que sur une
+    machine ayant le réseau et les données (25/08 : vert en CI, rouge sur le Mac).
+    En semant la paire, le défaut se reproduit partout sans réseau.
+    """
+    _cache(tmp_path, {"TWDUSD": _entree(0.031, age_h=1), "USDEUR": _entree(0.92, age_h=1)})
     assert fx.rate("", "USD") is None
-    assert fx.rate("TWD", "") is None
+    assert fx.rate("TWD", "") is None      # ne doit PAS servir le TWDUSD du cache
+    assert fx.rate("USD", "") is None      # ni le USDEUR
     assert fx.rate("", "") is None
+    assert fx.rate("TWD", "USD") == 0.031  # la paire complète, elle, reste servie
 
 
 def test_cache_illisible_ne_leve_pas(tmp_path):
