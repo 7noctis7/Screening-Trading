@@ -71,16 +71,17 @@ def test_historique_trop_court_pour_la_mm200():
 
 
 def test_le_repli_sans_score_qualite_est_TRACÉ():
-    """Sans score, la sélection devient l'ordre ARBITRAIRE du dictionnaire.
+    """Le repli reste un INCIDENT à signaler, même maintenant qu'il est principiel.
 
-    C'était le repli le plus silencieux de la chaîne : `len(q) >= 5` bascule
-    sur un autre comportement sans un mot.
+    `len(q) >= 5` basculait sur un autre comportement sans un mot. Le basculement
+    est désormais tracé — et la stratégie de repli est le momentum, plus l'ordre
+    du dictionnaire (cf. `test_le_repli_sans_score_choisit_par_MOMENTUM_...`).
     """
     data = _panier(n_titres=20)
     _poids, d = preset_latest_weights_explique(data, {})      # aucun score
     trace = dict(d.etapes)
-    assert "REPLI" in trace["score qualité"]
-    assert "ARBITRAIRE" in trace["score qualité"]
+    assert "repli" in trace["score qualité"].lower()
+    assert "MOMENTUM" in trace["score qualité"]
 
 
 def test_avec_scores_la_selection_est_par_qualite():
@@ -141,3 +142,50 @@ def test_as_dict_est_serialisable_json():
     _poids, d = preset_latest_weights_explique(data, {}, top_k=12)
     json.dumps(d.as_dict())          # le snapshot le publie : il doit passer en JSON
     assert set(d.as_dict()) == {"etapes", "portes", "arret", "bloque"}
+
+
+# --- LE défaut de production du 26/08 ---------------------------------------
+
+def _panier_ordonne_du_pire_au_meilleur(n: int = 20) -> dict:
+    """Les PREMIERS du dictionnaire sont les pires titres, les derniers les meilleurs.
+
+    Reproduit ce qui piégeait la production : le repli prenait les `top_k` premiers
+    dans l'ordre du dictionnaire, sans aucun lien avec leur qualité ni leur momentum.
+    """
+    data = {}
+    for i in range(n):
+        data[f"A{i:02d}"] = _serie(i, 900, drift=-0.0015)        # mauvais, en tête
+    for i in range(n):
+        data[f"Z{i:02d}"] = _serie(100 + i, 900, drift=+0.0015)  # bons, en fin
+    return data
+
+
+def test_le_repli_sans_score_choisit_par_MOMENTUM_pas_par_ordre_de_dict():
+    """LE défaut constaté en production. `make live` tourne en mode LÉGER, qui coupe la
+    section `fundamentals` : `quality` est donc TOUJOURS vide à l'exécution, et le repli
+    tirait les 12 premiers symboles de `data`.
+
+    Conséquence en chaîne : `mkt`, l'indice de marché des portes de régime et d'ampleur,
+    était la moyenne de ces 12 noms arbitraires. Les portes concluaient « chute > 15 %,
+    aucun titre au-dessus de sa MM200 » et mettaient l'exposition brute à ZÉRO. Le
+    satellite actions était vide non par décision de risque, mais parce qu'on mesurait
+    le risque d'un panier tiré au hasard.
+    """
+    poids, d = preset_latest_weights_explique(
+        _panier_ordonne_du_pire_au_meilleur(), {}, top_k=12)   # AUCUN score → repli
+    assert poids, "le repli momentum doit produire un univers exploitable"
+    assert all(s.startswith("Z") for s in poids), \
+        f"le repli a retenu des titres de tête de dict : {sorted(poids)}"
+    trace = dict(d.etapes)
+    assert "MOMENTUM" in trace["score qualité"]
+    assert "ARBITRAIRE" not in trace["score qualité"]
+
+
+def test_le_repli_momentum_ne_ferme_pas_les_portes():
+    """Contre-épreuve directe du symptôme : avec un univers sensé, l'exposition brute
+    n'est plus annulée par les portes."""
+    _poids, d = preset_latest_weights_explique(
+        _panier_ordonne_du_pire_au_meilleur(), {}, top_k=12)
+    assert d.gross.get("régime", 0.0) > 0.0
+    assert d.gross.get("ampleur", 0.0) > 0.0
+    assert not d.bloque

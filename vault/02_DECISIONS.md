@@ -800,3 +800,46 @@ eu la même valeur que les trois premières.
 **Leçon transversale de la journée.** Quatre défauts corrigés (taux inventé, benchmark en NaN,
 ordres hors séance, ordres rejetés comptés comme envoyés) partagent une seule racine : **un
 chemin qui échoue sans le dire**. Le silence a coûté plus cher que chacun des défauts.
+
+## ADR-0045 — Le repli d'univers est PRINCIPIEL, jamais l'ordre du dictionnaire (2026-08-26)
+
+**Contexte, établi par la mesure et non par déduction.** Le diagnostic livré en ADR-0044 a donné
+le fait sur données réelles :
+
+```
+score qualité      ⚠️  0 titre(s) scoré(s) → REPLI sur les 12 premiers, ordre ARBITRAIRE
+exposition brute   DD-target 0.255 × régime 0.000 × ampleur 0.000  =  0.0000
+⛔ ARRÊT : exposition brute NULLE — porte(s) à zéro : régime, ampleur
+```
+
+**La chaîne causale.** `make live` tourne en mode LÉGER, qui coupe la section `fundamentals` :
+`quality` est donc **toujours vide à l'exécution**. Le repli `syms[:top_k]` prenait alors les
+12 premiers symboles du dictionnaire. Or `mkt = A.mean(axis=0)` — l'indice de marché que lisent
+les portes de régime et d'ampleur — est la moyenne de l'univers RETENU. Les portes mesuraient
+donc un panier tiré au hasard, concluaient « chute > 15 %, aucun titre au-dessus de sa MM200 »,
+et annulaient l'exposition.
+
+**Le satellite actions n'était pas vide par décision de risque. Il était vide parce qu'on
+mesurait le risque d'un panier arbitraire.** Toutes les exécutions de production passaient par
+ce chemin.
+
+**Décision.** Le repli utilise `_price_universe` : le même classement momentum que le backtest,
+aligné par date, prix seuls. Il ne dépend d'aucune source externe, donc il fonctionne quelle que
+soit la raison de l'absence de scores — mode léger, réseau coupé, quota d'API épuisé. Un repli
+doit être un choix dégradé mais SENSÉ, jamais un accident d'ordre d'itération.
+
+**Vérification.** Panier construit pour piéger l'ancien comportement : les 12 premiers du
+dictionnaire sont les PIRES titres, les meilleurs sont en fin. Ancien repli → les 12 pires
+retenus, portes à 0,00, exposition nulle. Nouveau repli → les 12 meilleurs retenus, exposition
+1,00. Deux tests, rouges sans le correctif.
+
+**Ce que cet ADR ne tranche PAS.** Faut-il retirer `fundamentals` de `_LITE_SKIP` ? Le repli
+momentum rend la production correcte sans cela, mais l'univers reste alors sélectionné par
+momentum et non par qualité — ce n'est pas ce que le design prévoyait. Arbitrage entre justesse
+du signal et durée du snapshot, laissé explicite au TODO plutôt que résolu par effet de bord.
+
+**Leçon de méthode, la plus coûteuse de la journée.** L'hypothèse « le mode léger coupe
+`fundamentals` » était JUSTE et a été écartée à tort : la mesure censée la tester lisait
+`snap["preset_allocation"]` à la racine, où la clé n'existe pas (elle est sous `dashboard`).
+Une bonne piste abandonnée sur la foi d'une mesure non validée. **Valider l'instrument avant de
+lui faire réfuter une hypothèse.**
