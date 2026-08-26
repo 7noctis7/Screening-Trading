@@ -146,6 +146,10 @@ def _sortie(res: dict, cpt: Compteurs, universe, A, L, start, step, *, cov_denoi
            "turnover_annual": round(turn / len(port) * per_year, 2),
            "dd_target": dd_target, "band": band, "target_vol": round(tgt_vol, 4),
            "avg_gross": round(float(np.mean(res["gross_hist"])) if res["gross_hist"] else 0.0, 4),
+           # Rendements PAR PAS, non arrondis. `curves` est cumulé ET arrondi à 4 décimales :
+           # en redériver les rendements perd assez de précision pour fausser une erreur-type.
+           # Le test de différence de Sharpe (packages/research/sharpe_diff) en a besoin bruts.
+           "rendements": [float(x) for x in port],
            "curves": {"preset": _cum(port)}}
     # bench équipondéré sur le MÊME univers (apples-to-apples : isole l'apport de la construction
     # risk-parity + DD-target + blackout + band vs un simple équipondéré plein-investi)
