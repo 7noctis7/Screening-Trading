@@ -115,9 +115,12 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       `packages/execution/market_calendar.py` répond « peut-on envoyer cet ordre maintenant ? »
       (XNYS 09:30-16:00 ET, week-ends, fériés, 24/7 crypto) et `run_live` REPORTE au lieu
       d'envoyer dans le vide. Reste ouvert ci-dessous pour l'intraday.
-- [ ] **P1 — Relire le STATUT de l'ordre après envoi.** Un ordre accepté puis rejeté par le
-      courtier est aujourd'hui compté comme réussi (`sent += 1`). C'est le trou qui a permis
-      au satellite actions de rester vide sans une ligne de journal (ADR-0040).
+- [x] **Statut de l'ordre relu après envoi — LIVRÉ le 26/08 (ADR-0042).**
+      `packages/execution/order_outcome.py` : quatre issues (REJETE / REMPLI / EN_COURS /
+      INCONNU). Un rejet ne compte plus comme envoyé ni comme ouverture journalisée.
+      Vérifié contre les quatre courtiers du dépôt avant activation.
+- [x] **`/positions` n'annonce plus d'achats impossibles — LIVRÉ (ADR-0043).** Badge
+      « bloqué · sous le plancher » + bandeau quand aucune cible ne peut partir.
 - [ ] **F11 (suite) · calendrier complet (P0 avant tout intraday)** : `MarketCalendar` par place
       (XNYS/XETR/24-7) — `is_open`, `session_minutes`, demi-séances, enchères, jours fériés.
       Sans lui, l'agrégation 1 h → 4 h → Weekly est une source de fuite structurelle.

@@ -126,6 +126,18 @@ def _broker_targets(targets, bname: str, cap: float, reduce: float, cur: dict) -
     return tgt, max(0.005 * cap, 5.0)                     # bande : 0,5 % du capital, min 5 $
 
 
+def _log_rejet(bsym: str, bname: str, intention, issue: str) -> None:
+    """Trace structurée d'un refus courtier. Best-effort : ne casse jamais le run."""
+    try:
+        import logging
+        logging.getLogger("live.execution").error(
+            "ordre refusé par le courtier",
+            extra={"symbole": bsym, "broker": bname, "action": intention.action,
+                   "montant": intention.montant, "issue": issue})
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, list]:
     """Réconciliation idempotente + ANTI-LEVIER. Retourne (nb ordres, ouvertures, ventes).
 
@@ -135,6 +147,7 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, 
 
     from packages.common.retry import retry
     from packages.core.models import Side
+    from packages.execution.order_outcome import compte_comme_envoye, resume
     from packages.execution.market_calendar import (
         feries_a_jour,
         is_open,
@@ -146,7 +159,7 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, 
     # les tests qui isolent le PORTAIL DE RISQUE du calendrier. Jamais le défaut : un
     # ordre qui ne peut pas se remplir doit être dit, pas envoyé dans le vide.
     _verif_seance = os.environ.get("QUANT_IGNORE_SESSION", "") != "1"
-    sent, opened, sold, differes = 0, [], [], []
+    sent, opened, sold, differes, rejetes = 0, [], [], [], []
     if _verif_seance and not feries_a_jour():
         print("  ⚠️  fériés NYSE périmés — voir packages/execution/market_calendar")
     for bname, broker, cap, cur in brokers:
@@ -213,9 +226,24 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, 
             try:
                 if intention.liquidation and hasattr(broker, "close_position"):
                     # Sortie totale EN QUANTITÉ : aucun résidu, donc aucune poussière future.
-                    retry(lambda: broker.close_position(bsym), attempts=3)
+                    _res = retry(lambda: broker.close_position(bsym), attempts=3)
                 else:
-                    retry(lambda: broker.submit_notional(bsym, side, intention.montant), attempts=3)
+                    _res = retry(
+                        lambda: broker.submit_notional(bsym, side, intention.montant),
+                        attempts=3)
+                # UN ORDRE ENVOYÉ N'EST PAS UN ORDRE EXÉCUTÉ. `sent += 1` dès l'absence
+                # d'exception comptait comme réussi un ordre qu'Alpaca venait de
+                # REJETER : le récapitulatif annonçait des ordres partis alors que rien
+                # n'était passé. C'est ce trou qui a laissé le satellite actions vide
+                # sans une ligne de journal (ADR-0040).
+                if not compte_comme_envoye(_res):
+                    print(tag + "  " + resume(_res))
+                    rejetes.append({"symbol": bsym, "broker": bname,
+                                    "action": intention.action,
+                                    "montant": round(intention.montant, 2),
+                                    "issue": resume(_res)})
+                    _log_rejet(bsym, bname, intention, resume(_res))
+                    continue          # ni compté, ni journalisé comme une ouverture
                 sent += 1
                 # Le plafond d'exposition doit voir les ordres DÉJÀ envoyés dans cette boucle,
                 # sinon chacun est jugé contre l'état initial et la somme dépasse la limite.
@@ -252,6 +280,11 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, 
                         f"Ordre {'achat' if delta > 0 else 'vente'} {bsym} ({bname}) échoué "
                         f"après retries : {str(e)[:80]}",
                         dedup_key=f"execution:submit_fail:{bsym}"))
+    if rejetes:
+        _tr = sum(abs(r["montant"]) for r in rejetes)
+        print(f"\n  ❌ {len(rejetes)} ordre(s) REFUSÉ(S) par le courtier,"
+              f" {_tr:,.0f}$ au total.".replace(",", " "))
+        print("     Ils ne comptent PAS comme envoyés. Motif par ligne ci-dessus.")
     if differes:
         _tot = sum(abs(d["montant"]) for d in differes)
         print(f"\n  ⏸  {len(differes)} ordre(s) REPORTÉ(S) hors séance,"
