@@ -1,5 +1,68 @@
 # 04 — JOURNAL
 
+## Session 2026-08-26 (13) — Le labo promeut sous son propre plancher de détection
+
+**Deux défauts que seule la vraie base pouvait montrer.** Le run du Mac a fait tomber deux
+choses invisibles en CI et dans le conteneur distant (qui n'a aucune donnée de marché).
+
+`fx.rate("TWD", "")` renvoyait **0,0314 au lieu de `None`** : `quote or "USD"` réécrit une chaîne
+vide en « USD » (une chaîne vide est falsy), donc le garde-fou juste en dessous ne voyait jamais
+le cas. L'appelant convertit des états financiers avec ce taux — un P/E et un DCF crédibles et
+faux, sans alerte. **Le test était vert pour la MAUVAISE raison** : sans réseau, l'appel tombait
+dans l'`except` et renvoyait `None` sans jamais exercer le défaut. Rendu hermétique (cache
+pré-rempli), il est maintenant rouge partout sans le correctif.
+
+`Équipondéré (même univers) −100,0 % / nan%` : la stratégie traite les radiations depuis #341
+(`dernier_connu`), la ligne de **comparaison** n'avait jamais été migrée. Un seul titre radié
+mettait toute la courbe à NaN. **Le preset se comparait donc à RIEN sans le dire** — pire qu'une
+comparaison absente, parce qu'elle a l'air d'exister. Corrigé, et vérifié bit-à-bit identique sur
+panel complet : le correctif ne mord que sur le cas cassé.
+
+**Le vrai sujet : le labo promeut sous son plancher de détection.** Neuf leviers « rejetés » avec
+des ΔSharpe de −0,01 à −0,12, présentés comme neuf verdicts distincts. Mais avec quelle précision ?
+Personne ne le demandait — le gate compare des estimations ponctuelles à un seuil fixe.
+
+Jobson-Korkie/Memmel sur Sharpe **appariés** (deux variantes tournent sur les mêmes dates,
+ρ > 0,95 : les traiter comme indépendantes surestimerait massivement l'incertitude). Puissance
+sur 126 pas :
+
+| ΔSharpe **vrai** | détecté |
+|---|---|
+| +0,05 ← *seuil du gate* | **7,3 %** |
+| +0,15 | 30,2 % |
+| +0,32 | 85,1 % |
+
+**Le seuil de +0,05 est trois fois sous ce que 126 pas résolvent (~+0,14, même à ρ = 0,99).** À ce
+niveau, le taux de détection (7,3 %) dépasse à peine le taux de faux positifs (5 %) : promouvoir
+ou rejeter est un tirage au sort.
+
+Ça ne change aucun chiffre publié. Ça change ce qu'on a le droit de **conclure** : « aucun levier
+ne bat la base » reste vrai, mais se lit « rien de distinguable sur cet échantillon », pas « ces
+leviers sont mauvais ». La nuance décide s'il faut les abandonner ou allonger la fenêtre.
+
+**Calibration vérifiée, pas supposée.** Un test statistique non calibré est pire qu'aucun test : il
+donne une autorité chiffrée à une décision arbitraire. Monte-Carlo sous H0 : 4,95 %–5,33 % de
+rejets à ρ = 0,99 / 0,95 / 0,80 / 0,00. Le contrôle est dans la suite, pas dans un script jetable.
+
+**Mes propres tests ont trouvé deux défauts dans mon propre module.** `sharpe_periodique` d'une
+série constante renvoyait 5e15 — l'écart-type vaut ~1e-18 en flottant, donc `sd > 0` est vrai.
+C'est **exactement le piège déjà consigné pour `polyfit` dans CLAUDE.md** : tolérance relative,
+jamais absolue. Et deux séries identiques donnaient « indisponible » au lieu de « différence nulle,
+indiscernable » — c'est le cas réel du garde-fou ⚪ INERTE, qui ne change aucun pas.
+
+**Arbitrage `k médian = 1`, tranché.** Le diagnostic de covariance dit « préférer l'inverse-vol » ;
+la mesure rejette le débruitage RMT (ΔSharpe −0,07). Avec l'erreur-type, la contradiction se
+dissout : −0,07 est **indiscernable de zéro** sur cet échantillon. Ni le diagnostic ni la mesure
+ne justifient de changer le défaut. On ne touche à rien, et on le documente — c'était le bon
+réflexe, pour une raison qui n'était pas encore chiffrée.
+
+**Non fait.** Le rolling universe n'est toujours pas branché : le brancher n'aurait servi à rien
+tant que le labo ne pouvait pas mesurer si son effet est réel. C'est maintenant le cas.
+
+**Tests & CI.** 1312 verts. ruff : aucune dette ajoutée.
+
+---
+
 ## Session 2026-08-25 (12) — Un look-ahead dans ma propre démo, et le mur de 793 lignes abattu
 
 **Le chiffre qui n'existait pas.** La session (11) a livré `scripts/demo_rolling_universe.py`
