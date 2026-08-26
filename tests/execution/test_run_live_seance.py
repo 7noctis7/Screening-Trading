@@ -152,9 +152,13 @@ def test_une_reponse_inexploitable_ne_compte_pas(rl, monkeypatch):
 
 # --- diagnostic du satellite : le cœur indiciel ne doit pas le masquer -------
 
-def _snap(etapes, bloque=False, arret=""):
-    return {"preset_diagnostic": {"etapes": etapes, "portes": {}, "arret": arret,
-                                  "bloque": bloque}}
+def _snap(etapes, bloque=False, arret="", racine=False):
+    """Le diagnostic est publié sous `dashboard`. Le lire à la racine renvoyait
+    toujours {} — et affichait « aucun diagnostic publié » alors qu'il existait."""
+    d = {"etapes": etapes, "portes": {}, "arret": arret, "bloque": bloque}
+    if racine:
+        return {"preset_diagnostic": d}
+    return {"dashboard": {"preset_diagnostic": d}}
 
 
 def test_le_coeur_indiciel_ne_masque_pas_un_satellite_vide(rl, capsys):
@@ -191,3 +195,21 @@ def test_diagnostic_absent_ne_leve_pas(rl, capsys):
     """Un snapshot ancien (sans la clé) ne doit pas casser l'exécution."""
     rl._diag_preset({}, [])
     assert "DIAGNOSTIC" in capsys.readouterr().out     # rien à cacher : il le dit
+
+
+def test_le_diagnostic_est_lu_sous_dashboard(rl, capsys):
+    """LE défaut : `preset_diagnostic` est publié sous `dashboard`, pas à la racine.
+    Le lire à la racine renvoyait {} et affichait « aucun diagnostic publié » alors
+    que le diagnostic existait — un faux négatif dans l'outil de diagnostic."""
+    snap = _snap([{"etape": "score qualité", "detail": "0 scoré → REPLI"}])
+    assert "preset_diagnostic" not in snap          # bien nulle part à la racine
+    rl._diag_preset(snap, [{"symbol": "QQQ", "asset_class": "equity"}])
+    sortie = capsys.readouterr().out
+    assert "REPLI" in sortie
+    assert "aucun diagnostic publié" not in sortie
+
+
+def test_repli_sur_la_racine_si_le_schema_evolue(rl, capsys):
+    snap = _snap([{"etape": "éligibles", "detail": "788 titres"}], racine=True)
+    rl._diag_preset(snap, [])
+    assert "788 titres" in capsys.readouterr().out
