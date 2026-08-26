@@ -52,7 +52,8 @@ def _kill_switch(bus):
         fetch_tv_technical_alerts,
         to_risk_veto,
     )
-    # Appel SANS filtre d'âge jusqu'au 25/08 : une alerte critique reçue des semaines plus tôt
+    # Appel SANS filtre d'âge jusqu'au 25/08 : une alerte critique reçue des
+    # semaines plus tôt
     # bloquait encore tout le portefeuille, jusqu'à effacement manuel du drop.
     risk = to_risk_veto(fetch_tv_technical_alerts(max_age_s=AGE_MAX_DEFAUT))
     if risk.get("n_sans_date"):
@@ -147,13 +148,13 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, 
 
     from packages.common.retry import retry
     from packages.core.models import Side
-    from packages.execution.order_outcome import compte_comme_envoye, resume
     from packages.execution.market_calendar import (
         feries_a_jour,
         is_open,
         prochaine_ouverture,
         raison_fermeture,
     )
+    from packages.execution.order_outcome import compte_comme_envoye, resume
     # ÉCHAPPATOIRE EXPLICITE. `QUANT_IGNORE_SESSION=1` envoie quand même hors séance —
     # utile pour empiler des ordres avant l'ouverture en connaissance de cause, et pour
     # les tests qui isolent le PORTAIL DE RISQUE du calendrier. Jamais le défaut : un
@@ -169,8 +170,10 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, 
             curn[_nsym(k)] = curn.get(_nsym(k), 0.0) + v
         from packages.execution.rebalance_plan import decider
         from packages.risk.order_gate import EtatCompte, Limites, evaluer, ligne_journal
-        # PORTAIL DE RISQUE — indépendant de la stratégie, lu depuis l'environnement seul.
-        # Jusqu'ici les limites du projet (`packages.risk`) n'existaient que dans les démos :
+        # PORTAIL DE RISQUE — indépendant de la stratégie, lu depuis l'environnement
+        # seul.
+        # Jusqu'ici les limites du projet (`packages.risk`) n'existaient que dans
+        # les démos :
         # le chemin de production n'avait aucun veto PAR ORDRE.
         _lim = Limites.depuis_env()
         _expo = sum(abs(v) for v in curn.values())
@@ -198,11 +201,13 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, 
                 differes.append({"symbol": bsym, "broker": bname, "asset_class": _ac,
                                  "montant": round(info["val"] - detenu, 2)})
                 continue
-            # Décision déléguée (testée) : solder hors bande, ne pas ouvrir sous le plancher.
+            # Décision déléguée (testée) : solder hors bande, ne pas ouvrir sous le
+            # plancher.
             intention = decider(info["val"], detenu, band)
             if not intention.agit:
                 print(tag + f"  ✓ {intention.motif}"); continue
-            # DERNIÈRE BARRIÈRE : le portail peut réduire ou refuser, jamais augmenter. Un
+            # DERNIÈRE BARRIÈRE : le portail peut réduire ou refuser, jamais
+            # augmenter. Un
             # désengagement le traverse toujours (le bloquer augmenterait le risque).
             _etat = EtatCompte(equity=cap, exposition_brute=_expo, n_positions=_npos,
                                detenu_ligne=detenu)
@@ -225,7 +230,8 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, 
                 print(tag + f"  {'aperçu' if dry else 'broker absent'} ({intention.action})"); continue
             try:
                 if intention.liquidation and hasattr(broker, "close_position"):
-                    # Sortie totale EN QUANTITÉ : aucun résidu, donc aucune poussière future.
+                    # Sortie totale EN QUANTITÉ : aucun résidu, donc aucune
+                    # poussière future.
                     _res = retry(lambda: broker.close_position(bsym), attempts=3)
                 else:
                     _res = retry(
@@ -245,8 +251,10 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, 
                     _log_rejet(bsym, bname, intention, resume(_res))
                     continue          # ni compté, ni journalisé comme une ouverture
                 sent += 1
-                # Le plafond d'exposition doit voir les ordres DÉJÀ envoyés dans cette boucle,
-                # sinon chacun est jugé contre l'état initial et la somme dépasse la limite.
+                # Le plafond d'exposition doit voir les ordres DÉJÀ envoyés dans
+                # cette boucle,
+                # sinon chacun est jugé contre l'état initial et la somme dépasse la
+                # limite.
                 _expo += intention.montant if intention.action == "acheter" else -intention.montant
                 if intention.action == "acheter" and detenu <= 0:
                     _npos += 1
@@ -329,8 +337,10 @@ def _journal_opens(snap: dict, opened: list, alpaca, bitmart) -> None:
             "fill": pos.get((op["venue"], _norm(op["broker_symbol"]))),
             "features": {**feats_by_sym.get(op["symbol"], {}), **regime_ctx,
                          "target_weight": op.get("weight_pct"),
-                         # prix de DÉCISION (close du snapshot) → slippage réel mesurable
-                         # au fill (exec_costs.py). None si série absente (jamais inventé).
+                         # prix de DÉCISION (close du snapshot) → slippage réel
+                         # mesurable
+                         # au fill (exec_costs.py). None si série absente (jamais
+                         # inventé).
                          **({"decision_price": _decision_px(op["symbol"])}
                             if _decision_px(op["symbol"]) else {})},
             "regime": regime_lbl,
@@ -413,6 +423,33 @@ def _decision_snapshot() -> dict:
     return build_snapshot()                                # DÉCISION unique (features figées ici)
 
 
+def _diag_preset(snap: dict, targets: list) -> None:
+    """Dit POURQUOI le satellite actions est vide, au lieu de le laisser deviner.
+
+    Le 26/08, un compte paper sans AUCUNE action a résisté à trois hypothèses
+    successives (plancher, horaires de marché, mode léger) simplement parce que
+    rien ne disait où la chaîne s'arrêtait. Affiché seulement en cas de problème."""
+    d = snap.get("preset_diagnostic") or {}
+    actions = [o for o in targets if (o.get("asset_class") or "equity") != "crypto"]
+    if actions and not d.get("bloque"):
+        return
+    print("\n  DIAGNOSTIC DU SATELLITE ACTIONS")
+    for e in d.get("etapes") or []:
+        print(f"    {e.get('etape', ''):<22} {e.get('detail', '')}")
+    portes = d.get("portes") or {}
+    if portes:
+        tot = 1.0
+        for v in portes.values():
+            tot *= v
+        detail = " × ".join(f"{k} {v:.3f}" for k, v in portes.items())
+        print(f"    {'exposition brute':<22} {detail}  =  {tot:.4f}")
+    if d.get("arret"):
+        print(f"    ⛔ ARRÊT : {d['arret']}")
+    elif not actions:
+        print("    (aucune action ciblée, sans arrêt signalé —"
+              " vérifier le cœur indiciel)")
+
+
 def _prepare_brokers(dry: bool, cli_equity: float | None, alert_engine):
     """Brokers vétés + positions lues (inconnu ⇒ broker écarté). Cf. live_guards."""
     from packages.execution.live_guards import current_values, fail_loud, vet_brokers
@@ -440,6 +477,7 @@ def main() -> None:
     dry = not (a.live and a.yes)
     snap = _decision_snapshot()
     targets = snap["live"]["target_orders"]                # poids cibles (% du portefeuille)
+    _diag_preset(snap, targets)
 
     from packages.execution.live_guards import dd_kill_switch, fail_loud
     bus, alert_engine = _setup_alerts(dry)

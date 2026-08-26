@@ -760,3 +760,43 @@ rebalance pas ? »
 **Conséquence.** (+) Une famille entière de confusion disparaît : l'écran et l'exécuteur disent
 la même chose. (−) Sur un petit capital, la page affichera surtout des lignes bloquées — c'est
 l'information juste, pas un régression d'affichage.
+
+## ADR-0044 — Le preset dit POURQUOI il ne demande rien (2026-08-26)
+
+**Contexte, et il est inconfortable.** Un compte paper sans aucune action du satellite a résisté
+à **trois hypothèses successives** — plancher de ligne, horaires de marché, mode léger — toutes
+formulées à partir du code, toutes réfutées par la mesure. Trois allers-retours avec
+l'utilisateur pour un diagnostic qu'une ligne de journal aurait donné immédiatement.
+
+La cause de cette errance n'est aucune des trois : c'est que `preset_latest_weights` renvoie
+`{}` pour **au moins six raisons** sans en distinguer aucune.
+
+| étage | cause d'un résultat vide |
+|---|---|
+| éligibilité | moins de 5 titres avec ≥ 200 barres |
+| score qualité | **repli silencieux** sur `syms[:top_k]`, ordre ARBITRAIRE |
+| panel | intersection des dates < 200, ou < 2 noms |
+| covariance | fenêtre < 20 barres |
+| exposition | une porte (DD-target / régime / ampleur) à zéro |
+| concentration | aucun poids au-dessus du seuil |
+
+**Décision.** `packages/backtest/preset_diag.py` : un journal d'étages, purement observationnel.
+
+1. `preset_latest_weights_explique` renvoie `(poids, Diag)` ; `preset_latest_weights` délègue et
+   ne renvoie que les poids. **Aucun chiffre ne change** — vérifié sur 5 tirages.
+2. **Chaque porte publie son multiplicateur.** C'est l'information qui manquait le plus : une
+   exposition nulle est légitime (« risk off, tout en cash ») mais doit être AFFICHÉE.
+3. **Le premier étage bloquant gagne** : la cause racine, pas le dernier message écrit.
+4. **Le repli sans score qualité est tracé comme un incident.** `len(q) >= 5` basculait sur un
+   univers dans l'ordre du dictionnaire sans un mot — le repli le plus dangereux de la chaîne,
+   parce qu'il produit un résultat plausible et faux plutôt qu'une erreur.
+5. Publié dans le snapshot (`preset_diagnostic`), affiché par `run_live` **seulement quand le
+   satellite actions est vide** — un diagnostic permanent deviendrait du bruit.
+
+**Ce que cet ADR ne fait PAS.** Il ne dit toujours pas pourquoi CE compte a un satellite vide :
+il donne le moyen de le savoir au prochain run. C'est délibéré — une quatrième hypothèse aurait
+eu la même valeur que les trois premières.
+
+**Leçon transversale de la journée.** Quatre défauts corrigés (taux inventé, benchmark en NaN,
+ordres hors séance, ordres rejetés comptés comme envoyés) partagent une seule racine : **un
+chemin qui échoue sans le dire**. Le silence a coûté plus cher que chacun des défauts.
