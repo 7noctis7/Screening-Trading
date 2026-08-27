@@ -213,3 +213,57 @@ def test_repli_sur_la_racine_si_le_schema_evolue(rl, capsys):
     snap = _snap([{"etape": "éligibles", "detail": "788 titres"}], racine=True)
     rl._diag_preset(snap, [])
     assert "788 titres" in capsys.readouterr().out
+
+
+# --------------------------------------------------------------------------
+# LE REPORT NE DOIT PAS ÊTRE SUBI (2026-08-27)
+#
+# L'utilisateur planifie le rebalancement à 22h05 heure de Paris — soit APRÈS la
+# clôture NYSE (22h00 pile). Les ordres actions y seront donc reportés chaque jour.
+# L'ancien message affirmait « ils partiront à la prochaine séance » : faux, puisque
+# la prochaine exécution sera elle aussi hors séance. Rien ne les met en file
+# d'attente. Un message rassurant et faux est pire que pas de message.
+# --------------------------------------------------------------------------
+def _differes():
+    return [
+        {"symbol": "AAPL", "asset_class": "equity", "montant": 1200.0},
+        {"symbol": "MSFT", "asset_class": "equity", "montant": -800.0},
+    ]
+
+
+def test_le_recap_ne_promet_PAS_un_envoi_automatique(capsys):
+    """Le cœur du correctif : ne plus affirmer ce qui est faux."""
+    from scripts.run_live import _recap_differes
+    _recap_differes(_differes())
+    sortie = capsys.readouterr().out
+    assert "prochaine séance" not in sortie or "ne part que" in sortie
+    assert "PAS mis en file d'attente" in sortie
+
+
+def test_le_recap_donne_les_DEUX_issues_actionnables(capsys):
+    """Un diagnostic qui ne dit pas quoi faire laisse l'utilisateur devant le même
+    écran le lendemain."""
+    from scripts.run_live import _recap_differes
+    _recap_differes(_differes())
+    sortie = capsys.readouterr().out
+    assert "make live-go" in sortie
+    assert "QUANT_LIVE_HOUR" in sortie
+
+
+def test_le_recap_ventile_par_classe_d_actifs(capsys):
+    """Distinguer actions et crypto est le fait qui compte : le crypto tourne 24/7
+    et n'est JAMAIS reporté — voir un « 2 equity » confirme que le report est bien
+    circonscrit, et non un blocage général."""
+    from scripts.run_live import _recap_differes
+    _recap_differes(_differes())
+    sortie = capsys.readouterr().out
+    assert "2 equity" in sortie
+    assert "24/7" in sortie
+
+
+def test_le_recap_totalise_les_montants_en_valeur_absolue(capsys):
+    """Un achat de 1200 et une vente de 800 font 2000 $ d'exposition non traitée,
+    pas 400 : les signes ne doivent pas se compenser."""
+    from scripts.run_live import _recap_differes
+    _recap_differes(_differes())
+    assert "2 000$" in capsys.readouterr().out

@@ -289,18 +289,40 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, 
                         f"après retries : {str(e)[:80]}",
                         dedup_key=f"execution:submit_fail:{bsym}"))
     if rejetes:
-        _tr = sum(abs(r["montant"]) for r in rejetes)
-        print(f"\n  ❌ {len(rejetes)} ordre(s) REFUSÉ(S) par le courtier,"
-              f" {_tr:,.0f}$ au total.".replace(",", " "))
+        _tr = f"{sum(abs(r['montant']) for r in rejetes):,.0f}".replace(",", " ")
+        print(f"\n  ❌ {len(rejetes)} ordre(s) REFUSÉ(S) par le courtier, "
+              f"{_tr}$ au total.")
         print("     Ils ne comptent PAS comme envoyés. Motif par ligne ci-dessus.")
     if differes:
-        _tot = sum(abs(d["montant"]) for d in differes)
-        print(f"\n  ⏸  {len(differes)} ordre(s) REPORTÉ(S) hors séance,"
-              f" {_tot:,.0f}$ au total.".replace(",", " "))
-        print("     Pas une erreur : ils partiront à la prochaine séance.")
-        print("     S'ils reviennent chaque jour, le rebalancement tourne hors des")
-        print("     de marché — décaler le cron (séance NYSE = 15:30–22:00 CEST).")
+        _recap_differes(differes)
     return sent, opened, sold
+
+
+def _recap_differes(differes: list) -> None:
+    """Le report n'est pas une erreur — mais il ne doit pas être SUBI.
+
+    L'ancien message disait « ils partiront à la prochaine séance ». C'est faux dès
+    que le rebalancement est planifié hors séance : la prochaine exécution sera elle
+    aussi hors séance, et les mêmes ordres seront reportés indéfiniment. Un ordre
+    reporté ne part QUE si une exécution tombe DANS la séance — rien ne le met en
+    file d'attente.
+    """
+    tot = f"{sum(abs(d['montant']) for d in differes):,.0f}".replace(",", " ")
+    par_classe: dict[str, int] = {}
+    for d in differes:
+        cl = d.get("asset_class", "?")
+        par_classe[cl] = par_classe.get(cl, 0) + 1
+    detail = ", ".join(f"{n} {c}" for c, n in sorted(par_classe.items()))
+    print(f"\n  ⏸  {len(differes)} ordre(s) REPORTÉ(S) hors séance ({detail}), "
+          f"{tot}$ au total.")
+    print("     Ils ne sont PAS mis en file d'attente : un ordre reporté ne part que")
+    print("     si une exécution tombe DANS la séance NYSE"
+          " (15:30-22:00, heure de Paris).")
+    print("     Si ce report revient chaque jour, c'est le planning, pas le marché :")
+    print("       • à la main, un soir avant 22h  →  make live-go")
+    print("       • ou décaler le rebalancement   →  "
+          "QUANT_LIVE_HOUR=21 make live-cron-install")
+    print("     Le crypto n'est jamais concerné : il tourne 24/7.")
 
 
 def _journal_opens(snap: dict, opened: list, alpaca, bitmart) -> None:
