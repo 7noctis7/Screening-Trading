@@ -64,6 +64,16 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
 - [ ] **Aucun cron installé** (`crontab -l` vide) : le rebalancement n'a jamais tourné seul.
       À décider — cron dans la séance NYSE (15:30-22:00 CEST), ou lancement manuel assumé.
 
+## 🔧 Infrastructure — visibilité du dépôt (2026-08-27)
+- [x] **`gitleaks` : `pull-requests: read` ajouté.** Le scan des PR était aveugle depuis le
+      passage en privé (`403`), alors que `main` restait couvert (scan local sur push).
+- [ ] **Repasser le dépôt en PUBLIC** (décidé le 27/08) — réactive GitHub Pages, figé depuis le
+      26/08 05:57 (`deploy` en `404 — Ensure GitHub Pages has been enabled` : Pages est
+      désactivé sur dépôt privé en plan Free). Contrôle pré-publication fait : aucun secret,
+      aucun fichier sensible suivi. **Après bascule : vérifier que `pages.yml` repasse vert.**
+- [ ] **Garde-fou à retenir** : un changement de visibilité modifie en SILENCE les permissions
+      implicites du jeton Actions et les droits Pages. Aucune alerte, aucun code touché.
+
 ## 🟡 Screening-Trading — reste ouvert (2026-08-22)
 - [ ] **Câbler `impact.py` / `almgren_chriss.py` à l'exécution réelle** — écrits et testés, non
       branchés : les coûts d'impact sont ignorés au dimensionnement. (Débloqué par ADR-0038.)

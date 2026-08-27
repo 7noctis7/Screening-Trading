@@ -1,5 +1,37 @@
 # 04 — JOURNAL
 
+## Incident 2026-08-27 — Le passage du dépôt en PRIVÉ a cassé deux workflows en silence
+
+**Symptôme.** `gitleaks` rouge sur toutes les PR. J'allais le classer « rouge pré-existant,
+pas mon diff » et passer à autre chose — la question de l'utilisateur (« est-ce parce que
+j'ai rendu le dépôt privé ? ») a ouvert la vraie piste.
+
+**Le motif qui tranche.** Sur `gitleaks`, l'événement `push` sur `main` est resté VERT tout
+du long, seul `pull_request` échoue — 7 fois d'affilée depuis le 26/08 au matin. Sur un push,
+gitleaks scanne en local sans toucher à l'API ; sur une PR, il appelle
+`GET /pulls/{n}/commits`. Le workflow ne déclarait que `contents: read` : sur un dépôt PUBLIC
+cet endpoint sert de la donnée publique et un jeton sans le scope peut la lire, en PRIVÉ il
+l'exige. D'où `403 Resource not accessible by integration`. Correctif : `pull-requests: read`.
+
+**La conséquence qu'on n'avait pas vue, et qui compte davantage.** `pages.yml` échoue depuis
+exactement la même fenêtre (dernier succès 05:57, contre 05:32 pour gitleaks). Le job `build`
+réussit, c'est `deploy` qui rend `404 — Ensure GitHub Pages has been enabled` : GitHub
+DÉSACTIVE Pages quand un dépôt privé est sur un plan Free. **La PWA publique était figée
+depuis 24 h et rien ne le disait.** Décision de l'utilisateur : repasser le dépôt en public.
+
+**Contrôle avant re-publication.** Aucun fichier sensible suivi, aucun motif de secret dans le
+diff de la fenêtre privée, `.env.example` sans valeur sensible. Surtout : gitleaks scanne
+l'historique COMPLET (`fetch-depth: 0`) à chaque push sur `main` et tous ces runs sont verts,
+le dernier le 26/08 à 19:11 — `main` n'a jamais cessé d'être couvert.
+
+**Leçon.** Un changement de VISIBILITÉ est un changement d'INFRASTRUCTURE. Il modifie
+silencieusement les permissions implicites du jeton d'Actions et les droits Pages, sans
+toucher une ligne de code ni produire d'alerte. Deux workflows sont morts au même moment sans
+que rien ne le signale. Corollaire : « rouge avant mon diff » n'est pas une conclusion, c'est
+le début d'une question.
+
+---
+
 ## Session 2026-08-27 (18) — L'univers de production était classé sur le momentum de 2015
 
 **Le fait mesuré.** Après le repli momentum de la session 17, le run de production a rendu :
