@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "moteur": "preset",
+  "meta": {
+    "nom": "Preset multi-actifs",
+    "description": "Le mandat effectivement en production au 27/08/2026. Décrit le système tel qu'il est, pas tel qu'on aimerait qu'il soit.",
+    "cree_le": "2026-08-27"
+  },
+  "contraintes": {
+    "drawdown_max": 0.35,
+    "poids_max_ligne": 0.10,
+    "poids_min_ligne": 0.025,
+    "nb_lignes_min": 12
+  },
+  "parametres": {
+    "top_k": 30,
+    "lookback": 120,
+    "k_dd": 1.6,
+    "blackout_move": 0.12,
+    "regime_gate": true,
+    "mom_tilt": true,
+    "breadth_gate": true,
+    "corr_tighten": true,
+    "cov_denoise": false
+  },
+  "donnees": {
+    "alignement": "par_date",
+    "exec_lag": 1,
+    "min_barres_regime": 200,
+    "point_de_mesure_univers": "dernier_point_en_production"
+  },
+  "execution": {
+    "bande_no_trade": 0.03
+  }
+}

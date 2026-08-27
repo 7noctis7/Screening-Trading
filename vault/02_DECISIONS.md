@@ -882,3 +882,108 @@ ne peut donc pas changer un poids.
 
 **Conséquences.** La prochaine porte fermée sera lue, pas devinée. Coût : une ligne de
 diagnostic et un appel de plus par exécution de production.
+
+## ADR-0048 — La stratégie est une DONNÉE hashée, pas une configuration éparpillée (2026-08-27)
+
+**Contexte.** Les 26 et 27/08, trois divergences production/backtest ont été corrigées en un
+jour : #347 (empilement positionnel vs alignement par date), #352 (sélection par qualité vs
+ordre du dictionnaire), #353 (momentum mesuré à la barre 120 vs au dernier point). Cause
+racine commune, et ce n'est aucune des trois : **il n'existait nulle part d'artefact disant
+« voici la stratégie »**. Elle était répartie entre des valeurs par défaut de fonctions, des
+variables d'environnement — `QUANT_LIVE_LITE=1` coupait `fundamentals`, donc changeait la
+SÉLECTION D'UNIVERS — et des effets de bord. Deux chemins pouvaient donc diverger sans qu'aucun
+diff ne le montre.
+
+**Décision.** `packages/mandate` introduit le MANDAT : une définition déclarative, sérialisable,
+dont l'identité est le SHA-256 de sa forme canonique. Ce hash entre dans chaque ordre, chaque
+ligne de journal et chaque résultat de backtest — de sorte qu'on puisse toujours répondre à
+« quelle définition exacte a produit cet ordre ». Vocabulaire : « mandat » est le terme
+institutionnel exact et évite la collision avec `packages/strategies`, qui héberge les plugins
+EXÉCUTABLES.
+
+**Le découpage qui porte tout.** `meta` (nom, description, auteur, tags) est **hors identité**.
+Renommer un mandat ou corriger une coquille ne doit pas rompre le lien d'audit avec les ordres
+déjà émis — sinon toucher une description orpheline tout l'historique. Tout le reste
+(contraintes, paramètres, règles de données, exécution) est sémantique et entre dans le hash.
+Vérifié dans les deux sens par test.
+
+**La forme canonique, sans quoi le hash ne prouve rien.** Tri des clés, sérialisation compacte,
+flottant entier ramené à l'entier (`30.0` ≡ `30`), `-0.0` ramené à `0`, non-fini REFUSÉ. Choix
+assumé : `0.3` et `0.1 + 0.2` hashent différemment — ce sont des nombres différents, et arrondir
+en douce ferait collisionner deux configurations réellement distinctes, plus grave que
+l'inverse. Corollaire : un paramètre de mandat se DÉCLARE, il ne se calcule pas.
+
+**Format JSON, pas YAML.** YAML 1.1 coerce `no` en booléen et distingue mal `1` de `1.0`. Sur un
+fichier dont le hash EST l'identité, ces conversions silencieuses la déplaceraient sans qu'on
+touche au sens.
+
+**Conséquences.** Une clé inconnue est refusée au chargement plutôt qu'ignorée : une clé ignorée
+en silence n'entre ni dans le comportement ni dans le hash, et l'écart ne se voit nulle part —
+exactement le mode de panne que ce module ferme. `config/mandats/preset_multi_actifs.json`
+décrit le système RÉEL, et un test échoue dès qu'une valeur par défaut du preset change sans que
+le mandat suive. Coût : toute modification de paramètre doit désormais passer par le mandat.
+
+## ADR-0049 — Le moteur est une fonction PURE du mandat, et on le vérifie mécaniquement (2026-08-27)
+
+**Contexte.** ADR-0048 donne une définition stable. Elle ne vaut rien si le moteur peut être
+influencé par autre chose qu'elle. Or il l'était : une variable d'environnement décidait quelles
+actions acheter.
+
+**Décision.** Contrat `moteur(mandat, marché, as_of) -> poids cibles`, avec trois propriétés
+vérifiables, chacune correspondant à un défaut RÉEL du dépôt :
+
+| Propriété | Défaut qu'elle ferme |
+|---|---|
+| déterminisme | deux appels identiques doivent rendre le même résultat |
+| indépendance à l'environnement | `QUANT_LIVE_LITE` changeait la sélection d'univers (26/08) |
+| équivalence des chemins | #347, #352, #353 — rétablies une par une, à la main, après coup |
+
+`packages/mandate/purete` implémente les trois. Le harnais bouscule volontairement les variables
+suspectes puis **restaure exactement** l'état initial — un harnais qui contamine les tests
+suivants serait pire que le défaut qu'il cherche, et c'est testé aussi.
+
+**Tolérance.** La comparaison arrondit à 1e-9 : on compare des DÉCISIONS, pas le dernier bit d'un
+flottant. Une réassociation d'opérations ne doit pas faire échouer le test pour un écart qui ne
+change aucun ordre envoyé. Un test vérifie que la tolérance n'avale pas pour autant un écart
+significatif.
+
+**Conséquences.** Le harnais attrape aujourd'hui la classe de défaut qui a coûté trois PR ; il
+n'est pas encore branché sur le preset lui-même — c'est la migration suivante, et elle touche du
+code de production tout juste stabilisé. Elle se fera dans une PR dédiée, pas dans celle-ci.
+
+## ADR-0050 — On ne SPÉCIFIE pas un Sharpe : on le mesure, dégonflé du nombre d'essais (2026-08-27)
+
+**Contexte.** Proposition initiale : « l'IA te sort la stratégie optimale — tu peux demander un
+Sharpe de 2,3 ». C'est une spécification par le RÉSULTAT, et une machine à surapprendre.
+
+**Le chiffre qui tranche, et il vient du dépôt.** `research/sharpe_diff.seuil_detectable` établit
+que 126 pas ne résolvent que ~+0,14 de Sharpe (ADR-0039). Un système incapable de distinguer 1,35
+de 1,49 ne peut pas livrer « 2,3 » comme contrat. Pire : si une boucle génère des candidats et
+garde ceux qui atteignent la cible, le maximum de N tirages bruités croît en √(2 ln N) — sur 100
+essais, ~2,5 écarts-types « gratuits ». On obtiendrait 2,3, en backtest, sans aucun alpha.
+
+**Décision.** Le schéma de mandat REFUSE toute cible de résultat en entrée (`sharpe`, `sortino`,
+`calmar`, `rendement`, `dsr`…). Le refus est structurel, pas un conseil en docstring. Ce qui est
+spécifiable est ce qu'on CONTRÔLE : `drawdown_max`, `turnover_max_annuel`, `levier_max`,
+`liquidite_min_adv`, `nb_lignes_min`, univers autorisé. Ces grandeurs restent parfaitement
+légitimes en SORTIE, avec leur barre d'erreur et le nombre d'essais.
+
+**Ce que le dépôt avait DÉJÀ, et que j'ai commencé par redévelopper.** `portfolio/psr.py`
+(PSR + DSR, avec la gestion du piège de périodicité annualisé/par-période — audit du 20/08),
+`research/ledger.py` (registre JSONL, `trial_count`, `deflation_params`), `research/gate.py` (le
+verdict). J'en avais écrit une version parallèle, moins bonne. Elle a été supprimée. **Seul
+Benjamini-Hochberg manquait réellement** — vérifié par recherche, absent du dépôt, et réclamé en
+P0 par le TODO pour le criblage de paires.
+
+**Décision complémentaire.** `packages/research/fdr.py` — BH seul, et le nombre de candidats
+testés publié AVEC le verdict. Le DSR déflate UN candidat du nombre d'essais ; il ne répond pas à
+« parmi N verdicts positifs simultanés, combien sont du bruit ? ». BH plutôt que Bonferroni : sur
+des candidats corrélés, Bonferroni ne laisse rien passer.
+
+**Conséquences.** L'ordre de construction est fixé : mandat hashé → moteur pur → comptage des
+hypothèses → **et seulement ensuite** un LLM qui propose des mandats. Le LLM en dernier, non par
+prudence de principe, mais parce que sans les trois premiers il amplifie le bruit au lieu de
+produire du signal.
+
+**Corollaire de méthode.** Avant d'écrire un module, chercher ce qui existe. Le dépôt compte 28
+paquets ; j'ai dupliqué PSR/DSR et un registre d'hypothèses parce que j'ai conçu avant de lire.

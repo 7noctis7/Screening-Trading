@@ -32,6 +32,12 @@ graph TD
     C1[DataProvider / Broker / Strategy]
     C2[RiskRule / Factor / Sizer / Indicator]
   end
+  subgraph MANDAT[packages/mandate - definition declarative]
+    MD[mandat JSON: contraintes + parametres]
+    MH[identite = hash canonique]
+    MP[harnais de purete: determinisme / env / equivalence]
+    MD --> MH
+  end
   subgraph PIPE[Chaine de traitement]
     D[data + pit_guard anti-fuite] --> R[macro and regime]
     R --> S[screening: filtres YAML + z-score]
@@ -43,10 +49,15 @@ graph TD
     ST --> PF[portefeuille and risque]
     PF --> EX[execution: run_live.py = chemin PROD unique]
   end
+  MD -. pilote .-> ST
+  MH -. tracee dans .-> JRNL
+  MP -. verifie .-> ST
   subgraph RESEARCH[packages/research - gate 4 etages]
     GATE[placebo -> DSR -> PBO -> sabotage]
     LEDGER[(ledger hypotheses.jsonl)]
+    FDR[fdr: Benjamini-Hochberg criblage simultane]
     LEDGER -.-> GATE
+    FDR -.-> GATE
   end
   subgraph STORE[Stockage]
     DB[(SQLite/DuckDB/Parquet)]
@@ -107,6 +118,7 @@ flowchart LR
 | Fondamental & valo | `packages/fundamentals` | ✅ ratios+DCF+value/quality (S4) |
 | Ranking multi-facteur | `packages/ranking` | ✅ momentum/trend/low-vol (S3) |
 | Stratégies | `packages/strategies` | ✅ 2 plugins (S1) |
+| **Mandat (définition déclarative)** | `packages/mandate` | ✅ identité = hash canonique · cosmétique hors identité · cibles de résultat refusées · harnais de pureté déterminisme/env/équivalence (ADR-0048/0049/0050) |
 | Backtest | `packages/backtest` | ✅ event-driven + walk-forward + DSR (S5) |
 | Risque (engine + règles) | `packages/risk` | ✅ engine+veto+kill-switch (S1) |
 | Portefeuille | `packages/portfolio` | ✅ HRP/ERC/min-var, VaR/CVaR/EVT, PSR/DSR, stress (S11) |
@@ -115,7 +127,7 @@ flowchart LR
 | Alertes | `packages/alerts` | ✅ engine+sinks+throttle+wiring — BRANCHÉ sur `run_live.py` (BLOC 1c) |
 | Reporting | `packages/reporting` | ✅ analytics, tearsheet, notes sociétés, miroir Obsidian (S13) |
 | API / Web | `apps/` | ✅ FastAPI snapshot + Next.js (dashboard, /positions réel-vs-cible, /screener explicable, /crypto live, /echecs) + export statique Pages |
-| Recherche & gate | `packages/research` | ✅ gate 4 étages (placebo→DSR→PBO→sabotage), ledger, microstructure OFI/vPIN, alpha-decay (ADR-0024) |
+| Recherche & gate | `packages/research` | ✅ gate 4 étages (placebo→DSR→PBO→sabotage), ledger, **fdr Benjamini-Hochberg (ADR-0050)**, microstructure OFI/vPIN, alpha-decay (ADR-0024) |
 | Screening | `packages/screening` | ✅ filtres YAML + composite z-score → `/screener` |
 | Sentiment | `packages/sentiment` | ✅ FinBERT+lexique+RSS point-in-time + risk gate |
 | Événements | `packages/events` | ✅ earnings (blackout) + IPOs |
