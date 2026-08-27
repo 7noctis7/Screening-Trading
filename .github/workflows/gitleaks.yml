@@ -11,6 +11,14 @@ on:
 
 permissions:
   contents: read
+  # Ajouté le 27/08, après le passage du dépôt en PRIVÉ. Sur un dépôt PUBLIC,
+  # `GET /pulls/{n}/commits` sert de la donnée publique : un jeton sans ce scope
+  # pouvait la lire. En PRIVÉ, la même lecture l'exige explicitement, sans quoi
+  # gitleaks-action meurt sur `403 Resource not accessible by integration` — et
+  # UNIQUEMENT sur l'événement `pull_request`, puisque sur un push il scanne en
+  # local sans toucher à l'API. C'est exactement le motif observé : sept échecs
+  # d'affilée sur les PR, `push` sur `main` resté vert tout du long.
+  pull-requests: read
 
 jobs:
   gitleaks:
