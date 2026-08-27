@@ -90,3 +90,24 @@ def select_rolling_universe(M: dict, t: int, top_k: int, lookback: int) -> list:
            and np.isfinite(M[s][_b0]) and M[s][_b0] > 0}
     return (sorted(sel, key=lambda s: sel[s], reverse=True)[:top_k]
             if len(sel) >= 5 else list(M.keys())[:top_k])
+
+
+def regime_detail(mkt: np.ndarray, t: int) -> str:
+    """Les CHIFFRES derrière `regime_mult` — drawdown, pic, MM200, pente.
+
+    Trois hypothèses fausses ont été émises sur un `régime = 0.000` faute de savoir
+    QUELLE branche l'annulait. Le multiplicateur seul ne le dit pas : 0,0 ne peut venir
+    que du drawdown dur, mais 0,2 et 0,6 se ressemblent, et rien n'indique si le niveau
+    est légitime. Cette fonction n'entre dans AUCUN calcul ; elle décrit.
+    """
+    if t < 25:
+        return "moins de 25 barres → porte neutralisée (1,0)"
+    hist = mkt[:t + 1]
+    peak_i = int(np.argmax(np.maximum.accumulate(hist)[-1] == hist))
+    peak = float(hist[peak_i])
+    dd = mkt[t] / peak - 1.0 if peak > 0 else 0.0
+    ma = float(hist[-200:].mean())
+    slope = float(mkt[t] / mkt[t - 20] - 1.0)
+    recul = t - peak_i
+    return (f"DD {dd:+.1%} (pic il y a {recul} barres) · "
+            f"niveau {mkt[t]:.2f} vs MM200 {ma:.2f} · pente 20j {slope:+.1%}")

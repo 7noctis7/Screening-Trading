@@ -46,6 +46,17 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       exécution. `mkt` (l'indice des portes régime/ampleur) était la moyenne de ces 12 noms
       arbitraires → portes à zéro → exposition brute nulle. Corrigé : repli par MOMENTUM
       (`_price_universe`, aligné par date, sans fondamentaux).
+- [x] **L'univers de PRODUCTION était classé sur le momentum de 2015** (2026-08-27, ADR-0046).
+      `_price_universe` mesure au DÉBUT de la fenêtre (`s0 = 120` sur 2762 barres) — correct en
+      backtest (anti-fuite #2), absurde en production. Titres effondrés depuis 2015 retenus →
+      drawdown du panier > 15 % → porte de régime à zéro, pendant que la porte d'AMPLEUR voyait
+      100 % du même univers au-dessus de sa MM200. Corrigé par `au_dernier_point=True` sur le
+      seul chemin production. Au passage : garde d'indice de `momentum_rank` `> s0` → `>= s0`,
+      sans quoi le repli momentum retombait sur l'ordre du dictionnaire au dernier point.
+- [x] **Le diagnostic chiffre la porte de régime** (ADR-0047) : drawdown, recul du pic, niveau
+      vs MM200, pente 20 j. Trois hypothèses fausses ont été émises faute de cette ligne.
+- [ ] **À VÉRIFIER AU PROCHAIN RUN** : `régime` doit cesser d'être à 0,000. Le correctif ferme
+      un défaut sans ambiguïté, mais qu'il suffise doit venir de la mesure, pas d'une prédiction.
 - [ ] **P1 — Décider : `fundamentals` doit-elle rester dans `_LITE_SKIP` ?** Le repli momentum
       rend la production correcte, mais l'univers reste sélectionné par momentum et non par
       qualité — ce n'est pas ce que le design prévoyait. Arbitrage justesse du signal vs durée

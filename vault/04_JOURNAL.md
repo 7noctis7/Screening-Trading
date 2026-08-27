@@ -1,5 +1,60 @@
 # 04 — JOURNAL
 
+## Session 2026-08-27 (18) — L'univers de production était classé sur le momentum de 2015
+
+**Le fait mesuré.** Après le repli momentum de la session 17, le run de production a rendu :
+
+```
+    exposition brute   DD-target 0.515 × régime 0.000 × ampleur 1.000  =  0.0000
+    ⛔ ARRÊT : exposition brute NULLE — porte(s) à zéro : régime
+```
+
+**Une contradiction, donc un défaut.** `ampleur = 1,000` dit que 100 % de l'univers est
+au-dessus de sa MM200. `régime = 0,000` ne peut venir que du drawdown DUR (> 15 %) du même
+indice `mkt`. Les deux portes lisent le MÊME panier : elles ne peuvent pas décrire deux
+marchés opposés. Une contradiction interne est un fait, pas une opinion — contrairement aux
+trois hypothèses de la veille, celle-ci n'avait pas besoin d'être devinée.
+
+**La cause.** `_price_universe` mesure le momentum au DÉBUT de la fenêtre commune,
+`s0 = max(lookback, 50) = 120`. Sur 2762 barres, c'est le momentum de **début 2015**, puis
+figé. Ce point est CORRECT en backtest — le mesurer à la fin reviendrait à choisir l'univers
+en connaissant l'avenir, le biais #2 que le dépôt a fermé — et indéfendable en production, où
+« aujourd'hui » EST le dernier point connu. Des titres forts en 2015 et effondrés depuis
+restaient sélectionnés ; l'indice de leur panier affichait un drawdown > 15 % ; la porte de
+régime mettait l'exposition à zéro.
+
+**Correctif.** `_price_universe(..., au_dernier_point=True)` pour le seul chemin de
+production. Le défaut du backtest ne bouge pas, et un test le verrouille explicitement.
+
+**Un second défaut, dans le correctif lui-même.** `momentum_rank` gardait
+`if len(M[s]) > s0`. On lit l'indice `s0 - 1` : une série de LONGUEUR `s0` est parfaitement
+lisible. Sans conséquence tant que `s0` valait 120, mais au dernier point `s0 == len(série)`
+et le garde excluait **tous** les titres → `sel` vide → `len(sel) < 5` → retour de
+`list(syms)[:top_k]`, c'est-à-dire **l'ordre du dictionnaire**. Le repli momentum se serait
+donc dégradé en silence exactement en ce qu'il devait remplacer. Garde passé à `>= s0`.
+
+**Ma vérification de la veille lisait ce repli en croyant lire un succès.** Le script
+synthétique renvoyait `ACTUEL00, ACTUEL01, ACTUEL02…` — l'ordre d'insertion, pas un
+classement. Je l'ai pris pour une preuve. Le tri par ordre alphabétique d'`aligner_par_date`
+a ensuite rendu VERT un premier test qui ne mesurait rien : « ACTUEL » précède « VIEUX »,
+donc le repli arbitraire tombait juste par hasard. Les familles sont désormais nommées pour
+que l'ordre du dictionnaire ET l'ordre alphabétique favorisent tous deux les titres périmés :
+seul un vrai classement momentum peut passer.
+
+**Le diagnostic chiffre maintenant la porte de régime** (`regime_detail`) : drawdown, recul du
+pic, niveau vs MM200, pente 20 j. Trois hypothèses fausses ont été émises faute de cette
+ligne ; elle n'entre dans aucun calcul.
+
+**Tests & CI.** 1381 verts. Cinq nouveaux tests, vérifiés rouges sans chacun des deux
+correctifs pris séparément. Aucune nouvelle alerte ruff dans `packages/` et `apps/`.
+
+**Ce que ce correctif ne prouve PAS.** Il ferme un défaut sans ambiguïté sur ses propres
+termes. Que `régime = 0` disparaisse réellement en production doit venir du prochain run de
+l'utilisateur, pas de ma prédiction : je me suis trompé trois fois sur cette question et j'ai
+livré deux bogues dans mon propre outil de diagnostic.
+
+---
+
 ## Session 2026-08-26 (17) — La cause, enfin : les portes mesuraient un panier tiré au hasard
 
 **Le diagnostic a parlé.** Après deux correctifs de l'outil lui-même (garde-fou bogué, puis
