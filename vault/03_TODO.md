@@ -74,6 +74,35 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
 - [ ] **Garde-fou à retenir** : un changement de visibilité modifie en SILENCE les permissions
       implicites du jeton Actions et les droits Pages. Aucune alerte, aucun code touché.
 
+## 🏗️ Mandat & moteur déterministe (2026-08-27, ADR-0048/0049/0050)
+- [x] **`packages/mandate`** — définition déclarative hashée, cosmétique hors identité, cibles
+      de résultat refusées structurellement, harnais de pureté (déterminisme / environnement /
+      équivalence des chemins). 50 tests.
+- [x] **`packages/research/fdr.py`** — Benjamini-Hochberg. Ferme la moitié du P0
+      DualMarketScreening ci-dessous (le criblage de paires doit maintenant l'APPELER).
+- [ ] **P1 — Brancher le harnais de pureté sur le preset.** Le contrat est écrit et testé, il
+      n'est pas encore appliqué au moteur réel. PR dédiée : elle touche du code de production
+      stabilisé le 27/08, et son contrôle d'équivalence backtest/production est le vrai livrable.
+- [ ] **P1 — Faire consommer le mandat par `preset_latest_weights`.** Aujourd'hui
+      `config/mandats/preset_multi_actifs.json` DÉCRIT le moteur (un test vérifie qu'il ne ment
+      pas) mais ne le PILOTE pas. Tant que le pilotage n'est pas fait, le lien d'audit reste
+      déclaratif.
+- [ ] **P2 — Graver l'identité du mandat dans le journal et les ordres.** C'est la propriété qui
+      justifie tout le reste : répondre à « quelle définition exacte a produit cet ordre ».
+- [ ] **P2 — Le LLM qui propose des mandats.** EN DERNIER, et seulement après les trois points
+      ci-dessus : sans comptage des hypothèses il amplifie le bruit au lieu de produire du signal.
+
+## 🗄️ Data layer élargi — avertissements avant de s'engager (2026-08-27)
+- [ ] **Futures et options ne sont pas « plus de lignes »** : expiration, roll, structure par
+      terme, grecques. Un contrat continu se CONSTRUIT, et la méthode de roll change
+      matériellement les résultats de backtest. Autre modèle de données, pas une extension.
+- [ ] **Données alternatives (sentiment, géopolitique)** : c'est là que la règle point-in-time se
+      fait violer — ces séries sont presque toujours révisées et rétro-remplies. Toute nouvelle
+      source doit porter un horodatage **as-of**, jamais seulement une date de valeur. La règle
+      existe déjà, formalisée dans `config/macro_publication_lags.yaml`.
+- [ ] **Méthode** : interface universelle dès le départ, couverture élargie UNE classe d'actifs à
+      la fois, chacune passant `make contracts` et `make audit`.
+
 ## 🟡 Screening-Trading — reste ouvert (2026-08-22)
 - [ ] **Câbler `impact.py` / `almgren_chriss.py` à l'exécution réelle** — écrits et testés, non
       branchés : les coûts d'impact sont ignorés au dimensionnement. (Débloqué par ADR-0038.)

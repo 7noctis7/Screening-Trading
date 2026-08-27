@@ -1,5 +1,54 @@
 # 04 — JOURNAL
 
+## Session 2026-08-27 (19) — La stratégie devient une donnée, et le moteur cesse d'être influençable
+
+**Point de départ.** L'utilisateur propose une architecture : le LLM produit une *définition de
+stratégie*, pas des ordres ; un cœur déterministe traduit cette définition en signaux ; le moteur
+est indépendant du LLM « pour la fiabilité et l'audit » ; et un data layer couvre tout, jusqu'aux
+données alternatives.
+
+**Ce qui est juste, et validé par nos propres bugs.** La séparation moteur/LLM est le point le
+plus important, et les trois divergences production/backtest corrigées en 24 h (#347, #352, #353)
+ont TOUTES la même cause racine — qui n'est aucune des trois : aucun artefact ne disait « voici la
+stratégie ». Elle vivait dans des valeurs par défaut, des variables d'environnement et des effets
+de bord. La proposition les aurait rendues **impossibles**, pas seulement détectables.
+
+**Ce que j'ai contesté.** « Demande un Sharpe à 2,3 » est une spécification par le résultat. Le
+dépôt possède le chiffre qui la réfute : 126 pas ne résolvent que ~+0,14 de Sharpe (ADR-0039), donc
+le système ne distingue même pas 1,35 de 1,49. Et une boucle qui garde les candidats atteignant la
+cible fait du p-hacking à l'échelle — le maximum de N tirages bruités croît en √(2 ln N). Le refus
+est désormais STRUCTUREL : le schéma de mandat rejette les cibles de résultat en entrée.
+Démonstration mesurée : le meilleur de 200 mandats tirés d'un **bruit pur** affiche un Sharpe de
+0,157 contre 0,168 atteignable par pur hasard — correctement rejeté.
+
+**Livré.** `packages/mandate` (canonical / spec / purete, 448 l.), `packages/research/fdr.py`,
+`config/mandats/preset_multi_actifs.json`, 50 tests. ADR-0048/0049/0050, diagramme mis à jour.
+
+**Mon erreur de la session, et elle est structurelle.** J'ai écrit un `hypothesis_ledger` complet —
+PSR, DSR, registre d'essais — avant de découvrir que `portfolio/psr.py` et `research/ledger.py`
+faisaient déjà tout cela, **et mieux** : l'existant gère le piège de périodicité annualisé
+vs par-période (audit du 20/08) que je n'avais même pas identifié. J'ai supprimé mon doublon et ne
+gardé que Benjamini-Hochberg, seule brique réellement absente (vérifiée par recherche, et P0 ouvert
+du TODO). J'ai conçu avant de lire, dans un dépôt de 28 paquets. La règle en tire une ligne dans
+l'ADR-0050.
+
+**Deuxième erreur, attrapée par un test.** Mon test sur la croissance du seuil de hasard affirmait
+« +40 % de 100 à 10 000 essais » d'après l'asymptotique √(2 ln n). La formule exacte donne +53 % —
+l'asymptotique n'est pas serrée pour n ≲ 10⁵. Corrigé avec la vraie valeur, pas en élargissant la
+borne.
+
+**Non livré, délibérément.** Le harnais de pureté n'est PAS branché sur le preset. C'est une
+migration qui touche du code de production stabilisé il y a quelques heures ; elle mérite sa propre
+PR et son propre contrôle d'équivalence.
+
+**Sur le data layer.** Bonne intuition, mais deux avertissements écrits au TODO : futures et options
+ne sont pas « plus de lignes » (expiration, roll, structure par terme — autre modèle de données), et
+les données alternatives sont précisément là où la règle point-in-time se fait violer. Le dépôt a
+déjà la bonne règle formalisée dans `config/macro_publication_lags.yaml` : *feature at t may only
+use vintages with release_date <= t*.
+
+---
+
 ## Incident 2026-08-27 — Le passage du dépôt en PRIVÉ a cassé deux workflows en silence
 
 **Symptôme.** `gitleaks` rouge sur toutes les PR. J'allais le classer « rouge pré-existant,
