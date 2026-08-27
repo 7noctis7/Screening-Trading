@@ -26,6 +26,9 @@ from packages.backtest.preset_helpers import (
     mom_tilt as _mom_tilt_fn,
 )
 from packages.backtest.preset_helpers import (
+    regime_detail as _regime_detail_fn,
+)
+from packages.backtest.preset_helpers import (
     regime_mult as _regime_mult_fn,
 )
 from packages.portfolio.optimize import equal_risk_contribution
@@ -93,28 +96,25 @@ def _selection(data: dict, quality: dict, lookback: int, top_k: int, d: Diag):
         return sorted(q, key=lambda s: q[s], reverse=True)[:top_k]
     # REPLI PAR MOMENTUM, plus jamais par l'ordre du dictionnaire.
     #
-    # Constaté en production le 26/08 : `make live` tourne en mode LÉGER, qui coupe la
-    # section `fundamentals` — donc `quality` est TOUJOURS vide à l'exécution, et le
-    # repli
-    # tirait les 12 premiers symboles de `data`. Conséquence en chaîne : `mkt`
-    # (l'indice de
-    # marché des portes de régime et d'ampleur) était la moyenne de ces 12 noms
-    # arbitraires.
-    # Les portes concluaient « marché en chute > 15 %, aucun titre au-dessus de sa
-    # MM200 »
-    # et mettaient l'exposition brute à ZÉRO. Le satellite actions était donc vide
-    # non par
-    # décision de risque, mais parce qu'on mesurait le risque d'un panier tiré au
-    # hasard.
+    # Constaté en production le 26/08 : `make live` tourne en mode LÉGER, qui coupe
+    # la section `fundamentals` — `quality` est donc TOUJOURS vide à l'exécution, et
+    # le repli tirait les 12 premiers symboles de `data`. Conséquence en chaîne :
+    # `mkt`, l'indice de marché des portes de régime et d'ampleur, était la moyenne
+    # de ces 12 noms arbitraires. Les portes concluaient « marché en chute > 15 %,
+    # aucun titre au-dessus de sa MM200 » et mettaient l'exposition brute à ZÉRO. Le
+    # satellite actions était donc vide non par décision de risque, mais parce qu'on
+    # mesurait le risque d'un panier tiré au hasard.
     #
     # `_price_universe` est le MÊME classement momentum que le backtest, aligné par
-    # date et
-    # sans fondamentaux : il fonctionne quelle que soit la raison de l'absence de scores
-    # (mode léger, réseau coupé, quota d'API), au lieu de dépendre d'un ordre de
-    # dictionnaire.
+    # date et sans fondamentaux : il fonctionne quelle que soit la raison de
+    # l'absence de scores (mode léger, réseau coupé, quota d'API).
+    # `au_dernier_point=True` le mesure sur les 252 dernières barres et non au début
+    # de la fenêtre : en production, « aujourd'hui » EST le dernier point connu, donc
+    # aucune fuite — alors que garder le point de départ revenait à figer l'univers
+    # sur le momentum de 2015.
     d.note("score qualité", f"⚠️  {len(q)} scoré(s) (< 5) → repli MOMENTUM "
                             f"(prix seuls, aligné par date)")
-    return _price_universe(data, syms, lookback, top_k)
+    return _price_universe(data, syms, lookback, top_k, au_dernier_point=True)
 
 
 def _prod_panel(data: dict, universe: list, min_names: int):
@@ -216,6 +216,7 @@ def _exposition(A, cov, w, mkt, t, d: Diag, *, k_dd, dd_target, regime_gate,
     if regime_gate:
         rm = _regime_mult_fn(mkt, t)
         d.porte("régime", rm)
+        d.note("régime (détail)", _regime_detail_fn(mkt, t))
         gross *= rm
     if breadth_gate:
         am = float(np.clip(_breadth_fn(A, t) / 0.5, 0.0, 1.0))

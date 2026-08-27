@@ -843,3 +843,42 @@ du signal et durée du snapshot, laissé explicite au TODO plutôt que résolu p
 `snap["preset_allocation"]` à la racine, où la clé n'existe pas (elle est sous `dashboard`).
 Une bonne piste abandonnée sur la foi d'une mesure non validée. **Valider l'instrument avant de
 lui faire réfuter une hypothèse.**
+
+## ADR-0046 — Le point de mesure du momentum n'est PAS le même en backtest et en production (2026-08-27)
+
+**Contexte.** `_price_universe` classe l'univers par momentum au DÉBUT de la fenêtre commune
+(`s0 = max(lookback, 50)`). C'est l'anti-fuite #2 : en backtest, classer au dernier point
+reviendrait à choisir l'univers en connaissant l'avenir. La fonction est partagée avec le
+chemin de PRODUCTION depuis ADR-0045, où ce même point produit un résultat absurde — sur
+2762 barres, `s0 = 120` sélectionne sur le momentum de début 2015, puis fige. Constaté :
+l'indice du panier périmé tombait sous −15 %, la porte de régime annulait l'exposition,
+pendant que la porte d'ampleur voyait 100 % du même univers au-dessus de sa MM200.
+
+**Décision.** Un paramètre explicite `au_dernier_point`, défaut `False`. Le backtest garde
+le point de départ ; seule la production le passe à `True`. En production, « aujourd'hui »
+EST le dernier point connu : il n'y a aucune information future à fuiter. Deux tests
+verrouillent l'asymétrie dans les deux sens — un défaut sur le chemin backtest serait une
+fuite, un défaut sur le chemin production un univers périmé.
+
+**Conséquences.** L'univers de production suit le marché au lieu d'être figé. Le garde
+d'indice de `momentum_rank` passe de `> s0` à `>= s0` : on lit `s0 - 1`, donc une série de
+longueur `s0` est lisible, et le garde strict aurait vidé la sélection au dernier point pour
+la faire retomber sur l'ordre du dictionnaire — le défaut même que ADR-0045 ferme. Sans effet
+sur le backtest, où `s0 = 120` et les séries font 2762 barres.
+
+**Corollaire de méthode.** Un repli qui se dégrade en silence doit être testé sur un jeu où
+TOUS les ordres arbitraires (insertion, alphabétique) donnent la mauvaise réponse. Une
+première version de ces tests était verte parce que le tri alphabétique d'`aligner_par_date`
+faisait accidentellement tomber juste le repli arbitraire.
+
+## ADR-0047 — Une porte qui bloque doit publier ses CHIFFRES, pas seulement son multiplicateur (2026-08-27)
+
+**Contexte.** `régime = 0.000` a donné lieu à trois hypothèses successives, toutes fausses.
+Le multiplicateur seul ne dit ni quelle branche l'a produit, ni si le niveau est légitime.
+
+**Décision.** `regime_detail(mkt, t)` publie drawdown, recul du pic, niveau vs MM200 et pente
+20 jours dans le diagnostic. Fonction purement descriptive : elle n'entre dans aucun calcul et
+ne peut donc pas changer un poids.
+
+**Conséquences.** La prochaine porte fermée sera lue, pas devinée. Coût : une ligne de
+diagnostic et un appel de plus par exécution de production.
