@@ -61,8 +61,16 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       rend la production correcte, mais l'univers reste sélectionné par momentum et non par
       qualité — ce n'est pas ce que le design prévoyait. Arbitrage justesse du signal vs durée
       du snapshot, à trancher explicitement plutôt que par effet de bord.
-- [ ] **Aucun cron installé** (`crontab -l` vide) : le rebalancement n'a jamais tourné seul.
-      À décider — cron dans la séance NYSE (15:30-22:00 CEST), ou lancement manuel assumé.
+- [x] **Cron : TRANCHÉ le 27/08 — 22h05, donc crypto automatique, actions manuelles.**
+      La machine n'est allumée que vers 22h, or la clôture NYSE tombe à 22h00 pile
+      (`_FERMETURE = 16:00 ET`, vérifié sur le code). Les actions seront donc reportées
+      chaque jour ; 8 des 9 positions étant du crypto, l'automatisation garde l'essentiel.
+      L'heure du script est désormais configurable (`QUANT_LIVE_HOUR`), et le récapitulatif
+      des ordres reportés ne ment plus : il disait « ils partiront à la prochaine séance »,
+      ce qui est FAUX avec un planning hors séance — rien ne les met en file d'attente.
+- [ ] **P2 — Si le report des actions devient gênant** : soit allumer avant 21h un soir par
+      semaine (`make live-go`), soit une file d'attente persistante des ordres reportés
+      qui les rejoue à la prochaine ouverture. La file n'existe pas aujourd'hui.
 
 ## 🔧 Infrastructure — visibilité du dépôt (2026-08-27)
 - [x] **`gitleaks` : `pull-requests: read` ajouté.** Le scan des PR était aveugle depuis le

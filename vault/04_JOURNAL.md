@@ -1,5 +1,38 @@
 # 04 — JOURNAL
 
+## Note 2026-08-27 (20) — Le rebalancement automatique sera crypto, et c'est dit
+
+**Contrainte matérielle.** La machine n'est allumée que vers 22h. Or la clôture NYSE tombe
+à **22h00 pile** heure de Paris — vérifié en exécutant `market_calendar.is_open` plutôt qu'en
+le supposant : à 21h55 les actions sont ouvertes, à 22h00 elles sont fermées. Un cron à 22h05
+ne peut donc jamais remplir un ordre actions.
+
+**Décision.** Cron à 22h05 quand même : 8 des 9 positions sont du crypto, qui tourne 24/7.
+L'automatisation garde l'essentiel, les actions restent manuelles. L'heure du script était codée
+en dur à 16h05 ; elle est désormais configurable (`QUANT_LIVE_HOUR` / `QUANT_LIVE_MIN`).
+
+**Le défaut trouvé en écrivant ce correctif.** Le récapitulatif des ordres reportés affirmait
+« Pas une erreur : ils partiront à la prochaine séance. » C'est **faux** dès que le planning est
+hors séance : la prochaine exécution sera elle aussi hors séance, et rien ne met les ordres en
+file d'attente. Un message rassurant et faux est pire que pas de message — il aurait laissé
+croire à un rattrapage qui n'arrive jamais. Le récapitulatif ventile maintenant par classe
+d'actifs et donne les deux issues actionnables.
+
+**Deux bugs de forme au passage.** `.replace(",", " ")` s'appliquait à toute la chaîne
+concaténée, donc mangeait aussi la virgule de ponctuation (`)  2 450$` au lieu de `), 2 450$`).
+Présent aussi dans le bloc des ordres REFUSÉS — corrigé aux deux endroits. Et un zéro codé en
+dur dans `${HOUR}h0${MIN}` rendait « 20h030 » pour MIN=30.
+
+**Piège de calendrier documenté.** Entre le changement d'heure européen (dernier dimanche
+d'octobre) et américain (premier dimanche de novembre), l'écart Paris↔New York passe à 5 h
+pendant une semaine : la clôture tombe alors à 21h00 heure de Paris. D'où le conseil d'éviter
+21h30-22h00 si le cron devait être avancé.
+
+**Tests.** 4 nouveaux (1435 verts). Le plus utile vérifie que le message ne promet PAS un envoi
+automatique — c'est-à-dire qu'il teste l'absence de l'ancienne affirmation.
+
+---
+
 ## Session 2026-08-27 (19) — La stratégie devient une donnée, et le moteur cesse d'être influençable
 
 **Point de départ.** L'utilisateur propose une architecture : le LLM produit une *définition de
