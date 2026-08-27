@@ -1,5 +1,73 @@
 # 04 — JOURNAL
 
+## Session 2026-08-27 (21) — `régime = 0` élucidé : la porte lisait sa propre sélection
+
+**Le run de production a tranché**, et la ligne de diagnostic ajoutée le matin a suffi :
+
+```
+    score qualité      ⚠️  0 scoré(s) → repli MOMENTUM (prix seuls, aligné par date)
+    panel aligné       12 noms × 1329 dates communes
+    régime (détail)    DD -23.8% (pic il y a 45 barres) · niveau 316.45 vs MM200 208.75
+                       · pente 20j +15.5%
+    exposition brute   DD-target 0.143 × régime 0.000 × ampleur 1.000  =  0.0000
+```
+
+**La contradiction est désormais LISIBLE, et elle désigne la cause.** L'indice est 52 %
+AU-DESSUS de sa MM200 (316,45 vs 208,75) et monte de +15,5 % sur 20 jours — et il affiche
+simultanément un drawdown de −23,8 %. Les deux sont vrais **de ce panier-là**, et c'est
+précisément le problème : `mkt = A.mean(axis=0)` est la moyenne des 12 titres SÉLECTIONNÉS,
+pas un indice de marché. Sans score qualité, le repli prend le top-12 du momentum à 12 mois,
+c'est-à-dire **par construction les douze titres les plus extrêmes de l'univers**. Un tel
+panier est presque toujours à plus de 15 % sous son pic tout en étant loin au-dessus de sa
+MM200. La porte de régime s'annulait donc en lisant sa propre sélection.
+
+**Le correctif expérimental, décisif.** Même capital, même minute, `QUANT_LIVE_LITE=0` :
+
+| | mode léger | mode complet |
+|---|---|---|
+| score qualité | 0 scoré → repli momentum | scoré |
+| univers | 12 noms extrêmes | THC, UNP, PATH, TGT, STT, TMO, T… |
+| satellite actions | **VIDE** (régime 0,000) | **75 720 $ alloués** |
+| durée | ~30 s | 5 min 38 |
+
+**Décision.** `fundamentals` sort de `_LITE_SKIP`. Ce n'était pas une section « non
+essentielle » : elle **décide de l'univers**. Coût assumé (snapshot plus long, mais le cron
+tourne sans personne devant l'écran) et surtout **dégradation gracieuse** : `safe_section`
+isole toute panne, un échec de `fundamentals` fait retomber sur le momentum — le
+comportement d'avant. Le pire cas du correctif est l'état antérieur. Échappatoire :
+`QUANT_LIVE_LITE_SKIP_FUNDAMENTALS=1`.
+
+**Un second bug, trouvé dans la même sortie et sans rapport.**
+
+```
+AAVEUSD  Alpaca  cible 0$  détenu 2541$  Δ -2541$   ⏸ REPORTÉ — hors séance
+```
+
+Une liquidation de CRYPTO bloquée par le calendrier des ACTIONS. Chaîne : les cibles portent
+« AAVE/USD », les positions rendues par Alpaca portent « AAVEUSD » sans séparateur ; une
+position à solder n'a pas de ligne cible, donc `_broker_targets` la crée avec `{"o": None}` ;
+le code lisait `(o or {}).get("asset_class") or "equity"`. **Toute liquidation hors-univers
+était donc classée « action ».** Et `routing._is_crypto` ne reconnaissait pas non plus le
+format sans slash. Gravité : c'est un DÉSENGAGEMENT — le portail de risque ne bloque jamais
+une réduction d'exposition, le calendrier ne doit pas le faire par méprise ; et rien ne met
+les reports en file d'attente, donc il se serait reproduit chaque nuit. Corrigé par
+`routing.classe_actif`, qui infère la classe du format position, base contrainte à la
+whitelist Alpaca pour éviter qu'une action au ticker en « USD » devienne crypto.
+
+**Exécution réelle.** `make live-go` a envoyé 7 ordres (allègements crypto vers les cibles).
+Equity Alpaca 101 735 $.
+
+**Ce que je n'ai PAS corrigé, délibérément.** `mkt` reste (a) la moyenne du panier
+sélectionné et non un indice de marché, (b) une moyenne de PRIX BRUTS — un titre à 500 $
+y pèse 25 fois un titre à 20 $. Les deux sont des défauts réels. Les corriger change ce que
+la porte de régime MESURE, donc les résultats de backtest : cela demande une mesure au labo,
+pas un correctif à l'aveugle. Après trois bugs livrés en deux jours faute de mesure, la leçon
+est prise. Ouvert en P1.
+
+**Tests.** 17 neufs (1456 verts). Ruff : `safe_section` 3→0, `routing` 16→11, aucun ajout.
+
+---
+
 ## Note 2026-08-27 (20) — Le rebalancement automatique sera crypto, et c'est dit
 
 **Contrainte matérielle.** La machine n'est allumée que vers 22h. Or la clôture NYSE tombe
