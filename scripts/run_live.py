@@ -155,6 +155,7 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, 
         raison_fermeture,
     )
     from packages.execution.order_outcome import compte_comme_envoye, resume
+    from packages.execution.routing import classe_actif as _classe_actif
     # ÉCHAPPATOIRE EXPLICITE. `QUANT_IGNORE_SESSION=1` envoie quand même hors séance —
     # utile pour empiler des ordres avant l'ouverture en connaissance de cause, et pour
     # les tests qui isolent le PORTAIL DE RISQUE du calendrier. Jamais le défaut : un
@@ -193,7 +194,7 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, 
             # Constat du 26/08 : sans ce contrôle, un run lancé d'Europe (03 h à NY)
             # remplissait tout le crypto et AUCUNE action — 28 % de cash restaient à
             # la place du satellite, sans un mot au journal. On REPORTE en le disant.
-            _ac = (o or {}).get("asset_class") or "equity"
+            _ac = _classe_actif(bsym, (o or {}).get("asset_class") or "")
             if _verif_seance and not is_open(asset_class=_ac):
                 _pq = prochaine_ouverture()
                 print(tag + f"  ⏸  REPORTÉ — {raison_fermeture(asset_class=_ac)}"

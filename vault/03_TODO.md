@@ -57,7 +57,23 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       vs MM200, pente 20 j. Trois hypothèses fausses ont été émises faute de cette ligne.
 - [ ] **À VÉRIFIER AU PROCHAIN RUN** : `régime` doit cesser d'être à 0,000. Le correctif ferme
       un défaut sans ambiguïté, mais qu'il suffise doit venir de la mesure, pas d'une prédiction.
-- [ ] **P1 — Décider : `fundamentals` doit-elle rester dans `_LITE_SKIP` ?** Le repli momentum
+- [x] **TRANCHÉ le 27/08 par la mesure : `fundamentals` SORT de `_LITE_SKIP`.** Même
+      capital, même minute — mode léger : 0 scoré, régime 0,000, satellite VIDE ; mode
+      complet : 12 actions réelles, 75 720 $ alloués. Ce n'était pas une section « non
+      essentielle », elle décidait de l'univers. Dégradation gracieuse en cas de panne
+      réseau (retour au momentum). Échappatoire `QUANT_LIVE_LITE_SKIP_FUNDAMENTALS=1`.
+- [x] **Liquidation crypto bloquée par le calendrier ACTIONS** (`AAVEUSD` reporté chaque
+      nuit). Toute liquidation hors-univers était classée « equity » (`{"o": None}` →
+      défaut). Corrigé par `routing.classe_actif`.
+- [ ] **P1 — `mkt` ne mesure pas le marché.** Deux défauts distincts, tous deux confirmés
+      par la sortie du 27/08 (indice 52 % au-dessus de sa MM200 ET −23,8 % de drawdown) :
+      (a) `A.mean(axis=0)` est la moyenne du panier SÉLECTIONNÉ, donc la porte de régime lit
+      sa propre sélection — plus la sélection est agressive, plus la porte se ferme ;
+      (b) c'est une moyenne de PRIX BRUTS : un titre à 500 $ y pèse 25 fois un titre à 20 $,
+      alors qu'un indice se construit sur des séries normalisées ou des rendements.
+      ⚠️ Corriger change ce que la porte MESURE, donc les résultats de backtest → passer par
+      le labo, ne PAS livrer à l'aveugle.
+- [ ] **P1 — Décider : les autres sections de `_LITE_SKIP` ?** Le repli momentum
       rend la production correcte, mais l'univers reste sélectionné par momentum et non par
       qualité — ce n'est pas ce que le design prévoyait. Arbitrage justesse du signal vs durée
       du snapshot, à trancher explicitement plutôt que par effet de bord.
