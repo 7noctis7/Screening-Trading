@@ -1,10 +1,12 @@
 """Différenciation fractionnaire + assemblage de features point-in-time.
 
 Frac-diff (López de Prado, AFML ch. 5) : rend une série stationnaire en gardant un
-MAXIMUM de mémoire (vs la diff entière qui détruit l'information de niveau). `d` réel ∈ [0,1].
+MAXIMUM de mémoire (vs la diff entière qui détruit l'information de niveau).
+`d` réel ∈ [0,1].
 
 FeatureBuilder : assemble une matrice X alignée sur les temps d'entrée, en lisant les
-features techniques (feature store, à la barre) et macro (`as_of`, point-in-time). Aucune
+features techniques (feature store, à la barre) et macro (`as_of`, point-in-time).
+Aucune
 valeur future ne peut entrer → pas de fuite (cohérent avec le reste du système).
 """
 
@@ -34,7 +36,7 @@ def frac_diff(series: np.ndarray, d: float = 0.4, thresh: float = 1e-4) -> np.nd
     width = len(w)
     out = np.full(len(series), np.nan)
     for i in range(width - 1, len(series)):
-        out[i] = np.dot(w, series[i - width + 1: i + 1])
+        out[i] = np.dot(w, series[i - width + 1 : i + 1])
     return out
 
 
@@ -50,9 +52,9 @@ def adf_stat(series: np.ndarray, lag: int = 1) -> float:
     if m - lag < 8:
         return float("nan")
     dy = np.diff(y)
-    cols = [np.ones(m - lag), y[lag:m]]                 # constante + niveau y_{t-1}
+    cols = [np.ones(m - lag), y[lag:m]]  # constante + niveau y_{t-1}
     for i in range(1, lag + 1):
-        cols.append(dy[lag - i: m - i])                # lags de Δy
+        cols.append(dy[lag - i : m - i])  # lags de Δy
     x = np.column_stack(cols)
     yv = dy[lag:]
     beta, _, _, _ = np.linalg.lstsq(x, yv, rcond=None)
@@ -68,8 +70,12 @@ def adf_stat(series: np.ndarray, lag: int = 1) -> float:
     return float(beta[1] / se) if se > 0 else float("nan")
 
 
-def min_ffd(series: np.ndarray, crit: float = -2.86,
-            ds: tuple[float, ...] | None = None, thresh: float = 1e-4) -> dict:
+def min_ffd(
+    series: np.ndarray,
+    crit: float = -2.86,
+    ds: tuple[float, ...] | None = None,
+    thresh: float = 1e-4,
+) -> dict:
     """Minimum FFD (López de Prado) : plus PETIT `d` ∈ [0,1] stationnarisant la série
     (ADF < `crit`) → différenciation minimale → mémoire maximale préservée.
 
@@ -82,26 +88,65 @@ def min_ffd(series: np.ndarray, crit: float = -2.86,
         fd = frac_diff(arr, d=d, thresh=thresh)
         stat = adf_stat(fd)
         ok = stat == stat and stat < crit
-        last = {"d": round(d, 2), "adf": round(stat, 3) if stat == stat else None,
-                "stationary": bool(ok)}
+        last = {
+            "d": round(d, 2),
+            "adf": round(stat, 3) if stat == stat else None,
+            "stationary": bool(ok),
+        }
         if ok:
             return last
     return last
 
 
+def fold_ffd(
+    train: np.ndarray,
+    validation: np.ndarray,
+    crit: float = -2.86,
+    ds: tuple[float, ...] | None = None,
+    thresh: float = 1e-4,
+) -> dict:
+    """Sélectionne ``d`` sur le train, puis transforme train et validation sans refit.
+
+    La validation reçoit le contexte terminal du train pour le warm-up, mais ne
+    participe
+    jamais au choix de ``d``. Cette asymétrie est le contrat anti-look-ahead.
+    """
+    tr, va = np.asarray(train, float), np.asarray(validation, float)
+    if tr.ndim != 1 or va.ndim != 1 or tr.size < 20:
+        raise ValueError(
+            "train/validation doivent être 1-D et le train avoir au moins 20 points"
+        )
+    selected = min_ffd(tr, crit=crit, ds=ds, thresh=thresh)
+    d = float(selected["d"])
+    width = len(fracdiff_weights(d, thresh))
+    context = tr[-max(0, width - 1) :]
+    joined = np.concatenate([context, va])
+    transformed = frac_diff(joined, d=d, thresh=thresh)[len(context) :]
+    return {
+        "d": d,
+        "train": frac_diff(tr, d=d, thresh=thresh),
+        "validation": transformed,
+        "diagnostic_train": selected,
+    }
+
+
 class FeatureBuilder:
     """Construit X point-in-time : technique (feature store) + macro (`as_of`)."""
 
-    def __init__(self, feature_store, macro_store=None,
-                 macro_series: tuple[str, ...] = ()) -> None:
+    def __init__(
+        self, feature_store, macro_store=None, macro_series: tuple[str, ...] = ()
+    ) -> None:
         self.fs = feature_store
         self.ms = macro_store
         self.macro_series = macro_series
 
-    def build(self, symbol: str, timeframe: str,
-              entry_times: list[datetime]) -> tuple[np.ndarray, list[str]]:
+    def build(
+        self, symbol: str, timeframe: str, entry_times: list[datetime]
+    ) -> tuple[np.ndarray, list[str]]:
         tech_names = self.fs.feature_names(symbol, timeframe)
-        tech = {name: dict(self.fs.read(symbol, timeframe, name)) for name in tech_names}
+        tech = {
+            name: dict(self.fs.read(symbol, timeframe, name)) for name in tech_names
+        }
         names = list(tech_names) + [f"macro_{s}" for s in self.macro_series]
         rows = []
         for t in entry_times:
