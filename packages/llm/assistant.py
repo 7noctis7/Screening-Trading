@@ -72,6 +72,14 @@ def _portfolio(s: dict, details: bool) -> dict:
         "preset_diagnostic": p.get("preset_diagnostic"),
         "benchmark_comparison": _benchmark_summary(d),
     }
+
+
+def _portfolio(s: dict, details: bool) -> dict:
+    p = s.get("portfolio", {})
+    out = {
+        "analysis": p.get("analysis"),
+        "preset_diagnostic": p.get("preset_diagnostic"),
+    }
     if details:
         out["positions"] = _rows(s.get("positions", {}).get("rows", []), 12)
     return out
@@ -193,6 +201,9 @@ def answer_question(
         with _METRICS_LOCK:
             _METRICS["guard_rejections"] += 1
         answer = "Réponse rejetée : chiffres absents des sources fournies."
+        answer = (
+            "Réponse rejetée : chiffres absents des sources fournies."
+        )
     return {
         "available": True,
         "answer": answer,
