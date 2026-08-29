@@ -15,6 +15,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from apps.api.snapshot import build_snapshot
 
@@ -1049,6 +1050,7 @@ def ai_commentary(request: Request) -> dict:
     Le fournisseur vient de l'appelant (en-têtes) ou de l'environnement — modèle local par défaut.
     """
     from packages.llm.client import complete
+    from packages.llm.guard import guard_numbers
     s = _snap()
     d, p = s["dashboard"], s["portfolio"]
     rm = p.get("analysis", {}).get("risk", {})
@@ -1067,5 +1069,35 @@ def ai_commentary(request: Request) -> dict:
               "claires et actionnables, sans afficher ton raisonnement. Commente l'état du "
               "portefeuille (risque, régime, idées). Ton factuel et prudent, pas de conseil personnalisé.")
     res = complete(facts, system=system, max_tokens=1100, cfg=_cfg_llm(request))
-    return {"available": res.get("available", False), "text": res.get("text", ""),
-            "reason": res.get("reason", "")}
+    text, violations = guard_numbers(res.get("text", ""), facts, policy="reject")
+    if violations:
+        text = "Réponse rejetée : chiffres non sourcés dans le contexte Quant Terminal."
+    return {"available": res.get("available", False), "text": text,
+            "reason": res.get("reason", ""), "grounded": not violations,
+            "violations": violations}
+
+
+class AIChatRequest(BaseModel):
+    question: str = Field(min_length=3, max_length=600)
+    scope: str = "overview"
+    include_details: bool = False
+
+
+@app.post("/api/ai/chat")
+def ai_chat(body: AIChatRequest, request: Request) -> dict:
+    """Copilote read-only : outils bornés, citations, aucun accès DB ou exécution."""
+    from packages.llm.assistant import answer_question
+
+    try:
+        return answer_question(body.question, body.scope, _snap(), _cfg_llm(request),
+                               include_details=body.include_details)
+    except ValueError as exc:
+        return JSONResponse({"available": False, "reason": str(exc)}, status_code=400)
+
+
+@app.get("/api/ai/metrics")
+def ai_metrics() -> dict:
+    """Observabilité : fréquence effective de rejet du garde IA."""
+    from packages.llm.assistant import assistant_metrics
+
+    return assistant_metrics()

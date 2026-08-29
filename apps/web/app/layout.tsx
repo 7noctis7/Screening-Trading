@@ -3,6 +3,7 @@ import { Providers } from "./providers";
 import { Nav } from "@/components/Nav";
 import { CommandPalette } from "@/components/CommandPalette";
 import { ParticlesBg } from "@/components/ParticlesBg";
+import { QuantChat } from "@/components/QuantChat";
 export const metadata = {
   title: "Quant Terminal",
   description: "Screening & trading multi-actifs",
@@ -40,7 +41,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
         <script dangerouslySetInnerHTML={{ __html: swCleanup }} />
       </head>
-      <body className="text-fg antialiased"><ParticlesBg /><Providers><Nav /><CommandPalette />{children}</Providers></body>
+      <body className="text-fg antialiased"><ParticlesBg /><Providers><Nav /><CommandPalette />{children}<QuantChat /></Providers></body>
     </html>
   );
 }
