@@ -399,7 +399,7 @@ export default function Dashboard() {
                   <td className="text-right" style={{ color: "#f43f5e" }}>{(k.maxdd * 100).toFixed(1)}%</td>
                 </tr>))}</tbody>
             </table>
-            <p className="text-muted2 text-xs mt-2">Données 100 % réelles (historique broker + indices ^GSPC/^NDX). L'historique réel des comptes est court au début et s'étoffe chaque jour.</p>
+            <p className="text-muted2 text-xs mt-2">Données réelles (historique broker + indices ou ETF proxies frais). Un benchmark périmé est exclu plutôt que prolongé artificiellement.</p>
           </section>
         );
       })() : (

@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import json
 import os
+import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 
@@ -39,15 +41,18 @@ class Config:
     Elle n'est ni écrite sur disque, ni journalisée, ni renvoyée dans une réponse : elle vit le
     temps de la requête. Une clé qu'on n'écrit jamais ne peut pas être commitée par erreur.
     """
+
     base: str = ""
     key: str = ""
     model: str = ""
 
     def resolue(self) -> Config:
         """Complète les champs vides par l'environnement. L'appelant a la priorité."""
-        return Config(base=(self.base or _BASE).rstrip("/"),
-                      key=self.key or _KEY,
-                      model=self.model or os.environ.get("LLM_MODEL", ""))
+        return Config(
+            base=(self.base or _BASE).rstrip("/"),
+            key=self.key or _KEY,
+            model=self.model or os.environ.get("LLM_MODEL", ""),
+        )
 
 
 def _headers(cfg: Config, json: bool = False) -> dict:
@@ -83,7 +88,9 @@ def available(cfg: Config | None = None) -> bool:
     le bouton, pas autre chose (cas réel du 25/08 : base d'un fournisseur, modèle d'un autre)."""
     c = (cfg or Config()).resolue()
     try:
-        catalogue = [m.get("id") for m in (_get("/models", c).get("data") or []) if m.get("id")]
+        catalogue = [
+            m.get("id") for m in (_get("/models", c).get("data") or []) if m.get("id")
+        ]
     except Exception:  # noqa: BLE001
         return False
     return bool(catalogue) and _connu(c.model, catalogue)
@@ -102,24 +109,45 @@ def diagnostic(cfg: Config | None = None) -> dict:
         if modeles and not _connu(c.model, modeles):
             # LE cas qui produisait « connecté » puis « 404 » : l'URL d'un fournisseur avec le
             # nom de modèle d'un autre (base LM Studio + modèle « gemini-… », par exemple).
-            return {"ok": False, "modeles": modeles[:20], "base": c.base,
-                    "cle_fournie": bool(c.key), "modele": c.model,
-                    "motif": f"le fournisseur répond sur {c.base} mais ne connaît pas le modèle "
-                             f"« {c.model} » — base et modèle doivent venir du MÊME fournisseur. "
-                             f"Modèles servis ici : {', '.join(modeles[:5])}"}
-        return {"ok": bool(modeles), "modeles": modeles[:20], "base": c.base,
-                "cle_fournie": bool(c.key), "modele": c.model,
-                "motif": "" if modeles else "le fournisseur répond mais n'annonce aucun modèle"}
+            return {
+                "ok": False,
+                "modeles": modeles[:20],
+                "base": c.base,
+                "cle_fournie": bool(c.key),
+                "modele": c.model,
+                "motif": f"le fournisseur répond sur {c.base} mais ne connaît pas le modèle "
+                f"« {c.model} » — base et modèle doivent venir du MÊME fournisseur. "
+                f"Modèles servis ici : {', '.join(modeles[:5])}",
+            }
+        return {
+            "ok": bool(modeles),
+            "modeles": modeles[:20],
+            "base": c.base,
+            "cle_fournie": bool(c.key),
+            "modele": c.model,
+            "motif": ""
+            if modeles
+            else "le fournisseur répond mais n'annonce aucun modèle",
+        }
     except Exception as e:  # noqa: BLE001
         msg = str(e)
-        motif = ("clé refusée (401/403) — vérifiez la clé et qu'elle correspond bien au "
-                 "fournisseur de l'URL" if "401" in msg or "403" in msg else
-                 f"adresse introuvable (404) sur {c.base}/models — vérifiez l'URL de base"
-                 if "404" in msg else
-                 "aucun serveur ne répond — modèle local non lancé, ou URL inaccessible"
-                 if "refus" in msg.lower() or "urlopen" in msg.lower() else msg[:160])
-        return {"ok": False, "modeles": [], "base": c.base, "cle_fournie": bool(c.key),
-                "motif": motif}
+        motif = (
+            "clé refusée (401/403) — vérifiez la clé et qu'elle correspond bien au "
+            "fournisseur de l'URL"
+            if "401" in msg or "403" in msg
+            else f"adresse introuvable (404) sur {c.base}/models — vérifiez l'URL de base"
+            if "404" in msg
+            else "aucun serveur ne répond — modèle local non lancé, ou URL inaccessible"
+            if "refus" in msg.lower() or "urlopen" in msg.lower()
+            else msg[:160]
+        )
+        return {
+            "ok": False,
+            "modeles": [],
+            "base": c.base,
+            "cle_fournie": bool(c.key),
+            "motif": motif,
+        }
 
 
 def _default_model(cfg: Config | None = None) -> str:
@@ -132,27 +160,103 @@ def _default_model(cfg: Config | None = None) -> str:
         return "local-model"
 
 
-def complete(prompt: str, system: str = "", temperature: float = 0.3,
-             max_tokens: int = 1100, cfg: Config | None = None) -> dict:
+def _openai_body(
+    prompt: str, system: str, temperature: float, max_tokens: int, model: str
+) -> bytes:
+    msgs = ([{"role": "system", "content": system}] if system else []) + [
+        {"role": "user", "content": prompt}
+    ]
+    return json.dumps(
+        {
+            "model": model,
+            "messages": msgs,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+    ).encode()
+
+
+def _post_openai(c: Config, body: bytes) -> str:
+    req = urllib.request.Request(
+        f"{c.base}/chat/completions", data=body, headers=_headers(c, json=True)
+    )
+    with urllib.request.urlopen(req, timeout=_TIMEOUT) as response:  # noqa: S310
+        data = json.loads(response.read().decode())
+    msg = data["choices"][0].get("message", {})
+    return (msg.get("content") or "").strip() or (
+        msg.get("reasoning_content") or ""
+    ).strip()
+
+
+def _is_gemini(c: Config) -> bool:
+    return "generativelanguage.googleapis.com" in c.base.lower()
+
+
+def _post_gemini_native(
+    c: Config, prompt: str, system: str, temperature: float, max_tokens: int
+) -> str:
+    """Repli sur l'API Gemini native si sa couche compatible renvoie 404."""
+    root = c.base.split("/openai", 1)[0].rstrip("/")
+    model = urllib.parse.quote(_default_model(c).split("/")[-1], safe="-._")
+    url = f"{root}/models/{model}:generateContent"
+    body = {
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": temperature, "maxOutputTokens": max_tokens},
+    }
+    if system:
+        body["systemInstruction"] = {"parts": [{"text": system}]}
+    headers = {"Content-Type": "application/json", "x-goog-api-key": c.key}
+    req = urllib.request.Request(url, data=json.dumps(body).encode(), headers=headers)
+    with urllib.request.urlopen(req, timeout=_TIMEOUT) as response:  # noqa: S310
+        data = json.loads(response.read().decode())
+    parts = data["candidates"][0]["content"].get("parts", [])
+    return "\n".join(str(part.get("text", "")).strip() for part in parts).strip()
+
+
+def _error_detail(exc: Exception) -> str:
+    if not isinstance(exc, urllib.error.HTTPError):
+        return str(exc)[:180]
+    try:
+        body = exc.read().decode(errors="replace")
+        data = json.loads(body)
+        return str(data.get("error", {}).get("message") or body)[:180]
+    except Exception:  # noqa: BLE001 — diagnostic d'erreur uniquement
+        return str(exc)[:180]
+
+
+def complete(
+    prompt: str,
+    system: str = "",
+    temperature: float = 0.3,
+    max_tokens: int = 1100,
+    cfg: Config | None = None,
+) -> dict:
     """Chat completion. Renvoie {available, text} ; available=False si le fournisseur ne répond pas."""
     c = (cfg or Config()).resolue()
-    msgs = ([{"role": "system", "content": system}] if system else []) + \
-           [{"role": "user", "content": prompt}]
-    body = json.dumps({"model": _default_model(c), "messages": msgs,
-                       "temperature": temperature, "max_tokens": max_tokens}).encode()
+    model = _default_model(c)
+    body = _openai_body(prompt, system, temperature, max_tokens, model)
     try:
-        req = urllib.request.Request(f"{c.base}/chat/completions", data=body,
-                                     headers=_headers(c, json=True))
-        with urllib.request.urlopen(req, timeout=_TIMEOUT) as r:  # noqa: S310
-            data = json.loads(r.read().decode())
-        msg = data["choices"][0].get("message", {})
-        # modèles « raisonneurs » (gemma, etc.) : si content vide, récupérer reasoning_content
-        txt = (msg.get("content") or "").strip() or (msg.get("reasoning_content") or "").strip()
-        return {"available": True, "text": txt}
+        return {
+            "available": True,
+            "text": _post_openai(c, body),
+            "transport": "openai-compatible",
+        }
+    except urllib.error.HTTPError as first:
+        if _is_gemini(c) and first.code == 404:
+            try:
+                text = _post_gemini_native(c, prompt, system, temperature, max_tokens)
+                return {"available": True, "text": text, "transport": "gemini-native"}
+            except Exception as native:  # noqa: BLE001
+                reason = f"compatibilité: {_error_detail(first)} ; natif: {_error_detail(native)}"
+                return {"available": False, "text": "", "reason": reason}
+        return {"available": False, "text": "", "reason": _error_detail(first)}
     except Exception as e:  # noqa: BLE001
         # Un « HTTP Error 404: Not Found » nu ne dit pas ce qui a été appelé. L'utilisateur ne
         # peut alors pas savoir si c'est l'URL, le modèle, ou la clé — il devine. On nomme donc
         # toujours l'URL ET le modèle effectivement demandés.
-        return {"available": False, "text": "",
-                "reason": f"{str(e)[:100]} — appel POST {c.base}/chat/completions, "
-                          f"modèle « {_default_model(c) or '(auto)'} »"}
+        return {
+            "available": False,
+            "text": "",
+            "reason": f"{_error_detail(e)} — appel POST {c.base}/chat/completions, "
+            f"modèle « {model or '(auto)'} »",
+        }
