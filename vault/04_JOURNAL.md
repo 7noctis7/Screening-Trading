@@ -1,5 +1,22 @@
 # 04 — JOURNAL
 
+## Session 2026-08-29 (3) — L'IA connectée devient un copilote read-only réellement utile
+
+**Avant.** Le voyant vert ne débloquait qu'un commentaire one-shot à prompt fixe. Aucun champ de
+question, aucune consultation du vault ou des sections du terminal, et la route ne passait pas sa
+sortie dans le garde numérique pourtant déjà disponible.
+
+**Livré.** Drawer global « Interroger » sur toutes les pages, suggestions et scope contextuels,
+conversation éphémère, réglages fournisseur accessibles dans le chat et opt-in séparé avant d'envoyer
+les positions détaillées. `POST /api/ai/chat` ne donne accès qu'à six builders read-only bornés
+(overview/portfolio/risk/screener/research/vault), avec citations `as_of`; le vault réutilise le RAG
+extractif existant. Les nombres non présents dans le contexte font rejeter toute la réponse.
+
+**Sécurité et observabilité.** Aucun outil SQL/shell/fichier arbitraire, aucun import execution/risk,
+aucune action broker. `GET /api/ai/metrics` publie demandes, rejets et taux effectif. Le texte de
+confidentialité distingue désormais modèle local et cloud : un fournisseur cloud reçoit forcément
+la clé et le contexte sélectionné par HTTPS, même si Quant Terminal ne les persiste pas.
+
 ## Session 2026-08-29 (2) — Fondations causales plutôt qu'un big-bang invérifiable
 
 **Livré.** Kalman strictement avant avec calibration MLE limitée au train ; embargo de CV désormais

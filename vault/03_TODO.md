@@ -7,6 +7,10 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+- [x] **Copilote IA read-only (2026-08-29)** : chat global contextualisé par page, scopes/outils
+      bornés, positions détaillées en opt-in, citations/as-of, garde numérique stricte et compteurs
+      de rejets. Séparation AST : aucun import exécution/risque. L'IA reste hors chaîne d'ordres.
+
 ## 🔴 P0 — DualMarketScreening : deux défauts qui invalident des verdicts (2026-08-22)
 Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
 - [ ] **Correction pour tests multiples (Benjamini-Hochberg)** sur le criblage de paires.
