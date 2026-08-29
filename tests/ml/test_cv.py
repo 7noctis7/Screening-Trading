@@ -1,11 +1,12 @@
 import numpy as np
+
 from packages.ml import PurgedKFold
 
 
 def test_purges_overlapping_samples():
     n = 12
     t0 = np.arange(n)
-    t1 = t0 + 3                       # labels chevauchants (3 barres)
+    t1 = t0 + 3  # labels chevauchants (3 barres)
     cv = PurgedKFold(n_splits=3, embargo_pct=0.0)
     for tr, te in cv.split(t0, t1):
         test_t0, test_t1 = t0[te].min(), t1[te].max()
@@ -16,7 +17,17 @@ def test_purges_overlapping_samples():
 
 def test_embargo_widens_purge():
     n = 20
-    t0 = np.arange(n); t1 = t0 + 1
+    t0 = np.arange(n)
+    t1 = t0 + 1
     no_emb = sum(len(tr) for tr, _ in PurgedKFold(4, 0.0).split(t0, t1))
     emb = sum(len(tr) for tr, _ in PurgedKFold(4, 0.2).split(t0, t1))
-    assert emb <= no_emb              # l'embargo retire au moins autant
+    assert emb <= no_emb  # l'embargo retire au moins autant
+
+
+def test_embargo_est_au_moins_horizon_triple_barriere():
+    t0 = np.arange(40)
+    t1 = t0 + 1
+    cv = PurgedKFold(4, embargo_pct=0.0, label_horizon=7)
+    for train, test in cv.split(t0, t1):
+        end = t1[test].max()
+        assert not np.any((t0[train] > end) & (t0[train] <= end + 7))

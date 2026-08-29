@@ -1,5 +1,36 @@
 # 04 — JOURNAL
 
+## Session 2026-08-29 (2) — Fondations causales plutôt qu'un big-bang invérifiable
+
+**Livré.** Kalman strictement avant avec calibration MLE limitée au train ; embargo de CV désormais
+borné inférieurement par l'horizon triple-barrière ; sélection FFD fold par fold ; sizing conforme
+qui ne peut que réduire et tombe à zéro au-delà de l'incertitude admise ; projection ERC/Min-Var/HRP
+sous bornes du mandat, avec veto explicite si le problème est infaisable.
+
+**Preuves.** Les tests modifient tout le futur après la coupure d'apprentissage et vérifient que la
+calibration et les états du préfixe sont invariants. Les trois optimiseurs sont testés contre les
+mêmes hard constraints. Le dimensionnement conforme est monotone en risque.
+
+**Périmètre honnête.** Ces briques ferment des contrats mathématiques, mais ne sont pas présentées
+comme un câblage des six chantiers. Le remplacement de DualMarket, le benchmark `mkt` exogène, les
+corporate actions FIFO, Gold/ADV, PIT DuckDB, snapshot async et états UI restent ouverts. Les brancher
+sans schéma de données réel ni benchmark aurait créé des fallbacks ou calibrations inventés, interdits
+par le mandat du dépôt.
+
+## Session 2026-08-29 — Cartographie complète pour passation à un agent IA
+
+**Demande.** Produire une explication transmissible du fonctionnement et du contenu du dépôt afin
+qu'un agent externe puisse identifier des améliorations sans réinventer l'architecture ni confondre
+présence d'un module, câblage production et preuve d'alpha.
+
+**Livré.** `docs/AI_CODEBASE_MAP.md` cartographie les frontières, les packages, les trois flux
+recherche/terminal/paper, les commandes, l'état honnête et la dette connue. Le document impose aussi
+un format d'audit en dix points : preuve dans le dépôt, causalité/PIT, protocole anti-overfit,
+frictions/capacité, observabilité des garde-fous et red-team CRO.
+
+**Décision.** Aucun nouvel ADR : il s'agit d'une synthèse des contrats et décisions existants, pas
+d'un changement d'architecture. `vault/03_TODO.md` reste la roadmap unique.
+
 ## Session 2026-08-27 (21) — `régime = 0` élucidé : la porte lisait sa propre sélection
 
 **Le run de production a tranché**, et la ligne de diagnostic ajoutée le matin a suffi :
