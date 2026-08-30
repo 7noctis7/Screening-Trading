@@ -168,11 +168,15 @@ def _alternative_model(c: Config, current: str) -> str:
         return ""
     blocked = ("embedding", "image", "audio", "tts", "vision")
     candidates = [
-        model for model in models
-        if model and not _connu(current, [model])
+        model
+        for model in models
+        if model
+        and not _connu(current, [model])
         and not any(word in model.lower() for word in blocked)
     ]
-    candidates.sort(key=lambda model: ("flash" not in model.lower(), "latest" not in model.lower()))
+    candidates.sort(
+        key=lambda model: ("flash" not in model.lower(), "latest" not in model.lower())
+    )
     return candidates[0] if candidates else ""
 
 
@@ -209,22 +213,25 @@ def _is_gemini(c: Config) -> bool:
 
 
 def _post_gemini_native(
-    c: Config, prompt: str, system: str, temperature: float, max_tokens: int,
+    c: Config,
+    prompt: str,
+    system: str,
+    temperature: float,
+    max_tokens: int,
     model: str = "",
 ) -> str:
     """Repli sur l'API Gemini native si sa couche compatible renvoie 404."""
     root = c.base.split("/openai", 1)[0].rstrip("/")
-    selected = urllib.parse.quote((model or _default_model(c)).split("/")[-1], safe="-._")
+    selected = urllib.parse.quote(
+        (model or _default_model(c)).split("/")[-1], safe="-._"
+    )
     url = f"{root}/models/{selected}:generateContent"
-    c: Config, prompt: str, system: str, temperature: float, max_tokens: int
-) -> str:
-    """Repli sur l'API Gemini native si sa couche compatible renvoie 404."""
-    root = c.base.split("/openai", 1)[0].rstrip("/")
-    model = urllib.parse.quote(_default_model(c).split("/")[-1], safe="-._")
-    url = f"{root}/models/{model}:generateContent"
     body = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": temperature, "maxOutputTokens": max_tokens},
+        "generationConfig": {
+            "temperature": temperature,
+            "maxOutputTokens": max_tokens,
+        },
     }
     if system:
         body["systemInstruction"] = {"parts": [{"text": system}]}
@@ -267,10 +274,14 @@ def complete(
     except urllib.error.HTTPError as first:
         if _is_gemini(c) and first.code == 404:
             try:
-                text = _post_gemini_native(c, prompt, system, temperature, max_tokens, model)
+                text = _post_gemini_native(
+                    c, prompt, system, temperature, max_tokens, model
+                )
                 return {"available": True, "text": text, "transport": "gemini-native"}
             except urllib.error.HTTPError as native:
-                alternative = _alternative_model(c, model) if native.code in (400, 404) else ""
+                alternative = (
+                    _alternative_model(c, model) if native.code in (400, 404) else ""
+                )
                 if alternative:
                     try:
                         text = _post_gemini_native(
@@ -286,16 +297,11 @@ def complete(
                         native = retry
                 reason = f"compatibilité: {_error_detail(first)} ; natif: {_error_detail(native)}"
                 return {"available": False, "text": "", "reason": reason}
-                text = _post_gemini_native(c, prompt, system, temperature, max_tokens)
-                return {"available": True, "text": text, "transport": "gemini-native"}
             except Exception as native:  # noqa: BLE001
                 reason = f"compatibilité: {_error_detail(first)} ; natif: {_error_detail(native)}"
                 return {"available": False, "text": "", "reason": reason}
         return {"available": False, "text": "", "reason": _error_detail(first)}
     except Exception as e:  # noqa: BLE001
-        # Un « HTTP Error 404: Not Found » nu ne dit pas ce qui a été appelé. L'utilisateur ne
-        # peut alors pas savoir si c'est l'URL, le modèle, ou la clé — il devine. On nomme donc
-        # toujours l'URL ET le modèle effectivement demandés.
         return {
             "available": False,
             "text": "",
