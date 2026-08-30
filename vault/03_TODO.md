@@ -1,7 +1,21 @@
 # 03 — TODO (backlog priorisé)
 
+> **Passation IA (2026-08-29)** — la carte technique consolidée est disponible dans
+> `docs/AI_CODEBASE_MAP.md`. Elle décrit le flux complet, les frontières de sécurité et le protocole
+> d'audit ; les priorités ci-dessous restent la seule roadmap opérationnelle.
+
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
+
+- [x] **Copilote IA read-only (2026-08-29)** : chat global contextualisé par page, scopes/outils
+      bornés, positions détaillées en opt-in, citations/as-of, garde numérique stricte et compteurs
+      de rejets. Séparation AST : aucun import exécution/risque. L'IA reste hors chaîne d'ordres.
+      Correctif Gemini : repli automatique vers l'API native si la couche compatible renvoie 404 ;
+      comparaison portefeuille/Nasdaq désormais incluse dans les scopes overview/portfolio.
+- [x] **Benchmarks dashboard non plats (2026-08-30)** : fusion par date du même ticker entre bases,
+      sélection fraîche avant longueur, extension yfinance si le cache est périmé et alignement
+      compte/indice sur les dates réelles. Un benchmark périmé est exclu, jamais forward-fill sur
+      des mois avec l'étiquette « réel ».
 
 ## 🔴 P0 — DualMarketScreening : deux défauts qui invalident des verdicts (2026-08-22)
 Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
@@ -19,7 +33,9 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       correctif n'a pas de données.
 - [ ] P1 — **Calibration Kalman sans look-ahead** : `kalman_calibrate` cherche (δ, r) par MLE sur
       TOUTE la série. Le z-score est sans look-ahead *étant donné* (δ, r), mais (δ, r) a vu le
-      futur. Calibrer sur une fenêtre d'apprentissage seule.
+      futur. Calibrer sur une fenêtre d'apprentissage seule. **Brique causale livrée** dans
+      `packages/research/kalman_causal.py` (MLE sur préfixe + filtre avant uniquement) ; reste à
+      remplacer l'appel DualMarket et à fournir un benchmark de marché exogène au preset.
 
 ## 🟢 Écarté volontairement (avec justification)
 - **FinRL / RL profond** : multiplie les degrés de liberté là où le problème est le manque de
@@ -515,6 +531,12 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
 > ✅ Plus aucun P0-SI-LIVE ouvert. L'activation d'un broker réel reste conditionnée au RDV paper
 > du 2026-08-06 (cf. garde-fou CLAUDE.md : jamais de live sans décision explicite).
 ### 🟠 P1
+- [ ] **Price-action causal UNCALIBRATED (2026-08-30)** : plugin BOS/FTB/FVG/SFP et backtest
+      1R/TP partiels livrés, mais **non câblés en production**. À évaluer sur données réelles L2/tick
+      en walk-forward purgé avec DSR/PBO/Reality Check avant toute promotion paper.
+- [x] **Rotation des modèles cloud (2026-08-30)** : le preset fournisseur ne fige plus un modèle
+      périssable ; si le modèle enregistré est retiré, le client choisit un autre modèle texte
+      annoncé par le catalogue et republie le transport/modèle réellement utilisé.
 - [x] **P1-1** ✅ (2026-07-02, suite) : `SqliteTradeJournal` (`data/journal.db`, JSON features, UPSERT
       idempotent, flag `legacy` requêtable) + `LiveTradingEngine` persiste par défaut + `import_legacy_fills.py` (script one-shot, retiré 05/07)
       (137 fills importés `legacy=1`) + 8 tests (dont contrat anti-fuite). Cf. **ADR-0028**, commits `834338a`→`3c1c771`.
