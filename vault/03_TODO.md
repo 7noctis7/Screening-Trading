@@ -10,6 +10,12 @@
 - [x] **Copilote IA read-only (2026-08-29)** : chat global contextualisé par page, scopes/outils
       bornés, positions détaillées en opt-in, citations/as-of, garde numérique stricte et compteurs
       de rejets. Séparation AST : aucun import exécution/risque. L'IA reste hors chaîne d'ordres.
+      Correctif Gemini : repli automatique vers l'API native si la couche compatible renvoie 404 ;
+      comparaison portefeuille/Nasdaq désormais incluse dans les scopes overview/portfolio.
+- [x] **Benchmarks dashboard non plats (2026-08-30)** : fusion par date du même ticker entre bases,
+      sélection fraîche avant longueur, extension yfinance si le cache est périmé et alignement
+      compte/indice sur les dates réelles. Un benchmark périmé est exclu, jamais forward-fill sur
+      des mois avec l'étiquette « réel ».
 
 ## 🔴 P0 — DualMarketScreening : deux défauts qui invalident des verdicts (2026-08-22)
 Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.

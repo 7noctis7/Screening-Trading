@@ -6,6 +6,8 @@ import { enTetesIA } from "@/lib/ia";
 import { ReglagesIA } from "@/components/ReglagesIA";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+type Msg = { role: "user" | "assistant"; text: string; available?: boolean;
+  grounded?: boolean; citations?: any[] };
 type Msg = { role: "user" | "assistant"; text: string; grounded?: boolean; citations?: any[] };
 
 const PAGE_SCOPE: Record<string, string> = {
@@ -75,6 +77,10 @@ export function QuantChat() {
             style={{ background: m.role === "user" ? "var(--surface2)" : "var(--surface)" }}>
             <div className="whitespace-pre-wrap">{m.text}</div>
             {m.role === "assistant" && <div className="mt-2 text-[11px] text-muted2">
+              {m.available === false ? "✕ CONNEXION ÉCHOUÉE"
+                : m.grounded ? "✓ GROUNDED" : "⚠ UNCALIBRATED / rejeté"}
+              {m.available !== false && m.citations?.map((c, j) =>
+                <span key={j}> · [{j + 1}] {c.path ?? c.file}</span>)}
               {m.grounded ? "✓ GROUNDED" : "⚠ UNCALIBRATED / rejeté"}
               {m.citations?.map((c, j) => <span key={j}> · [{j + 1}] {c.path ?? c.file}</span>)}
             </div>}

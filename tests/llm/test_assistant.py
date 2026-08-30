@@ -15,6 +15,8 @@ def _snapshot():
             "regime": {"risk_mode": "neutral"},
             "honesty": {"dsr": 0.0},
             "portfolio": {"value": 10_000},
+            "equity": [{"v": 100.0}, {"v": 108.0}],
+            "benchmarks": {"Nasdaq 100": [{"v": 100.0}, {"v": 120.0}]},
         },
         "portfolio": {
             "analysis": {"risk": {"var_95": 0.02}},
@@ -30,6 +32,13 @@ def test_positions_detaillees_opt_in_uniquement():
     shown = assistant.build_context(_snapshot(), "portfolio", "risque", True)
     assert "positions" not in hidden.facts
     assert shown.facts["positions"][0]["symbol"] == "SECRET"
+
+
+def test_overview_compare_portefeuille_et_nasdaq_sans_llm():
+    context = assistant.build_context(_snapshot(), "overview", "Pourquoi le Nasdaq ?")
+    comparison = context.facts["benchmark_comparison"]
+    assert comparison["portfolio"] == pytest.approx(0.08)
+    assert comparison["Nasdaq 100"] == pytest.approx(0.20)
 
 
 def test_scope_inconnu_est_refuse():

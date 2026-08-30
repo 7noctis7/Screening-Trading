@@ -39,6 +39,38 @@ def _overview(s: dict) -> dict:
         "metrics": d.get("metrics"),
         "honesty": d.get("honesty"),
         "portfolio": d.get("portfolio"),
+        "benchmark_comparison": _benchmark_summary(d),
+    }
+
+
+def _series_return(series: Any) -> float | None:
+    if not isinstance(series, list) or len(series) < 2:
+        return None
+    try:
+        start, end = float(series[0]["v"]), float(series[-1]["v"])
+        return end / start - 1.0 if start else None
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _benchmark_summary(dashboard: dict) -> dict:
+    out = {"portfolio": _series_return(dashboard.get("equity"))}
+    for name, series in (dashboard.get("benchmarks") or {}).items():
+        out[str(name)] = _series_return(series)
+    account = dashboard.get("account_compare") or {}
+    if account.get("available"):
+        out["real_accounts"] = account.get("kpis")
+        out["comparison_window"] = account.get("window")
+    return out
+
+
+def _portfolio(s: dict, details: bool) -> dict:
+    p = s.get("portfolio", {})
+    d = s.get("dashboard", {})
+    out = {
+        "analysis": p.get("analysis"),
+        "preset_diagnostic": p.get("preset_diagnostic"),
+        "benchmark_comparison": _benchmark_summary(d),
     }
 
 
@@ -168,6 +200,7 @@ def answer_question(
     if violations:
         with _METRICS_LOCK:
             _METRICS["guard_rejections"] += 1
+        answer = "Réponse rejetée : chiffres absents des sources fournies."
         answer = (
             "Réponse rejetée : chiffres absents des sources fournies."
         )

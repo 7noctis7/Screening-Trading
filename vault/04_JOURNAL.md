@@ -1,5 +1,40 @@
 # 04 — JOURNAL
 
+## Session 2026-08-30 — S&P/Nasdaq plats : la série la plus longue était périmée
+
+**Observation réelle.** Sur le dashboard comptes vs indices (17/06→29/08), S&P et Nasdaq bougeaient
+quelques jours puis devenaient parfaitement horizontaux, alors que le tableau annonçait des données
+100 % réelles. Ce n'était pas le marché : `_index_closes` choisissait la série la plus longue sans
+regarder sa dernière date. Une longue base arrêtée fin juin gagnait contre une base plus courte mais
+fraîche, puis `_account_compare` forward-fillait sa dernière valeur jusqu'à fin août.
+
+**Correctif.** `packages/data/index_history.py` fusionne le même alias entre bases par date, refuse de
+mélanger indice et ETF (échelles différentes), exige 250 barres et privilégie un alias frais (≤7 j).
+Si toutes les bases sont périmées, yfinance tente de compléter ; si cela échoue, l'indice est exclu
+de la comparaison réelle au lieu d'être aplati. `_account_compare` reçoit désormais les dates propres
+de chaque indice, et non le calendrier positionnel du plus long actif de l'univers.
+
+**Compteurs/preuves.** Tests dédiés : fraîcheur > longueur, fusion sans plateau, stale explicite et
+alignement exact des fluctuations S&P/Nasdaq. Le texte UI dit désormais « indice ou ETF proxy frais »
+et documente l'exclusion d'un benchmark périmé.
+
+## Session 2026-08-29 (4) — Gemini connecté mais génération 404 : transport réellement testé
+
+**Bug réel.** `/models` répondait, donc le voyant passait au vert, mais la couche OpenAI-compatible
+de Gemini renvoyait 404 sur `/chat/completions`. Le diagnostic testait le catalogue, pas le transport
+de génération. Le chat affichait en plus « UNCALIBRATED / rejeté » pour une panne réseau, confondant
+qualité de données et connectivité.
+
+**Correctif.** Le client tente toujours le protocole compatible, puis, uniquement pour Google et un
+404, bascule sur `models/{model}:generateContent` avec `x-goog-api-key`. Le corps d'erreur fournisseur
+est désormais remonté au lieu du seul statut HTTP. Le front distingue `CONNEXION ÉCHOUÉE` d'une
+réponse non grounded. Tests : deux transports simulés, clé jamais placée dans l'URL.
+
+**Utilité quant.** Les scopes overview/portfolio publient maintenant une comparaison déterministe des
+rendements de bout en bout du portefeuille et des benchmarks, ainsi que les KPIs des comptes réels
+sur leur fenêtre commune lorsqu'ils existent. Une question « pourquoi moins que le Nasdaq ? » reçoit
+donc enfin les faits nécessaires ; sinon la réponse doit rester `UNCALIBRATED`.
+
 ## Session 2026-08-29 (3) — L'IA connectée devient un copilote read-only réellement utile
 
 **Avant.** Le voyant vert ne débloquait qu'un commentaire one-shot à prompt fixe. Aucun champ de
