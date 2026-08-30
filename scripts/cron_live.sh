@@ -5,9 +5,8 @@
 #
 # Sécurité :
 #   - Alpaca est forcé en paper → aucun ordre réel sur actions, quoi qu'il arrive.
-#   - Bitmart (crypto) ne s'active que si des clés Bitmart sont présentes. Pour
-#     INTERDIRE tout ordre crypto réel depuis ce cron, mettre QUANT_NO_CRYPTO_LIVE=1
-#     (défaut ici) → on retire les clés Bitmart de l'environnement du run.
+#   - Toute place crypto est neutralisée par défaut. Les variables sont définies VIDES plutôt
+#     que supprimées : le chargeur `.env` ne peut ainsi pas réinjecter les clés pendant le run.
 #   - Ne tourne QUE les jours de bourse US (lun-ven) ; sort proprement le week-end.
 #
 # Installation : make live-cron-install   ·   Désinstallation : make live-cron-uninstall
@@ -25,9 +24,10 @@ if [ "$DOW" -ge 6 ]; then
   echo "[$(date '+%F %T')] week-end (marché fermé) → rien à faire."; exit 0
 fi
 
-# Garde-fou crypto : par défaut, on NEUTRALISE les clés Bitmart pour rester 100 % paper.
+# Garde-fou crypto : couvre toutes les places connues et résiste au rechargement de `.env`.
 if [ "${QUANT_NO_CRYPTO_LIVE:-1}" = "1" ]; then
-  unset BITMART_API_KEY BITMART_API_SECRET BITMART_API_MEMO 2>/dev/null || true
+  export BITMART_API_KEY="" BITMART_API_SECRET="" BITMART_API_MEMO=""
+  export BINANCE_API_KEY="" BINANCE_API_SECRET="" QUANT_BINANCE_TESTNET="1"
 fi
 
 echo "[$(date '+%F %T')] rebalancement paper — début"

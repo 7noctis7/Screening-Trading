@@ -531,6 +531,8 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
 > ✅ Plus aucun P0-SI-LIVE ouvert. L'activation d'un broker réel reste conditionnée au RDV paper
 > du 2026-08-06 (cf. garde-fou CLAUDE.md : jamais de live sans décision explicite).
 ### 🟠 P1
+- [x] **Cron paper multi-venue sûr (2026-08-30)** : neutralisation explicite des clés Binance et
+      Bitmart par valeurs vides, empêchant le reload `.env`; test statique de non-régression.
 - [ ] **Price-action causal UNCALIBRATED (2026-08-30)** : plugin BOS/FTB/FVG/SFP et backtest
       1R/TP partiels livrés, mais **non câblés en production**. À évaluer sur données réelles L2/tick
       en walk-forward purgé avec DSR/PBO/Reality Check avant toute promotion paper.

@@ -2364,3 +2364,13 @@ pour entamer l'implémentation des modules métier.
 - L'espérance en R, le win rate et les moyennes gain/perte sont publiés ; moins de 30 trades reste
   `UNCALIBRATED`. Chaque veto publie son compteur et son effet moyen lorsqu'il s'est déclenché.
 - Aucun import vers le chemin d'exécution, aucune activation live/paper, aucune limite relevée.
+
+## 2026-08-30 — Le cron « paper » neutralise réellement toutes les places crypto
+
+- Le cron historique retirait seulement les clés Bitmart avec `unset`. Depuis le passage de la
+  place par défaut à Binance, ce garde-fou était incomplet ; de plus, `unset` autorisait le
+  chargeur `.env` à réinjecter une clé plus tard dans le processus.
+- Le cron définit désormais vides les clés Binance et Bitmart et force le sandbox Binance. Le
+  chemin actions reste Alpaca paper. Un test vérifie toutes les variables avant `run_live.py`.
+- Les ordres actions non remplis observés le week-end/hors séance ne sont pas forcés : le runner
+  les reporte explicitement et doit être lancé pendant la séance NYSE.
