@@ -1,5 +1,88 @@
 # 04 — JOURNAL
 
+## Session 2026-08-30 — S&P/Nasdaq plats : la série la plus longue était périmée
+
+**Observation réelle.** Sur le dashboard comptes vs indices (17/06→29/08), S&P et Nasdaq bougeaient
+quelques jours puis devenaient parfaitement horizontaux, alors que le tableau annonçait des données
+100 % réelles. Ce n'était pas le marché : `_index_closes` choisissait la série la plus longue sans
+regarder sa dernière date. Une longue base arrêtée fin juin gagnait contre une base plus courte mais
+fraîche, puis `_account_compare` forward-fillait sa dernière valeur jusqu'à fin août.
+
+**Correctif.** `packages/data/index_history.py` fusionne le même alias entre bases par date, refuse de
+mélanger indice et ETF (échelles différentes), exige 250 barres et privilégie un alias frais (≤7 j).
+Si toutes les bases sont périmées, yfinance tente de compléter ; si cela échoue, l'indice est exclu
+de la comparaison réelle au lieu d'être aplati. `_account_compare` reçoit désormais les dates propres
+de chaque indice, et non le calendrier positionnel du plus long actif de l'univers.
+
+**Compteurs/preuves.** Tests dédiés : fraîcheur > longueur, fusion sans plateau, stale explicite et
+alignement exact des fluctuations S&P/Nasdaq. Le texte UI dit désormais « indice ou ETF proxy frais »
+et documente l'exclusion d'un benchmark périmé.
+
+## Session 2026-08-29 (4) — Gemini connecté mais génération 404 : transport réellement testé
+
+**Bug réel.** `/models` répondait, donc le voyant passait au vert, mais la couche OpenAI-compatible
+de Gemini renvoyait 404 sur `/chat/completions`. Le diagnostic testait le catalogue, pas le transport
+de génération. Le chat affichait en plus « UNCALIBRATED / rejeté » pour une panne réseau, confondant
+qualité de données et connectivité.
+
+**Correctif.** Le client tente toujours le protocole compatible, puis, uniquement pour Google et un
+404, bascule sur `models/{model}:generateContent` avec `x-goog-api-key`. Le corps d'erreur fournisseur
+est désormais remonté au lieu du seul statut HTTP. Le front distingue `CONNEXION ÉCHOUÉE` d'une
+réponse non grounded. Tests : deux transports simulés, clé jamais placée dans l'URL.
+
+**Utilité quant.** Les scopes overview/portfolio publient maintenant une comparaison déterministe des
+rendements de bout en bout du portefeuille et des benchmarks, ainsi que les KPIs des comptes réels
+sur leur fenêtre commune lorsqu'ils existent. Une question « pourquoi moins que le Nasdaq ? » reçoit
+donc enfin les faits nécessaires ; sinon la réponse doit rester `UNCALIBRATED`.
+
+## Session 2026-08-29 (3) — L'IA connectée devient un copilote read-only réellement utile
+
+**Avant.** Le voyant vert ne débloquait qu'un commentaire one-shot à prompt fixe. Aucun champ de
+question, aucune consultation du vault ou des sections du terminal, et la route ne passait pas sa
+sortie dans le garde numérique pourtant déjà disponible.
+
+**Livré.** Drawer global « Interroger » sur toutes les pages, suggestions et scope contextuels,
+conversation éphémère, réglages fournisseur accessibles dans le chat et opt-in séparé avant d'envoyer
+les positions détaillées. `POST /api/ai/chat` ne donne accès qu'à six builders read-only bornés
+(overview/portfolio/risk/screener/research/vault), avec citations `as_of`; le vault réutilise le RAG
+extractif existant. Les nombres non présents dans le contexte font rejeter toute la réponse.
+
+**Sécurité et observabilité.** Aucun outil SQL/shell/fichier arbitraire, aucun import execution/risk,
+aucune action broker. `GET /api/ai/metrics` publie demandes, rejets et taux effectif. Le texte de
+confidentialité distingue désormais modèle local et cloud : un fournisseur cloud reçoit forcément
+la clé et le contexte sélectionné par HTTPS, même si Quant Terminal ne les persiste pas.
+
+## Session 2026-08-29 (2) — Fondations causales plutôt qu'un big-bang invérifiable
+
+**Livré.** Kalman strictement avant avec calibration MLE limitée au train ; embargo de CV désormais
+borné inférieurement par l'horizon triple-barrière ; sélection FFD fold par fold ; sizing conforme
+qui ne peut que réduire et tombe à zéro au-delà de l'incertitude admise ; projection ERC/Min-Var/HRP
+sous bornes du mandat, avec veto explicite si le problème est infaisable.
+
+**Preuves.** Les tests modifient tout le futur après la coupure d'apprentissage et vérifient que la
+calibration et les états du préfixe sont invariants. Les trois optimiseurs sont testés contre les
+mêmes hard constraints. Le dimensionnement conforme est monotone en risque.
+
+**Périmètre honnête.** Ces briques ferment des contrats mathématiques, mais ne sont pas présentées
+comme un câblage des six chantiers. Le remplacement de DualMarket, le benchmark `mkt` exogène, les
+corporate actions FIFO, Gold/ADV, PIT DuckDB, snapshot async et états UI restent ouverts. Les brancher
+sans schéma de données réel ni benchmark aurait créé des fallbacks ou calibrations inventés, interdits
+par le mandat du dépôt.
+
+## Session 2026-08-29 — Cartographie complète pour passation à un agent IA
+
+**Demande.** Produire une explication transmissible du fonctionnement et du contenu du dépôt afin
+qu'un agent externe puisse identifier des améliorations sans réinventer l'architecture ni confondre
+présence d'un module, câblage production et preuve d'alpha.
+
+**Livré.** `docs/AI_CODEBASE_MAP.md` cartographie les frontières, les packages, les trois flux
+recherche/terminal/paper, les commandes, l'état honnête et la dette connue. Le document impose aussi
+un format d'audit en dix points : preuve dans le dépôt, causalité/PIT, protocole anti-overfit,
+frictions/capacité, observabilité des garde-fous et red-team CRO.
+
+**Décision.** Aucun nouvel ADR : il s'agit d'une synthèse des contrats et décisions existants, pas
+d'un changement d'architecture. `vault/03_TODO.md` reste la roadmap unique.
+
 ## Session 2026-08-27 (21) — `régime = 0` élucidé : la porte lisait sa propre sélection
 
 **Le run de production a tranché**, et la ligne de diagnostic ajoutée le matin a suffi :
@@ -2257,3 +2340,37 @@ pour entamer l'implémentation des modules métier.
 - **154 tests verts** (aucune régression).
 
 **Décidé.** ADR-0022 (DOM : tables injectées en une chaîne complète + rendu d'onglet isolé par try/catch).
+
+## 2026-08-30 — Rotation automatique d'un modèle IA retiré
+
+- **Incident réel** : la connexion au catalogue fournisseur était verte, puis la génération
+  échouait parce que le modèle mémorisé n'était plus ouvert aux nouveaux utilisateurs.
+- **Cause** : le preset Web figeait un identifiant fournisseur périssable et le repli natif
+  réessayait exactement ce même identifiant.
+- **Correction** : le preset laisse désormais le modèle vide. Si un ancien réglage explicite est
+  refusé en génération, le backend consulte le catalogue, exclut ce modèle et sélectionne un
+  modèle texte disponible, sans inscrire un nouvel identifiant fournisseur dans le dépôt.
+- **Preuve** : test de régression en quatre appels simulés (compatibilité absente, modèle natif
+  retiré, découverte du catalogue, génération native réussie). Aucun accès à l'exécution.
+
+## 2026-08-30 — Formalisation falsifiable du cahier des charges price-action
+
+- Ajout d'un plugin de recherche causal : pivots confirmés sans back-painting, BOS sur barres HTF
+  terminées, zones FVG/order-block, midpoint, first-time-back, SFP et proxy LVN optionnel.
+- Les paramètres subjectifs (span, HTF, déplacement, buffer, profil volume) restent obligatoires
+  et train-only : aucune calibration n'a été inventée. Statut **UNCALIBRATED**.
+- Le backtest exécute au prochain open, applique coûts/slippage, dimensionne le stop à 1 % maximum,
+  traite l'ambiguïté intrabar pessimiste, sort la moitié au TP1 et le solde à 3R ou plus.
+- L'espérance en R, le win rate et les moyennes gain/perte sont publiés ; moins de 30 trades reste
+  `UNCALIBRATED`. Chaque veto publie son compteur et son effet moyen lorsqu'il s'est déclenché.
+- Aucun import vers le chemin d'exécution, aucune activation live/paper, aucune limite relevée.
+
+## 2026-08-30 — Le cron « paper » neutralise réellement toutes les places crypto
+
+- Le cron historique retirait seulement les clés Bitmart avec `unset`. Depuis le passage de la
+  place par défaut à Binance, ce garde-fou était incomplet ; de plus, `unset` autorisait le
+  chargeur `.env` à réinjecter une clé plus tard dans le processus.
+- Le cron définit désormais vides les clés Binance et Bitmart et force le sandbox Binance. Le
+  chemin actions reste Alpaca paper. Un test vérifie toutes les variables avant `run_live.py`.
+- Les ordres actions non remplis observés le week-end/hors séance ne sont pas forcés : le runner
+  les reporte explicitement et doit être lancé pendant la séance NYSE.

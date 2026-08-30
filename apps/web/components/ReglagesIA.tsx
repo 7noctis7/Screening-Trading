@@ -70,9 +70,9 @@ export function ReglagesIA({ onChange }: { onChange?: () => void }) {
           aria-label="Fermer">×</button>
       </div>
       <p className="text-muted2 text-xs mt-1">
-        Votre clé reste <b>dans ce navigateur</b> et voyage par en-tête à chaque requête. Elle
-        n'est jamais écrite sur le serveur ni journalisée — sur une instance auto-hébergée, elle
-        ne quitte pas votre machine.
+        Votre clé est stockée dans <b>ce navigateur</b> et n'est ni écrite ni journalisée par
+        Quant Terminal. Avec un fournisseur cloud, la clé et le contexte sélectionné lui sont
+        nécessairement transmis par HTTPS. Un modèle local reste sur votre machine.
       </p>
 
       <div className="grid gap-3 md:grid-cols-2 mt-3">

@@ -1359,12 +1359,12 @@ def _load_prices(instruments, sector_of, start, end, seed):
     return data, mode, real_syms
 
 
-def _index_closes(aliases: list[str], start, end, fallback: list[float]) -> tuple[list[float], bool]:
-    """Closes RÉELS d'un indice/ETF : essaie les alias dans TOUTES les bases (YAHOO.db + market.db +
-    crypto.db) et garde la série la PLUS LONGUE (ex. QQQ complet via market.db même si YAHOO.db ne
-    l'a que récent), puis yfinance. Sinon `fallback` synthétique. Renvoie (closes, is_real)."""
+def _index_series(aliases: list[str], start, end,
+                  fallback: list[float]) -> tuple[list[float], list[str], bool]:
+    """Historique daté : fusion même alias, fraîcheur obligatoire, puis réseau si périmé."""
+    from packages.data.index_history import choose_history, merge_bars
     from packages.data.providers.db_provider import DBPriceProvider
-    cands: list[list[float]] = []
+    histories: dict[str, dict] = {alias: {} for alias in aliases}
     _dbs = [_price_db_path(), ROOT / "data" / "market.db", ROOT / "data" / "crypto.db"]
     for _dbp in _dbs:
         if _dbp is None or not Path(_dbp).exists():
@@ -1373,24 +1373,31 @@ def _index_closes(aliases: list[str], start, end, fallback: list[float]) -> tupl
             prov = DBPriceProvider(_dbp)
             for a in aliases:
                 bars = prov.fetch_ohlcv(a, "1d", start, end)
-                if len(bars) >= 250:
-                    cands.append([b.close for b in bars])
-                    break
+                merge_bars(histories[a], bars)
         except Exception:  # noqa: BLE001
             continue
-    if cands:
-        return max(cands, key=len), True               # la série réelle la plus longue
+    selected = choose_history(aliases, histories, end)
+    if selected and selected.fresh:
+        return list(selected.closes), list(selected.dates), True
     try:
         from packages.common.net import online
         if online():
-            import yfinance as yf
+            from packages.data.providers.yfinance_provider import YFinanceProvider
+            provider = YFinanceProvider()
             for a in aliases:
-                df = yf.Ticker(a).history(start=start.date().isoformat(), end=end.date().isoformat())
-                if len(df) >= 250:
-                    return [float(x) for x in df["Close"].tolist()], True
+                merge_bars(histories[a], provider.fetch_ohlcv(a, "1d", start, end))
     except Exception:  # noqa: BLE001
         pass
-    return fallback, False
+    selected = choose_history(aliases, histories, end)
+    if selected and selected.fresh:
+        return list(selected.closes), list(selected.dates), True
+    return fallback, [], False
+
+
+def _index_closes(aliases: list[str], start, end,
+                   fallback: list[float]) -> tuple[list[float], bool]:
+    closes, _dates, real = _index_series(aliases, start, end, fallback)
+    return closes, real
 
 
 def _curve_stats(eq: list[float], *, compte_reel: bool = False,
@@ -1649,8 +1656,8 @@ def build_snapshot(seed: int = 7) -> dict:
         "synthetic", seed=101, drift=0.09, annual_vol=0.16).fetch_ohlcv("S&P 500", "1d", start, end)]
     _ndx_syn = [b.close for b in data_providers.create(
         "synthetic", seed=202, drift=0.13, annual_vol=0.22).fetch_ohlcv("Nasdaq 100", "1d", start, end)]
-    sp, _sp_real = _index_closes(["^GSPC", "SPX", "SPY"], start, end, _sp_syn)        # VRAI S&P 500
-    ndx, _ndx_real = _index_closes(["^NDX", "^IXIC", "QQQ"], start, end, _ndx_syn)    # VRAI Nasdaq 100
+    sp, _sp_dates, _sp_real = _index_series(["^GSPC", "SPX", "SPY"], start, end, _sp_syn)
+    ndx, _ndx_dates, _ndx_real = _index_series(["^NDX", "^IXIC", "QQQ"], start, end, _ndx_syn)
 
     # régime macro RÉEL point-in-time : VIX réel + tendance S&P (proxy activité) + FRED (courbe,
     # chômage) si FRED_API_KEY. Repli synthétique UNIQUEMENT si aucune donnée réelle disponible.
@@ -1662,7 +1669,7 @@ def build_snapshot(seed: int = 7) -> dict:
         _cal = [b.ts for b in max(data.values(), key=len)]
         _vix_d = _cal[-len(vix):] if _vix_is_real else []
         _vix_v = vix if _vix_is_real else []
-        _sp_d = _cal[-len(sp):] if _sp_real else []
+        _sp_d = _sp_dates if _sp_real else []
         _sp_v = sp if _sp_real else []
         ms, _macro_sources, _macro_real = real_macro_store(_vix_v, _vix_d, _sp_v, _sp_d, fred_key=_fred_key)
     if not _macro_real or ms.count() == 0:
@@ -2295,7 +2302,8 @@ def build_snapshot(seed: int = 7) -> dict:
     _account_cmp = _account_compare(
         _live["alpaca_perf"].get("curve", []) if _live["alpaca_perf"].get("source") == "réel" else [],
         _live["crypto_perf"].get("curve", []) if _live["crypto_perf"].get("source") == "réel" else [],
-        sp, ndx, _cal_full)
+        sp if _sp_real else [], ndx if _ndx_real else [],
+        _sp_dates if _sp_real else [], _ndx_dates if _ndx_real else [])
     # PORTEFEUILLE RÉEL combiné (Alpaca + Bitmart) : courbe d'equity réelle + stats → ligne cliquable
     # du dashboard (réconcilie avec les ORDRES réellement exécutés + positions réelles).
     _alp_c = _live["alpaca_perf"].get("curve", []) if _live["alpaca_perf"].get("source") == "réel" else []
@@ -2550,18 +2558,16 @@ def _earnings_risk(held: list) -> list[dict]:
         return []
 
 
-def _account_compare(alp_curve: list, cr_curve: list, sp: list, ndx: list, cal_dates: list) -> dict:
+def _account_compare(alp_curve: list, cr_curve: list, sp: list, ndx: list,
+                     sp_dates: list[str], ndx_dates: list[str]) -> dict:
     """Compare les comptes RÉELS (Alpaca, Crypto/Bitmart) vs S&P 500 / Nasdaq 100, rebasés à 100 sur
     la fenêtre où des données réelles existent. Courbes réelles courtes au début (compte récent)."""
     import numpy as np
 
-    def by_date(px, cal):
-        if not px:
-            return {}
-        off = len(cal) - len(px)
-        return {cal[off + i].date().isoformat(): float(px[i]) for i in range(len(px)) if off + i >= 0}
+    def by_date(px, dates):
+        return {str(d)[:10]: float(v) for d, v in zip(dates, px)}
 
-    spd, ndxd = by_date(sp, cal_dates), by_date(ndx, cal_dates)
+    spd, ndxd = by_date(sp, sp_dates), by_date(ndx, ndx_dates)
     reals = {}
     if len(alp_curve) >= 2:
         reals["Alpaca (réel)"] = {str(p["t"])[:10]: p["v"] for p in alp_curve}
