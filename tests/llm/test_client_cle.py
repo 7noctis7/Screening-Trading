@@ -122,11 +122,46 @@ def test_gemini_404_compatibilite_replie_sur_api_native(monkeypatch):
     cfg = c.Config(
         base="https://generativelanguage.googleapis.com/v1beta/openai",
         key="AIza-secret",
+        model="configured-flash",
         model="gemini-2.5-flash",
     )
     out = c.complete("question", system="système", cfg=cfg)
     assert out == {"available": True, "text": "réponse", "transport": "gemini-native"}
     assert calls[0].full_url.endswith("/openai/chat/completions")
+    assert calls[1].full_url.endswith("/v1beta/models/configured-flash:generateContent")
+    assert calls[1].headers["X-goog-api-key"] == "AIza-secret"
+
+
+def test_gemini_retire_choisit_un_modele_du_catalogue(monkeypatch):
+    c = _recharge()
+    calls = []
+
+    def fake(req, timeout):
+        calls.append(req)
+        if len(calls) == 1:
+            raise urllib.error.HTTPError(req.full_url, 404, "Not Found", {}, io.BytesIO(b"{}"))
+        if len(calls) == 2:
+            body = io.BytesIO(b'{"error":{"message":"model no longer available"}}')
+            raise urllib.error.HTTPError(req.full_url, 404, "Not Found", {}, body)
+        if len(calls) == 3:
+            return _Response({"data": [{"id": "retired-flash"}, {"id": "current-flash"}]})
+        return _Response({"candidates": [{"content": {"parts": [{"text": "ok"}]}}]})
+
+    monkeypatch.setattr(c.urllib.request, "urlopen", fake)
+    cfg = c.Config(
+        base="https://generativelanguage.googleapis.com/v1beta/openai",
+        key="secret",
+        model="retired-flash",
+    )
+
+    out = c.complete("question", cfg=cfg)
+
+    assert out["available"] is True
+    assert out["transport"] == "gemini-native-auto"
+    assert out["model"] == "current-flash"
+    assert calls[-1].full_url.endswith("/models/current-flash:generateContent")
+
+
     assert calls[1].full_url.endswith("/v1beta/models/gemini-2.5-flash:generateContent")
     assert calls[1].headers["X-goog-api-key"] == "AIza-secret"
 

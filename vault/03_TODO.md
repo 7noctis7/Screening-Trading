@@ -531,6 +531,14 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
 > ✅ Plus aucun P0-SI-LIVE ouvert. L'activation d'un broker réel reste conditionnée au RDV paper
 > du 2026-08-06 (cf. garde-fou CLAUDE.md : jamais de live sans décision explicite).
 ### 🟠 P1
+- [x] **Cron paper multi-venue sûr (2026-08-30)** : neutralisation explicite des clés Binance et
+      Bitmart par valeurs vides, empêchant le reload `.env`; test statique de non-régression.
+- [ ] **Price-action causal UNCALIBRATED (2026-08-30)** : plugin BOS/FTB/FVG/SFP et backtest
+      1R/TP partiels livrés, mais **non câblés en production**. À évaluer sur données réelles L2/tick
+      en walk-forward purgé avec DSR/PBO/Reality Check avant toute promotion paper.
+- [x] **Rotation des modèles cloud (2026-08-30)** : le preset fournisseur ne fige plus un modèle
+      périssable ; si le modèle enregistré est retiré, le client choisit un autre modèle texte
+      annoncé par le catalogue et republie le transport/modèle réellement utilisé.
 - [x] **P1-1** ✅ (2026-07-02, suite) : `SqliteTradeJournal` (`data/journal.db`, JSON features, UPSERT
       idempotent, flag `legacy` requêtable) + `LiveTradingEngine` persiste par défaut + `import_legacy_fills.py` (script one-shot, retiré 05/07)
       (137 fills importés `legacy=1`) + 8 tests (dont contrat anti-fuite). Cf. **ADR-0028**, commits `834338a`→`3c1c771`.

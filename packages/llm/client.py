@@ -72,8 +72,8 @@ def _get(path: str, cfg: Config | None = None):
 def _connu(modele: str, catalogue: list[str]) -> bool:
     """Le modèle demandé figure-t-il au catalogue du fournisseur ?
 
-    Comparaison tolérante au préfixe : Google annonce ses modèles sous `models/gemini-2.5-flash`
-    et les accepte sous les deux formes. Un catalogue vide ne prouve rien → on ne bloque pas."""
+    Comparaison tolérante au préfixe `models/`. Un catalogue vide ne prouve rien → on ne bloque
+    pas."""
     if not modele or not catalogue:
         return True
     cible = modele.split("/")[-1].strip().lower()
@@ -160,6 +160,22 @@ def _default_model(cfg: Config | None = None) -> str:
         return "local-model"
 
 
+def _alternative_model(c: Config, current: str) -> str:
+    """Choisit dans le catalogue un modèle texte différent, sans nom périssable codé en dur."""
+    try:
+        models = [m.get("id", "") for m in (_get("/models", c).get("data") or [])]
+    except Exception:  # noqa: BLE001
+        return ""
+    blocked = ("embedding", "image", "audio", "tts", "vision")
+    candidates = [
+        model for model in models
+        if model and not _connu(current, [model])
+        and not any(word in model.lower() for word in blocked)
+    ]
+    candidates.sort(key=lambda model: ("flash" not in model.lower(), "latest" not in model.lower()))
+    return candidates[0] if candidates else ""
+
+
 def _openai_body(
     prompt: str, system: str, temperature: float, max_tokens: int, model: str
 ) -> bytes:
@@ -193,6 +209,13 @@ def _is_gemini(c: Config) -> bool:
 
 
 def _post_gemini_native(
+    c: Config, prompt: str, system: str, temperature: float, max_tokens: int,
+    model: str = "",
+) -> str:
+    """Repli sur l'API Gemini native si sa couche compatible renvoie 404."""
+    root = c.base.split("/openai", 1)[0].rstrip("/")
+    selected = urllib.parse.quote((model or _default_model(c)).split("/")[-1], safe="-._")
+    url = f"{root}/models/{selected}:generateContent"
     c: Config, prompt: str, system: str, temperature: float, max_tokens: int
 ) -> str:
     """Repli sur l'API Gemini native si sa couche compatible renvoie 404."""
@@ -244,6 +267,25 @@ def complete(
     except urllib.error.HTTPError as first:
         if _is_gemini(c) and first.code == 404:
             try:
+                text = _post_gemini_native(c, prompt, system, temperature, max_tokens, model)
+                return {"available": True, "text": text, "transport": "gemini-native"}
+            except urllib.error.HTTPError as native:
+                alternative = _alternative_model(c, model) if native.code in (400, 404) else ""
+                if alternative:
+                    try:
+                        text = _post_gemini_native(
+                            c, prompt, system, temperature, max_tokens, alternative
+                        )
+                        return {
+                            "available": True,
+                            "text": text,
+                            "transport": "gemini-native-auto",
+                            "model": alternative,
+                        }
+                    except Exception as retry:  # noqa: BLE001
+                        native = retry
+                reason = f"compatibilité: {_error_detail(first)} ; natif: {_error_detail(native)}"
+                return {"available": False, "text": "", "reason": reason}
                 text = _post_gemini_native(c, prompt, system, temperature, max_tokens)
                 return {"available": True, "text": text, "transport": "gemini-native"}
             except Exception as native:  # noqa: BLE001

@@ -2340,3 +2340,37 @@ pour entamer l'implémentation des modules métier.
 - **154 tests verts** (aucune régression).
 
 **Décidé.** ADR-0022 (DOM : tables injectées en une chaîne complète + rendu d'onglet isolé par try/catch).
+
+## 2026-08-30 — Rotation automatique d'un modèle IA retiré
+
+- **Incident réel** : la connexion au catalogue fournisseur était verte, puis la génération
+  échouait parce que le modèle mémorisé n'était plus ouvert aux nouveaux utilisateurs.
+- **Cause** : le preset Web figeait un identifiant fournisseur périssable et le repli natif
+  réessayait exactement ce même identifiant.
+- **Correction** : le preset laisse désormais le modèle vide. Si un ancien réglage explicite est
+  refusé en génération, le backend consulte le catalogue, exclut ce modèle et sélectionne un
+  modèle texte disponible, sans inscrire un nouvel identifiant fournisseur dans le dépôt.
+- **Preuve** : test de régression en quatre appels simulés (compatibilité absente, modèle natif
+  retiré, découverte du catalogue, génération native réussie). Aucun accès à l'exécution.
+
+## 2026-08-30 — Formalisation falsifiable du cahier des charges price-action
+
+- Ajout d'un plugin de recherche causal : pivots confirmés sans back-painting, BOS sur barres HTF
+  terminées, zones FVG/order-block, midpoint, first-time-back, SFP et proxy LVN optionnel.
+- Les paramètres subjectifs (span, HTF, déplacement, buffer, profil volume) restent obligatoires
+  et train-only : aucune calibration n'a été inventée. Statut **UNCALIBRATED**.
+- Le backtest exécute au prochain open, applique coûts/slippage, dimensionne le stop à 1 % maximum,
+  traite l'ambiguïté intrabar pessimiste, sort la moitié au TP1 et le solde à 3R ou plus.
+- L'espérance en R, le win rate et les moyennes gain/perte sont publiés ; moins de 30 trades reste
+  `UNCALIBRATED`. Chaque veto publie son compteur et son effet moyen lorsqu'il s'est déclenché.
+- Aucun import vers le chemin d'exécution, aucune activation live/paper, aucune limite relevée.
+
+## 2026-08-30 — Le cron « paper » neutralise réellement toutes les places crypto
+
+- Le cron historique retirait seulement les clés Bitmart avec `unset`. Depuis le passage de la
+  place par défaut à Binance, ce garde-fou était incomplet ; de plus, `unset` autorisait le
+  chargeur `.env` à réinjecter une clé plus tard dans le processus.
+- Le cron définit désormais vides les clés Binance et Bitmart et force le sandbox Binance. Le
+  chemin actions reste Alpaca paper. Un test vérifie toutes les variables avant `run_live.py`.
+- Les ordres actions non remplis observés le week-end/hors séance ne sont pas forcés : le runner
+  les reporte explicitement et doit être lancé pendant la séance NYSE.

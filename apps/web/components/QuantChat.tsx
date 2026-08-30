@@ -47,6 +47,11 @@ export function QuantChat() {
       });
       const d = await r.json();
       const text = d.available ? d.answer : `IA indisponible : ${d.reason ?? "erreur inconnue"}`;
+      setMessages((m) => [...m, { role: "assistant", text, available: d.available,
+        grounded: d.grounded,
+        citations: d.citations ?? [] }]);
+    } catch { setMessages((m) => [...m, { role: "assistant", available: false,
+      text: "L'API locale ne répond pas." }]); }
       setMessages((m) => [...m, { role: "assistant", text, grounded: d.grounded,
         citations: d.citations ?? [] }]);
     } catch { setMessages((m) => [...m, { role: "assistant", text: "L'API locale ne répond pas." }]); }
