@@ -8,6 +8,7 @@ import { ReglagesIA } from "@/components/ReglagesIA";
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 type Msg = { role: "user" | "assistant"; text: string; available?: boolean;
   grounded?: boolean; citations?: any[] };
+type Msg = { role: "user" | "assistant"; text: string; grounded?: boolean; citations?: any[] };
 
 const PAGE_SCOPE: Record<string, string> = {
   "/portfolio": "portfolio", "/positions": "portfolio", "/risk": "risk",
@@ -51,6 +52,9 @@ export function QuantChat() {
         citations: d.citations ?? [] }]);
     } catch { setMessages((m) => [...m, { role: "assistant", available: false,
       text: "L'API locale ne répond pas." }]); }
+      setMessages((m) => [...m, { role: "assistant", text, grounded: d.grounded,
+        citations: d.citations ?? [] }]);
+    } catch { setMessages((m) => [...m, { role: "assistant", text: "L'API locale ne répond pas." }]); }
     finally { setLoading(false); }
   }
 
@@ -82,6 +86,8 @@ export function QuantChat() {
                 : m.grounded ? "✓ GROUNDED" : "⚠ UNCALIBRATED / rejeté"}
               {m.available !== false && m.citations?.map((c, j) =>
                 <span key={j}> · [{j + 1}] {c.path ?? c.file}</span>)}
+              {m.grounded ? "✓ GROUNDED" : "⚠ UNCALIBRATED / rejeté"}
+              {m.citations?.map((c, j) => <span key={j}> · [{j + 1}] {c.path ?? c.file}</span>)}
             </div>}
           </div>)}
           {loading && <p className="text-sm text-muted">Analyse des sources autorisées…</p>}<div ref={end} />

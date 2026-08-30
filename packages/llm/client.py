@@ -216,6 +216,12 @@ def _post_gemini_native(
     root = c.base.split("/openai", 1)[0].rstrip("/")
     selected = urllib.parse.quote((model or _default_model(c)).split("/")[-1], safe="-._")
     url = f"{root}/models/{selected}:generateContent"
+    c: Config, prompt: str, system: str, temperature: float, max_tokens: int
+) -> str:
+    """Repli sur l'API Gemini native si sa couche compatible renvoie 404."""
+    root = c.base.split("/openai", 1)[0].rstrip("/")
+    model = urllib.parse.quote(_default_model(c).split("/")[-1], safe="-._")
+    url = f"{root}/models/{model}:generateContent"
     body = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": temperature, "maxOutputTokens": max_tokens},
@@ -280,6 +286,8 @@ def complete(
                         native = retry
                 reason = f"compatibilité: {_error_detail(first)} ; natif: {_error_detail(native)}"
                 return {"available": False, "text": "", "reason": reason}
+                text = _post_gemini_native(c, prompt, system, temperature, max_tokens)
+                return {"available": True, "text": text, "transport": "gemini-native"}
             except Exception as native:  # noqa: BLE001
                 reason = f"compatibilité: {_error_detail(first)} ; natif: {_error_detail(native)}"
                 return {"available": False, "text": "", "reason": reason}
