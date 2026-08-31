@@ -24,8 +24,58 @@ def _row(label_core, label_pre, st):
           f"{st['total_return']*100:8.1f}%")
 
 
-def _sweep(title, preset, core, grid=(0.0, 0.25, 0.5, 0.75, 1.0)):
+def _rendements(eq):
+    """Rendements quotidiens d'une courbe d'equity."""
+    return [eq[i] / eq[i - 1] - 1.0 for i in range(1, len(eq)) if eq[i - 1] > 0]
+
+
+def _verdict(courbes: dict, best, reference: float) -> None:
+    """Le meilleur Sharpe de cinq essais est-il DISCERNABLE de la part actuelle ?
+
+    Sans cette étape, le sweep est une machine à surapprendre : cinq ratios essayés, on
+    garde le plus flatteur, et on lit du bruit comme un résultat. Le maximum de n
+    tirages bruités croît en racine de 2·ln(n) : sur cinq essais on gagne « gratuitement »
+    un demi-écart-type environ.
+
+    La comparaison est APPARIÉE (mêmes dates, forte corrélation entre deux mélanges du
+    même satellite). C'est exactement le cas que traite la correction de Jobson-Korkie /
+    Memmel, et qui rend le test bien plus sensible qu'une comparaison indépendante.
+    """
+    from packages.research.sharpe_diff import comparer, seuil_detectable
+    if reference not in courbes or best is None:
+        return
+    base = _rendements(courbes[reference])
+    if len(base) < 60:
+        return
+    seuil = seuil_detectable(len(base), sharpe=1.0, rho=0.95, periodes_par_an=252.0)
+    print(f"\n  Référence = part actuelle {reference*100:.0f}% · "
+          f"plus petit écart de Sharpe détectable à 5 % : ±{seuil:.2f}")
+    discernables = []
+    for c, eq in sorted(courbes.items()):
+        if c == reference:
+            continue
+        d = comparer(base, _rendements(eq), periodes_par_an=252.0)
+        if not d.get("disponible"):
+            continue
+        marque = "  ← DISCERNABLE" if d["verdict"] != "indiscernable" else ""
+        if marque:
+            discernables.append((c, d))
+        ic = f"{d['ic95'][0]:+.2f} à {d['ic95'][1]:+.2f}"
+        print(f"    {c*100:>3.0f}% cœur : ΔSharpe {d['delta']:+.2f} "
+              f"(IC95 {ic}, p={d['p']:.3f}){marque}")
+    if not discernables:
+        print("  → AUCUN ratio n'est distinguable de la part actuelle. Le « meilleur "
+              f"Sharpe » affiché ({best[0]*100:.0f}%) est du bruit de sélection : "
+              "ne pas bouger sur cette base.")
+    else:
+        noms = ", ".join(f"{c*100:.0f}%" for c, _ in discernables)
+        print(f"  → discernable(s) : {noms}. À confirmer hors échantillon avant "
+              "de bouger (5 ratios essayés — le comptage voyage avec le chiffre).")
+
+
+def _sweep(title, preset, core, grid=(0.0, 0.25, 0.5, 0.75, 1.0), reference=0.5):
     from packages.backtest.index_core import _stats, blend_equity
+    courbes: dict[float, list] = {}
     if not core or len(core) < 60:
         print(f"{title} : indisponible.\n"); return
     print(f"{title}")
@@ -40,12 +90,11 @@ def _sweep(title, preset, core, grid=(0.0, 0.25, 0.5, 0.75, 1.0)):
         if not st.get("available"):
             continue
         _row(f"{c*100:.0f}%", f"{(1-c)*100:.0f}%", st)
+        courbes[c] = eq
         if c > 0 and (best is None or st["sharpe"] > best[1]["sharpe"]):
             best = (c, st)
-    if best:
-        print(f"  → meilleur Sharpe : {best[0]*100:.0f}% cœur (Sharpe {best[1]['sharpe']})\n")
-    else:
-        print()
+    _verdict(courbes, best, reference)
+    print()
 
 
 def main() -> None:
