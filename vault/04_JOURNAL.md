@@ -1,5 +1,60 @@
 # 04 — JOURNAL
 
+## Session 2026-08-31 (22) — 53,6 % de CAGR : la troisième occurrence du même défaut
+
+**Le chiffre qui a déclenché l'enquête.** `make index-core` affichait, pour le cœur momentum
+sectoriel : **CAGR 53,6 %, rendement total 8908 %, Sharpe 1,29**. Un résultat qui, s'il était
+réel, rendrait inutile tout le reste du système — donc le signe qu'on attaque, pas qu'on célèbre.
+
+**Cause trouvée en lisant trente lignes.** `sector_momentum.py` importait `fenetre_commune` :
+
+```python
+syms, L, panel_diag = fenetre_commune(data, syms)      # empilement POSITIONNEL
+closes = {s: np.asarray([b.close for b in data[s]][-L:], float) for s in syms}
+ref = max(syms, key=lambda s: len(data[s]))
+dts  = [b.ts.isoformat() for b in data[ref]][-L:]      # calendrier d'UNE SEULE série
+```
+
+Les L dernières barres de chaque titre, superposées, avec un calendrier pris sur la série la
+plus longue. **Un titre radié en 2018 verse ses cours de 2018 dans des colonnes étiquetées
+2026.** Le classement `closes[s][t] / closes[s][t - lookback] - 1` comparait donc des rendements
+calculés sur des **périodes calendaires différentes** au sein d'un même secteur.
+
+Le preset avait été migré en #341, la production en #347. **Ce cœur ne l'avait jamais été.**
+Troisième occurrence, troisième module, même défaut.
+
+**Deux pièges que la migration seule aurait ouverts**, et c'est le vrai enseignement :
+
+1. `aligner_par_date` initialise sa matrice à `np.nan` — les trous sont légitimes. Or `_sma`
+   utilisait `np.cumsum`, qui **propage un NaN à l'infini** : un seul jour manquant rendait la
+   MM50 NaN pour tout le reste, le filtre `cours > MM50` devenait faux à jamais, et le titre
+   était exclu **en silence**. `_sma` somme désormais les points valides et divise par LEUR
+   NOMBRE.
+2. La moyenne des rendements du jour rendait NaN dès qu'une ligne détenue était radiée, et
+   l'equity restait NaN jusqu'au bout. **Attrapé par mon propre test**, pas par relecture.
+
+**Biais résiduel, écrit plutôt que masqué.** Retirer la ligne radiée de la moyenne revient à
+répartir son poids sur les survivantes le jour même, donc à ÉCHAPPER à la perte de radiation.
+C'est optimiste. Le traitement exact demande les rendements de radiation
+(`data/delisted.csv`) et n'est pas fait : le module reste INDICATIF.
+
+**Le sweep QQQ, lui, a rendu son verdict** (garde-fou livré en #362) :
+
+```
+Référence = 50% · seuil détectable ±0.27
+    0% : ΔSharpe -0.24 (p=0.159)    75% : +0.02 (p=0.765)
+   25% : ΔSharpe -0.07 (p=0.344)   100% : +0.01 (p=0.918)
+→ AUCUN ratio n'est distinguable. Le « meilleur Sharpe » (75%) est du bruit de sélection.
+```
+
+La question « faut-il plus ou moins de QQQ ? » est donc **close** : on garde 50 %. Ce qui bouge
+vraiment n'est pas le Sharpe (plat) mais le couple CAGR 8,5→21,1 % / maxDD −24,4→−35,1 %. C'est
+une préférence, pas une statistique.
+
+**Tests.** 6 neufs (1505 verts). Ruff sur le module : 20 → 11.
+
+---
+
 ## Session 2026-08-30 — S&P/Nasdaq plats : la série la plus longue était périmée
 
 **Observation réelle.** Sur le dashboard comptes vs indices (17/06→29/08), S&P et Nasdaq bougeaient
