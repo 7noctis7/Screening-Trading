@@ -369,6 +369,16 @@ def _vix_series(n: int, seed: int = 0) -> list:
     return [round(float(x), 2) for x in v]
 
 
+# Playbook rendu quand aucune série VIX RÉELLE n'est disponible. `exposure` vaut 1.0 :
+# une valeur neutre, jamais un multiplicateur inventé qui modulerait le risque.
+_VIX_NON_CALIBRE = {
+    "regime": "UNCALIBRATED", "color": "#6b7280", "exposure": 1.0,
+    "action": ("Aucune série VIX réelle disponible (ni `^VIX` ni `VIX`, "
+               "fraîcheur ≤ 7 j). Pas de lecture de volatilité : on n'en "
+               "invente pas. Vérifier la base de prix ou le réseau."),
+}
+
+
 def _vix_playbook(v: float) -> dict:
     if v < 13:
         return {"regime": "calme", "color": "#22c55e", "exposure": 1.2,
@@ -2518,8 +2528,22 @@ def build_snapshot(seed: int = 7) -> dict:
             "real_markers": _real_markers,             # signaux achat/vente RÉELS (ordres brokers)
             "earnings_risk": _earnings_risk(held),
             "trade_stats": trade_stats,
-            "vix": vix_now, "vix_playbook": _vix_playbook(vix_now),
-            "vix_series": vix[::max(1, n // 240)],   # sous-échantillonné pour le graphe
+            # PROVENANCE DU VIX — publiée, jamais devinée (31/08).
+            #
+            # Quand ni `^VIX` ni `VIX` ne donnent une série FRAÎCHE (≥250 barres, ≤7 j),
+            # `_vix_series()` fabrique une série synthétique. Le graphe le savait déjà
+            # (`_vix_d`/`_vix_v` sont vidés si `_vix_is_real` est faux) — mais le
+            # KPI, le playbook et la série étaient publiés SANS distinction. Un
+            # « VIX 18 · exposition ×0.8 » sorti d'un générateur aléatoire s'affichait
+            # comme une lecture de marché.
+            #
+            # Le mandat données-réelles tranche : données insuffisantes → on dit
+            # UNCALIBRATED, on n'invente pas. Le front rend déjà `null` en « n/d ».
+            "vix": vix_now if _vix_is_real else None,
+            "vix_reel": bool(_vix_is_real),
+            "vix_playbook": (_vix_playbook(vix_now) if _vix_is_real
+                             else _VIX_NON_CALIBRE),
+            "vix_series": vix[::max(1, n // 240)] if _vix_is_real else [],
         },
         "screener": screener,
         "screen": screen_sec,

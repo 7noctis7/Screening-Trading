@@ -151,7 +151,25 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       rejette le RMT (ΔSharpe −0,07). Avec l'erreur-type, la contradiction se dissout : −0,07 est
       **indiscernable de zéro**. Ni le diagnostic ni la mesure ne justifient de bouger. On garde
       l'ERC et on documente.
-- [ ] **P1 — Allonger la fenêtre du labo.** Le gate promeut à +0,05 alors que 126 pas ne résolvent
+- [x] **TRANCHÉ le 31/08 : allonger la fenêtre du labo NE MARCHERAIT PAS.** J'avais proposé
+      de raccourcir le pas (21 → 5/10) pour multiplier les observations. C'est faux deux fois.
+      (a) Changer le pas change la STRATÉGIE — hebdomadaire au lieu de mensuel quadruple le
+      turnover. (b) Surtout, le seuil est INVARIANT à la fréquence : Z·sqrt(var·ppa) avec
+      var ∝ 1/n et n = années × ppa → ppa s'annule. Mesuré : 11 ans donnent ±0,118 en
+      quotidien COMME en mensuel. Les deux vrais leviers : l'HISTORIQUE (20 ans → ±0,087 ;
+      il en faudrait ~60 pour atteindre 0,05) et la CORRÉLATION entre variantes (rho 0,95 →
+      0,99 fait passer de ±0,263 à ±0,118) — d'où le protocole apparié, une seule chose
+      changée à la fois. Le labo publie désormais ces deux tableaux.
+- [ ] **P1 — Conséquence : le gate promeut à +0,05, seuil INATTEIGNABLE avec 11 ans.**
+      À décider : relever le seuil de promotion à ~0,12, ou exiger une confirmation hors
+      échantillon pour tout ce qui passe en dessous. Ne pas laisser un seuil que la donnée
+      ne peut pas honorer.
+- [ ] **VIX : provenance publiée (31/08).** `vix`, `vix_playbook` et `vix_series` étaient
+      publiés sans distinguer une série RÉELLE d'une série `_vix_series()` FABRIQUÉE — le
+      graphe s'en protégeait déjà, pas le KPI. Corrigé : `vix_reel` publié, `null` +
+      UNCALIBRATED quand aucune série fraîche. **Reste à vérifier chez l'utilisateur** si
+      `^VIX` remonte réellement (le warning ne concerne que l'alias de repli `VIX`).
+- [ ] **P1 — ancien libellé (à ignorer) : Allonger la fenêtre du labo.** Le gate promeut à +0,05 alors que 126 pas ne résolvent
       que ~+0,14 (ADR-0039) : à ce seuil, promouvoir ou rejeter est un tirage au sort. C'est le
       vrai blocage de la recherche d'alpha — pas le manque de leviers à tester, mais l'incapacité
       à distinguer un levier réel du bruit. Piste : pas plus court (step 5 ou 10 au lieu de 21)

@@ -106,8 +106,21 @@ def test_positions_linked_to_sector_and_ml():
 def test_vix_playbook_and_live():
     snap = _snap()
     d = snap["dashboard"]
-    assert d["vix"] > 0 and d["vix_playbook"]["regime"] in {"calme", "normal", "tendu", "panique"}
-    assert d["vix_playbook"]["exposure"] in {1.2, 1.0, 0.6, 0.3}
+    # DEUX ÉTATS LÉGITIMES, et un seul contrat (31/08). Quand aucune série VIX RÉELLE
+    # n'est fraîche, `_vix_series()` fabrique une série synthétique. Le graphe s'en
+    # protégeait déjà, mais le KPI et le playbook étaient publiés sans distinction : un
+    # « VIX 18 · exposition ×0.8 » sorti d'un générateur aléatoire s'affichait comme une
+    # lecture de marché. Le test verrouille la cohérence des deux états, jamais un seul.
+    assert d["vix_reel"] is (d["vix"] is not None), "provenance et valeur désaccordées"
+    if d["vix_reel"]:
+        assert d["vix"] > 0
+        assert d["vix_playbook"]["regime"] in {"calme", "normal", "tendu", "panique"}
+        assert d["vix_playbook"]["exposure"] in {1.2, 1.0, 0.6, 0.3}
+        assert d["vix_series"], "VIX réel mais série vide"
+    else:
+        assert d["vix_playbook"]["regime"] == "UNCALIBRATED"
+        assert d["vix_playbook"]["exposure"] == 1.0, "un multiplicateur inventé module le risque"
+        assert d["vix_series"] == [], "série synthétique publiée comme réelle"
     live = snap["live"]
     # La place crypto n'est plus un nom figé : on vérifie qu'elle correspond à la place ACTIVE
     # (QUANT_CRYPTO_VENUE, défaut Binance). Figer « Bitmart » ici redeviendrait faux à la
