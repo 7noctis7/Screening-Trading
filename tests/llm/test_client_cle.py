@@ -123,7 +123,6 @@ def test_gemini_404_compatibilite_replie_sur_api_native(monkeypatch):
         base="https://generativelanguage.googleapis.com/v1beta/openai",
         key="AIza-secret",
         model="configured-flash",
-        model="gemini-2.5-flash",
     )
     out = c.complete("question", system="système", cfg=cfg)
     assert out == {"available": True, "text": "réponse", "transport": "gemini-native"}
@@ -160,10 +159,6 @@ def test_gemini_retire_choisit_un_modele_du_catalogue(monkeypatch):
     assert out["transport"] == "gemini-native-auto"
     assert out["model"] == "current-flash"
     assert calls[-1].full_url.endswith("/models/current-flash:generateContent")
-
-
-    assert calls[1].full_url.endswith("/v1beta/models/gemini-2.5-flash:generateContent")
-    assert calls[1].headers["X-goog-api-key"] == "AIza-secret"
 
 
 def test_erreur_http_restitue_le_message_du_fournisseur(monkeypatch):
