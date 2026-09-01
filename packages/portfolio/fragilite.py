@@ -98,7 +98,7 @@ def significativite(pnls, n_boot: int = N_BOOTSTRAP, seed: int = 7,
     `bloc` : un bootstrap par blocs mobiles sur la séquence CHRONOLOGIQUE, qui conserve
     la dépendance locale. La longueur usuelle est de l'ordre de √n.
     """
-    x = np.asarray([v for v in (pnls if pnls is not None else []) if _fini(v)], float)
+    x = np.asarray([v for v in _seq(pnls) if _fini(v)], float)
     n = x.size
     if n < 30:
         return {"significativite": "UNCALIBRATED",
@@ -136,8 +136,14 @@ def bloc_conseille(n: int) -> int:
     return max(2, int(round(math.sqrt(max(n, 1)))))
 
 
+def _seq(serie) -> list:
+    """Le seul test permis sur une séquence est `is None` : sur un ndarray, toute autre
+    forme de vérité (`x or []`) lève « truth value ambiguous ». Leçon du 01/09."""
+    return [] if serie is None else list(serie)
+
+
 def _separe(pnls) -> tuple[list[float], list[float]]:
-    vals = [float(v) for v in (pnls if pnls is not None else []) if _fini(v)]
+    vals = [float(v) for v in _seq(pnls) if _fini(v)]
     return [v for v in vals if v > 0], [v for v in vals if v <= 0]
 
 
@@ -146,3 +152,52 @@ def _fini(v) -> bool:
         return math.isfinite(float(v))
     except (TypeError, ValueError):
         return False
+
+
+def comparer_dimensionnement(pnls, r_multiples) -> dict:
+    """Queue épaisse RÉELLE, ou simple loterie de dimensionnement ?
+
+    La distinction est décisive et elle est mesurable. Le R d'un trade vaut
+    (sortie − entrée) / (entrée − stop) : c'est son résultat exprimé en unités de
+    RISQUE ENGAGÉ, donc débarrassé de la taille de la position. Or dimensionner à risque
+    égal signifie choisir la quantité telle que qty × (entrée − stop) soit constante —
+    auquel cas le P&L de chaque trade devient exactement proportionnel à son R.
+
+    Le t calculé sur les R n'est donc pas une analogie : c'est le t QU'ON AURAIT OBTENU,
+    à signaux identiques, si chaque trade avait risqué le même montant. L'écart entre
+    les deux t se lit directement :
+
+      · t(R) nettement supérieur à t($) → la dispersion vient de la TAILLE des
+        positions, pas du signal. Le risque égal relève alors le t sans exiger le
+        moindre alpha nouveau ;
+      · t(R) comparable → la queue est structurelle, elle appartient à la stratégie, et
+        aucun dimensionnement ne la fera disparaître.
+
+    LIMITE À GARDER EN TÊTE. La contrefactuelle suppose les mêmes entrées et sorties. En
+    pratique, redimensionner change le capital disponible, donc les trades qu'on peut
+    prendre. L'écart mesuré est une INDICATION FORTE, pas une promesse de résultat.
+    """
+    # `zip(..., strict=True)` DÉLIBÉRÉMENT : les deux séries sont indexées par trade.
+    # Une longueur qui diverge est un défaut d'appelant, et apparier un P&L au R d'un
+    # AUTRE trade produirait un chiffre faux tout en restant parfaitement lisible.
+    p_, r_ = _seq(pnls), _seq(r_multiples)
+    couples = [(float(a), float(b)) for a, b in zip(p_, r_, strict=True)
+               if _fini(a) and _fini(b)]
+    n_pnl = len([v for v in p_ if _fini(v)])
+    if not n_pnl:
+        return {}
+    couverture = len(couples) / n_pnl
+    if couverture < 0.90:
+        return {"dimensionnement": "UNCALIBRATED",
+                "motif": f"R connu sur {couverture:.0%} des trades — insuffisant",
+                "couverture_R_pct": round(couverture * 100, 1)}
+    rs = [r for _, r in couples]
+    t_dollars = significativite([p for p, _ in couples]).get("t_esperance")
+    en_r = significativite(rs)
+    gain = (round((en_r["t_esperance"] / t_dollars - 1.0) * 100.0, 1)
+            if t_dollars and t_dollars > 0 and en_r.get("t_esperance") else None)
+    return {"couverture_R_pct": round(couverture * 100, 1),
+            "t_esperance_en_R": en_r.get("t_esperance"),
+            "n_trades_pour_conclure_en_R": en_r.get("n_trades_pour_conclure"),
+            "gain_de_t_si_risque_egal_pct": gain,
+            **{f"{k}_en_R": v for k, v in concentration(rs).items()}}

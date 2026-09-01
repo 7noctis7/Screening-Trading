@@ -12,6 +12,7 @@ import pytest
 
 from packages.portfolio.fragilite import (
     bloc_conseille,
+    comparer_dimensionnement,
     concentration,
     marge_de_payoff,
     significativite,
@@ -20,7 +21,7 @@ from packages.portfolio.fragilite import (
 
 # ------------------------------------------------------------------ la marge
 def test_le_seuil_de_payoff_est_bien_le_point_mort():
-    """À p = 1/3, il faut gagner exactement 2 fois la perte moyenne pour ne rien gagner."""
+    """À p = 1/3, il faut gagner 2 fois la perte moyenne pour ne RIEN gagner."""
     pnls = [2.0] * 100 + [-1.0] * 200
     m = marge_de_payoff(pnls)
     assert m["payoff_seuil"] == 2.0 and m["payoff"] == 2.0
@@ -41,7 +42,7 @@ def test_retirer_les_cinq_meilleurs_peut_faire_basculer_sous_UN():
     pnls = [50.0] * 5 + [1.0] * 100 + [-1.0] * 140
     c = concentration(pnls)
     assert (sum(v for v in pnls if v > 0) / 140) > 1.0        # profit factor > 1
-    assert c["profit_factor_sans_top5"] < 1.0                 # sans eux, système perdant
+    assert c["profit_factor_sans_top5"] < 1.0        # sans eux, système perdant
     assert c["net_sans_top5"] < 0
 
 
@@ -127,3 +128,50 @@ def test_les_trois_mesures_acceptent_un_ndarray_et_ignorent_les_non_finis():
     assert significativite(a)["t_esperance"] is not None
     for vide in (None, [], np.array([])):
         assert marge_de_payoff(vide) == {} and concentration(vide) == {}
+
+
+# ------------------------------------- queue épaisse RÉELLE ou loterie de taille ?
+# La distinction commande la décision. Le R d'un trade est son résultat en unités de
+# RISQUE ENGAGÉ ; dimensionner à risque égal rend le P&L proportionnel au R. Le t
+# calculé sur les R est donc EXACTEMENT celui qu'on aurait obtenu, à signaux
+# identiques, si chaque trade avait risqué le même montant.
+def test_une_LOTERIE_DE_TAILLE_est_demasquee():
+    """Signal régulier en R, mais deux positions énormes en dollars. En dollars le
+    résultat semble tenir à quelques coups ; en R il ne tient à rien."""
+    rng = np.random.default_rng(2)
+    r = list(rng.normal(0.15, 1.0, 300))                  # signal régulier
+    taille = [1.0] * 300
+    taille[7], taille[99] = 60.0, 55.0                    # deux positions démesurées
+    pnls = [ri * ti for ri, ti in zip(r, taille, strict=True)]
+    d = comparer_dimensionnement(pnls, r)
+    assert d["couverture_R_pct"] == 100.0
+    assert d["gain_de_t_si_risque_egal_pct"] > 50         # le risque égal relève le t
+    sans_top5_dollars = concentration(pnls)["profit_factor_sans_top5"]
+    assert d["profit_factor_sans_top5_en_R"] > sans_top5_dollars
+
+
+def test_une_QUEUE_STRUCTURELLE_n_est_pas_confondue_avec_une_loterie():
+    """Contre-épreuve indispensable : quand la queue est dans le SIGNAL et non dans la
+    taille, le risque égal ne change rien et la mesure doit le dire."""
+    rng = np.random.default_rng(2)
+    r = list(rng.normal(0.10, 1.0, 300))
+    r[7], r[99] = 40.0, 35.0                              # la queue est dans le signal
+    pnls = list(r)                                        # taille constante
+    d = comparer_dimensionnement(pnls, r)
+    # rien à gagner au redimensionnement : la queue est dans le signal
+    assert abs(d["gain_de_t_si_risque_egal_pct"]) < 1e-6
+
+
+def test_un_R_trop_peu_renseigne_dit_UNCALIBRATED():
+    """Mandat données-réelles : sans couverture suffisante, pas de chiffre publié."""
+    pnls = [1.0] * 100
+    r = [1.0] * 50 + [None] * 50
+    d = comparer_dimensionnement(pnls, r)
+    assert d["dimensionnement"] == "UNCALIBRATED" and d["couverture_R_pct"] == 50.0
+
+
+def test_des_series_desalignees_levent_plutot_que_de_mentir():
+    """Apparier un P&L au R d'un AUTRE trade produirait un chiffre faux tout en restant
+    parfaitement lisible — le pire des cas. `strict=True` l'interdit."""
+    with pytest.raises(ValueError):
+        comparer_dimensionnement([1.0] * 100, [1.0] * 99)

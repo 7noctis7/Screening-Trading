@@ -8,6 +8,24 @@ from datetime import date, datetime
 
 from packages.core.models import Bar
 
+# Noms d'indices NUS — jamais des tickers réseau. Chez Yahoo un indice porte toujours
+# un accent circonflexe (`^VIX`, `^GSPC`) ; la forme nue est un nommage LOCAL, celui
+# sous lequel nos bases stockent la même série. L'envoyer au réseau produit au mieux du
+# bruit (« $VIX: possibly delisted »), au pire une collision : un jour un titre coté
+# s'appelle `DJI`, on télécharge un small-cap et on le lit comme le Dow — une erreur
+# SILENCIEUSE, donc pire que l'échec bruyant qu'elle remplace.
+ALIAS_LOCAUX = frozenset({"VIX", "SPX", "NDX", "DJI", "RUT", "IXIC", "GSPC"})
+
+
+def interrogeables_en_ligne(aliases: Iterable[str]) -> list[str]:
+    """Sous-ensemble des alias qu'un fournisseur réseau peut résoudre.
+
+    Les proxys cotés sont CONSERVÉS : `SPY` pour `^GSPC`, `QQQ` pour `^NDX` sont de
+    vrais tickers et le seul repli quand l'indice lui-même ne répond pas. Seule la
+    forme nue d'un nom d'indice est écartée.
+    """
+    return [a for a in aliases if a not in ALIAS_LOCAUX]
+
 
 @dataclass(frozen=True, slots=True)
 class IndexHistory:

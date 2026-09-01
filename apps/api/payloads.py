@@ -179,11 +179,11 @@ def trade_stats_payload(trades) -> dict:
         "best": round(max(pnls), 2),
         "worst": round(min(pnls), 2),
         "avg_pnl_pct": round(sum(t.pnl_pct or 0 for t in closed) / len(closed), 4),
-        **_fragilite(pnls),
+        **_fragilite(pnls, [getattr(t, "r_multiple", None) for t in closed]),
     }
 
 
-def _fragilite(pnls: list[float]) -> dict:
+def _fragilite(pnls: list[float], r_multiples: list | None = None) -> dict:
     """Le « pourquoi » derrière une espérance faible — délégué à `portfolio.fragilite`.
 
     Trois questions qui ne se déduisent pas l'une de l'autre : la MARGE du payoff sur le
@@ -192,6 +192,10 @@ def _fragilite(pnls: list[float]) -> dict:
     de zéro). Le bootstrap est donné deux fois : i.i.d., puis par BLOCS chronologiques —
     des positions qui se chevauchent partagent le même choc de marché, et le tirage
     i.i.d. surestime alors la certitude.
+
+    `comparer_dimensionnement` répond à la question qui commande les autres : la queue
+    épaisse est-elle réelle, ou une loterie de TAILLE de position ? Le t calculé sur les
+    R est celui qu'on aurait obtenu, à signaux identiques, à risque égal par trade.
     """
     from packages.portfolio import fragilite as F
     if not pnls:
@@ -200,7 +204,8 @@ def _fragilite(pnls: list[float]) -> dict:
     blocs = F.significativite(pnls, bloc=F.bloc_conseille(len(pnls)))
     return {**F.marge_de_payoff(pnls), **F.concentration(pnls), **iid,
             "p_esperance_negative_blocs": blocs.get("p_esperance_negative"),
-            "esperance_ic95_blocs": blocs.get("esperance_ic95")}
+            "esperance_ic95_blocs": blocs.get("esperance_ic95"),
+            **F.comparer_dimensionnement(pnls, r_multiples)}
 
 
 def _round(v):

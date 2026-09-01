@@ -1372,7 +1372,11 @@ def _load_prices(instruments, sector_of, start, end, seed):
 def _index_series(aliases: list[str], start, end,
                   fallback: list[float]) -> tuple[list[float], list[str], bool]:
     """Historique daté : fusion même alias, fraîcheur obligatoire, puis réseau si périmé."""
-    from packages.data.index_history import choose_history, merge_bars
+    from packages.data.index_history import (
+        choose_history,
+        interrogeables_en_ligne,
+        merge_bars,
+    )
     from packages.data.providers.db_provider import DBPriceProvider
     histories: dict[str, dict] = {alias: {} for alias in aliases}
     _dbs = [_price_db_path(), ROOT / "data" / "market.db", ROOT / "data" / "crypto.db"]
@@ -1394,7 +1398,11 @@ def _index_series(aliases: list[str], start, end,
         if online():
             from packages.data.providers.yfinance_provider import YFinanceProvider
             provider = YFinanceProvider()
-            for a in aliases:
+            # `VIX` et `SPX` sont nos noms de BASE, pas des tickers Yahoo : les
+            # demander au réseau ne peut rien rendre (« $VIX: possibly delisted »
+            # à chaque build). Les proxys cotés (`SPY`, `QQQ`) restent interrogés —
+            # vrais tickers, et seul repli quand l'indice lui-même ne répond pas.
+            for a in interrogeables_en_ligne(aliases):
                 merge_bars(histories[a], provider.fetch_ohlcv(a, "1d", start, end))
     except Exception:  # noqa: BLE001
         pass
