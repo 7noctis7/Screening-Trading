@@ -179,46 +179,28 @@ def trade_stats_payload(trades) -> dict:
         "best": round(max(pnls), 2),
         "worst": round(min(pnls), 2),
         "avg_pnl_pct": round(sum(t.pnl_pct or 0 for t in closed) / len(closed), 4),
-        **_fragilite(wins, gross_win, gross_loss, len(closed)),
+        **_fragilite(pnls),
     }
 
 
-def _fragilite(wins: list, gross_win: float, gross_loss: float, n: int) -> dict:
-    """DEUX chiffres qui manquaient — le « pourquoi » derrière une espérance faible.
+def _fragilite(pnls: list[float]) -> dict:
+    """Le « pourquoi » derrière une espérance faible — délégué à `portfolio.fragilite`.
 
-    Un profit factor de 1,01 se lit « léger avantage ». Les deux mesures ci-dessous
-    disent s'il s'agit d'un avantage ou d'un hasard :
-
-    `marge_payoff_pct` — de combien le payoff dépasse le SEUIL DE RENTABILITÉ imposé
-    par le taux de réussite, soit (1 − p) / p. À 28,5 % de réussite, il faut 2,51 pour
-    ne rien gagner ; réaliser 2,53 laisse 0,8 % de marge. Un payoff seul ne dit rien —
-    il ne se lit que contre ce seuil.
-
-    `n_gagnants_couvrant_les_pertes` — combien des MEILLEURS trades suffisent à couvrir
-    la totalité des pertes. Si dix trades sur cinq cents y suffisent, la stratégie n'a
-    pas un avantage : elle a une poignée de coups de chance, et son espérance dépend de
-    leur reproduction. Choisi plutôt qu'une « part du gain NET » : avec un profit factor
-    proche de 1, le net tend vers zéro et tout ratio qui le prend au dénominateur
-    explose.
+    Trois questions qui ne se déduisent pas l'une de l'autre : la MARGE du payoff sur le
+    seuil imposé par le taux de réussite, la CONCENTRATION (que reste-t-il sans les cinq
+    meilleurs trades), et la SIGNIFICATIVITÉ (l'espérance est-elle distinguable
+    de zéro). Le bootstrap est donné deux fois : i.i.d., puis par BLOCS chronologiques —
+    des positions qui se chevauchent partagent le même choc de marché, et le tirage
+    i.i.d. surestime alors la certitude.
     """
-    if not wins or gross_loss <= 0 or n <= 0:
+    from packages.portfolio import fragilite as F
+    if not pnls:
         return {}
-    p = len(wins) / n
-    seuil = (1.0 - p) / p if p > 0 else float("inf")
-    paye = (gross_win / len(wins)) / (gross_loss / max(1, n - len(wins)))
-    tries = sorted(wins, reverse=True)
-    cumul, k = 0.0, 0
-    while k < len(tries) and cumul < gross_loss:
-        cumul += tries[k]
-        k += 1
-    return {
-        "payoff": round(paye, 2),
-        "payoff_seuil": round(seuil, 2),
-        "marge_payoff_pct": round((paye / seuil - 1.0) * 100.0, 1) if seuil else None,
-        "n_gagnants_couvrant_les_pertes": k if cumul >= gross_loss else None,
-        "part_top5_du_gain_brut_pct": round(sum(tries[:5]) / gross_win * 100.0, 1)
-        if gross_win > 0 else None,
-    }
+    iid = F.significativite(pnls)
+    blocs = F.significativite(pnls, bloc=F.bloc_conseille(len(pnls)))
+    return {**F.marge_de_payoff(pnls), **F.concentration(pnls), **iid,
+            "p_esperance_negative_blocs": blocs.get("p_esperance_negative"),
+            "esperance_ic95_blocs": blocs.get("esperance_ic95")}
 
 
 def _round(v):
