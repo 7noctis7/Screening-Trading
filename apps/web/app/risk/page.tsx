@@ -5,6 +5,11 @@ import { PageSkeleton } from "@/components/ui";
 import { Simulator } from "@/components/Simulator";
 
 const pct = (x?: number) => `${((x ?? 0) * 100).toFixed(1)}%`;
+// Une valeur ABSENTE n'est pas zéro. `pct` rend `null` en « 0.0% » : le PSR et le DSR
+// s'affichaient donc à 0,0 % quand l'API ne les calculait pas — un chiffre faux à la
+// place d'une absence, et on en tirait « pas d'alpha prouvé ».
+const pctOuTiret = (x?: number | null) =>
+  x == null || !Number.isFinite(x) ? "—" : `${(x * 100).toFixed(1)}%`;
 
 function HealthChip({ label, value, tone, title }: { label: string; value: string; tone: string; title?: string }) {
   return (
@@ -91,7 +96,7 @@ export default function Risk() {
             aide="Perte MOYENNE lors des 5 journées les plus mauvaises sur 100." />
           <Stat label="Mauvaise journée, corrigée" terme="Cornish-Fisher" value={pct(rm.var_cornish_fisher_95)}
             aide="Même calcul, corrigé du fait que les krachs sont plus fréquents que ne le dit la courbe en cloche." />
-          <Stat label="Agitation" terme="volatilité" value={pct(rm.vol)}
+          <Stat label="Agitation" terme="volatilité" value={pctOuTiret(rm.vol_annualisee)}
             aide="Amplitude habituelle des variations sur un an." />
           <Stat label="Agitation récente" terme="EWMA" value={pct(rm.vol_ewma)}
             aide="Même mesure, en donnant plus de poids aux jours récents." />
@@ -99,9 +104,9 @@ export default function Risk() {
             aide="Estimation pour les jours à venir : une période agitée en appelle une autre." />}
           <Stat label="Risque de tout perdre" terme="Monte-Carlo" value={pct(a.monte_carlo?.p_ruin)}
             aide="Probabilité de perdre la moitié du capital, sur des milliers de scénarios rejoués." />
-          <Stat label="Le gain est-il réel ?" terme="PSR" value={pct(rm.psr)}
+          <Stat label="Le gain est-il réel ?" terme="PSR" value={pctOuTiret(rm.psr)}
             aide="Probabilité que le rapport gain/risque soit vraiment positif, et pas un hasard d'échantillon." />
-          <Stat label="Solidité du résultat" terme="DSR" value={pct(rm.dsr)} tone={rm.dsr >= 0.9 ? "#22c55e" : undefined}
+          <Stat label="Solidité du résultat" terme="DSR" value={pctOuTiret(rm.dsr)} tone={(rm.dsr ?? 0) >= 0.9 ? "#22c55e" : undefined}
             aide="Même question, corrigée du nombre de stratégies essayées. Plus on cherche, plus on trouve par chance." />
           {rm.evt?.available && <Stat label="Scénario extrême" terme="EVT 99,9 %" value={pct(rm.evt.var)} tone="#f43f5e"
             aide="Perte lors d'un événement rare : environ un jour sur mille." />}

@@ -1502,6 +1502,39 @@ def _screen_section(panel: dict, acmap: dict, names: dict, sector_of: dict, t: i
     }
 
 
+def _essais_de_recherche(minimum: int = 20) -> int:
+    """Essais RÉELS depuis le registre de recherche, pour déflater le Sharpe."""
+    try:
+        from packages.research.ledger import deflation_params
+        n, _ = deflation_params(min_trials=minimum)
+        return int(n)
+    except Exception:  # noqa: BLE001
+        return minimum
+
+
+def _vol_annualisee(rm: dict) -> dict:
+    """`risk_metrics()["vol"]` est un écart-type QUOTIDIEN ; `vol_ewma` et le GARCH sont
+    ANNUALISÉS. Le panneau les affichait côte à côte sous des libellés qui disent tous
+    « sur un an » : 1,0 % à côté de 13,2 % et 8,4 %, trois chiffres dont un dans une
+    autre unité. On publie la version annualisée sous un nom qui dit ce qu'elle est,
+    plutôt que de changer le contrat de `risk_metrics`, utilisé ailleurs."""
+    v = rm.get("vol")
+    return {} if not isinstance(v, (int, float)) else {
+        "vol_annualisee": round(float(v) * (252 ** 0.5), 5)}
+
+
+def _psr_dsr(rendements, n_trials: int) -> dict:
+    """PSR/DSR depuis les rendements — absents plutôt que faux si l'échantillon
+    est insuffisant."""
+    from packages.portfolio.psr import psr_dsr_depuis_rendements
+    d = psr_dsr_depuis_rendements(rendements, n_trials=n_trials)
+    if not d.get("available"):
+        return {"psr": None, "dsr": None, "psr_motif": d.get("motif", "")}
+    return {"psr": d["psr"], "dsr": d["dsr"], "psr_n_obs": d["n_obs"],
+            "psr_n_trials": d["n_trials"],
+            "psr_sharpe_annualise": d["sharpe_annualise"]}
+
+
 def _psr_block(equity: list) -> dict:
     """Honnêteté statistique (cf. manifeste) : PSR = P(Sharpe vrai > 0) sur la courbe affichée,
     corrigée skew/kurtosis (López de Prado). On assume le DSR≈0 plutôt que de le cacher."""
@@ -1904,19 +1937,15 @@ def build_snapshot(seed: int = 7) -> dict:
     from packages.regime.vol_regime import vol_regime
     rm["vol_regime"] = vol_regime(rets, window=20)
 
-    # Sharpe probabiliste & DÉFLATÉ (garde-fou surapprentissage / essais multiples)
-    from packages.portfolio.psr import deflated_sharpe_ratio, probabilistic_sharpe_ratio
-    sr = rm.get("sharpe", 0.0) / (252 ** 0.5) if rm.get("sharpe") else 0.0   # Sharpe journalier
-    nobs = len(rets)
-    rm["psr"] = probabilistic_sharpe_ratio(sr, nobs, sr_benchmark=0.0)
-    # N d'essais RÉEL depuis le ledger de recherche (≥20 : configs preset historiques) ;
-    # sr_std=None → seuil √(1/n), falsifiable (fix audit : sr_std=1.0 ≈ Sharpe 7 requis).
-    try:
-        from packages.research.ledger import deflation_params
-        _n_trials, _ = deflation_params(min_trials=20)
-    except Exception:  # noqa: BLE001
-        _n_trials = 20
-    rm["dsr"] = deflated_sharpe_ratio(sr, nobs, n_trials=_n_trials)
+    # Sharpe probabiliste & DÉFLATÉ (garde-fou surapprentissage / essais multiples).
+    # CORRIGÉ LE 01/09 : ce bloc lisait `rm.get("sharpe")`, clé que `risk_metrics()`
+    # ne produit PAS (var/cvar/vol seulement). Elle manquait donc toujours, le Sharpe
+    # valait toujours zéro, et le dashboard publiait « PSR 0,0 % · DSR 0,0 % »
+    # puis en tirait « pas d'alpha prouvé ». Le calcul part désormais des
+    # RENDEMENTS : la valeur ne peut plus être silencieusement absente.
+    _n_trials = _essais_de_recherche()
+    rm.update(_psr_dsr(rets, _n_trials))
+    rm.update(_vol_annualisee(rm))
 
     # EVT (risque de queue extrême) + risque de LIQUIDITÉ
     from packages.portfolio.evt import evt_var_es
@@ -2424,6 +2453,12 @@ def build_snapshot(seed: int = 7) -> dict:
             _prm["var_cornish_fisher_95"] = cornish_fisher_var(_prt, 0.95); _prm["vol_ewma"] = ewma_vol(_prt)
             _prm["garch"] = fit_garch(_prt); _prm["var_backtest"] = backtest_var(_prt, _prm.get("var_95", 0.0), alpha=0.95)
             _prm["vol_regime"] = vol_regime(_prt, window=20)
+            # Le panneau « mesures de risque » affiché est CELUI-CI : il ne calculait
+            # ni PSR ni DSR, et le front rendait les clés absentes « 0,0 % ». Une
+            # valeur manquante s'affichait donc en chiffre — le mode de panne qu'on
+            # combat partout ailleurs dans ce fichier.
+            _prm.update(_psr_dsr(_prt, _essais_de_recherche()))
+            _prm.update(_vol_annualisee(_prm))
             _prel = relative_metrics(_peq, bench_px); _pmc = monte_carlo(_prt, seed=1)
             _psy = [r["symbol"] for r in sorted(_pr, key=lambda x: -x["current_value"]) if r["symbol"] in data][:12]
             _pcorr_payload, _prb_payload, _popt, _prec = PL.correlation_payload(syms, corr, clusters), risk_budget, optimal, recommended

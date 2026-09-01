@@ -11,6 +11,7 @@ le site partagent donc exactement la même mesure.
 
 from __future__ import annotations
 
+import math
 import sys
 from pathlib import Path
 
@@ -18,10 +19,44 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 
-def _row(label_core, label_pre, st):
+def _row(label_core, label_pre, st, sup=None):
+    sup = sup or {}
+    def _p(x):
+        return "   —" if x is None else f"{x*100:3.0f}%"
     print(f"  {label_core:>9s} {label_pre:>8s} {st['cagr']*100:7.1f}% {st['sharpe']:7.2f} "
-          f"{st['sortino']:8.2f} {st['max_drawdown']*100:7.1f}% {st.get('calmar', 0):7.2f} "
-          f"{st['total_return']*100:8.1f}%")
+          f"{st['sortino']:8.2f} {st['max_drawdown']*100:7.1f}% "
+          f"{_p(sup.get('psr')):>5s} {_p(sup.get('dsr')):>5s} "
+          f"{sup.get('alpha_annual', 0)*100:7.1f}% {sup.get('t_alpha', 0):6.2f}")
+
+
+def _capm(eq, ref) -> dict:
+    """Alpha CAPM (rf = 0) de la variante contre le CŒUR, avec le t de l'alpha.
+
+    Le t est ce qui manque partout : un alpha annualisé de 1,1 % ne veut rien dire tant
+    qu'on ignore s'il est distinguable de zéro. Pour l'ordonnée à l'origine d'une
+    régression, l'erreur-type vaut s_resid · sqrt(1/m + m_ref²/((m-1)·var_ref)) ;
+    sur des rendements quotidiens le second terme est négligeable mais on le garde,
+    parce qu'il ne coûte rien et qu'un raccourci non écrit se transmet.
+
+    À 100 % de cœur, la variante EST la référence : alpha et t doivent valoir zéro.
+    C'est le contrôle intégré de cette fonction.
+    """
+    a, b = _rendements(eq), _rendements(ref)
+    m = min(len(a), len(b))
+    if m < 30:
+        return {}
+    a, b = a[-m:], b[-m:]
+    ma, mb = sum(a) / m, sum(b) / m
+    var_b = sum((x - mb) ** 2 for x in b) / (m - 1)
+    if var_b <= 0:
+        return {}
+    beta = sum((a[i] - ma) * (b[i] - mb) for i in range(m)) / (m - 1) / var_b
+    alpha_j = ma - beta * mb
+    resid = [a[i] - alpha_j - beta * b[i] for i in range(m)]
+    s2 = sum(r * r for r in resid) / max(m - 2, 1)
+    se = math.sqrt(s2 * (1.0 / m + mb * mb / ((m - 1) * var_b)))
+    return {"alpha_annual": alpha_j * 252, "beta": beta,
+            "t_alpha": (alpha_j / se) if se > 0 else 0.0}
 
 
 def _rendements(eq):
@@ -73,14 +108,26 @@ def _verdict(courbes: dict, best, reference: float) -> None:
               "de bouger (5 ratios essayés — le comptage voyage avec le chiffre).")
 
 
+def _essais(minimum: int = 20) -> int:
+    """Essais RÉELS du registre de recherche + les cinq parts de cœur de ce sweep."""
+    try:
+        from packages.research.ledger import deflation_params
+        deja, _ = deflation_params(min_trials=minimum)
+    except Exception:  # noqa: BLE001
+        deja = minimum
+    return int(deja) + 5
+
+
 def _sweep(title, preset, core, grid=(0.0, 0.25, 0.5, 0.75, 1.0), reference=0.5):
     from packages.backtest.index_core import _stats, blend_equity
+    from packages.portfolio.psr import psr_dsr_depuis_rendements
     courbes: dict[float, list] = {}
     if not core or len(core) < 60:
         print(f"{title} : indisponible.\n"); return
     print(f"{title}")
     print(f"  {'Cœur':>9s} {'Preset':>8s} {'CAGR':>8s} {'Sharpe':>7s} "
-          f"{'Sortino':>8s} {'maxDD':>8s} {'Calmar':>7s} {'Rdt tot.':>9s}")
+          f"{'Sortino':>8s} {'maxDD':>8s} {'PSR':>5s} {'DSR':>5s} "
+          f"{'alpha':>8s} {'t(α)':>6s}")
     best = None
     for c in grid:
         eq, _ = blend_equity(preset, core, c)
@@ -89,7 +136,11 @@ def _sweep(title, preset, core, grid=(0.0, 0.25, 0.5, 0.75, 1.0), reference=0.5)
         st = _stats(eq)
         if not st.get("available"):
             continue
-        _row(f"{c*100:.0f}%", f"{(1-c)*100:.0f}%", st)
+        sup = dict(_capm(eq, core))
+        _d = psr_dsr_depuis_rendements(_rendements(eq), n_trials=_essais())
+        if _d.get("available"):
+            sup["psr"], sup["dsr"] = _d["psr"], _d["dsr"]
+        _row(f"{c*100:.0f}%", f"{(1-c)*100:.0f}%", st, sup)
         courbes[c] = eq
         if c > 0 and (best is None or st["sharpe"] > best[1]["sharpe"]):
             best = (c, st)
