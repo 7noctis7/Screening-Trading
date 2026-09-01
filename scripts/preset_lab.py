@@ -281,6 +281,39 @@ def _plancher_detection(rows: list[dict]) -> None:
         print("     la donnée résout. À ce niveau, promouvoir ou rejeter est un")
         print("     tirage au sort — les verdicts ci-dessous disent « rien de")
         print("     distinguable », PAS « c'est mauvais ».")
+        _pourquoi_echantillonner_plus_ne_sert_a_rien(ppa)
+
+
+def _pourquoi_echantillonner_plus_ne_sert_a_rien(ppa: float) -> None:
+    """Ferme une fausse piste, mesurée le 31/08 puis écrite ici pour de bon.
+
+    Réflexe naturel devant un seuil trop haut : « raccourcis le pas de rebalancement,
+    tu auras plus d'observations ». C'est FAUX, deux fois.
+
+    D'abord, changer le pas change la STRATÉGIE — un rebalancement hebdomadaire au lieu
+    de mensuel quadruple le turnover et ses coûts. On ne mesure plus la même chose.
+
+    Ensuite, et c'est le point : le seuil est INVARIANT à la fréquence. Il vaut
+    Z·sqrt(var·ppa) avec var ∝ 1/n, et n = années × ppa — donc ppa s'annule et il ne
+    reste que le nombre d'ANNÉES. Mesuré : 11 ans donnent ±0,118 en quotidien comme en
+    mensuel, à la troisième décimale près.
+
+    Les deux seuls vrais leviers : allonger l'HISTORIQUE (11 ans → 20 ans fait passer
+    de ±0,118 à ±0,087 ; il en faudrait ~60 pour atteindre 0,05), et surtout MAXIMISER
+    LA CORRÉLATION entre les variantes comparées — à 11 ans, passer de rho 0,95 à 0,99
+    fait chuter le seuil de ±0,263 à ±0,118. D'où le protocole APPARIÉ : ne changer
+    qu'une chose à la fois, tout le reste strictement identique.
+    """
+    from packages.research.sharpe_diff import seuil_detectable
+    print("\n  Raccourcir le pas n'y changerait RIEN — le seuil ne dépend")
+    print("  que des ANNÉES :")
+    for ans in (5, 11, 20, 40):
+        _s = seuil_detectable(int(ans * ppa), 1.0, 0.99, ppa)
+        print(f"    {ans:>2} ans → ±{_s:.3f}")
+    print("  Le levier réel est la CORRÉLATION entre variantes (protocole apparié) :")
+    for rho in (0.90, 0.95, 0.99):
+        n_ans = seuil_detectable(int(11 * ppa), 1.0, rho, ppa)
+        print(f"    rho={rho:<5} → ±{n_ans:.3f}")
 
 
 def _verdict(rows: list[dict]) -> list[dict]:

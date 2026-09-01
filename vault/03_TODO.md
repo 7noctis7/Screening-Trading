@@ -143,6 +143,36 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
 - [ ] **Méthode** : interface universelle dès le départ, couverture élargie UNE classe d'actifs à
       la fois, chacune passant `make contracts` et `make audit`.
 
+## 🧪 Spec utilisateur du 01/09 — 4 modules livrés en SHADOW
+Tous à poids capital ZÉRO. Aucun appelant en production ; les brancher est une décision
+explicite, module par module, avec mesure.
+- [x] **M2 `risk/ddm`** — machine à états DD0/DD1/DD2, remontée asymétrique, sizing par R.
+      Complète `convex_drawdown_scaler` (continu sur le drawdown) sans le remplacer.
+- [x] **M2.4 `risk/disjoncteur`** — coupe-circuit journalier. Compte le LATENT, et le verrou
+      ne se lève pas sur un rebond intrajournalier.
+- [x] **M3 `execution/frictions`** — commission / spread / slippage SÉPARÉS (là où
+      `CostModel` agrège en bps) + règle d'inhibition à 3× les frictions.
+- [x] **M1 `indicators/market_structure`** — extrêmes protégés, échec d'enchère, tendance
+      par pivots confirmés, confluence MTF, POC approché. Point-in-time vérifié par test.
+- [x] **M4 `research/protocole_oos`** — partition chronologique 60/40, parcimonie ≤ 3
+      paramètres, PORTE de déploiement par le DSR. Couche mince sur `portfolio/psr` et
+      `research/ledger` — rien de réimplémenté.
+
+### Réserves écrites, à ne pas perdre
+- [ ] **M1 est une lecture INTRADAY appliquée à des barres QUOTIDIENNES.** Les primitives
+      sont correctes et agnostiques à l'unité de temps, mais l'absorption que vise la spec
+      (mèche + volume comme trace de flux institutionnel) ne se lit pas sur du quotidien.
+      Pouvoir prédictif NON ÉTABLI à cette fréquence — à mesurer avant tout branchement.
+- [ ] **Le DDM ne crée aucun avantage.** Il lisse la courbe et réduit le risque de ruine ;
+      à profit factor 1,01 l'espérance par unité de risque est inchangée.
+- [ ] **« DSR > 95 % » est une PORTE, jamais une cible.** `n_essais` vient du ledger et
+      n'est jamais fourni par l'appelant : sans ça, on contourne l'instrument même censé
+      pénaliser la recherche. Cohérent avec ADR-0050 et le refus des cibles de résultat
+      dans le schéma de mandat.
+- [ ] **P1 — mesurer avant de brancher quoi que ce soit.** Chaque module doit passer le
+      gate 4 étages sur données réelles. Un module SHADOW qui passe en production sans
+      mesure est un finding P0 selon `vault/15_CERTIFICATION.md`.
+
 ## 🟡 Screening-Trading — reste ouvert (2026-08-22)
 - [ ] **Câbler `impact.py` / `almgren_chriss.py` à l'exécution réelle** — écrits et testés, non
       branchés : les coûts d'impact sont ignorés au dimensionnement. (Débloqué par ADR-0038.)
@@ -151,7 +181,25 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       rejette le RMT (ΔSharpe −0,07). Avec l'erreur-type, la contradiction se dissout : −0,07 est
       **indiscernable de zéro**. Ni le diagnostic ni la mesure ne justifient de bouger. On garde
       l'ERC et on documente.
-- [ ] **P1 — Allonger la fenêtre du labo.** Le gate promeut à +0,05 alors que 126 pas ne résolvent
+- [x] **TRANCHÉ le 31/08 : allonger la fenêtre du labo NE MARCHERAIT PAS.** J'avais proposé
+      de raccourcir le pas (21 → 5/10) pour multiplier les observations. C'est faux deux fois.
+      (a) Changer le pas change la STRATÉGIE — hebdomadaire au lieu de mensuel quadruple le
+      turnover. (b) Surtout, le seuil est INVARIANT à la fréquence : Z·sqrt(var·ppa) avec
+      var ∝ 1/n et n = années × ppa → ppa s'annule. Mesuré : 11 ans donnent ±0,118 en
+      quotidien COMME en mensuel. Les deux vrais leviers : l'HISTORIQUE (20 ans → ±0,087 ;
+      il en faudrait ~60 pour atteindre 0,05) et la CORRÉLATION entre variantes (rho 0,95 →
+      0,99 fait passer de ±0,263 à ±0,118) — d'où le protocole apparié, une seule chose
+      changée à la fois. Le labo publie désormais ces deux tableaux.
+- [ ] **P1 — Conséquence : le gate promeut à +0,05, seuil INATTEIGNABLE avec 11 ans.**
+      À décider : relever le seuil de promotion à ~0,12, ou exiger une confirmation hors
+      échantillon pour tout ce qui passe en dessous. Ne pas laisser un seuil que la donnée
+      ne peut pas honorer.
+- [ ] **VIX : provenance publiée (31/08).** `vix`, `vix_playbook` et `vix_series` étaient
+      publiés sans distinguer une série RÉELLE d'une série `_vix_series()` FABRIQUÉE — le
+      graphe s'en protégeait déjà, pas le KPI. Corrigé : `vix_reel` publié, `null` +
+      UNCALIBRATED quand aucune série fraîche. **Reste à vérifier chez l'utilisateur** si
+      `^VIX` remonte réellement (le warning ne concerne que l'alias de repli `VIX`).
+- [ ] **P1 — ancien libellé (à ignorer) : Allonger la fenêtre du labo.** Le gate promeut à +0,05 alors que 126 pas ne résolvent
       que ~+0,14 (ADR-0039) : à ce seuil, promouvoir ou rejeter est un tirage au sort. C'est le
       vrai blocage de la recherche d'alpha — pas le manque de leviers à tester, mais l'incapacité
       à distinguer un levier réel du bruit. Piste : pas plus court (step 5 ou 10 au lieu de 21)
