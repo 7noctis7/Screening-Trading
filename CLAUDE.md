@@ -30,6 +30,8 @@ reconstruit chaque jour ouvré par GitHub Actions (`.github/workflows/pages.yml`
 | `make reports` | notes d'analyse institutionnelles → `out/notes/` + vault |
 | `make audit` | audit PwC des bases de prix (gate CI : `--strict`) |
 | `make brief` | brief unifié (priorités + journal + diffs + audit) — démarrage de session |
+| `make sync` | récupère la branche de dev **sans conflit possible** (jamais `git pull` dessus) |
+| `make labs` | les 4 bancs de mesure : candidats, sorties, dimensionnement, recouvrement des signaux |
 | `make vault-search Q="..."` | recherche sémantique locale du vault (TF-IDF ; Ollama optionnel ; `--code`) |
 | `make contracts` | gate d'intégrité OHLCV (bloque l'impossible) — aussi en CI |
 | `make hf-push` / `hf-pull` | cache OHLCV souverain (HuggingFace, anti rate-limit yfinance) |
@@ -57,6 +59,11 @@ reconstruit chaque jour ouvré par GitHub Actions (`.github/workflows/pages.yml`
 - `pickle` chargé uniquement via `packages/common/safe_pickle` (anti-symlink + hash).
 - **Dev `localhost:3000`** : après un `make site` (build export), faire `cd apps/web && rm -rf .next && npm run dev`
   (sinon `Cannot find module './682.js'` / `/_document` — le `.next` export n'est pas relisible par `next dev`).
+- **Ne JAMAIS faire `git pull` sur la branche de dev.** Elle est RÉÉCRITE à chaque déploiement
+  (`reset --hard origin/main` + `push --force`), donc `pull` la voit divergée, tente une fusion et
+  laisse des marqueurs `<<<<<<<` dans les sources — `SyntaxError` sur du code valide à l'origine.
+  Utiliser **`make sync`** (`fetch` + `reset --hard`), qui abandonne d'abord tout merge en cours.
+  Filet supplémentaire : `git config pull.ff only` fait ÉCHOUER un pull divergé au lieu de fusionner.
 - **Seuil sur `polyfit`/régression** : TOUJOURS une **tolérance relative** dans la comparaison
   (`x > band + 1e-9*max(1,|band|)`). Un canal **plat** (dispersion ~0) fait dériver la bande sous le
   niveau réel par erreur flottante → fausses cassures à chaque barre → capture du rendement de la barre

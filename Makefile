@@ -1,12 +1,30 @@
-.PHONY: install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto ingest-mktcap preset-report calibrate-preset preset-lab alpha-lab screen repro kill-check log-alpha sync-alphas event-study event-study-smid backtest-pead-smid funding-study risk-check sensitivity paper-watch vault-lint crypto-cockpit crypto-brief regime-study breakout-study microstructure-poc vault-ask crypto-screen screen-niche list-db live live-go live-cron-install live-cron-uninstall verify-journal rdv-paper slippage alerts-test ingest-macro bitmart-check clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull journal-pull journal-push notion-sync contracts supabase-kpis
+.PHONY: install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto ingest-mktcap preset-report calibrate-preset preset-lab alpha-lab screen repro kill-check log-alpha sync-alphas event-study event-study-smid backtest-pead-smid funding-study risk-check sensitivity paper-watch vault-lint crypto-cockpit crypto-brief regime-study breakout-study microstructure-poc vault-ask crypto-screen screen-niche list-db live live-go live-cron-install live-cron-uninstall verify-journal rdv-paper slippage alerts-test ingest-macro bitmart-check clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull journal-pull journal-push notion-sync contracts supabase-kpis sync labs
 # PYTHON : utilise AUTOMATIQUEMENT le venv s'il existe (.venv/bin/python), sinon python3 système.
 # Évite le piège « No module named numpy » quand le venv n'est pas activé. Surchargeable.
 TICKER ?= AAPL
+BRANCHE ?= claude/screening-trading-platform-me9p11
 PYTHON ?= $(shell [ -x .venv/bin/python ] && echo .venv/bin/python || echo python3)
 install:          ## installe les dépendances (uv)
 	uv venv && uv pip install -e ".[dev,data,quant,api,ml]"
 setup:            ## installation locale guidée (venv, détection YAHOO.db, build, cron) — 1 commande
 	bash scripts/setup_local.sh
+sync:             ## RÉCUPÈRE la branche de dev sans jamais créer de conflit (jamais `git pull`)
+	@# La branche de dev est RÉÉCRITE à chaque déploiement (`reset --hard origin/main`
+	@# puis `push --force`). Un `git pull` la voit donc divergée, tente une FUSION, et
+	@# laisse des marqueurs `<<<<<<<` dans les sources — d'où des `SyntaxError` sur du
+	@# code pourtant valide à l'origine. `fetch` + `reset --hard` est la seule opération
+	@# correcte ici : la branche n'a jamais de commit local à préserver.
+	@git merge --abort 2>/dev/null || true
+	@git rebase --abort 2>/dev/null || true
+	@git fetch origin $(BRANCHE)
+	@git checkout $(BRANCHE) 2>/dev/null || git checkout -b $(BRANCHE) origin/$(BRANCHE)
+	@git reset --hard origin/$(BRANCHE)
+	@echo "→ $(BRANCHE) alignée sur origin : $$(git log --oneline -1)"
+labs:             ## lance les quatre bancs de mesure (candidats, sorties, dimensionnement, signaux)
+	$(PYTHON) scripts/candidats_lab.py
+	$(PYTHON) scripts/sortie_lab.py
+	$(PYTHON) scripts/sizing_lab.py
+	$(PYTHON) scripts/signal_lab.py
 test:             ## lance la suite de tests
 	$(PYTHON) -m pytest -q
 coverage:         ## couverture de tests réelle (pytest-cov) → terme + rappel des trous
