@@ -119,9 +119,9 @@ flowchart LR
 | Ranking multi-facteur | `packages/ranking` | ✅ momentum/trend/low-vol (S3) |
 | Stratégies | `packages/strategies` | ✅ 2 plugins (S1) |
 | **Mandat (définition déclarative)** | `packages/mandate` | ✅ identité = hash canonique · cosmétique hors identité · cibles de résultat refusées · harnais de pureté déterminisme/env/équivalence (ADR-0048/0049/0050) |
-| Backtest | `packages/backtest` | ✅ event-driven + walk-forward + DSR (S5) |
+| Backtest | `packages/backtest` | ✅ event-driven + walk-forward + DSR (S5) · dimensionnement **notionnel ou à risque constant** (`risque_par_trade`, 0,5 % en prod — banc `scripts/sizing_lab.py`, ADR-0051) |
 | Risque (engine + règles) | `packages/risk` | ✅ engine+veto+kill-switch (S1) |
-| Portefeuille | `packages/portfolio` | ✅ HRP/ERC/min-var, VaR/CVaR/EVT, PSR/DSR, stress (S11) |
+| Portefeuille | `packages/portfolio` | ✅ HRP/ERC/min-var, VaR/CVaR/EVT, PSR/DSR, stress (S11) · **intégrité des séries** (un NaN est un incident, jamais une valeur) · **fragilité** : marge de payoff, PF privé des 5 meilleurs, significativité corrigée de la dépendance, $ contre R (ADR-0051) |
 | Exécution (paper) | `packages/execution` | ✅ SimBroker+AlpacaBroker+Bitmart gated · journal décision + round-trip FIFO (ADR-0028/0031) · LiveEngine = simulateur |
 | ML | `packages/ml` | ✅ triple-barrier, CV purgée/embargo, calibration, conformal, champion/challenger (S9) |
 | Alertes | `packages/alerts` | ✅ engine+sinks+throttle+wiring — BRANCHÉ sur `run_live.py` (BLOC 1c) |
