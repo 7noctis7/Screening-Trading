@@ -162,6 +162,14 @@ def trade_stats_payload(trades) -> dict:
     closed = [t for t in trades if getattr(t, "pnl_net", None) is not None]
     if not closed:
         return {"count": 0}
+    # TRI CHRONOLOGIQUE explicite : le bootstrap par blocs ne mesure la dépendance que
+    # sur une séquence ordonnée. Toutes les autres statistiques y sont indifférentes,
+    # donc trier ne coûte rien — et s'en remettre à l'ordre du journal serait un
+    # invariant non écrit, du genre qui se casse sans bruit.
+    _dates = [getattr(t, "exit_ts", None) or getattr(t, "entry_ts", None)
+              for t in closed]
+    if all(d is not None for d in _dates):
+        closed.sort(key=lambda t: getattr(t, "exit_ts", None) or t.entry_ts)
     pnls = [t.pnl_net for t in closed]
     wins = [p for p in pnls if p > 0]
     losses = [p for p in pnls if p <= 0]
@@ -205,6 +213,7 @@ def _fragilite(pnls: list[float], r_multiples: list | None = None) -> dict:
     return {**F.marge_de_payoff(pnls), **F.concentration(pnls), **iid,
             "p_esperance_negative_blocs": blocs.get("p_esperance_negative"),
             "esperance_ic95_blocs": blocs.get("esperance_ic95"),
+            **F.dependance(pnls),
             **F.comparer_dimensionnement(pnls, r_multiples)}
 
 

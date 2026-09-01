@@ -154,6 +154,80 @@ def _fini(v) -> bool:
         return False
 
 
+N_MELANGES = 20                  # tirages de référence pour le témoin sans dépendance
+
+
+def _largeur_temoin(x, n_boot: int, seed: int, bloc: int) -> float:
+    """Largeur d'IC ATTENDUE en l'absence de dépendance, sur cette série précise.
+
+    UN SEUL mélange ne suffit pas, et c'est mesurable : un échantillon i.i.d. de 600
+    points porte par hasard de l'autocorrélation locale, si bien qu'un unique tirage de
+    référence donne un rapport de 1,15 là où la vérité est 1. On prend donc la MÉDIANE
+    sur plusieurs mélanges — c'est la largeur attendue, débarrassée de la chance d'un
+    ordre particulier.
+    """
+    arr = np.asarray([v for v in _seq(x) if _fini(v)], float)
+    rng = np.random.default_rng(seed)
+    largeurs = [_largeur_ic(rng.permutation(arr), max(n_boot // 5, 200), seed + k, bloc)
+                for k in range(N_MELANGES)]
+    return float(np.median(largeurs))
+
+
+def _largeur_ic(x, n_boot: int, seed: int, bloc: int | None) -> float:
+    """Largeur d'intervalle NON ARRONDIE.
+
+    La version publiée arrondit à deux décimales. Sur des R d'amplitude 0,16 cela
+    suffit à fabriquer un rapport de 1,19 là où il n'y a rigoureusement rien à mesurer —
+    un « biais du bootstrap par blocs » entièrement imaginaire. Une comparaison de deux
+    largeurs doit partir des valeurs brutes.
+    """
+    arr = np.asarray([v for v in _seq(x) if _fini(v)], float)
+    moyennes = _bootstrap(arr, n_boot, seed, bloc).mean(axis=1)
+    lo, hi = np.percentile(moyennes, [2.5, 97.5])
+    return float(hi - lo)
+
+
+def dependance(pnls, n_boot: int = N_BOOTSTRAP, seed: int = 7) -> dict:
+    """Corrige le t de la DÉPENDANCE entre trades qui se chevauchent.
+
+    Deux positions ouvertes en même temps encaissent le même choc de marché : elles ne
+    valent pas deux observations. Le bootstrap par blocs conserve la dépendance locale
+    et élargit l'intervalle en conséquence.
+
+    LA RÉFÉRENCE N'EST PAS LE BOOTSTRAP I.I.D., mais la même série MÉLANGÉE plusieurs
+    fois : même longueur, même distribution, même longueur de bloc, dépendance détruite.
+    Comparer des blocs à des blocs annule tout biais propre à l'estimateur, et isole ce
+    que l'ORDRE CHRONOLOGIQUE ajoute — lui seul :
+
+        inflation = largeur(blocs, série) / largeur(blocs, série mélangée)
+        t_effectif = t_naïf / inflation        n_effectif = n / inflation²
+
+    PRÉCISION DE L'ESTIMATEUR, mesurée et non supposée. Sur 30 séries de 600 points sans
+    aucune dépendance : médiane 1,004, moyenne 1,010 — il est bien centré sur 1. Mais
+    son écart-type vaut 0,14, et l'étendue p5-p95 va de 0,79 à 1,23. À cette taille
+    d'échantillon, `inflation` se lit donc comme un ORDRE DE GRANDEUR — « autour de 1,
+    pas de dépendance notable » contre « autour de 3, forte dépendance » — jamais comme
+    un diviseur précis. Le `t_effectif` en hérite : ±15 % environ.
+
+    EXIGENCE. Les blocs n'ont de sens que sur une séquence CHRONOLOGIQUE. Sur une liste
+    déjà mélangée, la dépendance a disparu et la correction ne mesure plus rien —
+    l'appelant doit trier avant d'appeler.
+    """
+    x = [v for v in _seq(pnls) if _fini(v)]
+    iid = significativite(x, n_boot=n_boot, seed=seed)
+    if "t_esperance" not in iid:
+        return {}
+    b = bloc_conseille(len(x))
+    lb = _largeur_ic(x, n_boot, seed, b)
+    l0 = _largeur_temoin(x, n_boot, seed, b)
+    if l0 <= 0:
+        return {}
+    infl = lb / l0
+    return {"inflation_ecart_type": round(infl, 3),
+            "t_effectif": round(iid["t_esperance"] / infl, 3),
+            "n_effectif": int(len(x) / infl ** 2)}
+
+
 def comparer_dimensionnement(pnls, r_multiples) -> dict:
     """Queue épaisse RÉELLE, ou simple loterie de dimensionnement ?
 
@@ -196,8 +270,13 @@ def comparer_dimensionnement(pnls, r_multiples) -> dict:
     en_r = significativite(rs)
     gain = (round((en_r["t_esperance"] / t_dollars - 1.0) * 100.0, 1)
             if t_dollars and t_dollars > 0 and en_r.get("t_esperance") else None)
+    # le t en R subit la MÊME dépendance que le t en dollars : le publier en i.i.d.
+    # seul reproduirait, sur la mesure censée corriger, l'optimisme qu'on dénonce.
+    dep = dependance(rs)
     return {"couverture_R_pct": round(couverture * 100, 1),
             "t_esperance_en_R": en_r.get("t_esperance"),
+            "t_effectif_en_R": dep.get("t_effectif"),
+            "n_effectif_en_R": dep.get("n_effectif"),
             "n_trades_pour_conclure_en_R": en_r.get("n_trades_pour_conclure"),
             "gain_de_t_si_risque_egal_pct": gain,
             **{f"{k}_en_R": v for k, v in concentration(rs).items()}}

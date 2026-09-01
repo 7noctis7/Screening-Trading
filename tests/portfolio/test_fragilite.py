@@ -14,6 +14,7 @@ from packages.portfolio.fragilite import (
     bloc_conseille,
     comparer_dimensionnement,
     concentration,
+    dependance,
     marge_de_payoff,
     significativite,
 )
@@ -175,3 +176,41 @@ def test_des_series_desalignees_levent_plutot_que_de_mentir():
     parfaitement lisible — le pire des cas. `strict=True` l'interdit."""
     with pytest.raises(ValueError):
         comparer_dimensionnement([1.0] * 100, [1.0] * 99)
+
+
+# --------------------- des trades qui se chevauchent ne valent pas n observations
+def test_la_dependance_reduit_le_t_et_le_n_effectif():
+    """Sur une série autocorrélée, l'écart-type naïf est sous-évalué : le t effectif
+    doit descendre sous le t brut, et n_effectif sous n."""
+    rng = np.random.default_rng(5)
+    x, prec = [], 0.0
+    for _ in range(600):
+        prec = 0.8 * prec + rng.normal(0.05, 1.0)
+        x.append(prec)
+    d = dependance(x)
+    brut = significativite(x)["t_esperance"]
+    assert d["inflation_ecart_type"] > 2.0     # loin au-delà du bruit (sd 0,14)
+    assert d["t_effectif"] < brut
+    assert d["n_effectif"] < 600
+
+
+def test_sur_des_trades_INDEPENDANTS_la_correction_est_CENTREE_SUR_UN():
+    """Contre-épreuve indispensable : sans dépendance, la correction ne doit rien
+    corriger, sinon elle pénaliserait des échantillons sains.
+
+    Et elle ne peut pas se tester sur UNE série : mesuré sur 30, l'estimateur est bien
+    centré (médiane 1,004) mais son écart-type vaut 0,14 — un tirage isolé sort
+    couramment à 0,8 ou 1,25. C'est la MÉDIANE qui doit valoir 1."""
+    infl = [dependance(np.random.default_rng(s).normal(0.2, 1.0, 400))
+            ["inflation_ecart_type"] for s in range(12)]
+    assert 0.90 < float(np.median(infl)) < 1.10
+
+
+def test_la_correction_de_dependance_est_publiee_aussi_pour_le_R():
+    """Le t en R subit la même dépendance : le publier en i.i.d. seul reproduirait,
+    sur la mesure censée corriger, l'optimisme qu'elle dénonce."""
+    rng = np.random.default_rng(2)
+    r = list(rng.normal(0.15, 1.0, 300))
+    pnls = [ri * ti for ri, ti in zip(r, [1.0] * 300, strict=True)]
+    d = comparer_dimensionnement(pnls, r)
+    assert d["t_effectif_en_R"] is not None and d["n_effectif_en_R"] is not None
