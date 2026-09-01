@@ -1669,13 +1669,13 @@ def build_snapshot(seed: int = 7) -> dict:
         trail_atr=5.0,              # trailing stop ATR : protège les gains, laisse courir
         next_open_fills=True,       # exécution à l'ouverture suivante (anti look-ahead)
         # RISQUE CONSTANT à 0,5 % de l'equity par trade (scripts/sizing_lab.py, 01/09).
-        # Le dimensionnement notionnel faisait dépendre la taille d'une ligne de combien
-        # le carnet était plein ce jour-là : profit factor privé des cinq meilleurs
-        # trades à 0,89 — le système devenait PERDANT sans cinq lignes sur 477. À 0,5 %
-        # il passe à 1,15 : le résultat ne tient plus à une poignée de tailles heureuses.
+        # Le notionnel faisait dépendre la taille d'une ligne de combien le carnet
+        # était plein ce jour-là : profit factor privé des cinq meilleurs trades à
+        # 0,89 — le système devenait PERDANT sans cinq lignes sur 477. À 0,5 % il
+        # passe à 1,15 : le résultat ne tient plus à cinq tailles heureuses.
         # CE QUI N'EST PAS PROUVÉ : le gain de Sharpe (0,52 -> 0,66) n'est PAS
         # significatif (p = 0,59) et le net baisse de 9 642 à 6 863 $. On adopte ce
-        # réglage pour la ROBUSTESSE, pas pour la performance — et parce que l'avantage
+        # réglage pour la ROBUSTESSE, pas la performance — et parce que l'avantage
         # de net du notionnel s'explique par des tailles chanceuses qu'on n'a aucune
         # raison d'attendre à nouveau. Repli : remettre 0.0.
         risque_par_trade=0.005)
