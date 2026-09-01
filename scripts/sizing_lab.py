@@ -102,16 +102,49 @@ def _run(data, acmap, risque: float, vix=None):
             **F.comparer_dimensionnement(pnls, rs)}
 
 
+def _psr_dsr(rends: list[float], n_essais: int) -> tuple[float, float]:
+    """PSR et DSR — mêmes fonctions et même périodicité QUOTIDIENNE que le dashboard.
+
+    Le PSR est P(Sharpe vrai > 0). Le DSR relève ce seuil du nombre d'ESSAIS : le
+    maximum de N Sharpe bruités croît en sqrt(2 ln N), si bien qu'un beau chiffre obtenu
+    après vingt tentatives ne vaut pas un beau chiffre obtenu du premier coup. Le compte
+    d'essais inclut ici les variantes de ce banc — les compter est conservateur, et
+    c'est le bon sens de l'erreur.
+    """
+    import statistics as st
+
+    from packages.portfolio.psr import deflated_sharpe_ratio, probabilistic_sharpe_ratio
+    n = len(rends)
+    if n < 30:
+        return 0.0, 0.0
+    ec = st.pstdev(rends)
+    if ec <= 0:
+        return 0.0, 0.0
+    sr = st.fmean(rends) / ec                              # Sharpe QUOTIDIEN
+    return (probabilistic_sharpe_ratio(sr, n, sr_benchmark=0.0),
+            deflated_sharpe_ratio(sr, n, n_trials=n_essais))
+
+
+def _essais(n_variantes: int) -> int:
+    """Essais déjà consommés par le projet (registre de recherche) + ceux de ce banc."""
+    try:
+        from packages.research.ledger import deflation_params
+        deja, _ = deflation_params(min_trials=20)
+    except Exception:  # noqa: BLE001
+        deja = 20
+    return int(deja) + n_variantes + 1
+
+
 def _rendements(equity: list[float]) -> list[float]:
     return [equity[i] / equity[i - 1] - 1.0 for i in range(1, len(equity))
             if equity[i - 1] > 0]
 
 
-def _ligne(nom: str, r: dict, sharpe: float | None = None) -> str:
-    return (f"{nom:>12} | {r['n']:>5} | {r.get('profit_factor_sans_top5', 0):>6.2f} "
-            f"| {r.get('t_esperance', 0):>5.2f} | {r.get('t_effectif', 0):>5.2f} "
-            f"| {r.get('n_effectif', 0):>5} | {r.get('expo', 0):>7.1%} "
-            f"| {'—' if sharpe is None else f'{sharpe:>6.2f}'} | {r['net']:>10,.0f}")
+def _ligne(nom: str, r: dict, sharpe: float, psr: float, dsr: float) -> str:
+    esp = r["net"] / r["n"] if r["n"] else 0.0
+    return (f"{nom:>12} | {r['n']:>5} | {r.get('profit_factor_sans_top5', 0):>5.2f} "
+            f"| {r.get('expo', 0):>6.1%} | {sharpe:>6.2f} | {psr:>5.1%} | {dsr:>5.1%} "
+            f"| {esp:>7.1f} | {r['net']:>9,.0f}")
 
 
 def main() -> None:
@@ -125,27 +158,35 @@ def main() -> None:
         return
 
     vix = _vix(data, debut, fin)
+    n_essais = _essais(len(risques))
     base = _run(data, acmap, 0.0, vix)
     rb = _rendements(base["equity"])
-    s_base = comparer(rb, rb, periodes_par_an=252.0).get("sharpe_base")
-    print(f"{'dimension.':>12} | {'trades':>5} | {'PF-5':>6} | {'t':>5} | {'t eff':>5} "
-          f"| {'n eff':>5} | {'expo':>7} | {'Sharpe':>6} | {'net $':>10}")
-    print("-" * 92)
-    print(_ligne("notionnel", base, s_base))
+    s_base = comparer(rb, rb, periodes_par_an=252.0)["sharpe_base"]
+    cols = ("dimension.", "trades", "PF-5", "expo", "Sharpe", "PSR", "DSR",
+            "esp./tr", "net $")
+    larg = (12, 5, 5, 6, 6, 5, 5, 7, 9)
+    print(" | ".join(f"{c:>{w}}" for c, w in zip(cols, larg, strict=True)))
+    print("-" * 84)
+    print(_ligne("notionnel", base, s_base, *_psr_dsr(rb, n_essais)))
 
     for risque in risques:
         r = _run(data, acmap, risque, vix)
         # 252 : les rendements sont QUOTIDIENS. Le défaut de `comparer` est mensuel,
         # et l'oublier annualiserait le Sharpe par sqrt(12) au lieu de sqrt(252).
-        d = comparer(rb, _rendements(r["equity"]), periodes_par_an=252.0)
+        rv = _rendements(r["equity"])
+        d = comparer(rb, rv, periodes_par_an=252.0)
         if not d.get("disponible"):
-            print(_ligne(f"risque {risque:.1%}", r))
             print(f"{'':>12} | {d.get('raison')}")
             continue
-        print(_ligne(f"risque {risque:.1%}", r, d["sharpe_variante"]))
+        print(_ligne(f"risque {risque:.1%}", r, d["sharpe_variante"],
+                     *_psr_dsr(rv, n_essais)))
         print(f"{'':>12} | ΔSharpe {d['delta']:+.3f} · IC95 {d['ic95']} "
               f"· p = {d['p']:.4f} · {d['verdict'].upper()}")
 
+    print(f"\nPSR = P(Sharpe vrai > 0). DSR = le même, seuil relevé pour {n_essais} "
+          "essais : le maximum\nde N Sharpe bruités croît en sqrt(2 ln N), donc un "
+          "beau chiffre obtenu après vingt\ntentatives ne vaut pas le même obtenu du "
+          "premier coup. `esp./tr` = net / trades.")
     print("\nPF-5 = profit factor privé des cinq meilleurs trades ; sous 1,00 le "
           "résultat tient à\ncinq lignes. `t eff` corrige la dépendance entre trades "
           "qui se chevauchent.\n\n`t` MONTE MÉCANIQUEMENT AVEC LE NOMBRE DE TRADES "
