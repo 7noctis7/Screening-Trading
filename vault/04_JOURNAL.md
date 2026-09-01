@@ -1,5 +1,51 @@
 # 04 — JOURNAL
 
+## Session 2026-09-01 — Un NaN est un incident de données, et le garde tombait sur le type qu'il protégeait
+
+**Le fait.** La CI est passée du vert au rouge sur un code **identique** :
+`assert nan <= nan`, `assert nan > 0`. Le re-run est repassé vert sans changer une ligne —
+c'est la définition d'un défaut latent, pas d'un test fragile.
+
+**L'amplification, et c'est elle qui rend le défaut sérieux.** `stress.mc_projection` tire les
+rendements futurs **avec remise** dans le vivier observé. Un seul point non fini parmi 2760
+apparaît donc dans la quasi-totalité des 1000 trajectoires, et `cumprod` le propage jusqu'au
+bout : les cinq percentiles sortaient tous à `nan`. **Un point sur 2760 suffisait.**
+
+**Pourquoi ce n'était pas qu'un test cassé.** Aujourd'hui ça casse un test, donc on le voit.
+Demain ça publie un `sharpe: nan` que le front affiche « — » sans que personne ne sache qu'une
+donnée manquait. **Une métrique absente est un problème visible ; une métrique fausse ne l'est
+pas.**
+
+**La règle posée** (`packages/portfolio/integrite`) : on ne remplace jamais un NaN par une
+valeur inventée — ni 0, ni la moyenne, ni le dernier cours. On le **compte**, on le **dit**, on
+calcule sur ce qui existe. Deux traitements, et la distinction est de fond : une **courbe
+d'equity** se tronque au premier trou (après un trou la capitalisation est rompue ; recoller
+fabriquerait un rendement qui n'a jamais existé, celui qui enjambe le trou) ; un **vivier de
+rendements** se filtre (un rendement inobservable n'appartient simplement pas à l'échantillon
+dans lequel on tire). Une courbe est une *séquence*, un vivier est un *ensemble*.
+
+**Puis le garde est tombé sur exactement ce qu'il protégeait.** Première version : 9 tests
+rouges. `serie or []` teste la **vérité de l'objet** ; sur un `np.ndarray` de plus d'un élément
+Python lève « truth value ambiguous » *avant* toute analyse. Or `returns_from_equity` renvoie un
+ndarray que `snapshot.py` passe directement à `mc_projection`. J'avais écrit un garde d'intégrité
+qui refusait le type réel de la donnée qu'il devait garder.
+
+**Le second coût, plus instructif que le premier.** La suite est passée de 7 à **38 minutes**.
+`_snap()` est mémoïsé par `lru_cache`, mais **`lru_cache` ne mémorise pas une exception** :
+chaque test reconstruisait le snapshot entier. Une exception dans une fonction cachée ne coûte
+pas un test, elle coûte N constructions. Vérifié dans les deux sens : 9 rouges en 38m32, puis
+9 verts en 4m19 en local et 7m34 en CI.
+
+**Règle de méthode retenue.** Sur une séquence, le seul test permis est `is None`. Toute autre
+forme de vérité (`if not x`, `x or []`) est un piège dès qu'un ndarray peut arriver — et dans ce
+dépôt il arrive presque toujours. Les 5 modules SHADOW ont été relus pour le même motif : seul
+`ddm.py` teste une vérité de séquence, sur un `tuple` par contrat. Rien à corriger.
+
+**Fait** : #364 mergé (24 tests sur `integrite`, dont 5 vérifiés **rouges sur le code d'avant**
+en remettant l'ancien fichier en place plutôt qu'en le supposant). CI verte.
+**Bloqué** : rien. **Suite** : mesurer chacun des 5 modules SHADOW avant tout câblage
+production ; le seuil de promotion à +0,05 reste inatteignable avec 11 ans (plancher ~±0,12).
+
 ## Session 2026-08-31 (22) — 53,6 % de CAGR : la troisième occurrence du même défaut
 
 **Le chiffre qui a déclenché l'enquête.** `make index-core` affichait, pour le cœur momentum

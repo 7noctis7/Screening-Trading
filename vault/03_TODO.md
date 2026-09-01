@@ -186,6 +186,17 @@ explicite, module par module, avec mesure.
       vivier de rendements → FILTRÉ (un rendement inobservable n'est pas dans l'échantillon).
       Benchmarks tronqués ENSEMBLE : couper la seule série fautive désalignerait le graphe
       et rendrait la comparaison fausse tout en restant lisible.
+- [x] **Le garde lui-même tombait sur le type qu'il protégeait** (correctif `4a09a3f`).
+      `x or []` teste la VÉRITÉ de l'objet : sur un ndarray de plus d'un élément, Python
+      lève « truth value ambiguous » avant toute analyse. Or `returns_from_equity` renvoie
+      un ndarray que `snapshot.py` passe directement à `mc_projection` → 9 tests rouges.
+      Second coût, plus instructif que le premier : la suite est passée de 7 à 38 minutes,
+      parce que `lru_cache` NE MÉMORISE PAS UNE EXCEPTION — chaque test reconstruisait le
+      snapshot entier. Une exception dans une fonction cachée ne coûte pas un test, elle
+      coûte N constructions.
+      **Règle de méthode** : sur une séquence, le seul test permis est `is None`. Toute
+      autre forme de vérité (`if not x`, `x or []`) est un piège dès qu'un ndarray peut
+      arriver — et dans ce dépôt il arrive presque toujours.
 
 ## 🟡 Screening-Trading — reste ouvert (2026-08-22)
 - [ ] **Câbler `impact.py` / `almgren_chriss.py` à l'exécution réelle** — écrits et testés, non
