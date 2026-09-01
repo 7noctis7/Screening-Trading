@@ -151,3 +151,50 @@ def test_une_serie_saine_traverse_sans_modification():
     b = benchmark_comparison(_serie(), {"Indice": _serie()})
     assert len(b["portfolio"]) == 200
     assert not metrics_payload(_serie())["integrite"]["tronquee"]
+
+
+# ------------------------------------------- le type RÉEL passé par les appelants
+# `x or []` teste la vérité de l'objet. Sur un `np.ndarray` de plus d'un élément,
+# Python lève « truth value of an array is ambiguous » AVANT toute analyse. Or
+# `returns_from_equity` renvoie un ndarray, et `snapshot.py` le passe directement à
+# `mc_projection` : le garde d'intégrité tombait donc sur EXACTEMENT le chemin qu'il
+# était censé protéger. Le coût en CI était double — 9 tests rouges, et la suite passée
+# de 7 à 38 minutes parce que `lru_cache` ne mémorise pas une exception : chaque test
+# reconstruisait le snapshot entier.
+def test_un_ndarray_traverse_le_diagnostic():
+    np = pytest.importorskip("numpy")
+    d = diagnostiquer(np.array([1.0, 2.0, float("nan"), 4.0]))
+    assert d["n"] == 4 and d["n_non_finis"] == 1 and d["premier_non_fini"] == 2
+
+
+def test_un_ndarray_traverse_troncature_et_filtrage():
+    np = pytest.importorskip("numpy")
+    a = np.array([1.0, 2.0, float("nan"), 4.0])
+    assert prefixe_fini(a)[0] == [1.0, 2.0]
+    assert filtrer_finis(a)[0] == [1.0, 2.0, 4.0]
+
+
+def test_mc_projection_accepte_le_ndarray_de_returns_from_equity():
+    """Le chemin exact de `snapshot.py` : equity -> returns_from_equity -> mc."""
+    np = pytest.importorskip("numpy")
+    from packages.portfolio.metrics import returns_from_equity
+    rets = returns_from_equity(np.asarray(_serie(300), float))
+    assert isinstance(rets, np.ndarray)
+    out = mc_projection(rets, horizon=20, n_sims=50, seed=1)
+    assert out["p50"] and math.isfinite(out["final_p50"])
+
+
+def test_les_payloads_acceptent_le_ndarray():
+    np = pytest.importorskip("numpy")
+    eq = np.asarray(_serie(), float)
+    assert not math.isnan(metrics_payload(eq)["sharpe"])
+    b = benchmark_comparison(eq, {"Indice": np.asarray(_serie(), float)})
+    assert len(b["Indice"]) == 200
+
+
+def test_une_serie_vide_ou_absente_ne_leve_pas():
+    """`None` et le tableau vide sont des séries légitimes, pas des erreurs."""
+    np = pytest.importorskip("numpy")
+    for vide in (None, [], np.array([])):
+        assert diagnostiquer(vide)["n"] == 0
+        assert prefixe_fini(vide)[0] == [] and filtrer_finis(vide)[0] == []

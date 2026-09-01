@@ -91,7 +91,9 @@ def metrics_payload(equity_curve: list[float], rets: list[float] | None = None) 
     propre, diag = _INT.prefixe_fini(equity_curve)
     if diag["tronquee"]:
         _journal_integrite("metrics_payload", diag)
-    s = M.summary(propre, rets or [])
+    # `rets or []` testerait la vérité de l'objet : sur un ndarray, Python lève
+    # « truth value ambiguous ». Seule la comparaison à `None` est sûre ici.
+    s = M.summary(propre, [] if rets is None else list(rets))
     return {**{k: round(v, 4) for k, v in s.items()},
             "integrite": _INT.verdict(diag)}
 

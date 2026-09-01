@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
+
 PART_MIN_EXPLOITABLE = 0.90        # sous 90 % de points valides, on ne conclut pas
 
 
@@ -33,11 +35,36 @@ def _fini(v) -> bool:
         return False
 
 
-def diagnostiquer(serie) -> dict:
-    """Combien de points non finis, où commence le premier, quelle part reste."""
-    vals = list(serie or [])
+def _liste(serie) -> list:
+    """Séquence -> liste, SANS jamais tester la vérité de l'objet.
+
+    `serie or []` paraît anodin et ne l'est pas : sur un `np.ndarray` de plus d'un
+    élément, Python évalue `bool(serie)` et lève « truth value ambiguous ». Les
+    appelants (snapshot, payloads) passent des tableaux numpy : le seul test permis
+    ici est une comparaison explicite à `None`.
+    """
+    return [] if serie is None else list(serie)
+
+
+def _indices_non_finis(vals: list) -> list[int]:
+    """Positions non finies — vectorisé quand la série est numériquement homogène.
+
+    La conversion `float()` point par point coûte cher sur des séries de plusieurs
+    milliers de points appelées à chaque payload ; `np.isfinite` fait le même travail
+    d'un coup. On ne retombe sur la boucle que si le tableau n'est pas convertible
+    (objets, `None`, chaînes), cas où la boucle est de toute façon la seule réponse.
+    """
+    try:
+        arr = np.asarray(vals, dtype=float)
+    except (TypeError, ValueError):
+        return [i for i, v in enumerate(vals) if not _fini(v)]
+    if arr.ndim != 1:
+        return [i for i, v in enumerate(vals) if not _fini(v)]
+    return np.flatnonzero(~np.isfinite(arr)).tolist()
+
+
+def _diag(vals: list, mauvais: list[int]) -> dict:
     n = len(vals)
-    mauvais = [i for i, v in enumerate(vals) if not _fini(v)]
     return {
         "n": n,
         "n_non_finis": len(mauvais),
@@ -47,6 +74,12 @@ def diagnostiquer(serie) -> dict:
     }
 
 
+def diagnostiquer(serie) -> dict:
+    """Combien de points non finis, où commence le premier, quelle part reste."""
+    vals = _liste(serie)
+    return _diag(vals, _indices_non_finis(vals))
+
+
 def prefixe_fini(courbe) -> tuple[list[float], dict]:
     """Préfixe d'une COURBE D'EQUITY jusqu'au premier point non fini.
 
@@ -54,8 +87,8 @@ def prefixe_fini(courbe) -> tuple[list[float], dict]:
     recoller les deux morceaux fabriquerait un rendement qui n'a jamais existé — celui
     qui enjambe le trou. Tronquer perd de l'information ; recoller en invente.
     """
-    diag = diagnostiquer(courbe)
-    vals = list(courbe or [])
+    vals = _liste(courbe)
+    diag = _diag(vals, _indices_non_finis(vals))
     coupe = diag["premier_non_fini"]
     garde = vals if coupe is None else vals[:coupe]
     diag["n_conserves"] = len(garde)
@@ -70,8 +103,11 @@ def filtrer_finis(rendements) -> tuple[list[float], dict]:
     inobservable n'appartient simplement pas à l'échantillon dans lequel on tire. Une
     courbe d'equity est une séquence — un vivier de rendements est un ensemble.
     """
-    diag = diagnostiquer(rendements)
-    garde = [float(v) for v in (rendements or []) if _fini(v)]
+    vals = _liste(rendements)
+    mauvais = _indices_non_finis(vals)
+    diag = _diag(vals, mauvais)
+    exclus = set(mauvais)
+    garde = [float(v) for i, v in enumerate(vals) if i not in exclus]
     diag["n_conserves"] = len(garde)
     return garde, diag
 
