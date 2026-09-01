@@ -1,5 +1,51 @@
 # 04 — JOURNAL
 
+## Session 2026-09-01 (2) — Cinq trades sur 477 séparaient le gagnant du perdant
+
+**Le fait, sur les chiffres réels.** Profit factor 1,19, marge de payoff +19,5 % — tout paraissait
+correct. Le profit factor privé des CINQ meilleurs trades valait **0,89** : sans 1,05 % des
+trades, le système était perdant. Le panneau ne le montrait pas parce qu'il mesurait la part du
+gain BRUT ; avec un profit factor proche de 1, cette part paraît modeste alors que le rapport au
+NET bascule — et il n'était calculé nulle part.
+
+**La question préalable, qui manquait aussi.** L'espérance est-elle distinguable de zéro ?
+`t = 0,94`, IC 95 % de **[−21 ; +62] $** par trade — à cheval sur zéro. Il faudrait 2 184 trades,
+soit 40 ans au rythme actuel. Attendre n'était pas un plan.
+
+**Ce qui a tranché : la mesure en R.** Dimensionner à risque égal rend le P&L proportionnel au R,
+donc le t sur les R est celui qu'on aurait obtenu à signaux identiques. 0,94 en dollars contre
+**2,00 en R** ; PF-5 de 0,89 contre **1,21**. La concentration n'était pas dans le signal, elle
+était dans la TAILLE des positions. Cause : `room` tronquait les lignes, donc la taille d'un trade
+dépendait de combien le carnet était plein ce jour-là.
+
+**Puis le re-run a contredit la contrefactuelle, et c'est le point de méthode de la journée.**
+La mesure en R annonçait +114 % sur le t. Le backtest complet donne un Sharpe **indiscernable**
+(p = 0,59) et un net **−29 %**. Une contrefactuelle n'est pas une expérience : redimensionner
+change le capital disponible, donc les trades qu'on peut prendre. Adopté quand même à 0,5 %, sur
+le seul fait établi (PF-5 0,89 → 1,15), explicitement PAS sur la performance → ADR-0051.
+
+**Quatre erreurs à moi, toutes attrapées par un test ou par le re-run, aucune visible dans le
+résultat publié :**
+1. `x or []` teste la vérité de l'objet — le garde d'intégrité refusait le ndarray qu'il devait
+   garder (9 tests rouges, et la CI de 7 à 38 min car `lru_cache` ne mémorise pas une exception) ;
+2. le t en R publié en i.i.d. — la mesure censée corriger l'optimisme le reproduisait ;
+3. un « biais de 19 % du bootstrap par blocs » annoncé puis démenti : **artefact d'arrondi** des
+   IC à deux décimales ;
+4. le banc de comparaison tournait **sans VIX**, donc à exposition maximale en permanence — il
+   sous-représentait les troncatures qu'il était censé mesurer. Corrigé, sa ligne de référence
+   reproduit la production au chiffre près (477 / 0,89 / 0,94 / 427), ce qui la valide.
+
+**Aussi corrigé.** `$VIX: possibly delisted` à chaque build : `VIX` est notre nom de base, pas un
+ticker Yahoo (un indice y porte toujours un `^`). Le vrai risque n'était pas le bruit mais la
+COLLISION — le jour où un titre coté s'appelle `DJI`, on télécharge un small-cap et on le lit
+comme le Dow, en silence.
+
+**Fait** : #364 et #365 mergés ; `packages/portfolio/fragilite` (22 tests), `_taille` à risque
+constant (8 tests), `scripts/sizing_lab.py`, risque 0,5 % en production. Suite complète **1 669
+verts** sur la machine de Thierry.
+**Bloqué** : rien. **Suite** : mesurer les 5 modules SHADOW avant tout câblage ; le seuil de
+promotion à +0,05 reste inatteignable avec 11 ans (plancher ~±0,12).
+
 ## Session 2026-09-01 — Un NaN est un incident de données, et le garde tombait sur le type qu'il protégeait
 
 **Le fait.** La CI est passée du vert au rouge sur un code **identique** :

@@ -2,6 +2,58 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0051 — Le dimensionnement à RISQUE CONSTANT, adopté pour la robustesse et non pour la performance (2026-09-01)
+
+**Contexte, et le chiffre qui a déclenché l'enquête.** Sur 477 trades réels, profit factor 1,19 —
+lecture spontanée : « léger avantage ». Le profit factor privé des CINQ meilleurs trades valait
+**0,89** : le système devenait perdant sans 1,05 % de ses trades. Il ne mesurait pas un avantage,
+il mesurait cinq lignes.
+
+**La mesure qui tranche entre queue épaisse et loterie de taille.** Le R d'un trade vaut
+(sortie − entrée) / (entrée − stop) : son résultat en unités de RISQUE ENGAGÉ. Dimensionner à
+risque égal revient à choisir qty telle que qty × (entrée − stop) soit constante, auquel cas le
+P&L devient exactement proportionnel au R. Le t calculé sur les R n'est donc pas une analogie :
+c'est le t qu'on aurait obtenu, à signaux identiques, à risque égal. Mesuré :
+
+| | dollars | en R |
+|---|---|---|
+| t de l'espérance | 0,94 | 2,00 |
+| profit factor sans les 5 meilleurs | 0,89 | 1,21 |
+
+**La concentration n'était pas dans le signal, elle était dans la TAILLE des positions.** Cause
+dans le code : `fast_swing` dimensionnait en notionnel, et `room` (l'exposition brute restante)
+tronquait la ligne — la taille d'un trade dépendait de combien le carnet était plein ce jour-là.
+
+**Ce que la contrefactuelle N'A PAS établi.** Le re-run complet (`scripts/sizing_lab.py`, banc
+validé : sa ligne de référence reproduit la production au chiffre près — 477 trades, PF-5 0,89,
+t 0,94, n effectif 427) donne à 0,5 % de risque par trade : PF-5 **0,89 → 1,15**, Sharpe
+0,52 → 0,66 mais **p = 0,59**, et le net **−29 %** (9 642 → 6 863 $), espérance par trade de ~20
+à ~6 $. Trois fractions essayées, donc même ce p est optimiste.
+
+**Décision.** `risque_par_trade = 0,005` en production. Adopté sur le seul fait ÉTABLI — PF-5, qui
+n'est pas une assertion statistique mais une propriété de la distribution réalisée — et **pas** sur
+le Sharpe, qui reste indiscernable. L'avantage de net du notionnel vient de tailles plus grosses
+sur cinq trades, non d'un meilleur signal : une chance de dimensionnement passée n'est pas une
+espérance future, alors que la volatilité plus basse et l'indépendance aux cinq lignes sont
+structurelles.
+
+**Ce qu'on refuse de faire.** Affiner la fraction. 2 % est nettement pire (PF-5 0,81, Sharpe 0,23 —
+lignes plus grosses, donc plus de troncatures), l'optimum est intérieur, et un balayage plus fin
+sur 11 ans serait de l'ajustement a posteriori — exactement ce que l'ADR-0050 combat. 0,5 % est
+aussi la fourchette institutionnelle usuelle (0,25–1 %).
+
+**Conséquences.** Tous les chiffres publiés bougent : 477 → 1 168 trades, espérance par trade
+divisée par ~3. Le défaut de la FONCTION reste `risque_par_trade = 0.0` : le comportement
+historique est reproductible à l'identique, et rien d'autre ne change en silence. Sous 50 % de la
+taille voulue, un trade est SAUTÉ plutôt que pris en miette — une miette paie les mêmes frais et
+le même slippage pour une fraction de l'avantage.
+
+**Méthode retenue, valable au-delà de ce cas.** Une contrefactuelle n'est pas une expérience. Ici
+elle annonçait +114 % sur le t ; le re-run a donné un Sharpe indiscernable. C'est le re-run qui
+décide. Et `t` monte MÉCANIQUEMENT avec le nombre de trades (espérance/écart-type × √n) : entre
+variantes de cardinalités différentes il n'est pas comparable — seul le Sharpe l'est, et
+l'exposition moyenne doit être publiée pour qu'on voie si les deux jouent le même levier.
+
 ## ADR-0029 — Long-only = scope v1 assumé
 **Date :** 2026-07-02 · **Statut :** accepté
 Le système est **long-only** (`sim_broker.py:43` « v1 : pas de short » ; la vente ne fait que clôturer un long).

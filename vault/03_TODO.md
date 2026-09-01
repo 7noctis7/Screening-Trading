@@ -198,6 +198,21 @@ explicite, module par module, avec mesure.
       autre forme de vérité (`if not x`, `x or []`) est un piège dès qu'un ndarray peut
       arriver — et dans ce dépôt il arrive presque toujours.
 
+## 🩹 Fragilité des trades — mesurée et corrigée le 01/09 (ADR-0051)
+- [x] **Cinq trades sur 477 séparaient le système gagnant du perdant.** Profit factor privé des
+      cinq meilleurs : 0,89. La concentration n'était pas dans le signal mais dans la TAILLE des
+      positions — mesuré par le t en R (2,00) contre le t en dollars (0,94). Cause : `room`
+      tronquait les lignes, donc la taille dépendait de combien le carnet était plein ce jour-là.
+      Corrigé par `risque_par_trade = 0,005` en production ; PF-5 passe à 1,15.
+- [x] **`$VIX: possibly delisted` à chaque build.** `VIX` est un nom de base, pas un ticker Yahoo.
+      Risque réel : la collision silencieuse (un small-cap nommé `DJI` lu comme le Dow).
+- [ ] **P1 — Le gain de Sharpe n'est PAS démontré** (0,52 → 0,66, p = 0,59) et le net baisse de
+      29 %. Réévaluer après ~200 trades supplémentaires en paper. Ne pas affiner la fraction de
+      risque entre-temps : sur 11 ans ce serait de l'ajustement a posteriori (ADR-0050).
+- [ ] **P2 — La concentration reste mesurée en dollars ET en R.** `couverture_R_pct` vaut 100 %
+      aujourd'hui ; si un jour elle tombe sous 90 %, le panneau dit UNCALIBRATED — vérifier que
+      le ledger continue de remplir `r_multiple`.
+
 ## 🟡 Screening-Trading — reste ouvert (2026-08-22)
 - [ ] **Câbler `impact.py` / `almgren_chriss.py` à l'exécution réelle** — écrits et testés, non
       branchés : les coûts d'impact sont ignorés au dimensionnement. (Débloqué par ADR-0038.)
