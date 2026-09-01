@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from packages.core.models import Position, RegimeState
+from packages.portfolio import integrite as _INT
 from packages.portfolio import metrics as M
 
 
@@ -81,17 +82,56 @@ def composition_payload(positions: list[Position], marks: dict[str, float],
 
 
 def metrics_payload(equity_curve: list[float], rets: list[float] | None = None) -> dict:
-    s = M.summary(equity_curve, rets or [])
-    return {k: round(v, 4) for k, v in s.items()}
+    """KPIs d'une courbe. Un point non fini TRONQUE la courbe au lieu de tout polluer.
+
+    `M.summary` propage un NaN dans chaque ratio. Publier `sharpe: nan` est pire
+    qu'une métrique absente : le front l'affiche « — » et personne ne sait qu'une
+    donnée manquait. On calcule sur le préfixe valide, et on le DIT (`integrite`).
+    """
+    propre, diag = _INT.prefixe_fini(equity_curve)
+    if diag["tronquee"]:
+        _journal_integrite("metrics_payload", diag)
+    s = M.summary(propre, rets or [])
+    return {**{k: round(v, 4) for k, v in s.items()},
+            "integrite": _INT.verdict(diag)}
 
 
 def benchmark_comparison(portfolio_equity: list[float],
                          benchmarks: dict[str, list[float]]) -> dict:
-    """Courbes rebasées à 100 (portefeuille vs benchmarks) pour superposition."""
-    out = {"portfolio": _rebase(portfolio_equity)}
+    """Courbes rebasées à 100 (portefeuille vs benchmarks) pour superposition.
+
+    TOUTES les séries sont tronquées à la MÊME longueur — celle du préfixe valide du
+    portefeuille. Tronquer la seule série fautive désalignerait le graphe : les points
+    ne correspondraient plus aux mêmes dates, et la comparaison deviendrait fausse tout
+    en restant lisible, ce qui est le pire des cas.
+
+    Aucune clé de diagnostic n'est ajoutée ici : le front type ce dictionnaire en
+    `Record<string, Point[]>` et itère dessus. Une clé non-série y casserait le graphe.
+    L'incident part au journal structuré.
+    """
+    propre, diag = _INT.prefixe_fini(portfolio_equity)
+    if diag["tronquee"]:
+        _journal_integrite("benchmark_comparison", diag)
+    n = len(propre)
+    out = {"portfolio": _rebase(propre)}
     for name, curve in benchmarks.items():
-        out[name] = _rebase(curve)
+        c, _ = _INT.prefixe_fini(curve)
+        out[name] = _rebase(c[:n])
     return out
+
+
+def _journal_integrite(ou: str, diag: dict) -> None:
+    """Trace structurée d'une série trouée. Best-effort : ne casse aucun snapshot."""
+    try:
+        import logging
+        logging.getLogger("data.integrite").warning(
+            "série tronquée sur point non fini",
+            extra={"fonction": ou, "n": diag.get("n"),
+                   "n_non_finis": diag.get("n_non_finis"),
+                   "premier": diag.get("premier_non_fini"),
+                   "conserves": diag.get("n_conserves")})
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _rebase(curve: list[float]) -> list[float]:
