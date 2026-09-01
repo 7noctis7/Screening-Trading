@@ -143,6 +143,36 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
 - [ ] **Méthode** : interface universelle dès le départ, couverture élargie UNE classe d'actifs à
       la fois, chacune passant `make contracts` et `make audit`.
 
+## 🧪 Spec utilisateur du 01/09 — 4 modules livrés en SHADOW
+Tous à poids capital ZÉRO. Aucun appelant en production ; les brancher est une décision
+explicite, module par module, avec mesure.
+- [x] **M2 `risk/ddm`** — machine à états DD0/DD1/DD2, remontée asymétrique, sizing par R.
+      Complète `convex_drawdown_scaler` (continu sur le drawdown) sans le remplacer.
+- [x] **M2.4 `risk/disjoncteur`** — coupe-circuit journalier. Compte le LATENT, et le verrou
+      ne se lève pas sur un rebond intrajournalier.
+- [x] **M3 `execution/frictions`** — commission / spread / slippage SÉPARÉS (là où
+      `CostModel` agrège en bps) + règle d'inhibition à 3× les frictions.
+- [x] **M1 `indicators/market_structure`** — extrêmes protégés, échec d'enchère, tendance
+      par pivots confirmés, confluence MTF, POC approché. Point-in-time vérifié par test.
+- [x] **M4 `research/protocole_oos`** — partition chronologique 60/40, parcimonie ≤ 3
+      paramètres, PORTE de déploiement par le DSR. Couche mince sur `portfolio/psr` et
+      `research/ledger` — rien de réimplémenté.
+
+### Réserves écrites, à ne pas perdre
+- [ ] **M1 est une lecture INTRADAY appliquée à des barres QUOTIDIENNES.** Les primitives
+      sont correctes et agnostiques à l'unité de temps, mais l'absorption que vise la spec
+      (mèche + volume comme trace de flux institutionnel) ne se lit pas sur du quotidien.
+      Pouvoir prédictif NON ÉTABLI à cette fréquence — à mesurer avant tout branchement.
+- [ ] **Le DDM ne crée aucun avantage.** Il lisse la courbe et réduit le risque de ruine ;
+      à profit factor 1,01 l'espérance par unité de risque est inchangée.
+- [ ] **« DSR > 95 % » est une PORTE, jamais une cible.** `n_essais` vient du ledger et
+      n'est jamais fourni par l'appelant : sans ça, on contourne l'instrument même censé
+      pénaliser la recherche. Cohérent avec ADR-0050 et le refus des cibles de résultat
+      dans le schéma de mandat.
+- [ ] **P1 — mesurer avant de brancher quoi que ce soit.** Chaque module doit passer le
+      gate 4 étages sur données réelles. Un module SHADOW qui passe en production sans
+      mesure est un finding P0 selon `vault/15_CERTIFICATION.md`.
+
 ## 🟡 Screening-Trading — reste ouvert (2026-08-22)
 - [ ] **Câbler `impact.py` / `almgren_chriss.py` à l'exécution réelle** — écrits et testés, non
       branchés : les coûts d'impact sont ignorés au dimensionnement. (Débloqué par ADR-0038.)
