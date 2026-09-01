@@ -45,3 +45,27 @@ def test_serie_perimee_est_signalee_non_fraiche():
     merge_bars(history, _bars("^GSPC", dates))
     out = choose_history(["^GSPC"], {"^GSPC": history}, "2026-08-29", min_bars=20)
     assert out and out.fresh is False
+
+
+# ------------------------------------------- ce qui part au réseau, et ce qui n'y va pas
+# `$VIX: possibly delisted; no price data found` à chaque construction de snapshot :
+# `["^VIX", "VIX"]` envoyait les DEUX alias à yfinance. Chez Yahoo un indice porte
+# toujours un accent circonflexe ; `VIX` est le nom sous lequel NOS bases stockent la
+# même série, jamais un ticker.
+def test_le_nom_nu_d_un_indice_ne_part_pas_au_reseau():
+    from packages.data.index_history import interrogeables_en_ligne
+    assert interrogeables_en_ligne(["^VIX", "VIX"]) == ["^VIX"]
+    assert interrogeables_en_ligne(["^GSPC", "SPX", "SPY"]) == ["^GSPC", "SPY"]
+
+
+def test_les_proxys_COTES_restent_interrogeables():
+    """`SPY` et `QQQ` sont de vrais tickers, et le seul repli quand l'indice lui-même
+    ne répond pas. Les écarter « pour faire propre » coûterait la série entière."""
+    from packages.data.index_history import interrogeables_en_ligne
+    assert interrogeables_en_ligne(["^NDX", "^IXIC", "QQQ"]) == ["^NDX", "^IXIC", "QQQ"]
+
+
+def test_un_alias_local_seul_ne_produit_aucune_requete():
+    """Le cas qui compte pour le coût : rien à demander, donc aucun appel réseau."""
+    from packages.data.index_history import interrogeables_en_ligne
+    assert interrogeables_en_ligne(["VIX", "SPX"]) == []

@@ -1372,7 +1372,11 @@ def _load_prices(instruments, sector_of, start, end, seed):
 def _index_series(aliases: list[str], start, end,
                   fallback: list[float]) -> tuple[list[float], list[str], bool]:
     """Historique daté : fusion même alias, fraîcheur obligatoire, puis réseau si périmé."""
-    from packages.data.index_history import choose_history, merge_bars
+    from packages.data.index_history import (
+        choose_history,
+        interrogeables_en_ligne,
+        merge_bars,
+    )
     from packages.data.providers.db_provider import DBPriceProvider
     histories: dict[str, dict] = {alias: {} for alias in aliases}
     _dbs = [_price_db_path(), ROOT / "data" / "market.db", ROOT / "data" / "crypto.db"]
@@ -1394,7 +1398,11 @@ def _index_series(aliases: list[str], start, end,
         if online():
             from packages.data.providers.yfinance_provider import YFinanceProvider
             provider = YFinanceProvider()
-            for a in aliases:
+            # `VIX` et `SPX` sont nos noms de BASE, pas des tickers Yahoo : les
+            # demander au réseau ne peut rien rendre (« $VIX: possibly delisted »
+            # à chaque build). Les proxys cotés (`SPY`, `QQQ`) restent interrogés —
+            # vrais tickers, et seul repli quand l'indice lui-même ne répond pas.
+            for a in interrogeables_en_ligne(aliases):
                 merge_bars(histories[a], provider.fetch_ohlcv(a, "1d", start, end))
     except Exception:  # noqa: BLE001
         pass
@@ -1659,7 +1667,18 @@ def build_snapshot(seed: int = 7) -> dict:
         atr_stop=4.0, rr=6.0, vix=vix, close_at_end=False,
         daily_max_loss=0.06,        # kill-switch : stop des entrées si perte du jour > 6%
         trail_atr=5.0,              # trailing stop ATR : protège les gains, laisse courir
-        next_open_fills=True)       # exécution à l'ouverture suivante (anti look-ahead)
+        next_open_fills=True,       # exécution à l'ouverture suivante (anti look-ahead)
+        # RISQUE CONSTANT à 0,5 % de l'equity par trade (scripts/sizing_lab.py, 01/09).
+        # Le notionnel faisait dépendre la taille d'une ligne de combien le carnet
+        # était plein ce jour-là : profit factor privé des cinq meilleurs trades à
+        # 0,89 — le système devenait PERDANT sans cinq lignes sur 477. À 0,5 % il
+        # passe à 1,15 : le résultat ne tient plus à cinq tailles heureuses.
+        # CE QUI N'EST PAS PROUVÉ : le gain de Sharpe (0,52 -> 0,66) n'est PAS
+        # significatif (p = 0,59) et le net baisse de 9 642 à 6 863 $. On adopte ce
+        # réglage pour la ROBUSTESSE, pas la performance — et parce que l'avantage
+        # de net du notionnel s'explique par des tailles chanceuses qu'on n'a aucune
+        # raison d'attendre à nouveau. Repli : remettre 0.0.
+        risque_par_trade=0.005)
 
     # indices RÉELS (S&P 500 / Nasdaq 100) — calculés TÔT car le régime macro s'en sert
     _sp_syn = [b.close for b in data_providers.create(

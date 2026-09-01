@@ -38,6 +38,37 @@ def vix_exposure(v: float) -> float:
     return 0.4
 
 
+def _taille(eq: float, fillp: float, atr: float, room: float, frac_cap: float,
+            target_annual_vol: float, inst_vol: float, atr_stop: float,
+            risque_par_trade: float, miette_min: float) -> tuple[float, bool]:
+    """Quantité à acheter. Deux régimes, et la différence est de fond.
+
+    NOTIONNEL (`risque_par_trade = 0`, historique) : une fraction de l'equity en
+    DOLLARS, ciblée en volatilité. Le risque réellement engagé, qty × (entrée − stop)
+    = qty × atr_stop × ATR, n'apparaît nulle part et varie donc d'un trade à l'autre.
+
+    RISQUE CONSTANT : la quantité est choisie pour que qty × (entrée − stop) vaille
+    toujours la même fraction de l'equity. Les plafonds notionnels sont CONSERVÉS mais
+    deviennent des plafonds : concentration et exposition restent bornées sans piloter.
+
+    LE CAS `room`, qui est le cœur du problème. Quand l'exposition brute restante ne
+    permet plus la taille voulue, l'ancien code prenait ce qui restait : la taille d'une
+    ligne dépendait alors de combien le carnet était plein ce jour-là, ce qui n'a aucun
+    rapport avec la qualité du signal. Une miette paie les mêmes frais et le même
+    slippage pour une fraction de l'avantage. Sous `miette_min` de la taille voulue, on
+    SAUTE le trade — un signal qu'on ne peut pas jouer correctement ne se joue pas.
+    """
+    plafond = min(frac_cap, target_annual_vol / inst_vol) * eq
+    if risque_par_trade <= 0:
+        return min(plafond, room) / fillp, False
+    par_unite = atr_stop * atr
+    if par_unite <= 0:
+        return 0.0, True
+    voulu = min((eq * risque_par_trade) / par_unite, plafond / fillp)
+    tenable = room / fillp
+    return min(voulu, tenable), tenable < voulu * miette_min
+
+
 def fast_swing_backtest(
     data: dict[str, list], *, cash: float = 100_000.0, costs: CostModel | None = None,
     asset_classes: dict[str, str] | None = None, target_annual_vol: float = 0.20,
@@ -46,7 +77,8 @@ def fast_swing_backtest(
     exit_level: float = 68.0, atr_period: int = 14, atr_stop: float = 2.5, rr: float = 3.0,
     close_at_end: bool = True, vix: list | None = None, exit_trend: int = 100,
     rs_lookback: int = 126, daily_max_loss: float = 0.0, trail_atr: float = 0.0,
-    next_open_fills: bool = False,
+    next_open_fills: bool = False, risque_par_trade: float = 0.0,
+    miette_min: float = 0.5,
 ):
     """Retourne (broker, journal, equity_curve, timestamps).
 
@@ -156,8 +188,9 @@ def fast_swing_backtest(
                 if fillp <= 0:                              # prix d'exécution invalide
                     continue                                # (barre open=0 d'un delisted) → skip
                 fill_ts = b[nxt].ts if (next_open_fills and nxt > t) else b[t].ts
-                qty = min(eq * min(frac_cap, target_annual_vol / inst_vol), room) / fillp
-                if qty * fillp < eq * 0.01:                 # ligne trop petite → on saute
+                qty, stub = _taille(eq, fillp, a, room, frac_cap, target_annual_vol,
+                                    inst_vol, atr_stop, risque_par_trade, miette_min)
+                if stub or qty * fillp < eq * 0.01:         # ligne trop petite → on saute
                     continue
                 before = broker.position(s)
                 broker.mark(s, fillp)                       # fill au prix d'exécution…
