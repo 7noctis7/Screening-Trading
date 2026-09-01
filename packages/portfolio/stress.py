@@ -97,9 +97,22 @@ def mc_projection(returns, horizon: int = 252, n_sims: int = 1000,
     Renvoie les bandes de percentiles (p5 / p25 / médiane / p75 / p95) de la valeur
     projetée du portefeuille sur `horizon` jours → visualisation de l'incertitude.
     """
-    r = np.asarray(returns, float)
+    # GARDE D'INTÉGRITÉ (01/09). Le tirage se fait AVEC REMISE dans le vivier observé :
+    # un seul rendement non fini parmi des milliers apparaît alors dans la quasi-totalité
+    # des trajectoires, et `cumprod` le propage jusqu'au bout — les cinq percentiles
+    # sortent tous à `nan`. Un point sur 2760 suffisait, et c'est exactement ce qui a
+    # fait passer la CI du vert au rouge sur un code identique le 31/08.
+    #
+    # On FILTRE plutôt qu'on ne tronque : un rendement inobservable n'appartient
+    # simplement pas à l'échantillon dans lequel on tire. Et on renvoie la structure
+    # vide plutôt qu'un `nan` déguisé en chiffre si le vivier devient trop mince.
+    from packages.portfolio.integrite import filtrer_finis, verdict
+    valides, _diag = filtrer_finis(returns)
+    integrite = verdict(_diag, part_min=0.0)          # ici seul le NOMBRE compte
+    r = np.asarray(valides, float)
     if r.size < 2:
-        return {"horizon": 0, "steps": [], "p5": [], "p25": [], "p50": [], "p75": [], "p95": []}
+        return {"horizon": 0, "steps": [], "p5": [], "p25": [], "p50": [], "p75": [],
+                "p95": [], "integrite": integrite}
     rng = np.random.default_rng(seed)
     paths = start_value * np.cumprod(1 + rng.choice(r, size=(n_sims, horizon), replace=True), axis=1)
     idx = list(range(step - 1, horizon, step))
@@ -112,5 +125,5 @@ def mc_projection(returns, horizon: int = 252, n_sims: int = 1000,
         "p50": [round(float(v), 2) for v in pc[50]], "p75": [round(float(v), 2) for v in pc[75]],
         "p95": [round(float(v), 2) for v in pc[95]],
         "final_p5": round(float(pc[5][-1]), 2), "final_p50": round(float(pc[50][-1]), 2),
-        "final_p95": round(float(pc[95][-1]), 2),
+        "final_p95": round(float(pc[95][-1]), 2), "integrite": integrite,
     }

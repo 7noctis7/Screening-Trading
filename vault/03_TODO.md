@@ -173,6 +173,20 @@ explicite, module par module, avec mesure.
       gate 4 étages sur données réelles. Un module SHADOW qui passe en production sans
       mesure est un finding P0 selon `vault/15_CERTIFICATION.md`.
 
+## 🩹 Intégrité des séries — corrigé le 01/09
+- [x] **Un NaN se propageait EN SILENCE jusqu'aux métriques publiées.** La CI est passée
+      du vert au rouge sur un code IDENTIQUE (`assert nan <= nan`, `assert nan > 0`) :
+      un téléchargement réseau incomplet laissait un point non fini dans une courbe.
+      Amplification par `mc_projection`, qui rééchantillonne AVEC REMISE — un point sur
+      2760 apparaissait dans la quasi-totalité des 1000 trajectoires et `cumprod` le
+      propageait, mettant les cinq percentiles à `nan`.
+      `packages/portfolio/integrite` : on ne remplace jamais un NaN par une valeur
+      inventée, on le COMPTE, on le DIT, et on calcule sur ce qui existe.
+      Courbe d'equity → TRONQUÉE (recoller fabriquerait un rendement enjambant le trou) ;
+      vivier de rendements → FILTRÉ (un rendement inobservable n'est pas dans l'échantillon).
+      Benchmarks tronqués ENSEMBLE : couper la seule série fautive désalignerait le graphe
+      et rendrait la comparaison fausse tout en restant lisible.
+
 ## 🟡 Screening-Trading — reste ouvert (2026-08-22)
 - [ ] **Câbler `impact.py` / `almgren_chriss.py` à l'exécution réelle** — écrits et testés, non
       branchés : les coûts d'impact sont ignorés au dimensionnement. (Débloqué par ADR-0038.)
