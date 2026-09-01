@@ -109,3 +109,68 @@ def deflated_sharpe_ratio(sharpe: float, n: int, n_trials: int,
     z2 = _norm_ppf(1 - 1.0 / (n_trials * math.e))
     sr_star = sr_std * ((1 - e) * z1 + e * z2)
     return probabilistic_sharpe_ratio(sharpe, n, skew, kurt, sr_benchmark=sr_star)
+
+
+def psr_dsr_depuis_rendements(returns, n_trials: int = 20,
+                              sr_benchmark: float = 0.0) -> dict:
+    """PSR et DSR calculés DEPUIS LES RENDEMENTS, jamais depuis un Sharpe fourni à part.
+
+    POURQUOI CETTE SIGNATURE. Le dashboard affichait « PSR 0,0 % · DSR 0,0 % » et en
+    tirait la conclusion « pas d'alpha directionnel prouvé ». Le calcul était :
+
+        sr = rm.get("sharpe", 0.0) / sqrt(252) if rm.get("sharpe") else 0.0
+
+    Or `risk_metrics()` ne renvoie PAS de clé `sharpe` — seulement var/cvar/vol. La clé
+    manquait donc TOUJOURS, `sr` valait TOUJOURS zéro, et l'on publiait le PSR d'un
+    Sharpe nul : 0,5 et 0,029. Des nombres exacts, calculés sur une grandeur qui n'était
+    pas celle du portefeuille.
+
+    Le défaut n'était pas la formule mais le CHEMIN DE LA DONNÉE : un `.get()` avec
+    valeur par défaut sur une clé absente ne lève rien, il ment. En prenant les
+    rendements plutôt qu'un Sharpe, la valeur ne peut plus être silencieusement absente.
+
+    CE QUE CES DEUX NOMBRES NE DISENT PAS. Un DSR élevé sur une courbe portée par le
+    marché atteste que le Sharpe DE CETTE COURBE est réel — pas qu'il y ait de l'alpha.
+    L'alpha se lit sur son propre t, pas ici.
+
+    Stdlib seule, comme le reste du module : testable hors-ligne, sans numpy.
+    """
+    vals = [float(v) for v in _finis(returns)]
+    n = len(vals)
+    if n < 31:
+        return {"available": False, "motif": f"{n} rendements — trop peu pour conclure"}
+    moy = sum(vals) / n
+    ecarts = [v - moy for v in vals]
+    var = sum(e * e for e in ecarts) / (n - 1)
+    if var <= 0:
+        return {"available": False, "motif": "dispersion nulle"}
+    sd = math.sqrt(var)
+    sharpe_d = moy / sd
+    sd_pop = math.sqrt(sum(e * e for e in ecarts) / n)
+    skew = sum(e ** 3 for e in ecarts) / n / sd_pop ** 3
+    kurt = sum(e ** 4 for e in ecarts) / n / sd_pop ** 4
+    essais = max(int(n_trials), 1)
+    return {
+        "available": True,
+        "psr": probabilistic_sharpe_ratio(sharpe_d, n, skew, kurt, sr_benchmark),
+        "dsr": deflated_sharpe_ratio(sharpe_d, n, essais, skew, kurt),
+        "sharpe_annualise": round(sharpe_d * (252 ** 0.5), 3),
+        "n_obs": n, "n_trials": essais,
+        "skew": round(skew, 3), "excess_kurtosis": round(kurt - 3.0, 2),
+    }
+
+
+def _finis(serie) -> list[float]:
+    """Le seul test permis sur une séquence est `is None` : `serie or []` lève sur un
+    ndarray (« truth value ambiguous »), et les rendements arrivent sous cette forme."""
+    if serie is None:
+        return []
+    out = []
+    for v in serie:
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(f):
+            out.append(f)
+    return out
