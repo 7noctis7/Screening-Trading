@@ -28,6 +28,9 @@ def _isnan(v) -> bool:
     return v != v
 
 
+VOL_PLANCHER = 0.02              # sous 2 % annualisés, la division n'a plus de sens
+
+
 def vix_exposure(v: float) -> float:
     """Multiplicateur d'exposition piloté par le VIX (playbook volatilité), SANS levier (≤ 100%).
     VIX < 20 → pleinement investi (×1.0) · 20–30 → on réduit (×0.7) · > 30 → défensif (×0.4)."""
@@ -36,6 +39,40 @@ def vix_exposure(v: float) -> float:
     if v < 30:
         return 0.7
     return 0.4
+
+
+def _expo_vol_cible(equity: list, vol_cible: float, fenetre: int) -> float:
+    """Exposition dictée par la VOLATILITÉ RÉALISÉE du portefeuille (Moreira-Muir 2017).
+
+    L'idée tient en une phrase : la volatilité est PRÉVISIBLE, les rendements ne le sont
+    pas. Baisser la voile quand ça s'agite et la remonter quand ça se calme améliore le
+    Sharpe sans exiger le moindre signal directionnel nouveau.
+
+    POINT-IN-TIME. La vol est calculée sur les rendements DÉJÀ RÉALISÉS — `equity` ne
+    contient à cet instant que les barres closes jusqu'à t−1, puisque la valeur du jour
+    n'est ajoutée qu'en fin d'itération. Aucune fuite possible.
+
+    ON PLAFONNE À 1,0 ET ON PREND LE MINIMUM avec la porte VIX. Deux raisons, et la
+    seconde est une règle du dépôt : sans levier (≤ 100 %), et un garde-fou qu'on ajoute
+    ne doit jamais pouvoir AUGMENTER l'exposition d'un système déjà en production. Ce
+    réglage ne peut donc que réduire — c'est le sens sûr de l'erreur.
+
+    Tant que l'historique est trop court, on renvoie 1,0 : neutre, la porte VIX décide
+    seule. `vol_cible = 0` désactive complètement (comportement historique inchangé).
+    """
+    if vol_cible <= 0 or len(equity) < max(5, fenetre // 2) + 1:
+        return 1.0
+    serie = equity[-(fenetre + 1):]
+    rends = [serie[i] / serie[i - 1] - 1.0
+             for i in range(1, len(serie)) if serie[i - 1] > 0]
+    if len(rends) < 5:
+        return 1.0
+    moy = sum(rends) / len(rends)
+    var = sum((x - moy) ** 2 for x in rends) / len(rends)
+    vol = math.sqrt(var) * math.sqrt(252)
+    if vol < VOL_PLANCHER:                      # division par ~0 : marché à l'arrêt
+        return 1.0
+    return min(1.0, vol_cible / vol)
 
 
 def _taille(eq: float, fillp: float, atr: float, room: float, frac_cap: float,
@@ -78,7 +115,7 @@ def fast_swing_backtest(
     close_at_end: bool = True, vix: list | None = None, exit_trend: int = 100,
     rs_lookback: int = 126, daily_max_loss: float = 0.0, trail_atr: float = 0.0,
     next_open_fills: bool = False, risque_par_trade: float = 0.0,
-    miette_min: float = 0.5,
+    miette_min: float = 0.5, vol_cible: float = 0.0, vol_fenetre: int = 20,
 ):
     """Retourne (broker, journal, equity_curve, timestamps).
 
@@ -147,6 +184,7 @@ def fast_swing_backtest(
         # ENTRÉES : candidats éligibles classés par CONVICTION, cash alloué aux MEILLEURS.
         if len(open_t) < max_positions and not killed:
             vmult = vix_exposure(vix[t]) if vix and t < len(vix) else 1.0
+            vmult = min(vmult, _expo_vol_cible(equity, vol_cible, vol_fenetre))
             cands = []
             for s in symbols:
                 if s in open_t:

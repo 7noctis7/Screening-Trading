@@ -25,6 +25,14 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 RISQUES = [0.005, 0.01, 0.02]
+RISQUE_PROD = 0.005              # réglage de production (ADR-0051)
+# Cibles exprimées en FRACTION de la volatilité réalisée de la référence, et non en
+# valeur absolue. Une grille absolue (10/15/20 %) s'est révélée entièrement INERTE :
+# ce portefeuille tourne à ~52 % d'exposition, sa vol est donc bien en dessous de celle
+# d'un indice, le plafond ne mordait jamais et les trois variantes rendaient des courbes
+# identiques au centime. Un levier qui ne fait rien est pire qu'un levier absent : il se
+# lit comme « mesuré, sans effet ».
+FRACTIONS_VOL = [0.5, 0.7, 0.9]
 
 
 def _donnees():
@@ -81,7 +89,7 @@ def _expo_moyenne(trades, equity: list[float], jours: int) -> float:
     return engage / (jours * moy_eq) if moy_eq > 0 else 0.0
 
 
-def _run(data, acmap, risque: float, vix=None):
+def _run(data, acmap, risque: float, vix=None, vol_cible: float = 0.0):
     from packages.backtest.fast_swing import fast_swing_backtest
     from packages.execution.costs import CostModel
     from packages.portfolio import fragilite as F
@@ -90,7 +98,8 @@ def _run(data, acmap, risque: float, vix=None):
         data, cash=10_000, costs=CostModel(), asset_classes=acmap,
         target_annual_vol=0.30, max_capital_frac=0.15, max_positions=20, max_pct=0.20,
         atr_stop=4.0, rr=6.0, vix=vix, close_at_end=False, daily_max_loss=0.06,
-        trail_atr=5.0, next_open_fills=True, risque_par_trade=risque)
+        trail_atr=5.0, next_open_fills=True, risque_par_trade=risque,
+        vol_cible=vol_cible)
     trades = [t for t in journal.all() if t.pnl_net is not None]
     trades.sort(key=lambda t: t.exit_ts or t.entry_ts)
     pnls = [t.pnl_net for t in trades]
@@ -100,6 +109,12 @@ def _run(data, acmap, risque: float, vix=None):
             **F.marge_de_payoff(pnls), **F.concentration(pnls),
             **F.significativite(pnls), **F.dependance(pnls),
             **F.comparer_dimensionnement(pnls, rs)}
+
+
+def _vol_annualisee(rends: list[float]) -> float:
+    """Volatilité annualisée d'une série de rendements quotidiens."""
+    import statistics as st
+    return st.pstdev(rends) * (252 ** 0.5) if len(rends) > 1 else 0.0
 
 
 def _psr_dsr(rends: list[float], n_essais: int) -> tuple[float, float]:
@@ -158,7 +173,7 @@ def main() -> None:
         return
 
     vix = _vix(data, debut, fin)
-    n_essais = _essais(len(risques))
+    n_essais = _essais(len(risques) + len(FRACTIONS_VOL))
     base = _run(data, acmap, 0.0, vix)
     rb = _rendements(base["equity"])
     s_base = comparer(rb, rb, periodes_par_an=252.0)["sharpe_base"]
