@@ -2181,10 +2181,22 @@ def build_snapshot(seed: int = 7) -> dict:
                                      "blended_stats": _curve_stats(_pe["equity"])})
     _core_px = float(_qqq_closes[-1]) if _qqq_closes else 0.0
     _core_sym = "QQQ"
+    # CŒUR MULTI-ACTIFS : clôtures des diversifiants reportées sur l'AXE DE DATES du preset.
+    # L'alignement se fait ICI, une fois, à la source — pour que le banc n'ait pas à le refaire
+    # (et à le rater). N'a AUCUNE incidence sur la production tant que QUANT_CORE_SPEC ne les
+    # cite pas : ce bloc ne fait qu'exposer des séries.
+    try:
+        from packages.backtest.coeur_multi_actifs import SYMBOLES as _MA_SYMS
+        from packages.backtest.coeur_multi_actifs import serie_sur_axe as _serie_axe
+        _diversifiants = {_s: _serie_axe(_tradeable_data.get(_s), _preset_pure_dates)
+                          for _s in _MA_SYMS if _tradeable_data.get(_s)}
+    except Exception:  # noqa: BLE001
+        _diversifiants = {}
     # blocs de courbes (preset pur + cœurs) → permet au script make index-core de balayer N'IMPORTE
     # quel ratio instantanément, sur la VRAIE mesure de production (source de vérité unique).
     _ic_curves = {"preset": _preset_pure, "qqq": list(_qqq_closes), "megacap": list(_mc_curve),
-                  "sector_mom": list(_sm_curve), "dates": _preset_pure_dates, "sp": list(sp)}
+                  "sector_mom": list(_sm_curve), "dates": _preset_pure_dates, "sp": list(sp),
+                  "diversifiants": _diversifiants}
     # JOURNAL DÉTAILLÉ + P&L du portefeuille de production (cœur QQQ + satellite preset) → justifie
     # la perf affichée (clic « Portefeuille (preset) » sur le dashboard). Prix réels, parts/cash.
     try:
