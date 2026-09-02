@@ -2563,3 +2563,47 @@ pour entamer l'implémentation des modules métier.
   chemin actions reste Alpaca paper. Un test vérifie toutes les variables avant `run_live.py`.
 - Les ordres actions non remplis observés le week-end/hors séance ne sont pas forcés : le runner
   les reporte explicitement et doit être lancé pendant la séance NYSE.
+
+## 2026-09-02 — Cœur multi-actifs : changer la corrélation, pas la concentration
+
+- **Question posée** : concentrer le cœur (top-7 au lieu du top-10) améliorerait-il la
+  performance ? **Non, et c'était déjà mesuré** : preset 0,82 → 50/50 QQQ 0,99 → QQQ pur
+  0,98 → momentum sectoriel 0,86, pendant que le maxDD passe de −19,5 % à −73,6 %. La
+  concentration achète du drawdown, pas du Sharpe.
+- Le levier resté ouvert est la **corrélation**. Le compte réel affiche **N effectif 1,5**
+  (HHI 0,665, top-3 = 87 %) : il se comporte comme une position et demie.
+- **Livré** : `packages/backtest/coeur_multi_actifs.py` + `scripts/coeur_multi_actifs_lab.py`
+  (`make coeur-multi`). Taille de cœur inchangée à 50 % — SEULE la composition change.
+  Quatre variantes figées dans le code (60/25/15, 50/30/20, 40/35/25, inverse-vol),
+  comptées dans la déflation. **Règle d'acceptation écrite avant le run** : ΔSharpe > 0
+  avec p < 0,05 au test apparié, maxDD non dégradé, DSR ≥ 50 %.
+- Le cœur paie 5 bps de rééquilibrage mensuel là où le cœur QQQ n'en paie aucun : la
+  comparaison est **défavorable au nouveau venu**, sens d'erreur assumé.
+- **Non encore exécuté** : le banc n'a pas tourné (pas de base de prix dans l'environnement
+  distant). Aucun chiffre n'est donc avancé — la construction seule est livrée.
+
+## 2026-09-02 — Cahier des charges swing institutionnel : câblé sur l'existant
+
+- Quatre modules neufs, tous **SHADOW**, tous testés (32 tests verts) :
+  `indicators/liquidite_ict` (SFP, BOS, CHoCH, OTE, order block, point-in-time),
+  `portfolio/metriques_survie` (Ulcer, temps sous l'eau, R² log, ES de Cornish-Fisher),
+  `risk/garde_swing` (MM200 marché, plafond de corrélation 30 j),
+  `ml/caracteristiques_swing` (z-score EMA, RSI multi, moments glissants, squeeze),
+  `strategies/moteur_swing` (`MarketStructureEngine`, `RiskManager`).
+- **Rien n'a été redupliqué** : DDM (−4R), stops ATR, CPCV, IC de Spearman, promotion ML
+  existaient déjà. Les classes ORCHESTRENT, elles ne recodent pas.
+- **Trois défauts trouvés par les tests, corrigés dans le code, pas dans le test** :
+  1. ES modifié : la première version n'appliquait pas le crochet de Boudt-Peterson-Croux
+     → l'ES ressortait **plus clément** que le gaussien alors que la VaR, elle, était bien
+     aggravée. Formule complète + garde de domaine (croissance de l'expansion, aggravation,
+     plausibilité vs pire observation) ; hors domaine → repli historique explicite.
+  2. Pivots : la comparaison large (`>=`) faisait de CHAQUE barre un pivot sur une série
+     plate → cassure de structure trivialement vraie sur un titre peu liquide. Extremum
+     **strict sur les voisins**.
+  3. Features : `sd <= 0` laissait passer un skew de 0,02 sur une série strictement
+     géométrique — du bruit d'arrondi standardisé. Plancher **relatif** de dispersion.
+- **Recouvrement assumé et documenté** avec `strategies/institutional_price_action` (30/08) :
+  SFP, order block et BOS existent désormais en deux exemplaires. Dette P2 déclarée.
+- **Dit plutôt que caché** : la jambe 1H/4H de la spec est câblée mais **non mesurable** —
+  la base est quotidienne. `raffiner_entree` renvoie « indécidable », jamais « prêt ».
+

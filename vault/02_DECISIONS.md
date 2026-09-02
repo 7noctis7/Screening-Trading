@@ -1088,3 +1088,63 @@ produire du signal.
 
 **Corollaire de méthode.** Avant d'écrire un module, chercher ce qui existe. Le dépôt compte 28
 paquets ; j'ai dupliqué PSR/DSR et un registre d'hypothèses parce que j'ai conçu avant de lire.
+
+---
+
+## ADR-0053 — Le cœur change de COMPOSITION, jamais de TAILLE (2026-09-02)
+
+**Contexte.** Question posée : un top-7 plutôt qu'un top-10 améliorerait-il la performance ?
+La mesure existante répond déjà non — la concentration dégrade le maxDD de −19,5 % à −73,6 %
+sans gagner de Sharpe. Le compte réel, lui, affiche N effectif 1,5 : le portefeuille se
+comporte comme une position et demie. Le problème n'est pas le nombre de lignes, c'est leur
+corrélation.
+
+**Décision.** Le banc `make coeur-multi` garde la part de cœur à **50 %, identique à la
+production**, et ne fait varier que sa composition (QQQ + obligations longues + or). Tout
+écart mesuré est donc imputable à la corrélation, à rien d'autre. Quatre variantes sont
+**figées dans le code** avant toute mesure et comptées dans la déflation du DSR ; les poids
+sont une convention (un 60/40 incliné croissance), jamais un optimum ajusté.
+
+**Règle d'acceptation, écrite avant le run.** Bascule SI ET SEULEMENT SI : (a) ΔSharpe > 0
+avec p < 0,05 au test apparié de Jobson-Korkie/Memmel, (b) maxDD non dégradé, (c) DSR ≥ 50 %.
+Si (a) échoue on ne bouge pas, quel que soit le CAGR. Si (a) passe et (b) échoue, on ne bouge
+pas non plus : acheter du Sharpe avec un drawdown plus profond contredit la raison même de
+construire ce cœur. Un maxDD amélioré de plus de 5 points à Sharpe indiscernable est remonté
+comme « réduction du risque », PAS comme feu vert.
+
+**Conséquences.** Le cœur multi-actifs paie 5 bps de rééquilibrage mensuel, le cœur QQQ zéro
+(buy-and-hold) : la comparaison est défavorable au nouveau venu, et c'est le sens d'erreur
+qu'on accepte. Les séries des diversifiants sont alignées **par date** dans le snapshot, à la
+source — jamais empilées par position.
+
+---
+
+## ADR-0054 — Un cahier des charges externe se CÂBLE sur l'existant, il ne se recode pas (2026-09-02)
+
+**Contexte.** Une spec complète de robot swing institutionnel (structure fractale 1W/1D/1H,
+SFP, OTE, filtre ML, DDM, ratios de survie) demandait « le squelette architectural complet ».
+Écrit à neuf, ce squelette aurait dupliqué le DDM, les stops ATR, la validation croisée
+purgée, l'IC de Spearman et la promotion de modèle — tous déjà présents et testés.
+
+**Décision.** Quatre modules de primitives + une façade d'orchestration
+(`strategies/moteur_swing`, classes `MarketStructureEngine` et `RiskManager` aux noms
+demandés). Les classes composent ; elles ne calculent presque rien. Un tableau de
+correspondance spec → module figure en tête du fichier, pour que le lecteur voie tout de
+suite ce qui est neuf et ce qui ne l'est pas.
+
+**Ce qui est refusé, explicitement.** La jambe 1H/4H est câblée mais la base est
+QUOTIDIENNE : `raffiner_entree` renvoie « indécidable » et jamais « prêt » quand aucune barre
+intraday n'est fournie. Renvoyer un feu vert par défaut ferait disparaître un filtre de la
+spec en silence — le système se comporterait comme s'il avait vérifié quelque chose.
+
+**Les cibles de la spec ne sont pas des résultats.** PF ≥ 1,75 · Sortino ≥ 2,0 · maxDD ≤ 12 %
+· UI ≤ 4,5 · R² ≥ 0,90 sont des seuils écrits sans avoir vu ces données. Le système mesuré
+affiche PF 1,08, Sortino 0,88, maxDD −25,5 %. L'écart n'est pas un défaut d'implémentation :
+c'est la distance entre un cahier des charges et une mesure. Aucun de ces seuils n'est câblé
+comme critère d'acceptation ; les publier comme atteints serait le seul vrai échec.
+
+**Conséquence défavorable acceptée.** SFP, order block et cassure de structure existent
+maintenant en deux exemplaires (`indicators/liquidite_ict` en primitives as-of-`i`,
+`strategies/institutional_price_action` en plugin de signal). Consolider est une dette P2
+déclarée, pas un travail fait.
+

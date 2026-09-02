@@ -37,6 +37,31 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       `packages/research/kalman_causal.py` (MLE sur préfixe + filtre avant uniquement) ; reste à
       remplacer l'appel DualMarket et à fournir un benchmark de marché exogène au preset.
 
+## 🟡 P1/P2 — ouverts le 2026-09-02
+
+- [ ] **P1 — Instabilité entre runs NON EXPLIQUÉE** : Sharpe 0,65 puis 0,38 sur un appel
+      identique au caractère près, à un jour d'écart. L'hypothèse du repli VIX est TOMBÉE
+      (le run affiche « VIX RÉEL »). Les bancs publient désormais une empreinte (titres,
+      barres, dernière date, provenance VIX) — **aucune comparaison entre deux dates n'est
+      valide tant que la cause n'est pas trouvée**.
+- [ ] **P1 — Exécuter `make coeur-multi`** sur la vraie base et appliquer la règle
+      d'ADR-0053 telle quelle. La construction est livrée, la MESURE ne l'est pas.
+- [ ] **P1 — Expliquer la dégradation du backtest** : PF 1,19 → 1,08, espérance 6 $ → 2 $,
+      payoff 2,79 → 2,62, 1 168 → 1 299 trades. Deux causes possibles à départager :
+      `trail_atr=0` pas encore dans `main`, ou décalage du jeu de données (même P1 que
+      ci-dessus). **Ne rien conclure de ces chiffres avant.**
+- [ ] **P2 — Consolider `institutional_price_action` sur `indicators/liquidite_ict`** :
+      SFP, order block et cassure de structure existent en deux exemplaires depuis le 02/09.
+      Le recouvrement est documenté dans les deux fichiers ; il n'est pas résolu.
+- [ ] **P2 — Mesurer les modules SHADOW avant tout branchement** (porte de
+      `vault/15_CERTIFICATION.md`) : `liquidite_ict`, `garde_swing`, `caracteristiques_swing`,
+      `moteur_swing`, `metriques_survie`. Un composant non certifié en production = P0.
+- [ ] **P2 — Données intraday (1H/4H)** : sans elles, la jambe de raffinement de la spec
+      swing reste câblée mais non mesurable. Ne pas la déclarer active entre-temps.
+- [ ] **P2 — NE PAS explorer l'interaction (sans suiveur × rr 9)** : le classement des
+      cibles s'est inversé entre deux jeux de données. Chaque essai supplémentaire relève
+      le seuil du DSR sur tout le reste (ADR-0050).
+
 ## 🟢 Écarté volontairement (avec justification)
 - **FinRL / RL profond** : multiplie les degrés de liberté là où le problème est le manque de
   preuve (DSR ≈ 0). Le RL brille quand les données sont abondantes et le signal net.
