@@ -196,6 +196,28 @@ def _correlation(serie_a: dict, serie_b: dict) -> float:
     return sum((a[i] - ma) * (b[i] - mb) for i in range(len(a))) / len(a) / (sa * sb)
 
 
+def _melange(a: dict, b: dict) -> tuple[list[float], list[float]]:
+    """Flux 50/50 RÉELLEMENT construit, apparié par date — et la série de référence
+    restreinte aux mêmes dates, pour que le test soit apparié.
+
+    POURQUOI CE N'EST PAS UN DÉTAIL, ET C'EST MESURÉ. La colonne « 50/50 » était
+    calculée par la formule (s0 + s) / 2 / sqrt((1 + rho) / 2), qui suppose les DEUX
+    FLUX DE MÊME VARIANCE. Ils ne l'ont pas : mesuré sur un candidat de ce banc, 3,0 %
+    de volatilité annualisée côté production contre 10,5 % côté candidat — un rapport
+    de 3,5. À parts égales de CAPITAL, le candidat apporte donc l'essentiel du RISQUE.
+
+    L'écart n'est pas cosmétique : formule 0,84 contre mélange réellement construit
+    0,51. Un verdict « APPORTE » fondé sur la formule aurait annoncé un gain là où la
+    mesure donne une perte.
+
+    Ce que le banc ne fait PAS encore : pondérer par le risque plutôt que par le
+    capital. À risque égal, un candidat plus volatil pèserait moins et le mélange
+    dirait autre chose. C'est la mesure suivante, pas celle-ci.
+    """
+    communes = sorted(set(a) & set(b))
+    return ([a[d] for d in communes], [(a[d] + b[d]) / 2.0 for d in communes])
+
+
 def _datee(rendements: list[float], horodatage: list) -> dict:
     """{date: rendement}. Le rendement d'indice i se réalise à l'horodatage i+1."""
     return {_jour(horodatage[i + 1]): r
@@ -204,6 +226,7 @@ def _datee(rendements: list[float], horodatage: list) -> dict:
 
 def main() -> None:
     from packages.research.flux_candidat import flux_quotidien
+    from packages.research.sharpe_diff import comparer
     from scripts.sizing_lab import (
         _donnees,
         _essais,
@@ -263,21 +286,28 @@ def main() -> None:
             print(f"  {nom:<20} JAMAIS DÉCLENCHÉ sur cette période — rien à mesurer")
             continue
         st_c = _stats(f["rendements"], n_essais)
-        rho = _correlation(dates_ref, dict(zip(f["dates"], f["rendements"],
-                                               strict=True)))
-        # Sharpe d'un 50/50 : (s0+s)/2 / sqrt((1+rho)/2) en variances égales.
-        duo = (s_ref["sharpe"] + st_c["sharpe"]) / 2 / max(((1 + rho) / 2) ** 0.5, 1e-9)
-        gagne = duo > s_ref["sharpe"] + 0.27
+        d_cand = dict(zip(f["dates"], f["rendements"], strict=True))
+        rho = _correlation(dates_ref, d_cand)
+        base, duo_rends = _melange(dates_ref, d_cand)
+        duo = _stats(duo_rends, n_essais).get("sharpe", 0.0)
+        # Test APPARIÉ du mélange contre la production, sur les mêmes dates. Apparié et
+        # non indépendant : les deux séries partagent la production, donc leur écart a
+        # une variance bien plus faible qu'une comparaison générique — le test est
+        # d'autant plus puissant, et le seuil ±0,27 devient inutilement sévère ici.
+        d_test = comparer(base, duo_rends, periodes_par_an=252.0)
+        p_val = d_test.get("p", 1.0)
         verdict = ("redondant" if abs(rho) >= 0.5
-                   else ("APPORTE" if gagne else "sous le seuil"))
+                   else (f"APPORTE p={p_val:.3f}" if d_test.get("verdict") == "meilleur"
+                         else f"indiscernable p={p_val:.3f}"))
         print(f"  {nom:<20} {f['lignes_moyen']:>7.1f} {st_c['sharpe']:>7.2f} "
               f"{st_c['psr']:>5.0%} {st_c['dsr']:>5.0%} {rho:>+6.2f} {duo:>7.2f}  "
               f"{verdict}")
 
     print("\n  rho = corrélation des rendements quotidiens au flux de PRODUCTION.")
-    print("  « 50/50 » = Sharpe d'un mélange à parts égales, variances comparables.")
-    print("  Un candidat ne vaut d'être construit que s'il dépasse la production de")
-    print("  plus que le seuil détectable (±0.27) — sinon on ne le prouvera jamais.")
+    print("  « 50/50 » = Sharpe du mélange RÉELLEMENT CONSTRUIT, apparié par date —")
+    print("  plus une formule à variances supposées égales. Le p vient du test apparié")
+    print("  de Jobson-Korkie corrigé Memmel : le mélange contient la production, donc")
+    print("  leur écart a une variance faible et le test est puissant.")
     print(f"  DSR déflaté de {n_essais} essais, ceux de ce banc inclus.\n")
 
 
