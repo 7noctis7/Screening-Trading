@@ -59,9 +59,11 @@ def flux_quotidien(data: dict, signal, fenetre: int = FENETRE_DEFAUT,
                    max_lignes: int = 20) -> dict:
     """Rendements quotidiens d'un portefeuille long/flat équipondéré par `signal`.
 
-    `signal(barres)` reçoit les `fenetre` dernières barres du titre — la dernière
-    étant celle de la date de décision — et renvoie un booléen. Le portefeuille est
-    reconstitué tous les `pas` jours de calendrier et conservé entre deux décisions.
+    `signal(barres, symbole)` reçoit les `fenetre` dernières barres du titre — la
+    dernière étant celle de la date de décision — et renvoie un booléen. Le symbole est
+    passé pour qu'un candidat coûteux puisse PRÉCALCULER sa réponse par titre au lieu de
+    tout recalculer à chaque appel ; il ne donne aucun accès supplémentaire aux données.
+    Le portefeuille est reconstitué tous les `pas` jours, conservé entre deux fois.
 
     LE COÛT EST PRÉLEVÉ SUR LA ROTATION RÉELLE, pas forfaitairement : seules les lignes
     qui ENTRENT ou SORTENT paient. Un signal stable est donc avantagé face à un signal
@@ -103,7 +105,7 @@ def _selection(data: dict, idx: dict, d, fenetre: int, signal) -> list[str]:
         i = positions.get(d)
         if i is None or i < fenetre - 1:          # pas coté ce jour, ou trop jeune
             continue
-        if signal(data[s][i - fenetre + 1:i + 1]):
+        if signal(data[s][i - fenetre + 1:i + 1], s):
             retenus.append(s)
     return retenus
 

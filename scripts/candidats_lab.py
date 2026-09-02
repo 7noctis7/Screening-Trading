@@ -44,11 +44,54 @@ SEUIL_GAP = 0.06                 # |variation d'un jour| au-delà = « annonce �
 DERIVE = 21                      # jours de dérive suivis après l'événement (PEAD)
 
 
+def _capitulation(data: dict):
+    """Candidat capitulation, PRÉCALCULÉ par titre et par semaine.
+
+    Ce candidat exige 200 moyennes hebdomadaires, soit ~1 400 jours de fenêtre. Repartir
+    des barres quotidiennes à chaque appel demanderait de ré-agréger 1 400 barres pour
+    786 titres et 550 décisions — inexécutable. On agrège donc UNE fois par titre, on
+    évalue `signal_hebdo` semaine par semaine, et le signal quotidien lit la réponse de
+    la semaine close la plus récente.
+
+    L'ANTI-FUITE EST PRÉSERVÉE, seul point qui compte : `signal_hebdo(sem, i)` ne lit
+    que `sem[:i+1]`, et la réponse de la semaine `i` n'est consultée qu'à partir du jour
+    qui SUIT sa clôture. Précalculer n'est pas anticiper.
+    """
+    from packages.indicators.volume_capitulation import hebdomadaire, signal_hebdo
+    reponses: dict[str, dict] = {}
+    for sym, barres in data.items():
+        sem = hebdomadaire(barres, inclure_partielle=True)
+        par_jour: dict = {}
+        vrai_depuis = None
+        for i, s in enumerate(sem):
+            if signal_hebdo(sem, i):
+                vrai_depuis = _jour(s.ts)
+            par_jour[_jour(s.ts)] = vrai_depuis
+        reponses[sym] = par_jour
+    ordonnees = {s: sorted(d) for s, d in reponses.items()}
+
+    def signal(barres, symbole) -> bool:
+        """Lit la réponse de la dernière semaine CLOSE à la date de décision."""
+        import bisect
+        d = _jour(barres[-1].ts)
+        dates = ordonnees.get(symbole) or []
+        k = bisect.bisect_right(dates, d) - 1
+        if k < 1:                                  # aucune semaine close avant ce jour
+            return False
+        return reponses[symbole][dates[k - 1]] is not None
+
+    return signal
+
+
+def _jour(ts):
+    return ts.date() if hasattr(ts, "date") else ts
+
+
 def _signaux() -> dict:
     from packages.indicators.market_structure import echec_enchere, tendance
     from packages.research.breakout import channel_break
 
-    def pead_proxy(b) -> bool:
+    def pead_proxy(b, _s) -> bool:
         """Un gap haussier exceptionnel dans les `DERIVE` derniers jours → on suit."""
         for k in range(len(b) - DERIVE, len(b)):
             if k < 1:
@@ -60,9 +103,10 @@ def _signaux() -> dict:
 
     return {
         "pead (proxy gap)": pead_proxy,
-        "échec d'enchère": lambda b: bool(echec_enchere(b, len(b) - 1).get("echec")),
-        "structure pivots": lambda b: tendance(b, len(b) - 1) == "haussier",
-        "canal / IDWM": lambda b: bool(
+        "échec d'enchère": lambda b, _s: bool(
+            echec_enchere(b, len(b) - 1).get("echec")),
+        "structure pivots": lambda b, _s: tendance(b, len(b) - 1) == "haussier",
+        "canal / IDWM": lambda b, _s: bool(
             channel_break([x.close for x in b], win=60)["break"]),
     }
 
@@ -110,6 +154,7 @@ def main() -> None:
         return
     data = {s: data[s] for s in sorted(data)[:n_max]}
     signaux = _signaux()
+    signaux["capitulation (hebdo)"] = _capitulation(data)
     n_essais = _essais(len(signaux))
 
     vix, prov = _vix(data, debut, fin)
@@ -125,9 +170,18 @@ def main() -> None:
           f"{s_ref['dsr']:>5.0%} {'—':>6} {'—':>7}")
 
     for nom, fn in signaux.items():
-        f = flux_quotidien(data, fn, fenetre=FENETRE, pas=PAS)
+        # le candidat hebdomadaire lit une réponse PRÉCALCULÉE : deux barres suffisent
+        # à lui donner la date de décision, inutile de lui recopier 250 jours.
+        fen = 2 if "capitulation" in nom else FENETRE
+        f = flux_quotidien(data, fn, fenetre=fen, pas=PAS)
         if not f.get("available"):
             print(f"  {nom:<20} {f.get('motif', 'indisponible')}")
+            continue
+        if f["part_investie"] == 0.0:
+            # « Sharpe 0,00 » se lirait comme un résultat mesuré. Un signal qui ne
+            # s'est JAMAIS déclenché n'a pas de performance nulle : il n'a pas de
+            # performance du tout. Absence et zéro ne sont pas la même chose.
+            print(f"  {nom:<20} JAMAIS DÉCLENCHÉ sur cette période — rien à mesurer")
             continue
         st_c = _stats(f["rendements"], n_essais)
         rho = _correlation(r_ref, f["rendements"])
