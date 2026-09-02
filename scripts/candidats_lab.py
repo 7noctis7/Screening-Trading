@@ -44,8 +44,19 @@ SEUIL_GAP = 0.06                 # |variation d'un jour| au-delà = « annonce �
 DERIVE = 21                      # jours de dérive suivis après l'événement (PEAD)
 
 
-def _capitulation(data: dict):
-    """Candidat capitulation, PRÉCALCULÉ par titre et par semaine.
+def _capitulation(data: dict, hebdo: bool = True):
+    """Candidat capitulation, PRÉCALCULÉ par titre — hebdomadaire ou quotidien.
+
+    LES DEUX RÉSOLUTIONS SONT DEUX SIGNAUX DIFFÉRENTS, pas le même mieux échantillonné.
+    MM200 hebdo couvre 3,8 ans : un marché baissier séculaire, qui n'arrive qu'une
+    ou deux fois par titre en onze ans — trop peu pour prouver quoi que ce soit. MM200
+    quotidienne couvre 9,5 mois : une correction intermédiaire, bien plus fréquente,
+    donc bien plus d'ÉPISODES INDÉPENDANTS. C'est de là que vient le gain statistique —
+    pas de la résolution en elle-même.
+
+    On n'ajoute PAS de troisième variante « même horizon » (MM1000 quotidienne) : elle
+    décrirait les mêmes épisodes observés cinq fois plus souvent, donc sans gain de
+    n_effectif, et chaque essai supplémentaire relève le seuil du DSR sur tout le reste.
 
     Ce candidat exige 200 moyennes hebdomadaires, soit ~1 400 jours de fenêtre. Repartir
     des barres quotidiennes à chaque appel demanderait de ré-agréger 1 400 barres pour
@@ -57,14 +68,14 @@ def _capitulation(data: dict):
     que `sem[:i+1]`, et la réponse de la semaine `i` n'est consultée qu'à partir du jour
     qui SUIT sa clôture. Précalculer n'est pas anticiper.
     """
-    from packages.indicators.volume_capitulation import hebdomadaire, signal_hebdo
+    from packages.indicators.volume_capitulation import hebdomadaire, signal_sur
     reponses: dict[str, dict] = {}
     for sym, barres in data.items():
-        sem = hebdomadaire(barres, inclure_partielle=True)
+        agregees = hebdomadaire(barres, inclure_partielle=True) if hebdo else barres
         par_jour: dict = {}
         vrai_depuis = None
-        for i, s in enumerate(sem):
-            if signal_hebdo(sem, i):
+        for i, s in enumerate(agregees):
+            if signal_sur(agregees, i):
                 vrai_depuis = _jour(s.ts)
             par_jour[_jour(s.ts)] = vrai_depuis
         reponses[sym] = par_jour
@@ -154,7 +165,8 @@ def main() -> None:
         return
     data = {s: data[s] for s in sorted(data)[:n_max]}
     signaux = _signaux()
-    signaux["capitulation (hebdo)"] = _capitulation(data)
+    signaux["capitulation hebdo"] = _capitulation(data, hebdo=True)
+    signaux["capitulation daily"] = _capitulation(data, hebdo=False)
     n_essais = _essais(len(signaux))
 
     vix, prov = _vix(data, debut, fin)

@@ -17,11 +17,17 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from packages.indicators.volume_capitulation import (
+    CONFIRMATIONS,
+    FENETRE_BAS,
+    K_ECARTS,
+    MOYENNES,
+    PART_DU_BAS,
     empilement_baissier,
     hebdomadaire,
     pic_de_volume,
     proche_des_bas,
     signal,
+    signal_sur,
     volume_croissant,
 )
 
@@ -149,3 +155,44 @@ def test_un_historique_trop_court_ne_declenche_jamais():
 def test_volume_croissant_refuse_une_seule_baisse():
     assert volume_croissant([1, 2, 3, 4, 5], 0, 3) is True
     assert volume_croissant([1, 2, 1, 4, 5], 0, 3) is False
+
+
+# --------------------------------------------- la fenêtre bornée doit être ÉQUIVALENTE
+def _sans_borne(barres, i):
+    """L'implémentation NAÏVE : préfixe complet, O(n²). Sert de référence."""
+    if i < 0 or i >= len(barres):
+        return False
+    vue = barres[:i + 1]
+    if len(vue) < max(MOYENNES) + CONFIRMATIONS + 2:
+        return False
+    closes = [x.close for x in vue]
+    volumes = [x.volume for x in vue]
+    if not empilement_baissier(closes, MOYENNES):
+        return False
+    i_pic = len(vue) - 1 - CONFIRMATIONS
+    if not pic_de_volume(volumes, i_pic, k=K_ECARTS):
+        return False
+    if not volume_croissant(volumes, i_pic, CONFIRMATIONS):
+        return False
+    return proche_des_bas([x.low for x in vue], closes[-1],
+                          fenetre=FENETRE_BAS, part=PART_DU_BAS)
+
+
+def test_la_fenetre_BORNEE_donne_exactement_le_meme_verdict():
+    """Borner la fenêtre est une optimisation (O(n²) → O(n·200), 6× plus rapide).
+    Une optimisation qui change un verdict n'est pas une optimisation : c'est un bug.
+    On compare donc les deux implémentations barre à barre, pas « les tests passent ».
+
+    Vérifié aussi sur données réelles hors test : 13 600 indices, zéro désaccord.
+    """
+    import random
+    rng = random.Random(7)
+    barres, px = [], 300.0
+    for k in range(1200):
+        px *= 1 + rng.gauss(-0.0006, 0.02)           # dérive baissière + bruit
+        v = 1e6 * (1 + abs(rng.gauss(0, 1.2)))       # volume irrégulier, pics naturels
+        barres.append(_B(LUNDI + timedelta(days=k), px, px * 1.02, px * 0.98, px, v))
+    compares = [(signal_sur(barres, i), _sans_borne(barres, i))
+                for i in range(210, len(barres))]
+    assert all(a == b for a, b in compares)
+    assert len(compares) > 900

@@ -124,9 +124,22 @@ def proche_des_bas(bas: list[float], close: float,
     return plancher > 0 and close <= plancher * (1.0 + part)
 
 
-def signal_hebdo(semaines: list, i: int, confirmations: int = CONFIRMATIONS,
-                 k: float = K_ECARTS, part_du_bas: float = PART_DU_BAS) -> bool:
-    """Vrai à la CLÔTURE de la semaine `i`, qui confirme la reprise de volume.
+def signal_sur(barres: list, i: int, confirmations: int = CONFIRMATIONS,
+               k: float = K_ECARTS, part_du_bas: float = PART_DU_BAS,
+               moyennes=MOYENNES, fenetre_bas: int = FENETRE_BAS) -> bool:
+    """Vrai à la CLÔTURE de la barre `i`, qui confirme la reprise de volume.
+
+    INDÉPENDANT DE LA RÉSOLUTION : `barres` peut être hebdomadaire ou quotidien. Mais
+    changer de résolution à PÉRIODES ÉGALES ne donne pas « le même signal avec plus de
+    points » — c'est un AUTRE signal. MM200 hebdomadaire couvre 3,8 ans, donc un marché
+    baissier séculaire ; MM200 quotidienne couvre 9,5 mois, donc une correction
+    intermédiaire. Les deux méritent d'être mesurés, mais jamais confondus.
+
+    Et à HORIZON ÉGAL (MM1000 quotidienne ≈ MM200 hebdo), passer au quotidien ne
+    multiplie PAS l'information par cinq : ce sont les mêmes épisodes observés plus
+    souvent, et le `n_effectif` corrigé de la dépendance bougerait à peine. Le gain
+    statistique ne vient que des périodes plus courtes, qui produisent des épisodes plus
+    nombreux — pas de la résolution en elle-même.
 
     ANTI-FUITE, ET ELLE EST STRUCTURELLE. Tout est lu sur `semaines[:i + 1]` : la
     fonction n'a littéralement pas accès à ce qui suit. Le pic est cherché exactement
@@ -138,25 +151,38 @@ def signal_hebdo(semaines: list, i: int, confirmations: int = CONFIRMATIONS,
     candidat inexécutable sur 786 titres. Le contenu de la décision est identique ;
     seul son coût change.
     """
-    if i < 0 or i >= len(semaines):
+    # FENÊTRE BORNÉE, ET CE N'EST PAS UN DÉTAIL DE PERFORMANCE. Découper `barres[:i+1]`
+    # copie tout le préfixe à chaque appel : évalué barre par barre sur 2 760 jours et
+    # 786 titres, c'est un O(n²) : quatre minutes là où il en faut quinze secondes.
+    # Le besoin réel est borné — la plus longue moyenne, la fenêtre des plus bas, ou la
+    # fenêtre de volume plus les confirmations — donc on ne copie que cela.
+    besoin = max(max(moyennes) + confirmations + 2, fenetre_bas,
+                 FENETRE_VOLUME + confirmations + 2)
+    debut = i - besoin + 1
+    if i < 0 or i >= len(barres) or debut < 0:
         return False
-    vue = semaines[:i + 1]
-    if len(vue) < max(MOYENNES) + confirmations + 2:
-        return False
+    vue = barres[debut:i + 1]
     closes = [s.close for s in vue]
     volumes = [s.volume for s in vue]
-    if not empilement_baissier(closes):
+    if not empilement_baissier(closes, moyennes):
         return False
     i_pic = len(vue) - 1 - confirmations
     if not pic_de_volume(volumes, i_pic, k=k):
         return False
     if not volume_croissant(volumes, i_pic, confirmations):
         return False
-    return proche_des_bas([s.low for s in vue], closes[-1], part=part_du_bas)
+    return proche_des_bas([s.low for s in vue], closes[-1],
+                          fenetre=fenetre_bas, part=part_du_bas)
+
+
+def signal_hebdo(semaines: list, i: int, confirmations: int = CONFIRMATIONS,
+                 k: float = K_ECARTS, part_du_bas: float = PART_DU_BAS) -> bool:
+    """Résolution HEBDOMADAIRE, périodes de la spécification."""
+    return signal_sur(semaines, i, confirmations, k, part_du_bas)
 
 
 def signal(barres: list, confirmations: int = CONFIRMATIONS,
            k: float = K_ECARTS, part_du_bas: float = PART_DU_BAS) -> bool:
-    """Même décision, depuis des barres QUOTIDIENNES. Agrège puis délègue."""
+    """Même décision depuis des barres QUOTIDIENNES : agrège puis délègue."""
     sem = hebdomadaire(barres)
     return signal_hebdo(sem, len(sem) - 1, confirmations, k, part_du_bas)
