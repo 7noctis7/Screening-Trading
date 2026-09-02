@@ -265,11 +265,11 @@ def main() -> None:
     r_ref = _rendements(ref["equity"])
     dates_ref = _datee(r_ref, ref["horodatage"])
     s_ref = _stats(r_ref, n_essais)
-    print(f"  {'candidat':<20} {'lignes':>7} {'Sharpe':>7} {'PSR':>6} {'DSR':>6} "
-          f"{'rho':>6} {'50/50':>7}  verdict")
-    print("  " + "-" * 78)
-    print(f"  {'PRODUCTION':<20} {'—':>7} {s_ref['sharpe']:>7.2f} {s_ref['psr']:>5.0%} "
-          f"{s_ref['dsr']:>5.0%} {'—':>6} {'—':>7}")
+    print(f"  {'candidat':<20} {'lignes':>6} {'Sharpe':>6} {'DSR':>5} "
+          f"{'rho':>6} {'50/50':>6} {'Δ vs prod':>8}  verdict")
+    print("  " + "-" * 82)
+    print(f"  {'PRODUCTION (réf.)':<20} {'—':>6} {s_ref['sharpe']:>6.2f} "
+          f"{s_ref['dsr']:>5.0%} {'—':>6} {'—':>6} {'—':>8}")
 
     for nom, fn in signaux.items():
         # le candidat hebdomadaire lit une réponse PRÉCALCULÉE : deux barres suffisent
@@ -290,6 +290,12 @@ def main() -> None:
         rho = _correlation(dates_ref, d_cand)
         base, duo_rends = _melange(dates_ref, d_cand)
         duo = _stats(duo_rends, n_essais).get("sharpe", 0.0)
+        # La ligne PRODUCTION du tableau porte sur TOUTE la série ; le mélange, lui, sur
+        # les seules dates communes (le harnais démarre après sa fenêtre). Soustraire
+        # l'une de l'autre compare deux échantillons différents — c'est ce qui faisait
+        # lire « +0,39 » là où le test apparié disait p = 0,39. On publie donc le DELTA
+        # du test, calculé sur les mêmes dates, plutôt que de laisser faire la
+        # soustraction au lecteur.
         # Test APPARIÉ du mélange contre la production, sur les mêmes dates. Apparié et
         # non indépendant : les deux séries partagent la production, donc leur écart a
         # une variance bien plus faible qu'une comparaison générique — le test est
@@ -299,10 +305,14 @@ def main() -> None:
         verdict = ("redondant" if abs(rho) >= 0.5
                    else (f"APPORTE p={p_val:.3f}" if d_test.get("verdict") == "meilleur"
                          else f"indiscernable p={p_val:.3f}"))
-        print(f"  {nom:<20} {f['lignes_moyen']:>7.1f} {st_c['sharpe']:>7.2f} "
-              f"{st_c['psr']:>5.0%} {st_c['dsr']:>5.0%} {rho:>+6.2f} {duo:>7.2f}  "
-              f"{verdict}")
+        print(f"  {nom:<20} {f['lignes_moyen']:>6.1f} {st_c['sharpe']:>6.2f} "
+              f"{st_c['dsr']:>5.0%} {rho:>+6.2f} {duo:>6.2f} "
+              f"{d_test.get('delta', 0.0):>+6.2f}  {verdict}")
 
+    print("\n  « Δ vs prod » est le SEUL écart à lire : il vient du test apparié, sur")
+    print("  les mêmes dates que le mélange. La ligne PRODUCTION porte sur toute la")
+    print("  série, le mélange sur les dates communes — les soustraire comparerait")
+    print("  deux échantillons différents.")
     print("\n  rho = corrélation des rendements quotidiens au flux de PRODUCTION.")
     print("  « 50/50 » = Sharpe du mélange RÉELLEMENT CONSTRUIT, apparié par date —")
     print("  plus une formule à variances supposées égales. Le p vient du test apparié")
