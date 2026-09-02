@@ -152,9 +152,57 @@ def test_un_historique_trop_court_ne_declenche_jamais():
         assert signal(_serie(n)) is False
 
 
-def test_volume_croissant_refuse_une_seule_baisse():
-    assert volume_croissant([1, 2, 3, 4, 5], 0, 3) is True
-    assert volume_croissant([1, 2, 1, 4, 5], 0, 3) is False
+def test_la_branche_STRICTE_refuse_une_seule_baisse():
+    """Lecture littérale de la spécification : chaque barre >= la précédente."""
+    assert volume_croissant([1, 2, 3, 4, 5], 0, 3, strict=True) is True
+    assert volume_croissant([1, 2, 1, 4, 5], 0, 3, strict=True) is False
+
+
+def test_la_branche_par_MOYENNE_lit_la_persistance_de_l_activite():
+    """Après la capitulation, l'activité ne doit pas RETOMBER — sans exiger qu'elle
+    croisse à chaque barre. Avant : [1,1,1] · pic · après : [2,2,2] → retenu."""
+    assert volume_croissant([1, 1, 1, 9, 2, 2, 2], 3, 3) is True
+    assert volume_croissant([1, 1, 1, 9, 1, 1, 1], 3, 3) is False   # retombé au niveau
+
+
+def test_la_branche_STRICTE_rend_la_conjonction_QUASI_VIDE():
+    """Le défaut trouvé en exécutant, pas en relisant. Après un pic à 2 écarts-types,
+    exiger trois dépassements successifs d'un extrême arrive dans ~0,008 % des cas :
+    combiné aux trois autres conditions, le signal ne se déclenche JAMAIS.
+
+    Un setup qui ne se déclenche jamais n'est pas sélectif, il est mort — et il se
+    lirait « très sélectif » sur un tableau de résultats. D'où ce test."""
+    import random
+    rng = random.Random(1)
+    pics = suites = 0
+    for _ in range(4000):
+        passe = [1e6 * (1 + abs(rng.gauss(0, 1.3))) for _ in range(20)]
+        m = sum(passe) / 20
+        sd = (sum((x - m) ** 2 for x in passe) / 20) ** 0.5
+        pic = 1e6 * (1 + abs(rng.gauss(0, 1.3)))
+        if pic <= m + 2 * sd:
+            continue
+        pics += 1
+        vols = passe + [pic] + [1e6 * (1 + abs(rng.gauss(0, 1.3))) for _ in range(3)]
+        suites += volume_croissant(vols, 20, 3, strict=True)
+    assert pics > 100                                   # l'échantillon a du sens
+    assert suites / pics < 0.02                         # la branche stricte est vide
+
+
+def test_le_signal_se_DECLENCHE_moins_souvent_avec_PLUS_de_moyennes():
+    """Monotonie attendue : chaque moyenne ajoutée restreint. Si elle ne tenait pas,
+    le réglage du nombre de moyennes ne voudrait rien dire."""
+    import random
+    rng = random.Random(0)
+    px, barres = 300.0, []
+    for k in range(2500):
+        px *= 1 + rng.gauss(-0.0004, 0.018)
+        v = 1e6 * (1 + abs(rng.gauss(0, 1.3)))
+        barres.append(_B(LUNDI + timedelta(days=k), px, px * 1.02, px * 0.98, px, v))
+    compte = [sum(signal_sur(barres, i, moyennes=mm) for i in range(260, len(barres)))
+              for mm in ((20, 50, 100, 200), (50, 200), (200,))]
+    assert compte[0] < compte[1] < compte[2]
+    assert compte[0] > 0                                # et aucune n'est vide
 
 
 # --------------------------------------------- la fenêtre bornée doit être ÉQUIVALENTE

@@ -44,7 +44,7 @@ SEUIL_GAP = 0.06                 # |variation d'un jour| au-delà = « annonce �
 DERIVE = 21                      # jours de dérive suivis après l'événement (PEAD)
 
 
-def _capitulation(data: dict, hebdo: bool = True):
+def _capitulation(data: dict, hebdo: bool = True, moyennes=None):
     """Candidat capitulation, PRÉCALCULÉ par titre — hebdomadaire ou quotidien.
 
     LES DEUX RÉSOLUTIONS SONT DEUX SIGNAUX DIFFÉRENTS, pas le même mieux échantillonné.
@@ -68,14 +68,19 @@ def _capitulation(data: dict, hebdo: bool = True):
     que `sem[:i+1]`, et la réponse de la semaine `i` n'est consultée qu'à partir du jour
     qui SUIT sa clôture. Précalculer n'est pas anticiper.
     """
-    from packages.indicators.volume_capitulation import hebdomadaire, signal_sur
+    from packages.indicators.volume_capitulation import (
+        MOYENNES,
+        hebdomadaire,
+        signal_sur,
+    )
+    mm = tuple(moyennes or MOYENNES)
     reponses: dict[str, dict] = {}
     for sym, barres in data.items():
         agregees = hebdomadaire(barres, inclure_partielle=True) if hebdo else barres
         par_jour: dict = {}
         vrai_depuis = None
         for i, s in enumerate(agregees):
-            if signal_sur(agregees, i):
+            if signal_sur(agregees, i, moyennes=mm):
                 vrai_depuis = _jour(s.ts)
             par_jour[_jour(s.ts)] = vrai_depuis
         reponses[sym] = par_jour
