@@ -15,6 +15,7 @@ elle ne réécrit pas le cœur. Chaque bloc de la spec est donc câblé, pas rec
   1R = 1 % et descente −4R          → `risk/ddm.MachineDDM` (spécifié le 01/09)
   taille = risque / distance stop   → `risk/ddm.taille_position`
   MM200 marché + corrélation 30 j   → `risk/garde_swing`
+  sortie temps/liquidité/CVD        → `strategies/moteur_sortie.ExitEngine`
   Ulcer, TID, R², ES Cornish-Fisher → `portfolio/metriques_survie`
   filtre ML + IC + OOS/IS           → `ml/` (cpcv, promotion, governance) + features
 

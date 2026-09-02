@@ -106,6 +106,25 @@ flowchart LR
 
 ---
 
+## Modules SHADOW — écrits, testés, HORS des deux diagrammes (2026-09-02)
+
+Les diagrammes ci-dessus décrivent la PRODUCTION. Les modules suivants existent, sont
+testés, et n'ont **aucun appelant en production** : les dessiner dans le flux ferait
+croire qu'ils y sont. Ils y entreront un par un, après la porte de
+`vault/15_CERTIFICATION.md` — et le diagramme sera mis à jour à ce moment-là, pas avant.
+
+| Module | Rôle | Ce qui manque pour sortir de SHADOW |
+|---|---|---|
+| `indicators/liquidite_ict` | SFP, BOS, CHoCH, zone OTE, order block (as-of `i`) | mesure au banc `candidats_lab` |
+| `strategies/moteur_swing` | `MarketStructureEngine`, `RiskManager` (orchestration) | idem + données 1H pour la jambe de raffinement |
+| `strategies/moteur_sortie` | `ExitEngine` : temps 15 j, liquidité opposée, partielle CVD | mesure contre la sortie actuelle (`sortie_lab`) |
+| `risk/garde_swing` | filtre MM200 marché, plafond de corrélation 30 j | mesure de l'effet sur le portefeuille réel |
+| `ml/caracteristiques_swing` | features z-score EMA, RSI multi, moments, squeeze | IC de Spearman + ratio OOS/IS via `ml/promotion` |
+| `portfolio/metriques_survie` | Ulcer, temps sous l'eau, R² log, ES Cornish-Fisher | rien : mesure pure, branchable au dashboard |
+| `backtest/coeur_multi_actifs` | cœur QQQ + obligations + or, parts déclarées | exécuter `make coeur-multi` et appliquer ADR-0053 |
+
+---
+
 ## État d'implémentation (mis à jour à chaque session)
 | Module | Package | État |
 |---|---|---|

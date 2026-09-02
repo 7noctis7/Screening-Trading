@@ -1148,3 +1148,37 @@ maintenant en deux exemplaires (`indicators/liquidite_ict` en primitives as-of-`
 `strategies/institutional_price_action` en plugin de signal). Consolider est une dette P2
 déclarée, pas un travail fait.
 
+---
+
+## ADR-0055 — Le stop ne bouge que sur la structure ; l'ordre d'évaluation est pessimiste (2026-09-02)
+
+**Contexte.** Le bloc de sortie de la spec swing interdit le breakeven de confort et exige
+une sortie de temps à 15 séances. C'est aussi ce que `sortie_lab` a mesuré le 02/09 par un
+tout autre chemin : le suiveur à 5 ATR coupait la queue droite et détruisait l'avantage
+(payoff 2,82 vs 3,21 sans lui). Deux raisonnements indépendants, une seule conclusion.
+
+**Décision 1 — invariant du stop.** `ExitEngine` ne déplace le stop QUE sur un invalidant
+structurel : pour un long, un creux confirmé plus haut que le stop courant, lui-même validé
+par un sommet confirmé POSTÉRIEUR. Aucune branche du code ne lit le prix d'entrée, le gain
+courant ou un multiple d'ATR. Le garde-fou est doublé : la détection le refuse, et
+`appliquer` ignore tout recul même demandé explicitement — une règle de sécurité qui
+n'existe qu'à un endroit finit contournée.
+
+**Décision 2 — ordre d'évaluation pessimiste.** Stop, puis cible, puis temps, puis partielle.
+Une barre quotidienne qui touche le stop ET la cible ne dit pas laquelle est venue en
+premier. Retenir le stop est l'hypothèse défavorable ; retenir la cible fabriquerait de la
+performance à partir d'une ambiguïté de données.
+
+**Décision 3 — la cible retient le plus exigeant des deux critères**, sommet majeur OU
+plancher en R. Le sommet seul accepterait des trades à 1,2 R ; le R seul viserait un prix que
+rien n'attire.
+
+**Ce qui est assumé comme approximation.** Le CVD suppose des transactions signées ; des
+barres OHLCV n'en ont pas. Le module utilise le proxy « close location value × volume » et
+porte le nom `cvd_proxy`. Une divergence est ici un fait de prix et de volume — pas une
+preuve d'absorption institutionnelle. Le renommer en `cvd` serait la seule vraie faute.
+
+**Ce qui est refusé.** La borne « 2 jours » n'est pas transformée en immobilisation : elle
+est reportée et ne bloque jamais une sortie que le marché offre. Une borne basse en verrou
+serait un coût déguisé en protection.
+

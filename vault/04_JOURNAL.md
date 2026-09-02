@@ -2589,7 +2589,8 @@ pour entamer l'implémentation des modules métier.
   `portfolio/metriques_survie` (Ulcer, temps sous l'eau, R² log, ES de Cornish-Fisher),
   `risk/garde_swing` (MM200 marché, plafond de corrélation 30 j),
   `ml/caracteristiques_swing` (z-score EMA, RSI multi, moments glissants, squeeze),
-  `strategies/moteur_swing` (`MarketStructureEngine`, `RiskManager`).
+  `strategies/moteur_swing` (`MarketStructureEngine`, `RiskManager`),
+  `strategies/moteur_sortie` (`ExitEngine` : temps 15 j, liquidité opposée, partielle CVD).
 - **Rien n'a été redupliqué** : DDM (−4R), stops ATR, CPCV, IC de Spearman, promotion ML
   existaient déjà. Les classes ORCHESTRENT, elles ne recodent pas.
 - **Trois défauts trouvés par les tests, corrigés dans le code, pas dans le test** :
@@ -2606,4 +2607,33 @@ pour entamer l'implémentation des modules métier.
   SFP, order block et BOS existent désormais en deux exemplaires. Dette P2 déclarée.
 - **Dit plutôt que caché** : la jambe 1H/4H de la spec est câblée mais **non mesurable** —
   la base est quotidienne. `raffiner_entree` renvoie « indécidable », jamais « prêt ».
+
+## 2026-09-02 — ExitEngine : la spec de sortie rejoint la mesure du 02/09
+
+- Bloc 5 de la spec swing : sortie de temps à 15 séances, cible = liquidité opposée OU
+  plancher 3R (le plus EXIGEANT des deux), partielle 50 % à 2R sur divergence de flux,
+  **interdiction du breakeven arbitraire**.
+- **Convergence à noter** : cette dernière règle est exactement ce que `sortie_lab` a
+  mesuré le 02/09 (ADR-0052). Sans suiveur, payoff 3,21 · Sharpe 0,53 · maxDD −27,8 % ;
+  avec suiveur 5 ATR, payoff 2,82 · Sharpe 0,38 · maxDD −29,1 %. L'avantage vit dans la
+  queue droite ; tout ce qui la tronque le détruit. La spec et la mesure disent la même
+  chose par deux chemins indépendants.
+- **Invariant du module** : le stop ne recule jamais et ne bouge que sur un invalidant
+  STRUCTUREL (creux confirmé plus haut, validé par un sommet postérieur). Le garde-fou
+  est doublé — dans la détection ET dans `appliquer` — parce qu'une règle de sécurité
+  présente à un seul endroit finit contournée par un appelant qui écrit le champ.
+- **Ordre d'évaluation pessimiste** : stop, puis cible, puis temps, puis partielle. Quand
+  une barre touche stop ET cible, des barres quotidiennes ne disent pas l'ordre intrabar :
+  retenir la cible fabriquerait de la performance à partir d'une ambiguïté.
+- **Approximation nommée** : le CVD exige des transactions signées. Le module utilise le
+  proxy « close location value × volume » et s'appelle `cvd_proxy` pour que personne ne
+  l'oublie en aval. Une divergence détectée ici est un fait de prix et de volume, pas une
+  preuve de flux institutionnel.
+- **La borne basse « 2 jours » n'est PAS un verrou** : elle est reportée
+  (`hors_fenetre_nominale`) et ne bloque jamais une sortie. En verrou, elle coûterait un
+  gain offert au jour 1 — un coût, pas une protection.
+- Deux tests écrits d'abord conditionnels (`if partielles:`) ont été **refaits** : un test
+  qui passe quand rien ne se produit ne teste rien. Série construite exprès pour que le
+  prix fasse 113 → 117 pendant que le CVD approché passe de 6 300 à −2 100, plus le cas
+  symétrique où le flux confirme et où la règle ne doit PAS mordre.
 
