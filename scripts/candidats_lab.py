@@ -192,8 +192,19 @@ def main() -> None:
         return
     data = {s: data[s] for s in sorted(data)[:n_max]}
     signaux = _signaux()
-    signaux["capitulation hebdo"] = _capitulation(data, hebdo=True)
-    signaux["capitulation daily"] = _capitulation(data, hebdo=False)
+    # UNE SEULE configuration passe au banc de performance, choisie sur des critères
+    # STRUCTURELS par `scripts/reglage_capitulation.py` : 3 moyennes (50/100/200), en
+    # quotidien. La règle écrite d'avance retenait la plus restrictive gardant >= 4
+    # lignes détenues et |phi| < 0,50.
+    #
+    # TOUTES LES VARIANTES HEBDO SONT MORTES, et c'est mesuré : la plus généreuse
+    # ne tient que 1,5 ligne. Un empilement baissier sur 200 semaines est un marché
+    # baissier séculaire — trop rare pour produire une preuve, quel que soit son mérite.
+    #
+    # 4 MM quotidien rate à 3,9 lignes contre un seuil de 4,0. Le seuil n'est PAS
+    # descendu : l'écrire d'avance n'a de valeur que si on s'y tient quand il coûte 0,1.
+    signaux["capitulation 3MM daily"] = _capitulation(data, hebdo=False,
+                                                      moyennes=(50, 100, 200))
     n_essais = _essais(len(signaux))
 
     vix, prov = _vix(data, debut, fin)
