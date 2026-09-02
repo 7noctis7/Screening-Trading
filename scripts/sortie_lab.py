@@ -53,25 +53,39 @@ def _mesure(data, acmap, vix, n_essais, rr: float, trail: float) -> dict:
              for t in trades if t.exit_ts and t.entry_ts]
     return {"n": len(pnls), "net": sum(pnls),
             "jours": (sum(duree) / len(duree)) if duree else 0.0,
+            "maxdd": _max_drawdown(equity),
             **F.marge_de_payoff(pnls), **F.concentration(pnls),
             **_stats(_rendements(equity), n_essais)}
+
+
+def _max_drawdown(equity: list[float]) -> float:
+    """Pire baisse depuis un sommet. INDISPENSABLE ICI : retirer un stop suiveur ne
+    change pas le risque PAR TRADE — le stop initial à 4 ATR tient toujours — mais il
+    laisse les gagnants rendre ce qu'ils avaient pris. Juger ce réglage au seul Sharpe
+    reviendrait à décider d'un garde-fou sans regarder ce qu'il gardait."""
+    pic, pire = float("-inf"), 0.0
+    for v in equity:
+        pic = max(pic, v)
+        if pic > 0:
+            pire = min(pire, v / pic - 1.0)
+    return pire
 
 
 def _ligne(nom: str, m: dict) -> str:
     esp = m["net"] / m["n"] if m["n"] else 0.0
     return (f"  {nom:>14} | {m['n']:>5} | {m.get('payoff', 0):>6.2f} "
             f"| {m.get('marge_payoff_pct', 0):>6.1f}% | {m.get('jours', 0):>5.0f} "
-            f"| {m.get('sharpe', 0):>6.2f} | {m.get('dsr', 0) or 0:>5.1%} "
-            f"| {esp:>7.1f} | {m['net']:>9,.0f}")
+            f"| {m.get('sharpe', 0):>6.2f} | {m.get('maxdd', 0):>7.1%} "
+            f"| {m.get('dsr', 0) or 0:>5.1%} | {esp:>7.1f} | {m['net']:>9,.0f}")
 
 
 def _table(titre: str, data, acmap, vix, n_essais, variantes) -> None:
     print(f"\n{titre}")
-    cols = ("réglage", "trades", "payoff", "marge", "jours", "Sharpe", "DSR",
-            "esp./tr", "net $")
-    larg = (14, 5, 6, 7, 5, 6, 5, 7, 9)
+    cols = ("réglage", "trades", "payoff", "marge", "jours", "Sharpe", "maxDD",
+            "DSR", "esp./tr", "net $")
+    larg = (14, 5, 6, 7, 5, 6, 7, 5, 7, 9)
     print("  " + " | ".join(f"{c:>{w}}" for c, w in zip(cols, larg, strict=True)))
-    print("  " + "-" * 84)
+    print("  " + "-" * 94)
     for nom, rr, trail in variantes:
         print(_ligne(nom, _mesure(data, acmap, vix, n_essais, rr, trail)))
 
@@ -100,7 +114,9 @@ def main() -> None:
     print("  taux de réussite. Un payoff ne se lit JAMAIS seul : à 31 % de réussite il")
     print("  faut 2,24 pour ne rien gagner. « jours » = durée moyenne de détention.")
     print("  Élargir la cible monte le payoff ET baisse le taux de réussite : c'est la")
-    print("  marge qui arbitre, pas le payoff.\n")
+    print("  marge qui arbitre, pas le payoff. Le maxDD est là parce que retirer un")
+    print("  suiveur ne change PAS le risque par trade — le stop initial à 4 ATR tient")
+    print("  toujours — mais laisse les gagnants rendre ce qu'ils avaient pris.\n")
 
 
 if __name__ == "__main__":
