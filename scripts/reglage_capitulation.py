@@ -12,11 +12,18 @@ n'expose à aucun surapprentissage, puisqu'aucune performance n'entre dans le ch
 On explore donc librement cette dimension, on arrête UNE configuration, et elle seule
 va au banc de performance.
 
-RÈGLE DE CHOIX, ÉCRITE AVANT DE VOIR LES CHIFFRES :
-    on retient la configuration la PLUS RESTRICTIVE — donc la plus proche de la thèse
-    d'origine — qui garde une part investie ≥ 20 % et un phi < 0,50 face au filtre de
-    production. Jamais celle qui « performe » le mieux : aucune performance n'est
-    calculée ici.
+RÈGLE DE CHOIX : on retient la configuration la PLUS RESTRICTIVE — la plus proche de
+la thèse d'origine — gardant au moins 4 lignes détenues en moyenne et un phi < 0,50
+face au filtre de production. Jamais celle qui « performe » le mieux : aucune
+performance n'est calculée ici.
+
+LE PREMIER CRITÈRE ÉTAIT MAL POSÉ, et le corriger n'est pas se dédire. J'avais écrit
+« part investie >= 20 % ». Cette mesure dit seulement si le portefeuille détient AU
+MOINS UNE ligne : avec 150 titres et 21 jours de détention, elle vaut ~100 % quelle que
+soit la configuration. Elle ne discriminait rien — ce n'est pas un résultat qui déplaît,
+c'est une grandeur qui ne mesure pas ce qu'on croyait. Le nombre MOYEN de lignes, lui,
+distingue bien (3,2 contre 8,2) et dit ce qui compte : à trois lignes, un seul titre
+porte un tiers du rendement quotidien.
 
 Un setup qui ne se déclenche que vingt fois en onze ans ne produira jamais de preuve,
 quel que soit son mérite. C'est cela qu'on élimine d'abord.
@@ -42,7 +49,7 @@ CONFIGS = (
     ("2 MM         20/50", (20, 50)),
     ("1 MM           200", (200,)),
 )
-PART_MIN = 0.20
+LIGNES_MIN = 4.0
 PHI_MAX = 0.50
 
 
@@ -64,7 +71,7 @@ def main() -> None:
     print("comparer des performances en est un. Voir l'en-tête du script.\n")
 
     prod = _reference(data)
-    entete = ("configuration", "résolution", "signaux", "titres", "investi", "phi")
+    entete = ("configuration", "résolution", "signaux", "titres", "lignes", "phi")
     larg = (20, 10, 8, 6, 7, 6)
     print("  " + " | ".join(f"{c:>{w}}" for c, w in zip(entete, larg, strict=True)))
     print("  " + "-" * 70)
@@ -73,7 +80,7 @@ def main() -> None:
             _ligne(data, prod, nom, mm, label, hebdo, flux_quotidien,
                    _capitulation, _phi)
     print("\n  Retenu : la configuration la PLUS RESTRICTIVE gardant "
-          f"investi >= {PART_MIN:.0%} et phi < {PHI_MAX:.2f}.")
+          f"lignes >= {LIGNES_MIN:.0f} et phi < {PHI_MAX:.2f}.")
     print("  Un setup qui se déclenche vingt fois en onze ans ne prouvera rien.\n")
 
 
@@ -94,17 +101,19 @@ def _ligne(data, prod, nom, mm, label, hebdo, flux_quotidien, capitulation,
     if not f.get("available"):
         print(f"  {nom:>20} | {label:>10} | {f.get('motif', '—')}")
         return
-    brut = []
+    # DÉCLENCHEMENTS BRUTS, pas l'état « détenu » : compter l'état revient à compter la
+    # durée de détention. Le phi, lui, se lit sur l'état — c'est bien ce qu'un
+    # portefeuille détiendrait face au filtre de production.
+    decl = getattr(fn, "declenchements", {})
+    n_sig = sum(len(v) for v in decl.values())
+    titres = sum(1 for v in decl.values() if v)
+    etat = []
     for s in sorted(data):
         b = data[s]
-        brut.extend(fn(b[max(0, i - 1):i + 1], s) for i in range(250, len(b), 5))
-    n_sig = sum(brut)
-    titres = sum(1 for s in sorted(data)
-                 if any(fn(data[s][max(0, i - 1):i + 1], s)
-                        for i in range(250, len(data[s]), 25)))
-    coef = phi(prod, brut) if len(prod) == len(brut) else float("nan")
+        etat.extend(fn(b[max(0, i - 1):i + 1], s) for i in range(250, len(b), 5))
+    coef = phi(prod, etat) if len(prod) == len(etat) else float("nan")
     print(f"  {nom:>20} | {label:>10} | {n_sig:>8,} | {titres:>6} "
-          f"| {f['part_investie']:>6.1%} | {coef:>+6.2f}")
+          f"| {f['lignes_moyen']:>6.1f} | {coef:>+6.2f}")
 
 
 if __name__ == "__main__":

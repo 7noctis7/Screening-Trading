@@ -44,7 +44,11 @@ SEUIL_GAP = 0.06                 # |variation d'un jour| au-delà = « annonce �
 DERIVE = 21                      # jours de dérive suivis après l'événement (PEAD)
 
 
-def _capitulation(data: dict, hebdo: bool = True, moyennes=None):
+TENUE_JOURS = 21                 # durée de détention après déclenchement (~1 mois)
+
+
+def _capitulation(data: dict, hebdo: bool = True, moyennes=None,
+                  tenue: int = TENUE_JOURS):
     """Candidat capitulation, PRÉCALCULÉ par titre — hebdomadaire ou quotidien.
 
     LES DEUX RÉSOLUTIONS SONT DEUX SIGNAUX DIFFÉRENTS, pas le même mieux échantillonné.
@@ -78,24 +82,42 @@ def _capitulation(data: dict, hebdo: bool = True, moyennes=None):
     for sym, barres in data.items():
         agregees = hebdomadaire(barres, inclure_partielle=True) if hebdo else barres
         par_jour: dict = {}
-        vrai_depuis = None
+        dernier = None
         for i, s in enumerate(agregees):
             if signal_sur(agregees, i, moyennes=mm):
-                vrai_depuis = _jour(s.ts)
-            par_jour[_jour(s.ts)] = vrai_depuis
+                dernier = _jour(s.ts)
+            par_jour[_jour(s.ts)] = dernier
         reponses[sym] = par_jour
     ordonnees = {s: sorted(d) for s, d in reponses.items()}
 
     def signal(barres, symbole) -> bool:
-        """Lit la réponse de la dernière semaine CLOSE à la date de décision."""
+        """Vrai si un déclenchement a eu lieu dans les `tenue` derniers jours.
+
+        LA DÉTENTION EST BORNÉE, et ce n'est pas un détail. La première version posait
+        un VERROU jamais relâché : un titre déclenché une fois restait sélectionné
+        jusqu'à la fin. La part investie saturait alors à 88,9 % pour QUATRE
+        configurations différentes — à la décimale près — alors qu'elles allaient de
+        7 628 à 65 992 déclenchements. Le banc mesurait « jours écoulés depuis le
+        premier signal », pas la fréquence du signal : un tableau vide de sens tout en
+        paraissant renseigné.
+
+        `tenue` est DÉCLARÉE (21 jours ≈ un mois, la fenêtre de dérive usuelle, celle
+        du candidat PEAD), pas ajustée sur les données.
+        """
         import bisect
         d = _jour(barres[-1].ts)
         dates = ordonnees.get(symbole) or []
         k = bisect.bisect_right(dates, d) - 1
-        if k < 1:                                  # aucune semaine close avant ce jour
+        if k < 1:                                  # aucune barre close avant ce jour
             return False
-        return reponses[symbole][dates[k - 1]] is not None
+        dernier = reponses[symbole][dates[k - 1]]
+        return dernier is not None and (d - dernier).days <= tenue
 
+    # Les DÉCLENCHEMENTS bruts, distincts de l'état « détenu ». Compter l'état
+    # revient à compter la durée de détention, pas la fréquence du signal — c'est ce
+    # que faisait le banc, d'où des colonnes identiques pour des signaux différents.
+    signal.declenchements = {sym: sorted({d for d in par.values() if d is not None})
+                             for sym, par in reponses.items()}
     return signal
 
 
