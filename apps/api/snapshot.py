@@ -1699,7 +1699,17 @@ def build_snapshot(seed: int = 7) -> dict:
         target_annual_vol=0.30, max_capital_frac=0.15, max_positions=20, max_pct=0.20,
         atr_stop=4.0, rr=6.0, vix=vix, close_at_end=False,
         daily_max_loss=0.06,        # kill-switch : stop des entrées si perte du jour > 6%
-        trail_atr=5.0,              # trailing stop ATR : protège les gains, laisse courir
+        # SUIVEUR RETIRÉ (scripts/sortie_lab.py, 02/09). Il ne protégeait pas les
+        # gains, il les COUPAIT. La cible vise +24 ATR ; le suiveur à 5 ATR mordait
+        # presque toujours avant, si bien que le 6:1 nominal n'existait pas. Deux runs
+        # sur deux jeux de données différents s'accordent sur le SENS : sans suiveur
+        # bat trail 5 sur payoff, marge, Sharpe, DSR, espérance et net — et le maxDD
+        # s'AMÉLIORE (−27,8 % contre −29,1 %) : la seule objection sérieuse tombe.
+        # Le risque par trade est inchangé : le stop initial à 4 ATR tient toujours.
+        # NON PROUVÉ pour autant : l'écart de Sharpe reste sous le seuil détectable
+        # (±0,27). C'est la cohérence de la famille (trail 3 très mauvais, trail 8
+        # intermédiaire, sans suiveur le meilleur) qui décide, pas un point isolé.
+        trail_atr=0.0,
         next_open_fills=True,       # exécution à l'ouverture suivante (anti look-ahead)
         # RISQUE CONSTANT à 0,5 % de l'equity par trade (scripts/sizing_lab.py, 01/09).
         # Le notionnel faisait dépendre la taille d'une ligne de combien le carnet

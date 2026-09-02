@@ -91,15 +91,16 @@ def _table(titre: str, data, acmap, vix, n_essais, variantes) -> None:
 
 
 def main() -> None:
-    from scripts.sizing_lab import _donnees, _essais, _vix
+    from scripts.sizing_lab import _donnees, _essais, _vix, empreinte
     data, acmap, mode, n_reels, debut, fin = _donnees()
     if n_reels < 30:
         print("⚠️  Aucune base réelle branchée — ce banc ne décide de rien.")
         return
-    vix = _vix(data, debut, fin)
+    vix, prov = _vix(data, debut, fin)
     n_essais = _essais(len(RR) + len(TRAILS))
-    print(f"\ndonnées : {len(data)} symboles · mode {mode} · "
-          f"risque {RISQUE_PROD:.1%} par trade")
+    print(f"\nmode {mode} · risque {RISQUE_PROD:.1%} par trade")
+    print(f"empreinte : {empreinte(data, prov)}")
+    print("  (deux runs ne se comparent QUE si cette empreinte est identique)")
 
     _table(f"CIBLE (rr × stop 4 ATR), suiveur figé à {TRAIL_PROD:.0f} ATR",
            data, acmap, vix, n_essais,

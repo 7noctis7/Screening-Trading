@@ -55,8 +55,29 @@ def _donnees():
     return data, acmap, mode, len(reels), debut, fin
 
 
+def empreinte(data: dict, provenance_vix: str) -> str:
+    """Signature du jeu de données. Deux runs ne se comparent QUE si elle est identique.
+
+    Constaté le 02/09 : la même configuration a donné Sharpe 0,65 puis 0,38 à un jour
+    d'écart, sur un appel au backtest identique au caractère près. Sans empreinte
+    affichée, on aurait cru à un effet du réglage.
+    """
+    barres = sum(len(b) for b in data.values())
+    fin_reelle = max((b[-1].ts for b in data.values() if b), default=None)
+    jour = fin_reelle.date().isoformat() if fin_reelle else "?"
+    return (f"{len(data)} titres · {barres:,} barres · dernière {jour} · "
+            f"{provenance_vix}")
+
+
 def _vix(data, debut, fin, seed: int = 7):
-    """Le VIX de PRODUCTION, et non son absence.
+    """Le VIX de PRODUCTION, et non son absence. Renvoie (série, provenance).
+
+    LA PROVENANCE EST RENVOYÉE, PAS DEVINÉE. `_index_closes` lit la base puis, si la
+    série est périmée, INTERROGE LE RÉSEAU. Un banc de décision dont le résultat dépend
+    silencieusement de la réussite d'un appel réseau n'est pas reproductible : deux runs
+    à un jour d'écart peuvent alors comparer un VIX réel à un VIX synthétique sans que
+    rien ne l'indique — et le multiplicateur d'exposition (×1,0 / ×0,7 / ×0,4) suffit à
+    déplacer tous les chiffres. On publie donc d'où vient la série.
 
     `fast_swing` module l'exposition brute autorisée par `vix_exposure` : ×1,0 sous 20,
     ×0,7 entre 20 et 30, ×0,4 au-delà. Sans série VIX le multiplicateur reste à 1,0 —
@@ -68,8 +89,9 @@ def _vix(data, debut, fin, seed: int = 7):
     n = max(len(b) for b in data.values())
     reel, est_reel = _index_closes(["^VIX", "VIX"], debut, fin, [])
     if est_reel and len(reel) >= 50:
-        return reel[-n:] if len(reel) >= n else [reel[0]] * (n - len(reel)) + reel
-    return _vix_series(n, seed)
+        serie = reel[-n:] if len(reel) >= n else [reel[0]] * (n - len(reel)) + reel
+        return serie, "VIX RÉEL"
+    return _vix_series(n, seed), "VIX SYNTHÉTIQUE (repli — résultats non comparables)"
 
 
 def _expo_moyenne(trades, equity: list[float], jours: int) -> float:
@@ -172,7 +194,8 @@ def main() -> None:
               "sur du synthétique.")
         return
 
-    vix = _vix(data, debut, fin)
+    vix, prov = _vix(data, debut, fin)
+    print(f"  empreinte : {empreinte(data, prov)}")
     n_essais = _essais(len(risques) + len(FRACTIONS_VOL))
     base = _run(data, acmap, 0.0, vix)
     rb = _rendements(base["equity"])

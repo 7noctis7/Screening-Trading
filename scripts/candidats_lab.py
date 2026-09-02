@@ -94,7 +94,14 @@ def _correlation(a: list[float], b: list[float]) -> float:
 
 def main() -> None:
     from packages.research.flux_candidat import flux_quotidien
-    from scripts.sizing_lab import _donnees, _essais, _rendements, _run, _vix
+    from scripts.sizing_lab import (
+        _donnees,
+        _essais,
+        _rendements,
+        _run,
+        _vix,
+        empreinte,
+    )
 
     n_max = int(sys.argv[1]) if len(sys.argv) > 1 else 150
     data, acmap, mode, n_reels, debut, fin = _donnees()
@@ -105,8 +112,10 @@ def main() -> None:
     signaux = _signaux()
     n_essais = _essais(len(signaux))
 
-    print(f"\n{len(data)} titres · mode {mode} · décision tous les {PAS} jours\n")
-    ref = _run(data, acmap, 0.005, _vix(data, debut, fin))
+    vix, prov = _vix(data, debut, fin)
+    print(f"\nmode {mode} · décision tous les {PAS} jours")
+    print(f"empreinte : {empreinte(data, prov)}")
+    ref = _run(data, acmap, 0.005, vix)
     r_ref = _rendements(ref["equity"])
     s_ref = _stats(r_ref, n_essais)
     print(f"  {'candidat':<20} {'lignes':>7} {'Sharpe':>7} {'PSR':>6} {'DSR':>6} "
