@@ -1502,6 +1502,16 @@ def _screen_section(panel: dict, acmap: dict, names: dict, sector_of: dict, t: i
     }
 
 
+def _env_int(cle: str, defaut: int) -> int:
+    """Entier depuis l'environnement, sans jamais lever : un réglage illisible retombe
+    sur le défaut plutôt que d'empêcher le snapshot de se construire."""
+    import os
+    try:
+        return int(os.environ.get(cle, "") or defaut)
+    except (TypeError, ValueError):
+        return defaut
+
+
 def _essais_de_recherche(minimum: int = 20) -> int:
     """Essais RÉELS depuis le registre de recherche, pour déflater le Sharpe."""
     try:
@@ -2111,8 +2121,13 @@ def build_snapshot(seed: int = 7) -> dict:
     _mc_curve, _mc_top, _mc_w, _mc_real, _mc_weighting = [], [], {}, False, "—"
     if _mc_pct > 0:
         from packages.backtest.megacap import megacap_equity_daily
+        # PANIER RÉGLABLE (QUANT_MEGACAP_TOP, défaut 10). Le classement reste
+        # POINT-IN-TIME : panier reclassé tous les 63 jours, pondéré à la date t
+        # pour le rendement t→t+1. Prendre le top-N d'AUJOURD'HUI et le rejouer
+        # sur onze ans serait un look-ahead massif — NVDA ne pesait rien en 2015.
+        _mc_top_n = max(int(_env_int("QUANT_MEGACAP_TOP", 10)), 2)
         _mc = megacap_equity_daily(_tradeable_data, asset_classes=acmap, init_cap=init_cap,
-                                   market_caps=_mktcaps or None)
+                                   top_n=_mc_top_n, market_caps=_mktcaps or None)
         if _mc.get("available"):
             _mc_curve, _mc_top = _mc["equity"], _mc.get("current_top", [])
             _mc_w, _mc_real, _mc_weighting = _mc.get("current_weights", {}), True, _mc.get("weighting", "—")
