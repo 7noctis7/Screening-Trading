@@ -77,7 +77,7 @@ def flux_quotidien(data: dict, signal, fenetre: int = FENETRE_DEFAUT,
         return {"available": False,
                 "motif": f"{len(axe)} dates au calendrier — trop peu"}
     detenu: list[str] = []
-    rendements, tailles = [], []
+    rendements, tailles, dates = [], [], []
     for k in range(fenetre, len(axe) - 1):
         d, suivante = axe[k], axe[k + 1]
         if (k - fenetre) % pas == 0:
@@ -90,9 +90,10 @@ def flux_quotidien(data: dict, signal, fenetre: int = FENETRE_DEFAUT,
             frais = 0.0
         rendements.append(_rendement_jour(data, idx, detenu, d, suivante) - frais)
         tailles.append(len(detenu))
+        dates.append(suivante)          # le rendement est DATÉ du jour où il se réalise
     if len(rendements) < MIN_JOURS:
         return {"available": False, "motif": f"{len(rendements)} jours — trop peu"}
-    return {"available": True, "rendements": rendements,
+    return {"available": True, "rendements": rendements, "dates": dates,
             "n_jours": len(rendements),
             "lignes_moyen": round(sum(tailles) / len(tailles), 1),
             "part_investie": round(sum(1 for x in tailles if x) / len(tailles), 3)}

@@ -161,17 +161,45 @@ def _stats(rends: list[float], n_essais: int) -> dict:
             "psr": d.get("psr"), "dsr": d.get("dsr")}
 
 
-def _correlation(a: list[float], b: list[float]) -> float:
+def _correlation(serie_a: dict, serie_b: dict) -> float:
+    """Corrélation de deux flux APPARIÉS PAR DATE, jamais par position.
+
+    LE DÉFAUT QUE CETTE SIGNATURE CORRIGE. Les deux séries n'ont pas le même axe : la
+    production indexe par POSITION dans la série la plus longue (`data[s][t]`), le
+    harnais par DATE de calendrier. Tronquer les deux à la même longueur ne les aligne
+    donc pas — elles dérivent l'une par rapport à l'autre dès qu'un titre a un
+    historique plus court.
+
+    HONNÊTETÉ SUR CE QUE CETTE CORRECTION A CHANGÉ : rien, sur les données actuelles.
+    J'ai soupçonné ce défaut en voyant un candidat « toujours vrai » — le marché
+    équipondéré — ressortir à rho = +0,18 face à la production, valeur trop basse pour
+    deux portefeuilles actions long-only. Vérification faite, l'appariement par date
+    donne exactement le même +0,183 : les axes coïncidaient déjà. Le rho bas est donc
+    RÉEL, et l'explication est ailleurs — la production reste flat une grande partie du
+    temps (porte VIX, stops), et un rendement nul les jours où le marché bouge fait
+    chuter la corrélation sans qu'aucun bug n'intervienne.
+
+    L'appariement par date est conservé quand même : il ne coûte rien et supprime une
+    fragilité latente. Mais il est présenté pour ce qu'il est — une garantie, pas un
+    correctif qui aurait déplacé un chiffre.
+    """
     import statistics as st
-    m = min(len(a), len(b))
-    if m < 60:
+    communes = sorted(set(serie_a) & set(serie_b))
+    if len(communes) < 60:
         return 0.0
-    a, b = a[-m:], b[-m:]
+    a = [serie_a[d] for d in communes]
+    b = [serie_b[d] for d in communes]
     sa, sb = st.pstdev(a), st.pstdev(b)
     if sa <= 0 or sb <= 0:
         return 0.0
     ma, mb = st.fmean(a), st.fmean(b)
-    return sum((a[i] - ma) * (b[i] - mb) for i in range(m)) / m / (sa * sb)
+    return sum((a[i] - ma) * (b[i] - mb) for i in range(len(a))) / len(a) / (sa * sb)
+
+
+def _datee(rendements: list[float], horodatage: list) -> dict:
+    """{date: rendement}. Le rendement d'indice i se réalise à l'horodatage i+1."""
+    return {_jour(horodatage[i + 1]): r
+            for i, r in enumerate(rendements) if i + 1 < len(horodatage)}
 
 
 def main() -> None:
@@ -212,6 +240,7 @@ def main() -> None:
     print(f"empreinte : {empreinte(data, prov)}")
     ref = _run(data, acmap, 0.005, vix)
     r_ref = _rendements(ref["equity"])
+    dates_ref = _datee(r_ref, ref["horodatage"])
     s_ref = _stats(r_ref, n_essais)
     print(f"  {'candidat':<20} {'lignes':>7} {'Sharpe':>7} {'PSR':>6} {'DSR':>6} "
           f"{'rho':>6} {'50/50':>7}  verdict")
@@ -234,7 +263,8 @@ def main() -> None:
             print(f"  {nom:<20} JAMAIS DÉCLENCHÉ sur cette période — rien à mesurer")
             continue
         st_c = _stats(f["rendements"], n_essais)
-        rho = _correlation(r_ref, f["rendements"])
+        rho = _correlation(dates_ref, dict(zip(f["dates"], f["rendements"],
+                                               strict=True)))
         # Sharpe d'un 50/50 : (s0+s)/2 / sqrt((1+rho)/2) en variances égales.
         duo = (s_ref["sharpe"] + st_c["sharpe"]) / 2 / max(((1 + rho) / 2) ** 0.5, 1e-9)
         gagne = duo > s_ref["sharpe"] + 0.27

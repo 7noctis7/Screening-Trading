@@ -116,7 +116,7 @@ def _run(data, acmap, risque: float, vix=None, vol_cible: float = 0.0):
     from packages.execution.costs import CostModel
     from packages.portfolio import fragilite as F
 
-    _, journal, equity, _ = fast_swing_backtest(
+    _, journal, equity, horodatage = fast_swing_backtest(
         data, cash=10_000, costs=CostModel(), asset_classes=acmap,
         target_annual_vol=0.30, max_capital_frac=0.15, max_positions=20, max_pct=0.20,
         atr_stop=4.0, rr=6.0, vix=vix, close_at_end=False, daily_max_loss=0.06,
@@ -126,7 +126,8 @@ def _run(data, acmap, risque: float, vix=None, vol_cible: float = 0.0):
     trades.sort(key=lambda t: t.exit_ts or t.entry_ts)
     pnls = [t.pnl_net for t in trades]
     rs = [t.r_multiple for t in trades]
-    return {"equity": equity, "n": len(pnls), "net": sum(pnls),
+    return {"equity": equity, "horodatage": horodatage,
+            "n": len(pnls), "net": sum(pnls),
             "expo": _expo_moyenne(trades, equity, len(equity)),
             **F.marge_de_payoff(pnls), **F.concentration(pnls),
             **F.significativite(pnls), **F.dependance(pnls),
