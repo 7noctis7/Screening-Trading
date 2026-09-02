@@ -1,5 +1,47 @@
 # 04 — JOURNAL
 
+## Session 2026-09-02 — Le suiveur coupait les gagnants, et deux runs identiques ne l'étaient pas
+
+**Le résultat.** Retirer le stop suiveur bat le réglage de production sur payoff, marge, Sharpe,
+DSR, espérance et net — et le **maxDD s'améliore** (−27,8 % contre −29,1 %). Le mécanisme était
+annoncé depuis la veille : l'avantage vit dans la queue droite, et le suiveur à 5 ATR mordait
+avant la cible à +24 ATR. Le 6:1 nominal n'existait pas. `trail_atr = 0.0` en production
+(ADR-0052) ; le risque par trade est inchangé, le stop initial à 4 ATR tient.
+
+**La règle avait été écrite AVANT de voir le chiffre** — « maxDD dégradé de moins de 3 points →
+on bascule ; de plus de 6 → on garde malgré le Sharpe ». C'est le point de méthode de la journée :
+sans règle préalable, tout résultat se justifie après coup.
+
+**Ce qu'on refuse de toucher.** Le classement des cibles s'est INVERSÉ entre les deux jeux de
+données : rr 6 meilleur le 01/09, rr 9 meilleur le 02/09. Un optimum qui bouge d'un jour à
+l'autre est du bruit. `rr` reste à 6, et l'interaction n'est pas explorée : chaque essai relève
+le seuil du DSR sur tout le reste.
+
+**Le défaut que ce flip a révélé, et il est plus grave que le réglage.** Sur un appel au backtest
+identique au caractère près (vérifié par diff), la même configuration a donné Sharpe 0,65 puis
+0,38 à un jour d'écart. **Rien ne le disait.** Les trois bancs affichent désormais une EMPREINTE
+— titres, barres, dernière date, provenance du VIX. Cette dernière parce que `_index_closes`
+interroge le réseau quand la base est périmée : un banc de décision pouvait comparer en silence
+un VIX réel à un VIX synthétique, et le multiplicateur d'exposition (×1,0 / ×0,7 / ×0,4) suffit à
+tout déplacer. J'ai émis cette hypothèse puis elle n'a PAS été confirmée — le run du 02/09
+affiche « VIX RÉEL ». Reste le jour de données ajouté, à confirmer.
+
+**Troisième occurrence de l'empilement positionnel, et cette fois elle est de moi.** Le harnais
+des candidats prenait `min(len(série))` comme axe : un titre de 265 barres réduisait la mesure à
+14 jours pour les 785 autres, et les quatre candidats sortaient « trop peu de jours ». Écrit le
+jour même où je corrigeais la deuxième occurrence dans `sector_momentum`. L'axe est désormais
+l'union triée des DATES, chaque titre lu à sa propre position. Non-régression vérifiée dans les
+deux sens : 14 jours sur l'ancien code, 149 sur le nouveau.
+
+**Aussi livré** : ciblage de volatilité (Moreira-Muir) branché en opt-in — sa grille absolue
+était INERTE, les cibles sont désormais des fractions de la vol réalisée ; `make sync` pour ne
+plus jamais faire `git pull` sur une branche réécrite ; `signal_lab` et `candidats_lab` sous
+protocole unique.
+
+**Fait** : ADR-0051, ADR-0052, PSR/DSR réparés (#367), suiveur retiré. **Bloqué** : rien.
+**Suite** : relancer `candidats_lab` avec le harnais réparé — le PEAD reste le seul candidat
+structurellement orthogonal à la tendance.
+
 ## Session 2026-09-01 (2) — Cinq trades sur 477 séparaient le gagnant du perdant
 
 **Le fait, sur les chiffres réels.** Profit factor 1,19, marge de payoff +19,5 % — tout paraissait

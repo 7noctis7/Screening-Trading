@@ -2,6 +2,55 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0052 — Le stop suiveur ne protégeait pas les gains, il les COUPAIT (2026-09-02)
+
+**Contexte.** `fast_swing` visait une cible à `rr = 6` fois le stop de 4 ATR, soit +24 ATR, avec
+un suiveur ATR à 5. Le suiveur mordait donc presque toujours AVANT la cible : le 6:1 nominal
+n'existait pas dans les faits, et c'est le couple (cible, suiveur) qui décidait — jamais la cible
+seule, contrairement à ce que le paramètre laissait croire.
+
+**La règle de décision a été écrite AVANT de voir le chiffre**, pour interdire la
+rationalisation a posteriori : « maxDD dégradé de moins de 3 points → on bascule ; de plus de
+6 points → on garde le suiveur, malgré le Sharpe ». C'est le point de méthode le plus important
+de cet ADR : sans règle préalable, tout résultat se justifie après coup.
+
+**Mesuré** (`scripts/sortie_lab.py`, cible figée à rr 6, empreinte 786 titres · 2 049 666 barres
+· dernière 2026-09-01 · VIX RÉEL) :
+
+| suiveur | payoff | marge | Sharpe | maxDD | DSR | esp./tr | net |
+|---|---|---|---|---|---|---|---|
+| **sans** | **3,21** | **25,6 %** | **0,53** | **−27,8 %** | **48,1 %** | **5,6** | **6 398** |
+| trail 3 | 2,04 | 11,3 % | 0,42 | −21,8 % | 33,0 % | 1,8 | 3 900 |
+| trail 5 (prod) | 2,82 | 14,0 % | 0,38 | −29,1 % | 26,9 % | 2,7 | 3 426 |
+| trail 8 | 3,02 | 22,6 % | 0,45 | −26,0 % | 36,0 % | 4,7 | 5 300 |
+
+Le maxDD ne se dégrade pas, il **s'améliore**. La seule objection sérieuse tombe, et le risque
+PAR TRADE est inchangé : le stop initial à 4 ATR tient toujours.
+
+**Décision.** `trail_atr = 0.0` en production. Le mécanisme est celui qu'annonçait la mesure de
+concentration de l'ADR-0051 : l'avantage vit dans la queue droite, et tout ce qui la tronque le
+détruit. Le suiveur était exactement cela — un tronqueur de gagnants déguisé en garde-fou.
+
+**Ce qui n'est PAS prouvé.** L'écart de Sharpe (+0,15) reste sous le seuil détectable de ±0,27.
+Ce qui décide est la COHÉRENCE de toute la famille — trail 3 très mauvais, trail 8 intermédiaire,
+sans suiveur le meilleur — et l'accord de deux runs sur des jeux de données différents. Pas un
+point isolé.
+
+**Ce qu'on refuse de toucher, et c'est le second enseignement.** Le classement des CIBLES s'est
+INVERSÉ entre les deux jeux : rr 6 meilleur le 01/09 (Sharpe 0,65), rr 9 meilleur le 02/09
+(0,50 contre 0,38). Un optimum qui bouge d'un jour à l'autre est du bruit, pas un réglage. `rr`
+reste à 6, et l'interaction (sans suiveur × rr 9) n'est pas explorée : chaque essai
+supplémentaire relève le seuil du DSR sur tout le reste (ADR-0050).
+
+**Conséquence opératoire : l'EMPREINTE.** Sur un appel au backtest identique au caractère près
+(vérifié par diff), la même configuration a donné Sharpe 0,65 puis 0,38 à un jour d'écart. Rien
+ne le disait. Les trois bancs affichent désormais titres, barres, dernière date et provenance du
+VIX — cette dernière parce que `_index_closes` interroge le RÉSEAU quand la base est périmée, si
+bien qu'un banc de décision pouvait comparer en silence un VIX réel à un VIX synthétique. **Deux
+runs ne se comparent que si l'empreinte est identique.** Hypothèse du repli VIX émise puis NON
+confirmée : le run du 02/09 affiche « VIX RÉEL ». La cause de l'écart reste le jour de données
+ajouté, à confirmer.
+
 ## ADR-0051 — Le dimensionnement à RISQUE CONSTANT, adopté pour la robustesse et non pour la performance (2026-09-01)
 
 **Contexte, et le chiffre qui a déclenché l'enquête.** Sur 477 trades réels, profit factor 1,19 —

@@ -213,6 +213,18 @@ explicite, module par module, avec mesure.
       aujourd'hui ; si un jour elle tombe sous 90 %, le panneau dit UNCALIBRATED — vérifier que
       le ledger continue de remplir `r_multiple`.
 
+## 🩹 Gestion de sortie et reproductibilité — 02/09 (ADR-0052)
+- [x] **Le stop suiveur coupait les gagnants.** `trail_atr` 5 → 0 en production : gagne sur
+      payoff, marge, Sharpe, DSR, espérance, net, ET le maxDD s'améliore (−27,8 % vs −29,1 %).
+- [x] **Empreinte du jeu de données** sur les trois bancs. Même config, Sharpe 0,65 puis 0,38 à
+      un jour d'écart, sur un appel identique au caractère près. Deux runs ne se comparent que si
+      l'empreinte l'est.
+- [ ] **P1 — Identifier la cause exacte de l'écart 0,65 → 0,38.** Hypothèse du repli VIX émise
+      puis NON confirmée (« VIX RÉEL » au 02/09). Reste le jour de données ajouté. Tant que ce
+      n'est pas compris, aucune comparaison entre runs de dates différentes n'est valide.
+- [ ] **P2 — Ne PAS explorer l'interaction (sans suiveur × rr 9).** Le classement des cibles
+      s'est inversé entre deux jeux : c'est du bruit. Chaque essai relève le seuil du DSR.
+
 ## 🟡 Screening-Trading — reste ouvert (2026-08-22)
 - [ ] **Câbler `impact.py` / `almgren_chriss.py` à l'exécution réelle** — écrits et testés, non
       branchés : les coûts d'impact sont ignorés au dimensionnement. (Débloqué par ADR-0038.)
