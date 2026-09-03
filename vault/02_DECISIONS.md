@@ -1260,3 +1260,44 @@ l'humain qui lit le chiffre.
 **Conséquences.** Un bloc de diagnostic supplémentaire à chaque `make diag-journal`. En échange,
 la question « une seule écriture ou deux chemins ? » se tranche sur un chiffre plutôt que sur
 une lecture de code, et l'on ne retire aucune ligne d'un registre avant de savoir laquelle.
+
+## ADR-0060 — Une sortie ne peut pas précéder son entrée (2026-09-03)
+
+**Contexte.** `reconcilier_journal._plan` appariait chaque vente au plus ancien lot du symbole
+sans jamais regarder la date d'entrée de ce lot. Signalé sur le compte réel : DUOL portait une
+entrée au 03/09 et une sortie au 01/09. Le round-trip ainsi fabriqué calculait son P&L sur un
+prix de revient POSTÉRIEUR à la sortie — un chiffre qui ne correspond à aucune opération.
+
+**Décision.** Le FIFO ne s'applique qu'aux lots antérieurs à la vente. La comparaison se fait au
+JOUR et non à la seconde : le lot porte l'instant où le run l'a écrit, le fill celui de
+l'exécution, et ces deux horloges ne sont pas comparables — trancher à la seconde refuserait des
+aller-retours réels. Une date illisible d'un côté ou de l'autre fait REFUSER l'appariement plutôt
+que le supposer valide. Le FIFO saute le lot trop récent au lieu de s'arrêter dessus.
+
+**Conséquences.** Aucun round-trip à chronologie impossible ne peut plus être créé. La garde ne
+rétroagit pas sur ceux déjà écrits : `_sorties_avant_entree` les compte au diagnostic, et leur
+reprise suppose un plan complet — savoir à quel lot la vente aurait dû s'apparier ne se décide
+pas ligne à ligne.
+
+## ADR-0061 — Une opération qui n'a pas eu lieu se RETIRE ; elle ne se corrige pas (2026-09-03)
+
+**Contexte.** La règle du dépôt est de ne jamais réécrire un enregistrement mais de poster une
+écriture de correction. Elle est juste, et elle vise une VALEUR fausse. Mesuré le 03/09 : 33 des
+52 lots « ouverts » portaient le symbole, la quantité et le prix EXACTS d'un fill de VENTE — des
+sorties écrites à l'endroit des entrées. Leur valeur n'est pas fausse ; l'opération n'a pas eu
+lieu dans ce sens. Les garder revient à publier des positions que le compte n'a jamais eues.
+
+**Décision.** Ces lignes sont RETIRÉES (`SqliteTradeJournal.supprimer`), et seulement celles que
+désigne un fill de vente unique de mêmes symbole, quantité et prix. Deux archives survivent au
+retrait : une sauvegarde horodatée de la base, et un JSON portant chaque ligne retirée AVEC le
+fill qui l'a désignée — un retrait sans sa preuve n'est pas rejugeable. Ce JSON contient des
+fills réels : il est gitignoré, le dépôt étant public.
+
+**Alternative écartée.** Fermer ces lots à leur prix d'entrée. Cela produirait un aller-retour à
+0,00 $ qui n'a jamais existé et gonflerait le nombre de trades : on remplacerait une fausse
+position par un faux trade, ce qui est pire, parce que moins visible.
+
+**Conséquences.** Le critère strict (fill unique) sous-estime : une vente exécutée en plusieurs
+fills ne sera pas appariée et son lot restera ouvert et signalé. C'est la seule direction
+d'erreur acceptable pour une mesure qui décide d'un retrait — on préfère un registre encore
+imparfait à un registre nettoyé sur une présomption.

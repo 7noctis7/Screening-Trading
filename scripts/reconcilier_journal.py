@@ -134,8 +134,35 @@ def _fermetures_sans_identite(journal) -> int:
     return sum(1 for t in journal.all() if (t.exit_reason or "") == MOTIF)
 
 
+def _anterieur(lot, vente: dict) -> bool:
+    """Le lot existait-il DÉJÀ quand la vente a eu lieu ?
+
+    CORRECTIF (03/09, signalé sur le compte réel : DUOL affichait une entrée au 03/09
+    et une sortie au 01/09). L'appariement prenait le plus ancien lot du symbole sans
+    jamais regarder sa date d'entrée. Une vente pouvait donc fermer un lot qui n'existait
+    pas encore — et le round-trip fabriqué portait un P&L calculé sur un prix de revient
+    postérieur à la sortie. Une sortie ne peut pas précéder son entrée : c'est vrai avant
+    toute considération de FIFO, et ça se vérifie sur deux dates.
+
+    Comparaison au JOUR, pas à la seconde. Un achat suivi d'une vente le même jour est
+    légitime, et l'heure des deux sources n'est pas comparable : le lot porte l'instant
+    où le run l'a écrit, le fill porte celui de l'exécution. Trancher à la seconde
+    refuserait des aller-retours réels.
+
+    Date illisible d'un côté ou de l'autre → on REFUSE plutôt que de supposer valide.
+    """
+    d_vente = _horodatage(vente.get("date"))
+    d_lot = _horodatage(lot.entry_ts)
+    if d_vente is None or d_lot is None:
+        return False
+    return d_lot.date() <= d_vente.date()
+
+
 def _plan(lots: list, ventes: list[dict]) -> tuple[list, list]:
     """Appariement FIFO des ventes aux lots, PAR SYMBOLE CANONIQUE. Aucune écriture.
+
+    Le FIFO ne s'applique QU'AUX lots antérieurs à la vente (`_anterieur`) : un lot plus
+    récent que la vente est sauté, jamais fermé par elle.
 
     Renvoie (fermetures proposées, lots restés orphelins). Séparer le plan de son
     application est ce qui permet de le RELIRE avant de toucher au registre.
@@ -147,17 +174,21 @@ def _plan(lots: list, ventes: list[dict]) -> tuple[list, list]:
     for v in sorted(ventes, key=lambda x: x.get("date") or ""):
         pool = restants.get(_canon(v["symbol"]), [])
         a_placer = float(v["qty"])
-        while a_placer > 1e-9 and pool:
-            lot = pool[0]
+        i = 0
+        while a_placer > 1e-9 and i < len(pool):
+            if not _anterieur(pool[i], v):
+                i += 1                        # lot postérieur à la vente : on le saute
+                continue
+            lot = pool[i]
             prise = min(float(lot.qty), a_placer)
             fermetures.append({"lot": lot, "qty": prise, "prix": float(v["price"]),
                                "date": v.get("date", ""), "symbole_vente": v["symbol"],
                                "id_vente": str(v.get("id") or "")})
             a_placer -= prise
             if prise >= float(lot.qty) - 1e-9:
-                pool.pop(0)
+                pool.pop(i)
             else:
-                pool[0] = _reduire(lot, prise)
+                pool[i] = _reduire(lot, prise)
     fermes = {id(f["lot"]) for f in fermetures}
     orphelins = [x for x in lots if id(x) not in fermes]
     return fermetures, orphelins

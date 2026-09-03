@@ -113,6 +113,30 @@ class SqliteTradeJournal:
         cur = self.conn.execute(q, params)
         return [self._from_row(r) for r in cur.fetchall()]
 
+    def supprimer(self, ids: list[str]) -> int:
+        """Retire des enregistrements par identifiant. Renvoie le nombre effacé.
+
+        UN REGISTRE NE SE RÉÉCRIT PAS — d'où l'UPSERT partout ailleurs, et les écritures
+        de correction plutôt que les retouches. Cette méthode existe pour le seul cas
+        que la correction ne couvre pas : un enregistrement décrivant un événement
+        N'AYANT PAS EU LIEU. On corrige une valeur fausse ; on ne « corrige » pas
+        une opération imaginaire, on la retire. Mesuré le 03/09 : 33 lots « ouverts »
+        portaient le symbole, la quantité et le prix EXACTS d'une vente exécutée :
+        des sorties écrites à l'endroit des entrées. Les laisser reviendrait à
+        publier des positions que le compte n'a jamais eues.
+
+        L'appelant DOIT archiver les lignes avant l'appel (`completer_ouvertures` et
+        `reconcilier_journal` sauvegardent la base ; l'outil d'annulation écrit en plus
+        les lignes retirées en JSON). Rien ici ne remplace cette discipline.
+        """
+        if not ids:
+            return 0
+        marques = ",".join("?" for _ in ids)
+        cur = self.conn.execute(
+            f"DELETE FROM trades WHERE id IN ({marques})", list(ids))
+        self.conn.commit()
+        return cur.rowcount
+
     def pnls(self, *, legacy: bool | None = None) -> list[float]:
         return [t.pnl_net for t in self.all(legacy=legacy) if t.pnl_net is not None]
 

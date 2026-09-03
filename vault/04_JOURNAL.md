@@ -1,5 +1,37 @@
 # 04 — JOURNAL
 
+## Session 2026-09-03 (suite 4) — La lecture tient à l'échelle, et une sortie précédait son entrée
+
+**Confirmé sur 87 symboles, plus seulement deux.** 79 sur 87 ont des FERMETURES égales à la
+quantité achetée à 0,01 % près ; les 8 autres (PATH, T, QQQ, DUOL, TRV, TYL…) ferment MOINS
+qu'elles n'achètent — ce sont exactement les titres dont le journal et le courtier s'accordent
+dans le tableau des positions, c'est-à-dire ceux encore détenus. L'appariement des sorties est
+donc sain partout. **33 des 52 lots ouverts portent la signature exacte d'une vente exécutée**,
+et le critère étant strict (un fill unique de même quantité et même prix), 33 est un PLANCHER.
+
+**L'identité comptable est refermée : écart +3,93 $ sur +868,83 $.** De −4 198 $ ce matin.
+
+**Le bug que la question de l'utilisateur a trouvé.** « Une entrée DUOL le 03/09 et une sortie
+le 01/09, ce n'est pas logique. » Non, et c'était un défaut de `reconcilier_journal._plan` :
+l'appariement prenait le plus ancien lot du symbole **sans jamais regarder sa date d'entrée**.
+Une vente pouvait donc fermer un lot qui n'existait pas encore, et le P&L du round-trip fabriqué
+était calculé sur un prix de revient POSTÉRIEUR à la sortie. `_anterieur` compare désormais les
+deux dates AU JOUR — pas à la seconde : le lot porte l'instant où le run l'a écrit, le fill celui
+de l'exécution, et trancher à la seconde refuserait des aller-retours réels. Le FIFO saute le lot
+trop récent au lieu de s'arrêter. 4 tests.
+
+**Ce qui est livré pour le nettoyage, et sous quelles conditions.** `make annuler-ventes` retire
+les lots ouverts dont la signature est celle d'un fill de VENTE. Ni écriture de correction, ni
+fermeture au prix d'entrée : fermer produirait un aller-retour à 0,00 $ qui n'a jamais eu lieu et
+gonflerait le compte de trades — on remplacerait une fausse position par un faux trade. Une
+opération qui n'a pas eu lieu se retire. Survivent au retrait : une sauvegarde horodatée de la
+base ET un JSON qui garde chaque ligne avec le fill qui l'a désignée — un retrait sans sa preuve
+n'est pas rejugeable. Ce JSON porte des fills réels : ajouté au `.gitignore` (dépôt public).
+
+**Ce que l'outil refuse.** Courtier injoignable → aucune preuve → aucun retrait. Vente exécutée
+en plusieurs fills → pas d'appariement → le lot reste ouvert et reste signalé. On préfère un
+registre encore imparfait à un registre nettoyé sur une présomption.
+
 ## Session 2026-09-03 (suite 3) — Le registre est exact là où il ferme ; il invente là où il ouvre
 
 **Le dump a répondu, et la réponse est plus simple que mes deux hypothèses.** Sur les deux titres

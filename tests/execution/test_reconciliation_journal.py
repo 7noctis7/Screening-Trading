@@ -11,14 +11,15 @@ from packages.core.models import AssetClass, Side, TradeRecord
 from scripts.reconcilier_journal import _plan
 
 
-def _lot(sym: str, qty: float, prix: float, jour: int = 1) -> TradeRecord:
+def _lot(sym: str, qty: float, prix: float, jour: int = 1, mois: int = 8,
+         heure: int = 0) -> TradeRecord:
     """Un VRAI TradeRecord : `_close_record` en dérive un enregistrement fermé par
     `dataclasses.replace`, donc un objet factice trop maigre ferait passer les tests
     du plan et échouer ceux de l'écriture — exactement ce qui s'est produit."""
     return TradeRecord(
-        id=f"{sym}-{jour}", instrument=sym, asset_class=AssetClass.EQUITY,
+        id=f"{sym}-{mois}-{jour}", instrument=sym, asset_class=AssetClass.EQUITY,
         venue="Alpaca", side=Side.LONG, qty=qty,
-        entry_ts=datetime(2026, 8, jour, tzinfo=UTC),
+        entry_ts=datetime(2026, mois, jour, heure, tzinfo=UTC),
         entry_price=prix, avg_price=prix)
 
 
@@ -232,3 +233,46 @@ def test_sans_historique_de_consommation_rien_n_est_ampute():
     ventes = [{"symbol": "QQQ", "qty": 10.0, "price": 500.0, "date": "2026-08-15",
                "id": "x"}]
     assert _restant(ventes, {}) == ventes
+
+
+# ── Une sortie ne peut pas précéder son entrée ────────────────────────────────────
+
+def test_une_vente_ne_ferme_pas_un_lot_posterieur():
+    """Signalé sur le compte réel : DUOL affichait une ENTRÉE au 03/09 et une SORTIE
+    au 01/09. L'appariement prenait le plus ancien lot du symbole sans regarder sa date.
+    Le round-trip fabriqué portait un P&L calculé sur un prix de revient postérieur à
+    la sortie — un chiffre qui ne correspond à aucune opération."""
+    tardif = _lot("DUOL", 10.0, 300.0, jour=3, mois=9)
+    ventes = [{"symbol": "DUOL", "qty": 10.0, "price": 400.0,
+               "date": "2026-09-01T15:00:00Z", "id": "v1"}]
+    fermetures, orphelins = _plan([tardif], ventes)
+    assert fermetures == []
+    assert orphelins == [tardif]
+
+
+def test_le_fifo_saute_le_lot_posterieur_et_prend_le_suivant():
+    """La garde ne doit pas bloquer l'appariement : elle saute le lot trop récent."""
+    ancien = _lot("DUOL", 10.0, 300.0, jour=1, mois=8)
+    tardif = _lot("DUOL", 10.0, 310.0, jour=3, mois=9)
+    ventes = [{"symbol": "DUOL", "qty": 10.0, "price": 400.0,
+               "date": "2026-09-01T15:00:00Z", "id": "v1"}]
+    fermetures, orphelins = _plan([tardif, ancien], ventes)
+    assert [f["lot"].id for f in fermetures] == [ancien.id]
+    assert orphelins == [tardif]
+
+
+def test_aller_retour_le_MEME_jour_reste_appariable():
+    """La comparaison est au JOUR : l'heure du lot (instant du run) et celle du fill
+    (instant d'exécution) ne sont pas comparables. Trancher à la seconde refuserait
+    des aller-retours réels."""
+    lot = _lot("QQQ", 5.0, 500.0, jour=1, mois=9, heure=23)
+    ventes = [{"symbol": "QQQ", "qty": 5.0, "price": 510.0,
+               "date": "2026-09-01T14:00:00Z", "id": "v2"}]
+    assert len(_plan([lot], ventes)[0]) == 1
+
+
+def test_date_illisible_refuse_l_appariement():
+    """On ne suppose pas la chronologie valide quand on ne peut pas la lire."""
+    lot = _lot("QQQ", 5.0, 500.0, jour=1, mois=8)
+    ventes = [{"symbol": "QQQ", "qty": 5.0, "price": 510.0, "date": "hier", "id": "v3"}]
+    assert _plan([lot], ventes)[0] == []

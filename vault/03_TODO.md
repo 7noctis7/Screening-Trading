@@ -135,16 +135,27 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       **57/87 → 87/87, 0 incomplet**. Identité comptable : attendu +1 009,24 $ contre
       +904,50 $ constatés, **écart −104,74 $** (contre −4 198 $ avant) = latent au
       premier point de la courbe + frais hors P&L, ce qui est le comportement attendu.
-- [ ] **P0 — 29 symboles portent jusqu'à 2× l'achat, TOUS en `legacy=1` sous `LEG`.**
-      Ventilé le 03/09 : ICLN 603,2002 sur 3 ids pour 301,6001 acheté · NWL 2 861,0061
-      sur 8 ids pour 1 554,6265 · RIOT 248,4954 sur 2 ids pour 124,2477. `legacy=0` vaut
-      0,0000 partout : **le recouvrement import/live est ÉCARTÉ** (c'était mon hypothèse,
-      elle est fausse). Aucun script du dépôt n'écrit d'id `LEG-` — l'import n'est plus
-      dans l'arbre, donc on lit ses TRACES, pas son code.
-      **Prochaine mesure :** `make diag-journal ARGS="--symbole ICLN"` puis `--symbole NWL`.
-      Le dump dira si le même achat a été importé plusieurs fois sous des identités
-      différentes, ou si un lot a été scindé sans que le reste soit réduit. Aucune
-      suppression avant ce verdict.
+- [x] **P0 — Cause du 2× TROUVÉE et mesurée à l'échelle (03/09).** Les FERMETURES sont
+      justes : 79/87 symboles ferment exactement ce qu'ils achètent, les 8 autres sont
+      ceux encore détenus. Tout l'excédent est dans les lots ouverts, et **33 des 52
+      portent le symbole, la quantité et le prix EXACTS d'une vente exécutée** — des
+      sorties écrites à l'endroit des entrées. Le critère étant strict (fill unique),
+      33 est un PLANCHER.
+- [ ] **P0 — LANCER `make annuler-ventes` (poste local).** Simulation d'abord, puis
+      `ARGS=--appliquer`. Retire uniquement les lots prouvés ; sauvegarde la base et
+      archive chaque ligne retirée avec son fill dans `data/lots-annules-*.json`
+      (gitignoré : fills réels, dépôt public). Puis `make diag-journal` pour vérifier
+      que l'excédent de quantité a fondu et que les 43 lots fantômes ont diminué.
+- [x] **P0 — Une SORTIE pouvait précéder son ENTRÉE (03/09).** Signalé par l'utilisateur
+      sur DUOL (entrée 03/09, sortie 01/09). `_plan` appariait au plus ancien lot du
+      symbole sans regarder sa date : une vente fermait un lot qui n'existait pas encore,
+      et son P&L sortait d'un prix de revient postérieur à la sortie. Garde `_anterieur`
+      au JOUR (pas à la seconde : le lot porte l'instant du run, le fill celui de
+      l'exécution). Le FIFO saute le lot trop récent. 4 tests.
+- [ ] **P1 — Les round-trips à chronologie impossible DÉJÀ écrits.** La garde ne
+      rétroagit pas. `_sorties_avant_entree` les compte au `diag-journal` ; les rejouer
+      suppose de savoir à quel lot la vente aurait dû s'apparier — décision de plan
+      complet, pas ligne à ligne. **Lire d'abord le compte et le P&L concernés.**
 - [x] **P1 — Le panneau affichait un sous-ensemble favorable sans le dire (03/09).**
       `legacy=0` : +6 260,82 $ et 70 % ; compte réel : +569,31 $ et 56 %, le filtre
       masquant 266 lots et −5 691,51 $. `perimetre_affiche` publie les deux côte à côte,

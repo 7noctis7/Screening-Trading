@@ -533,6 +533,39 @@ def _latent() -> float:
         return 0.0
 
 
+def _sorties_avant_entree(journal) -> None:
+    """Combien de round-trips ont une SORTIE antérieure à leur ENTRÉE ?
+
+    Signalé sur le compte réel le 03/09 : DUOL affichait une entrée au 03/09 et une
+    sortie au 01/09. La cause était dans `reconcilier_journal._plan`, qui appariait la
+    vente au plus ancien lot du symbole SANS jamais regarder sa date d'entrée — une
+    vente pouvait donc fermer un lot qui n'existait pas encore. La garde `_anterieur`
+    l'empêche désormais, mais elle ne rétroagit pas : les enregistrements déjà écrits
+    portent toujours leur chronologie impossible, et leur P&L a été calculé sur un prix
+    de revient POSTÉRIEUR à la sortie. Ce chiffre-là ne correspond à aucune opération.
+
+    Ce bloc les COMPTE. Il ne les répare pas : les rouvrir suppose de savoir à quel lot
+    la vente aurait dû s'apparier, ce qui se décide sur le plan complet, pas ligne à
+    ligne.
+    """
+    mauvais = [t for t in journal.all()
+               if t.exit_ts is not None and t.entry_ts is not None
+               and t.exit_ts.date() < t.entry_ts.date()]
+    print("\n  SORTIES ANTÉRIEURES À LEUR ENTRÉE — chronologie impossible\n")
+    if not mauvais:
+        print("    aucune. Toute sortie suit son entrée.")
+        return
+    pnl = sum(float(t.pnl_net or 0.0) for t in mauvais)
+    print(f"    {len(mauvais)} enregistrement(s) · {pnl:+,.2f} $ de « réalisé » "
+          "qui ne correspond à aucune opération".replace(",", " "))
+    pire = sorted(mauvais, key=lambda x: -abs(float(x.pnl_net or 0)))
+    for t in pire[:8]:
+        print(f"      {t.instrument:<10} entrée {str(t.entry_ts)[:10]} · "
+              f"sortie {str(t.exit_ts)[:10]} · {float(t.pnl_net or 0):+10.2f} $")
+    print("\n    La garde de chronologie empêche d'en créer de nouveaux ; elle ne")
+    print("    rétroagit pas sur ceux-ci. À rejouer sur un plan complet.")
+
+
 def _cle_fill(sym: str, qty: float, prix: float) -> tuple:
     """Signature d'un fill, arrondie à ce que les deux sources savent porter."""
     return (sym, round(float(qty), 4), round(float(prix), 4))
@@ -691,6 +724,7 @@ def main() -> None:
     _couverture_achats(j, _ordres)
     _origine_du_double(j, _ordres)
     _excedent_dans_les_ouverts(j, _ordres)
+    _sorties_avant_entree(j)
     _base_de_cout(tous)
     latent = _latent()
     variation = None
