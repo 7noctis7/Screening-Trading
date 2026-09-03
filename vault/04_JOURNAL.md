@@ -2637,3 +2637,29 @@ pour entamer l'implémentation des modules métier.
   prix fasse 113 → 117 pendant que le CVD approché passe de 6 300 à −2 100, plus le cas
   symétrique où le flux confirme et où la règle ne doit PAS mordre.
 
+## 2026-09-03 — Le cœur multi-actifs est REJETÉ, et la prémisse tenait pourtant
+
+- Banc exécuté sur la vraie base (2 580 séances, 2016-05-31 → 2026-09-02, 24 essais).
+  **Aucune variante ne passe la règle d'ADR-0053.** Le cœur QQQ reste en production.
+- **Ce qui a marché** : les corrélations. GLD/QQQ +0,11, QQQ/TLT −0,09. Les diversifiants
+  sont réellement décorrélés — la construction reposait sur une prémisse VRAIE.
+- **Ce qui n'a pas marché** : la décorrélation réduit le drawdown d'un tiers (−25,3 % →
+  −17,1 %) mais ne produit AUCUN gain de Sharpe (0,96 → 0,90-0,92, p entre 0,65 et 0,75).
+  TLT et GLD n'ont pas de rendement propre sur cette fenêtre ; on achète de la stabilité
+  avec du rendement, à un taux défavorable.
+- **Le test décisif est le Calmar**, pas le maxDD seul : production 0,605, meilleur cœur
+  diversifié 0,532. Le drawdown baisse de 8,2 points, le CAGR de 6,2 — proportionnellement
+  plus. Et le levier ne rattrape rien, puisque le Sharpe (invariant au levier) ne bouge pas.
+- **L'issue secondaire déclarée d'avance s'est produite** et a été traitée comme prévu :
+  remontée pour décision humaine, pas conversion en feu vert.
+- **Limite assumée sans en faire un prétexte** : la fenêtre contient 2022 (TLT ≈ −31 %).
+  Rejouer sur une autre période après avoir vu le résultat serait exactement ce que la
+  déflation punit. Le chiffre reste tel quel.
+- **P1 ouvert par la ligne de contrôle** : le QQQ ETF sur l'axe du preset rend −0,4 %/an de
+  moins que le cœur de production, t(α) = −6,15, p = 0,000. Minuscule mais pas du bruit, sur
+  une ligne censée mesurer le même actif. Soit la production mesure ^NDX (indice non
+  achetable, donc dashboard optimiste de façon permanente), soit `blend_equity` désaligne
+  positionnellement — quatrième occurrence. `make diag-coeur-qqq` tranche.
+- **Le rejet ne dépend pas de cette anomalie** : les variantes perdent aussi contre la ligne
+  de contrôle, elle correctement alignée par date.
+

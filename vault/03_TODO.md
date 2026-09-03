@@ -44,8 +44,15 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       (le run affiche « VIX RÉEL »). Les bancs publient désormais une empreinte (titres,
       barres, dernière date, provenance VIX) — **aucune comparaison entre deux dates n'est
       valide tant que la cause n'est pas trouvée**.
-- [ ] **P1 — Exécuter `make coeur-multi`** sur la vraie base et appliquer la règle
-      d'ADR-0053 telle quelle. La construction est livrée, la MESURE ne l'est pas.
+- [x] **P1 — `make coeur-multi` exécuté (03/09)** : aucune variante ne passe. Corrélations
+      conformes à la prémisse (GLD/QQQ +0,11, QQQ/TLT −0,09) mais aucun gain de Sharpe, et
+      le Calmar reste en faveur de la production (0,605 vs 0,532). Détail complet dans
+      `vault/10_BACKTEST_RESULTS.md`.
+- [ ] **P1 — Trancher l'anomalie du cœur QQQ** (`make diag-coeur-qqq`) : le QQQ ETF rend
+      −0,4 %/an de moins que le cœur de production, t(α) = −6,15. Soit la production mesure
+      ^NDX (indice NON ACHETABLE → dashboard optimiste en permanence sur la moitié du
+      portefeuille), soit `blend_equity` désaligne par position. Les deux se corrigent, mais
+      pas de la même façon.
 - [ ] **P1 — Expliquer la dégradation du backtest** : PF 1,19 → 1,08, espérance 6 $ → 2 $,
       payoff 2,79 → 2,62, 1 168 → 1 299 trades. Deux causes possibles à départager :
       `trail_atr=0` pas encore dans `main`, ou décalage du jeu de données (même P1 que
