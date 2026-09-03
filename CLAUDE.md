@@ -64,6 +64,18 @@ reconstruit chaque jour ouvré par GitHub Actions (`.github/workflows/pages.yml`
   laisse des marqueurs `<<<<<<<` dans les sources — `SyntaxError` sur du code valide à l'origine.
   Utiliser **`make sync`** (`fetch` + `reset --hard`), qui abandonne d'abord tout merge en cours.
   Filet supplémentaire : `git config pull.ff only` fait ÉCHOUER un pull divergé au lieu de fusionner.
+- **`make sync` n'existe pas AVANT le premier fetch** (piège d'amorçage, 03/09) : la cible vit dans
+  le Makefile de la branche, donc un poste resté en arrière répond `No rule to make target 'sync'`.
+  La commande qui sert à récupérer le code n'existe qu'une fois le code récupéré. **Amorçage manuel,
+  une seule fois** — le `stash` d'abord, pour mettre de côté un éventuel travail local plutôt que
+  de l'écraser :
+  ```
+  git stash push -u -m "avant-sync" 2>/dev/null
+  git fetch origin claude/screening-trading-platform-me9p11
+  git checkout -B claude/screening-trading-platform-me9p11 origin/claude/screening-trading-platform-me9p11
+  ```
+  `checkout -B` crée OU réaligne la branche selon qu'elle existe déjà : une seule forme pour les
+  deux cas. Ensuite `make sync` est disponible et ces trois lignes ne resservent jamais.
 - **Seuil sur `polyfit`/régression** : TOUJOURS une **tolérance relative** dans la comparaison
   (`x > band + 1e-9*max(1,|band|)`). Un canal **plat** (dispersion ~0) fait dériver la bande sous le
   niveau réel par erreur flottante → fausses cassures à chaque barre → capture du rendement de la barre
