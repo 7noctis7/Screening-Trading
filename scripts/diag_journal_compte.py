@@ -7,19 +7,27 @@ du compte (+0,2 %). Les positions réelles disaient **+614,53 $**, donc positif.
 déduction était fausse. Ce script existe pour que la question suivante ne subisse pas
 le même sort.
 
-LA QUESTION, TELLE QU'ELLE SE POSE. 5 821 $ de gains réalisés plus 614 $ de latent
-font ~6,4 % sur un compte d'environ 100 000 $, quand le tableau de bord affiche le
-portefeuille RÉEL à +0,2 %. Ces deux nombres ne se réconcilient pas. Trois causes
-possibles, et le script les sépare par la mesure :
+LA QUESTION, ET SA RÉPONSE ARITHMÉTIQUE. L'identité comptable d'une période s'écrit
 
-1. LE FILTRE `legacy`. `/api/journal` lit `all(legacy=False)` : les fills IMPORTÉS
-     (legacy=1, sans features de décision) sont exclus du journal — mais le COMPTE,
-     lui, les subit. Si leur P&L est négatif, le journal montre un sous-ensemble
-     favorable sans que personne l'ait voulu.
-2. LA FENÊTRE. Les aller-retours tombent-ils dans la période couverte par
+    Δequity = réalisé + latent(fin) − latent(DÉBUT) + flux − frais
+
+Ce script compare `réalisé + latent(fin)` à `Δequity`. Il OMET donc `latent(début)` — le
+gain ou la perte non réalisé que portaient déjà les positions au premier point de la
+courbe. L'écart affiché vaut essentiellement ce terme-là. Ce n'est pas une anomalie à
+effacer : c'est la part du P&L qui précède la fenêtre de mesure.
+
+Quatre causes possibles, séparées par la MESURE plutôt que par l'opinion :
+
+1. LES ORDRES NON EXÉCUTÉS. Écartés en amont — `AlpacaBroker.orders` saute tout ordre
+     dont `filled_qty` vaut zéro. Piste fermée par le code, pas par une opinion.
+2. LE FILTRE `legacy`. `/api/journal` lit `all(legacy=False)` : les fills importés sont
+     hors du panneau mais subis par le compte.
+3. LA FENÊTRE. Les aller-retours tombent-ils dans la période couverte par
      `equity_history` ? Sinon on compare un cumul long à un rendement court.
-3. LES VERSEMENTS. La courbe du compte est un rendement pondéré dans le temps : deux
-     mouvements ont été neutralisés. Le script les affiche.
+4. LE PRIX DE REVIENT IMPORTÉ. Une position déjà détenue, journalisée au coût moyen
+     du courtier, porte une date d'entrée récente et un prix ancien. Son P&L à la vente
+     contient alors du gain ANTÉRIEUR à la courbe. C'est `latent(début)`, et le bloc
+     « PRIX D'ENTRÉE vs COURS DU JOUR » le mesure.
 
 CE QU'IL NE FAIT PAS : conclure à votre place quand les chiffres ne tranchent pas. Un
 résidu inexpliqué est imprimé comme tel.
@@ -217,6 +225,151 @@ def _age_fantomes(ouverts: list, positions: dict) -> None:
           "fermeront jamais.")
 
 
+def _ordres_courtier(limite: int = 5000) -> list[dict]:
+    """Tous les ordres EXÉCUTÉS du courtier.
+
+    Les ordres NON REMPLIS sont déjà écartés en amont (`AlpacaBroker.orders` saute
+    `filled_qty <= 0`) : un ordre passé mais jamais exécuté n'entre nulle part dans ces
+    chiffres. C'était une hypothèse naturelle sur l'origine du résidu ; elle est écartée
+    par le code, pas par une opinion.
+    """
+    try:
+        from packages.execution.alpaca_broker import AlpacaBroker
+        return AlpacaBroker().orders(limit=limite)
+    except Exception as e:  # noqa: BLE001
+        print(f"  (courtier injoignable : {str(e)[:60]})")
+        return []
+
+
+def _couverture_achats(journal, ordres: list[dict]) -> None:
+    """Le journal connaît-il TOUS les achats que le courtier a exécutés ?
+
+    C'EST LA QUESTION QUI EXPLIQUE LE RÉSIDU, et elle n'avait pas été posée.
+    L'identité comptable d'une période est :
+
+        Δequity = réalisé + latent(fin) − latent(début) + flux − frais
+
+    Le script compare `réalisé + latent(fin)` à `Δequity`. Le résidu vaut donc, pour
+    l'essentiel, `latent(début)` — le gain NON RÉALISÉ que portaient déjà les positions
+    au premier point de la courbe — plus tout ce que le journal ne couvre pas.
+
+    Un achat exécuté chez le courtier SANS lot correspondant au journal est exactement
+    ce trou-là : quand la position est vendue, le compte encaisse le résultat, mais le
+    journal n'a aucun prix de revient à opposer. Le réalisé du journal et la variation
+    du compte ne peuvent alors PAS coïncider, et aucune réparation de lots orphelins n'y
+    changera quoi que ce soit.
+
+    On compare donc, symbole par symbole, la quantité ACHETÉE chez le courtier à la
+    quantité du journal (lots fermés compris — un lot fermé a bien été ouvert).
+    """
+    from packages.research.biais_fermeture import symbole_canonique
+    achats: dict[str, float] = {}
+    for o in ordres:
+        if o.get("side") == "buy" and float(o.get("qty") or 0) > 0:
+            c = symbole_canonique(o["symbol"])
+            achats[c] = achats.get(c, 0.0) + float(o["qty"])
+    ouverts: dict[str, float] = {}
+    for t in journal.all():
+        c = symbole_canonique(t.instrument)
+        ouverts[c] = ouverts.get(c, 0.0) + float(t.qty or 0)
+    print("\n  COUVERTURE DES ACHATS — le journal connaît-il les achats du compte ?\n")
+    if not achats:
+        print("    aucun achat récupéré chez le courtier — comparaison impossible.")
+        return
+    manquants = {s: q for s, q in achats.items()
+                 if q - ouverts.get(s, 0.0) > 0.01 * max(1.0, q)}
+    couverts = len(achats) - len(manquants)
+    print(f"    {len(achats)} symbole(s) achetés · {couverts} couvert(s) par le "
+          f"journal · {len(manquants)} INCOMPLET(S)")
+    for s, q in sorted(manquants.items(), key=lambda kv: -kv[1])[:10]:
+        au_j = ouverts.get(s, 0.0)
+        print(f"      {s:<12} acheté {q:>12.4f}  ·  journal {au_j:>12.4f}")
+    if len(manquants) > 10:
+        print(f"      … et {len(manquants) - 10} autres")
+    if manquants:
+        print("\n    → Ces achats n'ont PAS de prix de revient au journal. Quand ils")
+        print("      sont vendus, le compte encaisse le résultat mais le journal n'a")
+        print("      rien à opposer : le résidu est là, et il ne se refermera pas en")
+        print("      réparant des lots — le journal ne couvre pas tout le compte.")
+    else:
+        print("\n    → Tous les achats sont couverts. Le résidu vient d'ailleurs :")
+        print("      chercher du côté du latent au PREMIER point de la courbe.")
+
+
+def _base_de_cout(tous: list) -> None:
+    """Le prix d'entrée d'un lot est-il celui du MARCHÉ à sa date d'entrée ?
+
+    C'EST LA MESURE QUI EXPLIQUE LE RÉSIDU. Quand la journalisation a démarré, la boucle
+    de réconciliation a inscrit les positions DÉJÀ DÉTENUES comme des lots, avec le prix
+    de revient moyen du courtier — c'est-à-dire un prix parfois bien antérieur. Le lot
+    porte alors une date d'entrée récente et un prix ancien.
+
+    Conséquence exacte sur le résidu : à la vente, le journal calcule le P&L depuis ce
+    prix ancien, donc il INCLUT un gain ou une perte acquis AVANT le premier point de la
+    courbe d'equity. Or ce gain-là n'est pas dans la variation du compte sur la période.
+    L'identité est `Δequity = réalisé + latent(fin) − latent(début) + flux`, et le
+    terme `latent(début)` est précisément ce que la comparaison omet.
+
+    On compare donc le prix d'entrée de chaque lot à la CLÔTURE de ce jour-là dans la
+    base de prix. Un écart massif et systématique signe l'import ; un écart nul dit que
+    les lots ont bien été ouverts au prix du jour, et qu'il faut chercher ailleurs.
+    """
+    from apps.api.snapshot import _price_db_path
+    from packages.data.providers.db_provider import DBPriceProvider
+    chemin = _price_db_path()
+    print("\n  PRIX D'ENTRÉE vs COURS DU JOUR D'ENTRÉE\n")
+    if chemin is None or not Path(chemin).exists():
+        print("    base de prix indisponible — comparaison impossible.")
+        return
+    prov = DBPriceProvider(chemin)
+    ecarts, testes, exemples = [], 0, []
+    for t in tous[:400]:
+        px = _cours_du_jour(prov, t.instrument, t.entry_ts)
+        if px is None or not t.entry_price:
+            continue
+        testes += 1
+        rel = float(t.entry_price) / px - 1.0
+        ecarts.append(abs(rel))
+        if abs(rel) > 0.02 and len(exemples) < 8:
+            exemples.append((t.instrument, _jour(t.entry_ts), float(t.entry_price), px,
+                             rel))
+    if testes < 20:
+        print(f"    {testes} lot(s) comparables seulement — rien de concluant.")
+        return
+    median = sorted(ecarts)[len(ecarts) // 2]
+    hors = sum(1 for e in ecarts if e > 0.02)
+    print(f"    {testes} lots comparés · écart médian {median:.2%} · "
+          f"{hors} au-delà de 2 % ({hors/testes:.0%})")
+    for sym, jour, pe, px, rel in exemples:
+        print(f"      {sym:<10} le {jour}  entrée {pe:>10.2f}  cours {px:>10.2f}  "
+              f"{rel:+7.1%}")
+    if hors / testes > 0.25:
+        print("\n    → PRIX DE REVIENT IMPORTÉ. Une part notable des lots porte un")
+        print("      prix d'entrée étranger au cours du jour inscrit : ce sont des")
+        print("      positions déjà détenues, journalisées à leur coût d'origine.")
+        print("      Leur P&L à la vente contient donc du gain ANTÉRIEUR à la courbe —")
+        print("      c'est le résidu, et il n'y a rien à « réparer » : il faut le")
+        print("      SOUSTRAIRE, pas le supprimer.")
+    else:
+        print("\n    → Les prix d'entrée correspondent aux cours du jour. Le résidu ne")
+        print("      vient pas de là : chercher ailleurs, et ne rien conclure ici.")
+
+
+def _cours_du_jour(prov, symbole: str, ts):
+    """Clôture du titre à la date d'entrée du lot, ou None."""
+    from datetime import timedelta
+    try:
+        barres = prov.fetch_ohlcv(symbole, "1d", ts - timedelta(days=6),
+                                  ts + timedelta(days=1))
+    except Exception:  # noqa: BLE001
+        return None
+    jour = _jour(ts)
+    for b in reversed(barres or []):
+        if _jour(b) <= jour and float(b.close) > 0:
+            return float(b.close)
+    return None
+
+
 def _doublons(ouverts: list) -> None:
     """Le même lot est-il enregistré PLUSIEURS FOIS ?
 
@@ -283,11 +436,14 @@ def _residu(b_total: dict, latent: float, variation: float | None) -> None:
         return
     print(f"    variation constatée (brute)         : {variation:+12,.2f} $")
     residu = variation - attendu
-    print(f"    RÉSIDU INEXPLIQUÉ                   : {residu:+12,.2f} $")
-    print("\n  Le résidu contient les versements/retraits (la courbe brute les inclut, "
-          "le\n  P&L non), les frais hors P&L, et tout lot antérieur au journal. Un "
-          "résidu\n  proche de zéro signifie que journal et compte racontent la même "
-          "histoire.")
+    print(f"    ÉCART                               : {residu:+12,.2f} $")
+    print("\n  CE QUE CET ÉCART EST, et il n'est pas une anomalie. L'identité d'une")
+    print("  période s'écrit  Δequity = réalisé + latent(fin) − latent(DÉBUT) + flux.")
+    print("  La comparaison ci-dessus omet `latent(début)` : l'écart vaut donc, pour")
+    print("  l'essentiel, le gain ou la perte NON RÉALISÉ que portaient déjà les")
+    print("  positions au premier point de la courbe. Les versements ayant été")
+    print("  mesurés à zéro, il ne reste que ce terme et les frais hors P&L.")
+    print("  Le bloc « PRIX D'ENTRÉE » ci-dessus dit si c'est bien le cas.")
 
 
 def _latent() -> float:
@@ -324,6 +480,8 @@ def main() -> None:
     print("\n  Construction du snapshot pour lire le courtier… ~30-60 s")
     positions = _positions_courtier()
     _lots_vs_courtier([t for t in tous if not t.exit_ts], positions)
+    _couverture_achats(j, _ordres_courtier())
+    _base_de_cout(tous)
     latent = _latent()
     variation = None
     for pts in courbes.values():

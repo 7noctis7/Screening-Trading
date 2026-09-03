@@ -3119,3 +3119,43 @@ fabriquer du réalisé — exactement ce que cet outil existe pour empêcher.
 **Ce que l'utilisateur doit faire** : restaurer `journal.avant-reconciliation-20260903-195231.db`
 (l'état d'AVANT toute réparation) puis relancer UNE fois avec cette version.
 
+## 2026-09-03 — Le « résidu inexpliqué » n'était pas inexpliqué : ma formule était incomplète
+
+**Réponse à la question posée** (« est-ce des ordres passés jamais réalisés ? ») : NON, et
+c'est le code qui le dit — `AlpacaBroker.orders` saute tout ordre dont `filled_qty` vaut
+zéro. Les ordres non exécutés n'entrent nulle part dans ces chiffres. Piste fermée sans
+avoir besoin de mesurer.
+
+**L'ARITHMÉTIQUE QUE J'AURAIS DÛ POSER AU PREMIER JOUR.** L'identité d'une période est :
+
+    Δequity = réalisé + latent(fin) − latent(DÉBUT) + flux − frais
+
+Mon script compare `réalisé + latent(fin)` à `Δequity`. Il **omet `latent(début)`**. Le
+« résidu inexpliqué » de −4 210 $ vaut donc, pour l'essentiel, le gain ou la perte NON
+RÉALISÉ que portaient déjà les positions au premier point de la courbe (2026-06-22). Les
+versements ayant été mesurés à zéro, il ne reste que ce terme et les frais hors P&L.
+
+**Ce n'est donc pas une anomalie à effacer** : c'est la part du P&L qui précède la fenêtre
+de mesure. Vouloir la faire tomber à zéro reviendrait à demander qu'un compte n'ait pas
+d'histoire avant qu'on commence à le mesurer.
+
+**MESURE AJOUTÉE POUR LE PROUVER — et non pour l'affirmer.** `_base_de_cout` compare le
+prix d'entrée de chaque lot à la CLÔTURE de sa date d'entrée dans la base de prix. Si les
+positions déjà détenues ont été journalisées au coût moyen du courtier, leur lot porte une
+date récente et un prix ancien : l'écart sera massif et systématique. S'il est nul, cette
+explication tombe comme les cinq précédentes et le script le dira.
+
+**Mesure ajoutée aussi** : `_couverture_achats` — le journal connaît-il tous les achats du
+compte ? Un achat sans lot correspondant est un trou par lequel le réalisé fuit, et aucune
+réparation de lots orphelins ne le refermera.
+
+**Vocabulaire corrigé** : « RÉSIDU INEXPLIQUÉ » devient « ÉCART », avec l'identité écrite
+sous le tableau. Un mot qui dit « inexpliqué » pousse à chercher un coupable là où il n'y a
+qu'un terme manquant dans une formule.
+
+**BILAN DE LA JOURNÉE SUR CE SEUL PROBLÈME — six hypothèses, cinq fausses :** ^NDX,
+désalignement de calendrier, double écriture, troncature des ventes, non-idempotence
+(vraie, mais défaut de MON outil, pas cause du résidu), et enfin `latent(début)`. Toutes
+sont tombées sur des mesures. La leçon n'est pas qu'il fallait mieux deviner : c'est que
+la première chose à écrire, face à un écart comptable, est l'IDENTITÉ COMPTABLE.
+
