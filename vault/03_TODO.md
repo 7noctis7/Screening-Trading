@@ -135,15 +135,16 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       **57/87 → 87/87, 0 incomplet**. Identité comptable : attendu +1 009,24 $ contre
       +904,50 $ constatés, **écart −104,74 $** (contre −4 198 $ avant) = latent au
       premier point de la courbe + frais hors P&L, ce qui est le comportement attendu.
-- [ ] **P0 — Le journal porte EXACTEMENT 2× l'achat sur 40 symboles.** Ratio calculé sur
-      dix d'entre eux : 2,000000 dix fois (AAPL 47,2824 / 23,6412 ; BXP 212,6200 /
-      106,3100 ; FOX 317,8576 / 158,9288). `_doublons` avait répondu « aucun doublon »
-      parce qu'il ne compare que des lots OUVERTS de mêmes titre, quantité, prix et jour :
-      ici les deux copies ont des ids différents, l'une peut être fermée, et les drapeaux
-      `legacy` peuvent différer. `_origine_du_double` (livré, aucune suppression) ventile
-      par drapeau et par préfixe d'id. **Lire sa sortie au prochain `make diag-journal`** :
-      deux préfixes à ~1× = recouvrement import historique / live ; un seul préfixe à 2× =
-      le chemin d'écriture crée deux identités. Ne rien supprimer avant ce verdict.
+- [ ] **P0 — 29 symboles portent jusqu'à 2× l'achat, TOUS en `legacy=1` sous `LEG`.**
+      Ventilé le 03/09 : ICLN 603,2002 sur 3 ids pour 301,6001 acheté · NWL 2 861,0061
+      sur 8 ids pour 1 554,6265 · RIOT 248,4954 sur 2 ids pour 124,2477. `legacy=0` vaut
+      0,0000 partout : **le recouvrement import/live est ÉCARTÉ** (c'était mon hypothèse,
+      elle est fausse). Aucun script du dépôt n'écrit d'id `LEG-` — l'import n'est plus
+      dans l'arbre, donc on lit ses TRACES, pas son code.
+      **Prochaine mesure :** `make diag-journal ARGS="--symbole ICLN"` puis `--symbole NWL`.
+      Le dump dira si le même achat a été importé plusieurs fois sous des identités
+      différentes, ou si un lot a été scindé sans que le reste soit réduit. Aucune
+      suppression avant ce verdict.
 - [x] **P1 — Le panneau affichait un sous-ensemble favorable sans le dire (03/09).**
       `legacy=0` : +6 260,82 $ et 70 % ; compte réel : +569,31 $ et 56 %, le filtre
       masquant 266 lots et −5 691,51 $. `perimetre_affiche` publie les deux côte à côte,

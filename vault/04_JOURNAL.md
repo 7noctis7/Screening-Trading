@@ -1,5 +1,30 @@
 # 04 — JOURNAL
 
+## Session 2026-09-03 (suite 2) — Ma deuxième hypothèse sur le doublon est fausse aussi
+
+**Ce que la ventilation a répondu.** J'avais écrit deux lectures possibles : deux préfixes à ~1×
+chacun (import historique + live), ou un seul préfixe à 2× (le chemin d'écriture crée deux
+identités). C'est la seconde, et sous une forme que je n'avais pas prévue : **tout est `legacy=1`,
+tout porte le préfixe `LEG`, et la quantité se répartit sur PLUSIEURS identifiants** — ICLN
+603,2002 sur 3 ids pour 301,6001 acheté, NWL 2 861,0061 sur 8 ids pour 1 554,6265 acheté, RIOT
+248,4954 sur 2 ids pour 124,2477. Le recouvrement import/live est écarté : `legacy=0` vaut
+0,0000 sur les huit symboles ventilés.
+
+**Pourquoi je ne peux pas lire la cause dans le code.** `grep` sur tout le dépôt ne trouve AUCUN
+script qui écrive un identifiant `LEG-`. L'import qui les a produits n'est plus dans l'arbre.
+On ne peut donc pas lire son mécanisme — seulement ses traces. `--symbole` imprime tous les
+enregistrements d'un titre à plat (identifiant, quantité, entrée, sortie, motif), sans
+interprétation. Ce sont ces lignes qui diront si le même achat a été importé plusieurs fois sous
+des identités différentes, ou si un lot a été scindé sans que le reste soit réduit.
+
+**Deuxième hypothèse à moi, deuxième réfutation en deux mesures.** Je les laisse écrites toutes
+les deux dans le code, avec ce qui les a démenties : c'est le seul moyen qu'une troisième
+génération de lecteur ne les repose pas.
+
+**Un chiffre a bougé entre les deux diagnostics, et c'est normal.** Latent +439,93 $ puis
++541,36 $, écart −104,74 $ puis −220,43 $ : les cours ont changé entre 20 h 02 et 20 h 23. Le
+latent est une mesure de marché, pas une constante du registre.
+
 ## Session 2026-09-03 (suite) — La réparation a tenu ; ce qu'elle a mis au jour ne l'était pas
 
 **Ce que la réparation a donné, mesuré.** `completer-ouvertures` a reconstitué 30 ouvertures

@@ -533,6 +533,49 @@ def _latent() -> float:
         return 0.0
 
 
+def _dump_symbole(journal, symbole: str) -> None:
+    """Tous les enregistrements d'un symbole, à plat. Aucune interprétation.
+
+    Le 03/09, `_origine_du_double` a réfuté l'hypothèse que j'avais posée : la seconde
+    copie n'est PAS le recouvrement entre l'import historique et la journalisation live.
+    Tout est `legacy=1`, tout porte le préfixe `LEG`, et la quantité se répartit sur
+    plusieurs identifiants — ICLN 603,2002 sur 3 ids pour 301,6001 acheté, NWL
+    2 861,0061 sur 8 ids pour 1 554,6265 acheté.
+
+    Aucun script du dépôt n'écrit d'identifiant `LEG-` : l'import qui les a produits
+    n'est plus dans l'arbre. On ne peut donc pas lire son mécanisme — il faut lire ses
+    TRACES. Ce bloc les imprime telles quelles : identifiant, quantité, entrée, sortie,
+    motif. Ce sont ces lignes, et non une lecture de code, qui diront si le même achat a
+    été importé plusieurs fois sous des identités différentes, ou si un lot a été scindé
+    sans que le reste soit réduit.
+
+        python scripts/diag_journal_compte.py --symbole ICLN
+    """
+    from packages.research.biais_fermeture import symbole_canonique
+    cible = symbole_canonique(symbole)
+    vivants = {t.id for t in journal.all(legacy=False)}
+    lots = [t for t in journal.all() if symbole_canonique(t.instrument) == cible]
+    print(f"\n  TOUS LES ENREGISTREMENTS DE « {cible} » — {len(lots)} ligne(s)\n")
+    if not lots:
+        print("    aucun. Vérifier l'orthographe du symbole.")
+        return
+    print(f"    {'identifiant':<34} {'lg':>2} {'quantité':>13} "
+          f"{'entrée':>10} {'prix ent.':>11} {'sortie':>10} {'prix sor.':>11}")
+    print("    " + "-" * 96)
+    total = 0.0
+    for t in sorted(lots, key=lambda x: (str(x.entry_ts), str(x.id))):
+        q = float(t.qty or 0.0)
+        total += q
+        print(f"    {str(t.id)[:34]:<34} {0 if t.id in vivants else 1:>2} {q:>13.6f} "
+              f"{str(t.entry_ts)[:10]:>10} {float(t.entry_price or 0):>11.4f} "
+              f"{(str(t.exit_ts)[:10] if t.exit_ts else '—'):>10} "
+              f"{float(t.exit_price or 0):>11.4f}")
+        if t.exit_reason:
+            print(f"        motif : {str(t.exit_reason)[:80]}")
+    print(f"\n    quantité TOTALE au journal : {total:.6f}")
+    print("    (à comparer à la quantité ACHETÉE du bloc COUVERTURE DES ACHATS)")
+
+
 def main() -> None:
     print(__doc__.split("    python")[0].rstrip())
     print()
@@ -543,6 +586,13 @@ def main() -> None:
         b_total = _bilan(tous)
     except Exception as e:  # noqa: BLE001
         print(f"Journal illisible : {str(e)[:80]}")
+        return
+    if "--symbole" in sys.argv:
+        i = sys.argv.index("--symbole")
+        if i + 1 >= len(sys.argv):
+            print("  --symbole attend un ticker (ex. --symbole ICLN).")
+            return
+        _dump_symbole(j, sys.argv[i + 1])       # dump SEUL : pas de snapshot, immédiat
         return
     _journal()
     # La courbe est lue AVANT le snapshot : `build_snapshot` enregistre le point du jour
