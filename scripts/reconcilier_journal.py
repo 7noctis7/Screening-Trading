@@ -40,6 +40,12 @@ sys.path.insert(0, str(ROOT))
 LIMITE_ORDRES = 5000         # profondeur demandée ; l'API pagine par 500
 MOTIF = "reconciliation-journal"
 
+# IDEMPOTENCE. Chaque fermeture porte l'IDENTIFIANT du fill qui l'a produite, et un
+# fill déjà consommé n'est jamais rejoué. Sans cela l'outil n'est pas rejouable : au
+# deuxième passage il réapplique TOUT l'historique de ventes aux lots encore ouverts,
+# et finit par fermer des lots qu'aucune vente ne couvre. Constaté le 03/09 — le second
+# plan proposait 50 fermetures de plus, toutes à +0,00 $, sur les mêmes 202 ventes.
+
 
 def _canon(s: str) -> str:
     from packages.research.biais_fermeture import symbole_canonique
@@ -83,6 +89,24 @@ def _lots_ouverts(journal) -> tuple[list, set]:
     return lots, ids_vivants
 
 
+def _ventes_deja_consommees(journal) -> set:
+    """Identifiants de fills déjà utilisés par une réconciliation antérieure."""
+    prefixe = MOTIF + ":"
+    return {(t.exit_reason or "")[len(prefixe):] for t in journal.all()
+            if (t.exit_reason or "").startswith(prefixe)}
+
+
+def _fermetures_sans_identite(journal) -> int:
+    """Fermetures écrites AVANT l'idempotence : motif nu, sans identifiant de vente.
+
+    Elles sont intraçables : impossible de savoir quelles ventes elles ont consommées,
+    donc impossible de garantir qu'un nouveau passage ne les rejouera pas. Le seul geste
+    sûr est de REFUSER de tourner et de renvoyer à une sauvegarde — deviner ici
+    reviendrait à fabriquer du réalisé, ce que cet outil existe pour empêcher.
+    """
+    return sum(1 for t in journal.all() if (t.exit_reason or "") == MOTIF)
+
+
 def _plan(lots: list, ventes: list[dict]) -> tuple[list, list]:
     """Appariement FIFO des ventes aux lots, PAR SYMBOLE CANONIQUE. Aucune écriture.
 
@@ -100,7 +124,8 @@ def _plan(lots: list, ventes: list[dict]) -> tuple[list, list]:
             lot = pool[0]
             prise = min(float(lot.qty), a_placer)
             fermetures.append({"lot": lot, "qty": prise, "prix": float(v["price"]),
-                               "date": v.get("date", ""), "symbole_vente": v["symbol"]})
+                               "date": v.get("date", ""), "symbole_vente": v["symbol"],
+                               "id_vente": str(v.get("id") or "")})
             a_placer -= prise
             if prise >= float(lot.qty) - 1e-9:
                 pool.pop(0)
@@ -183,8 +208,9 @@ def _appliquer(journal, fermetures: list, ids_vivants: set) -> int:
                                 split_id=f"{lot.id}-R{compteur[lot.id]}")
             journal.append(dataclasses.replace(lot, qty=round(total - q, 10)),
                            legacy=not est_vivant)
-        journal.append(dataclasses.replace(rec, exit_reason=MOTIF),
-                       legacy=not est_vivant)
+        journal.append(
+            dataclasses.replace(rec, exit_reason=f"{MOTIF}:{f.get('id_vente', '')}"),
+            legacy=not est_vivant)
         n += 1
     return n
 
@@ -194,12 +220,32 @@ def main() -> None:
     appliquer = "--appliquer" in sys.argv
     from packages.storage import SqliteTradeJournal
     journal = SqliteTradeJournal()
+    orphelines = _fermetures_sans_identite(journal)
+    if orphelines:
+        print(f"\n  ⛔ ARRÊT — {orphelines} fermeture(s) antérieure(s) ne portent pas")
+        print("     l'identifiant de la vente qui les a produites. On ne")
+        print("     peut donc pas savoir quelles ventes ont déjà été consommées, ni")
+        print("     garantir qu'un nouveau passage ne les rejouera pas — ce qui")
+        print("     fabriquerait du réalisé sans contrepartie.")
+        print("\n     Restaurer une sauvegarde ANTÉRIEURE à cette réconciliation, puis")
+        print("     relancer une seule fois avec cette version :")
+        print("       ls -1 data/journal.avant-reconciliation-*.db")
+        print("       cp data/journal.avant-reconciliation-<la-plus-ancienne>.db "
+              "data/journal.db")
+        return
     lots, ids_vivants = _lots_ouverts(journal)
+    deja = _ventes_deja_consommees(journal)
     if not lots:
         print("\n  Aucun lot ouvert — rien à réconcilier.")
         return
     ventes = _ventes_courtier()
+    if deja:
+        avant = len(ventes)
+        ventes = [v for v in ventes if str(v.get("id") or "") not in deja]
+        print(f"  {avant - len(ventes)} vente(s) DÉJÀ consommée(s) par une "
+              "réconciliation antérieure : écartée(s).")
     if not ventes:
+        print("\n  Aucune vente nouvelle à apparier — le journal est à jour.")
         return
     fermetures, orphelins = _plan(lots, ventes)
     _resume(fermetures, orphelins, lots)

@@ -3089,3 +3089,33 @@ peut être tronqué doit dire quand il l'est.
 **Ce que ça permet enfin** : rejouer la réconciliation avec l'historique COMPLET. Les 42
 lots orphelins devraient trouver leurs ventes, et le résidu se refermer nettement.
 
+## 2026-09-03 — La pagination a marché à moitié, et a révélé que l'outil n'était pas rejouable
+
+**Ce que la pagination a changé** : 202 → **419 ordres** récupérés. Mais **202 ventes**,
+exactement comme avant. L'historique des ACHATS était tronqué, celui des VENTES ne l'était
+pas. Ma quatrième hypothèse de la journée n'est donc que partiellement vraie — le correctif
+est bon, il n'explique pas ce qu'on croyait.
+
+**LE VRAI DÉFAUT, révélé par le second plan.** Sur un journal DÉJÀ réparé, le script
+proposait **50 fermetures de plus**, sur les **mêmes 202 ventes**, et **toutes à +0,00 $**.
+L'outil n'est pas IDEMPOTENT : à chaque passage il réapplique tout l'historique de ventes
+aux lots encore ouverts. Le relancer assez souvent finirait par fermer tous les lots, qu'une
+vente les couvre ou non. Un outil de réparation qui n'est pas rejouable est un outil qui
+fabrique des données au second passage.
+
+**Le signal était dans le chiffre** : cinquante fermetures d'affilée à exactement +0,00 $
+n'est pas une distribution de P&L, c'est la signature d'un appariement qui tourne à vide.
+
+**Corrigé** : chaque fermeture porte désormais l'IDENTIFIANT du fill qui l'a produite
+(`reconciliation-journal:<id>`), et un fill déjà consommé n'est jamais rejoué. `orders()`
+expose l'id. Quatre tests nouveaux.
+
+**ET UN GARDE-FOU RÉTROACTIF, parce que le mal est déjà fait.** Les 185 fermetures déjà
+écrites portent le motif NU, sans identifiant : elles sont intraçables, on ne peut pas
+savoir quelles ventes elles ont consommées. Le script REFUSE donc de tourner sur un tel
+journal et renvoie à une sauvegarde, plutôt que de deviner. Deviner ici reviendrait à
+fabriquer du réalisé — exactement ce que cet outil existe pour empêcher.
+
+**Ce que l'utilisateur doit faire** : restaurer `journal.avant-reconciliation-20260903-195231.db`
+(l'état d'AVANT toute réparation) puis relancer UNE fois avec cette version.
+

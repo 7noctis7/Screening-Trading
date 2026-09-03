@@ -173,6 +173,7 @@ class AlpacaBroker:
                     continue
                 ts = getattr(o, "filled_at", None) or getattr(o, "submitted_at", None)
                 out.append({
+                    "id": str(getattr(o, "id", "")),   # identité du fill → idempotence
                     "symbol": o.symbol, "broker": "Alpaca",
                     "side": str(getattr(o, "side", "")).lower().split(".")[-1],
                     "qty": fq, "price": float(getattr(o, "filled_avg_price", 0) or 0),
@@ -201,6 +202,7 @@ class AlpacaBroker:
                 # montant : notional explicite si présent, sinon parts × prix (si prix connu)
                 amount = nv if nv > 0 else (rq * px if px else 0.0)
                 out.append({
+                    "id": str(getattr(o, "id", "")),   # identité du fill → idempotence
                     "symbol": o.symbol, "broker": "Alpaca",
                     "side": str(getattr(o, "side", "")).lower().split(".")[-1],
                     "qty": rq, "filled_qty": fq, "notional_order": nv > 0,

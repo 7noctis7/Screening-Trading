@@ -126,7 +126,12 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
 - [x] **P0 — « Lots en double » : HYPOTHÈSE FAUSSE, mesurée le 03/09** (« aucun doublon »).
       La vraie cause : `AlpacaBroker.orders` ne PAGINAIT pas. 500 demandés, 202 rendus,
       moitié des ventes jamais arrivées. Pagination + fonction pure `paginer` + 5 tests.
-      **Reste à REJOUER la réconciliation avec l'historique complet.**
+      Pagination livrée : 202 → 419 ordres, mais 202 ventes INCHANGÉES (les achats
+      étaient tronqués, pas les ventes).
+- [ ] **P0 — Restaurer l'état d'AVANT réparation et rejouer UNE fois.** Les 185 fermetures
+      actuelles portent un motif sans identifiant de vente : intraçables, donc le script
+      refuse désormais de tourner dessus. `cp data/journal.avant-reconciliation-20260903-195231.db
+      data/journal.db` puis un seul `make reconcilier-journal ARGS=--appliquer`.
 - [ ] ~~**P0 — ancien : le journal écrit chaque lot en double**~~ Découvert le 03/09 après réparation :
       les quantités restantes valent EXACTEMENT la moitié des initiales sur des dizaines de
       titres (AAPL 47,28 → 23,64, BXP 212,62 → 106,31, CNC 228,81 → 114,40). Les ventes ont

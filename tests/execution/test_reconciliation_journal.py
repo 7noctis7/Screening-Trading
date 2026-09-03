@@ -132,3 +132,54 @@ def test_deux_ventes_partielles_ne_se_marchent_pas_dessus():
     _appliquer(j, fermetures, ids_vivants={lot.id})
     suffixes = [i for i, _ in j.ecritures if "-R" in i]
     assert len(set(suffixes)) == len(suffixes)          # aucun id en double
+
+
+# ── Idempotence : une vente ne se consomme qu'UNE fois ───────────────────────────
+
+def test_une_vente_deja_consommee_n_est_pas_rejouee():
+    """LE défaut du 03/09 : au deuxième passage, l'outil réappliquait tout l'historique
+    de ventes aux lots encore ouverts et proposait 50 fermetures de plus — toutes à
+    +0,00 $ — sur les mêmes 202 ventes. Un outil de réparation doit être REJOUABLE :
+    le relancer sur un registre déjà réparé ne doit rien faire."""
+    from scripts.reconcilier_journal import _appliquer, _ventes_deja_consommees
+    lot = _lot("AAPL", 10.0, 200.0)
+    j = JournalFactice([lot])
+    ventes = [{"symbol": "AAPL", "qty": 10.0, "price": 250.0, "date": "2026-08-15",
+               "id": "fill-42"}]
+    fermetures, _ = _plan([lot], ventes)
+    _appliquer(j, fermetures, ids_vivants={lot.id})
+    consommees = _ventes_deja_consommees(j)
+    assert "fill-42" in consommees
+    restantes = [v for v in ventes if str(v.get("id")) not in consommees]
+    assert restantes == []                             # plus rien à rejouer
+
+
+def test_le_motif_porte_l_identifiant_du_fill():
+    """Sans l'identité de la vente dans l'écriture, l'idempotence est impossible."""
+    from scripts.reconcilier_journal import MOTIF, _appliquer
+    lot = _lot("QQQ", 10.0, 400.0)
+    j = JournalFactice([lot])
+    ventes = [{"symbol": "QQQ", "qty": 10.0, "price": 500.0, "date": "2026-08-15",
+               "id": "abc"}]
+    fermetures, _ = _plan([lot], ventes)
+    _appliquer(j, fermetures, ids_vivants={lot.id})
+    motifs = [t.exit_reason for t, _ in j.lots.values() if t.exit_ts]
+    assert any(m == f"{MOTIF}:abc" for m in motifs)
+
+
+def test_l_outil_refuse_de_tourner_sur_des_fermetures_intracables():
+    """Un registre portant des fermetures SANS identité de vente n'est pas rejouable :
+    on ne sait pas ce qui a été consommé. Refuser est le seul geste sûr — deviner
+    fabriquerait du réalisé, ce que cet outil existe précisément pour empêcher."""
+    import dataclasses
+
+    from scripts.reconcilier_journal import MOTIF, _fermetures_sans_identite
+    lot = _lot("AAPL", 10.0, 200.0)
+    ferme = dataclasses.replace(lot, id="AAPL-clos", exit_ts=lot.entry_ts,
+                                exit_price=250.0, exit_reason=MOTIF)
+    j = JournalFactice([lot, ferme])
+    assert _fermetures_sans_identite(j) == 1
+    # une fermeture PORTANT l'identité ne déclenche pas le refus
+    avec_id = dataclasses.replace(ferme, id="AAPL-clos2",
+                                  exit_reason=f"{MOTIF}:fill-7")
+    assert _fermetures_sans_identite(JournalFactice([lot, avec_id])) == 0
