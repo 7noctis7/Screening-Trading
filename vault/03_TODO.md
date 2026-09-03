@@ -116,14 +116,22 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       porte ~80 actions que le compte ne détient plus, deux fois trop de QQQ, et la
       crypto sous deux conventions de nommage jamais appariées. Les ventes récentes
       s'apparient en FIFO à ces lots morts → 5 821 $ de « réalisé » sans contrepartie.
-- [ ] **P0 — Décider du sort des ~163 lots orphelins du journal.** Tant qu'ils y sont,
+- [x] **P0 — Lots orphelins : OUTIL LIVRÉ le 03/09.** Ni suppression ni bascule en
+      `legacy` (drapeau réservé aux fills importés — le réutiliser le rendrait illisible).
+      Écritures de correction datées, appariées aux fills RÉELS d'Alpaca, motif
+      `reconciliation-journal`. `make reconcilier-journal` simule ; `--appliquer` écrit
+      après sauvegarde. Les lots sans vente correspondante RESTENT ouverts et sont
+      signalés — les fermer au dernier prix inventerait un P&L. **Reste à LANCER.**
+- [x] **P1 — Nommage crypto : CORRIGÉ à la source.** `open_lots` apparie par symbole
+      canonique. C'est ce qui empêchera de nouveaux orphelins.
+- [ ] ~~**P0 — ancien : décider du sort des lots orphelins**~~ Tant qu'ils y sont,
       toute vente s'apparie à eux et fabrique du réalisé. Deux options, à trancher :
       (a) les solder à leur date de sortie réelle — demande un historique de fills que
       nous n'avons peut-être plus ; (b) les basculer en `legacy=1` — les sort du calcul
       sans réécrire le passé. **Aucune correction automatique** : c'est une décision.
-- [ ] **P1 — Le nommage crypto n'est pas unifié entre le journal et le courtier**
-      (`AVAX/USDC` vs `AVAXUSD`). Même piège que l'incident du 27/08 dans `routing`.
-      `symbole_canonique` le neutralise à la LECTURE ; l'écriture, elle, reste à unifier.
+- [ ] **P2 — Unifier le nommage crypto à L'ÉCRITURE aussi.** L'appariement est corrigé
+      (lecture canonique), mais le journal continue d'écrire « AVAX/USDC » quand le
+      courtier dit « AVAXUSD ». Fonctionnel, mais deux conventions cohabitent.
 - [ ] ~~**P1 — ancien : Réconcilier le journal et le compte**~~ 39 fermés × 149,27 $ = 5 821 $ réalisés
       + 614 $ de latent ≈ 6,4 % sur ~100 k$, contre **+0,2 % sur deux mois** affiché pour le
       portefeuille RÉEL. À vérifier : (1) `/api/journal` filtre `legacy=False` et exclut donc

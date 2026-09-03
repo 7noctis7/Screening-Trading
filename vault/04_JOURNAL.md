@@ -2923,3 +2923,40 @@ Les solder à leur date de sortie réelle demande un historique de fills que nou
 peut-être plus ; les archiver en `legacy` les sort du calcul sans mentir sur le passé.
 C'est une décision, pas une correction automatique.
 
+## 2026-09-03 — Réparer le journal : la cause d'abord, le passé avec la vérité du courtier
+
+**LA CAUSE, CORRIGÉE.** `live_roundtrip.open_lots` appariait les ventes aux lots par
+`t.instrument == instrument`, **exact au caractère près**. Les lots crypto sont écrits
+« AVAX/USDC » et les ventes reviennent d'Alpaca en « AVAXUSD » : **aucune vente crypto ne
+pouvait fermer son lot**, depuis l'origine, sans qu'aucune erreur ne soit levée. La poche
+crypto s'accumulait donc en orphelins. L'appariement se fait désormais par symbole
+CANONIQUE. Les 17 tests d'aller-retour existants passent inchangés.
+
+**LE PASSÉ, RÉPARABLE — et par la meilleure source.** `AlpacaBroker.orders()` rend les
+ordres exécutés avec symbole, sens, quantité, prix et DATE. La vérité est donc récupérable :
+pas besoin d'estimer quoi que ce soit.
+
+**POURQUOI PAS `legacy=1`, qui aurait été le geste rapide.** Ce drapeau signifie « fill
+importé sans features de décision ». Ces lots ne sont pas ça : ce sont des lots dont la
+SORTIE n'a jamais été enregistrée. Réutiliser un drapeau pour un second sens le rend
+illisible — dans six mois personne ne saurait pourquoi ils sont legacy ni ce qu'on croyait
+en les marquant.
+
+**CE QU'ON FAIT À LA PLACE — la pratique comptable ordinaire.** On ne supprime ni ne
+réécrit un enregistrement : on POSTE UNE ÉCRITURE DE CORRECTION, datée, avec son motif
+(`exit_reason = "reconciliation-journal"`) et sa source. Chaque fermeture porte le prix et
+la **date du fill réel**, pas ceux du jour de la réparation.
+
+**CE QU'ON REFUSE DE FAIRE.** Un lot dont aucune vente du courtier ne rend compte reste
+OUVERT et est signalé. Le fermer « au dernier prix connu » fabriquerait un P&L qui n'a
+jamais existé — exactement l'erreur qu'on répare.
+
+**Livré** : `scripts/reconcilier_journal.py` (`make reconcilier-journal`). **Simulation par
+défaut** : il imprime le plan — fermetures appariées, P&L correspondant, lots restés
+orphelins avec leurs dates — et n'écrit rien. `--appliquer` écrit, après **sauvegarde
+horodatée de `journal.db`**. Six tests couvrent le plan seul, sans base ni courtier : les
+deux conventions de nommage, le FIFO, la vente partielle, la vente excédentaire (ignorée,
+jamais inventée), et l'ordre chronologique des ventes.
+
+Suites `tests/execution` + `tests/research` : **447 verts**.
+
