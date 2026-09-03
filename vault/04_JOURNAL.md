@@ -2734,3 +2734,55 @@ les commits vérifiés). C'est un changement de règle ou d'ensemble éligible, 
 `QUANT_HISTORY_DAYS=3600 make index-core` — le code ACTUEL sur la fenêtre ANCIENNE.
 Sharpe qui remonte vers 1,34 → c'est la fenêtre. Sharpe qui reste vers 0,95 → c'est le code.
 
+## 2026-09-03 — C'était la FENÊTRE, pas le code. Et le code s'est amélioré.
+
+`QUANT_HISTORY_DAYS=3600 make index-core` — code ACTUEL sur la fenêtre ANCIENNE.
+
+| | ancien dashboard | reproduction (3 600 j) | plein historique |
+|---|---|---|---|
+| Sharpe, blend 50 % | 1,33 | **1,33** | 0,96 |
+| CAGR | 20,3 % | 18,5 % | 15,3 % |
+| maxDD | −28,7 % | −22,4 % | −25,3 % |
+
+**Le Sharpe retombe EXACTEMENT sur l'ancienne valeur.** L'écart 0,96 → 1,33 est imputable
+à la fenêtre, pas au code : le backtest actuel démarre treize mois plus tôt (2016-03 au
+lieu de 2017-04) et inclut une période plus difficile. Rien n'a régressé.
+
+**Le code a même AMÉLIORÉ le portefeuille, à fenêtre égale.** Sur le preset pur :
+
+| | ancien | actuel (même fenêtre) |
+|---|---|---|
+| CAGR | 17,7 % | 14,7 % |
+| Sharpe | 0,99 | **1,12** |
+| maxDD | −31,7 % | **−25,4 %** |
+
+Trois points de CAGR en moins, mais **+0,13 de Sharpe et 6,3 points de drawdown en moins**.
+Les correctifs d'alignement n'ont pas coûté de la performance : ils ont retiré du rendement
+qui venait avec un risque disproportionné. C'est le sens attendu quand on corrige une fuite.
+
+**Contrôle interne qui passe** : t(α) = 3,35 identique sur les lignes 0 %, 25 %, 50 %, 75 %,
+et −0,03 à 100 %. Ce n'est pas un bug — pour un mélange `c·cœur + (1−c)·preset`, l'alpha ET
+son erreur-type sont tous deux proportionnels à (1−c), donc le t est INVARIANT en c. À
+100 % de cœur la variante EST la référence, donc t = 0. La fonction fait ce qu'elle annonce.
+
+**Le Sortino corrigé se comporte comme prévu** : il est désormais SUPÉRIEUR au Sharpe sur
+toutes les lignes (1,96 contre 1,33 à 50 %), là où il passait dessous avant le correctif.
+
+**PIÈGE À NE PAS PRENDRE — la ligne 25 %.** Sharpe 1,42 contre 1,33, maxDD −18,2 % contre
+−22,4 % : meilleure sur les deux axes. Mais **ΔSharpe +0,09, IC95 [−0,25 ; +0,42],
+p = 0,612**, pour un seuil détectable de ±0,29. C'est du bruit de sélection sur cinq ratios
+essayés. **On ne bouge pas.** Ce qui EST discernable ne va que dans un sens : 75 % (p=0,027)
+et 100 % (p=0,011) sont significativement PIRES que 50 %.
+
+**À AUDITER AVANT TOUTE CHOSE — le momentum sectoriel.** CAGR 55,5 % à 100 % de cœur,
+26,8 % à 25 %, DSR 100 %. Un CAGR de 55 % sur 9,4 ans n'est pas un résultat, c'est une
+alerte : biais du survivant ou fuite. Le script prévient pour le top-10 méga-caps, pas pour
+celui-ci. À passer au `leakage-hunter` avant d'en dire un mot de plus.
+
+**NARROWING DU P1 (instabilité entre runs).** Les deux runs consécutifs de ce soir sont
+**identiques au caractère près**. Le code est donc DÉTERMINISTE ; l'instabilité 0,65 → 0,38
+observée le 02/09 s'était produite à un JOUR d'écart, donc après un rafraîchissement de
+données. **Hypothèse à tester** : elle vient du même défaut que l'anomalie du cœur QQQ —
+`_index_series` laisse `market.db` écraser `YAHOO.db`, si bien que chaque `make daily` peut
+déplacer le niveau d'ajustement de TOUT l'historique. Deux P1 qui n'en feraient qu'un.
+

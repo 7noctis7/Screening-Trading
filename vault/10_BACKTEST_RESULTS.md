@@ -83,3 +83,34 @@ preset — quatrième occurrence du même défaut. `make diag-coeur-qqq` tranche
 aussi contre la ligne de CONTRÔLE (0,90-0,92 contre 0,94), qui est, elle, correctement
 alignée par date. Le rejet tient quelle que soit l'issue du diagnostic.
 
+---
+
+## 2026-09-03 — Fenêtre vs code : le Sharpe 1,33 est reproduit à l'identique
+
+`QUANT_HISTORY_DAYS=3600 make index-core`. Objectif : savoir si la baisse observée
+(Sharpe 1,34 → 0,95) venait de la fenêtre de mesure ou d'une régression du code.
+
+**Réponse : la fenêtre.** Blend 50 % QQQ + 50 % preset → Sharpe **1,33**, contre 1,33 dans
+l'ancien tableau et 0,96 sur le plein historique. Le backtest actuel démarre treize mois
+plus tôt et inclut une période plus difficile.
+
+**À fenêtre égale, le code a amélioré le portefeuille** (preset pur) : Sharpe 0,99 → 1,12,
+maxDD −31,7 % → −25,4 %, pour 3 points de CAGR en moins. Les correctifs d'alignement ont
+retiré du rendement qui venait avec un risque disproportionné.
+
+| Cœur QQQ | CAGR | Sharpe | Sortino | maxDD | DSR | ΔSharpe vs 50 % | p |
+|---|---|---|---|---|---|---|---|
+| 0 % | 14,7 % | 1,12 | 1,58 | −25,4 % | 91 % | −0,21 | 0,522 |
+| 25 % | 16,9 % | **1,42** | 2,09 | **−18,2 %** | 99 % | +0,09 | 0,612 |
+| **50 % (prod)** | 18,5 % | 1,33 | 1,96 | −22,4 % | 98 % | — | — |
+| 75 % | 19,6 % | 1,09 | 1,57 | −28,7 % | 90 % | −0,24 | **0,027** |
+| 100 % | 20,2 % | 0,91 | 1,29 | −35,1 % | 77 % | −0,42 | **0,011** |
+
+**La ligne 25 % ne déclenche aucun changement.** Elle bat la production sur le Sharpe ET le
+drawdown, mais p = 0,612 pour un seuil détectable de ±0,29 : c'est du bruit de sélection sur
+cinq ratios. Seuls 75 % et 100 % sont discernables — et dans le sens PIRE.
+
+**Alerte non résolue** : le cœur « momentum sectoriel » affiche CAGR 55,5 % à 100 % et
+26,8 % à 25 %, DSR 100 %. Un tel chiffre sur 9,4 ans appelle un audit de fuite et de biais du
+survivant avant toute lecture. Aucune conclusion n'en est tirée ici.
+

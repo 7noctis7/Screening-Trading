@@ -39,7 +39,13 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
 
 ## 🟡 P1/P2 — ouverts le 2026-09-02
 
-- [ ] **P1 — Instabilité entre runs NON EXPLIQUÉE** : Sharpe 0,65 puis 0,38 sur un appel
+- [ ] **P1 — Instabilité entre runs : PISTE SÉRIEUSE (03/09).** Deux runs consécutifs sont
+      identiques au caractère près → le code est DÉTERMINISTE. L'instabilité 0,65 → 0,38
+      s'était produite à un JOUR d'écart, donc après un rafraîchissement de données.
+      Hypothèse : c'est le MÊME défaut que l'anomalie du cœur QQQ — `_index_series` laisse
+      `market.db` écraser `YAHOO.db`, donc chaque `make daily` peut déplacer le niveau
+      d'ajustement de tout l'historique. Tester en gelant market.db entre deux runs.
+- [ ] ~~**P1 — ancien libellé : Instabilité entre runs NON EXPLIQUÉE**~~ : Sharpe 0,65 puis 0,38 sur un appel
       identique au caractère près, à un jour d'écart. L'hypothèse du repli VIX est TOMBÉE
       (le run affiche « VIX RÉEL »). Les bancs publient désormais une empreinte (titres,
       barres, dernière date, provenance VIX) — **aucune comparaison entre deux dates n'est
@@ -64,7 +70,14 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       Mesuré : 0 séance d'écart entre le calendrier du cœur et l'axe du preset. Rien ne le
       garantit — un titre ajouté à l'univers change l'axe et casse silencieusement le
       recollage `core_ret[-k:] = xr[-k:]`. Aligner par DATE tant que ça ne coûte rien.
-- [ ] **P1 — Fenêtre vs code : `QUANT_HISTORY_DAYS=3600 make index-core`.** Un ancien
+- [x] **P1 — Fenêtre vs code : TRANCHÉ le 03/09.** C'est la FENÊTRE. Sharpe 1,33 reproduit
+      exactement sur la fenêtre ancienne. À fenêtre égale le code a AMÉLIORÉ le preset
+      (Sharpe 0,99 → 1,12, maxDD −31,7 % → −25,4 %) au prix de 3 points de CAGR. Détail
+      dans `vault/04_JOURNAL.md`.
+- [ ] **P1 — AUDIT DE FUITE sur le momentum sectoriel** : CAGR 55,5 % sur 9,4 ans, DSR
+      100 %. Ce n'est pas un résultat, c'est une alerte. `leakage-hunter` + biais du
+      survivant, AVANT d'en dire quoi que ce soit d'autre.
+- [ ] ~~**P1 — ancien : Fenêtre vs code**~~ Un ancien
       dashboard affichait Sharpe 1,34 / CAGR 20,1 % sur n=2391 depuis 2017-04 ; l'actuel
       0,95 / 14,9 % sur 2 580 séances depuis 2016-03. Treize mois de plus au début. Rejouer
       le code actuel sur la fenêtre ancienne sépare les deux causes en un seul run.
