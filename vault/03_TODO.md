@@ -48,11 +48,22 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       conformes à la prémisse (GLD/QQQ +0,11, QQQ/TLT −0,09) mais aucun gain de Sharpe, et
       le Calmar reste en faveur de la production (0,605 vs 0,532). Détail complet dans
       `vault/10_BACKTEST_RESULTS.md`.
-- [ ] **P1 — Trancher l'anomalie du cœur QQQ** (`make diag-coeur-qqq`) : le QQQ ETF rend
-      −0,4 %/an de moins que le cœur de production, t(α) = −6,15. Soit la production mesure
-      ^NDX (indice NON ACHETABLE → dashboard optimiste en permanence sur la moitié du
-      portefeuille), soit `blend_equity` désaligne par position. Les deux se corrigent, mais
-      pas de la même façon.
+- [ ] **P1 — `_index_series` et `_load_prices` fusionnent les bases en sens OPPOSÉS.**
+      Diagnostiqué le 03/09. `_load_prices` fait `setdefault` (YAHOO.db prioritaire,
+      market.db comble les trous) — choix DÉLIBÉRÉ, commenté « pas de discontinuité
+      d'ajustement raw vs adjusted ». `_index_series` fait `target[jour] = close` via
+      `merge_bars` : market.db écrase. Le cœur QQQ de production est donc potentiellement
+      recollé entre deux référentiels d'ajustement, pour **0,71 %/an** sur la moitié du
+      portefeuille. Deux hypothèses antérieures FALSIFIÉES : ce n'est pas ^NDX (source =
+      QQQ frais), ce n'est pas un désalignement de calendrier (0 séance d'écart).
+      **Reste à confirmer** par le bloc « COMPARAISON DES DEUX BASES » avant de corriger :
+      si les bases sont d'accord partout, le sens de fusion est sans effet et la cause est
+      ailleurs. Correctif attendu : aligner `merge_bars` sur la sémantique de
+      `_load_prices`, pas l'inverse.
+- [ ] **P2 — L'alignement positionnel de `blend_equity` tombe juste par COÏNCIDENCE.**
+      Mesuré : 0 séance d'écart entre le calendrier du cœur et l'axe du preset. Rien ne le
+      garantit — un titre ajouté à l'univers change l'axe et casse silencieusement le
+      recollage `core_ret[-k:] = xr[-k:]`. Aligner par DATE tant que ça ne coûte rien.
 - [ ] **P1 — Expliquer la dégradation du backtest** : PF 1,19 → 1,08, espérance 6 $ → 2 $,
       payoff 2,79 → 2,62, 1 168 → 1 299 trades. Deux causes possibles à départager :
       `trail_atr=0` pas encore dans `main`, ou décalage du jeu de données (même P1 que

@@ -6,24 +6,30 @@ inattendue : le QQQ ETF replacé sur l'axe du preset rend -0,4 %/an de moins que
 QQQ de production, avec t(alpha) = -6,15 sur 2 580 séances. Un écart minuscule, mais qui
 n'est PAS du bruit — et sur une ligne censée mesurer exactement la même chose.
 
-DEUX CAUSES POSSIBLES, ET ELLES N'ONT PAS LES MÊMES CONSÉQUENCES :
+DEUX HYPOTHÈSES ONT ÉTÉ ÉMISES PUIS FALSIFIÉES PAR CE DIAGNOSTIC (03/09). Elles restent
+écrites : une hypothèse abandonnée en silence se re-teste six mois plus tard.
 
-  A. SOURCE DIFFÉRENTE. `choose_history` prend le PREMIER alias frais parmi
-     ["QQQ", "^NDX", "^IXIC"]. Si la base n'a pas de QQQ frais, la production mesure
-     ^NDX — un INDICE, que personne ne peut acheter. L'écart serait alors les frais de
-     l'ETF (0,20 %/an) plus l'écart de suivi : le tableau de bord surestimerait la
-     moitié « cœur » du portefeuille d'environ 0,4 %/an, de façon permanente.
+  A. « La production mesure ^NDX, un indice non achetable. » FAUX — le run affiche
+     SOURCE RETENUE : QQQ (frais). C'est bien l'ETF.
+  B. « Les calendriers diffèrent, `blend_equity` recolle par position. » FAUX — zéro
+     séance d'écart dans les deux sens sur la fenêtre commune. L'alignement positionnel
+     tombe juste ici, parce que les deux calendriers coïncident exactement.
 
-  B. DÉSALIGNEMENT POSITIONNEL. `blend_equity` recolle le cœur au preset par
-     `core_ret[-k:] = xr[-k:]` — par POSITION. Or l'axe du preset est produit par
-     `aligner_sans_trous`, qui ne garde que les dates où TOUS les titres cotent : c'est
-     un SOUS-ENSEMBLE des séances américaines. Si les deux calendriers diffèrent, la
-     production mélange des rendements qui ne tombent pas le même jour.
+CE QUI RESTE, ET QUE LA LECTURE DU CODE ÉTABLIT. Les deux chemins fusionnent YAHOO.db et
+market.db dans des sens OPPOSÉS, sur le même symbole :
 
-COMMENT ON LES DISTINGUE. Le cas A donne des séries quasi identiques au jour le jour
-(corrélation ~0,999) avec un écart de rendement CONSTANT. Le cas B donne l'inverse : un
-écart moyen nul mais une corrélation effondrée. Le diagnostic mesure les deux et laisse
-les chiffres décider.
+  `_load_prices`   `merged.setdefault(jour, barre)`  → le PREMIER gagne : YAHOO.db garde
+                   la priorité, market.db ne comble que les dates manquantes. Le
+                   commentaire dit pourquoi : « pas de discontinuité d'ajustement (raw
+                   vs adjusted) au milieu de l'historique ».
+  `_index_series`  `merge_bars` fait `target[jour] = close` → le DERNIER gagne :
+                   market.db ÉCRASE YAHOO.db sur toutes les dates communes.
+
+Si les deux bases n'ont pas le même niveau d'ajustement (dividendes, splits), la série
+de production est RECOLLÉE entre deux référentiels, avec un saut artificiel à la date de
+raccord. Étalé sur onze ans, ce saut se lit comme une dérive régulière — exactement le
+-0,71 %/an observé. Le bloc « COMPARAISON DES DEUX BASES » ci-dessous le mesure plutôt
+que de le supposer : si les clôtures diffèrent aux dates communes, l'affaire est close.
 
     export QUANT_PRICE_DB=/chemin/YAHOO.db
     python scripts/diag_coeur_qqq.py
@@ -142,22 +148,74 @@ def main() -> None:
     print(f"    corrélation quotidienne source/ETF : {rho:+.4f}")
     print(f"    écart annualisé (ETF − production) : {drift*100:+.2f} %/an")
 
+    _comparer_bases(debut, fin)
+
     print("\n  LECTURE :")
     if rho > 0.99 and abs(drift) > 0.001:
-        print("    → CAS A. Les deux séries bougent ensemble au jour le jour,")
-        print("      mais l'une rend systématiquement moins. C'est un écart de")
-        print("      SOURCE, pas d'alignement : la production mesure un actif")
-        print("      différent")
-        print(f"      de celui qu'on achèterait, pour {abs(drift)*100:.2f} %/an sur la")
-        print("      moitié « cœur ». À corriger dans QUANT_CORE_SPEC.")
+        print("    → MÊME TICKER, SÉRIES DIFFÉRENTES. Les deux bougent ensemble")
+        print("      au jour le jour (rho > 0,99) mais l'une rend moins. Ce")
+        print("      n'est ni un problème d'instrument ni d'alignement : c'est que les")
+        print("      deux chemins ne FUSIONNENT PAS les bases dans le même sens.")
+        print(f"      Effet : {abs(drift)*100:.2f} %/an sur la moitié « cœur ».")
+        print("      Voir la comparaison des bases ci-dessus pour savoir")
+        print("      laquelle des deux séries est la bonne.")
     elif rho < 0.9:
-        print("    → CAS B. La corrélation est effondrée alors que les deux séries")
-        print("      décrivent le MÊME actif : les rendements ne tombent pas le même")
-        print("      jour. C'est un désalignement positionnel dans `blend_equity`,")
-        print("      quatrième occurrence du même défaut dans ce dépôt.")
+        print("    → DÉSALIGNEMENT. La corrélation est effondrée alors que les deux")
+        print("      séries décrivent le MÊME actif : les rendements ne tombent pas le")
+        print("      même jour. Défaut d'alignement positionnel, à corriger en amont.")
     else:
         print("    → NI L'UN NI L'AUTRE nettement. Ne rien conclure : publier")
         print("      l'écart tel quel et rouvrir la question avec ces chiffres.")
+
+
+def _closes_par_date(chemin, symbole: str, start, end) -> dict[str, float]:
+    from packages.data.providers.db_provider import DBPriceProvider
+    if chemin is None or not Path(chemin).exists():
+        return {}
+    try:
+        prov = DBPriceProvider(chemin)
+        return {b.ts.date().isoformat(): float(b.close)
+                for b in prov.fetch_ohlcv(symbole, "1d", start, end)}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _comparer_bases(start, end, symbole: str = "QQQ") -> None:
+    """Les deux bases donnent-elles les MÊMES clôtures aux MÊMES dates ?
+
+    C'est la question qui tranche. Si oui, le sens de fusion n'a aucune importance et
+    l'écart vient d'ailleurs. Si non, la série de production est un recollage entre deux
+    référentiels d'ajustement, et le saut au raccord EST la dérive mesurée.
+    """
+    from apps.api.snapshot import _price_db_path
+    hist = _closes_par_date(_price_db_path(), symbole, start, end)
+    maj = _closes_par_date(ROOT / "data" / "market.db", symbole, start, end)
+    print(f"\n  COMPARAISON DES DEUX BASES sur {symbole} :")
+    if not maj:
+        print("    market.db absente ou sans ce symbole → une seule source, "
+              "le sens de fusion n'a aucun effet. L'écart vient d'ailleurs.")
+        return
+    print(f"    base historique : {len(hist)} clôtures · market.db : {len(maj)}")
+    communes = sorted(set(hist) & set(maj))
+    if not communes:
+        print("    aucune date commune → market.db ne fait qu'ÉTENDRE l'historique ; "
+              "les deux chemins voient alors la même chose.")
+        return
+    ratios = [maj[d] / hist[d] for d in communes if hist[d] > 0]
+    ecarts = [r for r in ratios if abs(r - 1.0) > 1e-6]
+    print(f"    dates communes : {len(communes)} ({communes[0]} → {communes[-1]})")
+    print(f"    clôtures qui DIFFÈRENT : {len(ecarts)} ({len(ecarts)/len(ratios):.0%})")
+    if not ecarts:
+        print("    → les deux bases sont d'accord partout. Le sens de fusion est SANS")
+        print("      effet : la cause de l'écart est ailleurs, ne pas s'arrêter là.")
+        return
+    lo, hi = min(ratios), max(ratios)
+    print(f"    ratio market.db / historique : min {lo:.4f} · max {hi:.4f}")
+    print(f"    → NIVEAUX D'AJUSTEMENT DIFFÉRENTS sur {len(ecarts)} dates.")
+    print("      `_index_series` laisse market.db écraser l'historique ;")
+    print("      `_load_prices` fait l'inverse. La courbe de production est donc")
+    print("      RECOLLÉE entre deux référentiels — c'est le défaut à corriger, et")
+    print("      c'est `_load_prices` qui a raison (son commentaire l'explique).")
 
 
 if __name__ == "__main__":

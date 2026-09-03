@@ -2663,3 +2663,32 @@ pour entamer l'implémentation des modules métier.
 - **Le rejet ne dépend pas de cette anomalie** : les variantes perdent aussi contre la ligne
   de contrôle, elle correctement alignée par date.
 
+## 2026-09-03 — Deux hypothèses falsifiées, et la vraie cause était dans le sens de fusion
+
+- `make diag-coeur-qqq` exécuté. **Mes deux hypothèses sont FAUSSES**, et elles restent
+  écrites : une hypothèse abandonnée en silence se re-teste six mois plus tard.
+  · A « la production mesure ^NDX, indice non achetable » → **SOURCE RETENUE : QQQ (frais)**,
+    2 763 barres. C'est bien l'ETF.
+  · B « les calendriers diffèrent, `blend_equity` recolle par position » → **zéro séance
+    d'écart** dans les deux sens. L'alignement positionnel tombe juste ici, par coïncidence
+    des calendriers — pas par construction, ce qui reste un risque latent.
+- **Mesuré** : corrélation quotidienne source/ETF **+0,9999**, écart annualisé **−0,71 %/an**
+  (et non −0,4 % : le banc mesurait l'écart au niveau du MÉLANGE à 50 %, donc moitié moins).
+- **La vraie cause, établie par lecture du code** : les deux chemins fusionnent YAHOO.db et
+  market.db **dans des sens opposés**, sur le même symbole.
+  · `_load_prices` : `merged.setdefault(jour, barre)` → le PREMIER gagne. YAHOO.db garde la
+    priorité, market.db ne comble que les dates manquantes. Le commentaire dit pourquoi :
+    « pas de discontinuité d'ajustement (raw vs adjusted) au milieu de l'historique ».
+  · `_index_series` : `merge_bars` fait `target[jour] = close` → le DERNIER gagne. market.db
+    ÉCRASE YAHOO.db sur toutes les dates communes.
+  Si les deux bases n'ont pas le même niveau d'ajustement, la courbe de production est un
+  RECOLLAGE entre deux référentiels, avec un saut artificiel au raccord. Étalé sur onze ans,
+  ce saut se lit comme une dérive régulière — ce qu'on observe.
+- **Ce qui n'est PAS encore établi** : que les deux bases divergent effectivement sur les
+  dates communes. Le diagnostic mesure désormais ce point (bloc « COMPARAISON DES DEUX
+  BASES ») au lieu de le supposer. Tant qu'il n'a pas tourné, la cause reste un CANDIDAT.
+- **Défaut de mon propre diagnostic, corrigé** : sa lecture imprimait « la production mesure
+  un actif différent de celui qu'on achèterait » juste après avoir imprimé « SOURCE RETENUE :
+  QQQ ». Il se contredisait dans la même sortie. Le texte affirmait la conclusion écrite
+  d'avance au lieu de lire ce que le run venait de produire.
+
