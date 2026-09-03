@@ -2786,3 +2786,49 @@ données. **Hypothèse à tester** : elle vient du même défaut que l'anomalie 
 `_index_series` laisse `market.db` écraser `YAHOO.db`, si bien que chaque `make daily` peut
 déplacer le niveau d'ajustement de TOUT l'historique. Deux P1 qui n'en feraient qu'un.
 
+## 2026-09-03 — 87 % de réussite sur le compte réel : une déduction fausse, corrigée
+
+**J'ai avancé un chiffre déduit au lieu de mesuré, et il était faux.** J'avais conclu que
+les 26 lots ouverts portaient « environ −5 600 $ de latent », par rapprochement entre
+l'espérance affichée (39 × 149,27 $ = 5 821 $ réalisés) et le rendement du compte (+0,2 %).
+Les positions réelles disent **P&L latent +614,53 $**, donc POSITIF. Le biais de sélection
+que je décrivais ne s'est PAS matérialisé sur ce compte.
+
+**Le mécanisme reste réel et générique** : un système qui rééquilibre allège ce qui a monté
+et conserve ce qui a baissé, donc le sous-ensemble fermé est sélectionné. Mais il fallait le
+MESURER avant de l'affirmer, et c'est exactement ce que je n'ai pas fait.
+
+**Livré quand même, parce que le garde-fou vaut indépendamment** :
+`packages/research/biais_fermeture.py` + branchement sur `/api/journal`. Le panneau publie
+désormais À CÔTÉ des chiffres existants (jamais à leur place) : latent des lots ouverts, P&L
+total, **espérance sur TOUTES les positions**, et un avertissement chiffré qui ne sort QUE
+si part ouverte ≥ 20 % ET latent négatif — donc PAS aujourd'hui. Un lot sans prix est EXCLU,
+jamais valorisé à son entrée : le compter à zéro de latent fabriquerait un gagnant neutre à
+partir d'un trou de données. Cinq tests, présentés comme un scénario CONSTRUIT et non comme
+l'état du compte.
+
+**CE QUI RESTE OUVERT — ET QUI SE MESURE, MAINTENANT.** 5 821 $ de réalisé + 614 $ de
+latent = 6 435 $ sur ~100 000 $, soit ~6,4 %, alors que le tableau de bord affiche le
+portefeuille RÉEL à **+0,2 % sur deux mois**. Ces deux chiffres ne se réconcilient pas.
+Plutôt que d'énoncer une nouvelle hypothèse — la première était fausse — j'ai écrit
+`scripts/diag_journal_compte.py` (`make diag-journal`), qui MESURE les trois causes
+possibles et imprime le résidu inexpliqué :
+  1. le filtre `legacy` : combien de lots et combien de dollars réalisés le panneau
+     masque-t-il, et dans quel SENS ;
+  2. la fenêtre : les sorties du journal tombent-elles dans la période couverte par
+     `equity_history`, ou déborde-t-on ;
+  3. le latent RÉEL, lu chez le courtier — jamais reconstruit depuis un prix d'entrée.
+Le script ne conclut pas quand les chiffres ne tranchent pas : le résidu est imprimé
+comme résidu.
+
+**CE QUI N'EST PAS CONTAMINÉ, vérifié dans le code avant de le dire.** Le verdict GO/NO-GO
+du 2026-08-06 (`research/rdv_paper.compare`) lit la COURBE D'EQUITY, qui intègre le latent
+par construction — pas le win rate. Le verdict est sain. En revanche le TEXTE du panneau
+annonce que le journal est « la matière première du verdict » : c'est faux et ça invite à la
+mauvaise lecture. P2.
+
+**Autre lecture du même tableau, à ne pas perdre de vue.** Sur dix ans : portefeuille
+330,8 % / CAGR 14,9 % / Sharpe 0,95 / maxDD −25,5 % contre Nasdaq 100 572,5 % / 19,9 % /
+0,92 / −35,6 %. La stratégie **sous-performe le QQQ en absolu** avec un Sharpe à peine
+meilleur et **10 points de drawdown en moins**. Un Nasdaq à risque réduit, pas une machine
+à alpha — ce que dit aussi le DSR.

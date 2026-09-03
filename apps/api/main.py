@@ -259,6 +259,27 @@ def object_360(obj_type: str, obj_id: str) -> dict:
         "reason": "objet inconnu (type non enregistré ou id absent du snapshot)"}
 
 
+def _prix_courants() -> dict:
+    """Derniers prix connus, par symbole, depuis les positions RÉELLES du courtier.
+
+    Ce sont les seuls prix dont on ait besoin : on ne valorise que ce qu'on détient. En
+    cas d'échec (courtier injoignable, snapshot indisponible) on renvoie un dict VIDE —
+    les lots partent alors en « sans prix » et sont exclus, plutôt que valorisés au
+    hasard.
+    """
+    try:
+        real = (_snap().get("live") or {}).get("real") or {}
+        out: dict[str, float] = {}
+        for compte in ("alpaca", "crypto"):
+            for pos in (real.get(compte) or {}).get("positions", []) or []:
+                px = pos.get("last") or pos.get("price")
+                if pos.get("symbol") and px:
+                    out[pos["symbol"]] = float(px)
+        return out
+    except Exception:  # noqa: BLE001
+        return {}
+
+
 @app.get("/api/journal")
 def journal_roundtrips() -> dict:
     """Round-trips RÉELS du journal paper (legacy=0) : lots ouverts + fermés + stats honnêtes.
@@ -287,6 +308,13 @@ def journal_roundtrips() -> dict:
             stats["expectancy"] = round(sum(r["pnl_net"] or 0 for r in closed) / len(closed), 2)
         else:
             stats["status"] = f"UNCALIBRATED (expectancy à N≥20 fermés ; actuel {len(closed)})"
+        # LE WIN RATE DES FERMÉS EST UN ÉCHANTILLON CHOISI : le rééquilibrage ferme
+        # ce qui a monté et conserve ce qui a baissé. On publie donc le latent des lots
+        # ouverts À CÔTÉ, jamais à la place — les trades fermés ont bien été gagnants.
+        from packages.research import biais_fermeture as _bf
+        _ouverts = [r for r in rows if not r["exit_ts"]]
+        stats["honnete"] = _bf.statistiques_honnetes(
+            closed, _bf.marquer_lots(_ouverts, _prix_courants()))
         return {"available": True, "rows": rows, "stats": stats,
                 "slippage": measured_slippage(j)}
     except Exception as e:  # noqa: BLE001

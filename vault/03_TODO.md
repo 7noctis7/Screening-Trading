@@ -106,6 +106,18 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       cibles s'est inversé entre deux jeux de données. Chaque essai supplémentaire relève
       le seuil du DSR sur tout le reste (ADR-0050).
 
+- [ ] **P2 — Texte du panneau « Journal des round-trips » à corriger** : il annonce être
+      « la matière première du verdict GO/NO-GO du 2026-08-06 ». C'est FAUX — `rdv_paper`
+      lit la courbe d'equity, pas le win rate (vérifié le 03/09). Le texte invite à lire le
+      87 % comme une preuve de performance, ce qu'il n'est pas.
+
+- [ ] **P1 — Réconcilier le journal et le compte.** 39 fermés × 149,27 $ = 5 821 $ réalisés
+      + 614 $ de latent ≈ 6,4 % sur ~100 k$, contre **+0,2 % sur deux mois** affiché pour le
+      portefeuille RÉEL. À vérifier : (1) `/api/journal` filtre `legacy=False` et exclut donc
+      les fills importés que le compte subit ; (2) les aller-retours tombent-ils dans la
+      fenêtre d'`equity_history` ? **Outil livré : `make diag-journal`** — il mesure les
+      deux et imprime le résidu. Ne rien conclure avant de l'avoir lancé.
+
 ## 🟢 Écarté volontairement (avec justification)
 - **FinRL / RL profond** : multiplie les degrés de liberté là où le problème est le manque de
   preuve (DSR ≈ 0). Le RL brille quand les données sont abondantes et le signal net.
