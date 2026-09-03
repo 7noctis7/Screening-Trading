@@ -122,7 +122,14 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       `reconciliation-journal`. `make reconcilier-journal` simule ; `--appliquer` écrit
       après sauvegarde. Les lots sans vente correspondante RESTENT ouverts et sont
       signalés — les fermer au dernier prix inventerait un P&L.
-- [ ] **P0 — RESTAURER `journal.avant-reconciliation-20260903-195231.db` et REJOUER.**
+- [x] **P0 — Restaurer et rejouer : FAIT le 03/09.** 185 écritures, zéro avertissement.
+- [ ] **P1 — Les 39 round-trips déjà fermés restent fondés sur de mauvais prix de revient.**
+      Produits entre le 27/08 et le 02/09 par `close_sells` contre les lots du vieux
+      portefeuille. Fermer les orphelins ne rétroagit pas sur eux : les 87 % et les
+      149,27 $ affichés restent faux (marqués `fiable: false`). Les recalculer suppose de
+      les ANNULER puis de les rejouer contre le bon vivier — opération plus invasive que
+      la précédente, sur des enregistrements déjà publiés. À spécifier avant d'agir.
+- [ ] ~~**P0 — ancien : restaurer et rejouer**~~
       Le premier passage a écrit 185 fermetures avec le mauvais périmètre (`legacy` non
       conservé) et des ids de scission en collision. Corrigé, mais le registre porte
       encore les écritures fautives. Restaurer la sauvegarde puis relancer.

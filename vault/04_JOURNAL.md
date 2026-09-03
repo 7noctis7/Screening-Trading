@@ -2997,3 +2997,28 @@ absence de collision d'ids).
 puis relancer avec la version corrigée est la seule façon d'obtenir un registre propre :
 les 185 écritures actuelles portent le mauvais périmètre.
 
+## 2026-09-03 — Réparation appliquée, et ce qu'elle ne répare PAS
+
+Sauvegarde restaurée, version corrigée rejouée : **185 écritures, zéro avertissement**.
+La prédiction posée avant le run (« les 185 lignes `LEG-…` doivent disparaître ») s'est
+vérifiée — le drapeau `legacy` voyage bien avec le lot.
+
+**CE QUI EST RÉPARÉ** : le registre des lots OUVERTS. Les ~80 actions liquidées en juin
+sont désormais fermées au prix et à la date des fills réels, dans leur périmètre d'origine.
+P&L de ces fermetures : **−1 391,77 $** — le journal masquait des PERTES, pas des gains.
+
+**CE QUI NE L'EST PAS, et il faut le dire clairement.** Les **39 aller-retours déjà fermés**
+du panneau (87 % de réussite, 149,27 $ d'espérance) sont INCHANGÉS. Ils avaient été produits
+entre le 27/08 et le 02/09 par `close_sells`, qui les a appariés en FIFO aux lots du vieux
+portefeuille — donc à des prix de revient de juin. Fermer les lots orphelins ne rétroagit pas
+sur des round-trips déjà écrits. **Les statistiques affichées restent fausses**, et c'est
+`reconcilier` qui les marque `fiable: false`.
+
+**Effet attendu sur le résidu** : il se réduit d'environ 1 392 $ (le réalisé total passe de
+5 821 $ à ~4 430 $) mais **ne se referme pas**. Restent les 39 lots sans vente
+correspondante, l'écart de quantité crypto, et surtout ces 39 round-trips mal fondés.
+
+**Décision à prendre (P1)** : recalculer ces 39 aller-retours suppose de les annuler puis de
+les rejouer contre le bon vivier de lots. C'est une opération plus invasive que la
+précédente, sur des enregistrements déjà publiés. À ne pas lancer sans l'avoir spécifiée.
+
