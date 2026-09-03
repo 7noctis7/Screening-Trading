@@ -167,6 +167,15 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       fenêtre d'`equity_history` ? **Outil livré : `make diag-journal`** — il mesure les
       deux et imprime le résidu. Ne rien conclure avant de l'avoir lancé.
 
+- [ ] **P1 — Le panneau « Journal des round-trips » doit cesser de se présenter comme une
+      mesure de PERFORMANCE.** Mesuré le 03/09 : le journal ne couvre que 57 des 87
+      symboles achetés (moitié de la crypto, 9/139 sur PATH). Ses win rate et espérance
+      décrivent des décisions journalisées, PAS le compte. Le titre et le texte du panneau
+      doivent le dire ; `fiable: false` est posé mais le libellé induit encore en erreur.
+- [ ] **P2 — La boucle de réconciliation n'enregistre qu'une partie des achats.** Cause
+      racine de l'incomplétude du journal. À trouver dans `live_journal` / la boucle, pas
+      en aval. Tant que ce n'est pas fait, tout nouvel achat creuse l'écart.
+
 ## 🟢 Écarté volontairement (avec justification)
 - **FinRL / RL profond** : multiplie les degrés de liberté là où le problème est le manque de
   preuve (DSR ≈ 0). Le RL brille quand les données sont abondantes et le signal net.

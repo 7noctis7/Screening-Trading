@@ -365,7 +365,11 @@ def _cours_du_jour(prov, symbole: str, ts):
         return None
     jour = _jour(ts)
     for b in reversed(barres or []):
-        if _jour(b) <= jour and float(b.close) > 0:
+        # `_jour` attend un HORODATAGE, pas une barre. Lui passer la barre rendait le
+        # repr de l'objet, jamais une date : la comparaison échouait toujours et la
+        # mesure annonçait « 0 lot comparable » — un zéro qui ressemblait à une absence
+        # de données alors qu'il signalait mon propre bug.
+        if _jour(b.ts) <= jour and float(b.close) > 0:
             return float(b.close)
     return None
 

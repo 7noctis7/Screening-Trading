@@ -3159,3 +3159,33 @@ désalignement de calendrier, double écriture, troncature des ventes, non-idemp
 sont tombées sur des mesures. La leçon n'est pas qu'il fallait mieux deviner : c'est que
 la première chose à écrire, face à un écart comptable, est l'IDENTITÉ COMPTABLE.
 
+## 2026-09-03 — La couverture répond : le journal ne connaît que la MOITIÉ des achats
+
+**LA MESURE QUI TRANCHE, enfin.** Sur 87 symboles achetés chez le courtier, **57 sont
+couverts par le journal et 30 sont INCOMPLETS** :
+
+    AVAX  acheté 1 238,95  ·  journal   626,49      T     acheté 141,78  ·  journal 80,00
+    LINK  acheté   959,31  ·  journal   550,50      AAVE  acheté 141,07  ·  journal 42,55
+    LTC   acheté   286,88  ·  journal   114,87      PATH  acheté 138,80  ·  journal  9,00
+    SOL   acheté   212,49  ·  journal    63,52      SLG   acheté  69,36  ·  journal 19,54
+
+Le journal enregistre **environ la moitié** des achats crypto, et 9 titres sur 139 pour
+PATH. Ces achats n'ont donc AUCUN prix de revient au journal : quand ils sont vendus, le
+compte encaisse le résultat et le journal n'a rien à lui opposer.
+
+**CONCLUSION D'INGÉNIERIE, et elle est définitive : le journal ne peut pas être la source
+de vérité de la performance du compte.** Il n'enregistre que ce que la boucle de
+réconciliation a écrit, jamais l'activité complète. Aucune réparation de lots orphelins ne
+refermera cet écart — j'ai passé la soirée à réparer un registre dont le vrai problème est
+qu'il est INCOMPLET, pas qu'il est faux.
+
+**Ce qui est déjà correct sur le site, et qu'il faut préserver** : la ligne « Portefeuille
+RÉEL » et le verdict GO/NO-GO lisent la COURBE D'EQUITY, pas le journal. Ces chiffres-là
+sont justes et le restent.
+
+**Bug de MA mesure, corrigé** : `_cours_du_jour` passait une BARRE à `_jour`, qui attend un
+horodatage. La comparaison échouait donc toujours, et le bloc annonçait « 0 lot comparable
+» — un zéro qui ressemblait à une absence de données alors qu'il signalait mon bug. C'est
+la deuxième fois aujourd'hui qu'une de mes mesures ment par omission ; d'où la règle qui
+en sort : **un zéro doit toujours être distingué d'un « je n'ai pas pu mesurer »**.
+
