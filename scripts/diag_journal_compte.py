@@ -533,6 +533,91 @@ def _latent() -> float:
         return 0.0
 
 
+def _cle_fill(sym: str, qty: float, prix: float) -> tuple:
+    """Signature d'un fill, arrondie à ce que les deux sources savent porter."""
+    return (sym, round(float(qty), 4), round(float(prix), 4))
+
+
+def _excedent_dans_les_ouverts(journal, ordres: list[dict]) -> None:
+    """L'excédent du journal est-il dans les FERMÉS ou dans les OUVERTS ?
+
+    La question précédente (« deux chemins ou deux identités ? ») a reçu une réponse que
+    ni l'une ni l'autre de mes hypothèses ne prévoyait. Le dump de deux titres dit :
+
+      ICLN — fermés 301,600106 pour 301,6001 acheté (écart +0,0000) ; OUVERT 301,600106.
+      NWL  — fermés 1 554,626507 pour 1 554,6265 acheté ; OUVERTS 1 306,379607.
+
+    Autrement dit : **la partie FERMÉE du registre est exacte au dix-millième**, et tout
+    l'excédent tient dans des lots ouverts. Et ces lots portent la date et le prix
+    de VENTES : le lot ICLN ouvert entre le 23/06 à 20,83 — jour et prix exacts de la
+    vente qui a soldé les deux lots précédents ; le lot NWL de 155,375433 entre le 25/06
+    à 5,78 — quantité au millionième, jour et prix de la sortie `-R1`.
+
+    Ce bloc teste cette lecture sur TOUS les symboles au lieu de deux, et sur chaque lot
+    ouvert : existe-t-il, chez le courtier, une VENTE de même symbole, même quantité et
+    même prix ? Si oui, le lot n'est pas un achat — c'est une vente écrite à l'envers.
+
+    L'appariement est VOLONTAIREMENT strict : un fill de vente, une quantité, un prix.
+    Une vente exécutée en plusieurs fills n'a pas de fill unique de même quantité et ne
+    sera donc PAS appariée. Le compte renvoyé est un PLANCHER : il sous-estime le nombre
+    de ventes écrites à l'envers, il ne peut pas le surestimer. C'est le sens qu'on veut
+    pour un chiffre qui servira à décider d'un retrait de lignes.
+
+    Rien n'est supprimé. Le nombre décide de ce qu'on fera, et il doit être lu d'abord.
+    """
+    from packages.research.biais_fermeture import symbole_canonique
+    achats, ventes = {}, set()
+    for o in ordres:
+        sym = symbole_canonique(o.get("symbol", ""))
+        q, px = float(o.get("qty") or 0), float(o.get("price") or 0)
+        if q <= 0 or px <= 0:
+            continue
+        if o.get("side") == "buy":
+            achats[sym] = achats.get(sym, 0.0) + q
+        elif o.get("side") == "sell":
+            ventes.add(_cle_fill(sym, q, px))
+    fermes, ouverts = {}, {}
+    for t in journal.all():
+        sym = symbole_canonique(t.instrument)
+        cible = fermes if t.exit_ts else ouverts
+        cible[sym] = cible.get(sym, 0.0) + float(t.qty or 0)
+    _rapport_excedent(achats, fermes, ouverts)
+    lots_ouverts = [t for t in journal.all() if not t.exit_ts]
+    apparies = [t for t in lots_ouverts
+                if _cle_fill(symbole_canonique(t.instrument), t.qty,
+                             t.entry_price or 0) in ventes]
+    print(f"\n    LOTS OUVERTS APPARIÉS À UNE VENTE DU COURTIER : "
+          f"{len(apparies)} / {len(lots_ouverts)}")
+    for t in sorted(apparies, key=lambda x: -float(x.qty or 0))[:8]:
+        print(f"      {symbole_canonique(t.instrument):<8} {float(t.qty):>12.6f} @ "
+              f"{float(t.entry_price or 0):>9.4f}  entré le {str(t.entry_ts)[:10]}")
+    if apparies:
+        print("\n      Même symbole, même quantité et même prix qu'une VENTE exécutée.")
+        print("      Ces enregistrements décrivent une sortie, pas une entrée.")
+
+
+def _rapport_excedent(achats: dict, fermes: dict, ouverts: dict) -> None:
+    """Les fermetures collent-elles aux achats ? que pèsent les lots ouverts ?"""
+    print("\n  OÙ EST L'EXCÉDENT — dans les fermetures, ou dans les lots ouverts ?\n")
+    exacts, decales, exces = 0, [], 0.0
+    for sym, ach in achats.items():
+        f, o = fermes.get(sym, 0.0), ouverts.get(sym, 0.0)
+        if abs(f - ach) <= 0.0001 * max(1.0, ach):
+            exacts += 1
+        else:
+            decales.append((sym, ach, f))
+        exces += max(0.0, f + o - ach)
+    print(f"    {exacts}/{len(achats)} symbole(s) dont les FERMETURES égalent la "
+          "quantité achetée (à 0,01 %).")
+    for sym, ach, f in sorted(decales, key=lambda x: -abs(x[1] - x[2]))[:6]:
+        print(f"      ⚠ {sym:<8} acheté {ach:>12.4f} · fermé {f:>12.4f} "
+              f"({f - ach:+.4f})")
+    print(f"    Excédent total du journal sur les achats : {exces:,.4f} unité(s)"
+          .replace(",", " "))
+    print(f"    Quantité en lots OUVERTS : {sum(ouverts.values()):,.4f} unité(s)"
+          .replace(",", " "))
+
+
 def _dump_symbole(journal, symbole: str) -> None:
     """Tous les enregistrements d'un symbole, à plat. Aucune interprétation.
 
@@ -605,6 +690,7 @@ def main() -> None:
     _ordres = _ordres_courtier()
     _couverture_achats(j, _ordres)
     _origine_du_double(j, _ordres)
+    _excedent_dans_les_ouverts(j, _ordres)
     _base_de_cout(tous)
     latent = _latent()
     variation = None

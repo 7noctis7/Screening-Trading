@@ -1,5 +1,39 @@
 # 04 — JOURNAL
 
+## Session 2026-09-03 (suite 3) — Le registre est exact là où il ferme ; il invente là où il ouvre
+
+**Le dump a répondu, et la réponse est plus simple que mes deux hypothèses.** Sur les deux titres
+ventilés, la partie FERMÉE du journal égale la quantité achetée **au dix-millième** :
+
+    ICLN — fermés 301,600106 · acheté 301,6001 · écart +0,0000 · OUVERT 301,600106
+    NWL  — fermés 1 554,626507 · acheté 1 554,6265 · écart +0,0000 · OUVERTS 1 306,379607
+
+L'appariement des sorties est donc juste. **Tout l'excédent est dans les lots OUVERTS**, et le
+chiffre des lots ouverts NWL — 1 306,379607 — est exactement celui que le tableau
+« journal vs positions réelles » signalait déjà comme fantôme.
+
+**Ce que ces lots ouverts sont.** Ils portent la date et le prix de VENTES :
+
+  · ICLN, lot ouvert de 301,600106 entré le 23/06 à 20,8300 — jour et prix EXACTS de la vente
+    qui a soldé les deux lots précédents ;
+  · NWL, lot ouvert de 155,375433 entré le 25/06 à 5,7800 — quantité identique au millionième,
+    même jour et même prix que la SORTIE `-R1`.
+
+Une vente a été enregistrée comme une ouverture. C'est la cause du « 2× » : le journal porte
+`acheté + vendu` là où un aller-retour complet est bouclé, d'où le rapport exactement 2,0000 sur
+les titres soldés, et 1,84 sur NWL qui ne l'est pas entièrement.
+
+**Ce qui est livré, et ce qui ne l'est pas.** `_excedent_dans_les_ouverts` teste cette lecture
+sur TOUS les symboles et sur chaque lot ouvert : existe-t-il chez le courtier une vente de même
+symbole, même quantité, même prix ? L'appariement est volontairement strict — une vente exécutée
+en plusieurs fills ne sera pas appariée — donc le compte renvoyé est un **plancher** : il
+sous-estime, il ne peut pas surestimer. C'est le sens qu'on veut pour un chiffre qui servira à
+décider d'un retrait de lignes. **Aucune ligne n'est retirée avant de l'avoir lu.**
+
+**Troisième hypothèse, première confirmée — et c'est la mesure qui l'a produite, pas une lecture
+de code.** Les deux précédentes (recouvrement import/live, puis deux identités par le chemin
+d'écriture) restent écrites avec ce qui les a démenties.
+
 ## Session 2026-09-03 (suite 2) — Ma deuxième hypothèse sur le doublon est fausse aussi
 
 **Ce que la ventilation a répondu.** J'avais écrit deux lectures possibles : deux préfixes à ~1×
