@@ -37,7 +37,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-LIMITE_ORDRES = 500          # profondeur d'historique demandée au courtier
+LIMITE_ORDRES = 5000         # profondeur demandée ; l'API pagine par 500
 MOTIF = "reconciliation-journal"
 
 
@@ -59,8 +59,14 @@ def _ventes_courtier(limite: int = LIMITE_ORDRES) -> list[dict]:
         print(f"  Courtier injoignable ({str(e)[:70]}) — rien ne peut être réparé "
               "sans sa vérité. Aucune écriture.")
         return []
-    return [o for o in ordres
-            if o.get("side") == "sell" and float(o.get("price") or 0) > 0]
+    ventes = [o for o in ordres
+              if o.get("side") == "sell" and float(o.get("price") or 0) > 0]
+    print(f"\n  {len(ordres)} ordre(s) exécuté(s) récupéré(s), dont {len(ventes)} "
+          f"vente(s).")
+    if len(ordres) >= limite:
+        print("  ⚠️ Le plafond demandé est ATTEINT : l'historique est peut-être encore "
+              "tronqué.\n     Relancer avec une limite plus haute avant de conclure.")
+    return ventes
 
 
 def _lots_ouverts(journal) -> tuple[list, set]:
@@ -195,7 +201,6 @@ def main() -> None:
     ventes = _ventes_courtier()
     if not ventes:
         return
-    print(f"\n  {len(ventes)} vente(s) réelle(s) récupérée(s) chez le courtier.")
     fermetures, orphelins = _plan(lots, ventes)
     _resume(fermetures, orphelins, lots)
     if not appliquer:

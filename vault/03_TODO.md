@@ -123,7 +123,11 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       après sauvegarde. Les lots sans vente correspondante RESTENT ouverts et sont
       signalés — les fermer au dernier prix inventerait un P&L.
 - [x] **P0 — Restaurer et rejouer : FAIT le 03/09.** 185 écritures, zéro avertissement.
-- [ ] **P0 — LE JOURNAL ÉCRIT CHAQUE LOT EN DOUBLE.** Découvert le 03/09 après réparation :
+- [x] **P0 — « Lots en double » : HYPOTHÈSE FAUSSE, mesurée le 03/09** (« aucun doublon »).
+      La vraie cause : `AlpacaBroker.orders` ne PAGINAIT pas. 500 demandés, 202 rendus,
+      moitié des ventes jamais arrivées. Pagination + fonction pure `paginer` + 5 tests.
+      **Reste à REJOUER la réconciliation avec l'historique complet.**
+- [ ] ~~**P0 — ancien : le journal écrit chaque lot en double**~~ Découvert le 03/09 après réparation :
       les quantités restantes valent EXACTEMENT la moitié des initiales sur des dizaines de
       titres (AAPL 47,28 → 23,64, BXP 212,62 → 106,31, CNC 228,81 → 114,40). Les ventes ont
       soldé une copie et laissé l'autre. Explique aussi QQQ 137,1 vs 70,45 détenus.

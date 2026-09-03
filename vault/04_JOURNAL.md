@@ -3060,3 +3060,32 @@ courtier détient maintenant AAVE, MRNA, PRU, SLG, STT, TER, TROW, TTWO, UNH, ZI
 Le portefeuille bouge pendant qu'on le mesure — à garder en tête avant de lire un écart
 comme une anomalie.
 
+## 2026-09-03 — Troisième hypothèse fausse, et la cause enfin mesurée : l'historique était tronqué
+
+**« Le journal écrit chaque lot en double » est FAUX.** La mesure ajoutée le dit sans
+ambiguïté : « aucun doublon — les lots ouverts sont tous distincts ». Troisième hypothèse
+de ma part réfutée par les données dans cette session (après « ^NDX » et « désalignement de
+calendrier »). Les fermetures AAPL portaient d'ailleurs des quantités DIFFÉRENTES
+(11,763496 et 11,877721) : des lots distincts, pas des copies.
+
+**LA CAUSE, ET ELLE ÉTAIT SOUS LES YEUX.** J'ai demandé 500 ordres à Alpaca, l'API en a
+rendu **202**. `get_orders` plafonne à 500 par appel ET rend les plus RÉCENTS d'abord : un
+seul appel ne peut donc pas couvrir un historique plus long, et il le tronque **sans rien
+dire**. La moitié manquante de chaque position n'était pas un doublon — c'étaient les
+ventes ANCIENNES qui n'étaient jamais arrivées jusqu'au script.
+
+**Corrigé** : `AlpacaBroker.orders` pagine désormais avec `until` = le plus ancien
+horodatage déjà vu. La boucle est extraite en fonction PURE (`paginer`) pour être testable
+sans le SDK — une boucle de pagination est exactement le genre de code où une condition
+d'arrêt mal posée tourne à l'infini ou tronque en silence. Deux garde-fous, pour deux
+défaillances différentes : le nombre de pages est borné (API qui répond toujours du neuf)
+et l'horodatage doit STRICTEMENT reculer (API qui répond toujours pareil). Cinq tests.
+
+**Le script REND COMPTE de ce qu'il récupère** : nombre d'ordres, nombre de ventes, et un
+avertissement explicite si le plafond demandé est atteint — c'est-à-dire si l'historique
+peut ENCORE être tronqué. La leçon de la journée tient dans cette ligne : un chiffre qui
+peut être tronqué doit dire quand il l'est.
+
+**Ce que ça permet enfin** : rejouer la réconciliation avec l'historique COMPLET. Les 42
+lots orphelins devraient trouver leurs ventes, et le résidu se refermer nettement.
+
