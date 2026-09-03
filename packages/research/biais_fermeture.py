@@ -170,3 +170,43 @@ def reconcilier(lots_ouverts: list[dict], positions: dict[str, float]) -> dict:
                      (f"{len(ecarts)} symbole(s) en désaccord, dont {len(fantomes)} "
                       "que le courtier ne détient PAS. Le journal ne décrit pas ce "
                       "compte : win rate et espérance n'en sont pas des mesures.")}
+
+
+def perimetre_affiche(tous: list[dict], affiches: list[dict]) -> dict:
+    """Le panneau montre-t-il le COMPTE, ou un sous-ensemble favorable de celui-ci ?
+
+    Mesuré le 03/09, après réparation des entrées et des sorties : le périmètre
+    `legacy=0` affichait +6 260,82 $ de réalisé et 70 % de réussite, quand le TOTAL
+    subi par le compte valait +569,31 $ et 56 %. Le filtre masquait 266 lots et
+    −5 691,51 $. Aucun des deux chiffres n'est faux ; c'est leur présentation qui l'est,
+    puisque seul le premier est publié et qu'il est lu comme la performance du compte.
+
+    On ne fait PAS entrer les lots `legacy` dans la statistique affichée : ce sont des
+    fills importés sans features de décision, et les y verser rendrait le chiffre
+    inutilisable pour la calibration ML qu'il sert. On publie l'écart À CÔTÉ, chiffré —
+    de sorte que le sous-ensemble reste lisible comme un sous-ensemble.
+    """
+    def _bilan(rows: list[dict]) -> dict:
+        fermes = [r for r in rows if r.get("exit_ts")]
+        realise = sum(float(r.get("pnl_net") or 0.0) for r in fermes)
+        d = {"n": len(rows), "n_fermes": len(fermes), "pnl_realise": round(realise, 2)}
+        if fermes:
+            d["win_rate"] = round(
+                sum(1 for r in fermes if r.get("is_win")) / len(fermes), 3)
+        return d
+    total, vu = _bilan(tous), _bilan(affiches)
+    masques = total["n"] - vu["n"]
+    ecart = round(total["pnl_realise"] - vu["pnl_realise"], 2)
+    # L'espace fine ne remplace que le séparateur de MILLIERS : appliquer `replace`
+    # à la phrase entière effacerait aussi ses virgules de ponctuation.
+    montant = f"{ecart:+,.2f}".replace(",", " ")
+    return {
+        "affiche": vu, "compte": total,
+        "lots_masques": masques, "realise_masque": ecart,
+        "avertissement": (
+            f"Le panneau affiche un SOUS-ENSEMBLE du compte : {masques} lot(s) et "
+            f"{montant} $ de réalisé sont hors périmètre (fills importés, sans "
+            "features de décision). Le chiffre affiché décrit les trades pilotés par "
+            "le système, pas la performance du compte."
+        ) if masques > 0 else None,
+    }

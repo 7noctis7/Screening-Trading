@@ -1225,3 +1225,38 @@ reconstitués après coup, dont la vente existe mais a déjà été marquée con
 les unités fermées par fill et on rejoue le reste. Deux refus explicites subsistent : rien n'est
 écrit pour un courtier injoignable, et un écart où le journal en sait PLUS que le courtier est
 signalé sans être « corrigé » — supprimer des lots pour faire coller les chiffres ne répare rien.
+
+## ADR-0058 — Le panneau publie son PÉRIMÈTRE, il ne l'élargit pas (2026-09-03)
+
+**Contexte.** `/api/journal` lit `all(legacy=False)`. Après la réparation du 03/09, ce périmètre
+affichait +6 260,82 $ de réalisé et 70 % de réussite, quand le compte avait subi +569,31 $ et
+56 % : le filtre masquait 266 lots et −5 691,51 $. Aucun des deux chiffres n'est faux. Ce qui
+l'était, c'est de n'en publier qu'un et de le laisser lire comme la performance du compte.
+
+**Décision.** Le périmètre affiché reste `legacy=0`, et l'écart avec le total est publié à
+côté, chiffré (`perimetre_affiche`). On ne verse pas les lots `legacy` dans la statistique
+affichée : ce sont des fills importés sans features de décision, et les y mêler rendrait
+inutilisable pour la calibration ML le chiffre même qui la sert.
+
+**Conséquences.** Le lecteur voit d'un coup d'œil que le panneau décrit les trades pilotés par
+le système et non le compte. La correspondance avec la courbe d'équité redevient vérifiable au
+lieu d'être supposée. Un troisième chiffre apparaît sur la page ; c'est le prix d'une lecture
+qui ne se trompe plus de question.
+
+## ADR-0059 — Une mesure qui infirme n'infirme que ce qu'elle a mesuré (2026-09-03)
+
+**Contexte.** `_doublons` cherchait des lots OUVERTS de mêmes titre, quantité, prix et jour, et
+répondait « aucun doublon ». La conclusion « le journal n'écrit pas en double » en avait été
+tirée, et le sujet clos. Après la réparation, le rapport quantité-journal / quantité-achetée
+vaut 2,000000 sur dix symboles vérifiés parmi quarante. Les deux copies portent des identifiants
+différents, l'une peut être fermée, et leurs drapeaux `legacy` peuvent différer : trois
+conditions hors du champ du test. Troisième occurrence de ce schéma cette semaine.
+
+**Décision.** Une mesure ne réfute que l'énoncé qu'elle teste, et son périmètre doit être écrit
+à côté de son verdict. `_origine_du_double` VENTILE (par drapeau, par préfixe d'identifiant) au
+lieu de conclure, et ne supprime rien : il rend la cause lisible et laisse la décision à
+l'humain qui lit le chiffre.
+
+**Conséquences.** Un bloc de diagnostic supplémentaire à chaque `make diag-journal`. En échange,
+la question « une seule écriture ou deux chemins ? » se tranche sur un chiffre plutôt que sur
+une lecture de code, et l'on ne retire aucune ligne d'un registre avant de savoir laquelle.

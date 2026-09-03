@@ -296,6 +296,74 @@ def _couverture_achats(journal, ordres: list[dict]) -> None:
         print("      chercher du côté du latent au PREMIER point de la courbe.")
 
 
+def _origine_du_double(journal, ordres: list[dict]) -> None:
+    """D'OÙ vient la seconde copie, quand le journal porte DEUX FOIS l'achat ?
+
+    Mesuré le 03/09, après la complétion des ouvertures : sur 40 symboles, la quantité
+    du journal vaut 2,000000 fois celle achetée chez le courtier — AAPL 47,2824 contre
+    23,6412, BXP 212,6200 contre 106,3100, FOX 317,8576 contre 158,9288. Dix ratios
+    calculés, dix fois 2,000000 : ce n'est pas du bruit d'arrondi, c'est un achat
+    enregistré deux fois.
+
+    `_doublons` ne pouvait pas le voir : il ne compare que des lots OUVERTS de mêmes
+    titre, quantité, prix et jour. Ici les deux copies ont des IDENTIFIANTS différents,
+    l'une peut être fermée et l'autre non, et elles peuvent ne pas porter le même
+    drapeau `legacy`. Un test trop étroit avait donc répondu « aucun doublon » à une
+    question qu'il ne posait pas.
+
+    Ce bloc ne conclut pas : il VENTILE la quantité du journal par drapeau et par
+    préfixe d'identifiant. Si les deux moitiés se répartissent legacy=0 / legacy=1, la
+    cause est le recouvrement entre l'import historique et la journalisation live. Si
+    elles portent le même drapeau et deux préfixes différents, c'est le chemin
+    d'écriture qui a produit deux identités pour un même achat. Le chiffre tranche.
+    """
+    from packages.research.biais_fermeture import symbole_canonique
+    achete: dict[str, float] = {}
+    for o in ordres:
+        if o.get("side") == "buy" and float(o.get("qty") or 0) > 0:
+            c = symbole_canonique(o["symbol"])
+            achete[c] = achete.get(c, 0.0) + float(o["qty"])
+    # `legacy` n'est pas un champ de TradeRecord : il vit dans la table. On le
+    # RÉCUPÈRE par deux requêtes plutôt que par un getattr qui vaudrait toujours None.
+    vivants = {t.id for t in journal.all(legacy=False)}
+    par_sym: dict[str, list] = {}
+    for t in journal.all():
+        par_sym.setdefault(symbole_canonique(t.instrument), []).append(t)
+    doubles = {s: q for s, q in achete.items()
+               if sum(float(t.qty or 0) for t in par_sym.get(s, [])) > 1.5 * q}
+    print("\n  ORIGINE DU DOUBLE COMPTAGE — 2× l'achat au journal : sur quels ids ?")
+    print()
+    if not doubles:
+        print("    aucun symbole au-dessus de 1,5× la quantité achetée.")
+        return
+    print(f"    {len(doubles)} symbole(s) concerné(s). Ventilation des 8 plus gros :\n")
+    for sym in sorted(doubles, key=lambda s: -doubles[s])[:8]:
+        lots = par_sym.get(sym, [])
+        par_prefixe: dict[str, float] = {}
+        ids_par_prefixe: dict[str, int] = {}
+        q0 = q1 = 0.0
+        for t in lots:
+            qt = float(t.qty or 0)
+            pref = str(t.id).split("-")[0]
+            par_prefixe[pref] = par_prefixe.get(pref, 0.0) + qt
+            ids_par_prefixe[pref] = ids_par_prefixe.get(pref, 0) + 1
+            if t.id in vivants:
+                q0 += qt
+            else:
+                q1 += qt
+        total = q0 + q1
+        print(f"    {sym:<8} acheté {doubles[sym]:>12.4f} · journal {total:>12.4f} "
+              f"({total / doubles[sym]:.4f}×) · {len(lots)} enregistrement(s)")
+        print(f"        legacy=0 {q0:>12.4f}   ·   legacy=1 {q1:>12.4f}")
+        for pref, q in sorted(par_prefixe.items(), key=lambda kv: -kv[1])[:4]:
+            print(f"        id « {pref}… » {q:>12.4f}  "
+                  f"sur {ids_par_prefixe[pref]} identifiant(s)")
+    print("\n    LECTURE. Deux préfixes portant chacun ~1× la quantité achetée =")
+    print("    un même achat écrit par DEUX chemins (import historique et live).")
+    print("    Un seul préfixe portant 2× = le chemin d'écriture crée deux identités.")
+    print("    Aucune ligne n'est supprimée ici : on mesure d'abord.")
+
+
 def _base_de_cout(tous: list) -> None:
     """Le prix d'entrée d'un lot est-il celui du MARCHÉ à sa date d'entrée ?
 
@@ -484,7 +552,9 @@ def main() -> None:
     print("\n  Construction du snapshot pour lire le courtier… ~30-60 s")
     positions = _positions_courtier()
     _lots_vs_courtier([t for t in tous if not t.exit_ts], positions)
-    _couverture_achats(j, _ordres_courtier())
+    _ordres = _ordres_courtier()
+    _couverture_achats(j, _ordres)
+    _origine_du_double(j, _ordres)
     _base_de_cout(tous)
     latent = _latent()
     variation = None

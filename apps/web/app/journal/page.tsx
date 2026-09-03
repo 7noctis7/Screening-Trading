@@ -68,6 +68,18 @@ export default function Journal() {
             <MetricCard label="Expectancy / trade" value={st.expectancy != null ? usd(st.expectancy) : "UNCALIBRATED"} />
           </section>
           {st.status && <p className="text-muted2 text-xs">⚠️ {st.status} — les stats agrégées n'apparaissent qu'avec un échantillon suffisant (jamais de chiffre inventé).</p>}
+          {st.perimetre?.avertissement && (
+            <section className="card p-3 text-xs space-y-1">
+              <p className="text-muted"><b>Périmètre affiché ≠ compte.</b> {st.perimetre.avertissement}</p>
+              <p className="text-muted2 mono">
+                affiché : {st.perimetre.affiche?.n ?? 0} lots · réalisé {usd(st.perimetre.affiche?.pnl_realise ?? 0)}
+                {st.perimetre.affiche?.win_rate != null && ` · ${(st.perimetre.affiche.win_rate * 100).toFixed(0)}% de réussite`}
+                {"  —  "}
+                compte : {st.perimetre.compte?.n ?? 0} lots · réalisé {usd(st.perimetre.compte?.pnl_realise ?? 0)}
+                {st.perimetre.compte?.win_rate != null && ` · ${(st.perimetre.compte.win_rate * 100).toFixed(0)}% de réussite`}
+              </p>
+            </section>
+          )}
           {sl.available ? (
             <section className="card p-3 text-xs text-muted flex flex-wrap gap-x-6 gap-y-1">
               <span title="Écart entre le prix connu à la DÉCISION et le fill réel — sert à calibrer le sabotage-gate avec du vécu.">

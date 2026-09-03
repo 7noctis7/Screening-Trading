@@ -130,11 +130,26 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       dès son premier usage condamnait les lots reconstitués après coup à rester ouverts
       pour toujours (leur vente existe, mais était marquée consommée en entier). On compte
       les unités fermées par fill et on rejoue le reste. 3 tests de plus.
-- [ ] **P0 — LANCER la réparation dans l'ORDRE (poste local, données réelles).**
-      Non commutatif — le réconciliateur ne peut fermer que des lots qui existent :
-      `make completer-ouvertures` (lire le plan) → `ARGS=--appliquer` →
-      `make reconcilier-journal ARGS=--appliquer` → `make diag-journal` pour vérifier que
-      la couverture est passée de 57/87 à 87/87 et que le résidu s'est refermé.
+- [x] **P0 — Réparation LANCÉE et vérifiée le 03/09.** 30 ouvertures reconstituées
+      (99 847 $ de coût de revient), 67 fermetures postées (−3 860 $), couverture
+      **57/87 → 87/87, 0 incomplet**. Identité comptable : attendu +1 009,24 $ contre
+      +904,50 $ constatés, **écart −104,74 $** (contre −4 198 $ avant) = latent au
+      premier point de la courbe + frais hors P&L, ce qui est le comportement attendu.
+- [ ] **P0 — Le journal porte EXACTEMENT 2× l'achat sur 40 symboles.** Ratio calculé sur
+      dix d'entre eux : 2,000000 dix fois (AAPL 47,2824 / 23,6412 ; BXP 212,6200 /
+      106,3100 ; FOX 317,8576 / 158,9288). `_doublons` avait répondu « aucun doublon »
+      parce qu'il ne compare que des lots OUVERTS de mêmes titre, quantité, prix et jour :
+      ici les deux copies ont des ids différents, l'une peut être fermée, et les drapeaux
+      `legacy` peuvent différer. `_origine_du_double` (livré, aucune suppression) ventile
+      par drapeau et par préfixe d'id. **Lire sa sortie au prochain `make diag-journal`** :
+      deux préfixes à ~1× = recouvrement import historique / live ; un seul préfixe à 2× =
+      le chemin d'écriture crée deux identités. Ne rien supprimer avant ce verdict.
+- [x] **P1 — Le panneau affichait un sous-ensemble favorable sans le dire (03/09).**
+      `legacy=0` : +6 260,82 $ et 70 % ; compte réel : +569,31 $ et 56 %, le filtre
+      masquant 266 lots et −5 691,51 $. `perimetre_affiche` publie les deux côte à côte,
+      chiffrés, sur `/api/journal` et sur la page. Les lots `legacy` ne sont PAS versés
+      dans la statistique affichée : sans features de décision, ils rendraient inutilisable
+      le chiffre qui sert la calibration ML.
 - [x] **P1 — Le panneau du journal disait une chose fausse : CORRIGÉ le 03/09.**
       « C'est la matière première du verdict GO/NO-GO » — non, `rdv_paper` lit la courbe
       d'équité. Le texte dit maintenant que le registre décrit les TRADES et non la

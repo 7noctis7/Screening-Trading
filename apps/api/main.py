@@ -335,6 +335,13 @@ def journal_roundtrips() -> dict:
         # c'est un chiffre faux. On le marque plutôt que de le retirer : le retirer
         # ferait disparaître le problème de la vue.
         stats["reconciliation"] = _bf.reconcilier(_ouverts, _qtes_courtier())
+        # PÉRIMÈTRE. `legacy=0` est le bon filtre pour la calibration ML, et le mauvais
+        # pour répondre « combien le compte a-t-il gagné ». Mesuré le 03/09 : +6 260 $
+        # affichés contre +569 $ subis, l'écart tenant à 266 lots importés. On publie
+        # les deux, chiffrés, plutôt que de laisser lire le premier comme le second.
+        stats["perimetre"] = _bf.perimetre_affiche(
+            [{"exit_ts": t.exit_ts.isoformat() if t.exit_ts else None,
+              "pnl_net": t.pnl_net, "is_win": t.is_win} for t in j.all()], rows)
         if not stats["reconciliation"]["reconcilie"]:
             stats["fiable"] = False
             stats["motif_non_fiable"] = stats["reconciliation"]["motif"]

@@ -1,5 +1,39 @@
 # 04 — JOURNAL
 
+## Session 2026-09-03 (suite) — La réparation a tenu ; ce qu'elle a mis au jour ne l'était pas
+
+**Ce que la réparation a donné, mesuré.** `completer-ouvertures` a reconstitué 30 ouvertures
+(99 847 $ de coût de revient), `reconcilier-journal` a posté 67 fermetures avec les fills réels
+(−3 860 $), et la couverture est passée de **57/87 à 87/87 — 0 incomplet**. L'identité comptable
+se referme : réalisé +569,31 $, latent +439,93 $, attendu +1 009,24 $, constaté +904,50 $,
+**écart −104,74 $** — contre −4 198 $ avant. Le résidu résiduel vaut le latent au premier point
+de la courbe et les frais hors P&L, ce que le script disait devoir rester.
+
+**Ce que la complétion a refusé de toucher, et c'était le bon geste.** 40 symboles où le journal
+en sait PLUS que le courtier, signalés sans être corrigés. J'ai calculé le rapport sur les dix
+premiers : **2,000000 ×** dix fois de suite (AAPL 47,2824 contre 23,6412 ; BXP 212,6200 contre
+106,3100 ; FOX 317,8576 contre 158,9288). Ce n'est pas un arrondi. Le même achat est enregistré
+deux fois.
+
+**Pourquoi `_doublons` avait répondu « aucun doublon ».** Il ne compare que des lots OUVERTS de
+mêmes titre, quantité, prix et jour. Les deux copies ont des identifiants différents, l'une peut
+être fermée et l'autre non, et elles ne portent pas forcément le même drapeau `legacy`. Un test
+trop étroit avait donc répondu par la négative à une question qu'il ne posait pas — c'est la
+troisième fois de la semaine qu'une mesure trop spécifique passe pour une réfutation.
+
+**Ce qui est livré, et ce qui ne l'est pas.** `_origine_du_double` VENTILE la quantité par drapeau
+et par préfixe d'identifiant, sans rien supprimer. Deux préfixes portant chacun ~1× l'achat =
+recouvrement entre l'import historique et la journalisation live. Un seul préfixe portant 2× = le
+chemin d'écriture crée deux identités. Le chiffre tranchera au prochain `make diag-journal` ; je
+ne tranche pas ici, et aucune ligne n'est retirée avant de savoir laquelle.
+
+**Le panneau du site montrait un sous-ensemble favorable, et ne le disait pas.** `legacy=0`
+affiche +6 260,82 $ et 70 % de réussite ; le compte a subi +569,31 $ et 56 %, le filtre masquant
+266 lots et −5 691,51 $. Aucun des deux chiffres n'est faux : c'est de n'en publier qu'un qui
+l'était. `perimetre_affiche` publie désormais les deux côte à côte, chiffrés. On ne verse PAS les
+lots `legacy` dans la statistique affichée — ce sont des fills sans features de décision, et les y
+mêler rendrait inutilisable le chiffre qui sert la calibration ML.
+
 ## Session 2026-09-03 — Le journal n'était pas faux, il était incomplet : la cause était à l'ENTRÉE
 
 **La question posée.** « Trouve la solution pour que le journal soit FIABLE, puis fais-la. »

@@ -123,3 +123,38 @@ def test_un_ecart_de_quantite_infime_ne_declenche_rien():
     permanente — et une alerte permanente cesse d'être lue."""
     r = reconcilier([{"symbol": "QQQ", "qty": 70.4520}], {"QQQ": 70.4519})
     assert r["reconcilie"] is True
+
+
+# ── Le panneau montre-t-il le compte, ou un sous-ensemble favorable ? ─────────────
+
+def test_perimetre_chiffre_ce_que_le_filtre_masque():
+    """Mesuré le 03/09 : +6 260 $ affichés, +569 $ subis, l'écart tenant aux importés.
+    Aucun des deux n'est faux — c'est de n'en publier qu'un qui l'était."""
+    from packages.research.biais_fermeture import perimetre_affiche
+    affiches = [{"exit_ts": "t", "pnl_net": 6260.82, "is_win": True}]
+    tous = affiches + [{"exit_ts": "t", "pnl_net": -5691.51, "is_win": False},
+                       {"exit_ts": None}]
+    out = perimetre_affiche(tous, affiches)
+    assert out["lots_masques"] == 2
+    assert out["realise_masque"] == -5691.51
+    assert out["compte"]["pnl_realise"] == 569.31
+    assert out["affiche"]["win_rate"] == 1.0
+    assert out["compte"]["win_rate"] == 0.5
+    assert "SOUS-ENSEMBLE" in out["avertissement"]
+
+
+def test_perimetre_sans_ecart_ne_crie_pas():
+    """Quand le panneau montre tout, il n'y a rien à avertir."""
+    from packages.research.biais_fermeture import perimetre_affiche
+    rows = [{"exit_ts": "t", "pnl_net": 10.0, "is_win": True}]
+    assert perimetre_affiche(rows, rows)["avertissement"] is None
+
+
+def test_perimetre_espace_fine_ne_mange_pas_la_ponctuation():
+    """Le séparateur de milliers ne doit remplacer QUE lui : appliquer le remplacement
+    à la phrase entière effaçait ses virgules (« fills importés  sans features »)."""
+    from packages.research.biais_fermeture import perimetre_affiche
+    tous = [{"exit_ts": "t", "pnl_net": -5691.51, "is_win": False}]
+    avert = perimetre_affiche(tous, [])["avertissement"]
+    assert "-5 691.51 $" in avert
+    assert "importés, sans features" in avert
