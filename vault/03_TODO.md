@@ -64,7 +64,20 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       Mesuré : 0 séance d'écart entre le calendrier du cœur et l'axe du preset. Rien ne le
       garantit — un titre ajouté à l'univers change l'axe et casse silencieusement le
       recollage `core_ret[-k:] = xr[-k:]`. Aligner par DATE tant que ça ne coûte rien.
-- [ ] **P1 — Expliquer la dégradation du backtest** : PF 1,19 → 1,08, espérance 6 $ → 2 $,
+- [ ] **P1 — Fenêtre vs code : `QUANT_HISTORY_DAYS=3600 make index-core`.** Un ancien
+      dashboard affichait Sharpe 1,34 / CAGR 20,1 % sur n=2391 depuis 2017-04 ; l'actuel
+      0,95 / 14,9 % sur 2 580 séances depuis 2016-03. Treize mois de plus au début. Rejouer
+      le code actuel sur la fenêtre ancienne sépare les deux causes en un seul run.
+- [ ] **P1 — 610 → 1 299 trades NON EXPLIQUÉ.** Plus du double, pour une fenêtre +8 % et un
+      univers-graine inchangé (1 047 lignes, vérifié sur 6 commits). Changement de règle ou
+      d'ensemble éligible. À trouver avant d'interpréter le PF 1,48 → 1,08.
+- [ ] **P2 — `obsidian.attribution` aligne par position** (`min(len)` + `[-n:]`) : c'est ce
+      qui a produit bêta 0,006 et corrélation 0,008 vs QQQ pour un portefeuille long-only
+      d'actions US. Aligner par DATE comme partout ailleurs.
+- [ ] **P2 — Unifier les trois conventions de Sortino.** `index_core._stats` corrigé le
+      03/09 ; `perf_summary` et `metrics.sortino` utilisent encore l'écart-type des
+      négatifs (1,04× la définition). Une seule source de vérité, comme pour le Sharpe.
+- [ ] ~~**P1 — Expliquer la dégradation du backtest**~~ : PF 1,19 → 1,08, espérance 6 $ → 2 $,
       payoff 2,79 → 2,62, 1 168 → 1 299 trades. Deux causes possibles à départager :
       `trail_atr=0` pas encore dans `main`, ou décalage du jeu de données (même P1 que
       ci-dessus). **Ne rien conclure de ces chiffres avant.**

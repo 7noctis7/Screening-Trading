@@ -2692,3 +2692,45 @@ pour entamer l'implémentation des modules métier.
   QQQ ». Il se contredisait dans la même sortie. Le texte affirmait la conclusion écrite
   d'avance au lieu de lire ce que le run venait de produire.
 
+## 2026-09-03 — Un ancien tableau de bord bien meilleur : ce qui est vrai, ce qui ne l'est pas
+
+Comparaison demandée entre un ancien dashboard (469,8 % · CAGR 20,1 % · Sharpe 1,34 ·
+610 trades · PF 1,48 · n=2391) et l'actuel (330,1 % · 14,9 % · 0,95 · 1 299 trades · PF 1,08).
+
+**Ce qui n'est PAS crédible dans l'ancien.** Le bloc d'attribution affichait
+**bêta 0,006 et corrélation 0,008 vs QQQ** pour un portefeuille long-only d'actions
+américaines sur 9,5 ans. Aucun livre long d'actions US ne corrèle à 0,008 avec le Nasdaq —
+l'ordre de grandeur est 0,6 à 0,9. Ce chiffre-là ne décrit rien de réel, et c'est
+précisément lui qui portait « Alpha annualisé 17,8 % » et « Contrib. Alpha 365,1 % », les
+deux nombres les plus flatteurs de la page. `obsidian.attribution` aligne par `min(len)` +
+`[-n:]` — POSITIONNEL, la classe de bug déjà corrigée trois fois ailleurs. L'ancienne page
+imprimait d'ailleurs sa propre mise en garde : « DSR≈0 → pas d'alpha directionnel prouvé »
+et « ⚠ Sous-performe QQQ en absolu (368 % vs 481 %) ».
+
+**Un défaut réel trouvé et CORRIGÉ au passage.** La même page affichait deux Sortino,
+**1,29** en tête et **1,82** dans la table du cœur, sur des courbes dont les Sharpe
+différaient de 0,01. Trois conventions coexistaient. Mesuré sur 2 400 points :
+  · `perf_summary` — écart-type des négatifs → 1,04× la valeur correcte (acceptable) ;
+  · `index_core._stats` — RMS des négatifs divisé par le COMPTE DES PERTES → **0,70×**,
+    soit 30 % trop bas, au point de passer sous le Sharpe ;
+  · définition : racine de la moyenne des `min(r,0)²` sur le nombre TOTAL d'observations.
+`index_core._stats` est corrigé, avec quatre tests dont un qui CHIFFRE l'ancien écart.
+Le symptôme à retenir : **un Sortino inférieur au Sharpe** signale un dénominateur mal
+normalisé. Mon propre banc `coeur-multi` en souffrait — ses Sortino publiés le 03/09 sont
+donc 30 % trop bas ; les VERDICTS ne bougent pas, la règle porte sur Sharpe/maxDD/DSR.
+
+**Ce qui interdit la comparaison, indépendamment de tout ça.** Les deux mesures ne portent
+pas sur la même fenêtre : n=2391 depuis 2017-04-25 contre 2 580 séances depuis 2016-03-01.
+Le backtest actuel inclut **13 mois de plus au début**. Le texte de la page le dit
+lui-même : « Lis d'abord la colonne Fenêtre ». Et le P1 du 02/09 reste ouvert — Sharpe 0,65
+puis 0,38 sur un code identique au caractère près, à un jour d'écart. **Tant qu'il n'est pas
+expliqué, aucune comparaison entre deux dates n'est valide, celle-ci comprise.**
+
+**Ce que je ne sais PAS expliquer** : 610 → 1 299 trades, plus du double, alors que la
+fenêtre ne grandit que de 8 % et que l'univers-graine est inchangé (1 047 lignes sur tous
+les commits vérifiés). C'est un changement de règle ou d'ensemble éligible, pas de durée.
+
+**L'expérience qui tranche**, à lancer avant toute autre conclusion :
+`QUANT_HISTORY_DAYS=3600 make index-core` — le code ACTUEL sur la fenêtre ANCIENNE.
+Sharpe qui remonte vers 1,34 → c'est la fenêtre. Sharpe qui reste vers 0,95 → c'est le code.
+
