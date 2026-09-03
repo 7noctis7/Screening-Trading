@@ -2832,3 +2832,50 @@ mauvaise lecture. P2.
 0,92 / −35,6 %. La stratégie **sous-performe le QQQ en absolu** avec un Sharpe à peine
 meilleur et **10 points de drawdown en moins**. Un Nasdaq à risque réduit, pas une machine
 à alpha — ce que dit aussi le DSR.
+
+## 2026-09-03 — Mesuré : 5 557 $ manquent entre le journal et le compte
+
+`make diag-journal` a tourné. Ce qui est désormais ÉTABLI, et ce qui ne l'est pas.
+
+**Le filtre `legacy` n'explique rien.** Il masque 137 lots, mais **0 fermé et 0,00 $ de
+réalisé**. Ma première piste tombe : le panneau ne cache aucune perte réalisée.
+
+**La fenêtre est bonne côté Alpaca.** Courbe du 2026-06-22 au 2026-09-03, sorties du
+journal du 2026-08-27 au 2026-09-02 : DANS la fenêtre. (Bitmart déborde, mais ce compte
+vaut 0,10 $ — non matériel.)
+
+**Le résidu, lui, est massif.**
+
+    réalisé (tous lots)            +5 821,43 $
+    latent des positions ouvertes    +611,14 $
+    attendu sur le compte          +6 432,57 $
+    variation constatée              +875,95 $
+    RÉSIDU INEXPLIQUÉ              -5 556,62 $
+
+**Le fait le plus frappant, et il n'était pas dans mes hypothèses : 39 aller-retours en
+CINQ séances** (27/08 → 02/09), 5 821 $ de gains réalisés, sur un compte qui n'a bougé que
+de 876 $ **en deux mois et demi**. Un rythme et un montant qui, à eux seuls, demandent une
+explication.
+
+**Défaut de mon propre script, trouvé par sa sortie et corrigé.** Le total affichait
++875,95 $ quand la somme des lignes donnait +879,34 $. Cause : la courbe était relue APRÈS
+`build_snapshot()`, qui ENREGISTRE le point du jour — deux lectures, deux séries. Elle est
+maintenant lue une seule fois, en amont. Une mesure qui ne se recoupe pas avec elle-même ne
+vaut rien, si petit que soit l'écart.
+
+**Deux causes restent, et le script les mesure désormais toutes les deux :**
+  1. **VERSEMENTS/RETRAITS** — `_mouvements` détecte les sauts journaliers hors norme
+     (seuil relatif : 6 × l'écart absolu médian de la série, pas un montant arbitraire).
+     Un retrait de ~5 500 $ apparaîtrait comme un saut isolé.
+  2. **LOTS FANTÔMES** — `_lots_vs_courtier` compare, symbole par symbole, les quantités
+     des lots OUVERTS du journal aux quantités RÉELLEMENT détenues. Le réalisé s'obtient
+     en appariant les ventes à des lots ouverts : si le journal porte des lots que le
+     courtier ne confirme pas, ces appariements fabriquent des gains sans contrepartie.
+
+**Rien n'est conclu tant que ce run n'a pas eu lieu.**
+
+**Cause du `make sync` introuvable, confirmée par la sortie** : le HEAD local était sur
+`43b15a9 (origin/main, main)`. Un déploiement avait remis la branche sur `main`, où la
+cible `sync` n'existe pas encore. Le piège d'amorçage se reproduira à chaque déploiement
+tant que la branche n'est pas fusionnée.
+

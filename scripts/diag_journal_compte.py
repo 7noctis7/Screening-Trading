@@ -87,12 +87,25 @@ def _journal() -> None:
                   "mais réel.")
 
 
-def _compte(bilan_total: dict) -> None:
+BROKERS = ("alpaca", "crypto", "binance", "bitmart")
+
+
+def _courbes() -> dict[str, list]:
+    """Les courbes lues UNE SEULE FOIS.
+
+    Elles étaient relues après `build_snapshot()`, qui ENREGISTRE le point du jour :
+    les deux lectures ne portaient donc pas sur la même série et le total ne
+    correspondait plus à la somme des lignes (3,39 $ d'écart le 03/09). Une mesure qui
+    ne se recoupe pas avec elle-même ne vaut rien, si petit que soit l'écart.
+    """
     from packages.execution.equity_history import series
+    return {b: series(b) for b in BROKERS}
+
+
+def _compte(courbes: dict, bilan_total: dict) -> None:
     print("\n  COMPTE — courbe d'equity réelle enregistrée\n")
     trouve = False
-    for broker in ("alpaca", "crypto", "binance", "bitmart"):
-        pts = series(broker)
+    for broker, pts in courbes.items():
         if len(pts) < 2:
             continue
         trouve = True
@@ -100,6 +113,7 @@ def _compte(bilan_total: dict) -> None:
         print(f"  {broker:<10} {len(pts):>4} points · {pts[0]['t']} → {pts[-1]['t']} · "
               f"{v0:,.2f} $ → {v1:,.2f} $ · variation BRUTE {v1 - v0:+,.2f} $")
         _fenetre(pts, bilan_total)
+        _mouvements(pts)
     if not trouve:
         print("  Aucune courbe enregistrée (equity_history vide) — la comparaison")
         print("  est impossible, et c'est la réponse : rien à réconcilier encore.")
@@ -116,6 +130,81 @@ def _fenetre(pts: list, b: dict) -> None:
     if not dedans:
         print("    → on compare un cumul de trades à un rendement calculé sur")
         print("      une AUTRE période. À corriger avant toute autre lecture.")
+
+
+def _mouvements(pts: list, k: float = 6.0) -> None:
+    """Sauts journaliers hors norme = versements ou retraits, pas des gains.
+
+    On ne compare pas à un seuil en dollars, qui dépendrait de la taille du compte, mais
+    à la dispersion OBSERVÉE de la série : `k` fois l'écart absolu médian. Un compte
+    calme rend le filtre plus sensible, un compte agité moins — ce qui est le
+    comportement voulu.
+    """
+    ecarts = [float(pts[i]["v"]) - float(pts[i - 1]["v"]) for i in range(1, len(pts))]
+    if len(ecarts) < 5:
+        return
+    medabs = sorted(abs(x) for x in ecarts)[len(ecarts) // 2]
+    seuil = max(k * medabs, 1.0)
+    gros = [(pts[i + 1]["t"], e) for i, e in enumerate(ecarts) if abs(e) > seuil]
+    if not gros:
+        print(f"    aucun mouvement suspect (seuil {seuil:,.2f} $/jour) — "
+              "la variation est du P&L")
+        return
+    total = sum(e for _, e in gros)
+    print(f"    {len(gros)} saut(s) hors norme (> {seuil:,.2f} $/jour), total "
+          f"{total:+,.2f} $ — candidats VERSEMENT/RETRAIT :")
+    for t, e in gros[:6]:
+        print(f"      {t}  {e:+,.2f} $")
+
+
+def _lots_vs_courtier(ouverts: list, positions: dict) -> None:
+    """Les lots OUVERTS du journal correspondent-ils aux positions RÉELLES ?
+
+    C'est la mesure qui tranche si le réalisé est surévalué. Le P&L réalisé s'obtient
+    en appariant les ventes à des lots ouverts : si le journal porte des lots que le
+    courtier ne détient pas, ces appariements produisent des gains qui n'ont jamais
+    existé. On compare donc les QUANTITÉS, symbole par symbole, sans rien supposer.
+    """
+    par_sym: dict[str, float] = {}
+    for lot in ouverts:
+        par_sym[lot.instrument] = par_sym.get(lot.instrument, 0.0) + float(lot.qty or 0)
+    print("\n  LOTS OUVERTS DU JOURNAL vs POSITIONS RÉELLES\n")
+    if not positions:
+        print("    positions courtier indisponibles — comparaison impossible, "
+              "rien n'est conclu.")
+        return
+    print(f"    {'symbole':<12} {'journal':>14} {'courtier':>14} {'écart':>14}")
+    print("    " + "-" * 58)
+    ecart_total = 0.0
+    for sym in sorted(set(par_sym) | set(positions)):
+        qj, qc = par_sym.get(sym, 0.0), positions.get(sym, 0.0)
+        d = qj - qc
+        ecart_total += abs(d)
+        marque = "  ←" if abs(d) > 1e-6 * max(1.0, abs(qc)) else ""
+        print(f"    {sym:<12} {qj:>14.6f} {qc:>14.6f} {d:>+14.6f}{marque}")
+    if ecart_total < 1e-6:
+        print("\n    → Journal et courtier sont d'accord. Le réalisé n'est PAS gonflé "
+              "par des lots fantômes : chercher le résidu ailleurs.")
+    else:
+        print("\n    → ÉCART. Le journal porte des quantités que le courtier ne "
+              "confirme pas.\n      Les ventes appariées à ces lots produisent un "
+              "réalisé sans contrepartie réelle.")
+
+
+def _positions_courtier() -> dict:
+    """Quantités RÉELLEMENT détenues par symbole, telles que le courtier les dit."""
+    try:
+        from apps.api.snapshot import build_snapshot
+        real = (build_snapshot().get("live") or {}).get("real") or {}
+        out: dict[str, float] = {}
+        for compte in ("alpaca", "crypto"):
+            for pos in (real.get(compte) or {}).get("positions", []) or []:
+                if pos.get("symbol"):
+                    out[pos["symbol"]] = float(pos.get("qty") or 0.0)
+        return out
+    except Exception as e:  # noqa: BLE001
+        print(f"  (positions courtier indisponibles : {str(e)[:60]})")
+        return {}
 
 
 def _residu(b_total: dict, latent: float, variation: float | None) -> None:
@@ -159,18 +248,23 @@ def main() -> None:
     print()
     try:
         from packages.storage import SqliteTradeJournal
-        b_total = _bilan(SqliteTradeJournal().all())
+        j = SqliteTradeJournal()
+        tous = j.all()
+        b_total = _bilan(tous)
     except Exception as e:  # noqa: BLE001
         print(f"Journal illisible : {str(e)[:80]}")
         return
     _journal()
-    _compte(b_total)
-    print("\n  Construction du snapshot pour lire le latent RÉEL… ~30-60 s")
+    # La courbe est lue AVANT le snapshot : `build_snapshot` enregistre le point du jour
+    # et modifierait la série entre deux lectures.
+    courbes = _courbes()
+    _compte(courbes, b_total)
+    print("\n  Construction du snapshot pour lire le courtier… ~30-60 s")
+    positions = _positions_courtier()
+    _lots_vs_courtier([t for t in tous if not t.exit_ts], positions)
     latent = _latent()
-    from packages.execution.equity_history import series
     variation = None
-    for broker in ("alpaca", "crypto", "binance", "bitmart"):
-        pts = series(broker)
+    for pts in courbes.values():
         if len(pts) >= 2:
             variation = (variation or 0.0) + float(pts[-1]["v"]) - float(pts[0]["v"])
     _residu(b_total, latent, variation)
