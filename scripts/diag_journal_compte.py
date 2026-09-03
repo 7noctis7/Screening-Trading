@@ -186,6 +186,7 @@ def _lots_vs_courtier(ouverts: list, positions: dict) -> None:
         marque = "  ←" if abs(d) > 1e-6 * max(1.0, abs(qc)) else ""
         print(f"    {sym:<12} {qj:>14.6f} {qc:>14.6f} {d:>+14.6f}{marque}")
     _age_fantomes(ouverts, positions)
+    _doublons(ouverts)
     if ecart_total < 1e-6:
         print("\n    → Journal et courtier sont d'accord. Le réalisé n'est PAS gonflé "
               "par des lots fantômes : chercher le résidu ailleurs.")
@@ -214,6 +215,42 @@ def _age_fantomes(ouverts: list, positions: dict) -> None:
           f"détient PLUS\n    entrés entre {dates[0]} et {dates[-1]} — les ventes qui "
           "les ont soldés\n    n'ont jamais été journalisées, donc ils ne se "
           "fermeront jamais.")
+
+
+def _doublons(ouverts: list) -> None:
+    """Le même lot est-il enregistré PLUSIEURS FOIS ?
+
+    Constaté le 03/09 : après réparation, les quantités restantes valaient exactement
+    la MOITIÉ des quantités initiales, symbole après symbole — AAPL 47,28 → 23,64, BXP
+    212,62 → 106,31, CNC 228,81 → 114,40. Les ventes du courtier ont soldé une copie et
+    laissé l'autre. Une moitié exacte répétée sur des dizaines de titres n'est pas un
+    hasard de marché.
+
+    Deux lots sont tenus pour identiques s'ils partagent symbole, quantité, prix
+    d'entrée et JOUR d'entrée. Deux achats réels du même titre, au même prix au centième
+    près et pour la même quantité au millionième, le même jour, sont possibles mais
+    rares ; on COMPTE donc les groupes au lieu d'affirmer, et on montre l'échantillon.
+    """
+    groupes: dict[tuple, list] = {}
+    for t in ouverts:
+        cle = (t.instrument, round(float(t.qty), 6),
+               round(float(t.entry_price or 0), 6), _jour(t.entry_ts))
+        groupes.setdefault(cle, []).append(t)
+    multiples = {k: v for k, v in groupes.items() if len(v) > 1}
+    print("\n  LOTS ENREGISTRÉS EN DOUBLE (même titre, quantité, prix ET jour)\n")
+    if not multiples:
+        print("    aucun — les lots ouverts sont tous distincts.")
+        return
+    total = sum(len(v) - 1 for v in multiples.values())
+    print(f"    {len(multiples)} groupe(s), soit {total} enregistrement(s) "
+          f"EXCÉDENTAIRE(S) sur {len(ouverts)} lots ouverts.")
+    for (sym, qte, prix, jour), v in sorted(multiples.items())[:10]:
+        print(f"      {sym:<12} ×{len(v)}  {qte:>12.6f} @ {prix:>10.4f}  le {jour}")
+    if len(multiples) > 10:
+        print(f"      … et {len(multiples) - 10} autres groupes")
+    print("\n    → Chaque doublon gonfle la quantité au journal et fournit un lot de")
+    print("      plus à apparier : c'est du réalisé sans contrepartie réelle.")
+    print("      À corriger EN AMONT (l'écriture), pas en supprimant des lignes ici.")
 
 
 def _positions_courtier() -> dict:

@@ -3022,3 +3022,41 @@ correspondante, l'écart de quantité crypto, et surtout ces 39 round-trips mal 
 les rejouer contre le bon vivier de lots. C'est une opération plus invasive que la
 précédente, sur des enregistrements déjà publiés. À ne pas lancer sans l'avoir spécifiée.
 
+## 2026-09-03 — La réparation a marché, et elle a révélé un défaut plus profond
+
+**Le résidu s'est réduit comme annoncé** : −5 557 $ → **−4 195 $**, soit −1 362 $, l'ordre
+de grandeur prévu. Le drapeau `legacy` a bien été conservé (zéro avertissement), et la
+répartition le confirme : legacy=1 porte désormais 155 fermetures pour **−1 847 $** —
+c'est là que dormaient les pertes.
+
+**Le panneau affiché a changé, et dans le bon sens** : 39 → 69 aller-retours, win rate
+**87 % → 71 %**, espérance 149,27 $ → 90,97 $. Plus honnête, mais toujours pas juste.
+
+**CE QUE LA TABLE RÉVÈLE, ET QUI EST PIRE.** Les quantités restantes valent EXACTEMENT la
+moitié des quantités initiales, symbole après symbole :
+
+    AAPL  47,282434 → 23,641217      BXP  212,619953 → 106,309977
+    CNC  228,805493 → 114,402746     D    215,158384 → 107,579192
+    EFA  146,212389 →  73,106194     ICLN 603,200213 → 301,600106
+    MO   221,628274 → 110,814137     IWM   44,986204 →  22,493102
+
+Une moitié exacte, répétée sur des dizaines de titres, n'est pas un hasard de marché : les
+ventes du courtier ont soldé **une copie** et laissé **l'autre**. Le journal enregistre
+donc chaque lot DEUX FOIS. C'est cohérent avec tout le reste : QQQ 137,1 au journal contre
+70,45 détenus (facteur ~2), et un réalisé qui ne peut structurellement pas se réconcilier.
+
+**Mesure ajoutée plutôt qu'affirmation** : `_doublons` regroupe les lots ouverts par
+(symbole, quantité, prix d'entrée, jour) et compte les enregistrements excédentaires. Deux
+achats réels identiques au millionième le même jour sont possibles ; c'est pourquoi on
+COMPTE et on montre l'échantillon au lieu de conclure.
+
+**AUCUNE ÉCRITURE DE PLUS avant d'avoir trouvé la cause.** Supprimer les doublons dans le
+registre traiterait le symptôme et les laisserait revenir au prochain rebalancement. La
+cause est dans le chemin d'écriture (`live_journal` / la boucle de réconciliation), et
+c'est là qu'il faut regarder.
+
+**Note sur la mesure elle-même** : entre deux runs le compte a changé de composition (le
+courtier détient maintenant AAVE, MRNA, PRU, SLG, STT, TER, TROW, TTWO, UNH, ZION en plus).
+Le portefeuille bouge pendant qu'on le mesure — à garder en tête avant de lire un écart
+comme une anomalie.
+

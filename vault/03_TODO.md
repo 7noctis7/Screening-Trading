@@ -123,6 +123,14 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       après sauvegarde. Les lots sans vente correspondante RESTENT ouverts et sont
       signalés — les fermer au dernier prix inventerait un P&L.
 - [x] **P0 — Restaurer et rejouer : FAIT le 03/09.** 185 écritures, zéro avertissement.
+- [ ] **P0 — LE JOURNAL ÉCRIT CHAQUE LOT EN DOUBLE.** Découvert le 03/09 après réparation :
+      les quantités restantes valent EXACTEMENT la moitié des initiales sur des dizaines de
+      titres (AAPL 47,28 → 23,64, BXP 212,62 → 106,31, CNC 228,81 → 114,40). Les ventes ont
+      soldé une copie et laissé l'autre. Explique aussi QQQ 137,1 vs 70,45 détenus.
+      `make diag-journal` compte désormais les doublons (`_doublons`).
+      **Chercher la cause dans le chemin d'ÉCRITURE** (`live_journal`, boucle de
+      réconciliation) — supprimer les lignes en aval les ferait revenir au prochain
+      rebalancement. AUCUNE écriture de plus avant d'avoir trouvé.
 - [ ] **P1 — Les 39 round-trips déjà fermés restent fondés sur de mauvais prix de revient.**
       Produits entre le 27/08 et le 02/09 par `close_sells` contre les lots du vieux
       portefeuille. Fermer les orphelins ne rétroagit pas sur eux : les 87 % et les
