@@ -1,5 +1,63 @@
 # 04 — JOURNAL
 
+## Session 2026-09-03 — Le journal n'était pas faux, il était incomplet : la cause était à l'ENTRÉE
+
+**La question posée.** « Trouve la solution pour que le journal soit FIABLE, puis fais-la. »
+Deux jours de réparations portaient sur les SORTIES (lots orphelins, fermetures à +0,00 $,
+résidu inexpliqué). Elles étaient justes et insuffisantes : on refermait un registre dont la
+moitié des entrées n'avait jamais été écrite.
+
+**La mesure qui a tranché.** `make diag-journal` compare, symbole par symbole, la quantité
+ACHETÉE chez le courtier à celle que le journal connaît : **87 symboles achetés, 57 couverts,
+30 INCOMPLETS** — AVAX 626 unités au journal contre 1 239 achetées, PATH 9 contre 139. Un achat
+sans lot n'a pas de prix de revient : quand la position est vendue, le compte encaisse le
+résultat et le registre n'a rien à lui opposer. Aucune réparation des sorties ne peut refermer
+cet écart, parce qu'il ne naît pas là.
+
+**La cause, à la ligne près.** `run_live._journal_opens` prenait le prix et la quantité d'entrée
+dans la **position du courtier**, lue juste après l'envoi de l'ordre. Deux défauts dans un seul
+geste : si la position n'était pas encore rafraîchie (ordre non rempli à l'instant du run,
+marché fermé, latence), le fill était introuvable et l'achat n'était journalisé nulle part — le
+message disait « capturé au prochain run », mais **rien ne le capture** ; et quand la position
+était lisible, elle portait la quantité TOTALE et le prix de revient MOYEN, pas l'achat du jour.
+Le lot ne décrivait donc pas l'opération qu'il prétendait décrire.
+
+**Ce qui est branché.** Le fill vient désormais des **achats réellement exécutés du jour**
+(`agreger_achats` : quantité et VWAP, par symbole canonique, `AVAX/USDC` et `AVAXUSD` confondus),
+la position ne servant que de repli. Les fills existent après coup — un run tardif les retrouve,
+une position non rafraîchie non.
+
+**Le rattrapage de l'historique, et le point de méthode.** `make completer-ouvertures` reconstitue
+les achats manquants depuis les fills. Le prix retenu n'est **pas** le VWAP de tous les achats du
+symbole : ce serait mélanger les fills déjà couverts avec ceux qui manquent. On consomme les fills
+en FIFO à hauteur de ce que le journal couvre déjà, et on retient le VWAP de **ceux qui restent** —
+c'est-à-dire précisément ceux que le registre ignore. Ces lots sont écrits en `legacy=1` : leurs
+features de décision n'ont jamais été capturées et ne peuvent plus l'être, c'est la définition du
+drapeau. Les mettre en `legacy=0` gonflerait de trades aveugles la statistique qu'on cherche à
+rendre fiable.
+
+**Le piège que la complétion a révélé.** L'idempotence du réconciliateur écartait un fill de vente
+dès qu'il avait servi UNE fois. Une vente de 500 unités qui n'avait trouvé que 200 unités de lots
+était marquée consommée en entier : ses 300 unités restantes ne pourraient plus jamais fermer les
+lots reconstitués, condamnés à rester ouverts pour toujours. On compte désormais la **quantité**
+consommée par fill, pas son identifiant — le reste est rejoué, ni plus (pas de réalisé fabriqué),
+ni moins.
+
+**Ce que l'outil refuse de faire.** Rien pour un courtier muet : un silence n'est pas une mesure.
+Et là où le journal en sait PLUS que le courtier, l'écart est **signalé, jamais corrigé** — il dit
+autre chose (historique tronqué, lots fantômes), et un outil qui supprime des lots pour faire
+coller les chiffres ne répare rien.
+
+**Le panneau disait une chose fausse.** « C'est la matière première du verdict GO/NO-GO » : non —
+`rdv_paper` lit la courbe d'équité. Le texte dit maintenant ce que le registre est (les trades) et
+ce qu'il n'est pas (la performance du compte), et que son taux de réussite est **biaisé à la
+hausse par construction** — le rebalancement solde les gagnants et garde les perdants ouverts, ce
+qui explique 87 % au journal contre 28 % au backtest sans qu'aucun des deux soit faux.
+
+**Ordre d'exécution, et il n'est pas commutatif :**
+`make completer-ouvertures ARGS=--appliquer` → `make reconcilier-journal ARGS=--appliquer` →
+`make diag-journal`. Le réconciliateur ne peut fermer que des lots qui existent.
+
 ## Session 2026-09-02 — Le suiveur coupait les gagnants, et deux runs identiques ne l'étaient pas
 
 **Le résultat.** Retirer le stop suiveur bat le réglage de production sur payoff, marge, Sharpe,

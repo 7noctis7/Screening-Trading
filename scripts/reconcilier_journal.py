@@ -89,11 +89,38 @@ def _lots_ouverts(journal) -> tuple[list, set]:
     return lots, ids_vivants
 
 
-def _ventes_deja_consommees(journal) -> set:
-    """Identifiants de fills déjà utilisés par une réconciliation antérieure."""
+def _ventes_deja_consommees(journal) -> dict[str, float]:
+    """QUANTITÉ déjà consommée par fill de vente — pas seulement la liste des ids.
+
+    Écarter un fill dès qu'il a servi UNE FOIS était trop grossier. Une vente de 500
+    unités qui n'avait trouvé que 200 unités de lots (les autres achats n'étant pas
+    journalisés) était marquée consommée en entier : ses 300 unités restantes ne
+    pouvaient plus jamais fermer les lots reconstitués ensuite par
+    `completer_ouvertures`, qui seraient restés ouverts pour toujours.
+
+    Compter la quantité, et non l'identifiant, rejoue exactement le RESTE d'un fill —
+    ni plus (pas de réalisé fabriqué), ni moins (pas de lot condamné à rester ouvert).
+    """
     prefixe = MOTIF + ":"
-    return {(t.exit_reason or "")[len(prefixe):] for t in journal.all()
-            if (t.exit_reason or "").startswith(prefixe)}
+    consomme: dict[str, float] = {}
+    for t in journal.all():
+        motif = t.exit_reason or ""
+        if not motif.startswith(prefixe):
+            continue
+        cle = motif[len(prefixe):]
+        consomme[cle] = consomme.get(cle, 0.0) + float(t.qty or 0.0)
+    return consomme
+
+
+def _restant(ventes: list[dict], consomme: dict[str, float]) -> list[dict]:
+    """Ventes amputées de ce qu'elles ont déjà fermé. Une vente épuisée disparaît."""
+    out = []
+    for v in ventes:
+        deja = consomme.get(str(v.get("id") or ""), 0.0)
+        reste = float(v["qty"]) - deja
+        if reste > 1e-9:
+            out.append({**v, "qty": reste})
+    return out
 
 
 def _fermetures_sans_identite(journal) -> int:
@@ -240,10 +267,13 @@ def main() -> None:
         return
     ventes = _ventes_courtier()
     if deja:
-        avant = len(ventes)
-        ventes = [v for v in ventes if str(v.get("id") or "") not in deja]
-        print(f"  {avant - len(ventes)} vente(s) DÉJÀ consommée(s) par une "
-              "réconciliation antérieure : écartée(s).")
+        avant_n = len(ventes)
+        avant_q = sum(float(v["qty"]) for v in ventes)
+        ventes = _restant(ventes, deja)
+        reste_q = sum(float(v["qty"]) for v in ventes)
+        print(f"  {avant_n - len(ventes)} vente(s) ENTIÈREMENT consommée(s) par une "
+              f"réconciliation antérieure ;\n  {avant_q - reste_q:,.4f} unité(s) déjà "
+              "fermée(s) au total : seul le RESTE est rejoué.".replace(",", " "))
     if not ventes:
         print("\n  Aucune vente nouvelle à apparier — le journal est à jour.")
         return

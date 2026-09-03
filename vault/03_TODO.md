@@ -111,6 +111,36 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       lit la courbe d'equity, pas le win rate (vérifié le 03/09). Le texte invite à lire le
       87 % comme une preuve de performance, ce qu'il n'est pas.
 
+- [x] **P0 — La CAUSE des achats manquants : TROUVÉE ET CORRIGÉE le 03/09.**
+      `run_live._journal_opens` prenait le fill dans la POSITION du courtier, lue juste
+      après l'envoi de l'ordre. Position pas encore rafraîchie → achat introuvable et
+      **jamais** journalisé (le message « capturé au prochain run » était faux : rien ne
+      le capture). Position lisible → quantité TOTALE et prix de revient MOYEN, pas
+      l'achat du jour. Le fill vient désormais des **ordres exécutés du jour**
+      (`agreger_achats`, VWAP par symbole canonique) ; la position n'est plus qu'un repli.
+      ADR-0056. 6 tests (`tests/execution/test_fills_ouverture.py`).
+- [x] **P0 — Rattraper l'historique manquant : OUTIL LIVRÉ le 03/09.**
+      `make completer-ouvertures` (simulation par défaut, `ARGS=--appliquer` écrit après
+      sauvegarde) reconstitue les achats que le courtier a exécutés et que le registre
+      ignore — 30 symboles sur 87 au dernier diagnostic. Prix retenu = VWAP des fills
+      **non couverts** (fills consommés en FIFO à hauteur du déjà-journalisé), pas VWAP
+      global. Lots en `legacy=1` : leurs features de décision n'existent pas et ne
+      peuvent plus exister. ADR-0057. 11 tests.
+- [x] **P0 — Idempotence en QUANTITÉ du réconciliateur (03/09).** Écarter un fill de vente
+      dès son premier usage condamnait les lots reconstitués après coup à rester ouverts
+      pour toujours (leur vente existe, mais était marquée consommée en entier). On compte
+      les unités fermées par fill et on rejoue le reste. 3 tests de plus.
+- [ ] **P0 — LANCER la réparation dans l'ORDRE (poste local, données réelles).**
+      Non commutatif — le réconciliateur ne peut fermer que des lots qui existent :
+      `make completer-ouvertures` (lire le plan) → `ARGS=--appliquer` →
+      `make reconcilier-journal ARGS=--appliquer` → `make diag-journal` pour vérifier que
+      la couverture est passée de 57/87 à 87/87 et que le résidu s'est refermé.
+- [x] **P1 — Le panneau du journal disait une chose fausse : CORRIGÉ le 03/09.**
+      « C'est la matière première du verdict GO/NO-GO » — non, `rdv_paper` lit la courbe
+      d'équité. Le texte dit maintenant que le registre décrit les TRADES et non la
+      performance du compte, et que son taux de réussite est biaisé à la hausse par
+      construction (le rebalancement solde les gagnants, garde les perdants ouverts).
+
 - [x] **P1 — Réconcilier le journal et le compte : FAIT le 03/09.** Ce ne sont ni les
       retraits (aucun saut > 3 984 $/j) ni le filtre `legacy` (0 $ masqué). Le journal
       porte ~80 actions que le compte ne détient plus, deux fois trop de QQQ, et la

@@ -19,7 +19,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from datetime import UTC
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -326,8 +326,56 @@ def _recap_differes(differes: list) -> None:
     print("     Le crypto n'est jamais concerné : il tourne 24/7.")
 
 
+def _fills_achats(brokers: tuple, jour: str) -> dict:
+    """Achats RÉELLEMENT exécutés `jour`, par (place, symbole canonique) :
+    quantité + VWAP.
+
+    C'est la VÉRITÉ TERRAIN de l'ouverture. La position du courtier ne l'est pas : elle
+    porte la quantité TOTALE et le prix de revient MOYEN, et elle peut n'être pas encore
+    rafraîchie à l'instant du run — l'achat devenait alors introuvable et n'était JAMAIS
+    journalisé (mesuré le 03/09 : 30 symboles sur 87 couverts à moitié ou moins).
+
+    Best-effort par courtier : un courtier muet n'empêche pas l'autre d'être lu."""
+    from packages.execution.live_journal import agreger_achats
+    out: dict = {}
+    for bn, br in brokers:
+        if br is None or not hasattr(br, "orders"):
+            continue
+        try:
+            ordres = br.orders(limit=500)
+        except Exception:  # noqa: BLE001
+            continue                     # courtier muet : le repli position reste
+        for sym, fill in agreger_achats(ordres, jour).items():
+            out[(bn, sym)] = fill
+    return out
+
+
+def _positions_repli(brokers: tuple) -> dict:
+    """Positions du courtier par (place, symbole canonique) — REPLI quand aucun
+    fill n'est lisible.
+
+    Approximation assumée (quantité totale, prix moyen) : mieux qu'une ouverture perdue,
+    moins bon qu'un fill. Jamais prioritaire sur `_fills_achats`."""
+    from packages.execution.live_journal import normaliser
+    pos: dict = {}
+    for bn, br in brokers:
+        if br is None:
+            continue
+        try:
+            detail = br.positions_detailed()
+        except Exception:  # noqa: BLE001
+            continue
+        for p in detail:
+            pos[(bn, normaliser(p["symbol"]))] = {"avg_price": p.get("avg_price"),
+                                                  "qty": p.get("qty")}
+    return pos
+
+
 def _journal_opens(snap: dict, opened: list, alpaca, bitmart) -> None:
     """Journalise les ouvertures (`legacy=0`) : features de DÉCISION (snap) + faits de fill (broker).
+
+    Ordre des sources de fill : fills d'achat du jour (vérité terrain), puis
+    position (repli).
 
     Best-effort STRICT : ne lève jamais → ne peut pas bloquer l'exécution."""
     if not opened:
@@ -336,12 +384,11 @@ def _journal_opens(snap: dict, opened: list, alpaca, bitmart) -> None:
         from packages.execution.live_journal import (
             feature_map,
             journal_opens,
+            normaliser,
             regime_context,
         )
         from packages.storage import SqliteTradeJournal
 
-        def _norm(s):                                        # BTC/USD ↔ BTCUSD (format broker vs routing)
-            return (s or "").replace("/", "").replace("-", "").upper()
         feats_by_sym = feature_map(snap)
         regime_lbl, regime_ctx = regime_context(snap)
         _series = (snap.get("dashboard") or {}).get("chart_series") or {}
@@ -349,15 +396,17 @@ def _journal_opens(snap: dict, opened: list, alpaca, bitmart) -> None:
         def _decision_px(sym):                        # dernier close CONNU à la décision
             bars = _series.get(sym) or []
             return float(bars[-1]["c"]) if bars else None
-        pos: dict = {}                                        # faits d'exécution : positions RÉELLES post-fill
-        for bn, br in (("Alpaca", alpaca), ("Bitmart", bitmart)):
-            if br is None:
-                continue
-            for p in br.positions_detailed():
-                pos[(bn, _norm(p["symbol"]))] = {"avg_price": p.get("avg_price"), "qty": p.get("qty")}
+        brokers = (("Alpaca", alpaca), ("Bitmart", bitmart))
+        jour = datetime.now(UTC).date().isoformat()
+        fills = _fills_achats(brokers, jour)
+        repli = _positions_repli(brokers)
+
+        def _fill(op):          # le fill du jour d'abord, la position ensuite
+            cle = (op["venue"], normaliser(op["broker_symbol"]))
+            return fills.get(cle) or repli.get(cle)
         opens = [{
             "symbol": op["symbol"], "venue": op["venue"], "asset_class": op.get("asset_class"),
-            "fill": pos.get((op["venue"], _norm(op["broker_symbol"]))),
+            "fill": _fill(op),
             "features": {**feats_by_sym.get(op["symbol"], {}), **regime_ctx,
                          "target_weight": op.get("weight_pct"),
                          # prix de DÉCISION (close du snapshot) → slippage réel
@@ -371,7 +420,8 @@ def _journal_opens(snap: dict, opened: list, alpaca, bitmart) -> None:
         n = journal_opens(SqliteTradeJournal(), opens)
         skipped = len(opened) - n
         print(f"Journal : {n} ouverture(s) enregistrée(s) (legacy=0, features de décision)"
-              + (f" · {skipped} sans fill exploitable (capturé au prochain run)." if skipped else "."))
+              + (f" · {skipped} sans achat exécuté LISIBLE ce jour"
+                 " (ni fill, ni position — rien n'est inventé)." if skipped else "."))
     except Exception as e:  # noqa: BLE001
         print(f"Journal : journalisation ignorée ({str(e)[:60]}).")
 
@@ -380,7 +430,6 @@ def _exit_price(br, bsym: str) -> float:
     """Prix de sortie FACTUEL, par ordre de fiabilité : fill VENTE du jour (`orders`),
     sinon ticker broker (`last_price`), sinon prix courant de la position. 0.0 = inconnu
     (le lot restera OUVERT — on n'invente jamais un prix)."""
-    from datetime import datetime
     if br is None:
         return 0.0
     try:

@@ -1182,3 +1182,46 @@ preuve d'absorption institutionnelle. Le renommer en `cvd` serait la seule vraie
 est reportée et ne bloque jamais une sortie que le marché offre. Une borne basse en verrou
 serait un coût déguisé en protection.
 
+
+## ADR-0056 — Le fill d'ouverture vient des ORDRES EXÉCUTÉS, jamais de la position (2026-09-03)
+
+**Contexte.** `run_live._journal_opens` lisait le prix et la quantité d'entrée dans la position
+du courtier, interrogée juste après l'envoi de l'ordre. Mesure du 03/09 sur le compte réel :
+87 symboles achetés, 57 couverts par le journal, 30 incomplets (AVAX 626 unités journalisées
+contre 1 239 achetées). La position est une photo d'état, pas une trace d'opération : elle peut
+n'être pas encore rafraîchie — l'achat est alors introuvable et perdu, le message « capturé au
+prochain run » étant faux puisque rien ne le capture — et quand elle est lisible elle porte la
+quantité TOTALE et le prix de revient MOYEN, pas l'achat du jour.
+
+**Décision.** La source primaire du fill d'ouverture est l'historique des **ordres exécutés du
+jour**, agrégés par symbole canonique (quantité et VWAP). La position ne sert que de repli, et
+ce repli est déclaré comme une approximation. Rien n'est écrit si aucune des deux sources ne
+répond.
+
+**Conséquences.** Un run tardif retrouve les achats de la journée : le journal cesse de dépendre
+de la latence du courtier. Le lot décrit l'opération qu'il prétend décrire. Le repli reste
+possible pour un courtier qui ne publie pas d'historique d'ordres, au prix d'un prix de revient
+moyen — c'est un choix assumé, pas un défaut silencieux.
+
+## ADR-0057 — On complète les ENTRÉES avant de réparer les SORTIES (2026-09-03)
+
+**Contexte.** Deux jours de réparation du journal portaient sur les sorties : lots orphelins,
+fermetures sans identité, résidu inexpliqué. Elles ne pouvaient pas converger, parce qu'un achat
+jamais journalisé n'a pas de lot — donc pas de sortie possible, et la vente correspondante reste
+sans contrepartie quoi qu'on fasse en aval.
+
+**Décision.** Une réparation de registre se fait dans l'ordre du flux : `completer-ouvertures`
+(reconstitue les achats manquants depuis les fills), puis `reconcilier-journal` (ferme avec les
+ventes réelles), puis `diag-journal` (vérifie). Les lots reconstitués sont écrits en `legacy=1`,
+parce que leurs features de décision n'ont jamais été capturées et ne peuvent plus l'être : c'est
+le sens exact du drapeau, et les mettre en `legacy=0` gonflerait de trades aveugles la
+statistique affichée qu'on cherche à assainir. Leur prix de revient est le VWAP des fills **non
+couverts** — obtenu en consommant les fills en FIFO à hauteur de ce que le journal connaît déjà —
+et non le VWAP de tous les achats du symbole, qui mélangerait le couvert et le manquant.
+
+**Conséquences.** L'idempotence du réconciliateur devient une idempotence en QUANTITÉ : écarter
+un fill de vente dès son premier usage condamnerait à rester ouverts pour toujours les lots
+reconstitués après coup, dont la vente existe mais a déjà été marquée consommée. On compte donc
+les unités fermées par fill et on rejoue le reste. Deux refus explicites subsistent : rien n'est
+écrit pour un courtier injoignable, et un écart où le journal en sait PLUS que le courtier est
+signalé sans être « corrigé » — supprimer des lots pour faire coller les chiffres ne répare rien.

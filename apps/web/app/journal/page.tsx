@@ -47,7 +47,12 @@ export default function Journal() {
         <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full align-middle"
           style={{ background: "color-mix(in srgb, #22c55e 16%, transparent)", color: "#22c55e" }}>RÉEL · paper</span></h1>
       <p className="text-muted text-xs">Chaque aller-retour du rebalancement paper : features figées à la <b>décision</b>,
-        fill broker, PnL réalisé, MFE/MAE. C'est la matière première du verdict GO/NO-GO du <b>2026-08-06</b> — publiée telle quelle, y compris les pertes.</p>
+        fill broker, PnL réalisé, MFE/MAE — publié tel quel, y compris les pertes.</p>
+      <p className="text-muted text-xs">Ce registre décrit les <b>trades</b>, pas la performance du compte : le verdict
+        GO/NO-GO du <b>2026-08-06</b> se lit sur la <b>courbe d'équité</b> du courtier, seule mesure qui n'oublie rien.
+        Un round-trip clos ici est un trade que le rebalancement a choisi de solder — les positions perdantes restent
+        ouvertes et n'y figurent pas, donc le taux de réussite affiché est <b>biaisé à la hausse</b> par construction
+        et ne se compare pas à celui d'un backtest.</p>
 
       {!data.available || rows.length === 0 ? (
         <EmptyState title="Journal vide (pour l'instant)"

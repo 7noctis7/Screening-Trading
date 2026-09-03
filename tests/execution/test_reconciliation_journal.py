@@ -183,3 +183,52 @@ def test_l_outil_refuse_de_tourner_sur_des_fermetures_intracables():
     avec_id = dataclasses.replace(ferme, id="AAPL-clos2",
                                   exit_reason=f"{MOTIF}:fill-7")
     assert _fermetures_sans_identite(JournalFactice([lot, avec_id])) == 0
+
+
+# ── Le RESTE d'une vente partiellement placée doit rester rejouable ───────────────
+
+def test_vente_partiellement_placee_garde_son_reste():
+    """Le défaut que la complétion des ouvertures a révélé.
+
+    Une vente de 500 unités ne trouve que 200 unités de lots — les 300 autres achats
+    n'avaient jamais été journalisés. Marquer le fill « consommé » en entier condamnait
+    les lots reconstitués ensuite à rester ouverts POUR TOUJOURS : leur vente existait,
+    mais l'outil refusait de la regarder. On compte donc la QUANTITÉ consommée."""
+    from scripts.reconcilier_journal import (
+        _appliquer,
+        _restant,
+        _ventes_deja_consommees,
+    )
+    lot = _lot("AAPL", 200.0, 100.0)
+    j = JournalFactice([lot])
+    ventes = [{"symbol": "AAPL", "qty": 500.0, "price": 150.0, "date": "2026-08-15",
+               "id": "fill-7"}]
+    fermetures, _ = _plan([lot], ventes)
+    _appliquer(j, fermetures, ids_vivants={lot.id})
+    reste = _restant(ventes, _ventes_deja_consommees(j))
+    assert len(reste) == 1
+    assert abs(reste[0]["qty"] - 300.0) < 1e-9         # les 300 unités non placées
+
+
+def test_vente_entierement_consommee_disparait():
+    """L'acquis du 03/09 ne doit pas régresser : un fill soldé n'est plus rejoué."""
+    from scripts.reconcilier_journal import (
+        _appliquer,
+        _restant,
+        _ventes_deja_consommees,
+    )
+    lot = _lot("QQQ", 10.0, 400.0)
+    j = JournalFactice([lot])
+    ventes = [{"symbol": "QQQ", "qty": 10.0, "price": 500.0, "date": "2026-08-15",
+               "id": "fill-9"}]
+    fermetures, _ = _plan([lot], ventes)
+    _appliquer(j, fermetures, ids_vivants={lot.id})
+    assert _restant(ventes, _ventes_deja_consommees(j)) == []
+
+
+def test_sans_historique_de_consommation_rien_n_est_ampute():
+    """Un premier passage doit voir les ventes ENTIÈRES."""
+    from scripts.reconcilier_journal import _restant
+    ventes = [{"symbol": "QQQ", "qty": 10.0, "price": 500.0, "date": "2026-08-15",
+               "id": "x"}]
+    assert _restant(ventes, {}) == ventes
