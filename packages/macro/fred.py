@@ -77,6 +77,21 @@ POURQUOI: dict[str, str] = {
 # une série mensuelle) sans laisser passer une série morte.
 _FACTEUR_RETARD = 3.0
 
+# … mais « en retard » et « arrêtée » ne sont PAS la même chose, et les confondre a
+# produit
+# un contresens visible (03/09) : le Bund, dernière observation au 01/06, était étiqueté
+# « série arrêtée — ne reflète plus la situation actuelle » alors qu'il dépassait
+# le seuil d'UN jour (94 contre 93). Or la série OCDE des taux longs publie avec
+# un décalage structurel de deux mois : à ce rythme elle bascule en « arrêtée » à
+# la fin de chaque trimestre, puis en ressort à la publication suivante. Un
+# détecteur qui clignote au rythme du calendrier de publication n'informe pas, il use.
+#
+# Le cas qui a motivé la règle — chômage zone euro, 1 332 jours — valait 43× la cadence.
+# Le Bund en vaut 3,03. Le même mot pour les deux rend le mot inutilisable. On sépare :
+# au-delà de 3× la cadence, la publication est EN RETARD ; il faut un an de silence
+# sur une série mensuelle (12× la cadence) pour parler d'arrêt.
+_FACTEUR_ARRET = 12.0
+
 # Nombre d'observations lues pour estimer la cadence. Il en faut assez pour VOIR un week-end :
 # avec 4 observations d'une série quotidienne on ne voit que des espacements de 1 jour, et le
 # lundi suivant la série paraît morte. 12 observations couvrent au moins deux week-ends.
@@ -92,8 +107,11 @@ _N_OBS_CADENCE = 12
 _QUANTILE_CADENCE = 0.9
 
 
-def _retard(dates: list[str]) -> tuple[int, bool]:
-    """(jours depuis la dernière observation, périmée ?) — cadence déduite de la série elle-même.
+def _retard(dates: list[str]) -> tuple[int, str]:
+    """(jours depuis la dernière observation, statut) — cadence déduite de la série.
+
+    Statut : « ok », « retard » (au-delà de 3× la cadence : publication décalée, mais
+    la série vit), « arretee » (au-delà de 12× : rien depuis un an sur du mensuel).
 
     Aucune table de fréquence à maintenir : on mesure l'espacement RÉEL entre les dernières
     observations. Une série qui publiait tous les mois et n'a rien donné depuis un an est
@@ -102,18 +120,20 @@ def _retard(dates: list[str]) -> tuple[int, bool]:
     try:
         ds = [date.fromisoformat(x) for x in dates]
     except ValueError:
-        return 0, False
+        return 0, "ok"
     if not ds:                      # liste vide : rien à mesurer, et surtout pas d'index [0]
-        return 0, False
+        return 0, "ok"
     retard = (date.today() - ds[0]).days
     if len(ds) < 2:
-        return retard, False
+        return retard, "ok"
     espacements = sorted(e for e in ((ds[i] - ds[i + 1]).days for i in range(len(ds) - 1)) if e > 0)
     if not espacements:
-        return retard, False
+        return retard, "ok"
     rang = min(len(espacements) - 1, int(_QUANTILE_CADENCE * len(espacements)))
     cadence = max(1, espacements[rang])
-    return retard, retard > _FACTEUR_RETARD * cadence
+    if retard > _FACTEUR_ARRET * cadence:
+        return retard, "arretee"
+    return retard, "retard" if retard > _FACTEUR_RETARD * cadence else "ok"
 
 
 def _fetch(series_id: str, units: str, key: str) -> dict | None:
@@ -129,9 +149,12 @@ def _fetch(series_id: str, units: str, key: str) -> dict | None:
             return None
         (d0, v0) = vals[0]
         delta = round(v0 - vals[1][1], 2) if len(vals) > 1 else None
-        retard, perimee = _retard([d for d, _ in vals])
+        retard, statut = _retard([d for d, _ in vals])
         return {"value": round(v0, 2), "date": d0, "delta": delta,
-                "retard_jours": retard, "perimee": perimee}
+                # `perimee` reste VRAI dès le simple retard : les appelants qui ne
+                # connaissent que ce drapeau continuent de signaler, sans régression.
+                # `statut` porte la nuance pour qui sait la lire.
+                "retard_jours": retard, "perimee": statut != "ok", "statut": statut}
     except Exception:  # noqa: BLE001
         return None
 

@@ -1086,7 +1086,14 @@ def profil(horizon_annees: float = 10.0, perte_max_toleree: float = 0.25,
 
     return {"available": True, "risque": risque_retenu(pr), "budget_perte": budget_perte(pr),
             "strategique": strat, "tactique": tact,
-            "avertissement": ("Ces chiffres CONTRAIGNENT votre outil ; ils ne constituent pas "
+            # « CONTRAIGNENT votre outil » était FAUX : `quant.profil` n'est lu
+            # QUE par la page qui l'écrit, et aucun autre écran ni la chaîne
+            # d'exécution ne consulte cette route. Un avertissement qui promet
+            # une contrainte inexistante est pire qu'un silence : il fait croire
+            # à un garde-fou. On dit ce que le code fait.
+            "avertissement": ("Calcul de RÉFÉRENCE : ces chiffres ne contraignent "
+                              "aujourd'hui ni le screener, ni le dimensionnement, "
+                              "ni le rebalancement paper. Ils ne constituent pas "
                               "une recommandation personnalisée.")}
 
 

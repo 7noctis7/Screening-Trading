@@ -1,5 +1,46 @@
 # 04 — JOURNAL
 
+## Session 2026-09-03 (suite 5) — Trois signalements de l'utilisateur, trois affirmations fausses du site
+
+**Le nettoyage a tenu.** 33 lots retirés : 343 enregistrements → 310, lots ouverts `legacy`
+45 → 12, lots fantômes 43 → 10, symboles à 2× **29 → 3**, excédent 3 308 → 1 317 unités, et
+« lots ouverts appariés à une vente » **33/52 → 0/19** — il n'en reste aucun que la preuve
+désigne. Le reliquat (NWL 1,74×, MAS 1,91×, QQQ 1,56×) tient à des ventes exécutées en
+PLUSIEURS fills, que le critère strict refuse d'apparier : c'est le plancher assumé.
+
+**Six sorties antérieures à leur entrée, −142,33 $.** SJM, STT, PATH, DUOL, TYL, T. La garde
+`_anterieur` empêche d'en créer ; elle ne rétroagit pas. Leur reprise reste ouverte.
+
+**« Mon profil » ne contraignait rien.** L'utilisateur demande : « une fois réglé, est-ce pris en
+considération ? » Mesuré : `quant.profil` n'est lu que par la page qui l'écrit, et `/api/profil`
+n'est appelée que par elle. Aucun autre écran, ni la chaîne d'exécution, ne les consulte. Or la
+page et l'API affirmaient toutes deux « ces chiffres CONTRAIGNENT votre outil ». C'est faux, et
+c'est la troisième affirmation de ce type corrigée aujourd'hui. Les deux textes disent désormais
+ce que le code fait : un calcul de RÉFÉRENCE.
+
+**Et le réglage se perdait — vraie course, vrai correctif.** L'effet d'écriture partait au
+MONTAGE, donc avec les valeurs par DÉFAUT (l'état restauré n'étant pas encore appliqué), et
+écrasait le stockage avant que la restauration ne s'y réécrive. Quitter la page entre ces deux
+instants suffisait à perdre le réglage. Un drapeau `lu` interdit d'écrire avant d'avoir lu, et
+la persistance est séparée de l'appel API — deux préoccupations, deux effets.
+
+**Une page invisible n'existe pas.** « Je ne retrouve plus l'onglet des news. » Elle n'avait pas
+été supprimée : la réduction à 3 groupes l'avait laissée hors de tout menu, joignable seulement
+par URL directe ou ⌘K. `/sentiment` et `/events` reviennent dans « Marché ». Onze autres pages
+restent hors de la barre (`/fiche`, `/live`, `/trades`, `/portfolio`, `/ml`, `/conviction`,
+`/notes`, `/investors`, `/fundamentals`, `/data`, `/accueil`) — c'est le résultat de l'audit
+« simplicité radicale », pas un accident, donc je ne le défais pas sans décision.
+
+**Le Bund n'était pas mort, il était en retard — et le détecteur ne savait pas dire la
+différence.** Dernière observation au 01/06, 94 jours, seuil 93 : dépassement d'UN jour, soit
+3,03× la cadence. Le cas qui a motivé la règle — chômage zone euro — valait 43×. Le même mot
+pour les deux le rend inutilisable, et la série OCDE des taux longs, publiée avec deux mois de
+décalage structurel, rebasculerait en « arrêtée » à chaque trimestre : une alerte qui clignote
+au rythme du calendrier de publication apprend à être ignorée. Deux seuils désormais — au-delà
+de 3× la publication est EN RETARD, au-delà de 12× (un an de silence sur du mensuel) la série
+est ARRÊTÉE. `perimee` reste vrai dès le retard pour ne casser aucun appelant ; `statut` porte
+la nuance.
+
 ## Session 2026-09-03 (suite 4) — La lecture tient à l'échelle, et une sortie précédait son entrée
 
 **Confirmé sur 87 symboles, plus seulement deux.** 79 sur 87 ont des FERMETURES égales à la

@@ -141,11 +141,40 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       portent le symbole, la quantité et le prix EXACTS d'une vente exécutée** — des
       sorties écrites à l'endroit des entrées. Le critère étant strict (fill unique),
       33 est un PLANCHER.
-- [ ] **P0 — LANCER `make annuler-ventes` (poste local).** Simulation d'abord, puis
-      `ARGS=--appliquer`. Retire uniquement les lots prouvés ; sauvegarde la base et
-      archive chaque ligne retirée avec son fill dans `data/lots-annules-*.json`
-      (gitignoré : fills réels, dépôt public). Puis `make diag-journal` pour vérifier
-      que l'excédent de quantité a fondu et que les 43 lots fantômes ont diminué.
+- [x] **P0 — `annuler-ventes` LANCÉ et vérifié (03/09).** 33 lots retirés :
+      343 enregistrements → 310 · lots ouverts `legacy` 45 → 12 · fantômes 43 → 10 ·
+      symboles à 2× **29 → 3** · excédent 3 308 → 1 317 unités · lots appariés à une vente
+      **33/52 → 0/19**. Le reliquat (NWL 1,74×, MAS 1,91×, QQQ 1,56×) vient de ventes
+      exécutées en PLUSIEURS fills que le critère strict refuse d'apparier — plancher assumé.
+- [ ] **P1 — Le reliquat multi-fills (NWL, MAS, QQQ).** Apparier un lot ouvert à la SOMME de
+      plusieurs fills de vente du même jour, pas à un fill unique. Plus permissif, donc à
+      n'écrire qu'avec la même discipline : preuve archivée, simulation d'abord.
+- [ ] **P1 — Six sorties antérieures à leur entrée, −142,33 $** (SJM, STT, PATH, DUOL, TYL, T).
+      La garde `_anterieur` empêche d'en créer ; elle ne rétroagit pas. Les rejouer suppose de
+      savoir à quel lot chaque vente aurait dû s'apparier : décision de plan complet.
+- [x] **P1 — « Mon profil » : réglages perdus à la navigation + affirmation fausse (03/09).**
+      L'effet d'écriture partait au MONTAGE avec les valeurs par DÉFAUT et écrasait le stockage
+      avant que la restauration ne s'y réécrive ; quitter la page entre les deux perdait le
+      réglage. Drapeau `lu` : rien n'est écrit avant d'avoir lu, et la persistance est séparée
+      de l'appel API. Mesuré par ailleurs : `quant.profil` n'est lu QUE par la page qui l'écrit,
+      donc « ces chiffres CONTRAIGNENT votre outil » était faux — page et API corrigées.
+- [ ] **P2 — Câbler le profil sur la chaîne (budget de perte → dimensionnement).** Aujourd'hui
+      c'est un calcul de référence isolé. Tant que ce n'est pas fait, le texte doit le dire.
+- [x] **P1 — Onglets introuvables : `/sentiment` et `/events` remis dans « Marché » (03/09).**
+      Signalé : « je ne retrouve plus l'onglet des news ». Elles n'avaient pas été supprimées —
+      la réduction à 3 groupes les avait laissées hors de tout menu, joignables seulement par
+      URL directe ou ⌘K. Une page qu'on ne peut atteindre qu'en connaissant son adresse
+      n'existe pas pour l'utilisateur.
+- [ ] **P2 — Onze pages restent hors de la barre** (`/fiche`, `/live`, `/trades`, `/portfolio`,
+      `/ml`, `/conviction`, `/notes`, `/investors`, `/fundamentals`, `/data`, `/accueil`).
+      C'est le résultat de l'audit « simplicité radicale », pas un accident : à trancher
+      explicitement, pas à défaire au fil des signalements.
+- [x] **P1 — « Série arrêtée » disait faux sur le Bund (03/09).** 94 jours de retard contre un
+      seuil de 93 — un dépassement d'UN jour, soit 3,03× la cadence, quand le cas qui a motivé
+      la règle (chômage zone euro) valait 43×. La série OCDE des taux longs publie avec deux
+      mois de décalage structurel : elle rebasculerait en « arrêtée » chaque trimestre. Deux
+      seuils : **retard** au-delà de 3× la cadence, **arrêt** au-delà de 12×. `perimee` reste
+      vrai dès le retard (aucun appelant cassé) ; `statut` porte la nuance.
 - [x] **P0 — Une SORTIE pouvait précéder son ENTRÉE (03/09).** Signalé par l'utilisateur
       sur DUOL (entrée 03/09, sortie 01/09). `_plan` appariait au plus ancien lot du
       symbole sans regarder sa date : une vente fermait un lot qui n'existait pas encore,

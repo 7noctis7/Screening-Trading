@@ -1301,3 +1301,37 @@ position par un faux trade, ce qui est pire, parce que moins visible.
 fills ne sera pas appariée et son lot restera ouvert et signalé. C'est la seule direction
 d'erreur acceptable pour une mesure qui décide d'un retrait — on préfère un registre encore
 imparfait à un registre nettoyé sur une présomption.
+
+## ADR-0062 — « En retard » et « arrêtée » sont deux états, pas un seul (2026-09-03)
+
+**Contexte.** Le détecteur de fraîcheur macro déclarait « série arrêtée — ne reflète plus la
+situation actuelle » dès 3× la cadence observée. Le Bund (OCDE, taux longs) portait ce label
+avec 94 jours de retard contre un seuil de 93 : un dépassement d'UN jour, soit 3,03× la
+cadence. Le cas qui avait motivé la règle — chômage zone euro — valait 43×. Cette série publie
+par ailleurs avec un décalage structurel de deux mois : elle rebasculerait en « arrêtée » à la
+fin de chaque trimestre, puis en sortirait à la publication suivante.
+
+**Décision.** Deux seuils au lieu d'un. Au-delà de 3× la cadence, la publication est EN RETARD
+et la série vit. Au-delà de 12× — un an de silence sur du mensuel — la série est ARRÊTÉE. Le
+champ `perimee` reste vrai dès le retard, pour qu'aucun appelant existant ne cesse de signaler ;
+le nouveau champ `statut` porte la nuance pour qui sait la lire.
+
+**Conséquences.** Une alerte qui clignote au rythme du calendrier de publication apprend à être
+ignorée : c'est le coût réel d'un seuil unique, et il est plus élevé qu'un faux négatif ici,
+puisqu'une série vraiment morte reste détectée par le second seuil. Le mot « arrêtée » redevient
+utilisable parce qu'il ne désigne plus qu'une chose.
+
+## ADR-0063 — Une page hors de la barre de navigation n'existe pas (2026-09-03)
+
+**Contexte.** L'audit « simplicité radicale » avait ramené la navigation à trois groupes. Les
+pages absorbées restaient routables — URL directe, liens contextuels, ⌘K — ce qui semblait
+suffisant. Signalé le 03/09 : « je ne retrouve plus l'onglet des news ». `/sentiment` était
+intacte et fonctionnelle ; simplement introuvable pour qui ne connaît pas son adresse.
+
+**Décision.** « Routable » n'est pas « accessible ». Une page que l'utilisateur consulte
+régulièrement doit figurer dans un menu. `/sentiment` (actualité marché, secteur et positions
+réelles) et `/events` (résultats trimestriels et IPOs) rejoignent « Marché ».
+
+**Conséquences.** Onze pages restent hors de la barre. Ce n'est pas un oubli mais le résultat
+d'un arbitrage assumé : elles y restent jusqu'à décision explicite, plutôt que d'être réinsérées
+une par une au fil des signalements — ce qui déferait l'audit sans jamais le rediscuter.

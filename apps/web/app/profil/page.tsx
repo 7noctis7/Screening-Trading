@@ -78,10 +78,18 @@ export default function ProfilPage() {
   const [rep, setRep] = useState<Rep>(DEFAUT);
   const [res, setRes] = useState<any>(null);
   const [err, setErr] = useState("");
+  // ON N'ÉCRIT PAS AVANT D'AVOIR LU. Signalé le 03/09 : « je le règle, je navigue, je
+  // reviens, et mes réponses sont réinitialisées ». L'effet d'écriture partait au
+  // MONTAGE, donc avec les valeurs par DÉFAUT — l'état restauré n'étant pas encore
+  // appliqué — et écrasait le stockage avant que la restauration ne s'y réécrive. Entre
+  // ces deux instants, quitter la page suffisait à perdre le réglage. Ce drapeau
+  // supprime la course : tant que la lecture n'a pas eu lieu, rien n'est écrit.
+  const [lu, setLu] = useState(false);
 
   useEffect(() => {
     try { const b = localStorage.getItem(STOCK); if (b) setRep({ ...DEFAUT, ...JSON.parse(b) }); }
     catch { /* stockage refusé : on garde les valeurs par défaut */ }
+    setLu(true);
   }, []);
 
   const q = useMemo(() => new URLSearchParams({
@@ -94,13 +102,17 @@ export default function ProfilPage() {
   }).toString(), [rep]);
 
   useEffect(() => {
+    if (!lu) return;                       // cf. ci-dessus : jamais avant la lecture
     try { localStorage.setItem(STOCK, JSON.stringify(rep)); } catch { /* sans effet */ }
+  }, [rep, lu]);
+
+  useEffect(() => {
     let vivant = true;
     fetch(`${BASE}/api/profil?${q}`).then((r) => r.json())
       .then((d) => { if (vivant) { setRes(d); setErr(""); } })
       .catch(() => { if (vivant) setErr("L'API ne répond pas. Est-elle lancée (make start) ?"); });
     return () => { vivant = false; };
-  }, [q, rep]);
+  }, [q]);
 
   const maj = (k: keyof Rep, v: number | boolean) => setRep((r) => ({ ...r, [k]: v }));
   const pct = (x: number) => `${(x * 100).toFixed(0)} %`;
@@ -110,9 +122,16 @@ export default function ProfilPage() {
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Mon profil d'investisseur</h1>
         <p className="text-muted text-xs mt-1">
-          Ces réponses <b>contraignent l'outil</b> : elles fixent la baisse maximale qu'il vise et
-          les plafonds qu'il ne franchira pas. Elles ne constituent pas une recommandation
+          Cette page calcule, à partir de ce que vous déclarez accepter, l'<b>allocation de
+          politique</b> que votre situation autorise. Elle ne constitue pas une recommandation
           personnalisée. Tout reste dans ce navigateur — rien n'est envoyé ni conservé.
+        </p>
+        <p className="text-muted2 text-[11px] mt-2">
+          <b>Ce que ces réponses ne font PAS encore.</b> Elles ne contraignent aujourd'hui aucun
+          autre écran ni la chaîne d'exécution : le screener, le dimensionnement et le
+          rebalancement paper ne les lisent pas. C'est un calcul de référence — à comparer
+          vous-même à ce que le portefeuille fait réellement. Le câblage est au backlog ;
+          d'ici là, écrire l'inverse serait une promesse que le code ne tient pas.
         </p>
       </div>
 
