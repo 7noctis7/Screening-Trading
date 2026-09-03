@@ -111,3 +111,62 @@ def _avertissement(s: dict) -> str:
             f"{s['pnl_latent']:+.2f} $ de latent. Le rééquilibrage ferme ce qui a "
             f"monté et conserve ce qui a baissé : le taux de réussite des trades "
             f"FERMÉS est donc biaisé vers le haut{detail}. Lire « toutes positions ».")
+
+
+# ─────────────────── Réconciliation journal ↔ courtier (03/09) ───────────────────
+# Mesuré ce jour-là : le journal portait ~80 actions que le compte ne détient PAS,
+# deux fois trop de QQQ, et ses cryptos sous une convention de nommage différente de
+# celle du courtier. Une statistique tirée d'un tel registre ne décrit pas le compte.
+
+QUOTES = ("USDC", "USDT", "USD")
+TOLERANCE_QTE = 0.01            # 1 % d'écart de quantité toléré (arrondis de fills)
+
+
+def symbole_canonique(sym: str) -> str:
+    """« AVAX/USDC », « AVAX-USD » et « AVAXUSD » désignent le MÊME actif.
+
+    Le dépôt connaît déjà ce piège : `execution/routing` le documente avec un incident
+    de production du 27/08 (une liquidation crypto bloquée par le calendrier NYSE parce
+    que `AAVEUSD` n'était pas reconnu comme crypto). Comparer sans canoniser produirait
+    des écarts entièrement fictifs, et ferait passer un vrai problème pour du bruit.
+    """
+    su = (sym or "").upper().replace("-", "/")
+    if "/" in su:
+        return su.split("/")[0]
+    for q in QUOTES:
+        if su.endswith(q) and len(su) > len(q):
+            return su[: -len(q)]
+    return su
+
+
+def reconcilier(lots_ouverts: list[dict], positions: dict[str, float]) -> dict:
+    """Les lots OUVERTS correspondent-ils aux quantités RÉELLEMENT détenues ?
+
+    C'est la condition de validité de tout ce que le panneau publie. Le P&L réalisé
+    s'obtient en appariant des ventes à des lots ouverts : si ces lots ne correspondent
+    à rien, les appariements produisent des gains sans contrepartie, et le taux de
+    réussite porte sur des trades qui n'ont pas eu lieu tels quels.
+    """
+    j: dict[str, float] = {}
+    for lot in lots_ouverts or []:
+        c = symbole_canonique(lot.get("symbol", ""))
+        if c:
+            j[c] = j.get(c, 0.0) + float(lot.get("qty") or 0.0)
+    c_pos: dict[str, float] = {}
+    for sym, q in (positions or {}).items():
+        c = symbole_canonique(sym)
+        if c:
+            c_pos[c] = c_pos.get(c, 0.0) + float(q or 0.0)
+    ecarts = []
+    for sym in sorted(set(j) | set(c_pos)):
+        qj, qc = j.get(sym, 0.0), c_pos.get(sym, 0.0)
+        if abs(qj - qc) > TOLERANCE_QTE * max(1.0, abs(qc)):
+            ecarts.append({"symbole": sym, "journal": round(qj, 6),
+                           "courtier": round(qc, 6), "ecart": round(qj - qc, 6)})
+    fantomes = [e for e in ecarts if e["courtier"] == 0.0]
+    return {"reconcilie": not ecarts, "n_ecarts": len(ecarts),
+            "n_fantomes": len(fantomes), "ecarts": ecarts[:50],
+            "motif": "" if not ecarts else
+                     (f"{len(ecarts)} symbole(s) en désaccord, dont {len(fantomes)} "
+                      "que le courtier ne détient PAS. Le journal ne décrit pas ce "
+                      "compte : win rate et espérance n'en sont pas des mesures.")}

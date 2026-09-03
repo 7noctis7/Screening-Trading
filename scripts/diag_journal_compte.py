@@ -165,9 +165,12 @@ def _lots_vs_courtier(ouverts: list, positions: dict) -> None:
     courtier ne détient pas, ces appariements produisent des gains qui n'ont jamais
     existé. On compare donc les QUANTITÉS, symbole par symbole, sans rien supposer.
     """
+    from packages.research.biais_fermeture import symbole_canonique
     par_sym: dict[str, float] = {}
     for lot in ouverts:
-        par_sym[lot.instrument] = par_sym.get(lot.instrument, 0.0) + float(lot.qty or 0)
+        c = symbole_canonique(lot.instrument)
+        par_sym[c] = par_sym.get(c, 0.0) + float(lot.qty or 0)
+    positions = {symbole_canonique(k): v for k, v in (positions or {}).items()}
     print("\n  LOTS OUVERTS DU JOURNAL vs POSITIONS RÉELLES\n")
     if not positions:
         print("    positions courtier indisponibles — comparaison impossible, "
@@ -182,6 +185,7 @@ def _lots_vs_courtier(ouverts: list, positions: dict) -> None:
         ecart_total += abs(d)
         marque = "  ←" if abs(d) > 1e-6 * max(1.0, abs(qc)) else ""
         print(f"    {sym:<12} {qj:>14.6f} {qc:>14.6f} {d:>+14.6f}{marque}")
+    _age_fantomes(ouverts, positions)
     if ecart_total < 1e-6:
         print("\n    → Journal et courtier sont d'accord. Le réalisé n'est PAS gonflé "
               "par des lots fantômes : chercher le résidu ailleurs.")
@@ -189,6 +193,27 @@ def _lots_vs_courtier(ouverts: list, positions: dict) -> None:
         print("\n    → ÉCART. Le journal porte des quantités que le courtier ne "
               "confirme pas.\n      Les ventes appariées à ces lots produisent un "
               "réalisé sans contrepartie réelle.")
+
+
+def _age_fantomes(ouverts: list, positions: dict) -> None:
+    """Depuis QUAND les lots que le courtier ne détient plus sont-ils « ouverts » ?
+
+    C'est le dernier maillon. Si ces lots datent d'avant un réaménagement du
+    portefeuille, la conclusion est mécanique : les ventes qui les ont soldés n'ont
+    jamais été enregistrées, donc ils restent ouverts pour toujours — et les ventes
+    RÉCENTES viennent s'apparier à eux en FIFO, produisant un réalisé calculé sur un
+    prix de revient qui n'a plus rien à voir avec le compte.
+    """
+    from packages.research.biais_fermeture import symbole_canonique
+    detenus = {symbole_canonique(k) for k, v in (positions or {}).items() if v}
+    fantomes = [t for t in ouverts if symbole_canonique(t.instrument) not in detenus]
+    if not fantomes:
+        return
+    dates = sorted(_jour(t.entry_ts) for t in fantomes)
+    print(f"\n    {len(fantomes)} lots ouverts sur des titres que le courtier ne "
+          f"détient PLUS\n    entrés entre {dates[0]} et {dates[-1]} — les ventes qui "
+          "les ont soldés\n    n'ont jamais été journalisées, donc ils ne se "
+          "fermeront jamais.")
 
 
 def _positions_courtier() -> dict:

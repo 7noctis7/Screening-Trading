@@ -2879,3 +2879,47 @@ vaut rien, si petit que soit l'écart.
 cible `sync` n'existe pas encore. Le piège d'amorçage se reproduira à chaque déploiement
 tant que la branche n'est pas fusionnée.
 
+## 2026-09-03 — Le journal ne décrit pas le compte. Les 5 602 $ sont expliqués.
+
+`make diag-journal` a éliminé les deux causes candidates et en a établi une troisième,
+que je n'avais pas envisagée.
+
+**ÉLIMINÉ — les versements/retraits.** Aucun saut hors norme sur Alpaca (seuil 3 984 $/jour,
+zéro dépassement). Le résidu n'est pas de l'argent sorti du compte.
+
+**ÉLIMINÉ — le filtre `legacy`.** 137 lots masqués, mais **0 fermé et 0,00 $ de réalisé**.
+
+**ÉTABLI — le journal porte des positions que le compte n'a plus.** La réconciliation
+quantité par quantité, symbole par symbole :
+
+  · **~80 actions** (AAPL, BBY, CNC, ICLN, NWL 2 861 titres, ZION…) : journal > 0,
+    **courtier = 0**. Le compte ne détient plus rien de tout cela.
+  · **QQQ : 137,105 au journal contre 70,452 chez le courtier** — presque le DOUBLE.
+  · **La poche crypto est comptée deux fois sous deux conventions** : `AVAX/USDC` au
+    journal (41,9) et `AVAXUSD` chez le courtier (214,6), `LTC/USDC` 7,2 contre `LTCUSD`
+    37,1, et ainsi de suite. Même actif, deux noms, jamais appariés — le dépôt connaissait
+    déjà ce piège (`execution/routing`, incident du 27/08 : une liquidation crypto bloquée
+    par le calendrier NYSE parce qu'`AAVEUSD` n'était pas reconnu comme crypto).
+
+**LA CONSÉQUENCE, ET ELLE EST MÉCANIQUE.** Le P&L réalisé s'obtient en appariant les ventes
+aux lots ouverts en FIFO. Les ventes RÉCENTES (27/08 → 02/09) se sont donc appariées à des
+lots d'un portefeuille que le compte ne détient plus, au prix de revient de CE
+portefeuille-là. Les 5 821 $ « réalisés » sont le produit de cet appariement, pas de
+l'argent gagné. Les 87 % de réussite et les 149,27 $ d'espérance portent sur des
+aller-retours qui n'ont pas eu lieu tels que le journal les décrit.
+
+**Ce que ça ne remet PAS en cause** : le verdict GO/NO-GO lit la courbe d'equity du compte
+(vérifié dans le code le 03/09), pas ces statistiques. La décision de passage au réel n'est
+pas contaminée.
+
+**Livré** : `biais_fermeture.reconcilier` + `symbole_canonique` (les trois conventions de
+nommage ramenées au même actif, sinon toute la poche crypto ressortirait en faux écart),
+branchés sur `/api/journal`. Quand la réconciliation échoue, la charge utile porte
+`fiable: false` et le motif. **Le chiffre n'est pas retiré — il est MARQUÉ** : le retirer
+ferait disparaître le problème de la vue au lieu de le montrer. Dix tests.
+
+**Reste à décider (P0 avant tout usage du journal)** : que faire des ~163 lots orphelins.
+Les solder à leur date de sortie réelle demande un historique de fills que nous n'avons
+peut-être plus ; les archiver en `legacy` les sort du calcul sans mentir sur le passé.
+C'est une décision, pas une correction automatique.
+

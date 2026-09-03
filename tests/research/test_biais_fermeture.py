@@ -8,7 +8,9 @@ existe le jour où elle se produit, plutôt que d'être déduite après coup.
 
 from packages.research.biais_fermeture import (
     marquer_lots,
+    reconcilier,
     statistiques_honnetes,
+    symbole_canonique,
 )
 
 
@@ -77,3 +79,47 @@ def test_sous_vingt_fermes_rien_n_est_publie():
     s = statistiques_honnetes(_fermes(5, 3), marquer_lots([], {}))
     assert "win_rate_ferme" not in s
     assert "UNCALIBRATED" in s["statut_ferme"]
+
+
+# ── Réconciliation journal ↔ courtier ────────────────────────────────────────────
+
+
+def test_les_trois_conventions_de_nommage_designent_le_meme_actif():
+    """Piège déjà payé en production le 27/08 (`AAVEUSD` non reconnu comme crypto).
+
+    Comparer sans canoniser produirait des écarts entièrement fictifs sur toute la
+    poche crypto — et ferait passer un vrai problème pour du bruit de nommage.
+    """
+    assert symbole_canonique("AVAX/USDC") == "AVAX"
+    assert symbole_canonique("AVAX-USD") == "AVAX"
+    assert symbole_canonique("AVAXUSD") == "AVAX"
+    assert symbole_canonique("QQQ") == "QQQ"
+    assert symbole_canonique("AAPL") == "AAPL"
+
+
+def test_un_ticker_court_n_est_pas_amputé_par_le_suffixe():
+    """« USD » lui-même ne doit pas devenir la chaîne vide."""
+    assert symbole_canonique("USD") == "USD"
+
+
+def test_reconciliation_verte_quand_les_quantites_concordent():
+    lots = [{"symbol": "AVAX/USDC", "qty": 100.0}, {"symbol": "QQQ", "qty": 70.0}]
+    r = reconcilier(lots, {"AVAXUSD": 100.0, "QQQ": 70.0})
+    assert r["reconcilie"] is True and r["n_ecarts"] == 0 and r["motif"] == ""
+
+
+def test_un_lot_que_le_courtier_ne_detient_pas_est_un_fantome():
+    """Le cas réel du 03/09 : ~80 actions au journal, zéro sur le compte."""
+    lots = [{"symbol": "AAPL", "qty": 47.3}, {"symbol": "QQQ", "qty": 137.1}]
+    r = reconcilier(lots, {"QQQ": 70.45})
+    assert r["reconcilie"] is False
+    assert r["n_fantomes"] == 1                        # AAPL, détenu à zéro
+    assert r["n_ecarts"] == 2                          # AAPL + QQQ en quantité
+    assert "ne décrit pas ce compte" in r["motif"]
+
+
+def test_un_ecart_de_quantite_infime_ne_declenche_rien():
+    """Les fills laissent des arrondis : 1 % de tolérance, sinon l'alerte est
+    permanente — et une alerte permanente cesse d'être lue."""
+    r = reconcilier([{"symbol": "QQQ", "qty": 70.4520}], {"QQQ": 70.4519})
+    assert r["reconcilie"] is True

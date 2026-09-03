@@ -111,7 +111,20 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       lit la courbe d'equity, pas le win rate (vérifié le 03/09). Le texte invite à lire le
       87 % comme une preuve de performance, ce qu'il n'est pas.
 
-- [ ] **P1 — Réconcilier le journal et le compte.** 39 fermés × 149,27 $ = 5 821 $ réalisés
+- [x] **P1 — Réconcilier le journal et le compte : FAIT le 03/09.** Ce ne sont ni les
+      retraits (aucun saut > 3 984 $/j) ni le filtre `legacy` (0 $ masqué). Le journal
+      porte ~80 actions que le compte ne détient plus, deux fois trop de QQQ, et la
+      crypto sous deux conventions de nommage jamais appariées. Les ventes récentes
+      s'apparient en FIFO à ces lots morts → 5 821 $ de « réalisé » sans contrepartie.
+- [ ] **P0 — Décider du sort des ~163 lots orphelins du journal.** Tant qu'ils y sont,
+      toute vente s'apparie à eux et fabrique du réalisé. Deux options, à trancher :
+      (a) les solder à leur date de sortie réelle — demande un historique de fills que
+      nous n'avons peut-être plus ; (b) les basculer en `legacy=1` — les sort du calcul
+      sans réécrire le passé. **Aucune correction automatique** : c'est une décision.
+- [ ] **P1 — Le nommage crypto n'est pas unifié entre le journal et le courtier**
+      (`AVAX/USDC` vs `AVAXUSD`). Même piège que l'incident du 27/08 dans `routing`.
+      `symbole_canonique` le neutralise à la LECTURE ; l'écriture, elle, reste à unifier.
+- [ ] ~~**P1 — ancien : Réconcilier le journal et le compte**~~ 39 fermés × 149,27 $ = 5 821 $ réalisés
       + 614 $ de latent ≈ 6,4 % sur ~100 k$, contre **+0,2 % sur deux mois** affiché pour le
       portefeuille RÉEL. À vérifier : (1) `/api/journal` filtre `legacy=False` et exclut donc
       les fills importés que le compte subit ; (2) les aller-retours tombent-ils dans la

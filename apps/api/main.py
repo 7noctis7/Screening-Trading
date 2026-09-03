@@ -280,6 +280,20 @@ def _prix_courants() -> dict:
         return {}
 
 
+def _qtes_courtier() -> dict:
+    """Quantités RÉELLEMENT détenues, par symbole, telles que le courtier les rapporte."""
+    try:
+        real = (_snap().get("live") or {}).get("real") or {}
+        out: dict[str, float] = {}
+        for compte in ("alpaca", "crypto"):
+            for pos in (real.get(compte) or {}).get("positions", []) or []:
+                if pos.get("symbol"):
+                    out[pos["symbol"]] = float(pos.get("qty") or 0.0)
+        return out
+    except Exception:  # noqa: BLE001
+        return {}
+
+
 @app.get("/api/journal")
 def journal_roundtrips() -> dict:
     """Round-trips RÉELS du journal paper (legacy=0) : lots ouverts + fermés + stats honnêtes.
@@ -315,6 +329,15 @@ def journal_roundtrips() -> dict:
         _ouverts = [r for r in rows if not r["exit_ts"]]
         stats["honnete"] = _bf.statistiques_honnetes(
             closed, _bf.marquer_lots(_ouverts, _prix_courants()))
+        # RÉCONCILIATION D'ABORD : mesuré le 03/09, le journal portait ~80 actions que
+        # le compte ne détient pas et deux fois trop de QQQ. Un win rate calculé sur un
+        # registre qui ne décrit pas le compte n'est pas un chiffre prudent à afficher,
+        # c'est un chiffre faux. On le marque plutôt que de le retirer : le retirer
+        # ferait disparaître le problème de la vue.
+        stats["reconciliation"] = _bf.reconcilier(_ouverts, _qtes_courtier())
+        if not stats["reconciliation"]["reconcilie"]:
+            stats["fiable"] = False
+            stats["motif_non_fiable"] = stats["reconciliation"]["motif"]
         return {"available": True, "rows": rows, "stats": stats,
                 "slippage": measured_slippage(j)}
     except Exception as e:  # noqa: BLE001
