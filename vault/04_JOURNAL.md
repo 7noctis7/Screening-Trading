@@ -2960,3 +2960,40 @@ jamais inventée), et l'ordre chronologique des ventes.
 
 Suites `tests/execution` + `tests/research` : **447 verts**.
 
+## 2026-09-03 — L'outil de réparation avait trois défauts, découverts APRÈS son passage
+
+Le run réel a posté 185 écritures (P&L des fermetures **−1 391,77 $** : la liquidation de
+juin, jamais enregistrée — le journal masquait donc des PERTES). 39 lots restent ouverts,
+sans vente correspondante, et c'est le comportement voulu.
+
+Mais la sortie contenait 185 avertissements « TradeRecord LEG-… enregistré SANS
+features_snapshot ». **Ce n'était pas du bruit : c'était le journal qui signalait ma faute.**
+
+**Défaut 1 — le drapeau `legacy` n'était pas conservé.** J'écrivais toutes les fermetures
+en `legacy=False`, y compris celles de fills IMPORTÉS. Résultat : ces fermetures entraient
+dans le périmètre AFFICHÉ, sans features de décision. J'assainissais le registre en
+polluant exactement le chiffre que je cherchais à assainir. Le drapeau voyage désormais
+avec le lot.
+
+**Défaut 2 — collision d'identifiants sur les ventes partielles.** Un lot soldé en
+plusieurs ventes produisait plusieurs enregistrements au même id `-R1` ; l'UPSERT n'en
+gardait qu'un et les fermetures intermédiaires disparaissaient **sans bruit**. Visible dans
+la sortie : `LEG-ad4ac9fa7f59-R1 (QQQ)` revient une dizaine de fois. Suffixe numéroté.
+
+**Défaut 3 — trouvé par le test, jamais atteint en production.** Une date de fill sans
+fuseau lève une `TypeError` en pleine boucle d'écriture, donc **après** des enregistrements
+déjà commités. Une réparation de registre qui s'arrête à mi-chemin est pire que pas de
+réparation. `_horodatage` normalise en UTC aware ou refuse la ligne.
+
+**Ce que ça dit de ma méthode.** J'ai livré un outil qui écrit dans un registre avec six
+tests portant uniquement sur le PLAN, aucun sur l'ÉCRITURE. Les trois défauts sont tous du
+côté non testé. Le mode simulation par défaut et la sauvegarde horodatée ont limité les
+dégâts — c'est précisément à ça qu'ils servent — mais ils ne remplacent pas des tests sur
+le chemin qui écrit. Trois tests d'écriture ajoutés (drapeau conservé dans les deux sens,
+absence de collision d'ids).
+
+**À FAIRE — restaurer et rejouer.** La sauvegarde
+`journal.avant-reconciliation-20260903-195231.db` contient l'état d'avant. La restaurer
+puis relancer avec la version corrigée est la seule façon d'obtenir un registre propre :
+les 185 écritures actuelles portent le mauvais périmètre.
+

@@ -5,25 +5,21 @@ de toucher au registre, et c'est aussi ce qui rend ces tests possibles sans base
 courtier.
 """
 
-from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from packages.core.models import AssetClass, Side, TradeRecord
 from scripts.reconcilier_journal import _plan
 
 
-@dataclass
-class Lot:
-    id: str
-    instrument: str
-    qty: float
-    entry_price: float
-    entry_ts: datetime
-    exit_ts: None = None
-
-
-def _lot(sym: str, qty: float, prix: float, jour: int = 1) -> Lot:
-    return Lot(f"{sym}-{jour}", sym, qty, prix,
-               datetime(2026, 8, jour, tzinfo=UTC))
+def _lot(sym: str, qty: float, prix: float, jour: int = 1) -> TradeRecord:
+    """Un VRAI TradeRecord : `_close_record` en dérive un enregistrement fermé par
+    `dataclasses.replace`, donc un objet factice trop maigre ferait passer les tests
+    du plan et échouer ceux de l'écriture — exactement ce qui s'est produit."""
+    return TradeRecord(
+        id=f"{sym}-{jour}", instrument=sym, asset_class=AssetClass.EQUITY,
+        venue="Alpaca", side=Side.LONG, qty=qty,
+        entry_ts=datetime(2026, 8, jour, tzinfo=UTC),
+        entry_price=prix, avg_price=prix)
 
 
 def test_une_vente_alpaca_ferme_un_lot_ecrit_sous_l_autre_convention():
@@ -77,3 +73,62 @@ def test_les_ventes_sont_appariees_dans_l_ordre_chronologique():
     fermetures, _ = _plan(lots, ventes)
     assert fermetures[0]["prix"] == 500.0            # la vente du 10 passe en premier
     assert fermetures[0]["lot"].entry_price == 400.0
+
+
+# ── Écriture : le drapeau et l'identité doivent survivre ─────────────────────────
+
+class JournalFactice:
+    """Journal minimal en mémoire, qui reproduit l'UPSERT sur `id` du vrai."""
+
+    def __init__(self, lots):
+        self.lots = {t.id: (t, False) for t in lots}
+        self.ecritures = []
+
+    def all(self, *, legacy=None):
+        if legacy is None:
+            return [t for t, _ in self.lots.values()]
+        return [t for t, lg in self.lots.values() if lg == legacy]
+
+    def append(self, trade, *, legacy=False):
+        self.ecritures.append((trade.id, legacy))
+        self.lots[trade.id] = (trade, legacy)          # UPSERT : même id → écrase
+
+
+def test_la_fermeture_d_un_lot_legacy_reste_legacy():
+    """Sinon on assainit le registre en polluant le chiffre qu'on veut assainir.
+
+    Un fill importé n'a jamais eu de features de décision : sa fermeture n'a rien à
+    faire dans les statistiques affichées, qui portent sur des décisions évaluables.
+    """
+    from scripts.reconcilier_journal import _appliquer
+    lot = _lot("AAPL", 10.0, 200.0)
+    j = JournalFactice([lot])
+    ventes = [{"symbol": "AAPL", "qty": 10.0, "price": 250.0, "date": "2026-08-15"}]
+    fermetures, _ = _plan([lot], ventes)
+    _appliquer(j, fermetures, ids_vivants=set())        # le lot n'est PAS non-legacy
+    assert all(lg is True for _, lg in j.ecritures)
+
+
+def test_la_fermeture_d_un_lot_vivant_reste_vivante():
+    from scripts.reconcilier_journal import _appliquer
+    lot = _lot("AAPL", 10.0, 200.0)
+    j = JournalFactice([lot])
+    ventes = [{"symbol": "AAPL", "qty": 10.0, "price": 250.0, "date": "2026-08-15"}]
+    fermetures, _ = _plan([lot], ventes)
+    _appliquer(j, fermetures, ids_vivants={lot.id})
+    assert all(lg is False for _, lg in j.ecritures)
+
+
+def test_deux_ventes_partielles_ne_se_marchent_pas_dessus():
+    """LE défaut du 03/09 : les deux scissions portaient l'id `-R1`, donc l'UPSERT
+    n'en gardait qu'une et une fermeture disparaissait sans bruit."""
+    from scripts.reconcilier_journal import _appliquer
+    lot = _lot("QQQ", 100.0, 400.0)
+    j = JournalFactice([lot])
+    ventes = [{"symbol": "QQQ", "qty": 30.0, "price": 600.0, "date": "2026-08-10"},
+              {"symbol": "QQQ", "qty": 40.0, "price": 650.0, "date": "2026-08-20"}]
+    fermetures, _ = _plan([lot], ventes)
+    assert len(fermetures) == 2
+    _appliquer(j, fermetures, ids_vivants={lot.id})
+    suffixes = [i for i, _ in j.ecritures if "-R" in i]
+    assert len(set(suffixes)) == len(suffixes)          # aucun id en double

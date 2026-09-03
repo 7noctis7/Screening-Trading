@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import shutil
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -63,9 +63,18 @@ def _ventes_courtier(limite: int = LIMITE_ORDRES) -> list[dict]:
             if o.get("side") == "sell" and float(o.get("price") or 0) > 0]
 
 
-def _lots_ouverts(journal) -> list:
-    return sorted((t for t in journal.all() if t.exit_ts is None),
+def _lots_ouverts(journal) -> tuple[list, set]:
+    """Lots ouverts (TOUS périmètres) + l'ensemble des ids NON legacy.
+
+    Le drapeau doit voyager avec le lot. Sans lui, la fermeture d'un lot importé
+    ressortirait en `legacy=0`, c'est-à-dire DANS les statistiques affichées — et sans
+    features de décision, puisqu'un fill importé n'en a jamais eu. On réparerait le
+    registre en polluant précisément le chiffre qu'on cherche à assainir.
+    """
+    ids_vivants = {t.id for t in journal.all(legacy=False)}
+    lots = sorted((t for t in journal.all() if t.exit_ts is None),
                   key=lambda t: t.entry_ts)
+    return lots, ids_vivants
 
 
 def _plan(lots: list, ventes: list[dict]) -> tuple[list, list]:
@@ -126,26 +135,50 @@ def _resume(fermetures: list, orphelins: list, lots: list) -> None:
         print("    réconciliation du panneau continuera de signaler l'écart.")
 
 
-def _appliquer(journal, fermetures: list) -> int:
-    """Écrit les fermetures. Chaque écriture porte la DATE du fill et son motif."""
+def _horodatage(brut) -> datetime | None:
+    """Date de fill en UTC AWARE, ou `None` si illisible.
+
+    Les dates du courtier portent un fuseau, mais rien ne le garantit : une date nue
+    (« 2026-08-15 ») produit un datetime NAÏF, et le soustraire à une entrée aware lève
+    une TypeError EN PLEINE ÉCRITURE — donc après que des enregistrements ont déjà été
+    commités. Une réparation de registre ne doit jamais s'arrêter à mi-chemin.
+    """
+    try:
+        ts = datetime.fromisoformat(str(brut))
+    except (TypeError, ValueError):
+        return None
+    return ts if ts.tzinfo else ts.replace(tzinfo=UTC)
+
+
+def _appliquer(journal, fermetures: list, ids_vivants: set) -> int:
+    """Écrit les fermetures. Chaque écriture porte la DATE du fill, son motif, et
+    CONSERVE le périmètre (`legacy`) du lot d'origine.
+
+    Le suffixe de scission est NUMÉROTÉ par lot : un même lot soldé en plusieurs
+    ventes produirait sinon plusieurs enregistrements au même id `-R1`, et l'UPSERT
+    ne garderait que le dernier — les fermetures intermédiaires disparaîtraient.
+    """
     import dataclasses
 
     from packages.execution.live_roundtrip import _close_record
-    n = 0
+    n, compteur = 0, {}
     for f in fermetures:
         lot, q = f["lot"], f["qty"]
-        try:
-            ts = datetime.fromisoformat(f["date"])
-        except (TypeError, ValueError):
+        ts = _horodatage(f["date"])
+        if ts is None:
             continue                                  # date illisible → on ne ferme pas
+        est_vivant = lot.id.split("-R")[0] in ids_vivants
         total = float(lot.qty)
         if q >= total - 1e-9:
             rec = _close_record(lot, total, f["prix"], ts, None)
         else:
-            rec = _close_record(lot, q, f["prix"], ts, None, split_id=f"{lot.id}-R1")
+            compteur[lot.id] = compteur.get(lot.id, 0) + 1
+            rec = _close_record(lot, q, f["prix"], ts, None,
+                                split_id=f"{lot.id}-R{compteur[lot.id]}")
             journal.append(dataclasses.replace(lot, qty=round(total - q, 10)),
-                           legacy=False)
-        journal.append(dataclasses.replace(rec, exit_reason=MOTIF), legacy=False)
+                           legacy=not est_vivant)
+        journal.append(dataclasses.replace(rec, exit_reason=MOTIF),
+                       legacy=not est_vivant)
         n += 1
     return n
 
@@ -155,7 +188,7 @@ def main() -> None:
     appliquer = "--appliquer" in sys.argv
     from packages.storage import SqliteTradeJournal
     journal = SqliteTradeJournal()
-    lots = _lots_ouverts(journal)
+    lots, ids_vivants = _lots_ouverts(journal)
     if not lots:
         print("\n  Aucun lot ouvert — rien à réconcilier.")
         return
@@ -176,7 +209,7 @@ def main() -> None:
         dest = src.with_suffix(f".avant-reconciliation-{horo}.db")
         shutil.copy2(src, dest)
         print(f"\n  Sauvegarde : {dest.name}")
-    n = _appliquer(journal, fermetures)
+    n = _appliquer(journal, fermetures, ids_vivants)
     print(f"  {n} écriture(s) de correction postée(s), au prix et à la date des fills "
           "réels.")
     print("  Relancer `make diag-journal` pour vérifier que l'écart s'est refermé.")

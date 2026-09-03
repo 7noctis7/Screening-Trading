@@ -121,7 +121,11 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       Écritures de correction datées, appariées aux fills RÉELS d'Alpaca, motif
       `reconciliation-journal`. `make reconcilier-journal` simule ; `--appliquer` écrit
       après sauvegarde. Les lots sans vente correspondante RESTENT ouverts et sont
-      signalés — les fermer au dernier prix inventerait un P&L. **Reste à LANCER.**
+      signalés — les fermer au dernier prix inventerait un P&L.
+- [ ] **P0 — RESTAURER `journal.avant-reconciliation-20260903-195231.db` et REJOUER.**
+      Le premier passage a écrit 185 fermetures avec le mauvais périmètre (`legacy` non
+      conservé) et des ids de scission en collision. Corrigé, mais le registre porte
+      encore les écritures fautives. Restaurer la sauvegarde puis relancer.
 - [x] **P1 — Nommage crypto : CORRIGÉ à la source.** `open_lots` apparie par symbole
       canonique. C'est ce qui empêchera de nouveaux orphelins.
 - [ ] ~~**P0 — ancien : décider du sort des lots orphelins**~~ Tant qu'ils y sont,
