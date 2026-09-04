@@ -140,6 +140,16 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       dans l'intervalle). Le banc avertit lui-même qu'on ne compare qu'à empreinte
       identique. Refaire les deux runs sur la MÊME empreinte (le VPS est arrêté au 20/06 :
       `make ingest` d'abord) avant d'accorder le moindre crédit au réglage.
+- [x] **P0 — 6 round-trips à chronologie impossible : OUTILLÉ le 04/09 (PATH etc).**
+      L'utilisateur a repéré PATH (entrée 03/09, sortie 01/09) directement dans le journal.
+      Confirmé : c'est le bug DUOL du 03/09 (`reconcilier_journal._plan` appariait au plus
+      ancien lot SANS regarder sa date), déjà corrigé par la garde `_anterieur` — mais la
+      garde n'est pas rétroactive. 6 enregistrements déjà écrits (SJM, STT, PATH, DUOL, TYL,
+      T) portent -142,33 $ de « réalisé » qui ne correspond à aucune opération.
+      `make annuler-chronologie` (simulation par défaut, sauvegarde + archive JSON avant tout
+      retrait, 5 tests) — retire, ne corrige pas : rouvrir supposerait de savoir à quel lot
+      RÉEL la vente aurait dû s'apparier, ce qui n'est pas mesurable ligne à ligne.
+      **Pas encore appliqué** — à lancer sur le Mac mini avec `--appliquer` après vérification.
 - [ ] **P1 — Trois copies divergentes de `data/journal.db`.** Mac mini (37 positions), HF
       (25), VPS (le sien, isolé). `cron_live.sh` ne synchronise pas avec HF — seul
       `paper.yml` le fait. Le timer systemd que j'ai posé sur le VPS le 04/09 hérite de ce
