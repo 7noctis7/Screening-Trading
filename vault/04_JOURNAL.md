@@ -1,5 +1,44 @@
 # 04 — JOURNAL
 
+## Session 2026-09-04 (suite 11, clôture) — Le journal réparé révèle un bug plus profond que la donnée qu'il corrigeait
+
+**La chaîne de réparation, appliquée pour de vrai sur le compte réel.** `make completer-ouvertures`
+puis `make reconcilier-journal`, dans cet ordre (imposé par le code : on ne peut fermer un lot
+qui n'a pas d'ouverture). Résultat mesuré, pas supposé : écart de réconciliation −684,55 $ →
+**−294,00 $**, lots orphelins 15 → 12, achats sans prix de revient 20 → 11. Progrès réel, la
+moitié du trou refermée par les outils déjà construits plus tôt cette semaine.
+
+**Ce qui reste n'a plus la même nature.** Les deux scripts demandaient déjà `limit=5000` à
+Alpaca ; 463 ordres, c'est TOUT l'historique que l'API rend, pas une fenêtre tronquée. Les 12
+lots orphelins et les 11 achats non couverts n'ont donc aucun ordre correspondant dans
+l'historique complet du compte — relancer les mêmes scripts n'aurait rien changé.
+
+**Le dump `--symbole LINK` a montré autre chose : un vrai bug de code, pas un trou de donnée.**
+`live_journal.py:127` écrit les ouvertures normales en `P-{date}-{venue}-{symbole}` ;
+`completer_ouvertures.py:91` écrit ses lots correcteurs en `C-{symbole}`. Les deux chaînes
+existent en parallèle pour LINK, et se sont fait fermer par les MÊMES ventes réelles : la
+sortie du 27/08 à 11,842 $ ferme à la fois `P-...-X1` (86,88 unités, entrée 8,03 $) et
+`C-LINK-R3` (88,60 unités, entrée 11,53 $) — même date, même prix, deux lots distincts. Idem
+le 28/08. Pas un doublon simple (quantités et prix d'entrée différents) : un lot correcteur créé
+un jour sans vérifier que le manque qu'il comblait se refermerait de toute façon via la chaîne
+normale. Ça touche `reconcilier_journal._plan`, pas une donnée à nettoyer.
+
+**Pourquoi je n'ai pas codé le correctif ce soir.** Toucher la logique d'appariement du journal
+qui pilote un compte réel (même en paper) sans y regarder à tête reposée serait exactement
+l'erreur qu'on a corrigée chez quelqu'un d'autre toute la journée — deviner au lieu de mesurer.
+Consigné dans le TODO en P0, avec le chemin de reproduction exact (`--symbole LINK`).
+
+**Bilan de la journée, vu d'ici** : VPS provisionné et opérationnel (systemd, Python, base de
+prix) ; deux bugs d'ingestion réels corrigés (`ingest_crypto.py` timezone, schéma `prices`
+migré) ; outil de mesure du turnover construit puis corrigé deux fois sur ses propres pièges de
+comptage (tranches, fermetures administratives) avant de donner un chiffre fiable ; découverte
+que le banc de sortie ne mesure pas le moteur de production (ADR-0073) ; 6 chronologies
+impossibles retirées ; la moitié du trou de réconciliation refermée ; un bug de fond découvert
+en cherchant autre chose. Rien de tout ça n'aurait tenu sans mesurer à chaque étape plutôt que
+supposer — et la dernière trouvaille du soir en est la preuve : le chiffre qui semblait clore le
+sujet (l'écart réduit de moitié) cachait un bug qu'aucune mesure agrégée n'aurait montré, seul
+un dump ligne à ligne l'a fait apparaître.
+
 ## Session 2026-09-04 (suite 10) — Le banc qu'on règle depuis des semaines ne mesure pas la production
 
 **Trois mesures, trois faux résultats corrigés, une vraie réponse.** L'utilisateur
