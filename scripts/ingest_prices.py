@@ -51,6 +51,22 @@ def _ysym(sym: str, ac: str) -> str | None:
     return sym
 
 
+_COLONNES = ("symbol", "date", "open", "high", "low", "close", "adj_close", "volume")
+
+
+def _migrer_schema(conn: sqlite3.Connection) -> None:
+    """Complète une base `prices` plus ancienne que le schéma courant.
+
+    `CREATE TABLE IF NOT EXISTS` ne touche pas une table déjà là — une base tirée
+    du cache HuggingFace public, figée à un schéma antérieur (ex. sans `adj_close`),
+    plantait alors sur l'INSERT positionnel avec « N colonnes mais M valeurs ».
+    Idempotent : ne fait rien sur un schéma déjà à jour."""
+    presentes = {r[1] for r in conn.execute("PRAGMA table_info(prices)")}
+    for col in _COLONNES:
+        if col not in presentes:
+            conn.execute(f"ALTER TABLE prices ADD COLUMN {col} REAL")
+
+
 def _connect() -> sqlite3.Connection:
     DB.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB, timeout=120)          # attend le verrou (lecteurs API) au lieu d'échouer
@@ -60,6 +76,7 @@ def _connect() -> sqlite3.Connection:
     except sqlite3.OperationalError:
         pass                                         # base tenue par un lecteur → on reste en rollback (busy_timeout gère)
     conn.executescript(_DDL)
+    _migrer_schema(conn)
     return conn
 
 

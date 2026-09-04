@@ -118,6 +118,15 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       suiveur — `rr 6 → rr 9` ne changerait pas un ordre. ADR-0073.
       Journal réel, décisions du SYSTÈME seules : 6 positions en 57 j, détention médiane
       **0,1 jour**, t = +0,92 (non significatif), capture −22 % sur 5 mesurables.
+- [x] **P0 — VPS bloqué sur `make daily`/`make ingest-crypto` : CORRIGÉ le 04/09.**
+      Deux bugs distincts, trouvés en lançant les commandes que j'avais moi-même données :
+      (a) `ingest_crypto.py` important `timezone` DEPUIS `apps.api.snapshot`, qui ne
+      l'exporte plus (il utilise `UTC`) — `ImportError` immédiat, crypto.db resté figé au
+      20/06. Corrigé : import direct depuis `datetime` stdlib.
+      (b) `ingest_prices.py` : le `market.db` tiré du cache HuggingFace public a un schéma
+      `prices` à 7 colonnes (sans `adj_close`) plus ancien que le code actuel (8 colonnes),
+      et `CREATE TABLE IF NOT EXISTS` ne migre pas une table déjà là → `sqlite3.OperationalError`
+      sur l'INSERT positionnel. Corrigé : `_migrer_schema` (ALTER TABLE idempotent), 3 tests.
 - [ ] **P0 — Pourquoi la production tient-elle ses positions 0,1 jour ?** Le banc de sortie
       suppose 42 à 48 jours ; la production solde en quelques heures. Ce n'est pas un
       désaccord statistique (n=6 n'y change rien), c'est une description de comportement.
