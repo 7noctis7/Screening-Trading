@@ -111,6 +111,20 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       Mesuré : 1,25 % de séances manquantes ramènent un bêta de 1,200 à 0,345 (corr 1,000 → 0,288).
       `alignement` et `n_observations` sont désormais PUBLIÉS, et le front avertit en orange quand
       l'appariement reste positionnel. ADR-0072.
+- [ ] **P1 — Rebalancement journalier vs. tenir jusqu'au TP/SL : outillé le 04/09, PAS mesuré.**
+      Question de l'utilisateur : le rebalancement quotidien vers les poids cibles coupe-t-il
+      des positions gagnantes avant leur potentiel ? Constat de code (pas de mesure) :
+      `run_live.py` n'a AUCUNE sortie déclenchée par un TP/SL — une seule cause de clôture
+      existe, le rebalancement (`exit_reason` toujours "reconciliation paper (reduce/close)").
+      Outil construit : `make turnover-audit` (`packages/research/turnover_audit.py`, 8 tests
+      synthétiques) — frais/slippage cumulés, durée de détention médiane, taux de gain, et une
+      « capture » (`pnl_pct / mfe`) qui dit si une ligne sort loin de son meilleur point observé
+      PENDANT sa détention (limite explicite : ne dit rien de l'après-sortie, `mfe`/`mae` sont
+      bornés à la fenêtre [entrée, sortie]). **UNCALIBRATED sur cette session** : `data/journal.db`
+      est vide ici (conteneur cloud fraîchement cloné) — la vraie histoire vit sur le Mac mini /
+      le VPS. À faire : lancer `make turnover-audit` là où le journal réel existe, coller le
+      résultat, PUIS décider (bande de tolérance élargie sur le rebalancement existant, probable,
+      plutôt qu'un moteur TP/SL parallèle qui créerait un conflit d'arbitrage avec le risk-parity).
 - [ ] **P1 — Trois occurrences restantes du même moule, IDENTIFIÉES PAR LECTURE, pas mesurées.**
       (a) `eqw` (indice équipondéré, `apps/api/snapshot.py`) : `zip(*norm)` empile la PREMIÈRE
       barre de chaque titre — 2015 pour un ancien, 2023 pour une IPO récente. Il alimente

@@ -1,5 +1,44 @@
 # 04 — JOURNAL
 
+## Session 2026-09-04 (suite 9) — VPS OVH mis en service, et un outil de mesure au lieu d'une décision devinée
+
+**VPS opérationnel.** Guidage pas à pas (accès SSH par clé, pare-feu, fail2ban, mises à jour
+auto, Python 3.11, dépôt cloné sur la branche de dev, `.env` avec les clés Alpaca PAPER) jusqu'à
+un service systemd qui rejoue le rebalancement quotidien (`cron_live.sh`) en redondance de
+GitHub Actions — idempotent par construction, donc sans risque de double exécution. Le vrai
+apport du VPS n'est pas « faire tourner le bot » (Alpaca tourne déjà dans le cloud depuis
+`paper.yml`) mais une base de prix unique synchronisable entre Mac mini et MacBook Air, et le
+terrain prêt pour Bitmart/Binance/Blofin en réel — jamais activé sans décision explicite,
+puisque Bitmart n'a pas de paper et que le garde-fou du projet l'exige par courtier.
+
+**Une confusion récurrente, bien réelle.** Cinq allers-retours avant que la séquence
+scp → ssh → bash passe sans erreur : script lancé sur le Mac au lieu du VPS, fichier obsolète
+resservi depuis `~/Downloads`, un `sed` de rattrapage qui aurait rendu un test toujours vrai
+(repéré avant de l'envoyer). Le correctif qui a fini par marcher : plus de transfert de fichier,
+un seul bloc `cat > fichier <<'EOF' ... EOF` collé directement dans le terminal déjà connecté,
+avec `hostname` comme vérification imposée avant tout script sensible.
+
+**Question stratégique de l'utilisateur, honnêtement instrumentée plutôt que devinée.**
+« Pourquoi rebalancer chaque jour plutôt que tenir une position jusqu'à son TP/SL ? » Lecture du
+code, pas supposition : le chemin live (`run_live.py`, poids `preset risk-parity + DD-target`)
+n'a AUCUNE sortie déclenchée par un TP ou un SL aujourd'hui — une seule cause de clôture existe,
+le rebalancement (`exit_reason` toujours identique, `"reconciliation paper (reduce/close)"`).
+Le moteur avec stop ATR + reward:risk existe (`fast_swing_backtest`), mais étiqueté « legacy » :
+ce n'est pas ce qui tourne en production.
+
+**Ce qui a été construit : l'outil de mesure, pas la décision.** `make turnover-audit`
+(`packages/research/turnover_audit.py`, 8 tests synthétiques) — coût (frais + slippage cumulés),
+durée de détention médiane, taux de gain, et une « capture » (`pnl_pct / mfe`) qui dit si une
+ligne sort loin de son meilleur point observé PENDANT sa détention. Limite dite explicitement
+dans le module : ça ne dit rien de l'après-sortie (`mfe`/`mae` bornés à la fenêtre
+[entrée, sortie]) — impossible de prouver qu'une position aurait continué à monter si on l'avait
+gardée. **`data/journal.db` est vide dans cette session** (conteneur cloud fraîchement cloné) :
+`UNCALIBRATED`, affiché tel quel plutôt qu'un chiffre inventé. La vraie histoire vit sur le Mac
+mini et, désormais, le VPS. Prochain pas : lancer `make turnover-audit` là où le journal réel
+existe, avant de choisir entre une bande de tolérance élargie sur le rebalancement existant (la
+piste la plus probable) et un moteur TP/SL parallèle (qui entrerait en conflit d'arbitrage avec
+le risk-parity — pas construit tant que ce n'est pas mesuré comme nécessaire).
+
 ## Session 2026-09-04 (suite 8) — « Contribution alpha 1072 % » : le bêta était faux, pas l'alpha
 
 **La question était la bonne.** Devant le tableau de bord : « contribution alpha, est-ce correct ?
