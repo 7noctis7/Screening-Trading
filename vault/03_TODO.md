@@ -149,7 +149,7 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       `make annuler-chronologie` (simulation par défaut, sauvegarde + archive JSON avant tout
       retrait, 5 tests) — retire, ne corrige pas : rouvrir supposerait de savoir à quel lot
       RÉEL la vente aurait dû s'apparier, ce qui n'est pas mesurable ligne à ligne.
-      **Pas encore appliqué** — à lancer sur le Mac mini avec `--appliquer` après vérification.
+      **Appliqué le 04/09 sur le Mac mini** : 6 round-trips retirés, sauvegarde + archive JSON.
 - [ ] **P1 — Trois copies divergentes de `data/journal.db`.** Mac mini (37 positions), HF
       (25), VPS (le sien, isolé). `cron_live.sh` ne synchronise pas avec HF — seul
       `paper.yml` le fait. Le timer systemd que j'ai posé sur le VPS le 04/09 hérite de ce
