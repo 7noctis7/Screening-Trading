@@ -217,8 +217,14 @@ export default function Dashboard() {
             <p className="text-muted2 text-xs mt-2">
               <span style={{ color: "#22c55e" }}>■</span> Hors-QQQ {aShare}% ·
               <span style={{ color: "#3b82f6" }}> ■</span> Bêta (marché) {100 - aShare}%.
-              Perf preset {(at.portfolio_return * 100).toFixed(1)}% vs QQQ {(at.benchmark_return * 100).toFixed(1)}% — net de frais.
+              Perf preset {(at.portfolio_return * 100).toFixed(1)}% vs QQQ {(at.benchmark_return * 100).toFixed(1)}% — net de frais,
+              sur {at.n_observations ?? "—"} séances communes aux deux calendriers.
             </p>
+            {at.alignement === "position" && (
+              <p className="text-xs mt-1" style={{ color: "#f59e0b" }}>
+                ⚠ Calendrier du benchmark indisponible : appariement par position, bêta et alpha non fiables.
+              </p>
+            )}
             {(at.underperforms_benchmark || at.alpha_significant === false) && (
               <p className="text-xs mt-1" style={{ color: "#f59e0b" }}>
                 ⚠ {at.underperforms_benchmark && `Sous-performe QQQ en absolu (${(at.portfolio_return * 100).toFixed(0)}% vs ${(at.benchmark_return * 100).toFixed(0)}%).`}

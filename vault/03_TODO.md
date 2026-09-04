@@ -103,6 +103,25 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       si les bases sont d'accord partout, le sens de fusion est sans effet et la cause est
       ailleurs. Correctif attendu : aligner `merge_bars` sur la sémantique de
       `_load_prices`, pas l'inverse.
+- [x] **P1 — Bêta 0,037 et « contribution alpha 1072 % » sur le tableau de bord : CORRIGÉ le 04/09.**
+      Cinquième occurrence de l'empilement positionnel : `packages/reporting/analytics.py` faisait
+      `min(len(r), len(b))` puis `[-m:]`. Le correctif du matin (ADR-0067) portait sur
+      `compute_attribution` (miroir Obsidian), pas sur ce que le web affiche. Sixième dans la
+      foulée : `_bench_series` posait le i-ème cours du S&P sur la i-ème date de l'equity.
+      Mesuré : 1,25 % de séances manquantes ramènent un bêta de 1,200 à 0,345 (corr 1,000 → 0,288).
+      `alignement` et `n_observations` sont désormais PUBLIÉS, et le front avertit en orange quand
+      l'appariement reste positionnel. ADR-0072.
+- [ ] **P1 — Trois occurrences restantes du même moule, IDENTIFIÉES PAR LECTURE, pas mesurées.**
+      (a) `eqw` (indice équipondéré, `apps/api/snapshot.py`) : `zip(*norm)` empile la PREMIÈRE
+      barre de chaque titre — 2015 pour un ancien, 2023 pour une IPO récente. Il alimente
+      `multi_strategy`, `relative_metrics` et le benchmark « Univers (équipondéré) ».
+      (b) `fast_swing_backtest` : `n = max(len(b))` et horodatage pris du PREMIER symbole.
+      (c) `packages/portfolio/benchmark._align` : tronque par le DÉBUT face à une equity plus
+      longue que `eqw` — donc compare deux fenêtres différentes.
+      **Mesurer avant de corriger** (l'écart réel se chiffre sur la base locale, pas ici) : dumper
+      les longueurs et les dates de début/fin de `equity`, `eqw` et `data[s]`. Semantique à
+      préserver pour `eqw` : moyenne de NIVEAUX normalisés (achat-conservation), pas moyenne de
+      rendements — sinon deux changements se superposent et on ne sait plus lequel bouge le chiffre.
 - [ ] **P2 — L'alignement positionnel de `blend_equity` tombe juste par COÏNCIDENCE.**
       Mesuré : 0 séance d'écart entre le calendrier du cœur et l'axe du preset. Rien ne le
       garantit — un titre ajouté à l'univers change l'axe et casse silencieusement le

@@ -537,7 +537,10 @@ def analytics() -> dict:
     preset, qqq = cur.get("preset") or [], cur.get("qqq") or []
     if len(preset) < 30:
         return {"available": False}
-    pa = PerformanceAnalytics.from_curves(preset, qqq)
+    # Les DEUX calendriers voyagent avec les courbes : le preset suit l'univers
+    # négociable, QQQ suit les indices. Par position : bêta 0,037 (cf. `from_curves`).
+    pa = PerformanceAnalytics.from_curves(preset, qqq, dates=cur.get("dates") or [],
+                                          benchmark_dates=cur.get("qqq_dates") or [])
     return {"available": True, "metrics": pa.metrics().to_dict(),
             "attribution": pa.attribution(),
             "html": pa.to_html_snippet("Preset vs QQQ (net de frais)")}

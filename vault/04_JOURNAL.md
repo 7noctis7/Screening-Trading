@@ -1,5 +1,44 @@
 # 04 — JOURNAL
 
+## Session 2026-09-04 (suite 8) — « Contribution alpha 1072 % » : le bêta était faux, pas l'alpha
+
+**La question était la bonne.** Devant le tableau de bord : « contribution alpha, est-ce correct ?
+Il me semble élevé. » Oui — mais le chiffre à regarder n'était pas la contribution alpha, c'était
+le **bêta de 0,037** juste à côté, avec une corrélation de 0,031. Un portefeuille long-only
+d'actions américaines qui ne bouge pas avec le Nasdaq, cela n'existe pas. Et une contribution
+alpha n'est qu'un résidu : `r − β·b`. Bêta écrasé ⇒ tout le rendement bascule en « alpha ».
+Les 1 072 % n'étaient pas une performance, c'était le symptôme.
+
+**Cinquième et sixième occurrences du même défaut.** Le matin même, ADR-0067 corrigeait
+`compute_attribution`. Mais le panneau web ne passe pas par cette fonction : il lit
+`/api/analytics` → `packages/reporting/analytics.py`, qui faisait `m = min(len(r), len(b))` puis
+`r[-m:], b[-m:]`. Le correctif du matin ne touchait pas ce que l'utilisateur regarde. En cherchant,
+une sixième : `_bench_series` posait le i-ème cours du S&P sur la i-ème date du portefeuille — la
+courbe de comparaison tracée sous l'equity du tableau de bord, tous les jours.
+
+**Mesuré, pas déduit.** Deux fois la même courbe sur 400 séances, cinq séances retirées du seul
+calendrier du benchmark (1,25 %) : par date bêta 1,200 / corrélation 1,000 ; par position bêta
+0,345 / corrélation 0,288. **1,25 % de calendrier détruit 71 % du bêta.** Sur un levier pur 1,2×,
+dont l'alpha est nul par construction, la part « alpha » passe de 5,5 % à 47,6 %.
+
+**Ce qui change à l'écran.** Le bêta et l'alpha sont calculés sur les séances COMMUNES aux deux
+calendriers, et le panneau dit lesquelles (`n_observations`). Si le calendrier du benchmark
+manque, l'appariement reste positionnel mais le tableau de bord l'affiche en orange :
+« bêta et alpha non fiables ». Un chiffre publié porte désormais la manière dont il a été obtenu.
+
+**Ce que je n'ai PAS fait, et pourquoi.** La chasse a sorti trois autres endroits du même moule :
+l'indice équipondéré `eqw` (`zip(*norm)` empile la première barre de chaque titre — 2015 pour un
+ancien, 2023 pour une IPO récente), l'horodatage de `fast_swing` (`n = max(len)`, dates prises du
+premier symbole), et `_align` de `packages/portfolio/benchmark` qui tronque par le DÉBUT face à une
+equity plus longue. Ce sont des lectures de code, pas des mesures : je n'ai pas les bases ici pour
+chiffrer l'écart. Remplacer un chiffre publié par un autre sans l'avoir mesuré serait refaire
+l'erreur de la veille dans l'autre sens. P1 au TODO, avec le mécanisme exact.
+
+**Prochain pas.** `make sync` puis relancer un build : le tableau de bord doit afficher un bêta
+plausible (0,5–0,9 pour ce portefeuille). Si le bêta reste sous 0,1 après appariement par date,
+c'est que les deux calendriers ne se recouvrent presque pas — et c'est alors `n_observations` qui
+le dira, au lieu du silence.
+
 ## Session 2026-09-04 (suite 7) — Deux fois la même erreur : j'ai deviné le payload au lieu de le lire
 
 **Deuxième blocage, deuxième faute de ma part.** Le gate a de nouveau arrêté le déploiement, en

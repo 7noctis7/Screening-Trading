@@ -1500,3 +1500,35 @@ publiés et la parité local/en-ligne. Il ne garantit pas qu'un chiffre soit jus
 économique — aucun automate ne le peut. Et le journal réel reste local-only : les chiffres de
 compte du site public ne sont pas ceux du Mac. Ce n'est pas une incohérence mais un périmètre,
 désormais affiché sur la page concernée.
+
+## ADR-0072 — L'appariement par date est une règle de dépôt, pas un correctif ponctuel (2026-09-04)
+
+**Contexte.** Question de l'utilisateur devant le tableau de bord : « contribution alpha, est-ce
+correct ? Il me semble élevé. » 1 072,2 % de contribution alpha, bêta 0,037, corrélation 0,031
+vis-à-vis de QQQ, pour un portefeuille long-only d'actions américaines. Le chiffre à regarder
+n'était pas la contribution mais le bêta : une contribution alpha, c'est le RÉSIDU `r − β·b`.
+Un bêta écrasé bascule mécaniquement tout le rendement du côté « alpha ».
+
+L'ADR-0067 avait corrigé `compute_attribution` (miroir Obsidian) le matin même. Le panneau web ne
+passe pas par là : il lit `/api/analytics`, donc `packages/reporting/analytics.py`, qui faisait
+exactement la même chose — `m = min(len(r), len(b))` puis `r[-m:], b[-m:]`. **Cinquième
+occurrence.** Une sixième a été trouvée dans la foulée : `_bench_series` posait le i-ème cours du
+S&P sur la i-ème date du portefeuille — la courbe de comparaison tracée sous l'equity.
+
+**Mesure, pas déduction.** Deux fois la même courbe, 400 séances, cinq séances retirées du
+calendrier du benchmark (1,25 %) : par date bêta 1,200 et corrélation 1,000 ; par position bêta
+0,345 et corrélation 0,288. Un peu plus de 1 % de calendrier suffit à détruire 71 % du bêta. Sur
+un levier pur 1,2× (alpha nul par construction), la part « alpha » passe de 5,5 % à 47,6 %.
+
+**Décision.** Toute comparaison entre deux séries de calendriers différents passe par
+`apparier_deux_series` (deux séries) ou `aligner_par_date` (N séries). Le résultat publié PORTE la
+manière dont il a été obtenu : `attribution()` expose `alignement` (`"date"` / `"position"`) et
+`n_observations`, et le tableau de bord affiche un avertissement orange quand l'appariement est
+positionnel. Sans calendrier commun suffisant, `available: False` + motif.
+
+**Conséquences.** Six occurrences en un jour disent que la revue au cas par cas ne suffit pas :
+`min(len(a), len(b))` sur deux séries de sources différentes est à traiter comme un défaut par
+défaut, pas comme un choix. L'inventaire des occurrences restantes (indice équipondéré `eqw`,
+horodatage de `fast_swing`, `_align` de `packages/portfolio/benchmark`) est au TODO en P1 : elles
+sont identifiées par lecture du code, pas encore MESURÉES sur données réelles, et on ne remplace
+pas un chiffre publié par un autre sans l'avoir mesuré.

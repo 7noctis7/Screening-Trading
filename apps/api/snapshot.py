@@ -31,6 +31,7 @@ from packages.portfolio import (
     risk_metrics_fn,
 )
 from packages.portfolio.metrics import returns_from_equity
+from packages.reporting.bench_curves import bench_series
 from packages.ranking import RankingEngine
 from packages.regime import MacroImpactMap, MacroRegimeClassifier, synthetic_macro
 from packages.storage import MacroStore
@@ -2651,7 +2652,12 @@ def build_snapshot(seed: int = 7) -> dict:
                            + [f"{int(round((1-_index_core_info['core_pct'])*100))}% preset"])
                 if _index_core_info.get("enabled")
                 else ("preset (risk-parity + DD-target)" if _pe.get("available") else "swing")),
-            "benchmarks": _bench_series({"S&P 500": sp, "Nasdaq 100": ndx}, _dash_dates, init_cap),
+            # Les dates des indices voyagent avec leurs cours : sans elles la courbe du
+            # benchmark était tracée sur le calendrier de l'equity (`bench_series`).
+            "benchmarks": bench_series(
+                {"S&P 500": (sp, _sp_dates if _sp_real else []),
+                 "Nasdaq 100": (ndx, _ndx_dates if _ndx_real else [])},
+                _dash_dates, init_cap),
             "dates": _dash_dates,
             "positions": comp["rows"], "totals": comp["totals"],
             "preset_allocation": _preset_alloc,        # allocation PRESET (production) → page Positions
@@ -2774,29 +2780,6 @@ def _account_compare(alp_curve: list, cr_curve: list, sp: list, ndx: list,
             series[name], st = b
             kpis.append({"name": name, **st})
     return {"available": bool(series), "window": [axis[0], axis[-1]], "series": series, "kpis": kpis}
-
-
-def _bench_series(benches: dict, dates: list, init_cap: float) -> dict:
-    """Rebasera chaque benchmark sur le capital initial, aligné sur les dates de l'equity (overlay)."""
-    out = {}
-    for name, px in benches.items():
-        if not px:
-            continue
-        # ffill anti-NaN (barres yfinance du jour parfois NaN) : courbe d'AFFICHAGE →
-        # dernière valeur connue ; jamais de NaN servi au front (JSON NaN-safe + tests).
-        clean, last = [], None
-        for v in px:
-            if v == v and v is not None:
-                last = v
-            clean.append(last)
-        px = [v for v in clean if v is not None]
-        if not px:
-            continue
-        L = min(len(px), len(dates))
-        base = px[len(px) - L] or 1.0
-        out[name] = [{"t": dates[len(dates) - L + i],
-                      "v": round(init_cap * px[len(px) - L + i] / base, 2)} for i in range(L)]
-    return out
 
 
 def _top_traded(journal, k: int) -> list[tuple[str, int]]:
