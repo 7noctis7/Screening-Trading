@@ -162,6 +162,21 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       la suite. C'est le comportement voulu, pas un bug. Leçon : `python3 -c` sur
       `AlpacaBroker().orders()` filtré par symbole tranche ce genre de doute en une
       commande — le réflexe à avoir AVANT d'écrire "bug" dans ce fichier.
+- [ ] **P1 — Détention minimale : PARAMÈTRE CONSTRUIT le 04/09, PAS ENCORE MESURÉ.**
+      Hypothèse de l'utilisateur devant son journal : « les trades < 10 j perdent, mieux
+      vaudrait tenir 10 j le temps que la volatilité d'entrée se nettoie ». Le journal ne
+      pouvait PAS trancher — toutes les longues détentions y sont des tranches d'un même
+      lot crypto du 07/07 sur le rallye de juillet-août, et toutes les courtes sont des
+      actions du rebalancement quotidien : comparer les deux compare des classes d'actifs
+      et une fenêtre de marché, pas des durées de détention.
+      Construit à la place : `fast_swing_backtest(detention_min=N)` (en séances) +
+      3ᵉ table dans `make labs` / `sortie_lab.py`, balayage 0/5/10/15 j. Le verrou DIFFÈRE
+      les sorties molles (cible, suiveur, cassure MM longue) et laisse TOUJOURS passer le
+      stop initial — sinon on mesurerait « tenir sans garde-fou » et le maxDD changerait
+      de sens. 6 tests sur la mécanique (`tests/backtest/test_detention_minimale.py`).
+      **À FAIRE : lancer `make labs` et lire la 3ᵉ table** — jours ET maxDD ensemble, un
+      verrou allonge la détention par construction, la question est ce qu'il coûte en
+      baisse maximale. DSR déjà déflaté des 4 essais supplémentaires.
 - [ ] **P1 — Trois copies divergentes de `data/journal.db`.** Mac mini (37 positions), HF
       (25), VPS (le sien, isolé). `cron_live.sh` ne synchronise pas avec HF — seul
       `paper.yml` le fait. Le timer systemd que j'ai posé sur le VPS le 04/09 hérite de ce
