@@ -84,16 +84,40 @@ def _plausibilite(jsons: list[Path]) -> list[str]:
     Le module d'audit vit dans `packages/` pour être testable hors CI : un gate qu'on
     n'exerce pas en test est un gate qu'on découvre en panne le jour où il compte."""
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from packages.common.gate_publication import auditer
+    from packages.common.coherence_site import auditer as coherence
+    from packages.common.coherence_site import dates_d_arrete
+    from packages.common.gate_publication import auditer as plausibilite
     motifs: list[str] = []
+    arretes: dict[str, str] = {}
     for p in sorted(jsons):
         try:
             payload = json.loads(p.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue              # illisible : déjà couvert par les contrôles 1-4
-        if isinstance(payload, dict):
-            motifs += [f"{p.name}{m}" for m in auditer(payload)]
+        if not isinstance(payload, dict):
+            continue
+        motifs += [f"{p.name}{m}" for m in plausibilite(payload)]
+        motifs += [f"{p.name}{m}" for m in coherence(payload)]
+        for chemin, jour in dates_d_arrete(payload).items():
+            arretes[f"{p.name}{chemin}"] = jour
+    _inventaire_arretes(arretes)
     return motifs
+
+
+def _inventaire_arretes(arretes: dict[str, str]) -> None:
+    """Recense les dates d'arrêté SANS bloquer. Elles diffèrent légitimement entre
+    domaines — la crypto cote le week-end, les actions non — donc en faire une règle
+    produirait un faux positif chaque samedi. On les rend LISIBLES : une divergence
+    inattendue saute aux yeux dans le log, là où personne n'irait la chercher."""
+    if not arretes:
+        return
+    par_jour: dict[str, list[str]] = {}
+    for chemin, jour in arretes.items():
+        par_jour.setdefault(jour, []).append(chemin)
+    print(f"   dates d'arrêté publiées : {len(par_jour)} distincte(s)")
+    for jour in sorted(par_jour, reverse=True):
+        exemples = ", ".join(sorted(par_jour[jour])[:4])
+        print(f"     {jour} — {len(par_jour[jour])} bloc(s) : {exemples}")
 
 
 if __name__ == "__main__":

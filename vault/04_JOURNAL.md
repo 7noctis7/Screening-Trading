@@ -1,5 +1,53 @@
 # 04 — JOURNAL
 
+## Session 2026-09-04 (suite 5) — « Plus aucune incohérence » : ce qu'on peut réellement garantir
+
+**La demande, et ce que j'en fais.** « Assure-toi que TOUTES les données publiées — local, en
+ligne, ordinateur, téléphone, entre onglets — soient cohérentes et correctes. » Je ne peux pas
+promettre l'absence d'erreur : ce serait une promesse que le code ne tient pas, et ce carnet est
+plein d'affirmations de ce genre qu'il a fallu retirer. Ce que je peux faire, et qui vaut mieux :
+transformer l'exigence en **contrat vérifié par la machine, qui casse le build**.
+
+**Le fait qui rend les invariants durs.** Les 24 payloads dérivent d'UN SEUL snapshot
+(`dump_static` appelle `M._snap()` une fois). Deux pages ne peuvent donc pas diverger à cause des
+données : si elles divergent, le même nombre est calculé à deux endroits et l'un des deux est
+faux. C'est exactement l'historique du dépôt — PSR à 0,0 % et 100 % sur la même page, trois
+conventions de Sortino, un bêta de 0,006, un CAGR de −100 % avec Sharpe positif.
+
+**Le principe de conception : AUCUN faux positif.** Un gate qui crie au loup finit désactivé, et
+ce dépôt l'a déjà vécu — le détecteur de fraîcheur macro se trompait 4 fois sur 5 et « apprenait
+à être ignoré ». Chaque règle est donc une IMPOSSIBILITÉ, pas un seuil :
+
+  · une courbe strictement positive interdit toute statistique d'anéantissement — aucun argument
+    de flux, de frais ou de fenêtre ne franchit cette borne ;
+  · une courbe et ses dates ont la MÊME longueur — signature de l'empilement positionnel, quatre
+    occurrences ici ;
+  · un capital anéanti avec un ratio positif, ou un `null` dans une courbe publiée (ADR-0070).
+
+Les tests « doit PASSER » comptent autant que les autres : une vraie ruine passe, une perte de
+−62 % passe, un anéantissement avec Sharpe négatif passe. Ce sont eux qui gardent le gate
+crédible.
+
+**Local ≠ en ligne : le piège structurel, désormais testé.** Le front a deux modes —
+`data/<nom>.json` en statique (téléphone, ordinateur en ligne) et `localhost:8000/api/…` en local.
+Une page qui appelle une route que `dump_static` n'écrit pas fonctionne parfaitement en local et
+rend **404 en ligne** ; le développeur ne le voit jamais, il travaille sur le mode qui marche.
+Comparaison faite : 25 routes appelées, 26 fichiers publiés, **aucune manquante**, un seul
+orphelin (`overlays`, neutralisé exprès). Rien à corriger aujourd'hui — et c'est justement le
+moment d'écrire le test, pendant que c'est vert : un test ajouté après la panne ne protège que du
+passé.
+
+**Ce qui est inventorié plutôt que bloqué.** Les dates d'arrêté diffèrent LÉGITIMEMENT entre
+domaines : la crypto cote le week-end, les actions non. En faire une règle produirait un faux
+positif chaque samedi. Le build les RECENSE dans son log — mesurer sans juger vaut mieux qu'une
+règle fausse.
+
+**Ce que ce dispositif ne couvre pas, et il faut le dire.** Il vérifie la cohérence *interne* des
+chiffres publiés et la parité des routes. Il ne vérifie pas qu'un chiffre est JUSTE au sens
+économique — aucun automate ne le peut. Le journal réel reste local-only par construction (le
+build CI n'a pas les clés courtier), donc les chiffres de compte du site public ne sont pas ceux
+du Mac : ce n'est pas une incohérence, c'est un périmètre, et il est désormais affiché.
+
 ## Session 2026-09-04 (suite 4) — `0 × NaN = NaN` : une panne visible en production
 
 **Le signalement.** Le téléphone affichait gain total **−100 %**, CAGR **−100 %**, pire baisse

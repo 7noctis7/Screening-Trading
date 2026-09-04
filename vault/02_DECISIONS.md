@@ -1471,3 +1471,32 @@ cohérente passe, un anéantissement avec Sharpe négatif passe, le cas du 04/09
 plutôt que le symptôme (le chiffre absurde), et elle vaut avant même de savoir ce que le trou
 signifie. Le module vit dans `packages/` pour être exerçable en test — un gate qu'on ne teste pas
 est un gate qu'on découvre en panne le jour où il compte.
+
+
+## ADR-0071 — La cohérence du site est un contrat testé, pas une promesse (2026-09-04)
+
+**Contexte.** Demande explicite : « plus aucune erreur ni incohérence » entre local, en ligne,
+ordinateur, téléphone et onglets. Une promesse de ce type ne peut pas être tenue par un
+engagement verbal — ce carnet est plein d'affirmations qu'il a fallu retirer parce que le code ne
+les tenait pas.
+
+**Décision.** L'exigence devient un contrat vérifié : `coherence_site` (invariants entre courbes,
+dates et statistiques) et `gate_publication` (contradictions arithmétiques) tournent dans
+`check_build`, donc dans le workflow Pages, et FONT ÉCHOUER le déploiement. Un test permanent
+compare les routes appelées par le front aux fichiers écrits par le build statique : une route
+manquante rendrait 404 en ligne tout en marchant en local.
+
+**Le principe qui gouverne chaque règle : aucun faux positif.** Un gate qui crie au loup finit
+désactivé — le détecteur de fraîcheur macro de ce dépôt se trompait 4 fois sur 5 et « apprenait à
+être ignoré ». Toute règle est donc une impossibilité vérifiable sans connaître l'intention, et
+chaque règle est accompagnée de tests « doit PASSER » qui protègent sa crédibilité.
+
+**Ce qui est inventorié et non bloqué.** Les dates d'arrêté diffèrent légitimement entre domaines
+(la crypto cote le week-end). Le build les recense dans son log au lieu d'en faire une règle qui
+échouerait chaque samedi.
+
+**Conséquences, et limite assumée.** Le dispositif garantit la cohérence INTERNE des chiffres
+publiés et la parité local/en-ligne. Il ne garantit pas qu'un chiffre soit juste au sens
+économique — aucun automate ne le peut. Et le journal réel reste local-only : les chiffres de
+compte du site public ne sont pas ceux du Mac. Ce n'est pas une incohérence mais un périmètre,
+désormais affiché sur la page concernée.
