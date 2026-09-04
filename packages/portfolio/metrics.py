@@ -26,12 +26,15 @@ def sharpe(equity, rf: float = 0.0, ppy: int = _PPY) -> float:
 
 
 def sortino(equity, rf: float = 0.0, ppy: int = _PPY) -> float:
-    r = returns_from_equity(equity)
-    downside = r[r < 0]
-    if downside.size == 0 or downside.std(ddof=1) == 0:
-        return 0.0
-    excess = r.mean() - rf / ppy
-    return float(excess / downside.std(ddof=1) * np.sqrt(ppy))
+    """Sortino annualisé — définition unique dans `portfolio.deviation`.
+
+    CORRECTIF (04/09) : le dénominateur était l'écart-type des rendements NÉGATIFS
+    seuls, ce qui cumule deux erreurs — diviser par le nombre de négatifs au lieu de N
+    (le ratio cesse alors de dépendre de la FRÉQUENCE des pertes, ce que Sortino entend
+    précisément mesurer) et retrancher leur moyenne. Mesuré sur 2 520 rendements :
+    Sortino gonflé de 12,8 %."""
+    from packages.portfolio.deviation import sortino_annualise
+    return sortino_annualise(returns_from_equity(equity).tolist(), ppy=ppy, rf=rf)
 
 
 def max_drawdown(equity) -> float:
@@ -102,9 +105,9 @@ def perf_summary(returns, pnls: list[float] | None = None, rf: float = 0.0,
     sd = float(r.std(ddof=1))
     vol = sd * np.sqrt(ppy)
     sharpe_v = float((r.mean() - rf / ppy) / sd * np.sqrt(ppy)) if sd > 0 else 0.0
-    dn = r[r < 0]
-    dsd = float(dn.std(ddof=1)) if dn.size > 1 else 0.0
-    sortino_v = float((r.mean() - rf / ppy) / dsd * np.sqrt(ppy)) if dsd > 0 else 0.0
+    # Même définition que `sortino()` — une seule source (`portfolio.deviation`).
+    from packages.portfolio.deviation import sortino_annualise
+    sortino_v = sortino_annualise(r.tolist(), ppy=ppy, rf=rf)
     mdd = max_drawdown(eq.tolist())
     out = {"available": True, "n": n, "total_return": round(total, 4),
            "cagr": round(cagr, 4), "vol": round(vol, 4), "sharpe": round(sharpe_v, 3),

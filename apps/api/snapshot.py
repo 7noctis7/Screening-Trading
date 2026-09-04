@@ -1446,8 +1446,21 @@ def _index_series(aliases: list[str], start, end,
 
 def _index_closes(aliases: list[str], start, end,
                    fallback: list[float]) -> tuple[list[float], bool]:
+    """Cours seuls. Jeter les dates a un COÛT : cf. `_index_closes_dates`."""
     closes, _dates, real = _index_series(aliases, start, end, fallback)
     return closes, real
+
+
+def _index_closes_dates(aliases: list[str], start, end,
+                        fallback: list[float]) -> tuple[list[float], list[str], bool]:
+    """Cours ET dates. `_index_closes` jetait `_dates` juste avant qu'on en ait besoin.
+
+    Conséquence mesurée (04/09) : la courbe QQQ arrivait sans son calendrier,
+    et `compute_attribution` la comparait au preset PAR POSITION — deux calendriers
+    différents (indices vs univers négociable). Résultat publié : bêta 0,006 et
+    corrélation 0,008 pour un portefeuille long-only d'actions américaines. Le chiffre
+    était absurde et rien ne le signalait."""
+    return _index_series(aliases, start, end, fallback)
 
 
 def _curve_stats(eq: list[float], *, compte_reel: bool = False,
@@ -2148,8 +2161,11 @@ def build_snapshot(seed: int = 7) -> dict:
     except Exception:  # noqa: BLE001
         pass
     # cœur ETF (QQQ) et cœur top-10 méga-caps
-    _qqq_closes, _qqq_real = (_index_closes(["QQQ", "^NDX", "^IXIC"], start, end, ndx)
-                              if _qqq_pct > 0 else ([], False))
+    # Les DATES de QQQ voyagent avec ses cours : sans elles, l'attribution comparait
+    # deux calendriers par position (bêta 0,006 publié — cf. `_index_closes_dates`).
+    _qqq_closes, _qqq_dates, _qqq_real = (
+        _index_closes_dates(["QQQ", "^NDX", "^IXIC"], start, end, ndx)
+        if _qqq_pct > 0 else ([], [], False))
     _mc_curve, _mc_top, _mc_w, _mc_real, _mc_weighting = [], [], {}, False, "—"
     if _mc_pct > 0:
         from packages.backtest.megacap import megacap_equity_daily
@@ -2226,9 +2242,12 @@ def build_snapshot(seed: int = 7) -> dict:
         _diversifiants = {}
     # blocs de courbes (preset pur + cœurs) → permet au script make index-core de balayer N'IMPORTE
     # quel ratio instantanément, sur la VRAIE mesure de production (source de vérité unique).
+    # `dates` = calendrier du PRESET. `qqq_dates` = celui de QQQ, qui n'est PAS le même
+    # (indices vs univers négociable) : les publier séparément est ce qui permet à
+    # l'attribution d'apparier par date au lieu de supposer un calendrier commun.
     _ic_curves = {"preset": _preset_pure, "qqq": list(_qqq_closes), "megacap": list(_mc_curve),
                   "sector_mom": list(_sm_curve), "dates": _preset_pure_dates, "sp": list(sp),
-                  "diversifiants": _diversifiants}
+                  "qqq_dates": list(_qqq_dates), "diversifiants": _diversifiants}
     # JOURNAL DÉTAILLÉ + P&L du portefeuille de production (cœur QQQ + satellite preset) → justifie
     # la perf affichée (clic « Portefeuille (preset) » sur le dashboard). Prix réels, parts/cash.
     try:

@@ -135,24 +135,41 @@ def _svg_sparkline(vals: list[float], w: int = 520, h: int = 90, color: str = "#
 
 # ─────────────────────────── Attribution de performance (pur) ───────────────────────────
 def compute_attribution(snapshot: dict) -> dict:
-    """Alpha (net de frais) du PRESET vs Beta du cœur QQQ — modèle CAPM (rf=0), sur les courbes réelles.
+    """Alpha du PRESET vs Beta du cœur QQQ — CAPM (rf=0), sur les courbes réelles.
 
     alpha_annuel = R̄_preset·252 − beta · R̄_qqq·252  ·  beta = cov(preset, qqq) / var(qqq).
+
+    APPARIEMENT PAR DATE, ET C'EST UN CORRECTIF (04/09). Cette fonction prenait les `n`
+    dernières valeurs de chaque courbe et les supposait alignées. Elles ne le sont pas :
+    le preset suit le calendrier de l'univers négociable, QQQ celui des indices. Deux
+    séries décalées de quelques séances ne sont pas corrélées — d'où le **bêta 0,006 et
+    la corrélation 0,008** publiés pour un portefeuille long-only d'actions américaines.
+    Un chiffre absurde, affiché sans que rien ne le signale.
+
+    Sans les deux calendriers, on REFUSE de conclure (`motif`) au lieu de retomber sur
+    l'appariement positionnel : c'est lui qui a produit le chiffre faux, et un résultat
+    absent se voit, alors qu'un résultat faux se lit.
     """
+    from packages.backtest.panel import apparier_deux_series
     cur = snapshot.get("index_core_curves", {}) or {}
     preset, qqq = cur.get("preset") or [], cur.get("qqq") or []
-    n = min(len(preset), len(qqq))
+    dates_p, dates_q = cur.get("dates") or [], cur.get("qqq_dates") or []
     out: dict[str, Any] = {"available": False}
-    if n < 30:
+    if not dates_p or not dates_q:
+        out["motif"] = ("calendriers absents : sans eux l'appariement serait "
+                        "positionnel, et c'est ce qui a produit un bêta de 0,006")
         return out
-    pr = [preset[i] / preset[i - 1] - 1 for i in range(n - len(preset) + 1, n) if preset[i - 1]]
-    # alignement strict sur la fenêtre commune
-    p = preset[-n:]; q = qqq[-n:]
+    p, q, dates = apparier_deux_series(preset, dates_p, qqq, dates_q)
+    n = len(dates)
+    if n < 30:
+        out["motif"] = f"intersection de {n} séance(s) — trop court pour un bêta"
+        return out
     rp = [p[i] / p[i - 1] - 1 for i in range(1, n) if p[i - 1]]
     rq = [q[i] / q[i - 1] - 1 for i in range(1, n) if q[i - 1]]
     m = min(len(rp), len(rq))
     rp, rq = rp[-m:], rq[-m:]
     if m < 20:
+        out["motif"] = f"{m} rendement(s) exploitable(s) — trop court"
         return out
     mp, mq = sum(rp) / m, sum(rq) / m
     cov = sum((rp[i] - mp) * (rq[i] - mq) for i in range(m)) / (m - 1)

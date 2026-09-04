@@ -80,7 +80,9 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       conformes à la prémisse (GLD/QQQ +0,11, QQQ/TLT −0,09) mais aucun gain de Sharpe, et
       le Calmar reste en faveur de la production (0,605 vs 0,532). Détail complet dans
       `vault/10_BACKTEST_RESULTS.md`.
-- [ ] **P1 — `_index_series` et `_load_prices` fusionnent les bases en sens OPPOSÉS.**
+- [x] **P1 — Les deux sens de fusion : CORRIGÉ le 04/09** (cf. section « Données & recherche »
+      en tête de fichier). Ancien libellé conservé ci-dessous.
+- [ ] ~~**P1 — `_index_series` et `_load_prices` fusionnent les bases en sens OPPOSÉS.**~~
       Diagnostiqué le 03/09. `_load_prices` fait `setdefault` (YAHOO.db prioritaire,
       market.db comble les trous) — choix DÉLIBÉRÉ, commenté « pas de discontinuité
       d'ajustement raw vs adjusted ». `_index_series` fait `target[jour] = close` via
@@ -110,12 +112,19 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
 - [ ] **P1 — 610 → 1 299 trades NON EXPLIQUÉ.** Plus du double, pour une fenêtre +8 % et un
       univers-graine inchangé (1 047 lignes, vérifié sur 6 commits). Changement de règle ou
       d'ensemble éligible. À trouver avant d'interpréter le PF 1,48 → 1,08.
-- [ ] **P2 — `obsidian.attribution` aligne par position** (`min(len)` + `[-n:]`) : c'est ce
-      qui a produit bêta 0,006 et corrélation 0,008 vs QQQ pour un portefeuille long-only
-      d'actions US. Aligner par DATE comme partout ailleurs.
-- [ ] **P2 — Unifier les trois conventions de Sortino.** `index_core._stats` corrigé le
-      03/09 ; `perf_summary` et `metrics.sortino` utilisent encore l'écart-type des
-      négatifs (1,04× la définition). Une seule source de vérité, comme pour le Sharpe.
+- [x] **P2 — `obsidian.attribution` alignait par position : CORRIGÉ le 04/09.** La racine
+      était `_index_closes`, qui jetait les dates rendues par `_index_series` une ligne avant
+      qu'elles servent. Les dates voyagent (`qqq_dates` au snapshot), l'appariement se fait par
+      date (`apparier_deux_series`), et sans les deux calendriers l'attribution REFUSE de
+      conclure. Contre-épreuve : un décalage de fin ne reproduit pas le défaut (les séries
+      finissent le même jour) — seuls des trous INTÉRIEURS le montrent, 0,29 contre 1,00 sur le
+      même actif. ADR-0067. 3 tests.
+- [x] **P2 — Les trois conventions de Sortino : UNIFIÉES le 04/09.** `portfolio.deviation`
+      porte la définition (RMS de min(r,0) sur N total), en Python pur — `analytics` et
+      `company_report` évitent numpy délibérément. Quatre appelants branchés. L'écart réel est
+      plus grand que ce que cette note annonçait : mesuré sur 2 520 rendements, ×1,128 pour
+      l'écart-type des négatifs et ×1,191 pour celui de min(r,0), pas ×1,04. Les Sortino
+      publiés baissent de 12 à 19 % : c'est une flatterie qui disparaît. ADR-0068. 7 tests.
 - [ ] ~~**P1 — Expliquer la dégradation du backtest**~~ : PF 1,19 → 1,08, espérance 6 $ → 2 $,
       payoff 2,79 → 2,62, 1 168 → 1 299 trades. Deux causes possibles à départager :
       `trail_atr=0` pas encore dans `main`, ou décalage du jeu de données (même P1 que

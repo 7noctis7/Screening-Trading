@@ -1,5 +1,46 @@
 # 04 — JOURNAL
 
+## Session 2026-09-04 (suite 2) — Un bêta de 0,006, et trois Sortino pour un portefeuille
+
+**Le bêta absurde avait une cause lisible.** `compute_attribution` comparait la courbe du preset
+(calendrier de l'univers négociable) à celle de QQQ (calendrier des indices) **par position** —
+`n = min(len(...))` puis `[-n:]`. Publié : **bêta 0,006 et corrélation 0,008** pour un
+portefeuille long-only d'actions américaines. Un chiffre que personne ne peut croire, affiché
+sans que rien ne le signale.
+
+**La racine était une ligne en amont.** `_index_closes` faisait `closes, _dates, real =
+_index_series(...)` puis `return closes, real` : les dates existaient et étaient jetées juste
+avant qu'on en ait besoin. `_index_closes_dates` les conserve, le snapshot publie `qqq_dates`, et
+l'attribution apparie par date. Sans les deux calendriers, elle **refuse** désormais de conclure
+avec un motif — un résultat absent se voit, un résultat faux se lit.
+
+**Ma première contre-épreuve ne prouvait rien, et je l'ai vu à temps.** J'avais écrit un test où
+QQQ démarre cinq séances plus tard : l'appariement positionnel y donnait corrélation 1,000, tout
+comme le corrigé. Normal — les deux séries **finissent le même jour**, donc compter depuis la fin
+tombe juste. Le vrai mécanisme est ailleurs : des trous INTÉRIEURS de calendrier (jours fériés
+d'indice absents de l'univers négociable). Reproduit : même actif, douze fériés intérieurs,
+**corrélation 0,29 en positionnel contre 1,00 par date**. Le test dit maintenant cela, et le
+dit dans son docstring — un test qui passe pour la mauvaise raison est pire que pas de test.
+
+**Quatrième occurrence de l'empilement positionnel.** `apparier_deux_series` rejoint
+`aligner_par_date` dans `panel.py` : une seule règle d'alignement, deux points d'entrée selon la
+forme des données.
+
+**Trois conventions de Sortino, et le backlog sous-estimait l'écart.** `index_core` et
+`company_report` appliquaient la définition (RMS de min(r,0) sur N total) ; `metrics.sortino` et
+`perf_summary` prenaient l'écart-type des NÉGATIFS seuls ; `analytics` l'écart-type de min(r,0).
+La note annonçait 1,04× d'écart. Mesuré sur 2 520 rendements (46,6 % de séances négatives) :
+
+    définition (RMS sur N)         0,008314    Sortino ×1,000
+    écart-type des NÉGATIFS        0,007369    Sortino ×1,128
+    écart-type de min(r,0) sur N   0,006979    Sortino ×1,191
+
+**Douze à dix-neuf pour cent**, et les deux erreurs vont dans le même sens : elles flattent.
+Diviser par le nombre de négatifs est la plus grave — le ratio cesse alors de dépendre de la
+FRÉQUENCE des pertes, ce que Sortino existe précisément pour mesurer. Une définition unique en
+Python pur (`portfolio.deviation`, sans numpy puisque `analytics` et `company_report` s'en passent
+délibérément), quatre appelants branchés dessus.
+
 ## Session 2026-09-04 (suite) — Une politique de fusion au lieu de deux, et un scan qui se compte
 
 **Le contexte : deux questions produit.** L'utilisateur demande s'il faut ajouter un onglet

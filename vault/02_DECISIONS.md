@@ -1393,3 +1393,37 @@ justifie, mais reste conditionné à l'unification de `DBPriceProvider` et `Bars
 fabrique n'a jamais eu d'appelant : « brancher DuckDB » n'est pas un changement de variable, c'est
 un refactor, et il doit être payé par un chiffre. Sans DuckDB installé, le banc ne rend aucun
 verdict et le dit — il ne suppose pas.
+
+## ADR-0067 — Sans les deux calendriers, on refuse de conclure (2026-09-04)
+
+**Contexte.** `compute_attribution` appariait la courbe du preset et celle de QQQ par position
+(`min(len)` puis `[-n:]`). Les deux suivent des calendriers différents — univers négociable
+contre indices — et le résultat publié était bêta 0,006, corrélation 0,008 pour un portefeuille
+long-only d'actions américaines. La racine était en amont : `_index_closes` jetait les dates que
+`_index_series` lui rendait, une ligne avant qu'elles servent.
+
+**Décision.** Les dates voyagent avec les cours (`_index_closes_dates`, `qqq_dates` au snapshot)
+et l'attribution apparie par date via `apparier_deux_series`. Quand un calendrier manque, elle
+renvoie `available: False` avec un motif au lieu de retomber sur l'appariement positionnel.
+
+**Conséquences.** Un résultat absent se voit ; un résultat faux se lit — c'est pourquoi le repli
+positionnel est refusé plutôt que conservé « au cas où ». La contre-épreuve compte autant que le
+correctif : un décalage de fin d'historique ne reproduit PAS le défaut (les deux séries finissant
+le même jour, le positionnel tombe juste), seuls des trous intérieurs le montrent — 0,29 contre
+1,00 sur le même actif. C'est aussi pourquoi le bug est resté invisible si longtemps.
+
+## ADR-0068 — Une seule définition de la déviation baissière (2026-09-04)
+
+**Contexte.** Trois conventions coexistaient et publiaient trois Sortino pour le même
+portefeuille. Mesuré sur 2 520 rendements : la définition donne 0,008314 ; l'écart-type des
+négatifs seuls 0,007369 (Sortino ×1,128) ; l'écart-type de min(r,0) 0,006979 (×1,191). Le backlog
+annonçait 1,04× — l'écart réel est trois à cinq fois plus grand, et les deux erreurs flattent.
+
+**Décision.** `packages/portfolio/deviation` porte la définition (Sortino & Price 1994 : racine
+de la moyenne des carrés sous le seuil, sur le nombre TOTAL d'observations), en Python pur parce
+que `analytics` et `company_report` évitent délibérément numpy. Quatre appelants y délèguent.
+
+**Conséquences.** Diviser par le nombre de négatifs était la plus grave des deux erreurs : le
+ratio cessait de dépendre de la FRÉQUENCE des pertes, ce que Sortino existe pour mesurer. Les
+Sortino publiés vont baisser de 12 à 19 % selon la page — ce n'est pas une régression, c'est la
+disparition d'une flatterie.

@@ -117,6 +117,32 @@ def aligner_par_date(data: dict, syms: list[str], couverture: float = COUVERTURE
     return noms, dates, A, diag
 
 
+def apparier_deux_series(a: list[float], dates_a: list[str],
+                         b: list[float], dates_b: list[str]
+                         ) -> tuple[list[float], list[float], list[str]]:
+    """Deux courbes venues de CALENDRIERS DIFFÉRENTS, appariées par date.
+
+    QUATRIÈME OCCURRENCE DE L'EMPILEMENT POSITIONNEL, et la plus visible (04/09).
+    `compute_attribution` comparait la courbe du preset (calendrier de l'univers
+    négociable) à celle de QQQ (calendrier des indices) en prenant les `n` dernières
+    valeurs de chacune. Deux séries décalées d'une poignée de séances ne sont pas
+    corrélées : le résultat publié était **bêta 0,006 et corrélation 0,008** pour un
+    portefeuille long-only d'actions américaines. Un chiffre absurde, affiché sans que
+    rien ne le signale — c'est la marque de ce bug : il ne plante pas, il ment.
+
+    `aligner_par_date` traite N séries d'un même dictionnaire de barres ; il manquait le
+    cas à DEUX séries déjà réduites à (valeurs, dates). Une seule règle d'alignement
+    dans le projet, deux points d'entrée selon la forme des données.
+
+    Renvoie les deux séries restreintes à l'INTERSECTION des dates, dans l'ordre
+    chronologique, plus ces dates. Intersection vide → trois listes vides : l'appelant
+    doit refuser de conclure, pas retomber sur un appariement positionnel."""
+    par_a = dict(zip(dates_a, a, strict=False))
+    par_b = dict(zip(dates_b, b, strict=False))
+    communes = sorted(set(par_a) & set(par_b))
+    return ([par_a[d] for d in communes], [par_b[d] for d in communes], communes)
+
+
 def dernier_connu(A, t: int) -> "object":
     """Dernier prix CONNU de chaque titre à la date `t` (report en avant du passé seulement).
 
