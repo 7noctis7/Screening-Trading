@@ -150,23 +150,18 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       retrait, 5 tests) — retire, ne corrige pas : rouvrir supposerait de savoir à quel lot
       RÉEL la vente aurait dû s'apparier, ce qui n'est pas mesurable ligne à ligne.
       **Appliqué le 04/09 sur le Mac mini** : 6 round-trips retirés, sauvegarde + archive JSON.
-- [ ] **P0 — Deux chaînes d'identifiants pour un même symbole se font fermer par la MÊME
-      vente (trouvé le 04/09 sur LINK, après `completer-ouvertures` + `reconcilier-journal`).**
-      `live_journal.py:127` écrit les ouvertures normales en `P-{date}-{venue}-{symbole}` ;
-      `completer_ouvertures.py:91` écrit ses lots correcteurs en `C-{symbole}` (id fixe,
-      pensé pour être idempotent). `reconcilier_journal.py:259-266` scinde chaque chaîne
-      séparément (`-X{n}` pour les `P-`, `-R{n}` pour les `C-`) — mais rien n'empêche les
-      DEUX chaînes du même symbole d'exister en parallèle et de se faire fermer par les
-      mêmes ventes réelles. Preuve mesurée sur LINK : sortie du 27/08 à 11,842 $ ferme À
-      LA FOIS `P-...-X1` (86,88 unités, entrée 8,03 $) ET `C-LINK-R3` (88,60 unités,
-      entrée 11,53 $) — même date, même prix, deux lots différents. Idem le 28/08.
-      **Pas un doublon simple** (quantités différentes, prix d'entrée différents) : c'est
-      `completer_ouvertures` qui a un jour créé un lot correcteur sans vérifier que le
-      manque de couverture qu'il comblait allait de toute façon se refermer par la chaîne
-      `P-` normale. Nécessite de relire `reconcilier_journal._plan` à tête reposée — pas
-      un nettoyage de données, un bug d'appariement. Diagnostic complet reproductible :
-      `python scripts/diag_journal_compte.py` puis chercher « TOUS LES ENREGISTREMENTS DE
-      » (le script imprime le détail symbole par symbole quand on passe `--symbole`).
+- [x] **P0 — « Deux chaînes fermées par la même vente » sur LINK : FAUSSE ALERTE, vérifiée
+      et retirée le 04/09.** Un lot `P-...-X1` (86,88 unités) et un lot `C-LINK-R3`
+      (88,60 unités) fermaient tous deux le 27/08 au même prix — j'ai lu ça comme un
+      double comptage sans faire l'addition qui aurait dû trancher AVANT de le consigner
+      en P0. Vérifié sur l'ordre réel `ee481ad2` (07/08, l'autre paire suspecte) :
+      quantité RÉELLE 273,12538382 $. Or 125,613741 (C-LINK-R1) + 147,511643 (P-lot)
+      = 273,125384 — exact au dix-millième. `_plan` regroupe déjà `P-` et `C-` dans UN
+      SEUL pool par symbole (`scripts/reconcilier_journal.py`, fonction `_plan`) : une
+      vente plus grosse que le premier lot de la file en ferme légitimement plusieurs à
+      la suite. C'est le comportement voulu, pas un bug. Leçon : `python3 -c` sur
+      `AlpacaBroker().orders()` filtré par symbole tranche ce genre de doute en une
+      commande — le réflexe à avoir AVANT d'écrire "bug" dans ce fichier.
 - [ ] **P1 — Trois copies divergentes de `data/journal.db`.** Mac mini (37 positions), HF
       (25), VPS (le sien, isolé). `cron_live.sh` ne synchronise pas avec HF — seul
       `paper.yml` le fait. Le timer systemd que j'ai posé sur le VPS le 04/09 hérite de ce

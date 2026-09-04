@@ -1,5 +1,26 @@
 # 04 — JOURNAL
 
+## Session 2026-09-04 (suite 12) — Le "bug" LINK n'en était pas un, et l'addition le prouve
+
+**Fausse alerte, vérifiée avant correction — pas après.** Le P0 posé en clôture (« deux
+chaînes d'identifiants fermées par la même vente ») ne tenait pas à l'addition. Vérifié
+sur l'ordre réel `ee481ad2` (LINK, 07/08) via `AlpacaBroker().orders()` filtré : quantité
+RÉELLE **273,12538382**. Or `C-LINK-R1` (125,613741) + le lot `P-` correspondant
+(147,511643) = **273,125384** — exact au dix-millième. `_plan` regroupe déjà `P-` et `C-`
+dans un seul pool FIFO par symbole ; une vente plus grosse que le premier lot en ferme
+légitimement plusieurs à la suite. C'est voulu, pas un bug.
+
+**Ce qui a évité de corriger un code qui n'était pas cassé** : l'utilisateur a insisté pour
+vérifier plutôt que d'accepter le diagnostic tel quel, et la vérification demandée
+(comparer la fermeture proposée à la quantité RÉELLE de l'ordre chez le courtier) était
+déjà la bonne méthode — je l'ai juste appliquée après coup au lieu de l'avoir faite avant
+d'écrire « P0 » dans le TODO. Le motif qui avait déclenché l'alerte (même date, même prix,
+deux lots) ressemblait à un doublon mais ne l'était pas — une seule addition suffisait à le
+savoir, et je ne l'avais pas faite.
+
+**TODO corrigé, pas juste refermé** : l'entrée P0 est remplacée par ce qui a été vérifié et
+pourquoi, pour qu'une session future ne reparte pas sur la même fausse piste.
+
 ## Session 2026-09-04 (suite 11, clôture) — Le journal réparé révèle un bug plus profond que la donnée qu'il corrigeait
 
 **La chaîne de réparation, appliquée pour de vrai sur le compte réel.** `make completer-ouvertures`
