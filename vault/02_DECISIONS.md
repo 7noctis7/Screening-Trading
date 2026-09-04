@@ -1448,3 +1448,26 @@ moyenne de la première fenêtre.
 sait sous-échantillonné — mais il n'est plus séparable du chiffre qu'il conditionne. Un CAGR
 séparé de son biais se lit comme un résultat ; c'est ce qui s'est produit ici pendant que l'audit
 existait, disponible et jamais joint.
+
+
+## ADR-0070 — Le gate de publication refuse l'impossible, pas les mauvaises nouvelles (2026-09-04)
+
+**Contexte.** Le site a publié CAGR −100 %, gain total −100 %, pire baisse −100 %, avec un Sharpe
+de 0,25 et un Sortino de 0,18. Le gate `check_build` était vert : fichiers présents, volumineux,
+datés du jour. Il ne regardait jamais les nombres. La cause était `0 * nan = nan` en numpy, dans
+le calcul du rendement quotidien du preset — un titre au poids ZÉRO suffisait à annuler la courbe
+dès qu'il lui manquait un cours.
+
+**Décision.** Le gate contrôle désormais la PLAUSIBILITÉ, selon deux règles qui sont des
+contradictions et non des seuils : un capital anéanti ne peut pas coexister avec un ratio
+positif ; une courbe d'équity publiée ne peut pas contenir de `null`.
+
+**Pourquoi pas des seuils.** « CAGR < −50 % » serait un jugement sur la performance. Une
+stratégie a le droit de perdre beaucoup, et un gate qui refuse les mauvaises nouvelles finit par
+cacher les vraies. Une contradiction ne dépend d'aucune opinion. Vérifié : une perte sévère
+cohérente passe, un anéantissement avec Sharpe négatif passe, le cas du 04/09 est refusé.
+
+**Conséquences.** La seconde règle vaut mieux que la première : elle attrape la cause (le trou)
+plutôt que le symptôme (le chiffre absurde), et elle vaut avant même de savoir ce que le trou
+signifie. Le module vit dans `packages/` pour être exerçable en test — un gate qu'on ne teste pas
+est un gate qu'on découvre en panne le jour où il compte.

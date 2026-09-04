@@ -8,6 +8,18 @@ Contrôles (tous bloquants) :
   2. taille cumulée des JSON > MIN_TOTAL_BYTES (détecte un dump tronqué)
   3. data/meta.json lisible et `generated_at` daté d'AUJOURD'HUI (UTC) → fraîcheur
   4. fichiers clés présents et non-triviaux (dashboard, screen)
+  5. PLAUSIBILITÉ des chiffres publiés (`packages.common.gate_publication`)
+
+CE QUE LE CONTRÔLE 5 AJOUTE, ET POURQUOI IL MANQUAIT. Le 04/09, le site a publié — et le
+téléphone a affiché — gain total −100 %, CAGR −100 %, pire baisse −100 %, avec un Sharpe
+de 0,25 et un Sortino de 0,18. Les deux moitiés ne peuvent pas être vraies ensemble. Ce
+gate était vert : les fichiers étaient présents, volumineux et datés du jour. **Il ne
+regardait jamais les nombres.** Un dump parfaitement formé annonçait la ruine, et c'est
+l'utilisateur qui l'a vu.
+
+Le contrôle ne juge PAS la performance — une stratégie a le droit de perdre, et un gate
+qui refuse les mauvaises nouvelles finit par cacher les vraies. Il refuse l'IMPOSSIBLE :
+un capital anéanti avec un ratio positif, une courbe d'équity percée de `null`.
 """
 
 from __future__ import annotations
@@ -55,8 +67,33 @@ def main() -> int:
     if gen != today:
         _fail(f"données périmées : generated_at={gen!r} ≠ aujourd'hui {today!r}")
 
-    print(f"✅ Gate OK : {len(jsons)} JSON, {total // 1024} Ko, frais ({gen}).")
+    motifs = _plausibilite(jsons)
+    if motifs:
+        for m in motifs[:12]:
+            print(f"   · {m}")
+        _fail(f"{len(motifs)} incohérence(s) dans les chiffres publiés")
+
+    print(f"✅ Gate OK : {len(jsons)} JSON, {total // 1024} Ko, frais ({gen}), "
+          "chiffres cohérents.")
     return 0
+
+
+def _plausibilite(jsons: list[Path]) -> list[str]:
+    """Motifs de refus trouvés dans les JSON publiés. Liste vide = rien d'impossible.
+
+    Le module d'audit vit dans `packages/` pour être testable hors CI : un gate qu'on
+    n'exerce pas en test est un gate qu'on découvre en panne le jour où il compte."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from packages.common.gate_publication import auditer
+    motifs: list[str] = []
+    for p in sorted(jsons):
+        try:
+            payload = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue              # illisible : déjà couvert par les contrôles 1-4
+        if isinstance(payload, dict):
+            motifs += [f"{p.name}{m}" for m in auditer(payload)]
+    return motifs
 
 
 if __name__ == "__main__":

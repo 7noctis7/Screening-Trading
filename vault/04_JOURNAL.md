@@ -1,5 +1,43 @@
 # 04 — JOURNAL
 
+## Session 2026-09-04 (suite 4) — `0 × NaN = NaN` : une panne visible en production
+
+**Le signalement.** Le téléphone affichait gain total **−100 %**, CAGR **−100 %**, pire baisse
+**−100 %** — et, dans les mêmes cartes, Sharpe **0,25** et Sortino **0,18**, tous deux POSITIFS.
+Cette combinaison est arithmétiquement impossible : un capital réduit à zéro ne donne pas un
+Sharpe positif. C'est elle qui a permis de remonter à la cause, parce que les deux familles ne
+sont pas calculées au même endroit — les ratios sur les rendements, le CAGR sur les extrémités
+de la courbe nettoyée.
+
+**La cause, en une ligne.** `preset_curves` calculait
+`(w * (A[:, t+1] / A[:, t] - 1)).sum()`. Or **`0 * nan` vaut `nan` en numpy** : un titre au poids
+ZÉRO, qu'on ne détient même pas, suffisait à rendre le rendement du jour NaN dès qu'il lui
+manquait un cours. L'equity devenait NaN, puis toute la fin de la courbe.
+`dump_static._clean` convertit ensuite NaN en `null` — le bon geste, sans quoi le JSON serait
+invalide et la page bloquée — et le front lit ce trou comme un zéro.
+
+**Le NaN n'est pas une anomalie ici.** Depuis l'alignement par date, la matrice en contient
+légitimement : un titre ne cote pas toutes les dates du panel. Ce n'est donc pas une donnée à
+traquer en amont, c'est un état normal que ce calcul devait savoir traverser. `megacap` avait le
+même défaut, sans même la garde de poids ; `sector_momentum` portait déjà la sienne. Les deux
+renormalisent désormais sur les lignes cotées — les ignorer sans renormaliser supposerait que la
+part manquante fait 0 % ce jour-là, ce qui est un rendement inventé, pas une absence.
+
+**Ce qui est plus grave que le bug : le gate ne regardait pas les nombres.** `check_build`
+vérifiait la présence des fichiers, leur taille et leur fraîcheur. Un dump complet, volumineux et
+daté du jour annonçait la ruine, et passait au VERT. C'est l'utilisateur qui l'a vu.
+
+`gate_publication` ajoute deux règles, et ce sont des **contradictions**, pas des seuils :
+
+  1. capital anéanti (≤ −99,9 %) avec un ratio positif → impossible ;
+  2. `null` dans une courbe d'équity publiée → une courbe percée n'est pas une courbe.
+
+La seconde vaut mieux que la première : elle attrape la CAUSE, pas le symptôme. Et le choix des
+contradictions plutôt que des seuils est délibéré — « CAGR < −50 % » serait un jugement, une
+stratégie a le droit de perdre, et un gate qui refuse les mauvaises nouvelles finit par cacher
+les vraies. Vérifié de bout en bout : perte sévère cohérente → PUBLIÉ ; anéantissement avec
+Sharpe négatif → PUBLIÉ ; le cas exact du 04/09 → REFUSÉ ; courbe percée → REFUSÉ.
+
 ## Session 2026-09-04 (suite 3) — Audit de fuite du momentum sectoriel : la cause est l'univers
 
 **Le verdict.** CAGR 55,5 % sur 9,4 ans avec DSR 100 % n'était pas un résultat. Trois causes
