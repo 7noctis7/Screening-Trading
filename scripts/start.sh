@@ -20,12 +20,20 @@ export QUANT_CRYPTO="${QUANT_CRYPTO:-1}"               # cockpit crypto (/crypto
 export QUANT_PREDMKT="${QUANT_PREDMKT:-1}"             # marchés de prédiction (/macro)
 # QUANT_CORE_SPEC / QUANT_DD_TARGET : respectés s'ils sont définis dans l'environnement (sinon défaut code).
 
-# On se cale sur MAIN, pas sur une branche de travail. Une branche de travail n'est resynchronisée
-# qu'après SON merge ; si une session en a utilisé une autre, celle-ci reste en arrière et le
-# `git reset --hard` ci-dessous efface silencieusement tout ce qui a été livré entre-temps.
-# C'est arrivé : `make start` ramenait un code vieux de quatre PR sans rien signaler.
-# `main` porte toujours ce qui est mergé, quelle que soit la branche qui l'a produit.
-BRANCH="${QUANT_BRANCH:-main}"
+# ON MET À JOUR LA BRANCHE OÙ L'ON EST — pas `main`. Le forçage sur `main` visait un vrai
+# danger (une branche de travail restée en arrière, et `make start` qui ramenait du code vieux
+# de quatre PR sans rien dire), mais il en créait un pire, mesuré le 04/09 : `make sync` alignait
+# la branche de dev sur ses derniers commits, puis `make start` la RÉÉCRASAIT sur `main` deux
+# secondes plus tard. Les correctifs livrés ne tournaient jamais, et rien ne le signalait — on
+# cherchait un bug de cache dans du code qui n'était même pas chargé. Le Makefile de `main`
+# étant plus ancien, `make sync` disparaissait ensuite, ce qui rendait la sortie impossible.
+#
+# Le danger d'origine est traité par un AVERTISSEMENT, pas par un écrasement : on dit de combien
+# de commits la branche est en retard sur `main` et comment se réaligner. Informer laisse le
+# choix ; écraser le retire.
+BRANCH="${QUANT_BRANCH:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)}"
+# HEAD détaché (ou dépôt illisible) : aucune branche à suivre, on retombe sur `main`.
+[ "$BRANCH" = "HEAD" ] && BRANCH="main"
 if [ "${QUANT_NO_UPDATE:-0}" != "1" ]; then
   echo "→ Mise à jour du code (origin/$BRANCH)…"
   _avant="$(git rev-parse --short HEAD 2>/dev/null || echo '?')"
@@ -40,6 +48,15 @@ if [ "${QUANT_NO_UPDATE:-0}" != "1" ]; then
     fi
   else
     echo "  ⚠ maj ignorée (hors-ligne ?) — le code local reste sur $(git rev-parse --short HEAD 2>/dev/null || echo '?')"
+  fi
+  # Le garde-fou qui remplace l'écrasement : on DIT le retard sur `main` au lieu de le corriger
+  # d'autorité. Silence = la branche contient tout ce que `main` contient.
+  if [ "$BRANCH" != "main" ] && git fetch origin main >/dev/null 2>&1; then
+    _retard="$(git rev-list --count HEAD..origin/main 2>/dev/null || echo 0)"
+    if [ "${_retard:-0}" -gt 0 ]; then
+      echo "  ⚠ $BRANCH est en retard de $_retard commit(s) sur main."
+      echo "    Pour vous réaligner : git fetch origin main && git reset --hard origin/main"
+    fi
   fi
 fi
 

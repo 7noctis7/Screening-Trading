@@ -1,5 +1,34 @@
 # 04 — JOURNAL
 
+## Session 2026-09-04 — `make start` écrasait ce que `make sync` venait de récupérer
+
+**Ma explication d'hier était fausse.** J'avais mis les deux correctifs invisibles (`/sentiment`
+dans la barre, étiquette Bund) sur le compte du cache `.next`. Le terminal de l'utilisateur le
+montre autrement, en une ligne :
+
+    make sync   → b40ee72   (branche de dev, mes commits)
+    make start  → 43b15a9   (origin/main)
+
+`start.sh` faisait `git reset --hard origin/main`. `make sync` alignait la branche de dev, puis
+`make start` la réécrasait deux secondes plus tard sur `main`, où rien n'est mergé. **Les
+correctifs n'ont jamais tourné.** Et comme le Makefile de `main` est plus ancien, `make sync`
+disparaissait ensuite — l'utilisateur perdait jusqu'à la commande qui sert à sortir de là.
+
+**Le forçage visait un vrai danger** — une branche de travail restée en arrière, et `make start`
+ramenant du code vieux de quatre PR sans rien dire. Mais il en créait un pire : il détruisait
+l'état que l'utilisateur venait délibérément de demander. Un garde-fou qui écrase le geste qu'il
+est censé protéger n'est plus un garde-fou.
+
+**Ce qui remplace.** `start.sh` suit la branche COURANTE, et le danger d'origine est traité par
+un AVERTISSEMENT chiffré : « en retard de N commits sur main », avec la commande pour se
+réaligner. Informer laisse le choix ; écraser le retire. Vérifié sur dépôt jouet : sur `dev`,
+le contenu reste celui de `dev` ; HEAD détaché retombe sur `main`.
+
+**La leçon de méthode, et c'est la deuxième fois cette semaine.** J'ai expliqué un symptôme par
+une cause plausible — le cache — sans mesurer laquelle des deux agissait. La sortie du terminal
+contenait la réponse depuis le début. Chercher la cause dans le code qu'on croit exécuté, sans
+vérifier QUEL code est exécuté, c'est la même erreur que déduire un latent au lieu de le lire.
+
 ## Session 2026-09-03 (suite 6) — Le correctif était juste ; c'est le build qui mentait
 
 **Deux correctifs poussés, deux « ça n'a pas marché ».** Le menu « Marché » affichait toujours ses

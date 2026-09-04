@@ -59,6 +59,15 @@ reconstruit chaque jour ouvré par GitHub Actions (`.github/workflows/pages.yml`
 - `pickle` chargé uniquement via `packages/common/safe_pickle` (anti-symlink + hash).
 - **Dev `localhost:3000`** : après un `make site` (build export), faire `cd apps/web && rm -rf .next && npm run dev`
   (sinon `Cannot find module './682.js'` / `/_document` — le `.next` export n'est pas relisible par `next dev`).
+- **`make start` ÉCRASAIT la branche que `make sync` venait de récupérer** (04/09). `start.sh` faisait
+  `git reset --hard origin/main` : `make sync` alignait la branche de dev sur ses derniers commits,
+  puis `make start` la ramenait sur `main` deux secondes plus tard. Les correctifs livrés ne
+  tournaient **jamais**, et rien ne le signalait — on cherchait un bug de cache dans du code qui
+  n'était pas chargé. Pire : le Makefile de `main` étant plus ancien, `make sync` disparaissait
+  ensuite (« No rule to make target 'sync' »), ce qui rendait la sortie impossible sans les trois
+  lignes d'amorçage. `start.sh` suit désormais la branche COURANTE et se contente d'AVERTIR du
+  retard sur `main`. **Symptôme à reconnaître : la ligne `✓ <sha> → <autre sha>` de `make start`
+  où le second sha n'est pas celui que `make sync` vient d'afficher.**
 - **Le cache `.next` resert l'ANCIEN rendu après un `make sync`** (03/09). Symptôme trompeur : le code
   contient le correctif, le navigateur affiche la version d'avant, et **rien ne le signale** — on croit
   lire le résultat de son correctif, on lit celui d'avant. Constaté sur deux correctifs le même jour
