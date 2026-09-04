@@ -1,5 +1,55 @@
 # 04 — JOURNAL
 
+## Session 2026-09-04 (suite) — Une politique de fusion au lieu de deux, et un scan qui se compte
+
+**Le contexte : deux questions produit.** L'utilisateur demande s'il faut ajouter un onglet
+« l'IA pilote TradingView » (sur la foi d'un post viral) et un onglet « entrepôt de données ».
+Réponse aux deux : non, parce que le dépôt possède déjà l'essentiel des deux — `mcp_tradingview`
+expose neuf outils (dont `generate_pine`, `compare_pine_python`, `query_market_db`), `pine.py`
+traduit le preset en Pine v5, le copilote `/api/ai/chat` existe avec ses scopes ; et côté données
+l'architecture médaillon bronze/silver/gold, le dépôt DuckDB avec export Parquet, le feature store
+GOLD, `make audit` et `make contracts` sont là, page `/data` comprise. Ce qui manquait n'était pas
+des onglets.
+
+**Chantier 1 — une seule politique de fusion, et le lignage.** Le défaut est mesuré depuis des
+jours et restait ouvert : `_load_prices` fusionnait en « premier gagne », `merge_bars` en
+« dernier gagne », **sur les mêmes bases**. Mêmes dates, deux historiques selon la fonction qui
+demande — 0,71 %/an d'écart sur le cœur QQQ. La règle retenue est celle qui avait une raison
+écrite : la base longue est AJUSTÉE, la couche de maj est brute, la laisser écraser insérerait
+une discontinuité raw/ajusté au milieu de l'historique. La fraîcheur n'en souffre pas, les dates
+récentes étant justement celles qui manquent à la base longue. Une seule implémentation
+(`fusion_sources`), deux appelants, et un LIGNAGE qui enregistre quelle source a fourni chaque
+jour — la question « d'où vient cette barre ? » devient une lecture au lieu d'une enquête.
+
+**Et la mesure qui manquait.** `make diag-fusion` chiffre, symbole par symbole, sur combien de
+jours les bases se recouvrent et sur combien elles DIVERGENT. Tant qu'on ne l'avait pas,
+« les bases sont d'accord » était une hypothèse. Un désaccord ne dit pas laquelle a raison : il
+dit que la priorité change le résultat, donc qu'elle doit être motivée plutôt que subie.
+
+**Chantier 2 — un scan est un essai.** Un scanner en langage naturel balaie 200 titres en une
+minute ; c'est sa qualité, et c'est ce qui en fait une machine à tests multiples. « RSI < 30 »,
+puis « et si c'était 25 ? », puis « et en 4 h ? » : trois essais, trois questions légitimes, zéro
+trace. `scan_registre` valide des critères STRUCTURÉS (aucun parseur de langage naturel enfoui
+dans la couche de recherche — c'est le travail du modèle appelant), exécute purement, et produit
+un enregistrement pour le `ledger`.
+
+**Le retournement, et c'est la raison d'être du module.** Le compte d'essais est aujourd'hui
+SOUS-estimé : les idées essayées à la main ne sont journalisées nulle part, donc le `N` du DSR ne
+voit qu'une fraction de la recherche et déflate trop peu. Un scanner qui enregistre rend ce compte
+honnête pour la première fois. Idempotence obligatoire dans les deux sens : rejouer le même scan
+n'est pas un nouvel essai (sur-déflater est l'erreur symétrique, tout aussi fausse), mais deux
+seuils différents SONT deux essais.
+
+**Chantier 3 — DuckDB : ce que j'ai trouvé, et ce que je refuse de conclure.**
+`make_bars_repository` choisit entre sqlite et duckdb… et **n'est appelé nulle part**. Le dépôt
+DuckDB existe, son docstring dit « écrit pour la prod, non exécuté hors-ligne », et rien ne
+l'exécute. Je ne peux pas le mesurer d'ici (`duckdb` absent de cet environnement), donc je
+n'affirme aucun gain : `make bench-backend` le mesurera sur la vraie base, **avec sa règle de
+décision écrite avant le run** — gain médian < 1,5× on reste sur SQLite, ≥ 1,5× le basculement se
+justifie mais reste conditionné à l'unification de `DBPriceProvider` et `BarsRepository`. Ces deux
+abstractions sur la même donnée sont d'ailleurs la vraie raison pour laquelle la fabrique n'a
+jamais eu d'appelant.
+
 ## Session 2026-09-04 — `make start` écrasait ce que `make sync` venait de récupérer
 
 **Ma explication d'hier était fausse.** J'avais mis les deux correctifs invisibles (`/sentiment`

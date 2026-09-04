@@ -64,6 +64,16 @@ graph TD
     FS[feature store GOLD]
     JRNL[(journal.db: live_journal + live_roundtrip FIFO)]
   end
+  subgraph FUSION[Fusion des sources - UNE politique, tracee]
+    LONGUE[(base longue - historique AJUSTE)]
+    MAJ[(maj quotidienne - barres brutes)]
+    POL[fusion_sources: le PREMIER gagne, la maj comble les trous]
+    LIGN[lignage: jour -> source qui l a fourni]
+    LONGUE --> POL
+    MAJ --> POL
+    POL --> LIGN
+    POL --> DB
+  end
   subgraph REPAIR[Reparation du registre - ordre NON commutatif]
     FILLS[ordres EXECUTES du courtier = verite terrain]
     COMP[completer_ouvertures: entrees manquantes, VWAP des fills non couverts]
@@ -156,7 +166,7 @@ croire qu'ils y sont. Ils y entreront un par un, après la porte de
 | Alertes | `packages/alerts` | ✅ engine+sinks+throttle+wiring — BRANCHÉ sur `run_live.py` (BLOC 1c) |
 | Reporting | `packages/reporting` | ✅ analytics, tearsheet, notes sociétés, miroir Obsidian (S13) |
 | API / Web | `apps/` | ✅ FastAPI snapshot + Next.js (dashboard, /positions réel-vs-cible, /screener explicable, /crypto live, /echecs) + export statique Pages |
-| Recherche & gate | `packages/research` | ✅ gate 4 étages (placebo→DSR→PBO→sabotage), ledger, **fdr Benjamini-Hochberg (ADR-0050)**, microstructure OFI/vPIN, alpha-decay (ADR-0024), `biais_fermeture` (réconciliation lots↔positions), `completion_ouvertures` (entrées manquantes, ADR-0057) |
+| Recherche & gate | `packages/research` | ✅ gate 4 étages (placebo→DSR→PBO→sabotage), ledger, **fdr Benjamini-Hochberg (ADR-0050)**, microstructure OFI/vPIN, alpha-decay (ADR-0024), `biais_fermeture` (réconciliation lots↔positions), `completion_ouvertures` (entrées manquantes, ADR-0057), `ventes_inversees` (ADR-0061), **`scan_registre` — un scan compte comme un essai (ADR-0065)** |
 | Screening | `packages/screening` | ✅ filtres YAML + composite z-score → `/screener` |
 | Sentiment | `packages/sentiment` | ✅ FinBERT+lexique+RSS point-in-time + risk gate |
 | Événements | `packages/events` | ✅ earnings (blackout) + IPOs |

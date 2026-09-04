@@ -1335,3 +1335,61 @@ réelles) et `/events` (résultats trimestriels et IPOs) rejoignent « Marché �
 **Conséquences.** Onze pages restent hors de la barre. Ce n'est pas un oubli mais le résultat
 d'un arbitrage assumé : elles y restent jusqu'à décision explicite, plutôt que d'être réinsérées
 une par une au fil des signalements — ce qui déferait l'audit sans jamais le rediscuter.
+
+## ADR-0064 — Une seule politique de fusion des sources, et elle est tracée (2026-09-04)
+
+**Contexte.** Deux fonctions fusionnaient les mêmes bases de prix selon des règles opposées :
+`_load_prices` gardait le premier provider (`setdefault`), `merge_bars` gardait le dernier
+(`target[jour] = …`). Mêmes bases, mêmes dates, deux historiques pour le même actif selon la
+fonction qui le demandait — **0,71 %/an d'écart** mesuré sur le cœur QQQ. Aucune des deux ne
+savait qu'elle contredisait l'autre.
+
+**Décision.** Une implémentation unique (`packages/data/fusion_sources`), et c'est le PREMIER
+provider qui prime. La raison est écrite : la base longue porte un historique AJUSTÉ, la couche
+de mise à jour est brute ; la laisser écraser insérerait une discontinuité raw/ajusté au milieu
+de l'historique, dont les rendements de part et d'autre ne sont plus comparables. La fraîcheur
+survit à la règle, les dates récentes étant exactement celles qui manquent à la base longue.
+Chaque jour retenu porte le NOM de la source qui l'a fourni.
+
+**Conséquences.** Une copie d'une politique diverge toujours : c'est ce qui s'est produit ici,
+et l'unique implémentation est ce qui l'empêche de se reproduire. Le lignage transforme « d'où
+vient cette barre ? » en lecture. `make diag-fusion` chiffre les désaccords entre bases là où
+elles se recouvrent — un désaccord ne dit pas laquelle a raison, il dit que la priorité change
+le résultat.
+
+## ADR-0065 — Un scan est un ESSAI : il se compte, ou le Sharpe déflaté ment (2026-09-04)
+
+**Contexte.** Un scanner piloté en langage naturel balaie 200 titres en une minute. Chaque
+variante de seuil est un test supplémentaire, et vingt tests non enregistrés font passer pour
+significatif ce qui ne l'est pas. Le dépôt possède le remède (`ledger` compte les essais,
+`deflation_params` en tire le `N` du DSR) mais rien ne reliait le scanner au registre.
+
+**Décision.** Tout scan produit un enregistrement au ledger, sous le facteur `scan_ad_hoc` et
+au statut `exploratoire` — jamais « validé » : un scan ne valide rien. L'empreinte des critères
+NORMALISÉS (triés) sert de clé d'idempotence. Les critères sont structurés et validés contre une
+liste fermée d'opérateurs ; aucun parseur de langage naturel n'entre dans la couche de recherche,
+traduire la phrase reste le travail du modèle appelant.
+
+**Conséquences.** Le compte d'essais était jusqu'ici SOUS-estimé — les idées testées à la main ne
+laissent aucune trace — donc le DSR déflatait trop peu. Un scanner qui enregistre le rend honnête
+pour la première fois : la fonctionnalité qui menaçait la statistique devient ce qui la répare.
+L'idempotence est obligatoire dans les deux sens : rejouer une question ne la repose pas, mais
+deux seuils différents sont deux essais.
+
+## ADR-0066 — On ne branche pas DuckDB sans l'avoir mesuré (2026-09-04)
+
+**Contexte.** `make_bars_repository` arbitre entre sqlite et duckdb et n'a **aucun appelant**. Le
+dépôt DuckDB (79 lignes, export Parquet partitionné) porte lui-même la mention « écrit pour
+l'environnement de prod ; non exécuté hors-ligne ». Le chemin colonnaire est conçu, pas branché,
+et la question « irait-il plus vite ? » n'a jamais reçu de chiffre.
+
+**Décision.** Aucun basculement avant mesure. `make bench-backend` chronomètre la LECTURE — le
+coût qui pèse réellement sur les bancs — sur la vraie base, en lisant le MÊME fichier par les
+deux moteurs (comparer deux bases différentes mesurerait leur contenu, pas le moteur). La règle
+est écrite avant le run : gain médian < 1,5× → on reste sur SQLite ; ≥ 1,5× → le basculement se
+justifie, mais reste conditionné à l'unification de `DBPriceProvider` et `BarsRepository`.
+
+**Conséquences.** Ces deux abstractions sur la même donnée sont la vraie raison pour laquelle la
+fabrique n'a jamais eu d'appelant : « brancher DuckDB » n'est pas un changement de variable, c'est
+un refactor, et il doit être payé par un chiffre. Sans DuckDB installé, le banc ne rend aucun
+verdict et le dit — il ne suppose pas.

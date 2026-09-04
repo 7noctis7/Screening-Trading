@@ -17,6 +17,32 @@
       compte/indice sur les dates réelles. Un benchmark périmé est exclu, jamais forward-fill sur
       des mois avec l'étiquette « réel ».
 
+## ✅ Données & recherche — livré le 2026-09-04
+
+- [x] **P1 — Les deux priorités de fusion opposées : CORRIGÉ.** `_load_prices` gardait le
+      premier provider, `merge_bars` le dernier, sur les MÊMES bases — 0,71 %/an d'écart sur
+      le cœur QQQ. Une seule implémentation (`packages/data/fusion_sources`), premier gagne,
+      raison écrite (base longue ajustée vs maj brute → pas de couture raw/ajusté au milieu
+      de l'historique). Lignage : chaque jour porte le nom de sa source. ADR-0064. 9 tests.
+- [x] **P1 — Les désaccords entre bases sont MESURÉS.** `make diag-fusion` : recouvrement et
+      divergences par symbole. « Les bases sont d'accord » cesse d'être une hypothèse.
+- [x] **P1 — Un scan compte comme un essai.** `packages/research/scan_registre` : critères
+      structurés (liste fermée d'opérateurs), exécution pure, enregistrement au `ledger` sous
+      `scan_ad_hoc`/`exploratoire`, empreinte idempotente. Le `N` du DSR était SOUS-estimé —
+      les essais manuels ne laissent aucune trace. ADR-0065. 12 tests.
+- [x] **P1 — DuckDB : la fabrique n'a AUCUN appelant (constat).** `make bench-backend` mesure
+      la lecture SQLite vs DuckDB sur la vraie base, règle de décision écrite avant le run
+      (< 1,5× on reste ; ≥ 1,5× conditionné à l'unification `DBPriceProvider` /
+      `BarsRepository`). Aucun verdict sans mesure. ADR-0066.
+- [ ] **P1 — LANCER les deux mesures (poste local).** `make diag-fusion` puis
+      `make bench-backend`. Ce sont elles qui décideront s'il reste du travail sur les
+      données ; sans elles, les trois points ci-dessus sont outillés mais pas tranchés.
+- [ ] **P2 — Brancher le scanner sur le copilote.** `scan_registre` est prêt et testé ; il
+      manque l'outil côté `/api/ai/chat` qui traduit la question en critères, appelle
+      `executer` sur les lignes du screener, puis écrit au ledger si l'empreinte est neuve.
+- [ ] **P2 — Onze pages hors de la barre**, dont `/data` (l'onglet « entrepôt » demandé
+      existe déjà). À trancher explicitement plutôt qu'au fil des signalements.
+
 ## 🔴 P0 — DualMarketScreening : deux défauts qui invalident des verdicts (2026-08-22)
 Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
 - [ ] **Correction pour tests multiples (Benjamini-Hochberg)** sur le criblage de paires.
