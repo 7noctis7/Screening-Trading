@@ -111,6 +111,32 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       Mesuré : 1,25 % de séances manquantes ramènent un bêta de 1,200 à 0,345 (corr 1,000 → 0,288).
       `alignement` et `n_observations` sont désormais PUBLIÉS, et le front avertit en orange quand
       l'appariement reste positionnel. ADR-0072.
+- [x] **P1 — Rebalancement journalier vs. tenir jusqu'au TP/SL : MESURÉ le 04/09.** Réponse :
+      la question ne se pose pas comme un réglage. `sortie_lab` (où l'on règle `rr` et le
+      suiveur) rejoue `fast_swing_backtest` ; la production applique des poids cibles
+      `preset risk-parity`. Deux moteurs. La production n'a ni stop ATR, ni cible, ni
+      suiveur — `rr 6 → rr 9` ne changerait pas un ordre. ADR-0073.
+      Journal réel, décisions du SYSTÈME seules : 6 positions en 57 j, détention médiane
+      **0,1 jour**, t = +0,92 (non significatif), capture −22 % sur 5 mesurables.
+- [ ] **P0 — Pourquoi la production tient-elle ses positions 0,1 jour ?** Le banc de sortie
+      suppose 42 à 48 jours ; la production solde en quelques heures. Ce n'est pas un
+      désaccord statistique (n=6 n'y change rien), c'est une description de comportement.
+      **Hypothèse à vérifier, pas une cause établie** : le plancher de ligne (1 000 $)
+      solderait une ligne ouverte la veille dès que sa cible repasse sous le plancher —
+      ouvrir puis liquider, en boucle. Méthode : rejouer deux runs consécutifs de
+      `run_live.py --live --yes` sur un compte de test et tracer, pour chaque symbole, la
+      cible et le détenu d'un run à l'autre. Corriger seulement après avoir vu le cycle.
+- [ ] **P1 — `sortie_lab` : verdict instable entre deux fenêtres.** « Sans suiveur » donne
+      Sharpe 0,50 sur les données au 04/09 et 0,03 au 20/06 (rallye crypto de juillet-août
+      dans l'intervalle). Le banc avertit lui-même qu'on ne compare qu'à empreinte
+      identique. Refaire les deux runs sur la MÊME empreinte (le VPS est arrêté au 20/06 :
+      `make ingest` d'abord) avant d'accorder le moindre crédit au réglage.
+- [ ] **P1 — Trois copies divergentes de `data/journal.db`.** Mac mini (37 positions), HF
+      (25), VPS (le sien, isolé). `cron_live.sh` ne synchronise pas avec HF — seul
+      `paper.yml` le fait. Le timer systemd que j'ai posé sur le VPS le 04/09 hérite de ce
+      trou : il accumulera un historique séparé. **Ne pas brancher `hf_journal.py push` à
+      l'aveugle** : le push écrase sans fusion, un run du VPS pourrait effacer l'historique
+      plus complet du Mac. Décider d'une source de vérité AVANT de câbler.
 - [ ] **P1 — Rebalancement journalier vs. tenir jusqu'au TP/SL : outillé le 04/09, PAS mesuré.**
       Question de l'utilisateur : le rebalancement quotidien vers les poids cibles coupe-t-il
       des positions gagnantes avant leur potentiel ? Constat de code (pas de mesure) :

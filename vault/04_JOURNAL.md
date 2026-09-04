@@ -1,5 +1,46 @@
 # 04 — JOURNAL
 
+## Session 2026-09-04 (suite 10) — Le banc qu'on règle depuis des semaines ne mesure pas la production
+
+**Trois mesures, trois faux résultats corrigés, une vraie réponse.** L'utilisateur
+demandait si le rebalancement quotidien coupe les trades trop tôt. Chaque passage sur le
+journal réel a d'abord produit un chiffre flatteur qu'il a fallu casser :
+
+1. **+10,26 % par position, t = 5,50 « significatif »** — faux. `close_sells` scinde un
+   lot soldé en tranches portant la même entrée ; huit lots crypto du 07/07 revenaient
+   six fois chacun avec leur +25 à +47 %. Comme |t| croît en racine de n, la
+   significativité était fabriquée par le découpage des ventes. Agrégation par lot.
+2. **+5,14 %, t = 2,61** — encore faux. 31 des 37 positions avaient été fermées par le
+   script de réparation du matin même : sorties réelles, mais dates et prix reconstruits
+   a posteriori dans les fills courtier. 84 % de l'échantillon ne mesurait aucune
+   décision. Rapport scindé en trois blocs.
+3. **Décisions du système seules : 6 positions, t = +0,92, non significatif.** Rien à
+   conclure sur la rentabilité — et c'est la réponse honnête.
+
+**Mais le constat qui compte n'est pas statistique.** Détention médiane des décisions du
+système : **0,1 jour**. Le banc `sortie_lab`, où l'on règle `rr` et le suiveur ATR depuis
+des semaines, annonce des détentions de 42 à 48 jours. L'écart n'est pas un désaccord de
+mesure : `sortie_lab` rejoue `fast_swing_backtest` (stop 4 ATR, cible R-multiple,
+suiveur), tandis que la production applique des poids cibles `preset risk-parity +
+DD-target`. **Deux moteurs différents.** La production n'a ni stop ATR, ni cible, ni
+suiveur — donc aucune notion de TP ou de SL, et un seul motif de sortie possible. Régler
+`rr 6 → rr 9` ne changerait pas un ordre. ADR-0073.
+
+**Ce que les 6 décisions disent quand même.** Capture −22 % sur 5 d'entre elles : passées
+en positif (+1,3 à +2,2 % de MFE) puis sorties en perte, après quelques heures. C'est
+exactement le mécanisme que l'utilisateur décrivait. Six observations : cohérent avec son
+intuition, ne prouve rien.
+
+**Instabilité relevée au passage, désormais secondaire.** `sortie_lab` « sans suiveur »
+donne Sharpe 0,50 sur les données au 04/09 et 0,03 au 20/06 — deux mois et demi
+d'écart, avec un rallye crypto (BTC +21 %, ETH +33 %, LINK +38 %) dans l'intervalle. Le
+banc avertit lui-même que deux runs ne se comparent qu'à empreinte identique. Même
+robuste, ce réglage ne toucherait pas la production.
+
+**À diagnostiquer, pas encore expliqué.** Pourquoi 0,1 jour de détention ? Hypothèse à
+vérifier : le plancher de ligne (1 000 $) solderait une position ouverte la veille dès
+que sa cible repasse dessous. Formulé comme piste, pas comme cause.
+
 ## Session 2026-09-04 (suite 9) — VPS OVH mis en service, et un outil de mesure au lieu d'une décision devinée
 
 **VPS opérationnel.** Guidage pas à pas (accès SSH par clé, pare-feu, fail2ban, mises à jour

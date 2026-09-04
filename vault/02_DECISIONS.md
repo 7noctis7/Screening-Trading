@@ -1532,3 +1532,37 @@ défaut, pas comme un choix. L'inventaire des occurrences restantes (indice équ
 horodatage de `fast_swing`, `_align` de `packages/portfolio/benchmark`) est au TODO en P1 : elles
 sont identifiées par lecture du code, pas encore MESURÉES sur données réelles, et on ne remplace
 pas un chiffre publié par un autre sans l'avoir mesuré.
+
+## ADR-0073 — Le banc de sortie ne mesure pas ce qui tourne en production (2026-09-04)
+
+**Contexte.** Question de l'utilisateur : « plutôt qu'un rebalancement quotidien, ne
+vaudrait-il pas mieux tenir les positions jusqu'au TP ou au SL ? » Trois mesures ont été
+nécessaires pour répondre, et chacune a d'abord donné un faux résultat qu'il a fallu
+corriger (comptage des tranches, fermetures administratives). Photo finale du journal
+réel du Mac mini, décisions du SYSTÈME seulement : **6 positions closes en 57 jours,
+détention médiane 0,1 jour, taux de gain 33 %, t = +0,92 (non significatif), capture
+−22 % sur 5 positions mesurables**.
+
+**Le vrai constat n'est pas statistique, il est structurel.** `sortie_lab` — le banc où
+l'on règle `rr` et le suiveur ATR, et qui annonce des détentions de 42 à 48 jours —
+rejoue `fast_swing_backtest` : stop 4 ATR, cible en R-multiples, suiveur. Le chemin de
+production, lui, est `run_live.py` → poids cibles `preset risk-parity + DD-target`
+(`apps/api/snapshot.py`). **Ce sont deux moteurs différents.** La production ne lit ni
+`rr`, ni le suiveur, ni un stop ATR : elle n'a aucune notion de TP ou de SL, et son seul
+motif de sortie est le rebalancement. Passer `rr 6 → rr 9` ou retirer le suiveur dans le
+banc ne changerait **pas un seul ordre** envoyé en production.
+
+**Décision.** Ne pas régler les paramètres de `sortie_lab` en croyant agir sur la
+production. Les deux systèmes sont nommés séparément partout où ils apparaissent, et
+tout résultat du banc porte désormais la mention du moteur qu'il mesure. La question
+« tenir jusqu'au TP/SL » n'est pas un réglage : c'est le choix de faire tourner en
+production un autre moteur que celui qui y tourne — un changement gaté, à valider pour
+lui-même, pas un ajustement.
+
+**Conséquences.** L'instabilité relevée le même jour sur `sortie_lab` (« sans suiveur »
+à Sharpe 0,50 sur les données au 04/09 contre 0,03 au 20/06, un rallye crypto de
+juillet-août dans l'intervalle) devient secondaire : même robuste, ce réglage ne
+toucherait pas la production. Reste une observation à diagnostiquer, formulée comme
+hypothèse et non comme fait : une détention médiane de 0,1 jour sur les décisions du
+système suggère un cycle ouvrir-puis-solder dans la même journée — le plancher de ligne
+(1 000 $) est le premier suspect, à vérifier avant toute correction.
