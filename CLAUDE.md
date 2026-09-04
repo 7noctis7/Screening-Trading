@@ -59,6 +59,12 @@ reconstruit chaque jour ouvré par GitHub Actions (`.github/workflows/pages.yml`
 - `pickle` chargé uniquement via `packages/common/safe_pickle` (anti-symlink + hash).
 - **Dev `localhost:3000`** : après un `make site` (build export), faire `cd apps/web && rm -rf .next && npm run dev`
   (sinon `Cannot find module './682.js'` / `/_document` — le `.next` export n'est pas relisible par `next dev`).
+- **Le cache `.next` resert l'ANCIEN rendu après un `make sync`** (03/09). Symptôme trompeur : le code
+  contient le correctif, le navigateur affiche la version d'avant, et **rien ne le signale** — on croit
+  lire le résultat de son correctif, on lit celui d'avant. Constaté sur deux correctifs le même jour
+  (onglet `/sentiment` remis dans la barre, étiquette macro « série arrêtée » corrigée). `start.sh`
+  tamponne désormais le commit du build dans `apps/web/.quant-build-commit` et purge `.next` s'il a
+  changé. **Avant de conclure qu'un correctif front ne marche pas, vérifier qu'il est BUILT.**
 - **Ne JAMAIS faire `git pull` sur la branche de dev.** Elle est RÉÉCRITE à chaque déploiement
   (`reset --hard origin/main` + `push --force`), donc `pull` la voit divergée, tente une fusion et
   laisse des marqueurs `<<<<<<<` dans les sources — `SyntaxError` sur du code valide à l'origine.

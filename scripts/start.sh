@@ -61,6 +61,24 @@ echo "  PID API : $!"
 
 echo "→ Démarrage du site (Ctrl+C arrête le SITE ; l'API continue en fond)…"
 cd apps/web
+
+# LE CACHE .next RESERT L'ANCIEN RENDU. Signalé le 03/09 : après un `make sync` qui
+# ramenait `/sentiment` dans la barre, le menu « Marché » affichait toujours ses cinq
+# anciennes entrées, et une étiquette macro corrigée restait dans sa version fausse. Le
+# code était bon, le build ne l'était pas — et rien ne le disait, ce qui est le pire cas :
+# on croit lire le résultat de son correctif, on lit celui d'avant.
+#
+# On tamponne le commit avec lequel le cache a été produit, HORS de `.next` (que Next
+# régénère). S'il diffère de la tête courante, on purge : quelques secondes de rebuild
+# contre une heure à chercher un bug déjà corrigé.
+EMPREINTE=".quant-build-commit"
+TETE="$(git rev-parse HEAD 2>/dev/null || echo inconnu)"
+if [ "$(cat "$EMPREINTE" 2>/dev/null)" != "$TETE" ]; then
+  echo "  Code modifié depuis le dernier build → purge du cache .next (rebuild ~30 s)"
+  rm -rf .next
+  echo "$TETE" >"$EMPREINTE"
+fi
+
 npm install >/dev/null 2>&1 || true
 echo "  Ouvre http://localhost:3000  (laisse ~1-3 min au 1er build de l'API)"
 npm run dev

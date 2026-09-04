@@ -1,5 +1,23 @@
 # 04 — JOURNAL
 
+## Session 2026-09-03 (suite 6) — Le correctif était juste ; c'est le build qui mentait
+
+**Deux correctifs poussés, deux « ça n'a pas marché ».** Le menu « Marché » affichait toujours ses
+cinq anciennes entrées sans `/sentiment`, et la tuile Bund portait encore « série arrêtée ». Le code
+poussé contenait pourtant les deux corrections, vérifiées dans le fichier.
+
+**La cause est le cache `.next`.** `make start` lance `npm run dev`, qui resert le rendu mis en cache.
+Après un `make sync` qui change les sources, le navigateur montre l'état d'AVANT — et rien ne le
+signale. C'est le pire mode de défaillance possible : on croit lire le résultat de son correctif,
+on lit celui d'avant, et l'on va chercher un bug déjà corrigé.
+
+**Le garde-fou.** `start.sh` tamponne le commit ayant produit le build dans
+`apps/web/.quant-build-commit` — HORS de `.next`, que Next régénère — et purge le cache si la tête
+courante en diffère. Trente secondes de rebuild contre une heure de fausse piste. Vérifié sur les
+trois cas : premier lancement (purge), relance au même commit (cache conservé), nouveau commit
+(purge). Ajouté aux pièges connus de `CLAUDE.md` : **avant de conclure qu'un correctif front ne
+marche pas, vérifier qu'il est BUILT.**
+
 ## Session 2026-09-03 (suite 5) — Trois signalements de l'utilisateur, trois affirmations fausses du site
 
 **Le nettoyage a tenu.** 33 lots retirés : 343 enregistrements → 310, lots ouverts `legacy`
