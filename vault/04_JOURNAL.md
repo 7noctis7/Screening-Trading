@@ -1,5 +1,43 @@
 # 04 — JOURNAL
 
+## Session 2026-09-04 (suite 7) — Deux fois la même erreur : j'ai deviné le payload au lieu de le lire
+
+**Deuxième blocage, deuxième faute de ma part.** Le gate a de nouveau arrêté le déploiement, en
+annonçant : `dashboard.json/equity : 2392 point(s) non exploitable(s)` sur une courbe de
+2 392 points, plus les deux courbes de `live.json`. Toute la courbe, donc. J'ai vérifié avant de
+conclure — et c'était un FAUX POSITIF.
+
+**La forme, après les noms.** Le dépôt publie ses courbes principales en listes de POINTS
+`{"t": date, "v": valeur}` — `_dash_equity`, `alpaca_perf.curve`, `crypto_perf.curve`. Ma règle
+n'acceptait que des listes de nombres et comptait chaque point comme un trou. Hier j'avais deviné
+les NOMS de clés (`qqq` désigne aussi un poids), aujourd'hui la FORME. Deux fois la même faute de
+méthode : construire un contrôle contre l'idée que je me fais du payload, plutôt que contre le
+payload.
+
+**Le second défaut est bien pire que le premier, et il était invisible.** `coherence_site`
+ignorait ces mêmes courbes SANS RIEN DIRE : sa règle « une courbe positive interdit une
+statistique de −100 % », écrite exactement pour attraper le CAGR de −100 % de la veille, **ne se
+serait jamais déclenchée sur le vrai tableau de bord**. Un faux positif fait échouer un build, on
+le voit. Un contrôle silencieux laisse croire qu'on est protégé — et j'aurais annoncé une
+protection qui n'existait pas.
+
+**Ce qui est corrigé.** `valeurs_de_courbe` reconnaît les deux formes, une seule fois, et les deux
+modules l'utilisent. Une liste de dicts n'est une courbe que si ses points portent une valeur —
+sinon c'est un tableau (positions, trades) et on ne le juge pas. Une entrée textuelle au milieu de
+nombres reste un trou : être indulgent là-dessus rendrait la règle silencieuse, ce qu'on vient
+précisément de payer. Douze tests de plus, sur les formes RÉELLES.
+
+**Ce que les deux échecs disent de bon.** À aucun moment le site en ligne n'a été modifié :
+`deploy` a été SKIPPED deux fois. Le principe « un build rouge ne publie pas » a tenu, y compris
+contre mes propres erreurs. C'est la seule chose qui a bien fonctionné aujourd'hui, et c'est celle
+qui compte.
+
+**Le blocage a aussi révélé quelque chose que je n'avais pas demandé.** L'inventaire des dates
+d'arrêté imprime trois valeurs distinctes : `events`/`themes`/`universe` au 04/09, `screener` et
+`dashboard.regime` au 02/09, et **`dashboard` racine + `data` au 18/06** — deux mois et demi de
+retard. Je ne sais pas encore si c'est légitime (fenêtre de backtest close) ou si c'est un défaut.
+C'est noté, pas conclu.
+
 ## Session 2026-09-04 (suite 6) — Mon gate a bloqué le déploiement, et il avait tort
 
 **Ce qui s'est passé.** PR #369 mergée, CI verte, build Pages lancé — et le gate de publication a

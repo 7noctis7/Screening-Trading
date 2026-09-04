@@ -130,3 +130,36 @@ def test_un_gate_qui_plante_vaut_un_gate_absent():
     build rouge inexpliqué invite à désactiver le contrôle, pas à chercher la cause."""
     for valeur in (0.5, -1, "x", {"a": 1}, None, True, [], [1, 2], (1, 2)):
         assert isinstance(trous_dans_courbe(valeur), int)
+
+
+# ───── la FORME réelle des courbes : listes de points, pas listes de nombres ─────
+
+def test_une_courbe_en_POINTS_est_reconnue():
+    """Deuxième erreur du 04/09, et elle a coûté un second déploiement. Le dépôt publie
+    ses courbes principales en listes de `{"t": date, "v": valeur}` — `_dash_equity`,
+    `alpaca_perf.curve`, `crypto_perf.curve`. La règle comptait chaque point comme un
+    trou : 2 392 faux trous sur une courbe de 2 392 points, build bloqué pour rien."""
+    from packages.common.gate_publication import valeurs_de_courbe
+    pts = [{"t": "j1", "v": 100.0}, {"t": "j2", "v": 101.0}]
+    assert valeurs_de_courbe(pts) == [100.0, 101.0]
+    assert trous_dans_courbe(pts) == 0
+
+
+def test_un_point_sans_valeur_reste_un_trou():
+    """Le correctif ne doit pas désarmer la règle : un `v` absent ou nul est un trou."""
+    assert trous_dans_courbe([{"t": "j1", "v": 100.0}, {"t": "j2", "v": None}]) == 1
+    assert trous_dans_courbe([{"t": "j1", "v": 100.0}, {"t": "j2"}]) == 1
+
+
+def test_un_TABLEAU_de_lignes_n_est_pas_une_courbe():
+    """Sinon chaque position publiée compterait comme un trou. Une liste de dicts n'est
+    une courbe que si ses points portent une valeur."""
+    from packages.common.gate_publication import valeurs_de_courbe
+    assert valeurs_de_courbe([{"symbol": "QQQ", "qty": 70.4}]) is None
+    assert trous_dans_courbe([{"symbol": "QQQ", "qty": 70.4}]) == 0
+
+
+def test_les_deux_formes_donnent_le_meme_verdict():
+    """Une courbe percée doit être détectée quelle que soit sa forme d'écriture."""
+    assert trous_dans_courbe([100.0, None]) == trous_dans_courbe(
+        [{"t": "a", "v": 100.0}, {"t": "b", "v": None}]) == 1
