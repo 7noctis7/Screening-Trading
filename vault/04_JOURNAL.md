@@ -1,5 +1,221 @@
 # 04 — JOURNAL
 
+## Session 2026-09-04 (suite 5) — « Plus aucune incohérence » : ce qu'on peut réellement garantir
+
+**La demande, et ce que j'en fais.** « Assure-toi que TOUTES les données publiées — local, en
+ligne, ordinateur, téléphone, entre onglets — soient cohérentes et correctes. » Je ne peux pas
+promettre l'absence d'erreur : ce serait une promesse que le code ne tient pas, et ce carnet est
+plein d'affirmations de ce genre qu'il a fallu retirer. Ce que je peux faire, et qui vaut mieux :
+transformer l'exigence en **contrat vérifié par la machine, qui casse le build**.
+
+**Le fait qui rend les invariants durs.** Les 24 payloads dérivent d'UN SEUL snapshot
+(`dump_static` appelle `M._snap()` une fois). Deux pages ne peuvent donc pas diverger à cause des
+données : si elles divergent, le même nombre est calculé à deux endroits et l'un des deux est
+faux. C'est exactement l'historique du dépôt — PSR à 0,0 % et 100 % sur la même page, trois
+conventions de Sortino, un bêta de 0,006, un CAGR de −100 % avec Sharpe positif.
+
+**Le principe de conception : AUCUN faux positif.** Un gate qui crie au loup finit désactivé, et
+ce dépôt l'a déjà vécu — le détecteur de fraîcheur macro se trompait 4 fois sur 5 et « apprenait
+à être ignoré ». Chaque règle est donc une IMPOSSIBILITÉ, pas un seuil :
+
+  · une courbe strictement positive interdit toute statistique d'anéantissement — aucun argument
+    de flux, de frais ou de fenêtre ne franchit cette borne ;
+  · une courbe et ses dates ont la MÊME longueur — signature de l'empilement positionnel, quatre
+    occurrences ici ;
+  · un capital anéanti avec un ratio positif, ou un `null` dans une courbe publiée (ADR-0070).
+
+Les tests « doit PASSER » comptent autant que les autres : une vraie ruine passe, une perte de
+−62 % passe, un anéantissement avec Sharpe négatif passe. Ce sont eux qui gardent le gate
+crédible.
+
+**Local ≠ en ligne : le piège structurel, désormais testé.** Le front a deux modes —
+`data/<nom>.json` en statique (téléphone, ordinateur en ligne) et `localhost:8000/api/…` en local.
+Une page qui appelle une route que `dump_static` n'écrit pas fonctionne parfaitement en local et
+rend **404 en ligne** ; le développeur ne le voit jamais, il travaille sur le mode qui marche.
+Comparaison faite : 25 routes appelées, 26 fichiers publiés, **aucune manquante**, un seul
+orphelin (`overlays`, neutralisé exprès). Rien à corriger aujourd'hui — et c'est justement le
+moment d'écrire le test, pendant que c'est vert : un test ajouté après la panne ne protège que du
+passé.
+
+**Ce qui est inventorié plutôt que bloqué.** Les dates d'arrêté diffèrent LÉGITIMEMENT entre
+domaines : la crypto cote le week-end, les actions non. En faire une règle produirait un faux
+positif chaque samedi. Le build les RECENSE dans son log — mesurer sans juger vaut mieux qu'une
+règle fausse.
+
+**Ce que ce dispositif ne couvre pas, et il faut le dire.** Il vérifie la cohérence *interne* des
+chiffres publiés et la parité des routes. Il ne vérifie pas qu'un chiffre est JUSTE au sens
+économique — aucun automate ne le peut. Le journal réel reste local-only par construction (le
+build CI n'a pas les clés courtier), donc les chiffres de compte du site public ne sont pas ceux
+du Mac : ce n'est pas une incohérence, c'est un périmètre, et il est désormais affiché.
+
+## Session 2026-09-04 (suite 4) — `0 × NaN = NaN` : une panne visible en production
+
+**Le signalement.** Le téléphone affichait gain total **−100 %**, CAGR **−100 %**, pire baisse
+**−100 %** — et, dans les mêmes cartes, Sharpe **0,25** et Sortino **0,18**, tous deux POSITIFS.
+Cette combinaison est arithmétiquement impossible : un capital réduit à zéro ne donne pas un
+Sharpe positif. C'est elle qui a permis de remonter à la cause, parce que les deux familles ne
+sont pas calculées au même endroit — les ratios sur les rendements, le CAGR sur les extrémités
+de la courbe nettoyée.
+
+**La cause, en une ligne.** `preset_curves` calculait
+`(w * (A[:, t+1] / A[:, t] - 1)).sum()`. Or **`0 * nan` vaut `nan` en numpy** : un titre au poids
+ZÉRO, qu'on ne détient même pas, suffisait à rendre le rendement du jour NaN dès qu'il lui
+manquait un cours. L'equity devenait NaN, puis toute la fin de la courbe.
+`dump_static._clean` convertit ensuite NaN en `null` — le bon geste, sans quoi le JSON serait
+invalide et la page bloquée — et le front lit ce trou comme un zéro.
+
+**Le NaN n'est pas une anomalie ici.** Depuis l'alignement par date, la matrice en contient
+légitimement : un titre ne cote pas toutes les dates du panel. Ce n'est donc pas une donnée à
+traquer en amont, c'est un état normal que ce calcul devait savoir traverser. `megacap` avait le
+même défaut, sans même la garde de poids ; `sector_momentum` portait déjà la sienne. Les deux
+renormalisent désormais sur les lignes cotées — les ignorer sans renormaliser supposerait que la
+part manquante fait 0 % ce jour-là, ce qui est un rendement inventé, pas une absence.
+
+**Ce qui est plus grave que le bug : le gate ne regardait pas les nombres.** `check_build`
+vérifiait la présence des fichiers, leur taille et leur fraîcheur. Un dump complet, volumineux et
+daté du jour annonçait la ruine, et passait au VERT. C'est l'utilisateur qui l'a vu.
+
+`gate_publication` ajoute deux règles, et ce sont des **contradictions**, pas des seuils :
+
+  1. capital anéanti (≤ −99,9 %) avec un ratio positif → impossible ;
+  2. `null` dans une courbe d'équity publiée → une courbe percée n'est pas une courbe.
+
+La seconde vaut mieux que la première : elle attrape la CAUSE, pas le symptôme. Et le choix des
+contradictions plutôt que des seuils est délibéré — « CAGR < −50 % » serait un jugement, une
+stratégie a le droit de perdre, et un gate qui refuse les mauvaises nouvelles finit par cacher
+les vraies. Vérifié de bout en bout : perte sévère cohérente → PUBLIÉ ; anéantissement avec
+Sharpe négatif → PUBLIÉ ; le cas exact du 04/09 → REFUSÉ ; courbe percée → REFUSÉ.
+
+## Session 2026-09-04 (suite 3) — Audit de fuite du momentum sectoriel : la cause est l'univers
+
+**Le verdict.** CAGR 55,5 % sur 9,4 ans avec DSR 100 % n'était pas un résultat. Trois causes
+possibles, séparées par la MESURE plutôt que par l'opinion :
+
+  · **coûts de transaction absents** — réel, et MINEUR. Le module rotait mensuellement sur deux
+    secteurs entiers sans jamais rien payer, tout en étant comparé à QQQ, un buy-and-hold de
+    turnover nul. Mesuré sur panneau synthétique (24 titres, 4 secteurs) : **0,64 point de
+    CAGR**. Corrigé (5 bps, même convention que `coeur_multi_actifs`), frais publiés avec le
+    résultat. Ce n'est pas l'explication.
+  · **look-ahead dormant dans la MM50** — `_sma` remplissait ses `w-1` premières cases avec
+    `out[0]`, la moyenne des jours 0..w-1 : lue à t=10, elle contient l'avenir. Jamais lue
+    aujourd'hui (la boucle démarre à `max(lookback, 50)` = 126), mais un `lookback` plus court
+    la réveillerait **en silence**. Remplacé par NaN — une comparaison avec NaN vaut False, donc
+    le titre est écarté du filtre au lieu d'être admis sur une valeur inconnaissable.
+  · **univers de SURVIVANTS** — et c'est la cause principale.
+
+**Le mécanisme, à la ligne près.** `build_snapshot` nettoie l'univers : tout titre dont la
+dernière barre a plus de dix jours est retiré de `data`. C'est-à-dire **tous les délistés, avant
+que le moindre backtest ne tourne**. Ce cœur classe ensuite des secteurs sur 9,4 ans en ne voyant
+que les sociétés qui existent ENCORE. Les faillites et radiations qui auraient vidé les paniers
+sectoriels ont été écartées par construction. C'est exactement la configuration qui fabrique un
+CAGR spectaculaire.
+
+**L'audit existait déjà et répondait à côté.** `survivorship_audit` rapporte le nombre de
+délistés CONNUS au nombre d'actifs : sur 3 titres vivants et 43 délistés au catalogue, il annonce
+« corrigé (partiel) » et 93,5 % de couverture. Il répond à « en connaît-on ? », pas à « sont-ils
+DANS le panneau ? ». Un délisté absent ne corrige rien. `_biais_survivant` compte donc les
+délistés RÉELLEMENT présents dans l'univers du backtest — zéro présent, biais ÉLEVÉ, quel que
+soit le catalogue.
+
+**Et surtout : le chiffre ne voyage plus seul.** Le statut du biais est attaché au résultat, pas
+posé à côté. Un CAGR séparé de son biais se lit comme un résultat — c'est précisément ce qui
+s'est produit jusqu'ici, l'audit étant disponible mais jamais joint.
+
+**Ce que je n'ai PAS fait.** Corriger le biais. Cela demande l'historique de prix des délistés,
+que le dépôt sait sous-échantillonné. Tant qu'il manque, ce cœur reste INDICATIF — et il le dit
+désormais dans son propre résultat.
+
+## Session 2026-09-04 (suite 2) — Un bêta de 0,006, et trois Sortino pour un portefeuille
+
+**Le bêta absurde avait une cause lisible.** `compute_attribution` comparait la courbe du preset
+(calendrier de l'univers négociable) à celle de QQQ (calendrier des indices) **par position** —
+`n = min(len(...))` puis `[-n:]`. Publié : **bêta 0,006 et corrélation 0,008** pour un
+portefeuille long-only d'actions américaines. Un chiffre que personne ne peut croire, affiché
+sans que rien ne le signale.
+
+**La racine était une ligne en amont.** `_index_closes` faisait `closes, _dates, real =
+_index_series(...)` puis `return closes, real` : les dates existaient et étaient jetées juste
+avant qu'on en ait besoin. `_index_closes_dates` les conserve, le snapshot publie `qqq_dates`, et
+l'attribution apparie par date. Sans les deux calendriers, elle **refuse** désormais de conclure
+avec un motif — un résultat absent se voit, un résultat faux se lit.
+
+**Ma première contre-épreuve ne prouvait rien, et je l'ai vu à temps.** J'avais écrit un test où
+QQQ démarre cinq séances plus tard : l'appariement positionnel y donnait corrélation 1,000, tout
+comme le corrigé. Normal — les deux séries **finissent le même jour**, donc compter depuis la fin
+tombe juste. Le vrai mécanisme est ailleurs : des trous INTÉRIEURS de calendrier (jours fériés
+d'indice absents de l'univers négociable). Reproduit : même actif, douze fériés intérieurs,
+**corrélation 0,29 en positionnel contre 1,00 par date**. Le test dit maintenant cela, et le
+dit dans son docstring — un test qui passe pour la mauvaise raison est pire que pas de test.
+
+**Quatrième occurrence de l'empilement positionnel.** `apparier_deux_series` rejoint
+`aligner_par_date` dans `panel.py` : une seule règle d'alignement, deux points d'entrée selon la
+forme des données.
+
+**Trois conventions de Sortino, et le backlog sous-estimait l'écart.** `index_core` et
+`company_report` appliquaient la définition (RMS de min(r,0) sur N total) ; `metrics.sortino` et
+`perf_summary` prenaient l'écart-type des NÉGATIFS seuls ; `analytics` l'écart-type de min(r,0).
+La note annonçait 1,04× d'écart. Mesuré sur 2 520 rendements (46,6 % de séances négatives) :
+
+    définition (RMS sur N)         0,008314    Sortino ×1,000
+    écart-type des NÉGATIFS        0,007369    Sortino ×1,128
+    écart-type de min(r,0) sur N   0,006979    Sortino ×1,191
+
+**Douze à dix-neuf pour cent**, et les deux erreurs vont dans le même sens : elles flattent.
+Diviser par le nombre de négatifs est la plus grave — le ratio cesse alors de dépendre de la
+FRÉQUENCE des pertes, ce que Sortino existe précisément pour mesurer. Une définition unique en
+Python pur (`portfolio.deviation`, sans numpy puisque `analytics` et `company_report` s'en passent
+délibérément), quatre appelants branchés dessus.
+
+## Session 2026-09-04 (suite) — Une politique de fusion au lieu de deux, et un scan qui se compte
+
+**Le contexte : deux questions produit.** L'utilisateur demande s'il faut ajouter un onglet
+« l'IA pilote TradingView » (sur la foi d'un post viral) et un onglet « entrepôt de données ».
+Réponse aux deux : non, parce que le dépôt possède déjà l'essentiel des deux — `mcp_tradingview`
+expose neuf outils (dont `generate_pine`, `compare_pine_python`, `query_market_db`), `pine.py`
+traduit le preset en Pine v5, le copilote `/api/ai/chat` existe avec ses scopes ; et côté données
+l'architecture médaillon bronze/silver/gold, le dépôt DuckDB avec export Parquet, le feature store
+GOLD, `make audit` et `make contracts` sont là, page `/data` comprise. Ce qui manquait n'était pas
+des onglets.
+
+**Chantier 1 — une seule politique de fusion, et le lignage.** Le défaut est mesuré depuis des
+jours et restait ouvert : `_load_prices` fusionnait en « premier gagne », `merge_bars` en
+« dernier gagne », **sur les mêmes bases**. Mêmes dates, deux historiques selon la fonction qui
+demande — 0,71 %/an d'écart sur le cœur QQQ. La règle retenue est celle qui avait une raison
+écrite : la base longue est AJUSTÉE, la couche de maj est brute, la laisser écraser insérerait
+une discontinuité raw/ajusté au milieu de l'historique. La fraîcheur n'en souffre pas, les dates
+récentes étant justement celles qui manquent à la base longue. Une seule implémentation
+(`fusion_sources`), deux appelants, et un LIGNAGE qui enregistre quelle source a fourni chaque
+jour — la question « d'où vient cette barre ? » devient une lecture au lieu d'une enquête.
+
+**Et la mesure qui manquait.** `make diag-fusion` chiffre, symbole par symbole, sur combien de
+jours les bases se recouvrent et sur combien elles DIVERGENT. Tant qu'on ne l'avait pas,
+« les bases sont d'accord » était une hypothèse. Un désaccord ne dit pas laquelle a raison : il
+dit que la priorité change le résultat, donc qu'elle doit être motivée plutôt que subie.
+
+**Chantier 2 — un scan est un essai.** Un scanner en langage naturel balaie 200 titres en une
+minute ; c'est sa qualité, et c'est ce qui en fait une machine à tests multiples. « RSI < 30 »,
+puis « et si c'était 25 ? », puis « et en 4 h ? » : trois essais, trois questions légitimes, zéro
+trace. `scan_registre` valide des critères STRUCTURÉS (aucun parseur de langage naturel enfoui
+dans la couche de recherche — c'est le travail du modèle appelant), exécute purement, et produit
+un enregistrement pour le `ledger`.
+
+**Le retournement, et c'est la raison d'être du module.** Le compte d'essais est aujourd'hui
+SOUS-estimé : les idées essayées à la main ne sont journalisées nulle part, donc le `N` du DSR ne
+voit qu'une fraction de la recherche et déflate trop peu. Un scanner qui enregistre rend ce compte
+honnête pour la première fois. Idempotence obligatoire dans les deux sens : rejouer le même scan
+n'est pas un nouvel essai (sur-déflater est l'erreur symétrique, tout aussi fausse), mais deux
+seuils différents SONT deux essais.
+
+**Chantier 3 — DuckDB : ce que j'ai trouvé, et ce que je refuse de conclure.**
+`make_bars_repository` choisit entre sqlite et duckdb… et **n'est appelé nulle part**. Le dépôt
+DuckDB existe, son docstring dit « écrit pour la prod, non exécuté hors-ligne », et rien ne
+l'exécute. Je ne peux pas le mesurer d'ici (`duckdb` absent de cet environnement), donc je
+n'affirme aucun gain : `make bench-backend` le mesurera sur la vraie base, **avec sa règle de
+décision écrite avant le run** — gain médian < 1,5× on reste sur SQLite, ≥ 1,5× le basculement se
+justifie mais reste conditionné à l'unification de `DBPriceProvider` et `BarsRepository`. Ces deux
+abstractions sur la même donnée sont d'ailleurs la vraie raison pour laquelle la fabrique n'a
+jamais eu d'appelant.
+
 ## Session 2026-09-04 — `make start` écrasait ce que `make sync` venait de récupérer
 
 **Ma explication d'hier était fausse.** J'avais mis les deux correctifs invisibles (`/sentiment`

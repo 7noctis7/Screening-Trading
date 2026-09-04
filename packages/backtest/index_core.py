@@ -31,7 +31,8 @@ def _stats(eq: list[float]) -> dict:
     # mesuré le 03/09, cette version rendait un Sortino 30 % TROP BAS, au point de le
     # faire passer sous le Sharpe. Un Sortino inférieur au Sharpe est le symptôme :
     # à moins d'une asymétrie franchement négative, il lui est supérieur.
-    dsd = float((np.minimum(r, 0.0) ** 2).mean() ** 0.5)
+    from packages.portfolio.deviation import deviation_baissiere
+    dsd = deviation_baissiere(r)         # même définition partout (04/09)
     peak = np.maximum.accumulate(e)
     mdd = float((e / peak - 1).min())
     return {"available": True, "cagr": round(cagr, 4), "total_return": round(total, 4),

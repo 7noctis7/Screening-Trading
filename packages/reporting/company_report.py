@@ -345,8 +345,8 @@ def risk_block(closes: list[float] | None, beta: float | None = None) -> dict[st
     n = len(rets)
     mu = sum(rets) / n
     sd = (sum((x - mu) ** 2 for x in rets) / (n - 1)) ** 0.5 if n > 1 else 0.0
-    dn = [min(0.0, x) for x in rets]
-    dsd = (sum(x * x for x in dn) / n) ** 0.5
+    from packages.portfolio.deviation import deviation_baissiere
+    dsd = deviation_baissiere(rets)      # déjà la bonne définition ; on la partage
     vol_a = sd * math.sqrt(252)
     sharpe = (mu / sd * math.sqrt(252)) if sd > 0 else 0.0
     sortino = (mu / dsd * math.sqrt(252)) if dsd > 0 else 0.0

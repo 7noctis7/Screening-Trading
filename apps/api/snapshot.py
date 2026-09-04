@@ -1287,12 +1287,31 @@ def _yahoo_aliases(sym: str, ac: str) -> list[str]:
     return [s for s in dict.fromkeys(out) if s]   # dédupliqué, ordre préservé, sans vide
 
 
+def _noms_sources(provs: list, prov_db, prov_crypto) -> list[str]:
+    """Nom lisible de chaque provider, dans l'ordre où la fusion les consulte.
+
+    Le lignage ne vaut que si la source porte un nom qu'un humain reconnaît : « base
+    longue », « maj quotidienne », « crypto ». Un index de liste ne répond pas à la
+    question « d'où vient cette barre ? »."""
+    noms = []
+    for p in provs:
+        if p is prov_db:
+            noms.append("base longue")
+        elif p is prov_crypto:
+            noms.append("crypto")
+        else:
+            noms.append("maj quotidienne")
+    return noms
+
+
 def _load_prices(instruments, sector_of, start, end, seed):
     """Charge l'OHLCV : base RÉELLE (YAHOO.db…) en priorité, sinon synthétique sectorisé
     (et synthétique en complément pour les symboles absents de la base). Renvoie
     (data, mode, real_syms) — `real_syms` = symboles à données RÉELLES (les autres sont synthétiques
     et NE doivent PAS apparaître en production/allocation/graphes : prix factices)."""
     data, real_syms = {}, set()
+    # symbole → jour → source qui l'a fourni
+    _lignage: dict[str, dict[str, str]] = {}
     db = _price_db_path()
     prov_db = None
     if db is not None:
@@ -1341,15 +1360,23 @@ def _load_prices(instruments, sector_of, start, end, seed):
         else:
             provs = [p for p in (prov_db, prov_updates) if p]   # historique + maj fraîche (fusion)
         merged: dict = {}
-        for prov in provs:                               # ordre : YAHOO.db (historique) puis market.db
+        # EXTENSION SANS ÉCRASEMENT : la base longue garde la priorité, la couche de maj
+        # complète les dates manquantes → pas de discontinuité raw/ajusté au milieu de
+        # l'historique. Même règle que `merge_bars` depuis le 04/09 : les deux chemins
+        # appliquaient des priorités OPPOSÉES sur les mêmes bases (0,71 %/an d'écart sur
+        # le cœur QQQ). Le lignage enregistre quelle source a fourni chaque jour.
+        _noms = _noms_sources(provs, prov_db, prov_crypto)
+        for _nom, prov in zip(_noms, provs, strict=False):
             got = []
             for alias in _yahoo_aliases(s, ac_m):
                 got = prov.fetch_ohlcv(alias, "1d", start, end)
                 if len(got) >= 50:
                     break
-            for _b in got:                               # EXTENSION sans écrasement : YAHOO.db garde
-                merged.setdefault(_b.ts.isoformat()[:10], _b)   # la priorité, market.db complète les dates
-        # manquantes → pas de discontinuité d'ajustement (raw vs adjusted) au milieu de l'historique.
+            for _b in got:
+                _cle = _b.ts.isoformat()[:10]
+                if _cle not in merged:
+                    merged[_cle] = _b
+                    _lignage.setdefault(s, {})[_cle] = _nom
         if len(merged) >= 250:
             data[s] = sorted(merged.values(), key=lambda x: x.ts)
             real_syms.add(s)
@@ -1379,15 +1406,20 @@ def _index_series(aliases: list[str], start, end,
     )
     from packages.data.providers.db_provider import DBPriceProvider
     histories: dict[str, dict] = {alias: {} for alias in aliases}
-    _dbs = [_price_db_path(), ROOT / "data" / "market.db", ROOT / "data" / "crypto.db"]
-    for _dbp in _dbs:
+    # L'ORDRE EST LA POLITIQUE : la base longue d'abord, elle garde la priorité ; les
+    # suivantes ne comblent que les dates absentes (cf. `fusion_sources`).
+    _dbs = [(_price_db_path(), "base longue"),
+            (ROOT / "data" / "market.db", "maj quotidienne"),
+            (ROOT / "data" / "crypto.db", "crypto")]
+    lignage: dict[str, dict[str, str]] = {alias: {} for alias in aliases}
+    for _dbp, _nom in _dbs:
         if _dbp is None or not Path(_dbp).exists():
             continue
         try:
             prov = DBPriceProvider(_dbp)
             for a in aliases:
                 bars = prov.fetch_ohlcv(a, "1d", start, end)
-                merge_bars(histories[a], bars)
+                merge_bars(histories[a], bars, source=_nom, lignage=lignage[a])
         except Exception:  # noqa: BLE001
             continue
     selected = choose_history(aliases, histories, end)
@@ -1414,8 +1446,21 @@ def _index_series(aliases: list[str], start, end,
 
 def _index_closes(aliases: list[str], start, end,
                    fallback: list[float]) -> tuple[list[float], bool]:
+    """Cours seuls. Jeter les dates a un COÛT : cf. `_index_closes_dates`."""
     closes, _dates, real = _index_series(aliases, start, end, fallback)
     return closes, real
+
+
+def _index_closes_dates(aliases: list[str], start, end,
+                        fallback: list[float]) -> tuple[list[float], list[str], bool]:
+    """Cours ET dates. `_index_closes` jetait `_dates` juste avant qu'on en ait besoin.
+
+    Conséquence mesurée (04/09) : la courbe QQQ arrivait sans son calendrier,
+    et `compute_attribution` la comparait au preset PAR POSITION — deux calendriers
+    différents (indices vs univers négociable). Résultat publié : bêta 0,006 et
+    corrélation 0,008 pour un portefeuille long-only d'actions américaines. Le chiffre
+    était absurde et rien ne le signalait."""
+    return _index_series(aliases, start, end, fallback)
 
 
 def _curve_stats(eq: list[float], *, compte_reel: bool = False,
@@ -2116,8 +2161,11 @@ def build_snapshot(seed: int = 7) -> dict:
     except Exception:  # noqa: BLE001
         pass
     # cœur ETF (QQQ) et cœur top-10 méga-caps
-    _qqq_closes, _qqq_real = (_index_closes(["QQQ", "^NDX", "^IXIC"], start, end, ndx)
-                              if _qqq_pct > 0 else ([], False))
+    # Les DATES de QQQ voyagent avec ses cours : sans elles, l'attribution comparait
+    # deux calendriers par position (bêta 0,006 publié — cf. `_index_closes_dates`).
+    _qqq_closes, _qqq_dates, _qqq_real = (
+        _index_closes_dates(["QQQ", "^NDX", "^IXIC"], start, end, ndx)
+        if _qqq_pct > 0 else ([], [], False))
     _mc_curve, _mc_top, _mc_w, _mc_real, _mc_weighting = [], [], {}, False, "—"
     if _mc_pct > 0:
         from packages.backtest.megacap import megacap_equity_daily
@@ -2194,9 +2242,12 @@ def build_snapshot(seed: int = 7) -> dict:
         _diversifiants = {}
     # blocs de courbes (preset pur + cœurs) → permet au script make index-core de balayer N'IMPORTE
     # quel ratio instantanément, sur la VRAIE mesure de production (source de vérité unique).
+    # `dates` = calendrier du PRESET. `qqq_dates` = celui de QQQ, qui n'est PAS le même
+    # (indices vs univers négociable) : les publier séparément est ce qui permet à
+    # l'attribution d'apparier par date au lieu de supposer un calendrier commun.
     _ic_curves = {"preset": _preset_pure, "qqq": list(_qqq_closes), "megacap": list(_mc_curve),
                   "sector_mom": list(_sm_curve), "dates": _preset_pure_dates, "sp": list(sp),
-                  "diversifiants": _diversifiants}
+                  "qqq_dates": list(_qqq_dates), "diversifiants": _diversifiants}
     # JOURNAL DÉTAILLÉ + P&L du portefeuille de production (cœur QQQ + satellite preset) → justifie
     # la perf affichée (clic « Portefeuille (preset) » sur le dashboard). Prix réels, parts/cash.
     try:

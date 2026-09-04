@@ -83,7 +83,10 @@ class PerformanceAnalytics:
         cagr = (1 + total) ** (1 / years) - 1.0 if years > 0 and total > -1 else 0.0
         vol = sd * math.sqrt(ppy)
         sharpe = (mu - self.rf / ppy) / sd * math.sqrt(ppy) if sd > 0 else 0.0
-        downside = _std([min(0.0, x) for x in r])
+        # `_std` retranche la moyenne : c'est une dispersion, pas une amplitude.
+        # Mesuré le 04/09 : Sortino gonflé de 19,1 %. Définition unique ci-dessous.
+        from packages.portfolio.deviation import deviation_baissiere
+        downside = deviation_baissiere(r)
         sortino = (mu / downside * math.sqrt(ppy)) if downside > 0 else 0.0
         mdd = self._max_drawdown()
         calmar = (cagr / abs(mdd)) if mdd < 0 else 0.0

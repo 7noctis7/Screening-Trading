@@ -22,6 +22,33 @@ def _company_key(sym: str) -> str:
     return _DUAL_CLASS.get(sym.upper(), sym.upper())
 
 
+def _rendement_pondere(closes: dict, poids: dict, cur: list, t: int) -> float:
+    """Rendement pondéré du jour, sur les seules lignes RÉELLEMENT COTÉES à t et t+1.
+
+    CORRECTIF DU 04/09, ET C'EST UNE PANNE VISIBLE EN PRODUCTION. Ce calcul n'avait
+    AUCUNE garde. Depuis l'alignement par date, la matrice contient légitimement des NaN
+    (un titre ne cote pas toutes les dates du panel) — et `x * nan` vaut nan, donc **un
+    seul cours manquant rendait le rendement du jour NaN, l'équity NaN, et toute la fin
+    de la courbe avec**. `dump_static._clean` convertit ensuite NaN en `None`, que le
+    front lit comme zéro : le tableau de bord affichait **CAGR −100 %, pire baisse
+    −100 %** avec un Sharpe de 0,25 et un Sortino de 0,18 — RESTÉS POSITIFS, puisqu'ils
+    sont calculés sur les rendements avant nettoyage. Cette combinaison est impossible
+    pour une vraie courbe, et c'est elle qui a permis de remonter jusqu'ici.
+
+    `sector_momentum._rendement_jour` portait déjà cette garde ; celui-ci ne l'avait
+    jamais reçue. On renormalise les poids sur les lignes cotées : les ignorer sans
+    renormaliser supposerait que la part manquante fait 0 % ce jour-là — un rendement
+    inventé, pas une absence."""
+    valides = [s for s in cur
+               if np.isfinite(closes[s][t]) and np.isfinite(closes[s][t + 1])
+               and closes[s][t] > 0]
+    total = sum(poids.get(s, 0.0) for s in valides)
+    if not valides or total <= 0:
+        return 0.0
+    return float(sum(poids.get(s, 0.0) / total * (closes[s][t + 1] / closes[s][t] - 1)
+                     for s in valides))
+
+
 def _top_unique(ranked: list[str], top_n: int) -> list[str]:
     """top_n SOCIÉTÉS distinctes (déduplique les doubles classes d'actions)."""
     out: list[str] = []
@@ -126,7 +153,7 @@ def megacap_equity_daily(data: dict, asset_classes: dict | None = None, top_n: i
                 curw = {s: max(0.0, score[s]) / tot for s in cur}
             else:                                         # repli : équipondéré
                 curw = {s: 1.0 / len(cur) for s in cur} if cur else {}
-        r_d = float(sum(curw.get(s, 0.0) * (closes[s][t + 1] / closes[s][t] - 1) for s in cur)) if cur else 0.0
+        r_d = _rendement_pondere(closes, curw, cur, t)
         eq.append(eq[-1] * (1 + r_d))
         out_dates.append(dts[t + 1])
     if len(eq) < 30:

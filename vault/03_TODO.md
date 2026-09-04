@@ -17,6 +17,32 @@
       compte/indice sur les dates réelles. Un benchmark périmé est exclu, jamais forward-fill sur
       des mois avec l'étiquette « réel ».
 
+## ✅ Données & recherche — livré le 2026-09-04
+
+- [x] **P1 — Les deux priorités de fusion opposées : CORRIGÉ.** `_load_prices` gardait le
+      premier provider, `merge_bars` le dernier, sur les MÊMES bases — 0,71 %/an d'écart sur
+      le cœur QQQ. Une seule implémentation (`packages/data/fusion_sources`), premier gagne,
+      raison écrite (base longue ajustée vs maj brute → pas de couture raw/ajusté au milieu
+      de l'historique). Lignage : chaque jour porte le nom de sa source. ADR-0064. 9 tests.
+- [x] **P1 — Les désaccords entre bases sont MESURÉS.** `make diag-fusion` : recouvrement et
+      divergences par symbole. « Les bases sont d'accord » cesse d'être une hypothèse.
+- [x] **P1 — Un scan compte comme un essai.** `packages/research/scan_registre` : critères
+      structurés (liste fermée d'opérateurs), exécution pure, enregistrement au `ledger` sous
+      `scan_ad_hoc`/`exploratoire`, empreinte idempotente. Le `N` du DSR était SOUS-estimé —
+      les essais manuels ne laissent aucune trace. ADR-0065. 12 tests.
+- [x] **P1 — DuckDB : la fabrique n'a AUCUN appelant (constat).** `make bench-backend` mesure
+      la lecture SQLite vs DuckDB sur la vraie base, règle de décision écrite avant le run
+      (< 1,5× on reste ; ≥ 1,5× conditionné à l'unification `DBPriceProvider` /
+      `BarsRepository`). Aucun verdict sans mesure. ADR-0066.
+- [ ] **P1 — LANCER les deux mesures (poste local).** `make diag-fusion` puis
+      `make bench-backend`. Ce sont elles qui décideront s'il reste du travail sur les
+      données ; sans elles, les trois points ci-dessus sont outillés mais pas tranchés.
+- [ ] **P2 — Brancher le scanner sur le copilote.** `scan_registre` est prêt et testé ; il
+      manque l'outil côté `/api/ai/chat` qui traduit la question en critères, appelle
+      `executer` sur les lignes du screener, puis écrit au ledger si l'empreinte est neuve.
+- [ ] **P2 — Onze pages hors de la barre**, dont `/data` (l'onglet « entrepôt » demandé
+      existe déjà). À trancher explicitement plutôt qu'au fil des signalements.
+
 ## 🔴 P0 — DualMarketScreening : deux défauts qui invalident des verdicts (2026-08-22)
 Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
 - [ ] **Correction pour tests multiples (Benjamini-Hochberg)** sur le criblage de paires.
@@ -54,7 +80,9 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       conformes à la prémisse (GLD/QQQ +0,11, QQQ/TLT −0,09) mais aucun gain de Sharpe, et
       le Calmar reste en faveur de la production (0,605 vs 0,532). Détail complet dans
       `vault/10_BACKTEST_RESULTS.md`.
-- [ ] **P1 — `_index_series` et `_load_prices` fusionnent les bases en sens OPPOSÉS.**
+- [x] **P1 — Les deux sens de fusion : CORRIGÉ le 04/09** (cf. section « Données & recherche »
+      en tête de fichier). Ancien libellé conservé ci-dessous.
+- [ ] ~~**P1 — `_index_series` et `_load_prices` fusionnent les bases en sens OPPOSÉS.**~~
       Diagnostiqué le 03/09. `_load_prices` fait `setdefault` (YAHOO.db prioritaire,
       market.db comble les trous) — choix DÉLIBÉRÉ, commenté « pas de discontinuité
       d'ajustement raw vs adjusted ». `_index_series` fait `target[jour] = close` via
@@ -74,9 +102,24 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       exactement sur la fenêtre ancienne. À fenêtre égale le code a AMÉLIORÉ le preset
       (Sharpe 0,99 → 1,12, maxDD −31,7 % → −25,4 %) au prix de 3 points de CAGR. Détail
       dans `vault/04_JOURNAL.md`.
-- [ ] **P1 — AUDIT DE FUITE sur le momentum sectoriel** : CAGR 55,5 % sur 9,4 ans, DSR
-      100 %. Ce n'est pas un résultat, c'est une alerte. `leakage-hunter` + biais du
-      survivant, AVANT d'en dire quoi que ce soit d'autre.
+- [x] **P1 — AUDIT DE FUITE sur le momentum sectoriel : FAIT le 04/09.** Trois causes
+      séparées par la mesure. (1) Coûts absents — rotation mensuelle sur deux secteurs
+      comparée à QQQ, buy-and-hold de turnover nul : **0,64 pt de CAGR** mesuré sur
+      panneau synthétique. Corrigé à 5 bps, frais publiés. Réel mais MINEUR. (2) MM50 :
+      look-ahead DORMANT dans le préfixe (`out[0]` = moyenne des jours 0..w−1, lue à
+      t=10 elle contient l'avenir) — jamais lu aujourd'hui puisque la boucle démarre à
+      126, mais un `lookback` plus court le réveillerait en silence. Remplacé par NaN.
+      (3) **Univers de SURVIVANTS — la cause principale** : `build_snapshot` retire tout
+      titre dont la dernière barre a plus de dix jours, donc tous les délistés, AVANT le
+      backtest. Le statut du biais est désormais ATTACHÉ au résultat. ADR-0069. 9 tests.
+- [ ] **P1 — Le biais du survivant n'est pas CORRIGÉ, seulement déclaré.** Il faut
+      l'historique de prix des délistés ; le dépôt sait le catalogue sous-échantillonné
+      (43 symboles). Tant qu'il manque, ce cœur reste INDICATIF et le dit lui-même. À
+      trancher : re-sourcer les délistés, ou retirer ce cœur des candidats de production.
+- [ ] **P1 — Vérifier si les AUTRES backtests souffrent du même nettoyage d'univers.**
+      Le retrait des titres périmés est fait une fois dans `build_snapshot`, en amont de
+      TOUS les consommateurs (preset, conviction, megacap…). Le momentum sectoriel n'est
+      pas un cas particulier — c'est celui où le symptôme était le plus visible.
 - [ ] ~~**P1 — ancien : Fenêtre vs code**~~ Un ancien
       dashboard affichait Sharpe 1,34 / CAGR 20,1 % sur n=2391 depuis 2017-04 ; l'actuel
       0,95 / 14,9 % sur 2 580 séances depuis 2016-03. Treize mois de plus au début. Rejouer
@@ -84,12 +127,19 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
 - [ ] **P1 — 610 → 1 299 trades NON EXPLIQUÉ.** Plus du double, pour une fenêtre +8 % et un
       univers-graine inchangé (1 047 lignes, vérifié sur 6 commits). Changement de règle ou
       d'ensemble éligible. À trouver avant d'interpréter le PF 1,48 → 1,08.
-- [ ] **P2 — `obsidian.attribution` aligne par position** (`min(len)` + `[-n:]`) : c'est ce
-      qui a produit bêta 0,006 et corrélation 0,008 vs QQQ pour un portefeuille long-only
-      d'actions US. Aligner par DATE comme partout ailleurs.
-- [ ] **P2 — Unifier les trois conventions de Sortino.** `index_core._stats` corrigé le
-      03/09 ; `perf_summary` et `metrics.sortino` utilisent encore l'écart-type des
-      négatifs (1,04× la définition). Une seule source de vérité, comme pour le Sharpe.
+- [x] **P2 — `obsidian.attribution` alignait par position : CORRIGÉ le 04/09.** La racine
+      était `_index_closes`, qui jetait les dates rendues par `_index_series` une ligne avant
+      qu'elles servent. Les dates voyagent (`qqq_dates` au snapshot), l'appariement se fait par
+      date (`apparier_deux_series`), et sans les deux calendriers l'attribution REFUSE de
+      conclure. Contre-épreuve : un décalage de fin ne reproduit pas le défaut (les séries
+      finissent le même jour) — seuls des trous INTÉRIEURS le montrent, 0,29 contre 1,00 sur le
+      même actif. ADR-0067. 3 tests.
+- [x] **P2 — Les trois conventions de Sortino : UNIFIÉES le 04/09.** `portfolio.deviation`
+      porte la définition (RMS de min(r,0) sur N total), en Python pur — `analytics` et
+      `company_report` évitent numpy délibérément. Quatre appelants branchés. L'écart réel est
+      plus grand que ce que cette note annonçait : mesuré sur 2 520 rendements, ×1,128 pour
+      l'écart-type des négatifs et ×1,191 pour celui de min(r,0), pas ×1,04. Les Sortino
+      publiés baissent de 12 à 19 % : c'est une flatterie qui disparaît. ADR-0068. 7 tests.
 - [ ] ~~**P1 — Expliquer la dégradation du backtest**~~ : PF 1,19 → 1,08, espérance 6 $ → 2 $,
       payoff 2,79 → 2,62, 1 168 → 1 299 trades. Deux causes possibles à départager :
       `trail_atr=0` pas encore dans `main`, ou décalage du jeu de données (même P1 que

@@ -54,6 +54,36 @@ def _couts_aller_retour(universe: list, asset_classes: dict | None) -> np.ndarra
                        for s in universe])
 
 
+def _rendement_du_jour(A: np.ndarray, w: np.ndarray, t: int) -> float:
+    """Rendement pondéré à t, sur les seules lignes RÉELLEMENT COTÉES à t et t+1.
+
+    LA PANNE DU 04/09, VISIBLE EN PRODUCTION. Le calcul s'écrivait
+    `(w * (A[:, t+1] / A[:, t] - 1)).sum()`. Or **`0 * nan` vaut `nan` en numpy** : un
+    titre au poids ZÉRO, qu'on ne détient pas, suffisait à rendre le rendement du jour
+    NaN dès qu'il lui manquait un cours. L'equity devenait NaN, puis toute la fin de la
+    courbe. `dump_static._clean` convertit NaN en `None`, que le front lit comme zéro —
+    d'où **CAGR −100 %, pire baisse −100 %** au tableau de bord, avec un Sharpe de 0,25
+    et un Sortino de 0,18 restés POSITIFS puisqu'ils se calculent sur les rendements
+    d'avant nettoyage. Cette combinaison est arithmétiquement impossible pour une vraie
+    courbe, et c'est elle qui a permis de remonter à la cause.
+
+    Depuis l'alignement par date, la matrice contient légitimement des NaN : un titre ne
+    cote pas toutes les dates du panel. Le NaN n'est donc pas une anomalie à traquer en
+    amont, c'est un état normal que ce calcul devait savoir traverser.
+
+    Les poids sont RENORMALISÉS sur les lignes cotées : les ignorer sans renormaliser
+    supposerait que la part manquante fait 0 % ce jour-là — un rendement inventé, pas
+    une absence."""
+    valides = np.isfinite(A[:, t]) & np.isfinite(A[:, t + 1]) & (A[:, t] > 0)
+    poids = np.where(valides, w, 0.0)
+    total = float(poids.sum())
+    if total <= 0:
+        return 0.0
+    base = np.where(valides, A[:, t], 1.0)
+    variation = np.where(valides, A[:, t + 1] / base - 1.0, 0.0)
+    return float((poids / total * variation).sum())
+
+
 def preset_equity_daily(data: dict, quality: dict | None = None,
                         asset_classes: dict | None = None,
                         dd_target: float = 0.35, band: float = 0.03, step: int = 21,
@@ -86,7 +116,7 @@ def preset_equity_daily(data: dict, quality: dict | None = None,
                     nw = np.where(np.abs(nw - w) < band, w, nw)
                 reb_cost = float((np.abs(nw - w) * rt).sum())  # #P0-3 : coût du turnover ce jour-là
                 w = nw
-        r_d = float((w * (A[:, t + 1] / A[:, t] - 1)).sum()) - reb_cost   # quotidien NET de coûts
+        r_d = _rendement_du_jour(A, w, t) - reb_cost      # quotidien NET de coûts
         eq.append(eq[-1] * (1 + r_d))
         out_dates.append(dts[t + 1])
     if len(eq) < 30:

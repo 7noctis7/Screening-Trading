@@ -1335,3 +1335,168 @@ réelles) et `/events` (résultats trimestriels et IPOs) rejoignent « Marché �
 **Conséquences.** Onze pages restent hors de la barre. Ce n'est pas un oubli mais le résultat
 d'un arbitrage assumé : elles y restent jusqu'à décision explicite, plutôt que d'être réinsérées
 une par une au fil des signalements — ce qui déferait l'audit sans jamais le rediscuter.
+
+## ADR-0064 — Une seule politique de fusion des sources, et elle est tracée (2026-09-04)
+
+**Contexte.** Deux fonctions fusionnaient les mêmes bases de prix selon des règles opposées :
+`_load_prices` gardait le premier provider (`setdefault`), `merge_bars` gardait le dernier
+(`target[jour] = …`). Mêmes bases, mêmes dates, deux historiques pour le même actif selon la
+fonction qui le demandait — **0,71 %/an d'écart** mesuré sur le cœur QQQ. Aucune des deux ne
+savait qu'elle contredisait l'autre.
+
+**Décision.** Une implémentation unique (`packages/data/fusion_sources`), et c'est le PREMIER
+provider qui prime. La raison est écrite : la base longue porte un historique AJUSTÉ, la couche
+de mise à jour est brute ; la laisser écraser insérerait une discontinuité raw/ajusté au milieu
+de l'historique, dont les rendements de part et d'autre ne sont plus comparables. La fraîcheur
+survit à la règle, les dates récentes étant exactement celles qui manquent à la base longue.
+Chaque jour retenu porte le NOM de la source qui l'a fourni.
+
+**Conséquences.** Une copie d'une politique diverge toujours : c'est ce qui s'est produit ici,
+et l'unique implémentation est ce qui l'empêche de se reproduire. Le lignage transforme « d'où
+vient cette barre ? » en lecture. `make diag-fusion` chiffre les désaccords entre bases là où
+elles se recouvrent — un désaccord ne dit pas laquelle a raison, il dit que la priorité change
+le résultat.
+
+## ADR-0065 — Un scan est un ESSAI : il se compte, ou le Sharpe déflaté ment (2026-09-04)
+
+**Contexte.** Un scanner piloté en langage naturel balaie 200 titres en une minute. Chaque
+variante de seuil est un test supplémentaire, et vingt tests non enregistrés font passer pour
+significatif ce qui ne l'est pas. Le dépôt possède le remède (`ledger` compte les essais,
+`deflation_params` en tire le `N` du DSR) mais rien ne reliait le scanner au registre.
+
+**Décision.** Tout scan produit un enregistrement au ledger, sous le facteur `scan_ad_hoc` et
+au statut `exploratoire` — jamais « validé » : un scan ne valide rien. L'empreinte des critères
+NORMALISÉS (triés) sert de clé d'idempotence. Les critères sont structurés et validés contre une
+liste fermée d'opérateurs ; aucun parseur de langage naturel n'entre dans la couche de recherche,
+traduire la phrase reste le travail du modèle appelant.
+
+**Conséquences.** Le compte d'essais était jusqu'ici SOUS-estimé — les idées testées à la main ne
+laissent aucune trace — donc le DSR déflatait trop peu. Un scanner qui enregistre le rend honnête
+pour la première fois : la fonctionnalité qui menaçait la statistique devient ce qui la répare.
+L'idempotence est obligatoire dans les deux sens : rejouer une question ne la repose pas, mais
+deux seuils différents sont deux essais.
+
+## ADR-0066 — On ne branche pas DuckDB sans l'avoir mesuré (2026-09-04)
+
+**Contexte.** `make_bars_repository` arbitre entre sqlite et duckdb et n'a **aucun appelant**. Le
+dépôt DuckDB (79 lignes, export Parquet partitionné) porte lui-même la mention « écrit pour
+l'environnement de prod ; non exécuté hors-ligne ». Le chemin colonnaire est conçu, pas branché,
+et la question « irait-il plus vite ? » n'a jamais reçu de chiffre.
+
+**Décision.** Aucun basculement avant mesure. `make bench-backend` chronomètre la LECTURE — le
+coût qui pèse réellement sur les bancs — sur la vraie base, en lisant le MÊME fichier par les
+deux moteurs (comparer deux bases différentes mesurerait leur contenu, pas le moteur). La règle
+est écrite avant le run : gain médian < 1,5× → on reste sur SQLite ; ≥ 1,5× → le basculement se
+justifie, mais reste conditionné à l'unification de `DBPriceProvider` et `BarsRepository`.
+
+**Conséquences.** Ces deux abstractions sur la même donnée sont la vraie raison pour laquelle la
+fabrique n'a jamais eu d'appelant : « brancher DuckDB » n'est pas un changement de variable, c'est
+un refactor, et il doit être payé par un chiffre. Sans DuckDB installé, le banc ne rend aucun
+verdict et le dit — il ne suppose pas.
+
+## ADR-0067 — Sans les deux calendriers, on refuse de conclure (2026-09-04)
+
+**Contexte.** `compute_attribution` appariait la courbe du preset et celle de QQQ par position
+(`min(len)` puis `[-n:]`). Les deux suivent des calendriers différents — univers négociable
+contre indices — et le résultat publié était bêta 0,006, corrélation 0,008 pour un portefeuille
+long-only d'actions américaines. La racine était en amont : `_index_closes` jetait les dates que
+`_index_series` lui rendait, une ligne avant qu'elles servent.
+
+**Décision.** Les dates voyagent avec les cours (`_index_closes_dates`, `qqq_dates` au snapshot)
+et l'attribution apparie par date via `apparier_deux_series`. Quand un calendrier manque, elle
+renvoie `available: False` avec un motif au lieu de retomber sur l'appariement positionnel.
+
+**Conséquences.** Un résultat absent se voit ; un résultat faux se lit — c'est pourquoi le repli
+positionnel est refusé plutôt que conservé « au cas où ». La contre-épreuve compte autant que le
+correctif : un décalage de fin d'historique ne reproduit PAS le défaut (les deux séries finissant
+le même jour, le positionnel tombe juste), seuls des trous intérieurs le montrent — 0,29 contre
+1,00 sur le même actif. C'est aussi pourquoi le bug est resté invisible si longtemps.
+
+## ADR-0068 — Une seule définition de la déviation baissière (2026-09-04)
+
+**Contexte.** Trois conventions coexistaient et publiaient trois Sortino pour le même
+portefeuille. Mesuré sur 2 520 rendements : la définition donne 0,008314 ; l'écart-type des
+négatifs seuls 0,007369 (Sortino ×1,128) ; l'écart-type de min(r,0) 0,006979 (×1,191). Le backlog
+annonçait 1,04× — l'écart réel est trois à cinq fois plus grand, et les deux erreurs flattent.
+
+**Décision.** `packages/portfolio/deviation` porte la définition (Sortino & Price 1994 : racine
+de la moyenne des carrés sous le seuil, sur le nombre TOTAL d'observations), en Python pur parce
+que `analytics` et `company_report` évitent délibérément numpy. Quatre appelants y délèguent.
+
+**Conséquences.** Diviser par le nombre de négatifs était la plus grave des deux erreurs : le
+ratio cessait de dépendre de la FRÉQUENCE des pertes, ce que Sortino existe pour mesurer. Les
+Sortino publiés vont baisser de 12 à 19 % selon la page — ce n'est pas une régression, c'est la
+disparition d'une flatterie.
+
+
+## ADR-0069 — Un chiffre ne voyage pas sans son biais (2026-09-04)
+
+**Contexte.** Le cœur momentum sectoriel affichait 55,5 % de CAGR sur 9,4 ans, DSR 100 %.
+L'audit du 04/09 a séparé trois causes par la mesure : coûts absents (0,64 point de CAGR — réel
+mais mineur), look-ahead dormant dans la MM50 (jamais lu, réveillable en silence), et univers de
+survivants. La troisième domine : `build_snapshot` retire tout titre dont la dernière barre a
+plus de dix jours, donc tous les délistés, avant que le moindre backtest ne tourne.
+
+**Décision.** Le statut du biais est ATTACHÉ au résultat (`biais_survivant`), pas publié à côté.
+Il mesure les délistés réellement présents dans le panneau, et non — comme `survivorship_audit` —
+le rapport des délistés connus au nombre d'actifs : ce dernier annonce « corrigé (partiel) » sur
+un univers de survivants purs, parce qu'il répond à une autre question. Les coûts sont appliqués
+(5 bps, convention du dépôt) et publiés. Le préfixe de la moyenne mobile vaut NaN plutôt que la
+moyenne de la première fenêtre.
+
+**Conséquences.** Le biais n'est pas corrigé — cela exige l'historique des délistés, que le dépôt
+sait sous-échantillonné — mais il n'est plus séparable du chiffre qu'il conditionne. Un CAGR
+séparé de son biais se lit comme un résultat ; c'est ce qui s'est produit ici pendant que l'audit
+existait, disponible et jamais joint.
+
+
+## ADR-0070 — Le gate de publication refuse l'impossible, pas les mauvaises nouvelles (2026-09-04)
+
+**Contexte.** Le site a publié CAGR −100 %, gain total −100 %, pire baisse −100 %, avec un Sharpe
+de 0,25 et un Sortino de 0,18. Le gate `check_build` était vert : fichiers présents, volumineux,
+datés du jour. Il ne regardait jamais les nombres. La cause était `0 * nan = nan` en numpy, dans
+le calcul du rendement quotidien du preset — un titre au poids ZÉRO suffisait à annuler la courbe
+dès qu'il lui manquait un cours.
+
+**Décision.** Le gate contrôle désormais la PLAUSIBILITÉ, selon deux règles qui sont des
+contradictions et non des seuils : un capital anéanti ne peut pas coexister avec un ratio
+positif ; une courbe d'équity publiée ne peut pas contenir de `null`.
+
+**Pourquoi pas des seuils.** « CAGR < −50 % » serait un jugement sur la performance. Une
+stratégie a le droit de perdre beaucoup, et un gate qui refuse les mauvaises nouvelles finit par
+cacher les vraies. Une contradiction ne dépend d'aucune opinion. Vérifié : une perte sévère
+cohérente passe, un anéantissement avec Sharpe négatif passe, le cas du 04/09 est refusé.
+
+**Conséquences.** La seconde règle vaut mieux que la première : elle attrape la cause (le trou)
+plutôt que le symptôme (le chiffre absurde), et elle vaut avant même de savoir ce que le trou
+signifie. Le module vit dans `packages/` pour être exerçable en test — un gate qu'on ne teste pas
+est un gate qu'on découvre en panne le jour où il compte.
+
+
+## ADR-0071 — La cohérence du site est un contrat testé, pas une promesse (2026-09-04)
+
+**Contexte.** Demande explicite : « plus aucune erreur ni incohérence » entre local, en ligne,
+ordinateur, téléphone et onglets. Une promesse de ce type ne peut pas être tenue par un
+engagement verbal — ce carnet est plein d'affirmations qu'il a fallu retirer parce que le code ne
+les tenait pas.
+
+**Décision.** L'exigence devient un contrat vérifié : `coherence_site` (invariants entre courbes,
+dates et statistiques) et `gate_publication` (contradictions arithmétiques) tournent dans
+`check_build`, donc dans le workflow Pages, et FONT ÉCHOUER le déploiement. Un test permanent
+compare les routes appelées par le front aux fichiers écrits par le build statique : une route
+manquante rendrait 404 en ligne tout en marchant en local.
+
+**Le principe qui gouverne chaque règle : aucun faux positif.** Un gate qui crie au loup finit
+désactivé — le détecteur de fraîcheur macro de ce dépôt se trompait 4 fois sur 5 et « apprenait à
+être ignoré ». Toute règle est donc une impossibilité vérifiable sans connaître l'intention, et
+chaque règle est accompagnée de tests « doit PASSER » qui protègent sa crédibilité.
+
+**Ce qui est inventorié et non bloqué.** Les dates d'arrêté diffèrent légitimement entre domaines
+(la crypto cote le week-end). Le build les recense dans son log au lieu d'en faire une règle qui
+échouerait chaque samedi.
+
+**Conséquences, et limite assumée.** Le dispositif garantit la cohérence INTERNE des chiffres
+publiés et la parité local/en-ligne. Il ne garantit pas qu'un chiffre soit juste au sens
+économique — aucun automate ne le peut. Et le journal réel reste local-only : les chiffres de
+compte du site public ne sont pas ceux du Mac. Ce n'est pas une incohérence mais un périmètre,
+désormais affiché sur la page concernée.

@@ -5,6 +5,13 @@ import pathlib
 from packages.reporting import obsidian as O
 
 
+def _jours(n: int) -> list[str]:
+    """Calendrier simplifié — ce qui compte est que les DEUX séries en aient un."""
+    from datetime import date, timedelta
+    d0 = date(2025, 1, 1)
+    return [(d0 + timedelta(days=i)).isoformat() for i in range(n)]
+
+
 def _snap(max_dd=-0.12, breach_label="MU", dd_now_curve=True, var_reject=False):
     curve = [100 * (1.02 ** i) for i in range(120)]
     if not dd_now_curve:                                   # force un gros drawdown courant (chute finale)
@@ -22,7 +29,11 @@ def _snap(max_dd=-0.12, breach_label="MU", dd_now_curve=True, var_reject=False):
             "limits": {"ok": False, "top_name": "QQQ", "top_name_weight": 0.5,
                        "breaches": [{"type": "nom", "label": breach_label, "weight": 0.3, "limit": 0.2}]}}},
         "preset_ledger": {"summary": {"fees_paid": 19.0, "fees_pct": 0.0019, "reconciles": True}},
-        "index_core_curves": {"preset": curve, "qqq": [100 * (1.015 ** i) for i in range(len(curve))]},
+        # Les DEUX calendriers voyagent avec les courbes : sans eux, l'attribution
+        # apparierait par position — c'est ce qui avait produit un bêta de 0,006.
+        "index_core_curves": {
+            "preset": curve, "qqq": [100 * (1.015 ** i) for i in range(len(curve))],
+            "dates": _jours(len(curve)), "qqq_dates": _jours(len(curve))},
     }
 
 
@@ -30,6 +41,70 @@ def test_attribution_capm():
     a = O.compute_attribution(_snap())
     assert a["available"] is True
     assert "alpha_annual" in a and "beta_qqq" in a and 0.0 <= a["r2"] <= 1.0
+
+
+# ────────── L'appariement par DATE, et le refus quand il est impossible ──────────
+
+def test_des_trous_de_calendrier_ne_produisent_plus_un_beta_absurde():
+    """LE défaut du 04/09, et son mécanisme EXACT.
+
+    Le preset suit le calendrier de l'univers négociable, QQQ celui des indices : ils
+    diffèrent par des jours fériés d'indice, au MILIEU de l'historique. Compter les `n`
+    dernières valeurs de chacune fait alors glisser les dates les unes contre les autres
+    dès qu'on remonte avant le premier trou. D'où bêta 0,006 et corrélation 0,008
+    publiés pour un portefeuille long-only d'actions américaines.
+
+    Contre-épreuve chiffrée sur ces données : le MÊME actif, doté de douze jours fériés
+    intérieurs, donne **0,29 en appariement positionnel contre 1,00 par date**. Un
+    décalage de fin d'historique ne suffirait pas à le montrer — quand les deux séries
+    se terminent le même jour, le positionnel tombe juste par chance, ce qui est
+    précisément pourquoi le défaut est resté invisible.
+    """
+    n = 300
+    jours = _jours(n)
+    chocs = [0.001 + 0.02 * ((i * 7919 % 101) / 100 - 0.5) for i in range(n)]
+    feries = {40, 55, 70, 85, 100, 115, 130, 145, 160, 175, 190, 205}
+
+    def _serie(exclus: set) -> tuple[list[float], list[str]]:
+        v, val, dts = 100.0, [], []
+        for i in range(n):
+            v *= 1 + chocs[i]
+            if i in exclus:
+                continue
+            val.append(v)
+            dts.append(jours[i])
+        return val, dts
+    preset, dates_p = _serie(set())
+    qqq, dates_q = _serie(feries)          # même actif, calendrier troué
+    snap = _snap()
+    snap["index_core_curves"] = {"preset": preset, "dates": dates_p,
+                                 "qqq": qqq, "qqq_dates": dates_q}
+    out = O.compute_attribution(snap)
+    assert out["available"] is True
+    # `n_days` compte les RENDEMENTS : une intersection de N dates en produit N−1.
+    assert out["n_days"] == len(dates_q) - 1   # l'intersection, pas le min des len
+    assert out["corr_qqq"] > 0.99                 # et non 0,29 comme en positionnel
+
+
+def test_sans_calendrier_on_REFUSE_au_lieu_de_publier_un_chiffre():
+    """Un résultat absent se voit ; un résultat faux se lit. Retomber sur l'appariement
+    positionnel reproduirait exactement le bug qu'on corrige."""
+    snap = _snap()
+    snap["index_core_curves"].pop("qqq_dates")
+    out = O.compute_attribution(snap)
+    assert out["available"] is False
+    assert "calendriers absents" in out["motif"]
+
+
+def test_une_intersection_trop_courte_est_dite_trop_courte():
+    """Le motif distingue « pas de calendrier » de « pas assez de recouvrement »."""
+    snap = _snap()
+    jours = _jours(300)
+    snap["index_core_curves"] = {"preset": [100.0] * 300, "dates": jours,
+                                 "qqq": [100.0] * 10, "qqq_dates": jours[:10]}
+    out = O.compute_attribution(snap)
+    assert out["available"] is False
+    assert "séance" in out["motif"]
 
 
 def test_incident_ignores_intentional_core_breach():
