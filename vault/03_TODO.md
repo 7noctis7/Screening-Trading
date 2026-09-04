@@ -102,9 +102,24 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       exactement sur la fenêtre ancienne. À fenêtre égale le code a AMÉLIORÉ le preset
       (Sharpe 0,99 → 1,12, maxDD −31,7 % → −25,4 %) au prix de 3 points de CAGR. Détail
       dans `vault/04_JOURNAL.md`.
-- [ ] **P1 — AUDIT DE FUITE sur le momentum sectoriel** : CAGR 55,5 % sur 9,4 ans, DSR
-      100 %. Ce n'est pas un résultat, c'est une alerte. `leakage-hunter` + biais du
-      survivant, AVANT d'en dire quoi que ce soit d'autre.
+- [x] **P1 — AUDIT DE FUITE sur le momentum sectoriel : FAIT le 04/09.** Trois causes
+      séparées par la mesure. (1) Coûts absents — rotation mensuelle sur deux secteurs
+      comparée à QQQ, buy-and-hold de turnover nul : **0,64 pt de CAGR** mesuré sur
+      panneau synthétique. Corrigé à 5 bps, frais publiés. Réel mais MINEUR. (2) MM50 :
+      look-ahead DORMANT dans le préfixe (`out[0]` = moyenne des jours 0..w−1, lue à
+      t=10 elle contient l'avenir) — jamais lu aujourd'hui puisque la boucle démarre à
+      126, mais un `lookback` plus court le réveillerait en silence. Remplacé par NaN.
+      (3) **Univers de SURVIVANTS — la cause principale** : `build_snapshot` retire tout
+      titre dont la dernière barre a plus de dix jours, donc tous les délistés, AVANT le
+      backtest. Le statut du biais est désormais ATTACHÉ au résultat. ADR-0069. 9 tests.
+- [ ] **P1 — Le biais du survivant n'est pas CORRIGÉ, seulement déclaré.** Il faut
+      l'historique de prix des délistés ; le dépôt sait le catalogue sous-échantillonné
+      (43 symboles). Tant qu'il manque, ce cœur reste INDICATIF et le dit lui-même. À
+      trancher : re-sourcer les délistés, ou retirer ce cœur des candidats de production.
+- [ ] **P1 — Vérifier si les AUTRES backtests souffrent du même nettoyage d'univers.**
+      Le retrait des titres périmés est fait une fois dans `build_snapshot`, en amont de
+      TOUS les consommateurs (preset, conviction, megacap…). Le momentum sectoriel n'est
+      pas un cas particulier — c'est celui où le symptôme était le plus visible.
 - [ ] ~~**P1 — ancien : Fenêtre vs code**~~ Un ancien
       dashboard affichait Sharpe 1,34 / CAGR 20,1 % sur n=2391 depuis 2017-04 ; l'actuel
       0,95 / 14,9 % sur 2 580 séances depuis 2016-03. Treize mois de plus au début. Rejouer

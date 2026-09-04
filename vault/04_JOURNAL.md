@@ -1,5 +1,44 @@
 # 04 — JOURNAL
 
+## Session 2026-09-04 (suite 3) — Audit de fuite du momentum sectoriel : la cause est l'univers
+
+**Le verdict.** CAGR 55,5 % sur 9,4 ans avec DSR 100 % n'était pas un résultat. Trois causes
+possibles, séparées par la MESURE plutôt que par l'opinion :
+
+  · **coûts de transaction absents** — réel, et MINEUR. Le module rotait mensuellement sur deux
+    secteurs entiers sans jamais rien payer, tout en étant comparé à QQQ, un buy-and-hold de
+    turnover nul. Mesuré sur panneau synthétique (24 titres, 4 secteurs) : **0,64 point de
+    CAGR**. Corrigé (5 bps, même convention que `coeur_multi_actifs`), frais publiés avec le
+    résultat. Ce n'est pas l'explication.
+  · **look-ahead dormant dans la MM50** — `_sma` remplissait ses `w-1` premières cases avec
+    `out[0]`, la moyenne des jours 0..w-1 : lue à t=10, elle contient l'avenir. Jamais lue
+    aujourd'hui (la boucle démarre à `max(lookback, 50)` = 126), mais un `lookback` plus court
+    la réveillerait **en silence**. Remplacé par NaN — une comparaison avec NaN vaut False, donc
+    le titre est écarté du filtre au lieu d'être admis sur une valeur inconnaissable.
+  · **univers de SURVIVANTS** — et c'est la cause principale.
+
+**Le mécanisme, à la ligne près.** `build_snapshot` nettoie l'univers : tout titre dont la
+dernière barre a plus de dix jours est retiré de `data`. C'est-à-dire **tous les délistés, avant
+que le moindre backtest ne tourne**. Ce cœur classe ensuite des secteurs sur 9,4 ans en ne voyant
+que les sociétés qui existent ENCORE. Les faillites et radiations qui auraient vidé les paniers
+sectoriels ont été écartées par construction. C'est exactement la configuration qui fabrique un
+CAGR spectaculaire.
+
+**L'audit existait déjà et répondait à côté.** `survivorship_audit` rapporte le nombre de
+délistés CONNUS au nombre d'actifs : sur 3 titres vivants et 43 délistés au catalogue, il annonce
+« corrigé (partiel) » et 93,5 % de couverture. Il répond à « en connaît-on ? », pas à « sont-ils
+DANS le panneau ? ». Un délisté absent ne corrige rien. `_biais_survivant` compte donc les
+délistés RÉELLEMENT présents dans l'univers du backtest — zéro présent, biais ÉLEVÉ, quel que
+soit le catalogue.
+
+**Et surtout : le chiffre ne voyage plus seul.** Le statut du biais est attaché au résultat, pas
+posé à côté. Un CAGR séparé de son biais se lit comme un résultat — c'est précisément ce qui
+s'est produit jusqu'ici, l'audit étant disponible mais jamais joint.
+
+**Ce que je n'ai PAS fait.** Corriger le biais. Cela demande l'historique de prix des délistés,
+que le dépôt sait sous-échantillonné. Tant qu'il manque, ce cœur reste INDICATIF — et il le dit
+désormais dans son propre résultat.
+
 ## Session 2026-09-04 (suite 2) — Un bêta de 0,006, et trois Sortino pour un portefeuille
 
 **Le bêta absurde avait une cause lisible.** `compute_attribution` comparait la courbe du preset

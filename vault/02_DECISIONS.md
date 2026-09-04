@@ -1427,3 +1427,24 @@ que `analytics` et `company_report` évitent délibérément numpy. Quatre appel
 ratio cessait de dépendre de la FRÉQUENCE des pertes, ce que Sortino existe pour mesurer. Les
 Sortino publiés vont baisser de 12 à 19 % selon la page — ce n'est pas une régression, c'est la
 disparition d'une flatterie.
+
+
+## ADR-0069 — Un chiffre ne voyage pas sans son biais (2026-09-04)
+
+**Contexte.** Le cœur momentum sectoriel affichait 55,5 % de CAGR sur 9,4 ans, DSR 100 %.
+L'audit du 04/09 a séparé trois causes par la mesure : coûts absents (0,64 point de CAGR — réel
+mais mineur), look-ahead dormant dans la MM50 (jamais lu, réveillable en silence), et univers de
+survivants. La troisième domine : `build_snapshot` retire tout titre dont la dernière barre a
+plus de dix jours, donc tous les délistés, avant que le moindre backtest ne tourne.
+
+**Décision.** Le statut du biais est ATTACHÉ au résultat (`biais_survivant`), pas publié à côté.
+Il mesure les délistés réellement présents dans le panneau, et non — comme `survivorship_audit` —
+le rapport des délistés connus au nombre d'actifs : ce dernier annonce « corrigé (partiel) » sur
+un univers de survivants purs, parce qu'il répond à une autre question. Les coûts sont appliqués
+(5 bps, convention du dépôt) et publiés. Le préfixe de la moyenne mobile vaut NaN plutôt que la
+moyenne de la première fenêtre.
+
+**Conséquences.** Le biais n'est pas corrigé — cela exige l'historique des délistés, que le dépôt
+sait sous-échantillonné — mais il n'est plus séparable du chiffre qu'il conditionne. Un CAGR
+séparé de son biais se lit comme un résultat ; c'est ce qui s'est produit ici pendant que l'audit
+existait, disponible et jamais joint.
