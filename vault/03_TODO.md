@@ -17,6 +17,15 @@
       compte/indice sur les dates réelles. Un benchmark périmé est exclu, jamais forward-fill sur
       des mois avec l'étiquette « réel ».
 
+## 🔴 P1 — Trois dates d'arrêté distinctes sur le site (constaté 2026-09-04)
+
+- [ ] **`dashboard` racine et `data` sont datés du 18/06** quand `events`, `themes` et
+      `universe` le sont du 04/09, et `screener` / `dashboard.regime` du 02/09. Relevé par
+      l'inventaire du gate de publication, qui les imprime sans juger. Trois dates sur un
+      même site est peut-être légitime (fenêtre de backtest close vs données du jour), peut-être
+      pas — **à trancher par la mesure avant d'en dire quoi que ce soit**. C'est exactement le
+      genre d'incohérence entre onglets que l'utilisateur ne veut plus voir.
+
 ## ✅ Données & recherche — livré le 2026-09-04
 
 - [x] **P1 — Les deux priorités de fusion opposées : CORRIGÉ.** `_load_prices` gardait le

@@ -110,3 +110,37 @@ def test_les_dates_d_arrete_sont_RECENSEES_et_non_jugees():
 
 def test_un_payload_sans_arrete_ne_recense_rien():
     assert dates_d_arrete({"x": {"y": 1}}) == {}
+
+
+# ───── la règle doit s'appliquer à la forme RÉELLE, sinon elle est silencieuse ─────
+
+def _points(valeurs):
+    return [{"t": f"j{i}", "v": v} for i, v in enumerate(valeurs)]
+
+
+def test_la_regle_s_applique_aux_courbes_en_POINTS():
+    """LE défaut le plus grave du 04/09. `_nombres` ne connaissait que les listes de
+    nombres, alors que le tableau de bord publie `_dash_equity` en points `{t, v}` : la
+    règle écrite pour attraper le CAGR de −100 % ne se serait JAMAIS déclenchée sur le
+    vrai payload. Un faux positif fait échouer un build, on le voit ; un contrôle
+    silencieux laisse croire qu'on est protégé."""
+    motifs = courbe_vs_amplitude({"equity": _points([100.0, 110.0, 121.0]),
+                                  "metrics": {"cagr": -1.0}})
+    assert motifs and "jamais été anéanti" in motifs[0]
+
+
+def test_une_vraie_ruine_en_points_passe_toujours():
+    assert courbe_vs_amplitude({"equity": _points([100.0, 0.0]),
+                                "stats": {"total_return": -1.0}}) == []
+
+
+def test_les_longueurs_se_verifient_aussi_sur_les_points():
+    motifs = longueurs_courbe_dates({"equity": _points([1.0, 2.0, 3.0]),
+                                     "dates": ["a", "b"]})
+    assert motifs and "axe est décalé" in motifs[0]
+
+
+def test_un_tableau_de_positions_ne_declenche_rien():
+    """Sinon chaque page portant des lignes serait refusée."""
+    assert courbe_vs_amplitude({"equity": [{"symbol": "QQQ", "qty": 70.4}],
+                                "metrics": {"cagr": -1.0}}) == []

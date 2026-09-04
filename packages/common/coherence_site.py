@@ -46,7 +46,22 @@ def _fini(x: Any) -> bool:
 
 
 def _nombres(serie: Any) -> list[float]:
-    return [float(x) for x in serie if _fini(x)] if isinstance(serie, list) else []
+    """Valeurs numériques d'une courbe, quelle que soit sa FORME.
+
+    CORRECTIF DU 04/09, et c'est le plus grave des deux défauts de ce dispositif. Cette
+    fonction ne connaissait que les listes de nombres. Or le dépôt publie ses courbes
+    principales en listes de POINTS `{"t": date, "v": valeur}` — `_dash_equity`,
+    `alpaca_perf.curve`, `crypto_perf.curve`. La règle « une courbe positive interdit
+    une statistique de −100 % », écrite précisément pour attraper le CAGR de −100 %,
+    ne se serait donc **jamais déclenchée sur le vrai tableau de bord**.
+
+    Un faux positif fait échouer un build : on le voit. Un contrôle silencieux laisse
+    croire qu'on est protégé : on ne le voit pas. Le second est pire, et j'ai livré les
+    deux le même jour pour la même raison — j'ai deviné la forme du payload au lieu de
+    la lire."""
+    from packages.common.gate_publication import valeurs_de_courbe
+    valeurs = valeurs_de_courbe(serie)
+    return [float(x) for x in (valeurs or []) if _fini(x)]
 
 
 def courbe_vs_amplitude(bloc: dict, chemin: str = "") -> list[str]:
@@ -95,10 +110,11 @@ def longueurs_courbe_dates(bloc: dict, chemin: str = "") -> list[str]:
     dates = bloc.get("dates")
     if not isinstance(dates, list) or not dates:
         return []
+    from packages.common.gate_publication import valeurs_de_courbe
     motifs = []
     for cle in CLES_COURBES:
-        serie = bloc.get(cle)
-        if isinstance(serie, list) and serie and len(serie) != len(dates):
+        serie = valeurs_de_courbe(bloc.get(cle))
+        if serie and len(serie) != len(dates):
             motifs.append(f"{chemin}/{cle} : {len(serie)} point(s) pour "
                           f"{len(dates)} date(s) — l'axe est décalé")
     return motifs

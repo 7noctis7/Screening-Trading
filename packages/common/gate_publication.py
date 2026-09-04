@@ -38,6 +38,46 @@ def _fini(x: Any) -> bool:
     return isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x)
 
 
+# Clés portant la valeur d'un point de courbe. Le dépôt publie ses courbes sous DEUX
+# formes : une liste de nombres, ou une liste de points `{"t": date, "v": valeur}`
+# (`_dash_equity`, `alpaca_perf.curve`, `crypto_perf.curve`). Ignorer la seconde rendait
+# la règle SILENCIEUSE là où elle comptait le plus.
+CLES_VALEUR = ("v", "c", "close", "value", "equity")
+
+
+def valeurs_de_courbe(courbe: object) -> list | None:
+    """Valeurs d'une courbe, quelle que soit sa forme. `None` si ce n'en est pas une.
+
+    DEUX ERREURS DE MA PART, LE MÊME JOUR, ET ELLES ONT COÛTÉ DEUX DÉPLOIEMENTS.
+    J'ai d'abord deviné les NOMS de clés (`qqq` désigne aussi un poids, d'où un
+    `TypeError`), puis la FORME (les courbes sont des listes de points `{t, v}`, d'où
+    2 392 faux trous sur une courbe de 2 392 points — un faux positif, exactement ce
+    qu'un gate n'a pas le droit de produire).
+
+    Pire que le faux positif : `coherence_site` ignorait ces courbes en silence, si
+    bien que la règle écrite pour attraper le CAGR de −100 % ne se serait jamais
+    déclenchée sur le vrai payload. Un contrôle qui ne s'applique pas est plus
+    dangereux qu'un contrôle absent — on croit être protégé.
+
+    Une liste de dicts n'est une courbe que si ses points portent une valeur : sinon
+    c'est un tableau (positions, trades…) et on ne le juge pas."""
+    if not isinstance(courbe, list) or not courbe:
+        return None
+    scalaires = all(isinstance(x, (int, float, str)) or x is None for x in courbe)
+    # AU MOINS UN NOMBRE, sinon c'est une liste d'étiquettes (des dates, des symboles)
+    # et non une courbe. Une entrée textuelle AU MILIEU de nombres reste un trou :
+    # être indulgent là-dessus rendrait la règle silencieuse, le pire des défauts.
+    if scalaires and any(isinstance(x, (int, float)) and not isinstance(x, bool)
+                         for x in courbe):
+        return list(courbe)
+    if all(isinstance(x, dict) for x in courbe):
+        cle = next((k for k in CLES_VALEUR if any(k in x for x in courbe)), None)
+        if cle is None:
+            return None                    # tableau de lignes, pas une courbe
+        return [x.get(cle) for x in courbe]
+    return None
+
+
 def trous_dans_courbe(courbe: object) -> int:
     """Nombre de points non exploitables (`null`, NaN, texte) dans une courbe publiée.
 
@@ -56,9 +96,10 @@ def trous_dans_courbe(courbe: object) -> int:
     Un gate qui plante est aussi nuisible qu'un gate absent — il apprend qu'on peut
     l'ignorer, et le premier réflexe devant un build rouge inexpliqué est de le
     désactiver."""
-    if not isinstance(courbe, list) or not courbe:
+    valeurs = valeurs_de_courbe(courbe)
+    if valeurs is None:
         return 0
-    return sum(1 for x in courbe if not _fini(x))
+    return sum(1 for x in valeurs if not _fini(x))
 
 
 def contradictions(stats: dict | None) -> list[str]:
