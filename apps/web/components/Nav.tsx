@@ -43,7 +43,14 @@ const LINKS: [string, string][] = [
 // liens contextuels, ⌘K) — seule la SURFACE visible se réduit. La Fiche 360 (/fiche?sym=X)
 // remplace la navigation par tables : on clique un ticker, on voit tout l'objet.
 const GROUPS: [string, string[]][] = [
-  ["Marché", ["/screener", "/universe", "/macro", "/themes", "/crypto"]],
+  // `/sentiment` était devenue INTROUVABLE (signalé le 03/09 : « je ne retrouve plus
+  // l'onglet des news »). Elle n'avait pas été supprimée — la réduction à 3 groupes
+  // l'avait laissée hors de tout menu, joignable seulement par URL directe ou ⌘K. Une
+  // page qu'on ne peut atteindre qu'en connaissant son adresse n'existe pas pour
+  // l'utilisateur. Elle appartient à « Marché » : actualité du marché, du secteur, et
+  // des titres RÉELLEMENT détenus.
+  ["Marché", ["/screener", "/universe", "/macro", "/themes", "/sentiment", "/events",
+              "/crypto"]],
   ["Méthode & preuves", ["/methode", "/glossaire", "/echecs", "/journal", "/profil"]],
   ["Portefeuille", ["/dashboard", "/positions", "/risk"]],
 ];

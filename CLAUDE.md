@@ -30,6 +30,8 @@ reconstruit chaque jour ouvré par GitHub Actions (`.github/workflows/pages.yml`
 | `make reports` | notes d'analyse institutionnelles → `out/notes/` + vault |
 | `make audit` | audit PwC des bases de prix (gate CI : `--strict`) |
 | `make brief` | brief unifié (priorités + journal + diffs + audit) — démarrage de session |
+| `make sync` | récupère la branche de dev **sans conflit possible** (jamais `git pull` dessus) |
+| `make labs` | les 4 bancs de mesure : candidats, sorties, dimensionnement, recouvrement des signaux |
 | `make vault-search Q="..."` | recherche sémantique locale du vault (TF-IDF ; Ollama optionnel ; `--code`) |
 | `make contracts` | gate d'intégrité OHLCV (bloque l'impossible) — aussi en CI |
 | `make hf-push` / `hf-pull` | cache OHLCV souverain (HuggingFace, anti rate-limit yfinance) |
@@ -57,6 +59,38 @@ reconstruit chaque jour ouvré par GitHub Actions (`.github/workflows/pages.yml`
 - `pickle` chargé uniquement via `packages/common/safe_pickle` (anti-symlink + hash).
 - **Dev `localhost:3000`** : après un `make site` (build export), faire `cd apps/web && rm -rf .next && npm run dev`
   (sinon `Cannot find module './682.js'` / `/_document` — le `.next` export n'est pas relisible par `next dev`).
+- **`make start` ÉCRASAIT la branche que `make sync` venait de récupérer** (04/09). `start.sh` faisait
+  `git reset --hard origin/main` : `make sync` alignait la branche de dev sur ses derniers commits,
+  puis `make start` la ramenait sur `main` deux secondes plus tard. Les correctifs livrés ne
+  tournaient **jamais**, et rien ne le signalait — on cherchait un bug de cache dans du code qui
+  n'était pas chargé. Pire : le Makefile de `main` étant plus ancien, `make sync` disparaissait
+  ensuite (« No rule to make target 'sync' »), ce qui rendait la sortie impossible sans les trois
+  lignes d'amorçage. `start.sh` suit désormais la branche COURANTE et se contente d'AVERTIR du
+  retard sur `main`. **Symptôme à reconnaître : la ligne `✓ <sha> → <autre sha>` de `make start`
+  où le second sha n'est pas celui que `make sync` vient d'afficher.**
+- **Le cache `.next` resert l'ANCIEN rendu après un `make sync`** (03/09). Symptôme trompeur : le code
+  contient le correctif, le navigateur affiche la version d'avant, et **rien ne le signale** — on croit
+  lire le résultat de son correctif, on lit celui d'avant. Constaté sur deux correctifs le même jour
+  (onglet `/sentiment` remis dans la barre, étiquette macro « série arrêtée » corrigée). `start.sh`
+  tamponne désormais le commit du build dans `apps/web/.quant-build-commit` et purge `.next` s'il a
+  changé. **Avant de conclure qu'un correctif front ne marche pas, vérifier qu'il est BUILT.**
+- **Ne JAMAIS faire `git pull` sur la branche de dev.** Elle est RÉÉCRITE à chaque déploiement
+  (`reset --hard origin/main` + `push --force`), donc `pull` la voit divergée, tente une fusion et
+  laisse des marqueurs `<<<<<<<` dans les sources — `SyntaxError` sur du code valide à l'origine.
+  Utiliser **`make sync`** (`fetch` + `reset --hard`), qui abandonne d'abord tout merge en cours.
+  Filet supplémentaire : `git config pull.ff only` fait ÉCHOUER un pull divergé au lieu de fusionner.
+- **`make sync` n'existe pas AVANT le premier fetch** (piège d'amorçage, 03/09) : la cible vit dans
+  le Makefile de la branche, donc un poste resté en arrière répond `No rule to make target 'sync'`.
+  La commande qui sert à récupérer le code n'existe qu'une fois le code récupéré. **Amorçage manuel,
+  une seule fois** — le `stash` d'abord, pour mettre de côté un éventuel travail local plutôt que
+  de l'écraser :
+  ```
+  git stash push -u -m "avant-sync" 2>/dev/null
+  git fetch origin claude/screening-trading-platform-me9p11
+  git checkout -B claude/screening-trading-platform-me9p11 origin/claude/screening-trading-platform-me9p11
+  ```
+  `checkout -B` crée OU réaligne la branche selon qu'elle existe déjà : une seule forme pour les
+  deux cas. Ensuite `make sync` est disponible et ces trois lignes ne resservent jamais.
 - **Seuil sur `polyfit`/régression** : TOUJOURS une **tolérance relative** dans la comparaison
   (`x > band + 1e-9*max(1,|band|)`). Un canal **plat** (dispersion ~0) fait dériver la bande sous le
   niveau réel par erreur flottante → fausses cassures à chaque barre → capture du rendement de la barre

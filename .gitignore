@@ -21,6 +21,11 @@ htmlcov/
 # Données & artefacts locaux
 *.db
 data/journal.db          # journal de trades persistant — local-only (fills réels courtier)
+# Archives des lignes retirées du journal : elles portent les fills RÉELS du courtier
+# (symbole, quantité, prix, date, identifiant). Dépôt PUBLIC — jamais versionnées.
+data/lots-annules-*.json
+# Tampon du commit ayant produit le cache .next (cf. scripts/start.sh) — purement local.
+apps/web/.quant-build-commit
 *.sqlite
 *.parquet
 *.duckdb

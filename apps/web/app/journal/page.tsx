@@ -47,7 +47,12 @@ export default function Journal() {
         <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full align-middle"
           style={{ background: "color-mix(in srgb, #22c55e 16%, transparent)", color: "#22c55e" }}>RÉEL · paper</span></h1>
       <p className="text-muted text-xs">Chaque aller-retour du rebalancement paper : features figées à la <b>décision</b>,
-        fill broker, PnL réalisé, MFE/MAE. C'est la matière première du verdict GO/NO-GO du <b>2026-08-06</b> — publiée telle quelle, y compris les pertes.</p>
+        fill broker, PnL réalisé, MFE/MAE — publié tel quel, y compris les pertes.</p>
+      <p className="text-muted text-xs">Ce registre décrit les <b>trades</b>, pas la performance du compte : le verdict
+        GO/NO-GO du <b>2026-08-06</b> se lit sur la <b>courbe d'équité</b> du courtier, seule mesure qui n'oublie rien.
+        Un round-trip clos ici est un trade que le rebalancement a choisi de solder — les positions perdantes restent
+        ouvertes et n'y figurent pas, donc le taux de réussite affiché est <b>biaisé à la hausse</b> par construction
+        et ne se compare pas à celui d'un backtest.</p>
 
       {!data.available || rows.length === 0 ? (
         <EmptyState title="Journal vide (pour l'instant)"
@@ -63,6 +68,18 @@ export default function Journal() {
             <MetricCard label="Expectancy / trade" value={st.expectancy != null ? usd(st.expectancy) : "UNCALIBRATED"} />
           </section>
           {st.status && <p className="text-muted2 text-xs">⚠️ {st.status} — les stats agrégées n'apparaissent qu'avec un échantillon suffisant (jamais de chiffre inventé).</p>}
+          {st.perimetre?.avertissement && (
+            <section className="card p-3 text-xs space-y-1">
+              <p className="text-muted"><b>Périmètre affiché ≠ compte.</b> {st.perimetre.avertissement}</p>
+              <p className="text-muted2 mono">
+                affiché : {st.perimetre.affiche?.n ?? 0} lots · réalisé {usd(st.perimetre.affiche?.pnl_realise ?? 0)}
+                {st.perimetre.affiche?.win_rate != null && ` · ${(st.perimetre.affiche.win_rate * 100).toFixed(0)}% de réussite`}
+                {"  —  "}
+                compte : {st.perimetre.compte?.n ?? 0} lots · réalisé {usd(st.perimetre.compte?.pnl_realise ?? 0)}
+                {st.perimetre.compte?.win_rate != null && ` · ${(st.perimetre.compte.win_rate * 100).toFixed(0)}% de réussite`}
+              </p>
+            </section>
+          )}
           {sl.available ? (
             <section className="card p-3 text-xs text-muted flex flex-wrap gap-x-6 gap-y-1">
               <span title="Écart entre le prix connu à la DÉCISION et le fill réel — sert à calibrer le sabotage-gate avec du vécu.">

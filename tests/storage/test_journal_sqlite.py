@@ -144,3 +144,32 @@ def test_snapshot_immutable_after_persist():
     j.append(_record(features={"rsi": 55.0}))
     j.all()[0].features_snapshot["rsi"] = 999.0          # mutation d'une lecture
     assert j.all()[0].features_snapshot["rsi"] == 55.0   # base intacte
+
+
+def test_supprimer_retire_par_identifiant(tmp_path):
+    """Le retrait existe pour le seul cas que l'écriture de correction ne couvre pas :
+    un enregistrement décrivant une opération qui n'a pas eu lieu."""
+    from packages.core.models import AssetClass, Side, TradeRecord
+    from packages.storage import SqliteTradeJournal
+    j = SqliteTradeJournal(tmp_path / "j.db")
+    for i in (1, 2):
+        j.append(TradeRecord(
+            id=f"LEG-{i}", instrument="ICLN", asset_class=AssetClass.EQUITY,
+            venue="Alpaca", side=Side.LONG, qty=10.0,
+            entry_ts=datetime(2026, 6, 23, tzinfo=timezone.utc), entry_price=20.83,
+            avg_price=20.83), legacy=True)
+    assert j.supprimer(["LEG-1"]) == 1
+    assert [t.id for t in j.all()] == ["LEG-2"]
+
+
+def test_supprimer_sans_id_ne_touche_a_rien(tmp_path):
+    """Une liste vide ne doit pas produire un DELETE sans clause."""
+    from packages.core.models import AssetClass, Side, TradeRecord
+    from packages.storage import SqliteTradeJournal
+    j = SqliteTradeJournal(tmp_path / "j.db")
+    j.append(TradeRecord(
+        id="LEG-1", instrument="ICLN", asset_class=AssetClass.EQUITY, venue="Alpaca",
+        side=Side.LONG, qty=10.0, entry_ts=datetime(2026, 6, 23, tzinfo=timezone.utc),
+        entry_price=20.83, avg_price=20.83), legacy=True)
+    assert j.supprimer([]) == 0
+    assert len(j.all()) == 1

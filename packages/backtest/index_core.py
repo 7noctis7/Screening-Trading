@@ -25,8 +25,13 @@ def _stats(eq: list[float]) -> dict:
     total = float(e[-1] / e[0] - 1)
     cagr = float((1 + total) ** (252.0 / len(r)) - 1) if total > -1 else -1.0
     sd = float(r.std())
-    dn = r[r < 0]
-    dsd = float((dn ** 2).mean() ** 0.5) if dn.size else 0.0
+    # DÉVIATION BAISSIÈRE, définition de Sortino : moyenne des carrés des rendements
+    # NÉGATIFS sur le nombre TOTAL d'observations — pas sur le nombre de négatifs.
+    # Diviser par le seul compte des pertes gonfle le dénominateur et écrase le ratio :
+    # mesuré le 03/09, cette version rendait un Sortino 30 % TROP BAS, au point de le
+    # faire passer sous le Sharpe. Un Sortino inférieur au Sharpe est le symptôme :
+    # à moins d'une asymétrie franchement négative, il lui est supérieur.
+    dsd = float((np.minimum(r, 0.0) ** 2).mean() ** 0.5)
     peak = np.maximum.accumulate(e)
     mdd = float((e / peak - 1).min())
     return {"available": True, "cagr": round(cagr, 4), "total_return": round(total, 4),

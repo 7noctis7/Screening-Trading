@@ -27,10 +27,24 @@ _EPS = 1e-6
 
 def open_lots(journal, instrument: str | None = None,
               venue: str | None = None) -> list[TradeRecord]:
-    """Lots encore ouverts (`legacy=0`, sans exit), FIFO (entry_ts croissant)."""
+    """Lots encore ouverts (`legacy=0`, sans exit), FIFO (entry_ts croissant).
+
+    APPARIEMENT PAR SYMBOLE CANONIQUE, et c'est un CORRECTIF (03/09). La comparaison
+    était `t.instrument == instrument`, exacte au caractère près. Or les lots crypto
+    sont écrits « AVAX/USDC » tandis que les ventes reviennent d'Alpaca en « AVAXUSD » :
+    aucune vente crypto ne pouvait donc fermer son lot. Mesuré ce jour-là sur le compte
+    réel : 41,9 AVAX au journal contre 214,6 détenus, 7,2 LTC contre 37,1 — la poche
+    crypto s'accumulait en orphelins depuis l'origine, sans qu'aucune erreur ne sorte.
+
+    Le dépôt connaissait déjà ce piège ailleurs : `execution/routing` le documente avec
+    l'incident du 27/08 (liquidation crypto bloquée par le calendrier NYSE parce
+    qu'`AAVEUSD` n'était pas reconnu comme crypto). Même cause, autre symptôme.
+    """
+    from packages.research.biais_fermeture import symbole_canonique
     lots = [t for t in journal.all(legacy=False) if t.exit_ts is None]
     if instrument is not None:
-        lots = [t for t in lots if t.instrument == instrument]
+        cible = symbole_canonique(instrument)
+        lots = [t for t in lots if symbole_canonique(t.instrument) == cible]
     if venue is not None:
         lots = [t for t in lots if t.venue == venue]
     return sorted(lots, key=lambda t: t.entry_ts)

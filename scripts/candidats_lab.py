@@ -1,0 +1,325 @@
+#!/usr/bin/env python3
+"""Quatre candidats, un seul protocole — avant d'en câbler un seul.
+
+CE QUE CE BANC DÉCIDE, ET DANS QUEL ORDRE. Un candidat doit franchir DEUX portes, et la
+première n'a rien à voir avec sa qualité propre :
+
+  1. APPORTE-T-IL QUELQUE CHOSE DE NOUVEAU ? Le Sharpe d'une combinaison de N flux de
+     Sharpe s et corrélation rho vaut s·sqrt(N/(1+(N-1)·rho)). Un flux corrélé à 0,7
+     n'apporte quasi rien, quel que soit son Sharpe propre. La corrélation se lit donc
+     AVANT le Sharpe.
+  2. TIENT-IL DEBOUT SEUL ? Sharpe, PSR, et surtout DSR — déflaté du nombre d'essais,
+     celui-ci inclus.
+
+LES CANDIDATS. Trois sont pilotés par le prix et passent par le harnais commun ; le PEAD
+est piloté par un ÉVÉNEMENT, ce qui en fait le seul structurellement orthogonal à la
+tendance — et c'est aussi pour ça qu'il est le plus prometteur.
+
+  · pead (proxy)      écart de cours exceptionnel = annonce ; on suit la dérive 21 jours
+  · échec d'enchère   mèche de rejet sur volume, mesuré à phi ~ 0 du filtre existant
+  · structure pivots  BOS/CHoCH — attendu redondant avec la tendance, on le vérifie
+  · canal (IDWM)      cassure du plus-haut de canal = Donchian, la version testable des
+                      « key levels » intraday/daily/weekly/monthly
+
+RÉSERVE SUR LE PEAD. Le proxy détecte l'événement par le PRIX (gap exceptionnel), faute
+de calendrier de résultats dans la base. C'est ce que fait déjà le blackout du preset.
+La confirmation sur vraies dates passe par `scripts/backtest_earnings.py`, qui les
+récupère chez yfinance — plus lent, mais c'est lui qui fait foi.
+
+    python scripts/candidats_lab.py           # ~150 titres
+    python scripts/candidats_lab.py 300
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+FENETRE = 250
+PAS = 5
+SEUIL_GAP = 0.06                 # |variation d'un jour| au-delà = « annonce » (proxy)
+DERIVE = 21                      # jours de dérive suivis après l'événement (PEAD)
+
+
+TENUE_JOURS = 21                 # durée de détention après déclenchement (~1 mois)
+
+
+def _capitulation(data: dict, hebdo: bool = True, moyennes=None,
+                  tenue: int = TENUE_JOURS):
+    """Candidat capitulation, PRÉCALCULÉ par titre — hebdomadaire ou quotidien.
+
+    LES DEUX RÉSOLUTIONS SONT DEUX SIGNAUX DIFFÉRENTS, pas le même mieux échantillonné.
+    MM200 hebdo couvre 3,8 ans : un marché baissier séculaire, qui n'arrive qu'une
+    ou deux fois par titre en onze ans — trop peu pour prouver quoi que ce soit. MM200
+    quotidienne couvre 9,5 mois : une correction intermédiaire, bien plus fréquente,
+    donc bien plus d'ÉPISODES INDÉPENDANTS. C'est de là que vient le gain statistique —
+    pas de la résolution en elle-même.
+
+    On n'ajoute PAS de troisième variante « même horizon » (MM1000 quotidienne) : elle
+    décrirait les mêmes épisodes observés cinq fois plus souvent, donc sans gain de
+    n_effectif, et chaque essai supplémentaire relève le seuil du DSR sur tout le reste.
+
+    Ce candidat exige 200 moyennes hebdomadaires, soit ~1 400 jours de fenêtre. Repartir
+    des barres quotidiennes à chaque appel demanderait de ré-agréger 1 400 barres pour
+    786 titres et 550 décisions — inexécutable. On agrège donc UNE fois par titre, on
+    évalue `signal_hebdo` semaine par semaine, et le signal quotidien lit la réponse de
+    la semaine close la plus récente.
+
+    L'ANTI-FUITE EST PRÉSERVÉE, seul point qui compte : `signal_hebdo(sem, i)` ne lit
+    que `sem[:i+1]`, et la réponse de la semaine `i` n'est consultée qu'à partir du jour
+    qui SUIT sa clôture. Précalculer n'est pas anticiper.
+    """
+    from packages.indicators.volume_capitulation import (
+        MOYENNES,
+        hebdomadaire,
+        signal_sur,
+    )
+    mm = tuple(moyennes or MOYENNES)
+    reponses: dict[str, dict] = {}
+    for sym, barres in data.items():
+        agregees = hebdomadaire(barres, inclure_partielle=True) if hebdo else barres
+        par_jour: dict = {}
+        dernier = None
+        for i, s in enumerate(agregees):
+            if signal_sur(agregees, i, moyennes=mm):
+                dernier = _jour(s.ts)
+            par_jour[_jour(s.ts)] = dernier
+        reponses[sym] = par_jour
+    ordonnees = {s: sorted(d) for s, d in reponses.items()}
+
+    def signal(barres, symbole) -> bool:
+        """Vrai si un déclenchement a eu lieu dans les `tenue` derniers jours.
+
+        LA DÉTENTION EST BORNÉE, et ce n'est pas un détail. La première version posait
+        un VERROU jamais relâché : un titre déclenché une fois restait sélectionné
+        jusqu'à la fin. La part investie saturait alors à 88,9 % pour QUATRE
+        configurations différentes — à la décimale près — alors qu'elles allaient de
+        7 628 à 65 992 déclenchements. Le banc mesurait « jours écoulés depuis le
+        premier signal », pas la fréquence du signal : un tableau vide de sens tout en
+        paraissant renseigné.
+
+        `tenue` est DÉCLARÉE (21 jours ≈ un mois, la fenêtre de dérive usuelle, celle
+        du candidat PEAD), pas ajustée sur les données.
+        """
+        import bisect
+        d = _jour(barres[-1].ts)
+        dates = ordonnees.get(symbole) or []
+        k = bisect.bisect_right(dates, d) - 1
+        if k < 1:                                  # aucune barre close avant ce jour
+            return False
+        dernier = reponses[symbole][dates[k - 1]]
+        return dernier is not None and (d - dernier).days <= tenue
+
+    # Les DÉCLENCHEMENTS bruts, distincts de l'état « détenu ». Compter l'état
+    # revient à compter la durée de détention, pas la fréquence du signal — c'est ce
+    # que faisait le banc, d'où des colonnes identiques pour des signaux différents.
+    signal.declenchements = {sym: sorted({d for d in par.values() if d is not None})
+                             for sym, par in reponses.items()}
+    return signal
+
+
+def _jour(ts):
+    return ts.date() if hasattr(ts, "date") else ts
+
+
+def _signaux() -> dict:
+    from packages.indicators.market_structure import echec_enchere, tendance
+    from packages.research.breakout import channel_break
+
+    def pead_proxy(b, _s) -> bool:
+        """Un gap haussier exceptionnel dans les `DERIVE` derniers jours → on suit."""
+        for k in range(len(b) - DERIVE, len(b)):
+            if k < 1:
+                continue
+            p0, p1 = float(b[k - 1].close), float(b[k].close)
+            if p0 > 0 and (p1 / p0 - 1.0) > SEUIL_GAP:
+                return True
+        return False
+
+    return {
+        "pead (proxy gap)": pead_proxy,
+        "échec d'enchère": lambda b, _s: bool(
+            echec_enchere(b, len(b) - 1).get("echec")),
+        "structure pivots": lambda b, _s: tendance(b, len(b) - 1) == "haussier",
+        "canal / IDWM": lambda b, _s: bool(
+            channel_break([x.close for x in b], win=60)["break"]),
+    }
+
+
+def _stats(rends: list[float], n_essais: int) -> dict:
+    import statistics as st
+
+    from packages.portfolio.psr import psr_dsr_depuis_rendements
+    if len(rends) < 60:
+        return {}
+    ec = st.pstdev(rends)
+    d = psr_dsr_depuis_rendements(rends, n_trials=n_essais)
+    return {"sharpe": (st.fmean(rends) / ec * (252 ** 0.5)) if ec > 0 else 0.0,
+            "psr": d.get("psr"), "dsr": d.get("dsr")}
+
+
+def _correlation(serie_a: dict, serie_b: dict) -> float:
+    """Corrélation de deux flux APPARIÉS PAR DATE, jamais par position.
+
+    LE DÉFAUT QUE CETTE SIGNATURE CORRIGE. Les deux séries n'ont pas le même axe : la
+    production indexe par POSITION dans la série la plus longue (`data[s][t]`), le
+    harnais par DATE de calendrier. Tronquer les deux à la même longueur ne les aligne
+    donc pas — elles dérivent l'une par rapport à l'autre dès qu'un titre a un
+    historique plus court.
+
+    HONNÊTETÉ SUR CE QUE CETTE CORRECTION A CHANGÉ : rien, sur les données actuelles.
+    J'ai soupçonné ce défaut en voyant un candidat « toujours vrai » — le marché
+    équipondéré — ressortir à rho = +0,18 face à la production, valeur trop basse pour
+    deux portefeuilles actions long-only. Vérification faite, l'appariement par date
+    donne exactement le même +0,183 : les axes coïncidaient déjà. Le rho bas est donc
+    RÉEL, et l'explication est ailleurs — la production reste flat une grande partie du
+    temps (porte VIX, stops), et un rendement nul les jours où le marché bouge fait
+    chuter la corrélation sans qu'aucun bug n'intervienne.
+
+    L'appariement par date est conservé quand même : il ne coûte rien et supprime une
+    fragilité latente. Mais il est présenté pour ce qu'il est — une garantie, pas un
+    correctif qui aurait déplacé un chiffre.
+    """
+    import statistics as st
+    communes = sorted(set(serie_a) & set(serie_b))
+    if len(communes) < 60:
+        return 0.0
+    a = [serie_a[d] for d in communes]
+    b = [serie_b[d] for d in communes]
+    sa, sb = st.pstdev(a), st.pstdev(b)
+    if sa <= 0 or sb <= 0:
+        return 0.0
+    ma, mb = st.fmean(a), st.fmean(b)
+    return sum((a[i] - ma) * (b[i] - mb) for i in range(len(a))) / len(a) / (sa * sb)
+
+
+def _melange(a: dict, b: dict) -> tuple[list[float], list[float]]:
+    """Flux 50/50 RÉELLEMENT construit, apparié par date — et la série de référence
+    restreinte aux mêmes dates, pour que le test soit apparié.
+
+    POURQUOI CE N'EST PAS UN DÉTAIL, ET C'EST MESURÉ. La colonne « 50/50 » était
+    calculée par la formule (s0 + s) / 2 / sqrt((1 + rho) / 2), qui suppose les DEUX
+    FLUX DE MÊME VARIANCE. Ils ne l'ont pas : mesuré sur un candidat de ce banc, 3,0 %
+    de volatilité annualisée côté production contre 10,5 % côté candidat — un rapport
+    de 3,5. À parts égales de CAPITAL, le candidat apporte donc l'essentiel du RISQUE.
+
+    L'écart n'est pas cosmétique : formule 0,84 contre mélange réellement construit
+    0,51. Un verdict « APPORTE » fondé sur la formule aurait annoncé un gain là où la
+    mesure donne une perte.
+
+    Ce que le banc ne fait PAS encore : pondérer par le risque plutôt que par le
+    capital. À risque égal, un candidat plus volatil pèserait moins et le mélange
+    dirait autre chose. C'est la mesure suivante, pas celle-ci.
+    """
+    communes = sorted(set(a) & set(b))
+    return ([a[d] for d in communes], [(a[d] + b[d]) / 2.0 for d in communes])
+
+
+def _datee(rendements: list[float], horodatage: list) -> dict:
+    """{date: rendement}. Le rendement d'indice i se réalise à l'horodatage i+1."""
+    return {_jour(horodatage[i + 1]): r
+            for i, r in enumerate(rendements) if i + 1 < len(horodatage)}
+
+
+def main() -> None:
+    from packages.research.flux_candidat import flux_quotidien
+    from packages.research.sharpe_diff import comparer
+    from scripts.sizing_lab import (
+        _donnees,
+        _essais,
+        _rendements,
+        _run,
+        _vix,
+        empreinte,
+    )
+
+    n_max = int(sys.argv[1]) if len(sys.argv) > 1 else 150
+    data, acmap, mode, n_reels, debut, fin = _donnees()
+    if n_reels < 30:
+        print("⚠️  Aucune base réelle branchée — ce banc ne décide de rien.")
+        return
+    data = {s: data[s] for s in sorted(data)[:n_max]}
+    signaux = _signaux()
+    # UNE SEULE configuration passe au banc de performance, choisie sur des critères
+    # STRUCTURELS par `scripts/reglage_capitulation.py` : 3 moyennes (50/100/200), en
+    # quotidien. La règle écrite d'avance retenait la plus restrictive gardant >= 4
+    # lignes détenues et |phi| < 0,50.
+    #
+    # TOUTES LES VARIANTES HEBDO SONT MORTES, et c'est mesuré : la plus généreuse
+    # ne tient que 1,5 ligne. Un empilement baissier sur 200 semaines est un marché
+    # baissier séculaire — trop rare pour produire une preuve, quel que soit son mérite.
+    #
+    # 4 MM quotidien rate à 3,9 lignes contre un seuil de 4,0. Le seuil n'est PAS
+    # descendu : l'écrire d'avance n'a de valeur que si on s'y tient quand il coûte 0,1.
+    signaux["capitulation 3MM daily"] = _capitulation(data, hebdo=False,
+                                                      moyennes=(50, 100, 200))
+    n_essais = _essais(len(signaux))
+
+    vix, prov = _vix(data, debut, fin)
+    print(f"\nmode {mode} · décision tous les {PAS} jours")
+    print(f"empreinte : {empreinte(data, prov)}")
+    ref = _run(data, acmap, 0.005, vix)
+    r_ref = _rendements(ref["equity"])
+    dates_ref = _datee(r_ref, ref["horodatage"])
+    s_ref = _stats(r_ref, n_essais)
+    print(f"  {'candidat':<20} {'lignes':>6} {'Sharpe':>6} {'DSR':>5} "
+          f"{'rho':>6} {'50/50':>6} {'Δ vs prod':>8}  verdict")
+    print("  " + "-" * 82)
+    print(f"  {'PRODUCTION (réf.)':<20} {'—':>6} {s_ref['sharpe']:>6.2f} "
+          f"{s_ref['dsr']:>5.0%} {'—':>6} {'—':>6} {'—':>8}")
+
+    for nom, fn in signaux.items():
+        # le candidat hebdomadaire lit une réponse PRÉCALCULÉE : deux barres suffisent
+        # à lui donner la date de décision, inutile de lui recopier 250 jours.
+        fen = 2 if "capitulation" in nom else FENETRE
+        f = flux_quotidien(data, fn, fenetre=fen, pas=PAS)
+        if not f.get("available"):
+            print(f"  {nom:<20} {f.get('motif', 'indisponible')}")
+            continue
+        if f["part_investie"] == 0.0:
+            # « Sharpe 0,00 » se lirait comme un résultat mesuré. Un signal qui ne
+            # s'est JAMAIS déclenché n'a pas de performance nulle : il n'a pas de
+            # performance du tout. Absence et zéro ne sont pas la même chose.
+            print(f"  {nom:<20} JAMAIS DÉCLENCHÉ sur cette période — rien à mesurer")
+            continue
+        st_c = _stats(f["rendements"], n_essais)
+        d_cand = dict(zip(f["dates"], f["rendements"], strict=True))
+        rho = _correlation(dates_ref, d_cand)
+        base, duo_rends = _melange(dates_ref, d_cand)
+        duo = _stats(duo_rends, n_essais).get("sharpe", 0.0)
+        # La ligne PRODUCTION du tableau porte sur TOUTE la série ; le mélange, lui, sur
+        # les seules dates communes (le harnais démarre après sa fenêtre). Soustraire
+        # l'une de l'autre compare deux échantillons différents — c'est ce qui faisait
+        # lire « +0,39 » là où le test apparié disait p = 0,39. On publie donc le DELTA
+        # du test, calculé sur les mêmes dates, plutôt que de laisser faire la
+        # soustraction au lecteur.
+        # Test APPARIÉ du mélange contre la production, sur les mêmes dates. Apparié et
+        # non indépendant : les deux séries partagent la production, donc leur écart a
+        # une variance bien plus faible qu'une comparaison générique — le test est
+        # d'autant plus puissant, et le seuil ±0,27 devient inutilement sévère ici.
+        d_test = comparer(base, duo_rends, periodes_par_an=252.0)
+        p_val = d_test.get("p", 1.0)
+        verdict = ("redondant" if abs(rho) >= 0.5
+                   else (f"APPORTE p={p_val:.3f}" if d_test.get("verdict") == "meilleur"
+                         else f"indiscernable p={p_val:.3f}"))
+        print(f"  {nom:<20} {f['lignes_moyen']:>6.1f} {st_c['sharpe']:>6.2f} "
+              f"{st_c['dsr']:>5.0%} {rho:>+6.2f} {duo:>6.2f} "
+              f"{d_test.get('delta', 0.0):>+6.2f}  {verdict}")
+
+    print("\n  « Δ vs prod » est le SEUL écart à lire : il vient du test apparié, sur")
+    print("  les mêmes dates que le mélange. La ligne PRODUCTION porte sur toute la")
+    print("  série, le mélange sur les dates communes — les soustraire comparerait")
+    print("  deux échantillons différents.")
+    print("\n  rho = corrélation des rendements quotidiens au flux de PRODUCTION.")
+    print("  « 50/50 » = Sharpe du mélange RÉELLEMENT CONSTRUIT, apparié par date —")
+    print("  plus une formule à variances supposées égales. Le p vient du test apparié")
+    print("  de Jobson-Korkie corrigé Memmel : le mélange contient la production, donc")
+    print("  leur écart a une variance faible et le test est puissant.")
+    print(f"  DSR déflaté de {n_essais} essais, ceux de ce banc inclus.\n")
+
+
+if __name__ == "__main__":
+    main()

@@ -1502,6 +1502,16 @@ def _screen_section(panel: dict, acmap: dict, names: dict, sector_of: dict, t: i
     }
 
 
+def _env_int(cle: str, defaut: int) -> int:
+    """Entier depuis l'environnement, sans jamais lever : un réglage illisible retombe
+    sur le défaut plutôt que d'empêcher le snapshot de se construire."""
+    import os
+    try:
+        return int(os.environ.get(cle, "") or defaut)
+    except (TypeError, ValueError):
+        return defaut
+
+
 def _essais_de_recherche(minimum: int = 20) -> int:
     """Essais RÉELS depuis le registre de recherche, pour déflater le Sharpe."""
     try:
@@ -1699,7 +1709,17 @@ def build_snapshot(seed: int = 7) -> dict:
         target_annual_vol=0.30, max_capital_frac=0.15, max_positions=20, max_pct=0.20,
         atr_stop=4.0, rr=6.0, vix=vix, close_at_end=False,
         daily_max_loss=0.06,        # kill-switch : stop des entrées si perte du jour > 6%
-        trail_atr=5.0,              # trailing stop ATR : protège les gains, laisse courir
+        # SUIVEUR RETIRÉ (scripts/sortie_lab.py, 02/09). Il ne protégeait pas les
+        # gains, il les COUPAIT. La cible vise +24 ATR ; le suiveur à 5 ATR mordait
+        # presque toujours avant, si bien que le 6:1 nominal n'existait pas. Deux runs
+        # sur deux jeux de données différents s'accordent sur le SENS : sans suiveur
+        # bat trail 5 sur payoff, marge, Sharpe, DSR, espérance et net — et le maxDD
+        # s'AMÉLIORE (−27,8 % contre −29,1 %) : la seule objection sérieuse tombe.
+        # Le risque par trade est inchangé : le stop initial à 4 ATR tient toujours.
+        # NON PROUVÉ pour autant : l'écart de Sharpe reste sous le seuil détectable
+        # (±0,27). C'est la cohérence de la famille (trail 3 très mauvais, trail 8
+        # intermédiaire, sans suiveur le meilleur) qui décide, pas un point isolé.
+        trail_atr=0.0,
         next_open_fills=True,       # exécution à l'ouverture suivante (anti look-ahead)
         # RISQUE CONSTANT à 0,5 % de l'equity par trade (scripts/sizing_lab.py, 01/09).
         # Le notionnel faisait dépendre la taille d'une ligne de combien le carnet
@@ -2101,8 +2121,13 @@ def build_snapshot(seed: int = 7) -> dict:
     _mc_curve, _mc_top, _mc_w, _mc_real, _mc_weighting = [], [], {}, False, "—"
     if _mc_pct > 0:
         from packages.backtest.megacap import megacap_equity_daily
+        # PANIER RÉGLABLE (QUANT_MEGACAP_TOP, défaut 10). Le classement reste
+        # POINT-IN-TIME : panier reclassé tous les 63 jours, pondéré à la date t
+        # pour le rendement t→t+1. Prendre le top-N d'AUJOURD'HUI et le rejouer
+        # sur onze ans serait un look-ahead massif — NVDA ne pesait rien en 2015.
+        _mc_top_n = max(int(_env_int("QUANT_MEGACAP_TOP", 10)), 2)
         _mc = megacap_equity_daily(_tradeable_data, asset_classes=acmap, init_cap=init_cap,
-                                   market_caps=_mktcaps or None)
+                                   top_n=_mc_top_n, market_caps=_mktcaps or None)
         if _mc.get("available"):
             _mc_curve, _mc_top = _mc["equity"], _mc.get("current_top", [])
             _mc_w, _mc_real, _mc_weighting = _mc.get("current_weights", {}), True, _mc.get("weighting", "—")
@@ -2156,10 +2181,22 @@ def build_snapshot(seed: int = 7) -> dict:
                                      "blended_stats": _curve_stats(_pe["equity"])})
     _core_px = float(_qqq_closes[-1]) if _qqq_closes else 0.0
     _core_sym = "QQQ"
+    # CŒUR MULTI-ACTIFS : clôtures des diversifiants reportées sur l'AXE DE DATES du preset.
+    # L'alignement se fait ICI, une fois, à la source — pour que le banc n'ait pas à le refaire
+    # (et à le rater). N'a AUCUNE incidence sur la production tant que QUANT_CORE_SPEC ne les
+    # cite pas : ce bloc ne fait qu'exposer des séries.
+    try:
+        from packages.backtest.coeur_multi_actifs import SYMBOLES as _MA_SYMS
+        from packages.backtest.coeur_multi_actifs import serie_sur_axe as _serie_axe
+        _diversifiants = {_s: _serie_axe(_tradeable_data.get(_s), _preset_pure_dates)
+                          for _s in _MA_SYMS if _tradeable_data.get(_s)}
+    except Exception:  # noqa: BLE001
+        _diversifiants = {}
     # blocs de courbes (preset pur + cœurs) → permet au script make index-core de balayer N'IMPORTE
     # quel ratio instantanément, sur la VRAIE mesure de production (source de vérité unique).
     _ic_curves = {"preset": _preset_pure, "qqq": list(_qqq_closes), "megacap": list(_mc_curve),
-                  "sector_mom": list(_sm_curve), "dates": _preset_pure_dates, "sp": list(sp)}
+                  "sector_mom": list(_sm_curve), "dates": _preset_pure_dates, "sp": list(sp),
+                  "diversifiants": _diversifiants}
     # JOURNAL DÉTAILLÉ + P&L du portefeuille de production (cœur QQQ + satellite preset) → justifie
     # la perf affichée (clic « Portefeuille (preset) » sur le dashboard). Prix réels, parts/cash.
     try:

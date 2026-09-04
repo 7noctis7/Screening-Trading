@@ -1,5 +1,318 @@
 # 04 — JOURNAL
 
+## Session 2026-09-04 — `make start` écrasait ce que `make sync` venait de récupérer
+
+**Ma explication d'hier était fausse.** J'avais mis les deux correctifs invisibles (`/sentiment`
+dans la barre, étiquette Bund) sur le compte du cache `.next`. Le terminal de l'utilisateur le
+montre autrement, en une ligne :
+
+    make sync   → b40ee72   (branche de dev, mes commits)
+    make start  → 43b15a9   (origin/main)
+
+`start.sh` faisait `git reset --hard origin/main`. `make sync` alignait la branche de dev, puis
+`make start` la réécrasait deux secondes plus tard sur `main`, où rien n'est mergé. **Les
+correctifs n'ont jamais tourné.** Et comme le Makefile de `main` est plus ancien, `make sync`
+disparaissait ensuite — l'utilisateur perdait jusqu'à la commande qui sert à sortir de là.
+
+**Le forçage visait un vrai danger** — une branche de travail restée en arrière, et `make start`
+ramenant du code vieux de quatre PR sans rien dire. Mais il en créait un pire : il détruisait
+l'état que l'utilisateur venait délibérément de demander. Un garde-fou qui écrase le geste qu'il
+est censé protéger n'est plus un garde-fou.
+
+**Ce qui remplace.** `start.sh` suit la branche COURANTE, et le danger d'origine est traité par
+un AVERTISSEMENT chiffré : « en retard de N commits sur main », avec la commande pour se
+réaligner. Informer laisse le choix ; écraser le retire. Vérifié sur dépôt jouet : sur `dev`,
+le contenu reste celui de `dev` ; HEAD détaché retombe sur `main`.
+
+**La leçon de méthode, et c'est la deuxième fois cette semaine.** J'ai expliqué un symptôme par
+une cause plausible — le cache — sans mesurer laquelle des deux agissait. La sortie du terminal
+contenait la réponse depuis le début. Chercher la cause dans le code qu'on croit exécuté, sans
+vérifier QUEL code est exécuté, c'est la même erreur que déduire un latent au lieu de le lire.
+
+## Session 2026-09-03 (suite 6) — Le correctif était juste ; c'est le build qui mentait
+
+**Deux correctifs poussés, deux « ça n'a pas marché ».** Le menu « Marché » affichait toujours ses
+cinq anciennes entrées sans `/sentiment`, et la tuile Bund portait encore « série arrêtée ». Le code
+poussé contenait pourtant les deux corrections, vérifiées dans le fichier.
+
+**La cause est le cache `.next`.** `make start` lance `npm run dev`, qui resert le rendu mis en cache.
+Après un `make sync` qui change les sources, le navigateur montre l'état d'AVANT — et rien ne le
+signale. C'est le pire mode de défaillance possible : on croit lire le résultat de son correctif,
+on lit celui d'avant, et l'on va chercher un bug déjà corrigé.
+
+**Le garde-fou.** `start.sh` tamponne le commit ayant produit le build dans
+`apps/web/.quant-build-commit` — HORS de `.next`, que Next régénère — et purge le cache si la tête
+courante en diffère. Trente secondes de rebuild contre une heure de fausse piste. Vérifié sur les
+trois cas : premier lancement (purge), relance au même commit (cache conservé), nouveau commit
+(purge). Ajouté aux pièges connus de `CLAUDE.md` : **avant de conclure qu'un correctif front ne
+marche pas, vérifier qu'il est BUILT.**
+
+## Session 2026-09-03 (suite 5) — Trois signalements de l'utilisateur, trois affirmations fausses du site
+
+**Le nettoyage a tenu.** 33 lots retirés : 343 enregistrements → 310, lots ouverts `legacy`
+45 → 12, lots fantômes 43 → 10, symboles à 2× **29 → 3**, excédent 3 308 → 1 317 unités, et
+« lots ouverts appariés à une vente » **33/52 → 0/19** — il n'en reste aucun que la preuve
+désigne. Le reliquat (NWL 1,74×, MAS 1,91×, QQQ 1,56×) tient à des ventes exécutées en
+PLUSIEURS fills, que le critère strict refuse d'apparier : c'est le plancher assumé.
+
+**Six sorties antérieures à leur entrée, −142,33 $.** SJM, STT, PATH, DUOL, TYL, T. La garde
+`_anterieur` empêche d'en créer ; elle ne rétroagit pas. Leur reprise reste ouverte.
+
+**« Mon profil » ne contraignait rien.** L'utilisateur demande : « une fois réglé, est-ce pris en
+considération ? » Mesuré : `quant.profil` n'est lu que par la page qui l'écrit, et `/api/profil`
+n'est appelée que par elle. Aucun autre écran, ni la chaîne d'exécution, ne les consulte. Or la
+page et l'API affirmaient toutes deux « ces chiffres CONTRAIGNENT votre outil ». C'est faux, et
+c'est la troisième affirmation de ce type corrigée aujourd'hui. Les deux textes disent désormais
+ce que le code fait : un calcul de RÉFÉRENCE.
+
+**Et le réglage se perdait — vraie course, vrai correctif.** L'effet d'écriture partait au
+MONTAGE, donc avec les valeurs par DÉFAUT (l'état restauré n'étant pas encore appliqué), et
+écrasait le stockage avant que la restauration ne s'y réécrive. Quitter la page entre ces deux
+instants suffisait à perdre le réglage. Un drapeau `lu` interdit d'écrire avant d'avoir lu, et
+la persistance est séparée de l'appel API — deux préoccupations, deux effets.
+
+**Une page invisible n'existe pas.** « Je ne retrouve plus l'onglet des news. » Elle n'avait pas
+été supprimée : la réduction à 3 groupes l'avait laissée hors de tout menu, joignable seulement
+par URL directe ou ⌘K. `/sentiment` et `/events` reviennent dans « Marché ». Onze autres pages
+restent hors de la barre (`/fiche`, `/live`, `/trades`, `/portfolio`, `/ml`, `/conviction`,
+`/notes`, `/investors`, `/fundamentals`, `/data`, `/accueil`) — c'est le résultat de l'audit
+« simplicité radicale », pas un accident, donc je ne le défais pas sans décision.
+
+**Le Bund n'était pas mort, il était en retard — et le détecteur ne savait pas dire la
+différence.** Dernière observation au 01/06, 94 jours, seuil 93 : dépassement d'UN jour, soit
+3,03× la cadence. Le cas qui a motivé la règle — chômage zone euro — valait 43×. Le même mot
+pour les deux le rend inutilisable, et la série OCDE des taux longs, publiée avec deux mois de
+décalage structurel, rebasculerait en « arrêtée » à chaque trimestre : une alerte qui clignote
+au rythme du calendrier de publication apprend à être ignorée. Deux seuils désormais — au-delà
+de 3× la publication est EN RETARD, au-delà de 12× (un an de silence sur du mensuel) la série
+est ARRÊTÉE. `perimee` reste vrai dès le retard pour ne casser aucun appelant ; `statut` porte
+la nuance.
+
+## Session 2026-09-03 (suite 4) — La lecture tient à l'échelle, et une sortie précédait son entrée
+
+**Confirmé sur 87 symboles, plus seulement deux.** 79 sur 87 ont des FERMETURES égales à la
+quantité achetée à 0,01 % près ; les 8 autres (PATH, T, QQQ, DUOL, TRV, TYL…) ferment MOINS
+qu'elles n'achètent — ce sont exactement les titres dont le journal et le courtier s'accordent
+dans le tableau des positions, c'est-à-dire ceux encore détenus. L'appariement des sorties est
+donc sain partout. **33 des 52 lots ouverts portent la signature exacte d'une vente exécutée**,
+et le critère étant strict (un fill unique de même quantité et même prix), 33 est un PLANCHER.
+
+**L'identité comptable est refermée : écart +3,93 $ sur +868,83 $.** De −4 198 $ ce matin.
+
+**Le bug que la question de l'utilisateur a trouvé.** « Une entrée DUOL le 03/09 et une sortie
+le 01/09, ce n'est pas logique. » Non, et c'était un défaut de `reconcilier_journal._plan` :
+l'appariement prenait le plus ancien lot du symbole **sans jamais regarder sa date d'entrée**.
+Une vente pouvait donc fermer un lot qui n'existait pas encore, et le P&L du round-trip fabriqué
+était calculé sur un prix de revient POSTÉRIEUR à la sortie. `_anterieur` compare désormais les
+deux dates AU JOUR — pas à la seconde : le lot porte l'instant où le run l'a écrit, le fill celui
+de l'exécution, et trancher à la seconde refuserait des aller-retours réels. Le FIFO saute le lot
+trop récent au lieu de s'arrêter. 4 tests.
+
+**Ce qui est livré pour le nettoyage, et sous quelles conditions.** `make annuler-ventes` retire
+les lots ouverts dont la signature est celle d'un fill de VENTE. Ni écriture de correction, ni
+fermeture au prix d'entrée : fermer produirait un aller-retour à 0,00 $ qui n'a jamais eu lieu et
+gonflerait le compte de trades — on remplacerait une fausse position par un faux trade. Une
+opération qui n'a pas eu lieu se retire. Survivent au retrait : une sauvegarde horodatée de la
+base ET un JSON qui garde chaque ligne avec le fill qui l'a désignée — un retrait sans sa preuve
+n'est pas rejugeable. Ce JSON porte des fills réels : ajouté au `.gitignore` (dépôt public).
+
+**Ce que l'outil refuse.** Courtier injoignable → aucune preuve → aucun retrait. Vente exécutée
+en plusieurs fills → pas d'appariement → le lot reste ouvert et reste signalé. On préfère un
+registre encore imparfait à un registre nettoyé sur une présomption.
+
+## Session 2026-09-03 (suite 3) — Le registre est exact là où il ferme ; il invente là où il ouvre
+
+**Le dump a répondu, et la réponse est plus simple que mes deux hypothèses.** Sur les deux titres
+ventilés, la partie FERMÉE du journal égale la quantité achetée **au dix-millième** :
+
+    ICLN — fermés 301,600106 · acheté 301,6001 · écart +0,0000 · OUVERT 301,600106
+    NWL  — fermés 1 554,626507 · acheté 1 554,6265 · écart +0,0000 · OUVERTS 1 306,379607
+
+L'appariement des sorties est donc juste. **Tout l'excédent est dans les lots OUVERTS**, et le
+chiffre des lots ouverts NWL — 1 306,379607 — est exactement celui que le tableau
+« journal vs positions réelles » signalait déjà comme fantôme.
+
+**Ce que ces lots ouverts sont.** Ils portent la date et le prix de VENTES :
+
+  · ICLN, lot ouvert de 301,600106 entré le 23/06 à 20,8300 — jour et prix EXACTS de la vente
+    qui a soldé les deux lots précédents ;
+  · NWL, lot ouvert de 155,375433 entré le 25/06 à 5,7800 — quantité identique au millionième,
+    même jour et même prix que la SORTIE `-R1`.
+
+Une vente a été enregistrée comme une ouverture. C'est la cause du « 2× » : le journal porte
+`acheté + vendu` là où un aller-retour complet est bouclé, d'où le rapport exactement 2,0000 sur
+les titres soldés, et 1,84 sur NWL qui ne l'est pas entièrement.
+
+**Ce qui est livré, et ce qui ne l'est pas.** `_excedent_dans_les_ouverts` teste cette lecture
+sur TOUS les symboles et sur chaque lot ouvert : existe-t-il chez le courtier une vente de même
+symbole, même quantité, même prix ? L'appariement est volontairement strict — une vente exécutée
+en plusieurs fills ne sera pas appariée — donc le compte renvoyé est un **plancher** : il
+sous-estime, il ne peut pas surestimer. C'est le sens qu'on veut pour un chiffre qui servira à
+décider d'un retrait de lignes. **Aucune ligne n'est retirée avant de l'avoir lu.**
+
+**Troisième hypothèse, première confirmée — et c'est la mesure qui l'a produite, pas une lecture
+de code.** Les deux précédentes (recouvrement import/live, puis deux identités par le chemin
+d'écriture) restent écrites avec ce qui les a démenties.
+
+## Session 2026-09-03 (suite 2) — Ma deuxième hypothèse sur le doublon est fausse aussi
+
+**Ce que la ventilation a répondu.** J'avais écrit deux lectures possibles : deux préfixes à ~1×
+chacun (import historique + live), ou un seul préfixe à 2× (le chemin d'écriture crée deux
+identités). C'est la seconde, et sous une forme que je n'avais pas prévue : **tout est `legacy=1`,
+tout porte le préfixe `LEG`, et la quantité se répartit sur PLUSIEURS identifiants** — ICLN
+603,2002 sur 3 ids pour 301,6001 acheté, NWL 2 861,0061 sur 8 ids pour 1 554,6265 acheté, RIOT
+248,4954 sur 2 ids pour 124,2477. Le recouvrement import/live est écarté : `legacy=0` vaut
+0,0000 sur les huit symboles ventilés.
+
+**Pourquoi je ne peux pas lire la cause dans le code.** `grep` sur tout le dépôt ne trouve AUCUN
+script qui écrive un identifiant `LEG-`. L'import qui les a produits n'est plus dans l'arbre.
+On ne peut donc pas lire son mécanisme — seulement ses traces. `--symbole` imprime tous les
+enregistrements d'un titre à plat (identifiant, quantité, entrée, sortie, motif), sans
+interprétation. Ce sont ces lignes qui diront si le même achat a été importé plusieurs fois sous
+des identités différentes, ou si un lot a été scindé sans que le reste soit réduit.
+
+**Deuxième hypothèse à moi, deuxième réfutation en deux mesures.** Je les laisse écrites toutes
+les deux dans le code, avec ce qui les a démenties : c'est le seul moyen qu'une troisième
+génération de lecteur ne les repose pas.
+
+**Un chiffre a bougé entre les deux diagnostics, et c'est normal.** Latent +439,93 $ puis
++541,36 $, écart −104,74 $ puis −220,43 $ : les cours ont changé entre 20 h 02 et 20 h 23. Le
+latent est une mesure de marché, pas une constante du registre.
+
+## Session 2026-09-03 (suite) — La réparation a tenu ; ce qu'elle a mis au jour ne l'était pas
+
+**Ce que la réparation a donné, mesuré.** `completer-ouvertures` a reconstitué 30 ouvertures
+(99 847 $ de coût de revient), `reconcilier-journal` a posté 67 fermetures avec les fills réels
+(−3 860 $), et la couverture est passée de **57/87 à 87/87 — 0 incomplet**. L'identité comptable
+se referme : réalisé +569,31 $, latent +439,93 $, attendu +1 009,24 $, constaté +904,50 $,
+**écart −104,74 $** — contre −4 198 $ avant. Le résidu résiduel vaut le latent au premier point
+de la courbe et les frais hors P&L, ce que le script disait devoir rester.
+
+**Ce que la complétion a refusé de toucher, et c'était le bon geste.** 40 symboles où le journal
+en sait PLUS que le courtier, signalés sans être corrigés. J'ai calculé le rapport sur les dix
+premiers : **2,000000 ×** dix fois de suite (AAPL 47,2824 contre 23,6412 ; BXP 212,6200 contre
+106,3100 ; FOX 317,8576 contre 158,9288). Ce n'est pas un arrondi. Le même achat est enregistré
+deux fois.
+
+**Pourquoi `_doublons` avait répondu « aucun doublon ».** Il ne compare que des lots OUVERTS de
+mêmes titre, quantité, prix et jour. Les deux copies ont des identifiants différents, l'une peut
+être fermée et l'autre non, et elles ne portent pas forcément le même drapeau `legacy`. Un test
+trop étroit avait donc répondu par la négative à une question qu'il ne posait pas — c'est la
+troisième fois de la semaine qu'une mesure trop spécifique passe pour une réfutation.
+
+**Ce qui est livré, et ce qui ne l'est pas.** `_origine_du_double` VENTILE la quantité par drapeau
+et par préfixe d'identifiant, sans rien supprimer. Deux préfixes portant chacun ~1× l'achat =
+recouvrement entre l'import historique et la journalisation live. Un seul préfixe portant 2× = le
+chemin d'écriture crée deux identités. Le chiffre tranchera au prochain `make diag-journal` ; je
+ne tranche pas ici, et aucune ligne n'est retirée avant de savoir laquelle.
+
+**Le panneau du site montrait un sous-ensemble favorable, et ne le disait pas.** `legacy=0`
+affiche +6 260,82 $ et 70 % de réussite ; le compte a subi +569,31 $ et 56 %, le filtre masquant
+266 lots et −5 691,51 $. Aucun des deux chiffres n'est faux : c'est de n'en publier qu'un qui
+l'était. `perimetre_affiche` publie désormais les deux côte à côte, chiffrés. On ne verse PAS les
+lots `legacy` dans la statistique affichée — ce sont des fills sans features de décision, et les y
+mêler rendrait inutilisable le chiffre qui sert la calibration ML.
+
+## Session 2026-09-03 — Le journal n'était pas faux, il était incomplet : la cause était à l'ENTRÉE
+
+**La question posée.** « Trouve la solution pour que le journal soit FIABLE, puis fais-la. »
+Deux jours de réparations portaient sur les SORTIES (lots orphelins, fermetures à +0,00 $,
+résidu inexpliqué). Elles étaient justes et insuffisantes : on refermait un registre dont la
+moitié des entrées n'avait jamais été écrite.
+
+**La mesure qui a tranché.** `make diag-journal` compare, symbole par symbole, la quantité
+ACHETÉE chez le courtier à celle que le journal connaît : **87 symboles achetés, 57 couverts,
+30 INCOMPLETS** — AVAX 626 unités au journal contre 1 239 achetées, PATH 9 contre 139. Un achat
+sans lot n'a pas de prix de revient : quand la position est vendue, le compte encaisse le
+résultat et le registre n'a rien à lui opposer. Aucune réparation des sorties ne peut refermer
+cet écart, parce qu'il ne naît pas là.
+
+**La cause, à la ligne près.** `run_live._journal_opens` prenait le prix et la quantité d'entrée
+dans la **position du courtier**, lue juste après l'envoi de l'ordre. Deux défauts dans un seul
+geste : si la position n'était pas encore rafraîchie (ordre non rempli à l'instant du run,
+marché fermé, latence), le fill était introuvable et l'achat n'était journalisé nulle part — le
+message disait « capturé au prochain run », mais **rien ne le capture** ; et quand la position
+était lisible, elle portait la quantité TOTALE et le prix de revient MOYEN, pas l'achat du jour.
+Le lot ne décrivait donc pas l'opération qu'il prétendait décrire.
+
+**Ce qui est branché.** Le fill vient désormais des **achats réellement exécutés du jour**
+(`agreger_achats` : quantité et VWAP, par symbole canonique, `AVAX/USDC` et `AVAXUSD` confondus),
+la position ne servant que de repli. Les fills existent après coup — un run tardif les retrouve,
+une position non rafraîchie non.
+
+**Le rattrapage de l'historique, et le point de méthode.** `make completer-ouvertures` reconstitue
+les achats manquants depuis les fills. Le prix retenu n'est **pas** le VWAP de tous les achats du
+symbole : ce serait mélanger les fills déjà couverts avec ceux qui manquent. On consomme les fills
+en FIFO à hauteur de ce que le journal couvre déjà, et on retient le VWAP de **ceux qui restent** —
+c'est-à-dire précisément ceux que le registre ignore. Ces lots sont écrits en `legacy=1` : leurs
+features de décision n'ont jamais été capturées et ne peuvent plus l'être, c'est la définition du
+drapeau. Les mettre en `legacy=0` gonflerait de trades aveugles la statistique qu'on cherche à
+rendre fiable.
+
+**Le piège que la complétion a révélé.** L'idempotence du réconciliateur écartait un fill de vente
+dès qu'il avait servi UNE fois. Une vente de 500 unités qui n'avait trouvé que 200 unités de lots
+était marquée consommée en entier : ses 300 unités restantes ne pourraient plus jamais fermer les
+lots reconstitués, condamnés à rester ouverts pour toujours. On compte désormais la **quantité**
+consommée par fill, pas son identifiant — le reste est rejoué, ni plus (pas de réalisé fabriqué),
+ni moins.
+
+**Ce que l'outil refuse de faire.** Rien pour un courtier muet : un silence n'est pas une mesure.
+Et là où le journal en sait PLUS que le courtier, l'écart est **signalé, jamais corrigé** — il dit
+autre chose (historique tronqué, lots fantômes), et un outil qui supprime des lots pour faire
+coller les chiffres ne répare rien.
+
+**Le panneau disait une chose fausse.** « C'est la matière première du verdict GO/NO-GO » : non —
+`rdv_paper` lit la courbe d'équité. Le texte dit maintenant ce que le registre est (les trades) et
+ce qu'il n'est pas (la performance du compte), et que son taux de réussite est **biaisé à la
+hausse par construction** — le rebalancement solde les gagnants et garde les perdants ouverts, ce
+qui explique 87 % au journal contre 28 % au backtest sans qu'aucun des deux soit faux.
+
+**Ordre d'exécution, et il n'est pas commutatif :**
+`make completer-ouvertures ARGS=--appliquer` → `make reconcilier-journal ARGS=--appliquer` →
+`make diag-journal`. Le réconciliateur ne peut fermer que des lots qui existent.
+
+## Session 2026-09-02 — Le suiveur coupait les gagnants, et deux runs identiques ne l'étaient pas
+
+**Le résultat.** Retirer le stop suiveur bat le réglage de production sur payoff, marge, Sharpe,
+DSR, espérance et net — et le **maxDD s'améliore** (−27,8 % contre −29,1 %). Le mécanisme était
+annoncé depuis la veille : l'avantage vit dans la queue droite, et le suiveur à 5 ATR mordait
+avant la cible à +24 ATR. Le 6:1 nominal n'existait pas. `trail_atr = 0.0` en production
+(ADR-0052) ; le risque par trade est inchangé, le stop initial à 4 ATR tient.
+
+**La règle avait été écrite AVANT de voir le chiffre** — « maxDD dégradé de moins de 3 points →
+on bascule ; de plus de 6 → on garde malgré le Sharpe ». C'est le point de méthode de la journée :
+sans règle préalable, tout résultat se justifie après coup.
+
+**Ce qu'on refuse de toucher.** Le classement des cibles s'est INVERSÉ entre les deux jeux de
+données : rr 6 meilleur le 01/09, rr 9 meilleur le 02/09. Un optimum qui bouge d'un jour à
+l'autre est du bruit. `rr` reste à 6, et l'interaction n'est pas explorée : chaque essai relève
+le seuil du DSR sur tout le reste.
+
+**Le défaut que ce flip a révélé, et il est plus grave que le réglage.** Sur un appel au backtest
+identique au caractère près (vérifié par diff), la même configuration a donné Sharpe 0,65 puis
+0,38 à un jour d'écart. **Rien ne le disait.** Les trois bancs affichent désormais une EMPREINTE
+— titres, barres, dernière date, provenance du VIX. Cette dernière parce que `_index_closes`
+interroge le réseau quand la base est périmée : un banc de décision pouvait comparer en silence
+un VIX réel à un VIX synthétique, et le multiplicateur d'exposition (×1,0 / ×0,7 / ×0,4) suffit à
+tout déplacer. J'ai émis cette hypothèse puis elle n'a PAS été confirmée — le run du 02/09
+affiche « VIX RÉEL ». Reste le jour de données ajouté, à confirmer.
+
+**Troisième occurrence de l'empilement positionnel, et cette fois elle est de moi.** Le harnais
+des candidats prenait `min(len(série))` comme axe : un titre de 265 barres réduisait la mesure à
+14 jours pour les 785 autres, et les quatre candidats sortaient « trop peu de jours ». Écrit le
+jour même où je corrigeais la deuxième occurrence dans `sector_momentum`. L'axe est désormais
+l'union triée des DATES, chaque titre lu à sa propre position. Non-régression vérifiée dans les
+deux sens : 14 jours sur l'ancien code, 149 sur le nouveau.
+
+**Aussi livré** : ciblage de volatilité (Moreira-Muir) branché en opt-in — sa grille absolue
+était INERTE, les cibles sont désormais des fractions de la vol réalisée ; `make sync` pour ne
+plus jamais faire `git pull` sur une branche réécrite ; `signal_lab` et `candidats_lab` sous
+protocole unique.
+
+**Fait** : ADR-0051, ADR-0052, PSR/DSR réparés (#367), suiveur retiré. **Bloqué** : rien.
+**Suite** : relancer `candidats_lab` avec le harnais réparé — le PEAD reste le seul candidat
+structurellement orthogonal à la tendance.
+
 ## Session 2026-09-01 (2) — Cinq trades sur 477 séparaient le gagnant du perdant
 
 **Le fait, sur les chiffres réels.** Profit factor 1,19, marge de payoff +19,5 % — tout paraissait
@@ -2521,3 +2834,629 @@ pour entamer l'implémentation des modules métier.
   chemin actions reste Alpaca paper. Un test vérifie toutes les variables avant `run_live.py`.
 - Les ordres actions non remplis observés le week-end/hors séance ne sont pas forcés : le runner
   les reporte explicitement et doit être lancé pendant la séance NYSE.
+
+## 2026-09-02 — Cœur multi-actifs : changer la corrélation, pas la concentration
+
+- **Question posée** : concentrer le cœur (top-7 au lieu du top-10) améliorerait-il la
+  performance ? **Non, et c'était déjà mesuré** : preset 0,82 → 50/50 QQQ 0,99 → QQQ pur
+  0,98 → momentum sectoriel 0,86, pendant que le maxDD passe de −19,5 % à −73,6 %. La
+  concentration achète du drawdown, pas du Sharpe.
+- Le levier resté ouvert est la **corrélation**. Le compte réel affiche **N effectif 1,5**
+  (HHI 0,665, top-3 = 87 %) : il se comporte comme une position et demie.
+- **Livré** : `packages/backtest/coeur_multi_actifs.py` + `scripts/coeur_multi_actifs_lab.py`
+  (`make coeur-multi`). Taille de cœur inchangée à 50 % — SEULE la composition change.
+  Quatre variantes figées dans le code (60/25/15, 50/30/20, 40/35/25, inverse-vol),
+  comptées dans la déflation. **Règle d'acceptation écrite avant le run** : ΔSharpe > 0
+  avec p < 0,05 au test apparié, maxDD non dégradé, DSR ≥ 50 %.
+- Le cœur paie 5 bps de rééquilibrage mensuel là où le cœur QQQ n'en paie aucun : la
+  comparaison est **défavorable au nouveau venu**, sens d'erreur assumé.
+- **Non encore exécuté** : le banc n'a pas tourné (pas de base de prix dans l'environnement
+  distant). Aucun chiffre n'est donc avancé — la construction seule est livrée.
+
+## 2026-09-02 — Cahier des charges swing institutionnel : câblé sur l'existant
+
+- Quatre modules neufs, tous **SHADOW**, tous testés (32 tests verts) :
+  `indicators/liquidite_ict` (SFP, BOS, CHoCH, OTE, order block, point-in-time),
+  `portfolio/metriques_survie` (Ulcer, temps sous l'eau, R² log, ES de Cornish-Fisher),
+  `risk/garde_swing` (MM200 marché, plafond de corrélation 30 j),
+  `ml/caracteristiques_swing` (z-score EMA, RSI multi, moments glissants, squeeze),
+  `strategies/moteur_swing` (`MarketStructureEngine`, `RiskManager`),
+  `strategies/moteur_sortie` (`ExitEngine` : temps 15 j, liquidité opposée, partielle CVD).
+- **Rien n'a été redupliqué** : DDM (−4R), stops ATR, CPCV, IC de Spearman, promotion ML
+  existaient déjà. Les classes ORCHESTRENT, elles ne recodent pas.
+- **Trois défauts trouvés par les tests, corrigés dans le code, pas dans le test** :
+  1. ES modifié : la première version n'appliquait pas le crochet de Boudt-Peterson-Croux
+     → l'ES ressortait **plus clément** que le gaussien alors que la VaR, elle, était bien
+     aggravée. Formule complète + garde de domaine (croissance de l'expansion, aggravation,
+     plausibilité vs pire observation) ; hors domaine → repli historique explicite.
+  2. Pivots : la comparaison large (`>=`) faisait de CHAQUE barre un pivot sur une série
+     plate → cassure de structure trivialement vraie sur un titre peu liquide. Extremum
+     **strict sur les voisins**.
+  3. Features : `sd <= 0` laissait passer un skew de 0,02 sur une série strictement
+     géométrique — du bruit d'arrondi standardisé. Plancher **relatif** de dispersion.
+- **Recouvrement assumé et documenté** avec `strategies/institutional_price_action` (30/08) :
+  SFP, order block et BOS existent désormais en deux exemplaires. Dette P2 déclarée.
+- **Dit plutôt que caché** : la jambe 1H/4H de la spec est câblée mais **non mesurable** —
+  la base est quotidienne. `raffiner_entree` renvoie « indécidable », jamais « prêt ».
+
+## 2026-09-02 — ExitEngine : la spec de sortie rejoint la mesure du 02/09
+
+- Bloc 5 de la spec swing : sortie de temps à 15 séances, cible = liquidité opposée OU
+  plancher 3R (le plus EXIGEANT des deux), partielle 50 % à 2R sur divergence de flux,
+  **interdiction du breakeven arbitraire**.
+- **Convergence à noter** : cette dernière règle est exactement ce que `sortie_lab` a
+  mesuré le 02/09 (ADR-0052). Sans suiveur, payoff 3,21 · Sharpe 0,53 · maxDD −27,8 % ;
+  avec suiveur 5 ATR, payoff 2,82 · Sharpe 0,38 · maxDD −29,1 %. L'avantage vit dans la
+  queue droite ; tout ce qui la tronque le détruit. La spec et la mesure disent la même
+  chose par deux chemins indépendants.
+- **Invariant du module** : le stop ne recule jamais et ne bouge que sur un invalidant
+  STRUCTUREL (creux confirmé plus haut, validé par un sommet postérieur). Le garde-fou
+  est doublé — dans la détection ET dans `appliquer` — parce qu'une règle de sécurité
+  présente à un seul endroit finit contournée par un appelant qui écrit le champ.
+- **Ordre d'évaluation pessimiste** : stop, puis cible, puis temps, puis partielle. Quand
+  une barre touche stop ET cible, des barres quotidiennes ne disent pas l'ordre intrabar :
+  retenir la cible fabriquerait de la performance à partir d'une ambiguïté.
+- **Approximation nommée** : le CVD exige des transactions signées. Le module utilise le
+  proxy « close location value × volume » et s'appelle `cvd_proxy` pour que personne ne
+  l'oublie en aval. Une divergence détectée ici est un fait de prix et de volume, pas une
+  preuve de flux institutionnel.
+- **La borne basse « 2 jours » n'est PAS un verrou** : elle est reportée
+  (`hors_fenetre_nominale`) et ne bloque jamais une sortie. En verrou, elle coûterait un
+  gain offert au jour 1 — un coût, pas une protection.
+- Deux tests écrits d'abord conditionnels (`if partielles:`) ont été **refaits** : un test
+  qui passe quand rien ne se produit ne teste rien. Série construite exprès pour que le
+  prix fasse 113 → 117 pendant que le CVD approché passe de 6 300 à −2 100, plus le cas
+  symétrique où le flux confirme et où la règle ne doit PAS mordre.
+
+## 2026-09-03 — Le cœur multi-actifs est REJETÉ, et la prémisse tenait pourtant
+
+- Banc exécuté sur la vraie base (2 580 séances, 2016-05-31 → 2026-09-02, 24 essais).
+  **Aucune variante ne passe la règle d'ADR-0053.** Le cœur QQQ reste en production.
+- **Ce qui a marché** : les corrélations. GLD/QQQ +0,11, QQQ/TLT −0,09. Les diversifiants
+  sont réellement décorrélés — la construction reposait sur une prémisse VRAIE.
+- **Ce qui n'a pas marché** : la décorrélation réduit le drawdown d'un tiers (−25,3 % →
+  −17,1 %) mais ne produit AUCUN gain de Sharpe (0,96 → 0,90-0,92, p entre 0,65 et 0,75).
+  TLT et GLD n'ont pas de rendement propre sur cette fenêtre ; on achète de la stabilité
+  avec du rendement, à un taux défavorable.
+- **Le test décisif est le Calmar**, pas le maxDD seul : production 0,605, meilleur cœur
+  diversifié 0,532. Le drawdown baisse de 8,2 points, le CAGR de 6,2 — proportionnellement
+  plus. Et le levier ne rattrape rien, puisque le Sharpe (invariant au levier) ne bouge pas.
+- **L'issue secondaire déclarée d'avance s'est produite** et a été traitée comme prévu :
+  remontée pour décision humaine, pas conversion en feu vert.
+- **Limite assumée sans en faire un prétexte** : la fenêtre contient 2022 (TLT ≈ −31 %).
+  Rejouer sur une autre période après avoir vu le résultat serait exactement ce que la
+  déflation punit. Le chiffre reste tel quel.
+- **P1 ouvert par la ligne de contrôle** : le QQQ ETF sur l'axe du preset rend −0,4 %/an de
+  moins que le cœur de production, t(α) = −6,15, p = 0,000. Minuscule mais pas du bruit, sur
+  une ligne censée mesurer le même actif. Soit la production mesure ^NDX (indice non
+  achetable, donc dashboard optimiste de façon permanente), soit `blend_equity` désaligne
+  positionnellement — quatrième occurrence. `make diag-coeur-qqq` tranche.
+- **Le rejet ne dépend pas de cette anomalie** : les variantes perdent aussi contre la ligne
+  de contrôle, elle correctement alignée par date.
+
+## 2026-09-03 — Deux hypothèses falsifiées, et la vraie cause était dans le sens de fusion
+
+- `make diag-coeur-qqq` exécuté. **Mes deux hypothèses sont FAUSSES**, et elles restent
+  écrites : une hypothèse abandonnée en silence se re-teste six mois plus tard.
+  · A « la production mesure ^NDX, indice non achetable » → **SOURCE RETENUE : QQQ (frais)**,
+    2 763 barres. C'est bien l'ETF.
+  · B « les calendriers diffèrent, `blend_equity` recolle par position » → **zéro séance
+    d'écart** dans les deux sens. L'alignement positionnel tombe juste ici, par coïncidence
+    des calendriers — pas par construction, ce qui reste un risque latent.
+- **Mesuré** : corrélation quotidienne source/ETF **+0,9999**, écart annualisé **−0,71 %/an**
+  (et non −0,4 % : le banc mesurait l'écart au niveau du MÉLANGE à 50 %, donc moitié moins).
+- **La vraie cause, établie par lecture du code** : les deux chemins fusionnent YAHOO.db et
+  market.db **dans des sens opposés**, sur le même symbole.
+  · `_load_prices` : `merged.setdefault(jour, barre)` → le PREMIER gagne. YAHOO.db garde la
+    priorité, market.db ne comble que les dates manquantes. Le commentaire dit pourquoi :
+    « pas de discontinuité d'ajustement (raw vs adjusted) au milieu de l'historique ».
+  · `_index_series` : `merge_bars` fait `target[jour] = close` → le DERNIER gagne. market.db
+    ÉCRASE YAHOO.db sur toutes les dates communes.
+  Si les deux bases n'ont pas le même niveau d'ajustement, la courbe de production est un
+  RECOLLAGE entre deux référentiels, avec un saut artificiel au raccord. Étalé sur onze ans,
+  ce saut se lit comme une dérive régulière — ce qu'on observe.
+- **Ce qui n'est PAS encore établi** : que les deux bases divergent effectivement sur les
+  dates communes. Le diagnostic mesure désormais ce point (bloc « COMPARAISON DES DEUX
+  BASES ») au lieu de le supposer. Tant qu'il n'a pas tourné, la cause reste un CANDIDAT.
+- **Défaut de mon propre diagnostic, corrigé** : sa lecture imprimait « la production mesure
+  un actif différent de celui qu'on achèterait » juste après avoir imprimé « SOURCE RETENUE :
+  QQQ ». Il se contredisait dans la même sortie. Le texte affirmait la conclusion écrite
+  d'avance au lieu de lire ce que le run venait de produire.
+
+## 2026-09-03 — Un ancien tableau de bord bien meilleur : ce qui est vrai, ce qui ne l'est pas
+
+Comparaison demandée entre un ancien dashboard (469,8 % · CAGR 20,1 % · Sharpe 1,34 ·
+610 trades · PF 1,48 · n=2391) et l'actuel (330,1 % · 14,9 % · 0,95 · 1 299 trades · PF 1,08).
+
+**Ce qui n'est PAS crédible dans l'ancien.** Le bloc d'attribution affichait
+**bêta 0,006 et corrélation 0,008 vs QQQ** pour un portefeuille long-only d'actions
+américaines sur 9,5 ans. Aucun livre long d'actions US ne corrèle à 0,008 avec le Nasdaq —
+l'ordre de grandeur est 0,6 à 0,9. Ce chiffre-là ne décrit rien de réel, et c'est
+précisément lui qui portait « Alpha annualisé 17,8 % » et « Contrib. Alpha 365,1 % », les
+deux nombres les plus flatteurs de la page. `obsidian.attribution` aligne par `min(len)` +
+`[-n:]` — POSITIONNEL, la classe de bug déjà corrigée trois fois ailleurs. L'ancienne page
+imprimait d'ailleurs sa propre mise en garde : « DSR≈0 → pas d'alpha directionnel prouvé »
+et « ⚠ Sous-performe QQQ en absolu (368 % vs 481 %) ».
+
+**Un défaut réel trouvé et CORRIGÉ au passage.** La même page affichait deux Sortino,
+**1,29** en tête et **1,82** dans la table du cœur, sur des courbes dont les Sharpe
+différaient de 0,01. Trois conventions coexistaient. Mesuré sur 2 400 points :
+  · `perf_summary` — écart-type des négatifs → 1,04× la valeur correcte (acceptable) ;
+  · `index_core._stats` — RMS des négatifs divisé par le COMPTE DES PERTES → **0,70×**,
+    soit 30 % trop bas, au point de passer sous le Sharpe ;
+  · définition : racine de la moyenne des `min(r,0)²` sur le nombre TOTAL d'observations.
+`index_core._stats` est corrigé, avec quatre tests dont un qui CHIFFRE l'ancien écart.
+Le symptôme à retenir : **un Sortino inférieur au Sharpe** signale un dénominateur mal
+normalisé. Mon propre banc `coeur-multi` en souffrait — ses Sortino publiés le 03/09 sont
+donc 30 % trop bas ; les VERDICTS ne bougent pas, la règle porte sur Sharpe/maxDD/DSR.
+
+**Ce qui interdit la comparaison, indépendamment de tout ça.** Les deux mesures ne portent
+pas sur la même fenêtre : n=2391 depuis 2017-04-25 contre 2 580 séances depuis 2016-03-01.
+Le backtest actuel inclut **13 mois de plus au début**. Le texte de la page le dit
+lui-même : « Lis d'abord la colonne Fenêtre ». Et le P1 du 02/09 reste ouvert — Sharpe 0,65
+puis 0,38 sur un code identique au caractère près, à un jour d'écart. **Tant qu'il n'est pas
+expliqué, aucune comparaison entre deux dates n'est valide, celle-ci comprise.**
+
+**Ce que je ne sais PAS expliquer** : 610 → 1 299 trades, plus du double, alors que la
+fenêtre ne grandit que de 8 % et que l'univers-graine est inchangé (1 047 lignes sur tous
+les commits vérifiés). C'est un changement de règle ou d'ensemble éligible, pas de durée.
+
+**L'expérience qui tranche**, à lancer avant toute autre conclusion :
+`QUANT_HISTORY_DAYS=3600 make index-core` — le code ACTUEL sur la fenêtre ANCIENNE.
+Sharpe qui remonte vers 1,34 → c'est la fenêtre. Sharpe qui reste vers 0,95 → c'est le code.
+
+## 2026-09-03 — C'était la FENÊTRE, pas le code. Et le code s'est amélioré.
+
+`QUANT_HISTORY_DAYS=3600 make index-core` — code ACTUEL sur la fenêtre ANCIENNE.
+
+| | ancien dashboard | reproduction (3 600 j) | plein historique |
+|---|---|---|---|
+| Sharpe, blend 50 % | 1,33 | **1,33** | 0,96 |
+| CAGR | 20,3 % | 18,5 % | 15,3 % |
+| maxDD | −28,7 % | −22,4 % | −25,3 % |
+
+**Le Sharpe retombe EXACTEMENT sur l'ancienne valeur.** L'écart 0,96 → 1,33 est imputable
+à la fenêtre, pas au code : le backtest actuel démarre treize mois plus tôt (2016-03 au
+lieu de 2017-04) et inclut une période plus difficile. Rien n'a régressé.
+
+**Le code a même AMÉLIORÉ le portefeuille, à fenêtre égale.** Sur le preset pur :
+
+| | ancien | actuel (même fenêtre) |
+|---|---|---|
+| CAGR | 17,7 % | 14,7 % |
+| Sharpe | 0,99 | **1,12** |
+| maxDD | −31,7 % | **−25,4 %** |
+
+Trois points de CAGR en moins, mais **+0,13 de Sharpe et 6,3 points de drawdown en moins**.
+Les correctifs d'alignement n'ont pas coûté de la performance : ils ont retiré du rendement
+qui venait avec un risque disproportionné. C'est le sens attendu quand on corrige une fuite.
+
+**Contrôle interne qui passe** : t(α) = 3,35 identique sur les lignes 0 %, 25 %, 50 %, 75 %,
+et −0,03 à 100 %. Ce n'est pas un bug — pour un mélange `c·cœur + (1−c)·preset`, l'alpha ET
+son erreur-type sont tous deux proportionnels à (1−c), donc le t est INVARIANT en c. À
+100 % de cœur la variante EST la référence, donc t = 0. La fonction fait ce qu'elle annonce.
+
+**Le Sortino corrigé se comporte comme prévu** : il est désormais SUPÉRIEUR au Sharpe sur
+toutes les lignes (1,96 contre 1,33 à 50 %), là où il passait dessous avant le correctif.
+
+**PIÈGE À NE PAS PRENDRE — la ligne 25 %.** Sharpe 1,42 contre 1,33, maxDD −18,2 % contre
+−22,4 % : meilleure sur les deux axes. Mais **ΔSharpe +0,09, IC95 [−0,25 ; +0,42],
+p = 0,612**, pour un seuil détectable de ±0,29. C'est du bruit de sélection sur cinq ratios
+essayés. **On ne bouge pas.** Ce qui EST discernable ne va que dans un sens : 75 % (p=0,027)
+et 100 % (p=0,011) sont significativement PIRES que 50 %.
+
+**À AUDITER AVANT TOUTE CHOSE — le momentum sectoriel.** CAGR 55,5 % à 100 % de cœur,
+26,8 % à 25 %, DSR 100 %. Un CAGR de 55 % sur 9,4 ans n'est pas un résultat, c'est une
+alerte : biais du survivant ou fuite. Le script prévient pour le top-10 méga-caps, pas pour
+celui-ci. À passer au `leakage-hunter` avant d'en dire un mot de plus.
+
+**NARROWING DU P1 (instabilité entre runs).** Les deux runs consécutifs de ce soir sont
+**identiques au caractère près**. Le code est donc DÉTERMINISTE ; l'instabilité 0,65 → 0,38
+observée le 02/09 s'était produite à un JOUR d'écart, donc après un rafraîchissement de
+données. **Hypothèse à tester** : elle vient du même défaut que l'anomalie du cœur QQQ —
+`_index_series` laisse `market.db` écraser `YAHOO.db`, si bien que chaque `make daily` peut
+déplacer le niveau d'ajustement de TOUT l'historique. Deux P1 qui n'en feraient qu'un.
+
+## 2026-09-03 — 87 % de réussite sur le compte réel : une déduction fausse, corrigée
+
+**J'ai avancé un chiffre déduit au lieu de mesuré, et il était faux.** J'avais conclu que
+les 26 lots ouverts portaient « environ −5 600 $ de latent », par rapprochement entre
+l'espérance affichée (39 × 149,27 $ = 5 821 $ réalisés) et le rendement du compte (+0,2 %).
+Les positions réelles disent **P&L latent +614,53 $**, donc POSITIF. Le biais de sélection
+que je décrivais ne s'est PAS matérialisé sur ce compte.
+
+**Le mécanisme reste réel et générique** : un système qui rééquilibre allège ce qui a monté
+et conserve ce qui a baissé, donc le sous-ensemble fermé est sélectionné. Mais il fallait le
+MESURER avant de l'affirmer, et c'est exactement ce que je n'ai pas fait.
+
+**Livré quand même, parce que le garde-fou vaut indépendamment** :
+`packages/research/biais_fermeture.py` + branchement sur `/api/journal`. Le panneau publie
+désormais À CÔTÉ des chiffres existants (jamais à leur place) : latent des lots ouverts, P&L
+total, **espérance sur TOUTES les positions**, et un avertissement chiffré qui ne sort QUE
+si part ouverte ≥ 20 % ET latent négatif — donc PAS aujourd'hui. Un lot sans prix est EXCLU,
+jamais valorisé à son entrée : le compter à zéro de latent fabriquerait un gagnant neutre à
+partir d'un trou de données. Cinq tests, présentés comme un scénario CONSTRUIT et non comme
+l'état du compte.
+
+**CE QUI RESTE OUVERT — ET QUI SE MESURE, MAINTENANT.** 5 821 $ de réalisé + 614 $ de
+latent = 6 435 $ sur ~100 000 $, soit ~6,4 %, alors que le tableau de bord affiche le
+portefeuille RÉEL à **+0,2 % sur deux mois**. Ces deux chiffres ne se réconcilient pas.
+Plutôt que d'énoncer une nouvelle hypothèse — la première était fausse — j'ai écrit
+`scripts/diag_journal_compte.py` (`make diag-journal`), qui MESURE les trois causes
+possibles et imprime le résidu inexpliqué :
+  1. le filtre `legacy` : combien de lots et combien de dollars réalisés le panneau
+     masque-t-il, et dans quel SENS ;
+  2. la fenêtre : les sorties du journal tombent-elles dans la période couverte par
+     `equity_history`, ou déborde-t-on ;
+  3. le latent RÉEL, lu chez le courtier — jamais reconstruit depuis un prix d'entrée.
+Le script ne conclut pas quand les chiffres ne tranchent pas : le résidu est imprimé
+comme résidu.
+
+**CE QUI N'EST PAS CONTAMINÉ, vérifié dans le code avant de le dire.** Le verdict GO/NO-GO
+du 2026-08-06 (`research/rdv_paper.compare`) lit la COURBE D'EQUITY, qui intègre le latent
+par construction — pas le win rate. Le verdict est sain. En revanche le TEXTE du panneau
+annonce que le journal est « la matière première du verdict » : c'est faux et ça invite à la
+mauvaise lecture. P2.
+
+**Autre lecture du même tableau, à ne pas perdre de vue.** Sur dix ans : portefeuille
+330,8 % / CAGR 14,9 % / Sharpe 0,95 / maxDD −25,5 % contre Nasdaq 100 572,5 % / 19,9 % /
+0,92 / −35,6 %. La stratégie **sous-performe le QQQ en absolu** avec un Sharpe à peine
+meilleur et **10 points de drawdown en moins**. Un Nasdaq à risque réduit, pas une machine
+à alpha — ce que dit aussi le DSR.
+
+## 2026-09-03 — Mesuré : 5 557 $ manquent entre le journal et le compte
+
+`make diag-journal` a tourné. Ce qui est désormais ÉTABLI, et ce qui ne l'est pas.
+
+**Le filtre `legacy` n'explique rien.** Il masque 137 lots, mais **0 fermé et 0,00 $ de
+réalisé**. Ma première piste tombe : le panneau ne cache aucune perte réalisée.
+
+**La fenêtre est bonne côté Alpaca.** Courbe du 2026-06-22 au 2026-09-03, sorties du
+journal du 2026-08-27 au 2026-09-02 : DANS la fenêtre. (Bitmart déborde, mais ce compte
+vaut 0,10 $ — non matériel.)
+
+**Le résidu, lui, est massif.**
+
+    réalisé (tous lots)            +5 821,43 $
+    latent des positions ouvertes    +611,14 $
+    attendu sur le compte          +6 432,57 $
+    variation constatée              +875,95 $
+    RÉSIDU INEXPLIQUÉ              -5 556,62 $
+
+**Le fait le plus frappant, et il n'était pas dans mes hypothèses : 39 aller-retours en
+CINQ séances** (27/08 → 02/09), 5 821 $ de gains réalisés, sur un compte qui n'a bougé que
+de 876 $ **en deux mois et demi**. Un rythme et un montant qui, à eux seuls, demandent une
+explication.
+
+**Défaut de mon propre script, trouvé par sa sortie et corrigé.** Le total affichait
++875,95 $ quand la somme des lignes donnait +879,34 $. Cause : la courbe était relue APRÈS
+`build_snapshot()`, qui ENREGISTRE le point du jour — deux lectures, deux séries. Elle est
+maintenant lue une seule fois, en amont. Une mesure qui ne se recoupe pas avec elle-même ne
+vaut rien, si petit que soit l'écart.
+
+**Deux causes restent, et le script les mesure désormais toutes les deux :**
+  1. **VERSEMENTS/RETRAITS** — `_mouvements` détecte les sauts journaliers hors norme
+     (seuil relatif : 6 × l'écart absolu médian de la série, pas un montant arbitraire).
+     Un retrait de ~5 500 $ apparaîtrait comme un saut isolé.
+  2. **LOTS FANTÔMES** — `_lots_vs_courtier` compare, symbole par symbole, les quantités
+     des lots OUVERTS du journal aux quantités RÉELLEMENT détenues. Le réalisé s'obtient
+     en appariant les ventes à des lots ouverts : si le journal porte des lots que le
+     courtier ne confirme pas, ces appariements fabriquent des gains sans contrepartie.
+
+**Rien n'est conclu tant que ce run n'a pas eu lieu.**
+
+**Cause du `make sync` introuvable, confirmée par la sortie** : le HEAD local était sur
+`43b15a9 (origin/main, main)`. Un déploiement avait remis la branche sur `main`, où la
+cible `sync` n'existe pas encore. Le piège d'amorçage se reproduira à chaque déploiement
+tant que la branche n'est pas fusionnée.
+
+## 2026-09-03 — Le journal ne décrit pas le compte. Les 5 602 $ sont expliqués.
+
+`make diag-journal` a éliminé les deux causes candidates et en a établi une troisième,
+que je n'avais pas envisagée.
+
+**ÉLIMINÉ — les versements/retraits.** Aucun saut hors norme sur Alpaca (seuil 3 984 $/jour,
+zéro dépassement). Le résidu n'est pas de l'argent sorti du compte.
+
+**ÉLIMINÉ — le filtre `legacy`.** 137 lots masqués, mais **0 fermé et 0,00 $ de réalisé**.
+
+**ÉTABLI — le journal porte des positions que le compte n'a plus.** La réconciliation
+quantité par quantité, symbole par symbole :
+
+  · **~80 actions** (AAPL, BBY, CNC, ICLN, NWL 2 861 titres, ZION…) : journal > 0,
+    **courtier = 0**. Le compte ne détient plus rien de tout cela.
+  · **QQQ : 137,105 au journal contre 70,452 chez le courtier** — presque le DOUBLE.
+  · **La poche crypto est comptée deux fois sous deux conventions** : `AVAX/USDC` au
+    journal (41,9) et `AVAXUSD` chez le courtier (214,6), `LTC/USDC` 7,2 contre `LTCUSD`
+    37,1, et ainsi de suite. Même actif, deux noms, jamais appariés — le dépôt connaissait
+    déjà ce piège (`execution/routing`, incident du 27/08 : une liquidation crypto bloquée
+    par le calendrier NYSE parce qu'`AAVEUSD` n'était pas reconnu comme crypto).
+
+**LA CONSÉQUENCE, ET ELLE EST MÉCANIQUE.** Le P&L réalisé s'obtient en appariant les ventes
+aux lots ouverts en FIFO. Les ventes RÉCENTES (27/08 → 02/09) se sont donc appariées à des
+lots d'un portefeuille que le compte ne détient plus, au prix de revient de CE
+portefeuille-là. Les 5 821 $ « réalisés » sont le produit de cet appariement, pas de
+l'argent gagné. Les 87 % de réussite et les 149,27 $ d'espérance portent sur des
+aller-retours qui n'ont pas eu lieu tels que le journal les décrit.
+
+**Ce que ça ne remet PAS en cause** : le verdict GO/NO-GO lit la courbe d'equity du compte
+(vérifié dans le code le 03/09), pas ces statistiques. La décision de passage au réel n'est
+pas contaminée.
+
+**Livré** : `biais_fermeture.reconcilier` + `symbole_canonique` (les trois conventions de
+nommage ramenées au même actif, sinon toute la poche crypto ressortirait en faux écart),
+branchés sur `/api/journal`. Quand la réconciliation échoue, la charge utile porte
+`fiable: false` et le motif. **Le chiffre n'est pas retiré — il est MARQUÉ** : le retirer
+ferait disparaître le problème de la vue au lieu de le montrer. Dix tests.
+
+**Reste à décider (P0 avant tout usage du journal)** : que faire des ~163 lots orphelins.
+Les solder à leur date de sortie réelle demande un historique de fills que nous n'avons
+peut-être plus ; les archiver en `legacy` les sort du calcul sans mentir sur le passé.
+C'est une décision, pas une correction automatique.
+
+## 2026-09-03 — Réparer le journal : la cause d'abord, le passé avec la vérité du courtier
+
+**LA CAUSE, CORRIGÉE.** `live_roundtrip.open_lots` appariait les ventes aux lots par
+`t.instrument == instrument`, **exact au caractère près**. Les lots crypto sont écrits
+« AVAX/USDC » et les ventes reviennent d'Alpaca en « AVAXUSD » : **aucune vente crypto ne
+pouvait fermer son lot**, depuis l'origine, sans qu'aucune erreur ne soit levée. La poche
+crypto s'accumulait donc en orphelins. L'appariement se fait désormais par symbole
+CANONIQUE. Les 17 tests d'aller-retour existants passent inchangés.
+
+**LE PASSÉ, RÉPARABLE — et par la meilleure source.** `AlpacaBroker.orders()` rend les
+ordres exécutés avec symbole, sens, quantité, prix et DATE. La vérité est donc récupérable :
+pas besoin d'estimer quoi que ce soit.
+
+**POURQUOI PAS `legacy=1`, qui aurait été le geste rapide.** Ce drapeau signifie « fill
+importé sans features de décision ». Ces lots ne sont pas ça : ce sont des lots dont la
+SORTIE n'a jamais été enregistrée. Réutiliser un drapeau pour un second sens le rend
+illisible — dans six mois personne ne saurait pourquoi ils sont legacy ni ce qu'on croyait
+en les marquant.
+
+**CE QU'ON FAIT À LA PLACE — la pratique comptable ordinaire.** On ne supprime ni ne
+réécrit un enregistrement : on POSTE UNE ÉCRITURE DE CORRECTION, datée, avec son motif
+(`exit_reason = "reconciliation-journal"`) et sa source. Chaque fermeture porte le prix et
+la **date du fill réel**, pas ceux du jour de la réparation.
+
+**CE QU'ON REFUSE DE FAIRE.** Un lot dont aucune vente du courtier ne rend compte reste
+OUVERT et est signalé. Le fermer « au dernier prix connu » fabriquerait un P&L qui n'a
+jamais existé — exactement l'erreur qu'on répare.
+
+**Livré** : `scripts/reconcilier_journal.py` (`make reconcilier-journal`). **Simulation par
+défaut** : il imprime le plan — fermetures appariées, P&L correspondant, lots restés
+orphelins avec leurs dates — et n'écrit rien. `--appliquer` écrit, après **sauvegarde
+horodatée de `journal.db`**. Six tests couvrent le plan seul, sans base ni courtier : les
+deux conventions de nommage, le FIFO, la vente partielle, la vente excédentaire (ignorée,
+jamais inventée), et l'ordre chronologique des ventes.
+
+Suites `tests/execution` + `tests/research` : **447 verts**.
+
+## 2026-09-03 — L'outil de réparation avait trois défauts, découverts APRÈS son passage
+
+Le run réel a posté 185 écritures (P&L des fermetures **−1 391,77 $** : la liquidation de
+juin, jamais enregistrée — le journal masquait donc des PERTES). 39 lots restent ouverts,
+sans vente correspondante, et c'est le comportement voulu.
+
+Mais la sortie contenait 185 avertissements « TradeRecord LEG-… enregistré SANS
+features_snapshot ». **Ce n'était pas du bruit : c'était le journal qui signalait ma faute.**
+
+**Défaut 1 — le drapeau `legacy` n'était pas conservé.** J'écrivais toutes les fermetures
+en `legacy=False`, y compris celles de fills IMPORTÉS. Résultat : ces fermetures entraient
+dans le périmètre AFFICHÉ, sans features de décision. J'assainissais le registre en
+polluant exactement le chiffre que je cherchais à assainir. Le drapeau voyage désormais
+avec le lot.
+
+**Défaut 2 — collision d'identifiants sur les ventes partielles.** Un lot soldé en
+plusieurs ventes produisait plusieurs enregistrements au même id `-R1` ; l'UPSERT n'en
+gardait qu'un et les fermetures intermédiaires disparaissaient **sans bruit**. Visible dans
+la sortie : `LEG-ad4ac9fa7f59-R1 (QQQ)` revient une dizaine de fois. Suffixe numéroté.
+
+**Défaut 3 — trouvé par le test, jamais atteint en production.** Une date de fill sans
+fuseau lève une `TypeError` en pleine boucle d'écriture, donc **après** des enregistrements
+déjà commités. Une réparation de registre qui s'arrête à mi-chemin est pire que pas de
+réparation. `_horodatage` normalise en UTC aware ou refuse la ligne.
+
+**Ce que ça dit de ma méthode.** J'ai livré un outil qui écrit dans un registre avec six
+tests portant uniquement sur le PLAN, aucun sur l'ÉCRITURE. Les trois défauts sont tous du
+côté non testé. Le mode simulation par défaut et la sauvegarde horodatée ont limité les
+dégâts — c'est précisément à ça qu'ils servent — mais ils ne remplacent pas des tests sur
+le chemin qui écrit. Trois tests d'écriture ajoutés (drapeau conservé dans les deux sens,
+absence de collision d'ids).
+
+**À FAIRE — restaurer et rejouer.** La sauvegarde
+`journal.avant-reconciliation-20260903-195231.db` contient l'état d'avant. La restaurer
+puis relancer avec la version corrigée est la seule façon d'obtenir un registre propre :
+les 185 écritures actuelles portent le mauvais périmètre.
+
+## 2026-09-03 — Réparation appliquée, et ce qu'elle ne répare PAS
+
+Sauvegarde restaurée, version corrigée rejouée : **185 écritures, zéro avertissement**.
+La prédiction posée avant le run (« les 185 lignes `LEG-…` doivent disparaître ») s'est
+vérifiée — le drapeau `legacy` voyage bien avec le lot.
+
+**CE QUI EST RÉPARÉ** : le registre des lots OUVERTS. Les ~80 actions liquidées en juin
+sont désormais fermées au prix et à la date des fills réels, dans leur périmètre d'origine.
+P&L de ces fermetures : **−1 391,77 $** — le journal masquait des PERTES, pas des gains.
+
+**CE QUI NE L'EST PAS, et il faut le dire clairement.** Les **39 aller-retours déjà fermés**
+du panneau (87 % de réussite, 149,27 $ d'espérance) sont INCHANGÉS. Ils avaient été produits
+entre le 27/08 et le 02/09 par `close_sells`, qui les a appariés en FIFO aux lots du vieux
+portefeuille — donc à des prix de revient de juin. Fermer les lots orphelins ne rétroagit pas
+sur des round-trips déjà écrits. **Les statistiques affichées restent fausses**, et c'est
+`reconcilier` qui les marque `fiable: false`.
+
+**Effet attendu sur le résidu** : il se réduit d'environ 1 392 $ (le réalisé total passe de
+5 821 $ à ~4 430 $) mais **ne se referme pas**. Restent les 39 lots sans vente
+correspondante, l'écart de quantité crypto, et surtout ces 39 round-trips mal fondés.
+
+**Décision à prendre (P1)** : recalculer ces 39 aller-retours suppose de les annuler puis de
+les rejouer contre le bon vivier de lots. C'est une opération plus invasive que la
+précédente, sur des enregistrements déjà publiés. À ne pas lancer sans l'avoir spécifiée.
+
+## 2026-09-03 — La réparation a marché, et elle a révélé un défaut plus profond
+
+**Le résidu s'est réduit comme annoncé** : −5 557 $ → **−4 195 $**, soit −1 362 $, l'ordre
+de grandeur prévu. Le drapeau `legacy` a bien été conservé (zéro avertissement), et la
+répartition le confirme : legacy=1 porte désormais 155 fermetures pour **−1 847 $** —
+c'est là que dormaient les pertes.
+
+**Le panneau affiché a changé, et dans le bon sens** : 39 → 69 aller-retours, win rate
+**87 % → 71 %**, espérance 149,27 $ → 90,97 $. Plus honnête, mais toujours pas juste.
+
+**CE QUE LA TABLE RÉVÈLE, ET QUI EST PIRE.** Les quantités restantes valent EXACTEMENT la
+moitié des quantités initiales, symbole après symbole :
+
+    AAPL  47,282434 → 23,641217      BXP  212,619953 → 106,309977
+    CNC  228,805493 → 114,402746     D    215,158384 → 107,579192
+    EFA  146,212389 →  73,106194     ICLN 603,200213 → 301,600106
+    MO   221,628274 → 110,814137     IWM   44,986204 →  22,493102
+
+Une moitié exacte, répétée sur des dizaines de titres, n'est pas un hasard de marché : les
+ventes du courtier ont soldé **une copie** et laissé **l'autre**. Le journal enregistre
+donc chaque lot DEUX FOIS. C'est cohérent avec tout le reste : QQQ 137,1 au journal contre
+70,45 détenus (facteur ~2), et un réalisé qui ne peut structurellement pas se réconcilier.
+
+**Mesure ajoutée plutôt qu'affirmation** : `_doublons` regroupe les lots ouverts par
+(symbole, quantité, prix d'entrée, jour) et compte les enregistrements excédentaires. Deux
+achats réels identiques au millionième le même jour sont possibles ; c'est pourquoi on
+COMPTE et on montre l'échantillon au lieu de conclure.
+
+**AUCUNE ÉCRITURE DE PLUS avant d'avoir trouvé la cause.** Supprimer les doublons dans le
+registre traiterait le symptôme et les laisserait revenir au prochain rebalancement. La
+cause est dans le chemin d'écriture (`live_journal` / la boucle de réconciliation), et
+c'est là qu'il faut regarder.
+
+**Note sur la mesure elle-même** : entre deux runs le compte a changé de composition (le
+courtier détient maintenant AAVE, MRNA, PRU, SLG, STT, TER, TROW, TTWO, UNH, ZION en plus).
+Le portefeuille bouge pendant qu'on le mesure — à garder en tête avant de lire un écart
+comme une anomalie.
+
+## 2026-09-03 — Troisième hypothèse fausse, et la cause enfin mesurée : l'historique était tronqué
+
+**« Le journal écrit chaque lot en double » est FAUX.** La mesure ajoutée le dit sans
+ambiguïté : « aucun doublon — les lots ouverts sont tous distincts ». Troisième hypothèse
+de ma part réfutée par les données dans cette session (après « ^NDX » et « désalignement de
+calendrier »). Les fermetures AAPL portaient d'ailleurs des quantités DIFFÉRENTES
+(11,763496 et 11,877721) : des lots distincts, pas des copies.
+
+**LA CAUSE, ET ELLE ÉTAIT SOUS LES YEUX.** J'ai demandé 500 ordres à Alpaca, l'API en a
+rendu **202**. `get_orders` plafonne à 500 par appel ET rend les plus RÉCENTS d'abord : un
+seul appel ne peut donc pas couvrir un historique plus long, et il le tronque **sans rien
+dire**. La moitié manquante de chaque position n'était pas un doublon — c'étaient les
+ventes ANCIENNES qui n'étaient jamais arrivées jusqu'au script.
+
+**Corrigé** : `AlpacaBroker.orders` pagine désormais avec `until` = le plus ancien
+horodatage déjà vu. La boucle est extraite en fonction PURE (`paginer`) pour être testable
+sans le SDK — une boucle de pagination est exactement le genre de code où une condition
+d'arrêt mal posée tourne à l'infini ou tronque en silence. Deux garde-fous, pour deux
+défaillances différentes : le nombre de pages est borné (API qui répond toujours du neuf)
+et l'horodatage doit STRICTEMENT reculer (API qui répond toujours pareil). Cinq tests.
+
+**Le script REND COMPTE de ce qu'il récupère** : nombre d'ordres, nombre de ventes, et un
+avertissement explicite si le plafond demandé est atteint — c'est-à-dire si l'historique
+peut ENCORE être tronqué. La leçon de la journée tient dans cette ligne : un chiffre qui
+peut être tronqué doit dire quand il l'est.
+
+**Ce que ça permet enfin** : rejouer la réconciliation avec l'historique COMPLET. Les 42
+lots orphelins devraient trouver leurs ventes, et le résidu se refermer nettement.
+
+## 2026-09-03 — La pagination a marché à moitié, et a révélé que l'outil n'était pas rejouable
+
+**Ce que la pagination a changé** : 202 → **419 ordres** récupérés. Mais **202 ventes**,
+exactement comme avant. L'historique des ACHATS était tronqué, celui des VENTES ne l'était
+pas. Ma quatrième hypothèse de la journée n'est donc que partiellement vraie — le correctif
+est bon, il n'explique pas ce qu'on croyait.
+
+**LE VRAI DÉFAUT, révélé par le second plan.** Sur un journal DÉJÀ réparé, le script
+proposait **50 fermetures de plus**, sur les **mêmes 202 ventes**, et **toutes à +0,00 $**.
+L'outil n'est pas IDEMPOTENT : à chaque passage il réapplique tout l'historique de ventes
+aux lots encore ouverts. Le relancer assez souvent finirait par fermer tous les lots, qu'une
+vente les couvre ou non. Un outil de réparation qui n'est pas rejouable est un outil qui
+fabrique des données au second passage.
+
+**Le signal était dans le chiffre** : cinquante fermetures d'affilée à exactement +0,00 $
+n'est pas une distribution de P&L, c'est la signature d'un appariement qui tourne à vide.
+
+**Corrigé** : chaque fermeture porte désormais l'IDENTIFIANT du fill qui l'a produite
+(`reconciliation-journal:<id>`), et un fill déjà consommé n'est jamais rejoué. `orders()`
+expose l'id. Quatre tests nouveaux.
+
+**ET UN GARDE-FOU RÉTROACTIF, parce que le mal est déjà fait.** Les 185 fermetures déjà
+écrites portent le motif NU, sans identifiant : elles sont intraçables, on ne peut pas
+savoir quelles ventes elles ont consommées. Le script REFUSE donc de tourner sur un tel
+journal et renvoie à une sauvegarde, plutôt que de deviner. Deviner ici reviendrait à
+fabriquer du réalisé — exactement ce que cet outil existe pour empêcher.
+
+**Ce que l'utilisateur doit faire** : restaurer `journal.avant-reconciliation-20260903-195231.db`
+(l'état d'AVANT toute réparation) puis relancer UNE fois avec cette version.
+
+## 2026-09-03 — Le « résidu inexpliqué » n'était pas inexpliqué : ma formule était incomplète
+
+**Réponse à la question posée** (« est-ce des ordres passés jamais réalisés ? ») : NON, et
+c'est le code qui le dit — `AlpacaBroker.orders` saute tout ordre dont `filled_qty` vaut
+zéro. Les ordres non exécutés n'entrent nulle part dans ces chiffres. Piste fermée sans
+avoir besoin de mesurer.
+
+**L'ARITHMÉTIQUE QUE J'AURAIS DÛ POSER AU PREMIER JOUR.** L'identité d'une période est :
+
+    Δequity = réalisé + latent(fin) − latent(DÉBUT) + flux − frais
+
+Mon script compare `réalisé + latent(fin)` à `Δequity`. Il **omet `latent(début)`**. Le
+« résidu inexpliqué » de −4 210 $ vaut donc, pour l'essentiel, le gain ou la perte NON
+RÉALISÉ que portaient déjà les positions au premier point de la courbe (2026-06-22). Les
+versements ayant été mesurés à zéro, il ne reste que ce terme et les frais hors P&L.
+
+**Ce n'est donc pas une anomalie à effacer** : c'est la part du P&L qui précède la fenêtre
+de mesure. Vouloir la faire tomber à zéro reviendrait à demander qu'un compte n'ait pas
+d'histoire avant qu'on commence à le mesurer.
+
+**MESURE AJOUTÉE POUR LE PROUVER — et non pour l'affirmer.** `_base_de_cout` compare le
+prix d'entrée de chaque lot à la CLÔTURE de sa date d'entrée dans la base de prix. Si les
+positions déjà détenues ont été journalisées au coût moyen du courtier, leur lot porte une
+date récente et un prix ancien : l'écart sera massif et systématique. S'il est nul, cette
+explication tombe comme les cinq précédentes et le script le dira.
+
+**Mesure ajoutée aussi** : `_couverture_achats` — le journal connaît-il tous les achats du
+compte ? Un achat sans lot correspondant est un trou par lequel le réalisé fuit, et aucune
+réparation de lots orphelins ne le refermera.
+
+**Vocabulaire corrigé** : « RÉSIDU INEXPLIQUÉ » devient « ÉCART », avec l'identité écrite
+sous le tableau. Un mot qui dit « inexpliqué » pousse à chercher un coupable là où il n'y a
+qu'un terme manquant dans une formule.
+
+**BILAN DE LA JOURNÉE SUR CE SEUL PROBLÈME — six hypothèses, cinq fausses :** ^NDX,
+désalignement de calendrier, double écriture, troncature des ventes, non-idempotence
+(vraie, mais défaut de MON outil, pas cause du résidu), et enfin `latent(début)`. Toutes
+sont tombées sur des mesures. La leçon n'est pas qu'il fallait mieux deviner : c'est que
+la première chose à écrire, face à un écart comptable, est l'IDENTITÉ COMPTABLE.
+
+## 2026-09-03 — La couverture répond : le journal ne connaît que la MOITIÉ des achats
+
+**LA MESURE QUI TRANCHE, enfin.** Sur 87 symboles achetés chez le courtier, **57 sont
+couverts par le journal et 30 sont INCOMPLETS** :
+
+    AVAX  acheté 1 238,95  ·  journal   626,49      T     acheté 141,78  ·  journal 80,00
+    LINK  acheté   959,31  ·  journal   550,50      AAVE  acheté 141,07  ·  journal 42,55
+    LTC   acheté   286,88  ·  journal   114,87      PATH  acheté 138,80  ·  journal  9,00
+    SOL   acheté   212,49  ·  journal    63,52      SLG   acheté  69,36  ·  journal 19,54
+
+Le journal enregistre **environ la moitié** des achats crypto, et 9 titres sur 139 pour
+PATH. Ces achats n'ont donc AUCUN prix de revient au journal : quand ils sont vendus, le
+compte encaisse le résultat et le journal n'a rien à lui opposer.
+
+**CONCLUSION D'INGÉNIERIE, et elle est définitive : le journal ne peut pas être la source
+de vérité de la performance du compte.** Il n'enregistre que ce que la boucle de
+réconciliation a écrit, jamais l'activité complète. Aucune réparation de lots orphelins ne
+refermera cet écart — j'ai passé la soirée à réparer un registre dont le vrai problème est
+qu'il est INCOMPLET, pas qu'il est faux.
+
+**Ce qui est déjà correct sur le site, et qu'il faut préserver** : la ligne « Portefeuille
+RÉEL » et le verdict GO/NO-GO lisent la COURBE D'EQUITY, pas le journal. Ces chiffres-là
+sont justes et le restent.
+
+**Bug de MA mesure, corrigé** : `_cours_du_jour` passait une BARRE à `_jour`, qui attend un
+horodatage. La comparaison échouait donc toujours, et le bloc annonçait « 0 lot comparable
+» — un zéro qui ressemblait à une absence de données alors qu'il signalait mon bug. C'est
+la deuxième fois aujourd'hui qu'une de mes mesures ment par omission ; d'où la règle qui
+en sort : **un zéro doit toujours être distingué d'un « je n'ai pas pu mesurer »**.
+

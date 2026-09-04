@@ -76,8 +76,8 @@ def test_une_serie_quotidienne_survit_a_un_week_end(monkeypatch):
 
     monkeypatch.setattr(F, "date", Mardi)
     quotidienne = _dates_depuis("2026-08-21", [1, 1, 1, 3, 1, 1, 1, 3, 1, 1, 1])
-    retard, perimee = F._retard(quotidienne)
-    assert retard == 4 and perimee is False
+    retard, statut = F._retard(quotidienne)
+    assert retard == 4 and statut == "ok"
 
 
 def test_une_serie_reellement_arretee_est_signalee(monkeypatch):
@@ -93,8 +93,10 @@ def test_une_serie_reellement_arretee_est_signalee(monkeypatch):
 
     monkeypatch.setattr(F, "date", Aujourdhui)
     morte = _dates_depuis("2023-01-01", [30] * 11)
-    retard, perimee = F._retard(morte)
-    assert retard > 1300 and perimee is True
+    retard, statut = F._retard(morte)
+    # 43× la cadence : c'est un ARRÊT, pas un retard de publication. Le Bund, à 3,03×,
+    # ne doit pas porter le même mot (cf. `test_fred_fraicheur`).
+    assert retard > 1300 and statut == "arretee"
 
 
 def test_une_interruption_exceptionnelle_ne_relache_pas_le_seuil_pour_toujours(monkeypatch):
@@ -112,8 +114,8 @@ def test_une_interruption_exceptionnelle_ne_relache_pas_le_seuil_pour_toujours(m
 
     monkeypatch.setattr(F, "date", Aujourdhui)
     avec_trou = _dates_depuis("2026-05-01", [1, 1, 90, 1, 1, 1, 3, 1, 1, 1, 1])
-    _retard_j, perimee = F._retard(avec_trou)
-    assert perimee is True, "116 jours de retard ne doivent pas être excusés par un vieux trou"
+    _retard_j, statut = F._retard(avec_trou)
+    assert statut != "ok", "116 jours ne doivent pas être excusés par un vieux trou"
 
 
 def test_la_serie_euro_morte_a_ete_retiree():
@@ -127,6 +129,6 @@ def test_la_serie_euro_morte_a_ete_retiree():
 def test_dates_vides_ou_illisibles_ne_levent_pas():
     from packages.macro.fred import _retard
 
-    assert _retard([]) == (0, False)
-    assert _retard(["pas une date"]) == (0, False)
-    assert _retard(["2026-08-21"])[1] is False        # une seule obs : aucune cadence mesurable
+    assert _retard([]) == (0, "ok")
+    assert _retard(["pas une date"]) == (0, "ok")
+    assert _retard(["2026-08-21"])[1] == "ok"        # une seule obs : cadence non mesurable

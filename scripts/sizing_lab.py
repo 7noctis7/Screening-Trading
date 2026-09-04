@@ -25,6 +25,14 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 RISQUES = [0.005, 0.01, 0.02]
+RISQUE_PROD = 0.005              # réglage de production (ADR-0051)
+# Cibles exprimées en FRACTION de la volatilité réalisée de la référence, et non en
+# valeur absolue. Une grille absolue (10/15/20 %) s'est révélée entièrement INERTE :
+# ce portefeuille tourne à ~52 % d'exposition, sa vol est donc bien en dessous de celle
+# d'un indice, le plafond ne mordait jamais et les trois variantes rendaient des courbes
+# identiques au centime. Un levier qui ne fait rien est pire qu'un levier absent : il se
+# lit comme « mesuré, sans effet ».
+FRACTIONS_VOL = [0.5, 0.7, 0.9]
 
 
 def _donnees():
@@ -47,8 +55,29 @@ def _donnees():
     return data, acmap, mode, len(reels), debut, fin
 
 
+def empreinte(data: dict, provenance_vix: str) -> str:
+    """Signature du jeu de données. Deux runs ne se comparent QUE si elle est identique.
+
+    Constaté le 02/09 : la même configuration a donné Sharpe 0,65 puis 0,38 à un jour
+    d'écart, sur un appel au backtest identique au caractère près. Sans empreinte
+    affichée, on aurait cru à un effet du réglage.
+    """
+    barres = sum(len(b) for b in data.values())
+    fin_reelle = max((b[-1].ts for b in data.values() if b), default=None)
+    jour = fin_reelle.date().isoformat() if fin_reelle else "?"
+    return (f"{len(data)} titres · {barres:,} barres · dernière {jour} · "
+            f"{provenance_vix}")
+
+
 def _vix(data, debut, fin, seed: int = 7):
-    """Le VIX de PRODUCTION, et non son absence.
+    """Le VIX de PRODUCTION, et non son absence. Renvoie (série, provenance).
+
+    LA PROVENANCE EST RENVOYÉE, PAS DEVINÉE. `_index_closes` lit la base puis, si la
+    série est périmée, INTERROGE LE RÉSEAU. Un banc de décision dont le résultat dépend
+    silencieusement de la réussite d'un appel réseau n'est pas reproductible : deux runs
+    à un jour d'écart peuvent alors comparer un VIX réel à un VIX synthétique sans que
+    rien ne l'indique — et le multiplicateur d'exposition (×1,0 / ×0,7 / ×0,4) suffit à
+    déplacer tous les chiffres. On publie donc d'où vient la série.
 
     `fast_swing` module l'exposition brute autorisée par `vix_exposure` : ×1,0 sous 20,
     ×0,7 entre 20 et 30, ×0,4 au-delà. Sans série VIX le multiplicateur reste à 1,0 —
@@ -60,8 +89,9 @@ def _vix(data, debut, fin, seed: int = 7):
     n = max(len(b) for b in data.values())
     reel, est_reel = _index_closes(["^VIX", "VIX"], debut, fin, [])
     if est_reel and len(reel) >= 50:
-        return reel[-n:] if len(reel) >= n else [reel[0]] * (n - len(reel)) + reel
-    return _vix_series(n, seed)
+        serie = reel[-n:] if len(reel) >= n else [reel[0]] * (n - len(reel)) + reel
+        return serie, "VIX RÉEL"
+    return _vix_series(n, seed), "VIX SYNTHÉTIQUE (repli — résultats non comparables)"
 
 
 def _expo_moyenne(trades, equity: list[float], jours: int) -> float:
@@ -81,25 +111,33 @@ def _expo_moyenne(trades, equity: list[float], jours: int) -> float:
     return engage / (jours * moy_eq) if moy_eq > 0 else 0.0
 
 
-def _run(data, acmap, risque: float, vix=None):
+def _run(data, acmap, risque: float, vix=None, vol_cible: float = 0.0):
     from packages.backtest.fast_swing import fast_swing_backtest
     from packages.execution.costs import CostModel
     from packages.portfolio import fragilite as F
 
-    _, journal, equity, _ = fast_swing_backtest(
+    _, journal, equity, horodatage = fast_swing_backtest(
         data, cash=10_000, costs=CostModel(), asset_classes=acmap,
         target_annual_vol=0.30, max_capital_frac=0.15, max_positions=20, max_pct=0.20,
         atr_stop=4.0, rr=6.0, vix=vix, close_at_end=False, daily_max_loss=0.06,
-        trail_atr=5.0, next_open_fills=True, risque_par_trade=risque)
+        trail_atr=5.0, next_open_fills=True, risque_par_trade=risque,
+        vol_cible=vol_cible)
     trades = [t for t in journal.all() if t.pnl_net is not None]
     trades.sort(key=lambda t: t.exit_ts or t.entry_ts)
     pnls = [t.pnl_net for t in trades]
     rs = [t.r_multiple for t in trades]
-    return {"equity": equity, "n": len(pnls), "net": sum(pnls),
+    return {"equity": equity, "horodatage": horodatage,
+            "n": len(pnls), "net": sum(pnls),
             "expo": _expo_moyenne(trades, equity, len(equity)),
             **F.marge_de_payoff(pnls), **F.concentration(pnls),
             **F.significativite(pnls), **F.dependance(pnls),
             **F.comparer_dimensionnement(pnls, rs)}
+
+
+def _vol_annualisee(rends: list[float]) -> float:
+    """Volatilité annualisée d'une série de rendements quotidiens."""
+    import statistics as st
+    return st.pstdev(rends) * (252 ** 0.5) if len(rends) > 1 else 0.0
 
 
 def _psr_dsr(rends: list[float], n_essais: int) -> tuple[float, float]:
@@ -157,8 +195,9 @@ def main() -> None:
               "sur du synthétique.")
         return
 
-    vix = _vix(data, debut, fin)
-    n_essais = _essais(len(risques))
+    vix, prov = _vix(data, debut, fin)
+    print(f"  empreinte : {empreinte(data, prov)}")
+    n_essais = _essais(len(risques) + len(FRACTIONS_VOL))
     base = _run(data, acmap, 0.0, vix)
     rb = _rendements(base["equity"])
     s_base = comparer(rb, rb, periodes_par_an=252.0)["sharpe_base"]

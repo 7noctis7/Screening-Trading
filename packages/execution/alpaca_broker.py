@@ -18,6 +18,38 @@ _STATUS = {
 }
 
 
+def paginer(page, limit: int, page_max: int = 500) -> list:
+    """Remonte l'historique page par page. `page(n, borne)` rend les n ordres les plus
+    récents ANTÉRIEURS à `borne`.
+
+    Extrait de `AlpacaBroker.orders` pour être testable SANS le SDK : la boucle de
+    pagination est exactement le genre de code où une condition d'arrêt mal posée
+    tourne à l'infini ou tronque en silence, et c'est précisément ce qu'on répare ici.
+
+    Deux garde-fous, et ils servent des cas différents : le nombre de pages est borné
+    (une API qui renvoie toujours du neuf ne peut pas nous retenir), et l'horodatage le
+    plus ancien doit STRICTEMENT reculer (une API qui renvoie toujours la même page ne
+    peut pas nous faire boucler). L'un couvre le cas où elle répond trop, l'autre le cas
+    où elle répond pareil.
+    """
+    res, vus, borne = [], set(), None
+    for _ in range(2 + max(0, limit - 1) // max(1, page_max)):
+        lot = page(min(limit, page_max), borne)
+        nouveaux = [o for o in lot if getattr(o, "id", None) not in vus]
+        if not nouveaux:
+            break
+        vus.update(getattr(o, "id", None) for o in nouveaux)
+        res.extend(nouveaux)
+        horo = [getattr(o, "submitted_at", None) for o in nouveaux]
+        plus_ancien = min((t for t in horo if t), default=None)
+        if plus_ancien is None or (borne is not None and plus_ancien >= borne):
+            break
+        borne = plus_ancien
+        if len(res) >= limit or len(lot) < min(limit, page_max):
+            break
+    return res[:limit]
+
+
 def _is_crypto_symbol(symbol: str) -> bool:
     """Alpaca : paires crypto avec '/' (BTC/USD) MAIS les POSITIONS reviennent SANS slash
     (BTCUSD) — fix 07/07 : les ventes de positions héritées partaient en TIF=DAY →
@@ -111,12 +143,29 @@ class AlpacaBroker:
         except Exception:  # noqa: BLE001 — position déjà fermée / inconnue : rien à solder
             return False
 
+    PAGE_MAX = 500                      # plafond imposé par l'API Alpaca pour `limit`
+
     def orders(self, limit: int = 100) -> list[dict]:
-        """Ordres RÉELS exécutés (fills) du compte — pour la page Trades. [] si indispo."""
+        """Ordres RÉELS exécutés (fills) du compte — pour la page Trades. [] si indispo.
+
+        PAGINÉ (03/09). `get_orders` plafonne à 500 par appel et rend les plus RÉCENTS
+        d'abord : un seul appel ne peut donc pas rendre un historique plus long, et il
+        le tronque SANS RIEN DIRE. Mesuré ce jour-là : `limit=500` a rendu 202 ordres,
+        et la réconciliation du journal n'a pu solder que la MOITIÉ de chaque position —
+        les ventes plus anciennes n'étaient jamais arrivées.
+
+        On remonte donc page par page avec `until` = le plus ancien horodatage déjà vu.
+        Deux garde-fous contre la boucle infinie : le nombre de pages est borné, et
+        l'horodatage le plus ancien doit STRICTEMENT reculer à chaque tour — sinon
+        l'API rend la même page et on s'arrête.
+        """
         try:
-            from alpaca.trading.requests import GetOrdersRequest
             from alpaca.trading.enums import QueryOrderStatus
-            res = self._client.get_orders(GetOrdersRequest(status=QueryOrderStatus.CLOSED, limit=limit))
+            from alpaca.trading.requests import GetOrdersRequest
+            def _page(n, borne):
+                return list(self._client.get_orders(GetOrdersRequest(
+                    status=QueryOrderStatus.CLOSED, limit=n, until=borne)))
+            res = paginer(_page, limit, self.PAGE_MAX)
             out = []
             for o in res:
                 fq = float(getattr(o, "filled_qty", 0) or 0)
@@ -124,6 +173,7 @@ class AlpacaBroker:
                     continue
                 ts = getattr(o, "filled_at", None) or getattr(o, "submitted_at", None)
                 out.append({
+                    "id": str(getattr(o, "id", "")),   # identité du fill → idempotence
                     "symbol": o.symbol, "broker": "Alpaca",
                     "side": str(getattr(o, "side", "")).lower().split(".")[-1],
                     "qty": fq, "price": float(getattr(o, "filled_avg_price", 0) or 0),
@@ -152,6 +202,7 @@ class AlpacaBroker:
                 # montant : notional explicite si présent, sinon parts × prix (si prix connu)
                 amount = nv if nv > 0 else (rq * px if px else 0.0)
                 out.append({
+                    "id": str(getattr(o, "id", "")),   # identité du fill → idempotence
                     "symbol": o.symbol, "broker": "Alpaca",
                     "side": str(getattr(o, "side", "")).lower().split(".")[-1],
                     "qty": rq, "filled_qty": fq, "notional_order": nv > 0,

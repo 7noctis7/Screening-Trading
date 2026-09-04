@@ -59,6 +59,56 @@ def regime_context(snap: dict) -> tuple[str | None, dict]:
     return label, ctx
 
 
+def normaliser(sym: str) -> str:
+    """« AVAX/USDC », « AVAX-USD » et « AVAXUSD » désignent le même instrument.
+
+    DÉLÈGUE à `symbole_canonique`, qui retire aussi la DEVISE DE COTATION. Un simple
+    retrait des séparateurs ne suffit pas : « AVAX/USDC » deviendrait « AVAXUSDC » et
+    « AVAXUSD » resterait « AVAXUSD » — deux clés distinctes pour le même actif, et
+    l'agrégation des achats se scinderait en deux. Une seule définition du symbole
+    canonique dans tout le dépôt, sinon elles divergent.
+    """
+    from packages.research.biais_fermeture import symbole_canonique
+    return symbole_canonique(sym)
+
+
+def agreger_achats(ordres: list[dict], jour: str) -> dict[str, dict]:
+    """Achats RÉELLEMENT exécutés un jour donné, agrégés par symbole : quantité et VWAP.
+
+    POURQUOI CETTE FONCTION EXISTE (03/09). `_journal_opens` prenait le fill dans la
+    POSITION du courtier lue juste après l'envoi de l'ordre. Deux conséquences, toutes
+    deux mesurées sur le compte réel :
+
+      · si la position n'était pas encore à jour (ordre non rempli à l'instant du run,
+        marché fermé, latence), le fill était introuvable et l'achat n'était JAMAIS
+        journalisé. Le message disait « capturé au prochain run » — mais rien ne le
+        capture, sauf à racheter le même titre. L'achat était perdu ;
+      · la position porte la quantité TOTALE et le prix de revient MOYEN, pas l'achat
+        du jour. Le lot ne décrivait donc pas l'opération qu'il prétendait décrire.
+
+    Mesuré le 03/09 : sur 87 symboles achetés, 30 n'étaient couverts qu'à moitié ou
+    moins (AVAX 626 au journal contre 1 239 achetés, PATH 9 contre 139).
+
+    Les fills, eux, sont la vérité terrain : ils existent après coup, ils portent la
+    quantité RÉELLEMENT achetée et son prix. Un run tardif les retrouve ; une position
+    non rafraîchie, non.
+    """
+    par_sym: dict[str, dict] = {}
+    for o in ordres or []:
+        if o.get("side") != "buy" or (o.get("date") or "")[:10] != jour:
+            continue
+        q, px = float(o.get("qty") or 0.0), float(o.get("price") or 0.0)
+        if q <= 0 or px <= 0:
+            continue
+        cle = normaliser(o.get("symbol", ""))
+        acc = par_sym.setdefault(cle, {"qty": 0.0, "notional": 0.0})
+        acc["qty"] += q
+        acc["notional"] += q * px
+    return {k: {"qty": round(v["qty"], 10),
+                "avg_price": v["notional"] / v["qty"]}      # VWAP du jour, pas le PRU
+            for k, v in par_sym.items() if v["qty"] > 0}
+
+
 def build_open(symbol: str, *, venue: str, asset_class: str | None, fill: dict | None,
                features: dict | None, regime: str | None = None,
                strategy: str = "preset", ts: datetime | None = None) -> TradeRecord | None:

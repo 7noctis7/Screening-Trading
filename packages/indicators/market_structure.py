@@ -143,18 +143,38 @@ def tendance(barres: list, i: int, pivot: int = 5) -> str:
     return "range"
 
 
+def pivots_indexes(barres: list, i: int, pivot: int) -> tuple[list[int], list[int]]:
+    """INDICES des pivots CONFIRMÉS disponibles à `i` (décalés de `pivot` barres).
+
+    Les indices, et pas seulement les prix : reconstruire une impulsion (d'où part une
+    jambe, où elle finit) exige de savoir OÙ sont les pivots. `_pivots` en dérive les
+    prix — une seule définition du pivot pour les deux usages, sinon elles divergent.
+
+    EXTREMUM STRICT SUR LES VOISINS, et c'est une correction (02/09) : avec une
+    comparaison large (`>=` sur la fenêtre, barre courante incluse), une série PLATE
+    déclare un pivot à CHAQUE barre, puisque toutes sont ex æquo. La cassure de
+    structure devenait alors trivialement vraie au moindre tick sur un titre peu
+    liquide. On compare donc `barres[j]` à ses VOISINS seuls, strictement. Le prix
+    d'une égalité exacte — un pivot perdu — va dans le sens prudent : moins de signaux.
+    """
+    hauts: list[int] = []
+    bas: list[int] = []
+    for j in range(pivot, i - pivot + 1):
+        voisins = barres[j - pivot:j] + barres[j + 1:j + pivot + 1]
+        if not voisins:
+            continue
+        h, b = float(barres[j].high), float(barres[j].low)
+        if h > max(float(x.high) for x in voisins):
+            hauts.append(j)
+        if b < min(float(x.low) for x in voisins):
+            bas.append(j)
+    return hauts, bas
+
+
 def _pivots(barres: list, i: int, pivot: int) -> tuple[list[float], list[float]]:
     """Pivots CONFIRMÉS disponibles à `i` (décalés de `pivot` barres)."""
-    hauts: list[float] = []
-    bas: list[float] = []
-    for j in range(pivot, i - pivot + 1):
-        fen = barres[j - pivot:j + pivot + 1]
-        h, b = float(barres[j].high), float(barres[j].low)
-        if h >= max(float(x.high) for x in fen):
-            hauts.append(h)
-        if b <= min(float(x.low) for x in fen):
-            bas.append(b)
-    return hauts, bas
+    ih, ib = pivots_indexes(barres, i, pivot)
+    return ([float(barres[j].high) for j in ih], [float(barres[j].low) for j in ib])
 
 
 def point_de_controle(barres: list, i: int, fenetre: int = 60, bins: int = 24) -> float:

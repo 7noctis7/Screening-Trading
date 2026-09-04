@@ -2,6 +2,55 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0052 — Le stop suiveur ne protégeait pas les gains, il les COUPAIT (2026-09-02)
+
+**Contexte.** `fast_swing` visait une cible à `rr = 6` fois le stop de 4 ATR, soit +24 ATR, avec
+un suiveur ATR à 5. Le suiveur mordait donc presque toujours AVANT la cible : le 6:1 nominal
+n'existait pas dans les faits, et c'est le couple (cible, suiveur) qui décidait — jamais la cible
+seule, contrairement à ce que le paramètre laissait croire.
+
+**La règle de décision a été écrite AVANT de voir le chiffre**, pour interdire la
+rationalisation a posteriori : « maxDD dégradé de moins de 3 points → on bascule ; de plus de
+6 points → on garde le suiveur, malgré le Sharpe ». C'est le point de méthode le plus important
+de cet ADR : sans règle préalable, tout résultat se justifie après coup.
+
+**Mesuré** (`scripts/sortie_lab.py`, cible figée à rr 6, empreinte 786 titres · 2 049 666 barres
+· dernière 2026-09-01 · VIX RÉEL) :
+
+| suiveur | payoff | marge | Sharpe | maxDD | DSR | esp./tr | net |
+|---|---|---|---|---|---|---|---|
+| **sans** | **3,21** | **25,6 %** | **0,53** | **−27,8 %** | **48,1 %** | **5,6** | **6 398** |
+| trail 3 | 2,04 | 11,3 % | 0,42 | −21,8 % | 33,0 % | 1,8 | 3 900 |
+| trail 5 (prod) | 2,82 | 14,0 % | 0,38 | −29,1 % | 26,9 % | 2,7 | 3 426 |
+| trail 8 | 3,02 | 22,6 % | 0,45 | −26,0 % | 36,0 % | 4,7 | 5 300 |
+
+Le maxDD ne se dégrade pas, il **s'améliore**. La seule objection sérieuse tombe, et le risque
+PAR TRADE est inchangé : le stop initial à 4 ATR tient toujours.
+
+**Décision.** `trail_atr = 0.0` en production. Le mécanisme est celui qu'annonçait la mesure de
+concentration de l'ADR-0051 : l'avantage vit dans la queue droite, et tout ce qui la tronque le
+détruit. Le suiveur était exactement cela — un tronqueur de gagnants déguisé en garde-fou.
+
+**Ce qui n'est PAS prouvé.** L'écart de Sharpe (+0,15) reste sous le seuil détectable de ±0,27.
+Ce qui décide est la COHÉRENCE de toute la famille — trail 3 très mauvais, trail 8 intermédiaire,
+sans suiveur le meilleur — et l'accord de deux runs sur des jeux de données différents. Pas un
+point isolé.
+
+**Ce qu'on refuse de toucher, et c'est le second enseignement.** Le classement des CIBLES s'est
+INVERSÉ entre les deux jeux : rr 6 meilleur le 01/09 (Sharpe 0,65), rr 9 meilleur le 02/09
+(0,50 contre 0,38). Un optimum qui bouge d'un jour à l'autre est du bruit, pas un réglage. `rr`
+reste à 6, et l'interaction (sans suiveur × rr 9) n'est pas explorée : chaque essai
+supplémentaire relève le seuil du DSR sur tout le reste (ADR-0050).
+
+**Conséquence opératoire : l'EMPREINTE.** Sur un appel au backtest identique au caractère près
+(vérifié par diff), la même configuration a donné Sharpe 0,65 puis 0,38 à un jour d'écart. Rien
+ne le disait. Les trois bancs affichent désormais titres, barres, dernière date et provenance du
+VIX — cette dernière parce que `_index_closes` interroge le RÉSEAU quand la base est périmée, si
+bien qu'un banc de décision pouvait comparer en silence un VIX réel à un VIX synthétique. **Deux
+runs ne se comparent que si l'empreinte est identique.** Hypothèse du repli VIX émise puis NON
+confirmée : le run du 02/09 affiche « VIX RÉEL ». La cause de l'écart reste le jour de données
+ajouté, à confirmer.
+
 ## ADR-0051 — Le dimensionnement à RISQUE CONSTANT, adopté pour la robustesse et non pour la performance (2026-09-01)
 
 **Contexte, et le chiffre qui a déclenché l'enquête.** Sur 477 trades réels, profit factor 1,19 —
@@ -1039,3 +1088,250 @@ produire du signal.
 
 **Corollaire de méthode.** Avant d'écrire un module, chercher ce qui existe. Le dépôt compte 28
 paquets ; j'ai dupliqué PSR/DSR et un registre d'hypothèses parce que j'ai conçu avant de lire.
+
+---
+
+## ADR-0053 — Le cœur change de COMPOSITION, jamais de TAILLE (2026-09-02)
+
+**Contexte.** Question posée : un top-7 plutôt qu'un top-10 améliorerait-il la performance ?
+La mesure existante répond déjà non — la concentration dégrade le maxDD de −19,5 % à −73,6 %
+sans gagner de Sharpe. Le compte réel, lui, affiche N effectif 1,5 : le portefeuille se
+comporte comme une position et demie. Le problème n'est pas le nombre de lignes, c'est leur
+corrélation.
+
+**Décision.** Le banc `make coeur-multi` garde la part de cœur à **50 %, identique à la
+production**, et ne fait varier que sa composition (QQQ + obligations longues + or). Tout
+écart mesuré est donc imputable à la corrélation, à rien d'autre. Quatre variantes sont
+**figées dans le code** avant toute mesure et comptées dans la déflation du DSR ; les poids
+sont une convention (un 60/40 incliné croissance), jamais un optimum ajusté.
+
+**Règle d'acceptation, écrite avant le run.** Bascule SI ET SEULEMENT SI : (a) ΔSharpe > 0
+avec p < 0,05 au test apparié de Jobson-Korkie/Memmel, (b) maxDD non dégradé, (c) DSR ≥ 50 %.
+Si (a) échoue on ne bouge pas, quel que soit le CAGR. Si (a) passe et (b) échoue, on ne bouge
+pas non plus : acheter du Sharpe avec un drawdown plus profond contredit la raison même de
+construire ce cœur. Un maxDD amélioré de plus de 5 points à Sharpe indiscernable est remonté
+comme « réduction du risque », PAS comme feu vert.
+
+**Conséquences.** Le cœur multi-actifs paie 5 bps de rééquilibrage mensuel, le cœur QQQ zéro
+(buy-and-hold) : la comparaison est défavorable au nouveau venu, et c'est le sens d'erreur
+qu'on accepte. Les séries des diversifiants sont alignées **par date** dans le snapshot, à la
+source — jamais empilées par position.
+
+---
+
+## ADR-0054 — Un cahier des charges externe se CÂBLE sur l'existant, il ne se recode pas (2026-09-02)
+
+**Contexte.** Une spec complète de robot swing institutionnel (structure fractale 1W/1D/1H,
+SFP, OTE, filtre ML, DDM, ratios de survie) demandait « le squelette architectural complet ».
+Écrit à neuf, ce squelette aurait dupliqué le DDM, les stops ATR, la validation croisée
+purgée, l'IC de Spearman et la promotion de modèle — tous déjà présents et testés.
+
+**Décision.** Quatre modules de primitives + une façade d'orchestration
+(`strategies/moteur_swing`, classes `MarketStructureEngine` et `RiskManager` aux noms
+demandés). Les classes composent ; elles ne calculent presque rien. Un tableau de
+correspondance spec → module figure en tête du fichier, pour que le lecteur voie tout de
+suite ce qui est neuf et ce qui ne l'est pas.
+
+**Ce qui est refusé, explicitement.** La jambe 1H/4H est câblée mais la base est
+QUOTIDIENNE : `raffiner_entree` renvoie « indécidable » et jamais « prêt » quand aucune barre
+intraday n'est fournie. Renvoyer un feu vert par défaut ferait disparaître un filtre de la
+spec en silence — le système se comporterait comme s'il avait vérifié quelque chose.
+
+**Les cibles de la spec ne sont pas des résultats.** PF ≥ 1,75 · Sortino ≥ 2,0 · maxDD ≤ 12 %
+· UI ≤ 4,5 · R² ≥ 0,90 sont des seuils écrits sans avoir vu ces données. Le système mesuré
+affiche PF 1,08, Sortino 0,88, maxDD −25,5 %. L'écart n'est pas un défaut d'implémentation :
+c'est la distance entre un cahier des charges et une mesure. Aucun de ces seuils n'est câblé
+comme critère d'acceptation ; les publier comme atteints serait le seul vrai échec.
+
+**Conséquence défavorable acceptée.** SFP, order block et cassure de structure existent
+maintenant en deux exemplaires (`indicators/liquidite_ict` en primitives as-of-`i`,
+`strategies/institutional_price_action` en plugin de signal). Consolider est une dette P2
+déclarée, pas un travail fait.
+
+---
+
+## ADR-0055 — Le stop ne bouge que sur la structure ; l'ordre d'évaluation est pessimiste (2026-09-02)
+
+**Contexte.** Le bloc de sortie de la spec swing interdit le breakeven de confort et exige
+une sortie de temps à 15 séances. C'est aussi ce que `sortie_lab` a mesuré le 02/09 par un
+tout autre chemin : le suiveur à 5 ATR coupait la queue droite et détruisait l'avantage
+(payoff 2,82 vs 3,21 sans lui). Deux raisonnements indépendants, une seule conclusion.
+
+**Décision 1 — invariant du stop.** `ExitEngine` ne déplace le stop QUE sur un invalidant
+structurel : pour un long, un creux confirmé plus haut que le stop courant, lui-même validé
+par un sommet confirmé POSTÉRIEUR. Aucune branche du code ne lit le prix d'entrée, le gain
+courant ou un multiple d'ATR. Le garde-fou est doublé : la détection le refuse, et
+`appliquer` ignore tout recul même demandé explicitement — une règle de sécurité qui
+n'existe qu'à un endroit finit contournée.
+
+**Décision 2 — ordre d'évaluation pessimiste.** Stop, puis cible, puis temps, puis partielle.
+Une barre quotidienne qui touche le stop ET la cible ne dit pas laquelle est venue en
+premier. Retenir le stop est l'hypothèse défavorable ; retenir la cible fabriquerait de la
+performance à partir d'une ambiguïté de données.
+
+**Décision 3 — la cible retient le plus exigeant des deux critères**, sommet majeur OU
+plancher en R. Le sommet seul accepterait des trades à 1,2 R ; le R seul viserait un prix que
+rien n'attire.
+
+**Ce qui est assumé comme approximation.** Le CVD suppose des transactions signées ; des
+barres OHLCV n'en ont pas. Le module utilise le proxy « close location value × volume » et
+porte le nom `cvd_proxy`. Une divergence est ici un fait de prix et de volume — pas une
+preuve d'absorption institutionnelle. Le renommer en `cvd` serait la seule vraie faute.
+
+**Ce qui est refusé.** La borne « 2 jours » n'est pas transformée en immobilisation : elle
+est reportée et ne bloque jamais une sortie que le marché offre. Une borne basse en verrou
+serait un coût déguisé en protection.
+
+
+## ADR-0056 — Le fill d'ouverture vient des ORDRES EXÉCUTÉS, jamais de la position (2026-09-03)
+
+**Contexte.** `run_live._journal_opens` lisait le prix et la quantité d'entrée dans la position
+du courtier, interrogée juste après l'envoi de l'ordre. Mesure du 03/09 sur le compte réel :
+87 symboles achetés, 57 couverts par le journal, 30 incomplets (AVAX 626 unités journalisées
+contre 1 239 achetées). La position est une photo d'état, pas une trace d'opération : elle peut
+n'être pas encore rafraîchie — l'achat est alors introuvable et perdu, le message « capturé au
+prochain run » étant faux puisque rien ne le capture — et quand elle est lisible elle porte la
+quantité TOTALE et le prix de revient MOYEN, pas l'achat du jour.
+
+**Décision.** La source primaire du fill d'ouverture est l'historique des **ordres exécutés du
+jour**, agrégés par symbole canonique (quantité et VWAP). La position ne sert que de repli, et
+ce repli est déclaré comme une approximation. Rien n'est écrit si aucune des deux sources ne
+répond.
+
+**Conséquences.** Un run tardif retrouve les achats de la journée : le journal cesse de dépendre
+de la latence du courtier. Le lot décrit l'opération qu'il prétend décrire. Le repli reste
+possible pour un courtier qui ne publie pas d'historique d'ordres, au prix d'un prix de revient
+moyen — c'est un choix assumé, pas un défaut silencieux.
+
+## ADR-0057 — On complète les ENTRÉES avant de réparer les SORTIES (2026-09-03)
+
+**Contexte.** Deux jours de réparation du journal portaient sur les sorties : lots orphelins,
+fermetures sans identité, résidu inexpliqué. Elles ne pouvaient pas converger, parce qu'un achat
+jamais journalisé n'a pas de lot — donc pas de sortie possible, et la vente correspondante reste
+sans contrepartie quoi qu'on fasse en aval.
+
+**Décision.** Une réparation de registre se fait dans l'ordre du flux : `completer-ouvertures`
+(reconstitue les achats manquants depuis les fills), puis `reconcilier-journal` (ferme avec les
+ventes réelles), puis `diag-journal` (vérifie). Les lots reconstitués sont écrits en `legacy=1`,
+parce que leurs features de décision n'ont jamais été capturées et ne peuvent plus l'être : c'est
+le sens exact du drapeau, et les mettre en `legacy=0` gonflerait de trades aveugles la
+statistique affichée qu'on cherche à assainir. Leur prix de revient est le VWAP des fills **non
+couverts** — obtenu en consommant les fills en FIFO à hauteur de ce que le journal connaît déjà —
+et non le VWAP de tous les achats du symbole, qui mélangerait le couvert et le manquant.
+
+**Conséquences.** L'idempotence du réconciliateur devient une idempotence en QUANTITÉ : écarter
+un fill de vente dès son premier usage condamnerait à rester ouverts pour toujours les lots
+reconstitués après coup, dont la vente existe mais a déjà été marquée consommée. On compte donc
+les unités fermées par fill et on rejoue le reste. Deux refus explicites subsistent : rien n'est
+écrit pour un courtier injoignable, et un écart où le journal en sait PLUS que le courtier est
+signalé sans être « corrigé » — supprimer des lots pour faire coller les chiffres ne répare rien.
+
+## ADR-0058 — Le panneau publie son PÉRIMÈTRE, il ne l'élargit pas (2026-09-03)
+
+**Contexte.** `/api/journal` lit `all(legacy=False)`. Après la réparation du 03/09, ce périmètre
+affichait +6 260,82 $ de réalisé et 70 % de réussite, quand le compte avait subi +569,31 $ et
+56 % : le filtre masquait 266 lots et −5 691,51 $. Aucun des deux chiffres n'est faux. Ce qui
+l'était, c'est de n'en publier qu'un et de le laisser lire comme la performance du compte.
+
+**Décision.** Le périmètre affiché reste `legacy=0`, et l'écart avec le total est publié à
+côté, chiffré (`perimetre_affiche`). On ne verse pas les lots `legacy` dans la statistique
+affichée : ce sont des fills importés sans features de décision, et les y mêler rendrait
+inutilisable pour la calibration ML le chiffre même qui la sert.
+
+**Conséquences.** Le lecteur voit d'un coup d'œil que le panneau décrit les trades pilotés par
+le système et non le compte. La correspondance avec la courbe d'équité redevient vérifiable au
+lieu d'être supposée. Un troisième chiffre apparaît sur la page ; c'est le prix d'une lecture
+qui ne se trompe plus de question.
+
+## ADR-0059 — Une mesure qui infirme n'infirme que ce qu'elle a mesuré (2026-09-03)
+
+**Contexte.** `_doublons` cherchait des lots OUVERTS de mêmes titre, quantité, prix et jour, et
+répondait « aucun doublon ». La conclusion « le journal n'écrit pas en double » en avait été
+tirée, et le sujet clos. Après la réparation, le rapport quantité-journal / quantité-achetée
+vaut 2,000000 sur dix symboles vérifiés parmi quarante. Les deux copies portent des identifiants
+différents, l'une peut être fermée, et leurs drapeaux `legacy` peuvent différer : trois
+conditions hors du champ du test. Troisième occurrence de ce schéma cette semaine.
+
+**Décision.** Une mesure ne réfute que l'énoncé qu'elle teste, et son périmètre doit être écrit
+à côté de son verdict. `_origine_du_double` VENTILE (par drapeau, par préfixe d'identifiant) au
+lieu de conclure, et ne supprime rien : il rend la cause lisible et laisse la décision à
+l'humain qui lit le chiffre.
+
+**Conséquences.** Un bloc de diagnostic supplémentaire à chaque `make diag-journal`. En échange,
+la question « une seule écriture ou deux chemins ? » se tranche sur un chiffre plutôt que sur
+une lecture de code, et l'on ne retire aucune ligne d'un registre avant de savoir laquelle.
+
+## ADR-0060 — Une sortie ne peut pas précéder son entrée (2026-09-03)
+
+**Contexte.** `reconcilier_journal._plan` appariait chaque vente au plus ancien lot du symbole
+sans jamais regarder la date d'entrée de ce lot. Signalé sur le compte réel : DUOL portait une
+entrée au 03/09 et une sortie au 01/09. Le round-trip ainsi fabriqué calculait son P&L sur un
+prix de revient POSTÉRIEUR à la sortie — un chiffre qui ne correspond à aucune opération.
+
+**Décision.** Le FIFO ne s'applique qu'aux lots antérieurs à la vente. La comparaison se fait au
+JOUR et non à la seconde : le lot porte l'instant où le run l'a écrit, le fill celui de
+l'exécution, et ces deux horloges ne sont pas comparables — trancher à la seconde refuserait des
+aller-retours réels. Une date illisible d'un côté ou de l'autre fait REFUSER l'appariement plutôt
+que le supposer valide. Le FIFO saute le lot trop récent au lieu de s'arrêter dessus.
+
+**Conséquences.** Aucun round-trip à chronologie impossible ne peut plus être créé. La garde ne
+rétroagit pas sur ceux déjà écrits : `_sorties_avant_entree` les compte au diagnostic, et leur
+reprise suppose un plan complet — savoir à quel lot la vente aurait dû s'apparier ne se décide
+pas ligne à ligne.
+
+## ADR-0061 — Une opération qui n'a pas eu lieu se RETIRE ; elle ne se corrige pas (2026-09-03)
+
+**Contexte.** La règle du dépôt est de ne jamais réécrire un enregistrement mais de poster une
+écriture de correction. Elle est juste, et elle vise une VALEUR fausse. Mesuré le 03/09 : 33 des
+52 lots « ouverts » portaient le symbole, la quantité et le prix EXACTS d'un fill de VENTE — des
+sorties écrites à l'endroit des entrées. Leur valeur n'est pas fausse ; l'opération n'a pas eu
+lieu dans ce sens. Les garder revient à publier des positions que le compte n'a jamais eues.
+
+**Décision.** Ces lignes sont RETIRÉES (`SqliteTradeJournal.supprimer`), et seulement celles que
+désigne un fill de vente unique de mêmes symbole, quantité et prix. Deux archives survivent au
+retrait : une sauvegarde horodatée de la base, et un JSON portant chaque ligne retirée AVEC le
+fill qui l'a désignée — un retrait sans sa preuve n'est pas rejugeable. Ce JSON contient des
+fills réels : il est gitignoré, le dépôt étant public.
+
+**Alternative écartée.** Fermer ces lots à leur prix d'entrée. Cela produirait un aller-retour à
+0,00 $ qui n'a jamais existé et gonflerait le nombre de trades : on remplacerait une fausse
+position par un faux trade, ce qui est pire, parce que moins visible.
+
+**Conséquences.** Le critère strict (fill unique) sous-estime : une vente exécutée en plusieurs
+fills ne sera pas appariée et son lot restera ouvert et signalé. C'est la seule direction
+d'erreur acceptable pour une mesure qui décide d'un retrait — on préfère un registre encore
+imparfait à un registre nettoyé sur une présomption.
+
+## ADR-0062 — « En retard » et « arrêtée » sont deux états, pas un seul (2026-09-03)
+
+**Contexte.** Le détecteur de fraîcheur macro déclarait « série arrêtée — ne reflète plus la
+situation actuelle » dès 3× la cadence observée. Le Bund (OCDE, taux longs) portait ce label
+avec 94 jours de retard contre un seuil de 93 : un dépassement d'UN jour, soit 3,03× la
+cadence. Le cas qui avait motivé la règle — chômage zone euro — valait 43×. Cette série publie
+par ailleurs avec un décalage structurel de deux mois : elle rebasculerait en « arrêtée » à la
+fin de chaque trimestre, puis en sortirait à la publication suivante.
+
+**Décision.** Deux seuils au lieu d'un. Au-delà de 3× la cadence, la publication est EN RETARD
+et la série vit. Au-delà de 12× — un an de silence sur du mensuel — la série est ARRÊTÉE. Le
+champ `perimee` reste vrai dès le retard, pour qu'aucun appelant existant ne cesse de signaler ;
+le nouveau champ `statut` porte la nuance pour qui sait la lire.
+
+**Conséquences.** Une alerte qui clignote au rythme du calendrier de publication apprend à être
+ignorée : c'est le coût réel d'un seuil unique, et il est plus élevé qu'un faux négatif ici,
+puisqu'une série vraiment morte reste détectée par le second seuil. Le mot « arrêtée » redevient
+utilisable parce qu'il ne désigne plus qu'une chose.
+
+## ADR-0063 — Une page hors de la barre de navigation n'existe pas (2026-09-03)
+
+**Contexte.** L'audit « simplicité radicale » avait ramené la navigation à trois groupes. Les
+pages absorbées restaient routables — URL directe, liens contextuels, ⌘K — ce qui semblait
+suffisant. Signalé le 03/09 : « je ne retrouve plus l'onglet des news ». `/sentiment` était
+intacte et fonctionnelle ; simplement introuvable pour qui ne connaît pas son adresse.
+
+**Décision.** « Routable » n'est pas « accessible ». Une page que l'utilisateur consulte
+régulièrement doit figurer dans un menu. `/sentiment` (actualité marché, secteur et positions
+réelles) et `/events` (résultats trimestriels et IPOs) rejoignent « Marché ».
+
+**Conséquences.** Onze pages restent hors de la barre. Ce n'est pas un oubli mais le résultat
+d'un arbitrage assumé : elles y restent jusqu'à décision explicite, plutôt que d'être réinsérées
+une par une au fil des signalements — ce qui déferait l'audit sans jamais le rediscuter.

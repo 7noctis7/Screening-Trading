@@ -37,11 +37,17 @@ export default function Macro() {
                     <div className="text-muted2 text-[11px]">
                       {it.date}{it.delta != null ? ` · Δ ${it.delta >= 0 ? "+" : ""}${it.delta}` : ""}
                     </div>
+                    {/* « En retard » et « arrêtée » ne sont pas la même chose. Le Bund,
+                        publié par l'OCDE avec deux mois de décalage structurel, dépassait
+                        le seuil d'UN jour et s'affichait « série arrêtée » — un contresens
+                        qui, répété à chaque trimestre, apprend à ignorer l'alerte. */}
                     {it.perimee && (
                       <div className="text-[11px] mt-1 px-1.5 py-0.5 rounded inline-block"
-                        style={{ background: "color-mix(in srgb, var(--warn) 16%, transparent)", color: "var(--warn)" }}
-                        title={`Dernière publication il y a ${it.retard_jours} jours, très au-delà de la cadence habituelle de cette série.`}>
-                        ⚠ série arrêtée — ne reflète plus la situation actuelle
+                        style={{ background: `color-mix(in srgb, var(--warn) ${it.statut === "arretee" ? 16 : 9}%, transparent)`, color: "var(--warn)" }}
+                        title={`Dernière observation il y a ${it.retard_jours} jours.`}>
+                        {it.statut === "arretee"
+                          ? "⚠ série arrêtée — ne reflète plus la situation actuelle"
+                          : `⏳ publication en retard (${it.retard_jours} j) — la série publie avec du décalage`}
                       </div>
                     )}
                   </div>
