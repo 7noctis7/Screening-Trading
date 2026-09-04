@@ -145,3 +145,30 @@ def test_rendement_negatif_mais_bruite_n_est_pas_significatif():
     a = auditer(trades)
     assert a.rendement_tstat is not None and abs(a.rendement_tstat) < 2.0
     assert "NON significatif" in rapport(a)
+
+
+# ── séparation des deux populations (le point qui décide, 04/09) ──
+
+def test_seulement_systeme_exclut_les_reparations():
+    """Sur le vrai journal : 31 positions sur 37 venaient du script de réparation."""
+    trades = ([_trade(i, 50, 0.40, None, motif=f"reconciliation-journal:{i}")
+               for i in range(8)]
+              + [_trade(20 + i, 1, -0.01, 0.02) for i in range(3)])
+    tout = auditer(trades)
+    sys_ = auditer(trades, seulement="systeme")
+    admin = auditer(trades, seulement="administratif")
+    assert tout.n_positions == 11
+    assert sys_.n_positions == 3 and sys_.n_administratives == 0
+    assert admin.n_positions == 8
+    # le rallye réparé tirait la moyenne vers le haut ; isolé, le système perd
+    assert tout.rendement_moyen_pct > 0 > sys_.rendement_moyen_pct
+
+
+def test_rapport_complet_separe_les_blocs():
+    from packages.research.turnover_audit import rapport_complet
+    trades = [_trade(0, 50, 0.40, None, motif="reconciliation-journal:x"),
+              _trade(1, 1, -0.01, 0.02)]
+    txt = rapport_complet(trades)
+    assert "DÉCISIONS DU SYSTÈME SEULEMENT" in txt
+    assert "FERMETURES RECONSTRUITES" in txt
+    assert "ne mesurent AUCUNE décision" in txt

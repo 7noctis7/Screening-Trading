@@ -113,7 +113,7 @@ def _agreger(clos: list) -> list[dict]:
         mfes = [t.mfe for t in tranches if t.mfe is not None]
         durees = [t.duration_s for t in tranches if t.duration_s is not None]
         positions.append({
-            "pnl_pct": pnl, "poids": poids,
+            "pnl_pct": pnl, "poids": poids, "tranches": tranches,
             "mfe": max(mfes) if mfes else None,
             "duree_j": (max(durees) / 86400.0) if durees else None,
             "admin": any((t.exit_reason or "").startswith(_ADMIN) for t in tranches),
@@ -121,14 +121,25 @@ def _agreger(clos: list) -> list[dict]:
     return positions
 
 
-def auditer(trades: list) -> AuditTurnover:
-    """`trades` : `TradeRecord` (legacy=False). Les lots encore ouverts sont ignorés."""
-    clos = [t for t in trades if t.exit_ts is not None]
+def auditer(trades: list, *, seulement: str | None = None) -> AuditTurnover:
+    """`trades` : `TradeRecord` (legacy=False). Les lots encore ouverts sont ignorés.
+
+    `seulement="systeme"` ne garde que les positions fermées par une DÉCISION du
+    système ; `"administratif"` que celles reconstruites après coup par le script de
+    réparation. C'est la séparation qui compte : sur le journal réel du 04/09, 31
+    positions sur 37 étaient administratives — les mélanger faisait passer un rallye
+    crypto réparé a posteriori pour la performance de la stratégie."""
+    clos_tout = [t for t in trades if t.exit_ts is not None]
+    pos = _agreger(clos_tout)
+    if seulement == "systeme":
+        pos = [p for p in pos if not p["admin"]]
+    elif seulement == "administratif":
+        pos = [p for p in pos if p["admin"]]
+    clos = [t for p in pos for t in p["tranches"]]
     if not clos:
         return AuditTurnover(0, 0, 0, 0.0, 0.0, None, None, None, 0, frozenset(),
                              None, None, None, False)
 
-    pos = _agreger(clos)
     pnls = [p["pnl_pct"] for p in pos if p["pnl_pct"] is not None]
     gains_ = sum(x for x in pnls if x > 0)
     pertes_ = -sum(x for x in pnls if x < 0)
@@ -207,3 +218,18 @@ def rapport(a: AuditTurnover) -> str:
         L.append("⚠ Un seul motif de sortie côté système : aucune sortie déclenchée "
                  "par un TP ou un SL — toute clôture vient du rebalancement.")
     return "\n".join(L)
+
+
+def rapport_complet(trades: list) -> str:
+    """Deux blocs SÉPARÉS. Mélanger les réparations et les décisions du système fait
+    passer un rallye crypto retrouvé a posteriori pour la performance de l'algo."""
+    blocs = ["═══ TOUTES POSITIONS CLOSES ═══", rapport(auditer(trades))]
+    sys_ = auditer(trades, seulement="systeme")
+    blocs += ["", "═══ DÉCISIONS DU SYSTÈME SEULEMENT ═══",
+              "(le seul sous-ensemble qui mesure la stratégie)", rapport(sys_)]
+    admin = auditer(trades, seulement="administratif")
+    if admin.n_positions:
+        blocs += ["", "═══ FERMETURES RECONSTRUITES (script de réparation) ═══",
+                  "(sorties réelles, mais dates et prix retrouvés après coup — "
+                  "ne mesurent AUCUNE décision)", rapport(admin)]
+    return "\n".join(blocs)

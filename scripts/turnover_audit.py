@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT))
 
 
 def main() -> None:
-    from packages.research.turnover_audit import auditer, rapport
+    from packages.research.turnover_audit import rapport_complet
     from packages.storage import SqliteTradeJournal
 
     db = ROOT / "data" / "journal.db"
@@ -26,7 +26,7 @@ def main() -> None:
               "script sur la machine qui détient le vrai journal (Mac mini / VPS).")
         return
     trades = SqliteTradeJournal(str(db)).all(legacy=False)
-    print(rapport(auditer(trades)))
+    print(rapport_complet(trades))
 
 
 if __name__ == "__main__":
