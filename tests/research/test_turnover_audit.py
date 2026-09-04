@@ -80,3 +80,19 @@ def test_plusieurs_motifs_ne_declenchent_pas_l_alerte():
     a = auditer(trades)
     assert len(a.motifs_de_sortie) == 2
     assert "AUCUNE sortie" not in rapport(a)
+
+
+def test_profit_factor_rentable_malgre_taux_de_gain_bas():
+    """1 gagnant sur 3, mais le gagnant compense largement les deux perdants."""
+    trades = [_trade(0, 1, 0.10, 0.10), _trade(1, 1, -0.02, None),
+              _trade(2, 1, -0.02, None)]
+    a = auditer(trades)
+    assert a.taux_gain == round(1 / 3, 3)
+    assert a.profit_factor is not None and a.profit_factor > 1
+    assert "rentable malgré taux bas" in rapport(a)
+
+
+def test_petit_echantillon_est_signale():
+    trades = [_trade(i, 1, 0.01, None) for i in range(5)]
+    a = auditer(trades)
+    assert "trop petit pour distinguer" in rapport(a)

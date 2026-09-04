@@ -44,6 +44,8 @@ class AuditTurnover:
     capture_mediane: float | None      # médiane de pnl_pct / mfe, trades avec mfe > 0
     n_capture_mesurable: int
     motifs_de_sortie: frozenset[str]   # distincts observés — voir le module docstring
+    rendement_moyen_pct: float | None  # moyenne de pnl_pct
+    profit_factor: float | None        # gains/pertes — rentable même si taux bas
 
 
 def _jours(a: datetime, b: datetime) -> float:
@@ -63,7 +65,7 @@ def auditer(trades: list) -> AuditTurnover:
     """`trades` : `TradeRecord` (legacy=False). Les lots encore ouverts sont ignorés."""
     clos = [t for t in trades if t.exit_ts is not None]
     if not clos:
-        return AuditTurnover(0, 0.0, 0.0, None, None, None, 0, frozenset())
+        return AuditTurnover(0, 0.0, 0.0, None, None, None, 0, frozenset(), None, None)
 
     debut = min(t.entry_ts for t in clos)
     fin = max(t.exit_ts for t in clos)
@@ -78,6 +80,12 @@ def auditer(trades: list) -> AuditTurnover:
     motifs = frozenset((t.exit_reason or "").strip() for t in clos
                        if (t.exit_reason or "").strip())
 
+    pnls = [t.pnl_pct for t in clos if t.pnl_pct is not None]
+    rendement_moyen = sum(pnls) / len(pnls) if pnls else None
+    gains_ = sum(p for p in pnls if p > 0)
+    pertes_ = -sum(p for p in pnls if p < 0)
+    pf = (gains_ / pertes_) if pertes_ > 1e-9 else None
+
     return AuditTurnover(
         n_trades=len(clos), n_jours_couverts=round(_jours(debut, fin), 1),
         frais_totaux=round(frais, 2),
@@ -85,6 +93,9 @@ def auditer(trades: list) -> AuditTurnover:
         taux_gain=round(taux_gain, 3) if taux_gain is not None else None,
         capture_mediane=round(_mediane(captures), 3) if captures else None,
         n_capture_mesurable=len(captures), motifs_de_sortie=motifs,
+        rendement_moyen_pct=(round(rendement_moyen, 4)
+                            if rendement_moyen is not None else None),
+        profit_factor=round(pf, 2) if pf is not None else None,
     )
 
 
@@ -100,8 +111,16 @@ def rapport(a: AuditTurnover) -> str:
         L.append(f"Détention médiane : {a.duree_mediane_j:.1f} jour(s).")
     if a.taux_gain is not None:
         L.append(f"Taux de gain : {a.taux_gain * 100:.0f} %.")
+    if a.rendement_moyen_pct is not None:
+        L.append(f"Rendement moyen par trade : {a.rendement_moyen_pct * 100:+.2f} %.")
+    if a.profit_factor is not None:
+        v = "rentable malgré taux bas" if a.profit_factor > 1 else "perdant net"
+        L.append(f"Profit factor (gains / pertes) : {a.profit_factor:.2f} ({v}).")
+    if a.n_trades < 30:
+        L.append(f"⚠ Échantillon de {a.n_trades} trade(s) : trop petit pour distinguer "
+                 "un vrai effet du bruit. À reconfirmer avec plus de données.")
     if a.capture_mediane is not None:
-        L.append(f"Capture médiane du potentiel observé (pnl / MFE) : "
+        L.append("Capture médiane du potentiel observé (pnl / MFE) : "
                  f"{a.capture_mediane * 100:.0f} % sur {a.n_capture_mesurable} "
                  f"trade(s) mesurable(s).")
     else:
