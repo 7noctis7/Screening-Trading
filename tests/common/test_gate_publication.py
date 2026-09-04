@@ -95,3 +95,38 @@ def test_les_quatre_courbes_du_coeur_sont_surveillees():
     """preset, qqq, megacap, sector_mom — celle qui a cassé était `preset`."""
     for cle in ("preset", "qqq", "megacap", "sector_mom"):
         assert auditer({cle: [100.0, None]}), f"{cle} non surveillée"
+
+
+# ───── le gate ne doit pas PLANTER : il a bloqué un déploiement pour rien ─────
+
+def test_une_cle_de_courbe_portant_un_NOMBRE_ne_fait_pas_planter():
+    """LE défaut du 04/09, et il a coûté un déploiement. `spec = {"qqq": 0.5}` porte le
+    POIDS du cœur, pas sa courbe — et `qqq` figure dans la liste des clés de courbes.
+    La première version faisait `if not courbe` puis itérait : `TypeError: 'float'
+    object is not iterable`, build rouge, déploiement bloqué pour la mauvaise raison.
+
+    J'avais deviné des noms de clés au lieu de les vérifier sur le payload réel. Un nom
+    peut toujours resservir ailleurs avec un autre sens ; le type, lui, ne ment pas."""
+    assert trous_dans_courbe(0.5) == 0
+    assert trous_dans_courbe("une chaîne") == 0
+    assert trous_dans_courbe({"a": 1}) == 0
+    assert trous_dans_courbe(None) == 0
+
+
+def test_le_payload_reel_du_coeur_ne_fait_pas_planter():
+    """Reproduit la structure exacte qui a cassé le build : `index_core.spec`."""
+    assert auditer({"index_core": {"spec": {"qqq": 0.5, "megacap": 0.3,
+                                            "sector_mom": 0.2}}}) == []
+
+
+def test_une_VRAIE_courbe_reste_detectee_apres_le_correctif():
+    """Le correctif ne doit pas désarmer la règle qu'il protège."""
+    assert trous_dans_courbe([100.0, None, 102.0]) == 1
+    assert auditer({"index_core": {"qqq": [100.0, None]}})
+
+
+def test_un_gate_qui_plante_vaut_un_gate_absent():
+    """Note de méthode, vérifiée par le code : aucun type d'entrée ne doit lever. Un
+    build rouge inexpliqué invite à désactiver le contrôle, pas à chercher la cause."""
+    for valeur in (0.5, -1, "x", {"a": 1}, None, True, [], [1, 2], (1, 2)):
+        assert isinstance(trous_dans_courbe(valeur), int)

@@ -1,5 +1,32 @@
 # 04 — JOURNAL
 
+## Session 2026-09-04 (suite 6) — Mon gate a bloqué le déploiement, et il avait tort
+
+**Ce qui s'est passé.** PR #369 mergée, CI verte, build Pages lancé — et le gate de publication a
+échoué. Pas sur une incohérence : sur une `TypeError`. `'float' object is not iterable`.
+
+**La cause, et c'est ma faute de méthode.** `trous_dans_courbe` faisait `if not courbe` puis
+itérait. Appelée sur `index_core.spec = {"qqq": 0.5, "megacap": 0.3, "sector_mom": 0.2}` — où ces
+noms désignent les **POIDS** du cœur et non ses courbes — elle a levé. **J'avais deviné les noms
+de clés au lieu de les vérifier sur le payload réel.** Un nom peut toujours resservir ailleurs
+avec un autre sens ; le type, lui, ne ment pas. Le filtre est désormais `isinstance(list)`.
+
+**Ce que l'échec dit de bien, et ce qu'il dit de mal.** De bien : rien n'a été publié, le site en
+ligne est resté intact, `deploy` a été SKIPPED. Le principe « un build rouge ne publie pas » a
+tenu. De mal : un gate qui plante est aussi nuisible qu'un gate absent — devant un build rouge
+inexpliqué, le premier réflexe est de désactiver le contrôle, pas de chercher la cause. Un
+gate doit être increvable avant d'être sévère.
+
+**`coherence_site` ne portait pas la faiblesse** : il filtrait par `isinstance(list)` dès
+l'origine. Seul `gate_publication` guessait. Quatre tests de non-régression, dont un qui balaie
+tous les types d'entrée et exige qu'aucun ne lève.
+
+**La leçon, et c'est la même que celle du cache `.next` et de la branche écrasée.** J'ai vérifié
+mon gate sur des fixtures que j'avais écrites moi-même, donc conformes à l'idée que je me faisais
+du payload. Je l'ai ensuite exercé sur une structure calquée sur le VRAI dashboard — poids,
+courbes, métriques, régime, positions — et c'est seulement là qu'il devient crédible. Tester son
+code contre sa propre représentation du monde ne teste que la représentation.
+
 ## Session 2026-09-04 (suite 5) — « Plus aucune incohérence » : ce qu'on peut réellement garantir
 
 **La demande, et ce que j'en fais.** « Assure-toi que TOUTES les données publiées — local, en

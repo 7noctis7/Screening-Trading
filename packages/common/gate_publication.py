@@ -38,13 +38,25 @@ def _fini(x: Any) -> bool:
     return isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x)
 
 
-def trous_dans_courbe(courbe: list | None) -> int:
+def trous_dans_courbe(courbe: object) -> int:
     """Nombre de points non exploitables (`null`, NaN, texte) dans une courbe publiée.
 
     Une courbe d'équity est une suite de montants. Un trou n'y est pas une donnée
     manquante bénigne : le front l'affiche comme zéro, et un zéro au milieu d'une
-    equity signifie faillite. Refuser de publier vaut mieux qu'une ruine imaginaire."""
-    if not courbe:
+    equity signifie faillite. Refuser de publier vaut mieux qu'une ruine imaginaire.
+
+    ON FILTRE PAR TYPE, PAS PAR NOM DE CLÉ (correctif du 04/09). La première version
+    faisait `if not courbe` puis itérait : appelée sur `spec = {"qqq": 0.5}` — où
+    `qqq` désigne le POIDS du cœur et non sa courbe — elle levait
+    `TypeError: 'float' object is not iterable` et **le gate a bloqué le déploiement
+    pour la mauvaise raison**. J'avais deviné des noms de clés au lieu de les vérifier
+    sur le payload réel ; or un nom peut toujours resservir ailleurs avec un autre
+    sens. Le type, lui, ne ment pas : ce qui n'est pas une liste n'est pas une courbe.
+
+    Un gate qui plante est aussi nuisible qu'un gate absent — il apprend qu'on peut
+    l'ignorer, et le premier réflexe devant un build rouge inexpliqué est de le
+    désactiver."""
+    if not isinstance(courbe, list) or not courbe:
         return 0
     return sum(1 for x in courbe if not _fini(x))
 
