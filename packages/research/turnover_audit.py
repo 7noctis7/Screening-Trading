@@ -30,6 +30,7 @@ DISTINCTS observés plutôt que de supposer le résultat.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -46,6 +47,8 @@ class AuditTurnover:
     motifs_de_sortie: frozenset[str]   # distincts observés — voir le module docstring
     rendement_moyen_pct: float | None  # moyenne de pnl_pct
     profit_factor: float | None        # gains/pertes — rentable même si taux bas
+    rendement_tstat: float | None      # t-stat du rendement moyen vs 0 (même seuil
+    rendement_significatif: bool       # |t|≥2 que l'alpha du dashboard, ADR-0072)
 
 
 def _jours(a: datetime, b: datetime) -> float:
@@ -61,11 +64,27 @@ def _mediane(xs: list[float]) -> float | None:
     return v[m] if n % 2 else (v[m - 1] + v[m]) / 2.0
 
 
+def _tstat_vs_zero(pnls: list[float],
+                   moyenne: float | None) -> tuple[float | None, bool]:
+    """t-stat du rendement moyen vs 0 — MÊME test que l'alpha du dashboard (ADR-0072) :
+    un rendement moyen négatif sur peu de trades peut être du bruit, pas un signal."""
+    n = len(pnls)
+    if n < 2 or moyenne is None:
+        return None, False
+    sd = math.sqrt(sum((p - moyenne) ** 2 for p in pnls) / (n - 1))
+    se = sd / math.sqrt(n)
+    if se <= 1e-12:
+        return None, False
+    t = moyenne / se
+    return round(t, 2), abs(t) >= 2.0
+
+
 def auditer(trades: list) -> AuditTurnover:
     """`trades` : `TradeRecord` (legacy=False). Les lots encore ouverts sont ignorés."""
     clos = [t for t in trades if t.exit_ts is not None]
     if not clos:
-        return AuditTurnover(0, 0.0, 0.0, None, None, None, 0, frozenset(), None, None)
+        return AuditTurnover(0, 0.0, 0.0, None, None, None, 0, frozenset(),
+                             None, None, None, False)
 
     debut = min(t.entry_ts for t in clos)
     fin = max(t.exit_ts for t in clos)
@@ -81,10 +100,12 @@ def auditer(trades: list) -> AuditTurnover:
                        if (t.exit_reason or "").strip())
 
     pnls = [t.pnl_pct for t in clos if t.pnl_pct is not None]
-    rendement_moyen = sum(pnls) / len(pnls) if pnls else None
+    n_pnl = len(pnls)
+    rendement_moyen = sum(pnls) / n_pnl if pnls else None
     gains_ = sum(p for p in pnls if p > 0)
     pertes_ = -sum(p for p in pnls if p < 0)
     pf = (gains_ / pertes_) if pertes_ > 1e-9 else None
+    tstat, significatif = _tstat_vs_zero(pnls, rendement_moyen)
 
     return AuditTurnover(
         n_trades=len(clos), n_jours_couverts=round(_jours(debut, fin), 1),
@@ -96,6 +117,7 @@ def auditer(trades: list) -> AuditTurnover:
         rendement_moyen_pct=(round(rendement_moyen, 4)
                             if rendement_moyen is not None else None),
         profit_factor=round(pf, 2) if pf is not None else None,
+        rendement_tstat=tstat, rendement_significatif=significatif,
     )
 
 
@@ -113,6 +135,11 @@ def rapport(a: AuditTurnover) -> str:
         L.append(f"Taux de gain : {a.taux_gain * 100:.0f} %.")
     if a.rendement_moyen_pct is not None:
         L.append(f"Rendement moyen par trade : {a.rendement_moyen_pct * 100:+.2f} %.")
+    if a.rendement_tstat is not None:
+        etat = ("significatif" if a.rendement_significatif
+                else "NON significatif (bruit ?)")
+        L.append(f"Significativité (t-stat vs 0, |t|≥2) : {a.rendement_tstat:+.2f} "
+                 f"({etat}).")
     if a.profit_factor is not None:
         v = "rentable malgré taux bas" if a.profit_factor > 1 else "perdant net"
         L.append(f"Profit factor (gains / pertes) : {a.profit_factor:.2f} ({v}).")

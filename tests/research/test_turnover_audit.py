@@ -96,3 +96,23 @@ def test_petit_echantillon_est_signale():
     trades = [_trade(i, 1, 0.01, None) for i in range(5)]
     a = auditer(trades)
     assert "trop petit pour distinguer" in rapport(a)
+
+
+def test_rendement_negatif_et_stable_est_significatif():
+    """Perte petite mais TRÈS régulière sur assez de trades → distinguable du bruit."""
+    trades = [_trade(i, 1, -0.01 + (0.0002 if i % 2 else -0.0002), None)
+              for i in range(40)]
+    a = auditer(trades)
+    assert a.rendement_moyen_pct is not None and a.rendement_moyen_pct < 0
+    assert a.rendement_significatif is True
+    assert "significatif" in rapport(a)
+
+
+def test_rendement_negatif_mais_bruite_n_est_pas_significatif():
+    """Même moyenne négative, peu de trades, forte dispersion → pas distinguable."""
+    trades = [_trade(0, 1, -0.02, None), _trade(1, 1, 0.05, None),
+              _trade(2, 1, -0.06, None)]
+    a = auditer(trades)
+    assert a.rendement_tstat is not None and abs(a.rendement_tstat) < 2.0
+    assert a.rendement_significatif is False
+    assert "NON significatif" in rapport(a)
