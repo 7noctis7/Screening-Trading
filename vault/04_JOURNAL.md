@@ -1,5 +1,44 @@
 # 04 — JOURNAL
 
+## Session 2026-09-05 (clôture réelle) — L'IC mesuré, la pièce qui manquait à `breadth.py`
+
+**Contexte inhabituel** : l'utilisateur a soumis un prompt généré par Gemini pour
+« passer en Swing D/W », truffé de détails qui ne décrivaient PAS ce dépôt — un
+cycle 1H qui n'existe pas (la prod tourne en DAILY, cron 14:40 UTC), des scores
+(`Fed_Shock_Score`, `Whale_Consensus_Index`) et un levier x3 BitMart introuvables
+dans le code ou le vault (Bitmart est SPOT, `live_roundtrip.py` le dit explicitement).
+**Refusé d'auditer un fantasme** : signalé les écarts factuels avant tout code,
+plutôt que d'exécuter un prompt éloquent construit sur un système qui n'existe pas.
+
+**Confronté aux faits, Gemini a corrigé son propre prompt** — daily 14:40 UTC, spot
+sans levier, `detention_min=0` validé par le balayage de ce soir (suite 13). Version
+corrigée, Option B choisie par l'utilisateur : construire les fonctions pures
+Grinold-Kahn (IC/TC/IR) pour évaluer la qualité d'un signal Swing.
+
+**Découverte en creusant : `packages/research/breadth.py` (166 lignes, 8 tests déjà
+verts) implémentait DÉJÀ la quasi-totalité de la demande** — souffle EFFECTIF
+(corrige le piège du sur-comptage BR=N×T que le prompt Gemini ne mentionnait même
+pas), `transfer_coefficient`, `expected_ir`, `ir_report` avec gate `UNCALIBRATED`,
+et même `optimal_horizon` (durée de détention qui maximise l'IC à partir de la
+demi-vie d'un signal — directement pertinent pour la question `detention_min` de
+ce soir). Seule pièce manquante, vérifiée par recherche (`grep spearmanr` :
+aucun résultat dans tout le dépôt) : rien ne MESURE l'IC depuis des prédictions
+brutes — `breadth.py` le prend en entrée, déjà connu.
+
+**Livré : `packages/research/information_coefficient.py`** (83 lignes).
+`information_coefficient()` — Spearman, NaN-safe, `None` (pas 0.0) sous le seuil de
+20 paires ou variance dégénérée — la distinction compte : un IC mesuré à 0,0 est
+une information (« ce signal ne prédit rien »), `None` dit qu'on n'a rien pu mesurer.
+`ic_in_sample_hors_echantillon()` + `ICInEchantillon.robuste` (ratio OOS/IS ≥ 0,5,
+même seuil que ADR-0066, jamais robuste par défaut). 10 tests : corrélation
+parfaite/inverse/nulle, seuil N, variance nulle, filtrage NaN, tailles différentes,
+IS/OOS robuste et non-robuste. Vérifié en bout en bout avec `ir_report` existant —
+aucune couture, zéro duplication.
+
+**Portée délibérément limitée** : module d'ANALYSE pur, ne touche ni
+`order_gate.py` ni l'exécution — exactement ce que la version corrigée du prompt
+demandait, et ce que ce dépôt exige (séparation IA/capital).
+
 ## Session 2026-09-05 (clôture) — Bilan honnête : ce qui est fini, ce qui ne l'est pas
 
 **Demande : « finalise TOUTES les corrections maintenant ».** Triage du TODO plutôt

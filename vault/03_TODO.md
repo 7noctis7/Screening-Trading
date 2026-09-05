@@ -17,6 +17,21 @@
       compte/indice sur les dates réelles. Un benchmark périmé est exclu, jamais forward-fill sur
       des mois avec l'étiquette « réel ».
 
+## ✅ Recherche — livré le 2026-09-05 (soir)
+
+- [x] **Information Coefficient mesurable — `packages/research/information_coefficient.py`.**
+      `breadth.py` avait toute la mécanique Grinold-Kahn (souffle effectif, TC, IR,
+      `optimal_horizon`) mais prenait l'IC en ENTRÉE. Rien ne le mesurait — vérifié
+      par `grep spearmanr` sur tout le dépôt, zéro résultat. `information_coefficient()`
+      (Spearman, NaN-safe, seuil N≥20, `None` si dégénéré) + `ic_in_sample_hors_echantillon()`
+      (gate robustesse OOS/IS ≥ 0,5, même seuil qu'ADR-0066). 10 tests, vérifié bout en
+      bout avec `ir_report` existant. Module d'analyse pur, aucun contact avec
+      `order_gate.py` ni l'exécution.
+- [ ] **P2 — Brancher l'IC sur un vrai signal de production.** Le module est prêt et
+      testé sur synthétique ; il reste à l'alimenter avec de vraies prédictions du
+      preset (ou d'un futur modèle ML) et des rendements réels, pour mesurer l'IC
+      RÉEL de la stratégie — ce que ce module rend possible, pas ce qu'il fait déjà.
+
 ## 🔴 P0 — Le courtier détient ce que le journal ignore (constaté 2026-09-05)
 
 - [ ] **Écart en sens INVERSE, sur 8 symboles — À REFERMER MAINTENANT, pas un nouveau
