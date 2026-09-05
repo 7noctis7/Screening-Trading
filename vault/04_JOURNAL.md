@@ -1,5 +1,49 @@
 # 04 — JOURNAL
 
+## Session 2026-09-04 (suite 13) — Le verrou de détention mesuré : hypothèse NON retenue
+
+**L'hypothèse testée** (utilisateur, d'après son historique réel) : les round-trips tenus
+moins de 10 jours perdent, donc imposer un plancher de détention laisserait au trade le
+temps de « nettoyer » la volatilité d'entrée avant de viser la cible. Paramètre
+`detention_min` ajouté à `fast_swing_backtest` (`9459f00`), balayé 0/5/10/15 séances dans
+`sortie_lab`, 783 titres · 2 045 257 barres · dernière séance 04/09.
+
+| réglage | trades | payoff | marge | jours | Sharpe | maxDD | DSR | net $ |
+|---|--:|--:|--:|--:|--:|--:|--:|--:|
+| aucune ◀ prod | 1342 | 2.65 | 3.9 % | 42 | 0.17 | −27.9 % | 7.1 % | 937 |
+| min 5 j | 1293 | 2.42 | 8.4 % | 45 | 0.29 | −27.4 % | 16.2 % | 2 113 |
+| min 10 j | 1141 | 2.32 | 0.8 % | 48 | 0.18 | −26.6 % | 7.7 % | 177 |
+| min 15 j | 1030 | 2.22 | 2.7 % | 51 | 0.20 | −31.0 % | 9.2 % | 597 |
+
+**Décision : `detention_min` reste à 0 en production.** Quatre raisons mesurées, aucune
+d'opinion.
+
+1. **Le 10 jours précisément demandé est le PIRE des trois verrous** : 177 $ net contre
+   937 $ sans verrou. Si l'effet « <10 j perd » existait, c'est ce réglage qui devrait
+   gagner. Il perd le plus.
+2. **La suite des Sharpe n'a pas la forme d'un effet** : 0.17 → 0.29 → 0.18 → 0.20. Un
+   mécanisme réel produit une courbe (croissante, décroissante, ou avec un optimum) ;
+   un zigzag qui repasse deux fois par la même valeur est la signature du bruit.
+3. **La seule colonne monotone va dans le sens du COÛT** : payoff 2.65 → 2.42 → 2.32 →
+   2.22. Différer la cible et le suiveur fait sortir plus loin du sommet — c'est
+   mécanique, et c'est la seule chose que le balayage établisse proprement.
+4. **Aucun DSR n'approche 50 %** : après déflation du nombre d'essais (RR + suiveurs +
+   détentions), aucun réglage n'est distinguable de zéro. Le meilleur (16.2 %) reste à
+   un tiers du seuil.
+
+**Pourquoi la statistique du journal ne contredit pas ce résultat : elle est confondue.**
+Les longues détentions du journal réel sont presque toutes des tranches d'un même lot
+crypto sur un seul rallye (cf. `turnover_audit`, suite 9). « Tenu longtemps = gagnant »
+y décrit un rallye compté plusieurs fois, pas une durée de détention. La durée moyenne du
+banc est déjà de 42 jours : il contient très peu de trades courts, donc un plancher de
+5 ou 10 séances n'y touche qu'une minorité de positions (durée moyenne 42 → 45 → 48).
+
+**Ce qui reste acquis** : le paramètre et ses 6 tests (`tests/backtest/test_detention_minimale.py`)
+restent en place, défaut 0. La question redeviendra mesurable si l'exécution réelle produit
+un jour assez de trades courts non confondus. Et ADR-0073 tient toujours : ce banc mesure
+`fast_swing_backtest`, pas le moteur `preset risk-parity + DD-target` qui envoie réellement
+les ordres — même un gain net ici ne serait pas transposable tel quel.
+
 ## Session 2026-09-04 (suite 12) — Le "bug" LINK n'en était pas un, et l'addition le prouve
 
 **Fausse alerte, vérifiée avant correction — pas après.** Le P0 posé en clôture (« deux

@@ -28,6 +28,16 @@
 
 ## ✅ Données & recherche — livré le 2026-09-04
 
+- [x] **Verrou de détention minimale : MESURÉ, hypothèse NON retenue (04/09).** Question de
+      l'utilisateur : laisser les trades ouverts au moins 10 jours pour « nettoyer » la
+      volatilité d'entrée. Paramètre `detention_min` ajouté à `fast_swing_backtest`, balayé
+      0/5/10/15 séances dans `sortie_lab`. Le 10 jours demandé est le PIRE des trois verrous
+      (177 $ net contre 937 $ sans), la suite des Sharpe zigzague (0.17/0.29/0.18/0.20 — forme
+      du bruit, pas d'un effet), la seule colonne monotone est le payoff qui BAISSE (2.65 →
+      2.22 : coût mécanique du différé), et aucun DSR n'atteint le tiers de 50 %. La stat du
+      journal réel qui motivait l'hypothèse est confondue : ses longues détentions sont des
+      tranches d'un même lot crypto sur un seul rallye. Production reste à `detention_min=0` ;
+      paramètre et 6 tests conservés pour re-mesurer plus tard. Détail : `04_JOURNAL` suite 13.
 - [x] **P1 — Les deux priorités de fusion opposées : CORRIGÉ.** `_load_prices` gardait le
       premier provider, `merge_bars` le dernier, sur les MÊMES bases — 0,71 %/an d'écart sur
       le cœur QQQ. Une seule implémentation (`packages/data/fusion_sources`), premier gagne,
