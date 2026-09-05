@@ -1,5 +1,13 @@
 # 04 — JOURNAL
 
+## Session 2026-09-05 (suite 5) — Build Mac : doublon de composant après fusion
+
+Le fichier vu sur le Mac contenait deux déclarations `PortfolioAnalysisWorkspace` et avait perdu
+l'accolade fermante de la première, état qui n'existait pas dans le commit source et indique une
+fusion locale incomplète. Le composant est réécrit intégralement, avec une seule exportation, des
+imports de types explicites et l'annulation logique des réponses asynchrones périmées. Le build
+Next.js constitue le test de non-régression de syntaxe.
+
 ## Session 2026-09-05 (suite 4) — Les données existaient ; la page ne les chargeait jamais
 
 Cause du « 1/6 marché » et des scénarios vides : la page lisait uniquement les lignes ayant survécu
