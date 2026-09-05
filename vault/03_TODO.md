@@ -24,8 +24,17 @@
       OSCR 0 / 85,3 · LTC 23,4 / 60,1 · SOL 23,1 / 37,7 · BCH 0,15 / 10,9 · ETH 0,42 / 1,06 ·
       BTC 0,015 / 0,038. Les lots orphelins (journal > courtier) sont un trou de SORTIES ;
       celui-ci est un trou d'ENTRÉES que `completer_ouvertures` n'a PAS refermé alors qu'il
-      vient de tourner. Cause à MESURER, pas à supposer. Tant que ça tient, toute stat du
-      journal décrit un compte qui n'est pas celui du courtier.
+      vient de tourner. Tant que ça tient, toute stat du journal décrit un compte qui
+      n'est pas celui du courtier.
+- [x] **Outillé le 05/09 — l'écart est DÉCOMPOSÉ** : `make diag-surfermeture`
+      (`packages/research/sur_fermeture.py`, 7 tests). Identité vérifiée par ligne :
+      `manque_ouvert = achats_non_journalises + sur_fermeture`. Sur les chiffres réels
+      d'AVAX : 331,847254 = 274,407653 (entrées jamais écrites) + **57,439601 (sorties
+      INVENTÉES)**. Les deux causes coexistent ; la seconde produit du « réalisé » sans
+      contrepartie et contamine les statistiques.
+- [ ] **À LANCER là où vit le vrai journal** : `make diag-surfermeture`. La décomposition
+      dira quelle cause domine, et c'est elle qui décidera du correctif — pas une
+      hypothèse. Ne rien corriger avant d'avoir la sortie complète.
 
 ## 🟠 P1 — La détention médiane de 0,1 j reste NON expliquée (2026-09-05)
 

@@ -1,5 +1,51 @@
 # 04 — JOURNAL
 
+## Session 2026-09-05 (suite) — L'écart courtier/journal est DÉCOMPOSÉ, plus seulement constaté
+
+**Le problème.** `diag-journal` constate que le courtier détient ce que le journal ignore
+(AVAX 335,50 contre 3,65 · LINK 219,80 contre 82,41 · OSCR 85,27 contre 0), sans dire de
+quoi cet écart est fait. Deux causes possibles, remèdes opposés — et rien pour les séparer.
+
+**L'identité qui les sépare, et qui se vérifie :**
+
+    manque_ouvert = achats_non_journalises + sur_fermeture
+
+    manque_ouvert          = (acheté − vendu) − ouvert(journal)
+    achats_non_journalises = acheté − total(journal)      entrées jamais écrites — un TROU
+    sur_fermeture          = fermé(journal) − vendu       sorties INVENTÉES
+
+La démonstration tient en une ligne : (acheté − fermé − ouvert) + (fermé − vendu) =
+acheté − vendu − ouvert. Les deux termes s'additionnent EXACTEMENT au manque. Le module
+publie `identite_verifiee()` et le rapport l'imprime par ligne : **si l'identité ne se
+referme pas, c'est le module qui a tort, pas la donnée.** Une mesure réfutable, pas une
+opinion sur l'origine de l'écart.
+
+**Sur les chiffres RÉELS d'AVAX du 05/09, la décomposition tombe juste** (test dédié) :
+manque 331,847254 = achats non journalisés 274,407653 + **sur-fermeture 57,439601**. Donc
+les deux causes coexistent, et ~57 unités d'AVAX ont été soldées au journal sans que le
+courtier les ait vendues. C'est du « réalisé » sans contrepartie réelle — la cause qui
+CONTAMINE les statistiques, par opposition au trou d'entrées qui les rend seulement
+incomplètes.
+
+**Imputation ordre par ordre.** Les sorties écrites `reconciliation-journal:<uuid>`
+nomment le fill réel : on compare exactement. Celles écrites `reconciliation paper
+(reduce/close)` ne nomment rien et ne sont imputées à AUCUN ordre — les imputer d'office
+fabriquerait l'excédent qu'on cherche. Les deux blocs sont publiés séparément.
+
+**Le piège LINK est encodé en test, pas seulement en commentaire.** Un ordre ferme
+légitimement plusieurs lots (pool FIFO commun aux chaînes `P-` et `C-`). Un excédent
+n'existe que si la SOMME dépasse la quantité réellement vendue. Le test rejoue les vrais
+chiffres — 125,613741 + 147,511643 = 273,125384 pour un fill de 273,12538382 — et exige
+« aucun excès ». La fausse alerte du 04/09 ne peut plus être reposée par inadvertance.
+
+**Livré** : `packages/research/sur_fermeture.py` (161 l.), `scripts/diag_sur_fermeture.py`,
+`make diag-surfermeture` (LECTURE SEULE, `ARGS=--symbole AVAX` pour un titre), 7 tests.
+Courtier illisible → message `UNCALIBRATED` explicite, jamais une trace d'appel.
+
+**Prochaine étape, côté utilisateur** : lancer `make diag-surfermeture` là où vit le vrai
+journal. La décomposition dira si le mal dominant est le trou d'entrées ou l'invention de
+sorties — et c'est elle qui décidera du correctif, pas une hypothèse.
+
 ## Session 2026-09-05 — `make live` ne montrait pas le compte : aperçu ≠ simulation
 
 **Ce que l'aperçu affichait, et pourquoi c'était trompeur.** Sur le VPS, `make live`
