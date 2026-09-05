@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useState } from "react";
 import { PortfolioEvidence } from "@/components/PortfolioEvidence";
 import { PortfolioImportWizard } from "@/components/PortfolioImportWizard";
 import { PortfolioScenarios } from "@/components/PortfolioScenarios";
@@ -22,4 +23,8 @@ export function PortfolioAnalysisWorkspace() {
       .catch((error) => setAnalysis({ available: false, reason: String(error) })).finally(() => setLoading(false));
   }, [snapshot]);
   return <><PortfolioImportWizard onSnapshot={setSnapshot} initialSnapshot={snapshot} /><PortfolioEvidence snapshot={snapshot} analysis={analysis} loading={loading} /><PortfolioScenarios snapshot={snapshot} analysis={analysis} /><PortfolioSynergies /></>;
+
+export function PortfolioAnalysisWorkspace() {
+  const [snapshot, setSnapshot] = useState<PortfolioSnapshot | null>(null);
+  return <><PortfolioImportWizard onSnapshot={setSnapshot} /><PortfolioEvidence snapshot={snapshot} /><PortfolioScenarios snapshot={snapshot} /><PortfolioSynergies /></>;
 }
