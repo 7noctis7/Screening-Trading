@@ -48,10 +48,16 @@ def simule(dry: bool, cli_equity: float | None) -> bool:
 def _apercu(alpaca, bitmart, alp_cap: float, bit_cap: float):
     """Dry-run sur equity réelle : une lecture ratée se replie, ANNONCÉE, jamais
     fatale. Un aperçu n'envoie aucun ordre — le sanctionner comme un run live
-    n'aurait pas de sens."""
-    if alpaca and alp_cap <= 0:
-        print(f"⚠️  equity Alpaca illisible → aperçu sur {APERCU_DEFAUT:,.0f} $ SIMULÉS "
-              "(ce n'est PAS votre compte).")
+    n'aurait pas de sens.
+
+    Le repli couvre AUSSI le broker absent (`alpaca is None`) : sans lui, un capital
+    de 0 produit des cibles à 0 et un tableau entier de lignes vides, qui se lit comme
+    « le système ne veut rien faire » alors qu'il n'a rien pu lire. Un aperçu qui ne
+    décrit pas le compte doit le DIRE, pas le montrer sous forme de zéros."""
+    if alp_cap <= 0:
+        quoi = "illisible" if alpaca else "non lue (broker non construit)"
+        print(f"⚠️  equity Alpaca {quoi} → aperçu sur {APERCU_DEFAUT:,.0f} $ SIMULÉS. "
+              "Ce n'est PAS votre compte : ni le capital, ni le détenu.")
         alp_cap = APERCU_DEFAUT
     return alpaca, bitmart, alp_cap, max(bit_cap, 0.0), []
 

@@ -76,28 +76,40 @@ def _kill_switch(bus):
     return reduce
 
 
-def _make_brokers(dry: bool):
-    """(alpaca paper, place crypto) en mode réel ; (None, None) en dry-run. Alpaca best-effort.
+def _alpaca_ou_rien():
+    """Alpaca paper, best-effort — l'indisponibilité est DITE, jamais silencieuse."""
+    try:
+        from packages.execution.alpaca_broker import AlpacaBroker
+        return AlpacaBroker(paper=True)                   # actions TOUJOURS en paper
+    except Exception as e:  # noqa: BLE001
+        print(f"Alpaca indisponible ({str(e)[:60]}) → actions ignorées")
+        return None
 
-    La place crypto n'est plus codée en dur : elle vient de QUANT_CRYPTO_VENUE (défaut Binance,
-    taker 0,10 % contre 0,25 % chez Bitmart). Cf. packages/execution/venues.
+
+def _make_brokers(dry: bool, apercu: bool = False):
+    """(alpaca paper, place crypto). Rien en SIMULATION ; Alpaca seul en APERÇU.
+
+    Un aperçu doit lire l'equity et les positions RÉELLES, sinon il n'annonce pas le run
+    suivant — mesuré le 05/09 : sans broker construit, l'aperçu affichait `détenu
+    0 $` sur un compte plein, puis `cible 0 $` une fois l'equity lue sur un broker
+    inexistant.
+    AUCUN ordre ne peut partir pour autant : `_reconcile` sort sur `if dry or broker is
+    None` AVANT tout envoi. La place crypto reste absente en dry-run — `cron_live.sh` la
+    neutralise de toute façon, et les paires crypto d'Alpaca sont dans ses positions.
+
+    La place crypto n'est pas codée en dur : elle vient de QUANT_CRYPTO_VENUE (défaut
+    Binance, taker 0,10 % contre 0,25 % chez Bitmart). Cf. packages/execution/venues.
     """
     if dry:
-        return None, None
+        return (_alpaca_ou_rien(), None) if apercu else (None, None)
     from packages.execution.venues import venue_crypto
     _v = venue_crypto()
     try:
         crypto = _v.broker(dry_run=False)
-    except Exception as e:  # noqa: BLE001 — dépendance ou clés absentes : on continue sans crypto
+    except Exception as e:  # noqa: BLE001 — clés/dépendance absentes : on continue
         print(f"{_v.nom} indisponible ({str(e)[:60]}) → poche crypto ignorée")
         crypto = None
-    alpaca = None
-    try:
-        from packages.execution.alpaca_broker import AlpacaBroker
-        alpaca = AlpacaBroker(paper=True)                 # actions TOUJOURS en paper
-    except Exception as e:  # noqa: BLE001
-        print(f"Alpaca indisponible ({str(e)[:60]}) → actions ignorées")
-    return alpaca, crypto
+    return _alpaca_ou_rien(), crypto
 
 
 # Garde-fous d'exécution (audit 07/15) : inconnu ≠ zéro, fail-loud, kill-switch DD réel.
@@ -540,11 +552,11 @@ def _prepare_brokers(dry: bool, cli_equity: float | None, alert_engine):
     from packages.execution.live_guards import (
         current_values, fail_loud, simule, vet_brokers,
     )
-    alpaca, bitmart = _make_brokers(dry)
     # SIMULATION (`--equity`) vs APERÇU : seule la simulation ignore le détenu. Un aperçu
     # sur détenu vide affiche des achats que le run réel ne fera pas — il annonce un
     # portefeuille à construire là où le compte est déjà plein.
     simulation = simule(dry, cli_equity)
+    alpaca, bitmart = _make_brokers(dry, apercu=dry and not simulation)
     alpaca, bitmart, alp_cap, bit_cap, fatal = vet_brokers(alpaca, bitmart, dry, cli_equity)
     mode = ("SIMULATION (capital imposé, détenu ignoré)" if simulation else
             "DRY-RUN sur le compte RÉEL (aucun ordre)" if dry else "LIVE (paper)")

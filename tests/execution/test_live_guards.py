@@ -114,6 +114,13 @@ def test_apercu_sans_equity_lit_le_compte_reel():
     assert alp_cap == 1000.0 and alp is not None and not fatal
 
 
+def test_apercu_sans_broker_se_replie_au_lieu_de_tout_mettre_a_zero():
+    """05/09 : capital 0 → cibles 0 → un tableau de lignes vides, muet sur la cause."""
+    alp, bit, alp_cap, bit_cap, fatal = vet_brokers(
+        None, None, dry=True, cli_equity=None)
+    assert alp_cap == APERCU_DEFAUT and fatal == []
+
+
 def test_apercu_equity_illisible_se_replie_sans_etre_fatal():
     """Un aperçu n'envoie aucun ordre : le sanctionner comme un live n'a pas de sens."""
     alp, bit, alp_cap, bit_cap, fatal = vet_brokers(

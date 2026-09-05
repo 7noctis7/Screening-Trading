@@ -267,3 +267,28 @@ def test_le_recap_totalise_les_montants_en_valeur_absolue(capsys):
     from scripts.run_live import _recap_differes
     _recap_differes(_differes())
     assert "2 000$" in capsys.readouterr().out
+
+
+# APERÇU : Alpaca construit en LECTURE (05/09). `_make_brokers(dry)` renvoyait toujours
+# (None, None), donc l'aperçu n'avait aucun compte à lire — d'abord « détenu 0 $ »
+# sur un compte plein, puis « cible 0 $ » partout une fois l'equity demandée à un
+# broker absent.
+# Aucun ordre ne peut partir pour autant : `_reconcile` sort sur `dry` AVANT tout envoi.
+
+
+def test_simulation_ne_construit_aucun_broker(monkeypatch):
+    from scripts.run_live import _make_brokers
+    monkeypatch.setattr("scripts.run_live._alpaca_ou_rien",
+                        lambda: (_ for _ in ()).throw(AssertionError("ne doit pas")))
+    assert _make_brokers(dry=True, apercu=False) == (None, None)
+
+
+def test_apercu_construit_alpaca_seul(monkeypatch):
+    """La place crypto reste absente : `cron_live.sh` la neutralise de toute façon."""
+    monkeypatch.setattr("scripts.run_live._alpaca_ou_rien", lambda: "alpaca-lecture")
+    assert _make_brokers_apercu() == ("alpaca-lecture", None)
+
+
+def _make_brokers_apercu():
+    from scripts.run_live import _make_brokers
+    return _make_brokers(dry=True, apercu=True)

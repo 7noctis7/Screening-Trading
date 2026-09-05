@@ -21,7 +21,23 @@ FAUX et c'est un artefact de `--equity 10000` : à l'équity réelle, ces mêmes
 valent ~2 000-2 600 $ et passent le plancher sans le toucher. L'hypothèse du plancher
 reste donc OUVERTE et non mesurée — elle ne peut pas l'être avec un aperçu au 1/10ᵉ.
 
-**Correctif : deux modes nommés, au lieu d'un seul qui mentait.**
+**Premier correctif INCOMPLET — et son symptôme était pire que le mal.** Rendre
+`vet_brokers` capable de lire l'equity réelle en dry-run ne servait à rien : `_make_brokers`
+renvoie `(None, None)` en dry-run, donc AUCUN broker n'existait pour être lu. L'aperçu est
+passé de « détenu 0 $ » à « cible 0 $ ET détenu 0 $ » sur toutes les lignes — un tableau
+entier de zéros, qui se lit comme « le système ne veut rien faire » alors qu'il n'a rien pu
+lire. Une valeur par défaut retirée sans vérifier ce qui la remplaçait.
+
+**Correctif complet.** `_make_brokers(dry, apercu=)` construit Alpaca EN LECTURE quand
+l'aperçu le demande (place crypto laissée absente : `cron_live.sh` la neutralise, et les
+paires crypto d'Alpaca sont déjà dans ses positions). Sûreté vérifiée avant d'y toucher :
+`_reconcile` sort sur `if dry or broker is None` AVANT tout envoi (run_live.py:232), donc
+construire un broker en dry-run ne peut pas envoyer d'ordre. Et `_apercu` replie désormais
+un capital nul sur 10 000 $ SIMULÉS avec un avertissement explicite, y compris quand le
+broker est absent : un aperçu qui ne décrit pas le compte doit le DIRE, pas le montrer sous
+forme de zéros silencieux.
+
+**Deux modes nommés, au lieu d'un seul qui mentait.**
 - `make live` (aperçu) — equity ET positions RÉELLES, aucun ordre envoyé. C'est
   maintenant le seul moyen de voir ce que fera le prochain run réel.
 - `make live-sim` (`EQUITY=…`) — portefeuille NEUF au capital imposé, détenu ignoré à
@@ -30,7 +46,7 @@ reste donc OUVERTE et non mesurée — elle ne peut pas l'être avec un aperçu 
 `live_guards.simule(dry, cli_equity)` porte la distinction ; en aperçu, une equity
 illisible se replie sur 10 000 $ SIMULÉS avec un avertissement, sans être fatale — un
 aperçu n'envoie aucun ordre, le sanctionner comme un run live n'aurait pas de sens.
-4 tests ajoutés (12 au total dans `test_live_guards`).
+6 tests ajoutés (13 dans `test_live_guards`, 2 dans `test_run_live_seance`).
 
 **Suite complète VERTE** : 1970 passés, 7 ignorés, 0 échec (8 min 10). Les appels
 réseau que le proxy du conteneur refuse sont tous dans des tests qui les tolèrent —
