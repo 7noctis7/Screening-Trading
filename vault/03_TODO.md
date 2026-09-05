@@ -37,9 +37,23 @@
       --appliquer` du Mac mini. PATH (0 ligne), NWL (1 ligne sur 1554,63) confirment
       un trou de SORTIES massif, pas de l'invention (`invente`=0 partout, vérifié à la
       main sur le relevé brut). Les deux machines n'ont jamais partagé le même fichier.
-- [ ] **P0 — synchroniser AVANT lundi 14:40 UTC** : `make journal-push` (Mac mini) puis
-      `make journal-pull` (VPS). Sûr : le timer VPS n'a rien écrit depuis le 04/09 19:23.
-      Sans ça, `cron_live.sh` construira lundi sur la version non réparée.
+- [x] **P0 SYNC — FAIT (05/09).** `journal-push` (Mac) → `journal-pull` (VPS) : 313
+      lignes des deux côtés. Confirmé, plus un risque théorique.
+- [x] **P0 CRITIQUE — invention identifiée ET corrigée dans le code de PRODUCTION
+      (05/09).** `diag-surfermeture` sur le journal réparé : +258,33 unités inventées
+      (AVAX 60,82 · LINK 74,05 · OSCR 85,27 · LTC 36,00). Dump brut OSCR + calcul
+      d'élimination : la ligne `P-20260831-Alpaca-OSCR` (motif `reconciliation paper
+      (reduce/close)`, sans UUID) porte à elle seule les 85,27 inventées. Cause : dans
+      `run_live.py`, `sold[].notional` portait le DELTA PLANIFIÉ (`cible − détenu`),
+      jamais le fill réel — `close_sells` fermait `notional/prix` au lieu du fill.
+      **Ce code tourne CHAQUE JOUR OUVRÉ** — sans correctif, la récidive était certaine
+      dès lundi. Corrigé : `_fill_vente_jour` lit prix ET quantité du fill réel du jour ;
+      `close_sells` accepte `qty_reelle`, prioritaire sur `notional/prix`, sans
+      régression quand aucun ordre n'est citable. 6 tests. Détail : `04_JOURNAL`.
+- [ ] **P1 — reste à corriger : les ~258 unités DÉJÀ inventées dans le journal
+      historique.** Le correctif du 05/09 empêche la récidive, ne répare pas le passé.
+      Dumper AVAX/LINK/LTC comme OSCR (même méthode : élimination par UUID nommé vs
+      motif sans nom) avant de poser un script de correction — pas avant.
 
 ## 🟠 P1 — La détention médiane de 0,1 j reste NON expliquée (2026-09-05)
 

@@ -440,18 +440,39 @@ def _journal_opens(snap: dict, opened: list, alpaca, bitmart) -> None:
         print(f"Journal : journalisation ignorée ({str(e)[:60]}).")
 
 
+def _fill_vente_jour(br, bsym: str) -> dict | None:
+    """Fill de VENTE réel du jour pour ce symbole, ou None : {"price", "qty"}.
+
+    Isolé de `_exit_price` pour que `_journal_sells` lise aussi la QUANTITÉ vraiment
+    exécutée. Jusqu'ici seul le PRIX de ce même ordre était repris ; la quantité
+    fermée au journal venait de `notional / prix`, où `notional` = le delta PLANIFIÉ
+    par le rebalancement (`abs(cible − détenu)`), jamais relu contre le fill réel.
+    Mesuré le 05/09 sur le compte réel (OSCR) : le delta planifié dépassait le fill
+    réel de ~85 unités, closes au journal comme si elles avaient été vendues — du
+    « réalisé » sans contrepartie, à chaque écart entre plan et exécution."""
+    if br is None or not hasattr(br, "orders"):
+        return None
+    try:
+        today = datetime.now(UTC).date().isoformat()
+        for o in br.orders(limit=50):
+            if (o.get("symbol") == bsym and o.get("side") == "sell"
+                    and float(o.get("price") or 0) > 0 and (o.get("date") or "")[:10] == today):
+                return {"price": float(o["price"]), "qty": float(o.get("qty") or 0)}
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
 def _exit_price(br, bsym: str) -> float:
     """Prix de sortie FACTUEL, par ordre de fiabilité : fill VENTE du jour (`orders`),
     sinon ticker broker (`last_price`), sinon prix courant de la position. 0.0 = inconnu
     (le lot restera OUVERT — on n'invente jamais un prix)."""
     if br is None:
         return 0.0
+    fait = _fill_vente_jour(br, bsym)
+    if fait is not None:
+        return fait["price"]
     try:
-        today = datetime.now(UTC).date().isoformat()
-        for o in (br.orders(limit=50) if hasattr(br, "orders") else []):
-            if (o.get("symbol") == bsym and o.get("side") == "sell"
-                    and float(o.get("price") or 0) > 0 and (o.get("date") or "")[:10] == today):
-                return float(o["price"])
         if hasattr(br, "last_price"):
             px = float(br.last_price(bsym) or 0.0)
             if px > 0:
@@ -476,7 +497,12 @@ def _journal_sells(snap: dict, sold: list, alpaca, bitmart) -> None:
         from packages.storage import SqliteTradeJournal
         brokers = {"Alpaca": alpaca, "Bitmart": bitmart}
         for s in sold:
-            s["exit_price"] = _exit_price(brokers.get(s["venue"]), s["broker_symbol"])
+            br = brokers.get(s["venue"])
+            fait = _fill_vente_jour(br, s["broker_symbol"])
+            if fait is not None:                 # fill réel citable → quantité VRAIE
+                s["exit_price"], s["qty_reelle"] = fait["price"], fait["qty"]
+            else:                                     # repli : ancien comportement
+                s["exit_price"] = _exit_price(br, s["broker_symbol"])
         series = (snap.get("dashboard") or {}).get("chart_series") or {}
         n = close_sells(SqliteTradeJournal(), sold, series)
         skipped = sum(1 for s in sold if not s.get("exit_price"))

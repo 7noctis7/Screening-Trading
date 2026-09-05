@@ -83,16 +83,30 @@ def close_sells(journal, sells: list[dict], series_by_sym: dict | None = None,
                 *, ts: datetime | None = None) -> int:
     """Apparie les ventes aux lots ouverts (FIFO). Retourne le nb de fermetures.
 
-    `sells` : dicts {symbol, venue, exit_price, notional}. Sans `exit_price` > 0 la
-    vente est IGNORÉE (lot ouvert — on n'invente jamais un prix). Vente excédant les
-    ouverts : l'excédent est ignoré (position antérieure au journal Phase 1)."""
+    `sells` : dicts {symbol, venue, exit_price, notional, qty_reelle?}. Sans
+    `exit_price` > 0 la vente est IGNORÉE (lot ouvert — on n'invente jamais un prix).
+    Vente excédant les ouverts : l'excédent est ignoré (position antérieure au
+    journal Phase 1).
+
+    QUANTITÉ FERMÉE : `qty_reelle` (le fill RÉEL cité par un ordre du courtier), quand
+    fourni, prime STRICTEMENT sur `notional / exit_price` (le delta PLANIFIÉ par le
+    rebalancement). Mesuré le 05/09 sur le compte réel (OSCR) : le delta planifié
+    dépassait le fill réel de ~85 unités, et l'écart se fermait au journal comme s'il
+    avait été vendu — du « réalisé » sans contrepartie. `notional` reste le repli pour
+    les ventes sans ordre citable (ex. liquidation totale via `close_position`)."""
     ts = ts or datetime.now(timezone.utc)
     closed = 0
     for s in sells:
         price = float(s.get("exit_price") or 0.0)
-        if price <= 0 or float(s.get("notional") or 0.0) <= 0:
+        if price <= 0:
             continue
-        remaining = float(s["notional"]) / price               # qté à fermer
+        qty_reelle = float(s.get("qty_reelle") or 0.0)
+        if qty_reelle > _EPS:
+            remaining = qty_reelle                    # fill RÉEL, prioritaire
+        elif float(s.get("notional") or 0.0) > 0:
+            remaining = float(s["notional"]) / price       # repli : delta planifié
+        else:
+            continue
         series = (series_by_sym or {}).get(s["symbol"])
         for lot in open_lots(journal, instrument=s["symbol"], venue=s.get("venue")):
             if remaining <= _EPS:

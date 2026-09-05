@@ -292,3 +292,61 @@ def test_apercu_construit_alpaca_seul(monkeypatch):
 def _make_brokers_apercu():
     from scripts.run_live import _make_brokers
     return _make_brokers(dry=True, apercu=True)
+
+
+# FILL RÉEL vs DELTA PLANIFIÉ (05/09) — cf. `packages/execution/live_roundtrip.py` et
+# `packages/research/sur_fermeture.py`. `_journal_sells` doit lire la QUANTITÉ du fill
+# réel quand un ordre du jour le permet, pas seulement son prix — sinon `close_sells`
+# retombe sur le delta planifié et ferme plus que ce qui a vraiment été vendu.
+
+
+class _CourtierAvecFill:
+    """Un ordre de vente réel du jour, plus petit que le delta planifié (cas OSCR)."""
+    name = "test"
+
+    def orders(self, limit=50):
+        return [{"symbol": "OSCR", "side": "sell", "price": 29.65,
+                 "qty": 14.0, "date": "2026-09-05T12:00:00+00:00"}]
+
+
+class _CourtierSansOrdre:
+    name = "test"
+
+    def orders(self, limit=50):
+        return []
+
+    def last_price(self, sym):
+        return 30.0
+
+    def positions_detailed(self):
+        return []
+
+
+def test_fill_vente_jour_lit_prix_ET_quantite(monkeypatch):
+    from scripts.run_live import _fill_vente_jour
+    monkeypatch.setattr("scripts.run_live.datetime", _horodatage_fixe())
+    fait = _fill_vente_jour(_CourtierAvecFill(), "OSCR")
+    assert fait == {"price": 29.65, "qty": 14.0}
+
+
+def test_fill_vente_jour_absent_rend_none(monkeypatch):
+    from scripts.run_live import _fill_vente_jour
+    monkeypatch.setattr("scripts.run_live.datetime", _horodatage_fixe())
+    assert _fill_vente_jour(_CourtierSansOrdre(), "OSCR") is None
+
+
+def test_exit_price_seul_repli_sans_ordre_du_jour(monkeypatch):
+    """Repli inchangé : sans ordre citable, `_exit_price` retombe sur `last_price`."""
+    from scripts.run_live import _exit_price
+    monkeypatch.setattr("scripts.run_live.datetime", _horodatage_fixe())
+    assert _exit_price(_CourtierSansOrdre(), "OSCR") == 30.0
+
+
+def _horodatage_fixe():
+    import datetime as _dt
+
+    class _Fixe(_dt.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return _dt.datetime(2026, 9, 5, 12, 0, tzinfo=tz)
+    return _Fixe

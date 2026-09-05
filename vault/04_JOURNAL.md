@@ -1,5 +1,45 @@
 # 04 — JOURNAL
 
+## Session 2026-09-05 (suite) — P0 : le bug d'invention est dans la PRODUCTION, pas l'historique
+
+**Le journal réparé (313 lignes, sync Mac→VPS OK) montre une vraie invention.** Premier
+run de `diag-surfermeture` sur des données authentiques : `SUR-FERMETURE totale :
++258,3302` unité(s), concentrées sur AVAX (+60,82), LINK (+74,05), OSCR (+85,27), LTC
+(+36,00). Le bloc « ORDRE PAR ORDRE » montre 0 excès sur 195 ventes NOMMÉES
+(`reconciliation-journal:<uuid>`) — l'invention n'est donc PAS dans ce qui se vérifie
+individuellement contre un ordre réel.
+
+**Dump brut d'OSCR (5 lignes) : la coupable identifiée par élimination arithmétique.**
+4 des 5 lignes citent un UUID vérifié. La 5ᵉ, `P-20260831-Alpaca-OSCR` (99,177122
+unités, ouverte ET fermée le même jour, motif `reconciliation paper (reduce/close)`),
+n'en cite aucun. Calcul : vendu réel total (broker) 178,7987 − consommé par les 4
+closures nommées (164,8956) = 13,9031 de vente réelle NON attribuée restante. Sur les
+99,177122 unités de la 5ᵉ ligne, au PLUS 13,90 peuvent être réelles ; au MOINS **85,27
+sont pure invention — exactement le total imprimé.** Coïncidence exclue.
+
+**Root cause trouvée dans le code de PRODUCTION, pas un script de réparation.**
+`scripts/run_live.py:282` (avant correctif) : `sold.append({..., "notional":
+abs(delta)})` — le DELTA PLANIFIÉ par le rebalancement (`cible − détenu`), jamais le
+fill réel. `close_sells` (`live_roundtrip.py`) calculait `remaining = notional / prix`
+pour décider la quantité à fermer au journal. Si le fill réel est plus petit que ce qui
+était visé (slippage, remplissage partiel, ordre encore `EN_COURS` — `compte_comme_envoye`
+accepte cet état), le journal ferme quand même le montant PLANIFIÉ. **Ce code tourne
+chaque jour ouvré ; sans correctif, il aurait continué à inventer du « réalisé »
+lundi et tous les jours suivants.**
+
+**Correctif : le fill réel, quand il est citable, prime STRICTEMENT.** Nouvelle fonction
+`_fill_vente_jour` (`run_live.py`) isole la lecture du fill du jour (prix ET quantité,
+pas seulement le prix comme le faisait `_exit_price`). `close_sells` accepte un champ
+`qty_reelle` optionnel : fourni et positif, il remplace `notional/prix` ; absent, le
+comportement d'avant est inchangé (aucune régression sur les ventes sans ordre citable,
+ex. `close_position`). 6 tests ajoutés (3 sur `close_sells`, 3 sur `_fill_vente_jour` /
+`_exit_price`), rejouant le cas OSCR (planifié 99, fait 14 → ferme 14, pas 99).
+
+**Ce que ce correctif ne résout PAS** : les ~258 unités déjà inventées dans le journal
+historique restent à corriger — ce n'est pas le rôle de ce patch, qui empêche seulement
+la récidive. Et `AVAX/LINK/LTC` méritent le même dump brut qu'OSCR pour confirmer que
+la même cause (lots `P-...` sans UUID) explique chacun avant toute correction.
+
 ## Session 2026-09-05 (suite) — La preuve : le journal.db du VPS date d'AVANT toute réparation
 
 **Lancé `make diag-surfermeture` sur le VPS.** 95 enregistrements (contre 313 sur le Mac
