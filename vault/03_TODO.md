@@ -61,11 +61,12 @@
       même squelette que `annuler_chronologie_impossible.py` (simulation par défaut,
       sauvegarde + archive JSON, `--appliquer` explicite). Ne retire QUE le lot sans
       nom — la correction nommée reste intacte. 10 tests, 6 cas réels en dur.
-- [ ] **P1 — À APPLIQUER par l'utilisateur sur sa vraie base.** `make annuler-doublons`
-      (simulation) puis `make annuler-doublons ARGS=--appliquer`. Relancer ensuite
-      `make diag-surfermeture` : le total INVENTÉ doit baisser d'au moins la somme
-      retirée. Le résidu restant (ventes non journalisées, ex. AVAX 07-08) est un
-      trou différent, non traité par cet outil.
+- [x] **APPLIQUÉ sur le compte réel (05/09).** 20 doublons retirés (au-delà des 8
+      vérifiés à la main) · `INVENTÉ` 258,33 → **85,27** $ · sauvegarde + archive JSON.
+- [ ] **P2 — le résidu OSCR (85,27, seul restant) est un mécanisme DIFFÉRENT.** Pas un
+      doublon date+prix : un lot orphelin sans AUCUN ordre réel derrière. Chercher s'il
+      existe ailleurs avant de construire un second outil — ne pas supposer que c'est
+      isolé.
 
 ## 🟠 P1 — La détention médiane de 0,1 j reste NON expliquée (2026-09-05)
 

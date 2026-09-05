@@ -1,5 +1,29 @@
 # 04 — JOURNAL
 
+## Session 2026-09-05 (suite) — Appliqué sur le compte réel : 20 doublons, pas 6
+
+**`make annuler-doublons ARGS=--appliquer` exécuté sur le VPS**, sur le vrai journal
+(313 lignes). Résultat mesuré, pas supposé : **20 doublons retirés** (SOL ×3, LINK ×2,
+BTC ×2, ETH ×2, LTC ×3, AVAX ×3, BCH ×3, STT, SLG) — bien au-delà des 8 vérifiés à la
+main (AVAX+LINK+LTC). La règle générique (même symbole, même date+prix de sortie, un
+nommé + un sans nom) a correctement généralisé sans sur-détection : 313 → 293 lignes,
++3 448,65 $ de « réalisé » en double retiré, sauvegarde + archive JSON créées.
+
+**`diag-surfermeture` après coup : `INVENTÉ` +258,3302 → +85,2740.** Baisse de
+173,06 unités — exactement la quantité des doublons retirés. Le résidu de 85,27 est
+ENTIÈREMENT OSCR, et c'est attendu : OSCR n'est pas un doublon date+prix, c'est un lot
+sans AUCUNE contrepartie réelle (ouvert/fermé le même jour, aucun ordre du courtier ne
+l'explique) — mécanisme différent, hors du périmètre de cet outil.
+
+**Effet de bord compris, pas un problème** : `achats_non_journalises` a augmenté sur
+les symboles touchés (AVAX 274,41 → 605,34) — mécanique, puisque `ferme_journal` a
+baissé et que l'identité `achats_nj = achete − (ferme+ouvert)` remonte en
+conséquence. Une réalité déjà là (achats jamais journalisés), simplement démasquée.
+Identité vérifiée (✓) sur chaque ligne après coup.
+
+**Reste ouvert** : le mécanisme OSCR (lot orphelin sans ordre réel du tout, pas un
+doublon) — à chercher s'il existe ailleurs avant de construire un second outil.
+
 ## Session 2026-09-05 (suite) — Outil de retrait des doublons, sur les 6 cas vérifiés
 
 **Le même mécanisme, reproduit à l'identique sur AVAX et LTC.** Croisement ordre par
