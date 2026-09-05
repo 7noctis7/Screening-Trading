@@ -46,11 +46,15 @@ def _ordres() -> list[dict]:
 
 
 def _bloc_symboles(ecarts, cible: str | None) -> None:
+    """`invente` et `vente n.j.` sont deux colonnes SÉPARÉES, jamais une seule colonne
+    signée : les confondre a fait lire une vraie absence de clôtures comme une preuve
+    d'absence de problème (05/09, PATH/NWL sur le VPS). Elles ne sont JAMAIS toutes deux
+    non nulles pour un même symbole — `sur_fermeture` n'a qu'un signe à la fois."""
     print("\n  DÉCOMPOSITION DU MANQUE — le courtier porte-t-il plus que le "
           "journal ?\n")
     print(f"    {'symbole':<10}{'attendu':>12}{'ouvert jrn':>12}{'MANQUE':>12}"
-          f"{'achats n.j.':>13}{'SUR-FERM.':>12}  identité")
-    print("    " + "-" * 83)
+          f"{'achats n.j.':>13}{'invente':>10}{'vente n.j.':>12}  identité")
+    print("    " + "-" * 93)
     vus = 0
     for e in ecarts:
         if abs(e.manque_ouvert) < SEUIL and abs(e.sur_fermeture) < SEUIL:
@@ -60,15 +64,17 @@ def _bloc_symboles(ecarts, cible: str | None) -> None:
         vus += 1
         print(f"    {e.symbole:<10}{e.detenu_attendu:>12.4f}{e.ouvert_journal:>12.4f}"
               f"{e.manque_ouvert:>+12.4f}{e.achats_non_journalises:>+13.4f}"
-              f"{e.sur_fermeture:>+12.4f}  "
+              f"{e.invente:>10.4f}{e.vente_non_journalisee:>12.4f}  "
               f"{'✓' if e.identite_verifiee() else '⚠ NE SE REFERME PAS'}")
     if not vus:
         print("    aucun écart — le journal et le courtier disent la même chose.")
         return
-    total = sum(e.sur_fermeture for e in ecarts if e.sur_fermeture > SEUIL)
-    print(f"\n    SUR-FERMETURE totale : {total:+.4f} unité(s) — des sorties que le "
-          "courtier\n    n'a jamais exécutées. C'est du « réalisé » sans contrepartie "
-          "réelle.")
+    inv = sum(e.invente for e in ecarts)
+    vnj = sum(e.vente_non_journalisee for e in ecarts)
+    anj = sum(e.achats_non_journalises for e in ecarts if e.achats_non_journalises > 0)
+    print(f"\n    INVENTÉ (grave, contamine les stats)      : {inv:+.4f} unité(s)")
+    print(f"    ventes RÉELLES jamais closes au journal    : {vnj:+.4f} unité(s)")
+    print(f"    achats RÉELS jamais journalisés            : {anj:+.4f} unité(s)")
     print("    Une identité qui ne se referme pas accuse CE script, pas la donnée.")
 
 

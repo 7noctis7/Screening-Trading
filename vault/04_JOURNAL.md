@@ -1,5 +1,40 @@
 # 04 — JOURNAL
 
+## Session 2026-09-05 (suite) — La preuve : le journal.db du VPS date d'AVANT toute réparation
+
+**Lancé `make diag-surfermeture` sur le VPS.** 95 enregistrements (contre 313 sur le Mac
+mini). J'ai d'abord accusé mon propre outil : `diag_journal_compte.py --symbole PATH`
+répondait « 0 ligne » alors que mon tableau montrait PATH à −300,2230. J'ai dit à
+l'utilisateur de ne pas faire confiance au script — **à tort**.
+
+**Vérifié à la main sur le relevé brut** (`SELECT id, instrument, qty, exit_ts FROM
+trades`) : zéro ligne au journal pour PATH, c'est justement ce qui PRODUIT l'écart par
+construction (`ferme_journal=0, ouvert=0` → `achats_non_journalises=+achete` et
+`sur_fermeture=−vendu`). Recalculé à la main pour PATH et NWL, résultat identique au
+tableau du script au dix-millième. **Aucun bug. Je me suis trompé en doutant de l'outil.**
+
+**Le vrai défaut n'était pas dans le calcul, mais dans l'étiquette.** J'avais défini
+`sur_fermeture > 0` = « invention ». Un signe négatif ne veut PAS dire l'inverse — il
+signale un TROU DE SORTIES symétrique du trou d'entrées (une vente réelle qu'aucune
+clôture ne référence), pas une absence de problème. Ma propre bannière « SUR-FERMETURE
+totale : +0,0000 $ » était juste selon ma définition mais lisait comme rassurante alors
+que PATH (aucune ligne du tout), NWL (1 ligne sur 1554,63 — 8 % capturé), SJM, R, T,
+TRV, TYL, THC, VLO, TMO, TER, TSM, ASML, AAVE, ZION montraient tous ce trou massif.
+Corrigé : `invente` et `vente_non_journalisee` sont deux propriétés séparées
+(`max(0, ±sur_fermeture)`), jamais mélangées dans une colonne signée. 2 tests ajoutés
+rejouant PATH/NWL avec les vraies valeurs (9 tests au total).
+
+**La cause racine, confirmée par le relevé** : les 95 lignes du VPS commencent TOUTES
+par `P-` — aucune ne porte le préfixe `C-` des écritures de correction. Ce `journal.db`
+est la version D'AVANT `reconcilier_journal --appliquer` (Mac mini, aujourd'hui). Les
+deux machines n'ont jamais partagé le même fichier — le P1 « trois copies divergentes »
+signalé plusieurs fois cette session vient de produire un diagnostic concret, pas
+seulement un risque théorique.
+
+**Action recommandée, avant lundi 14:40 UTC** : `make journal-push` (Mac mini, source de
+vérité) puis `make journal-pull` (VPS). Sûr maintenant : le timer VPS n'a rien écrit
+depuis le 04/09 19:23, donc rien à perdre côté VPS.
+
 ## Session 2026-09-05 (suite) — L'écart courtier/journal est DÉCOMPOSÉ, plus seulement constaté
 
 **Le problème.** `diag-journal` constate que le courtier détient ce que le journal ignore

@@ -99,3 +99,29 @@ def test_par_symbole_agrege_les_alias_du_meme_actif():
     (e,) = par_symbole(trades, ordres)
     assert abs(e.achete - 1367.3599) < 1e-9 and abs(e.sur_fermeture - 57.439601) < 1e-6
     assert e.identite_verifiee()
+
+
+def test_invente_et_vente_non_journalisee_sont_exclusifs():
+    """05/09 : PATH/NWL sur le VPS avaient sur_fermeture < 0 — une VENTE réelle
+    jamais close au journal, pas une invention. Les deux ne coexistent jamais."""
+    e_invente = EcartSymbole("X", achete=100, vendu=50, ferme_journal=60,
+                            ouvert_journal=0)
+    assert e_invente.invente == 10.0 and e_invente.vente_non_journalisee == 0.0
+
+    e_path = EcartSymbole("PATH", achete=300.2230, vendu=300.2230,
+                          ferme_journal=0.0, ouvert_journal=0.0)
+    assert e_path.invente == 0.0
+    assert abs(e_path.vente_non_journalisee - 300.2230) < 1e-9
+
+
+def test_vps_du_05_09_path_et_nwl_ne_sont_pas_de_l_invention():
+    """Chiffres réels du relevé brut : PATH 0 ligne, NWL 1 ligne sur 1554,6265.
+    Zéro ligne au journal PRODUIT ce résultat par construction — pas un bug."""
+    path = EcartSymbole("PATH", achete=300.2230, vendu=300.2230,
+                        ferme_journal=0.0, ouvert_journal=0.0)
+    nwl = EcartSymbole("NWL", achete=1554.6265, vendu=1554.6265,
+                       ferme_journal=124.191244815, ouvert_journal=0.0)
+    for e, attendu_vnj in ((path, 300.2230), (nwl, 1430.435255185)):
+        assert e.invente == 0.0
+        assert abs(e.vente_non_journalisee - attendu_vnj) < 1e-6
+        assert e.identite_verifiee()

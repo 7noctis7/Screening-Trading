@@ -111,8 +111,24 @@ class EcartSymbole:
 
     @property
     def sur_fermeture(self) -> float:
-        """> 0 : le journal a soldé des unités que le courtier n'a pas vendues."""
+        """Signée : ferme_journal − vendu. > 0 = INVENTÉ, < 0 = SOLDE MAIS NON CLOS
+        (le miroir exact d'un achat non journalisé, côté sortie). Publier ce seul
+        signe sans les séparer a trompé sa propre auteure (05/09, PATH/NWL) : une
+        « sur-fermeture » négative se lit comme une preuve d'absence de problème,
+        alors qu'elle signale un trou de sorties aussi grave que le trou d'entrées.
+        `invente` et `vente_non_journalisee` ci-dessous isolent chaque sens."""
         return self.ferme_journal - self.vendu
+
+    @property
+    def invente(self) -> float:
+        """Part RÉELLEMENT inventée (>0 seulement) : du « réalisé » sans vente
+        réelle."""
+        return max(0.0, self.sur_fermeture)
+
+    @property
+    def vente_non_journalisee(self) -> float:
+        """Vente réelle qu'AUCUNE clôture du journal ne référence (>0 seulement)."""
+        return max(0.0, -self.sur_fermeture)
 
     def identite_verifiee(self) -> bool:
         """L'identité DOIT se refermer — sinon la décomposition est fausse."""

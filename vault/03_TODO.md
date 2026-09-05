@@ -32,9 +32,14 @@
       d'AVAX : 331,847254 = 274,407653 (entrées jamais écrites) + **57,439601 (sorties
       INVENTÉES)**. Les deux causes coexistent ; la seconde produit du « réalisé » sans
       contrepartie et contamine les statistiques.
-- [ ] **À LANCER là où vit le vrai journal** : `make diag-surfermeture`. La décomposition
-      dira quelle cause domine, et c'est elle qui décidera du correctif — pas une
-      hypothèse. Ne rien corriger avant d'avoir la sortie complète.
+- [x] **LANCÉ sur le VPS (05/09) — cause racine trouvée.** 95 lignes, TOUTES `P-`,
+      AUCUNE `C-` : ce `journal.db` est la version D'AVANT `reconcilier_journal
+      --appliquer` du Mac mini. PATH (0 ligne), NWL (1 ligne sur 1554,63) confirment
+      un trou de SORTIES massif, pas de l'invention (`invente`=0 partout, vérifié à la
+      main sur le relevé brut). Les deux machines n'ont jamais partagé le même fichier.
+- [ ] **P0 — synchroniser AVANT lundi 14:40 UTC** : `make journal-push` (Mac mini) puis
+      `make journal-pull` (VPS). Sûr : le timer VPS n'a rien écrit depuis le 04/09 19:23.
+      Sans ça, `cron_live.sh` construira lundi sur la version non réparée.
 
 ## 🟠 P1 — La détention médiane de 0,1 j reste NON expliquée (2026-09-05)
 
