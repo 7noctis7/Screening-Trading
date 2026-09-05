@@ -251,12 +251,14 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       **À FAIRE : lancer `make labs` et lire la 3ᵉ table** — jours ET maxDD ensemble, un
       verrou allonge la détention par construction, la question est ce qu'il coûte en
       baisse maximale. DSR déjà déflaté des 4 essais supplémentaires.
-- [ ] **P1 — Trois copies divergentes de `data/journal.db`.** Mac mini (37 positions), HF
-      (25), VPS (le sien, isolé). `cron_live.sh` ne synchronise pas avec HF — seul
-      `paper.yml` le fait. Le timer systemd que j'ai posé sur le VPS le 04/09 hérite de ce
-      trou : il accumulera un historique séparé. **Ne pas brancher `hf_journal.py push` à
-      l'aveugle** : le push écrase sans fusion, un run du VPS pourrait effacer l'historique
-      plus complet du Mac. Décider d'une source de vérité AVANT de câbler.
+- [x] **Trois copies divergentes — RÉSOLU pour l'état actuel (05/09).** Source de vérité
+      tranchée : le VPS (réparé le plus récemment). `journal-push` (VPS) → `journal-pull`
+      (Mac mini) : les deux machines ont désormais le MÊME fichier (159 744 octets,
+      293 lignes, invention isolée à 85,27 $ sur OSCR). Le trou STRUCTUREL demeure : rien
+      n'automatise ce push/pull, donc une nouvelle divergence peut réapparaître si les
+      deux machines écrivent sans se resynchroniser. Discipline à tenir : le VPS écrit en
+      continu (`cron_live.sh`), le Mac/MacBook restent des postes de LECTURE — jamais un
+      second exécuteur live — et un `journal-push` régulier depuis le VPS reste manuel.
 - [ ] **P1 — Rebalancement journalier vs. tenir jusqu'au TP/SL : outillé le 04/09, PAS mesuré.**
       Question de l'utilisateur : le rebalancement quotidien vers les poids cibles coupe-t-il
       des positions gagnantes avant leur potentiel ? Constat de code (pas de mesure) :
