@@ -8,7 +8,7 @@ const PAGES: [string, string][] = [
   ["/macro", "Macro"], ["/crypto", "Crypto"], ["/themes", "Thèmes de marché"], ["/events", "Événements"], ["/fundamentals", "Fondamentaux"], ["/investors", "Investisseurs"],
   ["/ml", "Signaux ML"], ["/sentiment", "Sentiment & news"], ["/conviction", "Conviction"],
   ["/portfolio", "Portefeuille & Analyse"], ["/risk", "Risque"],
-  ["/positions", "Positions"], ["/trades", "Trades"], ["/live", "Portefeuille réel"],
+  ["/positions", "Positions"], ["/analyse-portefeuille", "Analyser mon portefeuille"], ["/trades", "Trades"], ["/live", "Portefeuille réel"],
 ];
 
 export function CommandPalette() {
