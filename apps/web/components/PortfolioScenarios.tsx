@@ -47,6 +47,7 @@ export function PortfolioScenarios({ snapshot, analysis }: { snapshot: Portfolio
     const weakAssets = snapshot.positions
       .map(p => ({
         ticker: p.ticker,
+        weight: p.weight, // On récupère le poids actuel de l'actif
         score: (ml.scores as Record<string, number>)[p.ticker] ?? (ml.scores as Record<string, number>)[`${p.ticker}-USD`],
         isMissing: missingTickers.has(p.ticker) || missingTickers.has(`${p.ticker}-USD`)
       }))
@@ -66,6 +67,7 @@ export function PortfolioScenarios({ snapshot, analysis }: { snapshot: Portfolio
       return {
         current: weak.ticker,
         currentScore: weak.score,
+        currentWeight: weak.weight, // On passe le poids au tableau
         reason: weak.isMissing ? "Historique ou covariance introuvable" : `Score ML faible (${(weak.score! * 100).toFixed(1)}%)`,
         replacement: replacement?.ticker,
         replacementScore: replacement?.score
@@ -130,8 +132,9 @@ export function PortfolioScenarios({ snapshot, analysis }: { snapshot: Portfolio
                     <tr>
                       <th>Actif bloquant</th>
                       <th>Problème détecté</th>
-                      <th>Meilleure alternative dispo.</th>
+                      <th>Alternative dispo.</th>
                       <th>Score ML (OOS)</th>
+                      <th className="text-right">Poids suggéré</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -141,13 +144,14 @@ export function PortfolioScenarios({ snapshot, analysis }: { snapshot: Portfolio
                         <td className="text-xs text-muted">{s.reason}</td>
                         <td className="mono text-green-500">{s.replacement?.replace("-USD", "")}</td>
                         <td className="mono text-right">{s.replacementScore != null ? (s.replacementScore * 100).toFixed(1) + "%" : "—"}</td>
+                        <td className="mono text-right">{s.currentWeight != null ? s.currentWeight + " %" : "—"}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
               <p className="text-xs text-muted mt-3">
-                Ces recommandations sont générées à partir des scores réels de l'onglet Machine Learning. Retournez à l'Étape 1 pour modifier votre liste et débloquer les scénarios.
+                Remplacez les actifs bloquants par ces alternatives 1-pour-1 dans l'Étape 1 pour débloquer les scénarios d'optimisation.
               </p>
             </div>
           )}
