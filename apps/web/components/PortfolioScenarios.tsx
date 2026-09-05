@@ -36,45 +36,44 @@ export function PortfolioScenarios({ snapshot, analysis }: { snapshot: Portfolio
       : [];
   }, [snapshot, analysis, portfolio, ml, value, costBps, maxPct]);
 
-  // --- LOGIQUE DE RECOMMANDATION (Données réelles uniquement) ---
+  // --- LOGIQUE DE RECOMMANDATION INTELLIGENTE ---
   const suggestions = useMemo(() => {
     if (!ml?.scores || !snapshot) return [];
 
     const currentTickers = new Set(snapshot.positions.map(p => p.ticker));
     const missingTickers = new Set(analysis?.missing || []);
 
-    // 1. Identifier les actifs faibles ou bloquants
+    // 1. Identifier les actifs bloquants ou faibles
     const weakAssets = snapshot.positions
-      .map(p => ({
-        ticker: p.ticker,
-        weight: p.weight, // On récupère le poids actuel de l'actif
-        score: (ml.scores as Record<string, number>)[p.ticker] ?? (ml.scores as Record<string, number>)[`${p.ticker}-USD`],
-        isMissing: missingTickers.has(p.ticker) || missingTickers.has(`${p.ticker}-USD`)
-      }))
-      .filter(p => p.isMissing || (p.score !== undefined && p.score < 0.5)); // Seuil de faiblesse ML < 50%
+      .map(p => {
+        const cleanTicker = p.ticker.replace("-USD", "");
+        const isMissing = missingTickers.has(p.ticker) || missingTickers.has(cleanTicker);
+        const score = (ml.scores as Record<string, number>)[p.ticker] ?? (ml.scores as Record<string, number>)[cleanTicker];
+        return { ticker: p.ticker, weight: p.weight, score, isMissing };
+      })
+      .filter(p => p.isMissing || (p.score !== undefined && p.score < 0.5));
 
     if (weakAssets.length === 0) return [];
 
-    // 2. Trouver les meilleurs remplaçants disponibles dans l'univers ML
+    // 2. Trouver les meilleures alternatives dans le ML ayant les meilleurs scores
     const availableCandidates = Object.entries(ml.scores as Record<string, number>)
       .filter(([ticker, score]) => !currentTickers.has(ticker) && !currentTickers.has(ticker.replace("-USD", "")) && typeof score === "number")
       .map(([ticker, score]) => ({ ticker, score }))
       .sort((a, b) => b.score - a.score);
 
-    // 3. Associer les actifs faibles aux meilleurs candidats
+    // 3. Associer chaque actif faible à un remplaçant du top ML
     return weakAssets.map((weak, index) => {
-      const replacement = availableCandidates[index]; // Prend le top 1, puis top 2, etc.
+      const replacement = availableCandidates[index];
       return {
         current: weak.ticker,
-        currentScore: weak.score,
-        currentWeight: weak.weight, // On passe le poids au tableau
-        reason: weak.isMissing ? "Historique ou covariance introuvable" : `Score ML faible (${(weak.score! * 100).toFixed(1)}%)`,
+        currentWeight: weak.weight,
+        reason: weak.isMissing ? "Historique ou covariance rejeté par l'API" : `Score ML faible (${((weak.score ?? 0) * 100).toFixed(1)}%)`,
         replacement: replacement?.ticker,
         replacementScore: replacement?.score
       };
-    }).filter(s => s.replacement); // Exclut s'il n'y a plus de candidats
+    }).filter(s => s.replacement);
   }, [snapshot, analysis, ml]);
-  // -------------------------------------------------------------
+  // ----------------------------------------------
 
   if (!snapshot) return null;
   
@@ -120,11 +119,10 @@ export function PortfolioScenarios({ snapshot, analysis }: { snapshot: Portfolio
             ⚠️ {active.reason}
           </div>
           
-          {/* AFFICHAGE DES SUGGESTIONS D'AMÉLIORATION */}
           {suggestions.length > 0 && (
             <div className="rounded-xl border border-border bg-surface p-4">
               <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                <span>💡</span> Suggestions de substitution (Basé sur le ML OOS)
+                <span>💡</span> Suggestions de substitution par le moteur ML
               </h3>
               <div className="overflow-x-auto">
                 <table>
@@ -132,9 +130,9 @@ export function PortfolioScenarios({ snapshot, analysis }: { snapshot: Portfolio
                     <tr>
                       <th>Actif bloquant</th>
                       <th>Problème détecté</th>
-                      <th>Alternative dispo.</th>
+                      <th>Alternative suggérée</th>
                       <th>Score ML (OOS)</th>
-                      <th className="text-right">Poids suggéré</th>
+                      <th className="text-right">Poids libéré réallouable</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -144,14 +142,14 @@ export function PortfolioScenarios({ snapshot, analysis }: { snapshot: Portfolio
                         <td className="text-xs text-muted">{s.reason}</td>
                         <td className="mono text-green-500">{s.replacement?.replace("-USD", "")}</td>
                         <td className="mono text-right">{s.replacementScore != null ? (s.replacementScore * 100).toFixed(1) + "%" : "—"}</td>
-                        <td className="mono text-right">{s.currentWeight != null ? s.currentWeight + " %" : "—"}</td>
+                        <td className="mono text-right">{s.currentWeight != null ? `${s.currentWeight} %` : "—"}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
               <p className="text-xs text-muted mt-3">
-                Remplacez les actifs bloquants par ces alternatives 1-pour-1 dans l'Étape 1 pour débloquer les scénarios d'optimisation.
+                Intégrez ces alternatives à l'Étape 1 pour permettre aux moteurs Prudent, Neutre et Dynamique de calculer une matrice de covariance valide.
               </p>
             </div>
           )}
@@ -177,9 +175,9 @@ export function PortfolioScenarios({ snapshot, analysis }: { snapshot: Portfolio
             <table>
               <thead>
                 <tr>
-                  <th>Actif</th>
-                  <th>Actuel</th>
-                  <th>Proposé</th>
+                  <th>Actif ({active.label})</th>
+                  <th>Poids Actuel</th>
+                  <th>Poids Proposé</th>
                   <th>Écart</th>
                   <th>Montant indicatif</th>
                 </tr>
