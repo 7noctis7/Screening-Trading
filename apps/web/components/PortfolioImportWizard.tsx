@@ -272,8 +272,14 @@ export function PortfolioImportWizard({ onSnapshot, initialSnapshot }: { onSnaps
             <button className="rounded-xl border border-border px-4 py-2 text-sm" onClick={() => setStep(1)}>
               Modifier
             </button>
-            <button className="rounded-xl px-4 py-2 text-sm opacity-50 border border-border" disabled>
-              Scénarios — prochain incrément
+            <button 
+              className="rounded-xl bg-cyan-600 text-white px-4 py-2 text-sm" 
+              onClick={() => {
+                setStep(3);
+                window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+              }}
+            >
+              Voir les scénarios
             </button>
           </div>
         </section>
