@@ -1,4 +1,5 @@
 "use client";
+import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { ChangeEvent, useMemo, useState } from "react";
 import { allocationState, ImportedPosition, normalize, parseCsv, parseManual, PortfolioSnapshot } from "@/lib/portfolio-import";
 
@@ -52,6 +53,9 @@ function ConfirmStep({ positions, setPositions, onConfirm, back }: { positions: 
   </section>;
 }
 
+export function PortfolioImportWizard({ onSnapshot, initialSnapshot }: { onSnapshot?: (snapshot: PortfolioSnapshot | null) => void; initialSnapshot?: PortfolioSnapshot | null }) {
+  const [step, setStep] = useState(0); const [positions, setPositions] = useState<ImportedPosition[]>([]); const [snapshot, setSnapshot] = useState<PortfolioSnapshot | null>(null);
+  useEffect(() => { if (initialSnapshot && !snapshot) { setSnapshot(initialSnapshot); setPositions(initialSnapshot.positions); setStep(2); } }, [initialSnapshot, snapshot]);
 export function PortfolioImportWizard({ onSnapshot }: { onSnapshot?: (snapshot: PortfolioSnapshot | null) => void }) {
   const [step, setStep] = useState(0); const [positions, setPositions] = useState<ImportedPosition[]>([]); const [snapshot, setSnapshot] = useState<PortfolioSnapshot | null>(null);
   const state = useMemo(() => allocationState(positions), [positions]);

@@ -3,6 +3,10 @@
 ## Verdict actuel
 
 La route `/analyse-portefeuille` livre l'import, la confirmation et le snapshot local. Une première
+projection read-only joint ce snapshot aux scores de screening, fondamentaux, résultats, ML et à la
+macro. En local, `POST /api/portfolio/analyze` charge désormais les historiques de l'univers exact,
+aligne leurs dates sans remplissage, calcule le risque et recalcule min-variance/ERC/HRP. La conversion
+FX multi-devises et l'optimisation dynamique par rendement attendu restent à raccorder.
 projection read-only joint désormais ce snapshot aux scores de screening, fondamentaux, résultats,
 ML et à la disponibilité macro déjà publiés par l'API. Les historiques complets, la conversion FX
 et le recalcul d'allocations propres à l'univers importé restent à raccorder.
@@ -70,6 +74,10 @@ diagnostiquer ou simuler ne doit jamais déclencher ce passage.
 ## Ordre de livraison
 
 1. **Fait** — import/confirmation/snapshot local et diagnostic croisé read-only.
+2. **Partiel** — historiques réels, alias crypto, cash, alignement et diagnostic reproductible livrés
+   en local ; restent la résolution persistée, l'isolation multi-utilisateur et le FX multi-devises.
+3. **Partiel** — min-variance/ERC/HRP recalculés sur l'univers exact ; turnover, coût linéaire et veto
+   de poids maximal publiés. Restent les contraintes complètes et l'impact non linéaire.
 2. Résolution serveur et isolation utilisateur, puis historiques/FX réels et diagnostic reproductible.
 3. **Partiel** — comparaison min-variance/ERC/Black-Litterman réutilisée uniquement si l'univers
    correspond exactement ; turnover, coût linéaire et veto de poids maximal sont publiés. Le

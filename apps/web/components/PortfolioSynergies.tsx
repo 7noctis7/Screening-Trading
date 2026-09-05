@@ -1,4 +1,5 @@
 const SOURCES = [
+  ["Données & graphiques", "Historiques locaux chargés à la demande et calendriers alignés sans remplissage", "Actif local"],
   ["Données & graphiques", "Scores de marché joints ; historiques et FX restent à raccorder", "Partiel"],
   ["Fondamentaux & résultats", "Qualité, valorisation et calendrier joints par instrument", "Partiel"],
   ["Macro & régimes", "Disponibilité et source visibles ; tilt non calibré", "Partiel"],

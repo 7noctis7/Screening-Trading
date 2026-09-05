@@ -1,5 +1,15 @@
 # 04 — JOURNAL
 
+## Session 2026-09-05 (suite 4) — Les données existaient ; la page ne les chargeait jamais
+
+Cause du « 1/6 marché » et des scénarios vides : la page lisait uniquement les lignes ayant survécu
+aux filtres de `/api/screen`, puis exigeait que l'univers importé soit identique au portefeuille de
+production précalculé. Elle ne demandait jamais les historiques de PLTR/CLSK/BMNR/SBET/ETHUSDT.
+Correction : jointure avec le screener complet, normalisation des alias crypto, puis endpoint local
+read-only qui charge d'abord les séries déjà présentes dans le snapshot, ensuite YAHOO.db/yfinance,
+aligne l'intersection des dates sans forward-fill et recalcule risque + min-var/ERC/HRP. Cash est une
+série constante explicite. Un historique manquant publie maintenant son symbole et la couverture.
+
 ## Session 2026-09-05 (suite 3) — Des scénarios honnêtes, ou aucun scénario
 
 L'étape Améliorer affiche maintenant prudent (min-variance), neutre (ERC) et dynamique
