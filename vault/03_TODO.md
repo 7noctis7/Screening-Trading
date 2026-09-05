@@ -17,6 +17,23 @@
       compte/indice sur les dates réelles. Un benchmark périmé est exclu, jamais forward-fill sur
       des mois avec l'étiquette « réel ».
 
+## 🔴 P0 — Le courtier détient ce que le journal ignore (constaté 2026-09-05)
+
+- [ ] **Écart en sens INVERSE des lots orphelins, sur 8 symboles.** `diag-journal` après
+      les deux réparations : AVAX journal 3,65 / courtier **335,50** · LINK 82,4 / 219,8 ·
+      OSCR 0 / 85,3 · LTC 23,4 / 60,1 · SOL 23,1 / 37,7 · BCH 0,15 / 10,9 · ETH 0,42 / 1,06 ·
+      BTC 0,015 / 0,038. Les lots orphelins (journal > courtier) sont un trou de SORTIES ;
+      celui-ci est un trou d'ENTRÉES que `completer_ouvertures` n'a PAS refermé alors qu'il
+      vient de tourner. Cause à MESURER, pas à supposer. Tant que ça tient, toute stat du
+      journal décrit un compte qui n'est pas celui du courtier.
+
+## 🟠 P1 — La détention médiane de 0,1 j reste NON expliquée (2026-09-05)
+
+- [ ] **L'hypothèse du plancher de ligne (1 000 $) n'est ni confirmée ni écartée.** L'aperçu
+      du 05/09 semblait la confirmer (7 cibles crypto « sous le plancher ») mais c'était un
+      artefact de `--equity 10000` : à l'équity réelle ces cibles valent ~2 000-2 600 $ et
+      ne touchent pas le plancher. À reprendre avec `make live` corrigé (equity réelle).
+
 ## 🔴 P1 — Trois dates d'arrêté distinctes sur le site (constaté 2026-09-04)
 
 - [ ] **`dashboard` racine et `data` sont datés du 18/06** quand `events`, `themes` et

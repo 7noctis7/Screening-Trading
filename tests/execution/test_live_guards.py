@@ -3,8 +3,14 @@ kill-switch drawdown réel, fail-loud. Brokers factices — aucun réseau."""
 
 import pytest
 
-from packages.execution.live_guards import (current_values, dd_kill_switch,
-                                            fail_loud, vet_brokers)
+from packages.execution.live_guards import (
+    APERCU_DEFAUT,
+    current_values,
+    dd_kill_switch,
+    fail_loud,
+    simule,
+    vet_brokers,
+)
 
 
 class _Ok:
@@ -42,17 +48,20 @@ def test_positions_ko_donne_none_pas_zero():
 
 
 def test_broker_mort_ecarte_et_fatal():
-    alp, bit, alp_cap, bit_cap, fatal = vet_brokers(_Dead(), None, dry=False, cli_equity=None)
+    alp, bit, alp_cap, bit_cap, fatal = vet_brokers(
+        _Dead(), None, dry=False, cli_equity=None)
     assert alp is None and alp_cap == 0.0 and fatal   # écarté + motif d'échec (run rouge)
 
 
 def test_broker_sain_conserve():
-    alp, bit, alp_cap, bit_cap, fatal = vet_brokers(_Ok(), None, dry=False, cli_equity=None)
+    alp, bit, alp_cap, bit_cap, fatal = vet_brokers(
+        _Ok(), None, dry=False, cli_equity=None)
     assert alp is not None and alp_cap == 1000.0 and not fatal
 
 
 def test_dry_run_sans_reseau():
-    alp, bit, alp_cap, bit_cap, fatal = vet_brokers(None, None, dry=True, cli_equity=2500.0)
+    alp, bit, alp_cap, bit_cap, fatal = vet_brokers(
+        None, None, dry=True, cli_equity=2500.0)
     assert alp_cap == 2500.0 and not fatal
 
 
@@ -81,3 +90,40 @@ def test_fail_loud_exit_non_zero():
     with pytest.raises(SystemExit) as exc:
         fail_loud(["clé invalide"], None, code=3)
     assert exc.value.code == 3
+
+
+# APERÇU vs SIMULATION (05/09). `make live` affichait « détenu 0 $ » sur un compte plein
+# et un capital de 10 000 $ : chaque cible sortait au dixième de sa taille réelle, et
+# l'aperçu annonçait l'achat de tout le portefeuille par-dessus l'existant — le mode de
+# défaillance que le principe 1 de ce module interdit au run LIVE, reproduit à l'écran.
+
+
+def test_equity_impose_veut_dire_simulation():
+    """`--equity` = « portefeuille neuf » : le détenu est ignoré à dessein."""
+    assert simule(dry=True, cli_equity=2500.0) is True
+    alp, bit, alp_cap, bit_cap, fatal = vet_brokers(
+        _Ok(), None, dry=True, cli_equity=2500.0)
+    assert alp_cap == 2500.0 and not fatal             # equity du broker JAMAIS lue
+
+
+def test_apercu_sans_equity_lit_le_compte_reel():
+    """Sans `--equity`, l'aperçu doit décrire le compte : sinon il n'annonce rien."""
+    assert simule(dry=True, cli_equity=None) is False
+    alp, bit, alp_cap, bit_cap, fatal = vet_brokers(
+        _Ok(), None, dry=True, cli_equity=None)
+    assert alp_cap == 1000.0 and alp is not None and not fatal
+
+
+def test_apercu_equity_illisible_se_replie_sans_etre_fatal():
+    """Un aperçu n'envoie aucun ordre : le sanctionner comme un live n'a pas de sens."""
+    alp, bit, alp_cap, bit_cap, fatal = vet_brokers(
+        _Dead(), None, dry=True, cli_equity=None)
+    assert alp_cap == APERCU_DEFAUT and alp is not None and fatal == []
+
+
+def test_live_ignore_equity_de_la_ligne_de_commande():
+    """En live, `--equity` ne doit jamais se substituer à l'equity du courtier."""
+    assert simule(dry=False, cli_equity=2500.0) is False
+    alp, bit, alp_cap, bit_cap, fatal = vet_brokers(
+        _Ok(), None, dry=False, cli_equity=2500.0)
+    assert alp_cap == 1000.0

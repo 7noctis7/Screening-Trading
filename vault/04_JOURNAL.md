@@ -1,5 +1,41 @@
 # 04 — JOURNAL
 
+## Session 2026-09-05 — `make live` ne montrait pas le compte : aperçu ≠ simulation
+
+**Ce que l'aperçu affichait, et pourquoi c'était trompeur.** Sur le VPS, `make live`
+sortait `détenu 0 $` sur CHAQUE ligne d'un compte qui porte ~99 700 $ de positions, et
+un capital de 10 000 $. Deux causes, toutes deux volontaires dans le code :
+`run_live.py` forçait `cur_alp, cur_bit = ({}, {})` en dry-run, et le Makefile passait
+`--equity 10000` en dur. Conséquence : chaque cible sortait au DIXIÈME de sa taille
+réelle, et l'aperçu annonçait l'achat du portefeuille entier PAR-DESSUS l'existant.
+
+**C'est exactement le mode de défaillance que `live_guards` interdit au run LIVE** —
+son principe 1 dit « inconnu ≠ zéro », né du jour où un `détenu=0 prudent` a fait
+racheter tout le portefeuille. Le run réel en est protégé ; l'aperçu, lui, le mettait
+à l'écran, et un aperçu qui n'annonce pas le run suivant ne sert à rien.
+
+**Le piège de lecture que ça a failli produire.** Sept lignes crypto sortaient
+« cible 188-262 $ sous le plancher de ligne (1000) — on n'ouvre pas ». J'ai d'abord lu
+là une confirmation du plancher comme cause de la détention médiane de 0,1 jour. C'est
+FAUX et c'est un artefact de `--equity 10000` : à l'équity réelle, ces mêmes cibles
+valent ~2 000-2 600 $ et passent le plancher sans le toucher. L'hypothèse du plancher
+reste donc OUVERTE et non mesurée — elle ne peut pas l'être avec un aperçu au 1/10ᵉ.
+
+**Correctif : deux modes nommés, au lieu d'un seul qui mentait.**
+- `make live` (aperçu) — equity ET positions RÉELLES, aucun ordre envoyé. C'est
+  maintenant le seul moyen de voir ce que fera le prochain run réel.
+- `make live-sim` (`EQUITY=…`) — portefeuille NEUF au capital imposé, détenu ignoré à
+  dessein. L'ancien comportement, sous un nom qui dit ce qu'il fait.
+
+`live_guards.simule(dry, cli_equity)` porte la distinction ; en aperçu, une equity
+illisible se replie sur 10 000 $ SIMULÉS avec un avertissement, sans être fatale — un
+aperçu n'envoie aucun ordre, le sanctionner comme un run live n'aurait pas de sens.
+4 tests ajoutés (12 au total dans `test_live_guards`).
+
+**Non vérifié en local** : la suite complète ne tourne pas dans ce conteneur (tests
+réseau bloqués par le proxy). `tests/execution` + `tests/risk` (337) et tout ce qui
+touche `run_live`/`rebalance` (57) passent. `make test` reste à lancer côté Mac.
+
 ## Session 2026-09-04 (suite 13) — Le verrou de détention mesuré : hypothèse NON retenue
 
 **L'hypothèse testée** (utilisateur, d'après son historique réel) : les round-trips tenus

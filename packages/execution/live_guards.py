@@ -31,15 +31,47 @@ def current_values(alpaca, bitmart) -> tuple[dict | None, dict | None]:
     return _read(alpaca), _read(bitmart)
 
 
+APERCU_DEFAUT = 10_000.0
+
+
+def simule(dry: bool, cli_equity: float | None) -> bool:
+    """L'aperçu simule-t-il un portefeuille NEUF, ou décrit-il le compte réel ?
+
+    `--equity` en dry-run veut dire « montre-moi ce que ferait un portefeuille neuf
+    de ce capital » : le détenu est alors ignoré à dessein. Sans lui, l'aperçu doit
+    lire le compte — afficher « détenu 0 $ » sur un compte plein annonce des achats
+    que le run réel ne fera pas, et c'est exactement le mode de défaillance contre
+    lequel le principe 1 de ce module a été écrit."""
+    return dry and cli_equity is not None
+
+
+def _apercu(alpaca, bitmart, alp_cap: float, bit_cap: float):
+    """Dry-run sur equity réelle : une lecture ratée se replie, ANNONCÉE, jamais
+    fatale. Un aperçu n'envoie aucun ordre — le sanctionner comme un run live
+    n'aurait pas de sens."""
+    if alpaca and alp_cap <= 0:
+        print(f"⚠️  equity Alpaca illisible → aperçu sur {APERCU_DEFAUT:,.0f} $ SIMULÉS "
+              "(ce n'est PAS votre compte).")
+        alp_cap = APERCU_DEFAUT
+    return alpaca, bitmart, alp_cap, max(bit_cap, 0.0), []
+
+
 def vet_brokers(alpaca, bitmart, dry: bool, cli_equity: float | None):
     """(alpaca, bitmart, alp_cap, bit_cap, fatal) — équity par compte, brokers morts écartés.
 
     En LIVE : equity nulle/illisible = broker MORT → écarté + motif `fatal` (l'ancien
     repli 10 000 $ faisait « trader » un broker à clé invalide, run vert à jamais).
-    Bitmart sans clés = simple inactivité (normal en cloud), pas une erreur."""
+    Bitmart sans clés = simple inactivité (normal en cloud), pas une erreur.
+
+    En DRY-RUN : capital IMPOSÉ si `--equity` est donné (simulation), sinon equity
+    RÉELLE du compte — cf. `simule`."""
     fatal: list[str] = []
+    if simule(dry, cli_equity):
+        return alpaca, bitmart, float(cli_equity), 0.0, fatal
     if dry:
-        return alpaca, bitmart, (cli_equity or 10_000.0), 0.0, fatal
+        return _apercu(alpaca, bitmart,
+                       alpaca.equity() if alpaca else 0.0,
+                       bitmart.equity() if bitmart else 0.0)
     alp_cap = alpaca.equity() if alpaca else 0.0
     if alpaca and alp_cap <= 0:
         fatal.append("equity Alpaca nulle/illisible (clé invalide ?) → broker écarté")

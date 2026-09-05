@@ -1,4 +1,4 @@
-.PHONY: install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core coeur-multi diag-coeur-qqq index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto ingest-mktcap preset-report calibrate-preset preset-lab alpha-lab screen repro kill-check log-alpha sync-alphas event-study event-study-smid backtest-pead-smid funding-study risk-check sensitivity paper-watch vault-lint crypto-cockpit crypto-brief regime-study breakout-study microstructure-poc vault-ask crypto-screen screen-niche list-db live live-go live-cron-install live-cron-uninstall completer-ouvertures reconcilier-journal annuler-ventes annuler-chronologie diag-journal diag-fusion bench-backend verify-journal turnover-audit rdv-paper slippage alerts-test ingest-macro bitmart-check clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull journal-pull journal-push notion-sync contracts supabase-kpis sync labs
+.PHONY: install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core coeur-multi diag-coeur-qqq index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto ingest-mktcap preset-report calibrate-preset preset-lab alpha-lab screen repro kill-check log-alpha sync-alphas event-study event-study-smid backtest-pead-smid funding-study risk-check sensitivity paper-watch vault-lint crypto-cockpit crypto-brief regime-study breakout-study microstructure-poc vault-ask crypto-screen screen-niche list-db live live-sim live-go live-cron-install live-cron-uninstall completer-ouvertures reconcilier-journal annuler-ventes annuler-chronologie diag-journal diag-fusion bench-backend verify-journal turnover-audit rdv-paper slippage alerts-test ingest-macro bitmart-check clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull journal-pull journal-push notion-sync contracts supabase-kpis sync labs
 # PYTHON : utilise AUTOMATIQUEMENT le venv s'il existe (.venv/bin/python), sinon python3 système.
 # Évite le piège « No module named numpy » quand le venv n'est pas activé. Surchargeable.
 TICKER ?= AAPL
@@ -152,8 +152,10 @@ screen-niche:        ## audit d'exploitabilité d'un univers/niche (score 0-100)
 	$(PYTHON) scripts/screen_niche.py
 list-db:             ## liste ce que contient YAHOO.db (classes/secteurs) → pour bâtir une vraie niche
 	$(PYTHON) scripts/build_niche.py
-live:             ## APERÇU des ordres à répliquer (dry-run, aucun ordre envoyé)
-	$(PYTHON) scripts/run_live.py --equity 10000
+live:             ## APERÇU des ordres du PROCHAIN run réel (equity + positions RÉELLES, aucun ordre)
+	$(PYTHON) scripts/run_live.py $(ARGS)
+live-sim:         ## SIMULE un portefeuille NEUF (capital imposé, détenu ignoré) — ne décrit pas le compte
+	$(PYTHON) scripts/run_live.py --equity $(or $(EQUITY),10000)
 live-go:          ## EXÉCUTE en paper (Alpaca paper + Bitmart) — clés API requises
 	$(PYTHON) scripts/run_live.py --live --yes
 live-cron-install:   ## ACTIVE le rebalancement PAPER auto quotidien (lun-ven, launchd/cron)

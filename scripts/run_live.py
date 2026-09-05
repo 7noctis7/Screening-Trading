@@ -31,7 +31,9 @@ def _parse_args():
     ap.add_argument("--live", action="store_true", help="envoyer réellement (sinon dry-run)")
     ap.add_argument("--yes", action="store_true", help="confirmation obligatoire pour le mode --live")
     ap.add_argument("--equity", type=float, default=None,
-                    help="capital à allouer (dry-run) ; en live = equity réelle du broker")
+                    help="dry-run : SIMULE un portefeuille neuf de ce capital (détenu "
+                         "ignoré). Sans lui, l'aperçu lit l'equity et les positions "
+                         "RÉELLES. En live : toujours l'equity réelle du broker.")
     return ap.parse_args()
 
 
@@ -535,13 +537,21 @@ def _diag_preset(snap: dict, targets: list) -> None:
 
 def _prepare_brokers(dry: bool, cli_equity: float | None, alert_engine):
     """Brokers vétés + positions lues (inconnu ⇒ broker écarté). Cf. live_guards."""
-    from packages.execution.live_guards import current_values, fail_loud, vet_brokers
+    from packages.execution.live_guards import (
+        current_values, fail_loud, simule, vet_brokers,
+    )
     alpaca, bitmart = _make_brokers(dry)
+    # SIMULATION (`--equity`) vs APERÇU : seule la simulation ignore le détenu. Un aperçu
+    # sur détenu vide affiche des achats que le run réel ne fera pas — il annonce un
+    # portefeuille à construire là où le compte est déjà plein.
+    simulation = simule(dry, cli_equity)
     alpaca, bitmart, alp_cap, bit_cap, fatal = vet_brokers(alpaca, bitmart, dry, cli_equity)
+    mode = ("SIMULATION (capital imposé, détenu ignoré)" if simulation else
+            "DRY-RUN sur le compte RÉEL (aucun ordre)" if dry else "LIVE (paper)")
     print(f"Réplication · capital Alpaca {alp_cap:,.0f} $ · Bitmart {bit_cap:,.0f} $ · "
-          f"mode {'DRY-RUN (aucun ordre)' if dry else 'LIVE (paper)'}")
+          f"mode {mode}")
     print(f"  {'SENS':4s} {'ACTIF':14s} {'BROKER':8s} {'POIDS':>7s} {'MONTANT':>10s}  statut")
-    cur_alp, cur_bit = current_values(alpaca, bitmart) if not dry else ({}, {})
+    cur_alp, cur_bit = ({}, {}) if simulation else current_values(alpaca, bitmart)
     if cur_alp is None:                                        # inconnu ≠ zéro : broker écarté
         fatal.append("lecture positions Alpaca échouée → broker écarté (0 ordre)")
         alpaca, cur_alp = None, {}
