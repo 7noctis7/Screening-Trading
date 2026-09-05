@@ -1,5 +1,6 @@
 "use client";
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useMemo, useState } from "react";
 import { allocationState, ImportedPosition, normalize, parseCsv, parseManual, PortfolioSnapshot } from "@/lib/portfolio-import";
 
 const DEMO = "AAPL 20%\nMSFT 15%\nBTC 10%\nGLD 15%\nSPY 30%\nCASH:USD 10%";
@@ -55,6 +56,8 @@ function ConfirmStep({ positions, setPositions, onConfirm, back }: { positions: 
 export function PortfolioImportWizard({ onSnapshot, initialSnapshot }: { onSnapshot?: (snapshot: PortfolioSnapshot | null) => void; initialSnapshot?: PortfolioSnapshot | null }) {
   const [step, setStep] = useState(0); const [positions, setPositions] = useState<ImportedPosition[]>([]); const [snapshot, setSnapshot] = useState<PortfolioSnapshot | null>(null);
   useEffect(() => { if (initialSnapshot && !snapshot) { setSnapshot(initialSnapshot); setPositions(initialSnapshot.positions); setStep(2); } }, [initialSnapshot, snapshot]);
+export function PortfolioImportWizard({ onSnapshot }: { onSnapshot?: (snapshot: PortfolioSnapshot | null) => void }) {
+  const [step, setStep] = useState(0); const [positions, setPositions] = useState<ImportedPosition[]>([]); const [snapshot, setSnapshot] = useState<PortfolioSnapshot | null>(null);
   const state = useMemo(() => allocationState(positions), [positions]);
   const importPositions = (value: ImportedPosition[]) => { setPositions(value); setSnapshot(null); onSnapshot?.(null); setStep(1); };
   const confirm = () => { const value = { version: Date.now(), createdAt: new Date().toISOString(), baseCurrency: "USD", positions: positions.filter((position) => !position.excluded) }; localStorage.setItem("portfolio-analysis-snapshot", JSON.stringify(value)); setSnapshot(value); onSnapshot?.(value); setStep(2); };

@@ -15,6 +15,11 @@ export function PortfolioScenarios({ snapshot, analysis }: { snapshot: Portfolio
       risk_parity: analysis.scenarios?.neutre, hrp: analysis.scenarios?.hrp } : portfolio?.analysis?.optimal_allocation;
     return snapshot ? (["prudent", "neutre", "dynamique"] as ScenarioKind[]).map((kind) => buildScenario(snapshot, calculated, kind, value > 0 ? value : null, costBps, maxPct / 100, Boolean(ml?.edge_ok))) : [];
   }, [snapshot, analysis, portfolio, ml, value, costBps, maxPct]);
+export function PortfolioScenarios({ snapshot }: { snapshot: PortfolioSnapshot | null }) {
+  const { data: portfolio } = usePortfolio(); const { data: ml } = useMl();
+  const [selected, setSelected] = useState<ScenarioKind>("prudent"); const [value, setValue] = useState(100000);
+  const [costBps, setCostBps] = useState(15); const [maxPct, setMaxPct] = useState(20);
+  const scenarios = useMemo(() => snapshot ? (["prudent", "neutre", "dynamique"] as ScenarioKind[]).map((kind) => buildScenario(snapshot, portfolio?.analysis?.optimal_allocation, kind, value > 0 ? value : null, costBps, maxPct / 100, Boolean(ml?.edge_ok))) : [], [snapshot, portfolio, ml, value, costBps, maxPct]);
   if (!snapshot) return null;
   const active = scenarios.find((scenario) => scenario.kind === selected)!;
   return <section className="card space-y-5">
