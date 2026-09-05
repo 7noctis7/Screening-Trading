@@ -6,6 +6,154 @@ import { allocationState, ImportedPosition, normalize, parseCsv, parseManual, Po
 const DEMO = "AAPL 20%\nMSFT 15%\nBTC 10%\nGLD 15%\nSPY 30%\nCASH:USD 10%";
 const STEPS = ["Importer", "Vérifier", "Diagnostiquer", "Améliorer"];
 
+// --- MAPPING EXHAUSTIF DU TOP 100 DES CRYPTOMONNAIES ---
+const CRYPTO_NAME_TO_TICKER: Record<string, string> = {
+  // Noms complets & variantes courantes
+  "BITCOIN": "BTC-USD",
+  "ETHEREUM": "ETH-USD",
+  "TETHER": "USDT-USD",
+  "BNB": "BNB-USD",
+  "BINANCE COIN": "BNB-USD",
+  "SOLANA": "SOL-USD",
+  "USD COIN": "USDC-USD",
+  "RIPPLE": "XRP-USD",
+  "CARDANO": "ADA-USD",
+  "DOGECOIN": "DOGE-USD",
+  "SHIBA INU": "SHIB-USD",
+  "AVALANCHE": "AVAX-USD",
+  "POLKADOT": "DOT-USD",
+  "TRON": "TRX-USD",
+  "CHAINLINK": "LINK-USD",
+  "POLYGON": "MATIC-USD",
+  "NEAR PROTOCOL": "NEAR-USD",
+  "BITCOIN CASH": "BCH-USD",
+  "UNISWAP": "UNI-USD",
+  "LITECOIN": "LTC-USD",
+  "LEO TOKEN": "LEO-USD",
+  "DAI": "DAI-USD",
+  "INTERNET COMPUTER": "ICP-USD",
+  "APTOS": "APT-USD",
+  "SUI": "SUI-USD",
+  "FETCH.AI": "FET-USD",
+  "ARTIFICIAL SUPERINTELLIGENCE ALLIANCE": "FET-USD",
+  "PEPE": "PEPE-USD",
+  "MONERO": "XMR-USD",
+  "ETHEREUM CLASSIC": "ETC-USD",
+  "STELLAR": "XLM-USD",
+  "RENDER": "RENDER-USD",
+  "KASPA": "KAS-USD",
+  "STX": "STX-USD",
+  "STACKS": "STX-USD",
+  "OKB": "OKB-USD",
+  "FILECOIN": "FIL-USD",
+  "COSMOS": "ATOM-USD",
+  "IMMUTABLE": "IMX-USD",
+  "IMMUTABLEX": "IMX-USD",
+  "AAVE": "AAVE-USD",
+  "INJECTIVE": "INJ-USD",
+  "HEDERA": "HBAR-USD",
+  "FIRST DIGITAL USD": "FDUSD-USD",
+  "ARWEAVE": "AR-USD",
+  "OPTIMISM": "OP-USD",
+  "ARBITRUM": "ARB-USD",
+  "MAKER": "MKR-USD",
+  "THETA NETWORK": "THETA-USD",
+  "FANTOM": "FTM-USD",
+  "SONIC": "FTM-USD",
+  "SEI": "SEI-USD",
+  "CELESTIA": "TIA-USD",
+  "VECHAIN": "VET-USD",
+  "FLOKI": "FLOKI-USD",
+  "BONK": "BONK-USD",
+  "ALGORAND": "ALGO-USD",
+  "JUPITER": "JUP-USD",
+  "FIGHTER JETS": "JUP-USD",
+  "THORCHAIN": "RUNE-USD",
+  "FLEX COIN": "FLX-USD",
+  "PYTH NETWORK": "PYTH-USD",
+  "THE GRAPH": "GRT-USD",
+  "BITTORRENT": "BTT-USD",
+  "CORE": "CORE-USD",
+  "ONDO": "ONDO-USD",
+  "NOTCOIN": "NOT-USD",
+  "GALA": "GALA-USD",
+  "WIF": "WIF-USD",
+  "DOGWIFHAT": "WIF-USD",
+  "CHILIZ": "CHZ-USD",
+  "DYDX": "DYDX-USD",
+  "FLOW": "FLOW-USD",
+  "EOS": "EOS-USD",
+  "EIGEN": "EIGEN-USD",
+  "EIGENLAYER": "EIGEN-USD",
+  "TEZOS": "XTZ-USD",
+  "AXIE INFINITY": "AXS-USD",
+  "DECENTRALAND": "MANA-USD",
+  "THE SANDBOX": "SAND-USD",
+  "KUCOIN TOKEN": "KCS-USD",
+  "NEO": "NEO-USD",
+  "WORMHOLE": "W-USD",
+  "SYNTHETIX": "SNX-USD",
+  "EQUALIZER": "EQ-USD",
+  "PENDLE": "PENDLE-USD",
+  "KAVA": "KAVA-USD",
+  "KLAYTN": "KLAY-USD",
+  "KAIA": "KLAY-USD",
+  "RONIN": "RON-USD",
+  "MINA": "MINA-USD",
+  "AERO": "AERO-USD",
+  "AERODROME": "AERO-USD",
+  "IOTA": "IOTA-USD",
+  "OSMOSIS": "OSMO-USD",
+  "ZEC": "ZEC-USD",
+  "ZCASH": "ZEC-USD",
+  "BEAM": "BEAM-USD",
+  "NEXO": "NEXO-USD",
+  "CONFLUX": "CFX-USD",
+  "SUPERVERSE": "SUPER-USD",
+  "FRAX": "FRAX-USD",
+  "LIDO DAO": "LDO-USD"
+};
+
+// Liste des symboles reconnus du Top 100
+const TOP_100_CRYPTO_SYMBOLS = new Set([
+  "BTC", "ETH", "USDT", "BNB", "SOL", "USDC", "XRP", "TON", "DOGE", "ADA",
+  "SHIB", "AVAX", "TRX", "DOT", "BCH", "LINK", "NEAR", "MATIC", "POL", "LTC",
+  "UNI", "LEO", "DAI", "ICP", "APT", "SUI", "FET", "PEPE", "XMR", "ETC",
+  "XLM", "RENDER", "KAS", "STX", "OKB", "FIL", "ATOM", "IMX", "AAVE", "INJ",
+  "HBAR", "FDUSD", "AR", "OP", "ARB", "MKR", "THETA", "FTM", "SEI", "TIA",
+  "VET", "FLOKI", "BONK", "ALGO", "JUP", "RUNE", "PYTH", "GRT", "BTT", "CORE",
+  "ONDO", "NOT", "GALA", "WIF", "CHZ", "DYDX", "FLOW", "EOS", "EIGEN", "XTZ",
+  "AXS", "MANA", "SAND", "KCS", "NEO", "W", "SNX", "PENDLE", "KAVA", "KLAY",
+  "RON", "MINA", "AERO", "IOTA", "OSMO", "ZEC", "BEAM", "NEXO", "CFX", "SUPER",
+  "FRAX", "LDO", "BLUR", "CRV", "QNT", "GNO", "AGIX", "WOO", "ENS", "1INCH"
+]);
+
+function normalizeTicker(ticker: string): string {
+  let t = ticker.toUpperCase().trim();
+
+  // 1. Recherche par nom complet
+  if (CRYPTO_NAME_TO_TICKER[t]) {
+    return CRYPTO_NAME_TO_TICKER[t];
+  }
+
+  // 2. Détection des paires (ex: BTC/USDT, BTCUSDC, BTC-USD, BTC/EUR, SOLUSDT)
+  const cryptoPairRegex = /^([A-Z0-9]{2,6})[\/\-]?(USD|USDT|USDC|EUR|BTC)$/;
+  const match = t.match(cryptoPairRegex);
+  if (match) {
+    const base = match[1];
+    if (TOP_100_CRYPTO_SYMBOLS.has(base)) {
+      return `${base}-USD`;
+    }
+  }
+
+  // 3. Cas où l'utilisateur tape le symbole seul (ex: SOL, BTC, NEAR, SUI)
+  if (TOP_100_CRYPTO_SYMBOLS.has(t)) {
+    return `${t}-USD`;
+  }
+
+  return t;
+}
+
 function Stepper({ step }: { step: number }) {
   return (
     <ol className="grid grid-cols-4 gap-2" aria-label="Progression de l'analyse">
@@ -21,7 +169,7 @@ function Stepper({ step }: { step: number }) {
 
 function ImportStep({ onImport }: { onImport: (positions: ImportedPosition[]) => void }) {
   const [text, setText] = useState("");
-  
+
   const readCsv = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) file.text().then((value) => onImport(parseCsv(value)));
@@ -33,20 +181,20 @@ function ImportStep({ onImport }: { onImport: (positions: ImportedPosition[]) =>
         <h2 className="text-lg font-semibold">Importez vos positions</h2>
         <p className="text-xs text-muted mt-1">Les fichiers restent dans ce navigateur. Aucun ordre ne peut être envoyé depuis ce parcours.</p>
       </div>
-      
-      <textarea 
-        value={text} 
-        onChange={(event) => setText(event.target.value)} 
-        rows={8} 
+
+      <textarea
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        rows={8}
         placeholder={DEMO}
-        className="w-full rounded-xl border border-border bg-surface p-3 mono text-sm" 
-        aria-label="Positions avec poids" 
+        className="w-full rounded-xl border border-border bg-surface p-3 mono text-sm"
+        aria-label="Positions avec poids"
       />
-      
+
       <div className="flex flex-wrap gap-2">
-        <button 
-          className="rounded-xl bg-cyan-600 text-white px-4 py-2 text-sm" 
-          onClick={() => onImport(parseManual(text))} 
+        <button
+          className="rounded-xl bg-cyan-600 text-white px-4 py-2 text-sm"
+          onClick={() => onImport(parseManual(text))}
           disabled={!text.trim()}
         >
           Analyser la saisie
@@ -55,14 +203,14 @@ function ImportStep({ onImport }: { onImport: (positions: ImportedPosition[]) =>
           Importer un CSV
           <input className="sr-only" type="file" accept=".csv,text/csv" onChange={readCsv} />
         </label>
-        <button 
-          className="rounded-xl border border-border px-4 py-2 text-sm" 
+        <button
+          className="rounded-xl border border-border px-4 py-2 text-sm"
           onClick={() => onImport(parseManual(DEMO, "demo"))}
         >
           Charger la démonstration
         </button>
       </div>
-      <p className="text-xs text-muted2">Format : un symbole et un poids par ligne. OCR indisponible : aucun relevé n'est envoyé à un service externe.</p>
+      <p className="text-xs text-muted2">Format : un symbole et un poids par ligne. Résolution automatique des cryptos en paires USD réelles.</p>
     </section>
   );
 }
@@ -72,10 +220,10 @@ function PositionRow({ position, update, remove }: { position: ImportedPosition;
     <tr className={position.excluded ? "opacity-50" : ""}>
       <td>{position.original}</td>
       <td>
-        <input 
-          className="w-24 bg-transparent border-b border-border mono" 
-          value={position.ticker} 
-          onChange={(event) => update({ ...position, ticker: event.target.value.toUpperCase(), status: "a_verifier" })} 
+        <input
+          className="w-28 bg-transparent border-b border-border mono"
+          value={position.ticker}
+          onChange={(event) => update({ ...position, ticker: normalizeTicker(event.target.value), status: "a_verifier" })}
         />
       </td>
       <td>
@@ -87,19 +235,19 @@ function PositionRow({ position, update, remove }: { position: ImportedPosition;
         <div className="text-muted2">{position.exposureClass}</div>
       </td>
       <td>
-        <input 
-          type="number" 
-          min="0" 
-          step="0.01" 
-          className="w-20 bg-transparent border-b border-border mono text-right" 
-          value={position.weight ?? ""} 
-          onChange={(event) => update({ ...position, weight: event.target.value === "" ? null : Number(event.target.value) })} 
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          className="w-20 bg-transparent border-b border-border mono text-right"
+          value={position.weight ?? ""}
+          onChange={(event) => update({ ...position, weight: event.target.value === "" ? null : Number(event.target.value) })}
         /> %
       </td>
       <td>
-        <select 
-          className="bg-surface border border-border rounded-lg p-1" 
-          value={position.status} 
+        <select
+          className="bg-surface border border-border rounded-lg p-1"
+          value={position.status}
           onChange={(event) => update({ ...position, status: event.target.value as ImportedPosition["status"] })}
         >
           <option value="confirme">Confirmé</option>
@@ -108,8 +256,8 @@ function PositionRow({ position, update, remove }: { position: ImportedPosition;
         </select>
       </td>
       <td className="whitespace-nowrap">
-        <button 
-          className="text-xs text-muted underline mr-2" 
+        <button
+          className="text-xs text-muted underline mr-2"
           onClick={() => update({ ...position, excluded: !position.excluded })}
         >
           {position.excluded ? "Inclure" : "Exclure"}
@@ -135,7 +283,7 @@ function ConfirmStep({ positions, setPositions, onConfirm, back }: { positions: 
           {state.total.toFixed(2)} %
         </strong>
       </div>
-      
+
       <div className="overflow-x-auto">
         <table>
           <thead>
@@ -151,36 +299,36 @@ function ConfirmStep({ positions, setPositions, onConfirm, back }: { positions: 
           </thead>
           <tbody>
             {positions.map((position, index) => (
-              <PositionRow 
-                key={position.id} 
-                position={position} 
-                update={(value) => update(index, value)} 
-                remove={() => setPositions(positions.filter((_, i) => i !== index))} 
+              <PositionRow
+                key={position.id}
+                position={position}
+                update={(value) => update(index, value)}
+                remove={() => setPositions(positions.filter((_, i) => i !== index))}
               />
             ))}
           </tbody>
         </table>
       </div>
-      
+
       <div className="rounded-xl bg-surface3 p-3 text-xs">
         {state.missing > 0 && <p>⚠️ {state.missing} poids manquant(s) — aucune équipondération implicite.</p>}
         {state.ambiguous > 0 && <p>⚠️ {state.ambiguous} instrument(s) à confirmer ou exclure explicitement.</p>}
         {state.duplicates > 0 && <p>⚠️ {state.duplicates} doublon(s) potentiel(s), non fusionné(s).</p>}
         {Math.abs(state.total - 100) >= .01 && <p>⚠️ Total différent de 100 %. La normalisation est une action explicite.</p>}
       </div>
-      
+
       <div className="flex flex-wrap gap-2">
         <button className="rounded-xl border border-border px-4 py-2 text-sm" onClick={back}>Retour</button>
-        <button 
-          className="rounded-xl border border-border px-4 py-2 text-sm" 
-          onClick={() => setPositions(normalize(positions))} 
+        <button
+          className="rounded-xl border border-border px-4 py-2 text-sm"
+          onClick={() => setPositions(normalize(positions))}
           disabled={state.total <= 0 || state.missing > 0}
         >
           Normaliser à 100 %
         </button>
-        <button 
-          className="rounded-xl bg-cyan-600 text-white px-4 py-2 text-sm disabled:opacity-40" 
-          onClick={onConfirm} 
+        <button
+          className="rounded-xl bg-cyan-600 text-white px-4 py-2 text-sm disabled:opacity-40"
+          onClick={onConfirm}
           disabled={!state.coherent}
         >
           Créer le snapshot
@@ -194,57 +342,58 @@ export function PortfolioImportWizard({ onSnapshot, initialSnapshot }: { onSnaps
   const [step, setStep] = useState(0);
   const [positions, setPositions] = useState<ImportedPosition[]>([]);
   const [snapshot, setSnapshot] = useState<PortfolioSnapshot | null>(null);
-  
+
   const state = useMemo(() => allocationState(positions), [positions]);
 
-  useEffect(() => { 
-    if (initialSnapshot && !snapshot) { 
-      setSnapshot(initialSnapshot); 
-      setPositions(initialSnapshot.positions); 
-      setStep(2); 
-    } 
+  useEffect(() => {
+    if (initialSnapshot && !snapshot) {
+      setSnapshot(initialSnapshot);
+      setPositions(initialSnapshot.positions);
+      setStep(2);
+    }
   }, [initialSnapshot, snapshot]);
 
-  const importPositions = (value: ImportedPosition[]) => { 
-    setPositions(value); 
-    setSnapshot(null); 
-    onSnapshot?.(null); 
-    setStep(1); 
+  const importPositions = (value: ImportedPosition[]) => {
+    const sanitized = value.map((pos) => ({ ...pos, ticker: normalizeTicker(pos.ticker) }));
+    setPositions(sanitized);
+    setSnapshot(null);
+    onSnapshot?.(null);
+    setStep(1);
   };
-  
-  const confirm = () => { 
-    const value = { 
-      version: Date.now(), 
-      createdAt: new Date().toISOString(), 
-      baseCurrency: "USD", 
-      positions: positions.filter((position) => !position.excluded) 
-    }; 
-    localStorage.setItem("portfolio-analysis-snapshot", JSON.stringify(value)); 
-    setSnapshot(value); 
-    onSnapshot?.(value); 
-    setStep(2); 
+
+  const confirm = () => {
+    const value = {
+      version: Date.now(),
+      createdAt: new Date().toISOString(),
+      baseCurrency: "USD",
+      positions: positions.filter((position) => !position.excluded)
+    };
+    localStorage.setItem("portfolio-analysis-snapshot", JSON.stringify(value));
+    setSnapshot(value);
+    onSnapshot?.(value);
+    setStep(2);
   };
 
   return (
     <div className="space-y-5">
       <Stepper step={step} />
-      
+
       {step === 0 && <ImportStep onImport={importPositions} />}
-      
+
       {step === 1 && (
-        <ConfirmStep 
-          positions={positions} 
-          setPositions={setPositions} 
-          onConfirm={confirm} 
-          back={() => setStep(0)} 
+        <ConfirmStep
+          positions={positions}
+          setPositions={setPositions}
+          onConfirm={confirm}
+          back={() => setStep(0)}
         />
       )}
-      
+
       {step >= 2 && snapshot && (
         <section className="card space-y-4">
           <div className="eyebrow">Snapshot versionné</div>
           <h2 className="text-lg font-semibold">Portefeuille prêt pour le diagnostic quantitatif</h2>
-          
+
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
             <div>
               <span className="text-muted">Positions</span>
@@ -263,20 +412,20 @@ export function PortfolioImportWizard({ onSnapshot, initialSnapshot }: { onSnaps
               <div className="mono text-xs mt-2">{snapshot.version}</div>
             </div>
           </div>
-          
+
           <div className="rounded-xl bg-surface3 p-3 text-xs text-muted">
             Les métriques de marché restent <b>indisponibles</b> tant que les historiques ajustés et les taux FX réels ne sont pas chargés. Elles ne sont jamais remplacées par zéro. Ce snapshot n'est ni la performance réelle du compte, ni une instruction d'ordre.
           </div>
-          
+
           <div className="flex gap-2">
             <button className="rounded-xl border border-border px-4 py-2 text-sm" onClick={() => setStep(1)}>
               Modifier
             </button>
-            <button 
-              className="rounded-xl bg-cyan-600 text-white px-4 py-2 text-sm" 
+            <button
+              className="rounded-xl bg-cyan-600 text-white px-4 py-2 text-sm"
               onClick={() => {
                 setStep(3);
-                window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+                window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
               }}
             >
               Voir les scénarios
