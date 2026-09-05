@@ -20,12 +20,13 @@ export function PortfolioScenarios({ snapshot, analysis }: { snapshot: Portfolio
   const [maxPct, setMaxPct] = useState(20);
   
   const scenarios = useMemo(() => {
+    // CORRECTION ICI : On mappe les clés prudemment en gérant plusieurs noms possibles renvoyés par l'API
     const calculated = analysis?.available 
       ? { 
           symbols: analysis.symbols, 
-          min_variance: analysis.scenarios?.prudent,
-          risk_parity: analysis.scenarios?.neutre, 
-          hrp: analysis.scenarios?.hrp 
+          prudent: analysis.scenarios?.prudent ?? analysis.scenarios?.min_variance,
+          neutre: analysis.scenarios?.neutre ?? analysis.scenarios?.risk_parity, 
+          dynamique: analysis.scenarios?.dynamique ?? analysis.scenarios?.hrp ?? analysis.scenarios?.black_litterman 
         } 
       : portfolio?.analysis?.optimal_allocation;
       
