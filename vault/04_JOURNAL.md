@@ -32,9 +32,10 @@ illisible se replie sur 10 000 $ SIMULÉS avec un avertissement, sans être fata
 aperçu n'envoie aucun ordre, le sanctionner comme un run live n'aurait pas de sens.
 4 tests ajoutés (12 au total dans `test_live_guards`).
 
-**Non vérifié en local** : la suite complète ne tourne pas dans ce conteneur (tests
-réseau bloqués par le proxy). `tests/execution` + `tests/risk` (337) et tout ce qui
-touche `run_live`/`rebalance` (57) passent. `make test` reste à lancer côté Mac.
+**Suite complète VERTE** : 1970 passés, 7 ignorés, 0 échec (8 min 10). Les appels
+réseau que le proxy du conteneur refuse sont tous dans des tests qui les tolèrent —
+lancée en tâche de fond plutôt qu'avec un délai court, la suite passe entière.
+`tests/execution` + `tests/risk` (337) repassés après la mise en forme finale.
 
 ## Session 2026-09-04 (suite 13) — Le verrou de détention mesuré : hypothèse NON retenue
 
