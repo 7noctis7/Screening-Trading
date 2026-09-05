@@ -1,5 +1,43 @@
 # 04 — JOURNAL
 
+## Session 2026-09-05 (suite) — Outil de retrait des doublons, sur les 6 cas vérifiés
+
+**Le même mécanisme, reproduit à l'identique sur AVAX et LTC.** Croisement ordre par
+ordre (comme pour LINK) avec l'historique complet des ventes du courtier : AVAX
+(3 doublons, 08-27/08-28/08-31) reconstruit à **+60,8196** contre +60,8195 imprimé ;
+LTC (3 doublons, mêmes dates) à **+36,0020**, exact. Six doublons au total, tous avec
+la même signature : un lot `-Xn` (motif `reconciliation paper (reduce/close)`, écrit
+par l'ancien `close_sells` avant le correctif du jour) tombe sur la MÊME date et le
+MÊME prix qu'une correction nommée (`reconciliation-journal:<uuid>`) postée plus tard
+par `reconcilier_journal --appliquer`. Un résidu distinct, plus gros que les doublons :
+l'ordre AVAX du 07-08 (306,46 unités) n'a que 41,91 unités captées — 264,55 unités de
+vente réelle jamais journalisée, doublon ou pas.
+
+**Outil construit** : `packages/research/doublons_correction.py::identifier()`. Règle
+de détection dérivée directement de la vérification manuelle (pas devinée) : même
+symbole canonique, même date de sortie, même prix de sortie — un enregistrement qui
+cite un ordre réel, un qui n'en cite aucun. Deux négatifs encodés en tests, tous deux
+des pièges déjà rencontrés cette semaine :
+- deux enregistrements citant le MÊME uuid (LINK/LTC 07-08, AVAX 09-03) → fermeture
+  multi-lots légitime, PAS un doublon (le piège du faux P0 LINK du 04/09, revisité) ;
+- un lot sans nom SANS homologue nommé à la même date (les -X4/-X5 partout) → une
+  vente réelle non journalisée, un trou différent, PAS une invention.
+
+`scripts/annuler_doublons_correction.py` : même squelette que
+`annuler_chronologie_impossible.py` (SIMULATION par défaut, sauvegarde + archive JSON
+avant tout retrait, `--appliquer` explicite). Il ne retire QUE le lot sans nom — la
+correction nommée, vérifiée contre l'ordre réel, reste intacte.
+
+**10 tests, dont les 6 cas RÉELS en dur** (AVAX ×3, LINK ×2, LTC ×3, avec les vrais
+identifiants et prix des relevés du 05/09) — une régression future ne peut pas passer
+inaperçue sur ces montants précis. Vérifié aussi via `SqliteTradeJournal` réelle, pas
+seulement en mémoire.
+
+**Pas encore appliqué.** L'outil est en simulation ; `--appliquer` reste au choix de
+l'utilisateur, sur sa vraie base (ni le Mac mini ni le VPS n'est accessible depuis ce
+conteneur). Commande : `make annuler-doublons` puis `make annuler-doublons
+ARGS=--appliquer`.
+
 ## Session 2026-09-05 (suite) — P0 : le bug d'invention est dans la PRODUCTION, pas l'historique
 
 **Le journal réparé (313 lignes, sync Mac→VPS OK) montre une vraie invention.** Premier

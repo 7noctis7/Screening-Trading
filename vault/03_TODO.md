@@ -50,10 +50,22 @@
       dès lundi. Corrigé : `_fill_vente_jour` lit prix ET quantité du fill réel du jour ;
       `close_sells` accepte `qty_reelle`, prioritaire sur `notional/prix`, sans
       régression quand aucun ordre n'est citable. 6 tests. Détail : `04_JOURNAL`.
-- [ ] **P1 — reste à corriger : les ~258 unités DÉJÀ inventées dans le journal
-      historique.** Le correctif du 05/09 empêche la récidive, ne répare pas le passé.
-      Dumper AVAX/LINK/LTC comme OSCR (même méthode : élimination par UUID nommé vs
-      motif sans nom) avant de poser un script de correction — pas avant.
+- [x] **AVAX + LTC vérifiés (05/09) — même mécanisme, reconstruit à ±0,0001 unité.**
+      AVAX +60,8196 (attendu +60,8195), LTC +36,0020 (exact). 6 doublons confirmés au
+      total (AVAX ×3, LINK ×2, LTC ×3) : un lot `-Xn` sans nom tombe sur la même
+      date+prix qu'une correction nommée postée plus tard. Résidu distinct (pas un
+      doublon) : l'ordre AVAX du 07-08 a 264,55 unités de vente réelle jamais
+      journalisées.
+- [x] **Outil de retrait construit (05/09) : `make annuler-doublons`.**
+      `packages/research/doublons_correction.py` + `scripts/annuler_doublons_correction.py`,
+      même squelette que `annuler_chronologie_impossible.py` (simulation par défaut,
+      sauvegarde + archive JSON, `--appliquer` explicite). Ne retire QUE le lot sans
+      nom — la correction nommée reste intacte. 10 tests, 6 cas réels en dur.
+- [ ] **P1 — À APPLIQUER par l'utilisateur sur sa vraie base.** `make annuler-doublons`
+      (simulation) puis `make annuler-doublons ARGS=--appliquer`. Relancer ensuite
+      `make diag-surfermeture` : le total INVENTÉ doit baisser d'au moins la somme
+      retirée. Le résidu restant (ventes non journalisées, ex. AVAX 07-08) est un
+      trou différent, non traité par cet outil.
 
 ## 🟠 P1 — La détention médiane de 0,1 j reste NON expliquée (2026-09-05)
 
