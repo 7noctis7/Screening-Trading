@@ -1,5 +1,38 @@
 # 04 — JOURNAL
 
+## Session 2026-09-05 (clôture) — Bilan honnête : ce qui est fini, ce qui ne l'est pas
+
+**Demande : « finalise TOUTES les corrections maintenant ».** Triage du TODO plutôt
+qu'une clôture optimiste — quatre points ouverts, statuts réels :
+
+1. **P0 lots orphelins sens inverse (8 symboles) — PAS un nouveau bug, une conséquence
+   mécanique du nettoyage de ce soir.** `completer_ouvertures` avait tourné AVANT le
+   retrait des 20 doublons ; en supprimant les fermetures en double,
+   `achats_non_journalises` a augmenté (AVAX 274→605, LINK 66→228, LTC 1,5→61,6) —
+   le trou n'est pas pire, il est enfin visible dans sa vraie taille. Le correctif
+   existe déjà et a déjà servi cette session ; il suffit de le REJOUER dans l'ordre :
+   `completer_ouvertures` → `reconcilier_journal` → `diag-journal`. Rien à construire.
+
+2. **P2 OSCR isolé — RÉPONDU par les données déjà produites.** Le `diag-surfermeture`
+   relancé après le retrait des doublons montre `invente = 0` sur les 27 AUTRES
+   symboles. Pas besoin d'un nouvel outil : la mesure était déjà là, il fallait juste
+   la relire avec la bonne question. Reste ouvert seulement la CAUSE de ce lot précis
+   — creuser demande l'historique complet des ordres OSCR, hors de portée ici.
+
+3. **P1 détention 0,1 jour — GENUINEMENT bloqué, pas esquivé.** Nécessite des
+   snapshots RÉELS de production (`fast_swing`/`preset` en conditions réelles), que
+   ce conteneur n'a jamais eus (aucune clé, aucun `data/market.db` réel ici). Rien à
+   « finaliser » sans les données — le dire clairement vaut mieux qu'un faux vert.
+
+4. **P1 trois dates d'arrêté — GENUINEMENT bloqué, même raison.** Le site n'est
+   construit qu'avec des données réelles (`make site`), absentes de ce conteneur.
+
+**Ce qui distingue les deux premiers des deux derniers** : (1) et (2) se résolvent par
+la RELECTURE de ce qui existe déjà — outils construits, données déjà mesurées ce soir.
+(3) et (4) demandent une MESURE NOUVELLE que seul l'environnement réel (Mac mini/VPS)
+peut produire. Prétendre les finaliser sans données serait exactement le type de
+déduction que ce dépôt interdit.
+
 ## Session 2026-09-05 (suite) — Appliqué sur le compte réel : 20 doublons, pas 6
 
 **`make annuler-doublons ARGS=--appliquer` exécuté sur le VPS**, sur le vrai journal

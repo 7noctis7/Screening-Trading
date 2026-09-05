@@ -19,13 +19,16 @@
 
 ## 🔴 P0 — Le courtier détient ce que le journal ignore (constaté 2026-09-05)
 
-- [ ] **Écart en sens INVERSE des lots orphelins, sur 8 symboles.** `diag-journal` après
-      les deux réparations : AVAX journal 3,65 / courtier **335,50** · LINK 82,4 / 219,8 ·
-      OSCR 0 / 85,3 · LTC 23,4 / 60,1 · SOL 23,1 / 37,7 · BCH 0,15 / 10,9 · ETH 0,42 / 1,06 ·
-      BTC 0,015 / 0,038. Les lots orphelins (journal > courtier) sont un trou de SORTIES ;
-      celui-ci est un trou d'ENTRÉES que `completer_ouvertures` n'a PAS refermé alors qu'il
-      vient de tourner. Tant que ça tient, toute stat du journal décrit un compte qui
-      n'est pas celui du courtier.
+- [ ] **Écart en sens INVERSE, sur 8 symboles — À REFERMER MAINTENANT, pas un nouveau
+      bug.** `completer_ouvertures` avait tourné AVANT le retrait des 20 doublons ; en
+      supprimant les fermetures en double, `achats_non_journalises` a MÉCANIQUEMENT
+      augmenté (AVAX 274 → 605, LINK 66 → 228, LTC 1,5 → 61,6 — cf. `diag-surfermeture`
+      après coup). Le trou n'est pas pire qu'avant, il est enfin VISIBLE dans sa
+      taille réelle, démasqué par le nettoyage. Le correctif est déjà construit,
+      testé, et déjà utilisé cette session — il suffit de le REJOUER dans l'ordre
+      habituel, sur la vraie base, maintenant que les doublons sont partis :
+      `make completer-ouvertures` (simulation) → `ARGS=--appliquer` →
+      `make reconcilier-journal` (simulation) → `ARGS=--appliquer` → `make diag-journal`.
 - [x] **Outillé le 05/09 — l'écart est DÉCOMPOSÉ** : `make diag-surfermeture`
       (`packages/research/sur_fermeture.py`, 7 tests). Identité vérifiée par ligne :
       `manque_ouvert = achats_non_journalises + sur_fermeture`. Sur les chiffres réels
@@ -63,10 +66,13 @@
       nom — la correction nommée reste intacte. 10 tests, 6 cas réels en dur.
 - [x] **APPLIQUÉ sur le compte réel (05/09).** 20 doublons retirés (au-delà des 8
       vérifiés à la main) · `INVENTÉ` 258,33 → **85,27** $ · sauvegarde + archive JSON.
-- [ ] **P2 — le résidu OSCR (85,27, seul restant) est un mécanisme DIFFÉRENT.** Pas un
-      doublon date+prix : un lot orphelin sans AUCUN ordre réel derrière. Chercher s'il
-      existe ailleurs avant de construire un second outil — ne pas supposer que c'est
-      isolé.
+- [x] **P2 RÉPONDU par la mesure (05/09, après retrait des doublons).** Le
+      `diag-surfermeture` relancé après coup montre `invente = 0.0000` sur les 27
+      symboles SAUF OSCR (85,27) — colonne par colonne, isolé, pas un pattern qui se
+      répète. Répondu par les données déjà produites, pas par une nouvelle hypothèse.
+      Reste ouvert seulement : la CAUSE de ce lot précis (`P-20260831-Alpaca-OSCR`,
+      ouvert ET fermé le même jour) — creuser nécessite l'historique complet des
+      ordres OSCR chez le courtier, pas disponible hors de l'environnement réel.
 
 ## 🟠 P1 — La détention médiane de 0,1 j reste NON expliquée (2026-09-05)
 
