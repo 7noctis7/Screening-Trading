@@ -14,6 +14,8 @@
       `docs/PORTFOLIO_ANALYSIS_INTEGRATION.md`. Jointure read-only screening/fondamentaux/ML/
       résultats/macro livrée ; scénarios min-var/ERC/Black-Litterman affichés seulement pour un
       univers exact, avec turnover/coût/veto de plafond. Recalcul historique local livré avec alias
+      crypto et alignement sans fill. Step 4 réparée : plafond projeté si faisable, compteur et effet
+      moyen publiés. Restent FX multi-devises et dynamique `UNCALIBRATED` faute de μ OOS crédible.
       crypto et alignement sans fill ; restent FX multi-devises et contraintes complètes.
       univers exact, avec turnover/coût/veto de plafond. Reste le recalcul dédié historique/FX.
 

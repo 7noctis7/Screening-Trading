@@ -38,6 +38,8 @@ def _dated_closes(bars: list) -> dict[str, float]:
 
 
 def _align(series: dict[str, dict[str, float]]) -> tuple[list[str], np.ndarray]:
+    dates = sorted(set.intersection(*(set(values) for values in series.values()))) if series else []
+    matrix = np.asarray([[series[symbol][date] for date in dates] for symbol in series], dtype=float)
     if not series:
         return [], np.array([])
         
@@ -82,6 +84,9 @@ def _json_matrix(matrix: np.ndarray) -> list[list[float | None]]:
 
 
 def analyze(positions: list[dict], years: int = 5, series_by_symbol: dict | None = None) -> dict:
+    """Charge, aligne sans remplissage, puis mesure et optimise un portefeuille long-only."""
+    requested = [(str(row["symbol"]).upper(), float(row["weight"])) for row in positions]
+    loaded, aliases, missing, cash = {}, {}, [], []
     """Charge, aligne avec ffill, puis mesure et optimise un portefeuille long-only."""
     requested = [(str(row["symbol"]).upper(), float(row["weight"])) for row in positions]
     loaded, aliases, missing, cash = {}, {}, [], []
@@ -104,6 +109,27 @@ def analyze(positions: list[dict], years: int = 5, series_by_symbol: dict | None
         return _unavailable("historique insuffisant", missing, len(loaded) + len(cash), len(requested))
     if cash and not loaded:
         return _unavailable("aucun actif risqué avec historique", [], len(cash), len(requested))
+    calendar = sorted(set.union(*(set(values) for values in loaded.values())))
+    for symbol in cash:
+        loaded[symbol], aliases[symbol] = {date: 1.0 for date in calendar}, symbol
+    dates, prices = _align(loaded)
+    if len(dates) < MIN_OBSERVATIONS + 1:
+        return _unavailable("calendrier commun insuffisant", [], len(loaded), len(requested), max(0, len(dates) - 1))
+    returns = prices[:, 1:] / prices[:, :-1] - 1
+    weights = np.asarray([weight for _symbol, weight in requested], dtype=float)
+    weights /= weights.sum()
+    covariance = np.atleast_2d(np.cov(returns) * 252)
+    variance = float(weights @ covariance @ weights)
+    contribution = weights * (covariance @ weights) / variance if variance > 0 else np.full(len(weights), np.nan)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        correlation = np.corrcoef(returns)
+    return {"available": True, "symbols": [symbol for symbol, _ in requested], "aliases": aliases,
+            "as_of": dates[-1], "start": dates[0], "n_observations": returns.shape[1], "frequency": "daily",
+            "annualization": 252, "alignment": "intersection de dates, aucun remplissage",
+            "metrics": _metrics(returns, weights),
+            "risk_contribution": [float(value) if np.isfinite(value) else None for value in contribution],
+            "correlation": _json_matrix(correlation), "scenarios": {"prudent": min_variance_weights(covariance),
+            "neutre": equal_risk_contribution(covariance), "hrp": hrp_weights(covariance)}, "coverage": 1.0}
         
     calendar = sorted(set.union(*(set(values) for values in loaded.values())))
     for symbol in cash:

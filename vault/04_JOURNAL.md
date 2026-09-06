@@ -1,5 +1,15 @@
 # 04 — JOURNAL
 
+## Session 2026-09-06 — Step 4 : le veto rendait tous les scénarios invisibles
+
+Avec six actifs et un plafond de 20 %, min-var/ERC dépassaient souvent le plafond brut ; le front
+refusait alors tout le scénario au lieu de résoudre l'optimisation contrainte. Le plafond est
+maintenant projeté sur le simplex : les poids excédentaires sont plafonnés et le reliquat redistribué
+proportionnellement, seulement si `N × plafond ≥ 100 %`. Sinon l'infaisabilité est expliquée. Le
+compteur de plafonds activés et leur effet moyen sont visibles. La progression passe réellement à
+l'étape 4, le bouton y fait défiler la page et un état de calcul remplace le faux avertissement
+transitoire. Le dynamique demeure indisponible sans rendement attendu ML calibré OOS : pas de faux μ.
+
 ## Session 2026-09-05 (suite 5) — Build Mac : doublon de composant après fusion
 
 Le fichier vu sur le Mac contenait deux déclarations `PortfolioAnalysisWorkspace` et avait perdu

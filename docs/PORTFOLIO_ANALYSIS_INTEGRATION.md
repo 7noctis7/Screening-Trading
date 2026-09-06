@@ -76,6 +76,10 @@ diagnostiquer ou simuler ne doit jamais déclencher ce passage.
 1. **Fait** — import/confirmation/snapshot local et diagnostic croisé read-only.
 2. **Partiel** — historiques réels, alias crypto, cash, alignement et diagnostic reproductible livrés
    en local ; restent la résolution persistée, l'isolation multi-utilisateur et le FX multi-devises.
+3. **Livré pour prudent/neutre** — min-variance/ERC/HRP recalculés sur l'univers exact ; le plafond
+   est appliqué par projection sur le simplex lorsqu'il est faisable. Compteur de déclenchements,
+   effet moyen, turnover et coût linéaire sont publiés. Restent l'impact non linéaire et le dynamique,
+   maintenu `UNCALIBRATED` tant qu'aucun rendement attendu OOS défendable n'existe.
 3. **Partiel** — min-variance/ERC/HRP recalculés sur l'univers exact ; turnover, coût linéaire et veto
    de poids maximal publiés. Restent les contraintes complètes et l'impact non linéaire.
 2. Résolution serveur et isolation utilisateur, puis historiques/FX réels et diagnostic reproductible.

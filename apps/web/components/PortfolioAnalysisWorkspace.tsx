@@ -24,6 +24,7 @@ export function PortfolioAnalysisWorkspace() {
   const [analysis, setAnalysis] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => setSnapshot(restoreSnapshot()), []);
   useEffect(() => {
     setSnapshot(restoreSnapshot());
   }, []);
@@ -33,6 +34,8 @@ export function PortfolioAnalysisWorkspace() {
       setAnalysis(null);
       return;
     }
+    let active = true;
+    setLoading(true);
     
     let active = true;
     setLoading(true);
@@ -41,6 +44,15 @@ export function PortfolioAnalysisWorkspace() {
       .then((result) => active && setAnalysis(result))
       .catch((error) => active && setAnalysis({ available: false, reason: String(error) }))
       .finally(() => active && setLoading(false));
+    return () => { active = false; };
+  }, [snapshot]);
+
+  return <>
+    <PortfolioImportWizard onSnapshot={setSnapshot} initialSnapshot={snapshot} />
+    <PortfolioEvidence snapshot={snapshot} analysis={analysis} loading={loading} />
+    <PortfolioScenarios snapshot={snapshot} analysis={analysis} loading={loading} />
+    <PortfolioSynergies />
+  </>;
       
     return () => { active = false; };
   }, [snapshot]);
