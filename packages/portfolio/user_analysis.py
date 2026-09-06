@@ -118,18 +118,41 @@ def analyze(positions: list[dict], years: int = 5, series_by_symbol: dict | None
     weights = np.asarray([weight for _symbol, weight in requested], dtype=float)
     weights /= weights.sum()
     
-    # Base de covariance annualisée (mixte actions/cryptos)
-    covariance = np.atleast_2d(np.cov(returns) * 252)
-    variance = float(weights @ covariance @ weights)
-    contribution = weights * (covariance @ weights) / variance if variance > 0 else np.full(len(weights), np.nan)
-    
-    with np.errstate(invalid="ignore", divide="ignore"):
-        correlation = np.corrcoef(returns)
+    try:
+        # Base de covariance annualisée (mixte actions/cryptos)
+        covariance = np.atleast_2d(np.cov(returns) * 252)
+        variance = float(weights @ covariance @ weights)
+        contribution = weights * (covariance @ weights) / variance if variance > 0 else np.full(len(weights), np.nan)
         
-    return {"available": True, "symbols": [symbol for symbol, _ in requested], "aliases": aliases,
-            "as_of": dates[-1], "start": dates[0], "n_observations": returns.shape[1], "frequency": "daily",
-            "annualization": 252, "alignment": "forward-fill (week-ends) puis intersection",
+        with np.errstate(invalid="ignore", divide="ignore"):
+            correlation = np.corrcoef(returns)
+            
+        try:
+            scenarios_dict = {
+                "prudent": min_variance_weights(covariance),
+                "neutre": equal_risk_contribution(covariance),
+                "dynamique": hrp_weights(covariance)
+            }
+        except Exception:
+            n_assets = len(requested)
+            eq_w = [1.0 / n_assets] * n_assets
+            scenarios_dict = {"prudent": eq_w, "neutre": eq_w, "dynamique": eq_w}
+
+        return {
+            "available": True, 
+            "symbols": [symbol for symbol, _ in requested], 
+            "aliases": aliases,
+            "as_of": dates[-1], 
+            "start": dates[0], 
+            "n_observations": returns.shape[1], 
+            "frequency": "daily",
+            "annualization": 252, 
+            "alignment": "forward-fill (week-ends) puis intersection",
             "metrics": _metrics(returns, weights),
             "risk_contribution": [float(value) if np.isfinite(value) else None for value in contribution],
-            "correlation": _json_matrix(correlation), "scenarios": {"prudent": min_variance_weights(covariance),
-            "neutre": equal_risk_contribution(covariance), "hrp": hrp_weights(covariance)}, "coverage": 1.0}
+            "correlation": _json_matrix(correlation), 
+            "scenarios": scenarios_dict, 
+            "coverage": 1.0
+        }
+    except Exception as e:
+        return _unavailable(f"Erreur critique de calcul: {str(e)}", [], len(loaded), len(requested))
