@@ -7,6 +7,9 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+- [x] **Build analyse de portefeuille réparé (2026-09-06)** : blocs dupliqués de fusion
+      retirés, composant client unique et build Next.js ajouté aux contrôles de PR.
+
 - [~] **Analyse de portefeuille importée (2026-09-05, incrément 1/4)** : parcours local
       manuel/CSV → résolution prudente → confirmation → snapshot versionné livré. Restent le
       raccord aux historiques/FX réels, le diagnostic, l'optimisation sous contraintes, puis

@@ -3809,3 +3809,16 @@ horodatage. La comparaison échouait donc toujours, et le bloc annonçait « 0 l
 » — un zéro qui ressemblait à une absence de données alors qu'il signalait mon bug. C'est
 la deuxième fois aujourd'hui qu'une de mes mesures ment par omission ; d'où la règle qui
 en sort : **un zéro doit toujours être distingué d'un « je n'ai pas pu mesurer »**.
+
+
+## Session 2026-09-06 — Réparer le build de l'analyse de portefeuille
+
+La fusion avait entrelacé deux versions des composants : imports, hooks, rendus et variables
+redéclarés, avec des accolades manquantes. Rétablissement des blocs cohérents du commit
+e65588d pour Evidence, ImportWizard, Scenarios et portfolio-scenarios, conservant la progression
+étape 4, le calcul sous plafond et ses compteurs. Workspace réexporte le Client existant pour
+éviter deux implémentations. Un job Next.js build contrôle désormais chaque PR dans la CI.
+
+Validation : npm run build réussi, /analyse-portefeuille/ répond HTTP 200 en serveur de production ;
+make test : 1942 passed, 1 skipped (156 s). Le contrôle tsc séparé relève seulement deux erreurs
+préexistantes dans components/landing/Scene.tsx (types Three.js), hors du correctif.

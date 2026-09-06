@@ -19,6 +19,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  web-build:
+    name: Next.js build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install web dependencies
+        working-directory: apps/web
+        run: npm ci
+      - name: Build all pages
+        working-directory: apps/web
+        run: npm run build
+
   tests:
     name: pytest
     runs-on: ubuntu-latest
