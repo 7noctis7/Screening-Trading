@@ -229,6 +229,27 @@ def portfolio() -> dict:
     return _snap()["portfolio"]
 
 
+class PortfolioAnalysisPosition(BaseModel):
+    symbol: str = Field(min_length=1, max_length=32)
+    weight: float = Field(gt=0, le=1)
+
+
+class PortfolioAnalysisRequest(BaseModel):
+    positions: list[PortfolioAnalysisPosition] = Field(min_length=1, max_length=40)
+    years: int = Field(default=5, ge=1, le=15)
+
+
+@app.post("/api/portfolio/analyze")
+def analyze_user_portfolio(body: PortfolioAnalysisRequest, request: Request) -> dict:
+    """Analyse locale read-only ; aucune persistance et aucun chemin d'exécution."""
+    if not _webhook_authorized(request):
+        return {"available": False, "reason": "endpoint local uniquement"}
+    from packages.portfolio.user_analysis import analyze
+    rows = [{"symbol": row.symbol, "weight": row.weight} for row in body.positions]
+    series = ((_snap().get("dashboard") or {}).get("chart_series") or {})
+    return analyze(rows, years=body.years, series_by_symbol=series)
+
+
 @app.get("/api/positions")
 def positions() -> dict:
     snap = _snap()
