@@ -1,5 +1,90 @@
 # 04 — JOURNAL
 
+## Session 2026-09-06 (suite 2) — Compatibilité avec la page déjà fusionnée sur `main`
+
+Le diagnostic du Mac a enfin montré l'état exact de `main` : `PortfolioAnalysisClient.tsx` avait
+bien été ajouté, mais `page.tsx` importait encore `PortfolioAnalysisWorkspace`. Supprimer localement
+l'ancien fichier transformait donc l'erreur de syntaxe en `Module not found`. Ajout d'un shim propre
+portant l'ancien chemin et réexportant le nouveau composant. Les deux versions de la page compilent
+désormais, ce qui rend la correction robuste aux PR fusionnées dans un ordre différent.
+
+## Session 2026-09-06 (suite) — Couper court au fichier Workspace corrompu sur le Mac
+
+Le Mac montrait encore des fragments concaténés dans `PortfolioAnalysisWorkspace.tsx` malgré un
+fichier source propre sur la branche. Pour que la correction ne dépende plus d'une résolution de
+conflit locale, l'ancien module est supprimé et remplacé par `PortfolioAnalysisClient.tsx`; la page
+n'importe désormais que ce nouveau chemin. Le fichier corrompu cesse donc d'entrer dans le graphe
+de compilation, et la PR porte explicitement sa suppression plutôt qu'un patch contextuel fragile.
+
+## Session 2026-09-06 — Step 4 : le veto rendait tous les scénarios invisibles
+
+Avec six actifs et un plafond de 20 %, min-var/ERC dépassaient souvent le plafond brut ; le front
+refusait alors tout le scénario au lieu de résoudre l'optimisation contrainte. Le plafond est
+maintenant projeté sur le simplex : les poids excédentaires sont plafonnés et le reliquat redistribué
+proportionnellement, seulement si `N × plafond ≥ 100 %`. Sinon l'infaisabilité est expliquée. Le
+compteur de plafonds activés et leur effet moyen sont visibles. La progression passe réellement à
+l'étape 4, le bouton y fait défiler la page et un état de calcul remplace le faux avertissement
+transitoire. Le dynamique demeure indisponible sans rendement attendu ML calibré OOS : pas de faux μ.
+
+## Session 2026-09-05 (suite 5) — Build Mac : doublon de composant après fusion
+
+Le fichier vu sur le Mac contenait deux déclarations `PortfolioAnalysisWorkspace` et avait perdu
+l'accolade fermante de la première, état qui n'existait pas dans le commit source et indique une
+fusion locale incomplète. Le composant est réécrit intégralement, avec une seule exportation, des
+imports de types explicites et l'annulation logique des réponses asynchrones périmées. Le build
+Next.js constitue le test de non-régression de syntaxe.
+
+## Session 2026-09-05 (suite 4) — Les données existaient ; la page ne les chargeait jamais
+
+Cause du « 1/6 marché » et des scénarios vides : la page lisait uniquement les lignes ayant survécu
+aux filtres de `/api/screen`, puis exigeait que l'univers importé soit identique au portefeuille de
+production précalculé. Elle ne demandait jamais les historiques de PLTR/CLSK/BMNR/SBET/ETHUSDT.
+Correction : jointure avec le screener complet, normalisation des alias crypto, puis endpoint local
+read-only qui charge d'abord les séries déjà présentes dans le snapshot, ensuite YAHOO.db/yfinance,
+aligne l'intersection des dates sans forward-fill et recalcule risque + min-var/ERC/HRP. Cash est une
+série constante explicite. Un historique manquant publie maintenant son symbole et la couverture.
+
+## Session 2026-09-05 (suite 3) — Des scénarios honnêtes, ou aucun scénario
+
+L'étape Améliorer affiche maintenant prudent (min-variance), neutre (ERC) et dynamique
+(Black-Litterman), mais seulement si les poids existants ont été calculés sur exactement le même
+univers que le snapshot importé. Le dynamique est en plus refusé sans gate ML positif. L'utilisateur
+peut poser valeur, coûts en bps et poids maximal ; la page publie turnover, coût indicatif et nombre
+de violations. Une violation bloque le scénario au lieu de clipper silencieusement. Les coûts restent
+linéaires : spread dynamique, fiscalité et impact racine carrée sont explicitement non modélisés.
+
+## Session 2026-09-05 (suite 2) — Le snapshot importé rejoint réellement les autres vues
+
+Le portefeuille confirmé est maintenant croisé, dans le navigateur, avec les payloads existants
+de screening, fondamentaux, ML, résultats et macro. La page publie la couverture par source, HHI,
+nombre effectif de positions et plus grande ligne. Un score ML n'apparaît que si son gate d'edge
+est positif. Les allocations existantes ne sont déclarées réutilisables que si leur univers est
+exactement celui du snapshot ; sinon la page refuse de recycler les poids d'un autre portefeuille.
+Restent le recalcul serveur sur historiques/FX réels, les coûts et les contraintes utilisateur.
+
+## Session 2026-09-05 (suite) — Les synergies sont une cible, pas encore une fonctionnalité
+
+Clarification après revue : l'import MVP ne tire pas encore les scores ML, la macro, les résultats,
+les fondamentaux ou les historiques utilisés par les autres vues. Un panneau de statut le dit
+maintenant dans l'interface et le contrat d'intégration décrit la jointure par identifiant, le bundle
+de preuves daté, le fallback classique et la frontière stricte avec l'exécution. Les profils prudent,
+neutre et dynamique seront des objectifs sous contraintes ; aucun label ne rendra artificiellement
+prudent un univers risqué, et aucun score de classification ne deviendra directement un rendement.
+
+## Session 2026-09-05 — Analyse de portefeuille, incrément 1 : une entrée contrôlée avant les maths
+
+Ajout d'un parcours distinct « Analyser mon portefeuille » dans le front Next.js. Il accepte une
+saisie pondérée ou un CSV, classe seulement quelques instruments explicitement connus, et laisse
+les autres « à vérifier » au lieu de deviner à partir du ticker. Les crypto-actifs restent à
+confirmer tant que paire et plateforme ne sont pas établies.
+
+La confirmation bloque tant que poids, résolution et total ne sont pas cohérents. Normalisation
+et exclusion sont explicites, les valeurs originales sont conservées, les doublons sont signalés
+sans fusion automatique. Le snapshot versionné reste dans le navigateur : aucune donnée importée
+n'atteint l'API, le LLM ou l'exécution. Le diagnostic affiche volontairement « indisponible » tant
+que les historiques ajustés et les conversions FX réelles ne sont pas raccordés. C'est le premier
+des quatre incréments demandés ; aucune allocation ou mesure de marché n'a été inventée.
+
 ## Session 2026-09-04 (suite 7) — Deux fois la même erreur : j'ai deviné le payload au lieu de le lire
 
 **Deuxième blocage, deuxième faute de ma part.** Le gate a de nouveau arrêté le déploiement, en
@@ -3740,4 +3825,3 @@ horodatage. La comparaison échouait donc toujours, et le bloc annonçait « 0 l
 » — un zéro qui ressemblait à une absence de données alors qu'il signalait mon bug. C'est
 la deuxième fois aujourd'hui qu'une de mes mesures ment par omission ; d'où la règle qui
 en sort : **un zéro doit toujours être distingué d'un « je n'ai pas pu mesurer »**.
-

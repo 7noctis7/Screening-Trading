@@ -19,6 +19,17 @@ async function get<T>(path: string): Promise<T> {
   return r.json();
 }
 
+export async function analyzePortfolio(positions: { ticker: string; weight: number | null }[]) {
+  if (STATIC) return { available: false, reason: "analyse dynamique disponible en local avec make start" };
+  const payload = { positions: positions.filter((row) => row.weight != null).map((row) => ({
+    symbol: row.ticker, weight: Number(row.weight) / 100,
+  })), years: 5 };
+  const response = await fetch(`${BASE}/api/portfolio/analyze`, { method: "POST",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  if (!response.ok) throw new Error(`Analyse portefeuille : ${response.status}`);
+  return response.json();
+}
+
 // Navigation instantanée : données fraîches gardées en cache (staleTime), pas de "vide" au
 // changement d'onglet (placeholderData), refetch en arrière-plan. TTL serveur 15 min.
 const LIVE = 30000;
