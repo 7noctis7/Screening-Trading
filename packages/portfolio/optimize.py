@@ -26,7 +26,9 @@ def min_variance_weights(cov) -> list[float]:
     if n == 0:
         return []
     try:
-        inv = np.linalg.pinv(C)
+        # Sécurité numérique : régularisation par diagonale pour éviter l'explosion de l'inverse
+        C_reg = C + np.eye(n) * 1e-5
+        inv = np.linalg.pinv(C_reg)
         w = inv @ np.ones(n)
         w = np.clip(w, 0.0, None)
         s = w.sum()
@@ -43,9 +45,11 @@ def equal_risk_contribution(cov, iters: int = 500) -> list[float]:
         return []
     if n == 1:
         return [1.0]
+    # Régularisation de la matrice pour stabiliser le gradient itératif
+    C_reg = C + np.eye(n) * 1e-5
     w = np.ones(n) / n
     for _ in range(iters):
-        rc = w * (C @ w)                       # contributions au risque
+        rc = w * (C_reg @ w)                     # contributions au risque
         target = rc.mean()
         grad = rc - target
         w = np.clip(w - 0.01 * grad, 1e-6, None)
@@ -74,17 +78,19 @@ def hrp_weights(cov) -> list[float]:
         return []
     if n == 1:
         return [1.0]
-    d = np.sqrt(np.clip(np.diag(C), 1e-12, None))
-    corr = C / np.outer(d, d)
+    
+    C_reg = C + np.eye(n) * 1e-5
+    d = np.sqrt(np.clip(np.diag(C_reg), 1e-12, None))
+    corr = C_reg / np.outer(d, d)
     corr = np.clip(np.nan_to_num(corr, nan=0.0), -1.0, 1.0)
     order = _seriation(corr)
     w = np.ones(n)
-    var = np.clip(np.diag(C), 1e-12, None)
+    var = np.clip(np.diag(C_reg), 1e-12, None)
 
     def _cluster_var(idx):
         sub = var[idx]
         iv = (1.0 / sub) / (1.0 / sub).sum()
-        return float(iv @ C[np.ix_(idx, idx)] @ iv)
+        return float(iv @ C_reg[np.ix_(idx, idx)] @ iv)
 
     def _bisect(items):
         if len(items) <= 1:
