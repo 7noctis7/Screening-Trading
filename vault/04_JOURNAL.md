@@ -1,13 +1,5 @@
 # 04 — JOURNAL
 
-## Session 2026-09-06 (suite) — Couper court au fichier Workspace corrompu sur le Mac
-
-Le Mac montrait encore des fragments concaténés dans `PortfolioAnalysisWorkspace.tsx` malgré un
-fichier source propre sur la branche. Pour que la correction ne dépende plus d'une résolution de
-conflit locale, l'ancien module est supprimé et remplacé par `PortfolioAnalysisClient.tsx`; la page
-n'importe désormais que ce nouveau chemin. Le fichier corrompu cesse donc d'entrer dans le graphe
-de compilation, et la PR porte explicitement sa suppression plutôt qu'un patch contextuel fragile.
-
 ## Session 2026-09-06 — Step 4 : le veto rendait tous les scénarios invisibles
 
 Avec six actifs et un plafond de 20 %, min-var/ERC dépassaient souvent le plafond brut ; le front
