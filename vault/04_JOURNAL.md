@@ -1,21 +1,5 @@
 # 04 — JOURNAL
 
-## Session 2026-09-06 (suite 2) — Compatibilité avec la page déjà fusionnée sur `main`
-
-Le diagnostic du Mac a enfin montré l'état exact de `main` : `PortfolioAnalysisClient.tsx` avait
-bien été ajouté, mais `page.tsx` importait encore `PortfolioAnalysisWorkspace`. Supprimer localement
-l'ancien fichier transformait donc l'erreur de syntaxe en `Module not found`. Ajout d'un shim propre
-portant l'ancien chemin et réexportant le nouveau composant. Les deux versions de la page compilent
-désormais, ce qui rend la correction robuste aux PR fusionnées dans un ordre différent.
-
-## Session 2026-09-06 (suite) — Couper court au fichier Workspace corrompu sur le Mac
-
-Le Mac montrait encore des fragments concaténés dans `PortfolioAnalysisWorkspace.tsx` malgré un
-fichier source propre sur la branche. Pour que la correction ne dépende plus d'une résolution de
-conflit locale, l'ancien module est supprimé et remplacé par `PortfolioAnalysisClient.tsx`; la page
-n'importe désormais que ce nouveau chemin. Le fichier corrompu cesse donc d'entrer dans le graphe
-de compilation, et la PR porte explicitement sa suppression plutôt qu'un patch contextuel fragile.
-
 ## Session 2026-09-06 — Step 4 : le veto rendait tous les scénarios invisibles
 
 Avec six actifs et un plafond de 20 %, min-var/ERC dépassaient souvent le plafond brut ; le front
