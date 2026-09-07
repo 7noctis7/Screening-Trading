@@ -63,6 +63,29 @@ fi
 echo "→ Arrêt des anciens process (API/front)…"
 bash scripts/stop_services.sh
 
+# Next bascule SILENCIEUSEMENT sur 3001 si 3000 est déjà pris. Le front tourne alors sur une
+# origine que le CORS de l'API REFUSE (apps/api/main.py n'autorise par défaut que 3000 et 8080) :
+# la page s'affiche, aucune donnée ne se charge, et le navigateur ne rapporte qu'une panne réseau
+# anonyme. On a passé une matinée sur ce symptôme le 07/09. Mieux vaut refuser de démarrer.
+# `lsof` NE SUFFIT PAS : sans privilèges il ne montre que les sockets de l'utilisateur courant.
+# Le 07/09, `lsof -i:3000` ne rendait RIEN alors que Next refusait le port — le détenteur
+# appartenait à un autre compte. `ss` liste les sockets d'écoute quel qu'en soit le propriétaire
+# (le nom du process reste masqué sans droits, mais l'OCCUPATION, elle, devient visible).
+if command -v ss >/dev/null 2>&1; then
+  _occupe="$(ss -H -ltn 'sport = :3000' 2>/dev/null)"
+else
+  _occupe="$(lsof -ti:3000 2>/dev/null)"
+fi
+if [ -n "$_occupe" ]; then
+  echo "✗ Le port 3000 est déjà occupé :"
+  echo "    $_occupe"
+  echo "  Next basculerait sur 3001, que le CORS de l'API refuse : la page s'afficherait mais"
+  echo "  AUCUNE donnée ne se chargerait, sans autre symptôme qu'une panne réseau anonyme."
+  echo "  Identifiez le détenteur puis relancez :"
+  echo "      sudo ss -ltnp 'sport = :3000'      # ou : sudo lsof -i:3000 -sTCP:LISTEN -P -n"
+  exit 1
+fi
+
 if [ "${QUANT_REFRESH:-0}" = "1" ]; then
   echo "→ Maj des cours (make daily + crypto)…"
   python scripts/ingest_prices.py --daily || true

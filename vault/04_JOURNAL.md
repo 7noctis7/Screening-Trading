@@ -1,5 +1,26 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 4) — Next bascule sur 3001, et le CORS le refuse en silence
+
+`make start` affichait « ⚠ Port 3000 is in use, trying 3001 instead » et poursuivait. Or
+`apps/api/main.py:39` n'autorise par défaut que `localhost:3000`, `127.0.0.1:3000` et
+`localhost:8080` : un front servi sur 3001 voit TOUTES ses requêtes refusées par le CORS avant
+qu'elles partent. Symptôme : la page s'affiche, aucune donnée ne se charge, et le navigateur ne
+rapporte qu'une panne réseau anonyme — exactement le « TypeError: Load failed » de ce matin.
+Le démarrage échoue désormais au lieu de dériver.
+
+**Et la première version de cette garde était fausse.** Elle interrogeait `lsof -ti:3000`. Mesuré
+sur le VPS : `lsof -i:3000 -sTCP:LISTEN` ne rend RIEN alors que Next refuse le port — sans
+privilèges, `lsof` ne montre que les sockets de l'utilisateur courant, et le détenteur appartenait
+à un autre compte. La garde serait passée à côté du cas même qui l'a motivée. Elle utilise `ss`,
+qui liste les sockets d'écoute quel qu'en soit le propriétaire, avec repli sur `lsof`.
+
+Le message de transport du front distingue maintenant trois cas au lieu de deux : origine
+autorisée (API éteinte → `make start`), origine localhost mais hors liste (CORS → libérer 3000 ou
+élargir `QUANT_CORS_ORIGINS`), origine distante (`NEXT_PUBLIC_API_URL`). La liste par défaut est
+dupliquée côté front pour ce diagnostic ; le message dit « par défaut » et ne prétend donc rien
+sur une configuration surchargée.
+
 ## Session 2026-09-07 (suite 3) — Recommandation d'univers : que détenir, pas seulement comment repondérer
 
 Demande : une quatrième proposition où le robot dit QUELS actifs détenir, y compris des actifs

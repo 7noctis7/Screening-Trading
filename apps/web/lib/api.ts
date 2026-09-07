@@ -25,11 +25,22 @@ async function get<T>(path: string): Promise<T> {
 // disent rien de ce qu'il faut faire. Les relayer telles quelles sous « Analyse historique
 // indisponible » accusait la donnée alors que le corps de la requête n'était jamais parti
 // et qu'aucune base n'avait été ouverte (07/09).
+// Origines que l'API autorise par défaut (apps/api/main.py). Un front servi ailleurs — le cas
+// le plus courant : Next.js bascule tout seul sur 3001 quand 3000 est déjà pris — est refusé
+// par le CORS AVANT d'atteindre l'API, ce que le navigateur rapporte comme une panne réseau
+// indiscernable d'une API éteinte. Sans cette liste, le message renvoyait vers « make start »
+// pour une cause qui n'avait rien à voir (07/09).
+const ORIGINES_AUTORISEES = ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:8080"];
+
 function _raisonTransport(): string {
   const origine = typeof location === "undefined" ? "" : location.origin;
-  const memeMachine = /^https?:\/\/(localhost|127\.0\.0\.1)(:|$)/.test(origine);
   const tete = `API injoignable à ${BASE} : la requête n'a pas abouti, aucun historique n'a été lu.`;
-  if (memeMachine) return `${tete} Vérifier que « make start » tourne — curl ${BASE}/health.`;
+  if (ORIGINES_AUTORISEES.includes(origine))
+    return `${tete} Vérifier que « make start » tourne — curl ${BASE}/health.`;
+  const local = /^https?:\/\/(localhost|127\.0\.0\.1)(:|$)/.test(origine);
+  if (local) return `${tete} La page est servie depuis ${origine}, qui n'est pas dans les origines `
+    + `autorisées PAR DÉFAUT par l'API (${ORIGINES_AUTORISEES.join(", ")}) : le CORS refuse alors la requête avant `
+    + `qu'elle parte. Libérez le port 3000 et relancez, ou ajoutez ${origine} à QUANT_CORS_ORIGINS.`;
   return `${tete} La page est servie depuis ${origine} : « localhost » y désigne CET appareil, `
     + `pas la machine qui héberge l'API. Définir NEXT_PUBLIC_API_URL sur son adresse et ajouter `
     + `cette origine à QUANT_CORS_ORIGINS.`;
