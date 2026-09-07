@@ -29,6 +29,13 @@
       walk-forward (Spearman, fenêtres disjointes, coupe chronologique) et la carte publie le
       résultat. Reste à LANCER la mesure sur le VPS et à décider de l'horizon retenu — en tester
       plusieurs impose Benjamini-Hochberg. P1.
+- [ ] **P1 — univers pollué par des titres délistés** (07/09) : le dry-run de
+      `make noms-univers` a listé ATVI, CELG, ABC, CBS, DISCA/DISCK, ETFC, FRC, COL, FLIR, CBG,
+      HRS, COG, CXO, DPS, DNB, CA (+ EVHC, SCG vus dans la recommandation) — sociétés acquises,
+      renommées ou disparues entre 2018 et 2023. Elles occupent des places dans le screening et
+      arrivent sans historique dans la recommandation. Décider : purge des seeds, ou filtre de
+      fraîcheur sur la dernière barre. Mesurer d'abord le compte exact via le rapport groupé.
+
 - [ ] **P1 — deux sources de prix pour le même univers** (07/09) : `_screen_section` lit le
       `panel` en mémoire du snapshot, `packages/portfolio/recommendation.py` lit
       YAHOO.db/crypto.db via `load_bars`. Des tickers screenés (EVHC, SCG — délistés 2018/2019)

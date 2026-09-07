@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import csv
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -25,15 +26,47 @@ sys.path.insert(0, str(RACINE))
 SEEDS = RACINE / "data" / "seed"
 
 
-def nom_fournisseur(symbole: str) -> tuple[str, str | None]:
-    """(symbole, nom long) selon yfinance. None si le fournisseur ne sait pas."""
+# TROIS causes d'échec, et les confondre rend le rapport inexploitable. Constaté le 07/09
+# sur un premier jet de ce script : `ATVI`, `CELG`, `FRC` sont délistés ; `BK`, `HES`,
+# `HOLX` sont bien vivants mais le fournisseur n'avait pas répondu (débit limité) ;
+# `AAVE/USDC` échoue parce que yfinance ne connaît pas ce format de paire. Les afficher
+# tous en « introuvable » laisserait conclure que l'univers est plein de titres morts.
+INCONNU = "inconnu du fournisseur"      # le fournisseur a répondu : il ne connaît pas
+MUET = "aucune réponse"                  # débit limité, réseau : on ne sait PAS
+
+
+def _essayer(symbole: str) -> tuple[str | None, str | None]:
+    """(nom, cause d'échec). Distingue « il ne connaît pas » de « il n'a pas répondu »."""
+    import yfinance as yf
     try:
-        import yfinance as yf
         info = yf.Ticker(symbole).get_info() or {}
-        nom = info.get("longName") or info.get("shortName")
-        return symbole, (str(nom).strip() or None) if nom else None
-    except Exception:  # noqa: BLE001 — hors-ligne, symbole inconnu : l'absence se dit
-        return symbole, None
+    except Exception as erreur:  # noqa: BLE001
+        texte = str(erreur).lower()
+        muet = any(m in texte for m in ("rate", "limit", "timeout", "connection", "429"))
+        return None, (MUET if muet else INCONNU)
+    nom = info.get("longName") or info.get("shortName")
+    return (str(nom).strip() or None, None) if nom else (None, INCONNU)
+
+
+def nom_fournisseur(symbole: str, essais: int = 3) -> tuple[str, str | None, str | None]:
+    """(symbole, nom, cause). Essaie aussi les ALIAS — `AAVE/USDC` se demande `AAVE-USD`.
+
+    Les alias viennent de `user_analysis._aliases`, la MÊME fonction qui résout les prix :
+    un symbole valorisé sous un alias doit être nommé sous le même, sinon la colonne
+    « nom » décrirait un autre instrument que la colonne « prix ».
+    """
+    from packages.portfolio.user_analysis import _aliases
+    cause = None
+    for candidat in _aliases(symbole):
+        for tentative in range(essais):
+            nom, echec = _essayer(candidat)
+            if nom:
+                return symbole, nom, None
+            cause = echec
+            if echec != MUET:
+                break                                   # inutile d'insister : il ne connaît pas
+            time.sleep(1.5 * (tentative + 1))            # débit limité : on laisse respirer
+    return symbole, None, cause
 
 
 def _manquants(chemin: Path) -> list[str]:
@@ -61,6 +94,7 @@ def _reecrire(chemin: Path, noms: dict[str, str]) -> int:
 def principal() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dry-run", action="store_true", help="rapport sans écriture")
+    ap.add_argument("--fils", type=int, default=3, help="requêtes en parallèle (défaut 3)")
     args = ap.parse_args()
 
     fichiers = sorted(SEEDS.glob("*.csv"))
@@ -72,19 +106,27 @@ def principal() -> int:
     print(f"→ {total} symbole(s) sans nom dans {sum(1 for v in trous.values() if v)} fichier(s).")
 
     tous = sorted({s for v in trous.values() for s in v})
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        resolus = dict(pool.map(nom_fournisseur, tous))
-    trouves = {s: n for s, n in resolus.items() if n}
+    # Parallélisme MODÉRÉ : à 8 fils, le fournisseur limite le débit et rend des silences
+    # qu'on prendrait pour des titres délistés. Mieux vaut plus lent et interprétable.
+    with ThreadPoolExecutor(max_workers=args.fils) as pool:
+        resultats = list(pool.map(nom_fournisseur, tous))
+    trouves = {s: n for s, n, _ in resultats if n}
+    par_cause: dict[str, list[str]] = {}
+    for symbole, nom, cause in resultats:
+        if not nom:
+            par_cause.setdefault(cause or INCONNU, []).append(symbole)
     print(f"  {len(trouves)}/{len(tous)} résolus par le fournisseur.")
-
-    introuvables = [s for s in tous if s not in trouves]
-    if introuvables:
-        print("  NON RÉSOLUS (laissés vides, jamais devinés) :")
-        print("   ", ", ".join(introuvables[:40]) + (" …" if len(introuvables) > 40 else ""))
+    for cause, symboles in sorted(par_cause.items()):
+        etiquette = ("PROBABLEMENT DÉLISTÉS ou renommés — à retirer de l'univers"
+                     if cause == INCONNU else
+                     "NON MESURÉS (débit limité) — relancer, ce ne sont PAS des titres morts")
+        print(f"  {len(symboles)} × {cause} → {etiquette}")
+        print("   ", ", ".join(symboles[:30]) + (" …" if len(symboles) > 30 else ""))
 
     if args.dry_run:
-        for symbole in tous[:20]:
-            print(f"    {symbole:12s} → {trouves.get(symbole) or '— introuvable —'}")
+        print("\n  Aperçu :")
+        for symbole, nom, cause in resultats[:20]:
+            print(f"    {symbole:12s} → {nom or f'— {cause} —'}")
         return 0
 
     ecrits = sum(_reecrire(chemin, trouves) for chemin, manque in trous.items() if manque)

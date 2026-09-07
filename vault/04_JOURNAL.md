@@ -1,5 +1,30 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 17) — Mon propre script confondait trois causes d'échec
+
+Le dry-run sur le VPS a résolu la plupart des noms (Agilent, Alcoa, Apple, AbbVie…) et laissé une
+liste d'échecs qui, relue, contenait TROIS familles distinctes que mon script fondait en un seul
+« introuvable » — l'erreur exacte que je corrige depuis ce matin, commise dans mon propre outil :
+
+1. **Délistés/renommés** : ATVI, CELG, ABC, CBS, DISCA, ETFC, FRC, COL, FLIR, CBG, HRS, COG… Ceux-là
+   doivent sortir de l'univers ; c'est la même famille qu'EVHC et SCG repérés plus tôt.
+2. **Vivants mais non mesurés** : BK, CMA, DFS, HES, HOLX, FL, GPS. Grandes capitalisations bien
+   cotées — le fournisseur avait simplement limité le débit sous 8 requêtes parallèles.
+3. **Format de paire non reconnu** : AAVE/USDC, BTC/USDC, ETH/USDC, HYPE/USDC. yfinance ignore ce
+   format mais connaît `AAVE-USD`, et `_aliases` sait déjà faire la traduction.
+
+Publier ces trois familles sous une seule étiquette aurait fait conclure que l'univers est plein de
+titres morts, alors qu'une partie n'avait pas été interrogée correctement.
+
+Corrigé : `_essayer` distingue « le fournisseur a répondu qu'il ne connaît pas » (INCONNU) de
+« le fournisseur n'a pas répondu » (MUET) ; les MUET sont réessayés avec temporisation croissante,
+les INCONNU jamais — insister n'apprend rien. Les alias viennent de `user_analysis._aliases`, la
+MÊME fonction qui résout les prix : un instrument valorisé sous un alias doit être nommé sous le
+même, sinon la colonne « nom » décrirait un autre instrument que la colonne « prix ». Parallélisme
+ramené de 8 à 3 fils, réglable. Le rapport groupe par cause et dit quoi faire de chacune.
+
+5 tests dédiés.
+
 ## Session 2026-09-07 (suite 16) — VERDICT : le score de screening ne prédit rien de démontrable
 
 Première mesure sur données réelles (779 symboles réels, horizon 21 j, 83 fenêtres disjointes) :
