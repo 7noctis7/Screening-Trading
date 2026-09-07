@@ -1,5 +1,22 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 7) — « Nombre de lignes » demandé n'est pas obtenu, et il faut le dire là où on regarde
+
+Quatre lignes demandées, trois obtenues ; dix demandées, trois aussi. La réponse était DÉJÀ dans la
+charge utile (`selection.kept/asked`, `dropped` avec la date de début, `missing_history`), mais
+affichée SOUS le tableau — trop loin pour être lue. Une information qu'on ne trouve pas est une
+information qu'on n'a pas : on lisait « 3 lignes » sans savoir pourquoi. Le bilan est remonté
+AU-DESSUS du tableau qu'il explique, en ambre tant que le compte n'y est pas, et il nomme la cause :
+candidats sans historique dans la base locale, ou écartés parce que leur introduction récente
+écraserait la fenêtre commune.
+
+Défaut corrigé au passage : la colonne « Nom » restait blanche (BK, EA, NDX). `_lignes` faisait
+`.get("name", s)` — or le screener publie parfois une chaîne VIDE au lieu d'omettre la clé, et le
+repli par défaut ne se déclenche pas dans ce cas. `or s` remplace le défaut positionnel. Test ajouté.
+
+Reste à mesurer côté VPS laquelle des deux causes domine : le bilan le dira au prochain affichage.
+229 tests portefeuille passés ; build Next.js vert.
+
 ## Session 2026-09-07 (suite 6) — Le port est repris APRÈS la vérification, et 3001 cesse d'être fatal
 
 Le test de réservation a livré la mesure décisive : « Port 3000 encore occupé, attente de sa

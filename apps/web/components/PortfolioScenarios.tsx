@@ -50,6 +50,26 @@ function Tableau({ lignes, meta, valeur }: { lignes: any[]; meta: Map<string, an
   </tbody></table></div>;
 }
 
+/** « Nombre de lignes » est un nombre DEMANDÉ, pas garanti. Un candidat sans historique
+ *  exploitable, ou dont l'introduction récente écraserait la fenêtre commune, est retiré.
+ *  Cet écart était publié SOUS le tableau : trop loin pour être vu, donc inexistant en
+ *  pratique — on lisait « 3 lignes » sans savoir pourquoi (07/09). Il est désormais lu
+ *  avant le tableau qu'il explique. */
+function Bilan({ reco }: { reco: any }) {
+  const s = reco.selection ?? {};
+  const absents: string[] = s.missing_history ?? [];
+  const ecartes: any[] = s.dropped ?? [];
+  const complet = s.kept === s.asked;
+  return <div className={`rounded-xl p-3 text-xs ${complet ? "bg-surface3 text-muted" : "text-amber-500"}`}
+    style={complet ? undefined : { background: "color-mix(in srgb,var(--warn) 10%,transparent)" }}>
+    <b className="mono">{s.kept}/{s.asked}</b> ligne(s) retenue(s) sur les {s.asked} demandées au screening du jour.
+    {absents.length ? <> <b>{absents.length} sans historique exploitable</b> ({absents.join(", ")}) — la base locale ne les couvre pas.</> : null}
+    {ecartes.length ? <> <b>{ecartes.length} écartée(s)</b> pour fenêtre commune trop courte : {ecartes.map((d) => `${d.symbol} (depuis ${d.start})`).join(", ")}.</> : null}
+    {!absents.length && !ecartes.length && !complet ? <> Le screening n'a pas publié davantage de candidats aujourd'hui.</> : null}
+    {" "}Fenêtre commune : {reco.n_observations} observations, T/N = {reco.t_sur_n}.
+  </div>;
+}
+
 export function PortfolioScenarios({ snapshot, analysis, loading }: {
   snapshot: PortfolioSnapshot | null; analysis?: any; loading?: boolean;
 }) {
@@ -154,6 +174,7 @@ export function PortfolioScenarios({ snapshot, analysis, loading }: {
             <Metrique titre="Plafonds appliqués" valeur={String(active.breaches)} />
             <Metrique titre="Effet moyen plafond" valeur={`${(active.averageCapEffect * 100).toFixed(2)} pt`} />
           </div>
+          {source === "recommandation" && reco?.available ? <Bilan reco={reco} /> : null}
           <Tableau lignes={active.weights} meta={meta} valeur={value} />
         </>}
 

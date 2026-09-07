@@ -122,3 +122,13 @@ def test_n_demande_est_respecte_ou_expliqué(monkeypatch, n):
     out = recommander({"available": True, "rows": rows}, n=n)
     assert out["selection"]["asked"] == n
     assert out["selection"]["kept"] == len(out["symbols"]) <= n
+
+
+def test_nom_vide_retombe_sur_le_ticker(monkeypatch):
+    """Le screener publie parfois `name: ""` : la colonne ne doit pas rester blanche."""
+    import packages.portfolio.recommendation as module
+    series = {f"A{i}": _serie("2020-01-01", 900, i) for i in range(4)}
+    monkeypatch.setattr(module, "charger_series", lambda symboles, years: (series, {}, []))
+    rows = [{"symbol": s, "name": "", "sector": "", "score": 1.0} for s in series]
+    out = recommander({"available": True, "rows": rows}, n=4)
+    assert all(ligne["name"] == ligne["symbol"] for ligne in out["rows"])

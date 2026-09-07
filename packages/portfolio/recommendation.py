@@ -64,7 +64,10 @@ def elaguer(series: dict[str, dict[str, float]], scores: dict[str, float],
 
 
 def _lignes(symboles: list[str], meta: dict[str, dict], poids: dict) -> list[dict]:
-    return [{"symbol": s, "name": meta.get(s, {}).get("name", s),
+    # `or s` et non `.get(..., s)` : le screener publie parfois une chaîne VIDE plutôt que
+    # d'omettre la clé, et le repli par défaut ne se déclenchait alors pas — colonne « Nom »
+    # blanche sur des lignes pourtant valides (constaté le 07/09 sur BK, EA, NDX).
+    return [{"symbol": s, "name": meta.get(s, {}).get("name") or s,
              "sector": meta.get(s, {}).get("sector", ""),
              "asset_class": meta.get(s, {}).get("asset_class", ""),
              "score": meta.get(s, {}).get("score"),
