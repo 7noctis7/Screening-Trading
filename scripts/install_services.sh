@@ -38,9 +38,15 @@ fi
 mkdir -p "$RACINE/logs"
 chown "$UTILISATEUR:$GROUPE" "$RACINE/logs"
 
+# ATTENTION : le heredoc ci-dessous n'est PAS protégé — il doit interpoler $UTILISATEUR,
+# $RACINE et $VERSION_UNITE. Bash y interprète donc aussi les ACCENTS GRAVES comme des
+# substitutions de commande, y compris dans ce qui ressemble à un commentaire. Le 07/09,
+# un commentaire contenant « régénéré par [make services] » a relancé cet installateur
+# RÉCURSIVEMENT sous root, qui a refusé — deux fois, en écrivant des unités incomplètes.
+# Aucun accent grave ici : guillemets typographiques. Un test le vérifie.
 _unite() {   # $1 = nom, $2 = description, $3 = script, $4 = délai de démarrage
   cat >"/etc/systemd/system/$1.service" <<UNIT
-# quant-unit-version: $VERSION_UNITE   (ne pas éditer : régénéré par `make services`)
+# quant-unit-version: $VERSION_UNITE   (ne pas éditer : régénéré par « make services »)
 [Unit]
 Description=$2
 After=network-online.target
@@ -61,10 +67,10 @@ TimeoutStartSec=$4
 # Le build Next et l'ingestion sont gourmands : on ne les tue pas trop vite à l'arrêt.
 TimeoutStopSec=30
 # KillMode par DÉFAUT (control-group) : le signal d'arrêt va à TOUS les processus du
-# service, pas au seul principal. `mixed` ne signalait que le principal, et tout enfant qui
-# lui survivait gardait le port — c'est ainsi que des `next-server` orphelins se sont
+# service, pas au seul principal. « mixed » ne signalait que le principal, et tout enfant qui
+# lui survivait gardait le port — c'est ainsi que des « next-server » orphelins se sont
 # accumulés le 07/09 jusqu'à rendre le service impossible à démarrer. Ne pas remettre
-# `mixed` sans avoir d'abord garanti qu'aucun enfant ne détient de ressource.
+# « mixed » sans avoir d'abord garanti qu'aucun enfant ne détient de ressource.
 StandardOutput=append:$RACINE/logs/$1.log
 StandardError=append:$RACINE/logs/$1.log
 

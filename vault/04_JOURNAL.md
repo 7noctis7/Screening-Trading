@@ -1,5 +1,31 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 27) — Mes commentaires s'exécutaient : l'installateur se relançait lui-même
+
+    scripts/install_services.sh: line 42: mixed: command not found
+    ✗ Refus d'installer les services sous root …   (deux fois)
+
+Le heredoc qui écrit l'unité systemd n'est pas protégé — il DOIT interpoler `$UTILISATEUR`,
+`$RACINE`, `$VERSION_UNITE`. Bash y traite donc les accents graves comme des substitutions de
+commande, **y compris dans ce qui ressemble à un commentaire**. Mon commentaire « régénéré par
+[make services] » a donc relancé l'installateur RÉCURSIVEMENT, sous root, qui a refusé — et les
+unités ont été écrites au milieu de messages d'erreur.
+
+**Troisième occurrence du même piège dans la journée** : `make stop` ce matin (pkill qui se tuait
+lui-même), la garde de démarrage cet après-midi (accents graves autour de « make start »), et
+maintenant l'installateur. Le repérer à l'œil ne suffit visiblement pas : `tests/scripts/
+test_unite_systemd.py` interdit désormais tout accent grave et toute `$(...)` dans le gabarit,
+vérifie que les variables attendues y sont bien interpolées, et que `KillMode=mixed` n'est pas
+réintroduit.
+
+**Verdict « PID étranger » : je ne sais toujours pas s'il est juste.** Il est tombé deux fois sur
+des PID espacés de 35, donc probablement parent et enfant. Ma remontée de filiation a été testée et
+fonctionne sur un couple réel — mais je ne peux pas exclure qu'elle manque un cas. Plutôt que de
+trancher au jugé, le diagnostic imprime maintenant la filiation OBSERVÉE (PID, commande, parent, sur
+six niveaux) et le cgroup du service, avec la question posée franchement : si le PID figure dans le
+cgroup, c'est ma remontée qui échoue. Un diagnostic qui ne montre pas ce qu'il a vu oblige à le
+redemander.
+
 ## Session 2026-09-07 (suite 26) — Ratios de structure, et un turnover que j'avais faussé
 
 **Défaut introduit hier soir, trouvé dans la capture d'écran.** Le turnover affichait 100 % sur

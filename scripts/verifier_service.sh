@@ -33,8 +33,25 @@ if command -v systemctl >/dev/null 2>&1 \
     done
     if [ "$racine" != "$attendu" ]; then
       echo "✗ Le port $PORT est tenu par le PID $tenant, ÉTRANGER au service quant-web (PID $attendu)."
-      echo "  Votre navigateur parle à un processus orphelin qui sert du code périmé."
-      echo "  Le tuer puis relancer :   sudo kill -9 $tenant && make up"
+      echo "  Votre navigateur parle à un processus qui n'est pas celui que systemd surveille."
+      # La FILIATION observée, imprimée sur place. Deux fois le 07/09 ce verdict est tombé
+      # sans que je puisse dire s'il désignait un vrai orphelin ou un enfant légitime que ma
+      # remontée manquait. Un diagnostic qui ne montre pas ce qu'il a vu oblige à le
+      # redemander ; celui-ci se suffit.
+      echo "  Filiation observée :"
+      _p="$tenant"
+      for _ in 1 2 3 4 5 6; do
+        printf '    %s  %s  (parent %s)\n' "$_p" \
+          "$(ps -p "$_p" -o comm= 2>/dev/null || echo '?')" \
+          "$(ps -p "$_p" -o ppid= 2>/dev/null | tr -d ' ' || echo '?')"
+        _p="$(ps -p "$_p" -o ppid= 2>/dev/null | tr -d ' ')"
+        { [ -z "$_p" ] || [ "$_p" = "1" ] || [ "$_p" = "0" ]; } && break
+      done
+      echo "  Processus du service (cgroup) :"
+      systemctl status quant-web.service --no-pager 2>/dev/null \
+        | sed -n '/CGroup/,$p' | head -6 | sed 's/^/    /'
+      echo "  Si le PID $tenant figure dans le cgroup ci-dessus, c'est MA remontée qui échoue"
+      echo "  — envoyez ce bloc. Sinon c'est un orphelin :   sudo kill -9 $tenant && make up"
       statut=1
     fi
   fi
