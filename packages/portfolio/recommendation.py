@@ -17,6 +17,13 @@ from pathlib import Path
 import numpy as np
 
 from packages.portfolio.conviction import scenario_conviction
+from packages.portfolio.indicateurs import (
+    bornes_52_semaines,
+    correlation_moyenne,
+    performance_realisee,
+    positions_effectives,
+    ratio_diversification,
+)
 from packages.portfolio.filtre_resultats import FENETRE_DEFAUT, ecarter
 from packages.portfolio.user_analysis import (
     ALIGNEMENT,
@@ -121,7 +128,8 @@ def lien_source(symbole: str) -> str:
 
 
 def _lignes(symboles: list[str], meta: dict[str, dict], poids: dict,
-            alias: dict[str, str] | None = None) -> list[dict]:
+            alias: dict[str, str] | None = None,
+            series: dict[str, dict[str, float]] | None = None) -> list[dict]:
     """Chaque ligne porte de quoi IDENTIFIER l'instrument, pas seulement le pondérer.
 
     `name` reste None quand il est absent, au lieu de retomber sur le ticker. Afficher
@@ -139,6 +147,9 @@ def _lignes(symboles: list[str], meta: dict[str, dict], poids: dict,
              "lien": lien_source((alias or {}).get(s) or s),
              "score": meta.get(s, {}).get("score"),
              "reason": meta.get(s, {}).get("reason", ""),
+             # Bornes 52 semaines : un constat, pas un objectif de cours. La distance au
+             # plus haut se lit sans contexte — −40 % exige +67 % pour revenir.
+             **bornes_52_semaines((series or {}).get(s, {})),
              **{profil: round(float(vecteur[i]), 6) for profil, vecteur in poids.items()}}
             for i, s in enumerate(symboles)]
 
@@ -387,9 +398,19 @@ def recommander(screen: dict, n: int = 15, years: int = 5, plafond: float = 0.20
                                     moderation["facteur"])
                    for nom, vecteur in poids.items()}
     poids = {nom: c["poids"] for nom, c in contraintes.items()}
+    # Ratios de STRUCTURE (ce que la matrice implique aujourd'hui) et performance RÉALISÉE
+    # (ce qui s'est produit). Les deux sont des constats ; aucun n'est une prévision.
+    for nom, contrainte in contraintes.items():
+        vecteur = contrainte["poids"]
+        contrainte |= {
+            "ratio_diversification": ratio_diversification(vecteur, covariance),
+            "positions_effectives": positions_effectives(vecteur),
+            "correlation_moyenne": correlation_moyenne(covariance),
+            **performance_realisee(retenus, symboles, vecteur),
+        }
     return {
         "available": True, "symbols": symboles, "aliases": aliases,
-        "rows": _lignes(symboles, meta, poids, aliases),
+        "rows": _lignes(symboles, meta, poids, aliases, retenus),
         "scenarios": {profil: [round(float(v), 6) for v in vecteur]
                       for profil, vecteur in poids.items()},
         "as_of": dates[-1], "start": dates[0], "n_observations": len(dates) - 1,

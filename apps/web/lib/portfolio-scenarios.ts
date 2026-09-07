@@ -25,6 +25,9 @@ const LABELS: Record<ScenarioKind, [string, string]> = {
 };
 
 const norm = (value: string) => value.toUpperCase().replace(/[-/]/g, "");
+// Libellé de la ligne de trésorerie. Nommé une fois : le turnover DOIT pouvoir l'exclure,
+// et une chaîne recopiée à deux endroits finit par diverger de son test.
+export const LIQUIDITES = "Liquidités";
 
 function capWeights(raw: number[], cap: number): { weights: number[]; triggers: number; averageEffect: number } | null {
   if (raw.length * cap < 1 - 1e-9) return null;
@@ -85,13 +88,19 @@ export function buildScenario(snapshot: PortfolioSnapshot, optimal: any, kind: S
     // lirait comme une erreur d'arrondi plutôt que comme la contrainte qu'on a demandée.
     const cash = Number(precontraint?.cash ?? 0);
     if (cash > 1e-6)
-      weights.push({ symbol: "Liquidités", current: 0, proposed: cash, delta: cash });
+      weights.push({ symbol: LIQUIDITES, current: 0, proposed: cash, delta: cash });
     const retenus = new Set(symbols.map(norm));
     for (const [cle, position] of imported)
       if (!retenus.has(cle) && position.weight > 0)
         weights.push({ symbol: position.ticker, current: position.weight, proposed: 0, delta: -position.weight });
   }
-  const turnover = weights.reduce((sum, row) => sum + Math.abs(row.delta), 0) / 2;
+  // LES LIQUIDITÉS NE SE NÉGOCIENT PAS. Ajouter la ligne cash au tableau — pour rendre
+  // visible l'exposition réduite par le profil — l'a fait compter comme un ACHAT : le
+  // turnover ressortait à 100 % sur les trois profils alors qu'ils investissent de 37 % à
+  // 81 %, et le coût estimé était surévalué d'autant (07/09). Le cash est ce qui RESTE
+  // après les ventes, pas un instrument qu'on acquiert.
+  const negociees = weights.filter((row) => row.symbol !== LIQUIDITES);
+  const turnover = negociees.reduce((sum, row) => sum + Math.abs(row.delta), 0) / 2;
   return { kind, label, method, weights, turnover, estimatedCost: portfolioValue == null ? null : portfolioValue * turnover * costBps / 10_000,
     breaches: constrained.triggers, averageCapEffect: constrained.averageEffect, available: true };
 }

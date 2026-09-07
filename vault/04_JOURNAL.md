@@ -1,5 +1,34 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 26) — Ratios de structure, et un turnover que j'avais faussé
+
+**Défaut introduit hier soir, trouvé dans la capture d'écran.** Le turnover affichait 100 % sur
+les trois profils alors qu'ils investissent de 37,6 % à 81,1 %. Cause : la ligne « Liquidités »,
+ajoutée pour rendre visible l'exposition réduite par le profil, était comptée comme un ACHAT dans
+`Σ|Δ|/2`. Le cash est ce qui RESTE après les ventes, pas un instrument qu'on acquiert. Corrigé :
+68,8 % au lieu de 100 %, coût 103 € au lieu de 150 € — une surestimation de 45 %.
+
+**Ratios ajoutés — tous des constats, aucun n'est une prévision.** `packages/portfolio/indicateurs`.
+
+*Par ligne* : plus haut / plus bas 52 semaines, position dans la bande, et distance au plus haut.
+Ce dernier est le seul qui se lise sans contexte : −40 % exige +67 % pour revenir, asymétrie que
+le pourcentage de baisse masque.
+
+*Par allocation* : volatilité annualisée, **ratio de diversification** (Σwᵢσᵢ)/σₚ — vaut 1,0 quand
+tout bouge ensemble, et dix lignes n'y valent alors pas mieux qu'une —, **positions effectives**
+(1/Σw², qui corrige le nombre de lignes de leur concentration : quatorze dont une à 38 % n'en valent
+que 5,7), corrélation moyenne des paires, et Sharpe RÉALISÉ.
+
+**Ce qui a été refusé : l'objectif de cours.** Il faudrait le déduire d'un nom ou l'acheter à un
+tiers, et sa valeur prédictive n'est mesurée nulle part ici. Le publier à côté d'une allocation
+contredirait le résultat du jour même — IC +0,0202, t = 0,76. Le Sharpe réalisé est le cas limite :
+c'est un constat, mais il se lit comme une promesse ; il voyage donc avec un avertissement dans la
+charge utile elle-même, pas dans un commentaire, et son biais est nommé — l'allocation a été
+choisie EN CONNAISSANT ces prix.
+
+`PortfolioScenarios.tsx` atteignait 404 lignes : panneaux extraits dans `PortfolioPanneaux.tsx`
+(207 + 220). 10 tests dédiés ; 2106 passés ; build vert.
+
 ## Session 2026-09-07 (suite 25) — Vérifier tôt : une garde tardive coûte tout ce qu'elle laisse faire
 
 Trois messages d'échec, une seule cause : l'unité systemd n'avait pas été réinstallée. Le contrôle
