@@ -26,6 +26,12 @@
       MESURER l'IC hors échantillon du score de sélection (`packages/research/information_coefficient.py`
       existe ; il manque l'historique des scores) — tant que ce n'est pas fait, la carte reste
       étiquetée non validée OOS. P1.
+- [ ] **P1 — deux sources de prix pour le même univers** (07/09) : `_screen_section` lit le
+      `panel` en mémoire du snapshot, `packages/portfolio/recommendation.py` lit
+      YAHOO.db/crypto.db via `load_bars`. Des tickers screenés (EVHC, SCG — délistés 2018/2019)
+      n'ont donc aucun historique côté recommandation. Soit passer le panel à la recommandation
+      (comme `/analyze` reçoit `series_by_symbol`), soit exclure du screening ce que le loader
+      ne sait pas charger. Mesurer d'abord combien de candidats sont concernés un jour normal.
 
 - [x] **Copilote IA read-only (2026-08-29)** : chat global contextualisé par page, scopes/outils
       bornés, positions détaillées en opt-in, citations/as-of, garde numérique stricte et compteurs

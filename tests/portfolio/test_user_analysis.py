@@ -82,3 +82,27 @@ def test_alignement_sans_remplissage_et_etiquette_conforme():
     assert dates == ["2025-01-01", "2025-01-02"]          # le 03 n'est pas comblé
     assert matrix.shape == (2, 2)
     assert user_analysis.ALIGNEMENT == "intersection de dates, aucun remplissage"
+
+
+def test_paires_en_usdc_mènent_a_la_variante_usd():
+    """Le screening publie `TRX/USDC`, `BTC/USDC`… La base stocke `{base}-USD`.
+
+    MESURÉ le 07/09 : 7 des 15 candidats du jour partaient en « sans historique
+    exploitable » parce que seul le suffixe `USDT` était reconnu. Normalisées, ces paires
+    contenaient un tiret, et la variante `-USD` n'était jamais tentée."""
+    from packages.portfolio.user_analysis import _aliases
+    for paire, base in [("TRX/USDC", "TRX"), ("BTC/USDC", "BTC"), ("SOL/USDC", "SOL"),
+                        ("ETH/USDT", "ETH"), ("BNB-BUSD", "BNB"), ("LINK/FDUSD", "LINK")]:
+        assert f"{base}-USD" in _aliases(paire), paire
+
+
+def test_la_devise_la_plus_longue_est_testee_en_premier():
+    """Tester « USD » avant « USDC » amputerait `TRX-USDC` en `TRX-C`."""
+    from packages.portfolio.user_analysis import _aliases
+    assert "TRX-USD" in _aliases("TRX/USDC") and "TRX-C-USD" not in _aliases("TRX/USDC")
+
+
+def test_une_classe_d_action_n_est_pas_prise_pour_une_paire():
+    """`BRK-B` contient un tiret mais n'est pas coté en dollar : aucune variante inventée."""
+    from packages.portfolio.user_analysis import _aliases
+    assert _aliases("BRK-B") == ["BRK-B"]

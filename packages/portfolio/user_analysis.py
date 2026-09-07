@@ -17,27 +17,45 @@ from packages.portfolio.optimize import (
 MIN_OBSERVATIONS = 60
 
 
+# Devises de cotation rencontrées dans les paires crypto. Triées par LONGUEUR décroissante :
+# tester « USD » avant « USDC » amputerait « TRX-USDC » en « TRX-C ».
+DEVISES_DE_COTATION = ("FDUSD", "USDC", "USDT", "BUSD", "USD")
+
+
+def _base_crypto(clean: str) -> str:
+    """Base d'une paire cotée en dollar, ou le symbole inchangé si ce n'en est pas une."""
+    for devise in DEVISES_DE_COTATION:
+        if clean.endswith("-" + devise):
+            return clean[: -(len(devise) + 1)]
+        if "-" not in clean and clean.endswith(devise) and len(clean) > len(devise):
+            return clean[: -len(devise)]
+    return clean
+
+
 def _aliases(symbol: str) -> list[str]:
-    """Variantes à essayer, dans l'ordre. `ETH` doit produire `ETH-USD`.
+    """Variantes à essayer, dans l'ordre. `ETH`, `ETHUSDT` et `ETH/USDC` doivent tous
+    mener à `ETH-USD`, le format que `data/crypto.db` stocke (cf. `scripts/ingest_crypto.py`).
 
-    MESURÉ le 06/09 : un ticker crypto NU (« ETH », « BTC », tel que l'utilisateur le
-    saisit) ne produisait que lui-même. Or `data/crypto.db` stocke le format yfinance
-    `{base}-USD` (cf. `scripts/ingest_crypto.py::_ingerer`). Aucune variante `-USD`
-    n'était tentée hors des symboles finissant par `USDT` : un portefeuille mixte
-    actions + crypto tombait donc systématiquement en « historique insuffisant », et
-    l'étape 4 entière restait vide.
+    MESURÉ le 06/09 : un ticker crypto NU ne produisait que lui-même, alors que la base
+    stocke `{base}-USD` — un portefeuille mixte tombait en « historique insuffisant ».
+    MESURÉ le 07/09 : le correctif ne couvrait que le suffixe `USDT`. Le screening publie
+    aussi des paires en USDC (`TRX/USDC`, `BTC/USDC`…) : normalisées en `TRX-USDC`, elles
+    contenaient un tiret, la variante `-USD` n'était donc jamais tentée, et 7 des 15
+    candidats du jour partaient en « sans historique exploitable ». La devise de cotation
+    est désormais reconnue quelle qu'elle soit, séparateur ou non.
 
-    Le suffixe est ajouté à TOUT symbole court sans suffixe connu : pour une action,
-    l'alias nu répond en premier et `-USD` n'est jamais essayé (`_load` sort au
-    premier succès) — le coût est nul là où ça marche déjà.
+    Pour une action, l'alias nu répond en premier et `-USD` n'est jamais essayé (`_load`
+    sort au premier succès) — le coût est nul là où ça marche déjà.
     """
     clean = symbol.upper().replace("/", "-")
-    aliases = [clean]
-    if clean.endswith("USDT"):
-        aliases += [f"{clean[:-4]}-USD", clean[:-4]]
-    elif not clean.endswith("-USD") and "-" not in clean and not clean.startswith("CASH:"):
-        aliases.append(f"{clean}-USD")
-    return list(dict.fromkeys(aliases))
+    if clean.startswith("CASH:"):
+        return [clean]
+    base = _base_crypto(clean)
+    if base != clean:
+        return list(dict.fromkeys([clean, f"{base}-USD", base]))
+    if "-" not in clean:
+        return list(dict.fromkeys([clean, f"{clean}-USD"]))
+    return [clean]
 
 
 def _bars_crypto(symbole: str, years: int) -> list:

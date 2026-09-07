@@ -1,5 +1,25 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 10) — Les paires en USDC amputaient la moitié de la recommandation
+
+Écran réel : « 6/15 lignes retenues · 9 sans historique exploitable (EVHC, SCG, TRX/USDC,
+LINK/USDC, INJ/USDC, BNB/USDC, BTC/USDC, SOL/USDC, ETH/USDC) ». Sept des neuf sont des paires
+crypto cotées en USDC. Le correctif du 06/09 ne reconnaissait que le suffixe `USDT` : normalisée,
+`TRX/USDC` devient `TRX-USDC`, contient un tiret, et la branche qui ajoute `-USD` était donc
+sautée. La moitié de la sélection du jour tombait pour un suffixe.
+
+`_base_crypto` reconnaît maintenant la devise de cotation quelle qu'elle soit (FDUSD, USDC, USDT,
+BUSD, USD), avec ou sans séparateur, **triée par longueur décroissante** — tester « USD » avant
+« USDC » amputerait `TRX-USDC` en `TRX-C`. Une classe d'action comme `BRK-B` n'est pas prise pour
+une paire : aucune variante inventée. Trois tests ajoutés.
+
+Restent EVHC et SCG, deux tickers délistés (2018 et 2019) que le screening remonte alors que
+`load_bars` ne les trouve pas : le screener lit le `panel` en mémoire du snapshot, la
+recommandation lit YAHOO.db/crypto.db. **Deux sources différentes pour le même univers** — à
+traiter, noté au TODO. Ce n'est pas corrigé ici et la carte continue de les nommer.
+
+232 tests portefeuille passés.
+
 ## Session 2026-09-07 (suite 9) — Services systemd : l'orphelin ne peut plus naître
 
 **Défaut trouvé dans ma propre garde avant de livrer.** Après avoir tué l'orphelin nommé par le
