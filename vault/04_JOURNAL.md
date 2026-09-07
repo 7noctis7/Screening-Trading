@@ -1,5 +1,23 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 19) — 517 noms écrits, et un refus de signer la liste des 77
+
+`make noms-univers` a écrit 517 noms sur 594. Les 77 restants sont classés « inconnu du
+fournisseur » sur la foi de 404 explicites (« Quote not found for symbol: SEE »), ce qui est un
+INDICE de délistage — pas une preuve. `BK` et `CMA` figurent dans cette liste, et rien ici ne
+permet d'affirmer qu'ils sont morts. Un fournisseur peut ignorer un ticker parfaitement coté
+(changement de place, suffixe, panne de son côté).
+
+Le risque d'une purge sur cette seule base est ASYMÉTRIQUE : un titre retiré à tort ne se signale
+jamais, il manque simplement — et rien ne le détecte ensuite. D'où `make audit-univers`, en lecture
+seule, qui tranche sur les PRIX locaux : un titre délisté cesse d'avoir des barres.
+
+Le seuil est RELATIF à la barre la plus fraîche de l'univers, jamais à l'horloge : un seuil absolu
+déclarerait tout l'univers périmé un lundi férié ou après une semaine sans ingestion. C'est la règle
+déjà appliquée par `build_snapshot`, reprise et non réinventée. Trois catégories, dont une pour
+l'ignorance : vivants, périmés, et sans aucune barre locale — ne pas savoir n'est pas savoir à
+moitié. 5 tests.
+
 ## Session 2026-09-07 (suite 18) — `ABC → Abell Coin USD` : le repli crypto contaminait les actions
 
 Une ligne du dry-run réel a tout arrêté :
