@@ -8,17 +8,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 # shellcheck disable=SC1091
-source .venv/bin/activate 2>/dev/null || true
-
-export QUANT_PRICE_DB="${QUANT_PRICE_DB:-$HOME/Desktop/YAHOO.db}"
-export QUANT_FUND="${QUANT_FUND:-yf}"
-export QUANT_NEWS="${QUANT_NEWS:-1}"
-export QUANT_HISTORY_DAYS="${QUANT_HISTORY_DAYS:-4015}"
-# Sources crypto/marchés GRATUITES (sans clé) — ON par défaut (comme en CI/`make site`) ;
-# mettre QUANT_CRYPTO=0 etc. pour couper (ex. hors-ligne). Best-effort : n/d si injoignable.
-export QUANT_CRYPTO="${QUANT_CRYPTO:-1}"               # cockpit crypto (/crypto)
-export QUANT_PREDMKT="${QUANT_PREDMKT:-1}"             # marchés de prédiction (/macro)
-# QUANT_CORE_SPEC / QUANT_DD_TARGET : respectés s'ils sont définis dans l'environnement (sinon défaut code).
+source scripts/env_quant.sh      # venv + variables QUANT_* — partagé avec les services systemd
 
 # ON MET À JOUR LA BRANCHE OÙ L'ON EST — pas `main`. Le forçage sur `main` visait un vrai
 # danger (une branche de travail restée en arrière, et `make start` qui ramenait du code vieux
@@ -75,10 +65,21 @@ bash scripts/stop_services.sh
 _port_reservable() {
   python3 - "$1" <<'PYEOF' 2>/dev/null
 import socket, sys
-s = socket.socket()
-s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)   # mêmes options que Node
+# RÉPLIQUER NODE EXACTEMENT, pas approximer. Un `server.listen(port)` de Node se lie à
+# `::` en DOUBLE PILE (IPV6_V6ONLY=0). Tester `0.0.0.0` ne teste donc pas la même chose :
+# un détenteur lié à `::` en IPv6-only laisse l'IPv4 libre, mon test réussissait et Next
+# échouait juste après — la garde restait muette sur le cas exact qu'elle devait attraper
+# (07/09, VPS avec IPv6 actif). Repli sur IPv4 là où AF_INET6 n'existe pas (conteneurs).
+port = int(sys.argv[1])
 try:
-    s.bind(("0.0.0.0", int(sys.argv[1])))
+    s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+    s.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+    hote = "::"
+except OSError:
+    s, hote = socket.socket(), "0.0.0.0"
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+try:
+    s.bind((hote, port))
 except OSError:
     sys.exit(1)
 finally:

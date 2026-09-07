@@ -1,5 +1,36 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 9) — Services systemd : l'orphelin ne peut plus naître
+
+**Défaut trouvé dans ma propre garde avant de livrer.** Après avoir tué l'orphelin nommé par le
+diagnostic, `make start` repartait sur 3001 SANS que la garde signale quoi que ce soit : mon test
+réussissait là où Node échoue. Cause : je testais un bind sur `0.0.0.0` (IPv4) alors que
+`server.listen(port)` de Node se lie à `::` en double pile. Un détenteur lié à `::` en IPv6-only
+laisse l'IPv4 libre — le test passait, Next échouait une seconde plus tard, et la garde restait
+muette sur le cas exact qu'elle devait attraper. Le test réplique désormais Node (AF_INET6,
+IPV6_V6ONLY=0), avec repli IPv4 là où AF_INET6 n'existe pas. Non reproduit ici : le conteneur de
+développement n'a pas d'IPv6 ; c'est un raisonnement vérifié sur le mécanisme, pas une mesure.
+
+**Services livrés.** `quant-api.service` et `quant-web.service`, installés par
+`scripts/install_services.sh` (`make services`) qui GÉNÈRE les unités avec le vrai utilisateur et
+le vrai chemin plutôt que de les coder en dur, refuse de tourner sous root, et arrête d'abord les
+processus lancés à la main. `Restart=always`, démarrage au boot, arrêt propre.
+
+**Trois décisions.** (1) Front en mode PRODUCTION (`build` + `next start`) et non `next dev` : c'est
+l'enfant `next-server` du serveur de développement qui survivait à chaque déconnexion. Contrepartie
+assumée : `sudo systemctl restart quant-web` après un `make sync`, d'où `TimeoutStartSec=900`.
+(2) `QUANT_BIND_HOST=127.0.0.1` pour l'API ET le front : le dépôt est public, la page affiche des
+positions réelles, l'API n'a aucune authentification — accès par tunnel SSH, jamais par un port
+ouvert. (3) `STATIC_EXPORT`/`NEXT_PUBLIC_STATIC` explicitement neutralisés dans `svc_web.sh` :
+systemd charge le `.env` du dépôt, et une de ces variables y traînant produirait un build exporté
+que `next start` ne sait pas servir — panne sans rapport visible avec sa cause.
+
+L'environnement (venv + variables QUANT_*) est extrait dans `scripts/env_quant.sh`, sourcé par
+`start.sh` et par les deux services : une seule définition, aucune divergence possible.
+
+Vérifié : `next start` sert `/analyse-portefeuille/` en HTTP 200 sur le build serveur.
+272 tests passés (portefeuille + API).
+
 ## Session 2026-09-07 (suite 8) — Le coupable nommé : un `next-server` orphelin que `make stop` n'a jamais tué
 
 Le diagnostic tardif a livré la ligne décisive :

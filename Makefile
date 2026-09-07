@@ -39,6 +39,12 @@ preview:          ## régénère les aperçus HTML du dashboard/portefeuille
 	$(PYTHON) apps/web/preview/build_preview.py
 start:            ## TOUT EN UNE COMMANDE : maj code + kill vieux process + API (fond) + site
 	bash scripts/start.sh
+services:         ## installe API+front en services systemd (survivent à la déconnexion SSH)
+	sudo bash scripts/install_services.sh
+services-restart: ## relance les services après un `make sync` (reconstruit le front)
+	sudo systemctl restart quant-api quant-web && systemctl --no-pager status quant-api quant-web | head -20
+services-logs:    ## suit les logs des services
+	journalctl -u quant-web -u quant-api -f
 stop:             ## arrête l'API et le site (uvicorn + next dev)
 	@bash scripts/stop_services.sh; echo "arrêté"
 api:              ## lance l'API FastAPI (localhost) — STABLE, sans reload (évite l'OOM pendant make daily)
