@@ -16,6 +16,7 @@ import { PageSkeleton } from "@/components/ui";
 import { statsFrom, rebase } from "@/lib/metrics";
 import CompositionModeleVsReel from "@/components/CompositionModeleVsReel";
 import EcartReplication from "@/components/EcartReplication";
+import { DateArrete } from "@/components/DateArrete";
 
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 // Fenêtre lisible à partir du nombre de points quotidiens. Affichée sur CHAQUE ligne : sans
@@ -97,6 +98,7 @@ export default function Dashboard() {
           style={{ background: "color-mix(in srgb, var(--accent) 16%, transparent)", color: "var(--accent2)" }}>
           stratégie : {d.strategy_label}</span>}</h1>
       <StepBanner active="screener" />
+      <DateArrete date={d.as_of} quoi="Chiffres du tableau de bord" />
       <RegimeBanner regime={d.regime} />
       <SentimentBanner sentiment={sent} />
       <VixPlaybook vix={d.vix} playbook={d.vix_playbook} series={d.vix_series} />
@@ -119,7 +121,18 @@ export default function Dashboard() {
           style={{ background: "color-mix(in srgb, var(--warn) 18%, transparent)", color: "var(--warn)" }}>
           Modélisé
         </span>
-        <span className="text-muted2">simulation de la stratégie sur ~10 ans de prix réels, frais déduits — ce n'est pas de l'argent réel · votre argent réel est sur <a href="/positions" className="text-accent">/positions</a></span>
+        <span className="text-muted2">simulation de la stratégie sur des prix réels, frais déduits — ce n'est pas de l'argent réel · votre argent réel est sur <a href="/positions" className="text-accent">/positions</a></span>
+        {/* La fenêtre EN TOUTES LETTRES sous les tuiles. Sans elle, trois « gain / risque »
+            différents cohabitaient sur la même page — 2,43 ici, 1,07 dans le bandeau
+            honnêteté, 0,98 pour la stratégie seule — et rien ne disait qu'ils ne portaient
+            pas sur la même période. On lisait une contradiction là où il n'y avait que
+            trois questions différentes. */}
+        <span className="w-full text-muted2">
+          Ces cinq chiffres portent sur <b>{fenetre((m as any)?.n)}</b>
+          {sliced.length > 1 && <> — du {new Date(sliced[0].t).toLocaleDateString("fr-FR")} au {new Date(sliced[sliced.length - 1].t).toLocaleDateString("fr-FR")}</>}
+          {" "}(bouton « Période » ci-dessus). Les autres « gain / risque » de la page portent
+          sur d'autres fenêtres : chacun le dit à côté de lui.
+        </span>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <MetricCard hero label="Gain total" value={pct(m.total_return)} tone={m.total_return >= 0 ? "pos" : "neg"} delta={dPts(m.total_return, prevStats?.total_return)}
@@ -360,6 +373,8 @@ export default function Dashboard() {
         <section className="card p-4 overflow-x-auto">
           <h2 className="text-sm uppercase tracking-wide text-muted mb-1">Un socle d'indices, et la stratégie autour</h2>
           <p className="text-muted2 text-xs mb-3">
+            <b>Attention, autre fenêtre</b> : ce tableau compare les deux approches sur tout
+            l'historique disponible, pas sur la période choisie en haut de page.{" "}
             L'idée : une grosse part placée sur des indices larges, qui bouge peu, et le reste confié
             à la stratégie. Répartition en cours : <b style={{ color: "#22d3ee" }}>
             {(d.index_core.components ?? []).map((c: any) => `${Math.round(c.pct * 100)}% ${c.kind.toUpperCase()}`).join(" + ")}

@@ -582,7 +582,17 @@ def events() -> dict:
             ipos = upcoming_ipos()
         except Exception as e:  # noqa: BLE001
             log.warning("upcoming_ipos failed: %s", e); ipos = []
+        # FENÊTRE D'EXCLUSION — publiée pour que le calendrier puisse la DIRE.
+        #
+        # La recommandation écarte déjà les candidats dont les résultats tombent dans les
+        # jours qui viennent : un résultat trimestriel est un tirage binaire, pas un signal.
+        # Mais le lien n'était visible d'aucun côté — le calendrier ne disait pas « ce titre
+        # est en ce moment écarté des recommandations », et la recommandation ne disait pas
+        # « écarté à cause d'une publication mardi ». On publie donc LA MÊME constante, pas
+        # une copie : deux nombres qui dériveraient l'un de l'autre seraient pires que rien.
+        from packages.portfolio.filtre_resultats import FENETRE_DEFAUT as _fenetre_blackout
         _EVENTS = {"available": bool(earn or ipos), "earnings": earn, "ipos": ipos,
+                   "blackout_jours": _fenetre_blackout,
                    "n_symbols": len(eq), "fmp": bool(os.environ.get("FMP_API_KEY")),
                    "fmp_earnings": any(e.get("source") == "FMP" for e in earn),
                    "fmp_ipos": any(p.get("source") == "FMP" for p in ipos),

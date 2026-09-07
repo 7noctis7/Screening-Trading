@@ -59,15 +59,17 @@ def test_les_tableaux_defilent_dans_eux_memes_sur_mobile() -> None:
     regle = re.search(r"(?<![\w.\-#\[])table\s*\{([^}]*)\}", bloc, re.S)
     assert regle, (
         "Plus de règle `table` dans le bloc mobile : les tableaux larges redeviennent "
-        "coupés et injoignables (mesuré : jusqu'à 492 px hors écran sur /fundamentals)."
+        "coupés et injoignables (mesuré : jusqu'à 492 px hors écran sur "
+        "/fundamentals)."
     )
     corps = regle.group(1)
     assert "overflow-x:auto" in corps.replace(" ", ""), (
-        "Le tableau doit défiler horizontalement DANS lui-même — sinon `overflow-x:clip` "
-        "sur body coupe ce qui dépasse sans laisser d'accès."
+        "Le tableau doit défiler horizontalement DANS lui-même — sinon "
+        "`overflow-x:clip` sur body coupe ce qui dépasse sans laisser d'accès."
     )
     assert "display:block" in corps.replace(" ", ""), (
-        "Sans `display:block`, un `<table>` ignore `overflow-x` : la règle serait inerte."
+        "Sans `display:block`, un `<table>` ignore `overflow-x` : la règle "
+        "serait inerte."
     )
     assert "min-width:100%" in corps.replace(" ", ""), (
         "Sans `min-width:100%`, un tableau étroit se rétracte à son contenu au lieu de "
@@ -76,15 +78,21 @@ def test_les_tableaux_defilent_dans_eux_memes_sur_mobile() -> None:
 
 
 def test_les_bulles_d_aide_ne_sortent_pas_de_l_ecran() -> None:
-    """Une bulle de 240 px centrée sur son icône déborde dès que l'icône est à moins de
-    120 px du bord — le cas ordinaire en colonne de droite. Mesuré : 99 px de texte
-    coupés, donc illisibles. Sur mobile elle se pose en bas de l'écran, pleine largeur."""
+    """Une bulle de 240 px centrée sur son icône déborde dès que l'icône est à
+    moins de 120 px du bord — le cas ordinaire en colonne de droite. Mesuré :
+    99 px de texte coupés, donc illisibles. Sur mobile elle se pose en bas de
+    l'écran, pleine largeur."""
     bloc = _bloc_mobile(CSS.read_text(encoding="utf-8"))
     regle = re.search(r'\[role="tooltip"\]\s*\{([^}]*)\}', bloc, re.S)
-    assert regle, "Plus de règle mobile pour [role=\"tooltip\"] : les bulles d'aide redeviennent coupées."
+    assert regle, (
+        "Plus de règle mobile pour [role=\"tooltip\"] : les bulles d'aide "
+        "redeviennent coupées."
+    )
     corps = regle.group(1).replace(" ", "")
     assert "position:fixed" in corps, "La bulle doit quitter l'ancrage sur son icône."
-    assert "left:14px" in corps and "right:14px" in corps, "La bulle doit occuper la largeur de l'écran."
+    assert "left:14px" in corps and "right:14px" in corps, (
+        "La bulle doit occuper la largeur de l'écran."
+    )
 
 
 def test_les_marges_respectent_l_encoche_en_paysage() -> None:
@@ -94,5 +102,6 @@ def test_les_marges_respectent_l_encoche_en_paysage() -> None:
     bloc = _bloc_mobile(CSS.read_text(encoding="utf-8")).replace(" ", "")
     for bord in ("left", "right"):
         assert f"padding-{bord}:max(14px,env(safe-area-inset-{bord}))" in bloc, (
-            f"La marge {bord} de `main` ignore l'encoche : en paysage, le texte passe dessous."
+            f"La marge {bord} de `main` ignore l'encoche : en paysage, le texte "
+            f"passe dessous."
         )

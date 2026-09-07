@@ -3,6 +3,7 @@ import { StepBanner } from "@/components/Pipeline";
 import { useData } from "@/lib/api";
 import { PageSkeleton } from "@/components/ui";
 import { IR } from "@/lib/ir";
+import { DateArrete } from "@/components/DateArrete";
 
 const nb = (x?: number) => (x ?? 0).toLocaleString("fr-FR");
 const dt = (s?: string) => (s ? String(s).slice(0, 10) : "—");
@@ -30,6 +31,7 @@ export default function DataPage() {
         </p>
       </div>
       <StepBanner active="data" />
+      <DateArrete date={d.as_of} quoi="Historiques de prix" />
       {d.survivorship?.available && (
         <div className="card p-3 text-sm flex items-start gap-2"
           style={{ borderColor: d.survivorship.corrected ? "var(--pos)" : "var(--warn)" }}>

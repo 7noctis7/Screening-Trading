@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { useEvents } from "@/lib/api";
 import { PageSkeleton, EmptyState } from "@/components/ui";
 import { IR } from "@/lib/ir";
+import { DateArrete } from "@/components/DateArrete";
 
 // étiquettes de suivi : couleur, emoji et description (pour la légende + filtre)
 const TAGS: Record<string, { c: string; bg: string; emoji: string; desc: string }> = {
@@ -15,6 +16,16 @@ const TAGS: Record<string, { c: string; bg: string; emoji: string; desc: string 
 };
 const TAGC = (t: string): [string, string] => [TAGS[t]?.c ?? "#9aa1ad", TAGS[t]?.bg ?? "color-mix(in srgb,#9aa1ad 16%,transparent)"];
 const dt = (s?: string) => (s ? String(s).slice(0, 10) : "—");
+// Une publication à venir dans la fenêtre d'exclusion : le titre est écarté des
+// recommandations jusqu'à ce qu'elle soit passée. La fenêtre vient de l'API — c'est la
+// MÊME constante que celle appliquée côté moteur, jamais une copie recalculée ici.
+function enBlackout(date?: string, jours?: number | null): boolean {
+  if (!date || !jours) return false;
+  const t = Date.parse(String(date).slice(0, 10));
+  if (!Number.isFinite(t)) return false;
+  const ecart = (t - Date.now()) / 86_400_000;
+  return ecart >= -0.5 && ecart <= jours;
+}
 const eps = (x?: number | null) => (x == null ? "—" : `$${x.toFixed(2)}`);
 const big = (x?: number | null) => {
   if (x == null) return "—";
@@ -92,6 +103,7 @@ export default function Events() {
           les sociétés qui s'apprêtent à entrer en bourse.
         </p>
       </div>
+      <DateArrete date={data.as_of} quoi="Calendrier" />
       <p className="text-muted text-xs">
         Sont listées : les sociétés que vous détenez, les 5 % les mieux notées du site, et les autres
         entreprises suivies. Les entrées en bourse viennent des dossiers officiels déposés auprès du
@@ -108,6 +120,15 @@ export default function Events() {
       {/* ===== RÉSULTATS TRIMESTRIELS ===== */}
       <section className="card p-4 overflow-x-auto">
         <h2 className="text-sm uppercase tracking-wide text-muted mb-1">📅 Prochains résultats trimestriels ({earnRows.length}/{earnings.length})</h2>
+        {data.blackout_jours != null && (
+          <p className="text-xs mb-2" style={{ color: "var(--warn)" }}>
+            ⏸ Une société qui publie dans les <b>{data.blackout_jours} jours</b> est
+            automatiquement <b>écartée des recommandations</b> : un résultat trimestriel fait
+            bouger le cours dans un sens ou dans l'autre selon ce qu'il contient, et personne
+            ne sait lequel à l'avance. Ce n'est pas un avis sur l'entreprise, c'est un refus de
+            jouer à pile ou face. Les lignes concernées portent la pastille ⏸ ci-dessous.
+          </p>
+        )}
         <p className="text-muted2 text-xs mb-2">D'abord ce que les analystes <b>attendent</b>, puis ce que l'entreprise <b>annonce vraiment</b> le jour venu. La « surprise » est l'écart entre les deux : c'est souvent elle qui fait bouger le cours, pas le résultat lui-même. Pour les publications à venir, elle affiche « — », c'est normal.
         {!data.fmp_earnings && <> · <span className="text-muted2">Avec la source gratuite, le <b>chiffre d'affaires réellement annoncé</b> n'est disponible que pour le dernier trimestre publié ; un abonnement FMP le fournirait pour tous.</span></>}</p>
         {/* LÉGENDE des étiquettes « Suivi » */}
@@ -156,7 +177,11 @@ export default function Events() {
               <td className="py-1.5"><span style={{ color: e._when === "à venir" ? "#22d3ee" : "#9aa1ad" }}>{dt(e.date)}</span></td>
               <td><IR ticker={e.symbol} name={e.name} className="text-accent hover:underline" /></td>
               <td className="font-sans text-xs text-muted2 max-w-[180px] truncate">{e.name || "—"}</td>
-              <td className="pl-2 font-sans">{((e.tags ?? []).length === 0 ? ["base"] : e.tags).map((t: string) => (
+              <td className="pl-2 font-sans">{enBlackout(e.date, data.blackout_jours) && (
+                <span className="text-[10px] px-1 py-0.5 rounded whitespace-nowrap mr-1"
+                  style={{ background: "color-mix(in srgb, #f59e0b 16%, transparent)", color: "#f59e0b" }}
+                  title={`Publie dans moins de ${data.blackout_jours} jours : écartée des recommandations jusqu'à la publication.`}>⏸ écartée</span>)}
+                {((e.tags ?? []).length === 0 ? ["base"] : e.tags).map((t: string) => (
                 <span key={t} className="text-[10px] px-1 py-0.5 rounded mr-1 whitespace-nowrap"
                   style={{ background: TAGC(t)[1], color: TAGC(t)[0] }}>{TAGS[t]?.emoji} {t}</span>))}</td>
               <td className="text-right">{eps(e.eps_estimate)}</td>

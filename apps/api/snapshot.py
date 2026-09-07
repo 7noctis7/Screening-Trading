@@ -124,8 +124,18 @@ def _universe_section(instruments: list[dict]) -> dict:
                       "as_of": datetime.fromtimestamp(path.stat().st_mtime,
                                                       UTC).isoformat()})
     rows = sorted(instruments, key=lambda r: (r["asset_class"], r["symbol"]))
+    # `as_of` répond « de QUAND datent ces données », jamais « quand cette page a été
+    # fabriquée ». Ici il publiait `now()` : la liste d'univers se déclarait donc fraîche
+    # du jour même quand ses fichiers sources n'avaient pas bougé depuis des mois, et
+    # l'inventaire du gate de publication la comptait parmi les blocs à jour. Une
+    # fraîcheur affirmée sans être vraie est pire qu'une date ancienne assumée : elle
+    # empêche de repérer la source qui a cessé d'être rafraîchie.
+    # La date des données = celle du fichier source le plus récent. La date de
+    # fabrication garde sa place, sous son propre nom.
+    dates_seed = [s["as_of"] for s in seeds if s.get("as_of")]
     return {
-        "as_of": datetime.now(UTC).isoformat(),
+        "as_of": max(dates_seed) if dates_seed else None,
+        "genere_le": datetime.now(UTC).isoformat(),
         "rebuild_cadence_days": cfg.get("rebuild_cadence_days"),
         "sources": src_rows,
         "sources_enabled": sum(1 for s in src_rows if s["enabled"]),
@@ -2627,7 +2637,7 @@ def build_snapshot(seed: int = 7) -> dict:
                                             plancher=_min_ligne())
     except Exception:  # noqa: BLE001 — diagnostic, jamais bloquant
         _replication = {"available": False}
-    return {
+    _payload = {
         "meta": {
             "generated_at": now.isoformat(),
             "last_bar": last_bar.isoformat(),
@@ -2734,6 +2744,24 @@ def build_snapshot(seed: int = 7) -> dict:
         "conviction": conviction_sec,
         "live": _live,
     }
+    # DATES D'ARRÊTÉ — un seul endroit, calculé sur le payload FINI.
+    #
+    # Trois dates différentes coexistaient sur le site (18/06 pour le tableau de bord et
+    # les données, 04/09 pour les événements et les thèmes, 02/09 pour le tri) sans que
+    # rien ne l'explique au lecteur. Certaines divergences sont légitimes — une fenêtre de
+    # backtest close n'est pas la donnée du jour, et la crypto cote le samedi quand les
+    # actions non — mais le visiteur qui compare deux onglets n'a aucun moyen de le savoir.
+    # On publie donc l'inventaire complet : le front peut dire, sur chaque page, de quand
+    # datent ses chiffres ET s'ils sont en retard sur le reste du site.
+    try:
+        from packages.common.coherence_site import dates_d_arrete
+        _arretes = dates_d_arrete(_payload)
+        _payload["meta"]["arretes"] = _arretes
+        _payload["meta"]["arrete_le_plus_frais"] = max(_arretes.values()) if _arretes else None
+    except Exception:  # noqa: BLE001 — inventaire d'affichage, jamais bloquant
+        _payload["meta"]["arretes"] = {}
+        _payload["meta"]["arrete_le_plus_frais"] = None
+    return _payload
 
 
 def _earnings_risk(held: list) -> list[dict]:

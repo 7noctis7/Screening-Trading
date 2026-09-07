@@ -9,7 +9,11 @@ import { MetricCard } from "@/components/MetricCard";
 import { SortableTable, type Col } from "@/components/SortableTable";
 import { PageSkeleton, EmptyState } from "@/components/ui";
 import { IR } from "@/lib/ir";
+import { useVerdicts } from "@/lib/verdicts";
+import { VERDICT_LABEL } from "@/lib/plain";
+import { DateArrete } from "@/components/DateArrete";
 
+const TON: Record<string, string> = { bon: "var(--pos)", moyen: "#eab308", prudence: "#f43f5e", inconnu: "#9aa1ad" };
 const pct = (x?: number | null) => (x == null ? "—" : `${(x * 100).toFixed(1)}%`);
 const money = (x?: number | null) => (x == null ? "—" : `${(x / 1e6).toFixed(1)} M$`);
 
@@ -81,6 +85,20 @@ function CandidateModal({ row, factors, onClose }: { row: any; factors: Record<s
             <p className="text-muted2 text-xs">Non détaillé : ce titre passe les filtres, mais il n'est pas assez haut dans le classement pour qu'on ait calculé le détail de sa note.</p>
           )}
         </div>
+        {row._v && (
+          <div className="mt-4 rounded-lg border p-3" style={{ borderColor: TON[row._v.verdict] }}>
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <span className="text-muted text-[11px] uppercase tracking-wide">Ce qu'on en conclut</span>
+              <b style={{ color: TON[row._v.verdict] }}>{row._v.titre}</b>
+              <span className="text-muted2 text-[11px] ml-auto">{VERDICT_LABEL[row._v.verdict as keyof typeof VERDICT_LABEL]} · {row._v.mesures}/6 critères mesurés</span>
+            </div>
+            <p className="text-sm mt-1.5">{row._v.resume}</p>
+            <p className="text-sm text-muted mt-1">{row._v.ordre.phrase}</p>
+            <p className="text-muted2 text-[10px] mt-1.5">
+              Même moteur que la fiche du titre — <a href={`/fiche?sym=${row.symbol}`} className="text-accent">ouvrir la fiche complète</a>.
+            </p>
+          </div>
+        )}
         {row.reason && <p className="text-muted2 text-[11px] mt-3">{row.reason}</p>}
         <div className="mt-4 flex items-center justify-between">
           <IR ticker={row.symbol} name={row.name} assetClass={row.asset_class}
@@ -101,10 +119,18 @@ export default function Screener() {
     for (const r of rk?.rows ?? []) m[r.symbol] = r.factors ?? {};
     return m;
   }, [rk]);
+  const verdicts = useVerdicts(s?.rows);
   const rows = useMemo(() => (s?.rows ?? []).map((r: any) => ({
     ...r, _factors: factorsBySym[r.symbol] ?? null,
     _top: topFactor(factorsBySym[r.symbol]),
-  })), [s, factorsBySym]);
+    _v: verdicts[r.symbol] ?? null,
+    // clé de tri : on veut « Favorable » en haut, « Écarté » en bas, et le nombre de
+    // critères mesurés départage — un favorable sur 6 critères vaut mieux que sur 2.
+    _vrang: verdicts[r.symbol]
+      ? ({ bon: 3, moyen: 2, prudence: 1, inconnu: 0 } as any)[verdicts[r.symbol].verdict] * 10
+        + (verdicts[r.symbol].mesures ?? 0)
+      : -1,
+  })), [s, factorsBySym, verdicts]);
 
   if (!s) return <PageSkeleton />;
   const total = (s.universe_size ?? 0) + (s.excluded_non_investable ?? 0);
@@ -119,6 +145,14 @@ export default function Screener() {
     { key: "sector", label: "Secteur", render: (v, r) => <span className="text-muted text-xs font-sans">{v || r.asset_class}</span> },
     { key: "score", label: "Note", num: true, align: "right",
       render: (v) => <span className="mono" style={{ color: "var(--accent2)" }}>{v?.toFixed(2)}</span> },
+    { key: "_vrang", label: "Ce qu'on en conclut", num: true, align: "left",
+      title: "Même conclusion que la fiche du titre, avec le même moteur : santé des comptes, risque de faillite (bloquant), prix, tendance, signaux, actualité. Un critère sans donnée ne vote pas — d'où le compte de critères mesurés.",
+      csv: (_v, r) => r._v ? `${r._v.titre} (${r._v.mesures}/6)` : "",
+      render: (_v, r) => r._v ? (
+        <span className="inline-flex items-center gap-1.5 text-xs" title={r._v.resume}>
+          <span className="font-sans font-medium" style={{ color: TON[r._v.verdict] }}>{r._v.titre}</span>
+          <span className="text-muted2">{r._v.mesures}/6</span>
+        </span>) : <span className="text-muted2 text-xs">n/d</span> },
     { key: "_top", label: "Ce qui pèse le plus", render: (v) => v ? (
         <span className="inline-flex items-center gap-1.5 text-xs">
           <span className="text-muted font-sans">{v[0]}</span><ZBar z={v[1]} />
@@ -139,10 +173,12 @@ export default function Screener() {
         <p className="text-muted text-sm mt-1 max-w-3xl">
           On part de tous les actifs suivis, on écarte ceux qu'on ne peut pas acheter, puis
           ceux qui ne passent pas les filtres. Ce qui reste est classé par une note, et la
-          note se détaille : on peut toujours voir <b>pourquoi</b> un titre est là.
+          note se détaille : on peut toujours voir <b>pourquoi</b> un titre est là — et ce que
+          le site en conclut, avec le même raisonnement que la fiche de chaque titre.
         </p>
       </div>
       <StepBanner active="screener" />
+      <DateArrete date={rk?.as_of} quoi="Classement" />
       {!s.available ? (
         <EmptyState title="Tri indisponible" hint={s.error || "Il manque un réglage — le tri n'a pas pu tourner."} />
       ) : (

@@ -1,13 +1,19 @@
 "use client";
 import { StepBanner } from "@/components/Pipeline";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useUniverse } from "@/lib/api";
 import { PageSkeleton } from "@/components/ui";
 import { downloadCsv } from "@/lib/csv";
 import { IR } from "@/lib/ir";
+import { DateArrete } from "@/components/DateArrete";
 
 const nb = (x?: number) => (x ?? 0).toLocaleString("fr-FR");
-const ROW_H = 33;            // hauteur de ligne fixe (virtualisation)
+// Hauteur de ligne — fixe, parce que la virtualisation calcule les positions avec.
+// Deux valeurs : une ligne sur ordinateur, deux lignes sur téléphone (symbole + catégorie,
+// puis le nom en entier). Changer l'affichage sans changer CE nombre ferait se chevaucher
+// les lignes : la mise en page et le calcul de défilement doivent rester d'accord.
+const ROW_H_LARGE = 33;
+const ROW_H_ETROIT = 54;
 const VIEW_H = 520;          // hauteur de la fenêtre de défilement
 const BUFFER = 8;            // lignes hors écran pré-rendues
 
@@ -18,6 +24,17 @@ export default function Universe() {
   const [scrollTop, setScrollTop] = useState(0);
   const [sort, setSort] = useState<{ k: string; d: "asc" | "desc" }>({ k: "symbol", d: "asc" });
   const scroller = useRef<HTMLDivElement>(null);
+  // `matchMedia` plutôt qu'une largeur lue au rendu : pas d'écart entre le HTML envoyé par
+  // le serveur et celui du navigateur, et la valeur suit une rotation d'écran.
+  const [etroit, setEtroit] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    const maj = () => setEtroit(mq.matches);
+    maj();
+    mq.addEventListener("change", maj);
+    return () => mq.removeEventListener("change", maj);
+  }, []);
+  const ROW_H = etroit ? ROW_H_ETROIT : ROW_H_LARGE;
   const all = u?.instruments ?? [];
   const filtered = useMemo(() => {
     const s = q.toLowerCase();
@@ -56,6 +73,7 @@ export default function Universe() {
         </p>
       </div>
       <StepBanner active="universe" />
+      <DateArrete date={u.as_of} quoi="Liste des actifs" />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {cards.map(([lab, val]) => (
           <div key={lab} className="card p-4">
@@ -91,6 +109,14 @@ export default function Universe() {
         <input value={q} onChange={(e) => { setQ(e.target.value); if (scroller.current) scroller.current.scrollTop = 0; setScrollTop(0); }}
           placeholder="Rechercher un symbole, un nom, une place…"
           className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-accent mb-3" />
+        <div className="sm:hidden flex items-center gap-1.5 flex-wrap mb-2 text-xs">
+          <span className="text-muted2">Trier par</span>
+          {([["symbol", "symbole"], ["name", "nom"], ["asset_class", "catégorie"], ["venue", "place"]] as const).map(([k, lab]) => (
+            <button key={k} onClick={() => toggleSort(k)}
+              className={`px-2 py-1 rounded-full border ${sort.k === k ? "border-accent text-fg" : "border-border text-muted"}`}>
+              {lab}{sort.k === k ? (sort.d === "asc" ? " ▲" : " ▼") : ""}
+            </button>))}
+        </div>
         <div className="flex gap-1.5 flex-wrap mb-3">
           {classes.map((c) => (
             <button key={c} onClick={() => { setCls(c); setScrollTop(0); if (scroller.current) scroller.current.scrollTop = 0; }}
@@ -100,7 +126,12 @@ export default function Universe() {
           ))}
         </div>
         {/* en-tête fixe + corps virtualisé (gère 900+ lignes sans ralentir) */}
-        <div className="grid grid-cols-5 gap-2 text-muted text-xs px-1 pb-1 border-b border-border select-none">
+        {/* Sous 640 px, cinq colonnes fixes laissaient « Nom » et « Secteur » à ~50 px : rien
+            n'était injoignable (la grille se rétracte, mesuré), mais tout était tronqué à
+            quelques caractères. On passe donc à DEUX LIGNES par actif sur téléphone — le
+            symbole et sa catégorie d'abord, le nom en dessous, en entier. L'en-tête de tri
+            disparaît avec les colonnes qu'il titrait ; le tri reste accessible juste au-dessus. */}
+        <div className="hidden sm:grid grid-cols-5 gap-2 text-muted text-xs px-1 pb-1 border-b border-border select-none">
           {([["symbol", "Symbole"], ["name", "Nom"], ["asset_class", "Catégorie"], ["venue", "Place de cotation"], ["sector", "Secteur / Devise"]] as const).map(([k, lab]) => (
             <span key={k} onClick={() => toggleSort(k)} className="cursor-pointer hover:text-fg">
               {lab}{sort.k === k ? <span style={{ color: "var(--accent2)" }}>{sort.d === "asc" ? " ▲" : " ▼"}</span> : <span style={{ opacity: 0.35 }}> ↕</span>}
@@ -113,13 +144,27 @@ export default function Universe() {
             <div style={{ transform: `translateY(${start * ROW_H}px)` }}>
               {visible.map((r: any, i: number) => (
                 <div key={`${r.symbol}-${start + i}`}
-                  className="grid grid-cols-5 gap-2 text-sm border-b border-border items-center"
-                  style={{ height: ROW_H }}>
-                  <IR ticker={r.symbol} name={r.name} assetClass={r.asset_class} className="mono text-accent hover:underline truncate" />
-                  <span className="text-muted truncate">{r.name}</span>
-                  <span>{r.asset_class}</span>
-                  <span className="text-muted">{r.venue}</span>
-                  <span className="text-muted truncate">{r.sector || r.currency}</span>
+                  className="border-b border-border text-sm" style={{ height: ROW_H }}>
+                  {etroit ? (
+                    <div className="flex flex-col justify-center h-full gap-0.5 py-1">
+                      <div className="flex items-baseline gap-2">
+                        <IR ticker={r.symbol} name={r.name} assetClass={r.asset_class} className="mono text-accent hover:underline" />
+                        <span className="text-muted2 text-[11px]">{r.asset_class} · {r.venue}</span>
+                      </div>
+                      <div className="text-muted text-xs truncate"
+                        title={`${r.name}${(r.sector || r.currency) ? ` — ${r.sector || r.currency}` : ""}`}>
+                        {r.name}{(r.sector || r.currency) ? ` — ${r.sector || r.currency}` : ""}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-5 gap-2 items-center h-full">
+                      <IR ticker={r.symbol} name={r.name} assetClass={r.asset_class} className="mono text-accent hover:underline truncate" />
+                      <span className="text-muted truncate">{r.name}</span>
+                      <span>{r.asset_class}</span>
+                      <span className="text-muted">{r.venue}</span>
+                      <span className="text-muted truncate">{r.sector || r.currency}</span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

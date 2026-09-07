@@ -3,6 +3,7 @@ import { useThemes, useMeta } from "@/lib/api";
 import { PageSkeleton } from "@/components/ui";
 import { StepBanner } from "@/components/Pipeline";
 import { IR } from "@/lib/ir";
+import { DateArrete } from "@/components/DateArrete";
 
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 // % SIGNÉ et coloré. Le « ↗ » accolé au ticker est le pictogramme de LIEN externe du composant
@@ -26,6 +27,7 @@ export default function Themes() {
     <main className="max-w-5xl mx-auto p-6 space-y-4">
       <h1 className="text-xl font-semibold tracking-tight">Thèmes de marché</h1>
       <StepBanner active="themes" />
+      <DateArrete date={(th as any)?.as_of} quoi="Classement des secteurs" />
       <p className="text-muted text-xs">Quels secteurs montent et lesquels reculent depuis le début de l'année. Cela dit où l'argent
       va en ce moment — un décor utile avant de choisir des titres, pas une prévision.</p>
 
