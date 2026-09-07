@@ -1,5 +1,32 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 18) — `ABC → Abell Coin USD` : le repli crypto contaminait les actions
+
+Une ligne du dry-run réel a tout arrêté :
+
+    ABC → Abell Coin USD
+
+`ABC` est AmerisourceBergen, une action pharmaceutique américaine (délistée, renommée COR en 2023).
+Mon script s'apprêtait à ÉCRIRE DANS LE DÉPÔT le nom d'une cryptomonnaie pour cette ligne. C'est
+précisément le mode de défaillance que l'utilisateur redoutait — un nom plausible et faux — et
+c'est mon propre code d'alias qui l'a produit.
+
+**Le même mécanisme existait sur le chemin des PRIX**, et il est plus grave. `_load` essaie les
+alias dans l'ordre : pour une action sans barres locales (parce que délistée, justement), il
+passait à `{ticker}-USD` puis interrogeait `crypto.db`. Une action pouvait donc être valorisée par
+la série d'un jeton, silencieusement, dans une analyse de portefeuille. Le repli avait été écrit le
+06/09 pour retrouver `ETH-USD` depuis `ETH` ; personne n'avait envisagé qu'il s'appliquerait à un
+symbole à trois lettres d'une action morte.
+
+Corrigé : `_aliases(symbole, classe)` n'ajoute `-USD` que si la classe est CRYPTO ou INCONNUE. La
+classe circule depuis les seeds jusqu'au chargement (`charger_series` → `_collecter` → `_load`), et
+le script de noms la lit dans la colonne `asset_class` du CSV. Classe inconnue (portefeuille tapé à
+la main) : le repli reste, car « ETH » en a besoin, mais l'ambiguïté résiduelle est rendue VISIBLE
+par l'alias publié dans chaque ligne du tableau — ajouté le matin même, pour une autre raison.
+
+Six tests verrouillent les deux sens : aucune action, ETF, commodité ou devise ne reçoit d'alias
+crypto ; une crypto conserve le sien. 2084 tests passés.
+
 ## Session 2026-09-07 (suite 17) — Mon propre script confondait trois causes d'échec
 
 Le dry-run sur le VPS a résolu la plupart des noms (Agilent, Alcoa, Apple, AbbVie…) et laissé une

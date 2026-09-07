@@ -319,7 +319,10 @@ def recommander(screen: dict, n: int = 15, years: int = 5, plafond: float = 0.20
             f"{len(candidats)}, {MIN_ACTIFS} minimum. Réessayer après les publications.",
             earnings_blackout=blackout)
     meta = {s: meta[s] for s in candidats}
-    series, aliases, manquants = charger_series(candidats, years)
+    # La classe d'actif du screening interdit le repli crypto sur une action : sans elle,
+    # `ABC` (action délistée) se ferait valoriser par `ABC-USD`, un jeton.
+    series, aliases, manquants = charger_series(
+        candidats, years, {s: (meta[s].get("asset_class") or "") for s in candidats})
     if len(series) < MIN_ACTIFS:
         return _indisponible("historiques insuffisants pour les candidats du jour.",
                              missing=manquants, selected=list(meta))

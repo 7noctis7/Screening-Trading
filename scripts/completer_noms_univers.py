@@ -48,16 +48,23 @@ def _essayer(symbole: str) -> tuple[str | None, str | None]:
     return (str(nom).strip() or None, None) if nom else (None, INCONNU)
 
 
-def nom_fournisseur(symbole: str, essais: int = 3) -> tuple[str, str | None, str | None]:
+def nom_fournisseur(couple: tuple[str, str | None], essais: int = 3) -> tuple[str, str | None, str | None]:
     """(symbole, nom, cause). Essaie aussi les ALIAS — `AAVE/USDC` se demande `AAVE-USD`.
+
+    LA CLASSE D'ACTIF EST OBLIGATOIRE, et ce n'est pas du zèle. Sans elle, le 07/09, `ABC`
+    (AmerisourceBergen, action délistée) recevait le nom « Abell Coin USD » : le repli
+    `-USD`, conçu pour retrouver `ETH-USD` depuis `ETH`, avait trouvé une cryptomonnaie.
+    Le script s'apprêtait à écrire ce nom dans le dépôt. Un nom faux ne se signale pas
+    comme faux — il se lit, il rassure, et il traverse toutes les vérifications suivantes.
 
     Les alias viennent de `user_analysis._aliases`, la MÊME fonction qui résout les prix :
     un symbole valorisé sous un alias doit être nommé sous le même, sinon la colonne
     « nom » décrirait un autre instrument que la colonne « prix ».
     """
     from packages.portfolio.user_analysis import _aliases
+    symbole, classe = couple
     cause = None
-    for candidat in _aliases(symbole):
+    for candidat in _aliases(symbole, classe):
         for tentative in range(essais):
             nom, echec = _essayer(candidat)
             if nom:
@@ -69,9 +76,11 @@ def nom_fournisseur(symbole: str, essais: int = 3) -> tuple[str, str | None, str
     return symbole, None, cause
 
 
-def _manquants(chemin: Path) -> list[str]:
+def _manquants(chemin: Path) -> list[tuple[str, str | None]]:
+    """(symbole, classe d'actif) des lignes sans nom. La classe borne les alias essayés."""
     with chemin.open(encoding="utf-8") as f:
-        return [r["symbol"] for r in csv.DictReader(f)
+        return [(r["symbol"], (r.get("asset_class") or "").strip() or None)
+                for r in csv.DictReader(f)
                 if r.get("symbol") and not (r.get("name") or "").strip()]
 
 
@@ -105,7 +114,7 @@ def principal() -> int:
         return 0
     print(f"→ {total} symbole(s) sans nom dans {sum(1 for v in trous.values() if v)} fichier(s).")
 
-    tous = sorted({s for v in trous.values() for s in v})
+    tous = sorted({couple for v in trous.values() for couple in v})
     # Parallélisme MODÉRÉ : à 8 fils, le fournisseur limite le débit et rend des silences
     # qu'on prendrait pour des titres délistés. Mieux vaut plus lent et interprétable.
     with ThreadPoolExecutor(max_workers=args.fils) as pool:

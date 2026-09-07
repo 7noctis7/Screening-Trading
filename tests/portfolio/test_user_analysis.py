@@ -8,7 +8,7 @@ def _bars(scale: float):
 
 
 def test_analyse_reelle_alignee_et_scenarios(monkeypatch):
-    monkeypatch.setattr(user_analysis, "_load", lambda symbol, years: (symbol, _bars(1 if symbol == "AAA" else .5)))
+    monkeypatch.setattr(user_analysis, "_load", lambda symbol, years, classe=None: (symbol, _bars(1 if symbol == "AAA" else .5)))
     result = user_analysis.analyze([{"symbol": "AAA", "weight": .6}, {"symbol": "BBB", "weight": .4}])
     assert result["available"] is True
     assert result["n_observations"] == 69
@@ -17,14 +17,14 @@ def test_analyse_reelle_alignee_et_scenarios(monkeypatch):
 
 
 def test_refuse_si_un_historique_manque(monkeypatch):
-    monkeypatch.setattr(user_analysis, "_load", lambda symbol, years: (None, []))
+    monkeypatch.setattr(user_analysis, "_load", lambda symbol, years, classe=None: (None, []))
     result = user_analysis.analyze([{"symbol": "ABSENT", "weight": 1.0}])
     assert result["available"] is False
     assert result["missing"] == ["ABSENT"]
 
 
 def test_utilise_les_series_du_snapshot_et_gere_le_cash(monkeypatch):
-    monkeypatch.setattr(user_analysis, "_load", lambda symbol, years: (None, []))
+    monkeypatch.setattr(user_analysis, "_load", lambda symbol, years, classe=None: (None, []))
     supplied = [{"t": bar.ts, "c": bar.close} for bar in _bars(1)]
     result = user_analysis.analyze([{"symbol": "AAA", "weight": .8},
                                     {"symbol": "CASH:USD", "weight": .2}],
@@ -66,7 +66,7 @@ def test_univers_mixte_actions_et_crypto_nue(monkeypatch):
 
 def test_les_trois_scenarios_sont_publies_sous_les_cles_du_front(monkeypatch):
     """Le front lit `dynamique` ; publier `hrp` le rendait introuvable, donc « indisponible »."""
-    monkeypatch.setattr(user_analysis, "_load", lambda symbol, years: (symbol, _bars(1 if symbol == "AAA" else .5)))
+    monkeypatch.setattr(user_analysis, "_load", lambda symbol, years, classe=None: (symbol, _bars(1 if symbol == "AAA" else .5)))
     result = user_analysis.analyze([{"symbol": "AAA", "weight": .6}, {"symbol": "BBB", "weight": .4}])
     assert set(result["scenarios"]) == {"prudent", "neutre", "dynamique"}
     for poids in result["scenarios"].values():
@@ -106,3 +106,27 @@ def test_une_classe_d_action_n_est_pas_prise_pour_une_paire():
     """`BRK-B` contient un tiret mais n'est pas coté en dollar : aucune variante inventée."""
     from packages.portfolio.user_analysis import _aliases
     assert _aliases("BRK-B") == ["BRK-B"]
+
+
+def test_une_action_connue_ne_tombe_JAMAIS_sur_un_alias_crypto():
+    """Le repli `-USD` sert à retrouver `ETH-USD` depuis `ETH`. Appliqué à une action, il
+    valoriserait un titre avec la série d'un jeton — mesuré le 07/09 : `ABC`
+    (AmerisourceBergen, sans barres locales car délistée) trouvait « Abell Coin USD »."""
+    from packages.portfolio.user_analysis import _aliases
+    for ticker in ("ABC", "BK", "EA", "NDX"):
+        for classe in ("equity", "etf", "commodity", "forex"):
+            assert _aliases(ticker, classe) == [ticker], (ticker, classe)
+
+
+def test_une_crypto_conserve_son_repli_usd():
+    """Le garde-fou ne doit pas casser le cas qu'il protège."""
+    from packages.portfolio.user_analysis import _aliases
+    assert "ETH-USD" in _aliases("ETH", "crypto")
+    assert "AAVE-USD" in _aliases("AAVE/USDC", "crypto")
+
+
+def test_classe_inconnue_garde_le_repli_mais_l_alias_reste_publie():
+    """Un portefeuille importé à la main n'a pas de classe : le repli reste utile pour
+    « ETH ». L'ambiguïté résiduelle est rendue VISIBLE par l'alias publié dans la ligne."""
+    from packages.portfolio.user_analysis import _aliases
+    assert _aliases("ETH", None) == ["ETH", "ETH-USD"]

@@ -27,7 +27,7 @@ def test_un_nom_connu_est_rendu_tel_quel(monkeypatch):
     import scripts.completer_noms_univers as m
     faux, _ = _fournisseur({"AAPL": ("Apple Inc.", None)})
     monkeypatch.setattr(m, "_essayer", faux)
-    assert nom_fournisseur("AAPL") == ("AAPL", "Apple Inc.", None)
+    assert nom_fournisseur(("AAPL", "equity")) == ("AAPL", "Apple Inc.", None)
 
 
 def test_une_paire_usdc_est_resolue_par_son_ALIAS(monkeypatch):
@@ -37,7 +37,7 @@ def test_une_paire_usdc_est_resolue_par_son_ALIAS(monkeypatch):
     import scripts.completer_noms_univers as m
     faux, appels = _fournisseur({"AAVE-USD": ("Aave USD", None)})
     monkeypatch.setattr(m, "_essayer", faux)
-    symbole, nom, cause = nom_fournisseur("AAVE/USDC")
+    symbole, nom, cause = nom_fournisseur(("AAVE/USDC", "crypto"))
     assert (symbole, nom, cause) == ("AAVE/USDC", "Aave USD", None)
     assert appels[0] == "AAVE-USDC" and "AAVE-USD" in appels    # l'ordre des alias est suivi
 
@@ -46,7 +46,7 @@ def test_un_ticker_delisté_rend_la_cause_INCONNU(monkeypatch):
     import scripts.completer_noms_univers as m
     faux, _ = _fournisseur({})
     monkeypatch.setattr(m, "_essayer", faux)
-    _, nom, cause = nom_fournisseur("CELG")
+    _, nom, cause = nom_fournisseur(("CELG", "equity"))
     assert nom is None and cause == INCONNU
 
 
@@ -61,7 +61,7 @@ def test_un_silence_du_fournisseur_est_REESSAYE_puis_signalé(monkeypatch):
 
     monkeypatch.setattr(m, "_essayer", muet)
     monkeypatch.setattr(m.time, "sleep", lambda _s: None)
-    _, nom, cause = nom_fournisseur("BK", essais=3)
+    _, nom, cause = nom_fournisseur(("BK", "equity"), essais=3)
     assert nom is None and cause == MUET
     assert appels.count("BK") == 3                    # réessayé avant d'abandonner
 
@@ -76,5 +76,27 @@ def test_on_n_insiste_PAS_quand_le_fournisseur_a_repondu_ne_pas_connaitre(monkey
         return None, INCONNU
 
     monkeypatch.setattr(m, "_essayer", inconnu)
-    nom_fournisseur("ZZZZ", essais=5)
+    nom_fournisseur(("ZZZZ", "equity"), essais=5)
     assert appels.count("ZZZZ") == 1
+
+
+def test_UNE_ACTION_NE_RECOIT_JAMAIS_LE_NOM_D_UNE_CRYPTO(monkeypatch):
+    """Le 07/09, `ABC` (AmerisourceBergen, action délistée) recevait « Abell Coin USD » :
+    le repli `-USD`, conçu pour retrouver `ETH-USD` depuis `ETH`, trouvait une crypto. Le
+    script s'apprêtait à écrire ce nom dans le dépôt. Un nom faux ne se signale pas comme
+    faux : il se lit, il rassure, et il traverse toutes les vérifications suivantes."""
+    import scripts.completer_noms_univers as m
+    faux, appels = _fournisseur({"ABC-USD": ("Abell Coin USD", None)})
+    monkeypatch.setattr(m, "_essayer", faux)
+    _, nom, cause = nom_fournisseur(("ABC", "equity"))
+    assert nom is None and cause == INCONNU
+    assert "ABC-USD" not in appels          # l'alias crypto n'est même pas TENTÉ
+
+
+def test_une_crypto_garde_bien_son_repli(monkeypatch):
+    """Le garde-fou ne doit pas casser le cas qu'il protège."""
+    import scripts.completer_noms_univers as m
+    faux, appels = _fournisseur({"ETH-USD": ("Ethereum USD", None)})
+    monkeypatch.setattr(m, "_essayer", faux)
+    _, nom, _ = nom_fournisseur(("ETH", "crypto"))
+    assert nom == "Ethereum USD" and "ETH-USD" in appels

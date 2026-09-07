@@ -32,7 +32,7 @@ def _base_crypto(clean: str) -> str:
     return clean
 
 
-def _aliases(symbol: str) -> list[str]:
+def _aliases(symbol: str, classe: str | None = None) -> list[str]:
     """Variantes à essayer, dans l'ordre. `ETH`, `ETHUSDT` et `ETH/USDC` doivent tous
     mener à `ETH-USD`, le format que `data/crypto.db` stocke (cf. `scripts/ingest_crypto.py`).
 
@@ -53,7 +53,15 @@ def _aliases(symbol: str) -> list[str]:
     base = _base_crypto(clean)
     if base != clean:
         return list(dict.fromkeys([clean, f"{base}-USD", base]))
-    if "-" not in clean:
+    # LE REPLI `-USD` NE S'APPLIQUE QU'À CE QUI PEUT ÊTRE UNE CRYPTO.
+    # Mesuré le 07/09 : `ABC` (AmerisourceBergen, action délistée, donc sans barres
+    # locales) tombait sur `ABC-USD` et se voyait attribuer « Abell Coin USD » — une
+    # cryptomonnaie. Sur le chemin des prix, la même chaîne aurait valorisé une action
+    # avec la série d'un jeton. Un repli conçu pour retrouver `ETH-USD` depuis `ETH` ne
+    # doit jamais s'appliquer à un instrument dont on SAIT qu'il n'est pas une crypto :
+    # une correspondance plausible et fausse est pire qu'une absence, elle rassure.
+    connue_non_crypto = classe is not None and str(classe).lower() != "crypto"
+    if "-" not in clean and not connue_non_crypto:
         return list(dict.fromkeys([clean, f"{clean}-USD"]))
     return [clean]
 
@@ -76,9 +84,9 @@ def _bars_crypto(symbole: str, years: int) -> list:
         return []
 
 
-def _load(symbol: str, years: int) -> tuple[str | None, list]:
+def _load(symbol: str, years: int, classe: str | None = None) -> tuple[str | None, list]:
     """Premier alias qui rend assez de barres, en cherchant AUSSI la base crypto."""
-    for alias in _aliases(symbol):
+    for alias in _aliases(symbol, classe):
         for bars in (load_bars(alias, years=years), _bars_crypto(alias, years)):
             if len(bars) >= MIN_OBSERVATIONS:
                 return alias, bars
@@ -146,7 +154,8 @@ def _json_matrix(matrix: np.ndarray) -> list[list[float | None]]:
 
 
 def _collecter(requested: list[tuple[str, float]], years: int,
-               series_by_symbol: dict | None) -> tuple[dict, dict, list, list]:
+               series_by_symbol: dict | None,
+               classes: dict[str, str] | None = None) -> tuple[dict, dict, list, list]:
     """(séries chargées, alias retenus, manquants, lignes de cash). Aucune invention :
     un symbole sans historique suffisant part en `missing`, il n'est jamais comblé."""
     loaded, aliases, missing, cash = {}, {}, [], []
@@ -159,7 +168,7 @@ def _collecter(requested: list[tuple[str, float]], years: int,
         if supplied and len(supplied) >= MIN_OBSERVATIONS:
             loaded[symbol], aliases[symbol] = _dated_closes(supplied), symbol
             continue
-        alias, bars = _load(symbol, years)
+        alias, bars = _load(symbol, years, (classes or {}).get(symbol))
         if alias:
             loaded[symbol], aliases[symbol] = _dated_closes(bars), alias
         else:
@@ -181,7 +190,8 @@ def scenarios_risque(covariance: np.ndarray) -> dict:
             "dynamique": hrp_weights(covariance)}
 
 
-def charger_series(symboles: list[str], years: int = 5) -> tuple[dict, dict, list]:
+def charger_series(symboles: list[str], years: int = 5,
+                   classes: dict[str, str] | None = None) -> tuple[dict, dict, list]:
     """(séries datées par symbole, alias retenus, manquants) — chargement partagé.
 
     Exposé pour que la recommandation d'univers réutilise EXACTEMENT ce chargement :
@@ -189,7 +199,7 @@ def charger_series(symboles: list[str], years: int = 5) -> tuple[dict, dict, lis
     définitions concurrentes du chargement finiraient par diverger sans que rien ne le
     signale — c'est précisément ce qui avait produit la clé `hrp`/`black_litterman`.
     """
-    loaded, aliases, missing, _cash = _collecter([(s, 1.0) for s in symboles], years, None)
+    loaded, aliases, missing, _cash = _collecter([(s, 1.0) for s in symboles], years, None, classes)
     return loaded, aliases, missing
 
 

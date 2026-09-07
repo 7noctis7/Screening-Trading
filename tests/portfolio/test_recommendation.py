@@ -75,7 +75,7 @@ def test_screening_trop_maigre_est_refuse_pas_complete():
 def test_recommandation_publie_les_trois_profils_et_son_avertissement(monkeypatch):
     import packages.portfolio.recommendation as module
     series = {f"A{i}": _serie("2020-01-01", 900, i) for i in range(6)}
-    monkeypatch.setattr(module, "charger_series", lambda symboles, years: (series, {}, []))
+    monkeypatch.setattr(module, "charger_series", lambda symboles, years, classes=None: (series, {}, []))
     rows = [{"symbol": s, "name": f"Nom {s}", "sector": "Tech", "asset_class": "equity",
              "score": 3.0 - i, "reason": "momentum"} for i, s in enumerate(series)]
     out = recommander({"available": True, "rows": rows, "universe_size": 900,
@@ -98,7 +98,7 @@ def test_les_lignes_portent_le_nom_le_secteur_et_le_score(monkeypatch):
     """Le tableau doit être lisible sans aller chercher ailleurs ce qu'est le ticker."""
     import packages.portfolio.recommendation as module
     series = {f"A{i}": _serie("2020-01-01", 900, i) for i in range(4)}
-    monkeypatch.setattr(module, "charger_series", lambda symboles, years: (series, {}, []))
+    monkeypatch.setattr(module, "charger_series", lambda symboles, years, classes=None: (series, {}, []))
     rows = [{"symbol": s, "name": f"Nom {s}", "sector": "Santé", "asset_class": "equity",
              "score": 1.0, "reason": "value"} for s in series]
     out = recommander({"available": True, "rows": rows}, n=4)
@@ -109,7 +109,7 @@ def test_les_lignes_portent_le_nom_le_secteur_et_le_score(monkeypatch):
 
 def test_historiques_absents_sont_publies_pas_masques(monkeypatch):
     import packages.portfolio.recommendation as module
-    monkeypatch.setattr(module, "charger_series", lambda symboles, years: ({}, {}, ["X", "Y", "Z"]))
+    monkeypatch.setattr(module, "charger_series", lambda symboles, years, classes=None: ({}, {}, ["X", "Y", "Z"]))
     out = recommander({"available": True, "rows": [{"symbol": s, "score": 1.0} for s in "XYZW"]})
     assert out["available"] is False
     assert out["missing"] == ["X", "Y", "Z"]
@@ -119,7 +119,7 @@ def test_historiques_absents_sont_publies_pas_masques(monkeypatch):
 def test_n_demande_est_respecte_ou_expliqué(monkeypatch, n):
     import packages.portfolio.recommendation as module
     series = {f"A{i}": _serie("2015-01-01", 2000, i) for i in range(n)}
-    monkeypatch.setattr(module, "charger_series", lambda symboles, years: (series, {}, []))
+    monkeypatch.setattr(module, "charger_series", lambda symboles, years, classes=None: (series, {}, []))
     rows = [{"symbol": s, "score": 1.0} for s in series]
     out = recommander({"available": True, "rows": rows}, n=n)
     assert out["selection"]["asked"] == n
@@ -139,7 +139,7 @@ def test_n_demande_est_respecte_ou_expliqué(monkeypatch, n):
 def _reco_avec_ic(monkeypatch, ic):
     import packages.portfolio.recommendation as module
     series = {f"A{i}": _serie("2018-01-01", 2000, i) for i in range(6)}
-    monkeypatch.setattr(module, "charger_series", lambda symboles, years: (series, {}, []))
+    monkeypatch.setattr(module, "charger_series", lambda symboles, years, classes=None: (series, {}, []))
     monkeypatch.setattr(module, "charger_ic", lambda *a, **k: ic)
     rows = [{"symbol": s, "score": 2.0 - i * 0.3} for i, s in enumerate(series)]
     return recommander({"available": True, "rows": rows}, n=6)
@@ -269,7 +269,7 @@ def test_nom_absent_reste_absent_et_ne_repete_pas_le_ticker(monkeypatch):
     avoir vérifié. Un nom manquant doit se voir comme manquant."""
     import packages.portfolio.recommendation as module
     series = {f"A{i}": _serie("2020-01-01", 900, i) for i in range(4)}
-    monkeypatch.setattr(module, "charger_series", lambda symboles, years: (series, {}, []))
+    monkeypatch.setattr(module, "charger_series", lambda symboles, years, classes=None: (series, {}, []))
     rows = [{"symbol": s, "name": "", "score": 1.0} for s in series]
     out = recommander({"available": True, "rows": rows}, n=4)
     assert all(ligne["name"] is None for ligne in out["rows"])
@@ -280,7 +280,7 @@ def test_la_ligne_porte_place_de_cotation_devise_et_alias(monkeypatch):
     import packages.portfolio.recommendation as module
     series = {f"A{i}": _serie("2020-01-01", 900, i) for i in range(4)}
     monkeypatch.setattr(module, "charger_series",
-                        lambda symboles, years: (series, {"A0": "A0-USD"}, []))
+                        lambda symboles, years, classes=None: (series, {"A0": "A0-USD"}, []))
     rows = [{"symbol": s, "name": "Nom", "venue": "NASDAQ", "currency": "USD",
              "asset_class": "equity", "score": 1.0} for s in series]
     out = recommander({"available": True, "rows": rows}, n=4)
