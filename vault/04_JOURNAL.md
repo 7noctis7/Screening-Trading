@@ -1,5 +1,27 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 2) — `make stop` se tuait lui-même, et tuait les tunnels SSH
+
+Deux défauts d'outillage, mesurés et reproduits, pas déduits.
+
+**`make stop` se terminait sur « [Makefile:43: stop] Terminated ».** Cause : make exécute la
+recette via `/bin/sh -c '…'`, dont la ligne de commande CONTIENT le motif `uvicorn apps.api.main`.
+`pkill -f` tuait donc ce shell — et les deux nettoyages de ports qui suivaient sur la même ligne
+n'étaient JAMAIS exécutés. Un arrêt qui échoue bruyamment tout en s'arrêtant à mi-course.
+Reproduit sur un Makefile minimal : la ligne suivante n'est jamais atteinte. Corrigé par les
+crochets (`uvicorn apps[.]api[.]main`), qui cassent l'auto-correspondance sans changer la cible ;
+vérifié : `make stop` rend « arrêté » et le code retour 0.
+
+**`kill -9 $(lsof -ti:PORT)` tuait les tunnels SSH.** L'utilisateur avait ouvert
+`ssh -L 3000:… -L 8000:…` depuis le VPS lui-même ; `start.sh` a tué le processus qui tenait les
+ports — c'est-à-dire le tunnel — et avec lui la session qui exécutait `make start`. Un tunnel n'est
+pas un service à redémarrer. Le nettoyage inspecte désormais `ps -o comm=` et refuse de tuer un
+`ssh`/`sshd` : il le nomme et dit quoi faire. Vérifié avec un processus réellement nommé `ssh`
+tenant le port 3000 : survivant, message affiché.
+
+Les deux chemins d'arrêt (`make stop` et `scripts/start.sh`) dupliquaient ces trois lignes. Ils
+appellent maintenant `scripts/stop_services.sh` : une seule définition de ce qu'on tue.
+
 ## Session 2026-09-07 (suite) — « TypeError: Load failed » n'est pas une donnée manquante
 
 Après le correctif des alias crypto, l'étape 4 restait vide, mais sous un motif NOUVEAU :

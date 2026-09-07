@@ -61,9 +61,7 @@ if [ "${QUANT_NO_UPDATE:-0}" != "1" ]; then
 fi
 
 echo "→ Arrêt des anciens process (API/front)…"
-pkill -f "uvicorn apps.api.main" 2>/dev/null || true
-lsof -ti:8000 2>/dev/null | xargs kill -9 2>/dev/null || true
-lsof -ti:3000 2>/dev/null | xargs kill -9 2>/dev/null || true
+bash scripts/stop_services.sh
 
 if [ "${QUANT_REFRESH:-0}" = "1" ]; then
   echo "→ Maj des cours (make daily + crypto)…"

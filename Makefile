@@ -40,7 +40,7 @@ preview:          ## régénère les aperçus HTML du dashboard/portefeuille
 start:            ## TOUT EN UNE COMMANDE : maj code + kill vieux process + API (fond) + site
 	bash scripts/start.sh
 stop:             ## arrête l'API et le site (uvicorn + next dev)
-	@pkill -f "uvicorn apps.api.main" 2>/dev/null; lsof -ti:8000 2>/dev/null | xargs kill -9 2>/dev/null; lsof -ti:3000 2>/dev/null | xargs kill -9 2>/dev/null; echo "arrêté"
+	@bash scripts/stop_services.sh; echo "arrêté"
 api:              ## lance l'API FastAPI (localhost) — STABLE, sans reload (évite l'OOM pendant make daily)
 	$(PYTHON) -m uvicorn apps.api.main:app
 api-dev:          ## API avec reload du CODE seulement (apps/packages) — ne surveille PAS data/ (dev)
