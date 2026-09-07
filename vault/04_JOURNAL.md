@@ -1,5 +1,33 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 32) — Réécriture des textes du site en langage clair
+
+Retour de l'utilisateur : « trop technique ». Il avait raison, et le diagnostic est plus large qu'un
+paragraphe — l'ensemble du site parlait le vocabulaire de celui qui l'a écrit.
+
+**Règle appliquée : simplifier le VOCABULAIRE, jamais le CONTENU.** Une phrase plus courte qui
+laisserait tomber « non validé hors échantillon » serait un recul déguisé en amélioration. Chaque
+chiffre, chaque réserve et chaque avertissement sont conservés à l'identique ; seuls les mots
+changent.
+
+Exemples du registre visé, à contenu strictement égal :
+- « Minimum variance robuste sur l'univers disponible » → « Le panier qui bouge le moins »
+- « Equal Risk Contribution » → « Chaque ligne apporte la même dose de risque »
+- « IC +0,0202 sur 83 fenêtres disjointes (t = 0,76) » → « lien classement / hausse réelle =
+  +0,0202 (fiabilité 0,76 — il en faudrait 2) » — le seuil est DIT, il n'est plus à connaître
+- « chemin de moindre effort · turnover cumulé » → « par quoi commencer · portefeuille remué »
+- « série arrêtée, elle paraîtrait sans risque » → « un cours figé donne l'illusion d'un titre
+  calme, donc sans risque : le calcul lui donnerait une place qu'il ne mérite pas »
+
+Pages traitées : étape 4 (profils, panneaux, méthodologie), profil investisseur, journal, positions,
+portefeuille, risque, thèmes, trades, sentiment, ML, notes. Le bloc « méthodologie » de l'étape 4,
+le plus dense, est découpé en trois paragraphes titrés — ce que font les profils, ce qu'ils ne
+cherchent pas, ce qui n'est pas compté.
+
+Restent à traiter : accueil, dashboard, crypto, glossaire, fiche, events, screener, universe,
+échecs, méthode, macro, data, live, investors, fundamentals. Le glossaire est volontairement
+technique par nature.
+
 ## Session 2026-09-07 (suite 31) — 99 % sur une ligne : correct, et impossible à vérifier
 
 Question : est-il normal que « Prudent » propose 99 % sur NEAR, « Dynamique » 99,8 %, et « Neutre »

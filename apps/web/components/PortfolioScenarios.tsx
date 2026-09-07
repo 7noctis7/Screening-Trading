@@ -9,8 +9,8 @@ import {
 } from "@/components/PortfolioPanneaux";
 
 const SOURCES: { key: ScenarioSource; label: string; aide: string }[] = [
-  { key: "portefeuille", label: "Mon portefeuille", aide: "Mieux répartir les lignes que vous détenez déjà." },
-  { key: "recommandation", label: "Recommandation du robot", aide: "Ce qu'il faudrait détenir — sélection du screening du jour, y compris des actifs que vous n'avez pas." },
+  { key: "portefeuille", label: "Mon portefeuille", aide: "Garder vos titres, mais mieux doser chacun." },
+  { key: "recommandation", label: "Recommandation du robot", aide: "Un autre panier, choisi ce matin parmi tout le marché — y compris des titres que vous n'avez pas." },
 ];
 
 function Champ({ label, value, onChange, min, max }: {
@@ -138,7 +138,7 @@ export function PortfolioScenarios({ snapshot, analysis, loading }: {
       <div>
         <div className="eyebrow">Étape 4 · Améliorer</div>
         <h2 className="text-lg font-semibold mt-1">Scénarios sous contraintes</h2>
-        <p className="text-xs text-muted mt-1">Exploratoires, calculés par les moteurs existants. Aucun rendement attendu n'entre dans ces poids.</p>
+        <p className="text-xs text-muted mt-1">Trois façons de répartir votre argent, calculées sur l'historique réel. Aucune ne cherche à deviner ce qui va monter.</p>
       </div>
       <span className="text-[10px] mono rounded-full border border-border px-3 py-1 h-fit">AUCUN ORDRE</span>
     </div>
@@ -201,13 +201,19 @@ export function PortfolioScenarios({ snapshot, analysis, loading }: {
 
     <details className="rounded-xl border border-border p-3 text-xs text-muted">
       <summary className="cursor-pointer text-fg">Méthodologie et limites</summary>
-      <p className="mt-2">Les trois profils répartissent le RISQUE mesuré : « Prudent » minimise la variance,
-        « Neutre » égalise les contributions au risque, « Dynamique » est un Hierarchical Risk Parity sur les
-        grappes de corrélation. Aucun n'utilise de rendement attendu — « idéal » signifie ici « bien réparti »,
-        jamais « le plus rentable ». Les séries sont alignées par intersection de dates, sans remplissage.
-        Les coûts sont une hypothèse linéaire en points de base appliquée au turnover : spread dynamique,
-        fiscalité, impact racine carrée et borrow ne sont pas modélisés. Un scénario qui viole le plafond est
-        refusé, jamais corrigé silencieusement.</p>
+      <p className="mt-2"><b>Ce que font les trois premiers profils.</b> Ils répartissent le risque,
+        chacun à sa façon. « Prudent » cherche le panier qui bouge le moins — si un titre est bien plus
+        calme que les autres, il y mettra beaucoup, c'est sa définition. « Neutre » demande à chaque
+        ligne d'apporter la même dose de risque, ce qui l'empêche de concentrer. « Dynamique » regroupe
+        d'abord les titres qui bougent ensemble, puis répartit entre ces familles.</p>
+      <p className="mt-2"><b>Aucun des trois ne cherche ce qui va monter.</b> Ils ne connaissent que
+        l'agitation passée des cours et la façon dont les titres bougent les uns par rapport aux autres.
+        « Bien réparti » n'a jamais voulu dire « le plus rentable ».</p>
+      <p className="mt-2"><b>Ce qui n'est pas compté.</b> Les frais affichés sont une estimation simple :
+        ni fiscalité, ni écart acheteur-vendeur variable, ni impact de vos propres ordres sur le cours.
+        Les prix sont comparés uniquement aux dates où TOUS les titres ont coté — on ne comble jamais
+        un trou par un prix inventé. Et si votre plafond par ligne rend le calcul impossible, le profil
+        est refusé plutôt que corrigé en douce.</p>
     </details>
   </section>;
 }

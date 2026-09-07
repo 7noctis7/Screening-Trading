@@ -133,9 +133,9 @@ export default function ProfilPage() {
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Mon profil d'investisseur</h1>
         <p className="text-muted text-xs mt-1">
-          Cette page calcule, à partir de ce que vous déclarez accepter, l'<b>allocation de
-          politique</b> que votre situation autorise. Elle ne constitue pas une recommandation
-          personnalisée. Tout reste dans ce navigateur — rien n'est envoyé ni conservé.
+          À partir de ce que vous déclarez pouvoir supporter, cette page calcule la
+          <b> répartition</b> que votre situation autorise. Ce n'est pas un conseil personnalisé.
+          Tout reste dans votre navigateur : rien n'est envoyé nulle part, rien n'est conservé.
         </p>
         <p className="text-muted2 text-[11px] mt-2">
           <b>Ce que ces réponses ne font PAS encore.</b> Elles ne contraignent aujourd'hui aucun
@@ -197,9 +197,9 @@ export default function ProfilPage() {
                   {(res.risque.niveau * 100).toFixed(0)}</div></div>
             </div>
             <p className="text-muted2 text-[11px] mt-3">
-              Capacité et tolérance sont deux choses différentes, et c'est la plus petite qui lie.
-              Les fondre en un « score de risque » unique autoriserait un investisseur audacieux à
-              deux ans d'horizon à prendre un risque que son horizon ne permet pas.
+              Ce que vous POUVEZ encaisser et ce que vous ACCEPTEZ d'encaisser sont deux choses différentes. C'est la plus petite des deux qui décide.
+              Les mélanger en une seule note laisserait quelqu'un d'audacieux, mais qui a besoin
+              de son argent dans deux ans, prendre un risque que cette échéance ne permet pas.
             </p>
           </section>
 
@@ -214,10 +214,10 @@ export default function ProfilPage() {
             <Barre poids={res.strategique.poids} />
             <p className="text-muted text-xs mt-3">{res.strategique.note}</p>
             <p className="text-muted2 text-[11px] mt-1">
-              L'allocation est <b>vérifiée</b> contre son propre budget, pas seulement promise :
-              une allocation 100 % actions ne peut pas tenir −15 %, les actions développées ont
-              fait −55 % en 2008. Si les poids indicatifs dépassaient votre budget, ils ont été
-              réduits vers les liquidités.
+              Cette répartition est <b>vérifiée</b>, pas seulement annoncée : on recalcule la
+              baisse qu'elle aurait subie lors des vraies crises passées. Un portefeuille 100 %
+              actions ne peut pas tenir une limite de −15 % — les actions ont perdu 55 % en 2008.
+              Quand la répartition dépassait votre limite, elle a été ramenée vers les liquidités.
             </p>
           </section>
 
@@ -239,9 +239,10 @@ export default function ProfilPage() {
               <p className="text-sm mt-2">{res.tactique?.note ?? "Aucune inclinaison."}</p>
             )}
             <p className="text-muted2 text-[11px] mt-3">
-              L'amplitude suit la force de la <b>preuve</b>, jamais celle du signal. Ce site publie
-              un Sharpe déflaté proche de zéro — aucun alpha directionnel démontré : incliner
-              fortement sur cette base contredirait ce qu'il affiche par ailleurs.
+              On ne penche d'un côté que si la <b>preuve</b> est solide — jamais parce qu'un
+              indicateur a l'air convaincant. Ce site mesure et publie sa propre performance
+              corrigée : elle ne démontre aucune capacité à deviner la direction du marché. Pencher
+              fortement malgré ça contredirait ce qu'il affiche deux pages plus loin.
               {res.tactique?.preuve?.motif && (
                 <> Ici : {res.tactique.preuve.motif}.</>
               )}

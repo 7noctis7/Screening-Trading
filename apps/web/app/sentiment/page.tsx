@@ -105,8 +105,10 @@ export default function Sentiment() {
         </table>
       </section>
       <p className="text-muted text-xs">
-        Moteur : FinBERT si installé, sinon lexique finance ; hors-ligne → repli sur le momentum 63 j.
-        News réelles (RSS gratuit) en lançant l'API avec <code>QUANT_NEWS=1</code>.
+        Le ton des actualités récentes sur chaque titre : plutôt positif, plutôt négatif. Analysé
+        par un modèle de langage financier s'il est installé, sinon par une liste de mots-clés. Sans
+        actualités disponibles, l'onglet retombe sur la tendance des 3 derniers mois — et le dit.
+        Pour activer les vraies actualités : lancer l'API avec <code>QUANT_NEWS=1</code>.
       </p>
     </main>
   );

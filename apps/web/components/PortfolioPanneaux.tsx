@@ -30,11 +30,11 @@ function Structure({ c }: { c: any }) {
   if (!c) return null;
   const n = (x: any, d = 2) => x == null ? "—" : Number(x).toFixed(d);
   return <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-    <Metrique titre="Volatilité annualisée" valeur={c.vol_annuelle == null ? "—" : `${(c.vol_annuelle * 100).toFixed(1)}%`} />
-    <Metrique titre="Ratio de diversification" valeur={n(c.ratio_diversification)} />
+    <Metrique titre="Agitation par an" valeur={c.vol_annuelle == null ? "—" : `${(c.vol_annuelle * 100).toFixed(1)}%`} />
+    <Metrique titre="Diversification (1 = nulle)" valeur={n(c.ratio_diversification)} />
     <Metrique titre="Positions effectives" valeur={n(c.positions_effectives, 1)} />
     <Metrique titre="Corrélation moyenne" valeur={n(c.correlation_moyenne, 3)} />
-    <Metrique titre="Sharpe RÉALISÉ" valeur={n(c.sharpe_realise)} />
+    <Metrique titre="Rendement / risque passé" valeur={n(c.sharpe_realise)} />
   </div>;
 }
 
@@ -86,16 +86,18 @@ export /** Ce que vaut la SÉLECTION, chiffré. Sans cette ligne, l'utilisateur 
 function IC({ ic }: { ic: any }) {
   if (!ic) return null;
   if (!ic.available) return <div className="mt-1">
-    Pouvoir prédictif du score : <b>non mesuré</b>. {ic.reason} Tant qu'il ne l'est pas, la
-    sélection est un classement, pas une prévision.
+    Est-ce que ce classement prédit quoi que ce soit ? <b>Jamais vérifié.</b> {ic.reason}
+    Tant que ce n'est pas mesuré, c'est un classement — pas une prévision.
   </div>;
   const signe = ic.ic_moyen >= 0 ? "+" : "";
   return <div className="mt-1">
-    Pouvoir prédictif du score, <b>mesuré</b> : IC <b className="mono">{signe}{Number(ic.ic_moyen).toFixed(4)}</b>
-    {" "}sur {ic.n_dates} fenêtres disjointes de {ic.horizon} jours
-    {ic.t_stat != null ? <> (t = {Number(ic.t_stat).toFixed(2)})</> : null}.
-    {" "}1<sup>re</sup> moitié {Number(ic.ic_premiere_moitie).toFixed(4)} · 2<sup>e</sup> moitié {Number(ic.ic_seconde_moitie).toFixed(4)} →{" "}
-    <b>{ic.robuste ? "tient hors échantillon" : "ne tient pas hors échantillon"}</b>.
+    Est-ce que ce classement prédit quoi que ce soit ? <b>Mesuré</b> sur {ic.n_dates} périodes de
+    {" "}{ic.horizon} jours : lien classement / hausse réelle ={" "}
+    <b className="mono">{signe}{Number(ic.ic_moyen).toFixed(4)}</b>
+    {ic.t_stat != null ? <> (fiabilité {Number(ic.t_stat).toFixed(2)} — il en faudrait 2)</> : null}.
+    {" "}Sur la 1<sup>re</sup> moitié de la période : {Number(ic.ic_premiere_moitie).toFixed(4)} ·
+    {" "}sur la 2<sup>e</sup> : {Number(ic.ic_seconde_moitie).toFixed(4)} →{" "}
+    <b>{ic.robuste ? "le lien tient dans le temps" : "le lien ne tient pas dans le temps"}</b>.
     {" "}Mesuré le {String(ic.mesure_le ?? "").slice(0, 10)}.
   </div>;
 }
@@ -110,11 +112,12 @@ function Resultats({ s }: { s: any }) {
   const ecartes: any[] = s?.earnings_blackout ?? [];
   const inconnus: string[] = s?.earnings_unknown ?? [];
   if (!fenetre) return <div className="mt-1">
-    Filtre « résultats imminents » <b>inactif</b> (QUANT_EARNINGS non activé) : un candidat
-    peut publier ses résultats demain sans que rien ne l'indique ici.
+    Publications de résultats : <b>non surveillées</b> (option QUANT_EARNINGS désactivée). Un
+    titre peut publier ses comptes demain — un jour où le cours peut bondir ou chuter de 20 % —
+    sans que rien ne vous prévienne ici.
   </div>;
   return <div className="mt-1">
-    Résultats imminents (&le; {fenetre} j) :{" "}
+    Publications de résultats dans les {fenetre} jours :{" "}
     {ecartes.length
       ? <><b>{ecartes.length} candidat(s) écarté(s)</b> — {ecartes.map((e) => `${e.symbol} (${e.days} j)`).join(", ")}</>
       : <>aucun candidat concerné</>}.
@@ -131,9 +134,10 @@ function Perimes({ s }: { s: any }) {
   const arretees: any[] = s?.stale ?? [];
   if (!arretees.length) return null;
   return <div className="mt-1 text-amber-500">
-    <b>{arretees.length} série(s) arrêtée(s) écartée(s)</b> (plus de barre depuis plus de
-    {" "}{s?.stale_window ?? 10} j) : {arretees.map((d) => `${d.symbol} (${d.last})`).join(", ")}.
-    Figées, elles paraîtraient sans risque et tronqueraient la fenêtre commune.
+    <b>{arretees.length} titre(s) écarté(s)</b> : plus aucun cours depuis plus de
+    {" "}{s?.stale_window ?? 10} jours — {arretees.map((d) => `${d.symbol} (dernier prix ${d.last})`).join(", ")}.
+    Un cours figé donne l'illusion d'un titre calme, donc sans risque : le calcul lui donnerait
+    une place qu'il ne mérite pas.
   </div>;
 }
 
@@ -143,10 +147,11 @@ export /** Le régime macro module l'EXPOSITION, jamais le choix des titres, et 
 function Regime({ r }: { r: any }) {
   if (!r) return null;
   return <div className="rounded-xl bg-surface3 p-3 text-xs text-muted">
-    <b>Régime macro</b> — {r.cycle || "n/d"} · {r.risk_mode || "n/d"}.{" "}
+    <b>Climat économique</b> — {r.cycle || "inconnu"} · {r.risk_mode || "inconnu"}.{" "}
     {r.reduction > 0
       ? <>Exposition réduite de <b className="mono">{(r.reduction * 100).toFixed(1)} pt</b> : {r.motif}</>
-      : <>Aucune réduction appliquée : {r.motif}. L'amplitude suit la force de la PREUVE, jamais celle du signal.</>}
+      : <>Aucun effet sur votre allocation : {r.motif}. On ne réduit l'exposition que si la preuve
+        est solide — pas parce qu'un indicateur a l'air inquiétant.</>}
   </div>;
 }
 
@@ -160,11 +165,11 @@ function Chemin({ etapes }: { etapes: any[] | undefined }) {
   const seuil = utiles.length ? etapes.indexOf(utiles[0]) + 1 : etapes.length;
   return <details className="rounded-xl border border-border p-3 text-xs text-muted">
     <summary className="cursor-pointer text-fg">
-      Chemin de moindre effort — {seuil} mouvement(s) capturent 80 % du risque évité
-      {etapes[seuil - 1] ? ` pour ${(etapes[seuil - 1].turnover_cumule * 100).toFixed(0)} % de turnover` : ""}
+      Par quoi commencer — {seuil} mouvement(s) suffisent à obtenir 80 % du bénéfice
+      {etapes[seuil - 1] ? `, en ne remuant que ${(etapes[seuil - 1].turnover_cumule * 100).toFixed(0)} % du portefeuille` : ""}
     </summary>
     <div className="overflow-x-auto mt-2"><table><thead><tr>
-      <th>#</th><th>Actif</th><th>De</th><th>Vers</th><th>Turnover cumulé</th><th>Vol atteinte</th><th>Part du gain</th>
+      <th>#</th><th>Actif</th><th>De</th><th>Vers</th><th>Portefeuille remué</th><th>Agitation restante</th><th>Bénéfice acquis</th>
     </tr></thead><tbody>
       {etapes.map((e, i) => <tr key={e.symbol}>
         <td className="mono">{i + 1}</td><td className="mono">{e.symbol}</td>
@@ -189,10 +194,11 @@ function Profil({ contrainte }: { contrainte: any }) {
   const { budget_perte, vol_cible, vol_annuelle, exposition, cash } = contrainte;
   const p = (x: number) => `${(x * 100).toFixed(1)} %`;
   return <div className="rounded-xl p-3 text-xs" style={{ background: "color-mix(in srgb,var(--accent) 8%,transparent)" }}>
-    <b>Votre profil borne cette allocation.</b> Budget de perte déclaré {p(budget_perte)} →
-    volatilité cible {p(vol_cible)} (maxDD ≈ 2,5 × vol). Les actifs retenus portent {p(vol_annuelle)}
-    {" "}de volatilité annualisée : l'exposition est donc ramenée à <b className="mono">{p(exposition)}</b>,
-    {" "}le reste — <b className="mono">{p(cash)}</b> — restant en liquidités.
+    <b>Votre profil limite ce panier.</b> Vous avez déclaré supporter une baisse de {p(budget_perte)}
+    {" "}au maximum. Ces titres sont trop agités pour ça ({p(vol_annuelle)} d'agitation par an, alors
+    qu'il en faudrait {p(vol_cible)}). On n'investit donc que{" "}
+    <b className="mono">{p(exposition)}</b> de votre argent, et <b className="mono">{p(cash)}</b>
+    {" "}restent en liquidités.
     {exposition >= 0.999 ? " Aucune réduction n'a été nécessaire." : ""}
   </div>;
 }

@@ -22,7 +22,8 @@ export default function NotesPage() {
   return (
     <main className="max-w-4xl mx-auto p-6 space-y-4">
       <h1 className="text-xl font-semibold tracking-tight">Notes d'analyse</h1>
-      <p className="text-muted text-xs">Notes fondamentales (Vernimmen + Damodaran) — archivées chaque nuit, ou générées à la demande pour n'importe quel ticker.</p>
+      <p className="text-muted text-xs">Fiches d'analyse d'entreprise : ce qu'elle gagne, ce qu'elle vaut, ce qu'elle doit. Méthodes
+        d'évaluation classiques. Générées chaque nuit, ou à la demande pour le titre de votre choix.</p>
 
       {/* génération à la demande — nécessite l'API live (masqué sur le site statique) */}
       {!STATIC && (

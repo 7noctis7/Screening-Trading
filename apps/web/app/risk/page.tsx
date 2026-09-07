@@ -82,7 +82,8 @@ export default function Risk() {
         {data.strategy_label && <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full align-middle"
           style={{ background: "color-mix(in srgb, var(--accent) 16%, transparent)", color: "var(--accent2)" }}>
           {data.strategy_label}</span>}</h1>
-      <p className="text-muted text-xs">Risque de l'<b>allocation de production</b> (preset + cœur), cohérent avec le Dashboard et Positions.</p>
+      <p className="text-muted text-xs">Le risque de ce qui est <b>réellement détenu</b> aujourd'hui. Les mêmes positions que le
+        Dashboard et l'onglet Positions — un seul portefeuille, trois façons de le regarder.</p>
       <StepBanner active="risk" />
 
       <SystemHealth meta={meta} cd={rb?.covariance_diagnostics} />

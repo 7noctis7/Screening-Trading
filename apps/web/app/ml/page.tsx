@@ -41,10 +41,11 @@ export default function Ml() {
         ))}
       </div>
       <p className="text-muted text-xs">
-        Entraîné en cross-section sur tout l'univers (8 features point-in-time : momentum 1m/3m,
-        tendance vs MM50, RSI, volatilité, momentum ajusté du risque, distance au plus-haut 52 sem.,
-        reversal 5 j). Score = probabilité de hausse à ~{ml.horizon_days} jours, validée
-        hors-échantillon (AUC). Démonstration synthétique : edge volontairement modeste.
+        Un modèle estime, pour chaque titre, sa probabilité de monter dans les
+        ~{ml.horizon_days} prochains jours. Il ne regarde que 8 indicateurs de prix — tendance,
+        volatilité, distance au plus haut de l'année, rebond récent — et uniquement des données
+        disponibles au moment où il décide, jamais le futur. Sa qualité est mesurée sur des périodes
+        qu'il n'a pas vues à l'entraînement : c'est la seule note qui compte.
       </p>
 
       <section className="card p-4 overflow-x-auto">

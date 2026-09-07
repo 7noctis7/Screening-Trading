@@ -12,16 +12,20 @@ export type ScenarioResult = {
 };
 
 const LABELS: Record<ScenarioKind, [string, string]> = {
-  prudent: ["Prudent", "Minimum variance robuste sur l'univers disponible"],
-  neutre: ["Neutre", "Equal Risk Contribution, budgets de risque équilibrés"],
+  // Les libellés sont ce que l'utilisateur lit EN PREMIER. « Minimum variance robuste » ne dit
+  // rien à qui n'a pas fait de finance quantitative ; « le panier qui bouge le moins » dit
+  // exactement la même chose, et le méthodologique reste disponible plus bas. Simplifier le
+  // vocabulaire, jamais le contenu.
+  prudent: ["Prudent", "Le panier qui bouge le moins"],
+  neutre: ["Neutre", "Chaque ligne apporte la même dose de risque"],
   // Le backend calcule un HRP (hiérarchie de risque sur la covariance). Annoncer
   // « Black-Litterman » promettait des rendements attendus (μ) que rien ne calibre :
   // un nom que le calcul n'aurait jamais honoré. On nomme ce qui est calculé.
-  dynamique: ["Dynamique", "Hierarchical Risk Parity — grappes de corrélation, sans rendement attendu"],
+  dynamique: ["Dynamique", "Réparti par familles de titres qui bougent ensemble"],
   // Le SEUL profil qui utilise un rendement attendu. Il n'apparaît que si l'IC du score a
   // été mesuré ET tient hors échantillon ; l'amplitude des vues vaut IC × σ × z (Grinold),
   // donc un IC faible ramène mécaniquement le résultat sur le prior ERC.
-  conviction: ["Conviction", "Black-Litterman — vues calibrées par l'IC MESURÉ du score"],
+  conviction: ["Conviction", "Le seul qui parie sur une hausse — et seulement si c'est prouvé"],
 };
 
 const norm = (value: string) => value.toUpperCase().replace(/[-/]/g, "");

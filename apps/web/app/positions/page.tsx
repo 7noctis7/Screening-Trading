@@ -213,8 +213,10 @@ export default function Positions() {
       <h1 className="text-xl font-semibold tracking-tight">Positions
         <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full align-middle"
           style={{ background: "color-mix(in srgb, #22c55e 16%, transparent)", color: "#22c55e" }}>RÉEL · Alpaca + {vName}</span></h1>
-      <p className="text-muted text-xs">Positions <b>réellement détenues</b>, confrontées à la <b>cible du preset</b> (modèle).
-        L'écart montre ce que le prochain rebalancement corrigera (bande de non-trading : {BAND * 100} %). Aucun chiffre inventé : « n/d » si un compte est déconnecté.</p>
+      <p className="text-muted text-xs">Ce que vous détenez vraiment, face à ce que le modèle vise.
+        La colonne « écart » montre ce que le prochain ajustement corrigera. Sous {BAND * 100} %
+        d'écart, on ne touche à rien : bouger pour si peu coûterait plus que ça ne rapporte. Aucun
+        chiffre inventé — « n/d » quand un compte est déconnecté.</p>
       <StepBanner active="portfolio" />
 
       {toutBloque && (
@@ -228,16 +230,17 @@ export default function Positions() {
             n'ouvre pas de position (elle ne pèserait rien et coûterait du frottement).
           </p>
           <p className="text-muted text-xs mt-1">
-            Deux leviers : augmenter le capital de la poche, ou abaisser le plancher via
-            <code> QUANT_MIN_POSITION</code>. À capital constant, une exposition brute
+            Deux solutions : mettre plus de capital sur cette poche, ou abaisser le seuil minimal
+            par ligne (<code>QUANT_MIN_POSITION</code>). À capital constant, une exposition brute
             réduite par la porte de régime fait aussi passer des lignes sous le plancher.
           </p>
         </section>)}
 
       {!toutBloque && bloquees.length > 0 && (
         <p className="text-muted text-xs">
-          {bloquees.length} cible(s) sous le plancher de ${usd(PLANCHER)} par ligne : elles
-          restent affichées mais <b>ne seront pas ouvertes</b> au prochain rebalancement.
+          {bloquees.length} ligne(s) visée(s) pour moins de ${usd(PLANCHER)}. Elles restent
+          affichées mais <b>ne seront pas achetées</b> : une position trop petite coûte plus en
+          frais qu'elle n'apporte.
         </p>)}
 
       {!data.connected ? (

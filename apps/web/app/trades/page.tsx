@@ -23,7 +23,8 @@ export default function Trades() {
       <h1 className="text-xl font-semibold tracking-tight">Trades
         <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full align-middle"
           style={{ background: "color-mix(in srgb, #22c55e 16%, transparent)", color: "#22c55e" }}>RÉEL · Alpaca + {nomVenue(acc)}</span></h1>
-      <p className="text-muted text-xs">Ordres <b>réellement exécutés</b> (fills) <b>et ordres en attente</b> (non encore exécutés, ex. marché fermé) sur tes comptes. Aucune donnée modèle, backtest ou synthétique.</p>
+      <p className="text-muted text-xs">Vos ordres <b>réellement passés</b>, et ceux <b>en attente</b> — par exemple quand la bourse
+        est fermée. Rien ne vient d'un modèle ou d'une simulation : uniquement vos comptes.</p>
 
       {!data.connected ? (
         <section className="card p-6 text-center">

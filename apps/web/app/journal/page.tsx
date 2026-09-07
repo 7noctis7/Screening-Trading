@@ -46,10 +46,13 @@ export default function Journal() {
       <h1 className="text-xl font-semibold tracking-tight">Journal des round-trips
         <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full align-middle"
           style={{ background: "color-mix(in srgb, #22c55e 16%, transparent)", color: "#22c55e" }}>RÉEL · paper</span></h1>
-      <p className="text-muted text-xs">Chaque aller-retour du rebalancement paper : features figées à la <b>décision</b>,
-        fill broker, PnL réalisé, MFE/MAE — publié tel quel, y compris les pertes.</p>
-      <p className="text-muted text-xs">Ce registre décrit les <b>trades</b>, pas la performance du compte : le verdict
-        GO/NO-GO du <b>2026-08-06</b> se lit sur la <b>courbe d'équité</b> du courtier, seule mesure qui n'oublie rien.
+      <p className="text-muted text-xs">Chaque achat suivi de sa revente, en simulation. Pour chacun : ce que le robot voyait
+        <b>au moment de décider</b>, le prix réellement obtenu, le gain ou la perte, et jusqu'où
+        le trade est monté puis descendu avant d'être soldé. Tout est publié, les pertes comprises.</p>
+      <p className="text-muted text-xs">Attention : cette page montre les <b>trades terminés</b>, pas la performance du compte.
+        Les positions perdantes encore ouvertes n'y figurent pas, ce qui embellit le tableau.
+        Pour juger, regardez la <b>courbe du compte</b> chez le courtier — c'est la seule mesure
+        qui n'oublie rien. C'est elle qui tranchera le <b>2026-08-06</b>.
         Un round-trip clos ici est un trade que le rebalancement a choisi de solder — les positions perdantes restent
         ouvertes et n'y figurent pas, donc le taux de réussite affiché est <b>biaisé à la hausse</b> par construction
         et ne se compare pas à celui d'un backtest.</p>
