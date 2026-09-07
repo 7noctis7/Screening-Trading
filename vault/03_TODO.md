@@ -786,6 +786,20 @@ explicite, module par module, avec mesure.
       `accueil` volontairement laissée telle quelle : sa prose était déjà claire. Forme retenue :
       la question posée avant la réponse technique, et l'explication au survol (`Col.title` sur
       `SortableTable`) plutôt qu'en note de bas de page.
+- [x] **Lisibilité mobile — FERMÉ (2026-09-07, mesuré)** : 365 éléments étaient hors écran et
+      injoignables à 390 px (pire cas `/fundamentals`, +492 px, la moitié de ses colonnes) ;
+      0 après correction, témoin à l'ancien CSS rejoué pour valider l'audit. Cause : la
+      rencontre de `overflow-x:clip` (garde-fou) et de quatorze tableaux sans conteneur
+      défilable. Correction structurelle, pas au cas par cas : sur mobile tout `<table>`
+      défile dans lui-même. Bulles d'aide et encoche en paysage corrigées aussi.
+      Garde-fou : `tests/web/test_mobile_pas_de_hors_ecran.py`.
+- [ ] **P2 — Mobile : passer l'audit de débordement en CI.** L'audit de ce jour tournait avec
+      Playwright installé à la volée puis désinstallé. Le figer (navigateur déjà présent dans
+      l'image) donnerait la mesure à chaque PR au lieu d'une fois. Le test actuel garde la
+      RÈGLE CSS ; il ne mesure pas les pixels.
+- [ ] **P2 — `/universe` en 5 colonnes fixes sur mobile** : la grille se rétracte au lieu de
+      déborder (donc rien d'injoignable, vérifié), mais « Nom » et « Secteur » y sont tronqués
+      à quelques caractères. À repenser en deux lignes par actif sous 640 px.
 - [ ] **Unifier les fenêtres du dashboard** : Sharpe 2,43 en haut, 1,07 dans le bloc honnêteté,
       0,98 pour le preset pur — trois fenêtres, aucune ne le dit dans les tuiles héros.
 - [ ] **Bloc décision sur le screener** : il classe mais ne conclut pas (la fiche, elle, conclut).

@@ -28,6 +28,54 @@ Restent à traiter : accueil, dashboard, crypto, glossaire, fiche, events, scree
 échecs, méthode, macro, data, live, investors, fundamentals. Le glossaire est volontairement
 technique par nature.
 
+## Session 2026-09-07 (suite 34) — 365 éléments hors écran, invisibles depuis toujours
+
+Retour de l'utilisateur : « les textes et fonctions aux bords de l'écran sont parfois
+inaccessibles ». Mesuré avant de toucher quoi que ce soit, Chromium à 390 px, sur les pages
+réelles rendues avec des jeux de données de mise en page :
+
+    ancien CSS  →  365 éléments hors écran ET sans parent défilable
+    corrigé     →    0
+
+Pire cas `/fundamentals` : le tableau dépassait de **492 px**, soit la moitié de ses quatorze
+colonnes. « Solidité », « Risque de faillite », « Tendance du cours », « Note d'ensemble »,
+« Avis » : hors d'atteinte, ni au doigt ni par script. Et **rien ne le signalait** — le tableau
+semblait simplement s'arrêter à « Décote estimée ». C'est le pire genre de défaut : celui qui
+n'a pas l'air d'un défaut.
+
+**La cause n'est aucun tableau en particulier.** C'est la rencontre de deux règles chacune
+raisonnable : `html, body { overflow-x:clip }`, posé comme garde-fou anti-débordement latéral,
+et quatorze tableaux écrits hors de tout conteneur `overflow-x-auto`. `clip` coupe SANS créer
+de zone défilable — contrairement à `hidden`, il n'y a aucun accès au contenu débordant. Le
+garde-fou anti-débordement fabriquait le contenu inaccessible.
+
+Envelopper les quatorze tableaux marchait ce jour-là ; le quinzième, écrit le mois prochain,
+ramenait le bug. La correction est donc **structurelle** : sur mobile, tout `<table>` devient
+son propre conteneur de défilement (`display:block; overflow-x:auto; width:max-content;
+min-width:100%`). Vérifié à la mesure avant de l'appliquer, parce que je doutais que
+`display:block` préserve la mise en colonnes : en-tête et corps restent alignés **au pixel**
+(mêmes abscisses), et un tableau étroit continue de remplir sa carte sans défiler.
+
+Deux autres débordements mesurés dans la foulée :
+- **Bulles d'aide** : 240 px centrées sur une icône de 15 px. Dès que l'icône est à moins de
+  120 px du bord — le cas ORDINAIRE en colonne de droite — 99 px de texte partaient hors écran
+  et étaient coupés. Sur mobile la bulle quitte l'ancrage et se pose en bas de l'écran, pleine
+  largeur : jamais coupée, quelle que soit la position de l'icône.
+- **Marges de `main`** : 14 px fixes, donc SOUS l'encoche en paysage sur iPhone.
+  `max(14px, env(safe-area-inset-*))` garde le plus grand des deux et ne coûte rien quand la
+  marge de sécurité vaut zéro. Même correctif sur le tiroir de navigation, qui colle au bord droit.
+
+**Le zéro ne prouve rien sans témoin.** J'ai rejoué le même audit avec l'ancien CSS remis en
+place : 365. C'est cette comparaison qui vaut, pas le zéro seul — un audit aveugle affiche zéro
+aussi. Même discipline sur le test de non-régression ajouté
+(`tests/web/test_mobile_pas_de_hors_ecran.py`) : règle sabotée → rouge, restaurée → vert. Un
+test incapable d'échouer ne garde rien.
+
+Piège de la session, quatrième ou cinquième occurrence : `pkill -f "next start -p 3100"` a tué
+mon propre shell (code 144), deux fois de suite, y compris avec la parade `[ ]` — le motif reste
+dangereux dès qu'il décrit une commande que je viens de taper. Réflexe à garder : lancer en
+`nohup … &` et vérifier avec `ps aux | grep "[n]ext start"` plutôt que tuer à l'aveugle.
+
 ## Session 2026-09-07 (suite 33) — Les quatorze pages restantes, même règle
 
 Suite directe : « fais les quatorze autres pages ». Même règle qu'à la suite 32 — **simplifier le
