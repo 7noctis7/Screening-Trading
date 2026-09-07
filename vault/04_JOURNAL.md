@@ -1,5 +1,23 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 8) — Le coupable nommé : un `next-server` orphelin que `make stop` n'a jamais tué
+
+Le diagnostic tardif a livré la ligne décisive :
+`LISTEN *:3000 users:(("next-server (v1",pid=423655))`. Un `next-server` tenait le port depuis
+des heures. `make stop` annonçait « arrêté » sans l'avoir touché — il ne cherchait les détenteurs
+qu'avec `lsof`. Toute la matinée en découle : port pris → Next sur 3001 → origine hors CORS →
+requêtes refusées avant émission → « TypeError: Load failed » qui accusait la donnée.
+
+MÉCANISME de l'orphelin : `next dev` tourne au premier plan d'une session SSH. À la déconnexion,
+le shell reçoit SIGHUP et `npm` meurt, mais l'enfant `next-server` survit, détaché, port toujours
+lié. Chaque cycle connexion/déconnexion en fabriquait un de plus.
+
+Corrigé dans `stop_services.sh` : les détenteurs sont cherchés par `ss` ET `lsof` (union), et un
+filet par nom rattrape un `next-server` que ni l'un ni l'autre ne montrerait. Ce filet a d'abord
+été écrit en `pkill -f` nu — il a tué mon propre shell de test, dont la ligne de commande
+contenait le motif. Il exige désormais que `comm` soit réellement node/next : le motif désigne le
+candidat, l'exécutable décide. Vérifié dans les deux sens (orphelin tué, voisin épargné).
+
 ## Session 2026-09-07 (suite 7) — « Nombre de lignes » demandé n'est pas obtenu, et il faut le dire là où on regarde
 
 Quatre lignes demandées, trois obtenues ; dix demandées, trois aussi. La réponse était DÉJÀ dans la
