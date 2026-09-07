@@ -49,3 +49,14 @@ for pid in $(pgrep -f "[n]ext-server|[n]ext dev" 2>/dev/null); do
     node|next-server*|next*) kill -9 "$pid" 2>/dev/null || true ;;
   esac
 done
+
+# SUPERVISEUR CONCURRENT. Le 07/09, PM2 relançait le front dans les secondes suivant chaque
+# arrêt : tous les nettoyages de ce script étaient donc annulés aussitôt, et le symptôme
+# ressemblait à un orphelin tenace. On ne tue pas PM2 d'autorité — il peut superviser autre
+# chose — mais on refuse de laisser croire que le nettoyage a abouti.
+if command -v pm2 >/dev/null 2>&1 && pgrep -f "[P]M2.*God" >/dev/null 2>&1; then
+  echo "  ⚠ PM2 tourne : il RELANCERA tout ce que ce script vient d'arrêter."
+  echo "    Applications supervisées :"
+  pm2 jlist 2>/dev/null | grep -oE '"name":"[^"]+"' | sed 's/^/      /' || true
+  echo "    Pour lui retirer ce rôle :  pm2 delete all; pm2 save --force; pm2 kill"
+fi

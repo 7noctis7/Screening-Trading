@@ -50,8 +50,20 @@ if command -v systemctl >/dev/null 2>&1 \
       echo "  Processus du service (cgroup) :"
       systemctl status quant-web.service --no-pager 2>/dev/null \
         | sed -n '/CGroup/,$p' | head -6 | sed 's/^/    /'
+      # UN AUTRE GESTIONNAIRE DE PROCESSUS. Diagnostiqué le 07/09 après une journée à
+      # accuser des « orphelins » : PM2 faisait tourner le front et le RESSUSCITAIT dans
+      # les secondes suivant chaque kill. Tuer le processus ne servait donc à rien — il
+      # fallait retirer le superviseur concurrent. Un processus qui renaît n'est pas un
+      # orphelin : c'est quelqu'un qui le redémarre.
+      if ps -p "$tenant" -o ppid= >/dev/null 2>&1 && pgrep -a "PM2|pm2" >/dev/null 2>&1; then
+        echo "  ⚠ PM2 TOURNE SUR CETTE MACHINE et supervise probablement ce processus."
+        echo "    Deux gestionnaires ne peuvent pas se partager le port 3000. Le tuer ne"
+        echo "    suffit pas : PM2 le relance. Retirer PM2 de ce rôle :"
+        echo "        pm2 delete all; pm2 save --force; pm2 kill"
+        echo "        sudo systemctl disable --now pm2-\$USER"
+      fi
       echo "  Si le PID $tenant figure dans le cgroup ci-dessus, c'est MA remontée qui échoue"
-      echo "  — envoyez ce bloc. Sinon c'est un orphelin :   sudo kill -9 $tenant && make up"
+      echo "  — envoyez ce bloc. Sinon, voir ci-dessus, ou :   sudo kill -9 $tenant && make up"
       statut=1
     fi
   fi

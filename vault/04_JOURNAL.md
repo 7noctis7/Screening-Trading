@@ -1,5 +1,34 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 28) — LA CAUSE : PM2 ressuscitait le front derrière nous
+
+Le diagnostic de filiation, ajouté au tour précédent, a livré la réponse en quatre lignes :
+
+    860440  next-server     (parent 860439)
+    860439  sh              (parent 860404)
+    860404  npm run start   (parent 40536)
+    40536   PM2 v7.0.4: God (parent 1)
+
+**PM2 supervisait le front**, installé avant les services systemd. Son démon relance
+l'application dans les secondes suivant chaque arrêt. Tuer le processus ne servait donc à RIEN :
+il renaissait aussitôt, et le symptôme ressemblait à un orphelin tenace.
+
+Tout ce qui a été écrit aujourd'hui contre les « orphelins » — nettoyage par port et par nom,
+`KillMode=control-group`, exec du binaire local, garde de réservation — était juste, utile, et
+**incapable d'atteindre la cause**. Deux superviseurs se disputaient le port 3000 depuis le matin.
+
+**Un processus qui renaît n'est pas un orphelin : c'est quelqu'un qui le redémarre.** Cette
+distinction manquait à toute mon analyse. Je cherchais un processus abandonné là où il y avait un
+processus entretenu.
+
+Deux détections ajoutées, aux deux moments utiles. `stop_services.sh` avertit que PM2 annulera son
+propre travail et liste les applications supervisées. `verifier_service.sh` nomme PM2 dans le
+verdict de filiation et donne la procédure — car « tuer le PID » est précisément le conseil qui ne
+marche pas ici.
+
+Rappel de méthode : c'est le diagnostic qui IMPRIME CE QU'IL A VU, ajouté après deux verdicts que
+je ne savais pas justifier, qui a résolu la journée. L'assertion sans preuve avait tenu huit heures.
+
 ## Session 2026-09-07 (suite 27) — Mes commentaires s'exécutaient : l'installateur se relançait lui-même
 
     scripts/install_services.sh: line 42: mixed: command not found
