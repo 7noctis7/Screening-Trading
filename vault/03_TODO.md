@@ -21,6 +21,11 @@
       si faisable (06/09), puis (07/09) alias `-USD` + lecture de `crypto.db`, clé `dynamique`
       partagée front/back, `analyze()` purgé de son code mort de fusion. « Dynamique » = HRP, nommé
       comme tel et sans verrou ML (il n'exige aucun μ). Reste FX multi-devises.
+      Recommandation d'univers livrée (07/09) : sélection = screening du jour, poids = mêmes
+      moteurs de risque, élagage T/N ≥ 30, écart affiché face aux lignes détenues. Reste à
+      MESURER l'IC hors échantillon du score de sélection (`packages/research/information_coefficient.py`
+      existe ; il manque l'historique des scores) — tant que ce n'est pas fait, la carte reste
+      étiquetée non validée OOS. P1.
 
 - [x] **Copilote IA read-only (2026-08-29)** : chat global contextualisé par page, scopes/outils
       bornés, positions détaillées en opt-in, citations/as-of, garde numérique stricte et compteurs

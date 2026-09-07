@@ -149,7 +149,7 @@ def _collecter(requested: list[tuple[str, float]], years: int,
     return loaded, aliases, missing, cash
 
 
-def _scenarios(covariance: np.ndarray) -> dict:
+def scenarios_risque(covariance: np.ndarray) -> dict:
     """Trois allocations calculées sur la MÊME covariance.
 
     `dynamique` est un HRP (Hierarchical Risk Parity), pas un Black-Litterman : BL
@@ -161,6 +161,27 @@ def _scenarios(covariance: np.ndarray) -> dict:
     return {"prudent": min_variance_weights(covariance),
             "neutre": equal_risk_contribution(covariance),
             "dynamique": hrp_weights(covariance)}
+
+
+def charger_series(symboles: list[str], years: int = 5) -> tuple[dict, dict, list]:
+    """(séries datées par symbole, alias retenus, manquants) — chargement partagé.
+
+    Exposé pour que la recommandation d'univers réutilise EXACTEMENT ce chargement :
+    mêmes alias crypto, même lecture de `crypto.db`, même seuil d'observations. Deux
+    définitions concurrentes du chargement finiraient par diverger sans que rien ne le
+    signale — c'est précisément ce qui avait produit la clé `hrp`/`black_litterman`.
+    """
+    loaded, aliases, missing, _cash = _collecter([(s, 1.0) for s in symboles], years, None)
+    return loaded, aliases, missing
+
+
+def covariance_annuelle(series: dict[str, dict[str, float]]) -> tuple[list[str], np.ndarray, list[str]]:
+    """(symboles, covariance annualisée à 252 j, dates communes) — intersection stricte."""
+    dates, prices = _align(series)
+    if len(dates) < 2:
+        return list(series), np.array([]), dates
+    returns = prices[:, 1:] / prices[:, :-1] - 1
+    return list(series), np.atleast_2d(np.cov(returns) * 252), dates
 
 
 def analyze(positions: list[dict], years: int = 5, series_by_symbol: dict | None = None) -> dict:
@@ -195,4 +216,4 @@ def analyze(positions: list[dict], years: int = 5, series_by_symbol: dict | None
             "metrics": _metrics(returns, weights),
             "risk_contribution": [float(v) if np.isfinite(v) else None for v in contribution],
             "correlation": _json_matrix(correlation),
-            "scenarios": _scenarios(covariance), "coverage": 1.0}
+            "scenarios": scenarios_risque(covariance), "coverage": 1.0}

@@ -250,6 +250,25 @@ def analyze_user_portfolio(body: PortfolioAnalysisRequest, request: Request) -> 
     return analyze(rows, years=body.years, series_by_symbol=series)
 
 
+class RecommendationRequest(BaseModel):
+    n: int = Field(default=15, ge=3, le=30)
+    years: int = Field(default=5, ge=1, le=15)
+
+
+@app.post("/api/portfolio/recommend")
+def recommend_universe(body: RecommendationRequest, request: Request) -> dict:
+    """Univers RECOMMANDÉ : sélection issue du screening du jour, poids par les moteurs de risque.
+
+    Distinct de `optimal_allocation`, qui répartit le risque sur les lignes DÉJÀ détenues
+    (`snapshot.py` : `corr_syms = held[:12]`) et ne peut donc rien proposer de nouveau.
+    Read-only, aucune persistance, aucun chemin d'exécution — comme `/analyze`.
+    """
+    if not _webhook_authorized(request):
+        return {"available": False, "reason": "endpoint local uniquement"}
+    from packages.portfolio.recommendation import recommander
+    return recommander(_snap().get("screen") or {}, n=body.n, years=body.years)
+
+
 @app.get("/api/positions")
 def positions() -> dict:
     snap = _snap()

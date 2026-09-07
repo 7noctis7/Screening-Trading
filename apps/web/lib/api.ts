@@ -56,6 +56,22 @@ export async function analyzePortfolio(positions: { ticker: string; weight: numb
   return response.json();
 }
 
+// Univers RECOMMANDÉ : ce que le robot proposerait de détenir, indépendamment de ce qui
+// est détenu. Distinct de `optimal_allocation`, qui ne répartit le risque que sur les
+// lignes déjà en portefeuille et ne peut donc rien proposer de nouveau.
+export async function recommendUniverse(n: number, years = 5) {
+  if (STATIC) return _indisponible("recommandation disponible en local avec make start");
+  let response: Response;
+  try {
+    response = await fetch(`${BASE}/api/portfolio/recommend`, { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ n, years }) });
+  } catch {
+    return _indisponible(_raisonTransport());
+  }
+  if (!response.ok) return _indisponible(`API ${BASE}/api/portfolio/recommend : HTTP ${response.status}.`);
+  return response.json();
+}
+
 // Navigation instantanée : données fraîches gardées en cache (staleTime), pas de "vide" au
 // changement d'onglet (placeholderData), refetch en arrière-plan. TTL serveur 15 min.
 const LIVE = 30000;

@@ -1,6 +1,10 @@
 import { PortfolioSnapshot } from "@/lib/portfolio-import";
 
 export type ScenarioKind = "prudent" | "neutre" | "dynamique";
+// D'où vient l'univers : les lignes que l'utilisateur DÉTIENT, ou la sélection que le
+// screening du jour propose. Deux questions différentes — « comment mieux répartir ce que
+// j'ai » et « que devrais-je détenir » — donc deux règles de validation différentes.
+export type ScenarioSource = "portefeuille" | "recommandation";
 export type ScenarioResult = {
   kind: ScenarioKind; label: string; method: string; weights: { symbol: string; current: number; proposed: number; delta: number }[];
   turnover: number; estimatedCost: number | null; breaches: number; averageCapEffect: number;
@@ -36,9 +40,12 @@ function capWeights(raw: number[], cap: number): { weights: number[]; triggers: 
 }
 
 export function buildScenario(snapshot: PortfolioSnapshot, optimal: any, kind: ScenarioKind,
-  portfolioValue: number | null, costBps: number, maxWeight: number): ScenarioResult {
+  portfolioValue: number | null, costBps: number, maxWeight: number,
+  source: ScenarioSource = "portefeuille"): ScenarioResult {
   const [label, method] = LABELS[kind];
-  const imported = new Map(snapshot.positions.map((position) => [norm(position.ticker), (position.weight ?? 0) / 100]));
+  const imported = new Map(snapshot.positions.map((position) =>
+    [norm(position.ticker), { ticker: position.ticker, weight: (position.weight ?? 0) / 100 }]));
+  const poidsActuel = (symbol: string) => imported.get(norm(symbol))?.weight ?? 0;
   const keys: Record<ScenarioKind, string> = { prudent: "min_variance", neutre: "risk_parity", dynamique: "hrp" };
   const proposed = optimal?.[keys[kind]]; const symbols: string[] = optimal?.symbols ?? [];
   const exact = symbols.length === imported.size && symbols.every((item) => imported.has(norm(item)));
@@ -47,7 +54,10 @@ export function buildScenario(snapshot: PortfolioSnapshot, optimal: any, kind: S
   // « Historique/covariance indisponible », qui accusait la donnée même quand elle
   // était parfaitement chargée et que seule une clé manquait (06/09).
   if (!symbols.length) return { ...vide, reason: "Aucune allocation calculée : l'analyse de l'univers n'a rien renvoyé." };
-  if (!exact) return { ...vide, reason: `Univers calculé (${symbols.length} actifs) différent de l'univers importé (${imported.size}).` };
+  // En mode recommandation l'univers DIFFÈRE par construction : exiger qu'il coïncide
+  // interdirait la seule chose que cette carte apporte — proposer des actifs non détenus.
+  if (source === "portefeuille" && !exact)
+    return { ...vide, reason: `Univers calculé (${symbols.length} actifs) différent de l'univers importé (${imported.size}).` };
   if (!Array.isArray(proposed) || proposed.length !== symbols.length)
     return { ...vide, reason: `Scénario « ${label} » non renvoyé par le calcul (clé « ${keys[kind]} » absente).` };
   // Plus de verrou ML sur « dynamique » : le HRP se calcule sur la seule covariance,
@@ -55,7 +65,16 @@ export function buildScenario(snapshot: PortfolioSnapshot, optimal: any, kind: S
   // qui n'a jamais été calculé ici.
   const constrained = capWeights(proposed, maxWeight);
   if (!constrained) return { kind, label, method, weights: [], turnover: 0, estimatedCost: null, breaches: 0, averageCapEffect: 0, available: false, reason: `Contrainte infaisable : ${symbols.length} actifs × ${(maxWeight * 100).toFixed(1)}% < 100%.` };
-  const weights = symbols.map((item, index) => ({ symbol: item, current: imported.get(norm(item)) ?? 0, proposed: constrained.weights[index], delta: constrained.weights[index] - (imported.get(norm(item)) ?? 0) }));
+  const weights = symbols.map((item, index) => ({ symbol: item, current: poidsActuel(item),
+    proposed: constrained.weights[index], delta: constrained.weights[index] - poidsActuel(item) }));
+  // Les lignes DÉTENUES et absentes de la sélection sortent à 0 %. Les omettre sous-estimerait
+  // le turnover et, surtout, cacherait la moitié de la décision : ce qu'il faut vendre.
+  if (source === "recommandation") {
+    const retenus = new Set(symbols.map(norm));
+    for (const [cle, position] of imported)
+      if (!retenus.has(cle) && position.weight > 0)
+        weights.push({ symbol: position.ticker, current: position.weight, proposed: 0, delta: -position.weight });
+  }
   const turnover = weights.reduce((sum, row) => sum + Math.abs(row.delta), 0) / 2;
   return { kind, label, method, weights, turnover, estimatedCost: portfolioValue == null ? null : portfolioValue * turnover * costBps / 10_000,
     breaches: constrained.triggers, averageCapEffect: constrained.averageEffect, available: true };

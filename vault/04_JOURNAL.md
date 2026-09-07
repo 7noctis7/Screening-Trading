@@ -1,5 +1,39 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 3) — Recommandation d'univers : que détenir, pas seulement comment repondérer
+
+Demande : une quatrième proposition où le robot dit QUELS actifs détenir, y compris des actifs
+absents du portefeuille, avec un % par profil.
+
+**Correction préalable d'une étiquette fausse.** `optimal_allocation` ressemblait à la réponse toute
+faite. Elle ne l'est pas : `snapshot.py:1858` pose `corr_syms = held[:12]` — ce sont les douze
+premières lignes DÉJÀ DÉTENUES. L'exposer comme « recommandation » aurait répondu « comment le robot
+devrait repondérer ce qu'il a » sous le nom de « que devriez-vous détenir ». Aucun actif nouveau
+n'aurait pu en sortir, et rien ne l'aurait signalé.
+
+**Ce qui est livré.** `packages/portfolio/recommendation.py` : la sélection vient du screening du
+jour (`/api/screen` — filtres durs YAML puis score composite z-score sur l'univers investable), les
+poids des trois profils viennent des mêmes moteurs de risque que l'étape 4. Endpoint
+`POST /api/portfolio/recommend` (read-only, garde localhost, comme `/analyze`). Côté front, un
+sélecteur de source dans l'étape 4 : « Mon portefeuille » ou « Recommandation du robot », les trois
+profils inchangés.
+
+**Élagage T/N.** Une introduction récente parmi quinze candidats peut réduire la fenêtre commune à
+quelques semaines : une covariance de 15 actifs sur 40 jours est du bruit (Marchenko-Pastur — la
+bande de bruit s'élargit en (1+√(N/T))², et un min-variance nourri de cette matrice concentre sur les
+actifs dont la variance est sous-estimée par accident). `elaguer()` retire l'actif dont l'historique
+commence le plus tard — ce qui augmente T et diminue N — jusqu'à T ≥ 30·N, en départageant les débuts
+identiques par le score le plus faible. Ce qui est retiré est PUBLIÉ avec sa date de début.
+
+**Trois honnêtetés imposées par le mandat données-réelles.** (1) Les lignes détenues absentes de la
+sélection apparaissent à 0 % : les omettre sous-estimerait le turnover et cacherait ce qu'il faut
+vendre. (2) `caveat` est publié avec chaque résultat : les poids répartissent un risque mesuré, la
+SÉLECTION repose sur un score dont le pouvoir prédictif n'est pas validé hors échantillon. (3) Aucun
+rendement attendu n'entre nulle part : « idéal » veut dire « bien réparti », jamais « le plus
+rentable » — la méthodologie le dit en toutes lettres.
+
+12 tests dédiés ; 2028 passés sur la suite complète ; build Next.js vert.
+
 ## Session 2026-09-07 (suite 2) — `make stop` se tuait lui-même, et tuait les tunnels SSH
 
 Deux défauts d'outillage, mesurés et reproduits, pas déduits.
