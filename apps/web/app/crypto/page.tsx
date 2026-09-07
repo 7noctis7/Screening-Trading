@@ -26,21 +26,21 @@ const EXT = { target: "_blank", rel: "noopener noreferrer" } as const;
 // Glossaire pédagogique (définitions factuelles, pas de chiffre inventé).
 const GLOSSARY: Record<string, string> = {
   "Capitalisation totale":
-    "Valeur de marché cumulée de toutes les cryptos (prix × offre en circulation). Le « PIB » du marché crypto.",
+    "Ce que vaut le marché crypto tout entier : pour chaque crypto, son prix multiplié par le nombre d'unités en circulation, le tout additionné.",
   "Variation cap 24 h":
-    "Évolution de cette capitalisation sur 24 h. Positif = le marché global monte.",
+    "De combien cette valeur totale a bougé en 24 heures. Positif = le marché monte dans son ensemble.",
   "Dominance BTC":
-    "Part de Bitcoin dans la capitalisation totale. En hausse = repli vers la valeur refuge ; en baisse = appétit pour les altcoins (« altseason »).",
+    "La part du Bitcoin dans le total. Quand elle monte, les investisseurs se replient sur la crypto la plus établie ; quand elle baisse, ils prennent plus de risques ailleurs.",
   "Dominance ETH":
-    "Part d'Ethereum dans la capitalisation totale. Référence de l'écosystème des smart contracts.",
+    "La part d'Ethereum dans le total. C'est le réseau de référence pour les applications décentralisées.",
   "Fear & Greed":
-    "Indice 0-100 d'humeur du marché (alternative.me). 0 = peur extrême (souvent un creux), 100 = avidité (souvent un sommet). Indicateur contrarian.",
+    "Un indice d'humeur de 0 à 100 (alternative.me). 0 = peur panique, souvent près d'un creux ; 100 = euphorie, souvent près d'un sommet. Il se lit à l'envers de ce qu'on croit.",
   "TVL DeFi totale":
-    "Total Value Locked : capital déposé dans les protocoles de finance décentralisée. Mesure l'usage réel de la DeFi.",
+    "L'argent déposé dans les services financiers décentralisés. C'est la mesure de leur usage réel, pas de leur promesse.",
   breadth:
-    "Ampleur du marché : combien d'actifs montent vs descendent. Une hausse « large » (beaucoup d'actifs verts) est plus saine qu'une hausse portée par quelques-uns.",
+    "Combien de cryptos montent, comparé à combien descendent. Une hausse portée par beaucoup d'actifs est plus solide qu'une hausse portée par deux ou trois.",
   peg:
-    "Ancrage d'un stablecoin à sa valeur cible (en général 1,00 $). Un écart durable (≠ 0 %) signale un stress de liquidité ou de confiance.",
+    "Une crypto dite « stable » vaut en principe toujours 1,00 $. Cet écart mesure sa dérive : s'il dure, c'est un signe de tension ou de perte de confiance.",
 };
 
 function Label({ text }: { text: string }) {
@@ -117,8 +117,8 @@ function Overview({ ck }: { ck: any }) {
   if (!se?.available) return null;
   const s = SENTI[se.label] ?? SENTI.NEUTRE;
   return (
-    <Card title="Aperçu — humeur du marché" source="synthèse déterministe · 0 chiffre inventé"
-      hint="Score 0–100 = moyenne des signaux disponibles (Fear & Greed, variation 24 h, breadth). Contexte, pas un signal d'alpha.">
+    <Card title="Aperçu — humeur du marché" source="calcul reproductible · aucun chiffre inventé"
+      hint="Une note de 0 à 100 : la moyenne des indicateurs disponibles ce jour (l'indice de peur, la variation sur 24 h, la proportion d'actifs en hausse). C'est un thermomètre d'ambiance, pas un signal d'achat.">
       <div className="flex items-center gap-3 flex-wrap">
         <span className="text-sm font-semibold px-2.5 py-1 rounded-full"
           style={{ color: s.c, background: s.bg }}>{s.label}</span>
@@ -139,8 +139,8 @@ function Accumulation({ ck }: { ck: any }) {
   if (!a?.available) return null;
   const col = a.score >= 60 ? "var(--pos)" : a.score <= 40 ? "#f43f5e" : "var(--warn)";
   return (
-    <Card title="Score d'Accumulation Institutionnelle" source="synthèse contrarian · déterministe"
-      hint="0–100 contrarian : haut = conditions d'accumulation (peur, shorts surchauffés, poudre sèche stablecoins élevée) ; bas = euphorie/distribution. Contexte, pas un signal d'alpha.">
+    <Card title="Est-ce le moment où les gros acheteurs se positionnent ?" source="lecture à contre-courant · calcul reproductible"
+      hint="Une note de 0 à 100 qui va à l'inverse de la foule. Haut = tout le monde a peur, beaucoup parient sur la baisse, et de l'argent attend sur le côté : historiquement, le moment où les gros acheteurs se placent. Bas = euphorie générale, plutôt le moment où ils revendent. C'est un contexte, pas un signal d'achat.">
       <div className="flex items-center gap-3 flex-wrap">
         <span className="text-sm font-semibold px-2.5 py-1 rounded-full"
           style={{ color: col, background: "color-mix(in srgb, " + col + " 15%, transparent)" }}>{a.label}</span>
@@ -173,7 +173,7 @@ function Pulse({ ck }: { ck: any }) {
   ];
   return (
     <Card title="Pouls du marché" source="CoinGecko · DefiLlama · alternative.me"
-      hint="Dominance BTC ↑ = repli vers la valeur refuge crypto ; ↓ = appétit pour le risque (altcoins). TVL = capital verrouillé en DeFi.">
+      hint="Quand la part du Bitcoin monte, les investisseurs se réfugient sur la crypto la plus établie ; quand elle baisse, ils prennent plus de risques sur les autres. Le « TVL » est l'argent déposé dans les services financiers décentralisés : il mesure leur usage réel.">
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         {stats.map(([l, v, c]) => (
           <div key={l}>
@@ -191,8 +191,8 @@ function Narratives({ ck }: { ck: any }) {
   const cats = (ck.categories ?? []) as any[];
   if (!cats.length) return null;
   return (
-    <Card title="Narratifs du moment" source="CoinGecko · catégories"
-      hint="Quelle thématique surperforme aujourd'hui (IA, RWA, L2, memes…). Rotation sectorielle = où la liquidité se déplace.">
+    <Card title="Les thèmes qui marchent en ce moment" source="CoinGecko · catégories"
+      hint="Quelle famille de cryptos monte le plus aujourd'hui (intelligence artificielle, actifs du monde réel, réseaux rapides, memes…). Voir un thème dominer, c'est voir où l'argent se déplace.">
       <div className="flex flex-wrap gap-2">
         {cats.map((c) => {
           const href = cgCat(c.id);
@@ -217,8 +217,8 @@ function Trending({ ck }: { ck: any }) {
   const tr = (ck.trending ?? []) as any[];
   if (!tr.length) return null;
   return (
-    <Card title="Tendances (attention retail)" source="CoinGecko · search/trending"
-      hint="Les actifs les plus recherchés. Signal d'attention, souvent tardif — à lire comme un thermomètre du retail, pas un signal d'entrée.">
+    <Card title="Ce que tout le monde cherche" source="CoinGecko · recherches les plus fréquentes"
+      hint="Les cryptos les plus recherchées en ce moment. Attention : quand une crypto arrive ici, le mouvement a souvent déjà eu lieu. C'est un thermomètre de l'attention du public, pas un signal d'entrée.">
       <div className="flex flex-wrap gap-2">
         {tr.map((t, i) => {
           const href = cgCoin(t.id);
@@ -265,8 +265,8 @@ function Movers({ ck, onSelect }: { ck: any; onSelect: (m: any) => void }) {
     </div>
   );
   return (
-    <Card title="Gagnants / Perdants 24 h" source="CoinGecko · top 100 cap"
-      hint="Mouvements extrêmes du jour parmi les 100 plus grosses capitalisations. Volatilité = opportunité et risque ; jamais de levier en paper.">
+    <Card title="Plus fortes hausses et baisses du jour" source="CoinGecko · les 100 plus grosses cryptos"
+      hint="Les mouvements les plus violents des dernières 24 heures parmi les 100 plus grosses cryptos. Ce qui bouge fort peut rapporter gros et faire perdre autant — et ici, jamais d'argent emprunté.">
       <div className="grid md:grid-cols-2 gap-4">
         <Col title="📈 Gagnants" rows={gain} up />
         <Col title="📉 Perdants" rows={lose} up={false} />
@@ -280,8 +280,8 @@ function Stablecoins({ ck }: { ck: any }) {
   const st = (ck.stablecoins ?? []) as any[];
   if (!st.length) return null;
   return (
-    <Card title="Stablecoins — liquidité & peg" source="DefiLlama · stablecoins"
-      hint="La capitalisation stablecoin = poudre sèche prête à entrer. Un écart au peg (≠ $1.00) signale un stress de liquidité ou de confiance.">
+    <Card title="Les cryptos calées sur le dollar" source="DefiLlama · stablecoins"
+      hint="Ces cryptos valent en principe 1,00 $ en permanence : c'est l'argent qui attend sur le côté, prêt à être investi. Plus il y en a, plus il y a de munitions. Et si l'une d'elles s'écarte durablement de 1,00 $, c'est un signe de tension ou de perte de confiance.">
       <div className="overflow-x-auto">
         <table className="w-full text-sm mono">
           <thead className="text-muted2 text-[11px]">
@@ -305,7 +305,7 @@ function Stablecoins({ ck }: { ck: any }) {
                     {isYield && (
                       <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded align-middle"
                         style={{ background: "var(--surface2)", color: "var(--muted2)" }}
-                        title="Token à rendement : sa valeur (NAV) dérive volontairement de 1 $ — ce n'est pas un dépeg.">
+                        title="Cette crypto verse un rendement : sa valeur s'éloigne de 1 $ volontairement, en grandissant. Ce n'est pas un décrochage.">
                         rendement
                       </span>
                     )}
@@ -331,8 +331,8 @@ function Altseason({ ck }: { ck: any }) {
   if (!a?.available) return null;
   const col = a.label === "Altseason" ? "var(--pos)" : a.label === "Bitcoin" ? "#f59e0b" : "var(--muted)";
   return (
-    <Card title="Saison — Bitcoin vs Altcoins" source="dérivé CoinGecko · 7 j"
-      hint="Part du top 50 (hors stablecoins) qui surperforme BTC sur 7 jours. ≥75 % = « altseason » (l'argent va vers les altcoins) ; ≤25 % = domination Bitcoin.">
+    <Card title="Bitcoin ou le reste du marché ?" source="calculé depuis CoinGecko · sur 7 jours"
+      hint="Sur les 50 plus grosses cryptos, combien font mieux que le Bitcoin sur la semaine. Au-dessus de 75 %, l'argent part vers les autres cryptos ; en dessous de 25 %, le Bitcoin domine.">
       <div className="flex items-center gap-3 flex-wrap">
         <span className="text-sm font-semibold px-2.5 py-1 rounded-full"
           style={{ color: col, background: "color-mix(in srgb, " + col + " 15%, transparent)" }}>
@@ -359,7 +359,7 @@ function Halving({ ck }: { ck: any }) {
   const eta = new Date(Date.now() + h.days_left * 86400_000);
   return (
     <Card title={`Halving Bitcoin — le ${h.number}ᵉ`} source="blockchain.info · hauteur de bloc réelle"
-      hint="Tous les 210 000 blocs (~4 ans), la récompense de minage est divisée par deux → choc d'offre. Estimation à ~10 min/bloc.">
+      hint="Environ tous les quatre ans, la quantité de nouveaux bitcoins créés est divisée par deux : l'offre se raréfie d'un coup. La date est estimée à partir du rythme de création actuel.">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div><div className="text-muted text-xs">Dans</div><div className="text-lg mono">≈ {h.days_left} j</div></div>
         <div><div className="text-muted text-xs">Blocs restants</div><div className="text-lg mono">{h.blocks_left.toLocaleString("fr-FR")}</div></div>
@@ -448,8 +448,8 @@ function Derivatives({ ck }: { ck: any }) {
   const fpct = (x: any) => (typeof x === "number" ? `${(x * 100).toFixed(4)}%` : "n/d");
   const apct = (x: any) => (typeof x === "number" ? `${(x * 100).toFixed(1)}%` : "n/d");
   return (
-    <Card title="Dérivés & levier — funding multi-CEX" source="Bybit · OKX · Binance (perp)"
-      hint="Le funding des perpétuels : positif = les longs paient les shorts (longs surchauffés, biais contrarian baissier) ; négatif = shorts surchauffés. Normalisé sur 3 exchanges.">
+    <Card title="Qui paie qui chez ceux qui jouent avec de l'argent emprunté" source="Bybit · OKX · Binance"
+      hint="Sur ces plateformes, ceux qui parient à la hausse et ceux qui parient à la baisse se versent régulièrement de l'argent, selon qui est le plus nombreux. Un chiffre positif : les parieurs à la hausse paient — ils sont trop nombreux, ce qui annonce souvent une correction. Négatif : c'est l'inverse. Moyenne de trois plateformes.">
       {se?.available && (
         <div className="mb-3 flex items-center gap-2 flex-wrap">
           <span className="text-sm font-semibold px-2.5 py-1 rounded-full"
@@ -513,7 +513,7 @@ export default function Crypto() {
         <h1 className="text-xl font-semibold tracking-tight">Cockpit crypto</h1>
         {data?.generated_at && (
           <span className="text-[11px] text-muted2 mono px-2 py-1 rounded-md border border-border"
-            title="Horodatage du build (UTC). Le site est reconstruit chaque jour ouvré ; en cas de source indisponible, la dernière donnée valide est réutilisée.">
+            title="Heure de la dernière reconstruction du site (heure UTC). Il est refait chaque jour ouvré ; si une source ne répond pas, la dernière valeur correcte est conservée plutôt que remplacée par une estimation.">
             ⟳ {new Date(data.generated_at).toLocaleString("fr-FR", {
               day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
           </span>
@@ -526,7 +526,7 @@ export default function Crypto() {
       <ShareBar sentiment={data?.sentiment} />
       {!data?.available ? (
         <EmptyState
-          title="Cockpit crypto indisponible"
+          title="Les données crypto ne sont pas disponibles"
           hint={data?.reason === "QUANT_CRYPTO!=1"
             ? "Données réseau désactivées sur ce build (offline/tests). Activées au build quotidien des Pages."
             : `Sources temporairement injoignables (${data?.reason ?? "réseau"}).`}

@@ -28,6 +28,49 @@ Restent à traiter : accueil, dashboard, crypto, glossaire, fiche, events, scree
 échecs, méthode, macro, data, live, investors, fundamentals. Le glossaire est volontairement
 technique par nature.
 
+## Session 2026-09-07 (suite 33) — Les quatorze pages restantes, même règle
+
+Suite directe : « fais les quatorze autres pages ». Même règle qu'à la suite 32 — **simplifier le
+VOCABULAIRE, jamais le CONTENU**. Aucun chiffre, aucun seuil, aucune réserve n'a été retiré.
+
+**`accueil` : non réécrite, et c'est la bonne décision.** Sa prose était déjà en langage courant
+(« Un outil qui trie les marchés à votre place, explique chacun de ses choix, et dit franchement ce
+qu'il ne sait pas »). La réécrire pour pouvoir cocher quatorze au lieu de treize aurait été du
+travail pour le compteur, pas pour le lecteur.
+
+Pages traitées : `methode`, `echecs`, `screener`, `dashboard`, `data`, `live`, `universe`, `macro`,
+`investors`, `fundamentals`, `fiche`, `events`, `crypto`. Le glossaire portait déjà sa traduction
+« en clair » sous chaque terme et n'appelait rien.
+
+Deux formes récurrentes, appliquées partout :
+- **La question avant la réponse.** Chaque étage du gate de `/methode` s'ouvre désormais sur ce
+  qu'il cherche (« combien d'idées a-t-il fallu essayer avant de tomber sur celle-là ? »), la
+  formule SR* et la référence López de Prado restant intégralement en dessous. La rigueur n'a
+  jamais exigé d'être illisible.
+- **L'explication au survol plutôt qu'en note.** `Col.title` ajouté à `SortableTable` : un
+  en-tête de colonne porte sa définition sans allonger la page. « PER » devient « Prix /
+  bénéfices » avec, au survol, « combien d'années de bénéfices actuels il faut pour rembourser le
+  prix de l'action ».
+
+Exemples, à contenu strictement égal :
+- « Le rendement hors-QQQ n'est PAS une preuve de compétence (DSR≈0) » → « La part qui ne vient pas
+  de QQQ ne prouve PAS un savoir-faire : le plus souvent, c'est l'exposition à d'autres choses que
+  QQQ, plus de la chance »
+- « Biais du survivant » → « les actifs qui ont disparu de la cote sont remis dans les calculs :
+  ne garder que les survivants ferait croire que tout finit par monter »
+- « rendement pondéré dans le temps · un virement n'est ni un gain ni une perte » → « vos versements
+  et retraits sont mis de côté dans le calcul : seule la façon dont l'argent a travaillé compte »
+- « le screen capte peut-être UN thème, pas N opportunités indépendantes » → « c'est peut-être une
+  seule et même idée répétée dix fois : dix titres qui montent et descendent ensemble ne protègent
+  de rien »
+- « Trading SPOT uniquement » → « on achète et on vend comptant : jamais d'argent emprunté, jamais
+  de pari à la baisse »
+- « funding positif = les longs paient les shorts (biais contrarian baissier) » → « les parieurs à
+  la hausse paient — ils sont trop nombreux, ce qui annonce souvent une correction »
+
+Vérifié : `npx tsc --noEmit` propre sur les fichiers touchés (seules subsistent les deux erreurs
+`three` préexistantes de `components/landing/Scene.tsx`), `npm run build` vert sur les 26 pages.
+
 ## Session 2026-09-07 (suite 31) — 99 % sur une ligne : correct, et impossible à vérifier
 
 Question : est-il normal que « Prudent » propose 99 % sur NEAR, « Dynamique » 99,8 %, et « Neutre »

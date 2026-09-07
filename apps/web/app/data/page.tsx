@@ -14,21 +14,28 @@ export default function DataPage() {
   const h = d.health ?? {};
   const scoreColor = h.score >= 80 ? "#22c55e" : h.score >= 60 ? "#f59e0b" : "#f43f5e";
   const cards: [string, string][] = [
-    ["Provider", d.provider],
-    ["Barres collectées", nb(d.total_bars)],
-    ["Symboles", String((d.collection ?? []).length)],
-    ["Fondamentaux", d.fundamentals_provider ?? "—"],
+    ["Source des prix", d.provider],
+    ["Journées de cotation collectées", nb(d.total_bars)],
+    ["Actifs suivis", String((d.collection ?? []).length)],
+    ["Source des comptes d'entreprises", d.fundamentals_provider ?? "—"],
   ];
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-4">
-      <h1 className="text-xl font-semibold tracking-tight">Données</h1>
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight">Les données — d'où viennent les chiffres</h1>
+        <p className="text-muted text-sm mt-1 max-w-3xl">
+          Tout le site repose sur des historiques de prix. Cette page dit combien il y en a,
+          d'où ils viennent, ce qui manque et ce qui cloche. Une analyse ne vaut jamais mieux
+          que les chiffres qui la nourrissent : c'est pour ça qu'on les montre.
+        </p>
+      </div>
       <StepBanner active="data" />
       {d.survivorship?.available && (
         <div className="card p-3 text-sm flex items-start gap-2"
           style={{ borderColor: d.survivorship.corrected ? "var(--pos)" : "var(--warn)" }}>
           <span>{d.survivorship.corrected ? "✅" : "⚠️"}</span>
-          <span><b>Biais du survivant : {d.survivorship.severity}.</b>{" "}
-            <span className="text-muted">{d.survivorship.n_active} actifs cotés · {d.survivorship.n_delisted} délistés réintégrés. {d.survivorship.note}</span></span>
+          <span><b>Sociétés disparues prises en compte : {d.survivorship.severity}.</b>{" "}
+            <span className="text-muted">{d.survivorship.n_active} actifs encore cotés · {d.survivorship.n_delisted} actifs qui ont disparu de la cote, remis dans les calculs. Ne garder que les survivants ferait croire que tout finit par monter. {d.survivorship.note}</span></span>
         </div>
       )}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -44,17 +51,17 @@ export default function DataPage() {
       {h.score != null && (
         <section className="card p-4">
           <div className="flex items-center justify-between flex-wrap gap-2">
-            <h2 className="text-sm uppercase tracking-wide text-muted">Santé &amp; couverture des données</h2>
-            <span className="mono text-sm">Score qualité <b style={{ color: scoreColor }}>{h.score}/100</b>
-              <span className="text-muted text-xs"> · {h.complete}/{h.n_series} séries complètes · {h.outliers} outliers · {h.n_bad} valeurs invalides</span>
+            <h2 className="text-sm uppercase tracking-wide text-muted">Est-ce que l'historique est complet ?</h2>
+            <span className="mono text-sm">Note de qualité <b style={{ color: scoreColor }}>{h.score}/100</b>
+              <span className="text-muted text-xs"> · {h.complete} historiques complets sur {h.n_series} · {h.outliers} valeurs aberrantes · {h.n_bad} valeurs impossibles</span>
             </span>
           </div>
           <div className="overflow-x-auto mt-3">
             <table className="w-full text-sm mono">
               <thead className="text-muted text-xs">
-                <tr><th className="text-left font-normal">Classe</th><th className="text-right font-normal">Séries</th>
-                <th className="text-right font-normal">Complètes</th><th className="text-right font-normal">% complet</th>
-                <th className="text-right font-normal">Barres moy.</th></tr>
+                <tr><th className="text-left font-normal">Catégorie</th><th className="text-right font-normal">Actifs</th>
+                <th className="text-right font-normal">Historique complet</th><th className="text-right font-normal">% complet</th>
+                <th className="text-right font-normal" title="Nombre moyen de journées de cotation par actif.">Journées en moyenne</th></tr>
               </thead>
               <tbody>{(h.coverage ?? []).map((c: any) => (
                 <tr key={c.asset_class} className="border-t border-border">
@@ -71,14 +78,15 @@ export default function DataPage() {
       {/* SPC / Six Sigma — taux de défaut du pipeline OHLCV */}
       {d.spc?.available && (
         <section className="card p-4">
-          <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Maîtrise statistique (Six Sigma)</h2>
+          <h2 className="text-sm uppercase tracking-wide text-muted mb-1">Taux d'erreur de la collecte</h2>
+          <p className="text-muted2 text-xs mb-3">Sur des millions de journées de cotation collectées, combien contiennent une anomalie ? On mesure ça comme une usine mesure ses défauts de fabrication.</p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {([
-              ["Niveau sigma", `${d.spc.sigma_level}σ`,
+              ["Niveau de fiabilité", `${d.spc.sigma_level}σ`,
                 d.spc.sigma_level >= 6 ? "#22c55e" : d.spc.sigma_level >= 4.5 ? "#f59e0b" : "#f43f5e"],
-              ["DPMO", nb(Math.round(d.spc.dpmo)), undefined],
-              ["Cible", `${d.spc.target_dpmo} DPMO`, "#94a3b8"],
-              ["Barres contrôlées", nb(d.spc.p_chart?.n ?? 0), undefined],
+              ["Défauts par million", nb(Math.round(d.spc.dpmo)), undefined],
+              ["Objectif", `${d.spc.target_dpmo} par million`, "#94a3b8"],
+              ["Journées contrôlées", nb(d.spc.p_chart?.n ?? 0), undefined],
             ] as [string, string, string | undefined][]).map(([lab, val, col]) => (
               <div key={lab} className="rounded-lg border border-border p-3" style={{ background: "var(--surface)" }}>
                 <div className="text-muted text-[11px] uppercase tracking-wide">{lab}</div>
@@ -87,8 +95,9 @@ export default function DataPage() {
             ))}
           </div>
           <div className="text-xs text-muted2 mt-2">
-            Défaut = barre non conforme ({d.spc.checks}). Taux p̂ = {((d.spc.p_chart?.p ?? 0) * 100).toFixed(5)} %.
-            Cible 3,4 DPMO = 6σ (convention décalage 1,5σ).
+            Une journée est comptée en défaut si elle rate un de ces contrôles : {d.spc.checks}.
+            Taux observé : {((d.spc.p_chart?.p ?? 0) * 100).toFixed(5)} %. L'objectif industriel de référence
+            est 3,4 défauts par million, ce qu'on appelle le niveau 6σ.
           </div>
         </section>
       )}
@@ -97,16 +106,16 @@ export default function DataPage() {
       {d.audit && (
         <section className="card p-4">
           <div className="flex items-center justify-between flex-wrap gap-2">
-            <h2 className="text-sm uppercase tracking-wide text-muted">Audit d'intégrité (PwC)</h2>
+            <h2 className="text-sm uppercase tracking-wide text-muted">Contrôle d'intégrité, comme un audit comptable</h2>
             <span className="text-xs px-2 py-0.5 rounded-full bg-surfaceAlt"
               style={{ color: d.audit.ok ? "#22c55e" : "#ef4444" }}>
               {d.audit.ok ? "✓ aucune anomalie critique" : `✗ ${d.audit.counts?.critical ?? 0} critique(s)`}
             </span>
           </div>
           <div className="grid grid-cols-3 gap-3 mt-3">
-            {([["Critiques", d.audit.counts?.critical ?? 0, "#ef4444"],
-               ["Majeures", d.audit.counts?.major ?? 0, "#f59e0b"],
-               ["Avertissements", d.audit.counts?.warning ?? 0, "#94a3b8"]] as [string, number, string][])
+            {([["Bloquantes", d.audit.counts?.critical ?? 0, "#ef4444"],
+               ["Sérieuses", d.audit.counts?.major ?? 0, "#f59e0b"],
+               ["À surveiller", d.audit.counts?.warning ?? 0, "#94a3b8"]] as [string, number, string][])
               .map(([lab, val, col]) => (
                 <div key={lab}>
                   <div className="text-muted text-xs">{lab}</div>
@@ -114,14 +123,14 @@ export default function DataPage() {
                 </div>))}
           </div>
           <p className="text-muted text-xs mt-2">
-            {nb(d.audit.n_symbols)} séries · {nb(d.audit.n_bars)} barres auditées (complétude · exactitude OHLC · point-in-time · biais du survivant)
+            {nb(d.audit.n_symbols)} actifs · {nb(d.audit.n_bars)} journées de cotation passées au crible : rien ne manque · les prix d'une journée sont cohérents entre eux (le plus haut est bien le plus haut) · aucun chiffre du futur n'a fui dans le passé · les sociétés disparues sont comptées
           </p>
           {(d.audit.anomalies ?? []).length > 0 && (
             <div className="max-h-[220px] overflow-auto mt-2">
               <table className="w-full text-xs mono">
                 <thead className="text-muted sticky top-0 bg-surface">
-                  <tr><th className="text-left font-normal">Symbole</th><th className="text-left font-normal">Type</th>
-                  <th className="text-left font-normal">Sévérité</th><th className="text-left font-normal">Détail</th></tr>
+                  <tr><th className="text-left font-normal">Symbole</th><th className="text-left font-normal">Type d'anomalie</th>
+                  <th className="text-left font-normal">Gravité</th><th className="text-left font-normal">Détail</th></tr>
                 </thead>
                 <tbody>{d.audit.anomalies.slice(0, 100).map((an: any, i: number) => (
                   <tr key={i} className="border-t border-border">
@@ -137,18 +146,18 @@ export default function DataPage() {
 
       <section className="card p-4">
         <div className="flex items-center justify-between mb-1">
-          <h2 className="text-sm uppercase tracking-wide text-muted">Collecte OHLCV — univers complet</h2>
-          <span className="text-xs text-muted">{(d.collection ?? []).length} symboles</span>
+          <h2 className="text-sm uppercase tracking-wide text-muted">Tous les actifs suivis, un par un</h2>
+          <span className="text-xs text-muted">{(d.collection ?? []).length} actifs</span>
         </div>
         <p className="text-muted text-xs mb-3">
-          Ordre de fallback : {(d.fallback_order ?? []).join(" → ") || "—"} · cache {d.cache ? "activé" : "désactivé"}
+          Si une source ne répond pas, on passe à la suivante, dans cet ordre : {(d.fallback_order ?? []).join(" → ") || "—"} · réutilisation des données déjà téléchargées {d.cache ? "activée" : "désactivée"}
         </p>
         <div className="max-h-[460px] overflow-auto">
           <table className="w-full text-sm mono">
             <thead className="text-muted text-xs sticky top-0 bg-surface">
-              <tr><th className="text-left font-normal">Symbole</th><th className="text-left font-normal">Classe</th>
-              <th className="text-right font-normal">Barres</th><th className="text-left font-normal">Début</th>
-              <th className="text-left font-normal">Fin</th><th className="text-right font-normal">Dernier cours</th></tr>
+              <tr><th className="text-left font-normal">Symbole</th><th className="text-left font-normal">Catégorie</th>
+              <th className="text-right font-normal" title="Nombre de journées de cotation disponibles.">Journées</th><th className="text-left font-normal">Historique depuis</th>
+              <th className="text-left font-normal">Jusqu'au</th><th className="text-right font-normal">Dernier cours</th></tr>
             </thead>
             <tbody>{(d.collection ?? []).map((r: any) => (
               <tr key={r.symbol} className="border-t border-border">
@@ -163,20 +172,21 @@ export default function DataPage() {
 
       <section className="card p-4">
         <div className="flex justify-between items-center mb-2">
-          <h2 className="text-sm uppercase tracking-wide text-muted">Contrôle qualité ({q.symbol})</h2>
+          <h2 className="text-sm uppercase tracking-wide text-muted">Exemple détaillé : {q.symbol}</h2>
           <span className="text-xs px-2 py-0.5 rounded-full bg-surfaceAlt" style={{ color: q.ok ? "#22c55e" : "#ef4444" }}>
-            {q.ok ? "✓ conforme" : "✗ erreurs"}
+            {q.ok ? "✓ tout est bon" : "✗ des erreurs"}
           </span>
         </div>
         <p className="text-muted text-xs">
-          {q.n_rows ?? 0} lignes validées · prix&gt;0 · cohérence OHLC · timestamps croissants · trous temporels
+          {q.n_rows ?? 0} journées vérifiées : aucun prix nul ou négatif · les prix d'une même journée sont cohérents entre eux · les dates se suivent dans le bon ordre · trous dans le calendrier
           {(q.warnings ?? []).length ? ` — ${q.warnings.join("; ")}` : " : aucun"}
           {(q.errors ?? []).length ? ` — ERREURS: ${q.errors.join("; ")}` : ""}
         </p>
       </section>
 
       <section className="card p-4">
-        <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Base de données — couches médaillon</h2>
+        <h2 className="text-sm uppercase tracking-wide text-muted mb-1">Comment les données sont rangées</h2>
+        <p className="text-muted2 text-xs mb-3">Trois étages : ce qui arrive brut de la source, ce qui a été nettoyé et vérifié, puis ce qui est prêt à servir aux calculs. Rien ne saute d'étage.</p>
         <div className="divide-y divide-border">
           {(d.layers ?? []).map((l: any) => (
             <div key={l.name} className="py-2">

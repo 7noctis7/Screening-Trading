@@ -60,11 +60,12 @@ function CandidateModal({ row, factors, onClose }: { row: any; factors: Record<s
         </div>
         <div className="grid grid-cols-3 gap-3 mt-3 text-sm">
           <div><div className="text-muted text-[11px]">Score</div><div className="mono" style={{ color: "var(--accent2)" }}>{row.score?.toFixed(2)}</div></div>
-          <div><div className="text-muted text-[11px]">Ret 12 m</div><div className="mono" style={{ color: (row.ret_12m ?? 0) >= 0 ? "var(--pos)" : "#f43f5e" }}>{pct(row.ret_12m)}</div></div>
-          <div><div className="text-muted text-[11px]">Drawdown</div><div className="mono text-muted">{pct(row.drawdown)}</div></div>
+          <div title="Ce qu'aurait rapporté le titre sur les douze derniers mois."><div className="text-muted text-[11px]">Sur 1 an</div><div className="mono" style={{ color: (row.ret_12m ?? 0) >= 0 ? "var(--pos)" : "#f43f5e" }}>{pct(row.ret_12m)}</div></div>
+          <div title="La pire baisse subie depuis un sommet, sur la période mesurée."><div className="text-muted text-[11px]">Pire baisse</div><div className="mono text-muted">{pct(row.drawdown)}</div></div>
         </div>
         <div className="mt-4">
-          <div className="text-muted text-[11px] uppercase tracking-wide mb-2">Pourquoi ce score (z-scores factoriels)</div>
+          <div className="text-muted text-[11px] uppercase tracking-wide mb-2">Pourquoi cette note — critère par critère</div>
+          <p className="text-muted2 text-[11px] mb-2">Chaque barre dit de combien ce titre s'écarte de la moyenne du marché sur un critère. À droite = mieux que la moyenne, à gauche = moins bien.</p>
           {factors && Object.keys(factors).length ? (
             <div className="space-y-1.5">
               {Object.entries(factors).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).map(([k, v]) => (
@@ -77,7 +78,7 @@ function CandidateModal({ row, factors, onClose }: { row: any; factors: Record<s
               ))}
             </div>
           ) : (
-            <p className="text-muted2 text-xs">n/d — ce titre passe les filtres mais n'est pas dans le top du ranking factoriel.</p>
+            <p className="text-muted2 text-xs">Non détaillé : ce titre passe les filtres, mais il n'est pas assez haut dans le classement pour qu'on ait calculé le détail de sa note.</p>
           )}
         </div>
         {row.reason && <p className="text-muted2 text-[11px] mt-3">{row.reason}</p>}
@@ -116,47 +117,54 @@ export default function Screener() {
         <span><span className="mono text-accent border-b border-dotted border-border">{v}</span>
           <span className="text-muted2 ml-2 text-xs font-sans">{r.name}</span></span>) },
     { key: "sector", label: "Secteur", render: (v, r) => <span className="text-muted text-xs font-sans">{v || r.asset_class}</span> },
-    { key: "score", label: "Score", num: true, align: "right",
+    { key: "score", label: "Note", num: true, align: "right",
       render: (v) => <span className="mono" style={{ color: "var(--accent2)" }}>{v?.toFixed(2)}</span> },
-    { key: "_top", label: "Facteur dominant", render: (v) => v ? (
+    { key: "_top", label: "Ce qui pèse le plus", render: (v) => v ? (
         <span className="inline-flex items-center gap-1.5 text-xs">
           <span className="text-muted font-sans">{v[0]}</span><ZBar z={v[1]} />
         </span>) : <span className="text-muted2 text-xs">n/d</span> },
-    { key: "ret_12m", label: "Ret 12 m", num: true, align: "right",
+    { key: "ret_12m", label: "Sur 1 an", num: true, align: "right",
       render: (v) => <span className="mono" style={{ color: (v ?? 0) >= 0 ? "var(--pos)" : "#f43f5e" }}>{pct(v)}</span>,
       csv: (v) => v == null ? "" : +(v * 100).toFixed(1) },
-    { key: "drawdown", label: "Drawdown", num: true, align: "right",
+    { key: "drawdown", label: "Pire baisse", num: true, align: "right",
       render: (v) => <span className="mono text-muted">{pct(v)}</span>, csv: (v) => v == null ? "" : +(v * 100).toFixed(1) },
-    { key: "dollar_volume", label: "Volume $", num: true, align: "right",
+    { key: "dollar_volume", label: "Échangé / jour", num: true, align: "right",
       render: (v) => <span className="mono text-muted">{money(v)}</span>, csv: (v) => v == null ? "" : Math.round(v) },
   ];
 
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-4">
-      <h1 className="text-xl font-semibold tracking-tight">Screener — filtres + score explicable</h1>
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight">Le tri — de tout le marché aux quelques candidats</h1>
+        <p className="text-muted text-sm mt-1 max-w-3xl">
+          On part de tous les actifs suivis, on écarte ceux qu'on ne peut pas acheter, puis
+          ceux qui ne passent pas les filtres. Ce qui reste est classé par une note, et la
+          note se détaille : on peut toujours voir <b>pourquoi</b> un titre est là.
+        </p>
+      </div>
       <StepBanner active="screener" />
       {!s.available ? (
-        <EmptyState title="Screener indisponible" hint={s.error || "Configuration manquante."} />
+        <EmptyState title="Tri indisponible" hint={s.error || "Il manque un réglage — le tri n'a pas pu tourner."} />
       ) : (
         <>
           <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <MetricCard label="Candidats retenus" value={String(s.count ?? 0)} />
-            <MetricCard label="Univers investable" value={String(s.universe_size ?? 0)} />
-            <MetricCard label="Sélectivité" value={s.universe_size ? `${Math.round((100 * (s.count ?? 0)) / s.universe_size)}%` : "n/d"} />
-            <MetricCard label="Non investables exclus" value={String(s.excluded_non_investable ?? 0)} />
+            <MetricCard label="Actifs achetables analysés" value={String(s.universe_size ?? 0)} />
+            <MetricCard label="Part qui passe les filtres" value={s.universe_size ? `${Math.round((100 * (s.count ?? 0)) / s.universe_size)}%` : "n/d"} />
+            <MetricCard label="Écartés (non achetables)" value={String(s.excluded_non_investable ?? 0)} />
           </section>
 
           <section className="card p-4">
-            <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Entonnoir de sélection</h2>
+            <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Du marché entier aux candidats</h2>
             <div className="space-y-3">
-              <FunnelStep label="Univers analysé" n={total} base={total}
-                hint="Tous les actifs du panel de prix (actions, ETF, crypto, indices)." />
-              <FunnelStep label="Investable (hors indices ^…)" n={s.universe_size ?? 0} base={total}
-                hint="On ne propose jamais un actif non achetable — les indices servent au régime/benchmark." />
-              <FunnelStep label="Passent les filtres durs" n={s.count ?? 0} base={total}
-                hint="Filtres YAML (liquidité, tendance, drawdown…) appliqués : voir critères ci-dessous." />
-              <FunnelStep label="Top affiché (tri par score)" n={rows.length} base={total}
-                hint="Les 50 premiers par composite z-score." />
+              <FunnelStep label="Tout ce qu'on suit" n={total} base={total}
+                hint="Tous les actifs dont on a les prix : actions, ETF, crypto, indices." />
+              <FunnelStep label="Ce qui s'achète vraiment" n={s.universe_size ?? 0} base={total}
+                hint="On ne propose jamais un actif qu'on ne peut pas acheter. Les indices (^…) restent utiles pour comparer, pas pour investir." />
+              <FunnelStep label="Ce qui passe les filtres" n={s.count ?? 0} base={total}
+                hint="Filtres appliqués (assez d'échanges pour entrer et sortir, tendance, perte maximale passée…) : la liste exacte est juste en dessous." />
+              <FunnelStep label="Affiché ici, du mieux noté au moins bien" n={rows.length} base={total}
+                hint="Les 50 premiers de la note." />
             </div>
             <div className="flex flex-wrap gap-1.5 mt-4">
               {(s.filters ?? []).map((f: string) => (
@@ -164,8 +172,8 @@ export default function Screener() {
               ))}
             </div>
             <div className="text-xs text-muted mt-2">
-              Score = composite z-score pondéré · {Object.entries(s.weights ?? {}).map(([k, v]) => `${k}×${v}`).join(" · ")}
-              {rk?.as_of && <span className="text-muted2"> · ranking au {new Date(rk.as_of).toLocaleDateString("fr-FR")}</span>}
+              La note mélange plusieurs critères, chacun avec son poids · {Object.entries(s.weights ?? {}).map(([k, v]) => `${k}×${v}`).join(" · ")}
+              {rk?.as_of && <span className="text-muted2"> · classement arrêté au {new Date(rk.as_of).toLocaleDateString("fr-FR")}</span>}
             </div>
           </section>
 
@@ -178,16 +186,16 @@ export default function Screener() {
                     style={{ background: "var(--surface)" }}>{sec} <b className="mono">{n}</b></span>
                 ))}
               </div>
-              <p className="text-muted2 text-[11px] mt-2">Beaucoup de candidats dans un même secteur = le screen capte peut-être UN thème, pas N opportunités indépendantes (risque de concentration).</p>
+              <p className="text-muted2 text-[11px] mt-2">Beaucoup de candidats dans le même secteur, c'est peut-être une seule et même idée répétée dix fois, pas dix idées différentes. Dix titres qui montent et descendent ensemble ne protègent de rien.</p>
             </section>
           )}
 
           <section className="card p-4">
             <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
-              <h2 className="text-sm uppercase tracking-wide text-muted">Candidats — clique une ligne pour le détail factoriel</h2>
+              <h2 className="text-sm uppercase tracking-wide text-muted">Candidats — clique une ligne pour voir le détail de sa note</h2>
             </div>
             {rows.length === 0 ? (
-              <EmptyState title="Aucun candidat" hint="Aucun actif ne passe tous les filtres sur l'univers courant." />
+              <EmptyState title="Aucun candidat" hint="Aucun actif ne passe tous les filtres aujourd'hui. Ce n'est pas une panne : c'est un marché où rien ne remplit les conditions." />
             ) : (
               <div onClickCapture={(e) => {
                 if ((e.target as HTMLElement).closest("a,button,input")) return;

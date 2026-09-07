@@ -13,32 +13,37 @@ function interpret(r: any): { stage: string; verdict: string; text: string }[] {
   const p = r.placebo_p_value, d = r.dsr, b = r.pbo;
   out.push(p == null
     ? { stage: "01 · Placebo", verdict: "—",
-        text: "Non calculé séparément (event-study : le p ci-dessus EST le test de "
-          + "permutation/hasard). Règle : p < 0,05 pour passer." }
+        text: "Pas calculé à part : dans une étude d'événements, le p affiché EST déjà "
+          + "le test du hasard. Règle pour passer : p inférieur à 0,05." }
     : p >= 0.05
       ? { stage: "01 · Placebo", verdict: "❌",
-          text: `p = ${p} ≥ 0,05 : l'effet n'est PAS distinguable du hasard. Un t-stat ou `
-            + "un CAR brut spectaculaire peut être du bruit (fenêtres qui se chevauchent, "
-            + "queues épaisses)." }
+          text: `p = ${p}, soit 0,05 ou plus : on ne sait PAS distinguer cet effet du `
+            + "simple hasard. Un chiffre de performance spectaculaire peut n'être que du "
+            + "bruit — surtout quand les périodes testées se chevauchent ou que les "
+            + "mouvements extrêmes sont fréquents." }
       : { stage: "01 · Placebo", verdict: "✅",
-          text: `p = ${p} < 0,05 : bat le hasard — mais le placebo SEUL ne promeut rien.` });
+          text: `p = ${p}, inférieur à 0,05 : fait mieux que le hasard — mais cette seule `
+            + "épreuve ne suffit jamais à retenir une idée." });
   out.push(d == null
-    ? { stage: "02 · DSR", verdict: "—", text: "Non atteint (rejeté en amont)." }
+    ? { stage: "02 · DSR", verdict: "—", text: "Pas testé : l'idée avait déjà échoué à l'étape précédente." }
     : d <= 0.5
       ? { stage: "02 · DSR", verdict: "❌",
-          text: `${d} ≤ 0,5 : après déflation par le nombre d'essais (anti data-mining, `
-            + "López de Prado), le Sharpe n'est pas significatif. Essayer N stratégies en "
-            + "fait ressortir une par chance — le DSR l'annule." }
+          text: `${d}, soit 0,5 ou moins : une fois corrigée du nombre d'idées essayées, `
+            + "la performance ne veut plus rien dire. Essayez cent stratégies, l'une "
+            + "d'elles paraîtra brillante par pure chance ; cette correction (le Deflated "
+            + "Sharpe Ratio, López de Prado) neutralise exactement ça." }
       : { stage: "02 · DSR", verdict: "✅", text: `${d} > 0,5.` });
   out.push(b == null
-    ? { stage: "03 · PBO", verdict: "—", text: "Non calculé." }
+    ? { stage: "03 · PBO", verdict: "—", text: "Pas calculé." }
     : b >= 0.5
       ? { stage: "03 · PBO", verdict: "❌",
-          text: `${(b * 100).toFixed(0)} % de probabilité de SURAJUSTEMENT (CSCV) : la `
-            + "configuration championne in-sample finit sous la médiane hors-échantillon. "
-            + "Elle est optimisée sur le passé, pas généralisable." }
+          text: `${(b * 100).toFixed(0)} % de risque que le réglage soit taillé sur `
+            + "mesure pour le passé : le réglage gagnant sur les données d'entraînement "
+            + "finit sous la moyenne sur les données qu'il n'avait jamais vues. Il a appris "
+            + "l'histoire par cœur, il ne la comprend pas." }
       : { stage: "03 · PBO", verdict: "✅",
-          text: `${(b * 100).toFixed(0)} % < 50 % : robuste hors-échantillon.` });
+          text: `${(b * 100).toFixed(0)} %, sous les 50 % : tient encore sur des données `
+            + "jamais vues." });
   return out;
 }
 
@@ -69,26 +74,27 @@ export default function Echecs() {
           <div className="text-[11px] font-semibold tracking-[0.18em] uppercase"
             style={{ color: "var(--accent2)" }}>Negative Results Registry</div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight mt-1">
-            {data?.n_rejected ?? 0} hypothèses d'alpha. {data?.n_rejected ?? 0} rejetées. 0 cachée.</h1>
+            {data?.n_rejected ?? 0} idées testées. {data?.n_rejected ?? 0} rejetées. 0 cachée.</h1>
           <p className="text-muted text-sm mt-2 max-w-2xl">
-            Chaque piste affronte un gate déterministe en 4 étages —
-            <b> Placebo · DSR · PBO · Sabotage</b> — et n'est <b>jamais</b> promue sans les
-            franchir tous. Les négatifs sont publiés, datés et <b>reproductibles</b>
-            (<code className="mono">make &lt;facteur&gt;-study</code>). Un négatif honnête vaut
-            mille faux positifs.
+            Toute idée passe les mêmes quatre épreuves —
+            <b> hasard · nombre d'essais · réglage taillé sur mesure · frais</b> — et n'est
+            <b> jamais</b> retenue sans les franchir toutes. Ce qui échoue est publié ici,
+            daté, et <b>recalculable</b> par n'importe qui
+            (<code className="mono">make &lt;facteur&gt;-study</code>). Une idée abandonnée
+            honnêtement vaut mille promesses invérifiables.
           </p>
           {items.length > 0 && (
             <button onClick={() => exportCsv(items)}
               className="mt-3 text-xs px-3 py-1.5 rounded-lg border border-border hover:border-border2 hover:text-accent transition-colors">
-              ⤓ Télécharger le registre (CSV)
+              ⤓ Télécharger le registre (tableur CSV)
             </button>
           )}
         </div>
       </Reveal>
 
       {!items.length ? (
-        <EmptyState title="Registre vide sur ce build"
-          hint="Le ledger est généré par les études (make regime-study / breakout-study…)." />
+        <EmptyState title="Registre vide sur cette version"
+          hint="Le registre se remplit quand les études tournent (make regime-study / breakout-study…)." />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {items.map((r, i) => (
@@ -105,14 +111,17 @@ export default function Echecs() {
                   {(r.classe ?? []).join(", ") || "—"} · {r.horizon ?? "—"} · {r.date ?? ""}</div>
                 <p className="text-sm text-muted mt-2">{r.these ?? ""}</p>
                 <div className="grid grid-cols-3 gap-2 mt-3 text-center">
-                  <div><div className="text-[10px] text-muted2">placebo p</div>
+                  <div title="Probabilité que le résultat vienne du simple hasard. Il faut moins de 0,05 pour passer.">
+                    <div className="text-[10px] text-muted2">hasard (p)</div>
                     <div className="mono text-sm">{num(r.placebo_p_value, 3)}</div></div>
-                  <div><div className="text-[10px] text-muted2">DSR</div>
+                  <div title="Performance corrigée du nombre d'idées essayées. Il faut plus de 0,5 pour passer.">
+                    <div className="text-[10px] text-muted2">DSR</div>
                     <div className="mono text-sm">{num(r.dsr, 3)}</div></div>
-                  <div><div className="text-[10px] text-muted2">PBO</div>
+                  <div title="Risque que le réglage soit taillé sur mesure pour le passé. Il faut moins de 0,5 pour passer.">
+                    <div className="text-[10px] text-muted2">sur-mesure (PBO)</div>
                     <div className="mono text-sm">{num(r.pbo, 2)}</div></div>
                 </div>
-                <div className="text-[10px] text-accent mt-2">Cliquer → comment l'interpréter</div>
+                <div className="text-[10px] text-accent mt-2">Cliquer → pourquoi elle a été rejetée</div>
               </button>
             </Reveal>
           ))}
@@ -120,8 +129,9 @@ export default function Echecs() {
       )}
 
       <p className="text-muted2 text-xs">
-        Méthodologie : López de Prado (DSR, PBO/CSCV). Outil éducatif · pas un conseil
-        financier · 100 % open-source · ledger append-only <code className="mono">research/hypotheses.jsonl</code>.
+        Méthode : López de Prado (DSR, PBO/CSCV) — <a href="/methode" className="text-accent">le détail ici</a>.
+        Outil éducatif · pas un conseil financier · 100 % open-source · registre où l'on ne fait
+        qu'ajouter, jamais effacer : <code className="mono">research/hypotheses.jsonl</code>.
       </p>
 
       {sel && (
@@ -150,12 +160,13 @@ export default function Echecs() {
               ))}
             </div>
             <div className="mt-3 text-sm text-muted">
-              <b>Verdict</b> : rejeté — au moins un étage du gate échoue. Le signal reste en
-              recherche, <b>rien n'est câblé</b>. <i>Un négatif honnête vaut mille faux positifs.</i>
+              <b>Verdict</b> : rejetée — au moins une épreuve échoue. L'idée reste au stade de
+              la recherche, <b>elle ne pilote rien</b> sur le site. <i>Une idée abandonnée
+              honnêtement vaut mille promesses invérifiables.</i>
             </div>
             <div className="mt-2 text-[11px] text-muted2">
-              Reproduire : <code className="mono">make {(sel.facteur ?? "").split("_")[0]}-study</code>
-              {" "}· données réelles, gate déterministe.
+              Refaire le calcul soi-même : <code className="mono">make {(sel.facteur ?? "").split("_")[0]}-study</code>
+              {" "}· données réelles, mêmes règles à chaque fois.
             </div>
           </div>
         </div>

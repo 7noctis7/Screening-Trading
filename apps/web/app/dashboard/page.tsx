@@ -119,7 +119,7 @@ export default function Dashboard() {
           style={{ background: "color-mix(in srgb, var(--warn) 18%, transparent)", color: "var(--warn)" }}>
           Modélisé
         </span>
-        <span className="text-muted2">backtest preset ~10 ans, net de frais — pas un compte réel · le réel est sur <a href="/positions" className="text-accent">/positions</a></span>
+        <span className="text-muted2">simulation de la stratégie sur ~10 ans de prix réels, frais déduits — ce n'est pas de l'argent réel · votre argent réel est sur <a href="/positions" className="text-accent">/positions</a></span>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <MetricCard hero label="Gain total" value={pct(m.total_return)} tone={m.total_return >= 0 ? "pos" : "neg"} delta={dPts(m.total_return, prevStats?.total_return)}
@@ -142,17 +142,19 @@ export default function Dashboard() {
 
       {/* Comparaison KPI : portefeuille vs benchmarks, sur la période choisie */}
       <section className="card p-4 overflow-x-auto">
-        <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Comparaison vs benchmarks ({PERIODS.find(([, y]) => y === years)?.[0] ?? "Tout"})</h2>
+        <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Comparé aux grands indices ({PERIODS.find(([, y]) => y === years)?.[0] ?? "Tout"})</h2>
         <table className="w-full text-sm">
           <thead className="text-muted text-xs"><tr>
-            <th className="text-left font-normal">Série</th>
-            <th className="text-right font-normal">Fenêtre</th>
-            <th className="text-right font-normal">Rendement</th><th className="text-right font-normal">CAGR</th>
-            <th className="text-right font-normal">Sharpe</th><th className="text-right font-normal">Sortino</th>
-            <th className="text-right font-normal">Max DD</th></tr></thead>
+            <th className="text-left font-normal">Ligne comparée</th>
+            <th className="text-right font-normal" title="Durée réellement couverte par cette ligne.">Durée couverte</th>
+            <th className="text-right font-normal" title="Gain total sur toute la fenêtre.">Gain total</th>
+            <th className="text-right font-normal" title="Gain moyen par an (CAGR), une fois lissées les bonnes et les mauvaises années.">Gain / an</th>
+            <th className="text-right font-normal" title="Sharpe : combien de gain pour chaque unité de secousses subies. Plus c'est haut, mieux c'est.">Gain / risque</th>
+            <th className="text-right font-normal" title="Sortino : même idée, mais ne compte que les baisses.">Gain / baisses</th>
+            <th className="text-right font-normal" title="La pire chute depuis un sommet sur la fenêtre.">Pire baisse</th></tr></thead>
           <tbody className="mono">
-            {([["Portefeuille (backtest preset)", m, "#22d3ee", "backtest"],
-               ...(d.real_portfolio?.available ? [["Portefeuille RÉEL (comptes)", d.real_portfolio.stats, "#22c55e", "real"]] : []),
+            {([["Portefeuille simulé (stratégie)", m, "#22d3ee", "backtest"],
+               ...(d.real_portfolio?.available ? [["Portefeuille RÉEL (vos comptes)", d.real_portfolio.stats, "#22c55e", "real"]] : []),
                ...Object.entries(chartBench ?? {}).map(([n, arr]) => [n, statsFrom(arr as any), n === "S&P 500" ? "#f59e0b" : "#a855f7", ""])] as any[])
               .filter((row) => row[1]).map(([name, st, col, kind]: any) => {
                 const click = kind === "backtest" ? () => setShowLedger(v => !v) : kind === "real" ? () => setShowReal(v => !v) : undefined;
@@ -175,16 +177,17 @@ export default function Dashboard() {
           </tbody>
         </table>
         <p className="text-muted2 text-xs mt-2">
-          <b>Lis d'abord la colonne « Fenêtre »</b> : ces lignes ne couvrent pas la même durée, donc
-          leurs rendements ne se comparent pas directement. Le <b>backtest preset</b> simule la
+          <b>Regardez d'abord « Durée couverte »</b> : ces lignes ne couvrent pas la même période,
+          donc leurs gains totaux ne se comparent pas. Le <b>portefeuille simulé</b> rejoue la
           stratégie sur ~10 ans de prix réels ; le <b>portefeuille RÉEL</b> ne compte que depuis
-          l'ouverture des comptes. Un rendement sur dix ans face à un rendement sur deux mois ne
-          dit rien — seuls le CAGR et le Sharpe restent lisibles côte à côte, et encore : sur une
-          fenêtre courte ils sont très instables.
+          l'ouverture de vos comptes. Un gain sur dix ans face à un gain sur deux mois ne dit rien —
+          seuls le gain par an et le gain / risque restent lisibles côte à côte, et encore : sur une
+          période courte, ils bougent énormément d'une semaine à l'autre.
           <br />
-          Sur les comptes réels, versements et retraits sont <b>neutralisés</b> (rendement pondéré
-          dans le temps) : un virement n'est ni un gain ni une perte. La pastille indique combien
-          de mouvements ont été écartés. Clique une ligne pour son journal de trades.
+          Sur vos comptes réels, vos versements et retraits sont <b>mis de côté</b> dans le calcul :
+          virer 1 000 € n'est ni un gain ni une perte, seule la façon dont l'argent a travaillé
+          compte. La pastille indique combien de mouvements ont été écartés. Cliquez une ligne pour
+          voir le détail de ses achats et ventes.
         </p>
       </section>
 
@@ -196,39 +199,44 @@ export default function Dashboard() {
         return (
           <section className="card p-4">
             <div className="flex items-center justify-between flex-wrap gap-2">
-              <h2 className="text-sm uppercase tracking-wide text-muted">Performance &amp; attribution (Alpha / Bêta vs QQQ)</h2>
+              <h2 className="text-sm uppercase tracking-wide text-muted" title="Alpha = la part du résultat qui ne s'explique pas par le marché. Bêta = la part qui s'explique par lui.">Ce qui vient du marché, ce qui vient de la stratégie (face à QQQ)</h2>
               <span className="text-xs mono" style={{ color: (at.alpha_significant && !at.underperforms_benchmark) ? "#22c55e" : "#f59e0b" }}>{at.verdict}</span>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-3">
-              <div><div className="text-muted text-xs">Alpha annualisé</div>
+              <div title="Ce que la stratégie ajoute par an au-delà du marché, une fois retiré ce que le marché lui a donné.">
+                <div className="text-muted text-xs">Apport propre / an</div>
                 <div className="text-lg mono" style={{ color: (mt.alpha_annual ?? 0) >= 0 ? "#22c55e" : "#ef4444" }}>
                   {mt.alpha_annual == null ? "—" : `${(mt.alpha_annual * 100).toFixed(1)}%`}</div></div>
-              <div><div className="text-muted text-xs">Bêta (QQQ)</div><div className="text-lg mono">{mt.beta ?? "—"}</div></div>
-              <div><div className="text-muted text-xs">Contrib. Alpha</div>
+              <div title="À combien le portefeuille suit le marché. 1 = il bouge comme QQQ ; 0,5 = deux fois moins ; 1,5 = une fois et demie plus fort, à la hausse comme à la baisse.">
+                <div className="text-muted text-xs">Sensibilité au marché</div><div className="text-lg mono">{mt.beta ?? "—"}</div></div>
+              <div title="Part du résultat total venue de la stratégie elle-même.">
+                <div className="text-muted text-xs">Dû à la stratégie</div>
                 <div className="text-lg mono" style={{ color: aPos ? "#22c55e" : "#ef4444" }}>{(at.alpha_contribution * 100).toFixed(1)}%</div></div>
-              <div><div className="text-muted text-xs">Contrib. Bêta</div><div className="text-lg mono">{(at.beta_contribution * 100).toFixed(1)}%</div></div>
-              <div><div className="text-muted text-xs">Calmar / Corr</div><div className="text-lg mono">{mt.calmar ?? "—"} / {mt.corr ?? "—"}</div></div>
+              <div title="Part du résultat total venue simplement du marché qui montait ou descendait.">
+                <div className="text-muted text-xs">Dû au marché</div><div className="text-lg mono">{(at.beta_contribution * 100).toFixed(1)}%</div></div>
+              <div title="Calmar : gain par an rapporté à la pire baisse. Corrélation : à quel point le portefeuille et QQQ bougent ensemble (1 = à l'identique, 0 = sans rapport).">
+                <div className="text-muted text-xs">Gain / pire baisse · lien avec QQQ</div><div className="text-lg mono">{mt.calmar ?? "—"} / {mt.corr ?? "—"}</div></div>
             </div>
             {/* barre de décomposition alpha vs bêta */}
-            <div className="mt-3 h-2 rounded overflow-hidden flex" title={`Part de la perf attribuable à l'algo (alpha) : ${aShare}%`}>
+            <div className="mt-3 h-2 rounded overflow-hidden flex" title={`Part du résultat venue de la stratégie elle-même : ${aShare}%`}>
               <span style={{ width: `${aShare}%`, background: "#22c55e" }} />
               <span style={{ width: `${100 - aShare}%`, background: "#3b82f6" }} />
             </div>
             <p className="text-muted2 text-xs mt-2">
-              <span style={{ color: "#22c55e" }}>■</span> Hors-QQQ {aShare}% ·
-              <span style={{ color: "#3b82f6" }}> ■</span> Bêta (marché) {100 - aShare}%.
-              Perf preset {(at.portfolio_return * 100).toFixed(1)}% vs QQQ {(at.benchmark_return * 100).toFixed(1)}% — net de frais,
-              sur {at.n_observations ?? "—"} séances communes aux deux calendriers.
+              <span style={{ color: "#22c55e" }}>■</span> La stratégie {aShare}% ·
+              <span style={{ color: "#3b82f6" }}> ■</span> Le marché {100 - aShare}%.
+              Portefeuille simulé {(at.portfolio_return * 100).toFixed(1)}% contre QQQ {(at.benchmark_return * 100).toFixed(1)}% — frais déduits,
+              sur les {at.n_observations ?? "—"} jours de bourse où les deux étaient ouverts.
             </p>
             {at.alignement === "position" && (
               <p className="text-xs mt-1" style={{ color: "#f59e0b" }}>
-                ⚠ Calendrier du benchmark indisponible : appariement par position, bêta et alpha non fiables.
+                ⚠ On n'a pas les dates exactes de l'indice de comparaison : les deux séries ont été alignées à l'aveugle, ligne par ligne. Les deux chiffres ci-dessus ne sont donc pas fiables.
               </p>
             )}
             {(at.underperforms_benchmark || at.alpha_significant === false) && (
               <p className="text-xs mt-1" style={{ color: "#f59e0b" }}>
-                ⚠ {at.underperforms_benchmark && `Sous-performe QQQ en absolu (${(at.portfolio_return * 100).toFixed(0)}% vs ${(at.benchmark_return * 100).toFixed(0)}%).`}
-                {at.alpha_significant === false && ` Alpha non significatif (t=${at.alpha_tstat}).`} Le rendement « hors-QQQ » n'est PAS une preuve de compétence (DSR≈0) — souvent d'autres bêtas + chance.
+                ⚠ {at.underperforms_benchmark && `Fait moins bien que QQQ tout court (${(at.portfolio_return * 100).toFixed(0)} % contre ${(at.benchmark_return * 100).toFixed(0)} %).`}
+                {at.alpha_significant === false && ` L'apport propre n'est pas assez net pour être distingué du hasard (t = ${at.alpha_tstat}).`} La part « qui ne vient pas de QQQ » ne prouve PAS un savoir-faire : le plus souvent, c'est l'exposition à d'autres choses que QQQ, plus de la chance.
               </p>
             )}
           </section>
@@ -247,7 +255,7 @@ export default function Dashboard() {
         return (
         <section className="card p-4">
           <div className="flex justify-between items-center mb-2">
-            <h2 className="text-sm uppercase tracking-wide text-muted">Graphique technique — {selSym} <span className="normal-case text-xs">· {mk.length} signaux achat/vente du journal</span></h2>
+            <h2 className="text-sm uppercase tracking-wide text-muted">Graphique — {selSym} <span className="normal-case text-xs">· {mk.length} achats et ventes marqués sur la courbe</span></h2>
             <button onClick={() => setSelSym(null)} className="text-muted hover:text-fg text-sm">✕</button>
           </div>
           <TechnicalChart data={pos!.series[selSym]} markers={mk} />
@@ -260,15 +268,15 @@ export default function Dashboard() {
         const dlt = (x?: number) => (x ?? 0).toLocaleString("fr-FR", { maximumFractionDigits: 2 });
         return (
           <section className="card p-4 overflow-x-auto">
-            <h2 className="text-sm uppercase tracking-wide text-muted mb-1">Journal RÉEL — comptes réels</h2>
+            <h2 className="text-sm uppercase tracking-wide text-muted mb-1">Vos comptes réels — ce qui s'est vraiment passé</h2>
             {rt.length === 0 && rp.length === 0 ? (
-              <p className="text-muted text-sm">Aucun trade/position réel (comptes non connectés ou aucun ordre passé). Passe des ordres en paper : <code>make live-go</code>.</p>
+              <p className="text-muted text-sm">Aucune position ni aucun ordre réel : soit les comptes ne sont pas connectés, soit rien n'a encore été acheté. Pour passer des ordres en simulation : <code>make live-go</code>.</p>
             ) : (<>
-              <p className="text-muted2 text-xs mb-3">Rendement réel <b style={{ color: "#22c55e" }}>{((rps.total_return ?? 0) * 100).toFixed(1)}%</b> · {rt.length} ordres exécutés · {rp.length} positions. 100 % données réelles brokers.</p>
+              <p className="text-muted2 text-xs mb-3">Gain réel <b style={{ color: "#22c55e" }}>{((rps.total_return ?? 0) * 100).toFixed(1)}%</b> · {rt.length} ordres passés · {rp.length} positions. Chiffres lus directement chez vos courtiers, rien de simulé.</p>
               {rp.length > 0 && <table className="w-full text-sm mono mb-3"><thead className="text-muted text-xs"><tr>
-                <th className="text-left font-normal">Position</th><th className="text-left font-normal">Broker</th><th className="text-right font-normal">Qté</th>
-                <th className="text-right font-normal">PRU</th><th className="text-right font-normal">Prix</th><th className="text-right font-normal">Valeur</th>
-                <th className="text-right font-normal">P&L</th><th className="text-right font-normal">%</th></tr></thead>
+                <th className="text-left font-normal">Position</th><th className="text-left font-normal">Courtier</th><th className="text-right font-normal">Quantité</th>
+                <th className="text-right font-normal" title="Prix moyen auquel vous avez acheté cette ligne.">Prix d'achat moyen</th><th className="text-right font-normal">Prix du jour</th><th className="text-right font-normal">Valeur</th>
+                <th className="text-right font-normal" title="Gain ou perte de la ligne, en euros.">Gain / perte</th><th className="text-right font-normal">%</th></tr></thead>
                 <tbody>{rp.map((p: any, i: number) => (<tr key={i} className="border-t border-border">
                   <td className="py-1">{p.symbol}</td><td className="font-sans text-xs">{p.broker}</td><td className="text-right">{(p.qty ?? 0).toFixed(4)}</td>
                   <td className="text-right">{p.avg_price == null ? "—" : `$${dlt(p.avg_price)}`}</td><td className="text-right">${dlt(p.price)}</td>
@@ -276,8 +284,8 @@ export default function Dashboard() {
                   <td className="text-right" style={{ color: p.pnl == null ? "#9aa1ad" : p.pnl >= 0 ? "#22c55e" : "#ef4444" }}>{p.pnl == null ? "—" : `$${dlt(p.pnl)}`}</td>
                   <td className="text-right" style={{ color: (p.pnl_pct ?? 0) >= 0 ? "#22c55e" : "#ef4444" }}>{p.pnl_pct == null ? "—" : `${(p.pnl_pct * 100).toFixed(1)}%`}</td></tr>))}</tbody></table>}
               {rt.length > 0 && <table className="w-full text-sm mono"><thead className="text-muted text-xs"><tr>
-                <th className="text-left font-normal">Date</th><th className="text-left font-normal">Actif</th><th className="text-left font-normal">Broker</th>
-                <th className="text-left font-normal">Sens</th><th className="text-right font-normal">Qté</th><th className="text-right font-normal">Prix</th>
+                <th className="text-left font-normal">Date</th><th className="text-left font-normal">Actif</th><th className="text-left font-normal">Courtier</th>
+                <th className="text-left font-normal">Sens</th><th className="text-right font-normal">Quantité</th><th className="text-right font-normal">Prix</th>
                 <th className="text-right font-normal">Montant</th></tr></thead>
                 <tbody>{rt.slice(0, 200).map((t: any, i: number) => (<tr key={i} className="border-t border-border">
                   <td className="py-1 text-muted">{String(t.date).slice(0, 10)}</td><td><span className="text-accent border-b border-dotted border-border cursor-pointer" onClick={() => setSelSym(t.symbol)}>{t.symbol}</span></td><td className="font-sans text-xs">{t.broker}</td>
@@ -304,28 +312,28 @@ export default function Dashboard() {
             {label}{ledgerSort.k === k ? (ledgerSort.dir < 0 ? " ▼" : " ▲") : ""}</th>);
         return (
           <section className="card p-4 overflow-x-auto">
-            <h2 className="text-sm uppercase tracking-wide text-muted mb-1">Journal de trades — portefeuille de production (P&L réel)</h2>
-            <p className="text-muted2 text-xs mb-2">Backtest discret parts/cash sur prix RÉELS ({sm.start} → {sm.end}). Capital {dlt(sm.init_cap)}$ → {dlt(sm.final_equity)}$ ·
-              rendement <b style={{ color: "#22d3ee" }}>{((sm.total_return ?? 0) * 100).toFixed(1)}%</b> ·
-              P&L réalisé <b style={{ color: (sm.realized_pnl ?? 0) >= 0 ? "#22c55e" : "#ef4444" }}>{dlt(sm.realized_pnl)}$</b> ·
-              latent <b style={{ color: (sm.unrealized_pnl ?? 0) >= 0 ? "#22c55e" : "#ef4444" }}>{dlt(sm.unrealized_pnl)}$</b> · {sm.n_trades} trades. Réconcilie la courbe.</p>
+            <h2 className="text-sm uppercase tracking-wide text-muted mb-1">Le détail de la simulation — chaque achat, chaque vente</h2>
+            <p className="text-muted2 text-xs mb-2">Simulation en parts entières et en liquidités, sur des prix RÉELS ({sm.start} → {sm.end}). Départ {dlt(sm.init_cap)}$ → arrivée {dlt(sm.final_equity)}$ ·
+              gain <b style={{ color: "#22d3ee" }}>{((sm.total_return ?? 0) * 100).toFixed(1)}%</b> ·
+              déjà encaissé (lignes vendues) <b style={{ color: (sm.realized_pnl ?? 0) >= 0 ? "#22c55e" : "#ef4444" }}>{dlt(sm.realized_pnl)}$</b> ·
+              sur le papier (lignes encore détenues) <b style={{ color: (sm.unrealized_pnl ?? 0) >= 0 ? "#22c55e" : "#ef4444" }}>{dlt(sm.unrealized_pnl)}$</b> · {sm.n_trades} opérations. Ces chiffres retombent exactement sur la courbe.</p>
             {sm.fees_on !== false && (
-              <p className="text-muted2 text-xs mb-2">Frais RÉELS déduits : <b style={{ color: "#f59e0b" }}>−{dlt(sm.fees_paid)}$</b> ({((sm.fees_pct ?? 0) * 100).toFixed(2)}%) — commission + slippage aux barèmes courtiers
-              ({Object.entries(sm.brokers ?? {}).map(([ac, b]: any) => `${ac}→${b}`).join(", ")}). Rendement brut (sans frais) {((sm.gross_return ?? 0) * 100).toFixed(1)}% → <b>net {((sm.total_return ?? 0) * 100).toFixed(1)}%</b>.</p>
+              <p className="text-muted2 text-xs mb-2">Frais RÉELS déduits : <b style={{ color: "#f59e0b" }}>−{dlt(sm.fees_paid)}$</b> ({((sm.fees_pct ?? 0) * 100).toFixed(2)} %) — commission du courtier, plus l'écart entre le prix visé et le prix réellement obtenu, aux tarifs réels
+              ({Object.entries(sm.brokers ?? {}).map(([ac, b]: any) => `${ac}→${b}`).join(", ")}). Sans les frais : {((sm.gross_return ?? 0) * 100).toFixed(1)} % → <b>avec les frais : {((sm.total_return ?? 0) * 100).toFixed(1)} %</b>.</p>
             )}
-            <p className="text-muted2 text-xs mb-2">Réconciliation {sm.reconciles ? <b style={{ color: "#22c55e" }}>✓</b> : <b style={{ color: "#ef4444" }}>≠</b>} : P&L total <b>{dlt(sm.total_pnl)}$</b> = réalisé {dlt(sm.realized_pnl)}$ + latent {dlt(sm.unrealized_pnl)}$ = gain du graphe {dlt(sm.graph_gain)}$ {sm.fees_on !== false ? <>+ frais {dlt(sm.fees_paid)}$</> : null}. La somme des colonnes du journal (réalisé sur ventes, latent sur achats) égale ces totaux.</p>
+            <p className="text-muted2 text-xs mb-2">Les comptes tombent juste {sm.reconciles ? <b style={{ color: "#22c55e" }}>✓</b> : <b style={{ color: "#ef4444" }}>≠</b>} : gain total <b>{dlt(sm.total_pnl)}$</b> = déjà encaissé {dlt(sm.realized_pnl)}$ + sur le papier {dlt(sm.unrealized_pnl)}$ = gain lu sur le graphe {dlt(sm.graph_gain)}$ {sm.fees_on !== false ? <>+ frais {dlt(sm.fees_paid)}$</> : null}. Additionnez les colonnes du tableau ci-dessous : vous retrouvez ces totaux.</p>
             <div className="flex items-center gap-2 mb-2">
               <input value={ledgerQ} onChange={(e) => setLedgerQ(e.target.value)} placeholder="filtrer par actif (ex. QQQ)"
                 className="text-sm px-2 py-1 rounded bg-surfaceAlt border border-border outline-none w-48" />
-              <span className="text-muted2 text-xs">{rows0.length} trades · clique un en-tête pour trier</span>
+              <span className="text-muted2 text-xs">{rows0.length} opérations · cliquez un titre de colonne pour trier</span>
             </div>
             <table className="w-full text-sm mono">
               <thead className="text-muted text-xs"><tr>
                 <Th k="date" label="Date" /><Th k="symbol" label="Actif" /><Th k="side" label="Sens" />
-                <Th k="qty" label="Qté" r /><Th k="price" label="Prix" r /><Th k="avg_cost" label="PRU" r />
-                <Th k="notional" label="Montant" r /><Th k="pnl" label="P&L réalisé" r /><Th k="pnl_pct" label="%" r />
-                <Th k="latent" label="P&L latent" r /><Th k="latent_pct" label="% lat." r />
-                <th className="text-left font-normal pl-3">Motif</th></tr></thead>
+                <Th k="qty" label="Quantité" r /><Th k="price" label="Prix" r /><Th k="avg_cost" label="Prix d'achat moyen" r />
+                <Th k="notional" label="Montant" r /><Th k="pnl" label="Encaissé" r /><Th k="pnl_pct" label="%" r />
+                <Th k="latent" label="Sur le papier" r /><Th k="latent_pct" label="%" r />
+                <th className="text-left font-normal pl-3">Pourquoi</th></tr></thead>
               <tbody>{sorted.map((t: any, i: number) => (
                 <tr key={i} className="border-t border-border">
                   <td className="py-1 text-muted">{String(t.date).slice(0, 10)}</td>
@@ -350,21 +358,22 @@ export default function Dashboard() {
       {/* Cœur(s) indiciel(s) + satellite preset : blend de production (preset pur vs mélange) */}
       {d.index_core?.enabled && (
         <section className="card p-4 overflow-x-auto">
-          <h2 className="text-sm uppercase tracking-wide text-muted mb-1">Cœur indiciel + satellite preset</h2>
+          <h2 className="text-sm uppercase tracking-wide text-muted mb-1">Un socle d'indices, et la stratégie autour</h2>
           <p className="text-muted2 text-xs mb-3">
-            Allocation active : <b style={{ color: "#22d3ee" }}>
+            L'idée : une grosse part placée sur des indices larges, qui bouge peu, et le reste confié
+            à la stratégie. Répartition en cours : <b style={{ color: "#22d3ee" }}>
             {(d.index_core.components ?? []).map((c: any) => `${Math.round(c.pct * 100)}% ${c.kind.toUpperCase()}`).join(" + ")}
-            {" + "}{Math.round((1 - d.index_core.core_pct) * 100)}% preset</b>. Top-10 {d.index_core.mc_weighting === "market_cap"
-              ? "pondéré par market cap réelle" : "pondéré par proxy dollar-volume (lance make ingest-mktcap)"}, re-classé chaque trimestre.
+            {" + "}{Math.round((1 - d.index_core.core_pct) * 100)}% stratégie</b>. Les 10 plus grosses lignes du socle sont {d.index_core.mc_weighting === "market_cap"
+              ? "pondérées par la taille réelle des entreprises" : "pondérées par les montants échangés chaque jour, faute de la taille réelle (lancez make ingest-mktcap pour l'obtenir)"}, et la liste est refaite chaque trimestre.
           </p>
           <table className="w-full text-sm">
             <thead className="text-muted text-xs"><tr>
               <th className="text-left font-normal">Stratégie</th>
-              <th className="text-right font-normal">CAGR</th><th className="text-right font-normal">Sharpe</th>
-              <th className="text-right font-normal">Sortino</th><th className="text-right font-normal">Max DD</th></tr></thead>
+              <th className="text-right font-normal" title="Gain moyen par an.">Gain / an</th><th className="text-right font-normal" title="Combien de gain pour chaque unité de secousses subies.">Gain / risque</th>
+              <th className="text-right font-normal" title="Même idée, mais ne compte que les baisses.">Gain / baisses</th><th className="text-right font-normal" title="La pire chute depuis un sommet.">Pire baisse</th></tr></thead>
             <tbody className="mono">
-              {([["Preset pur", d.index_core.base_stats, "#9aa1ab"],
-                 ["Mélange (production)", d.index_core.blended_stats, "#22d3ee"]] as any[])
+              {([["La stratégie seule", d.index_core.base_stats, "#9aa1ab"],
+                 ["Socle + stratégie (ce qui tourne)", d.index_core.blended_stats, "#22d3ee"]] as any[])
                 .filter((r) => r[1]?.available).map(([name, st, col]: any) => (
                   <tr key={name} className="border-t border-border">
                     <td className="py-1.5 font-sans" style={{ color: col }}>{name}</td>
@@ -376,9 +385,9 @@ export default function Dashboard() {
             </tbody>
           </table>
           {d.index_core.core_holdings?.length > 0 && (
-            <p className="text-muted2 text-xs mt-2">Panier top-10 : {d.index_core.core_holdings.join(", ")}.</p>
+            <p className="text-muted2 text-xs mt-2">Les 10 lignes du socle : {d.index_core.core_holdings.join(", ")}.</p>
           )}
-          <p className="text-muted2 text-xs mt-1">Détail des ratios : <code>make index-core</code>. Changer le blend : <code>QUANT_CORE_SPEC="qqq:0.5"</code> (défaut) — ajoute <code>,megacap:0.10</code> ou <code>sector_mom:0.25</code> pour un cœur mixte.</p>
+          <p className="text-muted2 text-xs mt-1">Voir tous les chiffres : <code>make index-core</code>. Changer la répartition : <code>QUANT_CORE_SPEC="qqq:0.5"</code> (valeur par défaut) — ajoutez <code>,megacap:0.10</code> ou <code>sector_mom:0.25</code> pour mélanger plusieurs socles.</p>
         </section>
       )}
 
@@ -390,12 +399,12 @@ export default function Dashboard() {
         const benchmarks = Object.fromEntries(benchNames.map((n) => [n, ac.series[n]]));
         return (
           <section className="card p-4 overflow-x-auto">
-            <h2 className="text-sm uppercase tracking-wide text-muted mb-1">Mes comptes réels vs indices <span className="text-[11px] normal-case">· base 100 · {ac.window?.[0]} → {ac.window?.[1]}</span></h2>
+            <h2 className="text-sm uppercase tracking-wide text-muted mb-1">Mes comptes réels face aux indices <span className="text-[11px] normal-case">· tout le monde part de 100 · {ac.window?.[0]} → {ac.window?.[1]}</span></h2>
             {main && <EquityChart series={ac.series[main]} benchmarks={benchmarks} />}
             <table className="w-full text-sm mt-3">
-              <thead className="text-muted text-xs"><tr><th className="text-left font-normal">Série</th>
-                <th className="text-right font-normal">Rendement</th><th className="text-right font-normal">CAGR</th>
-                <th className="text-right font-normal">Sharpe</th><th className="text-right font-normal">Max DD</th></tr></thead>
+              <thead className="text-muted text-xs"><tr><th className="text-left font-normal">Ligne comparée</th>
+                <th className="text-right font-normal">Gain total</th><th className="text-right font-normal" title="Gain moyen par an.">Gain / an</th>
+                <th className="text-right font-normal" title="Combien de gain pour chaque unité de secousses subies.">Gain / risque</th><th className="text-right font-normal" title="La pire chute depuis un sommet.">Pire baisse</th></tr></thead>
               <tbody className="mono">{(ac.kpis ?? []).map((k: any) => (
                 <tr key={k.name} className="border-t border-border">
                   <td className="py-1.5 font-sans" style={{ color: col[k.name] ?? "#9aa1ab" }}>{k.name}</td>
@@ -405,22 +414,22 @@ export default function Dashboard() {
                   <td className="text-right" style={{ color: "#f43f5e" }}>{(k.maxdd * 100).toFixed(1)}%</td>
                 </tr>))}</tbody>
             </table>
-            <p className="text-muted2 text-xs mt-2">Données réelles (historique broker + indices ou ETF proxies frais). Un benchmark périmé est exclu plutôt que prolongé artificiellement.</p>
+            <p className="text-muted2 text-xs mt-2">Chiffres réels : l'historique de vos comptes chez le courtier, face aux indices (ou aux ETF qui les suivent). Si la série d'un indice n'est plus mise à jour, elle est retirée du tableau — on ne prolonge jamais une courbe avec des valeurs inventées.</p>
           </section>
         );
       })() : (
         <section className="card p-4">
           <h2 className="text-sm uppercase tracking-wide text-muted mb-1">Mes comptes réels vs indices</h2>
-          <p className="text-muted text-xs">Historique réel des comptes en constitution (quelques jours de suivi nécessaires) ou comptes non connectés. La comparaison s'affichera dès que des données réelles seront disponibles.</p>
+          <p className="text-muted text-xs">Il faut quelques jours de suivi pour comparer quoi que ce soit — ou bien les comptes ne sont pas connectés. La comparaison apparaîtra dès qu'il y aura de vrais chiffres.</p>
         </section>
       )}
       <section className="card p-4 overflow-x-auto">
-        <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Top screener — multi-actifs (score facteurs + edge ML)</h2>
+        <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Les mieux notés aujourd'hui, toutes catégories</h2>
         <table className="w-full text-sm">
           <thead className="text-muted text-xs">
             <tr><th className="text-left font-normal">#</th><th className="text-left font-normal">Actif</th>
-            <th className="text-left font-normal">Secteur</th><th className="text-right font-normal">Score</th>
-            <th className="text-right font-normal">ML</th><th className="text-left font-normal pl-4">Raison</th></tr>
+            <th className="text-left font-normal">Secteur</th><th className="text-right font-normal" title="Note issue du croisement de plusieurs critères de marché.">Note</th>
+            <th className="text-right font-normal" title="Probabilité de hausse estimée par le modèle appris sur l'historique. 50 % = il ne sait pas.">Modèle</th><th className="text-left font-normal pl-4">Pourquoi</th></tr>
           </thead>
           <tbody className="mono">
             {s?.rows?.slice(0, 10).map((r: any) => (

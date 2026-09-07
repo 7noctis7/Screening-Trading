@@ -7,6 +7,7 @@ export type Col = {
   label: string;
   align?: "left" | "right";
   num?: boolean;                              // tri numérique
+  title?: string;                             // explication en clair, au survol de l'en-tête
   render?: (v: any, row: any) => React.ReactNode;
   csv?: (v: any, row: any) => string | number | null;
 };
@@ -48,14 +49,14 @@ export function SortableTable({ rows, cols, filterKeys, csvName, initialSort, pa
         {csvName && (
           <button onClick={() => downloadCsv(csvName, cols.map((c) => c.label),
             shown.map((row) => cols.map((c) => (c.csv ? c.csv(row[c.key], row) : row[c.key] ?? ""))))}
-            className="text-xs px-3 py-1.5 rounded-lg border border-border text-muted hover:text-fg hover:bg-surfaceAlt">⬇ CSV</button>
+            className="text-xs px-3 py-1.5 rounded-lg border border-border text-muted hover:text-fg hover:bg-surfaceAlt">⬇ Tableur</button>
         )}
       </div>
       <div className="overflow-x-auto">
         <table className={`w-full ${dense ? "dense text-xs" : "text-sm"}`}>
           <thead>
             <tr>{cols.map((c) => (
-              <th key={c.key} onClick={() => toggle(c.key)} title="Trier"
+              <th key={c.key} onClick={() => toggle(c.key)} title={c.title ? `${c.title}\n(cliquer pour trier)` : "Trier"}
                 className="cursor-pointer select-none whitespace-nowrap hover:text-fg"
                 style={{ textAlign: c.align ?? (c.num ? "right" : "left") }}>
                 {c.label}{sort.key === c.key

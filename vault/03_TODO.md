@@ -780,7 +780,12 @@ explicite, module par module, avec mesure.
 - [ ] **Séries macro à ajouter** (identifiants à vérifier depuis le Mac, FRED joignable) :
       conditions financières NFCI, anticipations d'inflation 5a5a, dollar index, inscriptions
       hebdomadaires au chômage (seul indicateur haute fréquence), spread investment grade.
-- [ ] **Accessibilité** : `/ml`, `/conviction`, `/portfolio` gardent leur vocabulaire technique.
+- [x] **Accessibilité — FERMÉ (2026-09-07)** : les 26 pages du site sont passées en langage
+      courant, à contenu strictement égal (chaque chiffre, seuil et réserve conservé). `/ml`,
+      `/conviction` et `/portfolio` traités à la suite 32 ; les treize dernières à la suite 33.
+      `accueil` volontairement laissée telle quelle : sa prose était déjà claire. Forme retenue :
+      la question posée avant la réponse technique, et l'explication au survol (`Col.title` sur
+      `SortableTable`) plutôt qu'en note de bas de page.
 - [ ] **Unifier les fenêtres du dashboard** : Sharpe 2,43 en haut, 1,07 dans le bloc honnêteté,
       0,98 pour le preset pur — trois fenêtres, aucune ne le dit dans les tuiles héros.
 - [ ] **Bloc décision sur le screener** : il classe mais ne conclut pas (la fiche, elle, conclut).
