@@ -34,7 +34,17 @@ if command -v systemctl >/dev/null 2>&1 \
   fi
 fi
 
-# 2. QUEL build : le tampon posé au moment du build doit valoir la tête courante.
+# 2. QUELLE UNITÉ : le fichier systemd installé doit correspondre au gabarit du dépôt.
+attendue="$(grep -oP '^VERSION_UNITE=\K[0-9]+' scripts/install_services.sh 2>/dev/null || echo '')"
+installee="$(grep -oP '^# quant-unit-version: \K[0-9]+' /etc/systemd/system/quant-web.service 2>/dev/null || echo '')"
+if [ -n "$attendue" ] && [ "$installee" != "$attendue" ]; then
+  echo "✗ L'unité systemd installée est en version « ${installee:-inconnue} », le dépôt attend « $attendue »."
+  echo "  Des correctifs d'unité (arrêt des enfants, chemin d'exécution) ne sont donc PAS appliqués."
+  echo "  Réinstaller :   make services"
+  statut=1
+fi
+
+# 3. QUEL build : le tampon posé au moment du build doit valoir la tête courante.
 tete="$(git rev-parse --short HEAD 2>/dev/null || echo '?')"
 bati="$(cut -c1-7 apps/web/.quant-build-commit 2>/dev/null || echo '?')"
 if [ "$tete" != "$bati" ]; then

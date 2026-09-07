@@ -1,5 +1,26 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 24) — Une consigne orale n'est pas un mécanisme
+
+`make up` a enfin dit la vérité : « Le port 3000 est tenu par le PID 818916, ÉTRANGER au service
+quant-web (PID 818895) ». Vérification de la vérification : la logique de filiation a été rejouée
+localement sur un vrai couple parent/enfant — elle remonte correctement. Le verdict était donc
+juste, et le port tenu par un orphelin d'une tentative antérieure dont le parent est mort.
+
+**Cause : `make services` n'a pas été relancé.** Le changement de `KillMode` vit dans le fichier
+`/etc/systemd/system/quant-web.service`, pas dans le dépôt. Je l'avais signalé en prose ; ça n'a
+pas suffi, et rien dans l'outillage ne l'imposait. Le service a donc continué à laisser des
+orphelins pendant que `git log` montrait le correctif appliqué — la pire configuration : le
+correctif EXISTE, il n'est pas ACTIF, et tout indique le contraire.
+
+L'unité générée porte désormais `# quant-unit-version: N`, et `make up` compare cette valeur à
+celle attendue par le dépôt. Une unité obsolète fait échouer la vérification en nommant la
+commande de réinstallation. Toute modification future du gabarit devra incrémenter `VERSION_UNITE`,
+sinon l'écart passera de nouveau inaperçu.
+
+C'est la même leçon que le reste de la journée, appliquée à la configuration système : ce qui n'est
+pas vérifié par une machine finit par diverger sans bruit.
+
 ## Session 2026-09-07 (suite 23) — Mon unité systemd FABRIQUAIT les orphelins qu'elle subissait
 
 L'orphelin tué, un autre reprenait le port. Ce n'était donc pas un accident de session SSH : la

@@ -13,6 +13,13 @@
 #   sudo bash scripts/install_services.sh
 set -euo pipefail
 
+# Version du GABARIT d'unité. À incrémenter à CHAQUE changement de son contenu : `make up`
+# compare cette valeur à celle du fichier installé et exige une réinstallation si elle diffère.
+# Le 07/09, un changement de `KillMode` transmis en prose n'a pas été appliqué, et le service a
+# continué à laisser des orphelins pendant que tout semblait à jour. Une consigne orale n'est pas
+# un mécanisme.
+VERSION_UNITE=2
+
 RACINE="$(cd "$(dirname "$0")/.." && pwd)"
 UTILISATEUR="${SUDO_USER:-$(id -un)}"
 GROUPE="$(id -gn "$UTILISATEUR")"
@@ -33,6 +40,7 @@ chown "$UTILISATEUR:$GROUPE" "$RACINE/logs"
 
 _unite() {   # $1 = nom, $2 = description, $3 = script, $4 = délai de démarrage
   cat >"/etc/systemd/system/$1.service" <<UNIT
+# quant-unit-version: $VERSION_UNITE   (ne pas éditer : régénéré par `make services`)
 [Unit]
 Description=$2
 After=network-online.target
