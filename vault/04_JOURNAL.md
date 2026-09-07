@@ -1,5 +1,26 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 6) — Le port est repris APRÈS la vérification, et 3001 cesse d'être fatal
+
+Le test de réservation a livré la mesure décisive : « Port 3000 encore occupé, attente de sa
+libération » s'est affiché, puis le script a CONTINUÉ — donc le bind a fini par réussir — et Next,
+quelques secondes plus tard, a malgré tout basculé sur 3001. Le détenteur apparaît donc APRÈS la
+garde, pendant le démarrage de l'API, la purge du cache ou `npm install`. Vérifier juste après
+l'arrêt des process ne pouvait pas le voir. Un second contrôle est posé JUSTE AVANT `next dev`,
+avec un diagnostic complet (sockets tous états + processus node/next vivants + rappel du `sudo`).
+
+Deux décisions de fond. **La garde n'interrompt plus** : bloquer le démarrage coûtait plus que ça
+ne protégeait. **`localhost:3001` et `127.0.0.1:3001` entrent dans les origines CORS par défaut** :
+Next bascule tout seul sur 3001, et l'omettre transformait un simple décalage de port en panne
+totale et muette — page affichée, requêtes refusées avant d'être émises, navigateur ne rapportant
+qu'une panne réseau anonyme. On reste strictement en localhost : aucune surface réseau ajoutée.
+
+Le commentaire qui annonçait encore « mieux vaut refuser de démarrer » a été corrigé en même temps
+que le code : une étiquette qui survit à la décision qu'elle décrit est exactement le défaut
+poursuivi toute la journée.
+
+43 tests API passés ; typecheck front sans erreur nouvelle.
+
 ## Session 2026-09-07 (suite 5) — « y a-t-il un listener ? » n'est pas « puis-je réserver ce port ? »
 
 Ma garde du port 3000 disait LIBRE, `sudo ss -ltnp 'sport = :3000'` disait LIBRE, et Next refusait

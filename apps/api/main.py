@@ -35,8 +35,14 @@ for _noisy in ("watchfiles", "watchfiles.main"):   # silence le rechargeur (logs
 app = FastAPI(title="Quant Trading API", version="0.1.0")
 # CORS verrouillé par défaut sur localhost (l'API n'a pas d'auth). Élargir EXPLICITEMENT via
 # QUANT_CORS_ORIGINS="https://mon-domaine" si tu exposes l'API (jamais "*" sur réseau ouvert).
+# 3001 est autorisé au même titre que 3000 : Next bascule tout seul sur 3001 quand 3000 est
+# pris, et l'omettre transformait un simple décalage de port en panne totale et muette — page
+# affichée, requêtes refusées par le CORS avant d'être émises, navigateur rapportant une panne
+# réseau anonyme (07/09). On reste strictement en localhost : aucune surface réseau ajoutée.
 _cors_env = os.environ.get("QUANT_CORS_ORIGINS",
-                           "http://localhost:3000,http://127.0.0.1:3000,http://localhost:8080")
+                           "http://localhost:3000,http://127.0.0.1:3000,"
+                           "http://localhost:3001,http://127.0.0.1:3001,"
+                           "http://localhost:8080")
 _cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()] or ["http://localhost:3000"]
 app.add_middleware(CORSMiddleware, allow_origins=_cors_origins, allow_methods=["*"],
                    allow_headers=["*"])

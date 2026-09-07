@@ -30,7 +30,8 @@ async function get<T>(path: string): Promise<T> {
 // par le CORS AVANT d'atteindre l'API, ce que le navigateur rapporte comme une panne réseau
 // indiscernable d'une API éteinte. Sans cette liste, le message renvoyait vers « make start »
 // pour une cause qui n'avait rien à voir (07/09).
-const ORIGINES_AUTORISEES = ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:8080"];
+const ORIGINES_AUTORISEES = ["http://localhost:3000", "http://127.0.0.1:3000",
+  "http://localhost:3001", "http://127.0.0.1:3001", "http://localhost:8080"];
 
 function _raisonTransport(): string {
   const origine = typeof location === "undefined" ? "" : location.origin;

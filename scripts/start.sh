@@ -63,10 +63,8 @@ fi
 echo "→ Arrêt des anciens process (API/front)…"
 bash scripts/stop_services.sh
 
-# Next bascule SILENCIEUSEMENT sur 3001 si 3000 est déjà pris. Le front tourne alors sur une
-# origine que le CORS de l'API REFUSE (apps/api/main.py n'autorise par défaut que 3000 et 8080) :
-# la page s'affiche, aucune donnée ne se charge, et le navigateur ne rapporte qu'une panne réseau
-# anonyme. On a passé une matinée sur ce symptôme le 07/09. Mieux vaut refuser de démarrer.
+# Next bascule SILENCIEUSEMENT sur 3001 si 3000 est déjà pris. On le SIGNALE (l'API autorise
+# désormais aussi l'origine 3001, donc ce n'est plus fatal — mais le tunnel doit suivre).
 # NE PAS DEMANDER « y a-t-il un listener ? » MAIS « puis-je réserver ce port ? ».
 # Mesuré le 07/09 : `ss -ltn` ET `sudo ss -ltnp` rendaient le port 3000 VIDE, pendant que Next
 # refusait de s'y lier et basculait sur 3001 — que le CORS de l'API rejette, donc une page qui
@@ -129,5 +127,18 @@ if [ "$(cat "$EMPREINTE" 2>/dev/null)" != "$TETE" ]; then
 fi
 
 npm install >/dev/null 2>&1 || true
+
+# CONTRÔLE TARDIF, juste avant `next dev`. Le 07/09, la garde placée après l'arrêt des process
+# voyait le port LIBRE (bind réussi) et Next le trouvait OCCUPÉ quelques secondes plus tard :
+# le détenteur apparaît donc APRÈS elle, pendant le démarrage de l'API, la purge du cache ou
+# `npm install`. Vérifier au plus près du lancement est le seul moment où la mesure peut
+# désigner le vrai coupable.
+if ! _port_reservable 3000; then
+  echo "⚠ Port 3000 repris ENTRE la vérification initiale et le lancement du site."
+  _diagnostic_port 3000
+  echo "  Le site va démarrer sur 3001. L'API l'autorise, mais votre tunnel doit suivre :"
+  echo "      ssh -L 3001:localhost:3001 -L 8000:localhost:8000 ubuntu@<vps>"
+fi
+
 echo "  Ouvre http://localhost:3000  (laisse ~1-3 min au 1er build de l'API)"
 npm run dev
