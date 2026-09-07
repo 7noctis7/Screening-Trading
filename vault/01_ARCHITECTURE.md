@@ -49,12 +49,28 @@ graph TD
     ST --> PF[portefeuille and risque]
     PF --> EX[execution: run_live.py = chemin PROD unique]
   end
+  subgraph RECO[Analyse d'un portefeuille IMPORTE - read-only, aucun ordre]
+    IMP[snapshot importe: manuel ou CSV] --> UA[portfolio/user_analysis: alias, crypto.db, intersection SANS remplissage]
+    S --> RC[portfolio/recommendation: top N du screening du jour]
+    RC --> FR[portfolio/filtre_resultats: resultats imminents ecartes AVANT calcul]
+    FR --> PER[ecarter_perimes: series arretees - une serie figee parait sans risque]
+    PER --> ELG[elaguer: T/N >= 30 sinon covariance non estimable]
+    UA --> COV[covariance annuelle 252j]
+    ELG --> COV
+    COV --> SC[min-variance / ERC / HRP]
+    COV --> CV[portfolio/conviction: Black-Litterman]
+    ICM[research/screening_ic: IC walk-forward Spearman] -. AUTORISE ou REFUSE .-> CV
+    PRO[profile/investor: budget de perte declare] -. BORNE l'exposition .-> SC
+    SC --> IND[portfolio/indicateurs: diversification, positions effectives, 52 semaines]
+    CV --> IND
+  end
   MD -. pilote .-> ST
   MH -. tracee dans .-> JRNL
   MP -. verifie .-> ST
   subgraph RESEARCH[packages/research - gate 4 etages]
     GATE[placebo -> DSR -> PBO -> sabotage]
-    LEDGER[(ledger hypotheses.jsonl)]
+    LEDGER[(ledger hypotheses.jsonl - succes ET echecs)]
+    ICM -. consigne chaque mesure .-> LEDGER
     FDR[fdr: Benjamini-Hochberg criblage simultane]
     LEDGER -.-> GATE
     FDR -.-> GATE
@@ -113,6 +129,7 @@ flowchart LR
   B --> C[Macro and regime: VIX/Fed/FMI/cycle]
   C --> D[Screening technique + fondamental]
   D --> E[Ranking multi-facteur -> top actifs]
+  E -.-> M[IC mesure du score: t=0.76 au 07/09 -> selection NON validee]
   E --> F[Strategie selon regime]
   F --> G{Filtre risque: R:R, stop, limites}
   G -- rejete --> X[Pas de trade]
@@ -160,6 +177,7 @@ croire qu'ils y sont. Ils y entreront un par un, après la porte de
 | **Mandat (définition déclarative)** | `packages/mandate` | ✅ identité = hash canonique · cosmétique hors identité · cibles de résultat refusées · harnais de pureté déterminisme/env/équivalence (ADR-0048/0049/0050) |
 | Backtest | `packages/backtest` | ✅ event-driven + walk-forward + DSR (S5) · dimensionnement **notionnel ou à risque constant** (`risque_par_trade`, 0,5 % en prod — banc `scripts/sizing_lab.py`, ADR-0051) |
 | Risque (engine + règles) | `packages/risk` | ✅ engine+veto+kill-switch (S1) |
+| Analyse portefeuille importé | `packages/portfolio/{user_analysis,recommendation,conviction,indicateurs,filtre_resultats}` | ✅ read-only, aucun ordre · sélection = screening du jour, poids = moteurs de risque · profil déclaré BORNE l'exposition · « Conviction » ouvert seulement si l'IC MESURÉ tient hors échantillon (ADR-0075) · séries arrêtées et résultats imminents écartés avant tout calcul |
 | Portefeuille | `packages/portfolio` | ✅ HRP/ERC/min-var, VaR/CVaR/EVT, PSR/DSR, stress (S11) · **intégrité des séries** (un NaN est un incident, jamais une valeur) · **fragilité** : marge de payoff, PF privé des 5 meilleurs, significativité corrigée de la dépendance, $ contre R (ADR-0051) |
 | Exécution (paper) | `packages/execution` | ✅ SimBroker+AlpacaBroker+Bitmart gated · journal décision + round-trip FIFO (ADR-0028/0031) · LiveEngine = simulateur |
 | ML | `packages/ml` | ✅ triple-barrier, CV purgée/embargo, calibration, conformal, champion/challenger (S9) |

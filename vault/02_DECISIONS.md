@@ -2,6 +2,100 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0074 — La recommandation d'univers SÉLECTIONNE ; elle ne prédit pas (2026-09-07)
+
+**Contexte.** Demande : une carte où le robot propose quels actifs détenir, pas seulement comment
+repondérer l'existant. `optimal_allocation` ressemblait à la réponse toute faite — elle ne l'est
+pas : `snapshot.py:1858` pose `corr_syms = held[:12]`, ce sont les lignes DÉJÀ détenues. L'exposer
+sous ce nom aurait répondu à la question du rééquilibrage sous l'étiquette de la sélection.
+
+**Décision.** Sélection = top N du screening quotidien ; poids = les mêmes moteurs de risque
+(min-variance, ERC, HRP) que l'étape 4. Aucun rendement attendu n'entre dans ces trois profils :
+« idéal » signifie « bien réparti sur une sélection », jamais « le plus rentable ».
+
+**Conséquences.** L'écart de performance entre les deux cartes vient donc ENTIÈREMENT de l'étape
+de sélection — la seule que rien ne validait au moment de la livraison (cf. ADR-0075). Les lignes
+détenues absentes de la sélection s'affichent à 0 % : les omettre sous-estimerait le turnover et
+cacherait la moitié de la décision. Un élagage T/N ≥ 30 retire les candidats qui rendraient la
+covariance non estimable, et publie ce qu'il retire avec sa date de début.
+
+## ADR-0075 — Mesurer l'IC AVANT d'autoriser un profil orienté rendement (2026-09-07)
+
+**Contexte.** « Maximiser les gains » exige un rendement attendu, donc un signal dont le pouvoir
+prédictif est établi. Rien ne l'établissait. La tentation habituelle est de livrer quand même en
+qualifiant le résultat d'« exploratoire ».
+
+**Décision.** Construire la MESURE d'abord (`packages/research/screening_ic.py` : IC de Spearman
+walk-forward, information tronquée à `t`, fenêtres disjointes, coupe hors échantillon
+chronologique), puis n'ouvrir le profil « Conviction » que si elle passe. L'amplitude des vues vaut
+IC × σ × z (Grinold) : un IC faible ramène mécaniquement le postérieur sur le prior ERC.
+
+**Mesuré** (779 symboles réels, horizon 21 j, 83 fenêtres disjointes) : IC **+0,0202**, erreur-type
+0,0266, **t = 0,76** (p = 0,45), intervalle à 95 % **[−0,032 ; +0,072]** contenant zéro, première
+moitié +0,0322 contre seconde +0,0084 — **−74 %**. Il faudrait 2,6 fois cet IC pour atteindre t = 2.
+
+**Conséquences.** Le profil « Conviction » reste FERMÉ, et la carte affiche la raison chiffrée. Le
+verrou ayant été écrit AVANT la mesure, il n'a pas pu être assoupli pour accommoder le résultat —
+c'est l'intérêt de l'ordre choisi. Chaque mesure est consignée au registre des hypothèses, succès
+comme échec : un essai non consigné fausserait le compteur qui déflate le Sharpe.
+
+**Réserve.** Un seul horizon testé. L'absence de significativité à 21 jours ne prouve rien aux
+autres horizons, mais en tester plusieurs impose Benjamini-Hochberg avant de publier le meilleur.
+
+## ADR-0076 — Le profil déclaré BORNE le calcul, il ne le commente pas (2026-09-07)
+
+**Contexte.** La page « Mon profil » l'écrivait elle-même : « Elles ne contraignent aujourd'hui
+aucun autre écran ». Un questionnaire de risque sans effet est un ornement.
+
+**Décision.** Le front transmet le profil à chaque appel — comme le fait déjà `/api/profil`, l'API
+calcule et ne conserve rien. Deux contraintes, dans cet ORDRE : le plafond de ligne (RELATIF,
+projection sur le simplex à somme constante), puis l'exposition (ABSOLUE, lue sur la volatilité des
+poids DÉFINITIFS via `vol_target_from_drawdown`, la conversion du dimensionnement de production).
+
+**Conséquences.** Mesuré sur un profil horizon 10 ans / perte max 25 % : exposition ramenée à
+72,1 %, 27,9 % en liquidités, volatilité finale exactement à la cible. L'inversion de l'ordre
+mesurerait la volatilité d'une allocation qu'on ne détiendra pas. Les liquidités sont une LIGNE du
+tableau, exclue du turnover : le cash est ce qui reste après les ventes, pas un achat.
+
+## ADR-0077 — Séparer « certifier réel » de « comparer des dates » (2026-09-07)
+
+**Contexte.** `is_real_mode` refuse le mode « mixte » à juste titre : un seul titre en repli
+synthétique interdit de certifier l'univers réel. Mais le NETTOYAGE des titres périmés était gardé
+par ce même prédicat, alors qu'il ne pose pas cette question. Le VPS tournant en « mixte », le
+nettoyage ne s'est jamais exécuté en production.
+
+**Conséquences mesurées.** BK (dernière barre au 18 juin), EA (10 août) et EQR (21 août)
+occupaient 57 % de la recommandation. Deux dégâts : l'alignement par intersection ramenait la
+fenêtre commune de TOUT le portefeuille au 17 juin ; et une série figée, n'ayant plus de variance
+récente, est prise par un min-variance pour l'actif le moins risqué de l'univers. **La donnée morte
+n'est pas seulement inutile : elle attire le capital.**
+
+**Décision.** Un prédicat par question — `contient_des_prix_reels` pour la comparabilité des
+horodatages — et une défense en profondeur (`ecarter_perimes`) qui retire les séries arrêtées avant
+tout calcul. Les deux prédicats sont testés comme DISTINCTS, pour qu'ils ne reconvergent pas.
+
+## ADR-0078 — Un outil doit vérifier ce qu'il affirme, pas ce qui lui ressemble (2026-09-07)
+
+**Contexte.** Quatre outils ont menti dans la même journée : `make stop` annonçait « arrêté » sans
+rien arrêter (un `pkill -f` qui se tuait lui-même depuis une recette Make), une garde de port
+répondait « libre » sur un port occupé (elle testait `0.0.0.0` quand Node se lie à `::`),
+`make up` annonçait « prêt » parce que QUELQUE CHOSE répondait, et l'installateur d'unités se
+relançait récursivement (accents graves exécutés dans un heredoc non protégé).
+
+**Point commun.** Chaque vérification portait sur un SYMPTÔME — ça répond, ça rend 0, un listener
+existe — et non sur le FAIT : qui répond, avec quel code, sous quelle supervision.
+
+**Décision.** Trois contrôles explicites dans `make up` : la version de l'unité installée (en
+PREMIER, avant toute recompilation), la filiation du processus qui tient le port jusqu'au MainPID
+du service, et le commit du build servi. En cas d'échec, le diagnostic IMPRIME CE QU'IL A VU.
+
+**Conséquence décisive.** C'est ce dernier point qui a résolu la journée : la filiation imprimée a
+révélé `next-server ← sh ← npm run start ← PM2 God`. **Un processus qui renaît n'est pas un
+orphelin : c'est quelqu'un qui le redémarre.** Huit heures de correctifs contre des « orphelins »
+étaient justes et incapables d'atteindre la cause. L'assertion sans preuve avait tenu toute la
+journée ; le premier diagnostic qui montre ses observations l'a close.
+
+
 ## ADR-0052 — Le stop suiveur ne protégeait pas les gains, il les COUPAIT (2026-09-02)
 
 **Contexte.** `fast_swing` visait une cible à `rr = 6` fois le stop de 4 ATR, soit +24 ATR, avec
