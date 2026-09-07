@@ -67,32 +67,43 @@ bash scripts/stop_services.sh
 # origine que le CORS de l'API REFUSE (apps/api/main.py n'autorise par défaut que 3000 et 8080) :
 # la page s'affiche, aucune donnée ne se charge, et le navigateur ne rapporte qu'une panne réseau
 # anonyme. On a passé une matinée sur ce symptôme le 07/09. Mieux vaut refuser de démarrer.
-# `lsof` NE SUFFIT PAS : sans privilèges il ne montre que les sockets de l'utilisateur courant.
-# Le 07/09, `lsof -i:3000` ne rendait RIEN alors que Next refusait le port — le détenteur
-# appartenait à un autre compte. `ss` liste les sockets d'écoute quel qu'en soit le propriétaire
-# (le nom du process reste masqué sans droits, mais l'OCCUPATION, elle, devient visible).
-if command -v ss >/dev/null 2>&1; then
-  _occupe="$(ss -H -ltn 'sport = :3000' 2>/dev/null)"
-else
-  _occupe="$(lsof -ti:3000 2>/dev/null)"
-fi
-if [ -n "$_occupe" ]; then
-  echo "✗ Le port 3000 est déjà occupé :"
-  echo "    $_occupe"
+# NE PAS DEMANDER « y a-t-il un listener ? » MAIS « puis-je réserver ce port ? ».
+# Mesuré le 07/09 : `ss -ltn` ET `sudo ss -ltnp` rendaient le port 3000 VIDE, pendant que Next
+# refusait de s'y lier et basculait sur 3001 — que le CORS de l'API rejette, donc une page qui
+# s'affiche sans jamais charger de données. `ss -l` ne liste que l'état LISTEN : il ne voit ni
+# les sockets résiduelles d'un process tué, ni un détenteur qu'il n'a pas le droit d'afficher.
+# Le seul test fiable est celui que Next fera lui-même : tenter le bind, avec SO_REUSEADDR
+# comme Node. On réessaie, car l'occupation est souvent transitoire après un kill.
+_port_reservable() {
+  python3 - "$1" <<'PYEOF' 2>/dev/null
+import socket, sys
+s = socket.socket()
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)   # mêmes options que Node
+try:
+    s.bind(("0.0.0.0", int(sys.argv[1])))
+except OSError:
+    sys.exit(1)
+finally:
+    s.close()
+PYEOF
+}
+
+for _essai in $(seq 1 30); do
+  if _port_reservable 3000; then break; fi
+  [ "$_essai" = "1" ] && echo "  Port 3000 encore occupé, attente de sa libération (30 s max)…"
+  sleep 1
+done
+if ! _port_reservable 3000; then
+  echo "✗ Le port 3000 reste impossible à réserver après 30 s."
   echo "  Next basculerait sur 3001, que le CORS de l'API refuse : la page s'afficherait mais"
   echo "  AUCUNE donnée ne se chargerait, sans autre symptôme qu'une panne réseau anonyme."
-  echo "  Identifiez le détenteur puis relancez :"
-  echo "      sudo ss -ltnp 'sport = :3000'      # ou : sudo lsof -i:3000 -sTCP:LISTEN -P -n"
+  echo "  État COMPLET des sockets sur ce port (tous états, pas seulement LISTEN) :"
+  (ss -tanp "sport = :3000" 2>/dev/null || lsof -i:3000 -P -n 2>/dev/null) | sed 's/^/    /'
+  echo "  Si rien n'apparaît ci-dessus, le détenteur appartient à un autre compte :"
+  echo "      sudo ss -tanp 'sport = :3000'"
   exit 1
 fi
 
-if [ "${QUANT_REFRESH:-0}" = "1" ]; then
-  echo "→ Maj des cours (make daily + crypto)…"
-  python scripts/ingest_prices.py --daily || true
-  python scripts/ingest_crypto.py || true
-fi
-
-mkdir -p logs
 echo "→ Démarrage de l'API en arrière-plan (logs/api.log)…  build initial ~1-3 min"
 nohup python -m uvicorn apps.api.main:app >logs/api.log 2>&1 &
 echo "  PID API : $!"

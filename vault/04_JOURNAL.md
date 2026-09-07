@@ -1,5 +1,22 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 5) — « y a-t-il un listener ? » n'est pas « puis-je réserver ce port ? »
+
+Ma garde du port 3000 disait LIBRE, `sudo ss -ltnp 'sport = :3000'` disait LIBRE, et Next refusait
+de s'y lier en basculant sur 3001. Trois affirmations incompatibles au même instant : la
+vérification ne mesurait donc pas la bonne chose. `ss -l` ne liste que l'état LISTEN — il ne voit
+ni les sockets résiduelles d'un processus tué, ni un détenteur qu'il n'a pas le droit d'afficher.
+Poser la question à `ss` était structurellement incapable de prédire ce que ferait Next.
+
+La garde tente désormais le bind lui-même, avec SO_REUSEADDR comme Node — exactement l'opération
+que Next va tenter — et réessaie 30 s, l'occupation après un `kill -9` étant souvent transitoire.
+Si le port reste inaccessible, elle imprime l'état COMPLET des sockets (`ss -tanp`, tous états) au
+lieu de la seule vue LISTEN, et rappelle que `sudo` est nécessaire pour voir un autre compte : le
+diagnostic est produit automatiquement au lieu d'être redemandé.
+
+Vérifié dans les deux sens : port réellement lié → détecté occupé, code 1 ; port libéré → réservable
+immédiatement, code 0. `ss` peut être absent (constaté en conteneur) : repli sur `lsof`.
+
 ## Session 2026-09-07 (suite 4) — Next bascule sur 3001, et le CORS le refuse en silence
 
 `make start` affichait « ⚠ Port 3000 is in use, trying 3001 instead » et poursuivait. Or
