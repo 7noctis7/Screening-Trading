@@ -89,7 +89,9 @@ def test_recommandation_publie_les_trois_profils_et_son_avertissement(monkeypatc
         assert all(p >= -1e-12 for p in poids), profil          # long-only
     assert out["selection"]["universe_size"] == 900
     assert out["t_sur_n"] >= RATIO_T_SUR_N_MIN
-    assert "pas validé hors échantillon" in out["caveat"]        # l'aveu est OBLIGATOIRE
+    # L'avertissement suit désormais l'ÉTAT de la mesure au lieu d'une formule figée.
+    # Sans mesure d'IC (cas de ce test), il doit le dire — l'aveu reste obligatoire.
+    assert "JAMAIS été mesuré" in out["caveat"]
 
 
 def test_les_lignes_portent_le_nom_le_secteur_et_le_score(monkeypatch):
@@ -132,3 +134,58 @@ def test_nom_vide_retombe_sur_le_ticker(monkeypatch):
     rows = [{"symbol": s, "name": "", "sector": "", "score": 1.0} for s in series]
     out = recommander({"available": True, "rows": rows}, n=4)
     assert all(ligne["name"] == ligne["symbol"] for ligne in out["rows"])
+
+
+# --- Profil « Conviction » : le seul que la MESURE a le droit d'interdire ----------------
+
+def _reco_avec_ic(monkeypatch, ic):
+    import packages.portfolio.recommendation as module
+    series = {f"A{i}": _serie("2018-01-01", 2000, i) for i in range(6)}
+    monkeypatch.setattr(module, "charger_series", lambda symboles, years: (series, {}, []))
+    monkeypatch.setattr(module, "charger_ic", lambda *a, **k: ic)
+    rows = [{"symbol": s, "score": 2.0 - i * 0.3} for i, s in enumerate(series)]
+    return recommander({"available": True, "rows": rows}, n=6)
+
+
+def test_sans_mesure_d_ic_le_profil_conviction_n_existe_pas(monkeypatch):
+    """Pas de repli silencieux vers HRP sous un nom prometteur : le profil est ABSENT."""
+    out = _reco_avec_ic(monkeypatch, None)
+    assert "conviction" not in out["scenarios"]
+    assert "jamais mesuré" in out["conviction_reason"].lower()
+    assert "JAMAIS été mesuré" in out["caveat"]
+
+
+def test_ic_mesure_mais_non_robuste_refuse_le_profil_et_dit_les_deux_moities(monkeypatch):
+    ic = {"available": True, "ic_moyen": 0.08, "robuste": False, "n_dates": 40,
+          "horizon": 21, "ic_premiere_moitie": 0.16, "ic_seconde_moitie": 0.00}
+    out = _reco_avec_ic(monkeypatch, ic)
+    assert "conviction" not in out["scenarios"]
+    assert "+0.1600" in out["conviction_reason"] and "+0.0000" in out["conviction_reason"]
+    assert "NON robuste" in out["caveat"]
+
+
+def test_ic_robuste_ouvre_le_profil_conviction(monkeypatch):
+    ic = {"available": True, "ic_moyen": 0.06, "robuste": True, "n_dates": 40,
+          "horizon": 21, "ic_premiere_moitie": 0.07, "ic_seconde_moitie": 0.05}
+    out = _reco_avec_ic(monkeypatch, ic)
+    assert "conviction" in out["scenarios"]
+    poids = out["scenarios"]["conviction"]
+    assert len(poids) == len(out["symbols"])
+    assert abs(sum(poids) - 1.0) < 5e-7 * len(poids) + 1e-9
+    assert all(p >= -1e-12 for p in poids)                    # long-only
+    assert "robuste hors échantillon" in out["caveat"]
+
+
+def test_un_ic_plus_fort_ecarte_davantage_les_poids_du_prior(monkeypatch):
+    """Grinold : l'amplitude des vues vaut IC × σ × z. Un IC faible DOIT donner un
+    postérieur proche du prior — c'est ce qui empêche une conviction non mesurée de
+    déplacer un euro. On vérifie la monotonie, pas une valeur."""
+    faible = _reco_avec_ic(monkeypatch, {"available": True, "ic_moyen": 0.005, "robuste": True,
+                                         "n_dates": 40, "horizon": 21})
+    fort = _reco_avec_ic(monkeypatch, {"available": True, "ic_moyen": 0.25, "robuste": True,
+                                       "n_dates": 40, "horizon": 21})
+    import numpy as np
+    prior = np.array(faible["scenarios"]["neutre"])
+    ecart_faible = float(np.abs(np.array(faible["scenarios"]["conviction"]) - prior).sum())
+    ecart_fort = float(np.abs(np.array(fort["scenarios"]["conviction"]) - prior).sum())
+    assert ecart_fort > ecart_faible

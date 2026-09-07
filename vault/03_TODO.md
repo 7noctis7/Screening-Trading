@@ -25,7 +25,10 @@
       moteurs de risque, élagage T/N ≥ 30, écart affiché face aux lignes détenues. Reste à
       MESURER l'IC hors échantillon du score de sélection (`packages/research/information_coefficient.py`
       existe ; il manque l'historique des scores) — tant que ce n'est pas fait, la carte reste
-      étiquetée non validée OOS. P1.
+      étiquetée non validée OOS. **Fait le 07/09** : `make ic-screening` mesure l'IC
+      walk-forward (Spearman, fenêtres disjointes, coupe chronologique) et la carte publie le
+      résultat. Reste à LANCER la mesure sur le VPS et à décider de l'horizon retenu — en tester
+      plusieurs impose Benjamini-Hochberg. P1.
 - [ ] **P1 — deux sources de prix pour le même univers** (07/09) : `_screen_section` lit le
       `panel` en mémoire du snapshot, `packages/portfolio/recommendation.py` lit
       YAHOO.db/crypto.db via `load_bars`. Des tickers screenés (EVHC, SCG — délistés 2018/2019)

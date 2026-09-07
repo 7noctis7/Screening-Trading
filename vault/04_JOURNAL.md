@@ -1,5 +1,37 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 11) — L'IC mesuré, et le seul profil que la mesure peut interdire
+
+Demande : que la recommandation tienne compte de l'IC et sélectionne « les meilleurs set-ups pour
+maximiser les gains ». La seconde moitié n'est pas livrable telle quelle — maximiser un gain exige
+un rendement attendu, donc un signal dont le pouvoir prédictif est établi. Ce qui EST livrable, et
+qui manquait, c'est la mesure de ce pouvoir. Elle décide ensuite du reste.
+
+**`packages/research/screening_ic.py` — IC walk-forward.** Pour une grille d'instants `t`, on
+demande au moteur son classement avec la seule information disponible à `t` (vérifié :
+`FactorContext._closes` tronque à `bars[: t+1]`, aucun look-ahead), puis on corrèle par Spearman ce
+classement au rendement réalisé `t → t+h`. Deux pièges évités explicitement : le **chevauchement**
+(pas = horizon par défaut, sinon les IC s'autocorrèlent et le t-stat gonfle sans information
+ajoutée) et le **choix a posteriori de l'horizon** (paramètre explicite, `horizons_testes` publié,
+Benjamini-Hochberg requis pour en tester plusieurs). Coupe hors échantillon CHRONOLOGIQUE, jamais
+aléatoire. 8 tests, dont les deux bornes : score prescient → IC = 1, bruit → IC ≈ 0, t-stat < 3.
+
+**`scripts/mesurer_ic_screening.py` (`make ic-screening`)** réutilise `_seed_universe` et
+`_load_prices` de la production — jamais une seconde définition de l'univers — et EXCLUT les prix
+synthétiques. Résultat daté écrit dans `out/ic_screening.json` ; la mesure réexécute le moteur à
+chaque date de la grille, ce n'est pas une opération de requête HTTP.
+
+**Quatrième profil « Conviction », gouverné par la mesure.** Black-Litterman, prior = ERC, vues
+issues des scores. L'amplitude des vues n'est pas un réglage : elle vaut IC × σ × z (Grinold). Un
+IC de 0,005 produit donc un postérieur quasi identique au prior — c'est le mécanisme qui empêche
+une conviction non mesurée de déplacer un euro (testé : la monotonie de l'écart au prior en
+fonction de l'IC). Sans mesure, ou avec une mesure non robuste, le profil **n'existe pas** : pas de
+repli silencieux vers HRP sous un nom prometteur, et la carte affiche la raison chiffrée (les deux
+demi-périodes). L'avertissement général suit désormais l'état réel de la mesure au lieu d'une
+formule figée.
+
+578 tests passés (portefeuille + recherche + API) ; build Next.js vert.
+
 ## Session 2026-09-07 (suite 10) — Les paires en USDC amputaient la moitié de la recommandation
 
 Écran réel : « 6/15 lignes retenues · 9 sans historique exploitable (EVHC, SCG, TRX/USDC,

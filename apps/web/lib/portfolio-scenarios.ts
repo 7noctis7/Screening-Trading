@@ -1,6 +1,6 @@
 import { PortfolioSnapshot } from "@/lib/portfolio-import";
 
-export type ScenarioKind = "prudent" | "neutre" | "dynamique";
+export type ScenarioKind = "prudent" | "neutre" | "dynamique" | "conviction";
 // D'où vient l'univers : les lignes que l'utilisateur DÉTIENT, ou la sélection que le
 // screening du jour propose. Deux questions différentes — « comment mieux répartir ce que
 // j'ai » et « que devrais-je détenir » — donc deux règles de validation différentes.
@@ -18,6 +18,10 @@ const LABELS: Record<ScenarioKind, [string, string]> = {
   // « Black-Litterman » promettait des rendements attendus (μ) que rien ne calibre :
   // un nom que le calcul n'aurait jamais honoré. On nomme ce qui est calculé.
   dynamique: ["Dynamique", "Hierarchical Risk Parity — grappes de corrélation, sans rendement attendu"],
+  // Le SEUL profil qui utilise un rendement attendu. Il n'apparaît que si l'IC du score a
+  // été mesuré ET tient hors échantillon ; l'amplitude des vues vaut IC × σ × z (Grinold),
+  // donc un IC faible ramène mécaniquement le résultat sur le prior ERC.
+  conviction: ["Conviction", "Black-Litterman — vues calibrées par l'IC MESURÉ du score"],
 };
 
 const norm = (value: string) => value.toUpperCase().replace(/[-/]/g, "");
@@ -46,7 +50,7 @@ export function buildScenario(snapshot: PortfolioSnapshot, optimal: any, kind: S
   const imported = new Map(snapshot.positions.map((position) =>
     [norm(position.ticker), { ticker: position.ticker, weight: (position.weight ?? 0) / 100 }]));
   const poidsActuel = (symbol: string) => imported.get(norm(symbol))?.weight ?? 0;
-  const keys: Record<ScenarioKind, string> = { prudent: "min_variance", neutre: "risk_parity", dynamique: "hrp" };
+  const keys: Record<ScenarioKind, string> = { prudent: "min_variance", neutre: "risk_parity", dynamique: "hrp", conviction: "conviction" };
   const proposed = optimal?.[keys[kind]]; const symbols: string[] = optimal?.symbols ?? [];
   const exact = symbols.length === imported.size && symbols.every((item) => imported.has(norm(item)));
   const vide = { kind, label, method, weights: [], turnover: 0, estimatedCost: null, breaches: 0, averageCapEffect: 0, available: false };

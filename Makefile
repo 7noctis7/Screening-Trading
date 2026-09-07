@@ -39,6 +39,23 @@ preview:          ## régénère les aperçus HTML du dashboard/portefeuille
 	$(PYTHON) apps/web/preview/build_preview.py
 start:            ## TOUT EN UNE COMMANDE : maj code + kill vieux process + API (fond) + site
 	bash scripts/start.sh
+ic-screening:     ## MESURE l'IC hors échantillon du score de sélection (long, à lancer à la main)
+	$(PYTHON) scripts/mesurer_ic_screening.py $(ARGS)
+
+up:               ## TOUT EN UNE : sync + relance des services + attente que le front réponde
+	@$(MAKE) --no-print-directory sync
+	@echo "→ Relance des services (le front recompile)…"
+	@sudo systemctl restart quant-api quant-web
+	@printf "→ Attente du front"; \
+	 for i in $$(seq 1 90); do \
+	   if curl -sf -o /dev/null "http://127.0.0.1:$${QUANT_WEB_PORT:-3000}/"; then \
+	     echo; echo "✓ front prêt   → http://localhost:3000"; \
+	     printf "✓ API %s\n" "$$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/health)"; \
+	     exit 0; \
+	   fi; printf "."; sleep 5; \
+	 done; \
+	 echo; echo "✗ le front n'a pas répondu en 7 min — voir : tail -40 logs/quant-web.log"; exit 1
+
 services:         ## installe API+front en services systemd (survivent à la déconnexion SSH)
 	sudo bash scripts/install_services.sh
 services-restart: ## relance les services après un `make sync` (reconstruit le front)

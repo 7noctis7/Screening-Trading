@@ -50,6 +50,26 @@ function Tableau({ lignes, meta, valeur }: { lignes: any[]; meta: Map<string, an
   </tbody></table></div>;
 }
 
+/** Ce que vaut la SÉLECTION, chiffré. Sans cette ligne, l'utilisateur ne peut pas
+ *  distinguer « le robot a choisi » de « ces actifs vont surperformer » — deux
+ *  affirmations très différentes, et une seule est étayée. */
+function IC({ ic }: { ic: any }) {
+  if (!ic) return null;
+  if (!ic.available) return <div className="mt-1">
+    Pouvoir prédictif du score : <b>non mesuré</b>. {ic.reason} Tant qu'il ne l'est pas, la
+    sélection est un classement, pas une prévision.
+  </div>;
+  const signe = ic.ic_moyen >= 0 ? "+" : "";
+  return <div className="mt-1">
+    Pouvoir prédictif du score, <b>mesuré</b> : IC <b className="mono">{signe}{Number(ic.ic_moyen).toFixed(4)}</b>
+    {" "}sur {ic.n_dates} fenêtres disjointes de {ic.horizon} jours
+    {ic.t_stat != null ? <> (t = {Number(ic.t_stat).toFixed(2)})</> : null}.
+    {" "}1<sup>re</sup> moitié {Number(ic.ic_premiere_moitie).toFixed(4)} · 2<sup>e</sup> moitié {Number(ic.ic_seconde_moitie).toFixed(4)} →{" "}
+    <b>{ic.robuste ? "tient hors échantillon" : "ne tient pas hors échantillon"}</b>.
+    {" "}Mesuré le {String(ic.mesure_le ?? "").slice(0, 10)}.
+  </div>;
+}
+
 /** « Nombre de lignes » est un nombre DEMANDÉ, pas garanti. Un candidat sans historique
  *  exploitable, ou dont l'introduction récente écraserait la fenêtre commune, est retiré.
  *  Cet écart était publié SOUS le tableau : trop loin pour être vu, donc inexistant en
@@ -67,6 +87,7 @@ function Bilan({ reco }: { reco: any }) {
     {ecartes.length ? <> <b>{ecartes.length} écartée(s)</b> pour fenêtre commune trop courte : {ecartes.map((d) => `${d.symbol} (depuis ${d.start})`).join(", ")}.</> : null}
     {!absents.length && !ecartes.length && !complet ? <> Le screening n'a pas publié davantage de candidats aujourd'hui.</> : null}
     {" "}Fenêtre commune : {reco.n_observations} observations, T/N = {reco.t_sur_n}.
+    <IC ic={reco.ic} />
   </div>;
 }
 
@@ -105,20 +126,32 @@ export function PortfolioScenarios({ snapshot, analysis, loading }: {
     // Une seule fonction de construction, donc pas de divergence possible entre elles.
     const depuisReco = reco?.available
       ? { symbols: reco.symbols, min_variance: reco.scenarios?.prudent,
-          risk_parity: reco.scenarios?.neutre, hrp: reco.scenarios?.dynamique }
+          risk_parity: reco.scenarios?.neutre, hrp: reco.scenarios?.dynamique,
+          conviction: reco.scenarios?.conviction }
       : null;
     const depuisAnalyse = analysis?.available
       ? { symbols: analysis.symbols, min_variance: analysis.scenarios?.prudent,
           risk_parity: analysis.scenarios?.neutre, hrp: analysis.scenarios?.dynamique }
       : portfolio?.analysis?.optimal_allocation;
     const calcule = source === "recommandation" ? depuisReco : depuisAnalyse;
+    // « Conviction » n'est proposé QUE sur l'univers recommandé : c'est le score de
+    // sélection qui l'alimente, et un portefeuille importé n'en a pas.
+    const profils: ScenarioKind[] = source === "recommandation"
+      ? ["prudent", "neutre", "dynamique", "conviction"] : ["prudent", "neutre", "dynamique"];
     const construits = snapshot
-      ? (["prudent", "neutre", "dynamique"] as ScenarioKind[]).map((kind) =>
+      ? profils.map((kind) =>
           buildScenario(snapshot, calcule, kind, value > 0 ? value : null, costBps, maxPct / 100, source))
       : [];
     // Une panne amont connaît DÉJÀ sa cause exacte : on la relaie au lieu de laisser
     // chaque carte réinventer un motif générique.
-    return amont ? construits.map((scenario) => ({ ...scenario, reason: amont })) : construits;
+    if (amont) return construits.map((scenario) => ({ ...scenario, reason: amont }));
+    // « Conviction » absent n'est pas un accident technique : c'est la MESURE qui l'a
+    // refusé, et le back en donne la raison chiffrée. Afficher « clé absente » à sa place
+    // masquerait précisément l'information qui justifie le refus.
+    const motifConviction = reco?.conviction_reason;
+    return motifConviction
+      ? construits.map((s) => s.kind === "conviction" && !s.available ? { ...s, reason: motifConviction } : s)
+      : construits;
   }, [snapshot, analysis, portfolio, reco, source, value, costBps, maxPct, amont]);
 
   const meta = useMemo(() => new Map<string, any>(
@@ -155,7 +188,7 @@ export function PortfolioScenarios({ snapshot, analysis, loading }: {
         : <div />}
     </div>
 
-    <div className="grid md:grid-cols-3 gap-2">{scenarios.map((scenario) =>
+    <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-2">{scenarios.map((scenario) =>
       <button key={scenario.kind} onClick={() => setSelected(scenario.kind)}
         className={`text-left rounded-xl border p-3 ${selected === scenario.kind ? "border-cyan-500 bg-surface3" : "border-border"}`}>
         <div className="flex justify-between"><b>{scenario.label}</b><span>{scenario.available ? "✓" : "—"}</span></div>

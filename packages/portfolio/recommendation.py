@@ -11,6 +11,11 @@ pas validé hors échantillon dans ce dépôt. La carte le dit ; elle ne le supp
 """
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
+import numpy as np
+
 from packages.portfolio.user_analysis import (
     ALIGNEMENT,
     MIN_OBSERVATIONS,
@@ -76,6 +81,70 @@ def _lignes(symboles: list[str], meta: dict[str, dict], poids: dict) -> list[dic
             for i, s in enumerate(symboles)]
 
 
+CHEMIN_IC = Path(__file__).resolve().parents[2] / "out" / "ic_screening.json"
+
+
+def charger_ic(chemin: Path = CHEMIN_IC) -> dict | None:
+    """Mesure d'IC produite par `make ic-screening`, ou None si jamais mesurée.
+
+    On LIT un fichier daté au lieu de recalculer : la mesure walk-forward réexécute le
+    moteur à chaque date de la grille, ce n'est pas une opération de requête HTTP.
+    """
+    try:
+        return json.loads(chemin.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001 — jamais mesuré, illisible : on le dit par None
+        return None
+
+
+def scenario_conviction(covariance: np.ndarray, scores: list[float],
+                        ic: dict | None) -> tuple[list | None, str]:
+    """Profil orienté RENDEMENT — et le seul que la mesure a le droit d'interdire.
+
+    Black-Litterman : prior = ERC (pas de vue), vues issues des scores. L'amplitude des
+    vues n'est pas un réglage esthétique : elle vaut IC × σ × z, la formule de Grinold.
+    Un IC de 0,02 produit donc des vues quinze fois plus faibles qu'un IC de 0,30, et le
+    postérieur retombe naturellement sur le prior. C'est le mécanisme qui empêche une
+    conviction non mesurée de déplacer un euro.
+
+    Sans mesure, ou avec une mesure non robuste, le scénario n'existe PAS. On ne le
+    dégrade pas silencieusement en HRP sous un nom prometteur : on dit pourquoi il manque.
+    """
+    if not ic or not ic.get("available"):
+        return None, ("IC du score jamais mesuré. Lancer `make ic-screening` : sans lui, "
+                      "aucun rendement attendu n'est calibré et ce profil n'a pas de sens.")
+    if not ic.get("robuste"):
+        return None, (f"IC mesuré ({ic.get('ic_moyen', 0):+.4f}) mais NON robuste : "
+                      f"{ic.get('ic_premiere_moitie', 0):+.4f} sur la première moitié contre "
+                      f"{ic.get('ic_seconde_moitie', 0):+.4f} sur la seconde. Le signal ne "
+                      "survit pas à sa période d'origine — on ne l'utilise pas.")
+    try:
+        from packages.portfolio.black_litterman import (
+            black_litterman,
+            views_from_scores,
+        )
+        from packages.portfolio.optimize import equal_risk_contribution
+        vol = float(np.sqrt(np.mean(np.diag(covariance))))       # vol annuelle typique
+        echelle = abs(float(ic["ic_moyen"])) * vol               # Grinold : α = IC × σ × z
+        matrice, vues = views_from_scores(list(scores), scale=echelle)
+        return black_litterman(covariance, equal_risk_contribution(covariance),
+                               matrice, vues)["weights"], ""
+    except Exception as erreur:  # noqa: BLE001
+        return None, f"Black-Litterman indisponible : {erreur}"
+
+
+def _avertissement(ic: dict | None) -> str:
+    """L'avertissement dit l'état RÉEL de la mesure — jamais une formule figée."""
+    base = ("Les poids répartissent le risque mesuré. Aucun de ces profils ne prédit un "
+            "rendement, sauf « Conviction » lorsqu'il est disponible. Exploratoire — aucun ordre.")
+    if not ic or not ic.get("available"):
+        return ("Le pouvoir prédictif du score de sélection n'a JAMAIS été mesuré ici "
+                "(`make ic-screening`). " + base)
+    signe = "+" if ic.get("ic_moyen", 0) >= 0 else ""
+    etat = "robuste hors échantillon" if ic.get("robuste") else "NON robuste hors échantillon"
+    return (f"IC du score mesuré à {signe}{ic.get('ic_moyen', 0):.4f} sur "
+            f"{ic.get('n_dates')} fenêtres disjointes de {ic.get('horizon')} jours, {etat}. " + base)
+
+
 def _indisponible(raison: str, **extra) -> dict:
     return {"available": False, "reason": raison, **extra}
 
@@ -104,6 +173,11 @@ def recommander(screen: dict, n: int = 15, years: int = 5) -> dict:
         return _indisponible("calendrier commun insuffisant entre les candidats retenus.",
                              missing=manquants, dropped=ecartes)
     poids = scenarios_risque(covariance)
+    ic = charger_ic()
+    conviction, motif_conviction = scenario_conviction(
+        covariance, [scores.get(sym, 0.0) for sym in symboles], ic)
+    if conviction is not None:
+        poids["conviction"] = conviction
     return {
         "available": True, "symbols": symboles, "aliases": aliases,
         "rows": _lignes(symboles, meta, poids),
@@ -119,8 +193,12 @@ def recommander(screen: dict, n: int = 15, years: int = 5) -> dict:
             "filters": screen.get("filters") or [],
             "missing_history": manquants, "dropped": ecartes,
         },
-        # Étiquette obligatoire : les poids sont mesurés, la SÉLECTION ne l'est pas.
-        "caveat": ("Les poids répartissent le risque mesuré ; la sélection repose sur un score "
-                   "composite dont le pouvoir prédictif n'est pas validé hors échantillon. "
-                   "Exploratoire — aucun ordre."),
+        # La mesure, telle quelle. Si elle vaut UNCALIBRATED, la carte l'affiche —
+        # l'absence de mesure est une information, pas un blanc à combler.
+        "ic": ic or {"available": False, "status": "JAMAIS MESURÉ",
+                     "reason": "Lancer `make ic-screening`."},
+        "conviction_reason": motif_conviction,
+        # L'étiquette SUIT la mesure. La figer sur « non validé » alors qu'une mesure
+        # existe serait aussi faux que l'inverse : on publie ce qui a été constaté.
+        "caveat": _avertissement(ic),
     }
