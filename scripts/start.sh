@@ -50,6 +50,21 @@ if [ "${QUANT_NO_UPDATE:-0}" != "1" ]; then
   fi
 fi
 
+# `make start` et les services systemd ne peuvent pas coexister : les deux veulent le port
+# 3000. Une fois `make services` installé, lancer `make start` produit un EADDRINUSE brutal
+# (mesuré le 07/09) ou, pire, deux serveurs qui se disputent le port à chaque redémarrage.
+# On refuse tôt, en nommant la commande qui remplace celle-ci.
+if command -v systemctl >/dev/null 2>&1 \
+   && systemctl is-active --quiet quant-web.service 2>/dev/null; then
+  # Guillemets typographiques et NON des accents graves : entre guillemets doubles, bash
+  # exécuterait le contenu des accents graves — ici « make start », donc une récursion.
+  echo "✗ Le service quant-web tourne déjà : « make start » entrerait en conflit sur le port 3000."
+  echo "  Sur cette machine, les services systemd remplacent « make start ». Utilisez :"
+  echo "      make up                     # sync + relance des services + attente"
+  echo "  Pour revenir au mode manuel : sudo systemctl disable --now quant-api quant-web"
+  exit 1
+fi
+
 echo "→ Arrêt des anciens process (API/front)…"
 bash scripts/stop_services.sh
 

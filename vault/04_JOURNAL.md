@@ -1,5 +1,18 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 12) — Le piège que l'installation des services a créé
+
+`EADDRINUSE 127.0.0.1:3000` : le service `quant-web` tient le port en permanence, et `make start`
+essayait d'y lancer un second serveur. J'ai installé les services sans neutraliser la commande
+qu'ils remplacent — deux processus se disputant le même port, à chaque fois. `start.sh` refuse
+désormais tôt si `quant-web.service` est actif, nomme `make up` et rappelle comment revenir au
+mode manuel. Vérifié avec un faux `systemctl` : refus, code retour 1.
+
+**Erreur grave évitée de justesse dans ce correctif.** J'avais écrit le message d'erreur avec des
+accents graves autour de « make start ». Entre guillemets doubles, bash y voit une SUBSTITUTION DE
+COMMANDE : la garde aurait relancé `make start` récursivement, depuis le message censé l'interdire.
+`bash -n` ne détecte pas ce cas — seule la relecture l'a vu. Guillemets typographiques désormais.
+
 ## Session 2026-09-07 (suite 11) — L'IC mesuré, et le seul profil que la mesure peut interdire
 
 Demande : que la recommandation tienne compte de l'IC et sélectionne « les meilleurs set-ups pour
