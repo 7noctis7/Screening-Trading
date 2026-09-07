@@ -1,5 +1,25 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite) — « TypeError: Load failed » n'est pas une donnée manquante
+
+Après le correctif des alias crypto, l'étape 4 restait vide, mais sous un motif NOUVEAU :
+« Analyse historique indisponible : TypeError: Load failed. Couverture 0% ». Ce n'est pas une
+mesure — c'est la chaîne que Safari rend pour TOUTE panne de transport (Chrome dit « Failed to
+fetch »). Le corps de la requête n'était jamais parti : aucune base n'avait été ouverte, aucun
+historique lu. Le front relayait cette chaîne sous une étiquette qui accuse la donnée. Les quatre
+colonnes de preuves à 0/4 dans le même écran confirmaient la panne de transport, pas la donnée.
+
+Trois causes possibles, et le message ne permettait de trancher aucune : API éteinte, mauvais port,
+ou origine refusée par le CORS (page ouverte depuis une IP LAN — « localhost » y désigne l'appareil
+qui affiche, pas celui qui héberge l'API). `analyzePortfolio` distingue désormais l'échec de
+transport (try/catch autour du `fetch`) de la réponse HTTP en erreur, et nomme l'URL visée, la
+commande de vérification (`curl <BASE>/health` — la route est `/health`, pas `/api/health`) et,
+si l'origine n'est pas localhost, la variable à régler (`NEXT_PUBLIC_API_URL` + `QUANT_CORS_ORIGINS`).
+
+L'étape 4 relaie maintenant le motif amont au lieu d'en réinventer un générique : « Aucune
+allocation calculée : l'analyse de l'univers n'a rien renvoyé » paraphrasait une cause déjà connue
+en la rendant inutilisable.
+
 ## Session 2026-09-07 — Step 4 : trois causes distinctes, aucune n'était « la donnée »
 
 L'étape 4 affichait « — » sur les trois cartes avec le motif « Historique/covariance indisponible

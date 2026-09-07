@@ -17,7 +17,13 @@ export function PortfolioScenarios({ snapshot, analysis, loading }: { snapshot: 
     // partagée des deux côtés (06/09).
     const calculated = analysis?.available ? { symbols: analysis.symbols, min_variance: analysis.scenarios?.prudent,
       risk_parity: analysis.scenarios?.neutre, hrp: analysis.scenarios?.dynamique } : portfolio?.analysis?.optimal_allocation;
-    return snapshot ? (["prudent", "neutre", "dynamique"] as ScenarioKind[]).map((kind) => buildScenario(snapshot, calculated, kind, value > 0 ? value : null, costBps, maxPct / 100)) : [];
+    const construits = snapshot ? (["prudent", "neutre", "dynamique"] as ScenarioKind[]).map((kind) => buildScenario(snapshot, calculated, kind, value > 0 ? value : null, costBps, maxPct / 100)) : [];
+    // Quand l'analyse amont a échoué, elle connaît DÉJÀ la cause exacte (API injoignable,
+    // série manquante, calendrier trop court). Laisser chaque carte réinventer un motif
+    // générique — « l'analyse de l'univers n'a rien renvoyé » — masquait cette cause
+    // derrière une paraphrase inutilisable (07/09). On relaie le motif d'origine.
+    const amont = analysis && analysis.available === false ? String(analysis.reason ?? "") : "";
+    return amont ? construits.map((scenario) => ({ ...scenario, reason: amont })) : construits;
   }, [snapshot, analysis, portfolio, value, costBps, maxPct]);
   if (!snapshot) return null;
   const active = scenarios.find((scenario) => scenario.kind === selected)!;
