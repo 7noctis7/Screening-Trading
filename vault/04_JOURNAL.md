@@ -1,5 +1,27 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 21) — « ça répond » n'est pas « le bon processus sert le bon code »
+
+Après vingt commits, la page affiche toujours l'ancien code : avertissement figé, trois profils,
+paires USDC manquantes, et surtout « historique commun jusqu'au 2026-06-17 » — BK est encore là.
+`make up` annonce pourtant « front prêt » à chaque fois.
+
+Hypothèse principale : un `next dev` orphelin d'une session SSH morte tient le port 3000, le
+service systemd ne peut pas s'y lier et boucle, et le navigateur parle à l'ancien processus. La
+page FONCTIONNE, elle sert du code vieux de quinze commits, et rien ne le signale.
+
+C'est la troisième fois de la journée qu'un outil dit « fait » sans que ce soit vrai — après
+`make stop` qui annonçait « arrêté » sans rien arrêter, et la garde de port qui répondait « libre »
+sur un port occupé. Le point commun : la vérification portait sur un SYMPTÔME (ça répond, ça rend
+0) et non sur le FAIT (qui répond, avec quel code).
+
+`scripts/verifier_service.sh`, appelé par `make up`, pose les deux vraies questions :
+1. **Qui tient le port** — le PID doit remonter, par filiation, au MainPID du service. Un
+   processus étranger est nommé, avec la commande pour le tuer.
+2. **Quel build** — le tampon `apps/web/.quant-build-commit` doit valoir la tête courante.
+
+`make up` échoue désormais bruyamment au lieu d'annoncer une réussite qu'il n'a pas vérifiée.
+
 ## Session 2026-09-07 (suite 20) — La recommandation allouait 57 % à des séries mortes
 
 L'audit d'univers a révélé ce que dix heures de travail sur cette carte n'avaient pas vu. Les

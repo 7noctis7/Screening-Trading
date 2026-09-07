@@ -54,13 +54,13 @@ up:               ## TOUT EN UNE : sync + relance des services + attente que le 
 	@sudo systemctl restart quant-api quant-web
 	@printf "→ Attente du front"; \
 	 for i in $$(seq 1 90); do \
-	   if curl -sf -o /dev/null "http://127.0.0.1:$${QUANT_WEB_PORT:-3000}/"; then \
-	     echo; echo "✓ front prêt   → http://localhost:3000"; \
-	     printf "✓ API %s\n" "$$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/health)"; \
-	     exit 0; \
-	   fi; printf "."; sleep 5; \
+	   if curl -sf -o /dev/null "http://127.0.0.1:$${QUANT_WEB_PORT:-3000}/"; then echo; break; fi; \
+	   printf "."; sleep 5; \
 	 done; \
-	 echo; echo "✗ le front n'a pas répondu en 7 min — voir : tail -40 logs/quant-web.log"; exit 1
+	 if ! curl -sf -o /dev/null "http://127.0.0.1:$${QUANT_WEB_PORT:-3000}/"; then \
+	   echo; echo "✗ le front n'a pas répondu en 7 min — voir : tail -40 logs/quant-web.log"; exit 1; \
+	 fi
+	@bash scripts/verifier_service.sh
 
 services:         ## installe API+front en services systemd (survivent à la déconnexion SSH)
 	sudo bash scripts/install_services.sh
