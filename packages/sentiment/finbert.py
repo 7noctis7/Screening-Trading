@@ -28,7 +28,14 @@ def finbert_available() -> bool:
 @lru_cache(maxsize=1)
 def _pipe():
     from transformers import pipeline  # import local
-    return pipeline("sentiment-analysis", model=_MODEL, top_k=None)
+
+    from packages.common.device import device_index
+    # `pipeline` attend un ENTIER, pas une chaîne : 0 = premier accélérateur,
+    # -1 = processeur. Sans ce paramètre, HuggingFace reste sur le processeur même
+    # quand un GPU est là — le modèle tourne, simplement dix fois plus lentement, et
+    # rien ne le signale.
+    return pipeline("sentiment-analysis", model=_MODEL, top_k=None,
+                    device=device_index())
 
 
 def score_texts(texts: list[str]) -> list[float]:

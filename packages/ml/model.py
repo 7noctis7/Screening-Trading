@@ -75,8 +75,21 @@ def make_model(kind: str = "logit", **kw):
         return SklearnModel(**kw)
     if kind == "xgboost":
         from xgboost import XGBClassifier  # adaptateur prod
-        return SklearnModel(XGBClassifier(n_estimators=100, max_depth=3,
-                                          use_label_encoder=False, eval_metric="logloss"))
+
+        from packages.common.device import params_arbres
+        # Les hyperparamètres du modèle sont INCHANGÉS (100 arbres, profondeur 3) :
+        # seuls s'ajoutent les réglages matériels, qui ne touchent pas la forme du
+        # modèle appris. `params_arbres` rend `tree_method="hist"` sur processeur et
+        # y ajoute `device="cuda"` sur machine NVIDIA — la même forêt, calculée
+        # ailleurs, pas une autre forêt.
+        #
+        # `use_label_encoder` a été RETIRÉ de XGBoost 2.0 : le laisser faisait lever
+        # l'instanciation sur toute installation récente. Il était déjà à False,
+        # c'est-à-dire à la valeur devenue le seul comportement possible — le retirer
+        # ne change donc rien à l'entraînement.
+        return SklearnModel(XGBClassifier(
+            n_estimators=100, max_depth=3, eval_metric="logloss",
+            **params_arbres("xgboost")))
     raise ValueError(f"modèle inconnu: {kind}")
 
 

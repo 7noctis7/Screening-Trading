@@ -28,6 +28,54 @@ Restent à traiter : accueil, dashboard, crypto, glossaire, fiche, events, scree
 échecs, méthode, macro, data, live, investors, fundamentals. Le glossaire est volontairement
 technique par nature.
 
+## Session 2026-09-07 (suite 36) — Portabilité Mac ↔ NVIDIA : trois points de contact, pas cent
+
+Demande : rendre le code « 100 % device-agnostic » avant migration du Mac (MPS) vers une
+machine NVIDIA (CUDA), en remplaçant tous les `.to("mps")`, `.cuda()` et `.to("cpu")` codés
+en dur.
+
+**L'audit a d'abord contredit la prémisse, et c'était l'information utile.** Il n'existe
+**aucun** appareil codé en dur dans le dépôt : zéro `.to("mps")`, zéro `.cuda()`. `torch`
+n'apparaît que dans une docstring. `lightgbm` est déclaré en dépendance mais n'est importé
+nulle part ; `catboost` n'existe pas dans le projet. Le seul appel à accélérer était UNE
+instanciation `XGBClassifier`, plus le pipeline FinBERT qui choisissait son matériel seul.
+
+Le dire valait mieux que produire un gros diff sur du code inexistant. La refonte porte donc
+sur **trois points de contact** — et sur une infrastructure qui empêchera le problème de
+naître quand torch entrera vraiment dans le projet.
+
+**Ce qui a été construit** : `packages/common/device.py` — détection CUDA → MPS → CPU
+(surchargeable par `QUANT_DEVICE`), `torch_device()`, `device_index()` pour HuggingFace,
+`params_arbres(lib)` pour les trois bibliothèques d'arbres, `activer_cudf()`, bannière
+« Exécution sur : … ». Rien n'est importé au niveau module : le cœur du dépôt ne déclare
+aucune dépendance, et ni torch ni xgboost ne sont installés en CI.
+
+**Deux pièges qui auraient coûté cher, et qu'il fallait traiter à contre-courant de la
+demande.**
+
+1. *`cudf.pandas` n'est pas un import de repli.* La consigne était « try: import cudf.pandas,
+   sinon pandas ». Ça ne marche pas : `cudf.pandas` est un CROCHET D'IMPORTATION à poser avant
+   que pandas n'entre en mémoire, pas un module ayant l'API de pandas. Posé trop tard, il ne
+   fait rien **et ne lève rien** — on se croirait accéléré en tournant sur processeur. D'où
+   l'appel en tête des points d'entrée et un message explicite quand c'est trop tard.
+
+2. *La version d'XGBoost se LIT.* La 2.0 a remplacé `tree_method="gpu_hist"` par
+   `tree_method="hist"` + `device="cuda"`. L'ancienne forme est ignorée en silence par la
+   nouvelle : parier ferait tourner sur processeur une machine à 10 000 € sans un message.
+   Corrigé au passage : `use_label_encoder=False`, retiré d'XGBoost 2.0, faisait lever
+   l'instanciation sur toute installation récente — un bug latent, pas lié au matériel.
+
+**Preuve de non-régression, et son revers.** J'ai comparé la sortie complète de
+`scripts/demo_ml.py` avant/après : une ligne différait (accuracy sklearn). Avant d'accuser mon
+changement, j'ai lancé deux fois la MÊME version : elles diffèrent aussi. **Le script est non
+déterministe par lui-même** — `GradientBoostingClassifier` sans `random_state`. La différence
+ne venait pas de moi, mais elle a révélé un vrai défaut : un banc de mesure dont deux
+exécutions ne coïncident pas ne peut pas servir à comparer quoi que ce soit. Ouvert en P2.
+
+La preuve retenue est donc structurelle : le diff de calcul se réduit à deux appels
+(`params_arbres` et `device_index`), tout le reste est de la documentation et des points
+d'entrée. 20 tests, contrôle négatif vérifié (ordre saboté → 7 rouges).
+
 ## Session 2026-09-07 (suite 35) — « fais tout ce qui reste » : ce qui est fait, ce qui est bloqué
 
 Six chantiers livrés, un bloqué faute de données, deux volontairement non faits.

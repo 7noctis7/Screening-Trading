@@ -818,6 +818,24 @@ explicite, module par module, avec mesure.
       et `n_total` ; `/methode` affiche les quatre statuts. `items` reste les seuls rejets —
       /echecs l'affiche sans filtrer, y glisser une idée retenue la dirait échouée.
 
+## 🖥️ Portabilité matérielle (2026-09-07, ADR-0079)
+
+- [x] **Module de détection — FAIT.** `packages/common/device.py` : CUDA → MPS → CPU,
+      `QUANT_DEVICE` pour forcer, bannière « Exécution sur : … », `params_arbres()` pour
+      XGBoost/LightGBM/CatBoost, `activer_cudf()`. 20 tests, contrôle négatif vérifié.
+- [ ] **P2 — `scripts/demo_ml.py` n'est pas déterministe.** Constaté le 07/09 en cherchant à
+      prouver une non-régression : deux exécutions de la MÊME version donnent des accuracies
+      différentes (`GradientBoostingClassifier` sans `random_state`). Un banc dont deux runs
+      ne coïncident pas ne peut servir à comparer ni deux versions, ni deux matériels — ce
+      qui va précisément manquer au moment de valider la migration NVIDIA.
+- [ ] **P2 — Mesurer AVANT d'installer RAPIDS.** `cudf.pandas` accélère pandas ; le temps de
+      ce projet se passe surtout en lectures SQLite et en numpy. Profiler un `make daily`
+      avant de conclure que le GPU aidera — et vérifier que 7 Go tiennent en VRAM (sinon
+      déversement disque, qui peut être plus lent que pandas).
+- [ ] **P2 — À la migration : relancer un backtest identique sur les deux machines.** Deux
+      matériels ne donnent pas le bit près les mêmes flottants. Vérifier que l'écart reste
+      dans le bruit AVANT de faire confiance aux chiffres de la nouvelle machine.
+
 ## 🔵 Décisions en attente de l'utilisateur
 - [ ] **Bot Discord** (projet distinct) : vendre des signaux à des abonnés payants est une
       activité réglementée (conseil en investissement, agrément AMF). Décision à prendre AVANT

@@ -2,6 +2,50 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0079 — Le matériel se détecte, il ne se code pas en dur (2026-09-07)
+
+**Contexte.** Développement sur Mac Apple Silicon (backend MPS), migration prévue sur une
+machine NVIDIA (CUDA). Un `.to("mps")` écrit dans un module de calcul marche sur un poste et
+casse sur l'autre, des semaines plus tard, loin de la ligne fautive.
+
+**Constat avant d'agir.** Audit du dépôt : **aucun** `.to("mps")`, `.cuda()` ni `.to("cpu")`
+n'existait. `torch` n'apparaît que dans une docstring ; FinBERT passe par
+`transformers.pipeline`, qui choisissait son matériel seul. `lightgbm` est déclaré en
+dépendance mais n'est importé nulle part ; `catboost` n'existe pas dans le projet. Le seul
+appel à accélérer était UNE instanciation `XGBClassifier`. La refonte demandée portait donc
+sur trois points de contact, pas sur une passe globale — et le dire valait mieux que produire
+un diff impressionnant sur du code inexistant.
+
+**Décision.** Toute la logique matérielle dans `packages/common/device.py` :
+`get_optimal_device()` (CUDA → MPS → CPU, surchargeable par `QUANT_DEVICE`), `torch_device()`,
+`device_index()` pour les pipelines HuggingFace, `params_arbres(lib)` pour XGBoost / LightGBM /
+CatBoost, `activer_cudf()` et une bannière « Exécution sur : … ».
+
+**Trois choix non évidents.**
+
+1. *Rien d'importé au niveau module.* Le cœur du dépôt ne déclare aucune dépendance ; `torch`,
+   `xgboost` et `cudf` sont absents de la CI. Tout est importé dans les fonctions, sous `try`.
+   Importer ce module ne peut pas échouer.
+
+2. *La version d'XGBoost est LUE, pas supposée.* La 2.0 a remplacé `tree_method="gpu_hist"`
+   par `tree_method="hist"` + `device="cuda"`. L'ancienne forme est ignorée **en silence** par
+   la nouvelle : parier ferait tourner sur processeur une machine à 10 000 € sans un message.
+
+3. *`cudf.pandas` n'est PAS un import de repli.* C'est un crochet d'importation à poser AVANT
+   que pandas n'entre en mémoire. Posé après, il ne fait rien **et ne lève rien** — on se croit
+   accéléré en tournant sur processeur. D'où l'appel en tête des points d'entrée et un
+   diagnostic explicite quand il est trop tard. Le `try/except` autour d'un
+   `import cudf.pandas as pd` demandé initialement aurait produit un module qui n'a pas l'API
+   de pandas.
+
+**Conséquences.** Aucun hyperparamètre de modèle ne change : `params_arbres` ne rend QUE des
+réglages matériels. Un dictionnaire qui mélangerait les deux ferait dériver la forme du modèle
+appris à chaque changement de machine. Corrigé au passage : `use_label_encoder=False`, retiré
+d'XGBoost 2.0, faisait lever l'instanciation sur toute installation récente.
+
+**Non traité, volontairement.** L'accélération de pandas suppose que le temps se passe dans
+pandas ; ici il se passe surtout en lectures SQLite et en numpy. Non mesuré, donc non promis.
+
 ## ADR-0074 — La recommandation d'univers SÉLECTIONNE ; elle ne prédit pas (2026-09-07)
 
 **Contexte.** Demande : une carte où le robot propose quels actifs détenir, pas seulement comment
