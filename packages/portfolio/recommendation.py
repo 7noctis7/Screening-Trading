@@ -70,13 +70,36 @@ def elaguer(series: dict[str, dict[str, float]], scores: dict[str, float],
     return retenus, ecartes
 
 
-def _lignes(symboles: list[str], meta: dict[str, dict], poids: dict) -> list[dict]:
-    # `or s` et non `.get(..., s)` : le screener publie parfois une chaîne VIDE plutôt que
-    # d'omettre la clé, et le repli par défaut ne se déclenchait alors pas — colonne « Nom »
-    # blanche sur des lignes pourtant valides (constaté le 07/09 sur BK, EA, NDX).
-    return [{"symbol": s, "name": meta.get(s, {}).get("name") or s,
-             "sector": meta.get(s, {}).get("sector", ""),
-             "asset_class": meta.get(s, {}).get("asset_class", ""),
+def lien_source(symbole: str) -> str:
+    """Fiche de l'INSTRUMENT chez le fournisseur qui a produit nos prix.
+
+    Pourquoi pas le site « relations investisseurs » de la société : il faudrait le déduire
+    d'un nom, et un nom mal apparié enverrait vers UNE AUTRE ENTREPRISE — précisément
+    l'erreur qu'on cherche à éviter. Le lien pointe donc vers la fiche du fournisseur,
+    indexée par le symbole EXACT que nous avons utilisé. Si notre identifiant est faux, la
+    page ouverte est fausse de la même façon, donc visiblement fausse. Un lien qui échoue
+    de manière détectable vaut mieux qu'un lien plausible et faux.
+    """
+    return f"https://finance.yahoo.com/quote/{symbole}"
+
+
+def _lignes(symboles: list[str], meta: dict[str, dict], poids: dict,
+            alias: dict[str, str] | None = None) -> list[dict]:
+    """Chaque ligne porte de quoi IDENTIFIER l'instrument, pas seulement le pondérer.
+
+    `name` reste None quand il est absent, au lieu de retomber sur le ticker. Afficher
+    « BK / BK » a l'apparence d'une information et n'en est pas une : le lecteur croit
+    avoir vérifié. Un nom manquant doit se voir comme manquant, et le lien prend le relais.
+    """
+    return [{"symbol": s, "name": (meta.get(s, {}).get("name") or "").strip() or None,
+             "sector": meta.get(s, {}).get("sector") or None,
+             "asset_class": meta.get(s, {}).get("asset_class") or None,
+             "venue": meta.get(s, {}).get("venue") or None,
+             "currency": meta.get(s, {}).get("currency") or None,
+             # Le symbole RÉELLEMENT coté : `ETH` a pu être valorisé via `ETH-USD`. C'est le
+             # désambiguïsateur le plus utile — il dit quelle série a servi au calcul.
+             "alias": (alias or {}).get(s) or s,
+             "lien": lien_source((alias or {}).get(s) or s),
              "score": meta.get(s, {}).get("score"),
              "reason": meta.get(s, {}).get("reason", ""),
              **{profil: round(float(vecteur[i]), 6) for profil, vecteur in poids.items()}}
@@ -321,7 +344,7 @@ def recommander(screen: dict, n: int = 15, years: int = 5, plafond: float = 0.20
     poids = {nom: c["poids"] for nom, c in contraintes.items()}
     return {
         "available": True, "symbols": symboles, "aliases": aliases,
-        "rows": _lignes(symboles, meta, poids),
+        "rows": _lignes(symboles, meta, poids, aliases),
         "scenarios": {profil: [round(float(v), 6) for v in vecteur]
                       for profil, vecteur in poids.items()},
         "as_of": dates[-1], "start": dates[0], "n_observations": len(dates) - 1,

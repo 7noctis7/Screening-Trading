@@ -126,14 +126,12 @@ def test_n_demande_est_respecte_ou_expliqué(monkeypatch, n):
     assert out["selection"]["kept"] == len(out["symbols"]) <= n
 
 
-def test_nom_vide_retombe_sur_le_ticker(monkeypatch):
-    """Le screener publie parfois `name: ""` : la colonne ne doit pas rester blanche."""
-    import packages.portfolio.recommendation as module
-    series = {f"A{i}": _serie("2020-01-01", 900, i) for i in range(4)}
-    monkeypatch.setattr(module, "charger_series", lambda symboles, years: (series, {}, []))
-    rows = [{"symbol": s, "name": "", "sector": "", "score": 1.0} for s in series]
-    out = recommander({"available": True, "rows": rows}, n=4)
-    assert all(ligne["name"] == ligne["symbol"] for ligne in out["rows"])
+# Un test RETIRÉ le 07/09, et la raison vaut d'être gardée. Il exigeait qu'un nom vide
+# retombe sur le ticker, « pour que la colonne ne reste pas blanche ». C'était traiter un
+# symptôme d'affichage au prix de la vérité : « BK / BK » se lit comme une identification
+# alors que rien n'a été identifié, et le lecteur croit avoir vérifié. La règle est
+# désormais l'inverse — un nom absent reste absent — et elle est vérifiée par
+# `test_nom_absent_reste_absent_et_ne_repete_pas_le_ticker`.
 
 
 # --- Profil « Conviction » : le seul que la MESURE a le droit d'interdire ----------------
@@ -262,3 +260,40 @@ def test_l_ordre_est_plafond_puis_exposition():
     plafonne = contraindre(brut, cov, 0.30, PROFIL)
     assert plafonne["vol_annuelle"] < libre["vol_annuelle"]
     assert plafonne["exposition"] > libre["exposition"]
+
+
+# --- Identification de l'instrument : ne jamais faire passer un ticker pour un nom -------
+
+def test_nom_absent_reste_absent_et_ne_repete_pas_le_ticker(monkeypatch):
+    """« BK / BK » a l'apparence d'une information et n'en est pas une : le lecteur croit
+    avoir vérifié. Un nom manquant doit se voir comme manquant."""
+    import packages.portfolio.recommendation as module
+    series = {f"A{i}": _serie("2020-01-01", 900, i) for i in range(4)}
+    monkeypatch.setattr(module, "charger_series", lambda symboles, years: (series, {}, []))
+    rows = [{"symbol": s, "name": "", "score": 1.0} for s in series]
+    out = recommander({"available": True, "rows": rows}, n=4)
+    assert all(ligne["name"] is None for ligne in out["rows"])
+
+
+def test_la_ligne_porte_place_de_cotation_devise_et_alias(monkeypatch):
+    """Trois identifiants qui EXISTENT déjà dans les seeds et n'étaient pas publiés."""
+    import packages.portfolio.recommendation as module
+    series = {f"A{i}": _serie("2020-01-01", 900, i) for i in range(4)}
+    monkeypatch.setattr(module, "charger_series",
+                        lambda symboles, years: (series, {"A0": "A0-USD"}, []))
+    rows = [{"symbol": s, "name": "Nom", "venue": "NASDAQ", "currency": "USD",
+             "asset_class": "equity", "score": 1.0} for s in series]
+    out = recommander({"available": True, "rows": rows}, n=4)
+    ligne = next(r for r in out["rows"] if r["symbol"] == "A0")
+    assert ligne["venue"] == "NASDAQ" and ligne["currency"] == "USD"
+    assert ligne["alias"] == "A0-USD"                  # la série RÉELLEMENT valorisée
+    assert ligne["lien"].endswith("/A0-USD")           # le lien suit l'alias, pas le ticker
+
+
+def test_le_lien_utilise_le_symbole_exact_donc_echoue_de_facon_detectable():
+    """Un lien déduit d'un NOM pourrait ouvrir la page d'une autre société — l'erreur même
+    qu'on veut éviter. Indexé par le symbole utilisé, un identifiant faux donne une page
+    visiblement fausse."""
+    from packages.portfolio.recommendation import lien_source
+    assert lien_source("BK") == "https://finance.yahoo.com/quote/BK"
+    assert lien_source("ETH-USD").endswith("/ETH-USD")

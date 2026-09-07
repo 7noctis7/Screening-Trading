@@ -1,5 +1,35 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 15) — Identifier l'instrument, et l'aveu de 594 noms manquants
+
+Crainte exprimée : confondre deux tickers. **Elle est fondée, et ce n'est pas un cas limite.**
+Mesuré : 594 symboles sur ~766 n'ont AUCUN nom dans `data/seed/*.csv`. Ni les fondamentaux ne le
+comblent — la dataclass `Financials` n'a pas de champ `name`.
+
+**Correction d'un correctif du matin.** J'avais fait retomber un nom vide sur le ticker « pour que
+la colonne ne reste pas blanche ». C'était traiter un symptôme d'affichage au prix de la vérité :
+« BK / BK » se lit comme une identification alors que rien n'a été identifié, et le lecteur croit
+avoir vérifié. Un nom absent reste désormais absent, affiché « nom non renseigné ». Le test qui
+verrouillait l'ancien comportement est retiré, avec sa raison conservée en commentaire.
+
+**Ce qui existait déjà et n'était pas publié** : `venue` et `currency` sont dans les seeds depuis
+toujours (BK → NASDAQ/NYSE · USD). S'y ajoute l'ALIAS — le symbole réellement coté, `ETH` valorisé
+via `ETH-USD` — qui est le désambiguïsateur le plus utile puisqu'il dit quelle série a servi au
+calcul.
+
+**Lien : la fiche du FOURNISSEUR, pas le site relations investisseurs.** Déduire une URL d'IR à
+partir d'un nom peut ouvrir la page d'UNE AUTRE société — exactement l'erreur à éviter. Le lien est
+indexé par le symbole exactement utilisé : si notre identifiant est faux, la page est fausse de la
+même façon, donc visiblement fausse. Un lien qui échoue de façon détectable vaut mieux qu'un lien
+plausible et faux.
+
+**`make noms-univers`** comble les noms manquants DEPUIS les fournisseurs, jamais de mémoire. Les
+saisir à la main écrirait dans le dépôt des libellés sans source ni date : un nom faux est pire
+qu'un nom absent — absent il alerte, faux il rassure. Le script n'écrit que ce qu'un fournisseur a
+répondu, ne touche jamais un nom existant, et liste ce qu'il n'a pas résolu.
+
+2074 tests passés ; build Next.js vert.
+
 ## Session 2026-09-07 (suite 14) — Les quatre synergies inter-onglets, câblées
 
 Chacune partage la même discipline : le câblage est ACTIF, et son effet est proportionnel à la

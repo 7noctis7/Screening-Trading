@@ -28,6 +28,31 @@ function Metrique({ titre, valeur }: { titre: string; valeur: string }) {
   </div>;
 }
 
+/** IDENTIFIER l'instrument, pas seulement le nommer.
+ *
+ *  Un nom manquant s'affiche comme manquant. Écrire le ticker à la place du nom donnerait
+ *  au lecteur l'impression d'avoir vérifié quelque chose alors qu'il a relu le ticker.
+ *
+ *  Le lien pointe vers la fiche du FOURNISSEUR de nos prix, indexée par le symbole
+ *  exactement utilisé — pas vers un site « relations investisseurs » qu'il faudrait
+ *  déduire d'un nom, au risque d'ouvrir la page d'une autre société. L'alias est affiché
+ *  quand il diffère : c'est lui qui dit quelle série a réellement servi au calcul. */
+function Identite({ m }: { m: any }) {
+  if (!m) return <span className="text-muted">—</span>;
+  const alias = m.alias && m.alias !== m.symbol ? m.alias : null;
+  return <span>
+    {m.name
+      ? <b className="font-normal">{m.name}</b>
+      : <i className="text-muted">nom non renseigné</i>}
+    <span className="block text-muted2 text-[10px] mono">
+      {[m.venue, m.currency, m.asset_class].filter(Boolean).join(" · ") || "—"}
+      {alias ? ` · coté ${alias}` : ""}
+      {m.lien ? <> · <a href={m.lien} target="_blank" rel="noopener noreferrer"
+        className="underline" style={{ color: "var(--accent)" }}>vérifier</a></> : null}
+    </span>
+  </span>;
+}
+
 /** Tableau des poids. En mode recommandation, la ligne porte aussi le nom et le secteur :
  *  un ticker seul n'est pas une recommandation lisible. Une ligne détenue et non retenue
  *  apparaît à 0 % — c'est la moitié de la décision, elle ne doit pas être masquée. */
@@ -39,7 +64,7 @@ function Tableau({ lignes, meta, valeur }: { lignes: any[]; meta: Map<string, an
   </tr></thead><tbody>
     {lignes.map((row) => <tr key={row.symbol}>
       <td className="mono">{row.symbol}</td>
-      {detaille ? <td className="text-xs">{meta.get(row.symbol)?.name ?? "—"}</td> : null}
+      {detaille ? <td className="text-xs"><Identite m={meta.get(row.symbol)} /></td> : null}
       {detaille ? <td className="text-xs text-muted">{meta.get(row.symbol)?.sector || "—"}</td> : null}
       <td className="text-right mono">{pct(row.current)}</td>
       <td className="text-right mono">{pct(row.proposed)}</td>

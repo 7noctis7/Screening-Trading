@@ -39,6 +39,9 @@ preview:          ## régénère les aperçus HTML du dashboard/portefeuille
 	$(PYTHON) apps/web/preview/build_preview.py
 start:            ## TOUT EN UNE COMMANDE : maj code + kill vieux process + API (fond) + site
 	bash scripts/start.sh
+noms-univers:     ## comble les noms manquants des seeds depuis les fournisseurs (jamais devinés)
+	$(PYTHON) scripts/completer_noms_univers.py $(ARGS)
+
 ic-screening:     ## MESURE l'IC hors échantillon du score de sélection (long, à lancer à la main)
 	$(PYTHON) scripts/mesurer_ic_screening.py $(ARGS)
 
