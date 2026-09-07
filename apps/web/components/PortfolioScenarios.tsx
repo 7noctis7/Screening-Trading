@@ -135,6 +135,21 @@ function Resultats({ s }: { s: any }) {
       ? <><b>{ecartes.length} candidat(s) écarté(s)</b> — {ecartes.map((e) => `${e.symbol} (${e.days} j)`).join(", ")}</>
       : <>aucun candidat concerné</>}.
     {inconnus.length ? <> Date introuvable pour {inconnus.join(", ")} — non couverts par ce filtre.</> : null}
+    <Perimes s={s} />
+  </div>;
+}
+
+/** Séries arrêtées. Une donnée morte n'est pas seulement inutile : figée, elle n'a plus de
+ *  variance récente, un min-variance la prend pour l'actif le moins risqué de l'univers et
+ *  la surpondère. Et comme l'alignement se fait par intersection, elle tronque la fenêtre
+ *  de calcul de tout le portefeuille. Ce qui a été écarté doit donc se voir. */
+function Perimes({ s }: { s: any }) {
+  const arretees: any[] = s?.stale ?? [];
+  if (!arretees.length) return null;
+  return <div className="mt-1 text-amber-500">
+    <b>{arretees.length} série(s) arrêtée(s) écartée(s)</b> (plus de barre depuis plus de
+    {" "}{s?.stale_window ?? 10} j) : {arretees.map((d) => `${d.symbol} (${d.last})`).join(", ")}.
+    Figées, elles paraîtraient sans risque et tronqueraient la fenêtre commune.
   </div>;
 }
 

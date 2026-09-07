@@ -44,6 +44,43 @@ def _fenetre(series: dict[str, dict[str, float]]) -> int:
     return len(set.intersection(*(set(valeurs) for valeurs in series.values())))
 
 
+PERIME_JOURS = 10        # même seuil que le nettoyage d'univers de `build_snapshot`
+
+
+def ecarter_perimes(series: dict[str, dict[str, float]],
+                    seuil: int = PERIME_JOURS) -> tuple[dict, list[dict]]:
+    """Retire les séries ARRÊTÉES avant tout calcul. Défense en profondeur, et elle a servi.
+
+    Le 07/09, `BK` (dernière barre au 18 juin), `EA` (10 août) et `EQR` (21 août) occupaient
+    57 % de la recommandation. Deux conséquences distinctes, la seconde plus vicieuse :
+
+    1. L'alignement se fait par INTERSECTION des dates. Un seul actif arrêté au 18 juin
+       tronque donc la fenêtre commune de TOUT le portefeuille au 18 juin — la carte
+       affichait « historique commun jusqu'au 2026-06-17 » sans que personne n'y voie un
+       avertissement.
+    2. Une série figée n'a plus de variance récente. Un min-variance la prend pour l'actif
+       le moins risqué de l'univers et la surpondère mécaniquement. La donnée morte n'est
+       pas seulement inutile : elle ATTIRE le capital.
+
+    Seuil RELATIF à la barre la plus fraîche des candidats — un seuil absolu écarterait tout
+    l'univers un lundi férié ou après une semaine sans ingestion.
+    """
+    from datetime import date, timedelta
+    fins = {symbole: max(valeurs) for symbole, valeurs in series.items() if valeurs}
+    if not fins:
+        return series, []
+    fraiche = max(fins.values())
+    try:
+        limite = (date.fromisoformat(fraiche[:10]) - timedelta(days=seuil)).isoformat()
+    except ValueError:                       # dates non ISO : on ne tranche pas au hasard
+        return series, []
+    perimes = [{"symbol": s, "last": fins[s],
+                "reason": f"dernière barre {fins[s]} < {limite} — série arrêtée"}
+               for s in sorted(fins) if fins[s][:10] < limite]
+    retires = {ligne["symbol"] for ligne in perimes}
+    return {s: v for s, v in series.items() if s not in retires}, perimes
+
+
 def elaguer(series: dict[str, dict[str, float]], scores: dict[str, float],
             ratio_min: float = RATIO_T_SUR_N_MIN) -> tuple[dict, list[dict]]:
     """Retire les candidats qui rendent la covariance non estimable, et dit lesquels.
@@ -326,6 +363,11 @@ def recommander(screen: dict, n: int = 15, years: int = 5, plafond: float = 0.20
     if len(series) < MIN_ACTIFS:
         return _indisponible("historiques insuffisants pour les candidats du jour.",
                              missing=manquants, selected=list(meta))
+    series, perimes = ecarter_perimes(series)
+    if len(series) < MIN_ACTIFS:
+        return _indisponible(
+            f"{len(perimes)} candidat(s) écarté(s) pour série arrêtée — il en reste "
+            f"{len(series)}, {MIN_ACTIFS} minimum.", stale=perimes, missing=manquants)
     retenus, ecartes = elaguer(series, scores)
     symboles, covariance, dates = covariance_annuelle(retenus)
     if covariance.size == 0 or len(dates) <= MIN_OBSERVATIONS:
@@ -363,6 +405,9 @@ def recommander(screen: dict, n: int = 15, years: int = 5, plafond: float = 0.20
             # information, et son absence d'affichage se lirait comme un filtre inactif.
             "earnings_blackout": blackout, "earnings_window": blackout_resultats,
             "earnings_unknown": sans_date,
+            # Séries arrêtées : publiées avec leur dernière date. Une donnée morte n'est pas
+            # seulement inutile — figée, elle paraît sans risque et attire le capital.
+            "stale": perimes, "stale_window": PERIME_JOURS,
         },
         # La mesure, telle quelle. Si elle vaut UNCALIBRATED, la carte l'affiche —
         # l'absence de mesure est une information, pas un blanc à combler.

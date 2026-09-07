@@ -159,6 +159,24 @@ def is_real_mode(mode: str | None) -> bool:
     return bool(mode) and str(mode).startswith("réel")
 
 
+def contient_des_prix_reels(mode: str | None) -> bool:
+    """Y a-t-il des horodatages RÉELS exploitables ? — question distincte de la certification.
+
+    `is_real_mode` répond à « tout l'univers est-il certifié réel ? » et refuse « mixte » à
+    juste titre : un seul titre en repli synthétique interdit de certifier l'ensemble. Mais
+    le NETTOYAGE DES TITRES PÉRIMÉS ne pose pas cette question-là. Il demande seulement si
+    les dernières barres sont de vraies dates comparables entre elles.
+
+    Le 07/09, faire porter les deux questions par le même prédicat a coûté cher : le VPS
+    tourne en mode « mixte », le nettoyage ne s'exécutait donc JAMAIS, et des titres arrêtés
+    depuis des mois (BK au 18 juin, CA au 26 mai) restaient dans l'univers. Pire, comme les
+    séries sont alignées par intersection, un seul de ces morts tronquait la fenêtre de
+    calcul de TOUT le portefeuille — la recommandation du jour finissait au 17 juin sans que
+    rien ne le signale.
+    """
+    return bool(mode) and not str(mode).startswith("synthetic")
+
+
 def _sector_of(m: dict) -> str:
     """Secteur/thème d'un instrument (cohérent entre génération de données et heatmap)."""
     ac = m.get("asset_class")
@@ -1699,7 +1717,7 @@ def build_snapshot(seed: int = 7) -> dict:
     # NETTOYAGE UNIVERS : écarte les titres PÉRIMÉS (delisted/renommés, ex. FB→META) dont
     # la dernière barre est trop ancienne → plus de 404 ni de cibles fantômes. Seuil RELATIF
     # (vs la barre la plus fraîche) → ne vide jamais l'univers, même hors-ligne.
-    if is_real_mode(data_mode) and data:
+    if contient_des_prix_reels(data_mode) and data:
         _fresh = max(b[-1].ts for b in data.values() if b)
         _cut = _fresh - timedelta(days=10)
         _stale = [s for s, b in data.items() if b and b[-1].ts < _cut]

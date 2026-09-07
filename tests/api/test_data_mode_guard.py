@@ -41,3 +41,29 @@ def test_les_libelles_du_chargeur_sont_couverts():
     produits = ["synthetic", "réel (YAHOO.db)", "mixte (12 réels / 200 via YAHOO.db)"]
     reconnus = [m for m in produits if is_real_mode(m)]
     assert reconnus == ["réel (YAHOO.db)"]
+
+
+# --- Certifier « tout est réel » ≠ « puis-je comparer des dates » ------------------------
+
+def test_le_nettoyage_des_perimes_accepte_le_mode_MIXTE():
+    """Le 07/09 : le VPS tourne en « mixte », le nettoyage ne s'exécutait donc jamais et des
+    titres arrêtés depuis des mois restaient dans l'univers — BK au 18 juin, CA au 26 mai.
+    Refuser « mixte » est juste pour CERTIFIER ; c'est faux pour comparer des horodatages."""
+    from apps.api.snapshot import contient_des_prix_reels
+    assert contient_des_prix_reels("mixte (779 réels / 929 via market.db)")
+    assert contient_des_prix_reels("réel (YAHOO.db)")
+
+
+def test_le_nettoyage_refuse_le_synthetique_et_l_absence():
+    """Sur des prix inventés, « périmé » n'a aucun sens : les dates aussi sont fabriquées."""
+    from apps.api.snapshot import contient_des_prix_reels
+    assert not contient_des_prix_reels("synthetic")
+    assert not contient_des_prix_reels(None)
+    assert not contient_des_prix_reels("")
+
+
+def test_les_deux_predicats_restent_DISTINCTS():
+    """S'ils convergeaient, on aurait de nouveau une seule réponse pour deux questions."""
+    from apps.api.snapshot import contient_des_prix_reels, is_real_mode
+    mixte = "mixte (12 réels / 200 via YAHOO.db)"
+    assert contient_des_prix_reels(mixte) and not is_real_mode(mixte)

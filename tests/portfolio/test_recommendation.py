@@ -297,3 +297,45 @@ def test_le_lien_utilise_le_symbole_exact_donc_echoue_de_facon_detectable():
     from packages.portfolio.recommendation import lien_source
     assert lien_source("BK") == "https://finance.yahoo.com/quote/BK"
     assert lien_source("ETH-USD").endswith("/ETH-USD")
+
+
+# --- Séries arrêtées : écartées AVANT tout calcul ----------------------------------------
+
+def test_une_serie_arretee_est_ecartee_et_publiee():
+    """BK, arrêté au 18 juin, occupait 16,5 % de la recommandation du 07/09."""
+    from packages.portfolio.recommendation import ecarter_perimes
+    series = {"VIF": {"2026-09-04": 1.0}, "MORT": {"2026-06-18": 1.0}}
+    gardes, perimes = ecarter_perimes(series)
+    assert list(gardes) == ["VIF"]
+    assert perimes[0]["symbol"] == "MORT" and perimes[0]["last"] == "2026-06-18"
+
+
+def test_le_seuil_est_relatif_a_la_barre_la_plus_fraiche_des_candidats():
+    """Une base entière en retard d'un mois ne doit pas vider la sélection."""
+    from packages.portfolio.recommendation import ecarter_perimes
+    series = {"A": {"2026-08-01": 1.0}, "B": {"2026-08-03": 1.0}, "C": {"2026-08-05": 1.0}}
+    gardes, perimes = ecarter_perimes(series)
+    assert set(gardes) == {"A", "B", "C"} and perimes == []
+
+
+def test_une_serie_arretee_ne_tronque_plus_la_fenetre_commune(monkeypatch):
+    """LE dégât mesuré : l'alignement par intersection ramenait TOUT le portefeuille à la
+    dernière barre du mort — « historique commun jusqu'au 2026-06-17 »."""
+    import packages.portfolio.recommendation as module
+    vivants = {f"A{i}": _serie("2020-01-01", 1500, i) for i in range(4)}
+    mort = {d: 1.0 for d in list(vivants["A0"])[:300]}          # s'arrête bien plus tôt
+    monkeypatch.setattr(module, "charger_series",
+                        lambda s, y, classes=None: ({**vivants, "MORT": mort}, {}, []))
+    rows = [{"symbol": s, "score": 1.0} for s in [*vivants, "MORT"]]
+    out = recommander({"available": True, "rows": rows}, n=5)
+    assert "MORT" not in out["symbols"]
+    assert out["as_of"] == max(vivants["A0"])                   # la fenêtre n'est PAS tronquée
+    assert out["selection"]["stale"][0]["symbol"] == "MORT"
+
+
+def test_des_dates_non_iso_ne_font_trancher_personne():
+    """Plutôt ne rien écarter que d'écarter au hasard sur un format non compris."""
+    from packages.portfolio.recommendation import ecarter_perimes
+    series = {"A": {"01/09/2026": 1.0}, "B": {"04/09/2026": 1.0}}
+    gardes, perimes = ecarter_perimes(series)
+    assert set(gardes) == {"A", "B"} and perimes == []

@@ -1,5 +1,33 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 20) — La recommandation allouait 57 % à des séries mortes
+
+L'audit d'univers a révélé ce que dix heures de travail sur cette carte n'avaient pas vu. Les
+6 périmés — **BK (18 juin), EA (10 août), EQR (21 août)**, CA (26 mai), AVB, LEG — comprennent
+TROIS des six lignes recommandées, soit 57 % du portefeuille proposé.
+
+**Cause racine : un prédicat pour deux questions.** `is_real_mode` refuse « mixte » à juste titre
+— un seul titre en repli synthétique interdit de CERTIFIER l'univers réel. Mais le nettoyage des
+titres périmés était gardé par ce même prédicat, alors qu'il ne pose pas cette question : il
+demande seulement si les dernières barres sont des dates comparables. Le VPS tourne en « mixte » :
+le nettoyage ne s'est donc JAMAIS exécuté en production. `contient_des_prix_reels` répond
+désormais à la seconde question, et les deux prédicats sont testés comme DISTINCTS.
+
+**Deux dégâts, le second plus vicieux que le premier.**
+1. L'alignement par intersection ramenait la fenêtre commune à la dernière barre du plus mort :
+   la carte affichait « historique commun jusqu'au **2026-06-17** » — la dernière barre de BK —
+   et personne, moi compris, n'y a vu un avertissement. Trois mois de données perdus pour tous.
+2. Une série figée n'a plus de variance récente. Un min-variance la prend pour l'actif le moins
+   risqué de l'univers et la surpondère mécaniquement. **La donnée morte n'est pas seulement
+   inutile : elle attire le capital.** C'est ce qui explique BK à 16,5 %, EA à 20 %, EQR à 20,9 %.
+
+Défense en profondeur : `ecarter_perimes` retire les séries arrêtées AVANT tout calcul, seuil
+relatif à la barre la plus fraîche des candidats, dates non ISO → on n'écarte personne plutôt que
+d'écarter au hasard. Les exclusions sont publiées avec leur dernière date, en ambre.
+
+Ce défaut n'a été trouvé ni par les tests ni par moi : par un audit demandé pour une autre raison
+(les noms manquants), dont l'utilisateur a lu la sortie brute. 2096 tests passés.
+
 ## Session 2026-09-07 (suite 19) — 517 noms écrits, et un refus de signer la liste des 77
 
 `make noms-univers` a écrit 517 noms sur 594. Les 77 restants sont classés « inconnu du
