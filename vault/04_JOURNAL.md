@@ -1,5 +1,39 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 — Step 4 : trois causes distinctes, aucune n'était « la donnée »
+
+L'étape 4 affichait « — » sur les trois cartes avec le motif « Historique/covariance indisponible
+pour cet univers exact ». Ce motif accusait la donnée. **Mesuré : la donnée était là.** Trois causes
+indépendantes, chacune suffisante à elle seule.
+
+**A — le ticker crypto nu ne trouvait jamais sa base.** `_aliases("ETH")` ne produisait que `ETH` ;
+seuls les symboles finissant par `USDT` recevaient une variante `-USD`. Or `data/crypto.db` stocke le
+format yfinance `{base}-USD`, et `load_bars` ne consulte QUE `YAHOO.db`/`market.db` : la base crypto
+est hors de son chemin de recherche. Un univers AAPL/NVDA/AMD/ETH partait donc en
+`missing=["ETH"]` → `available: False` → tout vide. Corrigé : `-USD` est tenté pour tout symbole
+court sans suffixe connu (coût nul sur une action, l'alias nu répond en premier), et `_bars_crypto()`
+lit `crypto.db` en réutilisant la convention de `apps/api/main.py::_company_closes`.
+
+**B — les deux côtés ne parlaient pas la même clé.** Le front posait `hrp`, `buildScenario` lisait
+`black_litterman` : le scénario dynamique ne pouvait JAMAIS être trouvé. Le back publie désormais
+`prudent`/`neutre`/`dynamique`, lus tels quels. Et il s'appelle HRP, pas Black-Litterman — BL exige
+des μ que rien ici ne calibre ; le verrou ML sur « dynamique » est retiré, le HRP n'a besoin
+d'aucun rendement attendu.
+
+**C — `analyze()` contenait du code mort.** Preuve par AST : un `return` de niveau 1 ligne 126 suivi
+de 8 instructions inatteignables (lignes 134–184) et deux docstrings — séquelle de la fusion de
+`fix/portfolio-analysis-build`. Réécrit en `_collecter()` + `_scenarios()` + `analyze()` de 33 lignes.
+
+**Au passage :** `_align` annonçait « aucun remplissage » tout en faisant un forward-fill. Sur un
+mixte actions + crypto, remplir l'action le week-end lui invente deux rendements NULS par semaine :
+sa volatilité mesurée baisse d'environ 15 %, et l'optimiseur min-variance sur-pondère mécaniquement
+les actions. L'intersection est rétablie, et la constante partagée `ALIGNEMENT` interdit que le
+calcul et son étiquette divergent à nouveau. Le message unique d'indisponibilité est éclaté en trois
+messages qui nomment la cause réelle.
+
+Vérifié bout en bout sur AAPL/NVDA/AMD/ETH : `available: True`, alias `{'ETH': 'ETH-USD'}`, trois
+scénarios sommant à 1,0000. 5 tests de non-régression ajoutés ; 2016 passés sur la suite complète.
+
 
 ## Session 2026-09-06 — Step 4 : le veto rendait tous les scénarios invisibles
 

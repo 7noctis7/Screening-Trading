@@ -10,7 +10,10 @@ export type ScenarioResult = {
 const LABELS: Record<ScenarioKind, [string, string]> = {
   prudent: ["Prudent", "Minimum variance robuste sur l'univers disponible"],
   neutre: ["Neutre", "Equal Risk Contribution, budgets de risque équilibrés"],
-  dynamique: ["Dynamique", "Black-Litterman avec vues seulement si l'edge ML est validé"],
+  // Le backend calcule un HRP (hiérarchie de risque sur la covariance). Annoncer
+  // « Black-Litterman » promettait des rendements attendus (μ) que rien ne calibre :
+  // un nom que le calcul n'aurait jamais honoré. On nomme ce qui est calculé.
+  dynamique: ["Dynamique", "Hierarchical Risk Parity — grappes de corrélation, sans rendement attendu"],
 };
 
 const norm = (value: string) => value.toUpperCase().replace(/[-/]/g, "");
@@ -33,16 +36,23 @@ function capWeights(raw: number[], cap: number): { weights: number[]; triggers: 
 }
 
 export function buildScenario(snapshot: PortfolioSnapshot, optimal: any, kind: ScenarioKind,
-  portfolioValue: number | null, costBps: number, maxWeight: number, mlEdge: boolean): ScenarioResult {
+  portfolioValue: number | null, costBps: number, maxWeight: number): ScenarioResult {
   const [label, method] = LABELS[kind];
   const imported = new Map(snapshot.positions.map((position) => [norm(position.ticker), (position.weight ?? 0) / 100]));
-  const keys: Record<ScenarioKind, string> = { prudent: "min_variance", neutre: "risk_parity", dynamique: "black_litterman" };
+  const keys: Record<ScenarioKind, string> = { prudent: "min_variance", neutre: "risk_parity", dynamique: "hrp" };
   const proposed = optimal?.[keys[kind]]; const symbols: string[] = optimal?.symbols ?? [];
   const exact = symbols.length === imported.size && symbols.every((item) => imported.has(norm(item)));
-  if (!exact || !Array.isArray(proposed) || proposed.length !== symbols.length)
-    return { kind, label, method, weights: [], turnover: 0, estimatedCost: null, breaches: 0, averageCapEffect: 0, available: false, reason: "Historique/covariance indisponible pour cet univers exact." };
-  if (kind === "dynamique" && !mlEdge)
-    return { kind, label, method, weights: [], turnover: 0, estimatedCost: null, breaches: 0, averageCapEffect: 0, available: false, reason: "UNCALIBRATED — edge ML non validé." };
+  const vide = { kind, label, method, weights: [], turnover: 0, estimatedCost: null, breaches: 0, averageCapEffect: 0, available: false };
+  // TROIS causes distinctes, TROIS messages. L'ancien code les fondait toutes dans
+  // « Historique/covariance indisponible », qui accusait la donnée même quand elle
+  // était parfaitement chargée et que seule une clé manquait (06/09).
+  if (!symbols.length) return { ...vide, reason: "Aucune allocation calculée : l'analyse de l'univers n'a rien renvoyé." };
+  if (!exact) return { ...vide, reason: `Univers calculé (${symbols.length} actifs) différent de l'univers importé (${imported.size}).` };
+  if (!Array.isArray(proposed) || proposed.length !== symbols.length)
+    return { ...vide, reason: `Scénario « ${label} » non renvoyé par le calcul (clé « ${keys[kind]} » absente).` };
+  // Plus de verrou ML sur « dynamique » : le HRP se calcule sur la seule covariance,
+  // il n'a besoin d'aucun rendement attendu. Le verrou protégeait un Black-Litterman
+  // qui n'a jamais été calculé ici.
   const constrained = capWeights(proposed, maxWeight);
   if (!constrained) return { kind, label, method, weights: [], turnover: 0, estimatedCost: null, breaches: 0, averageCapEffect: 0, available: false, reason: `Contrainte infaisable : ${symbols.length} actifs × ${(maxWeight * 100).toFixed(1)}% < 100%.` };
   const weights = symbols.map((item, index) => ({ symbol: item, current: imported.get(norm(item)) ?? 0, proposed: constrained.weights[index], delta: constrained.weights[index] - (imported.get(norm(item)) ?? 0) }));

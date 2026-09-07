@@ -15,12 +15,12 @@
       raccord aux historiques/FX réels, le diagnostic, l'optimisation sous contraintes, puis
       OCR/simulations/ML facultatif. Contrat d'intégration documenté dans
       `docs/PORTFOLIO_ANALYSIS_INTEGRATION.md`. Jointure read-only screening/fondamentaux/ML/
-      résultats/macro livrée ; scénarios min-var/ERC/Black-Litterman affichés seulement pour un
+      résultats/macro livrée ; scénarios min-var/ERC/HRP affichés seulement pour un
       univers exact, avec turnover/coût/veto de plafond. Recalcul historique local livré avec alias
-      crypto et alignement sans fill. Step 4 réparée : plafond projeté si faisable, compteur et effet
-      moyen publiés. Restent FX multi-devises et dynamique `UNCALIBRATED` faute de μ OOS crédible.
-      crypto et alignement sans fill ; restent FX multi-devises et contraintes complètes.
-      univers exact, avec turnover/coût/veto de plafond. Reste le recalcul dédié historique/FX.
+      crypto et alignement par intersection sans fill. Step 4 réparée en deux temps : plafond projeté
+      si faisable (06/09), puis (07/09) alias `-USD` + lecture de `crypto.db`, clé `dynamique`
+      partagée front/back, `analyze()` purgé de son code mort de fusion. « Dynamique » = HRP, nommé
+      comme tel et sans verrou ML (il n'exige aucun μ). Reste FX multi-devises.
 
 - [x] **Copilote IA read-only (2026-08-29)** : chat global contextualisé par page, scopes/outils
       bornés, positions détaillées en opt-in, citations/as-of, garde numérique stricte et compteurs
