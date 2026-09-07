@@ -72,6 +72,11 @@ CONFIGS = [
 ]
 
 
+# Gain de Sharpe en deçà duquel on ne promeut jamais, même si l'échantillon savait le
+# distinguer : plus petit, il est mangé par les frais d'exécution.
+PLANCHER_PROMOTION = 0.05
+
+
 def _sortino(curve: list[float], per_year: float) -> float:
     import numpy as np
     e = np.asarray(curve, float)
@@ -316,9 +321,44 @@ def _pourquoi_echantillonner_plus_ne_sert_a_rien(ppa: float) -> None:
         print(f"    rho={rho:<5} → ±{n_ans:.3f}")
 
 
+def seuil_de_promotion(base: dict) -> tuple[float, float]:
+    """Le seuil de promotion, et le plancher historique qu'il remplace.
+
+    Le gate promouvait à +0,05 de Sharpe. Or `sharpe_diff.seuil_detectable` mesure que
+    onze ans d'historique ne résolvent que ±0,118 : à +0,05, promouvoir ou rejeter était
+    un TIRAGE AU SORT, et le labo l'imprimait déjà en avertissement sans en tirer la
+    conséquence. Un seuil que la donnée ne peut pas honorer ne filtre rien — il fabrique
+    des promotions au hasard, dont chacune coûte ensuite du capital réel.
+
+    On ne remplace pas 0,05 par un autre nombre choisi (0,12 aurait été tout aussi
+    arbitraire) : le seuil DEVIENT la résolution de l'échantillon. Il se resserre
+    tout seul à mesure que l'historique s'allonge, sans qu'on ait à y repenser — et
+    il ne prétend jamais distinguer ce qui n'est pas distinguable.
+
+    Le plancher à 0,05 subsiste comme borne basse : si un jour l'échantillon résout
+    mieux que 0,05, on ne promeut pas pour autant un gain plus petit, qui serait
+    mangé par les coûts d'exécution.
+    """
+    from packages.research.sharpe_diff import seuil_detectable
+    n = int(base.get("n_steps") or 0)
+    ppa = float(base.get("periods_per_year") or 12.0)
+    if n < 30:
+        return PLANCHER_PROMOTION, PLANCHER_PROMOTION
+    resolu = float(seuil_detectable(n, base.get("sharpe") or 1.0, 0.99, ppa))
+    return max(PLANCHER_PROMOTION, resolu), resolu
+
+
 def _verdict(rows: list[dict]) -> list[dict]:
     """Gate honnête : promu seulement si mieux sur Sharpe ET maxDD. Sinon rejeté (→ /echecs)."""
     base, promoted = rows[0], []
+    seuil, resolu = seuil_de_promotion(base)
+    print(f"\n  Seuil de promotion : +{seuil:.3f} de Sharpe — ce que cet "
+          f"échantillon sait distinguer ({base.get('n_steps')} pas), pas un "
+          f"nombre choisi.")
+    if resolu > PLANCHER_PROMOTION:
+        print(f"  (l'ancien seuil fixe de +{PLANCHER_PROMOTION:.2f} était "
+              f"{resolu / PLANCHER_PROMOTION:.0f}× sous cette résolution : à ce "
+              f"niveau, promouvoir revenait à tirer à pile ou face)")
     print(f"\n  {'Config':28s} {'CAGR':>7s} {'Sharpe':>7s} {'Sortino':>8s} "
           f"{'DSR':>6s} {'maxDD':>7s} {'turn.':>6s}")
     for r in rows:
@@ -332,11 +372,19 @@ def _verdict(rows: list[dict]) -> list[dict]:
                   f"{r.get('n_steps')} pas contre {base.get('n_steps')})")
             continue
         stat = _significativite(base, r)
-        ok = r["sharpe"] >= base["sharpe"] + 0.05 and r["maxdd"] >= base["maxdd"] - 1e-9
+        gain = r["sharpe"] - base["sharpe"]
+        ok = gain >= seuil and r["maxdd"] >= base["maxdd"] - 1e-9
+        # Entre le plancher et la résolution : la variante fait peut-être mieux, mais la
+        # donnée ne permet pas de l'affirmer. Ce n'est ni un candidat ni un rejet — le
+        # confondre avec l'un ou l'autre est exactement ce qu'on veut éviter.
+        indistinct = (not ok) and gain >= PLANCHER_PROMOTION and gain < seuil
         cles = DECLENCHEURS.get(r["label"], ())
         tirs = sum(int((r.get("decl") or {}).get(k, 0)) for k in cles)
         inerte = bool(cles) and tirs == 0
-        tag = "⚪ INERTE  " if inerte else ("✅ CANDIDAT" if ok else "❌ rejeté  ")
+        tag = ("⚪ INERTE  " if inerte
+               else "✅ CANDIDAT" if ok
+               else "🟡 INDISTINCT" if indistinct
+               else "❌ rejeté  ")
         print(f"  {tag} {r['label']}"
               f"  (ΔSharpe {r['sharpe']-base['sharpe']:+.2f}, ΔmaxDD "
               f"{(r['maxdd']-base['maxdd'])*100:+.1f} pts"

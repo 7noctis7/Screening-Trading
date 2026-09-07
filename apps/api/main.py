@@ -217,11 +217,23 @@ def failures() -> dict:
 
     Autorité par la transparence : chaque hypothèse rejetée est citable/reproductible.
     """
+    from collections import Counter
+
     from packages.research.ledger import read_records
     recs = read_records()
     rejected = [r for r in recs if r.get("statut") == "rejete"]
+    # LES DEUX CÔTÉS DU REGISTRE — on ne peut pas juger un taux de réussite en n'en
+    # voyant qu'un. Publier « 6 rejetées » sans dire combien ont été essayées laisse
+    # croire soit à une rigueur écrasante, soit à un projet qui ne trouve jamais rien :
+    # les deux lectures sont fausses, et rien ne permettait de trancher.
+    # `items` reste les seuls rejets (c'est le contrat de /echecs) ; le décompte
+    # complet part à côté, et /methode l'affiche en entier.
+    par_statut = Counter(str(r.get("statut") or "inconnu") for r in recs)
+    promus = [r for r in recs if r.get("statut") == "promu"]
     return {"available": bool(rejected), "n_total": len(recs),
-            "n_rejected": len(rejected), "items": rejected}
+            "n_rejected": len(rejected), "items": rejected,
+            "par_statut": dict(par_statut),
+            "n_promus": len(promus), "promus": promus}
 
 
 @app.get("/api/preset_ledger")

@@ -74,7 +74,8 @@ export default function Echecs() {
           <div className="text-[11px] font-semibold tracking-[0.18em] uppercase"
             style={{ color: "var(--accent2)" }}>Negative Results Registry</div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight mt-1">
-            {data?.n_rejected ?? 0} idées testées. {data?.n_rejected ?? 0} rejetées. 0 cachée.</h1>
+            {data?.n_total ?? data?.n_rejected ?? 0} idées au registre.{" "}
+            {data?.n_rejected ?? 0} rejetées. 0 cachée.</h1>
           <p className="text-muted text-sm mt-2 max-w-2xl">
             Toute idée passe les mêmes quatre épreuves —
             <b> hasard · nombre d'essais · réglage taillé sur mesure · frais</b> — et n'est
@@ -129,7 +130,8 @@ export default function Echecs() {
       )}
 
       <p className="text-muted2 text-xs">
-        Méthode : López de Prado (DSR, PBO/CSCV) — <a href="/methode" className="text-accent">le détail ici</a>.
+        Méthode : López de Prado (DSR, PBO/CSCV) — <a href="/methode" className="text-accent">le détail
+        des quatre épreuves, et le décompte complet de ce qui a été essayé</a>.
         Outil éducatif · pas un conseil financier · 100 % open-source · registre où l'on ne fait
         qu'ajouter, jamais effacer : <code className="mono">research/hypotheses.jsonl</code>.
       </p>

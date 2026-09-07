@@ -4,6 +4,7 @@
 // n'exige pas d'être illisible. Décrit le gate à 4 étages + références López de Prado. Statique.
 import Link from "next/link";
 import { Reveal } from "@/components/Reveal";
+import { useFailures } from "@/lib/api";
 
 const GATE = [
   ["01 · PLACEBO", "p < 0,05",
@@ -32,6 +33,66 @@ const GATE = [
     + "η·σ·√(Q/ADV)), bruit ajouté, exécution retardée. Un gain sur le papier que "
     + "les frais mangent entièrement est éliminé."],
 ];
+
+// LES DEUX CÔTÉS DU REGISTRE.
+//
+// Le site publiait ses rejets — c'est rare et c'est bien — mais SEULEMENT ses rejets.
+// « 6 hypothèses rejetées » se lit alors de deux façons opposées : une rigueur écrasante,
+// ou un projet qui ne trouve jamais rien. Aucune n'était vérifiable, et le lecteur n'avait
+// aucun moyen de trancher : on ne juge pas un taux de réussite en n'en voyant qu'un côté.
+// Le décompte complet est donc affiché, y compris ce qui a passé les quatre épreuves.
+const ETIQUETTES: Record<string, [string, string]> = {
+  promu: ["Retenues — les quatre épreuves franchies", "var(--pos)"],
+  rejete: ["Rejetées", "#f43f5e"],
+  en_test: ["Encore à l'épreuve", "#eab308"],
+  hypothese: ["Idées notées, pas encore testées", "#9aa1ad"],
+};
+
+function Registre() {
+  const { data } = useFailures();
+  const par = ((data as any)?.par_statut ?? {}) as Record<string, number>;
+  const total = Object.values(par).reduce((a, b) => a + b, 0);
+  if (!total) return null;
+  const ordre = ["promu", "rejete", "en_test", "hypothese"]
+    .filter((k) => par[k]).concat(Object.keys(par).filter((k) => !ETIQUETTES[k] && par[k]));
+  return (
+    <Reveal>
+      <section className="card p-5">
+        <h2 className="text-sm uppercase tracking-wide text-muted mb-1">
+          Tout ce qui a été essayé, pas seulement ce qui a raté
+        </h2>
+        <p className="text-muted text-sm mb-3">
+          {total} idée{total > 1 ? "s" : ""} inscrite{total > 1 ? "s" : ""} au registre à ce
+          jour. Le compte est donné en entier : un taux de réussite ne veut rien dire quand on
+          n'en montre qu'un côté.
+        </p>
+        <div className="flex h-2.5 rounded overflow-hidden mb-3" role="img"
+          aria-label="répartition des idées du registre par statut">
+          {ordre.map((k) => (
+            <span key={k} title={`${ETIQUETTES[k]?.[0] ?? k} : ${par[k]}`}
+              style={{ width: `${(par[k] / total) * 100}%`,
+                       background: ETIQUETTES[k]?.[1] ?? "#9aa1ad" }} />
+          ))}
+        </div>
+        <ul className="text-sm space-y-1">
+          {ordre.map((k) => (
+            <li key={k} className="flex items-baseline gap-2">
+              <span style={{ color: ETIQUETTES[k]?.[1] ?? "#9aa1ad" }}>■</span>
+              <span className="text-muted">{ETIQUETTES[k]?.[0] ?? k}</span>
+              <b className="mono ml-auto">{par[k]}</b>
+            </li>
+          ))}
+        </ul>
+        <p className="text-muted2 text-xs mt-3">
+          Le détail des rejets, avec la raison de chacun, est dans le{" "}
+          <Link href="/echecs" className="text-accent">registre des idées rejetées</Link>.
+          {" "}Une idée « encore à l'épreuve » ne pilote rien sur le site tant qu'elle n'a pas
+          franchi les quatre portes.
+        </p>
+      </section>
+    </Reveal>
+  );
+}
 
 export default function Methode() {
   return (
@@ -67,6 +128,8 @@ export default function Methode() {
           </section>
         </Reveal>
       ))}
+
+      <Registre />
 
       <Reveal>
         <section className="card p-5">
