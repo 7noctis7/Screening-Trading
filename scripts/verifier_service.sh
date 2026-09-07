@@ -10,7 +10,13 @@ set -u
 cd "$(dirname "$0")/.."
 PORT="${QUANT_WEB_PORT:-3000}"
 statut=0
+# `--unite` : ne contrôle QUE la version de l'unité. Appelé au DÉBUT de `make up`, il évite
+# de faire recompiler deux minutes pour annoncer ensuite qu'il fallait d'abord réinstaller.
+# Une vérification tardive coûte le temps de tout ce qu'elle laisse faire avant de refuser.
+SEULEMENT_UNITE=0
+[ "${1:-}" = "--unite" ] && SEULEMENT_UNITE=1
 
+if [ "$SEULEMENT_UNITE" = "0" ]; then
 # 1. QUI tient le port : le PID doit appartenir au service, pas à un processus orphelin.
 if command -v systemctl >/dev/null 2>&1 \
    && systemctl is-active --quiet quant-web.service 2>/dev/null; then
@@ -34,6 +40,8 @@ if command -v systemctl >/dev/null 2>&1 \
   fi
 fi
 
+fi
+
 # 2. QUELLE UNITÉ : le fichier systemd installé doit correspondre au gabarit du dépôt.
 attendue="$(grep -oP '^VERSION_UNITE=\K[0-9]+' scripts/install_services.sh 2>/dev/null || echo '')"
 installee="$(grep -oP '^# quant-unit-version: \K[0-9]+' /etc/systemd/system/quant-web.service 2>/dev/null || echo '')"
@@ -42,6 +50,10 @@ if [ -n "$attendue" ] && [ "$installee" != "$attendue" ]; then
   echo "  Des correctifs d'unité (arrêt des enfants, chemin d'exécution) ne sont donc PAS appliqués."
   echo "  Réinstaller :   make services"
   statut=1
+fi
+
+if [ "$SEULEMENT_UNITE" = "1" ]; then
+  exit "$statut"
 fi
 
 # 3. QUEL build : le tampon posé au moment du build doit valoir la tête courante.

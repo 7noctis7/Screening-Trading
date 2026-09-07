@@ -1,5 +1,20 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 25) — Vérifier tôt : une garde tardive coûte tout ce qu'elle laisse faire
+
+Trois messages d'échec, une seule cause : l'unité systemd n'avait pas été réinstallée. Le contrôle
+de version d'unité, ajouté juste avant, faisait son travail — mais à la FIN de `make up`, après
+deux minutes de recompilation inutile. Une vérification tardive ne coûte pas seulement du temps :
+elle laisse le système faire tout le travail avant de refuser, ce qui décourage de la relancer.
+
+Le contrôle d'unité s'exécute désormais en PREMIER (`verifier_service.sh --unite`), avant tout
+arrêt, tout nettoyage et toute recompilation. Les deux autres contrôles — qui tient le port, quel
+build est servi — restent à la fin, où ils ont un sens : ils portent sur un état qui n'existe
+qu'après le démarrage.
+
+Ordre général de la journée, retrouvé une fois de plus : ce qui peut être vérifié avant d'agir doit
+l'être avant d'agir.
+
 ## Session 2026-09-07 (suite 24) — Une consigne orale n'est pas un mécanisme
 
 `make up` a enfin dit la vérité : « Le port 3000 est tenu par le PID 818916, ÉTRANGER au service

@@ -50,6 +50,7 @@ ic-screening:     ## MESURE l'IC hors échantillon du score de sélection (long,
 
 up:               ## TOUT EN UNE : sync + relance des services + attente que le front réponde
 	@$(MAKE) --no-print-directory sync
+	@bash scripts/verifier_service.sh --unite
 	@echo "→ Arrêt des services, puis des orphelins qui tiendraient encore les ports…"
 	@sudo systemctl stop quant-api quant-web 2>/dev/null || true
 	@# `systemctl restart` ne tue QUE les processus du service. Un `next dev` orphelin d'une
