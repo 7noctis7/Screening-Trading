@@ -75,9 +75,9 @@ export async function analyzePortfolio(positions: { ticker: string; weight: numb
 // On le transmet à chaque appel, exactement comme la page de profil interroge déjà `/api/profil` :
 // l'API calcule et ne conserve rien. Sans profil enregistré, la recommandation reste ce qu'elle
 // était — bornée par le seul plafond de ligne.
-function _profilLocal(): unknown | null {
+function _lireLocal(cle: string): unknown | null {
   try {
-    const brut = localStorage.getItem("quant.profil");
+    const brut = localStorage.getItem(cle);
     return brut ? JSON.parse(brut) : null;
   } catch {
     return null;
@@ -91,7 +91,9 @@ export async function recommendUniverse(n: number, maxWeight: number,
   try {
     response = await fetch(`${BASE}/api/portfolio/recommend`, { method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ n, years, max_weight: maxWeight, profil: _profilLocal(),
+      body: JSON.stringify({ n, years, max_weight: maxWeight,
+        profil: _lireLocal("quant.profil"),
+        preferences: _lireLocal("quant.preferences"),
         positions: positions.filter((r) => r.weight != null)
           .map((r) => ({ symbol: r.ticker, weight: Number(r.weight) / 100 })) }) });
   } catch {

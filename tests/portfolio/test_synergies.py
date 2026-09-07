@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 from packages.portfolio.conviction import somers_d, vues_combinees
-from packages.portfolio.recommendation import chemin_de_moindre_effort, moderation_regime
+from packages.portfolio.contraintes import chemin_de_moindre_effort, moderation_regime
 
 IC_SOLIDE = {"t_stat": 4.0, "n_dates": 200}
 

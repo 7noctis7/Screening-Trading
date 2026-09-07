@@ -2,9 +2,20 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { PageSkeleton } from "@/components/ui";
+import { PreferencesSecteurs } from "@/components/PreferencesSecteurs";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const STOCK = "quant.profil";
+
+// Mêmes libellés que `_sector_of` côté snapshot : une préférence saisie ici doit
+// correspondre EXACTEMENT au secteur porté par les lignes de la recommandation, sinon la
+// contrainte ne s'appliquerait à rien sans que rien ne le signale.
+const SECTEURS = [
+  "Information Technology", "Health Care", "Financials", "Consumer Discretionary",
+  "Consumer Staples", "Industrials", "Energy", "Materials", "Utilities",
+  "Real Estate", "Communication Services", "Actions diverses",
+  "Crypto & Blockchain", "Commodités", "ETF", "Forex", "Indices",
+];
 
 // PROFIL D'INVESTISSEUR — un questionnaire qui CONTRAINT l'outil, pas qui conseille.
 //
@@ -242,6 +253,11 @@ export default function ProfilPage() {
           </p>
         </>
       )}
+
+      {/* HORS du bloc conditionnel : les préférences sectorielles ne dépendent d'aucune
+          réponse de l'API — elles vivent dans le navigateur et doivent rester saisissables
+          même si le calcul de profil échoue. */}
+      <PreferencesSecteurs secteurs={SECTEURS} />
     </main>
   );
 }

@@ -1,5 +1,38 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 29) — Chercher un edge sans se mentir, et des préférences qui ont un prix
+
+**1. « Ajouter les actifs au meilleur set-up » — la seule réponse honnête est un protocole.**
+Un IC de +0,0202 à t = 0,76 n'est pas « pas d'edge » : c'est « indiscernable de zéro À CET
+HORIZON, SUR CET UNIVERS ». Reste à chercher ailleurs — mais chercher, c'est multiplier les
+essais, et vingt essais à 5 % produisent un « significatif » par pur hasard.
+
+`scripts/balayage_ic.py` (`make balayage-ic`) balaie horizons × classes d'actifs, calcule une
+p-valeur par cellule et applique **Benjamini-Hochberg sur l'ensemble** : chaque cellule est jugée
+en sachant combien d'autres ont été tentées. Toutes les cellules — surtout les rejetées — sont
+consignées au registre, car le compteur d'essais déflate le Sharpe et un balayage non consigné le
+fausserait à la hausse. Si une cellule survit ET tient hors échantillon, le profil « Conviction »
+s'ouvre de lui-même. Sinon la sélection reste un classement, et on le sait.
+
+**2. Préférences sectorielles — des CONTRAINTES, jamais des vues.** « Privilégier la santé » a deux
+sens : une prévision (que rien ne valide ici) ou une contrainte personnelle (qui n'exige aucune
+preuve). `packages/portfolio/preferences.py` n'implémente que la seconde : exclusions, planchers,
+plafonds, appliqués dans cet ordre — une exclusion est absolue et prime sur un plancher.
+
+**Deux défauts trouvés par mes propres tests avant livraison.** Un plancher RESSUSCITAIT un secteur
+mis à zéro, y compris un secteur qu'on venait d'exclure : la répartition « à parts égales » quand le
+groupe pèse zéro inventait des lignes que le modèle de risque avait refusées. Corrigé : un plancher
+ne crée jamais une position à partir de rien, il est déclaré NON SATISFAIT avec sa raison.
+
+**Le coût est publié.** Une contrainte détourne du poids d'une allocation qui minimisait le risque :
+volatilité, ratio de diversification et positions effectives sont rendus avant/après. Le champ
+s'appelle `ecart_vol` et non « surcoût » — exclure un actif très volatil FAIT BAISSER la
+volatilité, et le nommer surcoût serait faux. Une préférence qu'on croit gratuite est une préférence
+mal posée.
+
+`recommendation.py` atteignait 465 lignes : contraintes extraites dans
+`packages/portfolio/contraintes.py` (317 + 164). 2123 tests passés ; build vert.
+
 ## Session 2026-09-07 (suite 28) — LA CAUSE : PM2 ressuscitait le front derrière nous
 
 Le diagnostic de filiation, ajouté au tour précédent, a livré la réponse en quatre lignes :

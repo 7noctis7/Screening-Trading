@@ -218,3 +218,31 @@ function Bilan({ reco }: { reco: any }) {
     <IC ic={reco.ic} />
   </div>;
 }
+
+
+/** Ce que la préférence sectorielle COÛTE. Une contrainte détourne du poids d'une
+ *  allocation qui minimisait le risque ; ne pas afficher ce prix la ferait passer pour un
+ *  choix sans conséquence. Le signe est rendu tel quel — exclure un actif très volatil FAIT
+ *  BAISSER la volatilité, et présenter cela comme un « surcoût » serait faux. */
+export function Preferences({ p }: { p: any }) {
+  if (!p) return null;
+  const pc = (x: any, d = 1) => x == null ? "—" : `${(Number(x) * 100).toFixed(d)} %`;
+  const nb = (x: any, d = 2) => x == null ? "—" : Number(x).toFixed(d);
+  const pire = Number(p.ecart_vol ?? 0) > 0;
+  return <div className="rounded-xl p-3 text-xs" style={{ background: "color-mix(in srgb,var(--accent) 8%,transparent)" }}>
+    <b>Vos préférences sectorielles s'appliquent.</b>
+    {p.exclus?.length ? <> Exclu : {p.exclus.map((e: any) => `${e.secteur} (${pc(e.poids_retire)} redistribués)`).join(", ")}.</> : null}
+    {p.planchers?.length ? <> Plancher : {p.planchers.map((e: any) => `${e.secteur} ${pc(e.avant)} → ${pc(e.apres)}`).join(", ")}.</> : null}
+    {p.plafonds?.length ? <> Plafond : {p.plafonds.map((e: any) => `${e.secteur} ${pc(e.avant)} → ${pc(e.apres)}`).join(", ")}.</> : null}
+    <div className="mt-1">
+      Effet mesuré : volatilité {pc(p.vol_avant)} → <b className={pire ? "text-amber-500" : ""}>{pc(p.vol_apres)}</b>
+      {" "}({Number(p.ecart_vol) >= 0 ? "+" : ""}{pc(p.ecart_vol, 2)}) · diversification {nb(p.diversification_avant)} → {nb(p.diversification_apres)}
+      {" "}· positions effectives {nb(p.positions_effectives_avant, 1)} → {nb(p.positions_effectives_apres, 1)}.
+      {pire ? " Votre contrainte a un prix : elle éloigne l'allocation de son optimum de risque."
+            : " Ici la contrainte ne dégrade pas le risque mesuré."}
+    </div>
+    {p.non_satisfaits?.length ? <div className="mt-1 text-amber-500">
+      <b>Non satisfait</b> : {p.non_satisfaits.map((e: any) => `${e.secteur} (${e.raison})`).join(" · ")}.
+    </div> : null}
+  </div>;
+}

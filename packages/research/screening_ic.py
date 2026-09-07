@@ -58,6 +58,23 @@ def _grille(panel: dict, horizon: int, pas: int, debut: int) -> list[int]:
     return list(range(debut, longueur - horizon, max(1, pas)))
 
 
+def p_valeur(t_stat: float | None, n: int) -> float | None:
+    """p bilatérale du t de Student. Repli normal si SciPy est absent.
+
+    Sans p-valeur, aucune correction de tests multiples n'est possible — et sans elle, un
+    balayage d'horizons trouve TOUJOURS quelque chose. C'est donc une pièce obligatoire,
+    pas un ornement statistique.
+    """
+    if t_stat is None or n < 3:
+        return None
+    try:
+        from scipy import stats
+        return float(2 * (1 - stats.t.cdf(abs(float(t_stat)), df=n - 1)))
+    except Exception:  # noqa: BLE001 — approximation normale, conservatrice au-delà de n=30
+        from math import erfc, sqrt
+        return float(erfc(abs(float(t_stat)) / sqrt(2.0)))
+
+
 def _stats(ics: list[float]) -> dict:
     """Moyenne, écart-type et t-stat sur des fenêtres DISJOINTES (pas = horizon)."""
     serie = np.asarray(ics, dtype=float)
@@ -65,6 +82,7 @@ def _stats(ics: list[float]) -> dict:
     ecart = float(serie.std(ddof=1)) if serie.size > 1 else 0.0
     t_stat = float(moyenne / ecart * np.sqrt(serie.size)) if ecart > 0 else None
     return {"ic_moyen": moyenne, "ic_ecart_type": ecart, "t_stat": t_stat,
+            "p_valeur": p_valeur(t_stat, serie.size),
             "part_positive": float((serie > 0).mean())}
 
 

@@ -5,7 +5,7 @@ import { PortfolioSnapshot } from "@/lib/portfolio-import";
 import { buildScenario, ScenarioKind, ScenarioSource } from "@/lib/portfolio-scenarios";
 import {
   Bande, Bilan, Chemin, IC, Identite, Metrique, money, pct, Perimes, Profil, Regime,
-  Resultats, Structure,
+  Preferences, Resultats, Structure,
 } from "@/components/PortfolioPanneaux";
 
 const SOURCES: { key: ScenarioSource; label: string; aide: string }[] = [
@@ -178,6 +178,7 @@ export function PortfolioScenarios({ snapshot, analysis, loading }: {
           {source === "recommandation" && reco?.available ? <Bilan reco={reco} /> : null}
           {source === "recommandation" && reco?.profil_applique
             ? <Profil contrainte={reco.contraintes?.[selected]} /> : null}
+          {source === "recommandation" ? <Preferences p={reco?.preferences?.[selected]} /> : null}
           {source === "recommandation" ? <Regime r={reco?.regime} /> : null}
           {source === "recommandation" ? <Chemin etapes={reco?.chemin?.[selected]} /> : null}
           <Tableau lignes={active.weights} meta={meta} valeur={value} />

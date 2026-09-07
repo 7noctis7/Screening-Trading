@@ -45,6 +45,9 @@ audit-univers:    ## trie les symboles sans nom en périmés / vivants, sur les 
 noms-univers:     ## comble les noms manquants des seeds depuis les fournisseurs (jamais devinés)
 	$(PYTHON) scripts/completer_noms_univers.py $(ARGS)
 
+balayage-ic:      ## BALAYE horizons x classes d'actifs, corrigé Benjamini-Hochberg (long)
+	$(PYTHON) scripts/balayage_ic.py $(ARGS)
+
 ic-screening:     ## MESURE l'IC hors échantillon du score de sélection (long, à lancer à la main)
 	$(PYTHON) scripts/mesurer_ic_screening.py $(ARGS)
 

@@ -281,6 +281,9 @@ class RecommendationRequest(BaseModel):
     # Positions détenues : servent UNIQUEMENT au chemin de moindre effort (quels mouvements
     # achètent le plus de risque évité). Elles n'influencent pas la sélection.
     positions: list[PortfolioAnalysisPosition] | None = None
+    # Préférences sectorielles : des CONTRAINTES personnelles (exclure, planchers,
+    # plafonds). Transmises à chaque appel comme le profil, jamais conservées.
+    preferences: dict | None = None
 
 
 @app.post("/api/portfolio/recommend")
@@ -309,7 +312,8 @@ def recommend_universe(body: RecommendationRequest, request: Request) -> dict:
                        ml_scores={r.get("symbol"): r.get("ml_score") or r.get("ml")
                                   for r in (ml.get("rows") or [])},
                        ml_auc=ml.get("auc") if ml.get("edge_ok") else None,
-                       positions={p.symbol.upper(): p.weight for p in (body.positions or [])})
+                       positions={p.symbol.upper(): p.weight for p in (body.positions or [])},
+                       preferences=body.preferences)
 
 
 @app.get("/api/positions")

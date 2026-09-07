@@ -202,7 +202,7 @@ def _cov(vols):
 
 def test_plafond_projette_sur_le_simplex_sans_depasser():
     """Un `min(w, cap)` suivi d'une renormalisation ferait REPASSER au-dessus du plafond."""
-    from packages.portfolio.recommendation import _plafonner
+    from packages.portfolio.contraintes import _plafonner
     poids, actives, _ = _plafonner([0.70, 0.20, 0.05, 0.05], 0.30)
     assert max(poids) <= 0.30 + 1e-9
     assert abs(sum(poids) - 1.0) < 1e-9
@@ -211,13 +211,13 @@ def test_plafond_projette_sur_le_simplex_sans_depasser():
 
 def test_plafond_infaisable_ne_bricole_pas():
     """3 actifs × 20 % < 100 % : on rend l'entrée telle quelle plutôt qu'un faux résultat."""
-    from packages.portfolio.recommendation import _plafonner
+    from packages.portfolio.contraintes import _plafonner
     poids, actives, effet = _plafonner([0.5, 0.3, 0.2], 0.20)
     assert poids == [0.5, 0.3, 0.2] and actives == 0 and effet == 0.0
 
 
 def test_sans_profil_l_exposition_reste_totale():
-    from packages.portfolio.recommendation import contraindre
+    from packages.portfolio.contraintes import contraindre
     out = contraindre([0.5, 0.5], _cov([0.30, 0.30]), 1.0, None)
     assert out["exposition"] == 1.0 and out["cash"] == 0.0
     assert out["budget_perte"] is None
@@ -225,7 +225,7 @@ def test_sans_profil_l_exposition_reste_totale():
 
 def test_le_budget_de_perte_reduit_l_exposition_et_sort_du_cash():
     """Actifs très volatils + budget déclaré : l'outil REFUSE d'être investi à 100 %."""
-    from packages.portfolio.recommendation import contraindre
+    from packages.portfolio.contraintes import contraindre
     out = contraindre([0.5, 0.5], _cov([0.60, 0.60]), 1.0, PROFIL)
     assert 0.0 < out["exposition"] < 1.0
     assert out["cash"] == pytest.approx(1.0 - out["exposition"])
@@ -235,14 +235,14 @@ def test_le_budget_de_perte_reduit_l_exposition_et_sort_du_cash():
 
 def test_des_actifs_calmes_ne_declenchent_aucune_reduction():
     """La contrainte ne prélève pas de cash quand elle n'a rien à protéger."""
-    from packages.portfolio.recommendation import contraindre
+    from packages.portfolio.contraintes import contraindre
     out = contraindre([0.5, 0.5], _cov([0.02, 0.02]), 1.0, PROFIL)
     assert out["exposition"] == 1.0 and out["cash"] == 0.0
 
 
 def test_un_budget_plus_serre_laisse_plus_de_liquidites():
     """Monotonie : moins de perte acceptée ⇒ moins d'exposition. Jamais l'inverse."""
-    from packages.portfolio.recommendation import contraindre
+    from packages.portfolio.contraintes import contraindre
     cov = _cov([0.40, 0.40])
     serre = contraindre([0.5, 0.5], cov, 1.0, {**PROFIL, "perte_max_toleree": 0.10})
     large = contraindre([0.5, 0.5], cov, 1.0, {**PROFIL, "perte_max_toleree": 0.40})
@@ -253,7 +253,7 @@ def test_un_budget_plus_serre_laisse_plus_de_liquidites():
 def test_l_ordre_est_plafond_puis_exposition():
     """L'exposition se lit sur les poids DÉFINITIFS. Mesurer la volatilité d'une allocation
     qu'on ne détiendra pas donnerait une exposition fausse."""
-    from packages.portfolio.recommendation import contraindre
+    from packages.portfolio.contraintes import contraindre
     cov = _cov([0.80, 0.10, 0.10, 0.10])
     brut = [0.85, 0.05, 0.05, 0.05]
     libre = contraindre(brut, cov, 1.0, PROFIL)
