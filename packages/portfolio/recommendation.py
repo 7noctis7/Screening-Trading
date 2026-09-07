@@ -132,6 +132,67 @@ def scenario_conviction(covariance: np.ndarray, scores: list[float],
         return None, f"Black-Litterman indisponible : {erreur}"
 
 
+def _plafonner(poids: list[float], plafond: float) -> tuple[list[float], int, float]:
+    """Projection sur le simplex sous plafond : (poids, nb de plafonds activés, effet moyen).
+
+    Les poids excédentaires sont fixés au plafond et le reliquat redistribué au prorata,
+    par itérations — un simple `min(w, cap)` suivi d'une renormalisation ferait ressortir
+    au-dessus du plafond ce qu'on venait d'y ramener.
+    """
+    base = [max(0.0, float(v)) for v in poids]
+    n = len(base)
+    if n * plafond < 1 - 1e-9:                      # contrainte infaisable, on ne bricole pas
+        return base, 0, 0.0
+    sortie, actifs, reste = [0.0] * n, set(range(n)), 1.0
+    while actifs:
+        total = sum(base[i] for i in actifs)
+        equi = reste / len(actifs)
+        depasse = [i for i in actifs
+                   if (reste * base[i] / total if total > 0 else equi) > plafond + 1e-9]
+        if not depasse:
+            for i in actifs:
+                sortie[i] = reste * base[i] / total if total > 0 else equi
+            break
+        for i in depasse:
+            sortie[i], reste = plafond, reste - plafond
+            actifs.discard(i)
+    actives = sum(1 for v in base if v > plafond + 1e-9)
+    effet = (sum(abs(sortie[i] - base[i]) for i in range(n)) / n) if actives else 0.0
+    return sortie, actives, effet
+
+
+def contraindre(poids: list[float], covariance: np.ndarray, plafond: float,
+                profil: dict | None) -> dict:
+    """Plafond de ligne PUIS exposition dictée par le budget de perte du profil.
+
+    L'ORDRE compte et n'est pas arbitraire. Le plafond est une contrainte RELATIVE (aucune
+    ligne au-dessus de x %) : il redistribue à somme constante. L'exposition est ABSOLUE
+    (le portefeuille entier ne doit pas pouvoir baisser de plus que le budget déclaré) :
+    elle se lit sur la volatilité des poids DÉFINITIFS. Faire l'inverse mesurerait la
+    volatilité d'une allocation qui ne sera pas détenue.
+
+    `maxDD ≈ 2.5 × vol` (`vol_target_from_drawdown`) : la même conversion que le
+    dimensionnement de production, pas une seconde formule pour le même objet.
+    """
+    plafonnes, actives, effet = _plafonner(poids, plafond)
+    vecteur = np.asarray(plafonnes, dtype=float)
+    vol = float(np.sqrt(max(0.0, vecteur @ covariance @ vecteur)))
+    sortie = {"poids": plafonnes, "vol_annuelle": vol, "exposition": 1.0, "cash": 0.0,
+              "plafonds_actives": actives, "effet_moyen_plafond": effet,
+              "budget_perte": None, "vol_cible": None}
+    if not profil:
+        return sortie
+    from packages.portfolio.construction import vol_target_from_drawdown
+    from packages.profile.investor import Profil, budget_perte
+    budget = budget_perte(Profil(**profil))
+    cible = vol_target_from_drawdown(budget)
+    exposition = 1.0 if vol <= 0 else min(1.0, cible / vol)
+    sortie |= {"poids": [w * exposition for w in plafonnes], "exposition": exposition,
+               "cash": 1.0 - exposition, "budget_perte": budget, "vol_cible": cible,
+               "vol_apres_exposition": vol * exposition}
+    return sortie
+
+
 def _avertissement(ic: dict | None) -> str:
     """L'avertissement dit l'état RÉEL de la mesure — jamais une formule figée."""
     base = ("Les poids répartissent le risque mesuré. Aucun de ces profils ne prédit un "
@@ -149,7 +210,8 @@ def _indisponible(raison: str, **extra) -> dict:
     return {"available": False, "reason": raison, **extra}
 
 
-def recommander(screen: dict, n: int = 15, years: int = 5) -> dict:
+def recommander(screen: dict, n: int = 15, years: int = 5, plafond: float = 0.20,
+                profil: dict | None = None) -> dict:
     """Sélection = top `n` du screening du jour ; poids = min-var / ERC / HRP sur eux.
 
     `screen` est la section `/api/screen` du snapshot : elle porte déjà les filtres durs
@@ -178,6 +240,11 @@ def recommander(screen: dict, n: int = 15, years: int = 5) -> dict:
         covariance, [scores.get(sym, 0.0) for sym in symboles], ic)
     if conviction is not None:
         poids["conviction"] = conviction
+    # Le profil déclaré BORNE le résultat au lieu de le commenter. Sans profil, la contrainte
+    # se réduit au plafond de ligne : le comportement d'avant, inchangé.
+    contraintes = {nom: contraindre(vecteur, covariance, plafond, profil)
+                   for nom, vecteur in poids.items()}
+    poids = {nom: c["poids"] for nom, c in contraintes.items()}
     return {
         "available": True, "symbols": symboles, "aliases": aliases,
         "rows": _lignes(symboles, meta, poids),
@@ -198,6 +265,9 @@ def recommander(screen: dict, n: int = 15, years: int = 5) -> dict:
         "ic": ic or {"available": False, "status": "JAMAIS MESURÉ",
                      "reason": "Lancer `make ic-screening`."},
         "conviction_reason": motif_conviction,
+        "contraintes": contraintes,
+        "profil_applique": bool(profil),
+        "plafond_ligne": plafond,
         # L'étiquette SUIT la mesure. La figer sur « non validé » alors qu'une mesure
         # existe serait aussi faux que l'inverse : on publie ce qui a été constaté.
         "caveat": _avertissement(ic),

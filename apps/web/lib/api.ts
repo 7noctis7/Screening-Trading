@@ -71,12 +71,26 @@ export async function analyzePortfolio(positions: { ticker: string; weight: numb
 // Univers RECOMMANDÉ : ce que le robot proposerait de détenir, indépendamment de ce qui
 // est détenu. Distinct de `optimal_allocation`, qui ne répartit le risque que sur les
 // lignes déjà en portefeuille et ne peut donc rien proposer de nouveau.
-export async function recommendUniverse(n: number, years = 5) {
+// Le profil déclaré dans l'onglet « Mon profil » vit dans CE navigateur (clé `quant.profil`).
+// On le transmet à chaque appel, exactement comme la page de profil interroge déjà `/api/profil` :
+// l'API calcule et ne conserve rien. Sans profil enregistré, la recommandation reste ce qu'elle
+// était — bornée par le seul plafond de ligne.
+function _profilLocal(): unknown | null {
+  try {
+    const brut = localStorage.getItem("quant.profil");
+    return brut ? JSON.parse(brut) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function recommendUniverse(n: number, maxWeight: number, years = 5) {
   if (STATIC) return _indisponible("recommandation disponible en local avec make start");
   let response: Response;
   try {
     response = await fetch(`${BASE}/api/portfolio/recommend`, { method: "POST",
-      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ n, years }) });
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ n, years, max_weight: maxWeight, profil: _profilLocal() }) });
   } catch {
     return _indisponible(_raisonTransport());
   }

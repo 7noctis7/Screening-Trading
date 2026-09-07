@@ -45,7 +45,7 @@ function capWeights(raw: number[], cap: number): { weights: number[]; triggers: 
 
 export function buildScenario(snapshot: PortfolioSnapshot, optimal: any, kind: ScenarioKind,
   portfolioValue: number | null, costBps: number, maxWeight: number,
-  source: ScenarioSource = "portefeuille"): ScenarioResult {
+  source: ScenarioSource = "portefeuille", precontraint?: any): ScenarioResult {
   const [label, method] = LABELS[kind];
   const imported = new Map(snapshot.positions.map((position) =>
     [norm(position.ticker), { ticker: position.ticker, weight: (position.weight ?? 0) / 100 }]));
@@ -67,13 +67,25 @@ export function buildScenario(snapshot: PortfolioSnapshot, optimal: any, kind: S
   // Plus de verrou ML sur « dynamique » : le HRP se calcule sur la seule covariance,
   // il n'a besoin d'aucun rendement attendu. Le verrou protégeait un Black-Litterman
   // qui n'a jamais été calculé ici.
-  const constrained = capWeights(proposed, maxWeight);
+  // En mode recommandation, le plafond ET l'exposition ont été appliqués côté serveur, là où
+  // vit la covariance : replafonner ici renormaliserait la somme à 1 et effacerait les
+  // liquidités que le budget de perte impose. On prend les poids tels qu'ils arrivent.
+  const constrained = source === "recommandation"
+    ? { weights: proposed as number[], triggers: precontraint?.plafonds_actives ?? 0,
+        averageEffect: precontraint?.effet_moyen_plafond ?? 0 }
+    : capWeights(proposed, maxWeight);
   if (!constrained) return { kind, label, method, weights: [], turnover: 0, estimatedCost: null, breaches: 0, averageCapEffect: 0, available: false, reason: `Contrainte infaisable : ${symbols.length} actifs × ${(maxWeight * 100).toFixed(1)}% < 100%.` };
   const weights = symbols.map((item, index) => ({ symbol: item, current: poidsActuel(item),
     proposed: constrained.weights[index], delta: constrained.weights[index] - poidsActuel(item) }));
   // Les lignes DÉTENUES et absentes de la sélection sortent à 0 %. Les omettre sous-estimerait
   // le turnover et, surtout, cacherait la moitié de la décision : ce qu'il faut vendre.
   if (source === "recommandation") {
+    // Les liquidités sont une LIGNE, pas un reste implicite. Le budget de perte déclaré peut
+    // laisser 30 % hors du marché : afficher un tableau qui somme à 70 % sans le dire se
+    // lirait comme une erreur d'arrondi plutôt que comme la contrainte qu'on a demandée.
+    const cash = Number(precontraint?.cash ?? 0);
+    if (cash > 1e-6)
+      weights.push({ symbol: "Liquidités", current: 0, proposed: cash, delta: cash });
     const retenus = new Set(symbols.map(norm));
     for (const [cle, position] of imported)
       if (!retenus.has(cle) && position.weight > 0)

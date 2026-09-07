@@ -50,6 +50,25 @@ function Tableau({ lignes, meta, valeur }: { lignes: any[]; meta: Map<string, an
   </tbody></table></div>;
 }
 
+/** Le profil déclaré BORNE le résultat au lieu de le commenter.
+ *
+ *  La conversion `maxDD ≈ 2.5 × vol` est celle du dimensionnement de production
+ *  (`vol_target_from_drawdown`), pas une seconde formule pour le même objet. Ce qui reste
+ *  hors du marché est affiché comme une LIGNE du portefeuille : une somme de poids
+ *  inférieure à 100 % sans ligne de liquidités se lit comme une erreur d'arrondi. */
+function Profil({ contrainte }: { contrainte: any }) {
+  if (!contrainte || contrainte.budget_perte == null) return null;
+  const { budget_perte, vol_cible, vol_annuelle, exposition, cash } = contrainte;
+  const p = (x: number) => `${(x * 100).toFixed(1)} %`;
+  return <div className="rounded-xl p-3 text-xs" style={{ background: "color-mix(in srgb,var(--accent) 8%,transparent)" }}>
+    <b>Votre profil borne cette allocation.</b> Budget de perte déclaré {p(budget_perte)} →
+    volatilité cible {p(vol_cible)} (maxDD ≈ 2,5 × vol). Les actifs retenus portent {p(vol_annuelle)}
+    {" "}de volatilité annualisée : l'exposition est donc ramenée à <b className="mono">{p(exposition)}</b>,
+    {" "}le reste — <b className="mono">{p(cash)}</b> — restant en liquidités.
+    {exposition >= 0.999 ? " Aucune réduction n'a été nécessaire." : ""}
+  </div>;
+}
+
 /** Ce que vaut la SÉLECTION, chiffré. Sans cette ligne, l'utilisateur ne peut pas
  *  distinguer « le robot a choisi » de « ces actifs vont surperformer » — deux
  *  affirmations très différentes, et une seule est étayée. */
@@ -108,12 +127,12 @@ export function PortfolioScenarios({ snapshot, analysis, loading }: {
     if (source !== "recommandation") return;
     let actif = true;
     setRecoLoading(true);
-    recommendUniverse(lignes)
+    recommendUniverse(lignes, maxPct / 100)
       .then((resultat) => actif && setReco(resultat))
       .catch((erreur) => actif && setReco({ available: false, reason: String(erreur) }))
       .finally(() => actif && setRecoLoading(false));
     return () => { actif = false; };
-  }, [source, lignes]);
+  }, [source, lignes, maxPct]);
 
   const enCours = Boolean(loading) || (source === "recommandation" && recoLoading);
   const amont = useMemo(() => {
@@ -140,7 +159,8 @@ export function PortfolioScenarios({ snapshot, analysis, loading }: {
       ? ["prudent", "neutre", "dynamique", "conviction"] : ["prudent", "neutre", "dynamique"];
     const construits = snapshot
       ? profils.map((kind) =>
-          buildScenario(snapshot, calcule, kind, value > 0 ? value : null, costBps, maxPct / 100, source))
+          buildScenario(snapshot, calcule, kind, value > 0 ? value : null, costBps, maxPct / 100,
+            source, reco?.contraintes?.[kind]))
       : [];
     // Une panne amont connaît DÉJÀ sa cause exacte : on la relaie au lieu de laisser
     // chaque carte réinventer un motif générique.
@@ -208,6 +228,8 @@ export function PortfolioScenarios({ snapshot, analysis, loading }: {
             <Metrique titre="Effet moyen plafond" valeur={`${(active.averageCapEffect * 100).toFixed(2)} pt`} />
           </div>
           {source === "recommandation" && reco?.available ? <Bilan reco={reco} /> : null}
+          {source === "recommandation" && reco?.profil_applique
+            ? <Profil contrainte={reco.contraintes?.[selected]} /> : null}
           <Tableau lignes={active.weights} meta={meta} valeur={value} />
         </>}
 

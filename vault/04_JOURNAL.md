@@ -1,5 +1,37 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 13) — Le profil déclaré BORNE enfin la recommandation
+
+La page « Mon profil » l'écrivait elle-même : « Elles ne contraignent aujourd'hui aucun autre
+écran ». C'est levé pour la recommandation d'univers.
+
+**Où poser la contrainte.** Le profil vit dans le navigateur (`localStorage: quant.profil`), la
+covariance vit côté serveur. Le front transmet donc le profil à chaque appel — exactement ce que
+fait déjà la page de profil avec `/api/profil` : l'API calcule et ne conserve rien, aucune session,
+aucune écriture. La promesse « rien n'est envoyé ni conservé » vise un serveur distant, pas l'API
+locale de l'utilisateur ; le modèle Pydantic le redit en commentaire.
+
+**Deux contraintes, dans cet ORDRE, et l'ordre n'est pas arbitraire.** Le plafond de ligne est
+RELATIF (aucune position au-dessus de x %) : projection sur le simplex, redistribution à somme
+constante — un `min(w, cap)` suivi d'une renormalisation ferait ressortir au-dessus du plafond ce
+qu'on venait d'y ramener. L'exposition est ABSOLUE (le portefeuille ne doit pas pouvoir baisser de
+plus que le budget déclaré) et se lit sur la volatilité des poids DÉFINITIFS : mesurer la
+volatilité d'une allocation qu'on ne détiendra pas donnerait une exposition fausse. Testé.
+
+`maxDD ≈ 2,5 × vol` via `vol_target_from_drawdown` — la conversion du dimensionnement de
+production, pas une seconde formule pour le même objet.
+
+**Vérifié sur le profil réel de l'utilisateur** (horizon 10 ans, perte max 25 %, 50 % du
+patrimoine) contre six actifs à 2,2 % de vol quotidienne : budget 23 %, volatilité cible 9 %,
+exposition ramenée à 72,1 %, **27,9 % en liquidités**, et la volatilité finale atteint exactement
+la cible. Les liquidités apparaissent comme une LIGNE du tableau : une somme de poids à 72 % sans
+ligne dédiée se lirait comme une erreur d'arrondi plutôt que comme la contrainte demandée.
+
+Monotonie testée : moins de perte acceptée ⇒ moins d'exposition, jamais l'inverse. Des actifs
+calmes ne déclenchent aucune réduction — la contrainte ne prélève pas de cash sans objet.
+
+2051 tests passés ; build Next.js vert.
+
 ## Session 2026-09-07 (suite 12) — Le piège que l'installation des services a créé
 
 `EADDRINUSE 127.0.0.1:3000` : le service `quant-web` tient le port en permanence, et `make start`

@@ -256,9 +256,25 @@ def analyze_user_portfolio(body: PortfolioAnalysisRequest, request: Request) -> 
     return analyze(rows, years=body.years, series_by_symbol=series)
 
 
+class ProfilInvestisseur(BaseModel):
+    """Réponses du questionnaire, transmises À CHAQUE APPEL et jamais conservées.
+
+    Même contrat que `/api/profil` : le front garde le profil dans son navigateur, l'API
+    ne fait qu'un calcul avec ce qu'on lui passe. Aucune écriture, aucune session.
+    """
+    horizon_annees: float = Field(ge=0, le=60)
+    perte_max_toleree: float = Field(ge=0.01, le=0.9)
+    part_du_patrimoine: float = Field(ge=0, le=1)
+    besoin_liquidite: float = Field(default=0.0, ge=0, le=1)
+    revenus_stables: bool = True
+    experience_annees: float = Field(default=0.0, ge=0, le=60)
+
+
 class RecommendationRequest(BaseModel):
     n: int = Field(default=15, ge=3, le=30)
     years: int = Field(default=5, ge=1, le=15)
+    max_weight: float = Field(default=0.20, gt=0, le=1)
+    profil: ProfilInvestisseur | None = None
 
 
 @app.post("/api/portfolio/recommend")
@@ -272,7 +288,9 @@ def recommend_universe(body: RecommendationRequest, request: Request) -> dict:
     if not _webhook_authorized(request):
         return {"available": False, "reason": "endpoint local uniquement"}
     from packages.portfolio.recommendation import recommander
-    return recommander(_snap().get("screen") or {}, n=body.n, years=body.years)
+    return recommander(_snap().get("screen") or {}, n=body.n, years=body.years,
+                       plafond=body.max_weight,
+                       profil=body.profil.model_dump() if body.profil else None)
 
 
 @app.get("/api/positions")
