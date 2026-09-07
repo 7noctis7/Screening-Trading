@@ -1,5 +1,47 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 14) — Les quatre synergies inter-onglets, câblées
+
+Chacune partage la même discipline : le câblage est ACTIF, et son effet est proportionnel à la
+preuve disponible. Trois des quatre ne font donc rien aujourd'hui — et le disent.
+
+**1. Résultats imminents → filtre d'ENTRÉE.** `packages/strategies/earnings_blackout` portait
+l'intention dans sa docstring (« à utiliser comme filtre d'entrée ») sans que rien ne l'appelle.
+Une covariance historique mesure le risque ORDINAIRE, celui qui se diversifie ; une annonce de
+résultats est datée, binaire, d'amplitude 20-30 %, et n'a aucune raison de compenser celle d'un
+autre titre. Un min-variance ne la voit pas et entrerait trois jours avant. Les candidats
+concernés sont écartés AVANT tout calcul de covariance. **Date inconnue ≠ pas de résultats** :
+conservée mais publiée à part — l'exclure viderait la sélection, la taire laisserait croire que
+le filtre l'a couverte. Appels parallélisés, budget de temps borné, gate `QUANT_EARNINGS` respecté.
+
+**2. Régime macro → EXPOSITION seulement, et seulement vers le BAS.** Incliner les poids entre
+titres suppose de savoir QUI profitera du régime : prévision transversale que rien ne valide.
+Réduire l'exposition ne suppose que de savoir que le risque global est moins bien payé —
+affirmation plus faible, donc plus soutenable. Asymétrie assumée : se tromper en étant prudent
+coûte un rendement manqué, se tromper en étant agressif coûte la capacité à rester investi. Un
+régime favorable n'autorise donc AUCUNE hausse. L'amplitude suit `force_preuve`, la règle déjà
+écrite pour la page profil, bornée par `AMPLITUDE_MAX` = 5 pts. Sans t-stat publié pour le régime,
+la force vaut 0 et la modération vaut exactement 1,0.
+
+**3. Chemin de moindre effort.** « Voici la cible » n'est pas actionnable à 100 % de turnover : le
+coût est certain et immédiat, le bénéfice diffus. Les mouvements sont ordonnés par variance évitée
+PAR POINT DE TURNOVER (glouton assumé, chaque étape publiant la volatilité atteinte, vérifiable).
+Mesuré sur un cas construit : le premier mouvement capture 97 % du risque évité pour 25 % du
+turnover. La part du gain peut dépasser 100 % en cours de route — sortir du marché est
+momentanément moins risqué que la cible, qui n'est pas le point de variance minimale.
+
+**4. Score ML dans les vues de Conviction.** `somers_d(AUC) = 2·AUC − 1` rend comparable un
+classifieur binaire et un score continu, et rend surtout visible ce que « edge détecté » masque :
+**AUC 0,52 = IC 0,04**. Les deux signaux sont combinés en pondérant chacun par SON IC — un signal
+nul disparaît de lui-même, sans branche particulière à maintenir. L'IC combiné est borné par la
+somme simple : √(ΣIC²) suppose l'indépendance, deux signaux corrélés font moins.
+
+`scenario_conviction` déménage dans `packages/portfolio/conviction.py` : la limite de 400 lignes,
+mais surtout tout ce qui touche à un rendement ATTENDU doit se lire d'un seul tenant, garde-fous
+compris, plutôt que dispersé au milieu de calculs qui ne prétendent rien prédire.
+
+21 tests dédiés (9 filtre résultats + 12 synergies) ; 2072 passés ; build Next.js vert.
+
 ## Session 2026-09-07 (suite 13) — Le profil déclaré BORNE enfin la recommandation
 
 La page « Mon profil » l'écrivait elle-même : « Elles ne contraignent aujourd'hui aucun autre

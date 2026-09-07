@@ -50,6 +50,69 @@ function Tableau({ lignes, meta, valeur }: { lignes: any[]; meta: Map<string, an
   </tbody></table></div>;
 }
 
+/** Le régime macro module l'EXPOSITION, jamais le choix des titres, et seulement vers le
+ *  bas : se tromper en étant prudent coûte un rendement manqué, se tromper en étant
+ *  agressif peut coûter la capacité à rester investi. */
+function Regime({ r }: { r: any }) {
+  if (!r) return null;
+  return <div className="rounded-xl bg-surface3 p-3 text-xs text-muted">
+    <b>Régime macro</b> — {r.cycle || "n/d"} · {r.risk_mode || "n/d"}.{" "}
+    {r.reduction > 0
+      ? <>Exposition réduite de <b className="mono">{(r.reduction * 100).toFixed(1)} pt</b> : {r.motif}</>
+      : <>Aucune réduction appliquée : {r.motif}. L'amplitude suit la force de la PREUVE, jamais celle du signal.</>}
+  </div>;
+}
+
+/** « Voici la cible » n'est pas actionnable à 100 % de turnover : le coût est certain et
+ *  immédiat, le bénéfice diffus. On publie donc l'ordre des mouvements par risque évité
+ *  par point de turnover — la part du gain peut dépasser 100 % en cours de route quand
+ *  sortir du marché est momentanément moins risqué que la cible elle-même. */
+function Chemin({ etapes }: { etapes: any[] | undefined }) {
+  if (!etapes?.length) return null;
+  const utiles = etapes.filter((e) => e.part_du_gain >= 0.8);
+  const seuil = utiles.length ? etapes.indexOf(utiles[0]) + 1 : etapes.length;
+  return <details className="rounded-xl border border-border p-3 text-xs text-muted">
+    <summary className="cursor-pointer text-fg">
+      Chemin de moindre effort — {seuil} mouvement(s) capturent 80 % du risque évité
+      {etapes[seuil - 1] ? ` pour ${(etapes[seuil - 1].turnover_cumule * 100).toFixed(0)} % de turnover` : ""}
+    </summary>
+    <div className="overflow-x-auto mt-2"><table><thead><tr>
+      <th>#</th><th>Actif</th><th>De</th><th>Vers</th><th>Turnover cumulé</th><th>Vol atteinte</th><th>Part du gain</th>
+    </tr></thead><tbody>
+      {etapes.map((e, i) => <tr key={e.symbol}>
+        <td className="mono">{i + 1}</td><td className="mono">{e.symbol}</td>
+        <td className="text-right mono">{(e.de * 100).toFixed(1)}%</td>
+        <td className="text-right mono">{(e.vers * 100).toFixed(1)}%</td>
+        <td className="text-right mono">{(e.turnover_cumule * 100).toFixed(0)}%</td>
+        <td className="text-right mono">{(e.vol_atteinte * 100).toFixed(1)}%</td>
+        <td className="text-right mono">{(e.part_du_gain * 100).toFixed(0)}%</td>
+      </tr>)}
+    </tbody></table></div>
+  </details>;
+}
+
+/** Résultats imminents : un risque DATÉ et binaire, que la covariance ne mesure pas.
+ *  Une annonce peut ouvrir à −25 % sans que rien dans l'historique ne l'ait annoncé, et
+ *  sans compensation par les autres lignes. Le filtre est donc une exclusion d'entrée,
+ *  pas une pondération. Ce qu'il n'a PAS pu vérifier est dit aussi : une date inconnue
+ *  n'est pas une absence de résultats. */
+function Resultats({ s }: { s: any }) {
+  const fenetre = s?.earnings_window ?? 0;
+  const ecartes: any[] = s?.earnings_blackout ?? [];
+  const inconnus: string[] = s?.earnings_unknown ?? [];
+  if (!fenetre) return <div className="mt-1">
+    Filtre « résultats imminents » <b>inactif</b> (QUANT_EARNINGS non activé) : un candidat
+    peut publier ses résultats demain sans que rien ne l'indique ici.
+  </div>;
+  return <div className="mt-1">
+    Résultats imminents (&le; {fenetre} j) :{" "}
+    {ecartes.length
+      ? <><b>{ecartes.length} candidat(s) écarté(s)</b> — {ecartes.map((e) => `${e.symbol} (${e.days} j)`).join(", ")}</>
+      : <>aucun candidat concerné</>}.
+    {inconnus.length ? <> Date introuvable pour {inconnus.join(", ")} — non couverts par ce filtre.</> : null}
+  </div>;
+}
+
 /** Le profil déclaré BORNE le résultat au lieu de le commenter.
  *
  *  La conversion `maxDD ≈ 2.5 × vol` est celle du dimensionnement de production
@@ -106,6 +169,7 @@ function Bilan({ reco }: { reco: any }) {
     {ecartes.length ? <> <b>{ecartes.length} écartée(s)</b> pour fenêtre commune trop courte : {ecartes.map((d) => `${d.symbol} (depuis ${d.start})`).join(", ")}.</> : null}
     {!absents.length && !ecartes.length && !complet ? <> Le screening n'a pas publié davantage de candidats aujourd'hui.</> : null}
     {" "}Fenêtre commune : {reco.n_observations} observations, T/N = {reco.t_sur_n}.
+    <Resultats s={s} />
     <IC ic={reco.ic} />
   </div>;
 }
@@ -127,12 +191,12 @@ export function PortfolioScenarios({ snapshot, analysis, loading }: {
     if (source !== "recommandation") return;
     let actif = true;
     setRecoLoading(true);
-    recommendUniverse(lignes, maxPct / 100)
+    recommendUniverse(lignes, maxPct / 100, snapshot?.positions ?? [])
       .then((resultat) => actif && setReco(resultat))
       .catch((erreur) => actif && setReco({ available: false, reason: String(erreur) }))
       .finally(() => actif && setRecoLoading(false));
     return () => { actif = false; };
-  }, [source, lignes, maxPct]);
+  }, [source, lignes, maxPct, snapshot]);
 
   const enCours = Boolean(loading) || (source === "recommandation" && recoLoading);
   const amont = useMemo(() => {
@@ -230,6 +294,8 @@ export function PortfolioScenarios({ snapshot, analysis, loading }: {
           {source === "recommandation" && reco?.available ? <Bilan reco={reco} /> : null}
           {source === "recommandation" && reco?.profil_applique
             ? <Profil contrainte={reco.contraintes?.[selected]} /> : null}
+          {source === "recommandation" ? <Regime r={reco?.regime} /> : null}
+          {source === "recommandation" ? <Chemin etapes={reco?.chemin?.[selected]} /> : null}
           <Tableau lignes={active.weights} meta={meta} valeur={value} />
         </>}
 

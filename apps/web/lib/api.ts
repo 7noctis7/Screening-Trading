@@ -84,13 +84,16 @@ function _profilLocal(): unknown | null {
   }
 }
 
-export async function recommendUniverse(n: number, maxWeight: number, years = 5) {
+export async function recommendUniverse(n: number, maxWeight: number,
+  positions: { ticker: string; weight: number | null }[] = [], years = 5) {
   if (STATIC) return _indisponible("recommandation disponible en local avec make start");
   let response: Response;
   try {
     response = await fetch(`${BASE}/api/portfolio/recommend`, { method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ n, years, max_weight: maxWeight, profil: _profilLocal() }) });
+      body: JSON.stringify({ n, years, max_weight: maxWeight, profil: _profilLocal(),
+        positions: positions.filter((r) => r.weight != null)
+          .map((r) => ({ symbol: r.ticker, weight: Number(r.weight) / 100 })) }) });
   } catch {
     return _indisponible(_raisonTransport());
   }

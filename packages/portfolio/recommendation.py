@@ -16,6 +16,8 @@ from pathlib import Path
 
 import numpy as np
 
+from packages.portfolio.conviction import scenario_conviction
+from packages.portfolio.filtre_resultats import FENETRE_DEFAUT, ecarter
 from packages.portfolio.user_analysis import (
     ALIGNEMENT,
     MIN_OBSERVATIONS,
@@ -96,42 +98,6 @@ def charger_ic(chemin: Path = CHEMIN_IC) -> dict | None:
         return None
 
 
-def scenario_conviction(covariance: np.ndarray, scores: list[float],
-                        ic: dict | None) -> tuple[list | None, str]:
-    """Profil orienté RENDEMENT — et le seul que la mesure a le droit d'interdire.
-
-    Black-Litterman : prior = ERC (pas de vue), vues issues des scores. L'amplitude des
-    vues n'est pas un réglage esthétique : elle vaut IC × σ × z, la formule de Grinold.
-    Un IC de 0,02 produit donc des vues quinze fois plus faibles qu'un IC de 0,30, et le
-    postérieur retombe naturellement sur le prior. C'est le mécanisme qui empêche une
-    conviction non mesurée de déplacer un euro.
-
-    Sans mesure, ou avec une mesure non robuste, le scénario n'existe PAS. On ne le
-    dégrade pas silencieusement en HRP sous un nom prometteur : on dit pourquoi il manque.
-    """
-    if not ic or not ic.get("available"):
-        return None, ("IC du score jamais mesuré. Lancer `make ic-screening` : sans lui, "
-                      "aucun rendement attendu n'est calibré et ce profil n'a pas de sens.")
-    if not ic.get("robuste"):
-        return None, (f"IC mesuré ({ic.get('ic_moyen', 0):+.4f}) mais NON robuste : "
-                      f"{ic.get('ic_premiere_moitie', 0):+.4f} sur la première moitié contre "
-                      f"{ic.get('ic_seconde_moitie', 0):+.4f} sur la seconde. Le signal ne "
-                      "survit pas à sa période d'origine — on ne l'utilise pas.")
-    try:
-        from packages.portfolio.black_litterman import (
-            black_litterman,
-            views_from_scores,
-        )
-        from packages.portfolio.optimize import equal_risk_contribution
-        vol = float(np.sqrt(np.mean(np.diag(covariance))))       # vol annuelle typique
-        echelle = abs(float(ic["ic_moyen"])) * vol               # Grinold : α = IC × σ × z
-        matrice, vues = views_from_scores(list(scores), scale=echelle)
-        return black_litterman(covariance, equal_risk_contribution(covariance),
-                               matrice, vues)["weights"], ""
-    except Exception as erreur:  # noqa: BLE001
-        return None, f"Black-Litterman indisponible : {erreur}"
-
-
 def _plafonner(poids: list[float], plafond: float) -> tuple[list[float], int, float]:
     """Projection sur le simplex sous plafond : (poids, nb de plafonds activés, effet moyen).
 
@@ -162,7 +128,7 @@ def _plafonner(poids: list[float], plafond: float) -> tuple[list[float], int, fl
 
 
 def contraindre(poids: list[float], covariance: np.ndarray, plafond: float,
-                profil: dict | None) -> dict:
+                profil: dict | None, moderation: float = 1.0) -> dict:
     """Plafond de ligne PUIS exposition dictée par le budget de perte du profil.
 
     L'ORDRE compte et n'est pas arbitraire. Le plafond est une contrainte RELATIVE (aucune
@@ -186,11 +152,103 @@ def contraindre(poids: list[float], covariance: np.ndarray, plafond: float,
     from packages.profile.investor import Profil, budget_perte
     budget = budget_perte(Profil(**profil))
     cible = vol_target_from_drawdown(budget)
-    exposition = 1.0 if vol <= 0 else min(1.0, cible / vol)
+    # La modération de régime s'applique APRÈS le budget de perte : elle ne peut que
+    # resserrer une exposition déjà autorisée, jamais l'élargir (facteur ≤ 1).
+    exposition = (1.0 if vol <= 0 else min(1.0, cible / vol)) * max(0.0, min(1.0, moderation))
     sortie |= {"poids": [w * exposition for w in plafonnes], "exposition": exposition,
                "cash": 1.0 - exposition, "budget_perte": budget, "vol_cible": cible,
                "vol_apres_exposition": vol * exposition}
     return sortie
+
+
+def moderation_regime(regime: dict | None, ic: dict | None) -> dict:
+    """Le régime macro module l'EXPOSITION, jamais le choix des titres — et seulement vers le bas.
+
+    DEUX DÉCISIONS, toutes deux discutables, donc énoncées.
+
+    *Pourquoi l'exposition et pas les poids.* Incliner les poids entre titres suppose de
+    savoir QUI profitera du régime : c'est une prévision transversale, et rien ici ne la
+    valide. Réduire l'exposition ne suppose que de savoir que le risque global est moins
+    bien payé — une affirmation plus faible, donc plus soutenable.
+
+    *Pourquoi seulement vers le bas.* La perte et le gain ne sont pas symétriques : se
+    tromper en étant prudent coûte un rendement manqué, se tromper en étant agressif peut
+    coûter la capacité à rester investi. Un régime favorable n'autorise donc AUCUNE
+    augmentation d'exposition au-delà de ce que le profil permet déjà.
+
+    L'amplitude suit `force_preuve` — la même règle que les inclinaisons de la page profil :
+    proportionnelle à la force de la PREUVE, pas à celle du signal. Sans mesure, la force
+    vaut 0 et la modération vaut exactement 1,0 : le câblage est actif et n'a aucun effet
+    tant que rien n'est démontré. C'est voulu.
+    """
+    from packages.profile.tilts import AMPLITUDE_MAX, force_preuve, vues_depuis_regime
+    cycle = (regime or {}).get("cycle")
+    risk_mode = (regime or {}).get("risk_mode")
+    vues = vues_depuis_regime(cycle, risk_mode)
+    # La preuve disponible est celle du score : c'est la seule mesurée dans ce dépôt. Le
+    # régime lui-même n'a pas de t-stat publié — l'absence se dit, elle ne se remplace pas.
+    preuve = force_preuve((ic or {}).get("t_stat"), (ic or {}).get("n_dates"))
+    penchant = float(vues.get("actions_dev", 0.0))
+    if penchant >= 0 or preuve["force"] <= 0:
+        return {"facteur": 1.0, "cycle": cycle, "risk_mode": risk_mode,
+                "force_preuve": preuve["force"], "motif": preuve["motif"] if penchant < 0
+                else "régime non défensif — aucune réduction d'exposition",
+                "reduction": 0.0}
+    reduction = AMPLITUDE_MAX * preuve["force"] * min(1.0, abs(penchant))
+    return {"facteur": 1.0 - reduction, "cycle": cycle, "risk_mode": risk_mode,
+            "force_preuve": preuve["force"], "reduction": reduction,
+            "motif": f"régime défensif ({cycle or 'n/d'} · {risk_mode or 'n/d'}), preuve "
+                     f"{preuve['force']:.2f} → exposition réduite de {reduction:.1%}"}
+
+
+def chemin_de_moindre_effort(covariance: np.ndarray, symboles: list[str],
+                             actuel: dict[str, float], cible: dict[str, float]) -> list[dict]:
+    """Ordonne les mouvements par variance évitée PAR POINT DE TURNOVER.
+
+    « Voici la cible » n'est pas actionnable quand le turnover est de 100 % : le coût est
+    certain et immédiat, le bénéfice diffus. La question utile est « quels mouvements
+    achètent le plus de réduction de risque par euro échangé », et elle a une réponse
+    exacte, pas une opinion.
+
+    Glouton assumé : à chaque étape on retient le mouvement de meilleur rapport, on
+    l'applique, on recalcule. Ce n'est pas l'optimum global du sous-ensemble — le problème
+    est combinatoire — mais l'ordre produit est celui qu'un opérateur suivrait, et chaque
+    ligne publie la variance ATTEINTE, vérifiable.
+
+    La trésorerie est le résidu implicite (1 − Σw) : elle ne contribue pas à la variance,
+    donc un mouvement qui sort du marché apparaît naturellement comme réducteur.
+    """
+    def variance(poids: dict[str, float]) -> float:
+        vecteur = np.asarray([poids.get(s, 0.0) for s in symboles], dtype=float)
+        return float(vecteur @ covariance @ vecteur)
+
+    courant = {s: float(actuel.get(s, 0.0)) for s in symboles}
+    restants = {s for s in symboles if abs(cible.get(s, 0.0) - courant[s]) > 1e-6}
+    depart = variance(courant)
+    total = variance({s: float(cible.get(s, 0.0)) for s in symboles})
+    etapes, turnover_cumule = [], 0.0
+    while restants:
+        meilleur, meilleur_gain = None, None
+        for symbole in restants:
+            essai = dict(courant, **{symbole: float(cible.get(symbole, 0.0))})
+            cout = abs(essai[symbole] - courant[symbole])
+            gain = (variance(courant) - variance(essai)) / cout if cout > 1e-12 else 0.0
+            if meilleur_gain is None or gain > meilleur_gain:
+                meilleur, meilleur_gain = symbole, gain
+        cout = abs(float(cible.get(meilleur, 0.0)) - courant[meilleur])
+        courant[meilleur] = float(cible.get(meilleur, 0.0))
+        restants.discard(meilleur)
+        turnover_cumule += cout / 2
+        atteinte = variance(courant)
+        part = ((depart - atteinte) / (depart - total)) if abs(depart - total) > 1e-12 else 1.0
+        etapes.append({
+            "symbol": meilleur, "de": round(float(actuel.get(meilleur, 0.0)), 6),
+            "vers": round(float(cible.get(meilleur, 0.0)), 6),
+            "turnover_cumule": round(turnover_cumule, 6),
+            "vol_atteinte": round(float(np.sqrt(max(0.0, atteinte))), 6),
+            "part_du_gain": round(float(part), 4),
+        })
+    return etapes
 
 
 def _avertissement(ic: dict | None) -> str:
@@ -211,7 +269,10 @@ def _indisponible(raison: str, **extra) -> dict:
 
 
 def recommander(screen: dict, n: int = 15, years: int = 5, plafond: float = 0.20,
-                profil: dict | None = None) -> dict:
+                profil: dict | None = None,
+                blackout_resultats: int = FENETRE_DEFAUT,
+                regime: dict | None = None, ml_scores: dict | None = None,
+                ml_auc: float | None = None, positions: dict | None = None) -> dict:
     """Sélection = top `n` du screening du jour ; poids = min-var / ERC / HRP sur eux.
 
     `screen` est la section `/api/screen` du snapshot : elle porte déjà les filtres durs
@@ -225,7 +286,17 @@ def recommander(screen: dict, n: int = 15, years: int = 5, plafond: float = 0.20
         return _indisponible(f"screening trop maigre : {len(rows)} candidat(s), {MIN_ACTIFS} minimum.")
     meta = {r["symbol"]: r for r in rows}
     scores = {r["symbol"]: float(r.get("score") or 0.0) for r in rows}
-    series, aliases, manquants = charger_series(list(meta), years)
+    # Filtre d'ENTRÉE avant tout calcul : inutile d'estimer une covariance sur des titres
+    # qu'on ne prendra pas. Le risque de résultats est daté et binaire — une covariance
+    # historique ne le mesure pas, donc aucun optimiseur ne peut le voir.
+    candidats, blackout, sans_date = ecarter(list(meta), fenetre=blackout_resultats)
+    if len(candidats) < MIN_ACTIFS:
+        return _indisponible(
+            f"{len(blackout)} candidat(s) écarté(s) pour résultats imminents — il en reste "
+            f"{len(candidats)}, {MIN_ACTIFS} minimum. Réessayer après les publications.",
+            earnings_blackout=blackout)
+    meta = {s: meta[s] for s in candidats}
+    series, aliases, manquants = charger_series(candidats, years)
     if len(series) < MIN_ACTIFS:
         return _indisponible("historiques insuffisants pour les candidats du jour.",
                              missing=manquants, selected=list(meta))
@@ -237,12 +308,15 @@ def recommander(screen: dict, n: int = 15, years: int = 5, plafond: float = 0.20
     poids = scenarios_risque(covariance)
     ic = charger_ic()
     conviction, motif_conviction = scenario_conviction(
-        covariance, [scores.get(sym, 0.0) for sym in symboles], ic)
+        covariance, [scores.get(sym, 0.0) for sym in symboles], ic,
+        [(ml_scores or {}).get(sym) for sym in symboles], ml_auc)
     if conviction is not None:
         poids["conviction"] = conviction
     # Le profil déclaré BORNE le résultat au lieu de le commenter. Sans profil, la contrainte
     # se réduit au plafond de ligne : le comportement d'avant, inchangé.
-    contraintes = {nom: contraindre(vecteur, covariance, plafond, profil)
+    moderation = moderation_regime(regime, ic)
+    contraintes = {nom: contraindre(vecteur, covariance, plafond, profil,
+                                    moderation["facteur"])
                    for nom, vecteur in poids.items()}
     poids = {nom: c["poids"] for nom, c in contraintes.items()}
     return {
@@ -259,6 +333,10 @@ def recommander(screen: dict, n: int = 15, years: int = 5, plafond: float = 0.20
             "universe_size": screen.get("universe_size"),
             "filters": screen.get("filters") or [],
             "missing_history": manquants, "dropped": ecartes,
+            # Le blackout est publié même vide : « aucun résultat imminent » est une
+            # information, et son absence d'affichage se lirait comme un filtre inactif.
+            "earnings_blackout": blackout, "earnings_window": blackout_resultats,
+            "earnings_unknown": sans_date,
         },
         # La mesure, telle quelle. Si elle vaut UNCALIBRATED, la carte l'affiche —
         # l'absence de mesure est une information, pas un blanc à combler.
@@ -266,7 +344,14 @@ def recommander(screen: dict, n: int = 15, years: int = 5, plafond: float = 0.20
                      "reason": "Lancer `make ic-screening`."},
         "conviction_reason": motif_conviction,
         "contraintes": contraintes,
+        # Chemin de moindre effort : sans les positions détenues, la question « quels
+        # mouvements achètent le plus de risque évité » n'a pas de point de départ.
+        "chemin": {nom: chemin_de_moindre_effort(
+                       covariance, symboles, positions or {},
+                       dict(zip(symboles, c["poids"])))
+                   for nom, c in contraintes.items()} if positions else {},
         "profil_applique": bool(profil),
+        "regime": moderation,
         "plafond_ligne": plafond,
         # L'étiquette SUIT la mesure. La figer sur « non validé » alors qu'une mesure
         # existe serait aussi faux que l'inverse : on publie ce qui a été constaté.

@@ -275,6 +275,12 @@ class RecommendationRequest(BaseModel):
     years: int = Field(default=5, ge=1, le=15)
     max_weight: float = Field(default=0.20, gt=0, le=1)
     profil: ProfilInvestisseur | None = None
+    # 0 = filtre désactivé. La valeur par défaut suit le gate QUANT_EARNINGS du snapshot :
+    # deux réglages concurrents pour la même source finiraient par diverger.
+    blackout_resultats: int | None = Field(default=None, ge=0, le=30)
+    # Positions détenues : servent UNIQUEMENT au chemin de moindre effort (quels mouvements
+    # achètent le plus de risque évité). Elles n'influencent pas la sélection.
+    positions: list[PortfolioAnalysisPosition] | None = None
 
 
 @app.post("/api/portfolio/recommend")
@@ -288,9 +294,22 @@ def recommend_universe(body: RecommendationRequest, request: Request) -> dict:
     if not _webhook_authorized(request):
         return {"available": False, "reason": "endpoint local uniquement"}
     from packages.portfolio.recommendation import recommander
-    return recommander(_snap().get("screen") or {}, n=body.n, years=body.years,
+    from packages.portfolio.filtre_resultats import FENETRE_DEFAUT
+    defaut = FENETRE_DEFAUT if os.environ.get("QUANT_EARNINGS") == "1" else 0
+    fenetre = defaut if body.blackout_resultats is None else body.blackout_resultats
+    snap = _snap()
+    ml = snap.get("ml") or {}
+    # Le régime module l'EXPOSITION (jamais le choix des titres) et seulement vers le bas ;
+    # le score ML n'entre que dans « Conviction », pondéré par son AUC converti en IC.
+    return recommander(snap.get("screen") or {}, n=body.n, years=body.years,
                        plafond=body.max_weight,
-                       profil=body.profil.model_dump() if body.profil else None)
+                       profil=body.profil.model_dump() if body.profil else None,
+                       blackout_resultats=fenetre,
+                       regime=(snap.get("regime") or {}).get("macro_real") or snap.get("regime"),
+                       ml_scores={r.get("symbol"): r.get("ml_score") or r.get("ml")
+                                  for r in (ml.get("rows") or [])},
+                       ml_auc=ml.get("auc") if ml.get("edge_ok") else None,
+                       positions={p.symbol.upper(): p.weight for p in (body.positions or [])})
 
 
 @app.get("/api/positions")
