@@ -55,12 +55,23 @@ def ratio_diversification(poids, covariance) -> float | None:
 
 
 def positions_effectives(poids) -> float | None:
-    """1/Σw² — le nombre de lignes ÉQUIPONDÉRÉES qui aurait la même concentration.
+    """1/Σw² sur les poids NORMALISÉS — le nombre de lignes équipondérées équivalent.
 
-    Quatorze lignes dont une à 38 % ne valent pas quatorze lignes : ce nombre le dit.
+    Quatorze lignes dont une à 38 % ne valent pas quatorze lignes : ce nombre le dit. Il ne
+    peut donc JAMAIS dépasser le nombre de lignes.
+
+    LA NORMALISATION N'EST PAS UN DÉTAIL. Mesuré le 07/09 : l'affichage annonçait « 25,6 »
+    pour quatorze actifs. Le budget de perte avait ramené l'exposition à 47,3 %, les poids
+    ne sommaient donc plus à 1, et 1/Σw² gonflait mécaniquement — quatorze lignes
+    équipondérées à 47,3 % d'exposition donnaient 62,6. La mesure porte sur la RÉPARTITION
+    des poids, pas sur leur somme : les liquidités ne sont pas une quinzième position.
     """
     w = np.asarray(poids, dtype=float)
-    carre = float(w @ w)
+    total = float(w.sum())
+    if total <= 0:
+        return None
+    part = w / total
+    carre = float(part @ part)
     return (1.0 / carre) if carre > 0 else None
 
 

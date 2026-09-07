@@ -1,5 +1,21 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 30) — « 25,6 positions effectives » pour 14 actifs
+
+Impossibilité mathématique, repérée dans la capture de l'utilisateur : 1/Σw² ne peut pas dépasser
+le nombre de lignes. Cause : le budget de perte avait ramené l'exposition à 47,3 %, les poids ne
+sommaient donc plus à 1, et la formule gonflait mécaniquement — quatorze lignes équipondérées à
+47,3 % d'exposition donnent 62,6.
+
+La mesure porte sur la RÉPARTITION des poids, pas sur leur somme : les liquidités ne sont pas une
+quinzième position. Normalisation avant calcul, et trois tests, dont un qui balaie 3/14/40 lignes ×
+trois niveaux d'exposition — la valeur doit être identique, seule la répartition compte.
+
+À noter : le ratio de diversification, lui, est invariant d'échelle par construction —
+(Σwᵢσᵢ)/σₚ, numérateur et dénominateur se multiplient par le même facteur. Il n'était pas touché.
+C'est précisément pourquoi l'erreur était difficile à voir : trois métriques côte à côte, deux
+justes, une fausse.
+
 ## Session 2026-09-07 (suite 29) — Chercher un edge sans se mentir, et des préférences qui ont un prix
 
 **1. « Ajouter les actifs au meilleur set-up » — la seule réponse honnête est un protocole.**

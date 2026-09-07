@@ -83,3 +83,24 @@ def test_trop_peu_d_observations_ne_produit_aucun_sharpe():
     series = {"A": {"2026-01-01": 1.0, "2026-01-02": 1.1}}
     out = performance_realisee(series, ["A"], [1.0])
     assert out["sharpe_realise"] is None and out["rendement_annualise"] is None
+
+
+def test_les_positions_effectives_ne_depassent_JAMAIS_le_nombre_de_lignes():
+    """Mesuré le 07/09 : « 25,6 positions effectives » affiché pour 14 actifs. Le budget de
+    perte avait ramené l'exposition à 47,3 %, les poids ne sommaient plus à 1, et 1/Σw²
+    gonflait mécaniquement. La mesure porte sur la RÉPARTITION, pas sur la somme."""
+    for n in (3, 14, 40):
+        for exposition in (1.0, 0.473, 0.05):
+            poids = [exposition / n] * n
+            assert positions_effectives(poids) == pytest.approx(float(n)), (n, exposition)
+
+
+def test_la_concentration_est_lue_a_exposition_reduite_comme_a_pleine():
+    """Une ligne à 38 % du RISQUE reste une ligne à 38 %, qu'on soit investi à 100 % ou 50 %."""
+    plein = positions_effectives([0.38] + [0.62 / 13] * 13)
+    reduit = positions_effectives([0.5 * 0.38] + [0.5 * 0.62 / 13] * 13)
+    assert plein == pytest.approx(reduit)
+
+
+def test_un_portefeuille_entierement_en_cash_ne_rend_pas_un_nombre():
+    assert positions_effectives([0.0, 0.0, 0.0]) is None
