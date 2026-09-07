@@ -1,5 +1,25 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 22) — L'orphelin identifié : `systemctl restart` ne tue que les siens
+
+Diagnostic confirmé sur le VPS, sans ambiguïté :
+
+    LISTEN *:3000  users:(("next-server (v1",pid=757591,fd=18))
+    quant-web.service : activating (auto-restart) (Result: exit-code) status=1/FAILURE
+
+Un `next-server` orphelin, né d'un `make start` d'une session SSH fermée, tenait le port 3000
+depuis des heures. Le service systemd bouclait en échec toutes les cinq secondes, et le navigateur
+parlait à l'orphelin — page fonctionnelle, code vieux de quinze commits, aucun signal.
+
+**Le défaut de `make up` :** il faisait `systemctl restart`, qui ne tue QUE les processus du
+service. L'orphelin, par définition, n'en fait pas partie : il survivait à toutes les relances.
+`make services` appelait bien `stop_services.sh`, mais `make up` — la commande du quotidien — ne
+l'appelait pas. Le nettoyage existait et n'était pas branché là où il servait tous les jours.
+
+Ordre corrigé, et l'ordre est le fond du correctif : arrêter les services, PUIS nettoyer les
+orphelins, PUIS démarrer. Nettoyer avant d'arrêter tuerait le service en cours sous les pieds de
+systemd et déclencherait une tempête de redémarrages.
+
 ## Session 2026-09-07 (suite 21) — « ça répond » n'est pas « le bon processus sert le bon code »
 
 Après vingt commits, la page affiche toujours l'ancien code : avertissement figé, trois profils,

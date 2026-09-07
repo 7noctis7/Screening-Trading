@@ -50,8 +50,16 @@ ic-screening:     ## MESURE l'IC hors échantillon du score de sélection (long,
 
 up:               ## TOUT EN UNE : sync + relance des services + attente que le front réponde
 	@$(MAKE) --no-print-directory sync
-	@echo "→ Relance des services (le front recompile)…"
-	@sudo systemctl restart quant-api quant-web
+	@echo "→ Arrêt des services, puis des orphelins qui tiendraient encore les ports…"
+	@sudo systemctl stop quant-api quant-web 2>/dev/null || true
+	@# `systemctl restart` ne tue QUE les processus du service. Un `next dev` orphelin d'une
+	@# session SSH morte survit donc à toutes les relances, garde le port 3000, et le service
+	@# boucle en échec pendant que le navigateur parle à l'orphelin (mesuré le 07/09 :
+	@# PID 757591 tenait le port depuis des heures, service en « activating (auto-restart) »).
+	@# On arrête d'abord, on nettoie ensuite, on démarre enfin — dans cet ordre.
+	@bash scripts/stop_services.sh
+	@echo "→ Démarrage des services (le front recompile)…"
+	@sudo systemctl start quant-api quant-web
 	@printf "→ Attente du front"; \
 	 for i in $$(seq 1 90); do \
 	   if curl -sf -o /dev/null "http://127.0.0.1:$${QUANT_WEB_PORT:-3000}/"; then echo; break; fi; \
