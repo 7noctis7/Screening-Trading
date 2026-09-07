@@ -52,7 +52,11 @@ RestartSec=5
 TimeoutStartSec=$4
 # Le build Next et l'ingestion sont gourmands : on ne les tue pas trop vite à l'arrêt.
 TimeoutStopSec=30
-KillMode=mixed
+# KillMode par DÉFAUT (control-group) : le signal d'arrêt va à TOUS les processus du
+# service, pas au seul principal. `mixed` ne signalait que le principal, et tout enfant qui
+# lui survivait gardait le port — c'est ainsi que des `next-server` orphelins se sont
+# accumulés le 07/09 jusqu'à rendre le service impossible à démarrer. Ne pas remettre
+# `mixed` sans avoir d'abord garanti qu'aucun enfant ne détient de ressource.
 StandardOutput=append:$RACINE/logs/$1.log
 StandardError=append:$RACINE/logs/$1.log
 

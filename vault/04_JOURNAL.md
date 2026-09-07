@@ -1,5 +1,34 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 23) — Mon unité systemd FABRIQUAIT les orphelins qu'elle subissait
+
+L'orphelin tué, un autre reprenait le port. Ce n'était donc pas un accident de session SSH : la
+source était mon unité elle-même, par deux défauts qui se combinent.
+
+**1. `exec npx next start`.** `exec` remplace bien bash par npx — mais npx SPAWNE ensuite Next
+comme enfant. Le processus que systemd surveille (`MainPID`) n'est donc PAS celui qui tient le
+port. À l'arrêt, systemd signale le principal, npx s'en va, et le serveur reste derrière lui.
+Chaque redémarrage fabriquait un orphelin de plus. Corrigé en appelant le binaire local :
+`exec ./node_modules/.bin/next start` — le processus surveillé EST celui qui écoute.
+
+**2. `KillMode=mixed`.** Ce mode n'envoie le signal d'arrêt qu'au processus principal. Tout enfant
+qui lui survit garde ses ressources — ici, le port 3000. Retour au défaut `control-group` : le
+signal va à TOUS les processus du service. À lui seul, ce réglage aurait suffi à empêcher
+l'accumulation, quelle que soit la forme de l'arbre de processus. Je l'avais changé sans nécessité.
+
+Les deux correctifs sont indépendants et cumulés délibérément : le premier rend l'arbre correct, le
+second garantit le nettoyage même si l'arbre ne l'est pas.
+
+Vérifié : `./node_modules/.bin/next start` sert la page en HTTP 200.
+
+**Le changement de `KillMode` impose de RÉÉCRIRE l'unité** — `make services` avant `make up`, dans
+cet ordre, sinon systemd relit l'ancien fichier.
+
+Note de méthode, troisième occurrence du jour : en nettoyant ce test j'ai lancé `pkill -f "3888"`,
+qui a tué mon propre shell — le motif figurait dans sa ligne de commande. Exactement le défaut
+corrigé le matin dans `make stop`. Un motif `pkill` doit toujours être écrit pour ne pas se
+reconnaître lui-même.
+
 ## Session 2026-09-07 (suite 22) — L'orphelin identifié : `systemctl restart` ne tue que les siens
 
 Diagnostic confirmé sur le VPS, sans ambiguïté :

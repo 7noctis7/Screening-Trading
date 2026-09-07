@@ -31,6 +31,14 @@ if [ "$(cat "$EMPREINTE" 2>/dev/null)" != "$TETE" ] || [ ! -d ".next" ]; then
   echo "$TETE" >"$EMPREINTE"
 fi
 
+# PAS `npx` : `exec npx …` remplace bash par npx, mais npx SPAWNE ensuite Next comme
+# ENFANT. Le processus qui tient réellement le port n'est donc pas celui que systemd
+# surveille. À l'arrêt, systemd signale le principal — npx — qui s'en va en laissant le
+# serveur derrière lui. Chaque redémarrage fabriquait ainsi un orphelin de plus, chacun
+# gardant le port 3000, et le service suivant échouait en EADDRINUSE (mesuré le 07/09,
+# plusieurs heures durant). En appelant le binaire local, `exec` remplace bash par le
+# serveur lui-même : le processus surveillé EST celui qui écoute.
+#
 # -H 127.0.0.1 : le site affiche des positions réelles et n'a pas d'authentification.
 # Accès par tunnel SSH uniquement. Ne jamais exposer sur 0.0.0.0.
-exec npx next start -H "$QUANT_BIND_HOST" -p "$QUANT_WEB_PORT"
+exec ./node_modules/.bin/next start -H "$QUANT_BIND_HOST" -p "$QUANT_WEB_PORT"
