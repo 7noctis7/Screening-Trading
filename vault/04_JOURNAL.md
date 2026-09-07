@@ -28,6 +28,65 @@ Restent à traiter : accueil, dashboard, crypto, glossaire, fiche, events, scree
 échecs, méthode, macro, data, live, investors, fundamentals. Le glossaire est volontairement
 technique par nature.
 
+## Session 2026-09-07 (suite 35) — « fais tout ce qui reste » : ce qui est fait, ce qui est bloqué
+
+Six chantiers livrés, un bloqué faute de données, deux volontairement non faits.
+
+**Bloqué, et il faut le dire clairement.** Le P0 de réconciliation du journal ne peut PAS être
+joué depuis cette session : `data/journal.db` y contient **0 trade**. C'est un fichier vide
+d'amorçage, pas le journal réel (313 lignes, synchronisé Mac↔VPS le 05/09), et il n'est même pas
+suivi par git. Lancer `--appliquer` dessus n'aurait rien réparé et aurait produit une archive
+trompeuse. Les commandes sont dans le TODO, à jouer sur la machine qui détient la vraie base.
+
+**Dates d'arrêté — la synergie qui manquait vraiment.** Trois dates coexistaient sans explication.
+L'inventaire existait déjà (`coherence_site.dates_d_arrete`) mais ne sortait que dans les journaux
+de fabrication. Il est maintenant publié dans `meta` et affiché sur chaque page, avec l'écart au
+bloc le plus frais du site — et la raison possible, parce qu'une fenêtre de mesure close ne devient
+pas fausse en vieillissant. Vérifié : l'alerte se déclenche sur `/data` (18/06) et `/universe`,
+pas sur `/screener` (2 jours d'écart, sous le seuil).
+
+**Le défaut trouvé en chemin est le plus intéressant** : `/api/universe` publiait `as_of: now()`.
+La liste d'actifs se déclarait donc fraîche du jour même quand ses fichiers sources n'avaient pas
+bougé depuis des mois — et l'inventaire CENSÉ SURVEILLER la fraîcheur la comptait parmi les blocs à
+jour. Une fraîcheur affirmée sans être vraie est pire qu'une date ancienne assumée : elle empêche
+de repérer la source qui a cessé d'être rafraîchie. `as_of` = date du fichier le plus récent ; la
+date de fabrication garde sa place sous `genere_le`.
+
+**Le tri conclut.** `/fiche` savait déjà aller jusqu'à « et donc, j'achète ou pas » ; le screener
+s'arrêtait au classement. La jointure est extraite dans `lib/verdicts.ts` et partagée — **même
+moteur `decide()`**, pas une version liste plus permissive. Deux verdicts divergents sur le même
+titre selon la page ouverte serait pire que pas de verdict du tout.
+
+**Fenêtre d'exclusion visible.** Le moteur écartait déjà les titres publiant sous 7 jours ; rien ne
+le disait. Le calendrier l'affiche, avec LA constante importée du moteur — deux nombres auraient
+dérivé au premier réglage.
+
+**Seuil de promotion — la correction dont je suis le plus sûr.** Le gate promouvait à +0,05 quand
+onze ans ne résolvent que ±0,118. Le labo imprimait déjà l'avertissement sans en tirer la
+conséquence. Le remplacer par 0,12 aurait juste déplacé l'arbitraire : le seuil DEVIENT la
+résolution mesurée de l'échantillon, plancher d'exécution à 0,05. Il donne 11 ans → +0,118,
+20 ans → +0,087, 60 ans → +0,051 : **exactement les valeurs relevées le 31/08**, ce qui confirme
+que l'implémentation reproduit la mesure au lieu de la réinventer. Nouveau verdict `🟡 INDISTINCT`
+pour l'entre-deux — ni promu ni rejeté, parce que la donnée ne permet pas de trancher.
+
+**Volontairement PAS fait, et pourquoi.**
+- `_index_series` / sens de fusion des bases : le TODO exige de CONFIRMER par le bloc
+  « comparaison des deux bases » avant de corriger. Sans `YAHOO.db` ni `market.db` ici, corriger
+  serait deviner — sur la moitié du portefeuille de production.
+- Câblage d'`almgren_chriss` au dimensionnement : ça change les tailles de position réelles. Ça se
+  mesure avant, pas après.
+
+**Piège récurrent, cinquième et sixième occurrence** : `pkill -f` a tué mon propre shell deux fois
+(code 144), y compris avec la parade `[ ]`. Et un `next start` resté vivant m'a servi un ANCIEN
+build pendant une vérification — j'ai lu « fonctionnalité absente » sur du code qui la contenait.
+Réflexe à garder : tuer par PID relevé avec `ps`, jamais par motif.
+
+**Contrôle négatif systématique.** Un audit qui affiche zéro sans avoir jamais rien détecté ne vaut
+rien : chaque vérification a été rejouée sur l'état d'avant (365 éléments hors écran, test de seuil
+sabotté → rouge). Une fois, mon propre contrôle était faux — le titre de colonne « ce qu'on en
+conclut » ne matchait pas parce que le CSS le met en majuscules ; c'est la vérification qui était
+cassée, pas la fonctionnalité.
+
 ## Session 2026-09-07 (suite 34) — 365 éléments hors écran, invisibles depuis toujours
 
 Retour de l'utilisateur : « les textes et fonctions aux bords de l'écran sont parfois

@@ -80,6 +80,11 @@
       habituel, sur la vraie base, maintenant que les doublons sont partis :
       `make completer-ouvertures` (simulation) → `ARGS=--appliquer` →
       `make reconcilier-journal` (simulation) → `ARGS=--appliquer` → `make diag-journal`.
+      **À jouer sur la machine qui détient la VRAIE base** (Mac mini ou VPS). Vérifié le
+      07/09 : le `data/journal.db` d'une session distante contient 0 trade — c'est un
+      fichier d'amorçage vide, non suivi par git. Y lancer `--appliquer` ne réparerait
+      rien et produirait une archive trompeuse. Contrôle avant de lancer :
+      `sqlite3 data/journal.db "select count(*) from trades"` doit rendre ~313, pas 0.
 - [x] **Outillé le 05/09 — l'écart est DÉCOMPOSÉ** : `make diag-surfermeture`
       (`packages/research/sur_fermeture.py`, 7 tests). Identité vérifiée par ligne :
       `manque_ouvert = achats_non_journalises + sur_fermeture`. Sur les chiffres réels
@@ -758,10 +763,13 @@ explicite, module par module, avec mesure.
       il en faudrait ~60 pour atteindre 0,05) et la CORRÉLATION entre variantes (rho 0,95 →
       0,99 fait passer de ±0,263 à ±0,118) — d'où le protocole apparié, une seule chose
       changée à la fois. Le labo publie désormais ces deux tableaux.
-- [ ] **P1 — Conséquence : le gate promeut à +0,05, seuil INATTEIGNABLE avec 11 ans.**
-      À décider : relever le seuil de promotion à ~0,12, ou exiger une confirmation hors
-      échantillon pour tout ce qui passe en dessous. Ne pas laisser un seuil que la donnée
-      ne peut pas honorer.
+- [x] **P1 — FERMÉ (2026-09-07) : le seuil n'est plus un nombre choisi.** Ni 0,05 ni 0,12 :
+      le seuil de promotion DEVIENT la résolution mesurée de l'échantillon
+      (`sharpe_diff.seuil_detectable`), avec le plancher d'exécution 0,05 comme borne basse.
+      Il se resserre seul quand l'historique s'allonge — 11 ans → +0,118 · 20 → +0,087 ·
+      60 → +0,051, soit exactement les valeurs relevées le 31/08. Verdict `🟡 INDISTINCT`
+      ajouté pour l'entre-deux (ni promu ni rejeté : la donnée ne tranche pas).
+      Garde-fou : `tests/research/test_seuil_de_promotion.py`.
 - [ ] **VIX : provenance publiée (31/08).** `vix`, `vix_playbook` et `vix_series` étaient
       publiés sans distinguer une série RÉELLE d'une série `_vix_series()` FABRIQUÉE — le
       graphe s'en protégeait déjà, pas le KPI. Corrigé : `vix_reel` publié, `null` +
@@ -800,11 +808,15 @@ explicite, module par module, avec mesure.
 - [ ] **P2 — `/universe` en 5 colonnes fixes sur mobile** : la grille se rétracte au lieu de
       déborder (donc rien d'injoignable, vérifié), mais « Nom » et « Secteur » y sont tronqués
       à quelques caractères. À repenser en deux lignes par actif sous 640 px.
-- [ ] **Unifier les fenêtres du dashboard** : Sharpe 2,43 en haut, 1,07 dans le bloc honnêteté,
-      0,98 pour le preset pur — trois fenêtres, aucune ne le dit dans les tuiles héros.
-- [ ] **Bloc décision sur le screener** : il classe mais ne conclut pas (la fiche, elle, conclut).
-- [ ] **Registre d'essais complet** sur `/methode` : publier ce qui a marché ET ce qui n'a pas —
-      un lecteur ne peut pas juger un taux de réussite s'il ne voit qu'un côté.
+- [x] **Fenêtres du dashboard — FERMÉ (2026-09-07)** : chacun des trois « gain / risque »
+      énonce désormais sa période (tuiles héros = période choisie, avec les dates ; bandeau
+      honnêteté = tout l'historique ; socle+stratégie = tout l'historique aussi).
+- [x] **Bloc décision sur le screener — FERMÉ (2026-09-07)** : jointure extraite dans
+      `apps/web/lib/verdicts.ts`, MÊME moteur `decide()` que la fiche (pas de variante liste
+      plus permissive). Colonne « ce qu'on en conclut » + bloc complet dans la modale.
+- [x] **Registre d'essais complet — FERMÉ (2026-09-07)** : `/api/failures` publie `par_statut`
+      et `n_total` ; `/methode` affiche les quatre statuts. `items` reste les seuls rejets —
+      /echecs l'affiche sans filtrer, y glisser une idée retenue la dirait échouée.
 
 ## 🔵 Décisions en attente de l'utilisateur
 - [ ] **Bot Discord** (projet distinct) : vendre des signaux à des abonnés payants est une
