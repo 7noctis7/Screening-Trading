@@ -40,6 +40,37 @@ def _panel_reel(annees: int) -> tuple[dict, str]:
     return {s: b for s, b in data.items() if s in reels and b}, mode
 
 
+def _consigner(resultat: dict, horizon: int) -> None:
+    """Écrit la mesure au registre des hypothèses — y compris (surtout) quand elle échoue.
+
+    Deux raisons, et la seconde est la moins intuitive. (1) Une hypothèse rejetée doit
+    rester citable, sinon elle sera re-testée dans six mois par quelqu'un qui aura oublié.
+    (2) Chaque mesure est un ESSAI : elle incrémente le compteur qui déflate le Sharpe
+    (DSR, López de Prado). Ne consigner que les succès ferait mécaniquement grimper la
+    significativité apparente de ce qui reste — c'est la définition du p-hacking, et un
+    registre qui ne garde que ce qui marche l'organise au lieu de s'en prémunir.
+    """
+    from packages.research.ledger import append_record
+    significatif = abs(resultat.get("t_stat") or 0.0) >= 2.0
+    statut = "promu" if (resultat.get("robuste") and significatif) else "rejete"
+    append_record({
+        "date": datetime.now(UTC).date().isoformat(),
+        "facteur": "screening_composite",
+        "horizon": f"{horizon}j",
+        "statut": statut,
+        "these": (f"IC transversal du score de screening à {horizon} jours "
+                  f"(Spearman, fenêtres disjointes, coupe hors échantillon chronologique)."),
+        "params": {"horizon": horizon, "pas": resultat.get("pas"),
+                   "n_symboles": resultat.get("n_symboles")},
+        "ic": resultat.get("ic_moyen"), "t_stat": resultat.get("t_stat"),
+        "n_obs": resultat.get("n_dates"),
+        "ic_is": resultat.get("ic_premiere_moitie"),
+        "ic_oos": resultat.get("ic_seconde_moitie"),
+        "source": "make ic-screening (réel)",
+    })
+    print(f"→ consigné au registre des hypothèses : {statut}")
+
+
 def principal() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--horizon", type=int, default=21, help="jours de bourse (défaut 21)")
@@ -61,6 +92,8 @@ def principal() -> int:
     resultat |= {"mesure_le": datetime.now(UTC).isoformat(timespec="seconds"),
                  "n_symboles": len(panel), "mode_donnees": mode,
                  "config": "config/screening.yaml"}
+
+    _consigner(resultat, args.horizon)
 
     chemin = Path(args.sortie)
     chemin.parent.mkdir(parents=True, exist_ok=True)

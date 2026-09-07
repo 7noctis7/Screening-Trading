@@ -1,5 +1,38 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 16) — VERDICT : le score de screening ne prédit rien de démontrable
+
+Première mesure sur données réelles (779 symboles réels, horizon 21 j, 83 fenêtres disjointes) :
+
+| grandeur | valeur | lecture |
+|---|---|---|
+| IC moyen | **+0,0202** | erreur-type 0,0266 |
+| t-stat | **+0,76** | p = 0,45 — indiscernable de zéro |
+| IC à 95 % | **[−0,032 ; +0,072]** | zéro confortablement dedans |
+| 1re → 2e moitié | +0,0322 → +0,0084 | **−74 %** |
+| robuste | **NON** | |
+
+Il faudrait un IC de 0,053 — **2,6 fois le mesuré** — pour atteindre t = 2 sur ce nombre de
+fenêtres. Même en prenant l'IC pour argent comptant, la loi fondamentale donne un IR de 0,07 à
+12 paris indépendants par an, 0,15 à 52. Ce n'est pas un edge : c'est du bruit avec un signe.
+
+**Conséquences appliquées sans discussion.** Le profil « Conviction » reste FERMÉ — le verrou fait
+exactement ce pour quoi il a été écrit. L'avertissement de la carte affiche la mesure au lieu d'une
+formule. La sélection reste un CLASSEMENT, jamais une prévision, et c'est désormais établi plutôt
+que supposé.
+
+**Réserve de méthode.** Un seul horizon a été testé. L'absence de significativité à 21 jours ne
+prouve pas l'absence à tout horizon — mais en tester plusieurs impose Benjamini-Hochberg avant de
+publier le meilleur, sans quoi on aura simplement choisi le plus flatteur. Le champ
+`horizons_testes` existe pour ça.
+
+**Chaque mesure est désormais consignée au registre des hypothèses**, y compris — surtout — quand
+elle échoue. Une hypothèse rejetée doit rester citable, sinon elle sera re-testée dans six mois par
+quelqu'un qui aura oublié. Et chaque mesure est un ESSAI : elle incrémente le compteur qui déflate
+le Sharpe. Ne consigner que les succès ferait mécaniquement grimper la significativité apparente de
+ce qui reste — un registre qui ne garde que ce qui marche organise le p-hacking au lieu de s'en
+prémunir.
+
 ## Session 2026-09-07 (suite 15) — Identifier l'instrument, et l'aveu de 594 noms manquants
 
 Crainte exprimée : confondre deux tickers. **Elle est fondée, et ce n'est pas un cas limite.**
