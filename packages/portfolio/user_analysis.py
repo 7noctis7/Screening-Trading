@@ -212,6 +212,34 @@ def covariance_annuelle(series: dict[str, dict[str, float]]) -> tuple[list[str],
     return list(series), np.atleast_2d(np.cov(returns) * 252), dates
 
 
+def diagnostic_par_actif(loaded: dict, symboles: list[str], returns: np.ndarray) -> list[dict]:
+    """Volatilité annualisée et dernière barre, PAR ACTIF — de quoi expliquer un poids.
+
+    POURQUOI C'EST INDISPENSABLE ICI. Un min-variance concentre sur l'actif de plus faible
+    variance : c'est sa définition, pas un défaut. Mais sans les volatilités individuelles
+    sous les yeux, un poids de 99 % sur une ligne est indistinguable d'un bug — et, plus
+    grave, indistinguable d'une SÉRIE ARRÊTÉE, qui n'a plus de variance récente et que
+    l'optimiseur prend alors pour l'actif le plus sûr de l'univers.
+
+    On ne retire RIEN ici, contrairement à la recommandation : ces lignes sont celles que
+    l'utilisateur DÉTIENT. On ne peut pas les écarter de son propre portefeuille — on
+    l'avertit, et il décide.
+    """
+    from datetime import date, timedelta
+    fins = {s: max(loaded[s]) for s in symboles if loaded.get(s)}
+    fraiche = max(fins.values()) if fins else ""
+    try:
+        limite = (date.fromisoformat(fraiche[:10]) - timedelta(days=10)).isoformat()
+    except ValueError:
+        limite = ""
+    vols = np.std(returns, axis=1, ddof=1) * sqrt(252)
+    return [{"symbol": s,
+             "vol_annuelle": float(vols[i]) if i < len(vols) else None,
+             "derniere_barre": fins.get(s),
+             "arretee": bool(limite and fins.get(s, "")[:10] < limite)}
+            for i, s in enumerate(symboles)]
+
+
 def analyze(positions: list[dict], years: int = 5, series_by_symbol: dict | None = None) -> dict:
     """Charge, aligne sans remplissage, puis mesure et optimise un portefeuille long-only."""
     requested = [(str(row["symbol"]).upper(), float(row["weight"])) for row in positions]
@@ -242,6 +270,10 @@ def analyze(positions: list[dict], years: int = 5, series_by_symbol: dict | None
             "n_observations": returns.shape[1], "frequency": "daily",
             "annualization": 252, "alignment": ALIGNEMENT,
             "metrics": _metrics(returns, weights),
+            # De quoi EXPLIQUER un poids : sans les volatilités individuelles, un
+            # min-variance à 99 % sur une ligne ne se distingue ni d'un bug ni d'une
+            # série arrêtée. On avertit, on ne retire pas : ces lignes sont détenues.
+            "par_actif": diagnostic_par_actif(loaded, [s for s, _ in requested], returns),
             "risk_contribution": [float(v) if np.isfinite(v) else None for v in contribution],
             "correlation": _json_matrix(correlation),
             "scenarios": scenarios_risque(covariance), "coverage": 1.0}

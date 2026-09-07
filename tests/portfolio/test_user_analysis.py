@@ -130,3 +130,38 @@ def test_classe_inconnue_garde_le_repli_mais_l_alias_reste_publie():
     « ETH ». L'ambiguïté résiduelle est rendue VISIBLE par l'alias publié dans la ligne."""
     from packages.portfolio.user_analysis import _aliases
     assert _aliases("ETH", None) == ["ETH", "ETH-USD"]
+
+
+# --- Expliquer un poids : volatilité par ligne et séries arrêtées ------------------------
+
+def test_le_diagnostic_par_actif_donne_la_volatilite_de_chaque_ligne():
+    """Sans elles, un min-variance à 99 % sur une ligne ne se distingue pas d'un bug."""
+    import numpy as np
+    from packages.portfolio.user_analysis import diagnostic_par_actif
+    loaded = {"CALME": {"2026-09-04": 1.0}, "AGITE": {"2026-09-04": 1.0}}
+    rendements = np.array([[0.001, -0.001, 0.001, -0.001],
+                           [0.05, -0.05, 0.05, -0.05]])
+    out = diagnostic_par_actif(loaded, ["CALME", "AGITE"], rendements)
+    assert out[0]["vol_annuelle"] < out[1]["vol_annuelle"] / 10
+    assert all(d["arretee"] is False for d in out)
+
+
+def test_une_serie_arretee_est_SIGNALEE_mais_pas_retiree():
+    """On ne peut pas écarter une ligne du portefeuille de l'utilisateur : il la détient.
+    On l'avertit — une série figée n'a plus de variance et paraît sans risque."""
+    import numpy as np
+    from packages.portfolio.user_analysis import diagnostic_par_actif
+    loaded = {"VIF": {"2026-09-04": 1.0}, "MORT": {"2026-06-18": 1.0}}
+    out = diagnostic_par_actif(loaded, ["VIF", "MORT"], np.array([[0.01, -0.01], [0.0, 0.0]]))
+    assert [d["symbol"] for d in out] == ["VIF", "MORT"]      # aucune ligne retirée
+    assert out[1]["arretee"] is True and out[0]["arretee"] is False
+    assert out[1]["derniere_barre"] == "2026-06-18"
+
+
+def test_une_serie_figee_affiche_une_volatilite_NULLE():
+    """C'est le mécanisme complet : plus de variance mesurée → l'optimiseur la croit sûre."""
+    import numpy as np
+    from packages.portfolio.user_analysis import diagnostic_par_actif
+    out = diagnostic_par_actif({"FIGE": {"2026-09-04": 1.0}}, ["FIGE"],
+                               np.array([[0.0, 0.0, 0.0]]))
+    assert out[0]["vol_annuelle"] == 0.0

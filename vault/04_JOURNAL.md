@@ -1,5 +1,33 @@
 # 04 — JOURNAL
 
+## Session 2026-09-07 (suite 31) — 99 % sur une ligne : correct, et impossible à vérifier
+
+Question : est-il normal que « Prudent » propose 99 % sur NEAR, « Dynamique » 99,8 %, et « Neutre »
+une répartition de 1,7 % à 21,9 % ?
+
+**Première hypothèse, FAUSSE.** J'ai supposé une instabilité d'estimation (T/N = 31, covariance
+empirique non régularisée alors que la production applique Ledoit-Wolf). Mesuré sur un cas
+reconstruit : δ* = 0,05, et le poids maximal passe de 87,0 % à 88,0 %. Le shrinkage ne change RIEN
+ici. L'hypothèse était plausible et le chiffre l'a écartée.
+
+**La vraie explication.** Reproduction sur neuf actifs à ~73 % de volatilité et un à 18 % :
+min-variance 87 % sur le calme, HRP 77 %, ERC 25 % maximum. Les trois profils du site montrent
+exactement ce profil. Ce n'est pas un défaut : minimiser la variance CONCENTRE sur l'actif de plus
+faible variance, et l'ERC ne le fait pas parce qu'il égalise les contributions au risque par
+construction. L'écart entre les profils n'est pas un bug — c'est leur définition.
+
+**Ce qui manquait vraiment : de quoi le VÉRIFIER.** Sans les volatilités individuelles sous les
+yeux, un poids de 99 % est indistinguable d'un bug — et, plus grave, d'une SÉRIE ARRÊTÉE, qui n'a
+plus de variance récente et que l'optimiseur prend pour l'actif le plus sûr du panier. Le chemin
+« Mon portefeuille » n'avait ni garde-fou de fraîcheur ni volatilité par ligne, alors que la
+recommandation a les deux depuis ce matin.
+
+`diagnostic_par_actif` publie désormais la volatilité annualisée et la dernière barre de chaque
+ligne détenue, et signale les séries arrêtées. **Il ne retire rien** — contrairement à la
+recommandation : ces lignes sont DÉTENUES, on ne les écarte pas du portefeuille de leur
+propriétaire. On l'avertit, il décide. L'affichage nomme la plus calme, la plus agitée et leur
+rapport, et rappelle que le champ « poids maximal » est le garde-fou prévu pour ça.
+
 ## Session 2026-09-07 (suite 30) — « 25,6 positions effectives » pour 14 actifs
 
 Impossibilité mathématique, repérée dans la capture de l'utilisateur : 1/Σw² ne peut pas dépasser

@@ -246,3 +246,41 @@ export function Preferences({ p }: { p: any }) {
     </div> : null}
   </div>;
 }
+
+
+/** Volatilité de CHAQUE ligne détenue — ce qui explique la concentration d'un min-variance.
+ *
+ *  Un min-variance concentre sur l'actif de plus faible variance : c'est sa définition, pas
+ *  un défaut. Mais sans les volatilités individuelles sous les yeux, un poids de 99 % sur
+ *  une ligne est indistinguable d'un bug, et surtout d'une SÉRIE ARRÊTÉE — qui n'a plus de
+ *  variance récente et que l'optimiseur prend alors pour l'actif le plus sûr du panier.
+ *
+ *  On n'écarte rien ici, contrairement à la recommandation : ces lignes sont DÉTENUES. On
+ *  avertit, l'utilisateur décide. */
+export function ParActif({ lignes }: { lignes: Map<string, any> }) {
+  const rows = [...lignes.values()].filter((r) => r.vol_annuelle != null);
+  if (rows.length < 2) return null;
+  const tri = [...rows].sort((a, b) => a.vol_annuelle - b.vol_annuelle);
+  const arretees = rows.filter((r) => r.arretee);
+  const calme = tri[0], agite = tri[tri.length - 1];
+  const ecart = calme.vol_annuelle > 0 ? agite.vol_annuelle / calme.vol_annuelle : null;
+  return <div className="rounded-xl bg-surface3 p-3 text-xs text-muted space-y-1">
+    <div>
+      <b>Volatilité par ligne</b> — la plus calme : <b className="mono">{calme.symbol}</b>{" "}
+      {pct(calme.vol_annuelle)} · la plus agitée : <b className="mono">{agite.symbol}</b>{" "}
+      {pct(agite.vol_annuelle)}
+      {ecart && ecart > 3 ? <> — un facteur <b>{ecart.toFixed(1)}×</b>. Un minimum de variance
+        concentrera mécaniquement sur la plus calme : c'est sa définition. Le champ « poids
+        maximal » est le garde-fou prévu pour ça.</> : null}
+    </div>
+    <div className="mono text-[10px]">
+      {tri.map((r) => `${r.symbol} ${pct(r.vol_annuelle)}`).join("  ·  ")}
+    </div>
+    {arretees.length ? <div className="text-amber-500">
+      ⚠️ <b>{arretees.length} série(s) arrêtée(s)</b> : {arretees.map((r) => `${r.symbol} (dernière barre ${r.derniere_barre})`).join(", ")}.
+      Figée, une série n'a plus de variance récente et paraît donc SANS RISQUE : elle attire
+      le capital de l'optimiseur. Ces lignes étant détenues, elles ne sont pas retirées —
+      à vous de décider.
+    </div> : null}
+  </div>;
+}

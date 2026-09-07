@@ -5,7 +5,7 @@ import { PortfolioSnapshot } from "@/lib/portfolio-import";
 import { buildScenario, ScenarioKind, ScenarioSource } from "@/lib/portfolio-scenarios";
 import {
   Bande, Bilan, Chemin, IC, Identite, Metrique, money, pct, Perimes, Profil, Regime,
-  Preferences, Resultats, Structure,
+  ParActif, Preferences, Resultats, Structure,
 } from "@/components/PortfolioPanneaux";
 
 const SOURCES: { key: ScenarioSource; label: string; aide: string }[] = [
@@ -124,6 +124,10 @@ export function PortfolioScenarios({ snapshot, analysis, loading }: {
   const meta = useMemo(() => new Map<string, any>(
     source === "recommandation" && reco?.available ? (reco.rows ?? []).map((r: any) => [r.symbol, r]) : []),
     [source, reco]);
+  // Volatilité par actif du portefeuille IMPORTÉ : sans elle, un min-variance à 99 % sur
+  // une ligne ne se distingue ni d'un bug ni d'une série arrêtée.
+  const parActif = useMemo(() => new Map<string, any>(
+    (analysis?.par_actif ?? []).map((r: any) => [r.symbol, r])), [analysis]);
 
   if (!snapshot) return null;
   const active = scenarios.find((scenario) => scenario.kind === selected)!;
@@ -181,6 +185,7 @@ export function PortfolioScenarios({ snapshot, analysis, loading }: {
           {source === "recommandation" ? <Preferences p={reco?.preferences?.[selected]} /> : null}
           {source === "recommandation" ? <Regime r={reco?.regime} /> : null}
           {source === "recommandation" ? <Chemin etapes={reco?.chemin?.[selected]} /> : null}
+          {source === "portefeuille" ? <ParActif lignes={parActif} /> : null}
           <Tableau lignes={active.weights} meta={meta} valeur={value} />
         </>}
 
