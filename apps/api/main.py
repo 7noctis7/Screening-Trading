@@ -211,6 +211,22 @@ def ticker() -> dict:
     return _snap().get("ticker", {"available": False})
 
 
+def _dernier_mot(recs: list[dict]) -> list[dict]:
+    """Un enregistrement par facteur : le plus récent. Les lignes sans facteur passent
+    telles quelles — elles ne prétendent pas décrire un état, juste un essai."""
+    dernier: dict[str, dict] = {}
+    autres: list[dict] = []
+    for r in recs:
+        facteur = r.get("facteur")
+        if not facteur:
+            autres.append(r)
+            continue
+        connu = dernier.get(str(facteur))
+        if connu is None or str(r.get("date") or "") >= str(connu.get("date") or ""):
+            dernier[str(facteur)] = r
+    return [*dernier.values(), *autres]
+
+
 @app.get("/api/failures")
 def failures() -> dict:
     """Registre des négatifs (Negative Results Registry) — lu directement du ledger.
@@ -221,7 +237,13 @@ def failures() -> dict:
 
     from packages.research.ledger import read_records
     recs = read_records()
-    rejected = [r for r in recs if r.get("statut") == "rejete"]
+    # LE LEDGER EST APPEND-ONLY : rouvrir une hypothèse s'y écrit en AJOUTANT une ligne,
+    # jamais en corrigeant l'ancienne — c'est la trace qui fait sa valeur. Mais le
+    # registre des négatifs doit montrer l'ÉTAT COURANT : sans ce dédoublonnage, une
+    # hypothèse rejetée puis rouverte resterait affichée comme rejetée pour toujours.
+    # Vu le 09/09 sur `allocation_mean_cvar`, dont le rejet reposait sur des séries de
+    # prix depuis réparées. Le dernier mot par facteur, l'historique reste au fichier.
+    rejected = [r for r in _dernier_mot(recs) if r.get("statut") == "rejete"]
     # LES DEUX CÔTÉS DU REGISTRE — on ne peut pas juger un taux de réussite en n'en
     # voyant qu'un. Publier « 6 rejetées » sans dire combien ont été essayées laisse
     # croire soit à une rigueur écrasante, soit à un projet qui ne trouve jamais rien :

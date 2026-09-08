@@ -2,6 +2,61 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0098 — Le rejet du Mean-CVaR est ANNULÉ : il portait sur des prix faux (2026-09-09)
+
+**Ce qui s'est passé.** `make valider-nouveautes` sur l'univers assaini. Le seuil calibré
+tient exactement sa promesse — **45 actifs signalés sur 826, soit 5,4 % contre 5,5 %
+prédits**, zéro série cassée (contre cinq), une seule série figée (contre sept). La
+partie qualité de données est réglée. Mais l'étape 3 renverse un verdict.
+
+| hors échantillon (252/63) | CVaR 95 % | rendement |
+|---|---|---|
+| **08/09 — panneau non réparé, 693 lignes, 6 fenêtres** | | |
+| HRP | **1,54 %** | **+12,3 %** |
+| Mean-CVaR | 2,91 % | −5,1 % |
+| **09/09 — panneau assaini, 734 lignes, 5 fenêtres** | | |
+| Mean-CVaR plafonné 25 % | **1,04 %** | +9,7 % |
+| Mean-CVaR | 1,06 % | +8,4 % |
+| HRP | 1,51 % | **+10,3 %** |
+| min-variance | 2,08 % | +10,2 % |
+| ERC / équipondéré | 2,64 % | +6,7 % |
+
+Là où le Mean-CVaR était **dernier et seul en perte**, il est **premier sur le risque de
+queue à rendement quasi égal**. HRP, lui, ne bouge presque pas (1,54 → 1,51 %).
+
+**Décision. Le rejet d'ADR-0087 est ANNULÉ — pas infirmé, annulé.** La distinction
+compte : sa mesure portait sur un panneau contenant cinq séries crypto qui décrivaient
+d'AUTRES jetons et six rongées par l'arrondi de la source. Ce chiffre ne prouvait pas ce
+qu'il disait, et il ne prouve pas davantage le contraire aujourd'hui. Le registre des
+négatifs reçoit une ligne datée qui rouvre l'hypothèse en `en_test` — le ledger est
+append-only, on n'efface pas la trace du rejet, on écrit qu'il ne vaut plus.
+
+**ET LE NOUVEAU RÉSULTAT NE VALIDE RIEN NON PLUS.** Le protocole ne donne que **cinq**
+fenêtres hors échantillon. Un test des signes sur cinq fenêtres a pour plus petite
+p-valeur atteignable **2/2⁵ = 0,0625** : même en gagnant les cinq, il ne peut pas
+descendre sous 5 %. Le protocole est donc sans puissance par construction, et c'est un
+fait de forme — connaissable AVANT de regarder les données, que j'aurais dû établir le
+08/09 avant de prononcer un rejet sur six fenêtres.
+
+**Ce qui est livré pour trancher.** `packages/portfolio/duel_hors_echantillon.py` : détail
+fenêtre par fenêtre, duel apparié contre l'allocateur en place, test des signes, et
+surtout deux honnêtetés imprimées à l'écran — le **plancher de puissance** (avec n
+fenêtres, rien sous 2/2ⁿ) et le **recouvrement** (à 252/63, deux fenêtres consécutives
+partagent 75 % de leur période d'ajustement, donc la p-valeur est optimiste). Les options
+`--fenetre` et `--pas` permettent d'acheter de la puissance : `--pas 21` donne seize
+fenêtres au lieu de cinq.
+
+**Deux réserves à porter dans la suite.** Le Mean-CVaR sans plafond met **63,7 % sur une
+seule ligne** (AGG, un ETF obligataire) : la variante plafonnée à 25 % fait aussi bien
+(1,04 %) pour un rendement supérieur, c'est elle la candidate sérieuse. Et l'allocation
+gagnante est à **66 % en ETF obligataires** — il faudra vérifier qu'on mesure une qualité
+d'allocateur et non la performance des obligations sur cette fenêtre-là.
+
+**Conséquence de forme, corrigée aujourd'hui.** `/api/failures` affichait toutes les
+lignes `rejete` du ledger append-only : une hypothèse rejetée puis rouverte y serait
+restée un échec pour toujours. L'endpoint retient désormais le dernier mot par facteur ;
+l'historique complet reste dans le fichier.
+
 ## ADR-0097 — La prédiction falsifiable était juste : l'arrondi venait de la source (2026-09-09)
 
 **Contexte.** ADR-0096 basculait six séries vers Binance pour cause d'arrondi

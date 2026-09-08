@@ -174,7 +174,8 @@ def etape_anomalies(champs, symboles, etat_partage: dict | None = None) -> set[s
 
 def etape_cvar(champs, symboles, ecarter: set[str] | None = None,
                surveiller: set[str] | None = None,
-               classes: list[str] | None = None) -> None:
+               classes: list[str] | None = None,
+               fenetre: int = 252, pas: int = 63) -> None:
     _titre(3, "MEAN-CVaR contre les allocateurs actuels — sur rendements RÉELS",
            "propose une allocation, n'en applique aucune")
     from packages.portfolio.cvar_optimize import cvar_du_portefeuille, mean_cvar_detail
@@ -299,7 +300,7 @@ def etape_cvar(champs, symboles, ecarter: set[str] | None = None,
         if suspects:
             print(f"    ⚠ dont {', '.join(suspects)} — signalé(s) à l'étape 1 comme "
                   "possible(s) split(s) non ajusté(s), à vérifier avant d'y croire")
-    _hors_echantillon(r)
+    _hors_echantillon(r, fenetre, pas)
 
 
 def _allocateurs(r: np.ndarray) -> list[tuple[str, callable]]:
@@ -327,6 +328,47 @@ def _allocateurs(r: np.ndarray) -> list[tuple[str, callable]]:
     ]
 
 
+REFERENCE = "HRP"          # l'allocateur en place : c'est lui qu'il faut battre
+
+
+def _duels(detail: dict, fenetre: int, pas: int) -> None:
+    """Le duel apparié, fenêtre à fenêtre, contre l'allocateur en place.
+
+    Un écart de moyennes ne dit pas s'il est réel : cinq segments mis bout à bout
+    ressemblent à une longue série, ce sont cinq observations. On compte donc sur
+    combien de fenêtres chaque candidat bat HRP, et ce que vaut ce score au hasard.
+    """
+    from packages.portfolio.duel_hors_echantillon import (
+        duel,
+        p_minimale,
+        recouvrement_ajustement,
+    )
+    ref = detail.get(REFERENCE) or []
+    if not ref:
+        return
+    plancher = p_minimale(len(ref))
+    print(f"\n  DUEL APPARIÉ contre {REFERENCE}, fenêtre par fenêtre (CVaR)")
+    print(f"  {'allocation':24s} {'gagnées':>9s} {'p (signes)':>12s} "
+          f"{'écart médian':>14s}")
+    for nom, perf in detail.items():
+        if nom == REFERENCE or not perf:
+            continue
+        d = duel(perf, ref)
+        marque = "✓" if d["concluant"] else " "
+        print(f"  {nom:24s} {d['gagnees']:>4d}/{d['comparables']:<4d} "
+              f"{d['p']:>11.3f} {d['ecart_median']:>13.2%} {marque}")
+    print(f"\n  PLANCHER DE PUISSANCE : avec {len(ref)} fenêtres, la plus petite "
+          f"p-valeur atteignable est {plancher:.4f}")
+    if plancher > 0.05:
+        print("  — donc AUCUN résultat, si net soit-il, ne peut conclure à 5 % ici.")
+        print(f"  Il faut plus de fenêtres : relancer avec --pas {max(5, pas // 3)}.")
+    part = recouvrement_ajustement(fenetre, pas)
+    print(f"  Deux fenêtres consécutives partagent {part:.0%} de leur période "
+          "d'ajustement :")
+    print("  leurs poids se ressemblent, donc leurs résultats aussi. La p-valeur")
+    print("  ci-dessus est OPTIMISTE — elle minore le hasard.")
+
+
 def _hors_echantillon(r: np.ndarray, fenetre: int = 252, pas: int = 63) -> None:
     """LE test qui décide. Ajuster sur le passé, mesurer sur la SUITE.
 
@@ -351,14 +393,20 @@ def _hors_echantillon(r: np.ndarray, fenetre: int = 252, pas: int = 63) -> None:
         print(f"\n  (hors échantillon impossible : {r.shape[0]} dates, il en faut "
               f"{fenetre + pas} au minimum)")
         return
-    decoupes = list(range(fenetre, r.shape[0] - pas + 1, pas))
+    from packages.portfolio.duel_hors_echantillon import (
+        decoupes,
+        performance_par_fenetre,
+    )
+    n_fenetres = len(decoupes(r.shape[0], fenetre, pas))
     print(f"\n  HORS ÉCHANTILLON — ajusté sur {fenetre} jours, mesuré sur les {pas}")
-    print(f"  suivants, {len(decoupes)} fois de suite. C'est le seul test qui décide.")
+    print(f"  suivants, {n_fenetres} fois de suite. C'est le seul test qui décide.")
     print(f"\n  {'allocation':24s} {'CVaR 95%':>10s} {'pire jour':>10s} "
           f"{'rendement':>11s}")
+    detail = {}
     for nom, calculer in _allocateurs(r):
+        detail[nom] = performance_par_fenetre(r, calculer, fenetre, pas)
         morceaux = []
-        for t in decoupes:
+        for t in decoupes(r.shape[0], fenetre, pas):
             try:
                 w = np.asarray(calculer(r[t - fenetre:t]), float)
             except Exception:  # noqa: BLE001 — un allocateur en échec ne fausse pas
@@ -372,6 +420,7 @@ def _hors_echantillon(r: np.ndarray, fenetre: int = 252, pas: int = 63) -> None:
         print(f"  {nom:24s} "
               f"{cvar_du_portefeuille(suite[:, None], [1.0]):>9.2%} "
               f"{(-suite).max():>9.2%} {cumul:>10.1%}")
+    _duels(detail, fenetre, pas)
     print("\n  À LIRE : si l'avantage du Mean-CVaR disparaît ici, il était du")
     print("  surajustement. S'il tient, il est réel — et le rendement dit son coût.")
 
@@ -480,6 +529,11 @@ def main() -> int:
     ap.add_argument("--appliquer", action="store_true",
                     help="inscrit la campagne de signaux au VRAI registre")
     ap.add_argument("--jours", type=int, default=1500)
+    ap.add_argument("--fenetre", type=int, default=252,
+                    help="jours d'ajustement du test hors échantillon")
+    ap.add_argument("--pas", type=int, default=63,
+                    help="jours mesurés après chaque ajustement (plus petit = plus "
+                         "de fenêtres, donc plus de puissance)")
     args = ap.parse_args()
 
     champs, symboles, mode, classes = charger_panel(args.jours)
@@ -496,7 +550,8 @@ def main() -> int:
             ecarter=etape_anomalies(champs, symboles, etat) or set())),
         ("explicabilité", lambda: etape_explication(champs, symboles)),
         ("Mean-CVaR", lambda: etape_cvar(champs, symboles, etat.get("ecarter"),
-                                        etat.get("surveiller"), classes)),
+                                        etat.get("surveiller"), classes,
+                                        args.fenetre, args.pas)),
         ("générateur de signaux", lambda: etape_generateur(champs, args.appliquer)),
     ]
     echecs = []

@@ -904,6 +904,25 @@ explicite, module par module, avec mesure.
       d'observations de queue, que l'élargissement aggrave — mais **ce raisonnement n'est
       pas une mesure**. `make valider-nouveautes` refait la comparaison ET applique pour
       la première fois le seuil calibré à 24.
+      **FAIT LE 09/09 — et le verdict s'inverse (ADR-0098).** Le seuil tient sa promesse :
+      **45 actifs signalés sur 826, soit 5,4 % contre 5,5 % prédits**, zéro série cassée
+      (contre 5), une seule figée (contre 7). Mais hors échantillon, le Mean-CVaR
+      plafonné passe de DERNIER (2,91 % de CVaR, −5,1 %) à PREMIER (1,04 %, +9,7 %),
+      HRP restant stable (1,54 → 1,51 %). **Le rejet d'ADR-0087 est ANNULÉ** — sa mesure
+      portait sur cinq séries décrivant d'autres jetons. Ligne datée au registre,
+      `allocation_mean_cvar` repasse en `en_test`.
+- [ ] **P1 — Trancher le Mean-CVaR avec un protocole qui PEUT conclure** (09/09).
+      Le nouveau résultat ne valide rien : cinq fenêtres hors échantillon donnent une
+      p-valeur minimale de **2/2⁵ = 0,0625**. Même en gagnant les cinq, le test des
+      signes ne peut pas descendre sous 5 % — sans puissance par construction, un fait
+      de forme connaissable AVANT de regarder les données. Instrument livré
+      (`packages/portfolio/duel_hors_echantillon.py` : duel apparié, plancher de
+      puissance et recouvrement imprimés). **RESTE** : `make valider-nouveautes
+      ARGS="--pas 21"` (seize fenêtres au lieu de cinq), puis lire le duel apparié —
+      pas la moyenne. Deux réserves à porter : le Mean-CVaR sans plafond met 63,7 % sur
+      une seule ligne (AGG), et l'allocation gagnante est à 66 % en ETF obligataires —
+      vérifier qu'on mesure un allocateur et non la performance des obligations sur
+      cette fenêtre-là.
 - [ ] **P1 — Sortir de l'univers les séries PÉRIMÉES** (trouvé le 09/09) : une douzaine
       de séries s'arrêtent des années avant le reste du lot — MATIC en 2025-03 (migration
       POL), RNDR en 2024-07, FTM en 2025-01, IMX en 2022-07, GRT en 2022-04, GMX en

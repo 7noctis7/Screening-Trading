@@ -1,5 +1,50 @@
 # 04 — JOURNAL
 
+## Session 2026-09-09 (6ᵉ) — Le seuil tient sa promesse, et un verdict s'inverse
+
+**LE SEUIL CALIBRÉ TRANSFÈRE EXACTEMENT.** 45 actifs signalés sur 826, soit **5,4 %
+contre 5,5 % prédits** sur le panneau de calibration. Zéro série cassée (contre cinq),
+une seule figée (contre sept), 77 événements au lieu de 5632. La partie qualité de
+données est réglée.
+
+**ET LE REJET DU MEAN-CVaR TOMBE.** Hors échantillon, sur le panneau assaini :
+
+| | CVaR 95 % | rendement |
+|---|---|---|
+| 08/09, données non réparées : HRP | 1,54 % | +12,3 % |
+| 08/09 : Mean-CVaR | 2,91 % | −5,1 % |
+| **09/09, assaini : Mean-CVaR plafonné** | **1,04 %** | +9,7 % |
+| 09/09 : HRP | 1,51 % | +10,3 % |
+
+Là où il était dernier et seul en perte, il est premier sur le risque de queue à
+rendement quasi égal. HRP ne bouge presque pas. **Le rejet d'ADR-0087 est ANNULÉ, pas
+infirmé** : sa mesure portait sur cinq séries crypto décrivant d'AUTRES jetons. Elle ne
+prouvait pas ce qu'elle disait — et le nouveau chiffre ne prouve pas davantage le
+contraire. Ligne datée au registre, l'hypothèse repasse en `en_test`.
+
+**CAR LE NOUVEAU RÉSULTAT NE VALIDE RIEN NON PLUS, ET J'AURAIS DÛ LE SAVOIR AVANT.**
+Cinq fenêtres hors échantillon : la plus petite p-valeur atteignable par un test des
+signes vaut **2/2⁵ = 0,0625**. Même en gagnant les cinq, on ne descend pas sous 5 %. Le
+protocole est sans puissance PAR CONSTRUCTION — un fait de forme, calculable avant de
+regarder la moindre donnée, que j'aurais dû établir le 08/09 avant de prononcer un rejet
+sur six fenêtres.
+
+**LIVRÉ POUR TRANCHER.** `packages/portfolio/duel_hors_echantillon.py` : détail fenêtre
+par fenêtre, duel apparié contre l'allocateur en place, test des signes — et deux
+honnêtetés imprimées à l'écran, le plancher de puissance (rien sous 2/2ⁿ) et le
+recouvrement (à 252/63 deux fenêtres partagent 75 % de leur ajustement, donc la p-valeur
+est optimiste). Options `--fenetre` et `--pas` pour acheter de la puissance.
+
+**AUSSI.** `/api/failures` affichait toutes les lignes `rejete` d'un ledger append-only :
+une hypothèse rouverte y serait restée un échec pour toujours. L'endpoint retient
+désormais le dernier mot par facteur, l'historique reste au fichier.
+
+**PROCHAIN.** `make valider-nouveautes ARGS="--pas 21"` — seize fenêtres au lieu de cinq.
+Lire le duel apparié, pas la moyenne. Et porter deux réserves : le Mean-CVaR sans plafond
+met 63,7 % sur AGG, et l'allocation gagnante est à 66 % en ETF obligataires.
+
+ADR-0098.
+
 ## Session 2026-09-09 (5ᵉ) — La prédiction tenait, et la source crypto est propre
 
 **LA PRÉDICTION ÉCRITE D'AVANCE ÉTAIT JUSTE.** Hier je basculais six séries vers Binance

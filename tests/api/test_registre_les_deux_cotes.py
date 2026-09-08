@@ -39,7 +39,7 @@ def test_le_decompte_complet_est_publie() -> None:
 def test_items_ne_contient_que_des_rejets() -> None:
     """La page /echecs affiche `items` sans filtrer."""
     bloc = _bloc_failures()
-    assert 'rejected = [r for r in recs if r.get("statut") == "rejete"]' in bloc, (
+    assert 'if r.get("statut") == "rejete"' in bloc, (
         "La sélection des rejets a changé : vérifier que `items` ne peut pas "
         "contenir une idée retenue, que /echecs afficherait comme un échec."
     )
@@ -59,3 +59,51 @@ def test_le_registre_reel_porte_bien_plusieurs_statuts() -> None:
         f"Un seul statut dans le registre ({dict(statuts)}) : soit les idées retenues "
         "n'y sont plus inscrites, soit rien n'a été essayé depuis longtemps."
     )
+
+
+def _dernier_mot():
+    """Extrait la fonction sans importer fastapi, absent de cet environnement."""
+    debut = MAIN.index("def _dernier_mot")
+    espace: dict = {}
+    exec(MAIN[debut : MAIN.index("\n\n\n", debut)], espace)  # noqa: S102
+    return espace["_dernier_mot"]
+
+
+def test_une_hypothese_rouverte_ne_reste_pas_affichee_comme_rejetee() -> None:
+    """Le ledger est APPEND-ONLY : rouvrir une hypothèse s'y écrit en ajoutant une
+    ligne, jamais en corrigeant l'ancienne — c'est la trace qui fait sa valeur. Mais le
+    registre des négatifs montre un ÉTAT : sans dédoublonnage, une hypothèse rejetée
+    puis rouverte resterait affichée comme un échec pour toujours.
+
+    Cas réel du 09/09 : le rejet du Mean-CVaR reposait sur des séries de prix depuis
+    réparées, et la mesure d'origine ne vaut plus.
+    """
+    dernier_mot = _dernier_mot()
+    recs = [
+        {"facteur": "x", "date": "2026-09-01", "statut": "rejete"},
+        {"facteur": "x", "date": "2026-09-09", "statut": "en_test"},
+        {"facteur": "y", "date": "2026-09-02", "statut": "rejete"},
+    ]
+    etat = {r["facteur"]: r["statut"] for r in dernier_mot(recs)}
+    assert etat == {"x": "en_test", "y": "rejete"}, etat
+
+
+def test_le_dedoublonnage_ne_perd_pas_les_lignes_sans_facteur() -> None:
+    """Une ligne sans facteur ne prétend pas décrire un état : la jeter effacerait des
+    essais du décompte, donc fausserait le taux de réussite publié."""
+    dernier_mot = _dernier_mot()
+    recs = [{"statut": "rejete"}, {"statut": "rejete"},
+            {"facteur": "z", "date": "2026-01-01", "statut": "promu"}]
+    assert len(dernier_mot(recs)) == 3
+
+
+def test_le_registre_reel_ne_montre_plus_le_mean_cvar_comme_rejete() -> None:
+    """Contrôle sur les VRAIES données : le rejet du 08/09 a été annulé le 09/09 par
+    une ligne plus récente, parce que sa mesure portait sur des prix faux."""
+    from packages.research.ledger import read_records
+
+    dernier_mot = _dernier_mot()
+    etat = {r.get("facteur"): r.get("statut") for r in dernier_mot(read_records())
+            if r.get("facteur")}
+    statut = etat.get("allocation_mean_cvar")
+    assert statut == "en_test", statut
