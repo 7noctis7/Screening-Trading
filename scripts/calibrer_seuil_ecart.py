@@ -219,7 +219,7 @@ def main() -> None:
     a = ap.parse_args()
 
     from scripts.valider_nouveautes import charger_panel
-    champs, symboles, mode, classes = charger_panel(a.jours)
+    champs, symboles, mode, classes, _dates = charger_panel(a.jours)
     prix = champs["close"]
     print(f"\nPanneau RÉEL : {prix.shape[0]} dates × {prix.shape[1]} actifs "
           f"(source : {mode})")

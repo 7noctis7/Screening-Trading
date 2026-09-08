@@ -55,10 +55,6 @@ COUVERTURE_MIN = 0.90
 # Part d'actifs cotant un jour donné pour qu'on le tienne pour un JOUR DE BOURSE. Sous
 # ce seuil, seul le crypto cote : c'est un week-end ou un férié, pas une séance.
 PRESENCE_JOUR_MIN = 0.60
-# Plafond par ligne de la variante contrainte. Une allocation qui met la moitié du
-# capital sur un actif réduit peut-être la perte extrême MESURÉE, mais elle expose à ce
-# que la mesure n'a pas vu.
-PLAFOND_LIGNE = 0.25
 # Classes présentes en base mais qu'AUCUN courtier branché ne dessert. Les laisser dans
 # une comparaison d'allocateurs produit une allocation qu'on ne peut pas exécuter.
 NON_NEGOCIABLE = ("forex", "index", "commodity")
@@ -100,7 +96,11 @@ def charger_panel(jours: int = 1500):
                 for c in champs:
                     champs[c][i, j] = float(getattr(b, c))
     classes = {m["symbol"]: m.get("asset_class", "?") for m in instruments}
-    return champs, symboles, mode, [classes.get(x, "?") for x in symboles]
+    # Les DATES sortent aussi : sans elles, on ne peut pas dire sur QUELLE période le
+    # test hors échantillon a été mené — et une performance d'allocateur sans sa période
+    # ne veut rien dire. Un portefeuille obligataire brille de 2024 à 2026 et s'effondre
+    # en 2022 ; le chiffre est le même, la conclusion est l'inverse.
+    return champs, symboles, mode, [classes.get(x, "?") for x in symboles], dates
 
 
 def etape_anomalies(champs, symboles, etat_partage: dict | None = None) -> set[str]:
@@ -172,10 +172,17 @@ def etape_anomalies(champs, symboles, etat_partage: dict | None = None) -> set[s
     return ecarter
 
 
+from scripts.comparaison_allocateurs import (  # noqa: E402
+    PLAFOND_LIGNE,
+    _hors_echantillon,
+)
+
+
 def etape_cvar(champs, symboles, ecarter: set[str] | None = None,
                surveiller: set[str] | None = None,
                classes: list[str] | None = None,
-               fenetre: int = 252, pas: int = 63) -> None:
+               fenetre: int = 252, pas: int = 63,
+               dates: list | None = None) -> None:
     _titre(3, "MEAN-CVaR contre les allocateurs actuels — sur rendements RÉELS",
            "propose une allocation, n'en applique aucune")
     from packages.portfolio.cvar_optimize import cvar_du_portefeuille, mean_cvar_detail
@@ -245,6 +252,14 @@ def etape_cvar(champs, symboles, ecarter: set[str] | None = None,
     sous = r_jours[:, gardes]
     dates_pleines = np.isfinite(sous).all(axis=1)
     sous = sous[dates_pleines]
+    # Les dates suivent EXACTEMENT les deux mêmes filtres que les rendements : le
+    # premier jour saute (une différence en consomme un), puis les jours de bourse,
+    # puis les dates pleines. Un décalage d'un cran ici ferait afficher une période
+    # fausse sous des chiffres justes — l'erreur la plus difficile à voir.
+    dates_utiles = None
+    if dates is not None and len(dates) == c.shape[0]:
+        suite = np.array(dates[1:], dtype=object)[jours_bourse]
+        dates_utiles = list(suite[dates_pleines])
     noms = [s for s, ok in zip(symboles, gardes, strict=True) if ok]
     if sous.shape[0] < 250:
         print(f"  ⛔ {sous.shape[0]} dates communes seulement : trop peu pour comparer")
@@ -300,129 +315,7 @@ def etape_cvar(champs, symboles, ecarter: set[str] | None = None,
         if suspects:
             print(f"    ⚠ dont {', '.join(suspects)} — signalé(s) à l'étape 1 comme "
                   "possible(s) split(s) non ajusté(s), à vérifier avant d'y croire")
-    _hors_echantillon(r, fenetre, pas)
-
-
-def _allocateurs(r: np.ndarray) -> list[tuple[str, callable]]:
-    """Les allocateurs comparés, sous forme de FONCTIONS d'un historique.
-
-    Sous forme de fonctions et non de poids figés : le test hors échantillon doit
-    pouvoir les réajuster sur chaque fenêtre passée, ce qu'une liste de poids calculée
-    une fois pour toutes interdit.
-    """
-    from packages.portfolio.cvar_optimize import mean_cvar_weights
-    from packages.portfolio.optimize import (
-        equal_risk_contribution,
-        hrp_weights,
-        min_variance_weights,
-    )
-    return [
-        ("Mean-CVaR (nouveau)", lambda h: mean_cvar_weights(h, alpha=0.95)),
-        (f"Mean-CVaR plafonné {PLAFOND_LIGNE:.0%}",
-         lambda h: mean_cvar_weights(h, alpha=0.95, plafond=PLAFOND_LIGNE)),
-        ("min-variance", lambda h: min_variance_weights(np.cov(h, rowvar=False))),
-        ("risk parity (ERC)",
-         lambda h: equal_risk_contribution(np.cov(h, rowvar=False))),
-        ("HRP", lambda h: hrp_weights(np.cov(h, rowvar=False))),
-        ("équipondéré", lambda h: [1.0 / h.shape[1]] * h.shape[1]),
-    ]
-
-
-REFERENCE = "HRP"          # l'allocateur en place : c'est lui qu'il faut battre
-
-
-def _duels(detail: dict, fenetre: int, pas: int) -> None:
-    """Le duel apparié, fenêtre à fenêtre, contre l'allocateur en place.
-
-    Un écart de moyennes ne dit pas s'il est réel : cinq segments mis bout à bout
-    ressemblent à une longue série, ce sont cinq observations. On compte donc sur
-    combien de fenêtres chaque candidat bat HRP, et ce que vaut ce score au hasard.
-    """
-    from packages.portfolio.duel_hors_echantillon import (
-        duel,
-        p_minimale,
-        recouvrement_ajustement,
-    )
-    ref = detail.get(REFERENCE) or []
-    if not ref:
-        return
-    plancher = p_minimale(len(ref))
-    print(f"\n  DUEL APPARIÉ contre {REFERENCE}, fenêtre par fenêtre (CVaR)")
-    print(f"  {'allocation':24s} {'gagnées':>9s} {'p (signes)':>12s} "
-          f"{'écart médian':>14s}")
-    for nom, perf in detail.items():
-        if nom == REFERENCE or not perf:
-            continue
-        d = duel(perf, ref)
-        marque = "✓" if d["concluant"] else " "
-        print(f"  {nom:24s} {d['gagnees']:>4d}/{d['comparables']:<4d} "
-              f"{d['p']:>11.3f} {d['ecart_median']:>13.2%} {marque}")
-    print(f"\n  PLANCHER DE PUISSANCE : avec {len(ref)} fenêtres, la plus petite "
-          f"p-valeur atteignable est {plancher:.4f}")
-    if plancher > 0.05:
-        print("  — donc AUCUN résultat, si net soit-il, ne peut conclure à 5 % ici.")
-        print(f"  Il faut plus de fenêtres : relancer avec --pas {max(5, pas // 3)}.")
-    part = recouvrement_ajustement(fenetre, pas)
-    print(f"  Deux fenêtres consécutives partagent {part:.0%} de leur période "
-          "d'ajustement :")
-    print("  leurs poids se ressemblent, donc leurs résultats aussi. La p-valeur")
-    print("  ci-dessus est OPTIMISTE — elle minore le hasard.")
-
-
-def _hors_echantillon(r: np.ndarray, fenetre: int = 252, pas: int = 63) -> None:
-    """LE test qui décide. Ajuster sur le passé, mesurer sur la SUITE.
-
-    Tout ce qui précède est mesuré EN ÉCHANTILLON : chaque allocateur est ajusté sur les
-    mêmes jours que ceux qui servent à le noter. Mean-CVaR minimise exactement le nombre
-    qu'on rapporte — il ne PEUT PAS perdre ce concours, c'est sa fonction objectif. Et
-    min-variance perd sur le CVaR par construction, pas par infériorité. « 0,58 % contre
-    1,65 % » ne prouve donc rien d'autre que « l'optimiseur a bien optimisé ce qu'on lui
-    a demandé ».
-
-    Ici, les poids sont calculés sur une fenêtre passée puis appliqués à la fenêtre
-    SUIVANTE, jamais vue. Les segments hors échantillon sont mis bout à bout et notés
-    ensemble. Un avantage qui survit à ça est réel ; un avantage qui s'évapore était du
-    surajustement — et les deux se ressemblent parfaitement en échantillon.
-
-    Le RENDEMENT est publié à côté du risque. Un allocateur qui divise la perte extrême
-    par trois en divisant aussi le rendement par trois n'a rien amélioré : il a
-    simplement moins investi.
-    """
-    from packages.portfolio.cvar_optimize import cvar_du_portefeuille
-    if r.shape[0] < fenetre + pas:
-        print(f"\n  (hors échantillon impossible : {r.shape[0]} dates, il en faut "
-              f"{fenetre + pas} au minimum)")
-        return
-    from packages.portfolio.duel_hors_echantillon import (
-        decoupes,
-        performance_par_fenetre,
-    )
-    n_fenetres = len(decoupes(r.shape[0], fenetre, pas))
-    print(f"\n  HORS ÉCHANTILLON — ajusté sur {fenetre} jours, mesuré sur les {pas}")
-    print(f"  suivants, {n_fenetres} fois de suite. C'est le seul test qui décide.")
-    print(f"\n  {'allocation':24s} {'CVaR 95%':>10s} {'pire jour':>10s} "
-          f"{'rendement':>11s}")
-    detail = {}
-    for nom, calculer in _allocateurs(r):
-        detail[nom] = performance_par_fenetre(r, calculer, fenetre, pas)
-        morceaux = []
-        for t in decoupes(r.shape[0], fenetre, pas):
-            try:
-                w = np.asarray(calculer(r[t - fenetre:t]), float)
-            except Exception:  # noqa: BLE001 — un allocateur en échec ne fausse pas
-                continue        # les autres ; il sera simplement absent du décompte
-            morceaux.append(r[t:t + pas] @ w)
-        if not morceaux:
-            print(f"  {nom:24s} {'—':>10s} {'—':>10s} {'—':>11s}")
-            continue
-        suite = np.concatenate(morceaux)
-        cumul = float(np.prod(1.0 + suite) - 1.0)
-        print(f"  {nom:24s} "
-              f"{cvar_du_portefeuille(suite[:, None], [1.0]):>9.2%} "
-              f"{(-suite).max():>9.2%} {cumul:>10.1%}")
-    _duels(detail, fenetre, pas)
-    print("\n  À LIRE : si l'avantage du Mean-CVaR disparaît ici, il était du")
-    print("  surajustement. S'il tient, il est réel — et le rendement dit son coût.")
+    _hors_echantillon(r, fenetre, pas, dates_utiles)
 
 
 def _repartition_par_classe(lignes, classes: list[str]) -> None:
@@ -536,7 +429,7 @@ def main() -> int:
                          "de fenêtres, donc plus de puissance)")
     args = ap.parse_args()
 
-    champs, symboles, mode, classes = charger_panel(args.jours)
+    champs, symboles, mode, classes, dates = charger_panel(args.jours)
     print(f"\nPanneau réel chargé : {len(symboles)} actifs · mode « {mode} »")
 
     # CHAQUE ÉTAPE EST ISOLÉE. Le premier lancement sur le VPS (08/09) s'est arrêté à
@@ -551,7 +444,7 @@ def main() -> int:
         ("explicabilité", lambda: etape_explication(champs, symboles)),
         ("Mean-CVaR", lambda: etape_cvar(champs, symboles, etat.get("ecarter"),
                                         etat.get("surveiller"), classes,
-                                        args.fenetre, args.pas)),
+                                        args.fenetre, args.pas, dates)),
         ("générateur de signaux", lambda: etape_generateur(champs, args.appliquer)),
     ]
     echecs = []

@@ -923,6 +923,29 @@ explicite, module par module, avec mesure.
       une seule ligne (AGG), et l'allocation gagnante est à 66 % en ETF obligataires —
       vérifier qu'on mesure un allocateur et non la performance des obligations sur
       cette fenêtre-là.
+      **RUN À 16 FENÊTRES FAIT LE 09/09 (ADR-0099)** : le Mean-CVaR bat HRP **15 fois
+      sur 16** (p = 0,001, écart médian −0,39 %), min-variance 2/16, ERC et équipondéré
+      0/16. Le protocole peut conclure. Deux défauts d'affichage corrigés — une coche
+      « concluant » s'affichait aussi sur les PERDANTS (le test des signes est
+      bilatéral), et le plancher de puissance non nul s'imprimait « 0.0000 ».
+      **MAIS LA LIMITE A CHANGÉ DE NATURE** : à `--pas 21` le recouvrement des périodes
+      d'ajustement monte à **92 %**. Le test reste valide comme comparaison de deux
+      PORTEFEUILLES sur seize périodes disjointes, faible comme comparaison de deux
+      MÉTHODES. Avec 601 dates communes, un test à fenêtres d'ajustement disjointes n'en
+      donnerait qu'une : **on ne peut pas acheter de l'indépendance qu'on n'a pas.**
+- [ ] **P1 — Allonger l'historique commun avant de conclure sur un allocateur** (09/09).
+      601 dates communes sur 802 jours de bourse : la grille exige que **tous** les 734
+      actifs cotent le même jour, ce qui coûte un quart des séances et borne le test hors
+      échantillon à ~1,7 an. Deux pistes, à mesurer avant de choisir : assouplir
+      l'intersection (masquer par date plutôt qu'exiger la ligne pleine), ou allonger la
+      profondeur d'ingestion. C'est cette contrainte, pas le réglage `--pas`, qui empêche
+      aujourd'hui de trancher sur une MÉTHODE d'allocation.
+- [ ] **P1 — Confronter l'allocation gagnante à un régime défavorable aux obligations.**
+      Elle est à 63 % en ETF obligataires (AGG, IEF, HYG) et un duel sur le CVaR
+      récompense mécaniquement qui détient la classe la moins volatile. La période
+      réellement mesurée est désormais imprimée par le script : vérifier qu'elle contient
+      un épisode de hausse des taux, sinon le résultat dit « ce portefeuille a bien
+      traversé CES mois-là », pas « cette méthode est meilleure ».
 - [ ] **P1 — Sortir de l'univers les séries PÉRIMÉES** (trouvé le 09/09) : une douzaine
       de séries s'arrêtent des années avant le reste du lot — MATIC en 2025-03 (migration
       POL), RNDR en 2024-07, FTM en 2025-01, IMX en 2022-07, GRT en 2022-04, GMX en

@@ -2,6 +2,65 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0099 — Le duel conclut, mon affichage mentait, et la vraie limite est ailleurs (2026-09-09)
+
+**Le résultat.** Seize fenêtres, duel apparié contre HRP sur le CVaR :
+
+| allocation | gagnées | p (signes) | écart médian |
+|---|---|---|---|
+| Mean-CVaR | 15/16 | 0,001 | −0,39 % |
+| Mean-CVaR plafonné 25 % | 15/16 | 0,001 | −0,37 % |
+| min-variance | 2/16 | 0,004 | +0,37 % |
+| ERC / équipondéré | 0/16 | <0,0001 | +0,76 % |
+
+Ce n'est plus une moyenne : le Mean-CVaR bat HRP fenêtre par fenêtre, quinze fois sur
+seize. Le protocole peut désormais conclure (plancher de puissance à 3,05·10⁻⁵).
+
+**DEUX DÉFAUTS DE MON AFFICHAGE, corrigés.**
+
+1. *Une coche à côté d'un perdant.* Le « ✓ » marquait `concluant`, c'est-à-dire « le test
+   des signes a tranché » — donc aussi pour l'équipondéré, battu **0 fois sur 16**. Le
+   test des signes est bilatéral : il dit qu'il y a un écart, jamais dans quel sens. Trois
+   lignes sur cinq portaient une coche qui se lit comme une validation alors qu'elles
+   décrivaient une défaite. Le sens vient du décompte, pas de la p-valeur : la colonne
+   affiche maintenant « mieux » ou « pire ».
+2. *Un zéro qui n'existe pas.* Le plancher de puissance à seize fenêtres vaut
+   3,05·10⁻⁵ ; arrondi à quatre décimales il s'imprimait « 0.0000 ». Dans un projet dont
+   toute la discipline est de ne jamais publier un chiffre qu'on n'a pas, un zéro fabriqué
+   par un format est exactement ce qu'il ne faut pas laisser passer. Sous 10⁻⁴, on écrit
+   « <0.0001 ».
+
+**LA VRAIE LIMITE N'EST NI LA PUISSANCE NI L'AFFICHAGE : C'EST LA LONGUEUR DES DONNÉES.**
+Passer de `--pas 63` à `--pas 21` a fait monter les fenêtres de 5 à 16 — et le
+recouvrement des périodes d'ajustement de 75 % à **92 %**. Deux fenêtres consécutives
+ajustent sur presque la même histoire, donc produisent presque les mêmes poids. Le test
+reste valide comme comparaison de DEUX PORTEFEUILLES sur seize périodes disjointes ; il
+est faible comme comparaison de deux MÉTHODES, parce que la méthode n'a été
+réellement exercée que deux ou trois fois indépendamment. Avec 601 dates communes, un
+test à fenêtres d'ajustement disjointes n'en donnerait qu'UNE seule. **On ne peut pas
+acheter de l'indépendance qu'on n'a pas** : la contrainte est la longueur de
+l'historique commun, pas le réglage.
+
+**Ce que le script dit maintenant de lui-même.** La période réellement mesurée est
+imprimée avec le tableau — dates de début et de fin des fenêtres hors échantillon. Sans
+elle, on ne peut pas juger : une poche obligataire brille sur certaines années et
+s'effondre sur d'autres, le chiffre est le même et la conclusion inverse. Un test
+d'alignement à un jour près garde ce calcul, parce qu'un décalage d'un cran afficherait
+une période fausse sous des chiffres justes — l'erreur la plus difficile à voir.
+
+**LA RÉSERVE QUI RESTE ENTIÈRE.** L'allocation gagnante est à **63 % en ETF obligataires**
+(AGG, IEF, HYG). Un duel sur le CVaR récompense mécaniquement qui détient la classe la
+moins volatile ; il ne mesure pas la qualité d'un allocateur mais son exposition. Le duel
+sur le RENDEMENT est publié à côté pour cette raison. Tant que la période mesurée n'aura
+pas été confrontée à un régime défavorable aux obligations, ce résultat dit « ce
+portefeuille a bien traversé CES mois-là », pas « cette méthode est meilleure ».
+
+**Conséquence de forme.** `scripts/valider_nouveautes.py` passait de 527 à 629 lignes,
+loin des 400 que s'impose le projet. La comparaison d'allocateurs part dans
+`scripts/comparaison_allocateurs.py` (476 + 175). `PLAFOND_LIGNE` n'y est plus défini
+qu'une fois : deux constantes jumelles qui divergent feraient comparer deux allocateurs
+différents sous le même nom, en échantillon et hors échantillon, sans que rien ne le dise.
+
 ## ADR-0098 — Le rejet du Mean-CVaR est ANNULÉ : il portait sur des prix faux (2026-09-09)
 
 **Ce qui s'est passé.** `make valider-nouveautes` sur l'univers assaini. Le seuil calibré

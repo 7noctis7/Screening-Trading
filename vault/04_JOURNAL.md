@@ -1,5 +1,45 @@
 # 04 — JOURNAL
 
+## Session 2026-09-09 (7ᵉ) — Le duel conclut, mon affichage mentait
+
+**LE RÉSULTAT.** Seize fenêtres : le Mean-CVaR bat HRP **15 fois sur 16** (p = 0,001,
+écart médian −0,39 % de CVaR), les deux variantes. min-variance 2/16, ERC et équipondéré
+0/16. Le protocole peut enfin conclure — plancher de puissance à 3,05·10⁻⁵.
+
+**DEUX DÉFAUTS DE MON AFFICHAGE.** Le « ✓ » marquait `concluant`, donc s'affichait aussi
+sur l'équipondéré battu **0 fois sur 16** : le test des signes est bilatéral, il dit
+qu'il y a un écart, jamais dans quel sens. Trois lignes sur cinq portaient une coche qui
+se lisait comme une validation en décrivant une défaite. La colonne dit maintenant
+« mieux » ou « pire ». Et le plancher de puissance, qui vaut 3,05·10⁻⁵, s'imprimait
+« 0.0000 » — un zéro fabriqué par un format, dans un projet dont la discipline est de ne
+jamais publier un chiffre qu'on n'a pas.
+
+**LA VRAIE LIMITE A CHANGÉ DE NATURE.** Passer de `--pas 63` à `--pas 21` a monté les
+fenêtres de 5 à 16 — et le recouvrement des périodes d'ajustement de 75 % à **92 %**.
+Deux fenêtres consécutives ajustent sur presque la même histoire, donc produisent presque
+les mêmes poids. Le test reste valide comme comparaison de deux PORTEFEUILLES sur seize
+périodes disjointes ; il est faible comme comparaison de deux MÉTHODES. Avec 601 dates
+communes, un test à fenêtres d'ajustement disjointes n'en donnerait qu'UNE. **On ne peut
+pas acheter de l'indépendance qu'on n'a pas** : la contrainte est la longueur de
+l'historique commun, pas le réglage.
+
+**AJOUTÉ.** La période réellement mesurée s'imprime avec le tableau, avec un test
+d'alignement à un jour près — un décalage d'un cran afficherait une période fausse sous
+des chiffres justes, l'erreur la plus difficile à voir.
+
+**LA RÉSERVE RESTE ENTIÈRE.** L'allocation gagnante est à 63 % en ETF obligataires. Un
+duel sur le CVaR récompense mécaniquement qui détient la classe la moins volatile.
+
+**RANGEMENT.** `valider_nouveautes.py` était monté à 629 lignes ; la comparaison
+d'allocateurs part dans `scripts/comparaison_allocateurs.py`. `PLAFOND_LIGNE` n'a plus
+qu'une définition.
+
+**PROCHAIN.** Lire la période imprimée par le prochain run : contient-elle un épisode de
+hausse des taux ? Et allonger l'historique commun (601 dates sur 802 jours de bourse,
+parce que la grille exige que les 734 actifs cotent le même jour).
+
+ADR-0099. Tests : 2319 passés.
+
 ## Session 2026-09-09 (6ᵉ) — Le seuil tient sa promesse, et un verdict s'inverse
 
 **LE SEUIL CALIBRÉ TRANSFÈRE EXACTEMENT.** 45 actifs signalés sur 826, soit **5,4 %

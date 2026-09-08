@@ -96,8 +96,10 @@ def test_une_etape_en_echec_n_emporte_pas_les_suivantes(monkeypatch, capsys) -> 
     champs = {c: close.copy() for c in ("open", "high", "low", "close", "volume")}
 
     noms = [f"A{i}" for i in range(n)]
-    monkeypatch.setattr(valider, "charger_panel",
-                        lambda jours=1500: (champs, noms, "réel", ["equity"] * n))
+    from datetime import date, timedelta
+    dates = [date(2024, 1, 1) + timedelta(days=i) for i in range(t)]
+    panneau_stub = (champs, noms, "réel", ["equity"] * n, dates)
+    monkeypatch.setattr(valider, "charger_panel", lambda jours=1500: panneau_stub)
 
     def _explose(*a, **k):
         raise ModuleNotFoundError("No module named 'sklearn'", name="sklearn")
@@ -391,4 +393,68 @@ def test_un_allocateur_en_echec_n_emporte_pas_les_autres(capsys, monkeypatch) ->
     assert "HORS ÉCHANTILLON" in sortie
     assert "Mean-CVaR (nouveau)" in sortie.split("HORS ÉCHANTILLON")[1], (
         "un allocateur en échec a emporté les autres"
+    )
+
+
+def test_le_panneau_rend_aussi_ses_dates() -> None:
+    """Sans les dates, on ne peut pas dire sur QUELLE période le test hors échantillon
+    a porté — et une performance d'allocateur sans sa période ne veut rien dire : une
+    poche obligataire brille de 2024 à 2026 et s'effondre en 2022, le chiffre est le
+    même et la conclusion inverse. Le contrat est vérifié ici parce que trois appelants
+    en dépendent et qu'un dépaquetage muet casserait tout le script."""
+    import inspect
+
+    source = inspect.getsource(valider.charger_panel)
+    assert "return champs, symboles, mode," in source and "dates" in source.split(
+        "return champs, symboles, mode,")[1].split("\n")[0], source[-300:]
+
+
+def test_la_periode_hors_echantillon_affichee_est_la_bonne(capsys) -> None:
+    """Un décalage d'un cran afficherait une PÉRIODE FAUSSE sous des chiffres justes —
+    l'erreur la plus difficile à voir, parce que rien n'a l'air anormal.
+
+    Les dates subissent exactement les mêmes filtres que les rendements : le premier
+    jour saute (une différence en consomme un), puis les jours de bourse, puis les dates
+    pleines. Le test reconstruit l'attendu à la main et le compare à l'affichage.
+    """
+    from datetime import date, timedelta
+
+    g = np.random.default_rng(7)
+    t, n = 400, 8
+    close = 100.0 * np.exp(np.cumsum(g.normal(0, 0.015, (t, n)), axis=0))
+    champs = {c: close.copy() for c in ("open", "high", "low", "close", "volume")}
+    dates = [date(2024, 1, 1) + timedelta(days=i) for i in range(t)]
+
+    valider.etape_cvar(champs, [f"A{i}" for i in range(n)], fenetre=252, pas=21,
+                       dates=dates)
+    sortie = capsys.readouterr().out
+
+    # r perd le premier jour : la ligne i des rendements porte la date dates[i + 1].
+    debut = dates[1 + 252]
+    assert f"{debut}" in sortie, (
+        f"période attendue à partir de {debut}, absente de :\n{sortie[-800:]}")
+    assert "Période RÉELLEMENT mesurée" in sortie
+
+
+def test_sans_dates_le_test_hors_echantillon_n_invente_pas_de_periode(capsys) -> None:
+    """Contrôle négatif : appelé sans dates — le cas de plusieurs tests et de tout
+    appelant tiers — le script se tait plutôt que d'afficher une période fausse."""
+    g = np.random.default_rng(8)
+    close = 100.0 * np.exp(np.cumsum(g.normal(0, 0.015, (400, 8)), axis=0))
+    champs = {c: close.copy() for c in ("open", "high", "low", "close", "volume")}
+
+    valider.etape_cvar(champs, [f"A{i}" for i in range(8)], fenetre=252, pas=21)
+    assert "Période RÉELLEMENT mesurée" not in capsys.readouterr().out
+
+
+def test_le_plafond_par_ligne_a_une_seule_definition() -> None:
+    """Le tableau EN échantillon et le tableau HORS échantillon doivent plafonner au
+    même niveau. Deux constantes jumelles qui divergent feraient comparer deux
+    allocateurs différents sous le même nom, sans que rien ne le signale."""
+    from scripts import comparaison_allocateurs
+
+    assert valider.PLAFOND_LIGNE is comparaison_allocateurs.PLAFOND_LIGNE
+    fichier = (RACINE / "scripts" / "valider_nouveautes.py").read_text(encoding="utf-8")
+    assert "PLAFOND_LIGNE = " not in fichier, (
+        "le plafond est redéfini dans le script au lieu d'être importé"
     )
