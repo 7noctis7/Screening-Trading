@@ -2,6 +2,46 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0087 — Mean-CVaR : REJETÉ par la mesure hors échantillon (2026-09-08)
+
+**Verdict.** Le Mean-CVaR (ADR-0080) n'est PAS mis en production. Il est inscrit au registre
+des négatifs (`allocation_mean_cvar`, visible sur `/echecs`).
+
+**La mesure.** Six réajustements glissants — 252 jours d'ajustement, 63 jours de mesure sur
+des données jamais vues — univers négociable (693 actifs), séries cassées et figées écartées :
+
+| allocateur          | CVaR dedans | CVaR dehors | rendement |
+|---------------------|------------:|------------:|----------:|
+| HRP                 |      1,46 % |  **1,54 %** | **+12,3 %** |
+| min-variance        |      1,65 % |      1,96 % |   +10,9 % |
+| risk parity (ERC)   |      2,32 % |      2,42 % |   +12,0 % |
+| équipondéré         |      2,32 % |      2,42 % |   +12,0 % |
+| Mean-CVaR plafonné  |      0,62 % |      2,54 % |    −2,4 % |
+| Mean-CVaR           |  **0,58 %** |  **2,91 %** | **−5,1 %** |
+
+Le classement s'INVERSE complètement. Premier en échantillon, dernier hors échantillon — et
+seul allocateur à rendement négatif quand tous les autres font +11 à +12 %. Il ne bat même pas
+l'équipondéré, qui ne demande aucun calcul.
+
+**La cause, et elle était prévisible.** Le CVaR à 95 % sur 252 jours est estimé sur **treize
+observations de queue**. Ajuster 693 poids contre treize points, c'est optimiser du bruit.
+min-variance exploite les 252 jours entiers ; HRP la structure de corrélation : tous deux
+estiment des quantités infiniment mieux échantillonnées. Le programme linéaire était juste — il
+touche l'optimum à 7,8e-08 — mais l'optimum d'une quantité mal estimée n'a aucune valeur.
+
+**Ce que ça confirme, plus largement.** Le cas piège synthétique du 07/09 (min-variance 33,5 %
+contre Mean-CVaR 14,85 % sur un actif à krachs) était juste ET sans portée : il opposait deux
+actifs dont la vraie distribution était connue par construction. Sur des données réelles, ce
+qu'on estime compte plus que ce qu'on optimise.
+
+**Ce qui est confirmé au passage : HRP tient.** Meilleur des six hors échantillon, sur le
+risque ET le rendement, avec la plus faible dégradation dedans → dehors (1,46 % → 1,54 %).
+L'allocateur déjà présent dans le projet est le bon.
+
+**Le module reste dans le dépôt**, testé et documenté. Un négatif mesuré vaut d'être gardé : il
+évite de refaire l'essai, et `cvar_du_portefeuille` sert de métrique de comparaison même quand
+l'optimiseur n'est pas utilisé.
+
 ## ADR-0086 — Comparer deux optimiseurs en échantillon est circulaire (2026-09-08)
 
 **Contexte.** Cinquième lancement, le premier honnête : univers négociable (693 actifs,

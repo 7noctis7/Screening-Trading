@@ -829,12 +829,27 @@ explicite, module par module, avec mesure.
       sur l'ESTIMATEUR (`SklearnModel.GRAINE`), jamais par `np.random.seed()`. Trois
       exécutions de `demo_ml.py` désormais identiques au caractère près.
       Garde-fou : `tests/ml/test_determinisme.py`.
-- [ ] **P1 — À VALIDER SUR DONNÉES RÉELLES avant toute mise en production** (rendez-vous
-      du 08/09) : `cvar_optimize` (ADR-0080), `generateur_signaux` (ADR-0081),
-      `ml/explication` et `storage/anomalies_panel` (ADR-0082). Aucun n'est branché.
-      Ordre proposé : anomalies (lecture seule, aucun risque) → explicabilité (idem) →
-      Mean-CVaR (compare CVaR et drawdown réalisés vs l'allocation actuelle) →
-      générateur (vérifier d'abord que le compte d'essais du registre réel monte).
+- [x] **P1 — VALIDÉ SUR DONNÉES RÉELLES (2026-09-08, six lancements)** — verdicts :
+      · `cvar_optimize` : **REJETÉ** hors échantillon (ADR-0087). Premier en échantillon,
+        DERNIER hors échantillon, seul à rendement négatif (−5,1 % contre +12,3 % pour HRP).
+        Cause : le CVaR 95 % sur 252 jours s'estime sur ~13 points de queue. Inscrit au
+        registre des négatifs. HRP reste le meilleur allocateur du projet.
+      · `generateur_signaux` : **VALIDÉ**. 96 candidats → 24 essais distincts → 13 retenus
+        par le seuil du blueprint NVIDIA → **0 promu** après Benjamini-Hochberg. Le registre
+        ne se remplit pas de bruit.
+      · `anomalies_panel` : **VALIDÉ**. 5 séries cassées et 7 figées trouvées, toutes des
+        paires `/USDC`. Actionnable immédiatement.
+      · `ml/explication` : **VALIDÉ** mécaniquement (mesuré EN échantillon : dit ce que le
+        modèle utilise, pas ce qui généralise).
+- [ ] **P1 — Réparer la source des paires `/USDC`** (trouvé le 08/09) : UNI, ARB, OP, STX,
+      TON avec des sauts jusqu'à +1 573 987 % (prix de la veille faux, proche de zéro) ;
+      SHIB figé 675 séances sur 1499, ARB 595. Écarter de l'univers tant que ce n'est pas
+      réparé — ces séries faussent tout optimiseur de risque.
+- [ ] **P2 — Recalibrer `SEUIL_ECART`** : 430 actifs sur 774 signalés, soit 0,49 % des
+      observations à 8 écarts robustes. Les queues épaisses des marchés, pas des anomalies.
+      Seules les catégories A (cassées) et C (figées) sont exploitables ; le titre
+      « 5632 mouvements incohérents » est alarmiste et devrait ne compter que celles-là.
+- [ ] ~~**P1 — ancien libellé : à valider sur données réelles**~~
 - [ ] ~~**P2 — ancien libellé : `scripts/demo_ml.py` n'est pas déterministe.**~~ Constaté le 07/09 en cherchant à
       prouver une non-régression : deux exécutions de la MÊME version donnent des accuracies
       différentes (`GradientBoostingClassifier` sans `random_state`). Un banc dont deux runs
