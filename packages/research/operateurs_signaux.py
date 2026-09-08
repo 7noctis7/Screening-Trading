@@ -49,13 +49,25 @@ def _fenetres_glissantes(x: np.ndarray, w: int) -> np.ndarray:
     return np.lib.stride_tricks.sliding_window_view(x, w, axis=0)
 
 
+# Nombre d'actifs traités d'un bloc. La vue glissante d'un panneau (T × N) sur une
+# fenêtre w pèse (T−w+1) × N × w valeurs : sur 1499 dates, 774 actifs et 126 jours, cela
+# fait 1,07 Go — et les réductions qui ignorent les NaN y ajoutent leur masque. Le
+# processus a été TUÉ par le système au premier lancement réel (VPS, 08/09), après avoir
+# passé les trois étapes précédentes. Découper borne le pic à ~100 Mo quel que soit le
+# nombre d'actifs, pour un coût de calcul identique : c'est la même arithmétique, faite
+# en plusieurs fois.
+BLOC_ACTIFS = 64
+
+
 def _applique(x: np.ndarray, w: int, fn) -> np.ndarray:
-    """Applique `fn` sur chaque fenêtre pleine, NaN avant."""
+    """Applique `fn` sur chaque fenêtre pleine, NaN avant. Mémoire bornée."""
     x = np.asarray(x, float)
     if w < 2 or x.shape[0] < w:
         return _vide_comme(x)
     out = _vide_comme(x)
-    out[w - 1:] = fn(_fenetres_glissantes(x, w))
+    for debut in range(0, x.shape[1], BLOC_ACTIFS):
+        bloc = x[:, debut:debut + BLOC_ACTIFS]
+        out[w - 1:, debut:debut + BLOC_ACTIFS] = fn(_fenetres_glissantes(bloc, w))
     return out
 
 

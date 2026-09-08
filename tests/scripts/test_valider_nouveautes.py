@@ -126,3 +126,85 @@ def test_une_serie_figee_annonce_sa_vraie_duree() -> None:
         f"durée annoncée {trouve[0]['jours']} pour 60 séances figées : le chiffre "
         "minimise le problème."
     )
+
+
+def test_l_etape_cvar_survit_a_des_calendriers_differents(capsys) -> None:
+    """Actions et crypto ne cotent pas les mêmes jours. Exiger un historique fini sur
+    TOUTES les dates rend la grille commune vide par construction : mesuré sur le VPS,
+    « moins de 5 actifs » et l'étape ne mesurait rien.
+
+    Ici CHAQUE actif a des trous, à des dates décalées — la situation réelle d'un
+    univers mêlant places et fuseaux. L'ancien filtre n'aurait retenu AUCUN actif ;
+    c'est ce qui rend ce test capable d'échouer."""
+    g = np.random.default_rng(4)
+    t, n = 900, 12
+    close = 100.0 * np.exp(np.cumsum(g.normal(0, 0.015, (t, n)), axis=0))
+    for j in range(n):
+        close[j + 5 :: 40, j] = np.nan      # trous décalés, ~2,5 % des séances
+    assert not np.isfinite(np.diff(close, axis=0)).all(axis=0).any(), (
+        "le scénario doit être tel qu'AUCUN actif n'a d'historique parfait, sinon "
+        "l'ancien filtre s'en sortirait et le test ne prouverait rien"
+    )
+    champs = {c: close.copy() for c in ("open", "high", "low", "close", "volume")}
+    valider.etape_cvar(champs, [f"A{i}" for i in range(n)])
+    sortie = capsys.readouterr().out
+    assert "comparaison impossible" not in sortie, (
+        "des calendriers décalés suffisent encore à vider la comparaison"
+    )
+    assert "Mean-CVaR" in sortie and "min-variance" in sortie
+
+
+def test_le_decoupage_en_blocs_ecrit_dans_les_bonnes_colonnes() -> None:
+    """Le processus a été TUÉ par le système au premier lancement réel : la vue
+    glissante d'un panneau 1499 × 774 sur 126 jours pèse 1,07 Go, et les réductions qui
+    ignorent les NaN y ajoutent leur masque. Le découpage borne le pic.
+
+    Le risque d'un découpage est de décaler les colonnes — un bloc écrit à la mauvaise
+    place, et chaque actif hérite du signal d'un autre. Rien ne le signalerait : les
+    chiffres restent plausibles. On donne donc à chaque actif une valeur RECONNAISSABLE
+    et on vérifie qu'il la retrouve."""
+    from packages.research import operateurs_signaux as ops
+    n = 3 * ops.BLOC_ACTIFS + 7            # plusieurs blocs, dont un incomplet
+    t = 120
+    # Actif j : cours strictement constant à (j+1)·100 → sa volatilité vaut 0 et son
+    # écart à la moyenne aussi. Un décalage de colonnes ne changerait pas ces deux-là,
+    # d'où le troisième contrôle sur `position_dans_la_bande`, qui dépend du NIVEAU.
+    c = np.tile(np.arange(1, n + 1, dtype=float) * 100.0, (t, 1))
+    p = {"open": c, "close": c, "volume": c,
+         "high": c * 1.10, "low": c * 0.90}
+    bande = ops.OPERATEURS_TEMPORELS["position_dans_la_bande"](p, 21)
+    attendu = (1.0 - 0.90) / (1.10 - 0.90)      # identique pour tout actif constant
+    assert np.allclose(bande[-1], attendu), "valeur inattendue sur un cours constant"
+
+    # Puis un panneau où chaque actif a une DYNAMIQUE propre : le momentum de l'actif j
+    # vaut j/1000. Un bloc mal placé ferait apparaître le momentum du voisin.
+    croissance = 1.0 + np.arange(n) / 1000.0
+    c2 = np.cumprod(np.tile(croissance, (t, 1)), axis=0)
+    p2 = {k: c2.copy() for k in ("open", "high", "low", "close", "volume")}
+    mom = ops.OPERATEURS_TEMPORELS["momentum"](p2, 21)
+    theorique = croissance ** 21 - 1.0
+    assert np.allclose(mom[-1], theorique, rtol=1e-9), (
+        "un actif ne retrouve pas SON propre momentum : les blocs écrivent dans les "
+        "mauvaises colonnes, et chaque actif hérite du signal d'un autre."
+    )
+
+
+def test_le_decoupage_ne_change_aucun_chiffre() -> None:
+    """Corriger une panne mémoire en changeant les résultats serait pire qu'elle."""
+    from packages.research import operateurs_signaux as ops
+    g = np.random.default_rng(0)
+    c = 100 * np.exp(np.cumsum(g.normal(0, 0.015, (300, 130)), axis=0))
+    p = {"open": c.copy(), "close": c.copy(), "volume": c.copy(),
+         "high": c * 1.01, "low": c * 0.99}
+    assert ops.BLOC_ACTIFS < 130, "le panneau de test doit couvrir plusieurs blocs"
+    for nom_op, fn in ops.OPERATEURS_TEMPORELS.items():
+        decoupe = fn(p, 63)
+        ancien = ops.BLOC_ACTIFS
+        try:
+            ops.BLOC_ACTIFS = 10_000          # un seul bloc = comportement d'avant
+            entier = fn(p, 63)
+        finally:
+            ops.BLOC_ACTIFS = ancien
+        assert np.allclose(decoupe, entier, equal_nan=True), (
+            f"{nom_op} ne rend pas la même chose par blocs qu'en une fois"
+        )

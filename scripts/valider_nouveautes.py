@@ -44,9 +44,14 @@ import numpy as np  # noqa: E402
 # On les tait ICI, dans le script d'affichage, jamais dans les modules de calcul.
 warnings.filterwarnings("ignore", message="Mean of empty slice")
 warnings.filterwarnings("ignore", message="Degrees of freedom <= 0")
+warnings.filterwarnings("ignore", message="All-NaN slice encountered")
 warnings.filterwarnings("ignore", category=RuntimeWarning, module="numpy")
 
 SEPARATEUR = "=" * 72
+# Part minimale de séances cotées pour qu'un actif entre dans la comparaison
+# d'allocation. Sous ce seuil, ses rendements sont trop lacunaires pour qu'une
+# covariance ou un CVaR estimés dessus veuillent dire quelque chose.
+COUVERTURE_MIN = 0.90
 
 
 def _titre(n: int, texte: str, risque: str) -> None:
@@ -150,13 +155,34 @@ def etape_cvar(champs, symboles) -> None:
     c = champs["close"]
     with np.errstate(divide="ignore", invalid="ignore"):
         r = np.diff(c, axis=0) / np.where(c[:-1] == 0, np.nan, c[:-1])
-    complets = np.isfinite(r).all(axis=0)
-    r = np.nan_to_num(r[:, complets], nan=0.0)
-    noms = [s for s, ok in zip(symboles, complets, strict=True) if ok]
-    if r.shape[1] < 5:
-        print("  ⛔ moins de 5 actifs à historique complet : comparaison impossible")
+
+    # ALIGNEMENT PAR INTERSECTION, jamais par remplissage.
+    #
+    # La première version exigeait un historique fini sur TOUTES les dates. Sur un
+    # univers qui mêle actions et crypto, c'est impossible : la crypto cote le samedi,
+    # les actions non, donc la grille commune est trouée par construction. Résultat
+    # mesuré sur le VPS (08/09) : « moins de 5 actifs », et l'étape ne mesurait rien.
+    #
+    # On garde donc les actifs assez COUVERTS, puis on ne retient que les dates où ils
+    # ont tous une valeur. Jamais de remplissage vers l'avant : prolonger un cours
+    # absent invente une séance sans mouvement, ce qui abaisse la volatilité mesurée et
+    # ferait justement paraître l'actif plus sûr qu'il n'est.
+    couverture = np.isfinite(r).mean(axis=0)
+    gardes = couverture >= COUVERTURE_MIN
+    if gardes.sum() < 5:
+        print(f"  ⛔ {int(gardes.sum())} actifs couverts à "
+              f"{COUVERTURE_MIN:.0%}+ : comparaison impossible")
         return
-    print(f"  {r.shape[1]} actifs à historique complet, {r.shape[0]} séances")
+    sous = r[:, gardes]
+    dates_pleines = np.isfinite(sous).all(axis=1)
+    sous = sous[dates_pleines]
+    noms = [s for s, ok in zip(symboles, gardes, strict=True) if ok]
+    if sous.shape[0] < 250:
+        print(f"  ⛔ {sous.shape[0]} dates communes seulement : trop peu pour comparer")
+        return
+    r = sous
+    print(f"  {r.shape[1]} actifs couverts à {COUVERTURE_MIN:.0%}+ · "
+          f"{r.shape[0]} dates communes (sur {len(dates_pleines)} possibles)")
     cov = np.cov(r, rowvar=False)
     d = mean_cvar_detail(r, alpha=0.95)
     lignes = [("Mean-CVaR (nouveau)", d["poids"]),
