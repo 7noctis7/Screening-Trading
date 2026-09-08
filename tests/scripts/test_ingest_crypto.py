@@ -39,9 +39,11 @@ def test_seules_les_bases_mesurees_fausses_changent_de_source() -> None:
     """Une source forcée sans mesure remplacerait une série fausse par une autre."""
     assert source_de("BTC") == "yahoo"
     assert source_de("ETH") == "yahoo"
-    for base in ("TON", "UNI", "APT", "ARB", "STX"):
+    mesurees = {"TON", "UNI", "APT", "ARB", "STX",      # 1er lot, réparé et vérifié
+                "SUI", "TIA", "JUP", "STRK", "APE"}     # 2e lot, univers complet
+    for base in mesurees:
         assert source_de(base) == "binance", base
-    assert set(SOURCE_FORCEE) == {"TON", "UNI", "APT", "ARB", "STX"}
+    assert set(SOURCE_FORCEE) == mesurees
 
 
 def test_la_purge_efface_toute_la_serie_de_l_homonyme() -> None:

@@ -171,6 +171,17 @@ def test_bibliotheque_inconnue_leve(monkeypatch):
 
 # ------------------------------------------------------------------------------ pandas
 
+@pytest.fixture(autouse=True)
+def _crochet_cudf_vierge():
+    """`activer_cudf` mémorise sa tentative : le crochet ne se pose utilement qu'une
+    fois. Cette mémoire est un état de MODULE — sans remise à zéro, le premier test à
+    l'appeler rendrait tous les suivants muets, et leur résultat dépendrait de l'ordre
+    d'exécution. Constaté : la suite entière passait, sauf lancée en bloc."""
+    dev._CUDF_TENTE, dev._CUDF_ACTIF = False, False
+    yield
+    dev._CUDF_TENTE, dev._CUDF_ACTIF = False, False
+
+
 def test_cudf_refuse_de_s_activer_trop_tard(monkeypatch, capsys):
     """LE piège de RAPIDS : `cudf.pandas` est un crochet d'importation, pas un module de
     remplacement. Posé après l'entrée de pandas en mémoire, il ne fait plus rien ET ne
@@ -204,3 +215,27 @@ def test_la_banniere_dit_qu_un_choix_est_force(monkeypatch):
 def test_la_banniere_previent_que_le_processeur_sera_lent(monkeypatch):
     _avec_torch(monkeypatch, None)
     assert "aucun GPU détecté" in dev.banniere(force=True)
+
+
+def test_activer_cudf_ne_se_plaint_que_du_premier_appel() -> None:
+    """Le crochet d'importation ne peut agir qu'une fois : le reste est du bruit.
+
+    Un script d'entrée pose le crochet, puis importe un module qui le pose à son tour.
+    Le second appel arrive forcément trop tard — mais l'avertissement qu'il produisait
+    accusait un code correct, et un avertissement qu'on apprend à ignorer finit par
+    couvrir celui qui compte.
+    """
+    import io
+    from contextlib import redirect_stderr
+
+    import pandas  # noqa: F401 — l'important est qu'il soit en mémoire
+
+    sorties = []
+    for _ in range(3):
+        tampon = io.StringIO()
+        with redirect_stderr(tampon):
+            dev.activer_cudf()
+        sorties.append(tampon.getvalue())
+
+    assert sorties[0], "le premier appel doit signaler qu'il est trop tard"
+    assert not any(sorties[1:]), f"appels suivants bavards : {sorties[1:]}"

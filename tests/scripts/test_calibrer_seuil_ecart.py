@@ -83,3 +83,37 @@ def test_la_sensibilite_ne_se_credite_pas_des_series_deja_cassees() -> None:
     assert deja == 1.0, f"contrôle inopérant : seulement {100 * deja:.0f} % signalés"
     taux, testes = sensibilite(p, 8.0, True, "tick", n=20)
     assert np.isnan(taux) and testes == 0
+
+
+def _mesure(seuil: float, fond: float, sens: float, n: int = 50) -> dict:
+    return {"seuil": seuil, "fond": fond, "split": sens, "tick": sens, "n_testes": n}
+
+
+def test_un_optimum_sur_le_bord_de_la_grille_est_signale(capsys) -> None:
+    """L'erreur que j'ai failli commettre le 09/09.
+
+    Le premier passage réel proposait 24 — le plus grand seuil essayé — alors que le
+    score y était ENCORE croissant. Ce n'était pas un maximum, c'était la fin de la
+    grille. Proposer un bord sans le dire fait passer « je n'ai pas cherché plus loin »
+    pour « j'ai trouvé le meilleur ».
+    """
+    from scripts.calibrer_seuil_ecart import SEUILS, proposer
+
+    croissant = [_mesure(s, fond=1.0 / (i + 1), sens=1.0) for i, s in enumerate(SEUILS)]
+    proposer(croissant)
+    sortie = capsys.readouterr().out
+    assert f"SEUIL_ECART = {SEUILS[-1]:.0f}" in sortie
+    assert "BORD de la grille" in sortie, sortie
+
+
+def test_un_optimum_interieur_n_est_pas_signale_comme_un_bord(capsys) -> None:
+    """Contrôle négatif : un avertissement permanent ne veut plus rien dire."""
+    from scripts.calibrer_seuil_ecart import SEUILS, proposer
+
+    milieu = len(SEUILS) // 2
+    mesures = [_mesure(s, fond=0.5, sens=1.0 if i == milieu else 0.2)
+               for i, s in enumerate(SEUILS)]
+    proposer(mesures)
+    sortie = capsys.readouterr().out
+    assert f"SEUIL_ECART = {SEUILS[milieu]:.0f}" in sortie
+    assert "BORD" not in sortie, sortie

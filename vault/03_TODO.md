@@ -865,8 +865,26 @@ explicite, module par module, avec mesure.
         jetons sub-centimes. Nouveau P2 ci-dessous.
       · **52 bases sur 102 n'avaient jamais été ingérées** — défaut `--top 50` contre un
         univers de 102. **Réparé** : `--top 0` = tout l'univers, par défaut.
-      **RESTE** : relancer `make ingest-crypto` puis `make diag-source-crypto` sur le VPS
-      pour vérifier que les cinq séries reprises chez Binance sortent CONFORMES.
+      **VÉRIFIÉ LE 09/09 (2ᵉ passage)** : les cinq ressortent **CONFORMES, corr +1,00**,
+      et leur début de série change du tout au tout — `ARB` de 2017-11 (impossible) à
+      2023-03, `APT` de 2021-11 à 2022-10. Réparation confirmée par une mesure
+      indépendante de celle qui l'avait motivée. L'univers réel passe de 774 à **823
+      actifs, dont 97 cryptos au lieu de 48** (ADR-0094).
+      **RESTE, 3ᵉ passage** : cinq NOUVELLES collisions trouvées une fois le périmètre
+      complet ingéré (SUI, TIA, JUP, STRK, APE — mêmes signatures, déjà ajoutées à
+      `SOURCE_FORCEE`). Relancer `make ingest-crypto && make diag-source-crypto` pour
+      les vérifier à leur tour.
+- [ ] **P1 — Sortir de l'univers les séries PÉRIMÉES** (trouvé le 09/09) : une douzaine
+      de séries s'arrêtent des années avant le reste du lot — MATIC en 2025-03 (migration
+      POL), RNDR en 2024-07, FTM en 2025-01, IMX en 2022-07, GRT en 2022-04, GMX en
+      2023-11, COMP en 2021-08. Rien ne cloche DANS ces séries : elles sont finies. Elles
+      sortaient « CONFORMES » et peuplaient l'univers en se faisant passer pour vivantes.
+      Le diagnostic les nomme désormais (verdict PÉRIMÉE, mesuré contre la barre la plus
+      fraîche du lot). **RESTE** : décider migration (MATIC→POL, RNDR→RENDER, FTM→S) ou
+      retrait, puis appliquer à `config/universe.yaml`.
+- [ ] **P2 — PEPE : 119 barres chez Yahoo**, sous le seuil des 250 (09/09). Seule base de
+      l'univers restée muette après l'ingestion complète. Basculer en `SOURCE_FORCEE`
+      vers Binance comme les collisions — à vérifier au prochain passage.
 - [x] **P2 — Recalibrer `SEUIL_ECART` : CAUSE TROUVÉE, ce n'était pas le seuil** (09/09).
       430 actifs sur 774 signalés. J'avais écrit « les queues épaisses des marchés » —
       **c'était faux, et mesurable**. Sur un panneau SAIN de 774 séries synthétiques
@@ -897,14 +915,27 @@ explicite, module par module, avec mesure.
       et tombait une fois sur trois sur un jour NON COTÉ, où un défaut ne produit aucun
       rendement (ADR-0091). Corrigé : l'injection ne vise que des séances réellement
       cotées deux jours de suite, et le rapport publie l'effectif de chaque mesure.
-      **RESTE** : relancer `make calibrer-seuil ARGS=--comparer-ancien` sur le VPS et
-      trancher sur des chiffres qui veulent dire quelque chose.
+      **2ᵉ PASSAGE (09/09) — l'instrument est réparé, la conclusion ne l'est pas.** Les
+      sensibilités sont enfin crédibles : **100 % de détection des splits à tous les
+      seuils** sans normalisation, contre 33-73 % erratiques avant. Mais la proposition
+      (24) tombait sur le **plus grand seuil de la grille**, avec un score encore
+      croissant : ce n'était pas un maximum, c'était le dernier point essayé (ADR-0093).
+      Grille élargie à 64, avertissement explicite sur les bords, `N_INJECTIONS` 40 → 150.
+      **Et le mode n'est pas tranché non plus** (ADR-0092) : à seuil 8 l'ANCIEN mode gagne
+      sur les deux axes (coût 55,3 % contre 59,4 %, sensibilité 100 % contre 94 %) ; la
+      normalisation ne l'emporte qu'à partir de 12, et par le seul coût. Mode et seuil
+      sont couplés — trancher l'un sans l'autre, c'est choisir sur la moitié de la table.
+      **RESTE, 3ᵉ passage** : `make calibrer-seuil ARGS=--comparer-ancien` avec la grille
+      élargie, puis trancher les deux ensemble.
 - [ ] **P2 — Source à plus de décimales pour les jetons sub-centimes** (trouvé le 09/09) :
       SHIB n'a que 3 % de clôtures distinctes sur 1967 barres — le bon jeton, arrondi à
       six décimales par la source. Un cours qui ne bouge qu'en marches d'escalier
       fabrique une volatilité fausse et des plages figées. Concerne aussi PEPE, BONK,
       FLOKI, XEC dès qu'ils seront ingérés. Binance rend huit décimales : vérifier si le
       passage en `SOURCE_FORCEE` suffit, AVANT d'écrire quoi que ce soit.
+      **CONFIRMÉ ET ÉLARGI le 09/09** une fois l'univers complet : SHIB 3 % de clôtures
+      distinctes, BONK 4 %, XEC 10 %, FLOKI 14 %, COMP 17 %, GMX 32 %. Six séries, pas
+      une.
 - [ ] ~~**P1 — ancien libellé : à valider sur données réelles**~~
 - [ ] ~~**P2 — ancien libellé : `scripts/demo_ml.py` n'est pas déterministe.**~~ Constaté le 07/09 en cherchant à
       prouver une non-régression : deux exécutions de la MÊME version donnent des accuracies

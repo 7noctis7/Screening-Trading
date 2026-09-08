@@ -117,3 +117,35 @@ def test_un_arrondi_prime_sur_la_plage_figee_qu_il_fabrique() -> None:
     assert fiche["corr"] > 0.5, "contrôle inopérant : ce n'est pas le bon jeton"
     assert fiche["figee"] >= 20, "contrôle inopérant : aucune plage figée fabriquée"
     assert fiche["verdict"] == "PRÉCISION", fiche
+
+
+def test_une_serie_qui_s_arrete_des_annees_avant_les_autres_est_perimee() -> None:
+    """Trouvé sur données réelles le 09/09 : MATIC s'arrête en mars 2025, RNDR en
+    juillet 2024, IMX en juillet 2022 — pendant que le reste du lot cote en 2026.
+
+    Ces jetons ont migré ou été délistés. Rien dans leur série ne cloche : elle est
+    juste MORTE. Sans contrôle de fraîcheur, elles sortaient « CONFORMES » et
+    continuaient de peupler l'univers en se faisant passer pour vivantes.
+    """
+    prix = _marche(n=400)
+    vieille = _serie(prix)                      # se termine ~400 jours après le départ
+    fiche = diagnostiquer("MATIC", vieille, _serie(prix), dernier_jour="2026-09-07")
+    assert fiche["retard"] > 1000, fiche["retard"]
+    assert fiche["verdict"] == "PÉRIMÉE", fiche
+
+
+def test_une_serie_a_jour_n_est_pas_perimee() -> None:
+    """Contrôle négatif : sans lui, tout le lot sortirait « PÉRIMÉE » et le verdict
+    ne vaudrait rien."""
+    prix = _marche(n=400)
+    serie = _serie(prix)
+    fiche = diagnostiquer("ETH", serie, _serie(prix), dernier_jour=serie[-1][0])
+    assert fiche["retard"] == 0
+    assert fiche["verdict"] == "CONFORME", fiche
+
+
+def test_sans_lot_de_reference_aucune_serie_n_est_declaree_perimee() -> None:
+    """La fraîcheur se mesure contre le lot. Sans lot, on ne conclut pas."""
+    prix = _marche(n=400)
+    fiche = diagnostiquer("ETH", _serie(prix), _serie(prix))
+    assert fiche["retard"] == 0 and fiche["verdict"] == "CONFORME"

@@ -183,6 +183,10 @@ def _lightgbm_gpu() -> bool:
         return False
 
 
+_CUDF_TENTE = False      # le crochet d'importation ne se pose qu'une fois, utilement
+_CUDF_ACTIF = False
+
+
 def activer_cudf() -> bool:
     """Active l'accélération NVIDIA RAPIDS pour pandas. Rend True si elle est active.
 
@@ -196,7 +200,16 @@ def activer_cudf() -> bool:
     diagnostic explicite quand il est trop tard.
 
     Sur Mac, `cudf` est absent : on rend False sans bruit et pandas reste pandas.
+
+    IDEMPOTENT. Un script d'entrée pose le crochet, puis importe un module qui le pose à
+    son tour : le second appel arrive forcément trop tard et affichait un avertissement
+    qui accusait un code correct. On ne se plaint que du PREMIER appel — le seul qui
+    pouvait encore agir.
     """
+    global _CUDF_TENTE, _CUDF_ACTIF
+    if _CUDF_TENTE:
+        return _CUDF_ACTIF
+    _CUDF_TENTE = True
     if "pandas" in sys.modules:
         print("cudf.pandas non activé : pandas est déjà importé. Déplacez l'appel à "
               "activer_cudf() AVANT les autres imports.", file=sys.stderr)
@@ -204,9 +217,10 @@ def activer_cudf() -> bool:
     try:
         import cudf.pandas
         cudf.pandas.install()
-        return True
+        _CUDF_ACTIF = True
     except Exception:  # noqa: BLE001 — absence de cudf = cas nominal hors NVIDIA
-        return False
+        _CUDF_ACTIF = False
+    return _CUDF_ACTIF
 
 
 def resume() -> dict:

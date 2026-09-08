@@ -2,6 +2,111 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0094 — Réparer une source en révèle d'autres (2026-09-09)
+
+**Contexte.** Les cinq bases routées vers Binance (ADR-0089) ont été réingérées. Elles
+ressortent **toutes CONFORMES, corrélation +1,00**, et leur début de série change du tout
+au tout : `ARB` passe de novembre 2017 — impossible, Arbitrum n'existait pas — à mars
+2023 ; `APT` de novembre 2021 à octobre 2022 ; `UNI` de octobre 2019 à septembre 2020.
+La réparation est confirmée par une mesure indépendante de celle qui l'avait motivée.
+
+**Ce que le périmètre complet a fait apparaître.** Les 52 bases jamais ingérées
+(ADR-0090) apportaient leurs propres avaries :
+
+· **Cinq nouvelles collisions**, même signature : SUI (+0,06), TIA (−0,01), JUP (−0,00),
+  STRK (+0,08), APE (+0,00), toutes avec un début de série antérieure de plusieurs années
+  au jeton. `JUP-USD` commence en novembre 2017. Ajoutées à `SOURCE_FORCEE`.
+· **Six séries à l'arrondi destructeur** : SHIB (3 % de clôtures distinctes), BONK (4 %),
+  XEC (10 %), FLOKI (14 %), COMP (17 %), GMX (32 %). Les quatre premières sont des jetons
+  sub-centimes ; leur cours ne dispose que de quelques dizaines de valeurs possibles, ce
+  qui fabrique une volatilité fausse et des plages figées. Non réparé — c'est un P2.
+· **PEPE : 119 barres chez Yahoo**, sous le seuil des 250. La seule base restée muette.
+
+**Une avarie que personne ne cherchait : les séries mortes.** Une douzaine de séries
+s'arrêtent des années avant le reste du lot — MATIC en mars 2025 (migration vers POL),
+RNDR en juillet 2024, FTM en janvier 2025, IMX en juillet 2022, GRT en avril 2022. Rien
+ne cloche DANS ces séries : elles sont juste finies. Elles sortaient « CONFORMES » et
+continuaient de peupler l'univers en se faisant passer pour vivantes. Nouveau verdict
+**PÉRIMÉE**, mesuré contre la barre la plus fraîche du lot — pas contre la date du jour,
+sans quoi une base ingérée la veille au soir serait déclarée morte.
+
+**Un trou de la mesure, tombé exactement sur ses cibles.** Dix séries sortaient « NON
+VÉRIFIABLE ». La référence demandait les 1000 DERNIÈRES barres à Binance : toute série
+s'arrêtant avant fin 2023 n'avait aucun recouvrement avec elle. Or ce sont précisément
+les séries suspectes — celles qui s'arrêtent trop tôt — qui échappaient ainsi au
+contrôle. La référence utilise désormais l'historique paginé depuis 2015
+(`packages/data/crypto_binance.py`), le même que l'ingestion.
+
+**Conséquences.** L'univers réel passe de 774 à **823 actifs**, dont **97 cryptos au lieu
+de 48**. Toutes les mesures d'allocation et de risque antérieures au 09/09 portaient sur
+un univers amputé de moitié côté crypto, dont cinq séries décrivant d'autres jetons.
+Aucune n'est à refaire d'urgence — HRP a été validé hors échantillon sur la partie saine
+— mais aucune ne doit être citée comme portant sur « l'univers crypto ».
+
+## ADR-0093 — Un optimum posé sur le bord d'une grille n'est pas un optimum (2026-09-09)
+
+**Contexte.** Instrument réparé (ADR-0091), second passage. Les sensibilités deviennent
+enfin crédibles : **100 % de détection des splits à tous les seuils** dans le mode sans
+normalisation, contre les 33-73 % erratiques du premier passage. La correction du
+calendrier était la bonne. Le script propose alors `SEUIL_ECART = 24`.
+
+**Le défaut.** 24 était le plus grand seuil de la grille, et le score
+(sensibilité − coût) y était **encore croissant** :
+
+| seuil | 8 | 10 | 12 | 16 | 24 |
+|---|---|---|---|---|---|
+| score, avec normalisation | 0,35 | 0,50 | 0,66 | 0,81 | **0,87** |
+
+Une courbe qui monte jusqu'au dernier point mesuré ne désigne pas un maximum : elle dit
+qu'on n'a pas cherché plus loin. Proposer ce point sans le dire fait passer « je me suis
+arrêté là » pour « j'ai trouvé le meilleur ». C'est la même faute de forme que la grille
+d'hyperparamètres dont l'optimum tombe sur la borne.
+
+**Décision.** La grille monte à 64 (4 · 6 · 8 · 10 · 12 · 16 · 24 · 32 · 48 · 64) et
+`proposer` **avertit explicitement** quand l'argmax retombe sur un bord. Deux tests
+encadrent ce garde-fou, dont un contrôle négatif : un avertissement permanent ne veut
+plus rien dire. `N_INJECTIONS` passe de 40 à 150 — 89 % mesurés sur 37 actifs, c'est
+±5 points, trop lâche pour départager deux seuils voisins. Le balayage du panneau propre
+est mémorisé par seuil au lieu d'être refait quatre fois, ce qui paie la grille élargie.
+
+**Conséquences.** `SEUIL_ECART` reste **8,0 et UNCALIBRATED** pour un troisième passage.
+Ce n'est pas un enlisement : chaque tour a supprimé une raison de se tromper — le mélange
+d'échelles, puis le calendrier, maintenant la borne. On ne pose pas un seuil de qualité
+de données sur un chiffre dont on sait qu'il est un artefact de la grille.
+
+## ADR-0092 — La normalisation par actif n'est pas un progrès uniforme (2026-09-09)
+
+**Contexte.** ADR-0088 introduit la normalisation par actif et l'active par défaut.
+`make calibrer-seuil --comparer-ancien` mesure enfin les deux modes **sur le même
+panneau réel** (1500 dates × 823 actifs), avec un instrument réparé.
+
+| seuil | coût sans | coût avec | sensib. sans | sensib. avec |
+|---|---|---|---|---|
+| 8 | **55,3 %** | 59,4 % | **100 %** | 94 % |
+| 12 | 37,3 % | **30,3 %** | **100 %** | 96 % |
+| 24 | 15,4 % | **6,1 %** | **100 %** | 93 % |
+
+**Ce que ça dit, et que je n'avais pas prévu.** À seuil bas, l'ancien mode est meilleur
+sur les DEUX axes à la fois : il signale moins ET détecte plus. La normalisation ne
+devient gagnante qu'à partir de 12, et par le seul coût. Le mécanisme est clair une fois
+posé : diviser par l'échelle propre de l'actif **jette l'amplitude absolue**, or un
+−75 % en une séance est une donnée cassée quelle que soit la volatilité habituelle du
+titre. Pour une crypto d'échelle 5 %/jour, ce −75 % ne pèse plus que quinze unités.
+Symétriquement, la normalisation **amplifie** les classes calmes : le forex passe de 5 %
+à 58 % de signalements au seuil 8 — sa journée agitée ordinaire devient un événement.
+
+**Décision.** Ne rien trancher maintenant. Le choix du mode et celui du seuil sont
+**couplés** — l'ancien mode gagne en dessous de 12, le nouveau au-dessus — et le seuil
+n'est pas fixé (ADR-0093). Trancher l'un sans l'autre reviendrait à choisir sur la moitié
+de la table. Les deux modes restent disponibles et mesurés côte à côte.
+
+**Conséquences.** ADR-0088 est à lire avec cet amendement : la normalisation corrige un
+artefact réel et démontré, elle n'est pas pour autant un progrès en toutes circonstances.
+Ma démonstration synthétique était juste et son domaine de validité était étroit — un
+panneau gaussien ne contient ni queues épaisses, ni l'information d'amplitude absolue que
+la normalisation sacrifie. **Deux fois de suite, la même erreur de méthode : conclure sur
+un contrôle synthétique ce qui ne pouvait se trancher que sur le panneau réel.**
+
 ## ADR-0091 — Un instrument de mesure qui mesurait le calendrier (2026-09-09)
 
 **Contexte.** `make calibrer-seuil` proposait `SEUIL_ECART = 24`, au motif qu'il ne

@@ -46,9 +46,13 @@ import numpy as np  # noqa: E402
 
 from packages.storage.anomalies_panel import ecart_a_la_coupe  # noqa: E402
 
-SEUILS = (4.0, 6.0, 8.0, 10.0, 12.0, 16.0, 24.0)
-N_INJECTIONS = 40          # assez pour une sensibilité à ±8 points, assez peu pour
-                           # que le script reste lançable en fin de session
+# La grille doit ENCADRER l'optimum, pas s'arrêter dessus. Au premier passage réel elle
+# montait à 24 et le score y était encore croissant : « 24 » n'était pas un maximum,
+# c'était le plus grand nombre essayé. On monte donc jusqu'à 64, et `proposer` prévient
+# si l'argmax retombe sur un bord.
+SEUILS = (4.0, 6.0, 8.0, 10.0, 12.0, 16.0, 24.0, 32.0, 48.0, 64.0)
+N_INJECTIONS = 150         # 89 % mesurés sur 37 actifs, c'est ±5 points : trop lâche
+                           # pour départager deux seuils voisins
 GRAINE = 0
 
 
@@ -62,9 +66,15 @@ def _signales(r: np.ndarray, seuil: float, normaliser: bool) -> set[int]:
 
 
 def taux_de_fond(prix: np.ndarray, classes: list[str], seuil: float,
-                 normaliser: bool) -> tuple[float, dict[str, float]]:
-    """Part de l'univers signalée, au total et par classe. Le COÛT du détecteur."""
-    touches = _signales(_rendements(prix), seuil, normaliser)
+                 normaliser: bool,
+                 touches: set[int] | None = None) -> tuple[float, dict[str, float]]:
+    """Part de l'univers signalée, au total et par classe. Le COÛT du détecteur.
+
+    `touches` évite de refaire le balayage du panneau propre, identique pour le coût et
+    pour les deux sensibilités d'un même seuil.
+    """
+    if touches is None:
+        touches = _signales(_rendements(prix), seuil, normaliser)
     total = len(touches) / max(1, prix.shape[1])
     par_classe: dict[str, float] = {}
     for c in sorted(set(classes)):
@@ -108,7 +118,8 @@ def _date_injectable(prix: np.ndarray, j: int, g) -> int | None:
 
 
 def sensibilite(prix: np.ndarray, seuil: float, normaliser: bool, genre: str,
-                n: int = N_INJECTIONS, graine: int = GRAINE) -> tuple[float, int]:
+                n: int = N_INJECTIONS, graine: int = GRAINE,
+                deja: set[int] | None = None) -> tuple[float, int]:
     """(part des défauts injectés qui ressortent, nb d'actifs réellement testés).
 
     Le BÉNÉFICE du détecteur. On ne compte QUE les actifs ciblés, et on retire ceux que
@@ -121,7 +132,8 @@ def sensibilite(prix: np.ndarray, seuil: float, normaliser: bool, genre: str,
     g = np.random.default_rng(graine)
     cibles = [int(j) for j in g.choice(prix.shape[1],
                                        size=min(n, prix.shape[1]), replace=False)]
-    deja = _signales(_rendements(prix), seuil, normaliser)
+    if deja is None:
+        deja = _signales(_rendements(prix), seuil, normaliser)
     gardes = [(j, t) for j in cibles if j not in deja
               and (t := _date_injectable(prix, j, g)) is not None]
     if not gardes:
@@ -149,9 +161,12 @@ def rapport(prix: np.ndarray, classes: list[str], normaliser: bool) -> list[dict
     print(f"  {'seuil':>5} │ {'coût':^13} │ "
           f"{'sensibilité (défauts injectés)':^40} │ par classe")
     mesures = []
+    r = _rendements(prix)
     for s in SEUILS:
-        fond, par_classe = taux_de_fond(prix, classes, s, normaliser)
-        sens = {g: sensibilite(prix, s, normaliser, g) for g in ("split", "tick")}
+        touches = _signales(r, s, normaliser)          # un seul balayage par seuil
+        fond, par_classe = taux_de_fond(prix, classes, s, normaliser, touches)
+        sens = {g: sensibilite(prix, s, normaliser, g, deja=touches)
+                for g in ("split", "tick")}
         m = {"seuil": s, "fond": fond, "par_classe": par_classe,
              "split": sens["split"][0], "tick": sens["tick"][0],
              "n_testes": min(sens["split"][1], sens["tick"][1])}
@@ -187,6 +202,11 @@ def proposer(mesures: list[dict]) -> None:
     if ecartes:
         print(f"    · {ecartes} seuil(s) écarté(s) : moins de {ECHANTILLON_MIN} séries")
         print("      vierges pour y mesurer quoi que ce soit")
+    if meilleur["seuil"] in (SEUILS[0], SEUILS[-1]):
+        print(f"    ⚠ ATTENTION : {meilleur['seuil']:.0f} est un BORD de la grille"
+              f" ({SEUILS[0]:.0f}…{SEUILS[-1]:.0f}).")
+        print("      Ce n'est pas un maximum, c'est le dernier point essayé :")
+        print("      élargir SEUILS avant de trancher quoi que ce soit.")
     print("    Rien n'est écrit : changer le seuil reste un geste humain, daté, dans")
     print("    packages/storage/anomalies_panel.py.")
 

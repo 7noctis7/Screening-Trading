@@ -46,6 +46,7 @@ JOURS_COMMUNS_MIN = 100    # sous ce nombre, la corrélation ne vaut rien
 FIGE_MIN = 20              # plage de clôtures identiques : au-delà, on parle d'arrêt
 DISTINCTES_MIN = 0.50      # part de clôtures distinctes : en dessous, on suspecte
                            # un arrondi destructeur
+RETARD_MAX = 30            # jours de retard sur la série la plus fraîche du lot
 
 
 def _bases_univers() -> list[str]:
@@ -72,12 +73,18 @@ def lire_base(db: Path, ticker: str) -> list[tuple[str, float]]:
     return [(str(d), float(c)) for d, c in rows if c is not None and float(c) > 0]
 
 
-def reference_binance(base: str, limite: int = 1000) -> list[tuple[str, float]]:
-    """Clôtures quotidiennes de `{base}USDT` chez Binance. [] si indisponible."""
-    from packages.data.crypto_history import _get_json, parse_klines
-    url = ("https://api.binance.com/api/v3/klines"
-           f"?symbol={base.upper()}USDT&interval=1d&limit={int(limite)}")
-    return parse_klines(_get_json(url))
+def reference_binance(base: str, depuis: str = "2015-01-01") -> list[tuple[str, float]]:
+    """Clôtures quotidiennes de `{base}USDT` chez Binance. [] si indisponible.
+
+    Historique PAGINÉ depuis 2015. La première version demandait les 1000 dernières
+    barres : toute série qui s'arrête avant fin 2023 n'avait alors aucun recouvrement
+    avec la référence, et sortait « NON VÉRIFIABLE » — soit dix séries du premier
+    passage réel, dont COMP, GMX, IMX et GRT — précisément les plus suspectes, puisque
+    ce sont celles qui s'arrêtent des années trop tôt. Le trou de la mesure tombait
+    exactement sur ses propres cibles.
+    """
+    from packages.data.crypto_binance import historique
+    return [(jour, close) for jour, _o, _h, _b, close, _v in historique(base, depuis)]
 
 
 def _plus_longue_plage_figee(closes: list[float]) -> int:
@@ -111,15 +118,25 @@ def _rendements_alignes(
     return ra, rb
 
 
+def _jours_de_retard(fin: str, reference: str | None) -> int:
+    """Écart en jours entre la dernière barre d'une série et la plus fraîche du lot."""
+    if not reference or not fin:
+        return 0
+    from datetime import date
+    return max(0, (date.fromisoformat(reference) - date.fromisoformat(fin)).days)
+
+
 def diagnostiquer(base: str, serie: list[tuple[str, float]],
-                  ref: list[tuple[str, float]]) -> dict:
+                  ref: list[tuple[str, float]],
+                  dernier_jour: str | None = None) -> dict:
     """Verdict mesuré pour une base. Aucune cause n'est retenue sans son chiffre."""
     closes = [c for _, c in serie]
     fiche = {"base": base, "barres": len(serie),
              "plage": f"{serie[0][0]}→{serie[-1][0]}" if serie else "—",
              "figee": _plus_longue_plage_figee(closes),
              "distinctes": len(set(closes)) / len(closes) if closes else 0.0,
-             "corr": float("nan"), "communes": 0}
+             "corr": float("nan"), "communes": 0,
+             "retard": _jours_de_retard(serie[-1][0] if serie else "", dernier_jour)}
     fiche["collision"] = False
     if len(serie) < 250:
         fiche["verdict"] = "SOURCE ABSENTE"
@@ -149,6 +166,11 @@ def diagnostiquer(base: str, serie: list[tuple[str, float]],
         fiche["verdict"] = "PRÉCISION"
     elif fiche["figee"] >= FIGE_MIN:
         fiche["verdict"] = "FLUX ARRÊTÉ"
+    elif fiche["retard"] > RETARD_MAX:
+        # Une série qui s'arrête des années avant les autres n'est pas « conforme » :
+        # le jeton a migré, été délisté, ou la source l'a lâchée. Elle traîne dans
+        # l'univers en se faisant passer pour vivante.
+        fiche["verdict"] = "PÉRIMÉE"
     elif fiche["communes"] < JOURS_COMMUNS_MIN:
         fiche["verdict"] = "NON VÉRIFIABLE"
     else:
@@ -158,10 +180,11 @@ def diagnostiquer(base: str, serie: list[tuple[str, float]],
 
 def _imprimer(fiche: dict, ticker: str) -> None:
     corr = "—" if fiche["corr"] != fiche["corr"] else f"{fiche['corr']:+.2f}"
+    retard = f"{fiche['retard']:4d} j" if fiche.get("retard") else "    —"
     print(f"  {fiche['base']:8s} {ticker:14s} {fiche['barres']:5d} barres  "
           f"{fiche['plage']:24s} figée {fiche['figee']:4d}  "
           f"distinctes {100 * fiche['distinctes']:3.0f}%  corr {corr:>5s}  "
-          f"→ {fiche['verdict']}")
+          f"retard {retard}  → {fiche['verdict']}")
 
 
 def _conclure(fiches: list[dict]) -> None:
@@ -179,6 +202,7 @@ def _conclure(fiches: list[dict]) -> None:
         ("FLUX ARRÊTÉ", "retirer de l'univers jusqu'à réparation de la source"),
         ("PRÉCISION", "changer de source : l'arrondi est dans la donnée"),
         ("SOURCE ABSENTE", "aucune donnée en base — vérifier l'ingestion"),
+        ("PÉRIMÉE", "jeton migré, délisté ou source lâchée — sortir de l'univers"),
     )
     for verdict, geste in gestes:
         lot = [f["base"] for f in fiches if f["verdict"] == verdict]
@@ -204,14 +228,19 @@ def main() -> None:
     print(f"Référence : {source}")
     print(f"{len(bases)} base(s) à examiner\n")
 
+    # Toutes les séries d'abord : le retard d'une série se mesure contre la plus fraîche
+    # du lot, pas contre la date du jour — une base ingérée hier soir n'est pas périmée.
+    series = {base: lire_base(db, ticker_yahoo(base)) for base in bases}
+    dernier = max((s[-1][0] for s in series.values() if s), default=None)
+    if dernier:
+        print(f"Barre la plus fraîche du lot : {dernier}\n")
+
     fiches = []
     for base in bases:
-        ticker = ticker_yahoo(base)
-        serie = lire_base(db, ticker)
         ref = [] if a.sans_reseau else reference_binance(base)
-        fiche = diagnostiquer(base, serie, ref)
+        fiche = diagnostiquer(base, series[base], ref, dernier)
         fiches.append(fiche)
-        _imprimer(fiche, ticker)
+        _imprimer(fiche, ticker_yahoo(base))
     _conclure(fiches)
 
 

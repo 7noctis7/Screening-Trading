@@ -44,11 +44,22 @@ def _bases_univers(top: int) -> list[str]:
 # 09/09 — et non supposée. Deux confirmations indépendantes par ligne : la corrélation
 # quasi nulle, et une date de début antérieure à l'existence du jeton.
 SOURCE_FORCEE: dict[str, str] = {
-    "TON": "binance",   # corr −0,08 / 691 j · Yahoo depuis 2020-08 (Toncoin : 2021)
-    "UNI": "binance",   # corr +0,25 / 490 j · Yahoo depuis 2019-10 (Uniswap : 2020-09)
-    "APT": "binance",   # corr +0,11 / 556 j · Yahoo depuis 2021-11 (Aptos : 2022-10)
-    "ARB": "binance",   # corr +0,04 / 994 j · Yahoo depuis 2017-11 (Arbitrum : 2023-03)
-    "STX": "binance",   # corr +0,00 / 496 j · Yahoo depuis 2019-10
+    # Premier lot, RÉPARÉ ET VÉRIFIÉ : après bascule, les cinq ressortent CONFORMES avec
+    # corr +1,00. Le début de série change du tout au tout, ce qui achève la preuve —
+    # `ARB` passe de 2017-11 (impossible) à 2023-03, `APT` de 2021-11 à 2022-10.
+    "TON": "binance",   # corr −0,08 / 691 j · Yahoo depuis 2020-08 → Binance 2024-08
+    "UNI": "binance",   # corr +0,25 / 490 j · Yahoo depuis 2019-10 → Binance 2020-09
+    "APT": "binance",   # corr +0,11 / 556 j · Yahoo depuis 2021-11 → Binance 2022-10
+    "ARB": "binance",   # corr +0,04 / 994 j · Yahoo depuis 2017-11 → Binance 2023-03
+    "STX": "binance",   # corr +0,00 / 496 j · Yahoo depuis 2019-10 → Binance 2019-10
+    # Second lot, trouvé une fois l'univers complet ingéré (les 52 bases manquantes
+    # contenaient leurs propres homonymes). Même signature : corrélation nulle contre
+    # la référence, et un début de série qui précède de plusieurs années le jeton.
+    "SUI": "binance",   # corr +0,06 / 173 j · Yahoo depuis 2022-03, arrêtée en 2024-06
+    "TIA": "binance",   # corr −0,01 / 998 j · Yahoo depuis 2022-02
+    "JUP": "binance",   # corr −0,00 / 950 j · Yahoo depuis 2017-11
+    "STRK": "binance",  # corr +0,08 / 930 j · Yahoo depuis 2021-04
+    "APE": "binance",   # corr +0,00 / 998 j · Yahoo depuis 2020-10, figée 154 séances
 }
 
 

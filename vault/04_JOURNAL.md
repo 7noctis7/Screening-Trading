@@ -1,5 +1,51 @@
 # 04 — JOURNAL
 
+## Session 2026-09-09 (3ᵉ) — La réparation tient ; la calibration ne tient toujours pas
+
+**CE QUI EST RÉPARÉ ET VÉRIFIÉ.** Les cinq bases routées vers Binance ressortent
+**CONFORMES, corr +1,00**, et leur début de série change du tout au tout : `ARB` passe de
+novembre 2017 — impossible, Arbitrum date de 2023 — à mars 2023 ; `APT` de 2021-11 à
+2022-10 ; `UNI` de 2019-10 à 2020-09. La réparation est confirmée par une mesure
+indépendante de celle qui l'avait motivée. L'univers réel passe de **774 à 823 actifs,
+dont 97 cryptos au lieu de 48**.
+
+**CE QUE LE PÉRIMÈTRE COMPLET A FAIT SORTIR.** Cinq NOUVELLES collisions (SUI, TIA, JUP,
+STRK, APE — `JUP-USD` commence en 2017 pour un jeton de 2024), six séries à l'arrondi
+destructeur (SHIB 3 % de clôtures distinctes, BONK 4 %, XEC 10 %, FLOKI 14 %, COMP 17 %,
+GMX 32 %), et une avarie que personne ne cherchait : **une douzaine de séries mortes** —
+MATIC s'arrête en mars 2025, IMX en juillet 2022 — qui sortaient « CONFORMES » et
+peuplaient l'univers en se faisant passer pour vivantes. Nouveau verdict PÉRIMÉE.
+
+**UN TROU DE LA MESURE, TOMBÉ SUR SES PROPRES CIBLES.** Dix séries sortaient « NON
+VÉRIFIABLE » : la référence demandait les 1000 DERNIÈRES barres à Binance, donc toute
+série s'arrêtant avant fin 2023 n'avait aucun recouvrement avec elle — c'est-à-dire
+exactement les séries suspectes. Référence passée à l'historique paginé.
+
+**LA CALIBRATION, EN REVANCHE, N'EST TOUJOURS PAS TRANCHÉE — et pour une bonne raison.**
+L'instrument réparé donne enfin des sensibilités crédibles (100 % de détection des splits
+à tous les seuils sans normalisation, contre 33-73 % erratiques avant : la correction du
+calendrier était la bonne). Mais deux choses bloquent :
+
+· La proposition (24) tombait sur le **plus grand seuil de la grille**, score encore
+  croissant. Ce n'est pas un maximum, c'est le dernier point essayé. Grille élargie à 64,
+  avertissement explicite sur les bords, `N_INJECTIONS` 40 → 150.
+· **Le mode n'est pas tranché non plus.** À seuil 8, l'ANCIEN mode gagne sur les deux
+  axes : coût 55,3 % contre 59,4 %, sensibilité 100 % contre 94 %. La normalisation ne
+  l'emporte qu'à partir de 12, et par le seul coût. Mécanisme : diviser par l'échelle
+  propre jette l'amplitude absolue, or un −75 % en une séance est une donnée cassée quelle
+  que soit la volatilité habituelle du titre.
+
+**Deux fois de suite la même erreur de méthode**, et je la note ici pour ne pas la
+refaire : conclure sur un contrôle synthétique ce qui ne pouvait se trancher que sur le
+panneau réel. Un panneau gaussien n'a ni queues épaisses, ni l'information d'amplitude
+que la normalisation sacrifie.
+
+**PROCHAIN (3ᵉ passage).** `make ingest-crypto && make diag-source-crypto` pour vérifier
+les cinq nouvelles bascules, puis `make calibrer-seuil ARGS=--comparer-ancien` avec la
+grille élargie — et trancher mode ET seuil ensemble.
+
+ADR-0092, ADR-0093, ADR-0094. Tests : 2299 passés, 6 ajoutés.
+
 ## Session 2026-09-09 (suite) — Le premier passage réel dément deux de mes conclusions
 
 Les deux instruments écrits ce matin ont tourné sur le VPS. Ils ont fait leur travail :
