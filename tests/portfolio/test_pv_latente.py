@@ -8,6 +8,8 @@ rien à mesurer.
 
 from __future__ import annotations
 
+import pytest
+
 from packages.portfolio.pv_latente import agreger, pv_rendue
 
 
@@ -22,7 +24,7 @@ def test_une_ligne_montee_puis_redescendue_est_distinguee_d_une_ligne_plate() ->
     droite = pv_rendue(_barres([100.0, 105.0, 112.0]), "2026-01-01", 100.0, 10.0)
 
     assert yoyo["pv_courante"] == droite["pv_courante"] == 120.0
-    assert yoyo["rendu"] == 780.0 and droite["rendu"] == 0.0
+    assert yoyo["rendu_du_gain"] == 780.0 and droite["rendu_du_gain"] == 0.0
     assert yoyo["part_rendue"] > 0.86 and droite["part_rendue"] == 0.0
 
 
@@ -32,7 +34,9 @@ def test_une_position_jamais_en_gain_ne_rend_rien() -> None:
     perdante = pv_rendue(_barres([100.0, 90.0, 80.0]), "2026-01-01", 100.0, 10.0)
     assert perdante["jamais_en_gain"]
     assert perdante["part_rendue"] == 0.0
+    assert perdante["rendu_du_gain"] == 0.0
     assert perdante["pv_courante"] == -200.0
+    assert perdante["perte_sous_entree"] == 200.0
 
 
 def test_les_barres_anterieures_a_l_entree_sont_ignorees() -> None:
@@ -54,7 +58,7 @@ def test_une_vente_a_decouvert_gagne_quand_le_cours_baisse() -> None:
                       sens="short")
     assert court["pv_max"] == 300.0
     assert court["pv_courante"] == 100.0
-    assert court["rendu"] == 200.0
+    assert court["rendu_du_gain"] == 200.0
 
 
 def test_le_total_ne_pretend_pas_que_les_pics_sont_simultanes() -> None:
@@ -65,10 +69,44 @@ def test_le_total_ne_pretend_pas_que_les_pics_sont_simultanes() -> None:
 
     total = agreger([a, b])
     assert total["n_positions"] == 2
-    assert "somme_des_pics" in total and "pic_du_portefeuille" not in total
-    assert total["somme_des_pics"] == 130.0     # +100 (a) et +30 (b), jamais ensemble
-    assert total["pv_courante"] == 80.0            # +50 (a) et +30 (b), aujourd'hui
+    assert "somme_des_gains_max" in total and "pic_du_portefeuille" not in total
+    assert total["somme_des_gains_max"] == 130.0  # +100 (a) et +30 (b), jamais ensemble
+    assert total["pv_courante"] == 80.0           # +50 (a) et +30 (b), aujourd'hui
 
 
 def test_un_total_sans_position_exploitable_ne_divise_pas_par_zero() -> None:
     assert agreger([{"available": False}])["part_rendue"] == 0.0
+
+
+def test_un_gain_minuscule_suivi_d_une_grosse_perte_n_est_pas_un_yo_yo() -> None:
+    """LE défaut trouvé sur données réelles le 10/09.
+
+    `NWL` : pic à +17 $, puis très en dessous du prix d'entrée. La première version
+    calculait `(pic − courante) / pic` et affichait « 7 975 % rendus » — un rapport
+    entre deux quantités de natures différentes, qui désignait en plus le mauvais
+    coupable. Seul le pic a jamais été un gain à sécuriser ; le reste est une perte sous
+    le prix d'entrée, qu'aucune prise de bénéfice n'aurait évitée. Deux problèmes, deux
+    gestes : un objectif de gain d'un côté, un stop de l'autre.
+    """
+    f = pv_rendue(_barres([100.0, 101.7, 86.71]), "2026-01-01", 100.0, 10.0)
+
+    assert f["pv_max"] == pytest.approx(17.0)
+    assert f["rendu_du_gain"] == pytest.approx(17.0), "le rendu dépasse le pic atteint"
+    assert f["part_rendue"] == 1.0, "une part rendue reste dans [0, 1]"
+    assert f["perte_sous_entree"] == pytest.approx(132.9), f["perte_sous_entree"]
+    # L'ancienne formule aurait publié (17 + 132,9) / 17 = 881 % « rendus ».
+    assert (f["pv_max"] - f["pv_courante"]) / f["pv_max"] > 8.0
+
+
+def test_le_total_ne_somme_pas_des_pics_negatifs() -> None:
+    """Sur le portefeuille réel, additionner les « pics » de lignes jamais en gain
+    donnait une somme de −1 916 $ : un sommet sous zéro, d'où l'on tirait ensuite une
+    part rendue de 0 %. Faux ET rassurant, la pire combinaison."""
+    gagnante = pv_rendue(_barres([100.0, 200.0, 150.0]), "2026-01-01", 100.0, 1.0)
+    perdante = pv_rendue(_barres([100.0, 60.0, 40.0]), "2026-01-01", 100.0, 1.0)
+
+    total = agreger([gagnante, perdante])
+    assert total["somme_des_gains_max"] == 100.0, "un pic négatif a été additionné"
+    assert total["rendu_du_gain"] == 50.0
+    assert total["part_rendue"] == 0.5
+    assert total["perte_sous_entree"] == 60.0

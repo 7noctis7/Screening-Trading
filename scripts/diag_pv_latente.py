@@ -58,10 +58,19 @@ def _barres(symbole: str, classe: str) -> list[tuple[str, float]]:
         from packages.portfolio.user_analysis import _aliases, _bars_crypto, load_bars
     except Exception:  # noqa: BLE001
         return []
+    # La base LOCALE d'abord. Le premier passage réel interrogeait Yahoo avec le
+    # symbole nu (« AAVE », « SOL ») et récoltait des 404 bruyants, alors que
+    # `crypto.db` contient la série sous `AAVE-USD` depuis les réparations du 09/09.
+    # Un diagnostic qui lit un journal local n'a aucune raison d'appeler le réseau
+    # tant qu'il n'a pas épuisé ce qu'il a sous la main.
     for alias in _aliases(symbole, classe):
-        for lot in (load_bars(alias, years=5), _bars_crypto(alias, 5)):
-            if lot:
-                return [(str(b.ts)[:10], float(b.close)) for b in lot]
+        lot = _bars_crypto(alias, 5)
+        if lot:
+            return [(str(b.ts)[:10], float(b.close)) for b in lot]
+    for alias in _aliases(symbole, classe):
+        lot = load_bars(alias, years=5)
+        if lot:
+            return [(str(b.ts)[:10], float(b.close)) for b in lot]
     return []
 
 
@@ -78,32 +87,85 @@ def analyser(positions: list[dict]) -> list[dict]:
     return out
 
 
+def _valeur(f: dict) -> float:
+    return f["prix_entree"] * f["qty"] + f["pv_courante"]
+
+
+def _concentration(fiches: list[dict]) -> None:
+    """Le poids de chaque instrument dans le portefeuille, plus lourd d'abord.
+
+    C'est la première chose à regarder devant un total qui oscille : un portefeuille
+    concentré bouge comme sa plus grosse ligne, et aucune règle de sortie n'y change
+    quoi que ce soit. Les LOTS sont regroupés par instrument — trois achats du même ETF
+    font une seule exposition, même s'ils font trois lignes au journal.
+    """
+    par_titre: dict[str, float] = {}
+    for f in fiches:
+        par_titre[f["symbole"]] = par_titre.get(f["symbole"], 0.0) + _valeur(f)
+    total = sum(par_titre.values())
+    if total <= 0:
+        return
+    lourds = sorted(par_titre.items(), key=lambda kv: -kv[1])
+    print(f"\n  CONCENTRATION — {len(par_titre)} instrument(s), "
+          f"{total:,.0f} $ investis")
+    for nom, val in lourds[:8]:
+        print(f"    {nom[:16]:16s} {val:>10,.0f} $   {100 * val / total:>5.1f} %")
+    tete = 100 * lourds[0][1] / total
+    if tete >= 25:
+        print(f"    ⚠ la première ligne pèse {tete:.0f} % du portefeuille.")
+        print("      Un total qui oscille suit d'abord CELA, pas une règle")
+        print("      de sortie manquante.")
+
+
+def _incoherences(fiches: list[dict]) -> None:
+    """Lots dont la PV latente est impossible au vu de leur taille.
+
+    Une position longue ne peut pas perdre plus qu'elle ne vaut. Quand c'est le cas,
+    ce n'est pas le marché : c'est `avg_price` ou `qty` qui est faux au journal. On le
+    signale à part plutôt que de le laisser polluer les totaux — un chiffre faux
+    mélangé à des chiffres justes les salit tous.
+    """
+    suspects = [f for f in fiches
+                if f.get("available") and f["pv_courante"] < 0
+                and abs(f["pv_courante"]) > max(1.0, _valeur(f))]
+    if not suspects:
+        return
+    print(f"\n  ⚠ {len(suspects)} lot(s) INCOHÉRENT(s) — perte supérieure à la valeur")
+    print("    de la position : `avg_price` ou `qty` est faux au journal, pas le")
+    print("    marché. Ces lignes faussent tout total qui les inclut.")
+    for f in suspects[:10]:
+        print(f"      · {f['symbole'][:14]:14s} PV {f['pv_courante']:>10,.0f} $ "
+              f"pour une position de {_valeur(f):>9,.0f} $")
+    print("    → `make diag-journal`, puis la réconciliation (P0 du TODO).")
+
+
 def _imprimer(fiches: list[dict], capital: float) -> None:
     from packages.portfolio.pv_latente import agreger
-    bande = max(BANDE_PART_CAPITAL * capital, 5.0)
     utiles = sorted([f for f in fiches if f.get("available")],
-                    key=lambda f: -f["rendu"])
-    print(f"\n  {'position':16s} {'PV pic':>10s} {'PV jour':>10s} {'rendu':>10s} "
-          f"{'part':>7s}  sécurisable ?")
+                    key=lambda f: -f["rendu_du_gain"])
+    print(f"\n  {'position':16s} {'valeur':>10s} {'PV pic':>9s} {'PV jour':>9s} "
+          f"{'gain rendu':>11s} {'part':>6s}")
     for f in utiles[:25]:
-        valeur = f["prix_entree"] * f["qty"] + f["pv_courante"]
-        secu = "oui" if f["pv_courante"] >= bande else f"non (< {bande:,.0f} $)"
-        print(f"  {f['symbole'][:16]:16s} {f['pv_max']:>10,.0f} "
-              f"{f['pv_courante']:>10,.0f} {f['rendu']:>10,.0f} "
-              f"{100 * f['part_rendue']:>6.0f}%  {secu:s}   ({valeur:,.0f} $)")
-    total = agreger(fiches)
-    print(f"\n  {total['n_positions']} position(s) ouverte(s) mesurée(s)")
-    print(f"  somme des pics : {total['somme_des_pics']:,.0f} $  — jamais atteinte "
-          "d'un seul coup, les pics ne sont pas simultanés")
-    print(f"  PV du jour     : {total['pv_courante']:,.0f} $")
-    print(f"  RENDU          : {total['rendu']:,.0f} $ "
-          f"({100 * total['part_rendue']:.0f} % de la somme des pics)")
-    bloquees = [f for f in utiles if 0 < f["pv_courante"] < bande]
-    print(f"\n  BANDE D'INACTION : {bande:,.0f} $ (0,5 % du capital)")
-    print(f"  {len(bloquees)} ligne(s) en gain sous cette bande : le rebalancement ne")
-    print("  peut PAS les alléger, quoi qu'elles")
-    print("  gagnent. Leur plus-value ne peut que revenir. C'est le premier suspect du")
-    print("  yo-yo, avant toute règle de prise de bénéfice.")
+        print(f"  {f['symbole'][:16]:16s} {_valeur(f):>10,.0f} {f['pv_max']:>9,.0f} "
+              f"{f['pv_courante']:>9,.0f} {f['rendu_du_gain']:>11,.0f} "
+              f"{100 * f['part_rendue']:>5.0f}%")
+    t = agreger(fiches)
+    print(f"\n  {t['n_positions']} position(s) mesurée(s), dont "
+          f"{t['n_jamais_en_gain']} jamais passée(s) en gain")
+    print(f"  somme des gains maximaux : {t['somme_des_gains_max']:>10,.0f} $ "
+          "(pics non simultanés)")
+    print(f"  GAIN RENDU               : {t['rendu_du_gain']:>10,.0f} $ "
+          f"({100 * t['part_rendue']:.0f} % de ces pics) ← le yo-yo")
+    print(f"  perte sous l'entrée      : {t['perte_sous_entree']:>10,.0f} $ "
+          "← autre problème : un stop, pas un objectif")
+    print(f"  PV latente du jour       : {t['pv_courante']:>10,.0f} $")
+    _incoherences(fiches)
+    _concentration(utiles)
+    bande = max(BANDE_PART_CAPITAL * capital, 5.0)
+    print(f"\n  Pour mémoire, la bande d'inaction vaut {bande:,.0f} $ — mais elle "
+          "compare")
+    print("  l'écart |cible − détenu| en VALEUR, pas la plus-value. Les cibles du")
+    print("  jour ne sont pas ici : `make live-sim` montre les décisions réelles.")
 
 
 def main() -> None:

@@ -9,8 +9,11 @@ permettait de les distinguer.
 CE QUE CE MODULE MESURE, sur une position ENCORE OUVERTE :
   · `pv_courante`  — la plus-value latente d'aujourd'hui ;
   · `pv_max`       — la meilleure jamais atteinte depuis l'entrée (MFE en monnaie) ;
-  · `rendu`        — `pv_max − pv_courante`, ce que le marché a repris ;
-  · `part_rendue`  — `rendu / pv_max`, entre 0 et 1.
+  · `rendu_du_gain`     — la part du PIC DE GAIN reprise par le marché, bornée par ce
+                          pic : c'est le yo-yo au sens strict ;
+  · `perte_sous_entree` — ce qui manque SOUS le prix d'entrée. Autre problème, autre
+                          geste : un stop, pas un objectif de gain ;
+  · `part_rendue`       — `rendu_du_gain / pic`, dans [0, 1].
 
 CE QU'IL NE FAIT PAS. Il ne dit pas s'il FALLAIT sortir : une position qui rend 40 % de
 son pic peut très bien en reprendre le double ensuite. Il chiffre un renoncement, pas
@@ -39,17 +42,27 @@ def pv_rendue(barres: list[tuple[str, float]], entree: str, prix_entree: float,
     pvs = [(d, signe * (c - prix_entree) * quantite) for d, c in apres]
     date_max, pv_max = max(pvs, key=lambda x: x[1])
     date_courante, pv_courante = pvs[-1]
-    rendu = max(0.0, pv_max - pv_courante)
+    # DEUX CHOSES QUI NE SE MÉLANGENT PAS, et que la première version additionnait.
+    #
+    # `pv_max − pv_courante` confond « j'ai rendu un gain » et « je suis passé sous mon
+    # prix d'entrée ». Sur données réelles (10/09), une ligne montée à +17 $ puis tombée
+    # à −1 329 $ affichait « 7 975 % rendus » : le rapport n'a plus aucun sens, et il
+    # désigne le mauvais coupable. Seuls 17 $ ont jamais été un gain à sécuriser ;
+    # les 1 329 $ restants sont une perte, qu'aucune prise de bénéfice n'aurait évitée —
+    # cela demande un stop, pas un objectif. Les deux appellent des gestes différents,
+    # donc deux chiffres différents.
+    gain_max = max(0.0, pv_max)
+    rendu_du_gain = min(gain_max, max(0.0, pv_max - pv_courante))
     return {
         "available": True,
         "n_barres": len(pvs),
         "date_pic": date_max, "pv_max": pv_max,
         "date_courante": date_courante, "pv_courante": pv_courante,
-        "rendu": rendu,
-        # Une PV maximale négative ou nulle n'a rien à rendre : la position n'est jamais
-        # passée en gain. Diviser par elle produirait une « part rendue » de signe
-        # arbitraire, c'est-à-dire un chiffre qui a l'air d'en être un.
-        "part_rendue": (rendu / pv_max) if pv_max > 0 else 0.0,
+        "rendu_du_gain": rendu_du_gain,
+        "perte_sous_entree": max(0.0, -pv_courante),
+        # Bornée à [0, 1] par construction : c'est une PART du gain atteint, pas un
+        # rapport entre deux quantités de natures différentes.
+        "part_rendue": (rendu_du_gain / gain_max) if gain_max > 0 else 0.0,
         "jamais_en_gain": pv_max <= 0,
     }
 
@@ -63,14 +76,18 @@ def agreger(lignes: list[dict]) -> dict:
     pu encaisser ce total d'un seul geste.
     """
     utiles = [x for x in lignes if x.get("available")]
-    somme_pics = sum(x["pv_max"] for x in utiles)
-    courante = sum(x["pv_courante"] for x in utiles)
-    part = ((somme_pics - courante) / somme_pics) if somme_pics > 0 else 0.0
+    # On ne somme que les pics POSITIFS. Additionner le « pic » d'une ligne qui n'a
+    # jamais été en gain — donc un nombre négatif — donnait un total de −1 916 $ sur le
+    # portefeuille réel : un « sommet » sous zéro, dont on déduisait ensuite une part
+    # rendue de 0 %. Le chiffre était faux ET rassurant, la pire combinaison.
+    gains_max = sum(max(0.0, x["pv_max"]) for x in utiles)
+    rendu = sum(x["rendu_du_gain"] for x in utiles)
     return {
         "n_positions": len(utiles),
-        "somme_des_pics": somme_pics,
-        "pv_courante": courante,
-        "rendu": sum(x["rendu"] for x in utiles),
-        "part_rendue": part,
+        "somme_des_gains_max": gains_max,
+        "pv_courante": sum(x["pv_courante"] for x in utiles),
+        "rendu_du_gain": rendu,
+        "perte_sous_entree": sum(x["perte_sous_entree"] for x in utiles),
+        "part_rendue": (rendu / gains_max) if gains_max > 0 else 0.0,
         "n_jamais_en_gain": sum(1 for x in utiles if x["jamais_en_gain"]),
     }

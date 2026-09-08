@@ -940,13 +940,30 @@ explicite, module par module, avec mesure.
       l'intersection (masquer par date plutôt qu'exiger la ligne pleine), ou allonger la
       profondeur d'ingestion. C'est cette contrainte, pas le réglage `--pas`, qui empêche
       aujourd'hui de trancher sur une MÉTHODE d'allocation.
+- [ ] **P0 — 69 % du portefeuille sur UN SEUL ETF** (mesuré le 10/09, ADR-0102).
+      Trois lots de QQQ pèsent ≈ 69 500 $ sur ≈ 100 000 $. Un total qui oscille de 101 k
+      à 100,4 k suit d'abord CELA : ±0,9 % sur QQQ font ±0,6 % sur le compte. Aucune
+      règle de sortie n'y change quoi que ce soit. À vérifier AVANT tout le reste :
+      pourquoi le rebalancement ne ramène-t-il pas cette ligne à sa cible ? (`make
+      live-sim` montre les décisions ; l'écart |cible − détenu| y dépasse forcément la
+      bande de 505 $.) Trois lots successifs sans allègement suggèrent que le chemin de
+      vente ne s'exécute pas.
+- [ ] **P0 — Lots crypto incohérents au journal** (mesuré le 10/09) : `BCH` affiche
+      −2 509 $ de PV latente sur une position de 512 $, `ETH` −619 $ sur 6 $. Une
+      position longue ne peut pas perdre plus qu'elle ne vaut : `avg_price` ou `qty` est
+      faux. `make diag-pv-latente` les isole désormais. C'est la P0 de réconciliation du
+      journal, qui attend toujours d'être passée.
 - [ ] **P0 — Le yo-yo de la PV latente : mesurer, puis décider** (posé le 10/09).
       Symptôme rapporté : total oscillant de 101 k à 100,4 k, PV latente impossible à
       sécuriser. Mécanisme lu dans le code (ADR-0101) : la production n'a ni objectif de
       gain ni stop, sa seule sortie est le rebalancement, et la **bande d'inaction vaut
       ≈ 505 $ par ligne** (0,5 % du capital). Sous cette bande, une ligne ne peut PAS
       être allégée — sa plus-value ne peut que revenir.
-      **ÉTAPE 1, sur la machine qui détient `journal.db`** : `make diag-pv-latente
+      **ÉTAPE 1 FAITE le 10/09** — et elle renvoie ailleurs : frais + slippage = 0,00 $,
+      donc pas de friction ; 5 décisions de sortie en 63 jours seulement ; et 69 % du
+      portefeuille sur QQQ. Le yo-yo mesuré n'est pas un problème de sortie, c'est une
+      concentration. Voir les deux P0 ci-dessus.
+      **Commandes** : `make diag-pv-latente
       ARGS="--capital <ton capital>"` puis `make turnover-audit`. Le premier chiffre le
       yo-yo sur les positions VIVANTES (pic, PV du jour, rendu, et combien de lignes
       dorment sous la bande) ; le second donne le coût des allers-retours sur les lots

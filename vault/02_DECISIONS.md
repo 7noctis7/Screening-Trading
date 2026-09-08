@@ -2,6 +2,56 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0102 — Mon propre instrument publiait deux chiffres faux (2026-09-10)
+
+**Premier passage réel de `diag-pv-latente`. Deux défauts, l'un grave.**
+
+1. *Une colonne « sécurisable ? » qui ne mesurait pas ce qu'elle disait.* J'avais écrit
+   `secu = pv_courante >= bande`. Or la bande d'inaction compare **l'écart à la cible en
+   VALEUR**, pas la plus-value. La colonne a donc affiché « non (< 505 $) » sur les
+   vingt-cinq lignes, y compris une position QQQ de **42 862 $** — évidemment
+   rééquilibrable. Et j'en avais tiré une conclusion : « 15 lignes ne peuvent pas être
+   allégées ». **Cette affirmation n'était pas soutenue par ce que je calculais.**
+   Colonne retirée : les cibles du jour ne sont pas dans ce script, `make live-sim`
+   montre les décisions réelles.
+2. *Une « part rendue » de 7 975 %.* `rendu = pic − courante` confond « j'ai rendu un
+   gain » et « je suis passé sous mon prix d'entrée ». `NWL` : pic à +17 $, aujourd'hui
+   −1 329 $. Seuls 17 $ ont jamais été un gain à sécuriser ; les 1 329 $ restants sont
+   une perte qu'aucun objectif de gain n'aurait évitée — cela demande un stop. Deux
+   problèmes, deux gestes, donc **deux chiffres** : `rendu_du_gain` (borné par le pic,
+   part dans [0, 1]) et `perte_sous_entree`. Le total ne somme plus que les pics
+   POSITIFS : additionner ceux des lignes jamais en gain donnait une « somme des pics »
+   de **−1 916 $**, un sommet sous zéro d'où l'on tirait une part rendue de 0 %. Faux et
+   rassurant, la pire combinaison.
+
+**CE QUE LE RUN A VRAIMENT MONTRÉ — et ce n'est pas le yo-yo.**
+
+· **Concentration.** Trois lots de QQQ pèsent **≈ 69 500 $ sur ≈ 100 000 $**, soit
+  **69 % du portefeuille**. Un total qui oscille de 101 k à 100,4 k suit d'abord cela :
+  ±0,9 % sur QQQ font ±0,6 % sur le compte. Aucune règle de sortie ne change ce fait.
+· **Les frais et le slippage cumulés valent 0,00 $** (`turnover-audit`). Le va-et-vient
+  ne coûte donc rien de mesurable : la baisse n'est pas de la friction.
+· **Le système n'a pris que CINQ décisions de sortie en 63 jours** — les 35 autres
+  fermetures viennent du script de réconciliation, dates et prix reconstruits après
+  coup. Sur ces cinq : détention médiane 0,1 jour, profit factor 0,29, t = −0,95.
+  Échantillon trop petit pour distinguer un effet du bruit, et l'outil le dit.
+· **Des lots crypto sont incohérents** : `BCH` affiche −2 509 $ de perte latente sur une
+  position de 512 $, `ETH` −619 $ sur 6 $. Une position longue ne peut pas perdre plus
+  qu'elle ne vaut : c'est `avg_price` ou `qty` qui est faux au journal. Le script les
+  isole désormais au lieu de les laisser polluer les totaux — c'est la P0 de
+  réconciliation, toujours ouverte.
+
+**Décision.** Le diagnostic publie maintenant la **concentration par instrument** (lots
+regroupés : trois achats du même ETF font une exposition, pas trois) et alerte au-delà de
+25 % sur une ligne. Il lit les bases LOCALES avant d'appeler le réseau — le premier
+passage interrogeait Yahoo avec le symbole nu (« AAVE », « SOL ») et récoltait des 404,
+alors que `crypto.db` contient ces séries depuis les réparations du 09/09.
+
+**Conséquence sur la question posée.** L'ordre des travaux change : avant toute règle de
+prise de bénéfice, il y a une exposition à 69 % sur un seul ETF et un journal dont
+certains lots sont faux. Poser un objectif de gain par-dessus reviendrait à régler la
+tenue de route d'une voiture dont on n'a pas vérifié que les roues sont boulonnées.
+
 ## ADR-0101 — Le yo-yo de la PV latente : mesurer avant de poser une règle (2026-09-10)
 
 **Question posée.** « Ma PV latente chute et je ne parviens pas à la sécuriser ; mon
