@@ -28,6 +28,55 @@ Restent à traiter : accueil, dashboard, crypto, glossaire, fiche, events, scree
 échecs, méthode, macro, data, live, investors, fundamentals. Le glossaire est volontairement
 technique par nature.
 
+## Session 2026-09-08 (nuit) — Trois ajouts pendant que l'utilisateur dort
+
+Consigne : « fais tout le reste, on testera au réveil sur données réelles ». J'ai donc pris
+ce qui était faisable SANS les bases réelles, et laissé le reste plutôt que de deviner.
+
+**Le banc n'était pas déterministe — et c'était le plus urgent.** Ouvert en P2 la veille,
+fermé ici. Cause ISOLÉE, pas supposée : `GradientBoostingClassifier` sans `random_state`
+consomme le générateur aléatoire GLOBAL de numpy pour départager les égalités entre découpes
+d'arbre. Vérifié en figeant ce générateur — la séquence devenait reproductible, ce qui
+désignait la cause sans ambiguïté. La graine est posée sur l'ESTIMATEUR, jamais par
+`np.random.seed()` : figer le générateur global depuis une bibliothèque contaminerait tout le
+processus, y compris des tirages qui doivent rester indépendants. Trois exécutions de
+`demo_ml.py` sont maintenant identiques au caractère près. Sans ça, la migration Mac → NVIDIA
+n'aurait pas pu être validée : on n'aurait pas su distinguer un écart de matériel d'un écart
+de logique.
+
+**Explicabilité — le manque que comble `cuml.explainer`.** « Le modèle donne 68 % » n'explique
+rien, c'est la chose même qu'il faudrait expliquer. Deux lectures distinctes : importance par
+permutation (globale) et valeurs de Shapley (locale). Le garde-fou est l'EFFICIENCE — les
+contributions somment exactement à `f(x) − moyenne(f(fond))`, un théorème. Sans ce test,
+n'importe quel histogramme normalisé passerait pour une explication.
+
+*Erreur commise et corrigée* : ma première version tirait la référence AU HASARD à chaque
+permutation. La somme retombait alors sur la moyenne de l'échantillon TIRÉ, pas du fond —
+l'efficience n'était plus exacte, à 1e-2 près. J'ai d'abord été tenté de relâcher la tolérance
+du test ; c'eût été supprimer le seul garde-fou. Le parcours systématique de chaque référence
+rétablit l'exactitude sans rien coûter.
+
+**Anomalies croisées — l'angle utile de NV-Tesseract : surveiller, pas prédire.** Les contrôles
+existants vérifient chaque série SÉPARÉMENT et attrapent l'impossible (prix négatif, OHLC
+incohérent). Ils ne voient pas le POSSIBLE MAIS ABSURDE : un split non ajusté, un tick erroné,
+un flux figé. On compare donc chaque actif à la COUPE du jour — médiane et MAD, jamais moyenne
+et écart-type : un jour de krach, une poignée de valeurs extrêmes déplacerait la moyenne au
+point de rendre tout le reste « normal ». Test dédié : un krach général à −12 % ne doit
+déclencher AUCUNE alerte.
+
+Le flux figé est le plus dangereux des trois, et il rejoint directement l'ADR du Mean-CVaR :
+un cours immobile n'a ni dispersion ni queue, donc il paraît sans risque à TOUS les
+optimiseurs, variance comme CVaR. Aucun contrôle de forme ne peut le voir.
+
+**Ce que je n'ai PAS fait, et pourquoi.** Le P0 du journal (pas la vraie base ici), le sens de
+fusion `_index_series` (le TODO exige de confirmer avant de corriger), le câblage d'Almgren
+(change les tailles de position réelles), les séries macro (clé FRED absente), l'élargissement
+des délistés (données absentes). Deviner sur l'un de ces points aurait coûté plus cher que de
+ne rien faire.
+
+Aucun des trois modules n'est branché en production — ni ceux-ci, ni le Mean-CVaR, ni le
+générateur de signaux. C'est le rendez-vous du réveil.
+
 ## Session 2026-09-07 (suite 36) — Portabilité Mac ↔ NVIDIA : trois points de contact, pas cent
 
 Demande : rendre le code « 100 % device-agnostic » avant migration du Mac (MPS) vers une

@@ -823,7 +823,19 @@ explicite, module par module, avec mesure.
 - [x] **Module de détection — FAIT.** `packages/common/device.py` : CUDA → MPS → CPU,
       `QUANT_DEVICE` pour forcer, bannière « Exécution sur : … », `params_arbres()` pour
       XGBoost/LightGBM/CatBoost, `activer_cudf()`. 20 tests, contrôle négatif vérifié.
-- [ ] **P2 — `scripts/demo_ml.py` n'est pas déterministe.** Constaté le 07/09 en cherchant à
+- [x] **P2 — Déterminisme du banc — FERMÉ (2026-09-08).** Cause isolée par la mesure :
+      `GradientBoostingClassifier` sans `random_state` consomme le générateur aléatoire
+      GLOBAL de numpy pour départager les égalités entre découpes d'arbre. Graine posée
+      sur l'ESTIMATEUR (`SklearnModel.GRAINE`), jamais par `np.random.seed()`. Trois
+      exécutions de `demo_ml.py` désormais identiques au caractère près.
+      Garde-fou : `tests/ml/test_determinisme.py`.
+- [ ] **P1 — À VALIDER SUR DONNÉES RÉELLES avant toute mise en production** (rendez-vous
+      du 08/09) : `cvar_optimize` (ADR-0080), `generateur_signaux` (ADR-0081),
+      `ml/explication` et `storage/anomalies_panel` (ADR-0082). Aucun n'est branché.
+      Ordre proposé : anomalies (lecture seule, aucun risque) → explicabilité (idem) →
+      Mean-CVaR (compare CVaR et drawdown réalisés vs l'allocation actuelle) →
+      générateur (vérifier d'abord que le compte d'essais du registre réel monte).
+- [ ] ~~**P2 — ancien libellé : `scripts/demo_ml.py` n'est pas déterministe.**~~ Constaté le 07/09 en cherchant à
       prouver une non-régression : deux exécutions de la MÊME version donnent des accuracies
       différentes (`GradientBoostingClassifier` sans `random_state`). Un banc dont deux runs
       ne coïncident pas ne peut servir à comparer ni deux versions, ni deux matériels — ce
