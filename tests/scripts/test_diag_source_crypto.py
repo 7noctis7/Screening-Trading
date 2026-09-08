@@ -1,8 +1,8 @@
 """Le diagnostic doit nommer LA bonne cause : les gestes de réparation sont opposés.
 
 Forcer le bon ticker, retirer la série ou changer de source : se tromper de cause,
-c'est réparer ce qui marche et laisser en place ce qui ment. Chaque test construit une série
-dont la cause est CONNUE et vérifie que le verdict la retrouve.
+c'est réparer ce qui marche et laisser en place ce qui ment. Chaque test construit une
+série dont la cause est CONNUE et vérifie que le verdict la retrouve.
 """
 
 from __future__ import annotations
@@ -90,3 +90,30 @@ def test_la_plage_figee_mesure_l_episode_entier() -> None:
 def test_une_base_absente_ne_leve_pas(tmp_path) -> None:
     """Sur une machine sans crypto.db, le diagnostic doit se taire, pas planter."""
     assert lire_base(tmp_path / "absente.db", "BTC-USD") == []
+
+
+def test_un_homonyme_illiquide_est_une_collision_pas_un_flux_arrete() -> None:
+    """L'ordre des verdicts, corrigé par les données réelles du 09/09.
+
+    UNI et ARB sortaient « FLUX ARRÊTÉ » (figées 24 et 174 séances) alors que leur
+    corrélation à la référence valait +0,25 et +0,04 : la base contient un homonyme
+    illiquide, dont l'immobilité est le SYMPTÔME, pas la cause. Les deux gestes sont
+    opposés — changer de source, ou retirer la série — donc l'ordre décide du geste.
+    """
+    autre = _marche(graine=3)
+    autre[300:] = autre[299]                   # homonyme illiquide : plus de cotation
+    fiche = diagnostiquer("ARB", _serie(autre), _serie(_marche(graine=4)))
+    assert fiche["figee"] >= 300, "contrôle inopérant : la série n'est pas figée"
+    assert fiche["verdict"] == "COLLISION DE TICKER", fiche
+
+
+def test_un_arrondi_prime_sur_la_plage_figee_qu_il_fabrique() -> None:
+    """SHIB, mesuré le 09/09 : corr +0,80 — c'est le BON jeton — mais 3 % de clôtures
+    distinctes et des plages de 61 séances. L'arrondi produit les plages ; les nommer
+    « flux arrêté » ferait retirer une série qu'il suffit de resourcer."""
+    prix = _marche()
+    grossier = np.round(prix * 1e-7, 6)
+    fiche = diagnostiquer("SHIB", _serie(grossier), _serie(prix * 1e-7))
+    assert fiche["corr"] > 0.5, "contrôle inopérant : ce n'est pas le bon jeton"
+    assert fiche["figee"] >= 20, "contrôle inopérant : aucune plage figée fabriquée"
+    assert fiche["verdict"] == "PRÉCISION", fiche

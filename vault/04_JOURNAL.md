@@ -1,5 +1,46 @@
 # 04 — JOURNAL
 
+## Session 2026-09-09 (suite) — Le premier passage réel dément deux de mes conclusions
+
+Les deux instruments écrits ce matin ont tourné sur le VPS. Ils ont fait leur travail :
+ils m'ont contredit.
+
+**1. La normalisation par actif n'a PAS réduit le taux de signalement.** Au seuil 8 sur
+le vrai panneau (1500 × 774) : **57,6 %** avec, contre 55,6 % sans (mesure du 08/09).
+J'avais écrit ce matin que « queues épaisses » était une explication fausse. **C'est ma
+correction qui était fausse.** Mon panneau de contrôle était gaussien : il n'a pas de
+queues épaisses, donc il ne pouvait pas départager les deux hypothèses — et j'ai conclu
+comme s'il le pouvait. Le mélange d'échelles était réel et est corrigé ; il n'était pas
+le facteur dominant. La normalisation reste (la statistique dit enfin ce qu'elle prétend
+dire), le seuil reste UNCALIBRATED. Par classe à 8 : crypto 94 %, actions 65 %, ETF 11 %.
+
+**2. L'instrument de calibration mesurait le calendrier.** Il proposait `SEUIL_ECART = 24`
+sur la foi d'un tableau contenant deux impossibilités : sensibilité de 33 % à seuil 4 mais
+73 % à seuil 6 (une sensibilité ne peut pas baisser quand le seuil baisse), et 61 % de
+détection pour un split de **−75 % en une séance**, qu'aucun détecteur ne peut manquer.
+Cause : l'injection tirait sa date au hasard, et tombait une fois sur trois sur un jour
+NON COTÉ — un défaut y produit zéro rendement, il n'y a rien à détecter, et l'échec était
+compté contre le détecteur. Vérifié par sabotage sur calendrier 5/7 : 100 % → **40 %**, le
+même ordre de grandeur que sur le vrai panneau. Le biais allait dans le sens qui désarme
+le détecteur, le pire des deux. Proposition retirée, instrument corrigé.
+
+**3. La source crypto, elle, a livré des causes nettes.** Cinq collisions de ticker
+confirmées **deux fois chacune** — corrélation ≈ 0 contre Binance (TON −0,08, ARB +0,04,
+STX +0,00, APT +0,11, UNI +0,25) ET date de début antérieure à l'existence du jeton (la
+série Yahoo d'`ARB-USD` démarre en novembre 2017 ; Arbitrum date de mars 2023). Réparé en
+routant ces cinq bases vers Binance, avec effacement annoncé des lignes de l'homonyme.
+SHIB n'est pas un flux arrêté mais un **arrondi** : corr +0,80 (le bon jeton) et 3 % de
+clôtures distinctes. Et le diagnostic a trouvé ce que personne ne cherchait : **52 bases
+crypto sur 102 n'avaient jamais été ingérées**, frontière exactement au 50ᵉ symbole —
+le défaut `--top 50` contre un univers de 102. La moitié de la poche crypto n'existait
+pas, et rien ne le disait.
+
+**PROCHAIN.** Sur le VPS : `make ingest-crypto` (102 bases, dont 5 reprises chez Binance),
+puis `make diag-source-crypto` pour vérifier qu'elles sortent CONFORMES, puis
+`make calibrer-seuil ARGS=--comparer-ancien` avec l'instrument réparé.
+
+ADR-0090, ADR-0091 ; ADR-0088 et ADR-0089 amendés en tête par les mesures réelles.
+
 ## Session 2026-09-09 — Deux avaries de données : l'une mesurée, l'autre outillée
 
 Suite des verdicts du 08/09. Deux chantiers ouverts, pris dans l'ordre où ils étaient

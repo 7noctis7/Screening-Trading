@@ -133,14 +133,22 @@ def diagnostiquer(base: str, serie: list[tuple[str, float]],
     # coche souvent les deux cases, et les deux gestes sont à faire.
     mesurable = fiche["corr"] == fiche["corr"]          # NaN ≠ NaN : pas de référence
     fiche["collision"] = bool(mesurable and fiche["corr"] < CORR_MIN)
-    # L'ordre va du fait le plus concret au plus interprété : une plage figée et un
-    # arrondi se lisent sur la série seule, la corrélation dépend d'une référence.
-    if fiche["figee"] >= FIGE_MIN:
-        fiche["verdict"] = "FLUX ARRÊTÉ"
+    # ORDRE CORRIGÉ SUR DONNÉES RÉELLES (09/09). J'avais mis la plage figée en premier,
+    # au motif qu'elle se lit sur la série seule. Le premier passage réel a montré que
+    # c'était l'ordre qui trompe : UNI et ARB, corrélation +0,25 et +0,04, sortaient
+    # « FLUX ARRÊTÉ » alors que leur immobilité est un SYMPTÔME — celle de l'homonyme
+    # illiquide que la base contient à leur place. Le geste juste est de changer de
+    # source, pas de retirer la série. Une corrélation quasi nulle invalide tout le
+    # reste de ce qu'on peut dire d'une série : elle passe donc en tête. Puis l'arrondi,
+    # qui FABRIQUE des plages figées (SHIB : corr +0,80, donc le bon jeton, mais 3 % de
+    # clôtures distinctes). La plage figée ne reste une cause qu'une fois les deux
+    # autres écartées.
+    if fiche["collision"]:
+        fiche["verdict"] = "COLLISION DE TICKER"
     elif fiche["distinctes"] < DISTINCTES_MIN:
         fiche["verdict"] = "PRÉCISION"
-    elif fiche["collision"]:
-        fiche["verdict"] = "COLLISION DE TICKER"
+    elif fiche["figee"] >= FIGE_MIN:
+        fiche["verdict"] = "FLUX ARRÊTÉ"
     elif fiche["communes"] < JOURS_COMMUNS_MIN:
         fiche["verdict"] = "NON VÉRIFIABLE"
     else:
@@ -160,13 +168,13 @@ def _conclure(fiches: list[dict]) -> None:
     collisions = [f for f in fiches if f.get("collision")]
     if collisions:
         print("\n  COLLISION DE TICKER — la base contient la série d'un AUTRE jeton.")
-        print("  Trouver le vrai ticker Yahoo (souvent suffixé d'un numéro :")
-        print("  ARB11841-USD plutôt que ARB-USD), puis l'inscrire dans ALIAS_YAHOO")
+        print("  Plutôt que de chercher le bon symbole Yahoo, forcer la source sur")
+        print("  celle contre laquelle la mesure a été faite. Dans SOURCE_FORCEE")
         print("  de scripts/ingest_crypto.py :")
         for f in collisions:
-            print(f'      "{f["base"]}": "{f["base"]}<numéro>-USD",   '
+            print(f'      "{f["base"]}": "binance",   '
                   f'# corr {f["corr"]:+.2f} sur {f["communes"]} jours')
-        print("  Puis réingérer : make ingest-crypto ARGS=\"--top 100\"")
+        print("  Puis réingérer : make ingest-crypto")
     gestes = (
         ("FLUX ARRÊTÉ", "retirer de l'univers jusqu'à réparation de la source"),
         ("PRÉCISION", "changer de source : l'arrondi est dans la donnée"),

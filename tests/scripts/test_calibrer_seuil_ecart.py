@@ -39,8 +39,33 @@ def test_le_cout_decroit_quand_le_seuil_monte() -> None:
 def test_un_defaut_injecte_est_retrouve() -> None:
     """Contrôle positif : sans lui, le seuil « le moins coûteux » serait l'infini."""
     p = _panel()
-    assert sensibilite(p, 8.0, True, "split", n=10) == 1.0
-    assert sensibilite(p, 8.0, True, "tick", n=10) == 1.0
+    for genre in ("split", "tick"):
+        taux, testes = sensibilite(p, 8.0, True, genre, n=10)
+        assert taux == 1.0, (genre, taux)
+        assert testes == 10, (genre, testes)
+
+
+def test_un_defaut_injecte_un_jour_non_cote_ne_compte_pas_contre_le_detecteur() -> None:
+    """Correctif du 09/09, trouvé sur données réelles.
+
+    Un panneau multi-classes est plein de trous : une action ne cote pas le week-end,
+    une crypto cote sept jours sur sept. Une date d'injection tirée au hasard tombe donc
+    souvent sur un jour non coté — le défaut n'y produit aucun rendement, il n'y a
+    rien à détecter, et la sensibilité s'effondre. Elle sortait à 61 % pour un split de
+    −75 % qu'aucun détecteur ne peut manquer, ce qui poussait la proposition vers le
+    seuil le plus silencieux : le biais désarmait le détecteur.
+
+    Ici, un calendrier 5 jours sur 7 — celui des actions dans un panneau qui contient
+    aussi des cryptos. Deux séances sur sept sont vides, et une date tirée au hasard y
+    tombe une fois sur trois et demie. La détection doit rester totale : l'injection ne
+    vise que des séances réellement cotées.
+    """
+    p = _panel(t=700)
+    for jour in (5, 6):                        # week-ends : l'action ne cote pas
+        p[jour::7] = np.nan
+    taux, testes = sensibilite(p, 8.0, True, "split", n=10)
+    assert testes == 10, f"{testes} actifs testés : des cibles ont été perdues"
+    assert taux == 1.0, f"sensibilité {taux:.0%} — l'injection tombe dans les trous"
 
 
 def test_la_sensibilite_ne_se_credite_pas_des_series_deja_cassees() -> None:
@@ -56,4 +81,5 @@ def test_la_sensibilite_ne_se_credite_pas_des_series_deja_cassees() -> None:
         p[150 + j, j] *= 6.0                # chaque série porte déjà un tick aberrant
     deja = taux_de_fond(p, ["equity"] * p.shape[1], 8.0, True)[0]
     assert deja == 1.0, f"contrôle inopérant : seulement {100 * deja:.0f} % signalés"
-    assert np.isnan(sensibilite(p, 8.0, True, "tick", n=20))
+    taux, testes = sensibilite(p, 8.0, True, "tick", n=20)
+    assert np.isnan(taux) and testes == 0

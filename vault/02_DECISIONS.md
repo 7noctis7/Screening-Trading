@@ -2,7 +2,99 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0091 — Un instrument de mesure qui mesurait le calendrier (2026-09-09)
+
+**Contexte.** `make calibrer-seuil` proposait `SEUIL_ECART = 24`, au motif qu'il ne
+signale que 4,8 % de l'univers pour une sensibilité comparable aux seuils plus bas. Le
+tableau qui fonde cette proposition contient deux impossibilités qu'il fallait regarder
+avant d'appliquer quoi que ce soit :
+
+| seuil | sensibilité aux splits |
+|---|---|
+| 4 | **33 %** |
+| 6 | 73 % |
+| 8 | 61 % |
+| 24 | 65 % |
+
+Un split ×4 fait **−75 % en une séance**. Aucun détecteur ne peut en manquer 39 %. Et la
+sensibilité ne peut pas *baisser* quand le seuil *baisse* : abaisser le seuil ne peut
+qu'ajouter des détections.
+
+**La cause, mesurée.** L'injection tirait sa date au hasard dans le panneau. Or un
+panneau multi-classes est plein de trous : une action ne cote pas le week-end, une
+crypto cote sept jours sur sept, chaque place a ses fériés. **Un défaut injecté un jour
+non coté ne produit aucun rendement** — il n'y a rien à détecter, et l'échec est compté
+contre le détecteur. Vérifié par sabotage sur un calendrier 5 jours sur 7 : la
+sensibilité tombe de 100 % à **40 %**, le même ordre de grandeur que sur le vrai panneau.
+La non-monotonie à 4, elle, vient d'un second défaut : à ce seuil 92 % de l'univers est
+déjà signalé, il ne reste qu'une poignée de séries vierges, et le pourcentage porte sur
+trois actifs.
+
+**Décision.** L'injection ne vise que des séances **réellement cotées deux jours de
+suite**, et le rapport publie l'effectif sur lequel chaque sensibilité est calculée. Un
+seuil laissant moins de dix séries vierges est exclu de la proposition au lieu d'y
+contribuer.
+
+**Conséquences.** La proposition de 24 est **retirée** : elle reposait sur un bénéfice
+sous-estimé. Le biais allait dans le sens qui désarme le détecteur — sous-estimer la
+détection pousse mécaniquement vers le seuil le plus silencieux — c'est-à-dire le pire
+des deux sens. `SEUIL_ECART` reste à 8,0 et **UNCALIBRATED** jusqu'au prochain passage.
+Leçon : un instrument de calibration qui se trompe est pire qu'aucun, parce qu'il rend
+un chiffre, et qu'un chiffre se croit.
+
+## ADR-0090 — Cinquante-deux cryptos sur cent deux n'avaient jamais été ingérées (2026-09-09)
+
+**Contexte.** Le diagnostic de source a examiné les 102 bases crypto de l'univers.
+**Cinquante-deux rendent zéro barre** — GALA, NEO, PEPE, SUI, SEI, LDO, CRV, ENS… La
+frontière ne doit rien au hasard : les cinquante premières bases de l'univers ont des
+données, la cinquante-et-unième et toutes les suivantes n'en ont aucune. C'est le défaut
+`--top 50` de `scripts/ingest_crypto.py`, alors que `config/universe.yaml` déclare
+`top_n: 100`. Ce n'était donc pas une source cassée : **c'était un périmètre**, jamais
+relu depuis le jour où le nombre a été écrit.
+
+**Ce que ça coûtait sans le dire.** Ces 52 bases n'apparaissaient nulle part comme
+manquantes. `_load_prices` bascule en synthétique sous 250 barres, et le panneau réel les
+écarte ensuite : elles sortaient de l'univers en silence. La moitié de la poche crypto
+n'existait pas, et aucune page ne le disait.
+
+**Décision.** Le périmètre est défini par l'univers, pas par un nombre rond : `--top`
+prend `0` par défaut, qui signifie « tout l'univers crypto ». `--top N` reste disponible
+pour un essai rapide.
+
+**Conséquences.** Le prochain `make ingest-crypto` interroge 102 bases au lieu de 50 et
+imprime, base par base, celles qui restent muettes — certaines le seront légitimement
+(jeton absent de Yahoo). La différence, c'est qu'on le saura.
+
 ## ADR-0089 — Une source de prix qui échoue en silence (2026-09-09)
+
+> **MESURÉ LE JOUR MÊME.** `make diag-source-crypto` a tourné sur les 102 bases crypto
+> de l'univers. Verdict :
+>
+> · **Cinq collisions de ticker, confirmées deux fois chacune.** Corrélation des
+>   rendements contre Binance : TON −0,08 (691 j), UNI +0,25 (490 j), APT +0,11 (556 j),
+>   ARB +0,04 (994 j), STX +0,00 (496 j). Et, indépendamment, une date de début
+>   antérieure à l'existence du jeton — la série Yahoo d'`ARB-USD` commence en
+>   **novembre 2017**, Arbitrum a été lancé en mars 2023. Deux signaux qui ne partagent
+>   aucune hypothèse : la base contient bien d'autres jetons.
+> · **SHIB : ce n'est PAS un flux arrêté, c'est un arrondi.** Corrélation +0,80 — c'est
+>   le bon jeton — mais **3 % de clôtures distinctes** sur 1967 barres, et des plages
+>   immobiles de 61 séances. Un cours à 0,00001 $ arrondi à six décimales ne dispose que
+>   d'une trentaine de valeurs possibles. Les plages figées sont le SYMPTÔME de
+>   l'arrondi. C'est ce cas qui a fait corriger l'ordre des verdicts du diagnostic :
+>   UNI et ARB sortaient « flux arrêté » alors que leur immobilité est celle de
+>   l'homonyme. Les gestes sont opposés — changer de source, ou retirer la série — donc
+>   l'ordre décide du geste, et il passe désormais par la corrélation d'abord.
+>
+> **Décision de réparation.** Ne PAS partir en chasse du bon symbole Yahoo. La source
+> contre laquelle la mesure vient d'être faite est déjà connue et déjà utilisée dans le
+> projet : `SOURCE_FORCEE` route ces cinq bases vers **Binance klines**
+> (`packages/data/crypto_binance.py`, historique paginé). Une histoire plus courte et
+> JUSTE vaut mieux qu'une histoire longue qui décrit un autre actif. Le changement de
+> source **efface d'abord** les lignes de l'homonyme : sans cela, les jours que Binance
+> ne couvre pas — précisément l'histoire d'avant l'existence du jeton, celle qui
+> trahissait la substitution — resteraient, et la série serait cousue de deux actifs,
+> pire que l'une ou l'autre et indétectable ensuite. L'effacement est annoncé à l'écran.
+
 
 **Contexte.** L'audit croisé du 08/09 a trouvé 5 séries cassées et 7 figées, **toutes des
 paires `/USDC`** : UNI, ARB, OP, STX, TON avec des sauts jusqu'à +1 573 987 %, SHIB
@@ -38,6 +130,27 @@ un cours immobile paraît sans risque à la variance comme au CVaR, et héritera
 poids qu'il ne mérite pas.
 
 ## ADR-0088 — Le détecteur d'anomalies reprochait à une crypto d'être une crypto (2026-09-09)
+
+> **CORRIGÉ LE MÊME JOUR PAR LES DONNÉES RÉELLES — lire d'abord ceci.** Le raisonnement
+> ci-dessous est juste sur son propre terrain et sa conclusion est fausse hors de lui.
+> `make calibrer-seuil` sur le vrai panneau (1500 dates × 774 actifs) donne, au seuil de
+> 8 et **avec** la normalisation, un taux de signalement de **57,6 %** — contre 55,6 %
+> (430/774) mesurés le 08/09 **sans** elle. **La normalisation n'a pas réduit le taux de
+> signalement réel.** Elle corrige un artefact réel — le mélange d'échelles, démontré
+> sur panneau synthétique — mais ce n'était pas le facteur dominant. Le facteur dominant
+> est bien celui que j'avais écrit au TODO puis rayé : **les queues épaisses**. Un
+> panneau gaussien ne pouvait pas en décider, puisqu'il n'en a pas ; ma mesure ne
+> pouvait donc pas distinguer les deux hypothèses, et j'ai conclu comme si elle le
+> pouvait. **La note initiale du TODO n'était pas fausse, elle était incomplète — et ma
+> correction l'était tout autant.** Par classe, au seuil 8 et après normalisation :
+> crypto 94 %, actions 65 %, forex 53 %, commodités 50 %, indices 24 %, ETF 11 %. Une
+> crypto reste signalée neuf fois sur dix parce que ses rendements sont réellement à
+> queues épaisses **par rapport à sa propre échelle**, pas parce qu'on la compare à des
+> actions. La normalisation est conservée : la statistique qu'elle produit veut dire ce
+> qu'elle prétend dire. Elle ne dispense pas de trancher le seuil, qui reste
+> **UNCALIBRATED** — et la première proposition chiffrée du script (24) est écartée pour
+> la raison décrite en ADR-0090.
+
 
 **Contexte.** Premier passage réel d'`anomalies_panel` : **430 actifs sur 774 signalés**.
 À ce taux, ce n'est plus un détecteur, c'est un bruit de fond qu'on apprend à ignorer —

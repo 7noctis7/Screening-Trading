@@ -852,9 +852,21 @@ explicite, module par module, avec mesure.
       est réelle). Sans référence il rend « NON VÉRIFIABLE » plutôt qu'un verdict inventé.
       `make ingest-crypto` liste désormais chaque base sans données au lieu de les avaler
       en silence — c'est ce silence qui a laissé douze séries pourrir sans alerte.
-      **RESTE À FAIRE sur la machine qui détient `crypto.db`** : lancer le diagnostic,
-      remplir `ALIAS_YAHOO` (scripts/ingest_crypto.py) avec les tickers que le script
-      imprime, réingérer, revérifier.
+      **DIAGNOSTIC PASSÉ SUR LE VPS le 09/09 — causes établies** (ADR-0089, ADR-0090) :
+      · 5 collisions de ticker confirmées deux fois chacune (corrélation ≈ 0 contre
+        Binance, ET date de début antérieure à l'existence du jeton — la série Yahoo
+        d'`ARB-USD` commence en 2017, Arbitrum date de 2023) : TON, UNI, APT, ARB, STX.
+        **Réparé** : `SOURCE_FORCEE` route ces cinq bases vers Binance (historique
+        paginé, `packages/data/crypto_binance.py`), avec effacement annoncé des lignes
+        de l'homonyme — sinon la série serait cousue de deux actifs.
+      · SHIB n'est PAS un flux arrêté : corr +0,80 (le bon jeton) mais **3 % de clôtures
+        distinctes** — un cours à 0,00001 $ arrondi à six décimales. Cause = précision de
+        la source. **Non réparé** : demande une source à plus de décimales pour les
+        jetons sub-centimes. Nouveau P2 ci-dessous.
+      · **52 bases sur 102 n'avaient jamais été ingérées** — défaut `--top 50` contre un
+        univers de 102. **Réparé** : `--top 0` = tout l'univers, par défaut.
+      **RESTE** : relancer `make ingest-crypto` puis `make diag-source-crypto` sur le VPS
+      pour vérifier que les cinq séries reprises chez Binance sortent CONFORMES.
 - [x] **P2 — Recalibrer `SEUIL_ECART` : CAUSE TROUVÉE, ce n'était pas le seuil** (09/09).
       430 actifs sur 774 signalés. J'avais écrit « les queues épaisses des marchés » —
       **c'était faux, et mesurable**. Sur un panneau SAIN de 774 séries synthétiques
@@ -869,9 +881,30 @@ explicite, module par module, avec mesure.
       les trois classes) restent tous détectés. La gravité continue de se lire sur le
       rendement RÉEL : « split non ajusté » se décide à −30 % de cours, pas à trente
       unités d'écart normalisé (test dédié, vérifié par sabotage). ADR-0088.
-      **RESTE** : `make calibrer-seuil` sur le vrai panneau pour confirmer que 8 reste le
-      bon seuil une fois la coupe homogène — le script mesure coût et sensibilité, et
-      propose ; il n'écrit rien.
+      **CONFRONTÉ AU VRAI PANNEAU LE 09/09 — ma correction était fausse elle aussi.**
+      Au seuil 8 AVEC normalisation : **57,6 %** de l'univers signalé, contre 55,6 %
+      (430/774) sans elle. La normalisation **n'a pas réduit le taux réel**. Elle corrige
+      un artefact démontré (le mélange d'échelles), mais ce n'était pas le facteur
+      dominant : le facteur dominant est bien celui que j'avais écrit puis rayé, **les
+      queues épaisses**. Un panneau gaussien ne pouvait pas trancher entre les deux
+      hypothèses, puisqu'il n'a pas de queues — et j'ai conclu comme s'il le pouvait.
+      Par classe à 8 : crypto 94 %, actions 65 %, forex 53 %, commodités 50 %,
+      indices 24 %, ETF 11 %. La normalisation est CONSERVÉE (la statistique dit enfin
+      ce qu'elle prétend dire), le seuil reste **UNCALIBRATED**.
+- [ ] **P2 — Trancher `SEUIL_ECART` avec un instrument réparé** (09/09). La première
+      proposition du script (24) est RETIRÉE : elle reposait sur une sensibilité
+      sous-estimée par un défaut de l'instrument — l'injection tirait sa date au hasard
+      et tombait une fois sur trois sur un jour NON COTÉ, où un défaut ne produit aucun
+      rendement (ADR-0091). Corrigé : l'injection ne vise que des séances réellement
+      cotées deux jours de suite, et le rapport publie l'effectif de chaque mesure.
+      **RESTE** : relancer `make calibrer-seuil ARGS=--comparer-ancien` sur le VPS et
+      trancher sur des chiffres qui veulent dire quelque chose.
+- [ ] **P2 — Source à plus de décimales pour les jetons sub-centimes** (trouvé le 09/09) :
+      SHIB n'a que 3 % de clôtures distinctes sur 1967 barres — le bon jeton, arrondi à
+      six décimales par la source. Un cours qui ne bouge qu'en marches d'escalier
+      fabrique une volatilité fausse et des plages figées. Concerne aussi PEPE, BONK,
+      FLOKI, XEC dès qu'ils seront ingérés. Binance rend huit décimales : vérifier si le
+      passage en `SOURCE_FORCEE` suffit, AVANT d'écrire quoi que ce soit.
 - [ ] ~~**P1 — ancien libellé : à valider sur données réelles**~~
 - [ ] ~~**P2 — ancien libellé : `scripts/demo_ml.py` n'est pas déterministe.**~~ Constaté le 07/09 en cherchant à
       prouver une non-régression : deux exécutions de la MÊME version donnent des accuracies

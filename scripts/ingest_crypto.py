@@ -38,17 +38,77 @@ def _bases_univers(top: int) -> list[str]:
     return bases[:top]
 
 
-# Certaines bases n'ont PAS le ticker Yahoo qu'on croit : le symbole court est occupé
-# par un homonyme illiquide, et `{base}-USD` ramène alors la série d'un autre jeton —
-# figée, ou pleine de sauts absurdes. Une entrée ici force le ticker à interroger.
-# À NE REMPLIR QUE SUR MESURE : `python scripts/diag_source_crypto.py` confronte chaque
-# série à une référence indépendante et imprime la ligne exacte à ajouter.
-ALIAS_YAHOO: dict[str, str] = {}
+# Bases dont le symbole court Yahoo désigne un AUTRE jeton : `{base}-USD` y ramène la
+# série d'un homonyme, propre de forme et fausse de bout en bout. Chaque entrée est
+# MESURÉE — corrélation des rendements contre Binance, `make diag-source-crypto`,
+# 09/09 — et non supposée. Deux confirmations indépendantes par ligne : la corrélation
+# quasi nulle, et une date de début antérieure à l'existence du jeton.
+SOURCE_FORCEE: dict[str, str] = {
+    "TON": "binance",   # corr −0,08 / 691 j · Yahoo depuis 2020-08 (Toncoin : 2021)
+    "UNI": "binance",   # corr +0,25 / 490 j · Yahoo depuis 2019-10 (Uniswap : 2020-09)
+    "APT": "binance",   # corr +0,11 / 556 j · Yahoo depuis 2021-11 (Aptos : 2022-10)
+    "ARB": "binance",   # corr +0,04 / 994 j · Yahoo depuis 2017-11 (Arbitrum : 2023-03)
+    "STX": "binance",   # corr +0,00 / 496 j · Yahoo depuis 2019-10
+}
 
 
 def ticker_yahoo(base: str) -> str:
-    """Ticker Yahoo à interroger pour cette base (override mesuré, sinon convention)."""
-    return ALIAS_YAHOO.get(base.upper(), f"{base}-USD")
+    """Symbole sous lequel la série est STOCKÉE en base, quelle que soit sa source.
+
+    On garde la convention Yahoo (`BTC-USD`) même pour les séries venues de Binance :
+    c'est ce que `_yahoo_aliases` cherche à la lecture, et fabriquer une seconde
+    convention obligerait chaque lecteur à connaître la provenance de chaque ligne.
+    """
+    return f"{base.upper()}-USD"
+
+
+def source_de(base: str) -> str:
+    """« yahoo » par défaut ; « binance » pour les bases où Yahoo a été mesuré faux."""
+    return SOURCE_FORCEE.get(base.upper(), "yahoo")
+
+
+def _lignes_yahoo(base: str, start, end) -> tuple[list, str]:
+    """(lignes prêtes à écrire, cause d'échec). L'une des deux est toujours vide."""
+    import yfinance as yf
+    ysym = ticker_yahoo(base)
+    try:
+        df = yf.Ticker(ysym).history(start=start.date().isoformat(),
+                                     end=end.date().isoformat())
+    except Exception as e:  # noqa: BLE001
+        return [], f"réseau/yfinance : {type(e).__name__}"
+    if df is None or len(df) < 250:
+        return [], f"historique trop court ({0 if df is None else len(df)} barres)"
+    lignes = [(ysym, d.date().isoformat(), float(r.Open), float(r.High), float(r.Low),
+               float(r.Close), float(r.Volume or 0))
+              for d, r in df.iterrows() if r.Close == r.Close and r.Close > 0]
+    return lignes, "" if lignes else "aucune clôture valide"
+
+
+def _lignes_binance(base: str, start) -> tuple[list, str]:
+    """Idem depuis Binance, pour les bases où Yahoo désigne un autre jeton."""
+    from packages.data.crypto_binance import historique
+    ysym = ticker_yahoo(base)
+    barres = historique(base, depuis=start.date().isoformat())
+    if len(barres) < 250:
+        return [], f"historique Binance trop court ({len(barres)} barres)"
+    return [(ysym, j, o, h, b, c, v) for j, o, h, b, c, v in barres], ""
+
+
+def _purger(conn: sqlite3.Connection, base: str) -> int:
+    """Efface les lignes existantes d'une base dont la source change.
+
+    Sans cela, les jours que la nouvelle source ne couvre pas garderaient les prix de
+    l'homonyme : une série cousue de deux actifs, pire que l'une ou l'autre, et
+    indétectable ensuite. On l'annonce — on ne touche jamais à des données de marché
+    en silence.
+    """
+    ysym = ticker_yahoo(base)
+    n = conn.execute("SELECT COUNT(*) FROM prices WHERE symbol=?",
+                     (ysym,)).fetchone()[0]
+    if n:
+        conn.execute("DELETE FROM prices WHERE symbol=?", (ysym,))
+        conn.commit()
+    return int(n)
 
 
 def _ingerer(conn: sqlite3.Connection, bases: list[str], start,
@@ -61,27 +121,20 @@ def _ingerer(conn: sqlite3.Connection, bases: list[str], start,
     `/USDC` sont restées inexploitables sans que rien ne le signale. Un ingest qui ne
     dit pas ce qu'il n'a pas pu faire donne l'illusion d'un univers complet.
     """
-    import yfinance as yf
     ok, echecs = 0, []
     for i, base in enumerate(bases, 1):
-        ysym = ticker_yahoo(base)
-        try:
-            df = yf.Ticker(ysym).history(start=start.date().isoformat(),
-                                         end=end.date().isoformat())
-        except Exception as e:  # noqa: BLE001
-            echecs.append((base, ysym, f"réseau/yfinance : {type(e).__name__}"))
+        source = source_de(base)
+        if source == "binance":
+            efface = _purger(conn, base)
+            print(f"  {base} : source forcée sur Binance (Yahoo mesuré faux)"
+                  + (f" — {efface} lignes de l'homonyme effacées" if efface else ""))
+            lignes, cause = _lignes_binance(base, start)
+        else:
+            lignes, cause = _lignes_yahoo(base, start, end)
+        if cause or not lignes:
+            echecs.append((base, ticker_yahoo(base), cause or "aucune ligne"))
             continue
-        if df is None or len(df) < 250:
-            n = 0 if df is None else len(df)
-            echecs.append((base, ysym, f"historique trop court ({n} barres)"))
-            continue
-        rows = [(ysym, d.date().isoformat(), float(r.Open), float(r.High), float(r.Low),
-                 float(r.Close), float(r.Volume or 0))
-                for d, r in df.iterrows() if r.Close == r.Close and r.Close > 0]
-        if not rows:
-            echecs.append((base, ysym, "aucune clôture valide"))
-            continue
-        conn.executemany("INSERT OR REPLACE INTO prices VALUES (?,?,?,?,?,?,?)", rows)
+        conn.executemany("INSERT OR REPLACE INTO prices VALUES (?,?,?,?,?,?,?)", lignes)
         conn.commit()
         ok += 1
         if i % 10 == 0:
@@ -91,11 +144,16 @@ def _ingerer(conn: sqlite3.Connection, bases: list[str], start,
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--top", type=int, default=50, help="nb de cryptos (par ordre de l'univers = cap)")
+    # Défaut 0 = TOUT l'univers crypto. L'ancien défaut de 50 laissait 52 bases sur 102
+    # sans la moindre barre en base (mesuré le 09/09 : la frontière tombait exactement
+    # au 50ᵉ symbole), sans que rien ne le dise. Le périmètre est défini par l'univers,
+    # pas par un nombre rond.
+    ap.add_argument("--top", type=int, default=0,
+                    help="nb de cryptos à ingérer (0 = tout l'univers)")
     ap.add_argument("--days", type=int, default=3650, help="profondeur d'historique (jours)")
     a = ap.parse_args()
 
-    bases = _bases_univers(a.top)
+    bases = _bases_univers(a.top or 10_000)
     if not bases:
         print("Aucune crypto dans l'univers (data/seed/crypto_*.csv)."); return
     print(f"{len(bases)} cryptos à ingérer (yfinance) : {', '.join(bases[:15])}…\n")
