@@ -2,6 +2,47 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0101 — Le yo-yo de la PV latente : mesurer avant de poser une règle (2026-09-10)
+
+**Question posée.** « Ma PV latente chute et je ne parviens pas à la sécuriser ; mon
+total fait le yo-yo de 101 k à 100,4 k. »
+
+**Ce que dit le code, sans supposition.** Le moteur de production (`scripts/run_live.py`)
+n'a NI objectif de gain NI stop — c'était déjà l'objet d'ADR-0073. Sa seule sortie est le
+rebalancement vers les poids cibles, et il ne touche une ligne que si
+`|cible − détenu|` dépasse la **bande d'inaction**, fixée à `max(0,5 % du capital, 5 $)`.
+Sur 101 k, cela fait **≈ 505 $ par ligne**. Une ligne dont l'écart à sa cible reste sous
+505 $ n'est jamais allégée, quoi qu'elle gagne : sa plus-value ne peut que revenir.
+**C'est un mécanisme, pas encore un diagnostic** — il faut savoir combien de lignes sont
+dans ce cas et combien d'argent y dort.
+
+**Ce qui manquait pour trancher.** `research/turnover_audit` mesure déjà la capture sur
+les lots CLOS (ADR-0073 : capture −22 % sur cinq positions, détention médiane 0,1 jour).
+Rien ne regardait les positions VIVANTES — et ce sont elles qu'on voit chuter. Le tableau
+de bord affiche la PV du jour, jamais le chemin : une ligne montée à +900 € puis
+redescendue à +120 € y ressemble trait pour trait à une ligne montée tout droit à +120 €.
+
+**Livré.** `packages/portfolio/pv_latente.py` (pur, testé) et `make diag-pv-latente` :
+par position ouverte, le pic de PV latente depuis l'entrée, la PV du jour, l'écart, et
+la part rendue. Plus, en regard, la liste des lignes dont le gain est **sous la bande
+d'inaction**, donc structurellement impossibles à alléger. Le total est nommé « somme des
+pics » et non « pic du portefeuille » : les pics de deux lignes ne sont pas simultanés,
+et cette somme n'a jamais été affichée d'un seul coup.
+
+**Ce qui n'est PAS décidé.** Aucune règle de prise de bénéfice n'est ajoutée. En poser
+une change le moteur qui tourne en production — un changement gaté, à valider pour
+lui-même, exactement ce que dit ADR-0073 à propos de `sortie_lab` : régler `rr` ou un
+suiveur ATR dans le banc ne modifierait pas un seul ordre réel, parce que le banc rejoue
+un autre moteur.
+
+**Sur l'idée d'importer une bibliothèque.** `exitkit` (27 politiques de sortie) et `bt`
+(rebalancement) existent. Ni l'une ni l'autre ne répond au problème : il ne manque pas
+d'algorithmes de sortie au projet — `packages/strategies/moteur_sortie.py`, les stops et
+cibles ATR de `swing`/`ma_crossover`/`rsi_reversion` sont déjà là et déjà testés. Ce qui
+manque est une DÉCISION : quelle politique brancher sur le chemin de production, et
+validée sur quoi. Ajouter une dépendance ici répéterait l'erreur de Riskfolio-Lib —
+recommander un paquet dont les capacités étaient déjà natives.
+
 ## ADR-0100 — HRP reste en production. Et deux avaries de fond, réparées (2026-09-10)
 
 **LA DÉCISION : on ne branche pas le Mean-CVaR.** Non par prudence de principe, mais

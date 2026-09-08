@@ -940,6 +940,25 @@ explicite, module par module, avec mesure.
       l'intersection (masquer par date plutôt qu'exiger la ligne pleine), ou allonger la
       profondeur d'ingestion. C'est cette contrainte, pas le réglage `--pas`, qui empêche
       aujourd'hui de trancher sur une MÉTHODE d'allocation.
+- [ ] **P0 — Le yo-yo de la PV latente : mesurer, puis décider** (posé le 10/09).
+      Symptôme rapporté : total oscillant de 101 k à 100,4 k, PV latente impossible à
+      sécuriser. Mécanisme lu dans le code (ADR-0101) : la production n'a ni objectif de
+      gain ni stop, sa seule sortie est le rebalancement, et la **bande d'inaction vaut
+      ≈ 505 $ par ligne** (0,5 % du capital). Sous cette bande, une ligne ne peut PAS
+      être allégée — sa plus-value ne peut que revenir.
+      **ÉTAPE 1, sur la machine qui détient `journal.db`** : `make diag-pv-latente
+      ARGS="--capital <ton capital>"` puis `make turnover-audit`. Le premier chiffre le
+      yo-yo sur les positions VIVANTES (pic, PV du jour, rendu, et combien de lignes
+      dorment sous la bande) ; le second donne le coût des allers-retours sur les lots
+      clos.
+      **ÉTAPE 2, seulement ensuite** : choisir entre (a) resserrer la bande — plus de
+      prises de bénéfice mais plus de frais, à arbitrer sur le coût mesuré par
+      `turnover-audit` ; (b) brancher une règle de sécurisation explicite (suiveur, ou
+      allègement partiel au-delà d'un seuil de gain) — c'est un CHANGEMENT DE MOTEUR au
+      sens d'ADR-0073, à valider pour lui-même ; (c) ne rien changer si le rendu mesuré
+      est faible et que le yo-yo n'est que la volatilité du marché.
+      **NE PAS** régler `rr` ou le suiveur de `sortie_lab` en croyant agir : ce banc
+      rejoue `fast_swing_backtest`, pas le chemin de production (ADR-0073).
 - [x] **P1 — TRANCHÉ le 10/09 : HRP reste en production** (ADR-0100). La période
       s'affiche : **2024-05-15 → 2026-05-19**, 336 séances — **aucun épisode de hausse
       des taux**, le krach obligataire de 2022 est hors fenêtre. Or l'allocation gagnante
