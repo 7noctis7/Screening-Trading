@@ -92,7 +92,7 @@ def charger_panel(jours: int = 1500):
     return champs, symboles, mode
 
 
-def etape_anomalies(champs, symboles) -> None:
+def etape_anomalies(champs, symboles) -> set[str]:
     _titre(1, "ANOMALIES CROISÉES — ce qu'un contrôle ligne par ligne ne voit pas",
            "lecture seule, aucun risque")
     from packages.storage.anomalies_panel import auditer_panel, resumer_par_actif
@@ -101,7 +101,7 @@ def etape_anomalies(champs, symboles) -> None:
     print(f"  → {rapport['resume']}")
     if rapport["ok"]:
         print("  ✓ rien à signaler — l'audit croisé ne trouve aucune incohérence")
-        return
+        return set()
 
     # PAR ACTIF, pas événement par événement : ce qui se décide, ce n'est pas « ce
     # point du 12 mars », c'est « cette série est-elle exploitable ».
@@ -139,11 +139,23 @@ def etape_anomalies(champs, symboles) -> None:
                   f"   ({x['figees']} épisodes)")
         if len(figes) > 15:
             print(f"       … et {len(figes) - 15} autre(s)")
-    print("\n  À LIRE : les actifs de la liste A ne devraient pas entrer dans une")
-    print("  allocation. Ceux de la liste C fausseraient tout optimiseur de risque.")
+    # LES LISTES A ET C SONT TRANSMISES À L'ÉTAPE 3, et ce n'est pas un confort.
+    #
+    # Premier lancement complet (08/09) : Mean-CVaR proposait TRX/USDC 56,2 %,
+    # BTC/USDC 42,4 % et TON/USDC 1,3 % — or TON/USDC figurait dans la liste A (données
+    # cassées) et TRX/USDC dans la liste B. Le CVaR de 4,61 % était donc mesuré SUR DES
+    # PRIX FAUX, et le « gain » face à min-variance ne prouvait rien.
+    #
+    # Un audit qui trouve des séries corrompues et laisse l'étape suivante les utiliser
+    # ne sert à rien. Pire : il fabrique un résultat flatteur, donc convaincant.
+    ecarter = {x["symbole"] for x in casses} | {x["symbole"] for x in figes}
+    print(f"\n  À LIRE : les {len(casses)} actifs de la liste A n'ont pas leur place")
+    print("  dans une allocation, et ceux de la liste C fausseraient tout optimiseur")
+    print(f"  de risque. Ces {len(ecarter)} actifs sont ÉCARTÉS de l'étape 3.")
+    return ecarter
 
 
-def etape_cvar(champs, symboles) -> None:
+def etape_cvar(champs, symboles, ecarter: set[str] | None = None) -> None:
     _titre(3, "MEAN-CVaR contre les allocateurs actuels — sur rendements RÉELS",
            "propose une allocation, n'en applique aucune")
     from packages.portfolio.cvar_optimize import cvar_du_portefeuille, mean_cvar_detail
@@ -169,6 +181,14 @@ def etape_cvar(champs, symboles) -> None:
     # ferait justement paraître l'actif plus sûr qu'il n'est.
     couverture = np.isfinite(r).mean(axis=0)
     gardes = couverture >= COUVERTURE_MIN
+    # Exclusion des séries que l'étape 1 a signalées. Comparer des allocateurs sur des
+    # prix faux mesure la sensibilité au bruit, pas la qualité de l'allocation.
+    if ecarter:
+        propres = np.array([s not in ecarter for s in symboles])
+        n_retires = int((gardes & ~propres).sum())
+        gardes = gardes & propres
+        if n_retires:
+            print(f"  {n_retires} actif(s) écarté(s) : séries signalées à l'étape 1")
     if gardes.sum() < 5:
         print(f"  ⛔ {int(gardes.sum())} actifs couverts à "
               f"{COUVERTURE_MIN:.0%}+ : comparaison impossible")
@@ -300,10 +320,13 @@ def main() -> int:
     # et 4 avec elle. Or l'ordre du script sert justement à obtenir les mesures
     # sans risque D'ABORD : les perdre à cause d'une dépendance optionnelle manquante
     # sur une étape ultérieure est exactement l'inverse du but recherché.
+    etat: dict = {}
     etapes = [
-        ("anomalies croisées", lambda: etape_anomalies(champs, symboles)),
+        ("anomalies croisées", lambda: etat.update(
+            ecarter=etape_anomalies(champs, symboles) or set())),
         ("explicabilité", lambda: etape_explication(champs, symboles)),
-        ("Mean-CVaR", lambda: etape_cvar(champs, symboles)),
+        ("Mean-CVaR", lambda: etape_cvar(champs, symboles,
+                                        etat.get("ecarter"))),
         ("générateur de signaux", lambda: etape_generateur(champs, args.appliquer)),
     ]
     echecs = []

@@ -139,6 +139,38 @@ def enumerer(temporels=None, transversaux=None, fenetres=FENETRES) -> list[dict]
             for a in temps for b in trans for f in fenetres]
 
 
+# Transformations qui préservent l'ORDRE d'une coupe transversale. La corrélation de
+# Spearman ne voit que l'ordre : `brut`,
+# `rang` et `zscore` d'un même signal donnent donc
+# EXACTEMENT le même IC, et `inverse` son opposé. Vérifié à la mesure le 08/09 —
+# −0,104974 pour les trois, +0,104974 pour le quatrième.
+#
+# Les compter comme quatre candidats distincts a deux effets, tous deux faux : le compte
+# d'essais quadruple sans qu'aucune hypothèse nouvelle soit testée, et une campagne
+# annonce huit découvertes là où il y en a deux. Elles restent dans la grammaire — elles
+# comptent pour un modèle qui consomme les VALEURS — mais l'évaluation par IC n'en garde
+# qu'une par famille.
+TRANSVERSAUX_EQUIVALENTS = ("brut", "rang", "zscore")
+
+
+def familles(candidats: list[dict]) -> list[tuple[dict, list[dict]]]:
+    """Regroupe les candidats que l'IC ne peut PAS distinguer.
+
+    Une famille = un couple (opérateur temporel, fenêtre). Son représentant est la
+    version brute ; les autres membres n'apportent aucune information supplémentaire à
+    une mesure de rang.
+    """
+    groupes: dict[tuple, list[dict]] = {}
+    for c in candidats:
+        e = valider(c)
+        groupes.setdefault((e["temporel"], e["fenetre"]), []).append(e)
+    sortie = []
+    for (temporel, fenetre), membres in groupes.items():
+        sortie.append(({"temporel": temporel, "transversal": "brut",
+                        "fenetre": fenetre}, membres))
+    return sortie
+
+
 def mesurer_ic(signal: np.ndarray, rendements_futurs: np.ndarray,
                horizon: int) -> dict:
     """IC moyen et t-stat sur des fenêtres DISJOINTES (pas = horizon).
@@ -161,6 +193,34 @@ def mesurer_ic(signal: np.ndarray, rendements_futurs: np.ndarray,
     moyenne = float(serie.mean())
     t_stat = float(moyenne / ecart * np.sqrt(serie.size)) if ecart > 0 else None
     return {"ic_moyen": moyenne, "t_stat": t_stat, "n_fenetres": int(serie.size)}
+
+
+def benjamini_hochberg(p_valeurs: list[float], fdr: float = 0.05) -> list[bool]:
+    """Quels tests survivent au contrôle du taux de fausses découvertes.
+
+    Sans cette correction, un seuil de t ≥ 2 appliqué à vingt-quatre tests laisse passer
+    un peu plus d'un faux positif en moyenne, par construction. C'est exactement le
+    reproche fait au seuil |IC| ≥ 0,02 du blueprint NVIDIA — et le premier lancement
+    réel (08/09) a montré que ce module le méritait aussi : deux signaux « promus » sur
+    vingt-quatre essais, soit le nombre attendu du pur hasard.
+
+    Benjamini-Hochberg plutôt que Bonferroni : on cherche à limiter la PROPORTION de
+    fausses découvertes parmi les retenues, pas à interdire toute erreur. Bonferroni
+    rejetterait presque tout et rendrait la recherche stérile.
+    """
+    n = len(p_valeurs)
+    if n == 0:
+        return []
+    ordre = sorted(range(n), key=lambda i: p_valeurs[i])
+    survit = [False] * n
+    dernier = -1
+    for rang, i in enumerate(ordre, 1):
+        if p_valeurs[i] <= fdr * rang / n:
+            dernier = rang
+    for rang, i in enumerate(ordre, 1):
+        if rang <= dernier:
+            survit[i] = True
+    return survit
 
 
 def verdict(mesure: dict) -> tuple[str, str]:
@@ -218,24 +278,86 @@ def soumettre(expression: dict, signal: np.ndarray, rendements_futurs: np.ndarra
 
 def campagne(candidats: list[dict], panneau: dict[str, np.ndarray],
              rendements_futurs: np.ndarray, horizon: int,
-             chemin_ledger=None) -> dict:
-    """Évalue une liste de candidats et rend le bilan de la campagne.
+             chemin_ledger=None, fdr: float = 0.05) -> dict:
+    """Évalue une campagne de candidats et rend son bilan, ESSAIS CORRIGÉS.
 
-    Publie le nombre d'essais AVANT et APRÈS : c'est la quantité qui déflate le Sharpe
-    de tout le programme, et la seule façon de voir qu'une campagne de trois cents
-    candidats a resserré le seuil pour tous les travaux à venir.
+    Deux choses que la première version faisait mal, révélées par le premier lancement
+    sur données réelles (08/09) :
+
+    1. Elle comptait quatre candidats là où l'IC n'en distingue qu'un : `brut`, `rang`
+       et `zscore` ont le même IC de Spearman, `inverse` son opposé. La
+       campagne annonçait huit découvertes pour deux signaux.
+    2. Elle promouvait à t ≥ 2 SANS corriger les essais de sa propre campagne. Sur
+       vingt-quatre tests, ce seuil laisse passer un peu plus d'un faux positif par
+       construction — et il en a laissé passer deux, soit le nombre attendu du hasard.
+       C'est précisément le reproche adressé au seuil du blueprint NVIDIA.
+
+    On évalue donc UNE fois par famille, puis on applique Benjamini-Hochberg à
+    l'ensemble. Un signal qui passait le seuil brut mais tombe après correction n'est
+    pas « rejeté » : il est INDISTINCT du hasard une fois compté ce qu'on a essayé.
+    La distinction compte — elle dit s'il faut le creuser ou l'oublier.
     """
     kw = {"path": chemin_ledger} if chemin_ledger else {}
     avant = trial_count(**kw)
-    resultats = [soumettre(c, evaluer(c, panneau), rendements_futurs, horizon,
-                           chemin_ledger=chemin_ledger) for c in candidats]
+    groupes = familles(candidats)
+
+    mesures = []
+    for representant, membres in groupes:
+        m = mesurer_ic(evaluer(representant, panneau), rendements_futurs, horizon)
+        mesures.append((representant, membres, m, *verdict(m)))
+
+    # Correction sur les seuls tests réellement mesurables : un candidat sans t-stat n'a
+    # pas de p-valeur, l'inclure fausserait le dénominateur dans le sens permissif.
+    testables = [i for i, (_, _, m, _, _) in enumerate(mesures)
+                 if m["t_stat"] is not None]
+    p_val = [_p_valeur(mesures[i][2]) for i in testables]
+    survit = benjamini_hochberg(p_val, fdr)
+    corriges = {testables[k]: survit[k] for k in range(len(testables))}
+
+    resultats = []
+    for i, (representant, membres, mesure, statut, motif) in enumerate(mesures):
+        if statut == "promu" and not corriges.get(i, False):
+            statut = "indistinct"
+            motif = (f"{motif} — mais NE SURVIT PAS à la correction pour "
+                     f"{len(testables)} essais (Benjamini-Hochberg, FDR {fdr:.0%})")
+        resultats.append(_inscrire(representant, membres, mesure, statut, motif,
+                                   horizon, len(testables), chemin_ledger))
+
     apres = trial_count(**kw)
     promus = [r for r in resultats if r["statut"] == "promu"]
+    indistincts = [r for r in resultats if r["statut"] == "indistinct"]
     faux_positifs = [r for r in resultats
                      if r["accepte_par_le_blueprint"] and r["statut"] != "promu"]
     return {
-        "n_candidats": len(resultats), "promus": promus,
+        "n_candidats": len(candidats), "n_essais_distincts": len(groupes),
+        "promus": promus, "indistincts_apres_correction": indistincts,
         "essais_avant": avant, "essais_apres": apres,
+        "faux_positifs_attendus": round(len(testables) * 0.05, 1),
         "retenus_par_le_blueprint_mais_pas_par_nous": faux_positifs,
         "resultats": resultats,
     }
+
+
+def _p_valeur(mesure: dict) -> float:
+    from packages.research.screening_ic import p_valeur
+    p = p_valeur(mesure["t_stat"], mesure["n_fenetres"])
+    return 1.0 if p is None else float(p)
+
+
+def _inscrire(representant: dict, membres: list[dict], mesure: dict, statut: str,
+              motif: str, horizon: int, n_essais: int, chemin_ledger) -> dict:
+    """Inscrit UNE famille au registre. Une ligne par hypothèse distincte, pas par
+    écriture de la même hypothèse."""
+    enregistrement = {
+        "facteur": nom(representant), "statut": statut, "motif": motif,
+        "horizon": f"{horizon}j", "classe": ["equity", "crypto"],
+        "ic_moyen": mesure["ic_moyen"], "t_stat": mesure["t_stat"],
+        "n_fenetres": mesure["n_fenetres"],
+        "n_essais_campagne": n_essais,
+        "formes_equivalentes": [nom(m) for m in membres],
+        "source": "generateur_signaux",
+        "accepte_par_le_blueprint": accepte_par_le_blueprint(mesure),
+    }
+    kw = {"path": chemin_ledger} if chemin_ledger else {}
+    append_record(enregistrement, **kw)
+    return enregistrement

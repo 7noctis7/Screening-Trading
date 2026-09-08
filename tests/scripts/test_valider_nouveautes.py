@@ -208,3 +208,42 @@ def test_le_decoupage_ne_change_aucun_chiffre() -> None:
         assert np.allclose(decoupe, entier, equal_nan=True), (
             f"{nom_op} ne rend pas la même chose par blocs qu'en une fois"
         )
+
+
+def test_les_series_signalees_sont_ecartees_de_la_comparaison(capsys) -> None:
+    """LE défaut du premier lancement complet (08/09) : Mean-CVaR proposait TRX/USDC
+    56,2 %, BTC/USDC 42,4 % et TON/USDC 1,3 % — or TON/USDC figurait dans la liste des
+    DONNÉES CASSÉES établie par l'étape 1, trois cadres plus haut.
+
+    Le CVaR de 4,61 % était donc mesuré sur des prix faux, et le « gain » face à
+    min-variance ne prouvait rien. Un audit qui trouve des séries corrompues et laisse
+    l'étape suivante les utiliser ne sert à rien : pire, il fabrique un résultat
+    flatteur, donc convaincant."""
+    g = np.random.default_rng(9)
+    t, n = 800, 10
+    close = 100.0 * np.exp(np.cumsum(g.normal(0, 0.015, (t, n)), axis=0))
+    close[300:, 0] = close[299, 0]          # actif 0 : figé, donc « sans risque »
+    champs = {c: close.copy() for c in ("open", "high", "low", "close", "volume")}
+    noms = [f"A{i}" for i in range(n)]
+
+    valider.etape_cvar(champs, noms, ecarter={"A0"})
+    sortie = capsys.readouterr().out
+    assert "1 actif(s) écarté(s)" in sortie, "l'exclusion n'est pas appliquée"
+    debut = sortie.index("Lignes proposées")
+    assert "A0 " not in sortie[debut:], (
+        "l'actif figé est encore proposé : il paraît sans risque à l'optimiseur et "
+        "hérite d'un poids qu'il ne mérite pas"
+    )
+
+
+def test_l_audit_transmet_bien_les_actifs_a_ecarter(capsys) -> None:
+    """Contrôle négatif du test précédent : si l'étape 1 ne rendait rien, l'exclusion
+    ne pourrait pas s'appliquer et le chaînage serait décoratif."""
+    g = np.random.default_rng(10)
+    t, n = 400, 8
+    close = 100.0 * np.exp(np.cumsum(g.normal(0, 0.015, (t, n)), axis=0))
+    close[100:200, 3] = close[99, 3]        # série figée franche
+    champs = {c: close.copy() for c in ("open", "high", "low", "close", "volume")}
+    ecarter = valider.etape_anomalies(champs, [f"A{i}" for i in range(n)])
+    assert isinstance(ecarter, set)
+    assert "A3" in ecarter, f"la série figée n'est pas transmise : {ecarter}"

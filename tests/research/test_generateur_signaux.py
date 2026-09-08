@@ -119,9 +119,15 @@ def test_chaque_candidat_monte_le_compte_d_essais(tmp_path) -> None:
     assert bilan["essais_apres"] > bilan["essais_avant"], (
         "le compte d'essais n'a pas bougé : générer est redevenu gratuit"
     )
-    assert len(read_records(ledger)) == len(candidats), (
-        "des candidats ne sont pas inscrits — le compte d'essais ment, donc la "
-        "déflation de TOUS les autres travaux est faussée"
+    # UNE ligne par hypothèse DISTINCTE, pas par écriture de la même. `brut`, `rang` et
+    # `zscore` d'un même signal ont le même IC de Spearman : les compter séparément
+    # quadruplerait le nombre d'essais sans qu'aucune hypothèse nouvelle soit testée.
+    assert len(read_records(ledger)) == bilan["n_essais_distincts"], (
+        "le registre ne contient pas exactement une ligne par hypothèse distincte"
+    )
+    assert bilan["n_essais_distincts"] < len(candidats), (
+        "aucune famille équivalente détectée : le compte d'essais est gonflé par des "
+        "doublons que la mesure d'IC ne peut pas distinguer"
     )
 
 
@@ -161,3 +167,67 @@ def test_l_enumeration_est_deterministe() -> None:
     """Un générateur non déterministe rendrait le registre inexploitable : deux
     campagnes ne seraient plus comparables."""
     assert gen.enumerer() == gen.enumerer()
+
+
+# ------------------------------- essais multiples DANS la campagne
+
+def test_les_transformations_de_rang_sont_une_seule_hypothese() -> None:
+    """Mesuré le 08/09 : `brut`, `rang` et `zscore` d'un même signal donnent −0,104974,
+    `inverse` +0,104974. La corrélation de Spearman ne voit que l'ORDRE, et ces
+    transformations le préservent. Quatre « candidats » = un seul test."""
+    fam = gen.familles(gen.enumerer(temporels=("momentum",), fenetres=(21,)))
+    assert len(fam) == 1, f"{len(fam)} familles pour un seul signal"
+    assert len(fam[0][1]) == 4, "les quatre formes ne sont pas regroupées"
+
+
+def test_benjamini_hochberg_rejette_deux_marginaux_sur_vingt_quatre() -> None:
+    """Le cas RÉEL du 08/09, rejoué. Les deux « promus » de la campagne avaient
+    p = 0,0092 et p = 0,0432 sur vingt-quatre essais distincts. Aucun ne survit : deux
+    promus sur vingt-quatre à t ≥ 2, c'est le nombre attendu du pur hasard (1,2)."""
+    p = [0.0092, 0.0432] + [0.5] * 22
+    assert not any(gen.benjamini_hochberg(p)), (
+        "le contrôle du taux de fausses découvertes laisse passer des marginaux"
+    )
+
+
+def test_benjamini_hochberg_garde_ce_qui_est_franc() -> None:
+    """Contrôle négatif : une correction qui rejette TOUT ne corrige rien, elle
+    stérilise. Un signal à p = 1e-6 doit survivre."""
+    survit = gen.benjamini_hochberg([1e-6] + [0.6] * 23)
+    assert survit[0] and not any(survit[1:])
+
+
+def test_un_signal_marginal_est_indistinct_et_non_rejete(tmp_path, monkeypatch) -> None:
+    """« Rejeté » et « indistinct une fois les essais comptés » ne sont pas la même
+    chose : le premier dit que l'idée est mauvaise, le second qu'on ne peut pas savoir.
+    Les confondre ferait abandonner des pistes pour la mauvaise raison.
+
+    On force UN candidat à ressortir marginal (t = 2,1) et les autres à plat, exactement
+    la configuration du 08/09 : il franchit le seuil brut, il ne survit pas à la
+    correction pour les vingt-quatre essais de sa propre campagne."""
+    appels = {"n": 0}
+
+    def _mesure_truquee(signal, futurs, horizon):
+        appels["n"] += 1
+        if appels["n"] == 1:
+            return {"ic_moyen": 0.055, "t_stat": 2.1, "n_fenetres": 70}
+        return {"ic_moyen": 0.001, "t_stat": 0.05, "n_fenetres": 70}
+
+    monkeypatch.setattr(gen, "mesurer_ic", _mesure_truquee)
+    ledger = tmp_path / "h.jsonl"
+    panneau, futurs = _panneau_sans_edge()
+    bilan = gen.campagne(gen.enumerer(), panneau, futurs, horizon=21,
+                         chemin_ledger=ledger)
+
+    assert not bilan["promus"], (
+        "un signal marginal est promu malgré les 24 essais de la campagne — c'est "
+        "exactement le reproche fait au seuil |IC| >= 0,02 du blueprint"
+    )
+    assert len(bilan["indistincts_apres_correction"]) == 1, (
+        "le signal marginal devrait être INDISTINCT, ni promu ni rejeté"
+    )
+    motif = bilan["indistincts_apres_correction"][0]["motif"]
+    assert "Benjamini-Hochberg" in motif, "le motif ne dit pas pourquoi il est tombé"
+    assert bilan["faux_positifs_attendus"] > 0, (
+        "la campagne doit publier combien de faux positifs le hasard produirait"
+    )
