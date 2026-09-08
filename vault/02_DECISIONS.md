@@ -2,6 +2,50 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0097 — La prédiction falsifiable était juste : l'arrondi venait de la source (2026-09-09)
+
+**Contexte.** ADR-0096 basculait six séries vers Binance pour cause d'arrondi
+destructeur, en écrivant à l'avance ce qui devait se produire : *« si l'arrondi vient de
+Yahoo, la part de clôtures distinctes doit bondir au prochain passage ; s'il tient au pas
+de cotation du jeton, non »*. La prédiction pouvait échouer. Elle n'a pas échoué.
+
+| base | clôtures distinctes | plus longue plage figée |
+|---|---|---|
+| SHIB | 3 % → **63 %** | 61 séances → **3** |
+| BONK | 4 % → **84 %** | 130 → **2** |
+| XEC | 10 % → **83 %** | 70 → **2** |
+| FLOKI | 14 % → **95 %** | 25 → **2** |
+| COMP | 17 % → **89 %** | 46 → **2** |
+| GMX | 32 % → **84 %** | 256 → **2** |
+
+**Ce que ça règle, au-delà de ces six séries.** Les plages figées n'étaient pas des flux
+morts : c'était la SOURCE qui décrochait, et l'arrondi qui fabriquait des paliers. Le
+verdict « FLUX ARRÊTÉ » désignait un symptôme de la source, jamais l'état du marché — et
+il aurait conduit à retirer de l'univers des séries qu'il suffisait de resourcer. Le geste
+qu'on aurait fait sans la mesure était le mauvais.
+
+**Décision.** `RPL` rejoint `SOURCE_FORCEE` sur la même signature — bon jeton (corr
++1,00), à jour, mais 24 séances immobiles — avec la même prédiction falsifiable : la
+plage doit tomber à 2 au prochain passage. C'est la dernière série que le diagnostic
+signalait encore hors des périmées.
+
+**État final de la source crypto.** 102 bases sur 102 ingérées (PEPE incluse, que Yahoo
+limitait à 119 barres), **21 sources forcées et vérifiées**, 92 séries CONFORMES. Restent
+trois séries **NON VÉRIFIABLES** — OKB, LEO, KAS — que Binance ne cote pas : leur forme
+est saine (100 % de clôtures distinctes, à jour), mais aucune référence indépendante
+n'existe pour elles ici. On le DIT plutôt que de les déclarer conformes par défaut ;
+ajouter une seconde référence pour trois bases est un P2, pas un préalable.
+
+**La conséquence qui compte, et qui n'est pas dans ce fichier.** Toutes les mesures
+d'allocation antérieures au 09/09 — ADR-0087 compris, celui qui rejette le Mean-CVaR —
+portaient sur un univers de 774 actifs dont 48 cryptos, avec cinq séries décrivant
+d'autres jetons et six rongées par l'arrondi. Le panneau fait maintenant **823 actifs
+dont 97 cryptos**, tous confrontés à une référence. Le rejet du Mean-CVaR ne devrait pas
+bouger — sa cause est un manque d'observations de queue, que l'élargissement de l'univers
+aggrave au lieu de le corriger — mais ce raisonnement n'est pas une mesure. **À
+reprendre : `make valider-nouveautes`**, qui refait la comparaison d'allocateurs ET
+applique pour la première fois le seuil calibré à 24.
+
 ## ADR-0096 — Un ticker réattribué, et un ordre destructeur (2026-09-09)
 
 **Le diagnostic s'est contredit, et il avait raison deux fois.** `OP` est sorti CONFORME

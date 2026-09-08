@@ -43,7 +43,8 @@ def test_seules_les_bases_mesurees_fausses_changent_de_source() -> None:
                 "SUI", "TIA", "JUP", "STRK", "APE",      # 2e lot, univers complet
                 "IMX", "GRT", "GMX", "GMT", "OP",        # 3e lot, référence paginée
                 # 4e lot : source inadéquate (arrondi, ou historique trop court)
-                "SHIB", "BONK", "XEC", "FLOKI", "COMP", "PEPE"}
+                "SHIB", "BONK", "XEC", "FLOKI", "COMP", "PEPE",
+                "RPL"}                                   # 5e : source qui décroche
     for base in mesurees:
         assert source_de(base) == "binance", base
     assert set(SOURCE_FORCEE) == mesurees

@@ -1,5 +1,45 @@
 # 04 — JOURNAL
 
+## Session 2026-09-09 (5ᵉ) — La prédiction tenait, et la source crypto est propre
+
+**LA PRÉDICTION ÉCRITE D'AVANCE ÉTAIT JUSTE.** Hier je basculais six séries vers Binance
+en écrivant ce qui devait se produire : *si l'arrondi vient de Yahoo, la part de clôtures
+distinctes doit bondir ; s'il tient au pas de cotation du jeton, non*. Elle pouvait
+échouer :
+
+| base | clôtures distinctes | plus longue plage figée |
+|---|---|---|
+| SHIB | 3 % → **63 %** | 61 séances → **3** |
+| BONK | 4 % → **84 %** | 130 → **2** |
+| XEC | 10 % → **83 %** | 70 → **2** |
+| FLOKI | 14 % → **95 %** | 25 → **2** |
+| COMP | 17 % → **89 %** | 46 → **2** |
+| GMX | 32 % → **84 %** | 256 → **2** |
+
+**Et ça règle plus que ces six séries.** Les plages figées n'étaient pas des flux morts :
+c'était la source qui décrochait. Le verdict « FLUX ARRÊTÉ » désignait un symptôme de la
+source, jamais l'état du marché — et sans la mesure, le geste (retirer ces séries de
+l'univers) aurait été le mauvais. `RPL` rejoint le lot sur la même signature, avec la
+même prédiction à vérifier.
+
+**ÉTAT FINAL DE LA SOURCE CRYPTO.** 102 bases sur 102 ingérées (PEPE incluse, que Yahoo
+limitait à 119 barres), **21 sources forcées et vérifiées**, **92 séries CONFORMES**.
+Restent 7 périmées (décision d'univers, elle t'appartient) et 3 non vérifiables — OKB,
+LEO, KAS — que Binance ne cote pas : leur forme est saine, mais rien ne les confronte, et
+on le DIT au lieu de les déclarer conformes par défaut.
+
+**CE QUI COMPTE MAINTENANT, ET QUI N'EST PLUS DE LA PLOMBERIE.** Toutes les mesures
+d'allocation antérieures à aujourd'hui — ADR-0087 compris, celui qui rejette le
+Mean-CVaR — portaient sur 774 actifs dont 48 cryptos, avec cinq séries décrivant d'autres
+jetons. Le panneau fait **823 actifs dont 97 cryptos**, tous confrontés à une référence.
+Le rejet du Mean-CVaR ne devrait pas bouger — sa cause est le manque d'observations de
+queue, que l'élargissement aggrave — **mais ce raisonnement n'est pas une mesure**.
+
+**PROCHAIN.** `make valider-nouveautes` : refait la comparaison d'allocateurs sur
+l'univers assaini ET applique pour la première fois le seuil calibré à 24.
+
+ADR-0097. Tests : 2304 passés.
+
 ## Session 2026-09-09 (4ᵉ) — Le seuil est calibré, et il passe de 8 à 24
 
 **TRANCHÉ.** Grille élargie, instrument réparé, 150 injections : **l'optimum est enfin

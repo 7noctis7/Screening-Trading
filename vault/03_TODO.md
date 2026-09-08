@@ -882,6 +882,28 @@ explicite, module par module, avec mesure.
         clôtures distinctes) et PEPE (Yahoo ne rend que 119 barres). **Prédiction
         falsifiable** : si l'arrondi vient de Yahoo, la part de clôtures distinctes doit
         bondir au prochain passage ; s'il tient au pas de cotation du jeton, non.
+      **VÉRIFIÉ LE 09/09, la prédiction tenait** (ADR-0097) : SHIB 3 % → **63 %**,
+      BONK 4 % → 84 %, XEC 10 % → 83 %, FLOKI 14 % → 95 %, COMP 17 % → 89 %,
+      GMX 32 % → 84 %. Et les plages figées s'effondrent avec : SHIB 61 séances → 3,
+      GMX 256 → 2. Ce n'étaient pas des flux morts, c'était la source qui décrochait —
+      le geste qu'on aurait fait sans mesurer (retirer les séries) était le mauvais.
+      **P1 CLOS.** 102 bases sur 102 ingérées, 21 sources forcées et vérifiées,
+      92 séries CONFORMES. `RPL` ajouté au 5ᵉ lot sur la même signature (figée 24,
+      corr +1,00) avec la même prédiction — à confirmer au prochain passage.
+- [ ] **P2 — Trois séries sans référence indépendante** : OKB, LEO, KAS, que Binance ne
+      cote pas. Leur forme est saine (100 % de clôtures distinctes, à jour), mais rien
+      ne les confronte. On le DIT au lieu de les déclarer conformes par défaut. Ajouter
+      une seconde référence (CoinGecko, avec résolution du symbole par son endpoint de
+      recherche plutôt qu'une table écrite à la main) — pour trois bases sur 102, ce
+      n'est pas un préalable.
+- [ ] **P1 — Refaire les mesures d'allocation sur l'univers assaini** (09/09).
+      ADR-0087 (rejet du Mean-CVaR) et la validation de HRP portaient sur 774 actifs dont
+      48 cryptos, avec cinq séries décrivant d'AUTRES jetons et six rongées par l'arrondi.
+      Le panneau fait maintenant **823 actifs dont 97 cryptos**, tous confrontés à une
+      référence. Le rejet du Mean-CVaR ne devrait pas bouger — sa cause est le manque
+      d'observations de queue, que l'élargissement aggrave — mais **ce raisonnement n'est
+      pas une mesure**. `make valider-nouveautes` refait la comparaison ET applique pour
+      la première fois le seuil calibré à 24.
 - [ ] **P1 — Sortir de l'univers les séries PÉRIMÉES** (trouvé le 09/09) : une douzaine
       de séries s'arrêtent des années avant le reste du lot — MATIC en 2025-03 (migration
       POL), RNDR en 2024-07, FTM en 2025-01, IMX en 2022-07, GRT en 2022-04, GMX en

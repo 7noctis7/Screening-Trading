@@ -79,6 +79,12 @@ SOURCE_FORCEE: dict[str, str] = {
     "FLOKI": "binance",  # 14 % · figée 25 séances (corr +0,99)
     "COMP": "binance",  # 17 % · arrêtée en 2021-08, périmée de 1850 jours
     "PEPE": "binance",  # Yahoo ne rend que 119 barres, sous le seuil des 250
+    # Cinquième lot. La bascule du 4ᵉ lot a montré que les plages figées de Yahoo
+    # s'effondrent une fois la source changée (SHIB 61 séances → 3, GMX 256 → 2) :
+    # c'était la source qui décrochait, pas le marché. `RPL` porte la même signature —
+    # bon jeton (corr +1,00), à jour, mais 24 séances immobiles. Même prédiction
+    # falsifiable : la plage doit tomber à 2 au prochain passage.
+    "RPL": "binance",   # figée 24 séances · corr +1,00 · retard 1 j
 }
 
 
