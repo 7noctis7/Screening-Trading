@@ -2,6 +2,46 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0080 — Mean-CVaR : minimiser la perte extrême, pas la dispersion (2026-09-07)
+
+**Contexte.** Inspiration : le blueprint `NVIDIA-AI-Blueprints/portfolio-optimization`
+(vérifié, 487 étoiles), qui résout du Mean-CVaR sur GPU avec cuOpt et annonce jusqu'à 160×.
+Ce chiffre suppose un H100 et porte sur le SOLVEUR. La question utile n'était donc pas
+« comment aller 160× plus vite » mais « qu'est-ce que ce blueprint calcule que nous ne
+calculons pas ».
+
+**Le manque.** Tous les optimiseurs de `optimize.py` raisonnent en variance : min-variance,
+inverse-variance, ERC, HRP. La variance traite +8 % et −8 % à l'identique. `cvar_historical`
+existait mais ne servait qu'à RAPPORTER, jamais à décider. Mesuré le 06/09 : min-variance
+pose 87 % à 99 % sur l'actif le plus calme — définitionnel, pas un bug. Or « le plus calme »
+et « celui qui perdra le moins le jour où tout tombe » diffèrent dès que les pertes sont
+asymétriques.
+
+**Décision.** `packages/portfolio/cvar_optimize.py` — Mean-CVaR par Rockafellar-Uryasev,
+résolu EXACTEMENT en programmation linéaire (HiGHS via scipy, matrice creuse), avec repli
+sous-gradient projeté si scipy est absent. Même formulation que celle que le blueprint confie
+à cuOpt : seul le solveur changerait sur GPU.
+
+**Mesuré sur le cas piège** (un actif calme à krachs, un actif agité sans trou) :
+optimum vrai par balayage 14,85 % / CVaR 0,03803 · solveur LP 14,85 % / 0,03803 (écart
+7,8e-08) · min-variance 33,5 % / 0,03989. L'écart n'est pas cosmétique : min-variance met
+plus du double sur l'actif qui ruine.
+
+**Deux erreurs commises et corrigées, consignées parce qu'elles se reproduiront.**
+1. *Mise à l'échelle du pas.* La première version calait le pas de sous-gradient sur
+   l'amplitude des rendements (O(0,01)) alors que les poids sont O(1). Partie de 50 %, elle
+   finissait à 44 % là où l'optimum était à 15 % — donc PIRE que min-variance sur son propre
+   objectif. Le code tournait et semblait converger. Seule la comparaison à min-variance l'a
+   attrapé ; la lecture ne l'aurait pas fait.
+2. *Fausse prémisse dans un test.* J'y exigeais 87 % pour min-variance, chiffre repris du cas
+   à dix actifs ; à deux actifs il ne se reproduit pas. La prémisse était fausse, pas le
+   code — corrigée, pas ajustée jusqu'à passer.
+
+**Conséquences.** Rien n'est branché en production : le module est disponible, pas imposé.
+L'intégrer comme profil supplémentaire demande une comparaison sur données réelles, pas sur
+le cas piège synthétique. Publié : `mean_cvar_detail()` rend la MÉTHODE employée — « exact »
+et « approché » ne sont pas des chiffres de même nature.
+
 ## ADR-0079 — Le matériel se détecte, il ne se code pas en dur (2026-09-07)
 
 **Contexte.** Développement sur Mac Apple Silicon (backend MPS), migration prévue sur une
