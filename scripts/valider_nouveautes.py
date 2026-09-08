@@ -59,6 +59,9 @@ PRESENCE_JOUR_MIN = 0.60
 # capital sur un actif réduit peut-être la perte extrême MESURÉE, mais elle expose à ce
 # que la mesure n'a pas vu.
 PLAFOND_LIGNE = 0.25
+# Classes présentes en base mais qu'AUCUN courtier branché ne dessert. Les laisser dans
+# une comparaison d'allocateurs produit une allocation qu'on ne peut pas exécuter.
+NON_NEGOCIABLE = ("forex", "index", "commodity")
 
 
 def _titre(n: int, texte: str, risque: str) -> None:
@@ -96,7 +99,8 @@ def charger_panel(jours: int = 1500):
             if i is not None:
                 for c in champs:
                     champs[c][i, j] = float(getattr(b, c))
-    return champs, symboles, mode
+    classes = {m["symbol"]: m.get("asset_class", "?") for m in instruments}
+    return champs, symboles, mode, [classes.get(x, "?") for x in symboles]
 
 
 def etape_anomalies(champs, symboles, etat_partage: dict | None = None) -> set[str]:
@@ -169,7 +173,8 @@ def etape_anomalies(champs, symboles, etat_partage: dict | None = None) -> set[s
 
 
 def etape_cvar(champs, symboles, ecarter: set[str] | None = None,
-               surveiller: set[str] | None = None) -> None:
+               surveiller: set[str] | None = None,
+               classes: list[str] | None = None) -> None:
     _titre(3, "MEAN-CVaR contre les allocateurs actuels — sur rendements RÉELS",
            "propose une allocation, n'en applique aucune")
     from packages.portfolio.cvar_optimize import cvar_du_portefeuille, mean_cvar_detail
@@ -205,6 +210,27 @@ def etape_cvar(champs, symboles, ecarter: set[str] | None = None,
     r_jours = r[jours_bourse]
     couverture = np.isfinite(r_jours).mean(axis=0)
     gardes = couverture >= COUVERTURE_MIN
+    # INVESTABLE UNIQUEMENT — la même règle que le screener, plus les classes qu'aucun
+    # courtier ne dessert.
+    #
+    # Le run du 08/09 a fait proposer à Mean-CVaR : USD/HKD 41,7 %, AUD/USD 12,9 %,
+    # USD/SGD 12,1 %… soit CENT POUR CENT de forex, alors que le TODO dit noir sur blanc
+    # que le forex est en base mais NON NÉGOCIABLE (aucun courtier branché). Un
+    # allocateur qui propose ce qu'on ne peut pas acheter ne se compare à rien.
+    #
+    # Pire, USD/HKD est un cours ANCRÉ par la banque centrale de Hong Kong dans une
+    # bande étroite : sa volatilité est proche de zéro par construction, pas par
+    # qualité. Le détecteur de séries figées ne l'attrape pas — il bouge, à peine — mais
+    # économiquement il joue le même rôle : un actif qui paraît sans risque et rafle la
+    # mise chez tout minimiseur.
+    if classes is not None:
+        negociable = np.array([c not in NON_NEGOCIABLE and not s.startswith("^")
+                               for s, c in zip(symboles, classes, strict=True)])
+        n_hors = int((gardes & ~negociable).sum())
+        gardes = gardes & negociable
+        if n_hors:
+            print(f"  {n_hors} actif(s) écarté(s) : non négociables "
+                  f"({', '.join(sorted(NON_NEGOCIABLE))}, indices)")
     if ecarter:
         propres = np.array([s not in ecarter for s in symboles])
         n_retires = int((gardes & ~propres).sum())
@@ -251,6 +277,9 @@ def etape_cvar(champs, symboles, ecarter: set[str] | None = None,
         pertes = -(r @ w)
         print(f"  {nom:24s} {cvar_du_portefeuille(r, w):>9.2%} "
               f"{pertes.max():>9.2%} {w.max():>9.1%}")
+    if classes is not None:
+        cls = [c for c, ok in zip(classes, gardes, strict=True) if ok]
+        _repartition_par_classe(lignes, cls)
     for etiquette, detail in (("sans plafond", d), (f"plafonné à {PLAFOND_LIGNE:.0%}",
                                                     d_cap)):
         top = sorted(zip(noms, detail["poids"], strict=True),
@@ -264,6 +293,25 @@ def etape_cvar(champs, symboles, ecarter: set[str] | None = None,
                   "possible(s) split(s) non ajusté(s), à vérifier avant d'y croire")
     print("\n  À LIRE : si le CVaR du Mean-CVaR n'est pas NETTEMENT sous les autres,")
     print("  on ne branche pas. La démonstration synthétique ne vaut pas verdict.")
+
+
+def _repartition_par_classe(lignes, classes: list[str]) -> None:
+    """Où chaque allocateur met son capital, par classe d'actifs.
+
+    C'est la lecture qui manquait. Un minimiseur de risque appliqué à un univers mêlant
+    forex (~0,3 %/jour), obligataire, actions (~1,8 %) et crypto (~4,5 %) ne produit pas
+    une allocation : il choisit la classe la moins agitée et y reste. Le CVaR obtenu est
+    alors imbattable et ne veut rien dire — il mesure le choix de la classe, pas la
+    qualité de la répartition. Publier la répartition rend ce piège VISIBLE ; le
+    dissimuler ferait passer une dégénérescence pour une performance.
+    """
+    familles = sorted(set(classes))
+    print(f"\n  {'répartition par classe':24s}"
+          + "".join(f"{f:>12s}" for f in familles))
+    for nom, w in lignes:
+        w = np.asarray(w, float)
+        parts = [w[[c == f for c in classes]].sum() for f in familles]
+        print(f"  {nom:24s}" + "".join(f"{x:>11.1%} " for x in parts))
 
 
 def etape_generateur(champs, appliquer: bool) -> None:
@@ -353,7 +401,7 @@ def main() -> int:
     ap.add_argument("--jours", type=int, default=1500)
     args = ap.parse_args()
 
-    champs, symboles, mode = charger_panel(args.jours)
+    champs, symboles, mode, classes = charger_panel(args.jours)
     print(f"\nPanneau réel chargé : {len(symboles)} actifs · mode « {mode} »")
 
     # CHAQUE ÉTAPE EST ISOLÉE. Le premier lancement sur le VPS (08/09) s'est arrêté à
@@ -367,7 +415,7 @@ def main() -> int:
             ecarter=etape_anomalies(champs, symboles, etat) or set())),
         ("explicabilité", lambda: etape_explication(champs, symboles)),
         ("Mean-CVaR", lambda: etape_cvar(champs, symboles, etat.get("ecarter"),
-                                        etat.get("surveiller"))),
+                                        etat.get("surveiller"), classes)),
         ("générateur de signaux", lambda: etape_generateur(champs, args.appliquer)),
     ]
     echecs = []

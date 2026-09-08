@@ -97,7 +97,7 @@ def test_une_etape_en_echec_n_emporte_pas_les_suivantes(monkeypatch, capsys) -> 
 
     noms = [f"A{i}" for i in range(n)]
     monkeypatch.setattr(valider, "charger_panel",
-                        lambda jours=1500: (champs, noms, "réel"))
+                        lambda jours=1500: (champs, noms, "réel", ["equity"] * n))
 
     def _explose(*a, **k):
         raise ModuleNotFoundError("No module named 'sklearn'", name="sklearn")
@@ -301,3 +301,52 @@ def test_la_variante_plafonnee_est_publiee(capsys) -> None:
         f"poids max {poids_max:.1f}% au-delà du plafond demandé"
     )
     assert "Mean-CVaR sans plafond" in sortie
+
+
+def test_les_actifs_non_negociables_sont_ecartes(capsys) -> None:
+    """LE défaut du run du 08/09 : Mean-CVaR proposait USD/HKD 41,7 %, AUD/USD 12,9 %,
+    USD/SGD 12,1 %… soit CENT POUR CENT de forex — alors que le TODO du projet dit noir
+    sur blanc que le forex est en base mais NON NÉGOCIABLE, faute de courtier branché.
+
+    Un allocateur qui propose ce qu'on ne peut pas acheter ne se compare à rien. Et
+    USD/HKD est un cours ANCRÉ par sa banque centrale : sa volatilité est proche de zéro
+    par construction, pas par qualité — le détecteur de séries figées ne l'attrape pas,
+    il bouge à peine, mais il joue le même rôle."""
+    g = np.random.default_rng(13)
+    t, n_fx, n_eq = 700, 6, 12
+    # le forex, calme par construction, écrase tout minimiseur de risque
+    fx = 100.0 * np.exp(np.cumsum(g.normal(0, 0.0004, (t, n_fx)), axis=0))
+    eq = 100.0 * np.exp(np.cumsum(g.normal(0, 0.018, (t, n_eq)), axis=0))
+    prix = np.column_stack([fx, eq])
+    champs = {c: prix.copy() for c in ("open", "high", "low", "close", "volume")}
+    noms = [f"FX{i}" for i in range(n_fx)] + [f"EQ{i}" for i in range(n_eq)]
+    classes = ["forex"] * n_fx + ["equity"] * n_eq
+
+    valider.etape_cvar(champs, noms, classes=classes)
+    sortie = capsys.readouterr().out
+    assert "non négociables" in sortie, "le filtre d'investabilité ne s'applique pas"
+    debut = sortie.index("Mean-CVaR sans plafond")
+    assert "FX" not in sortie[debut:], (
+        f"du forex est encore proposé alors qu'aucun courtier ne le dessert :\n"
+        f"{sortie[debut:debut + 300]}"
+    )
+
+
+def test_la_repartition_par_classe_est_publiee(capsys) -> None:
+    """Un minimiseur sur un univers mêlant des classes à volatilités très différentes
+    ne fait pas une allocation : il choisit la moins agitée et y reste. Le CVaR obtenu
+    est alors imbattable et ne veut rien dire. La répartition rend ce piège VISIBLE —
+    la dissimuler ferait passer une dégénérescence pour une performance."""
+    g = np.random.default_rng(14)
+    t, n_a, n_b = 700, 8, 8
+    calme = 100.0 * np.exp(np.cumsum(g.normal(0, 0.004, (t, n_a)), axis=0))
+    agite = 100.0 * np.exp(np.cumsum(g.normal(0, 0.040, (t, n_b)), axis=0))
+    prix = np.column_stack([calme, agite])
+    champs = {c: prix.copy() for c in ("open", "high", "low", "close", "volume")}
+    noms = [f"ETF{i}" for i in range(n_a)] + [f"CRY{i}" for i in range(n_b)]
+    classes = ["etf"] * n_a + ["crypto"] * n_b
+
+    valider.etape_cvar(champs, noms, classes=classes)
+    sortie = capsys.readouterr().out
+    assert "répartition par classe" in sortie, "la répartition n'est pas publiée"
+    assert "etf" in sortie and "crypto" in sortie

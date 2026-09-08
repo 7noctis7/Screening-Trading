@@ -2,6 +2,50 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0085 — Un minimiseur de risque multi-classes ne fait pas une allocation (2026-09-08)
+
+**Contexte.** Validation du Mean-CVaR (ADR-0080) sur données réelles, quatre lancements
+successifs. Chacun a corrigé un défaut du banc lui-même ; le quatrième a produit un résultat
+apparemment excellent — et c'est celui qui a le plus appris.
+
+**Le résultat, et pourquoi il ne vaut rien.** CVaR 0,06 % contre 1,06 % pour min-variance,
+soit dix-sept fois mieux. Allocation proposée : USD/HKD 41,7 %, AUD/USD 12,9 %, USD/SGD
+12,1 %, EUR/AUD 9,6 % — **cent pour cent de forex**.
+
+Deux raisons, l'une factuelle et l'autre structurelle :
+
+1. *Le forex est marqué NON NÉGOCIABLE dans ce projet* (`03_TODO`, aucun courtier branché).
+   L'allocateur proposait ce que le système ne peut pas acheter. Un banc de comparaison qui
+   ignore l'investabilité ne compare rien.
+
+2. *USD/HKD est un cours ANCRÉ* par la banque centrale de Hong Kong dans une bande étroite.
+   Sa volatilité est proche de zéro **par construction, pas par qualité**. Le détecteur de
+   séries figées ne l'attrape pas — il bouge, à peine — mais il joue exactement le même rôle
+   que les séries figées de l'étape 1 : un actif qui paraît sans risque et rafle la mise chez
+   tout minimiseur.
+
+**La leçon générale, qui dépasse ce cas.** Un minimiseur de risque appliqué à un univers
+mêlant forex (~0,3 %/jour), obligataire, actions (~1,8 %) et crypto (~4,5 %) ne produit pas une
+allocation : il **choisit la classe la moins agitée et y reste**. Le CVaR obtenu est imbattable
+et ne mesure rien d'autre que ce choix de classe. C'est la même dégénérescence que
+« min-variance concentre sur l'actif le plus calme » (06/09), remontée d'un cran : de l'actif
+à la CLASSE d'actifs.
+
+**Décisions.** Filtre d'investabilité aligné sur celui du screener, étendu aux classes sans
+courtier. Et surtout : la RÉPARTITION PAR CLASSE de chaque allocateur est désormais publiée —
+c'est la lecture qui manquait, celle qui rend le piège visible. La dissimuler ferait passer une
+dégénérescence pour une performance.
+
+**Verdict sur le Mean-CVaR : NON VALIDÉ, et non branché.** Quatre lancements n'ont jamais
+produit une comparaison honnête, parce que le banc était faux à chaque fois pour une raison
+différente. La cinquième mesure dira quelque chose ; les quatre premières ne disaient rien.
+
+**Ce qui EST validé.** Le générateur de signaux : 96 candidats ramenés à 24 essais distincts,
+13 retenus par le seuil du blueprint NVIDIA, **zéro promu** après Benjamini-Hochberg. Le
+registre ne s'est pas rempli de bruit — c'est le comportement voulu, mesuré sur données
+réelles. Et l'audit d'anomalies, qui a trouvé cinq séries cassées et sept figées, toutes des
+paires `/USDC`.
+
 ## ADR-0084 — Revue d'une liste de dépôts « indispensables » : un seul trou réel (2026-09-08)
 
 **Contexte.** Liste argumentée de dépôts standards de l'industrie, avec deux qualifiés
