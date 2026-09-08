@@ -2,6 +2,103 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0089 — Une source de prix qui échoue en silence (2026-09-09)
+
+**Contexte.** L'audit croisé du 08/09 a trouvé 5 séries cassées et 7 figées, **toutes des
+paires `/USDC`** : UNI, ARB, OP, STX, TON avec des sauts jusqu'à +1 573 987 %, SHIB
+immobile 675 séances sur 1499. Douze séries sur un même format de symbole, ce n'est pas
+le marché : c'est la source. En relisant `scripts/ingest_crypto.py`, on trouve pourquoi
+personne ne l'a vu : la boucle d'ingestion faisait `except Exception: continue` et
+`if len(df) < 250: continue`, puis ne renvoyait que le NOMBRE de succès. **Une base qui
+ne répond pas ne laissait aucune trace.** L'univers paraissait complet parce que rien ne
+disait le contraire.
+
+**Décision.** Deux gestes, séparés.
+
+1. *L'ingestion dit ce qu'elle n'a pas pu faire.* `_ingerer` renvoie désormais la liste
+   des échecs (base, ticker interrogé, cause) et `main` les imprime. Une série absente
+   vaut mieux qu'une série fausse — mais elle doit se voir.
+2. *La cause se mesure, elle ne se devine pas.* `make diag-source-crypto` confronte chaque
+   série de `crypto.db` à une référence indépendante (Binance klines, gratuit, sans clé,
+   déjà utilisé pour le funding) et sépare **quatre causes aux gestes opposés** :
+   collision de ticker (`UNI-USD` chez Yahoo peut désigner un homonyme illiquide → forcer
+   le bon symbole via `ALIAS_YAHOO`), flux arrêté (retirer jusqu'à réparation), précision
+   (un jeton à 0,00001 $ arrondi à six décimales bouge en marches d'escalier → changer de
+   source), conforme (l'anomalie est réelle). Sans réseau, le verdict est
+   « NON VÉRIFIABLE » : pas de référence, pas de conclusion inventée.
+
+**Ce qui n'est PAS décidé ici.** `ALIAS_YAHOO` est **vide**. Le vrai ticker de chacune de
+ces cinq bases se mesure sur la machine qui détient `crypto.db` ; l'écrire d'après une
+intuition reviendrait à remplacer une série fausse par une autre. Le script imprime la
+ligne exacte à ajouter — l'ajouter reste un geste humain, après mesure.
+
+**Conséquences.** Le prochain `make ingest-crypto` dira combien de bases sont muettes.
+Tant que le diagnostic n'a pas tourné, les douze séries restent à écarter de l'univers :
+un cours immobile paraît sans risque à la variance comme au CVaR, et hériterait d'un
+poids qu'il ne mérite pas.
+
+## ADR-0088 — Le détecteur d'anomalies reprochait à une crypto d'être une crypto (2026-09-09)
+
+**Contexte.** Premier passage réel d'`anomalies_panel` : **430 actifs sur 774 signalés**.
+À ce taux, ce n'est plus un détecteur, c'est un bruit de fond qu'on apprend à ignorer —
+et un rapport qu'on n'ouvre plus ne protège de rien. J'avais noté au TODO « les queues
+épaisses des marchés, pas des anomalies », et rangé l'affaire en P2 « recalibrer le
+seuil ». **C'était une explication plausible, non mesurée, et fausse.**
+
+**La mesure.** Panneau synthétique de 774 séries reproduisant le mélange réel du projet —
+300 forex à 0,5 % de volatilité quotidienne, 400 actions à 1,5 %, 74 cryptos à 5 % — et
+**aucune anomalie injectée, pas une seule**. Résultat au seuil de 8 écarts robustes :
+
+| classe | actifs signalés |
+|---|---|
+| forex | 0 / 300 |
+| action | 1 / 400 |
+| crypto | **74 / 74** |
+
+12 974 événements pour zéro défaut réel. Le mécanisme est alors évident : la coupe du
+jour mélange des échelles sans rapport, sa médiane et son MAD sont dictés par la classe
+la plus nombreuse, et une crypto qui vit sa journée ordinaire se retrouve à seize écarts
+de cette coupe-là. **Le seuil n'était pas trop bas : la statistique comparait des choses
+non comparables.** Monter le seuil aurait fait taire le détecteur sans corriger cela — on
+aurait perdu les vrais défauts du forex pour cesser d'accuser les cryptos.
+
+**Décision.** Diviser chaque série par sa PROPRE échelle robuste (MAD temporel de ses
+rendements) avant la comparaison transversale — `echelle_par_actif`, appliqué par défaut.
+La coupe devient homogène et ce qui reste signalé est un mouvement anormal **pour cet
+actif**, ce qu'on cherchait depuis le début.
+
+**Vérifié dans les deux sens, parce que se taire est facile :**
+
+| mesure, même panneau | avant | après |
+|---|---|---|
+| actifs sains signalés | 75 / 774 | **0 / 774** |
+| splits ×4 injectés retrouvés | 3 / 3 | **3 / 3** |
+| ticks erronés retrouvés (×1,5 à ×10, trois classes) | 12 / 12 | **12 / 12** |
+
+Le plancher de détection tombe à 8–10 écarts propres à l'actif, uniformément dans les
+trois classes : la sensibilité s'exprime enfin dans l'unité de l'actif au lieu d'être un
+accident de la classe majoritaire.
+
+**Deux pièges tenus à l'œil.** La gravité (« split non ajusté » / « donnée cassée »)
+continue de se lire sur le rendement **réel** : elle se décide à −30 % de cours, pas à
+trente unités d'écart normalisé — sans quoi un −25 % de forex passerait pour une donnée
+cassée et un −40 % de crypto pour une valeur extrême, classement inversé, geste de
+réparation inversé. Test dédié, dont j'ai vérifié par sabotage qu'il échoue quand on
+publie la valeur normalisée. Et une série d'échelle nulle sort de la comparaison au lieu
+de faire diverger la division : c'est `series_figees` qui la signale, avec le bon motif.
+
+**Le seuil, lui, reste UNCALIBRATED.** 8,0 est conservé faute d'une mesure sur le vrai
+panneau. `make calibrer-seuil` la fournit : taux de fond par classe (le coût — ce qu'un
+humain doit lire) et sensibilité mesurée par injection de défauts connus dans le panneau
+réel (le bénéfice). Sans le second on choisirait le seuil qui parle le moins, l'infini ;
+sans le premier celui qui attrape tout, zéro. Le script propose et **n'écrit rien**.
+
+**Conséquences.** L'affaire ne relevait pas de la calibration mais de la statistique
+elle-même : régler le seuil aurait donné un détecteur silencieux, pas un détecteur juste.
+La leçon vaut au-delà de ce module — j'ai écrit une cause plausible dans le TODO sans la
+mesurer, et elle a tenu une journée entière avant d'être démentie par un panneau
+synthétique de vingt lignes.
+
 ## ADR-0087 — Mean-CVaR : REJETÉ par la mesure hors échantillon (2026-09-08)
 
 **Verdict.** Le Mean-CVaR (ADR-0080) n'est PAS mis en production. Il est inscrit au registre

@@ -845,10 +845,33 @@ explicite, module par module, avec mesure.
       TON avec des sauts jusqu'à +1 573 987 % (prix de la veille faux, proche de zéro) ;
       SHIB figé 675 séances sur 1499, ARB 595. Écarter de l'univers tant que ce n'est pas
       réparé — ces séries faussent tout optimiseur de risque.
-- [ ] **P2 — Recalibrer `SEUIL_ECART`** : 430 actifs sur 774 signalés, soit 0,49 % des
-      observations à 8 écarts robustes. Les queues épaisses des marchés, pas des anomalies.
-      Seules les catégories A (cassées) et C (figées) sont exploitables ; le titre
-      « 5632 mouvements incohérents » est alarmiste et devrait ne compter que celles-là.
+      **Instrument livré le 09/09** : `make diag-source-crypto` confronte chaque série de
+      `crypto.db` à une référence indépendante (Binance klines, sans clé) et sépare les
+      quatre causes, qui appellent des gestes OPPOSÉS : collision de ticker (forcer le bon
+      symbole), flux arrêté (retirer), précision (changer de source), conforme (l'anomalie
+      est réelle). Sans référence il rend « NON VÉRIFIABLE » plutôt qu'un verdict inventé.
+      `make ingest-crypto` liste désormais chaque base sans données au lieu de les avaler
+      en silence — c'est ce silence qui a laissé douze séries pourrir sans alerte.
+      **RESTE À FAIRE sur la machine qui détient `crypto.db`** : lancer le diagnostic,
+      remplir `ALIAS_YAHOO` (scripts/ingest_crypto.py) avec les tickers que le script
+      imprime, réingérer, revérifier.
+- [x] **P2 — Recalibrer `SEUIL_ECART` : CAUSE TROUVÉE, ce n'était pas le seuil** (09/09).
+      430 actifs sur 774 signalés. J'avais écrit « les queues épaisses des marchés » —
+      **c'était faux, et mesurable**. Sur un panneau SAIN de 774 séries synthétiques
+      multi-classes, sans le moindre défaut injecté : **100 % des cryptos signalées, 0 %
+      du forex**, 12 974 événements pour zéro anomalie. La coupe du jour mélangeait des
+      échelles sans rapport (0,5 % / 1,5 % / 5 % par jour) : sa médiane et son MAD étaient
+      dictés par la classe la plus nombreuse, et une crypto vivant sa journée ordinaire se
+      retrouvait à seize écarts de cette coupe-là — signalée pour avoir été elle-même.
+      **Correctif** : chaque série est divisée par sa PROPRE échelle robuste avant la
+      comparaison (`echelle_par_actif`). Mesuré sur le même panneau sain : 75 actifs
+      signalés → **0**, et les quinze défauts injectés (splits ×4 et ticks erronés, dans
+      les trois classes) restent tous détectés. La gravité continue de se lire sur le
+      rendement RÉEL : « split non ajusté » se décide à −30 % de cours, pas à trente
+      unités d'écart normalisé (test dédié, vérifié par sabotage). ADR-0088.
+      **RESTE** : `make calibrer-seuil` sur le vrai panneau pour confirmer que 8 reste le
+      bon seuil une fois la coupe homogène — le script mesure coût et sensibilité, et
+      propose ; il n'écrit rien.
 - [ ] ~~**P1 — ancien libellé : à valider sur données réelles**~~
 - [ ] ~~**P2 — ancien libellé : `scripts/demo_ml.py` n'est pas déterministe.**~~ Constaté le 07/09 en cherchant à
       prouver une non-régression : deux exécutions de la MÊME version donnent des accuracies

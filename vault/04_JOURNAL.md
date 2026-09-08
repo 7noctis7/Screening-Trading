@@ -1,5 +1,45 @@
 # 04 — JOURNAL
 
+## Session 2026-09-09 — Deux avaries de données : l'une mesurée, l'autre outillée
+
+Suite des verdicts du 08/09. Deux chantiers ouverts, pris dans l'ordre où ils étaient
+actionnables.
+
+**FAIT — le détecteur d'anomalies accusait les cryptos d'être des cryptos (ADR-0088).**
+430 actifs sur 774 signalés au premier passage réel. J'avais écrit au TODO « les queues
+épaisses des marchés » : plausible, non mesuré, **faux**. Un panneau synthétique de 774
+séries multi-classes SANS le moindre défaut injecté donne 100 % des cryptos signalées et
+0 % du forex, 12 974 événements pour zéro anomalie. La coupe transversale mélangeait des
+échelles sans rapport (0,5 % / 1,5 % / 5 % par jour). Correctif : chaque série est
+divisée par sa propre échelle robuste avant comparaison. Même panneau : 75 actifs
+signalés → **0**, et les 15 défauts injectés (splits ×4, ticks ×1,5 à ×10, dans les trois
+classes) restent **tous** détectés. La gravité continue de se lire sur le rendement réel,
+avec un test dont j'ai vérifié par sabotage qu'il sait échouer.
+
+**OUTILLÉ — la source `/USDC` (ADR-0089).** Douze séries avariées sur un même format de
+symbole : c'est la source, pas le marché. `scripts/ingest_crypto.py` faisait
+`except Exception: continue` et ne renvoyait que le nombre de succès — **une base muette
+ne laissait aucune trace**, et c'est ce silence qui a laissé pourrir douze séries.
+L'ingestion liste désormais chaque échec avec sa cause. Et `make diag-source-crypto`
+confronte chaque série à une référence indépendante (Binance klines) pour séparer les
+quatre causes possibles, dont les gestes sont opposés : collision de ticker, flux arrêté,
+précision, conforme.
+
+**BLOQUÉ ICI, pas ailleurs.** Cette machine n'a ni `market.db`, ni `crypto.db`
+(`journal.db` y est présent mais vide : 0 trade). Le proxy refuse les fournisseurs de
+prix. Les deux mesures finales — quel ticker répond vraiment pour UNI/ARB/OP/STX/TON, et
+si 8,0 reste le bon seuil une fois la coupe homogène — se font sur la machine qui détient
+les bases : `make diag-source-crypto` puis `make calibrer-seuil`. Les deux ne font que
+lire et imprimer ; `ALIAS_YAHOO` est volontairement **vide**, le remplir sans mesure
+remplacerait une série fausse par une autre.
+
+**PROCHAIN.** Lancer ces deux commandes sur le Mac mini / le VPS, puis la P0 de
+réconciliation du journal, qui attend la même machine.
+
+Tests : **2280 passés, 7 ignorés, 0 échec**. Seize ajoutés : 4 sur la normalisation par
+actif (dont le contrôle négatif qui compare les deux modes et échoue si l'ancien ne crie
+pas), 4 sur l'instrument de calibration, 8 sur le diagnostic crypto.
+
 ## Session 2026-09-07 (suite 32) — Réécriture des textes du site en langage clair
 
 Retour de l'utilisateur : « trop technique ». Il avait raison, et le diagnostic est plus large qu'un

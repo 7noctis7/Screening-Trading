@@ -19,6 +19,7 @@ import pytest
 from packages.storage.anomalies_panel import (
     auditer_panel,
     ecart_a_la_coupe,
+    echelle_par_actif,
     series_figees,
 )
 
@@ -108,3 +109,90 @@ def test_une_matrice_mal_formee_leve() -> None:
         auditer_panel(np.zeros((2, 5)))
     with pytest.raises(ValueError):
         ecart_a_la_coupe(np.zeros(10))
+
+
+def _panel_heterogene(t: int = 400, graine: int = 0) -> tuple[np.ndarray, np.ndarray]:
+    """Un panneau MULTI-CLASSES parfaitement sain : forex, actions, cryptos.
+
+    C'est le panneau réel du projet en miniature. Les trois classes ne bougent pas à la
+    même échelle — 0,5 %, 1,5 % et 5 % par jour — et c'est précisément là que le
+    détecteur se trompait.
+    """
+    g = np.random.default_rng(graine)
+    colonnes, classes = [], []
+    for nom, (n, vol) in {"forex": (30, 0.005), "action": (40, 0.015),
+                          "crypto": (10, 0.050)}.items():
+        for _ in range(n):
+            colonnes.append(100.0 * np.exp(np.cumsum(g.normal(0, vol, t))))
+            classes.append(nom)
+    return np.column_stack(colonnes), np.array(classes)
+
+
+def test_une_classe_volatile_saine_n_est_pas_signalee() -> None:
+    """LE test qui a motivé la normalisation par actif.
+
+    Sans elle, la médiane et le MAD du jour sont dictés par la classe la plus nombreuse,
+    et une crypto qui vit sa journée ordinaire se retrouve à seize écarts de cette
+    coupe-là : signalée pour avoir été elle-même. Mesuré sur 774 séries SANS le moindre
+    défaut injecté : 100 % des cryptos flaguées, 0 % du forex.
+
+    Le contrôle porte sur la comparaison des deux modes, pas sur un chiffre absolu :
+    l'ancien mode DOIT crier ici, sinon le test ne prouve rien.
+    """
+    p, classes = _panel_heterogene()
+    r = np.diff(p, axis=0) / p[:-1]
+    cryptos = set(np.where(classes == "crypto")[0].tolist())
+
+    avant = {s["actif_index"] for s in ecart_a_la_coupe(r, normaliser=False)}
+    apres = {s["actif_index"] for s in ecart_a_la_coupe(r, normaliser=True)}
+
+    assert avant & cryptos, "contrôle inopérant : l'ancien mode ne signalait rien"
+    assert not apres, f"des séries saines restent signalées : {sorted(apres)}"
+
+
+def test_la_normalisation_ne_perd_pas_les_vrais_defauts() -> None:
+    """Contre-partie obligatoire du test précédent : se taire, c'est facile.
+
+    Un split ×4 et un tick erroné, injectés dans la classe la PLUS volatile — celle où
+    le bruit propre pourrait le mieux les cacher — doivent toujours ressortir.
+    """
+    p, classes = _panel_heterogene()
+    volatils = np.where(classes == "crypto")[0]
+    j_split, j_tick = int(volatils[0]), int(volatils[1])
+    p[200:, j_split] /= 4.0
+    p[250, j_tick] *= 3.0
+
+    touches = {s["actif_index"] for s in auditer_panel(p)["sauts_isoles"]}
+    assert j_split in touches, "split ×4 perdu par la normalisation"
+    assert j_tick in touches, "tick erroné perdu par la normalisation"
+
+
+def test_la_gravite_se_lit_sur_le_rendement_reel() -> None:
+    """« Split non ajusté » se décide à −30 % de COURS, pas à trente unités d'écart.
+
+    La normalisation divise les rendements par l'échelle de chaque actif ; si le rapport
+    publiait cette valeur normalisée, un −25 % de forex (cinquante écarts propres)
+    serait annoncé « donnée cassée » et un −40 % de crypto passerait pour « valeur
+    extrême ». Le classement, qui commande le geste de réparation, serait inversé.
+    """
+    p, classes = _panel_heterogene()
+    j = int(np.where(classes == "forex")[0][0])
+    p[300:, j] /= 4.0                      # −75 % : un split, pas une donnée cassée
+
+    sauts = [s for s in auditer_panel(p)["sauts_isoles"] if s["actif_index"] == j]
+    assert sauts, "le split n'est pas détecté"
+    pire = min(sauts, key=lambda s: s["rendement"])
+    assert pire["rendement"] == pytest.approx(-0.75, abs=0.02), pire["rendement"]
+    assert pire["gravite"] == "split non ajusté ?", pire["gravite"]
+
+
+def test_une_serie_figee_ne_fait_pas_diverger_la_division() -> None:
+    """Échelle propre nulle : la colonne sort de la comparaison au lieu de produire des
+    infinis. C'est `series_figees` qui la signale, avec le motif juste."""
+    p, _ = _panel_heterogene()
+    p[:, 5] = 100.0                        # immobile de bout en bout → échelle nulle
+
+    assert echelle_par_actif(np.diff(p, axis=0) / p[:-1])[5] == 0.0
+    rapport = auditer_panel(p)
+    assert all(np.isfinite(s["ecarts_robustes"]) for s in rapport["sauts_isoles"])
+    assert any(f["actif_index"] == 5 for f in rapport["series_figees"])
