@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import argparse
 import sys
+import traceback
+import warnings
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -35,6 +37,14 @@ activer_cudf()
 banniere()
 
 import numpy as np  # noqa: E402
+
+# Les fenêtres entièrement vides sont ATTENDUES au démarrage de chaque série (la
+# fenêtre n'est pas encore pleine) et sur les actifs à trous. numpy prévient à chaque
+# occurrence ; sur 774 actifs, ces avertissements noient la sortie qu'on est venu lire.
+# On les tait ICI, dans le script d'affichage, jamais dans les modules de calcul.
+warnings.filterwarnings("ignore", message="Mean of empty slice")
+warnings.filterwarnings("ignore", message="Degrees of freedom <= 0")
+warnings.filterwarnings("ignore", category=RuntimeWarning, module="numpy")
 
 SEPARATEUR = "=" * 72
 
@@ -80,29 +90,52 @@ def charger_panel(jours: int = 1500):
 def etape_anomalies(champs, symboles) -> None:
     _titre(1, "ANOMALIES CROISÉES — ce qu'un contrôle ligne par ligne ne voit pas",
            "lecture seule, aucun risque")
-    from packages.storage.anomalies_panel import auditer_panel
+    from packages.storage.anomalies_panel import auditer_panel, resumer_par_actif
     rapport = auditer_panel(champs["close"])
     print(f"  {rapport['n_actifs']} actifs sur {rapport['n_dates']} dates")
     print(f"  → {rapport['resume']}")
-    figees = rapport["series_figees"]
-    if figees:
-        print("\n  SÉRIES FIGÉES (le cas le plus dangereux : un cours immobile")
-        print("  paraît sans risque à TOUS les optimiseurs, et hériterait d'un poids")
-        print("  qu'il ne mérite pas) :")
-        for f in figees[:12]:
-            print(f"    · {symboles[f['actif_index']]:12s} {f['motif']}")
-        if len(figees) > 12:
-            print(f"    … et {len(figees) - 12} autre(s)")
-    sauts = rapport["sauts_isoles"]
-    if sauts:
-        pires = sorted(sauts, key=lambda s: -s["ecarts_robustes"])[:8]
-        print("\n  MOUVEMENTS INCOHÉRENTS AVEC LE MARCHÉ (split non ajusté ?) :")
-        for s in pires:
-            print(f"    · {symboles[s['actif_index']]:12s} {s['motif']}")
     if rapport["ok"]:
         print("  ✓ rien à signaler — l'audit croisé ne trouve aucune incohérence")
-    print("\n  À LIRE : beaucoup de séries figées expliquerait les concentrations")
-    print("  vues en min-variance. Beaucoup de faux positifs = seuil à revoir.")
+        return
+
+    # PAR ACTIF, pas événement par événement : ce qui se décide, ce n'est pas « ce
+    # point du 12 mars », c'est « cette série est-elle exploitable ».
+    lignes = resumer_par_actif(rapport, symboles)
+    casses = [x for x in lignes if x["gravite"] == "donnée cassée"]
+    splits = [x for x in lignes if x["gravite"] == "split non ajusté ?"]
+    figes = sorted([x for x in lignes if x["jours_figes"]],
+                   key=lambda d: -d["jours_figes"])
+
+    print(f"\n  {len(lignes)} actifs concernés sur {rapport['n_actifs']}")
+    if casses:
+        print(f"\n  A. DONNÉES CASSÉES — {len(casses)} actif(s). Un rendement au-delà")
+        print("     de +1000 % en une séance n'est pas un mouvement de marché : c'est")
+        print("     que le prix de la VEILLE était faux, souvent proche de zéro.")
+        print("     À retirer de l'univers tant que la source n'est pas réparée.")
+        for x in casses[:15]:
+            print(f"       · {x['symbole']:14s} pire saut {x['pire']:+.0%}"
+                  f"   ({x['sauts']} événements)")
+        if len(casses) > 15:
+            print(f"       … et {len(casses) - 15} autre(s)")
+    if splits:
+        print(f"\n  B. SPLITS POSSIBLES — {len(splits)} actif(s), à ajuster :")
+        for x in splits[:10]:
+            print(f"       · {x['symbole']:14s} pire saut {x['pire']:+.0%}")
+        if len(splits) > 10:
+            print(f"       … et {len(splits) - 10} autre(s)")
+    if figes:
+        total = sum(x["jours_figes"] for x in figes)
+        print(f"\n  C. SÉRIES FIGÉES — {len(figes)} actif(s), {total} séances.")
+        print("     C'est le cas le plus dangereux : un cours immobile n'a ni")
+        print("     dispersion ni queue, donc il paraît SANS RISQUE à tous les")
+        print("     optimiseurs — variance comme CVaR — et hérite d'un poids indu.")
+        for x in figes[:15]:
+            print(f"       · {x['symbole']:14s} {x['jours_figes']:4d} séances figées"
+                  f"   ({x['figees']} épisodes)")
+        if len(figes) > 15:
+            print(f"       … et {len(figes) - 15} autre(s)")
+    print("\n  À LIRE : les actifs de la liste A ne devraient pas entrer dans une")
+    print("  allocation. Ceux de la liste C fausseraient tout optimiseur de risque.")
 
 
 def etape_cvar(champs, symboles) -> None:
@@ -235,12 +268,39 @@ def main() -> int:
 
     champs, symboles, mode = charger_panel(args.jours)
     print(f"\nPanneau réel chargé : {len(symboles)} actifs · mode « {mode} »")
-    etape_anomalies(champs, symboles)
-    etape_explication(champs, symboles)
-    etape_cvar(champs, symboles)
-    etape_generateur(champs, args.appliquer)
-    print(f"\n{SEPARATEUR}\n Rien n'a été mis en production. La décision reste un geste"
-          f"\n humain, séparé, après lecture des chiffres ci-dessus.\n{SEPARATEUR}")
+
+    # CHAQUE ÉTAPE EST ISOLÉE. Le premier lancement sur le VPS (08/09) s'est arrêté à
+    # l'étape 2 — scikit-learn absent de cet environnement — et a emporté les étapes 3
+    # et 4 avec elle. Or l'ordre du script sert justement à obtenir les mesures
+    # sans risque D'ABORD : les perdre à cause d'une dépendance optionnelle manquante
+    # sur une étape ultérieure est exactement l'inverse du but recherché.
+    etapes = [
+        ("anomalies croisées", lambda: etape_anomalies(champs, symboles)),
+        ("explicabilité", lambda: etape_explication(champs, symboles)),
+        ("Mean-CVaR", lambda: etape_cvar(champs, symboles)),
+        ("générateur de signaux", lambda: etape_generateur(champs, args.appliquer)),
+    ]
+    echecs = []
+    for nom_etape, executer in etapes:
+        try:
+            executer()
+        except ModuleNotFoundError as e:
+            echecs.append((nom_etape, f"dépendance absente : {e.name}"))
+            print(f"\n  ⚠ étape « {nom_etape} » ignorée — {e.name} absent de cet "
+                  "environnement.\n    Les autres étapes continuent.")
+        except Exception as e:  # noqa: BLE001 — un banc de mesure ne doit jamais
+            echecs.append((nom_etape, f"{type(e).__name__}: {e}"))  # tout emporter
+            print(f"\n  ⚠ étape « {nom_etape} » en échec — {type(e).__name__}: {e}")
+            traceback.print_exc(limit=3)
+
+    print(f"\n{SEPARATEUR}")
+    if echecs:
+        print(" ÉTAPES NON ABOUTIES :")
+        for nom_etape, motif in echecs:
+            print(f"   · {nom_etape} — {motif}")
+        print(" (une étape manquante n'invalide pas les autres)")
+    print(" Rien n'a été mis en production. La décision reste un geste humain,")
+    print(f" séparé, après lecture des chiffres ci-dessus.\n{SEPARATEUR}")
     return 0
 
 

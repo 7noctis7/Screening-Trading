@@ -82,3 +82,47 @@ def test_l_etape_generateur_n_ecrit_pas_sans_appliquer(panneau, capsys) -> None:
 def test_l_etape_explicabilite_tourne(panneau, capsys) -> None:
     valider.etape_explication(*panneau)
     assert "EXPLICABILITÉ" in capsys.readouterr().out
+
+
+def test_une_etape_en_echec_n_emporte_pas_les_suivantes(monkeypatch, capsys) -> None:
+    """LE défaut vu en production le 08/09 : scikit-learn absent du VPS a fait planter
+    l'étape 2, qui a emporté les étapes 3 et 4. Or l'ordre du script sert justement à
+    obtenir les mesures SANS RISQUE d'abord — les perdre à cause d'une dépendance
+    optionnelle manquante plus loin est l'inverse du but recherché."""
+    g = np.random.default_rng(1)
+    t, n = 300, 10
+    close = 100.0 * np.exp(np.cumsum(g.normal(0, 0.015, (t, n)), axis=0))
+    champs = {c: close.copy() for c in ("open", "high", "low", "close", "volume")}
+
+    noms = [f"A{i}" for i in range(n)]
+    monkeypatch.setattr(valider, "charger_panel",
+                        lambda jours=1500: (champs, noms, "réel"))
+
+    def _explose(*a, **k):
+        raise ModuleNotFoundError("No module named 'sklearn'", name="sklearn")
+
+    monkeypatch.setattr(valider, "etape_explication", _explose)
+    monkeypatch.setattr(sys, "argv", ["valider_nouveautes.py"])
+
+    assert valider.main() == 0, "le script s'arrête au lieu de continuer"
+    sortie = capsys.readouterr().out
+    assert "sklearn" in sortie and "ignorée" in sortie
+    assert "MEAN-CVaR" in sortie, "l'étape 3 n'a pas tourné après l'échec de l'étape 2"
+    assert "GÉNÉRATEUR" in sortie, "l'étape 4 n'a pas tourné"
+    assert "ÉTAPES NON ABOUTIES" in sortie, "l'échec n'est pas récapitulé à la fin"
+
+
+def test_une_serie_figee_annonce_sa_vraie_duree() -> None:
+    """Vu sur données réelles : une série figée annonçait « 5 séances » quelle que soit
+    sa durée, parce que l'entrée était publiée au moment où le compteur ATTEIGNAIT le
+    seuil. Le chiffre était faux dans le sens qui minimise le problème."""
+    from packages.storage.anomalies_panel import series_figees
+    g = np.random.default_rng(2)
+    p = 100.0 * np.exp(np.cumsum(g.normal(0, 0.01, (120, 6)), axis=0))
+    p[40:100, 2] = p[39, 2]                     # 60 séances figées
+    trouve = [f for f in series_figees(p) if f["actif_index"] == 2]
+    assert trouve, "série figée non détectée"
+    assert trouve[0]["jours"] >= 55, (
+        f"durée annoncée {trouve[0]['jours']} pour 60 séances figées : le chiffre "
+        "minimise le problème."
+    )

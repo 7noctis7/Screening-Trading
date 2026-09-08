@@ -35,7 +35,8 @@ from __future__ import annotations
 
 import numpy as np
 
-__all__ = ["auditer_panel", "ecart_a_la_coupe", "series_figees"]
+__all__ = ["auditer_panel", "ecart_a_la_coupe", "gravite_du_saut",
+           "resumer_par_actif", "series_figees"]
 
 SEUIL_ECART = 8.0        # écarts robustes : au-delà, on regarde
 JOURS_FIGES_MIN = 5      # en dessous, un pont ou un jour férié suffit à l'expliquer
@@ -72,6 +73,7 @@ def ecart_a_la_coupe(rendements: np.ndarray, seuil: float = SEUIL_ECART) -> list
                 "date_index": int(t), "actif_index": int(j),
                 "rendement": float(ligne[j]), "mediane_du_jour": centre,
                 "ecarts_robustes": float(ecarts[j]),
+                "gravite": gravite_du_saut(float(ligne[j])),
                 "motif": (f"bouge de {ligne[j]:+.1%} quand le marché fait "
                           f"{centre:+.1%} — {ecarts[j]:.0f} écarts robustes"),
             })
@@ -94,19 +96,71 @@ def series_figees(prix: np.ndarray, jours_min: int = JOURS_FIGES_MIN) -> list[di
     out = []
     for j in range(p.shape[1]):
         serie = immobile[:, j] & marche_bouge
-        n, debut = 0, None
-        for t, fige in enumerate(serie):
-            if fige:
-                n += 1
-                debut = t if debut is None else debut
-            else:
-                n, debut = 0, None
-            if n == jours_min:
-                out.append({"actif_index": int(j), "depuis_index": int(debut),
-                            "jours": int(n),
-                            "motif": (f"cours identique depuis {n} séances alors que "
-                                      "le marché cote — flux probablement arrêté")})
+        # On repère les ÉPISODES complets, pas leur début. La première version
+        # publiait l'entrée au moment où le compteur atteignait le seuil, donc
+        # `jours` valait toujours exactement le seuil : une série figée deux cents
+        # séances s'annonçait « 5 séances ». Vu sur données réelles le 08/09 — le
+        # chiffre était faux dans le sens qui minimise le problème, le pire des deux.
+        debut = None
+        for t in range(len(serie) + 1):
+            fige = bool(serie[t]) if t < len(serie) else False
+            if fige and debut is None:
+                debut = t
+            elif not fige and debut is not None:
+                duree = t - debut
+                if duree >= jours_min:
+                    out.append({"actif_index": int(j), "depuis_index": int(debut),
+                                "jusqu_index": int(t - 1), "jours": int(duree),
+                                "motif": (f"cours identique sur {duree} séances "
+                                          f"(indices {debut} à {t - 1}) alors que le "
+                                          "marché cote — flux probablement arrêté")})
+                debut = None
     return out
+
+
+# Au-delà de ce rendement quotidien, ce n'est plus un mouvement de marché : c'est une
+# donnée cassée. Aucun actif ne fait +1 000 % en une séance ; quand on le lit, c'est que
+# le prix de la veille était faux (souvent proche de zéro), pas que le cours a bondi.
+SEUIL_CORRUPTION = 10.0        # +1000 %
+SEUIL_SPLIT = 0.30             # au-delà : possible division/regroupement non ajusté
+
+
+def gravite_du_saut(rendement: float) -> str:
+    """Nomme ce qu'on regarde. « Split non ajusté » et « prix cassé » appellent des
+    gestes opposés : l'un se corrige par un facteur d'ajustement, l'autre exige de
+    retirer la série jusqu'à ce que la source soit réparée."""
+    a = abs(float(rendement))
+    if a >= SEUIL_CORRUPTION:
+        return "donnée cassée"
+    if a >= SEUIL_SPLIT:
+        return "split non ajusté ?"
+    return "valeur extrême"
+
+
+def resumer_par_actif(rapport: dict, symboles: list[str]) -> list[dict]:
+    """Agrège les anomalies PAR ACTIF, du plus atteint au moins atteint.
+
+    Cinq mille événements bruts sont illisibles et donc inutiles : personne ne les
+    parcourt, et un rapport qu'on ne lit pas ne protège de rien. Ce qui se décide, ce
+    n'est pas « ce point du 12 mars », c'est « cette série est-elle exploitable ».
+    """
+    par: dict[int, dict] = {}
+    for s in rapport.get("sauts_isoles", []):
+        d = par.setdefault(s["actif_index"], {"sauts": 0, "pire": 0.0, "figees": 0,
+                                              "jours_figes": 0, "gravite": "—"})
+        d["sauts"] += 1
+        if abs(s["rendement"]) > abs(d["pire"]):
+            d["pire"] = s["rendement"]
+            d["gravite"] = gravite_du_saut(s["rendement"])
+    for f in rapport.get("series_figees", []):
+        d = par.setdefault(f["actif_index"], {"sauts": 0, "pire": 0.0, "figees": 0,
+                                              "jours_figes": 0, "gravite": "—"})
+        d["figees"] += 1
+        d["jours_figes"] += f["jours"]
+    lignes = [{"symbole": symboles[i] if i < len(symboles) else str(i), **v}
+              for i, v in par.items()]
+    lignes.sort(key=lambda d: (-abs(d["pire"]), -d["jours_figes"]))
+    return lignes
 
 
 def auditer_panel(prix: np.ndarray, seuil: float = SEUIL_ECART,
