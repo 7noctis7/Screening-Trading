@@ -109,6 +109,28 @@ def make_model(kind: str = "logit", **kw):
             n_estimators=100, max_depth=3, eval_metric="logloss",
             random_state=SklearnModel.GRAINE,   # même raison que ci-dessus
             **params_arbres("xgboost")))
+    if kind == "lightgbm":
+        from lightgbm import LGBMClassifier
+
+        from packages.common.device import params_arbres
+        # LightGBM était DÉCLARÉ en dépendance (`pyproject.toml`, groupe ml) et importé
+        # nulle part : une dépendance qu'on installe, qu'on met à jour, qu'on audite, et
+        # qui ne sert à rien. Le device module savait déjà lui parler
+        # (`params_arbres("lightgbm")`), il ne manquait que l'adaptateur.
+        #
+        # Hyperparamètres alignés sur ceux d'XGBoost — 100 arbres, profondeur 3 — pour
+        # que la comparaison entre les deux porte sur l'ALGORITHME et non sur des
+        # réglages différents. `num_leaves` doit suivre `max_depth` : LightGBM fait
+        # croître ses arbres par feuille et non par niveau, donc laisser le défaut (31)
+        # avec une profondeur de 3 donnerait un arbre bien plus complexe que celui
+        # d'XGBoost, et la comparaison ne voudrait plus rien dire.
+        #
+        # `verbose=-1` : sans lui, LightGBM écrit sur la sortie standard à chaque
+        # ajustement, ce qui noierait les journaux d'une validation croisée.
+        return SklearnModel(LGBMClassifier(
+            n_estimators=100, max_depth=3, num_leaves=7, verbose=-1,
+            random_state=SklearnModel.GRAINE,
+            **params_arbres("lightgbm")))
     raise ValueError(f"modèle inconnu: {kind}")
 
 

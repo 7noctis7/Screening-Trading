@@ -2,6 +2,50 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0084 — Revue d'une liste de dépôts « indispensables » : un seul trou réel (2026-09-08)
+
+**Contexte.** Liste argumentée de dépôts standards de l'industrie, avec deux qualifiés
+d'urgents. Vérification faite contre le code plutôt que contre la réputation des projets.
+
+**Le seul trou réel : LightGBM.** Déclaré dans `pyproject.toml` (groupe `ml`) et importé
+**nulle part**. Une dépendance qu'on installe, met à jour et audite pour ses vulnérabilités,
+sans qu'elle serve. `params_arbres("lightgbm")` savait déjà lui parler depuis ADR-0079 ; il ne
+manquait que l'adaptateur. Branché dans `make_model`.
+
+*Le point subtil qui justifie le test* : LightGBM fait croître ses arbres PAR FEUILLE, XGBoost
+par NIVEAU. Laisser `num_leaves=31` (défaut) avec `max_depth=3` donnerait un arbre bien plus
+complexe que son équivalent XGBoost à réglages « identiques » : on croirait comparer deux
+algorithmes, on comparerait deux capacités de mémorisation. `num_leaves=7` (2³−1). Contrôle
+négatif vérifié : remettre 31 fait rougir le test.
+
+**La correction factuelle : Riskfolio-Lib n'est pas à intégrer d'urgence.** Il est présenté
+comme apportant HRP, CVaR et Black-Litterman. Les trois existent DÉJÀ nativement ici :
+`optimize.hrp_weights`, `cvar_optimize.mean_cvar_weights` (ADR-0080), `black_litterman`. Comme
+LightGBM, riskfolio est déclaré et importé nulle part — mais son cas est l'inverse : ce n'est
+pas un trou à combler, c'est une dépendance à RETIRER. L'ajouter donnerait deux implémentations
+de HRP susceptibles de diverger, et un désaccord entre deux allocateurs est indétectable à
+l'œil.
+
+**Écartés, avec raison mesurée plutôt qu'avec un principe.**
+· *Transformers séries temporelles (PatchTST, Informer) et apprentissage par renforcement
+  (TradeMaster)* : le seuil de promotion mesuré ici vaut ±0,118 de Sharpe sur onze ans
+  (ADR-0079). Ajouter des familles de modèles multiplie les essais donc resserre encore la
+  déflation, sans lever le blocage — qui est la longueur de l'historique, pas la richesse des
+  modèles. Mesuré : sur du bruit pur, enrichir l'espace de recherche fait passer les faux
+  positifs d'un seuil non corrigé de 45/75 à 88/96 (ADR-0083).
+· *`jpmorganchase/perspective`* : réel, remarquable, conçu pour des millions de lignes en
+  streaming. Les tableaux d'ici en comptent ~750, et le front est un export statique. Un moteur
+  WebAssembly pour ça alourdirait la page sans rien résoudre.
+· *`apple/mlx`* : l'argument « prototyper vite sur le M4 » est juste, mais MLX est un framework
+  DISTINCT de torch — du code écrit pour MLX ne migrerait pas vers CUDA. Cela contredit
+  frontalement la portabilité établie en ADR-0079.
+· *Kalshi / Polymarket* : l'argument a changé et s'est amélioré (probabilités implicites FED
+  comme variables de CONTEXTE, non comme signal). Il reste à trancher par la mesure d'un IC sur
+  le panel réel — pas ce soir, faute de données. Inscrit au TODO plutôt que tranché à l'aveugle.
+· *gs-quant, connecteurs Binance/Coinbase, sec-gov* : dérivés hors périmètre ; le passage d'un
+  courtier en réel est conditionné aux P0-SI-LIVE ; SEC EDGAR est déjà dans la chaîne
+  fondamentale (yfinance → FMP → SEC).
+
 ## ADR-0083 — Grammaire de signaux à deux étages, inspirée d'Alpha158 (2026-09-08)
 
 **Contexte.** Revue d'une vingtaine d'organisations GitHub (Microsoft, Goldman Sachs,
