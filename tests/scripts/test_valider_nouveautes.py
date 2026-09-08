@@ -13,6 +13,7 @@ lancement — et qui est testée en premier ici.
 from __future__ import annotations
 
 import importlib.util
+import re
 import sys
 from pathlib import Path
 
@@ -229,7 +230,7 @@ def test_les_series_signalees_sont_ecartees_de_la_comparaison(capsys) -> None:
     valider.etape_cvar(champs, noms, ecarter={"A0"})
     sortie = capsys.readouterr().out
     assert "1 actif(s) écarté(s)" in sortie, "l'exclusion n'est pas appliquée"
-    debut = sortie.index("Lignes proposées")
+    debut = sortie.index("Mean-CVaR sans plafond")
     assert "A0 " not in sortie[debut:], (
         "l'actif figé est encore proposé : il paraît sans risque à l'optimiseur et "
         "hérite d'un poids qu'il ne mérite pas"
@@ -247,3 +248,56 @@ def test_l_audit_transmet_bien_les_actifs_a_ecarter(capsys) -> None:
     ecarter = valider.etape_anomalies(champs, [f"A{i}" for i in range(n)])
     assert isinstance(ecarter, set)
     assert "A3" in ecarter, f"la série figée n'est pas transmise : {ecarter}"
+
+
+def test_les_actions_ne_sont_plus_eliminees_par_le_calendrier(capsys) -> None:
+    """LE défaut du run du 08/09 : le filtre de couverture portait sur une grille
+    CALENDAIRE. Une action cote 5 jours sur 7, donc sa couverture plafonne à 71 % — sous
+    n'importe quel seuil raisonnable. Résultat : 36 actifs retenus, tous du crypto,
+    c'est-à-dire la famille dont l'étape 1 venait de dire que les données étaient
+    abîmées. La comparaison d'allocateurs portait sur un univers qui ne ressemble à
+    aucun portefeuille réel.
+
+    On identifie donc d'abord les vrais JOURS DE BOURSE (ceux où une large majorité
+    cote), et on mesure la couverture SUR CES JOURS."""
+    g = np.random.default_rng(11)
+    t, n_act, n_cry = 1000, 14, 6
+    prix = 100.0 * np.exp(np.cumsum(g.normal(0, 0.015, (t, n_act + n_cry)), axis=0))
+    # deux jours sur sept, seules les « cryptos » cotent — comme un week-end
+    week_end = (np.arange(t) % 7) >= 5
+    prix[np.ix_(week_end, np.arange(n_act))] = np.nan
+    champs = {c: prix.copy() for c in ("open", "high", "low", "close", "volume")}
+    noms = [f"ACT{i}" for i in range(n_act)] + [f"CRY{i}" for i in range(n_cry)]
+
+    valider.etape_cvar(champs, noms)
+    sortie = capsys.readouterr().out
+    assert "comparaison impossible" not in sortie, sortie[-400:]
+    assert "jours de bourse identifiés" in sortie
+    # 14 actions + 6 cryptos doivent TOUTES entrer : c'est le cœur du correctif.
+    assert f"{n_act + n_cry} actifs couverts" in sortie, (
+        "des actions sont encore éliminées par le calendrier : la comparaison ne "
+        f"porterait que sur du crypto.\n{sortie}"
+    )
+
+
+def test_la_variante_plafonnee_est_publiee(capsys) -> None:
+    """Mean-CVaR posait 54,6 % sur une ligne — PLUS concentré que min-variance (39,3 %),
+    l'allocateur qu'on lui reproche justement de concentrer. Réduire la perte extrême en
+    misant tout sur deux actifs n'est pas un progrès, c'est un autre risque : celui que
+    la mesure ne voit pas. Les deux versions doivent être publiées côte à côte."""
+    g = np.random.default_rng(12)
+    t, n = 700, 15
+    prix = 100.0 * np.exp(np.cumsum(g.normal(0, 0.015, (t, n)), axis=0))
+    champs = {c: prix.copy() for c in ("open", "high", "low", "close", "volume")}
+    valider.etape_cvar(champs, [f"A{i}" for i in range(n)])
+    sortie = capsys.readouterr().out
+    # La ligne du TABLEAU comparatif, pas seulement la liste des poids : c'est là que
+    # se lit l'arbitraire — combien de perte extrême coûte le fait de se diversifier.
+    ligne = re.search(r"Mean-CVaR plafonné \d+%\s+(\d+\.\d+)%\s+(\d+\.\d+)%"
+                      r"\s+(\d+\.\d+)%", sortie)
+    assert ligne, f"la variante plafonnée n'est pas dans le tableau :\n{sortie}"
+    poids_max = float(ligne.group(3))
+    assert poids_max <= valider.PLAFOND_LIGNE * 100 + 0.11, (
+        f"poids max {poids_max:.1f}% au-delà du plafond demandé"
+    )
+    assert "Mean-CVaR sans plafond" in sortie

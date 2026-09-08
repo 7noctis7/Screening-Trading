@@ -52,6 +52,13 @@ SEPARATEUR = "=" * 72
 # d'allocation. Sous ce seuil, ses rendements sont trop lacunaires pour qu'une
 # covariance ou un CVaR estimés dessus veuillent dire quelque chose.
 COUVERTURE_MIN = 0.90
+# Part d'actifs cotant un jour donné pour qu'on le tienne pour un JOUR DE BOURSE. Sous
+# ce seuil, seul le crypto cote : c'est un week-end ou un férié, pas une séance.
+PRESENCE_JOUR_MIN = 0.60
+# Plafond par ligne de la variante contrainte. Une allocation qui met la moitié du
+# capital sur un actif réduit peut-être la perte extrême MESURÉE, mais elle expose à ce
+# que la mesure n'a pas vu.
+PLAFOND_LIGNE = 0.25
 
 
 def _titre(n: int, texte: str, risque: str) -> None:
@@ -92,7 +99,7 @@ def charger_panel(jours: int = 1500):
     return champs, symboles, mode
 
 
-def etape_anomalies(champs, symboles) -> set[str]:
+def etape_anomalies(champs, symboles, etat_partage: dict | None = None) -> set[str]:
     _titre(1, "ANOMALIES CROISÉES — ce qu'un contrôle ligne par ligne ne voit pas",
            "lecture seule, aucun risque")
     from packages.storage.anomalies_panel import auditer_panel, resumer_par_actif
@@ -149,13 +156,20 @@ def etape_anomalies(champs, symboles) -> set[str]:
     # Un audit qui trouve des séries corrompues et laisse l'étape suivante les utiliser
     # ne sert à rien. Pire : il fabrique un résultat flatteur, donc convaincant.
     ecarter = {x["symbole"] for x in casses} | {x["symbole"] for x in figes}
+    # La liste B est SIGNALÉE, pas exclue. Un saut de +90 % en séance peut être un split
+    # non ajusté comme une vraie nouvelle (MRNA +177 % le jour d'un résultat d'essai
+    # clinique). Écarter les deux biaiserait le risque vers le bas — l'erreur inverse,
+    # et plus dangereuse que celle qu'on corrige.
+    if etat_partage is not None:
+        etat_partage["surveiller"] = {x["symbole"] for x in splits}
     print(f"\n  À LIRE : les {len(casses)} actifs de la liste A n'ont pas leur place")
     print("  dans une allocation, et ceux de la liste C fausseraient tout optimiseur")
     print(f"  de risque. Ces {len(ecarter)} actifs sont ÉCARTÉS de l'étape 3.")
     return ecarter
 
 
-def etape_cvar(champs, symboles, ecarter: set[str] | None = None) -> None:
+def etape_cvar(champs, symboles, ecarter: set[str] | None = None,
+               surveiller: set[str] | None = None) -> None:
     _titre(3, "MEAN-CVaR contre les allocateurs actuels — sur rendements RÉELS",
            "propose une allocation, n'en applique aucune")
     from packages.portfolio.cvar_optimize import cvar_du_portefeuille, mean_cvar_detail
@@ -168,21 +182,29 @@ def etape_cvar(champs, symboles, ecarter: set[str] | None = None) -> None:
     with np.errstate(divide="ignore", invalid="ignore"):
         r = np.diff(c, axis=0) / np.where(c[:-1] == 0, np.nan, c[:-1])
 
-    # ALIGNEMENT PAR INTERSECTION, jamais par remplissage.
+    # ALIGNEMENT EN DEUX TEMPS : d'abord les JOURS, ensuite les ACTIFS.
     #
-    # La première version exigeait un historique fini sur TOUTES les dates. Sur un
-    # univers qui mêle actions et crypto, c'est impossible : la crypto cote le samedi,
-    # les actions non, donc la grille commune est trouée par construction. Résultat
-    # mesuré sur le VPS (08/09) : « moins de 5 actifs », et l'étape ne mesurait rien.
+    # La première version filtrait les actifs sur leur couverture d'une grille
+    # CALENDAIRE. Or une action cote 5 jours sur 7 : sa couverture plafonne à 71 %,
+    # sous n'importe quel seuil raisonnable. Le filtre à 90 % ne retenait donc QUE du
+    # crypto — 36 actifs, tous de la famille dont l'étape 1 venait de dire que les
+    # données étaient abîmées. La comparaison d'allocateurs portait sur un univers
+    # crypto pur, ce qui ne ressemble à aucun portefeuille réel.
     #
-    # On garde donc les actifs assez COUVERTS, puis on ne retient que les dates où ils
-    # ont tous une valeur. Jamais de remplissage vers l'avant : prolonger un cours
-    # absent invente une séance sans mouvement, ce qui abaisse la volatilité mesurée et
-    # ferait justement paraître l'actif plus sûr qu'il n'est.
-    couverture = np.isfinite(r).mean(axis=0)
+    # On repère donc d'abord les vrais JOURS DE BOURSE — ceux où une large majorité
+    # d'actifs cote — ce qui écarte les week-ends sans avoir à connaître le calendrier
+    # d'aucune place. La couverture des actifs se mesure ensuite SUR CES JOURS, où une
+    # action saine est à 100 %. Aucun remplissage : prolonger un cours absent
+    # inventerait une séance sans mouvement, ce qui abaisse la volatilité mesurée et
+    # ferait paraître l'actif plus sûr qu'il n'est.
+    presence = np.isfinite(r).mean(axis=1)
+    jours_bourse = presence >= PRESENCE_JOUR_MIN
+    if jours_bourse.sum() < 250:
+        print(f"  ⛔ {int(jours_bourse.sum())} jours de bourse identifiés : trop peu")
+        return
+    r_jours = r[jours_bourse]
+    couverture = np.isfinite(r_jours).mean(axis=0)
     gardes = couverture >= COUVERTURE_MIN
-    # Exclusion des séries que l'étape 1 a signalées. Comparer des allocateurs sur des
-    # prix faux mesure la sensibilité au bruit, pas la qualité de l'allocation.
     if ecarter:
         propres = np.array([s not in ecarter for s in symboles])
         n_retires = int((gardes & ~propres).sum())
@@ -193,7 +215,7 @@ def etape_cvar(champs, symboles, ecarter: set[str] | None = None) -> None:
         print(f"  ⛔ {int(gardes.sum())} actifs couverts à "
               f"{COUVERTURE_MIN:.0%}+ : comparaison impossible")
         return
-    sous = r[:, gardes]
+    sous = r_jours[:, gardes]
     dates_pleines = np.isfinite(sous).all(axis=1)
     sous = sous[dates_pleines]
     noms = [s for s, ok in zip(symboles, gardes, strict=True) if ok]
@@ -201,11 +223,22 @@ def etape_cvar(champs, symboles, ecarter: set[str] | None = None) -> None:
         print(f"  ⛔ {sous.shape[0]} dates communes seulement : trop peu pour comparer")
         return
     r = sous
+    print(f"  {int(jours_bourse.sum())} jours de bourse identifiés sur "
+          f"{len(presence)} dates calendaires")
     print(f"  {r.shape[1]} actifs couverts à {COUVERTURE_MIN:.0%}+ · "
-          f"{r.shape[0]} dates communes (sur {len(dates_pleines)} possibles)")
+          f"{r.shape[0]} dates communes")
     cov = np.cov(r, rowvar=False)
     d = mean_cvar_detail(r, alpha=0.95)
+    # AVEC PLAFOND, à côté du sans plafond. Sur le run du 08/09, Mean-CVaR posait 54,6 %
+    # sur une ligne et 45,4 % sur une autre : PLUS concentré que min-variance (39,3 %),
+    # l'allocateur qu'on lui reproche justement de concentrer. Réduire la perte extrême
+    # en misant tout sur deux actifs n'est pas un progrès, c'est un autre risque —
+    # celui que la mesure ne voit pas, parce que le passé n'a pas encore montré ce que
+    # ces deux-là font quand ils tombent ensemble. Publier les deux versions laisse
+    # l'arbitrage visible au lieu de le trancher en silence.
+    d_cap = mean_cvar_detail(r, alpha=0.95, plafond=PLAFOND_LIGNE)
     lignes = [("Mean-CVaR (nouveau)", d["poids"]),
+              (f"Mean-CVaR plafonné {PLAFOND_LIGNE:.0%}", d_cap["poids"]),
               ("min-variance", min_variance_weights(cov)),
               ("risk parity (ERC)", equal_risk_contribution(cov)),
               ("HRP", hrp_weights(cov)),
@@ -218,9 +251,17 @@ def etape_cvar(champs, symboles, ecarter: set[str] | None = None) -> None:
         pertes = -(r @ w)
         print(f"  {nom:24s} {cvar_du_portefeuille(r, w):>9.2%} "
               f"{pertes.max():>9.2%} {w.max():>9.1%}")
-    top = sorted(zip(noms, d["poids"], strict=True), key=lambda t: -t[1])[:8]
-    print("\n  Lignes proposées par Mean-CVaR : "
-          + ", ".join(f"{n} {p:.1%}" for n, p in top if p > 0.001))
+    for etiquette, detail in (("sans plafond", d), (f"plafonné à {PLAFOND_LIGNE:.0%}",
+                                                    d_cap)):
+        top = sorted(zip(noms, detail["poids"], strict=True),
+                     key=lambda t: -t[1])[:8]
+        retenues = [(n, w) for n, w in top if w > 0.005]
+        print(f"\n  Mean-CVaR {etiquette} — {len(retenues)} ligne(s) : "
+              + ", ".join(f"{n} {w:.1%}" for n, w in retenues))
+        suspects = [n for n, _ in retenues if n in (surveiller or set())]
+        if suspects:
+            print(f"    ⚠ dont {', '.join(suspects)} — signalé(s) à l'étape 1 comme "
+                  "possible(s) split(s) non ajusté(s), à vérifier avant d'y croire")
     print("\n  À LIRE : si le CVaR du Mean-CVaR n'est pas NETTEMENT sous les autres,")
     print("  on ne branche pas. La démonstration synthétique ne vaut pas verdict.")
 
@@ -323,10 +364,10 @@ def main() -> int:
     etat: dict = {}
     etapes = [
         ("anomalies croisées", lambda: etat.update(
-            ecarter=etape_anomalies(champs, symboles) or set())),
+            ecarter=etape_anomalies(champs, symboles, etat) or set())),
         ("explicabilité", lambda: etape_explication(champs, symboles)),
-        ("Mean-CVaR", lambda: etape_cvar(champs, symboles,
-                                        etat.get("ecarter"))),
+        ("Mean-CVaR", lambda: etape_cvar(champs, symboles, etat.get("ecarter"),
+                                        etat.get("surveiller"))),
         ("générateur de signaux", lambda: etape_generateur(champs, args.appliquer)),
     ]
     echecs = []
