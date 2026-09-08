@@ -2,6 +2,42 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0086 — Comparer deux optimiseurs en échantillon est circulaire (2026-09-08)
+
+**Contexte.** Cinquième lancement, le premier honnête : univers négociable (693 actifs,
+678 jours communs), séries cassées et figées écartées, répartition par classe publiée.
+
+**Résultat obtenu.** CVaR 0,58 % pour Mean-CVaR contre 1,65 % pour min-variance, 1,46 % pour
+HRP, 2,32 % pour l'équipondéré. Pire jour 1,29 % contre 4,26 %. Répartition : 69 % d'ETF
+(AGG 67 % à lui seul), 29 % d'actions, 2 % de crypto.
+
+**Et pourtant ce chiffre ne prouve rien.** Chaque allocateur est ajusté sur les 678 mêmes
+jours qui servent ensuite à le noter. Mean-CVaR MINIMISE exactement le nombre rapporté : il ne
+peut pas perdre ce concours, c'est sa fonction objectif. Et min-variance perd sur le CVaR par
+construction, parce qu'il minimise la variance — pas par infériorité. « 0,58 % contre 1,65 % »
+énonce donc uniquement que l'optimiseur a bien optimisé ce qu'on lui a demandé.
+
+C'est le même défaut que le projet traque partout ailleurs — CV purgée, hors-échantillon,
+DSR — et qui s'était réinstallé ici sans qu'on le voie, parce que le chiffre était flatteur.
+
+**Décision.** Test à fenêtre glissante : poids ajustés sur 252 jours, appliqués aux 63
+suivants, jamais vus, répété le long de l'historique. Les segments hors échantillon sont mis
+bout à bout et notés ensemble. Un avantage qui survit est réel ; un avantage qui s'évapore
+était du surajustement — et les deux sont indiscernables en échantillon.
+
+Le RENDEMENT est publié à côté du risque. Un allocateur qui divise la perte extrême par trois
+en divisant aussi le rendement par trois n'a rien amélioré : il a moins investi. Sans cette
+colonne, « minimiser le CVaR » a une réponse triviale — acheter des obligations — que le run a
+d'ailleurs donnée (AGG 67 %).
+
+**Note sur le plafond.** Passer de 67 % à 25 % de poids maximal coûte 0,04 point de CVaR
+(0,58 % → 0,62 %). Si ce résultat tient hors échantillon, la diversification est presque
+gratuite — un fait actionnable indépendamment du verdict sur le Mean-CVaR.
+
+**Verdict inchangé : non branché.** Cinq lancements, cinq défauts du BANC (dépendance
+manquante, saturation mémoire, filtre calendaire, investabilité, circularité). Le sixième
+mesurera enfin quelque chose.
+
 ## ADR-0085 — Un minimiseur de risque multi-classes ne fait pas une allocation (2026-09-08)
 
 **Contexte.** Validation du Mean-CVaR (ADR-0080) sur données réelles, quatre lancements

@@ -263,12 +263,20 @@ def etape_cvar(champs, symboles, ecarter: set[str] | None = None,
     # ces deux-là font quand ils tombent ensemble. Publier les deux versions laisse
     # l'arbitrage visible au lieu de le trancher en silence.
     d_cap = mean_cvar_detail(r, alpha=0.95, plafond=PLAFOND_LIGNE)
-    lignes = [("Mean-CVaR (nouveau)", d["poids"]),
-              (f"Mean-CVaR plafonné {PLAFOND_LIGNE:.0%}", d_cap["poids"]),
-              ("min-variance", min_variance_weights(cov)),
-              ("risk parity (ERC)", equal_risk_contribution(cov)),
-              ("HRP", hrp_weights(cov)),
-              ("équipondéré", [1.0 / r.shape[1]] * r.shape[1])]
+    # Un allocateur qui lève sur une matrice dégénérée ne doit pas emporter les cinq
+    # autres : on perdrait toute la comparaison pour un cas particulier.
+    lignes = []
+    for nom_alloc, calculer in (
+            ("Mean-CVaR (nouveau)", lambda: d["poids"]),
+            (f"Mean-CVaR plafonné {PLAFOND_LIGNE:.0%}", lambda: d_cap["poids"]),
+            ("min-variance", lambda: min_variance_weights(cov)),
+            ("risk parity (ERC)", lambda: equal_risk_contribution(cov)),
+            ("HRP", lambda: hrp_weights(cov)),
+            ("équipondéré", lambda: [1.0 / r.shape[1]] * r.shape[1])):
+        try:
+            lignes.append((nom_alloc, calculer()))
+        except Exception as e:  # noqa: BLE001 — un allocateur absent, pas une panne
+            print(f"  ⚠ {nom_alloc} indisponible : {type(e).__name__}: {e}")
     print(f"  méthode de résolution : {d['methode']}\n")
     entetes = f"  {'allocation':24s} {'CVaR 95%':>10s} {'pire jour':>10s}"
     print(entetes + f" {'poids max':>10s}")
@@ -291,8 +299,81 @@ def etape_cvar(champs, symboles, ecarter: set[str] | None = None,
         if suspects:
             print(f"    ⚠ dont {', '.join(suspects)} — signalé(s) à l'étape 1 comme "
                   "possible(s) split(s) non ajusté(s), à vérifier avant d'y croire")
-    print("\n  À LIRE : si le CVaR du Mean-CVaR n'est pas NETTEMENT sous les autres,")
-    print("  on ne branche pas. La démonstration synthétique ne vaut pas verdict.")
+    _hors_echantillon(r)
+
+
+def _allocateurs(r: np.ndarray) -> list[tuple[str, callable]]:
+    """Les allocateurs comparés, sous forme de FONCTIONS d'un historique.
+
+    Sous forme de fonctions et non de poids figés : le test hors échantillon doit
+    pouvoir les réajuster sur chaque fenêtre passée, ce qu'une liste de poids calculée
+    une fois pour toutes interdit.
+    """
+    from packages.portfolio.cvar_optimize import mean_cvar_weights
+    from packages.portfolio.optimize import (
+        equal_risk_contribution,
+        hrp_weights,
+        min_variance_weights,
+    )
+    return [
+        ("Mean-CVaR (nouveau)", lambda h: mean_cvar_weights(h, alpha=0.95)),
+        (f"Mean-CVaR plafonné {PLAFOND_LIGNE:.0%}",
+         lambda h: mean_cvar_weights(h, alpha=0.95, plafond=PLAFOND_LIGNE)),
+        ("min-variance", lambda h: min_variance_weights(np.cov(h, rowvar=False))),
+        ("risk parity (ERC)",
+         lambda h: equal_risk_contribution(np.cov(h, rowvar=False))),
+        ("HRP", lambda h: hrp_weights(np.cov(h, rowvar=False))),
+        ("équipondéré", lambda h: [1.0 / h.shape[1]] * h.shape[1]),
+    ]
+
+
+def _hors_echantillon(r: np.ndarray, fenetre: int = 252, pas: int = 63) -> None:
+    """LE test qui décide. Ajuster sur le passé, mesurer sur la SUITE.
+
+    Tout ce qui précède est mesuré EN ÉCHANTILLON : chaque allocateur est ajusté sur les
+    mêmes jours que ceux qui servent à le noter. Mean-CVaR minimise exactement le nombre
+    qu'on rapporte — il ne PEUT PAS perdre ce concours, c'est sa fonction objectif. Et
+    min-variance perd sur le CVaR par construction, pas par infériorité. « 0,58 % contre
+    1,65 % » ne prouve donc rien d'autre que « l'optimiseur a bien optimisé ce qu'on lui
+    a demandé ».
+
+    Ici, les poids sont calculés sur une fenêtre passée puis appliqués à la fenêtre
+    SUIVANTE, jamais vue. Les segments hors échantillon sont mis bout à bout et notés
+    ensemble. Un avantage qui survit à ça est réel ; un avantage qui s'évapore était du
+    surajustement — et les deux se ressemblent parfaitement en échantillon.
+
+    Le RENDEMENT est publié à côté du risque. Un allocateur qui divise la perte extrême
+    par trois en divisant aussi le rendement par trois n'a rien amélioré : il a
+    simplement moins investi.
+    """
+    from packages.portfolio.cvar_optimize import cvar_du_portefeuille
+    if r.shape[0] < fenetre + pas:
+        print(f"\n  (hors échantillon impossible : {r.shape[0]} dates, il en faut "
+              f"{fenetre + pas} au minimum)")
+        return
+    decoupes = list(range(fenetre, r.shape[0] - pas + 1, pas))
+    print(f"\n  HORS ÉCHANTILLON — ajusté sur {fenetre} jours, mesuré sur les {pas}")
+    print(f"  suivants, {len(decoupes)} fois de suite. C'est le seul test qui décide.")
+    print(f"\n  {'allocation':24s} {'CVaR 95%':>10s} {'pire jour':>10s} "
+          f"{'rendement':>11s}")
+    for nom, calculer in _allocateurs(r):
+        morceaux = []
+        for t in decoupes:
+            try:
+                w = np.asarray(calculer(r[t - fenetre:t]), float)
+            except Exception:  # noqa: BLE001 — un allocateur en échec ne fausse pas
+                continue        # les autres ; il sera simplement absent du décompte
+            morceaux.append(r[t:t + pas] @ w)
+        if not morceaux:
+            print(f"  {nom:24s} {'—':>10s} {'—':>10s} {'—':>11s}")
+            continue
+        suite = np.concatenate(morceaux)
+        cumul = float(np.prod(1.0 + suite) - 1.0)
+        print(f"  {nom:24s} "
+              f"{cvar_du_portefeuille(suite[:, None], [1.0]):>9.2%} "
+              f"{(-suite).max():>9.2%} {cumul:>10.1%}")
+    print("\n  À LIRE : si l'avantage du Mean-CVaR disparaît ici, il était du")
+    print("  surajustement. S'il tient, il est réel — et le rendement dit son coût.")
 
 
 def _repartition_par_classe(lignes, classes: list[str]) -> None:

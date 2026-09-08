@@ -350,3 +350,45 @@ def test_la_repartition_par_classe_est_publiee(capsys) -> None:
     sortie = capsys.readouterr().out
     assert "répartition par classe" in sortie, "la répartition n'est pas publiée"
     assert "etf" in sortie and "crypto" in sortie
+
+
+def test_le_hors_echantillon_est_publie(capsys) -> None:
+    """LE défaut qui restait après cinq lancements : tout était mesuré EN ÉCHANTILLON.
+    Mean-CVaR minimise exactement le nombre rapporté — il ne peut pas perdre ce
+    concours, c'est sa fonction objectif. Et min-variance perd sur le CVaR par
+    construction, pas par infériorité. « 0,58 % contre 1,65 % » ne prouvait donc rien
+    d'autre que « l'optimiseur a bien optimisé ce qu'on lui a demandé ».
+
+    Les poids doivent être ajustés sur une fenêtre PASSÉE et notés sur la SUIVANTE."""
+    g = np.random.default_rng(15)
+    t, n = 900, 12
+    prix = 100.0 * np.exp(np.cumsum(g.normal(0.0004, 0.015, (t, n)), axis=0))
+    champs = {c: prix.copy() for c in ("open", "high", "low", "close", "volume")}
+    valider.etape_cvar(champs, [f"A{i}" for i in range(n)])
+    sortie = capsys.readouterr().out
+    assert "HORS ÉCHANTILLON" in sortie, "le test hors échantillon n'est pas lancé"
+    assert "rendement" in sortie, (
+        "le rendement n'est pas publié : un allocateur qui divise la perte extrême "
+        "par trois en divisant aussi le rendement par trois n'a rien amélioré"
+    )
+
+
+def test_un_allocateur_en_echec_n_emporte_pas_les_autres(capsys, monkeypatch) -> None:
+    """Le hors échantillon réajuste six allocateurs sur chaque fenêtre. Si l'un lève
+    sur une fenêtre dégénérée, les cinq autres doivent tout de même être notés."""
+    import packages.portfolio.optimize as opt
+
+    def _explose(*a, **k):
+        raise RuntimeError("matrice singulière")
+
+    monkeypatch.setattr(opt, "hrp_weights", _explose)
+    g = np.random.default_rng(16)
+    t, n = 900, 10
+    prix = 100.0 * np.exp(np.cumsum(g.normal(0.0004, 0.015, (t, n)), axis=0))
+    champs = {c: prix.copy() for c in ("open", "high", "low", "close", "volume")}
+    valider.etape_cvar(champs, [f"A{i}" for i in range(n)])
+    sortie = capsys.readouterr().out
+    assert "HORS ÉCHANTILLON" in sortie
+    assert "Mean-CVaR (nouveau)" in sortie.split("HORS ÉCHANTILLON")[1], (
+        "un allocateur en échec a emporté les autres"
+    )
