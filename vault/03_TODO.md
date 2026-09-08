@@ -940,6 +940,22 @@ explicite, module par module, avec mesure.
       l'intersection (masquer par date plutôt qu'exiger la ligne pleine), ou allonger la
       profondeur d'ingestion. C'est cette contrainte, pas le réglage `--pas`, qui empêche
       aujourd'hui de trancher sur une MÉTHODE d'allocation.
+- [ ] **P0 — AUCUN rebalancement planifié sur le VPS** (mesuré le 10/09, ADR-0104).
+      `crontab -l` → « no crontab for ubuntu ». Le portefeuille ne bouge que sur
+      lancement manuel : cela explique d'un coup les 5 décisions de sortie en 63 jours,
+      la détention médiane de 0,1 jour, et la poche QQQ montée à 69 % sans allègement.
+      **NON ÉTABLI** : le journal peut venir d'une autre machine (`journal-pull`,
+      launchd sur le Mac mini). L'absence de cron ici ne prouve pas que rien ne tourne
+      nulle part.
+      **À FAIRE, dans cet ordre** :
+      1. `make verify-journal` **sur la machine qui porte le planificateur** (le
+         Mac mini si c'est lui). Le contrôle sait enfin répondre sur Linux comme sur
+         macOS — il renvoyait « ✅ cron actif » sur toute machine Linux jusqu'au 10/09.
+      2. Si rien ne tourne nulle part : `make live-cron-install` sur la machine choisie,
+         puis `make verify-journal` pour confirmer.
+      3. Laisser tourner une semaine AVANT de rejuger quoi que ce soit sur les sorties :
+         les cinq décisions mesurées ne décrivent pas une stratégie, elles décrivent
+         cinq lancements manuels.
 - [ ] **P0 — 69 % du portefeuille sur UN SEUL ETF** (mesuré le 10/09, ADR-0102/0103).
       Trois lots de QQQ pèsent ≈ 69 500 $ sur ≈ 100 000 $. Un total qui oscille de 101 k
       à 100,4 k suit d'abord CELA : ±0,9 % sur QQQ font ±0,6 % sur le compte.

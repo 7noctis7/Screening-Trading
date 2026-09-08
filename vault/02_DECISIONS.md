@@ -2,6 +2,39 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0104 — Le contrôle « mon robot tourne-t-il ? » répondait oui sans regarder (2026-09-10)
+
+**Le fait.** `crontab -l` sur le VPS : **`no crontab for ubuntu`**. Aucun rebalancement
+n'y est planifié. Le portefeuille ne bouge donc que sur lancement manuel — ce qui
+explique d'un coup les cinq décisions de sortie en soixante-trois jours, la détention
+médiane de 0,1 jour, et une poche QQQ montée à 69 % sans jamais être allégée.
+
+**Ce qui n'est PAS établi.** Le journal peut être synchronisé depuis une autre machine
+(`make journal-pull` / `journal-push` existent, et ADR-0073 parlait du « journal réel du
+Mac mini »). L'absence de cron sur le VPS ne prouve donc pas que rien ne tourne nulle
+part — elle prouve que rien ne tourne ICI. La vérification appartient à la machine qui
+porte le planificateur.
+
+**LE DÉFAUT DE FOND, et il est à nous.** `scripts/verify_journal.py` existe précisément
+pour répondre à « le rebalancement quotidien alimente-t-il le journal ? ». Sa première
+section n'interrogeait que `launchctl`. Sur Linux l'outil est absent : elle imprimait
+« vérif planif ignorée » et renvoyait **True**. Le contrôle censé garantir la
+planification **validait donc par construction toute machine Linux**, VPS sans crontab
+compris. Le symptôme dormait depuis des semaines dans le journal, et l'outil chargé de
+le lever répondait « ✅ cron actif ».
+
+**Décision.** La sonde interroge les DEUX planificateurs — `launchctl list` et
+`crontab -l` — et distingue trois réponses au lieu de deux : l'outil est absent, l'outil
+dit qu'il n'y a rien, l'outil dit que c'est planifié. Un seul « oui » suffit. Si aucun
+planificateur n'est interrogeable, le contrôle **échoue en le disant** : *ne pas savoir
+n'est pas une réussite*. Sept tests, dont le contrôle positif (un cron installé doit
+passer) et le cas macOS, pour que le correctif n'échange pas une cécité contre une autre.
+
+**Conséquence.** C'est le seul défaut de cette série qui rendait un symptôme INVISIBLE.
+Les autres — le seuil trop bas, la grille trop courte, la coche sur les perdants —
+produisaient des chiffres faux qu'on pouvait lire et contester. Celui-ci produisait un
+silence, et un silence ne se conteste pas.
+
 ## ADR-0103 — La concentration est voulue : le cœur pèse la moitié du compte (2026-09-10)
 
 **Je t'avais envoyé sur la mauvaise commande.** `make live-sim` simule un portefeuille

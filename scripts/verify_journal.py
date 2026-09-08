@@ -7,7 +7,7 @@ après un run quotidien réel (`scripts/cron_live.sh`) :
   python3 scripts/verify_journal.py --max-age-days 4   # tolère un week-end
 
 Contrôle deux plans :
-  1. PLANIFICATION  — LaunchAgent `com.quant.live` chargé + fraîcheur du log `/tmp/quant_live.log`.
+  1. PLANIFICATION  — rebalancement planifié (launchd macOS OU cron Linux) + fraîcheur du log.
   2. JOURNALISATION — trades RÉELS (legacy=0) : count>0, cryptos BTC/ETH présents,
      timestamp récent, `features_snapshot` non vide (capture ML intacte).
 
@@ -47,19 +47,61 @@ def _parse_iso(s: str) -> datetime | None:
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
-def check_schedule() -> bool:
-    """LaunchAgent chargé + log récent. Non bloquant (info), mais on le signale."""
-    print("PLANIFICATION (launchd)")
-    ok = True
+CRON_MARQUEUR = "cron_live.sh"      # ligne posée par scripts/install_live_cron.sh
+
+
+def _sonde(commande: list[str], attendu: str) -> bool | None:
+    """True/False si l'outil RÉPOND, None s'il n'existe pas sur cette machine.
+
+    La distinction est tout l'intérêt de cette fonction : « l'outil est absent » et
+    « l'outil dit qu'il n'y a rien de planifié » sont deux réponses opposées, et les
+    confondre fait passer pour vérifié ce qui n'a pas été regardé.
+    """
     try:
-        out = subprocess.run(["launchctl", "list"], capture_output=True, text=True, timeout=10).stdout
-        loaded = any(LAUNCHD_LABEL in ln for ln in out.splitlines())
-    except Exception as e:  # noqa: BLE001
-        print(f"{WARN} launchctl indisponible ({str(e)[:40]}) — vérif planif ignorée"); return True
-    if loaded:
-        print(f"{OK} LaunchAgent {LAUNCHD_LABEL} chargé (lun-ven 16h05)")
+        r = subprocess.run(commande, capture_output=True, text=True, timeout=10)
+    except (FileNotFoundError, OSError, subprocess.SubprocessError):
+        return None
+    return any(attendu in ligne for ligne in (r.stdout or "").splitlines())
+
+
+def check_schedule() -> bool:
+    """Le rebalancement est-il PLANIFIÉ quelque part ? launchd (macOS) ou cron (Linux).
+
+    LE DÉFAUT QUE ÇA CORRIGE (constaté le 10/09). L'ancienne version n'interrogeait que
+    `launchctl`. Sur Linux, l'outil est absent : elle imprimait « vérif planif ignorée »
+    et renvoyait **True**. Le contrôle censé répondre à « mon robot tourne-t-il ? »
+    validait donc, par construction, toute machine Linux — y compris un VPS où
+    `crontab -l` répond « no crontab for ubuntu ». Le symptôme était visible depuis des
+    semaines dans le journal (cinq décisions de sortie en soixante-trois jours) et rien
+    ne le reliait à l'absence de planificateur.
+
+    Règle : on interroge les DEUX planificateurs ; un seul « oui » suffit. Si aucun ne
+    répond, on le DIT et on échoue — ne pas savoir n'est pas une réussite.
+    """
+    print("PLANIFICATION (launchd / cron)")
+    sondes = {
+        "launchd": _sonde(["launchctl", "list"], LAUNCHD_LABEL),
+        "cron": _sonde(["crontab", "-l"], CRON_MARQUEUR),
+    }
+    for nom, etat in sondes.items():
+        if etat is None:
+            print(f"{INFO} {nom} indisponible sur cette machine")
+        elif etat:
+            print(f"{OK} {nom} : rebalancement planifié")
+        else:
+            print(f"{INFO} {nom} : rien de planifié")
+
+    if any(e is True for e in sondes.values()):
+        ok = True
+    elif all(e is None for e in sondes.values()):
+        print(f"{BAD} aucun planificateur interrogeable — impossible d'affirmer que le")
+        print("      rebalancement tourne. Ne pas savoir n'est pas une réussite.")
+        ok = False
     else:
-        print(f"{BAD} LaunchAgent {LAUNCHD_LABEL} NON chargé → `make live-cron-install`"); ok = False
+        print(f"{BAD} AUCUN rebalancement planifié sur cette machine.")
+        print("      → `make live-cron-install` ici, ou vérifier la machine qui le")
+        print("        porte (le journal peut être synchronisé depuis une autre).")
+        ok = False
 
     log = next((p for p in LIVE_LOGS if p.exists()), None)
     if log is not None:
@@ -68,7 +110,7 @@ def check_schedule() -> bool:
         print(f"{tag} log {log} présent (dernière écriture il y a {age_h:.1f} h)")
     else:
         print(f"{INFO} log absent ({' / '.join(str(p) for p in LIVE_LOGS)}) — "
-              f"le cron n'a pas encore tourné")
+              f"le rebalancement n'a jamais tourné ICI")
     return ok
 
 
