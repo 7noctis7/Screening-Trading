@@ -48,6 +48,8 @@ noms-univers:     ## comble les noms manquants des seeds depuis les fournisseurs
 balayage-ic:      ## BALAYE horizons x classes d'actifs, corrigé Benjamini-Hochberg (long)
 	$(PYTHON) scripts/balayage_ic.py $(ARGS)
 
+valider-nouveautes: ## VALIDE sur données RÉELLES les modules non branchés (lecture seule)
+	$(PYTHON) scripts/valider_nouveautes.py $(ARGS)
 ic-screening:     ## MESURE l'IC hors échantillon du score de sélection (long, à lancer à la main)
 	$(PYTHON) scripts/mesurer_ic_screening.py $(ARGS)
 
