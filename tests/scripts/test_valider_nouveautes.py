@@ -458,3 +458,49 @@ def test_le_plafond_par_ligne_a_une_seule_definition() -> None:
     assert "PLAFOND_LIGNE = " not in fichier, (
         "le plafond est redéfini dans le script au lieu d'être importé"
     )
+
+
+def test_un_vrai_split_est_confirme_et_un_krach_ne_l_est_pas() -> None:
+    """« 33 actifs à vérifier » n'est pas un rapport, c'est une corvée qu'on saute.
+
+    Un split se distingue d'un krach par DEUX signaux qui doivent concorder : le ratio
+    de prix tombe sur une fraction usuelle, ET le volume change d'échelle en sens
+    inverse. Confondre les deux coûte cher dans les deux sens : ajuster un vrai krach
+    invente un rendement, laisser un vrai split corrompt tous ceux qui le traversent.
+    """
+    g = np.random.default_rng(11)
+    t = 300
+    base = 100.0 * np.exp(np.cumsum(g.normal(0, 0.01, t)))
+    volume = np.full(t, 1_000_000.0)
+
+    split, vol_split = base.copy(), volume.copy()
+    split[150:] /= 4.0                       # split 4:1
+    vol_split[150:] *= 4.0                   # … et le volume suit, en sens inverse
+
+    krach, vol_krach = base.copy(), volume.copy()
+    krach[150:] *= 0.42                  # −58 % : brutal, hors des fractions usuelles
+    vol_krach[150:] *= 6.0               # volume qui explose, sans lien avec le ratio
+
+    champs = {"close": np.column_stack([split, krach]),
+              "volume": np.column_stack([vol_split, vol_krach])}
+    verdicts = valider._qualifier_splits(
+        champs, ["SPLIT", "KRACH"],
+        [{"symbole": "SPLIT", "pire": -0.75}, {"symbole": "KRACH", "pire": -0.58}])
+
+    assert verdicts["SPLIT"]["certain"], verdicts["SPLIT"]
+    assert not verdicts["KRACH"]["certain"], verdicts["KRACH"]
+    assert "inexpliqué" in verdicts["KRACH"]["libelle"], verdicts["KRACH"]
+
+
+def test_sans_volume_le_split_n_est_pas_tranche() -> None:
+    """La règle du module : sans volume exploitable, on NE TRANCHE PAS. Annoncer
+    « confirmé » sur le seul ratio ferait ajuster des krachs tombés par hasard sur une
+    fraction ronde."""
+    g = np.random.default_rng(12)
+    close = 100.0 * np.exp(np.cumsum(g.normal(0, 0.01, 300)))
+    close[150:] /= 4.0
+    champs = {"close": close[:, None], "volume": np.zeros((300, 1))}
+
+    v = valider._qualifier_splits(champs, ["X"], [{"symbole": "X", "pire": -0.75}])["X"]
+    assert not v["certain"]
+    assert "volume indisponible" in v["libelle"], v["libelle"]

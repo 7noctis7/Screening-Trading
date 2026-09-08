@@ -940,12 +940,24 @@ explicite, module par module, avec mesure.
       l'intersection (masquer par date plutôt qu'exiger la ligne pleine), ou allonger la
       profondeur d'ingestion. C'est cette contrainte, pas le réglage `--pas`, qui empêche
       aujourd'hui de trancher sur une MÉTHODE d'allocation.
-- [ ] **P1 — Confronter l'allocation gagnante à un régime défavorable aux obligations.**
-      Elle est à 63 % en ETF obligataires (AGG, IEF, HYG) et un duel sur le CVaR
-      récompense mécaniquement qui détient la classe la moins volatile. La période
-      réellement mesurée est désormais imprimée par le script : vérifier qu'elle contient
-      un épisode de hausse des taux, sinon le résultat dit « ce portefeuille a bien
-      traversé CES mois-là », pas « cette méthode est meilleure ».
+- [x] **P1 — TRANCHÉ le 10/09 : HRP reste en production** (ADR-0100). La période
+      s'affiche : **2024-05-15 → 2026-05-19**, 336 séances — **aucun épisode de hausse
+      des taux**, le krach obligataire de 2022 est hors fenêtre. Or l'allocation gagnante
+      fait 63 % d'ETF obligataires, et sur le RENDEMENT le duel est indiscernable (7/16,
+      p = 0,80) : l'avantage porte sur le seul risque de queue, et ce risque de queue est
+      une exposition de classe d'actifs. On mesure « ces ETF ont été calmes deux ans »,
+      pas « cette méthode est meilleure ». Le Mean-CVaR reste `en_test` avec sa période
+      inscrite au registre ; il sera rejugé quand l'historique couvrira un choc de taux.
+- [x] **P1 — Un prix périmé comptait comme un prix RÉEL** (trouvé et corrigé le 10/09).
+      Le chargement ne regardait que le nombre de barres : `HYPE/USDC`, arrêtée le
+      27/08/2024, figurait dans l'univers réel du 08/09/2026 — le screener pouvait la
+      classer, le dimensionnement la dimensionner. `_load_prices` écarte désormais toute
+      série en retard de plus de 60 jours **sur la barre la plus fraîche de l'univers**
+      (pas sur la date du jour : un férié ne doit condamner personne). 5 tests.
+- [x] **P2 — Les splits suspects sont qualifiés, plus listés** (10/09). `corporate_actions`
+      existait depuis longtemps et n'était branché nulle part. La liste B se sépare en
+      « SPLIT CONFIRMÉ (ratio + volume) » / « volume non concordant » / « inexpliqué ».
+      Seule la dernière catégorie demande un œil humain.
 - [ ] **P1 — Sortir de l'univers les séries PÉRIMÉES** (trouvé le 09/09) : une douzaine
       de séries s'arrêtent des années avant le reste du lot — MATIC en 2025-03 (migration
       POL), RNDR en 2024-07, FTM en 2025-01, IMX en 2022-07, GRT en 2022-04, GMX en

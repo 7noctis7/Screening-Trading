@@ -1,5 +1,36 @@
 # 04 — JOURNAL
 
+## Session 2026-09-10 — HRP reste en production, et deux avaries de fond réparées
+
+**LA PÉRIODE A TRANCHÉ.** Le script imprime enfin ce qu'il mesure :
+**2024-05-15 → 2026-05-19**, 336 séances. Le krach obligataire de 2022 est HORS fenêtre.
+Or l'allocation gagnante du Mean-CVaR fait **63 % d'ETF obligataires**, et sur le
+RENDEMENT le duel contre HRP est indiscernable (7/16, p = 0,80). Son avantage porte donc
+sur le seul risque de queue — et ce risque de queue EST une exposition de classe. On
+mesure « ces ETF ont été calmes pendant deux ans », pas « cette méthode est meilleure ».
+**HRP reste l'allocateur de production.** Le Mean-CVaR reste `en_test`, avec sa période
+inscrite au registre : il sera rejugé quand l'historique couvrira un choc de taux.
+
+**AVARIE 1 — un prix périmé comptait comme un prix réel.** Le chargement ne regardait que
+le NOMBRE de barres. `HYPE/USDC`, arrêtée le 27 août 2024, figurait dans l'univers RÉEL
+du 8 septembre 2026 : le screener pouvait la classer, le dimensionnement la dimensionner,
+les graphiques l'afficher — sur un cours vieux de deux ans. Un prix périmé est pire qu'un
+prix absent : il a l'air d'un prix. `_load_prices` écarte désormais toute série en retard
+de plus de 60 jours sur la barre la plus fraîche de l'univers — pas sur la date du jour,
+sinon un férié condamnerait tout le monde.
+
+**AVARIE 2 — « 33 actifs à vérifier » n'est pas un rapport.** Personne n'ouvre une corvée
+de trente-trois lignes. Le projet possédait déjà `corporate_actions`, qui ne conclut à un
+split que si le ratio tombe sur une fraction usuelle ET que le volume change d'échelle en
+sens inverse — et il n'était branché nulle part. La liste se sépare maintenant en
+« SPLIT CONFIRMÉ », « volume non concordant » et « inexpliqué », seule catégorie qui
+demande un œil.
+
+**CE QUI RESTE.** Allonger l'historique commun (601 dates sur 802 jours de bourse), et la
+P0 de réconciliation du journal, qui attend toujours la machine qui détient `journal.db`.
+
+ADR-0100. Tests : 2326 passés, 7 ajoutés.
+
 ## Session 2026-09-09 (7ᵉ) — Le duel conclut, mon affichage mentait
 
 **LE RÉSULTAT.** Seize fenêtres : le Mean-CVaR bat HRP **15 fois sur 16** (p = 0,001,

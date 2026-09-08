@@ -1413,6 +1413,7 @@ def _load_prices(instruments, sector_of, start, end, seed):
             drift, vol = _SECTOR_DV.get(sector_of[s], (0.07, 0.18))
             data[s] = data_providers.create(
                 "synthetic", seed=seed, drift=drift, annual_vol=vol).fetch_ohlcv(s, "1d", start, end)
+    real_syms -= _series_perimees(data, real_syms)
     n_real = len(real_syms)
     _src = db.name if db else ("market.db" if prov_updates else "crypto.db" if prov_crypto else "?")
     _src += " + maj market.db" if (db and prov_updates) else ""
@@ -1423,6 +1424,36 @@ def _load_prices(instruments, sector_of, start, end, seed):
     else:
         mode = f"mixte ({n_real} réels / {len(instruments)} via {_src})"
     return data, mode, real_syms
+
+
+# Retard maximal toléré, en jours, sur la barre la plus fraîche de tout l'univers. On
+# compare au PANNEAU, pas à la date du jour : un lundi férié ou une ingestion de la
+# veille ne doivent condamner personne.
+RETARD_MAX_JOURS = 60
+
+
+def _series_perimees(data: dict, real_syms: set) -> set:
+    """Symboles dont la dernière barre est trop vieille pour être tenue pour RÉELLE.
+
+    LE DÉFAUT QUE ÇA CORRIGE. Une série s'arrête — jeton migré (MATIC→POL), délisté, ou
+    source qui lâche — et rien ne le remarquait : le chargement ne regardait que le
+    NOMBRE de barres. `HYPE/USDC`, arrêtée en août 2024, comptait pour un actif réel en
+    septembre 2026 avec un cours vieux de deux ans. Le screener pouvait le classer, le
+    dimensionnement le dimensionner, les graphiques l'afficher — tout cela sur un prix
+    qui n'existe plus. Un prix périmé est pire qu'un prix absent : il a l'air d'un prix.
+
+    Aucune donnée n'est modifiée ni supprimée : le symbole sort seulement de l'ensemble
+    des séries RÉELLES, exactement comme s'il n'avait jamais eu assez d'historique.
+    """
+    derniers = {s: max((b.ts for b in data.get(s, [])), default=None)
+                for s in real_syms}
+    fraiches = [d for d in derniers.values() if d is not None]
+    if not fraiches:
+        return set()
+    reference = max(fraiches)
+    trop_vieux = RETARD_MAX_JOURS
+    return {s for s, d in derniers.items()
+            if d is None or (reference - d).days > trop_vieux}
 
 
 def _index_series(aliases: list[str], start, end,

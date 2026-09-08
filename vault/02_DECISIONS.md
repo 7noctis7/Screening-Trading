@@ -2,6 +2,59 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0100 — HRP reste en production. Et deux avaries de fond, réparées (2026-09-10)
+
+**LA DÉCISION : on ne branche pas le Mean-CVaR.** Non par prudence de principe, mais
+parce que la mesure, une fois complète, ne soutient pas le changement.
+
+| duel apparié vs HRP, 16 fenêtres | CVaR | rendement |
+|---|---|---|
+| Mean-CVaR plafonné 25 % | **15/16**, p = 0,0005, −0,39 % | 7/16, p = 0,80 |
+
+Trois faits, chacun mesuré :
+
+1. **L'avantage porte sur le seul risque de queue.** Sur le rendement, le duel est
+   indiscernable (7/16, p = 0,80). Le Mean-CVaR ne gagne pas d'argent, il en perd moins
+   dans la queue.
+2. **Cet avantage EST une exposition de classe d'actifs.** L'allocation gagnante fait
+   63 % d'ETF obligataires (AGG 25 %, IEF 25 %, HYG 9,5 %) contre 31,8 % pour HRP. Un
+   duel sur le CVaR récompense mécaniquement qui détient la classe la moins volatile.
+3. **La période ne contient aucun régime défavorable aux obligations.** Le script
+   l'imprime désormais : **2024-05-15 → 2026-05-19**, 336 séances. Le krach obligataire
+   de 2022 est hors fenêtre. On mesure donc « ces ETF ont été calmes pendant deux ans »,
+   pas « cette méthode d'allocation est meilleure ».
+
+S'y ajoute la limite de forme d'ADR-0099 : 92 % de recouvrement entre périodes
+d'ajustement, donc un test qui compare deux PORTEFEUILLES, pas deux MÉTHODES. **HRP reste
+l'allocateur de production** — 66,9 % actions / 31,8 % ETF, une répartition qui ne repose
+pas sur le calme d'une seule classe. Le Mean-CVaR reste `en_test` au registre, avec sa
+période inscrite : il sera rejugé quand l'historique couvrira un choc de taux.
+
+**AVARIE 1 — un prix périmé comptait comme un prix réel.** Le chargement des prix ne
+regardait que le NOMBRE de barres. `HYPE/USDC`, arrêtée le 27 août 2024, figurait encore
+dans l'univers RÉEL du 8 septembre 2026 : le screener pouvait la classer, le
+dimensionnement la dimensionner, les graphiques l'afficher — sur un cours vieux de deux
+ans. Un prix périmé est pire qu'un prix absent : il a l'air d'un prix. `_load_prices`
+retire désormais du réel toute série dont la dernière barre a plus de 60 jours de retard
+**sur la barre la plus fraîche de l'univers** — pas sur la date du jour, sinon un férié
+ou une ingestion de la veille condamnerait tout le monde. Aucune donnée n'est effacée :
+le symbole sort de l'ensemble des séries réelles, comme s'il manquait d'historique.
+
+**AVARIE 2 — « 33 actifs à vérifier » n'est pas un rapport.** L'étape 1 listait les sauts
+suspects sans les qualifier ; personne n'ouvre une corvée de trente-trois lignes. Le
+projet possédait pourtant déjà `packages/data/corporate_actions.py`, qui ne conclut à un
+split que si DEUX signaux concordent — ratio de prix sur une fraction usuelle (1/2, 1/4,
+1/10…) ET volume changeant d'échelle en sens inverse. Un krach ne tombe pas pile sur
+0,250 en multipliant le volume par quatre. Il n'était branché nulle part. La liste B se
+sépare maintenant en « SPLIT CONFIRMÉ (ratio + volume) », « ratio de split, volume non
+concordant », et « inexpliqué » — cette dernière catégorie étant la seule qui mérite un
+œil. Sans volume exploitable, on ne tranche pas : c'est écrit « volume indisponible ».
+
+**Conséquences.** Le robot cesse de considérer comme vivants des instruments morts. Le
+rapport d'anomalies devient une liste courte de vraies questions. Et la question
+d'allocation est tranchée pour aujourd'hui, avec écrit noir sur blanc ce qui la
+rouvrira : un historique commun couvrant un choc de taux.
+
 ## ADR-0099 — Le duel conclut, mon affichage mentait, et la vraie limite est ailleurs (2026-09-09)
 
 **Le résultat.** Seize fenêtres, duel apparié contre HRP sur le CVaR :

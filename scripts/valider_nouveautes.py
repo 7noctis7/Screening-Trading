@@ -103,6 +103,48 @@ def charger_panel(jours: int = 1500):
     return champs, symboles, mode, [classes.get(x, "?") for x in symboles], dates
 
 
+def _qualifier_splits(champs, symboles: list[str], splits: list[dict]) -> dict:
+    """Confronte chaque saut suspect au calendrier des SPLITS, au lieu de le laisser
+    à vérifier à la main.
+
+    Le module `corporate_actions` n'ajuste que si DEUX signaux concordent : le ratio de
+    prix tombe sur une fraction usuelle (1/2, 1/4, 1/10…) ET le volume change d'échelle
+    en sens inverse. Un krach ne tombe pas pile sur 0,250 en multipliant le volume par
+    quatre. Ce qui restait « 33 actifs à vérifier » se sépare donc en deux : ce qui est
+    un split — donc ajustable sans deviner — et ce qui ne s'explique pas, la seule
+    partie qui mérite un œil humain.
+
+    Sans volume exploitable, on NE TRANCHE PAS : la sortie dit « volume indisponible ».
+    """
+    from packages.data.corporate_actions import detecter
+    index = {s: i for i, s in enumerate(symboles)}
+    closes, volumes = champs["close"], champs.get("volume")
+    out: dict[str, dict] = {}
+    for x in splits:
+        j = index.get(x["symbole"])
+        if j is None:
+            continue
+        col = [float(v) for v in closes[:, j] if v == v and v > 0]
+        vol = None
+        if volumes is not None:
+            vol = [float(v) for v, c in zip(volumes[:, j], closes[:, j], strict=True)
+                   if c == c and c > 0]
+            if not any(v > 0 for v in (vol or [])):
+                vol = None
+        candidats = detecter(col, vol) if len(col) > 2 else []
+        certain = any(c.certain for c in candidats)
+        if certain:
+            libelle = "→ SPLIT CONFIRMÉ (ratio + volume)"
+        elif candidats:
+            libelle = ("→ ratio de split, volume indisponible" if vol is None
+                       else "→ ratio de split, volume NON concordant")
+        else:
+            libelle = "→ inexpliqué"
+        out[x["symbole"]] = {"certain": certain, "libelle": libelle,
+                             "candidats": len(candidats)}
+    return out
+
+
 def etape_anomalies(champs, symboles, etat_partage: dict | None = None) -> set[str]:
     _titre(1, "ANOMALIES CROISÉES — ce qu'un contrôle ligne par ligne ne voit pas",
            "lecture seule, aucun risque")
@@ -134,11 +176,22 @@ def etape_anomalies(champs, symboles, etat_partage: dict | None = None) -> set[s
         if len(casses) > 15:
             print(f"       … et {len(casses) - 15} autre(s)")
     if splits:
-        print(f"\n  B. SPLITS POSSIBLES — {len(splits)} actif(s), à ajuster :")
-        for x in splits[:10]:
-            print(f"       · {x['symbole']:14s} pire saut {x['pire']:+.0%}")
-        if len(splits) > 10:
-            print(f"       … et {len(splits) - 10} autre(s)")
+        verdicts = _qualifier_splits(champs, symboles, splits)
+        confirmes = [x for x in splits if verdicts.get(x["symbole"], {}).get("certain")]
+        print(f"\n  B. SPLITS POSSIBLES — {len(splits)} actif(s), dont "
+              f"{len(confirmes)} CONFIRMÉ(s) par le volume :")
+        for x in splits[:12]:
+            v = verdicts.get(x["symbole"], {})
+            print(f"       · {x['symbole']:14s} pire saut {x['pire']:+.0%}"
+                  f"   {v.get('libelle', '')}")
+        if len(splits) > 12:
+            print(f"       … et {len(splits) - 12} autre(s)")
+        print("     « CONFIRMÉ » = le ratio tombe sur une fraction usuelle ET le")
+        print("     volume change d'échelle en sens inverse. Les deux ne concordent")
+        print("     pas par hasard : un krach ne tombe pas pile sur 0,250 en")
+        print("     multipliant le volume par quatre. Un titre « inexpliqué » n'est")
+        print("     pas forcément cassé — il a pu vraiment bouger ; c'est là qu'il")
+        print("     faut regarder, et nulle part ailleurs dans cette liste.")
     if figes:
         total = sum(x["jours_figes"] for x in figes)
         print(f"\n  C. SÉRIES FIGÉES — {len(figes)} actif(s), {total} séances.")
