@@ -940,14 +940,21 @@ explicite, module par module, avec mesure.
       l'intersection (masquer par date plutôt qu'exiger la ligne pleine), ou allonger la
       profondeur d'ingestion. C'est cette contrainte, pas le réglage `--pas`, qui empêche
       aujourd'hui de trancher sur une MÉTHODE d'allocation.
-- [ ] **P0 — 69 % du portefeuille sur UN SEUL ETF** (mesuré le 10/09, ADR-0102).
+- [ ] **P0 — 69 % du portefeuille sur UN SEUL ETF** (mesuré le 10/09, ADR-0102/0103).
       Trois lots de QQQ pèsent ≈ 69 500 $ sur ≈ 100 000 $. Un total qui oscille de 101 k
-      à 100,4 k suit d'abord CELA : ±0,9 % sur QQQ font ±0,6 % sur le compte. Aucune
-      règle de sortie n'y change quoi que ce soit. À vérifier AVANT tout le reste :
-      pourquoi le rebalancement ne ramène-t-il pas cette ligne à sa cible ? (`make
-      live-sim` montre les décisions ; l'écart |cible − détenu| y dépasse forcément la
-      bande de 505 $.) Trois lots successifs sans allègement suggèrent que le chemin de
-      vente ne s'exécute pas.
+      à 100,4 k suit d'abord CELA : ±0,9 % sur QQQ font ±0,6 % sur le compte.
+      **CORRECTION du 10/09 (ADR-0103)** : j'avais écrit « pourquoi le rebalancement ne
+      ramène-t-il pas cette ligne à sa cible ? ». La question était mal posée — **la
+      CIBLE elle-même est ≈ 50 %**. Sur un portefeuille neuf de 10 000 $, l'allocateur
+      vise QQQ à 5 000 $, soit 54 % du capital réellement alloué, le reste étant
+      35 satellites à ~3 % chacun. C'est un cœur-satellite assumé, pas une panne : la
+      moitié du compte EST un ETF Nasdaq, et il bouge comme lui. Le yo-yo est
+      structurel et voulu.
+      **RESTE À TRANCHER — une décision, pas un correctif** : ce poids de cœur est-il
+      celui que tu veux ? À 50 % de cœur, le compte suivra le Nasdaq quoi qu'il arrive
+      aux 35 satellites. Le seul écart réellement anormal est **69 % constaté contre
+      ≈ 54 % visés**, soit ~15 points de surpoids à alléger : `make live` (positions
+      RÉELLES, aucun ordre) dit si l'ordre de vente est bien émis.
 - [ ] **P0 — Lots crypto incohérents au journal** (mesuré le 10/09) : `BCH` affiche
       −2 509 $ de PV latente sur une position de 512 $, `ETH` −619 $ sur 6 $. Une
       position longue ne peut pas perdre plus qu'elle ne vaut : `avg_price` ou `qty` est

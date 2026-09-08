@@ -2,6 +2,51 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0103 — La concentration est voulue : le cœur pèse la moitié du compte (2026-09-10)
+
+**Je t'avais envoyé sur la mauvaise commande.** `make live-sim` simule un portefeuille
+NEUF : `--equity 10000`, **détenu ignoré**. Sa propre ligne d'aide le dit — « ne décrit
+pas le compte ». Elle ne pouvait donc pas répondre à « pourquoi QQQ n'est-il pas
+allégé ». La commande qui lit les positions réelles est **`make live`** (aperçu des
+ordres du prochain run, aucun ordre envoyé).
+
+**Ce qu'elle a montré quand même, et qui change la question.** Sur 10 000 $ neufs,
+l'allocateur vise :
+
+| ligne | cible | part du capital alloué |
+|---|---|---|
+| **QQQ** | **5 000 $** | **54 %** |
+| 35 satellites | 160 à 325 $ chacun | ~3 % chacun |
+
+**La concentration n'est pas une panne de rebalancement : c'est la cible.** Le
+portefeuille est un cœur-satellite dont le cœur est un ETF Nasdaq pesant la moitié du
+compte. Un total qui oscille de 101 k à 100,4 k ne fait que suivre QQQ — c'est le
+comportement attendu de cette allocation, pas un défaut d'exécution ni une règle de
+sortie manquante. Ma P0 « pourquoi le rebalancement ne vend-il pas » était mal posée.
+
+**Ce qui reste anormal, et c'est bien plus petit** : 69 % constatés contre ≈ 54 % visés,
+soit une quinzaine de points de surpoids — largement au-dessus de la bande d'inaction de
+505 $, donc un allègement devrait être émis. `make live` le dira.
+
+**Deux observations à ne pas perdre.**
+
+· *Les cibles crypto sont toutes sous le plancher de ligne.* BTC 321 $, LTC 309 $,
+  ETH 273 $, BCH 230 $ contre un plancher de 1 000 $ : « on n'ouvre pas ce qui
+  deviendrait de la poussière ». Or le journal porte encore de vieux lots BTC, ETH, BCH
+  et LTC de quelques dollars — des miettes que le plancher empêche de reconstruire et
+  que personne ne solde. C'est la même famille de lots incohérents relevée en ADR-0102.
+· *Treize ordres actions reportés hors séance.* Le run tournait à 17 h 27 ET, après la
+  clôture ; ces ordres ne sont PAS mis en file d'attente. Le script le dit lui-même :
+  « si ce report revient chaque jour, c'est le planning, pas le marché ». Le cron par
+  défaut vise 16 h (`install_live_cron.sh`), ce qui tombe DANS la séance si l'horloge de
+  la machine est en UTC — mais cela n'a pas été vérifié, et un rebalancement qui ne
+  s'exécuterait jamais expliquerait à lui seul les cinq décisions de sortie en 63 jours.
+  **À vérifier avant toute conclusion : `crontab -l` sur le VPS.**
+
+**Décision.** Rien n'est changé dans l'allocation. Le poids du cœur est un choix, pas un
+bug — et le changer serait un changement de stratégie, à décider puis à valider, pas un
+correctif à glisser.
+
 ## ADR-0102 — Mon propre instrument publiait deux chiffres faux (2026-09-10)
 
 **Premier passage réel de `diag-pv-latente`. Deux défauts, l'un grave.**
