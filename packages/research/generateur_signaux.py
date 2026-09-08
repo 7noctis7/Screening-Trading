@@ -42,6 +42,11 @@ import numpy as np
 
 from packages.research.information_coefficient import information_coefficient
 from packages.research.ledger import append_record, trial_count
+from packages.research.operateurs_signaux import (
+    FENETRES,
+    OPERATEURS_TEMPORELS,
+    OPERATEURS_TRANSVERSAUX,
+)
 
 # Seuil de la boucle NVIDIA, gardé comme POINT DE COMPARAISON, jamais comme critère.
 IC_SEUIL_BLUEPRINT = 0.02
@@ -77,65 +82,61 @@ def valider(expression: dict) -> dict:
     C'est la frontière de sécurité du module : rien n'est évalué avant d'être passé
     ici. Une expression venue d'un modèle de langage, d'un fichier ou du réseau suit le
     même chemin qu'une expression écrite à la main.
+
+    Une expression a DEUX étages — temporel (l'actif face à son propre passé) puis
+    transversal (l'actif face aux autres, à la même date). Un momentum brut n'est pas
+    comparable entre une action calme et une crypto ; son rang dans la coupe du jour
+    l'est. C'est la composition qui fait le signal, pas un étage seul.
     """
     if not isinstance(expression, dict):
         raise ExpressionInvalide("une expression est un dictionnaire")
-    champ = expression.get("champ")
-    op = expression.get("operateur", "identite")
-    retard = expression.get("retard", 0)
-    if champ not in CHAMPS:
-        raise ExpressionInvalide(f"champ inconnu : {champ!r} (attendus : {CHAMPS})")
-    if op not in OPERATEURS:
+    temporel = expression.get("temporel")
+    transversal = expression.get("transversal", "rang")
+    fenetre = expression.get("fenetre", 21)
+    if temporel not in OPERATEURS_TEMPORELS:
         raise ExpressionInvalide(
-            f"opérateur inconnu : {op!r}. La grammaire est FERMÉE — on n'exécute "
-            "jamais de code fourni de l'extérieur, on refuse."
+            f"opérateur temporel inconnu : {temporel!r}. La grammaire est FERMÉE — on "
+            "n'exécute jamais de code venu de l'extérieur, on refuse."
         )
-    if not isinstance(retard, int) or not 0 <= retard <= 252:
-        raise ExpressionInvalide(f"retard hors bornes : {retard!r}")
-    return {"champ": champ, "operateur": op, "retard": retard}
+    if transversal not in OPERATEURS_TRANSVERSAUX:
+        raise ExpressionInvalide(f"opérateur transversal inconnu : {transversal!r}")
+    if not isinstance(fenetre, int) or not 2 <= fenetre <= 252:
+        raise ExpressionInvalide(f"fenêtre hors bornes : {fenetre!r}")
+    return {"temporel": temporel, "transversal": transversal, "fenetre": fenetre}
 
 
 def nom(expression: dict) -> str:
     """Nom stable et lisible, qui sert de clé au registre."""
     e = valider(expression)
-    return f"{e['operateur']}({e['champ']}, retard={e['retard']})"
+    return f"{e['transversal']}({e['temporel']}, {e['fenetre']}j)"
 
 
-def evaluer(expression: dict, valeurs: dict[str, np.ndarray]) -> np.ndarray:
-    """Applique l'expression à un panneau {champ: matrice (T × N)}.
+def evaluer(expression: dict, panneau: dict) -> np.ndarray:
+    """Applique l'expression à un panneau {champ: matrice (T dates × N actifs)}.
 
     Rend une matrice de mêmes dimensions : une valeur de signal par actif et par date.
-    Le retard décale dans le PASSÉ — jamais vers le futur, c'est la seule direction
-    qui ne fabrique pas d'information.
+    Les premières lignes valent NaN tant que la fenêtre n'est pas pleine — on ne
+    complète jamais, une valeur inventée au début contaminerait toute l'étude.
     """
     e = valider(expression)
-    brut = np.asarray(valeurs[e["champ"]], dtype=float)
-    if brut.ndim != 2:
-        raise ExpressionInvalide(
-            "le panneau doit être une matrice (T dates × N actifs)")
-    if e["retard"]:
-        decale = np.full_like(brut, np.nan)
-        decale[e["retard"]:] = brut[: -e["retard"]]
-        brut = decale
-    fn = OPERATEURS[e["operateur"]]
-    sortie = np.full_like(brut, np.nan)
-    for i in range(brut.shape[0]):
-        ligne = brut[i]
-        if np.isfinite(ligne).sum() >= 2:
-            sortie[i] = fn(np.nan_to_num(ligne, nan=float(np.nanmean(ligne))))
-    return sortie
+    manquants = [c for c in CHAMPS if c not in panneau]
+    if manquants:
+        raise ExpressionInvalide(f"champs absents du panneau : {manquants}")
+    brut = OPERATEURS_TEMPORELS[e["temporel"]](panneau, e["fenetre"])
+    return OPERATEURS_TRANSVERSAUX[e["transversal"]](brut)
 
 
-def enumerer(champs=CHAMPS, operateurs=None, retards=(0, 5, 21)) -> list[dict]:
+def enumerer(temporels=None, transversaux=None, fenetres=FENETRES) -> list[dict]:
     """Tous les candidats de la grammaire — déterministe, sans modèle de langage.
 
     L'ordre est fixe : deux exécutions produisent la même liste, donc le même compte
     d'essais et la même déflation. Un générateur non déterministe rendrait le registre
     inexploitable.
     """
-    ops = tuple(operateurs or OPERATEURS)
-    return [{"champ": c, "operateur": o, "retard": r}
-            for c in champs for o in ops for r in retards]
+    temps = tuple(temporels or OPERATEURS_TEMPORELS)
+    trans = tuple(transversaux or OPERATEURS_TRANSVERSAUX)
+    return [{"temporel": a, "transversal": b, "fenetre": f}
+            for a in temps for b in trans for f in fenetres]
 
 
 def mesurer_ic(signal: np.ndarray, rendements_futurs: np.ndarray,

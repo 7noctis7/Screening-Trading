@@ -32,30 +32,27 @@ def test_un_operateur_inconnu_est_refuse_avant_toute_evaluation() -> None:
     """La grammaire est FERMÉE. C'est la différence avec une boucle qui fait écrire du
     Python par un modèle puis l'exécute — dans un dépôt qui peut passer des ordres
     réels, ce serait une porte d'entrée pour du code arbitraire."""
-    with pytest.raises(gen.ExpressionInvalide, match="opérateur inconnu"):
-        gen.valider({"champ": "close", "operateur": "__import__"})
+    with pytest.raises(gen.ExpressionInvalide, match="opérateur temporel inconnu"):
+        gen.valider({"temporel": "__import__", "transversal": "rang"})
 
 
-def test_un_champ_inconnu_est_refuse() -> None:
-    with pytest.raises(gen.ExpressionInvalide, match="champ inconnu"):
-        gen.valider({"champ": "os.system", "operateur": "identite"})
+def test_un_operateur_transversal_inconnu_est_refuse() -> None:
+    with pytest.raises(gen.ExpressionInvalide, match="transversal inconnu"):
+        gen.valider({"temporel": "momentum", "transversal": "os.system"})
 
 
-def test_un_retard_absurde_est_refuse() -> None:
+def test_une_fenetre_absurde_est_refusee() -> None:
     with pytest.raises(gen.ExpressionInvalide):
-        gen.valider({"champ": "close", "operateur": "identite", "retard": -3})
+        gen.valider({"temporel": "momentum", "transversal": "rang", "fenetre": -3})
 
 
-def test_le_retard_regarde_le_passe_jamais_le_futur() -> None:
-    """Un décalage dans le mauvais sens fabriquerait de l'information : le signal
-    connaîtrait le prix de demain, et l'IC deviendrait spectaculaire pour rien."""
-    panneau = {"close": np.arange(20, dtype=float).reshape(10, 2)}
-    sortie = gen.evaluer({"champ": "close", "operateur": "identite", "retard": 2},
-                         panneau)
-    assert np.isnan(sortie[:2]).all(), "les premières dates devraient être inconnues"
-    assert sortie[5][0] == pytest.approx(panneau["close"][3][0]), (
-        "le retard ne pointe pas vers le passé"
-    )
+def test_un_panneau_incomplet_est_refuse() -> None:
+    """Un opérateur de bande a besoin du plus haut et du plus bas : évaluer sur un
+    panneau amputé lèverait plus loin, dans du code numérique, avec un message
+    incompréhensible."""
+    with pytest.raises(gen.ExpressionInvalide, match="champs absents"):
+        gen.evaluer({"temporel": "momentum", "transversal": "rang"},
+                    {"close": np.ones((30, 3))})
 
 
 # ------------------------------------------------- le test qui justifie le module
@@ -98,7 +95,14 @@ def _panneau_sans_edge(t: int = 240, n: int = 30, graine: int = 3):
     du bruit, par construction.
     """
     g = np.random.default_rng(graine)
-    panneau = {c: g.lognormal(0, 0.02, (t, n)) for c in gen.CHAMPS}
+    close = 100.0 * np.exp(np.cumsum(g.normal(0, 0.015, (t, n)), axis=0))
+    panneau = {
+        "open": close * (1 + g.normal(0, 0.002, (t, n))),
+        "high": close * (1 + np.abs(g.normal(0, 0.006, (t, n)))),
+        "low": close * (1 - np.abs(g.normal(0, 0.006, (t, n)))),
+        "close": close,
+        "volume": np.abs(g.lognormal(10, 0.5, (t, n))),
+    }
     return panneau, g.normal(0, 0.03, (t, n))
 
 
@@ -107,7 +111,7 @@ def test_chaque_candidat_monte_le_compte_d_essais(tmp_path) -> None:
     resserre mécaniquement la déflation du Sharpe pour tout le programme."""
     ledger = tmp_path / "hypotheses.jsonl"
     panneau, futurs = _panneau_sans_edge()
-    candidats = gen.enumerer(champs=("close", "volume"), retards=(0, 5))
+    candidats = gen.enumerer(temporels=("momentum", "volatilite"), fenetres=(21,))
 
     bilan = gen.campagne(candidats, panneau, futurs, horizon=21, chemin_ledger=ledger)
 
@@ -125,8 +129,8 @@ def test_les_rejets_sont_inscrits_autant_que_les_promus(tmp_path) -> None:
     """N'inscrire que les gagnants est la définition du biais de publication."""
     ledger = tmp_path / "h.jsonl"
     panneau, futurs = _panneau_sans_edge()
-    gen.campagne(gen.enumerer(champs=("close",), retards=(0,)), panneau, futurs,
-                 horizon=21, chemin_ledger=ledger)
+    gen.campagne(gen.enumerer(temporels=("momentum",), fenetres=(21,)), panneau,
+                 futurs, horizon=21, chemin_ledger=ledger)
     statuts = {r["statut"] for r in read_records(ledger)}
     assert statuts, "registre vide"
     assert statuts <= {"promu", "rejete", "en_test"}
@@ -142,7 +146,7 @@ def test_sur_du_bruit_pur_le_gate_ne_promeut_presque_rien(tmp_path) -> None:
     """
     ledger = tmp_path / "h.jsonl"
     panneau, futurs = _panneau_sans_edge()
-    bilan = gen.campagne(gen.enumerer(retards=(0, 5, 21)), panneau, futurs,
+    bilan = gen.campagne(gen.enumerer(fenetres=(21, 63)), panneau, futurs,
                          horizon=21, chemin_ledger=ledger)
     n_blueprint = sum(1 for r in bilan["resultats"] if r["accepte_par_le_blueprint"])
     assert len(bilan["promus"]) <= 1, (

@@ -2,6 +2,47 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0083 — Grammaire de signaux à deux étages, inspirée d'Alpha158 (2026-09-08)
+
+**Contexte.** Revue d'une vingtaine d'organisations GitHub (Microsoft, Goldman Sachs,
+Bloomberg, JPMorgan, Apple, Google, Databricks, places de marché…). Une seule a désigné un
+manque RÉEL et immédiat : `microsoft/qlib` (MIT) et ses jeux de facteurs Alpha158/Alpha360.
+
+**Le manque était dans ce que je venais d'écrire la veille.** La grammaire du générateur
+(ADR-0081) produisait 75 candidats du type `identite(open, 0)` ou `log(volume, 5)` : le prix
+brut, le volume brut. Aucun ne dit rien de RELATIF — ni au passé de l'actif, ni aux autres
+actifs. Explorer cet espace revenait à tirer 75 fois à pile ou face en croyant chercher. Le
+garde-fou était bon, le champ de recherche était vide.
+
+**Décision.** Expressions à DEUX ÉTAGES, la forme qu'emploient les jeux de facteurs publiés :
+  · TEMPOREL — l'actif face à son propre passé sur une fenêtre (momentum, volatilité, écart à
+    la moyenne, position dans la bande, pente, ratio de volume) ;
+  · TRANSVERSAL — l'actif face aux autres à la même date (brut, rang, z-score, inverse).
+
+C'est la COMPOSITION qui fait le signal : un momentum brut n'est pas comparable entre une
+action calme et une crypto ; son rang dans la coupe du jour l'est. 96 candidats qui ont un
+sens (`rang(momentum, 63j)`) au lieu de 75 qui n'en avaient aucun.
+
+**La règle non négociable, et son test.** Chaque opérateur à l'instant `t` ne lit que
+`t-w+1 … t`. Un décalage d'UNE ligne fabrique un signal spectaculaire et parfaitement faux —
+et ça ne ressemble pas à un bug, puisque les chiffres deviennent justement très beaux. Aucun
+contrôle statistique ne le rattrape ensuite : un IC de 0,4 obtenu en trichant passe toutes les
+portes du gate. Test appliqué à CHAQUE opérateur : on saccage le futur, on exige que le passé
+ne bouge pas d'un bit. Contrôle négatif vérifié (momentum décalé d'une ligne → 4 rouges).
+
+**Effet mesuré sur la démonstration.** Sur du bruit pur, la grammaire riche AGGRAVE le problème
+du seuil |IC| ≥ 0,02 : 88 candidats sur 96 seraient retenus par le blueprint NVIDIA (contre 45
+sur 75 avec la grammaire pauvre), 0 par notre gate. Plus l'espace de recherche est riche, plus
+un critère sans correction pour essais multiples devient dangereux — exactement l'inverse de
+l'intuition.
+
+**Écarté, avec raison.** `gs-quant` (Goldman) : dérivés, dont une bonne part exige leur API ; le
+projet ne trade pas d'options et le TODO diffère les dérivés faute de Grecs et de surface de
+volatilité. Kalshi / Polymarket : les marchés de prédiction ont été RETIRÉS délibérément en
+juillet (aucune décision ne les consommait) — les réintroduire annulerait cette décision sans
+élément neuf. `riskfolio-lib` : déjà déclaré en dépendance. `tradingview/lightweight-charts` :
+déjà utilisé. Apple MLX : accélère Apple Silicon, or la cible est NVIDIA.
+
 ## ADR-0082 — Expliquer le modèle, et voir ce qu'un contrôle ligne par ligne rate (2026-09-08)
 
 **Contexte.** Suite de la revue des dépôts NVIDIA. Deux manques identifiés puis comblés,
