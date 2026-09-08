@@ -149,3 +149,31 @@ def test_sans_lot_de_reference_aucune_serie_n_est_declaree_perimee() -> None:
     prix = _marche(n=400)
     fiche = diagnostiquer("ETH", _serie(prix), _serie(prix))
     assert fiche["retard"] == 0 and fiche["verdict"] == "CONFORME"
+
+
+def test_un_ticker_reattribue_est_nomme_serie_recollee() -> None:
+    """L'anomalie qui faisait se contredire l'instrument, trouvée le 09/09.
+
+    `OP` est sorti CONFORME (corr +1,00 sur les 640 jours récents) puis COLLISION
+    (corr −0,00 sur 1559 jours) d'un passage à l'autre — seule la fenêtre de référence
+    avait changé. Ce n'était pas une contradiction : la série est RECOLLÉE, juste depuis
+    la réattribution du ticker et étrangère avant. Une seule corrélation ne peut pas le
+    dire, et le verdict dépendait alors de la fenêtre interrogée.
+    """
+    ancien, recent = _marche(n=800, graine=5), _marche(n=500, graine=6)
+    serie = _serie(list(ancien) + list(recent))
+    reference = _serie(list(_marche(n=800, graine=7)) + list(recent))
+
+    fiche = diagnostiquer("OP", serie, reference)
+    assert fiche["corr"] < 0.5, fiche["corr"]
+    assert fiche["corr_recente"] > 0.9, fiche["corr_recente"]
+    assert fiche["verdict"] == "SÉRIE RECOLLÉE", fiche
+
+
+def test_une_collision_franche_n_est_pas_prise_pour_un_recollage() -> None:
+    """Contrôle négatif : si tout sortait « recollé », le diagnostic ne dirait plus rien
+    — et laisserait croire que les données récentes sont bonnes alors qu'elles ne le
+    sont pas."""
+    fiche = diagnostiquer("UNI", _serie(_marche(graine=1)), _serie(_marche(graine=2)))
+    assert fiche["verdict"] == "COLLISION DE TICKER", fiche
+    assert not fiche["recollee"]

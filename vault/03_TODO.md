@@ -870,18 +870,31 @@ explicite, module par module, avec mesure.
       2023-03, `APT` de 2021-11 à 2022-10. Réparation confirmée par une mesure
       indépendante de celle qui l'avait motivée. L'univers réel passe de 774 à **823
       actifs, dont 97 cryptos au lieu de 48** (ADR-0094).
-      **RESTE, 3ᵉ passage** : cinq NOUVELLES collisions trouvées une fois le périmètre
-      complet ingéré (SUI, TIA, JUP, STRK, APE — mêmes signatures, déjà ajoutées à
-      `SOURCE_FORCEE`). Relancer `make ingest-crypto && make diag-source-crypto` pour
-      les vérifier à leur tour.
+      **2ᵉ LOT VÉRIFIÉ (09/09)** : SUI, TIA, JUP, STRK, APE ressortent CONFORMES à leur
+      tour, corr +1,00, avec des dates de naissance redevenues plausibles (`JUP` passe de
+      2017-11 à 2024-01). Dix bases réparées et vérifiées sur dix.
+      **3ᵉ ET 4ᵉ LOTS ajoutés à `SOURCE_FORCEE`, à vérifier au prochain passage** :
+      · collisions visibles seulement grâce à la référence PAGINÉE — IMX, GRT, GMX, GMT
+        (leur série s'arrête avant 2024, donc sans recouvrement avec l'ancienne fenêtre) ;
+      · `OP` : **SÉRIE RECOLLÉE** — corr −0,00 sur 1559 j mais +1,00 sur les 640 derniers.
+        Ticker réattribué : récent juste, ancien étranger (ADR-0096) ;
+      · source inadéquate — SHIB, BONK, XEC, FLOKI, COMP (arrondi : 3 % à 17 % de
+        clôtures distinctes) et PEPE (Yahoo ne rend que 119 barres). **Prédiction
+        falsifiable** : si l'arrondi vient de Yahoo, la part de clôtures distinctes doit
+        bondir au prochain passage ; s'il tient au pas de cotation du jeton, non.
 - [ ] **P1 — Sortir de l'univers les séries PÉRIMÉES** (trouvé le 09/09) : une douzaine
       de séries s'arrêtent des années avant le reste du lot — MATIC en 2025-03 (migration
       POL), RNDR en 2024-07, FTM en 2025-01, IMX en 2022-07, GRT en 2022-04, GMX en
       2023-11, COMP en 2021-08. Rien ne cloche DANS ces séries : elles sont finies. Elles
       sortaient « CONFORMES » et peuplaient l'univers en se faisant passer pour vivantes.
       Le diagnostic les nomme désormais (verdict PÉRIMÉE, mesuré contre la barre la plus
-      fraîche du lot). **RESTE** : décider migration (MATIC→POL, RNDR→RENDER, FTM→S) ou
-      retrait, puis appliquer à `config/universe.yaml`.
+      fraîche du lot). **Liste arrêtée au 09/09** : HYPE (retard 742 j), TON (70 j, Binance
+      a cessé de coter la paire), MATIC (533 j), RNDR (779 j), FTM (603 j), GALA (52 j),
+      FXS (490 j). À noter : `RENDER` est DÉJÀ dans l'univers et conforme — `RNDR` y fait
+      donc doublon avec sa propre version morte.
+      **RESTE** : décider migration (MATIC→POL, RNDR→RENDER, FTM→S) ou retrait, puis
+      appliquer à `config/universe.yaml`. Sortir un instrument change l'ensemble
+      investissable : c'est une décision, pas un correctif de données — elle t'appartient.
 - [ ] **P2 — PEPE : 119 barres chez Yahoo**, sous le seuil des 250 (09/09). Seule base de
       l'univers restée muette après l'ingestion complète. Basculer en `SOURCE_FORCEE`
       vers Binance comme les collisions — à vérifier au prochain passage.
@@ -925,8 +938,15 @@ explicite, module par module, avec mesure.
       sur les deux axes (coût 55,3 % contre 59,4 %, sensibilité 100 % contre 94 %) ; la
       normalisation ne l'emporte qu'à partir de 12, et par le seul coût. Mode et seuil
       sont couplés — trancher l'un sans l'autre, c'est choisir sur la moitié de la table.
-      **RESTE, 3ᵉ passage** : `make calibrer-seuil ARGS=--comparer-ancien` avec la grille
-      élargie, puis trancher les deux ensemble.
+      **TRANCHÉ LE 09/09, 3ᵉ passage (ADR-0095).** Grille élargie, instrument réparé,
+      150 injections : **l'optimum est INTÉRIEUR dans les deux modes**. Maximum global à
+      **24 avec normalisation** (score 0,905), devant 32 sans (0,889). Les deux questions
+      se répondaient bien ensemble. **`SEUIL_ECART = 24,0` appliqué**, normalisation
+      conservée : 5,5 % de l'univers signalé (45 actifs au lieu de 489), 93 % des splits
+      et 99 % des ticks retrouvés, mesuré sur 138 actifs. Le prix est écrit : cinq points
+      de détection des splits contre une lecture divisée par trois, et l'angle mort (un
+      split ×4 sur une crypto d'échelle 5 %/jour) est **fixé par un test** qui vérifie
+      aussi qu'il ressort à seuil 12 — arbitrage, pas cécité.
 - [ ] **P2 — Source à plus de décimales pour les jetons sub-centimes** (trouvé le 09/09) :
       SHIB n'a que 3 % de clôtures distinctes sur 1967 barres — le bon jeton, arrondi à
       six décimales par la source. Un cours qui ne bouge qu'en marches d'escalier

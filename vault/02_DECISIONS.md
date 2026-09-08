@@ -2,6 +2,88 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0096 — Un ticker réattribué, et un ordre destructeur (2026-09-09)
+
+**Le diagnostic s'est contredit, et il avait raison deux fois.** `OP` est sorti CONFORME
+(corrélation +1,00) à un passage, puis COLLISION (−0,00) au suivant, sur la même base.
+Seule la fenêtre de référence avait changé : 640 jours récents d'abord, 1559 jours après
+le passage à l'historique paginé. Ce n'était pas une contradiction — la série est
+**RECOLLÉE** : juste depuis la réattribution du ticker, étrangère avant. Une corrélation
+unique ne peut pas le dire, et le verdict dépendait alors de la fenêtre interrogée.
+
+**Décision.** Le diagnostic mesure désormais DEUX corrélations : sur tout le
+recouvrement, et sur les 365 derniers jours communs. Verdict `SÉRIE RECOLLÉE` quand la
+première est nulle et la seconde bonne. Le geste de réparation est le même que pour une
+collision — reprendre toute la série à la référence — mais le diagnostic rassure sur les
+données récentes au lieu de les condamner avec le reste.
+
+**Un ordre destructeur, corrigé avant qu'il ne coûte quelque chose.** `_ingerer`
+effaçait la série AVANT d'interroger la nouvelle source. Si celle-ci ne répondait pas, la
+base restait vide, sans rien pour la remplacer. Tant que la liste forcée tenait en cinq
+entrées mesurées ET vérifiées, le risque restait théorique ; il cesse de l'être à
+vingt-et-une entrées, dont onze dont on ignore encore si Binance les couvre. On récupère
+maintenant d'abord, on efface ensuite. Deux tests encadrent l'ordre, dont un contrôle
+négatif vérifié par sabotage. Détruire d'abord et espérer ensuite n'est jamais le bon
+ordre sur des données qu'on ne sait pas régénérer.
+
+**Quatre lots de sources forcées, quatre raisons distinctes.**
+
+| lot | bases | raison mesurée |
+|---|---|---|
+| 1 | TON UNI APT ARB STX | collision — **réparé et vérifié**, corr +1,00 |
+| 2 | SUI TIA JUP STRK APE | collision, visible une fois l'univers complet — **vérifié** |
+| 3 | IMX GRT GMX GMT | collision, visible une fois la référence paginée |
+| 3 | OP | série recollée |
+| 4 | SHIB BONK XEC FLOKI COMP | arrondi destructeur (3 % à 17 % de clôtures distinctes) |
+| 4 | PEPE | Yahoo ne rend que 119 barres, sous le seuil des 250 |
+
+Le quatrième lot porte une **prédiction falsifiable** : si l'arrondi vient de Yahoo, la
+part de clôtures distinctes doit bondir au prochain passage ; s'il tient au pas de
+cotation du jeton, non. On saura lequel sans avoir à en débattre.
+
+**Ce qui reste ouvert.** Sept séries **PÉRIMÉES** — HYPE, TON, MATIC, RNDR, FTM, GALA,
+FXS. Certaines sont des migrations réelles (MATIC→POL, RNDR→RENDER, FTM→S), et `RENDER`
+est déjà dans l'univers : `RNDR` y fait doublon avec sa propre version morte. Sortir un
+instrument de l'univers change l'ensemble investissable : c'est une décision de
+`config/universe.yaml`, pas un correctif de données. Signalé, pas appliqué.
+
+## ADR-0095 — SEUIL_ECART passe de 8 à 24, et le mode se tranche avec lui (2026-09-09)
+
+**Contexte.** Troisième passage, grille élargie (ADR-0093), instrument réparé (ADR-0091),
+150 injections. Cette fois **l'optimum est INTÉRIEUR dans les deux modes** — il n'est
+plus un artefact de borne, et l'avertissement de bord ne se déclenche pas.
+
+| seuil | 8 | 12 | 16 | 24 | 32 | 48 | 64 |
+|---|---|---|---|---|---|---|---|
+| score, sans normalisation | 0,45 | 0,63 | 0,71 | 0,84 | **0,89** | 0,88 | 0,65 |
+| score, avec normalisation | 0,39 | 0,69 | 0,83 | **0,91** | 0,90 | 0,81 | 0,70 |
+
+Le maximum global est **24 avec normalisation** (0,905), devant 32 sans (0,889). Les deux
+questions laissées ouvertes en ADR-0092 — quel mode, quel seuil — se répondent donc
+ensemble, comme il était dit qu'elles le devaient.
+
+**Décision. `SEUIL_ECART = 24,0`, normalisation par actif conservée par défaut.**
+Au point retenu : **5,5 % de l'univers signalé** (45 actifs au lieu de 489), 93 % des
+splits injectés retrouvés, 99 % des ticks, mesuré sur 138 actifs.
+
+**Le prix, écrit noir sur blanc.** À 16 la détection des splits vaut 98 % contre 93 % à
+24 — cinq points payés pour faire tomber la lecture de 128 actifs à 45. Ce n'est pas le
+score qui tranche cet arbitrage, c'est le principe inscrit dans le module depuis le
+premier jour : *un détecteur qui crie tout le temps devient invisible, et un rapport
+qu'on n'ouvre pas ne protège de rien*. L'angle mort est identifié : un split ×4 vaut
+−75 %, soit quinze unités seulement pour une crypto d'échelle 5 %/jour. **Un test le
+fixe** — il vérifie que ce défaut échappe bien à 24 ET qu'il ressort à 12, pour
+distinguer un arbitrage d'une cécité.
+
+**Robustesse.** 24 et 32 sont à cinq millièmes l'un de l'autre : le choix entre eux ne
+pèse rien. Ce qui pesait, c'était 8 — et 8 était moins bon que tout le reste de la
+grille. La conclusion ne tient donc pas à la forme exacte du critère.
+
+**Conséquences.** Le rapport d'anomalies redevient lisible, donc lu. Il aura fallu quatre
+passages : le mélange d'échelles, puis le calendrier de l'instrument, puis la borne de la
+grille, et enfin la mesure. Aucun de ces tours n'était évitable en raisonnant — chacun a
+été trouvé en regardant un chiffre impossible.
+
 ## ADR-0094 — Réparer une source en révèle d'autres (2026-09-09)
 
 **Contexte.** Les cinq bases routées vers Binance (ADR-0089) ont été réingérées. Elles

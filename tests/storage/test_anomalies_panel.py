@@ -153,18 +153,42 @@ def test_une_classe_volatile_saine_n_est_pas_signalee() -> None:
 def test_la_normalisation_ne_perd_pas_les_vrais_defauts() -> None:
     """Contre-partie obligatoire du test précédent : se taire, c'est facile.
 
-    Un split ×4 et un tick erroné, injectés dans la classe la PLUS volatile — celle où
-    le bruit propre pourrait le mieux les cacher — doivent toujours ressortir.
+    Un split ×4 sur une série d'échelle ordinaire, et un tick erroné dans la classe la
+    PLUS volatile — celle où le bruit propre pourrait le mieux le cacher — doivent
+    ressortir tous les deux.
     """
     p, classes = _panel_heterogene()
-    volatils = np.where(classes == "crypto")[0]
-    j_split, j_tick = int(volatils[0]), int(volatils[1])
+    j_split = int(np.where(classes == "action")[0][0])
+    j_tick = int(np.where(classes == "crypto")[0][1])
     p[200:, j_split] /= 4.0
     p[250, j_tick] *= 3.0
 
     touches = {s["actif_index"] for s in auditer_panel(p)["sauts_isoles"]}
-    assert j_split in touches, "split ×4 perdu par la normalisation"
-    assert j_tick in touches, "tick erroné perdu par la normalisation"
+    assert j_split in touches, "split ×4 perdu sur une série d'échelle ordinaire"
+    assert j_tick in touches, "tick erroné perdu dans la classe la plus volatile"
+
+
+def test_l_angle_mort_du_seuil_calibre_est_connu_et_borne() -> None:
+    """Le prix EXACT du seuil de 24, écrit noir sur blanc plutôt que subi.
+
+    Un split ×4 vaut −75 %. Rapporté à l'échelle propre d'une crypto qui bouge de 5 %
+    par jour, cela ne fait plus que quinze unités : sous le seuil. C'est précisément la
+    part de splits que la mesure sur panneau réel annonce manquée — 93 % retrouvés à 24
+    contre 98 % à 16 — et le contrepoids était de faire tomber la lecture de 128 actifs
+    à 45. Un angle mort mesuré et borné n'est pas un défaut ; un angle mort ignoré, si.
+
+    Le test vérifie AUSSI que le défaut ressort à seuil plus bas : sinon il constaterait
+    une cécité totale au lieu d'un arbitrage.
+    """
+    p, classes = _panel_heterogene()
+    j = int(np.where(classes == "crypto")[0][0])
+    p[200:, j] /= 4.0
+    r = np.diff(p, axis=0) / p[:-1]
+
+    a_24 = {s["actif_index"] for s in ecart_a_la_coupe(r, 24.0)}
+    a_12 = {s["actif_index"] for s in ecart_a_la_coupe(r, 12.0)}
+    assert j not in a_24, "l'angle mort documenté n'existe plus : rouvrir le calibrage"
+    assert j in a_12, "cécité totale : le défaut ne sort à aucun seuil"
 
 
 def test_la_gravite_se_lit_sur_le_rendement_reel() -> None:

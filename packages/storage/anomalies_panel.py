@@ -38,7 +38,25 @@ import numpy as np
 __all__ = ["auditer_panel", "echelle_par_actif", "ecart_a_la_coupe", "gravite_du_saut",
            "resumer_par_actif", "series_figees"]
 
-SEUIL_ECART = 8.0        # écarts robustes : au-delà, on regarde
+# CALIBRÉ SUR LE PANNEAU RÉEL le 09/09 (1500 dates × 823 actifs, `make calibrer-seuil`).
+# 8,0 avait été posé à vue et signalait 59 % de l'univers : un rapport que personne
+# n'ouvre ne protège de rien. La mesure confronte le COÛT (part de l'univers signalée)
+# au BÉNÉFICE (part des défauts injectés retrouvés — splits ×4 et ticks erronés placés
+# dans le vrai panneau, sur des séances réellement cotées) :
+#
+#   seuil │  coût  │ splits │ ticks │ (mesuré sur)
+#      8  │ 59,4 % │  98 %  │  98 % │  57 actifs
+#     16  │ 15,6 % │  98 %  │  99 % │ 121 actifs
+#     24  │  5,5 % │  93 %  │  99 % │ 138 actifs   ← retenu
+#     32  │  3,0 % │  87 %  │  99 % │ 143 actifs
+#     48  │  1,1 % │  67 %  │  97 % │ 147 actifs
+#
+# 24 maximise (sensibilité − coût) et l'optimum est INTÉRIEUR : la grille monte à 64 et
+# le score y redescend, ce n'est donc pas un artefact de borne. Passer de 8 à 24 fait
+# tomber la lecture de 489 actifs à 45, en perdant cinq points sur les splits.
+# 24 et 32 sont à cinq millièmes l'un de l'autre — le choix entre eux ne pèse rien ; ce
+# qui pesait, c'était 8.
+SEUIL_ECART = 24.0       # écarts robustes : au-delà, on regarde
 JOURS_FIGES_MIN = 5      # en dessous, un pont ou un jour férié suffit à l'expliquer
 PLANCHER_ECHELLE = 1e-6  # une échelle nulle = série figée : traitée par `series_figees`
 

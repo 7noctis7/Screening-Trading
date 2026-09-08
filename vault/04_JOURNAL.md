@@ -1,5 +1,45 @@
 # 04 — JOURNAL
 
+## Session 2026-09-09 (4ᵉ) — Le seuil est calibré, et il passe de 8 à 24
+
+**TRANCHÉ.** Grille élargie, instrument réparé, 150 injections : **l'optimum est enfin
+INTÉRIEUR dans les deux modes**, l'avertissement de bord ne se déclenche pas. Maximum
+global à **24 avec normalisation** (score 0,905) devant 32 sans (0,889) — les deux
+questions laissées ouvertes hier, quel mode et quel seuil, se répondaient bien ensemble.
+`SEUIL_ECART = 24,0` appliqué : **45 actifs à lire au lieu de 489**, 93 % des splits et
+99 % des ticks retrouvés sur 138 actifs. Le prix est inscrit dans le code : cinq points
+de détection contre une lecture divisée par trois, et l'angle mort — un split ×4 ne vaut
+que quinze unités pour une crypto d'échelle 5 %/jour — est **fixé par un test** qui
+vérifie aussi qu'il ressort à seuil 12, pour distinguer un arbitrage d'une cécité.
+Il aura fallu quatre passages : le mélange d'échelles, le calendrier de l'instrument, la
+borne de la grille, puis la mesure. Aucun n'était évitable en raisonnant ; chacun a été
+trouvé en regardant un chiffre impossible.
+
+**LE DIAGNOSTIC S'EST CONTREDIT, ET IL AVAIT RAISON DEUX FOIS.** `OP` sortait CONFORME
+(corr +1,00) puis COLLISION (−0,00) d'un passage à l'autre, sur la même base — seule la
+fenêtre de référence avait changé. La série est **RECOLLÉE** : juste depuis la
+réattribution du ticker, étrangère avant. Le diagnostic mesure désormais deux
+corrélations, complète et récente, et nomme ce cas.
+
+**UN ORDRE DESTRUCTEUR, CORRIGÉ AVANT QU'IL NE COÛTE QUELQUE CHOSE.** `_ingerer` effaçait
+la série AVANT d'interroger la nouvelle source : source muette = base vide, sans
+remplaçant. Le risque restait théorique à cinq entrées vérifiées ; il cesse de l'être à
+vingt-et-une, dont onze non encore confirmées. On récupère d'abord, on efface ensuite.
+Contrôle négatif vérifié par sabotage.
+
+**RÉPARATIONS.** Le 2ᵉ lot (SUI, TIA, JUP, STRK, APE) ressort CONFORME à son tour :
+**dix bases réparées et vérifiées sur dix**. Ajoutés pour le prochain passage : IMX, GRT,
+GMX, GMT (collisions visibles seulement grâce à la référence paginée), OP (recollée), et
+SHIB, BONK, XEC, FLOKI, COMP, PEPE (source inadéquate — avec une prédiction falsifiable
+sur l'arrondi).
+
+**RESTE À TRANCHER PAR TOI.** Sept séries périmées (HYPE, TON, MATIC, RNDR, FTM, GALA,
+FXS), dont trois migrations réelles ; `RNDR` fait doublon avec `RENDER`, déjà présent et
+conforme. Sortir un instrument change l'ensemble investissable : c'est ta décision, pas
+un correctif de données.
+
+ADR-0095, ADR-0096. Tests : 2304 passés, 5 ajoutés.
+
 ## Session 2026-09-09 (3ᵉ) — La réparation tient ; la calibration ne tient toujours pas
 
 **CE QUI EST RÉPARÉ ET VÉRIFIÉ.** Les cinq bases routées vers Binance ressortent

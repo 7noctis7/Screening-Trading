@@ -55,11 +55,30 @@ SOURCE_FORCEE: dict[str, str] = {
     # Second lot, trouvé une fois l'univers complet ingéré (les 52 bases manquantes
     # contenaient leurs propres homonymes). Même signature : corrélation nulle contre
     # la référence, et un début de série qui précède de plusieurs années le jeton.
-    "SUI": "binance",   # corr +0,06 / 173 j · Yahoo depuis 2022-03, arrêtée en 2024-06
-    "TIA": "binance",   # corr −0,01 / 998 j · Yahoo depuis 2022-02
-    "JUP": "binance",   # corr −0,00 / 950 j · Yahoo depuis 2017-11
-    "STRK": "binance",  # corr +0,08 / 930 j · Yahoo depuis 2021-04
-    "APE": "binance",   # corr +0,00 / 998 j · Yahoo depuis 2020-10, figée 154 séances
+    "SUI": "binance",   # corr +0,06 / 173 j · Yahoo depuis 2022-03 → Binance 2023-05
+    "TIA": "binance",   # corr −0,01 / 998 j · Yahoo depuis 2022-02 → Binance 2023-10
+    "JUP": "binance",   # corr −0,00 / 950 j · Yahoo depuis 2017-11 → Binance 2024-01
+    "STRK": "binance",  # corr +0,08 / 930 j · Yahoo depuis 2021-04 → Binance 2024-02
+    "APE": "binance",   # corr +0,00 / 998 j · Yahoo depuis 2020-10 → Binance 2022-03
+    # Troisième lot. Visibles seulement une fois la référence PAGINÉE : leur série
+    # s'arrête avant 2024, donc elle n'avait aucun recouvrement avec les 1000 dernières
+    # barres que demandait l'ancienne version du diagnostic.
+    "IMX": "binance",   # corr +0,20 / 194 j · arrêtée en 2022-07
+    "GRT": "binance",   # corr +0,06 / 470 j · arrêtée en 2022-04
+    "GMX": "binance",   # corr −0,01 / 421 j · arrêtée en 2023-11, figée 256 séances
+    "GMT": "binance",   # corr −0,00 / 210 j · arrêtée en 2022-10
+    "OP": "binance",    # SÉRIE RECOLLÉE : −0,00 sur 1559 j mais +1,00 sur les 640
+                        # derniers. Ticker réattribué — récent juste, ancien étranger.
+    # Quatrième lot : ni collision ni recollage, mais une source inadéquate. Le geste
+    # est le même (reprendre à la référence), la raison est autre, et la PRÉDICTION est
+    # falsifiable : si l'arrondi vient de Yahoo, la part de clôtures distinctes doit
+    # bondir au prochain passage ; s'il tient au pas de cotation du jeton, non.
+    "SHIB": "binance",  # 3 % de clôtures distinctes sur 1971 barres (corr +0,85)
+    "BONK": "binance",  # 4 % · figée 130 séances (corr +0,88)
+    "XEC": "binance",   # 10 % · figée 70 séances (corr +0,92)
+    "FLOKI": "binance",  # 14 % · figée 25 séances (corr +0,99)
+    "COMP": "binance",  # 17 % · arrêtée en 2021-08, périmée de 1850 jours
+    "PEPE": "binance",  # Yahoo ne rend que 119 barres, sous le seuil des 250
 }
 
 
@@ -134,17 +153,22 @@ def _ingerer(conn: sqlite3.Connection, bases: list[str], start,
     """
     ok, echecs = 0, []
     for i, base in enumerate(bases, 1):
-        source = source_de(base)
-        if source == "binance":
-            efface = _purger(conn, base)
-            print(f"  {base} : source forcée sur Binance (Yahoo mesuré faux)"
-                  + (f" — {efface} lignes de l'homonyme effacées" if efface else ""))
-            lignes, cause = _lignes_binance(base, start)
-        else:
-            lignes, cause = _lignes_yahoo(base, start, end)
+        forcee = source_de(base) == "binance"
+        # ON RÉCUPÈRE AVANT D'EFFACER. La première version purgeait puis interrogeait :
+        # une source muette laissait la base VIDE, sans rien pour la remplacer. Tant
+        # que la liste forcée tenait en cinq entrées vérifiées, le risque restait
+        # théorique ; il cesse de l'être dès qu'on y ajoute des bases dont on ignore
+        # encore si la nouvelle source les couvre. Détruire d'abord et espérer ensuite
+        # n'est jamais le bon ordre sur des données qu'on ne sait pas régénérer.
+        lignes, cause = (_lignes_binance(base, start) if forcee
+                         else _lignes_yahoo(base, start, end))
         if cause or not lignes:
             echecs.append((base, ticker_yahoo(base), cause or "aucune ligne"))
             continue
+        if forcee:
+            efface = _purger(conn, base)
+            print(f"  {base} : source forcée sur Binance ({len(lignes)} barres)"
+                  + (f" — {efface} lignes de l'ancienne effacées" if efface else ""))
         conn.executemany("INSERT OR REPLACE INTO prices VALUES (?,?,?,?,?,?,?)", lignes)
         conn.commit()
         ok += 1

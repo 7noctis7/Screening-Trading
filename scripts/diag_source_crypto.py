@@ -47,6 +47,7 @@ FIGE_MIN = 20              # plage de clôtures identiques : au-delà, on parle 
 DISTINCTES_MIN = 0.50      # part de clôtures distinctes : en dessous, on suspecte
                            # un arrondi destructeur
 RETARD_MAX = 30            # jours de retard sur la série la plus fraîche du lot
+FENETRE_RECENTE = 365      # fenêtre de contrôle « la partie récente est-elle juste ? »
 
 
 def _bases_univers() -> list[str]:
@@ -135,7 +136,7 @@ def diagnostiquer(base: str, serie: list[tuple[str, float]],
              "plage": f"{serie[0][0]}→{serie[-1][0]}" if serie else "—",
              "figee": _plus_longue_plage_figee(closes),
              "distinctes": len(set(closes)) / len(closes) if closes else 0.0,
-             "corr": float("nan"), "communes": 0,
+             "corr": float("nan"), "corr_recente": float("nan"), "communes": 0,
              "retard": _jours_de_retard(serie[-1][0] if serie else "", dernier_jour)}
     fiche["collision"] = False
     if len(serie) < 250:
@@ -145,6 +146,15 @@ def diagnostiquer(base: str, serie: list[tuple[str, float]],
     fiche["communes"] = len(ra)
     if len(ra) >= JOURS_COMMUNS_MIN:
         fiche["corr"] = _correlation(ra, rb)
+        # Corrélation sur la SEULE période récente, en plus de la période complète. Un
+        # ticker réattribué donne les deux à la fois : conforme depuis la réattribution,
+        # étranger avant. Sans ce second chiffre, le verdict dépend de la fenêtre
+        # interrogée — `OP` est sorti CONFORME (corr +1,00 sur 640 jours récents) puis
+        # COLLISION (corr −0,00 sur 1559 jours) d'un passage à l'autre, et l'instrument
+        # avait l'air de se contredire alors qu'il décrivait deux morceaux différents.
+        if len(ra) >= FENETRE_RECENTE:
+            fiche["corr_recente"] = _correlation(ra[-FENETRE_RECENTE:],
+                                                 rb[-FENETRE_RECENTE:])
     # Une corrélation basse est un fait à part : elle dit que la base ne décrit PAS
     # l'actif attendu, qu'elle soit figée par ailleurs ou non. Un homonyme illiquide
     # coche souvent les deux cases, et les deux gestes sont à faire.
@@ -160,7 +170,16 @@ def diagnostiquer(base: str, serie: list[tuple[str, float]],
     # qui FABRIQUE des plages figées (SHIB : corr +0,80, donc le bon jeton, mais 3 % de
     # clôtures distinctes). La plage figée ne reste une cause qu'une fois les deux
     # autres écartées.
-    if fiche["collision"]:
+    recente = fiche["corr_recente"]
+    fiche["recollee"] = bool(fiche["collision"] and recente == recente
+                             and recente >= CORR_MIN)
+    if fiche["recollee"]:
+        # La partie récente est juste, l'ancienne appartient à un autre jeton. Le geste
+        # est le même que pour une collision — reprendre toute la série à la source de
+        # référence — mais le diagnostic n'est pas le même, et il rassure sur les
+        # données récentes au lieu de les condamner avec le reste.
+        fiche["verdict"] = "SÉRIE RECOLLÉE"
+    elif fiche["collision"]:
         fiche["verdict"] = "COLLISION DE TICKER"
     elif fiche["distinctes"] < DISTINCTES_MIN:
         fiche["verdict"] = "PRÉCISION"
@@ -203,6 +222,8 @@ def _conclure(fiches: list[dict]) -> None:
         ("PRÉCISION", "changer de source : l'arrondi est dans la donnée"),
         ("SOURCE ABSENTE", "aucune donnée en base — vérifier l'ingestion"),
         ("PÉRIMÉE", "jeton migré, délisté ou source lâchée — sortir de l'univers"),
+        ("SÉRIE RECOLLÉE", "ticker réattribué : récent juste, ancien étranger — "
+                           "reprendre toute la série à la référence"),
     )
     for verdict, geste in gestes:
         lot = [f["base"] for f in fiches if f["verdict"] == verdict]
