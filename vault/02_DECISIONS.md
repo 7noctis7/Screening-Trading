@@ -2,6 +2,42 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0081 — Découverte de signaux : la moitié qui propose, tenue par celle qui refuse (2026-09-07)
+
+**Contexte.** Le blueprint `quantitative-signal-discovery-agent` boucle : un modèle invente
+une formule, un second l'écrit en Python, un troisième la teste au Rank IC, et la retient si
+|IC| ≥ 0,02 avec p ≤ 0,05. La documentation n'évoque AUCUNE correction pour essais multiples.
+
+**Le problème, en chiffres plutôt qu'en argument.** La sélection de ce projet a été mesurée à
+IC = +0,0202 (t = 0,76). Elle FRANCHIT le seuil de 0,02 du blueprint alors que notre méthode
+la rejette. Et mesuré ici sur 75 candidats évalués contre des rendements INDÉPENDANTS des
+prix — donc du bruit par construction : **45 retenus par le seuil du blueprint, 0 par le
+nôtre**. Le critère d'un signal isolé, appliqué à une machine qui en produit des centaines,
+ne filtre rien.
+
+**Décision.** `packages/research/generateur_signaux.py` — la boucle de génération, sous trois
+contraintes que le blueprint n'a pas :
+
+1. *Aucun code exécuté.* Un signal est une EXPRESSION dans une grammaire fermée (champ,
+   opérateur, retard), validée avant toute évaluation, interprétée par notre code. Le
+   blueprint fait écrire du Python par un modèle puis l'exécute : dans un dépôt qui peut
+   passer des ordres réels, c'est une porte ouverte. Un modèle pourra proposer des
+   expressions ; il ne pourra jamais injecter de code.
+2. *Inscription au registre AVANT le verdict.* `trial_count()` monte à chaque candidat, donc
+   `deflation_params()` resserre le Sharpe déflaté de TOUT le programme. Générer beaucoup
+   n'est plus gratuit — c'est exactement ce qui manque à une boucle qui génère sans compter.
+3. *Trois issues, pas deux.* « rejeté » ≠ « non mesuré ». Les confondre remplirait le registre
+   de faux négatifs et fausserait le taux de réussite affiché sur /methode.
+
+**Conséquences.** `accepte_par_le_blueprint()` est conservé comme point de COMPARAISON, jamais
+comme critère : il rend l'écart mesurable sur chaque campagne. Le retard ne décale que vers le
+passé (test dédié) — l'autre sens fabriquerait de l'information. L'énumération est
+déterministe : deux campagnes restent comparables.
+
+**Non fait.** Aucun modèle de langage n'est branché. `enumerer()` produit les candidats de
+façon déterministe et suffit à démontrer la mécanique ; le modèle remplacera cette énumération
+quand il viendra, jamais le garde-fou. Rien n'est branché en production.
+
 ## ADR-0080 — Mean-CVaR : minimiser la perte extrême, pas la dispersion (2026-09-07)
 
 **Contexte.** Inspiration : le blueprint `NVIDIA-AI-Blueprints/portfolio-optimization`
