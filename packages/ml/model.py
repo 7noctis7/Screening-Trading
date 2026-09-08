@@ -49,10 +49,28 @@ class LogitModel:
 class SklearnModel:
     name = "sklearn"
 
-    def __init__(self, estimator=None) -> None:
+    # Graine par défaut. Le CHIFFRE n'a aucune importance ; ce qui compte est qu'il
+    # y en ait un. Sans lui, scikit-learn tire du générateur aléatoire GLOBAL de numpy
+    # pour départager les égalités entre découpes d'arbre — et deux exécutions du même
+    # code sur les mêmes données donnent des scores différents. Mesuré le 07/09 :
+    # `demo_ml.py` rendait 0,425 puis 0,382 d'un appel à l'autre.
+    #
+    # Un banc dont deux exécutions ne coïncident pas ne peut comparer NI deux versions
+    # du code, NI deux machines — ce qui manquera précisément au moment de valider la
+    # migration Mac → NVIDIA, où l'on veut distinguer un écart de matériel d'un écart
+    # de logique.
+    #
+    # On fixe la graine sur l'ESTIMATEUR, jamais via `np.random.seed()` : figer le
+    # générateur global depuis une bibliothèque contaminerait tout le processus, y
+    # compris les tirages qui doivent rester indépendants.
+    GRAINE = 0
+
+    def __init__(self, estimator=None, graine: int | None = None) -> None:
         if estimator is None:
             from sklearn.ensemble import GradientBoostingClassifier
-            estimator = GradientBoostingClassifier(n_estimators=80, max_depth=3)
+            estimator = GradientBoostingClassifier(
+                n_estimators=80, max_depth=3,
+                random_state=self.GRAINE if graine is None else graine)
         from sklearn.impute import SimpleImputer
         from sklearn.pipeline import Pipeline
         self.pipe = Pipeline([("impute", SimpleImputer(strategy="mean")),
@@ -89,6 +107,7 @@ def make_model(kind: str = "logit", **kw):
         # ne change donc rien à l'entraînement.
         return SklearnModel(XGBClassifier(
             n_estimators=100, max_depth=3, eval_metric="logloss",
+            random_state=SklearnModel.GRAINE,   # même raison que ci-dessus
             **params_arbres("xgboost")))
     raise ValueError(f"modèle inconnu: {kind}")
 

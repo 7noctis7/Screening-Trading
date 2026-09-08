@@ -2,6 +2,47 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0082 — Expliquer le modèle, et voir ce qu'un contrôle ligne par ligne rate (2026-09-08)
+
+**Contexte.** Suite de la revue des dépôts NVIDIA. Deux manques identifiés puis comblés,
+tous deux INDÉPENDANTS du matériel : le GPU les accélère, il ne les rend pas possibles.
+
+**1. Le score ML entrait dans le site comme un nombre opaque.** `/fiche` détaille ses six
+étages, mais « le modèle donne 68 % » n'explique rien — c'est la chose même qu'il faudrait
+expliquer. C'est ce que comble `cuml.explainer` (SHAP). Implémenté en numpy :
+`importance_par_permutation` (globale : sur quoi le modèle s'appuie) et `valeurs_de_shapley`
+(locale : pourquoi CE titre aujourd'hui).
+
+*Le garde-fou est l'EFFICIENCE* : les contributions somment exactement à
+`f(x) − moyenne(f(fond))`. C'est un théorème, donc une implémentation fausse le viole — sans
+ce test, n'importe quel histogramme normalisé passerait pour une explication. Une première
+version tirait la référence AU HASARD à chaque permutation : la somme retombait alors sur la
+moyenne de l'échantillon tiré, pas du fond, et l'efficience n'était plus exacte. Corrigé par
+un parcours systématique de chaque référence, sans surcoût.
+
+**2. L'audit de données ne voyait que l'impossible.** Les contrôles existants vérifient chaque
+série SÉPARÉMENT (prix > 0, cohérence OHLC, dates croissantes). Ils attrapent l'impossible,
+jamais le POSSIBLE MAIS ABSURDE : un split non ajusté, un tick erroné, un flux figé. C'est
+l'angle utile de NV-Tesseract — pas prédire, surveiller. `anomalies_panel` compare chaque
+actif à la COUPE du jour (médiane et MAD, jamais moyenne et écart-type : un krach déplacerait
+la moyenne au point de rendre le reste « normal ») et repère les cours immobiles quand le
+marché cote.
+
+Le flux figé est le cas le plus dangereux des trois, et il rejoint ADR-0080 : un cours
+immobile n'a ni dispersion ni queue, donc il paraît sans risque à TOUS les optimiseurs,
+variance comme CVaR. Aucun contrôle de forme ne peut le voir.
+
+**3. Le banc n'était pas déterministe.** `GradientBoostingClassifier` sans `random_state`
+consomme le générateur aléatoire GLOBAL de numpy pour départager les égalités entre découpes
+d'arbre. Vérifié en figeant ce générateur, ce qui a isolé la cause. La graine est posée sur
+l'ESTIMATEUR, jamais par `np.random.seed()` : figer le générateur global depuis une
+bibliothèque contaminerait tout le processus.
+
+**Conséquences.** `demo_ml.py` rend désormais trois exécutions identiques au caractère près —
+sans quoi la migration Mac → NVIDIA n'aurait pas pu être validée. Rien n'est corrigé
+automatiquement par l'audit d'anomalies : on signale, l'humain tranche. Aucun des trois
+modules n'est branché en production.
+
 ## ADR-0081 — Découverte de signaux : la moitié qui propose, tenue par celle qui refuse (2026-09-07)
 
 **Contexte.** Le blueprint `quantitative-signal-discovery-agent` boucle : un modèle invente
