@@ -17,6 +17,13 @@ Deux tableaux, et ils répondent à deux questions différentes.
      0,5 % du capital. Une ligne dont l'écart reste sous cette bande ne peut pas être
      allégée, quoi qu'elle gagne. Le tableau dit lesquelles sont dans ce cas.
 
+CE QU'IL LIT, ET CE QU'IL NE LIT PAS. La source est `journal.db` — les lots que le
+SYSTÈME croit ouverts. Ce n'est PAS ce que le courtier détient. Mesuré le 10/09 : le
+journal portait trois lots QQQ « ouverts » pour 69 456 $ quand le courtier n'en détenait
+qu'un, à 43 562 $ — 25 894 $ de fantômes, fermés chez le courtier et jamais fermés au
+journal. Les valeurs ci-dessous décrivent donc la TRAJECTOIRE des lots journalisés, pas
+l'exposition réelle. Pour celle-ci : `make live` (dry-run sur le compte réel).
+
 RIEN N'EST DÉCIDÉ ICI. Ajouter une règle de prise de bénéfice change le moteur qui
 tourne en production : c'est un choix à valider pour lui-même (ADR-0073), pas un
 réglage. Ce script fournit les chiffres qui permettent de le trancher.
@@ -182,6 +189,8 @@ def main() -> None:
         print("   n'inventera rien. Lancer depuis la machine qui le détient.")
         return
     print(f"\n{len(positions)} position(s) ouverte(s) — journal : {a.journal}")
+    print("   ⚠ source = JOURNAL, pas courtier. Un lot fermé chez le courtier et non")
+    print("     fermé ici reste compté : `make live` donne l'exposition réelle.")
     _imprimer(analyser(positions), a.capital)
 
 

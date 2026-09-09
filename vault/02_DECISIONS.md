@@ -2,6 +2,52 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0109 — Les 69 % de QQQ n'existaient pas : le journal sur-comptait (2026-09-10)
+
+**Le compte réel, lu par `make live` en dry-run sur le compte RÉEL** (capital Alpaca
+100 665 $, positions du courtier) :
+
+| source | QQQ détenu | part du compte |
+|---|---|---|
+| journal.db — 3 lots « ouverts » | 69 456 $ | 69,0 % |
+| **courtier Alpaca** | **43 562 $** | **43,3 %** |
+| cible de l'allocateur | 45 214 $ | 44,9 % |
+
+**Le journal sur-compte de 25 894 $**, et l'écart réel à la cible est de **−1 652 $, un
+ACHAT**. Il n'y a pas de surpoids sur QQQ : la position est légèrement SOUS sa cible.
+
+**Ce que ça annule.** J'ai publié « 69 % du portefeuille sur un seul ETF » en ADR-0102,
+puis bâti dessus en ADR-0103 (« 69 % constatés contre ≈ 54 % visés, ~15 points à
+alléger ») et une P0 au TODO. **Ce chiffre venait du journal, pas du courtier**, et il
+était faux. `diag_pv_latente` sommait trois lots QQQ que le journal croit ouverts —
+42 862 $, 25 977 $ et 617 $ — quand le courtier n'en détient qu'un. Le premier
+correspond à peu près à la position réelle ; les deux autres sont des **fantômes**, des
+lots fermés chez le courtier et jamais fermés au journal.
+
+**La leçon, et elle est déjà écrite ailleurs dans ce vault.** Le journal n'est pas la
+source de vérité des POSITIONS — le courtier l'est. `turnover_audit` le disait à sa
+façon dès le 04/09 (« 35 fermetures reconstruites après coup »), et la P0 de
+réconciliation est ouverte depuis. J'ai quand même traité une somme de lots journal comme
+une exposition réelle, et j'en ai tiré un diagnostic de concentration qui n'avait pas
+lieu d'être. **Un chiffre juste dans son fichier peut être faux dans le monde.**
+
+**Ce qui reste vrai d'ADR-0103.** Le cœur PÈSE bien la moitié du compte par construction :
+la cible QQQ est à 44,9 %, et c'est un choix d'allocation, pas une dérive. Le total suit
+donc le Nasdaq — ce point-là ne dépendait pas du chiffre faux.
+
+**Ce que le premier passage automatique fera vraiment** (19 ordres, 60 386 $) : surtout
+des ACHATS — le compte porte ~21 000 $ de cash non déployé (79 535 $ détenus sur
+100 665 $) — et six soldes (ASML, MRNA, OSCR, SJM, TSM, ZION). Côté crypto, BTC, LTC et
+ETH sont déjà sous la bande d'inaction ; `LINK` et `SOL`, hors univers cible, seront
+soldés. **Ce n'est pas le grand allègement que j'annonçais : c'est un déploiement de
+trésorerie.**
+
+**Correctif d'outil.** `diag_pv_latente` lit le journal — c'est sa raison d'être, il
+mesure la trajectoire des lots. Il dira désormais explicitement que les VALEURS qu'il
+affiche sont celles du journal et peuvent diverger du courtier, avec la commande qui
+tranche (`make live`). Un outil qui lit une source ne doit pas laisser croire qu'il lit
+l'autre.
+
 ## ADR-0108 — Le crypto le week-end : ici, l'heure fixe est le BON choix (2026-09-10)
 
 **Demande.** Que le rebalancement tourne aussi le week-end pour le crypto.

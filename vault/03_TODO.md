@@ -961,7 +961,15 @@ explicite, module par module, avec mesure.
       3. Laisser tourner une semaine AVANT de rejuger quoi que ce soit sur les sorties :
          les cinq décisions mesurées ne décrivent pas une stratégie, elles décrivent
          cinq lancements manuels.
-- [ ] **P0 — 69 % du portefeuille sur UN SEUL ETF** (mesuré le 10/09, ADR-0102/0103).
+- [x] **P0 — ANNULÉ : les 69 % de QQQ n'existaient pas** (ADR-0109). Le courtier détient
+      **43 562 $**, soit 43,3 % du compte, pour une cible à 44,9 % : la position est
+      légèrement SOUS sa cible, l'écart est un ACHAT de 1 652 $. Le chiffre de 69 %
+      venait du JOURNAL, qui compte trois lots QQQ ouverts (42 862 + 25 977 + 617) là où
+      le courtier n'en détient qu'un — **25 894 $ de fantômes**, lots fermés chez le
+      courtier et jamais fermés au journal. Le journal n'est pas la source de vérité des
+      positions ; il reste celle des DÉCISIONS. Ancien libellé conservé ci-dessous pour
+      la trace.
+- [ ] ~~**P0 — 69 % du portefeuille sur UN SEUL ETF** (mesuré le 10/09, ADR-0102/0103).~~
       Trois lots de QQQ pèsent ≈ 69 500 $ sur ≈ 100 000 $. Un total qui oscille de 101 k
       à 100,4 k suit d'abord CELA : ±0,9 % sur QQQ font ±0,6 % sur le compte.
       **CORRECTION du 10/09 (ADR-0103)** : j'avais écrit « pourquoi le rebalancement ne
