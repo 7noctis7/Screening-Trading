@@ -40,11 +40,20 @@ def main() -> int:
     if len(cibles) > 15:
         print(f"     … et {len(cibles) - 15} autre(s) cible(s)")
     print(f"  ADR en double   : {r['duplicate_adrs'] or '—'}")
+    fut = r["dates_futures"]
+    print(f"  dates futures   : {len(fut) or '—'}")
+    for d in fut[:10]:
+        print(f"     ✗ {d['in']} · {d['date']} · {d['entete']}")
     print(f"  orphelins ({len(r['orphans'])}) : "
           f"{', '.join(r['orphans'][:15]) or '—'}")
     # gate dur : ADR dupliqués (vrai bug) toujours ; le reste seulement en --strict
     if r["duplicate_adrs"]:
         print("  → ❌ ADR dupliqué (corriger).")
+        return 1
+    # Gate dur au même titre : un enregistrement daté du futur ment sur QUAND il a été
+    # établi, et c'est la seule chose qu'un journal doit garantir.
+    if fut:
+        print("  → ❌ en-tête daté du futur (corriger la date).")
         return 1
     if a.strict and (r["dead_links"] or r["orphans"]):
         print("  → ❌ --strict : liens morts / orphelins à corriger.")

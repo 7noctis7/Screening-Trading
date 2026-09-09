@@ -1,6 +1,38 @@
 # 04 — JOURNAL
 
-## Session 2026-09-10 — HRP reste en production, et deux avaries de fond réparées
+## Session 2026-09-09 (9ᵉ) — Douze décisions datées de demain
+
+**CE QUE J'AI CASSÉ.** Les ADR-0100 à 0111, l'en-tête de séance et un enregistrement du
+registre portaient **2026-09-10**. On était le 09. Quatorze horodatages faux en une journée,
+dans les trois fichiers dont le seul travail est de dire QUAND. Aucun contrôle ne regardait
+les dates : le lint du vault vérifiait les liens, les doublons d'ADR, les orphelins — pas
+l'horodatage.
+
+**CORRIGÉ, ET GARDÉ.** Les quatorze dates rectifiées, la séance renumérotée `(8ᵉ)` puisque
+le jour en comptait déjà sept. Et un gate : `dates_futures` fait sortir `make vault-lint` en
+erreur sur un en-tête d'ADR ou de séance postérieur à aujourd'hui. Sabotage : l'erreur exacte
+remise en place → exit 1 ; retirée → exit 0.
+
+**CE QUE JE N'AI PAS ÉLARGI.** Le contrôle ne lit que les EN-TÊTES. « à rejuger au
+2026-12-01 » dans un corps d'ADR est un rendez-vous, pas une faute — le signaler ferait un
+avertissement permanent, donc un avertissement ignoré. Un en-tête sans date passe aussi : les
+ADR d'avant 0030 n'en portent pas.
+
+**BLOQUÉ / À TRANCHER.** Rien de neuf ici, mais la P0 de la veille reste entière et le
+rebalanceur automatique est ARMÉ : l'allocation courante franchit la politique de risque du
+projet tous les jours — secteur « Actions diverses » 47,5 % contre 40 %, QQQ 50 % contre un
+plafond de nom à 20 %, aux 05, 07, 08 et 09 septembre. Deux documents du projet se
+contredisent ; lequel corriger est un arbitrage utilisateur.
+
+**AUSSI, CONSTATÉ SANS AGIR.** `ruff check` hors de `packages/apps` remonte un arriéré
+préexistant de plusieurs milliers de lignes (longueur de ligne, surtout dans `apps/api` et
+`scripts`). Ce n'est pas de ce correctif — mes trois fichiers passent — mais le `ruff check .`
+du rituel de clôture est rouge AVANT toute modification, donc il ne protège plus rien. À
+traiter comme dette, pas comme urgence.
+
+**2381 tests passés, 6 ajoutés.** ADR-0112.
+
+## Session 2026-09-09 (8ᵉ) — HRP reste en production, et deux avaries de fond réparées
 
 **LA PÉRIODE A TRANCHÉ.** Le script imprime enfin ce qu'il mesure :
 **2024-05-15 → 2026-05-19**, 336 séances. Le krach obligataire de 2022 est HORS fenêtre.

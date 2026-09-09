@@ -8,6 +8,7 @@ ce qui se vérifie de façon FIABLE (structurel) — pas de détection floue de 
 from __future__ import annotations
 
 import re
+from datetime import date
 from pathlib import Path
 
 _EXCLUDE_DIRS = {".obsidian", ".smart-env", ".trash", "04_Companies"}
@@ -29,6 +30,14 @@ _BLOC_CODE = re.compile(r"```.*?```", re.DOTALL)
 _CODE_INLINE = re.compile(r"(`+)(?:.|\n)+?\1")
 _MDLINK = re.compile(r"\]\(([^)]+\.md)[^)]*\)")      # [txt](chemin.md)
 _ADR = re.compile(r"^#+\s*ADR-(\d{3,4})", re.MULTILINE)
+# HORODATAGE. Une décision et une séance de travail sont des faits PASSÉS : leur date
+# ne peut pas être dans le futur. Douze ADR ont pourtant été datés du lendemain
+# (09/09), et rien ne l'a signalé — la traçabilité du vault repose entièrement sur
+# ces dates. Contrôle volontairement ÉTROIT : seuls les en-têtes, jamais le corps,
+# où « rejuger au 2026-12-01 » est un rendez-vous légitime, pas une erreur.
+_ADR_DATE = re.compile(r"^#+\s*ADR-(\d{3,4})\b.*\((\d{4}-\d{2}-\d{2})\)\s*$",
+                       re.MULTILINE)
+_SESSION_DATE = re.compile(r"^#+\s*Session\s+(\d{4}-\d{2}-\d{2})", re.MULTILINE)
 
 
 def _iter_md(vault: Path):
@@ -56,6 +65,27 @@ def extract_links(text: str) -> tuple[set[str], set[str]]:
             {m.strip() for m in _MDLINK.findall(utile)})
 
 
+def dates_futures(vault: str | Path, aujourdhui: date | None = None) -> list[dict]:
+    """En-têtes d'ADR et de session portant une date postérieure à `aujourdhui`.
+
+    Un en-tête non daté n'est pas une erreur : les ADR d'avant 0030 n'en portaient pas.
+    On ne contrôle que ce qui est écrit.
+    """
+    vault, jour = Path(vault), aujourdhui or date.today()
+    trouves: list[dict] = []
+    for nom, motif, groupe in (("02_DECISIONS", _ADR_DATE, 1),
+                               ("04_JOURNAL", _SESSION_DATE, 0)):
+        f = vault / f"{nom}.md"
+        if not f.exists():
+            continue
+        for m in motif.finditer(f.read_text(encoding="utf-8", errors="ignore")):
+            d = m.group(2) if groupe else m.group(1)
+            if date.fromisoformat(d) > jour:
+                trouves.append({"in": f.name, "entete": m.group(0).strip()[:70],
+                                "date": d})
+    return trouves
+
+
 def _est_gabarit(p: Path) -> bool:
     """Un gabarit contient des ESPACES RÉSERVÉS, pas des liens : `[[paper_xxx]]` y
     attend d'être remplacé. Le signaler comme mort à chaque passage est un faux positif
@@ -70,12 +100,13 @@ def _is_index_like(p: Path) -> bool:
             or "TEMPLATE" in n or "INDEX" in n)
 
 
-def lint_vault(vault: str | Path) -> dict:
+def lint_vault(vault: str | Path, aujourdhui: date | None = None) -> dict:
     """Scanne le vault → {dead_links, orphans, duplicate_adrs, n_notes, ok}.
 
     - dead_links : `[[X]]` ou `chemin.md` ne résolvant vers aucun fichier (gate dur).
     - orphans : note de sous-dossier référencée par PERSONNE (avertissement).
     - duplicate_adrs : même numéro ADR deux fois dans 02_DECISIONS (gate dur).
+    - dates_futures : ADR/session daté après aujourd'hui (gate dur).
     """
     vault = Path(vault)
     files = list(_iter_md(vault))
@@ -111,5 +142,7 @@ def lint_vault(vault: str | Path) -> dict:
     if dec:
         adrs = _ADR.findall(dec.read_text(encoding="utf-8", errors="ignore"))
     dups = sorted({a for a in adrs if adrs.count(a) > 1})
+    futures = dates_futures(vault, aujourdhui)
     return {"n_notes": len(files), "dead_links": dead, "orphans": orphans,
-            "duplicate_adrs": dups, "ok": not dead and not dups}
+            "duplicate_adrs": dups, "dates_futures": futures,
+            "ok": not dead and not dups and not futures}

@@ -135,3 +135,90 @@ def test_le_vault_reel_ne_produit_aucun_pseudo_lien(tmp_path) -> None:
         wikis, _ = extract_links(note.read_text(encoding="utf-8", errors="ignore"))
         for w in wikis:
             assert "\n" not in w and len(w) <= 120, f"{note.name} → {w[:80]!r}"
+
+
+def test_un_adr_date_du_futur_est_signale(tmp_path) -> None:
+    """L'erreur exacte du 09/09 : douze ADR datés du LENDEMAIN, et rien pour le dire.
+    Un ADR enregistre une décision PRISE ; sa date ne peut pas être à venir."""
+    from datetime import date
+
+    from packages.common.vault_lint import dates_futures
+
+    v = _vault(tmp_path)
+    (v / "02_DECISIONS.md").write_text(
+        "## ADR-0111 — Un titre (2026-09-10)\n\ncorps\n"
+        "## ADR-0110 — Un autre (2026-09-09)\n", encoding="utf-8")
+
+    trouves = dates_futures(v, date(2026, 9, 9))
+    assert [t["date"] for t in trouves] == ["2026-09-10"], trouves
+    assert "ADR-0111" in trouves[0]["entete"]
+
+    # le lendemain, plus rien à signaler : c'est la DATE DU JOUR qui tranche
+    assert dates_futures(v, date(2026, 9, 10)) == []
+
+
+def test_une_seance_de_journal_datee_du_futur_est_signalee(tmp_path) -> None:
+    from datetime import date
+
+    from packages.common.vault_lint import dates_futures
+
+    v = _vault(tmp_path)
+    (v / "04_JOURNAL.md").write_text(
+        "# 04 — JOURNAL\n\n## Session 2026-09-10 (8e) — demain\n"
+        "## Session 2026-09-09 — aujourd'hui\n", encoding="utf-8")
+
+    assert [t["date"] for t in dates_futures(v, date(2026, 9, 9))] == ["2026-09-10"]
+
+
+def test_une_date_future_dans_le_CORPS_n_est_pas_une_erreur(tmp_path) -> None:
+    """Le contrôle est volontairement ÉTROIT. « à rejuger au 2026-12-01 » dans le texte
+    d'un ADR est un rendez-vous légitime : le signaler serait un faux positif permanent,
+    et un avertissement permanent finit par être ignoré — y compris quand il a
+    raison."""
+    from datetime import date
+
+    from packages.common.vault_lint import dates_futures
+
+    v = _vault(tmp_path)
+    (v / "02_DECISIONS.md").write_text(
+        "## ADR-0111 — Un titre (2026-09-09)\n\n"
+        "À rejuger au 2026-12-01, quand l'historique couvrira un choc de taux.\n",
+        encoding="utf-8")
+
+    assert dates_futures(v, date(2026, 9, 9)) == []
+
+
+def test_un_entete_sans_date_n_est_pas_une_erreur(tmp_path) -> None:
+    """Les ADR d'avant 0030 n'en portent pas. On ne contrôle que ce qui est écrit."""
+    from datetime import date
+
+    from packages.common.vault_lint import dates_futures
+
+    v = _vault(tmp_path)
+    (v / "02_DECISIONS.md").write_text(
+        "## ADR-0029 — Long-only = scope v1 assume\n", encoding="utf-8")
+
+    assert dates_futures(v, date(2026, 9, 9)) == []
+
+
+def test_la_date_future_ferme_le_gate_de_lint_vault(tmp_path) -> None:
+    """`ok` doit basculer : sans cela le contrôle existe mais ne bloque rien."""
+    from datetime import date
+
+    v = _vault(tmp_path)
+    (v / "02_DECISIONS.md").write_text(
+        "## ADR-0111 — Un titre (2026-09-10)\n", encoding="utf-8")
+
+    r = lint_vault(v, date(2026, 9, 9))
+    assert r["ok"] is False and len(r["dates_futures"]) == 1
+    assert lint_vault(v, date(2026, 9, 10))["ok"] is True
+
+
+def test_le_vault_reel_ne_porte_aucune_date_future() -> None:
+    """Contrôle sur les VRAIES notes, à la date du jour."""
+    from pathlib import Path
+
+    from packages.common.vault_lint import dates_futures
+
+    racine = Path(__file__).resolve().parents[2] / "vault"
+    assert dates_futures(racine) == []

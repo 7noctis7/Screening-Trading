@@ -2,7 +2,40 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
-## ADR-0111 — Le post-mortem annonçait trois causes et n'en nommait qu'une (2026-09-10)
+## ADR-0112 — Douze décisions datées d'un jour qui n'existait pas encore (2026-09-09)
+
+**Contexte.** Les ADR-0100 à 0111, l'en-tête de séance du journal et un enregistrement du
+registre d'hypothèses portaient la date **2026-09-10**. Nous étions le **2026-09-09** : les
+lancements sur le VPS sont horodatés `2026-09-09T07:33 UTC` et l'incident du jour est
+`incident_2026-09-09.md`. Quatorze horodatages écrits au lendemain, en une seule journée,
+sans que rien ne le signale.
+
+**Pourquoi ça compte plus qu'une coquille.** Toute la discipline du projet repose sur
+« quand a-t-on mesuré ça ». Une décision datée du futur casse l'ordre entre les ADR et les
+mesures qui les fondent : on ne peut plus dire si ADR-0109 a annulé ADR-0102 avant ou après
+le passage `make live` qui l'a permis. Et le registre d'hypothèses, dont la seule valeur est
+d'être un journal de mesures horodatées, portait deux protocoles différents du même facteur
+à deux dates dont l'une n'existait pas.
+
+**Décision.** Correction des quatorze horodatages, et surtout un **gate** : `dates_futures`
+refuse un en-tête d'ADR ou de séance daté après aujourd'hui, `make vault-lint` sort en
+erreur. Vérifié par sabotage — l'erreur exacte du jour remise en place fait sortir le linter
+en 1, sa correction le fait passer.
+
+**Contrôle volontairement ÉTROIT.** Seuls les EN-TÊTES. Une date future dans le CORPS d'un
+ADR — « à rejuger quand l'historique couvrira un choc de taux, au 2026-12-01 » — est un
+rendez-vous légitime, et la signaler serait un faux positif permanent. Le linter porte déjà
+cette leçon deux fois dans ses commentaires : un avertissement permanent finit par être
+ignoré, y compris les jours où il a raison. Un en-tête sans date n'est pas une erreur non
+plus : les ADR d'avant 0030 n'en portent pas.
+
+**Effet de bord corrigé.** La séance du jour devenait la deuxième « Session 2026-09-09 »
+sans numéro dans un journal qui en comptait déjà sept — renumérotée `(8ᵉ)`.
+
+**Conséquences.** 6 tests ajoutés, dont un qui balaie le vault RÉEL à la date du jour. Un
+horodatage faux ne peut plus atteindre un commit sans faire échouer le lint.
+
+## ADR-0111 — Le post-mortem annonçait trois causes et n'en nommait qu'une (2026-09-09)
 
 **Le fait, lu dans `incident_2026-09-09.md`.** L'en-tête déclare `n_breaches: 3` et
 `risk_limits_ok: false`. Le corps n'en nomme **qu'une** :
@@ -40,7 +73,7 @@ correctif. Il est noté en P0. Le rebalancement automatique démarré aujourd'hu
 appliquera cette allocation en l'état : le portique d'ordres peut réduire, jamais
 augmenter, mais il ne remplace pas la décision.
 
-## ADR-0110 — Le linter du vault comptait sa propre documentation (2026-09-10)
+## ADR-0110 — Le linter du vault comptait sa propre documentation (2026-09-09)
 
 **Constat.** `make vault-lint` sur le VPS : **52 liens morts**. Deux d'entre eux venaient
 de `00_INDEX.md`, ligne 61 :
@@ -75,7 +108,7 @@ les perdants du duel et la vérification de planification qui validait toute mac
 Linux. Chaque fois, le même mécanisme : l'instrument produisait du bruit ou du faux
 confort, et le bruit rendait invisible ce qu'il devait montrer.
 
-## ADR-0109 — Les 69 % de QQQ n'existaient pas : le journal sur-comptait (2026-09-10)
+## ADR-0109 — Les 69 % de QQQ n'existaient pas : le journal sur-comptait (2026-09-09)
 
 **Le compte réel, lu par `make live` en dry-run sur le compte RÉEL** (capital Alpaca
 100 665 $, positions du courtier) :
@@ -121,7 +154,7 @@ affiche sont celles du journal et peuvent diverger du courtier, avec la commande
 tranche (`make live`). Un outil qui lit une source ne doit pas laisser croire qu'il lit
 l'autre.
 
-## ADR-0108 — Le crypto le week-end : ici, l'heure fixe est le BON choix (2026-09-10)
+## ADR-0108 — Le crypto le week-end : ici, l'heure fixe est le BON choix (2026-09-09)
 
 **Demande.** Que le rebalancement tourne aussi le week-end pour le crypto.
 
@@ -161,7 +194,7 @@ question « faut-il agir maintenant ? » a reçu une seconde réponse.
 sur sa poche crypto, puis rattrape deux jours d'un coup le lundi — au pire moment, quand
 l'écart est maximal. C'était le cas jusqu'ici.
 
-## ADR-0107 — Un cron qu'on ne retouche plus : la fenêtre, pas l'heure (2026-09-10)
+## ADR-0107 — Un cron qu'on ne retouche plus : la fenêtre, pas l'heure (2026-09-09)
 
 **Demande.** Rebalancer une heure avant la clôture, et ne plus jamais avoir à corriger la
 planification aux changements d'heure.
@@ -208,7 +241,7 @@ testé). `QUANT_IGNORER_FENETRE=1` pour un lancement manuel hors fenêtre.
 n'a plus à savoir : comme les fériés, comme les jours de bourse, elle se déduit d'un
 calendrier au lieu d'être recopiée dans un réglage qui se périme.
 
-## ADR-0106 — L'heure d'exécution : deux questions, une seule se mesure (2026-09-10)
+## ADR-0106 — L'heure d'exécution : deux questions, une seule se mesure (2026-09-09)
 
 **Question posée.** « Quel créneau pour trader, là où historiquement ça performe le
 mieux ? » Elle en cache deux, qui n'ont pas la même nature de réponse.
@@ -257,7 +290,7 @@ avaient la même forme : un garde-fou qui renvoyait « tout va bien » par const
 Celui-ci a été attrapé avant d'avoir servi, parce que le test a été écrit pour le faire
 échouer.
 
-## ADR-0105 — L'installateur de planification échouait sur la machine qui en avait besoin (2026-09-10)
+## ADR-0105 — L'installateur de planification échouait sur la machine qui en avait besoin (2026-09-09)
 
 **Le symptôme, brut.** `make live-cron-install` sur le VPS :
 `make: *** [live-cron-install] Error 1`. Aucun message, rien d'installé.
@@ -296,7 +329,7 @@ répondait « ✅ cron actif » sur toute machine Linux (ADR-0104). Le portefeui
 pendant ce temps — QQQ à 69 % contre 54 % visés, cinq décisions de sortie en soixante-
 trois jours, et une plus-value latente que rien ne venait sécuriser.
 
-## ADR-0104 — Le contrôle « mon robot tourne-t-il ? » répondait oui sans regarder (2026-09-10)
+## ADR-0104 — Le contrôle « mon robot tourne-t-il ? » répondait oui sans regarder (2026-09-09)
 
 **Le fait.** `crontab -l` sur le VPS : **`no crontab for ubuntu`**. Aucun rebalancement
 n'y est planifié. Le portefeuille ne bouge donc que sur lancement manuel — ce qui
@@ -329,7 +362,7 @@ Les autres — le seuil trop bas, la grille trop courte, la coche sur les perdan
 produisaient des chiffres faux qu'on pouvait lire et contester. Celui-ci produisait un
 silence, et un silence ne se conteste pas.
 
-## ADR-0103 — La concentration est voulue : le cœur pèse la moitié du compte (2026-09-10)
+## ADR-0103 — La concentration est voulue : le cœur pèse la moitié du compte (2026-09-09)
 
 **Je t'avais envoyé sur la mauvaise commande.** `make live-sim` simule un portefeuille
 NEUF : `--equity 10000`, **détenu ignoré**. Sa propre ligne d'aide le dit — « ne décrit
@@ -374,7 +407,7 @@ soit une quinzaine de points de surpoids — largement au-dessus de la bande d'i
 bug — et le changer serait un changement de stratégie, à décider puis à valider, pas un
 correctif à glisser.
 
-## ADR-0102 — Mon propre instrument publiait deux chiffres faux (2026-09-10)
+## ADR-0102 — Mon propre instrument publiait deux chiffres faux (2026-09-09)
 
 **Premier passage réel de `diag-pv-latente`. Deux défauts, l'un grave.**
 
@@ -424,7 +457,7 @@ prise de bénéfice, il y a une exposition à 69 % sur un seul ETF et un journal
 certains lots sont faux. Poser un objectif de gain par-dessus reviendrait à régler la
 tenue de route d'une voiture dont on n'a pas vérifié que les roues sont boulonnées.
 
-## ADR-0101 — Le yo-yo de la PV latente : mesurer avant de poser une règle (2026-09-10)
+## ADR-0101 — Le yo-yo de la PV latente : mesurer avant de poser une règle (2026-09-09)
 
 **Question posée.** « Ma PV latente chute et je ne parviens pas à la sécuriser ; mon
 total fait le yo-yo de 101 k à 100,4 k. »
@@ -465,7 +498,7 @@ manque est une DÉCISION : quelle politique brancher sur le chemin de production
 validée sur quoi. Ajouter une dépendance ici répéterait l'erreur de Riskfolio-Lib —
 recommander un paquet dont les capacités étaient déjà natives.
 
-## ADR-0100 — HRP reste en production. Et deux avaries de fond, réparées (2026-09-10)
+## ADR-0100 — HRP reste en production. Et deux avaries de fond, réparées (2026-09-09)
 
 **LA DÉCISION : on ne branche pas le Mean-CVaR.** Non par prudence de principe, mais
 parce que la mesure, une fois complète, ne soutient pas le changement.

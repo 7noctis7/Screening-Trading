@@ -7,6 +7,21 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+- [x] **Horodatage du vault sous contrôle — FERMÉ (2026-09-09).** Douze ADR (0100→0111),
+      l'en-tête de séance et un enregistrement d'`hypotheses.jsonl` étaient datés du
+      2026-09-10 alors qu'on était le 09. Corrigés, et `make vault-lint` sort désormais en
+      erreur sur un en-tête d'ADR ou de séance postérieur au jour. Contrôle borné aux
+      EN-TÊTES : une date future dans un corps d'ADR est un rendez-vous, pas une faute.
+      ADR-0112.
+
+- [ ] **P2 — `ruff check` est rouge AVANT toute modification.** Hors `packages`/`apps`,
+      l'arriéré dépasse 2000 signalements (longueur de ligne pour l'essentiel, plus quelques
+      `E741`/`UP034` dans `.claude/hooks/`). `packages apps` en compte davantage encore. Le
+      rituel de clôture demande `ruff check .` : rouge de base, il ne distingue plus une
+      régression d'un héritage, donc il ne protège plus rien. Soit on résorbe, soit on fixe
+      un périmètre et on l'écrit dans le Makefile — mais pas les deux à moitié. Constaté le
+      09/09, non traité : ce n'est pas une urgence, c'est une alarme qui ne sonne plus.
+
 - [x] **Build analyse de portefeuille réparé (2026-09-06)** : blocs dupliqués de fusion
       retirés, composant client unique et build Next.js ajouté aux contrôles de PR.
 
