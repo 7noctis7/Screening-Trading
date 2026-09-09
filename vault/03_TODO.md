@@ -42,7 +42,14 @@
       estimation d'abord, ne pas l'inventer ; (4) `market_structure`, dont le STATUT dit
       « aucun appelant en production » alors que `make labs` l'utilise.
 
-- [ ] **P1 — ÎLOT SWING : MESURABLE depuis le 09/09 (`make banc-swing`, ADR-0123).**
+- [x] **ÎLOT SWING — MESURÉ le 09/09, verdict NON (ADR-0126).** 2 169 trades sur données
+      réelles : −0,059 R par trade, 26,8 % de réussite, −127,9 R au total, DSR 0,0001 pour
+      un seuil de 0,95. NE PAS BRANCHER. Nuance : 1,7 point sous le seuil d'équilibre, et
+      ma règle « stop prioritaire dans la même barre » porte sur ces cas — c'est une BORNE
+      INFÉRIEURE. Ne pas supprimer : la question se rejugera sur données INTRADAY, qui
+      lèveraient l'ambiguïté. Les coûts, non modélisés, ne peuvent qu'aggraver le résultat.
+
+- [x] **~~P1 — îlot swing mesurable~~ —**
       Ce n'est PAS le swing déjà backtesté (`strategies/swing` + `fast_swing`) : c'est une
       stratégie ICT/Smart Money distincte (Hurst 1W, SFP, BOS, OTE, order blocks, CHoCH).
       Le banc simule ses propositions sur l'historique réel — entrée en LIMITE, stop

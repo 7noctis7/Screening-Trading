@@ -2,6 +2,55 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0126 — Le banc a tranché : le swing ICT ne se branche pas (2026-09-09)
+
+**LA MESURE, sur 40 actifs de la watchlist et l'historique réel de `market.db`.**
+
+| | |
+|---|--:|
+| trades | **2 169** |
+| espérance | **−0,059 R** par trade |
+| taux de réussite | 26,8 % |
+| total | **−127,9 R** |
+| Sharpe par trade | −0,0366 |
+| sorties | 1 548 stops · 426 cibles · 195 horizon |
+| **DSR** | **0,0001** — déployable **NON** |
+
+**VERDICT : ne pas brancher.** Le DSR est à 0,0001 pour un seuil de 0,95. Aucune correction
+d'hypothèse ne franchit un tel écart.
+
+**MAIS L'HONNÊTETÉ EXIGE UNE NUANCE.** Avec un gain moyen de 2,51 R, le seuil d'équilibre
+est à 28,5 % de réussite ; on observe 26,8 %. **1,7 point d'écart**, soit ~37 trades sur
+2 169. Or ma règle la plus conservatrice — stop prioritaire quand stop ET cible tombent dans
+la même barre — porte précisément sur ces cas-là. Le résultat est donc une **borne
+inférieure**, pas un verdict sur la valeur du motif. Dire « la stratégie est nulle » serait
+aller plus loin que la mesure.
+
+**CE QUI LE RENDRAIT PIRE, ET QUI MANQUE.** Le banc mesure BRUT : ni commissions, ni
+fourchette, ni glissement. 2 169 trades sur 40 actifs en coûteraient largement plus que les
+0,059 R d'écart. La conclusion est donc robuste dans le bon sens : les coûts ne peuvent que
+l'enfoncer.
+
+**CE QUI TRANCHERAIT DÉFINITIVEMENT** : des barres INTRADAY, qui lèveraient l'ambiguïté sur
+l'ordre des extrêmes. Tant qu'on n'en a pas, la borne inférieure est ce qu'on sait.
+
+**DÉCISION.** L'îlot swing reste NON branché. On ne le supprime pas non plus : à 1,7 point
+de l'équilibre, ce n'est pas du bruit, et la question se rejugera sur données intraday. Il
+reste `SHADOW`, désormais avec un chiffre en face.
+
+**AUSSI — deux défauts de `make reports`, découverts au même run.** `ZEC/USDC`, `VET/USDC`
+et `LTC/USDC` ont été envoyés à Yahoo pour une analyse FONDAMENTALE : trois erreurs 500/502
+dont la page HTML entière a inondé le terminal, puis un plantage sur
+`note_ZEC/USDC.html` — un chemin qui désigne un fichier dans un dossier inexistant. 22 notes
+sur 25.
+
+Deux corrections : une paire cotée n'a pas de bilan, donc pas de note (filtre sur la FORME
+du symbole — une liste devrait être tenue à jour à chaque ajout d'actif, la forme non) ; et
+le symbole est assaini pour le nom de fichier, en gardant le point lisible (`BRK.B` reste
+`BRK.B`, il ne devient pas `BRK_B`).
+
+**Conséquences.** 2451 tests, 5 ajoutés.
+
 ## ADR-0125 — Écrire la sortie avant l'entrée (2026-09-09)
 
 **Origine.** La seule idée reprise d'un rapport concurrent : une section « qu'est-ce qui

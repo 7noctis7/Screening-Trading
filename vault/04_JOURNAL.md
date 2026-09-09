@@ -1,5 +1,27 @@
 # 04 — JOURNAL
 
+## Session 2026-09-09 (23ᵉ) — Le banc a tranché
+
+**2 169 TRADES SUR DONNÉES RÉELLES.** −0,059 R par trade, 26,8 % de réussite, −127,9 R au
+total, DSR **0,0001** pour un seuil de 0,95. **Le swing ICT ne se branche pas.**
+
+**LA NUANCE QUI COMPTE.** Gain moyen 2,51 R → équilibre à 28,5 % de réussite ; on observe
+26,8 %. **1,7 point**, soit ~37 trades sur 2 169. Et ma règle la plus conservatrice — stop
+prioritaire quand stop et cible tombent dans la même barre — porte exactement sur ces cas.
+C'est donc une BORNE INFÉRIEURE. Dire « la stratégie est nulle » irait plus loin que la
+mesure ; dire « elle ne franchit pas la porte » est exact.
+
+Les coûts ne sont pas modélisés — ils ne peuvent qu'enfoncer le résultat. Ce qui trancherait
+définitivement : des barres intraday.
+
+**DEUX BUGS DE `make reports` AU MÊME RUN.** ZEC/USDC, VET/USDC et LTC/USDC envoyés à Yahoo
+pour une analyse FONDAMENTALE — trois 500/502 dont la page HTML entière a inondé le
+terminal — puis plantage sur `note_ZEC/USDC.html`, un chemin vers un dossier inexistant.
+22 notes sur 25. Corrigé : une paire cotée n'a pas de bilan donc pas de note, et le nom de
+fichier est assaini en gardant le point lisible.
+
+**2451 tests passés, 5 ajoutés.** ADR-0126.
+
 ## Session 2026-09-09 (22ᵉ) — Écrire la sortie avant l'entrée
 
 **LIVRÉ.** Section « ce qui invaliderait cette thèse » dans les notes d'analyse — Markdown
