@@ -27,7 +27,18 @@
       puis `make sync && make diag-journal` — l'écart doit revenir à ~+169 $. Rejouer la
       chaîne seulement APRÈS ce contrôle.
 
-- [ ] **P1 — Réparation du journal : à rejouer avec le code corrigé (09/09).** La simulation
+- [ ] **P0 — LE CHEMIN D'ÉCRITURE DU JOURNAL DÉDOUBLE (09/09).** NWL porte 1,74× la
+      quantité achetée, MAS 1,91×, sur 7 et 6 identifiants `LEG-…` distincts. Le
+      diagnostic le nomme : « un seul préfixe portant 2× = le chemin d'ÉCRITURE crée deux
+      identités ». C'est la cause AMONT de tout le reste, et aucune réparation aval ne
+      peut converger tant qu'elle est ouverte. À traiter là : qui écrit les `LEG-…`, et
+      pourquoi deux fois. Tant que ce n'est pas fermé, NE PAS lancer `make reparer-journal`
+      (ADR-0117 : deux tentatives, deux dégradations).
+
+- [x] **~~Réparation du journal à rejouer~~ — GELÉE (09/09, ADR-0117).** Le code est
+      correct (ADR-0115/0116, garde-fou vérifié : plus aucun prix incohérent écrit), mais
+      la chaîne annonce −222 $ et produit −1 448 $ de réalisé : elle RE-APPARIE le FIFO
+      au lieu d'ajouter. Journal restauré, laissé tel quel. Sans effet sur l'exécution. La simulation
       donne : 18 ouvertures à reconstituer (83 804 $ de coût de revient), 23 fermetures
       appariées à un fill réel (+666,76 $), 8 doublons pour +915,37 $ de réalisé compté
       deux fois, 16 lots qu'aucune vente ne justifie et qui RESTENT ouverts. QQQ : 96,78

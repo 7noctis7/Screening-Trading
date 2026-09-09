@@ -1,5 +1,32 @@
 # 04 — JOURNAL
 
+## Session 2026-09-09 (14ᵉ) — Les correctifs marchent, la chaîne reste à geler
+
+**LES DEUX CORRECTIFS ONT TENU.** Second passage : les lots reconstitués portent des prix
+JUSTES (BTC 79 499 $ le 04/09, 81 132 $ le 03/09 — cohérents avec le marché) et le coût de
+revient tombe de 83 804 $ à 16 538 $. Le garde-fou n'a rien eu à refuser : il n'y avait plus
+rien d'incohérent à écrire.
+
+**ET LE RÉSULTAT EST QUAND MÊME PIRE.** Réalisé +245,33 → **−1 203,05 $**, soit −1 448 $,
+quand la chaîne n'annonce que −222 $ (+39,98 de fermetures, −262,38 de doublon). **−1 226 $
+non expliqués.** Écart de réconciliation : +169 → **+1 694 $**.
+
+**CE QUE J'AI COMPRIS TROP TARD.** Ajouter des ouvertures RÉ-APPARIE le FIFO : des
+fermetures déjà enregistrées changent de contrepartie. La chaîne ne s'ajoute pas au
+registre, elle le RECALCULE — sans le dire. Et la cause est en amont : NWL à 1,74× la
+quantité achetée sur 7 identifiants `LEG-…`, MAS à 1,91× sur 6. Le diagnostic le disait
+depuis le début — « le chemin d'ÉCRITURE crée deux identités ». Réparer en aval d'un writer
+qui dédouble ne peut pas converger.
+
+**DÉCISION. J'ARRÊTE.** Deux tentatives, deux dégradations. Journal restauré, laissé tel
+quel. `make reparer-journal` reste au dépôt mais ne doit plus être lancé avant que le
+dédoublement soit fermé. Aucun effet sur l'exécution : `run_live` lit le COURTIER.
+
+**RAPPEL POSÉ** pour le 23/09 : mesurer la rotation réelle (`make turnover-audit`) après
+deux semaines de cron.
+
+ADR-0117.
+
 ## Session 2026-09-09 (13ᵉ) — Le garde-fou existait, il regardait trop tard
 
 **RETOUR ARRIÈRE CONFIRMÉ.** Le journal du VPS est restauré : `réalisé +245,33 $`, au

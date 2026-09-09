@@ -2,6 +2,53 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0117 — J'arrête de recommander la réparation du journal (2026-09-09)
+
+**Contexte.** Deuxième passage de la chaîne, cette fois avec le code corrigé (ADR-0115) et
+le garde-fou de cohérence (ADR-0116). **Les deux correctifs ont fait leur travail** : les
+lots reconstitués portent des prix justes — BTC 79 499 $ le 04/09, 81 132 $ le 03/09,
+77 330 $ le 02/09, tous cohérents avec le marché — et le coût de revient reconstitué tombe
+de 83 804 $ à 16 538 $, c'est-à-dire aux seuls fills réellement non couverts. Le garde-fou
+n'a rien eu à refuser, parce qu'il n'y avait plus rien d'incohérent à écrire.
+
+**ET LE RÉSULTAT EST QUAND MÊME PIRE.**
+
+| | |
+|---|--:|
+| réalisé avant | +245,33 $ |
+| réalisé après | **−1 203,05 $** |
+| variation | **−1 448,38 $** |
+| annoncé par la chaîne (+39,98 fermetures, −262,38 doublon) | −222,40 $ |
+| **non expliqué** | **−1 225,98 $** |
+
+L'écart de réconciliation passe de +168,76 $ (état propre du matin) à **+1 693,66 $**.
+
+**CE QUE ÇA DIT, ET QUI N'EST PAS UNE HISTOIRE DE FUSION.** Une chaîne qui annonce −222 $
+et en produit −1 448 $ ne se contente pas d'écrire ce qu'elle décrit : ajouter des
+OUVERTURES ré-apparie le FIFO, et des fermetures déjà enregistrées changent de contrepartie.
+La réparation ne s'ajoute donc pas au registre, elle le RECALCULE — sans le dire.
+
+**LA CAUSE EST EN AMONT, ET LE DIAGNOSTIC LA NOMME.** NWL porte 1,74× la quantité achetée,
+MAS 1,91×, réparties sur 7 et 6 identifiants `LEG-…` distincts, tous `legacy=1`. Le
+diagnostic le lit lui-même : « un seul préfixe portant 2× = le chemin d'ÉCRITURE crée deux
+identités ». Et 0 lot ouvert sur 67 s'apparie à une vente du courtier. Le journal ne
+souffre pas d'un défaut de réparation : il souffre d'un **chemin d'écriture qui dédouble**.
+Réparer en aval d'un writer qui duplique, c'est empiler des corrections sur une base qui
+se corrompt pendant qu'on la corrige — ça ne peut pas converger.
+
+**Décision. J'ARRÊTE DE RECOMMANDER CETTE CHAÎNE.** Deux tentatives, deux dégradations de
+la réconciliation. Le journal du VPS est restauré depuis
+`journal.avant-completion-20260909-104503.db` et **laissé tel quel**. `make reparer-journal`
+reste dans le dépôt — la mécanique et les garde-fous sont justes — mais il ne doit plus
+être lancé avant que le dédoublement à l'écriture soit fermé.
+
+**CE QUE ÇA NE COÛTE PAS.** Rien à l'exécution. `run_live` lit les positions du COURTIER,
+jamais le journal. Le registre est une comptabilité, pas une commande : le robot tourne
+correctement avec un journal faux.
+
+**CE QUE ÇA COÛTE VRAIMENT.** Les statistiques du panneau. Et c'est la P0 `legacy` déjà
+ouverte, qui devient la seule chose à traiter côté journal.
+
 ## ADR-0116 — Le contrôle existait, il tournait APRÈS l'écriture (2026-09-09)
 
 **Contexte.** ADR-0115 a corrigé la cause des faux lots. Restait la question qui compte
