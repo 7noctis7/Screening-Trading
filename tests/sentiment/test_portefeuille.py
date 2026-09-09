@@ -105,7 +105,8 @@ def test_l_analyse_d_un_portefeuille_n_ecrit_RIEN(tmp_path, monkeypatch):
                   series={"AAA": _serie([100.0] * 64 + [120.0])}, fils=False)
     # le Δ a bien été CALCULÉ (sinon le test passerait pour la mauvaise raison : une
     # exception avalée n'écrit rien non plus)
-    assert out["historique_jours"] == 0 and out["rows"][0]["score_change"] == 0.0
+    assert out["historique_jours"] == 0 and "score_change" in out["rows"][0]
+    assert out["rows"][0]["score_change"] is None      # aucun passé = inconnu, pas 0,0
     assert not cible.exists(), "un portefeuille de passage a écrit dans l'historique"
 
 
@@ -141,3 +142,38 @@ def test_sans_AUCUNE_mesure_la_source_ne_credite_pas_le_momentum():
     out = analyse([{"symbol": "AAA", "weight": 1.0}], use_news=False, series={}, fils=False)
     assert "aucune mesure possible" in out["source"]
     assert out["mood_pondere"] is None and out["poids_non_mesure"] == 1.0
+
+
+def test_la_revision_NE_compare_PAS_deux_paniers_differents(tmp_path, monkeypatch):
+    """Le défaut mesuré le 09/09 : `history.mood_delta` soustrayait la moyenne du
+    portefeuille de l'utilisateur à la moyenne HISTORISÉE du robot — deux paniers
+    sans rapport. Ici l'historique ne contient QUE des titres du robot ; la révision
+    de l'utilisateur doit rester inconnue, pas prendre la valeur du robot."""
+    cible = tmp_path / "sentiment_history.json"
+    cible.write_text(json.dumps([
+        {"date": "2024-01-01", "scores": {"ROBOT1": -0.9, "ROBOT2": -0.9}},
+        {"date": "2024-01-02", "scores": {"ROBOT1": -0.9, "ROBOT2": -0.9}}]))
+    monkeypatch.setattr(H, "_F", cible)
+    out = analyse([{"symbol": "AAA", "weight": 1.0}], use_news=False,
+                  series={"AAA": _serie([100.0] * 64 + [110.0])}, fils=False)
+    assert out["mood_change"] is None, "un panier étranger a produit une révision"
+    assert out["n_revisions"] == 0
+    assert out["rows"][0]["score_change"] is None
+
+
+def test_la_revision_est_PONDEREE_par_les_poids():
+    """Chaque actif comparé à SON passé, puis pondéré comme l'humeur."""
+    rows = [{"symbol": "GROS", "disponible": True, "score_change": -0.4},
+            {"symbol": "PETIT", "disponible": True, "score_change": 0.4}]
+    from packages.sentiment.portefeuille import _revision_ponderee
+    m, n = _revision_ponderee(rows, {"GROS": 0.9, "PETIT": 0.1}, {"GROS", "PETIT"})
+    assert m == -0.32 and n == 2                 # 0,9·(−0,4) + 0,1·(+0,4)
+
+
+def test_une_ligne_sans_historique_est_EXCLUE_pas_comptee_a_zero():
+    """L'inclure à 0 diluerait la révision vers zéro et se lirait « stable »."""
+    rows = [{"symbol": "A", "disponible": True, "score_change": -0.6},
+            {"symbol": "B", "disponible": True, "score_change": None}]
+    from packages.sentiment.portefeuille import _revision_ponderee
+    m, n = _revision_ponderee(rows, {"A": 0.5, "B": 0.5}, {"A"})
+    assert m == -0.6 and n == 1                  # pas -0.3

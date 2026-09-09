@@ -164,6 +164,31 @@ def _fils(limite_marche: int = 8, limite_macro: int = 6) -> tuple[list, list]:
         return [], []
 
 
+def _revision_ponderee(rows: list[dict], poids: dict[str, float],
+                       avec_historique: set[str]) -> tuple[float | None, int]:
+    """Révision du sentiment DE CE PORTEFEUILLE : (Δ pondéré, nb de lignes comparables).
+
+    POURQUOI PAS `history.mood_delta`. Celui-ci compare la moyenne des scores reçus à
+    la moyenne des scores HISTORISÉS — or l'historique est celui du robot, sur SES
+    positions.
+    Pour un portefeuille tiers, ça soustrait deux paniers différents : mesuré le
+    09/09 sur AAPL+MSFT, il rendait −0,1979, c'est-à-dire « ces deux titres aujourd'hui,
+    moins les positions du robot les jours d'avant ». Un nombre sans référent.
+
+    Ici chaque actif est comparé à SON propre passé, puis les écarts sont pondérés comme
+    l'humeur. Les lignes sans historique sont EXCLUES et comptées : un Δ de 0 faute de
+    passé n'est pas « stable », il est inconnu — l'inclure diluerait la révision.
+    """
+    comparables = [r for r in rows
+                   if r.get("disponible") and r["symbol"] in avec_historique]
+    total = sum(poids.get(r["symbol"], 0.0) for r in comparables)
+    if not comparables or total <= 0:
+        return None, 0
+    somme = sum(poids.get(r["symbol"], 0.0) * (r.get("score_change") or 0.0)
+                for r in comparables)
+    return round(somme / total, 4), len(comparables)
+
+
 def analyse(positions: list[dict], *, use_news: bool, series: dict | None = None,
             noms: dict | None = None, secteurs: dict | None = None,
             fils: bool = True) -> dict:
@@ -181,16 +206,20 @@ def analyse(positions: list[dict], *, use_news: bool, series: dict | None = None
     h = humeur(rows, poids)
     try:                                       # lecture SEULE de l'historique
         revisions = delta({r["symbol"]: r["score"] for r in rows if r["disponible"]})
+        avec = set(revisions["avec_historique"])
         for r in rows:
-            r["score_change"] = revisions["by_symbol"].get(r["symbol"])
-        mood_change, jours = revisions["mood_delta"], revisions["history_days"]
+            r["score_change"] = (revisions["by_symbol"].get(r["symbol"])
+                                 if r["symbol"] in avec else None)
+        mood_change, n_revisions = _revision_ponderee(rows, poids, avec)
+        jours = revisions["history_days"]
     except Exception:  # noqa: BLE001
-        mood_change, jours = None, 0
+        mood_change, n_revisions, jours = None, 0, 0
     marche, macro = _fils() if fils else ([], [])
     a_des_news = any(r["n_news"] for r in rows) or bool(marche)
     return {
         "available": bool(rows), **h,
         "mood_change": mood_change, "historique_jours": jours,
+        "n_revisions": n_revisions,
         "engine": S.engine_name() if a_des_news else "momentum 63 j (repli hors-ligne)",
         # Dire « dérivé du momentum » quand AUCUN momentum n'a pu être calculé
         # attribuerait le vide à une méthode qui n'a jamais tourné.

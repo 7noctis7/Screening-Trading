@@ -2,6 +2,40 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0129 — Un Δ qui soustrayait deux paniers différents (2026-09-09)
+
+**Constat, sur la sortie réelle du VPS.** Premier appel de `/api/portfolio/sentiment` avec
+AAPL 60 % / MSFT 40 % : `mood_change: -0.1979`. Le chiffre est **sans référent**.
+`history.delta` calcule `mood_delta = moyenne(scores reçus) − moyenne(scores historisés)`.
+Les scores historisés sont ceux du **robot**, sur SES positions. Le nombre affiché disait
+donc « ces deux titres aujourd'hui, moins les positions du robot les jours d'avant ».
+
+**Pourquoi ce n'est pas un bug de `history.py`.** Pour le snapshot du robot, le panier est
+le même d'un jour à l'autre : la soustraction est légitime, et c'est l'usage pour lequel la
+fonction a été écrite. Le défaut est **ma réutilisation** de cet agrégat dans un contexte
+où le panier change. Les Δ **par actif** (`by_symbol`), eux, étaient corrects — chaque
+symbole y est comparé à son propre passé.
+
+**Décision.** `_revision_ponderee` : la révision du portefeuille est la moyenne des Δ **par
+actif**, pondérée comme l'humeur. Les lignes **sans historique sont exclues et comptées**
+(`n_revisions`), pas comptées à zéro — un Δ nul faute de passé se lit « stable » alors
+qu'il veut dire « inconnu », et l'inclure diluerait la révision vers zéro. Sans aucune
+ligne comparable, `mood_change` vaut `None` et l'infobulle dit pourquoi.
+
+**Ce que ça change à l'affichage.** Sur un portefeuille dont le robot ne détient aucune
+ligne : « — » au lieu de « −0,20 ». Sur les lignes que le robot suit, la révision devient
+enfin celle de ces lignes-là.
+
+**Garde.** Un test pose un historique ne contenant QUE des titres du robot et exige
+`mood_change is None` ; il tombe dès qu'on rebranche `mood_delta` (vérifié par sabotage).
+`history.delta` publie désormais `avec_historique` et porte un avertissement en clair sur
+la portée de `mood_delta`.
+
+**Leçon.** L'erreur n'était visible dans aucun test parce que tous mes cas partageaient un
+historique cohérent avec le portefeuille testé. C'est la **sortie réelle**, lue sur la
+machine, qui l'a montrée — le chiffre était plausible, jamais aberrant. Un agrégat repris
+d'un autre contexte doit être re-justifié dans le nouveau, pas seulement re-testé.
+
 ## ADR-0128 — Le sentiment d'un portefeuille n'est pas la moyenne de ses lignes (2026-09-09)
 
 **Contexte.** Demande : reprendre l'onglet « Sentiment & news » dans « Analyser mon

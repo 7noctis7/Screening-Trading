@@ -1,5 +1,32 @@
 # 04 — JOURNAL
 
+## Session 2026-09-09 (26ᵉ) — Le premier appel réel a montré un chiffre sans référent
+
+**Fait.** Services relancés sur le VPS (`make up`, build `ce52253`). Premier appel réel de
+`/api/portfolio/sentiment` : chemin complet vert — `couverture_news: 1.0`, 12 titres sur
+AAPL, `poids_mesure: 1.0`. **Mais `mood_change: -0.1979` était faux.**
+
+**Le défaut.** `history.mood_delta` soustrait la moyenne des scores REÇUS à la moyenne des
+scores HISTORISÉS — l'historique étant celui du robot, sur SES positions. Pour un
+portefeuille tiers, ça soustrait deux paniers sans rapport. Corrigé par
+`_revision_ponderee` : chaque actif comparé à SON propre passé, puis pondéré comme
+l'humeur ; les lignes sans historique exclues et comptées (`n_revisions`). Sans ligne
+comparable, `mood_change` vaut `None` — inconnu, pas nul (ADR-0129).
+
+**Ce que ça dit de ma méthode.** Aucun de mes tests ne l'attrapait : tous partageaient un
+historique cohérent avec le portefeuille testé. C'est la sortie réelle, lue sur la machine,
+qui l'a montrée — le chiffre était plausible, jamais aberrant. Un agrégat repris d'un autre
+contexte doit être re-justifié dans le nouveau, pas seulement re-testé.
+
+**Aussi.** Correction du `QUANT_NEWS=1` que j'avais mis en préfixe de `make start` :
+`scripts/env_quant.sh:11` le met déjà à `1`, et `svc_api.sh` le source — les news étaient
+déjà actives. Un import inutilisé (`timezone`), laissé par un correctif automatique dans
+`ce52253`, supprimé.
+
+**Mesuré.** Suite : **2 475 passés, 7 ignorés** (+3). Sabotage vérifié : rebrancher
+`mood_delta` fait tomber le nouveau test. Build Next OK. `engine: "lexique"` sur le VPS —
+FinBERT n'est pas installé, les scores viennent de la liste de mots-clés.
+
 ## Session 2026-09-09 (25ᵉ) — Le sentiment du capital, pas celui des lignes
 
 **Fait.** « Pouls du portefeuille » livré dans *Analyser mon portefeuille* : sentiment &

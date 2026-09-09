@@ -6,7 +6,7 @@ quotidien (un point par date) et on calcule l'écart au sentiment moyen récent.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 from pathlib import Path
 
 _F = Path(__file__).resolve().parents[2] / ".cache" / "sentiment_history.json"
@@ -33,16 +33,25 @@ def delta(scores: dict[str, float], window: int = 20,
     today = today or datetime.now(UTC).date().isoformat()
     prior = [h for h in _load() if h.get("date") != today][-window:]
     by_symbol: dict[str, float] = {}
+    avec_historique: list[str] = []
     for sym, sc in scores.items():
         past = [h["scores"][sym] for h in prior if sym in h.get("scores", {})]
         base = sum(past) / len(past) if past else sc
         by_symbol[sym] = round(sc - base, 4)
+        if past:
+            avec_historique.append(sym)
     cur_mood = sum(scores.values()) / len(scores) if scores else 0.0
     past_moods = [sum(h["scores"].values()) / len(h["scores"])
                   for h in prior if h.get("scores")]
     mood_base = sum(past_moods) / len(past_moods) if past_moods else cur_mood
+    # ATTENTION `mood_delta` : il compare la moyenne des scores REÇUS à la moyenne des
+    # scores HISTORISÉS, qui ne portent pas forcément sur le même panier. C'est juste
+    # pour le snapshot du robot (même univers d'un jour à l'autre) et FAUX pour un
+    # portefeuille tiers : voir `portefeuille.analyse`, qui repondère `by_symbol` —
+    # chaque actif y est comparé à SON propre passé. `avec_historique` dit lesquels en
+    # ont un ; un Δ de 0 sans historique n'est pas « stable », il est « inconnu ».
     return {"by_symbol": by_symbol, "mood_delta": round(cur_mood - mood_base, 4),
-            "history_days": len(prior)}
+            "history_days": len(prior), "avec_historique": avec_historique}
 
 
 def record_and_delta(scores: dict[str, float], window: int = 20,

@@ -161,7 +161,11 @@ export function SentimentPulse({ snapshot }: { snapshot: PortfolioSnapshot | nul
           aide="Positif : le pessimisme est sur les petites lignes. Négatif : il est sur les grosses." />
         <Metrique titre="Δ révision" valeur={data.mood_change == null ? "—" : sc(data.mood_change)}
           teinte={TEINTE(data.mood_change)}
-          aide={`Variation vs la moyenne des jours précédents (${data.historique_jours} jour(s) d'historique).`} />
+          aide={data.mood_change == null
+            ? "Aucune ligne n'a d'historique de sentiment : la révision est inconnue, pas nulle."
+            : `Moyenne pondérée des révisions par actif, chacun comparé à SON propre passé — `
+              + `${data.n_revisions} ligne(s) comparable(s) sur ${data.historique_jours} jour(s) `
+              + `d'historique. Les lignes sans passé sont exclues, pas comptées à zéro.`} />
         <Metrique titre="Capital mesuré" valeur={pc(data.poids_mesure)}
           teinte={data.poids_non_mesure > 0.15 ? "var(--warn)" : undefined}
           aide="Part du portefeuille pour laquelle un score a pu être calculé." />
