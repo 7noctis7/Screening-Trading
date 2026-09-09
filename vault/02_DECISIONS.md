@@ -2,6 +2,32 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0124 — Le banc exigeait un catalogue dont il n'a pas besoin (2026-09-09)
+
+**Constat sur le VPS.** `make banc-swing` refusait de démarrer : « Aucun univers lisible ».
+Le diagnostic corrigé le montre — `data/market.db` est PRÉSENT (220 Mo), mais
+`_db_full_universe` lit une table de MÉTADONNÉES (nom, secteur, place) qui vit dans
+`YAHOO.db` et pas dans une base OHLCV. Le banc réclamait un CATALOGUE là où il lui faut des
+symboles et des barres.
+
+**Décision.** Le banc lit d'abord `config/mobile_universe.csv` — la watchlist, versionnée,
+présente partout — et ne retombe sur le catalogue que si elle manque. La source est
+imprimée : un résultat ne se lit pas de la même façon selon l'univers mesuré. Mesurer sur ce
+que le robot TRADE vaut d'ailleurs mieux que sur tout ce qu'une base contient.
+
+**UN MESSAGE QUI NOMMAIT LA MAUVAISE CAUSE.** Sans base de prix, le banc affichait
+« 0 actif(s) mesurés · 6 écarté(s) (< 200 barres) » : il envoyait chercher un problème
+d'HISTORIQUE là où il n'y avait aucune BASE. Le cas est désormais détecté avant la boucle et
+nommé. Un message qui désigne la mauvaise cause coûte plus cher qu'un message absent —
+c'est la leçon de la journée, appliquée à mon propre outil.
+
+**VÉRIFICATION DE BOUT EN BOUT.** Sur une base de test (marche aléatoire, plomberie
+uniquement — jamais une mesure) : 16 trades, −0,500 R par trade, 12,5 % de réussite,
+DSR 0,0008, verdict **déployable NON**. C'est le comportement JUSTE sur des données sans
+signal : un banc à stop/cible qui rendrait positif sur du bruit serait truqué.
+
+**Conséquences.** 2434 tests. Le banc est prêt à tourner sur les données réelles du VPS.
+
 ## ADR-0123 — Le swing ICT ne se décide pas, il se mesure (2026-09-09)
 
 **LA QUESTION POSÉE.** « Brancher le swing » signifie quoi, et comment savoir si ça vaut le

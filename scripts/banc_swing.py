@@ -27,11 +27,29 @@ if str(ROOT) not in sys.path:
 MIN_BARRES = 200          # sous ce seuil, l'actif n'offre pas de fenêtre exploitable
 
 
-def _univers(limite: int) -> list[str]:
+def _univers(limite: int) -> tuple[list[str], str]:
+    """(symboles, source). La WATCHLIST d'abord — c'est ce que le robot trade.
+
+    L'ancienne version passait par `_db_full_universe`, qui lit une table de MÉTADONNÉES
+    (nom, secteur, place) présente dans YAHOO.db et absente de `market.db`. Sur un poste
+    qui n'a que la base OHLCV, le banc refusait donc de démarrer faute d'un CATALOGUE
+    dont il n'a pas besoin : il lui faut des symboles et des barres. Et mesurer sur
+    l'univers réellement tradé vaut mieux que sur tout ce qu'une base contient.
+    """
+    import csv
+    watchlist = ROOT / "config" / "mobile_universe.csv"
+    if watchlist.exists():
+        with watchlist.open(encoding="utf-8") as f:
+            syms = sorted({r["symbol"] for r in csv.DictReader(f)
+                           if (r.get("asset_class") or "equity") == "equity"
+                           and r.get("symbol")})
+        if syms:
+            return (syms[:limite] if limite else syms), "watchlist"
     from apps.api.snapshot import _db_full_universe
     uni = _db_full_universe() or []
-    actions = [r["symbol"] for r in uni if (r.get("asset_class") or "") == "equity"]
-    return sorted(actions)[:limite] if limite else sorted(actions)
+    syms = sorted(r["symbol"] for r in uni
+                  if (r.get("asset_class") or "") == "equity")
+    return (syms[:limite] if limite else syms), "catalogue de la base"
 
 
 def _barres(symbole: str):
@@ -74,16 +92,28 @@ def main() -> int:
     from packages.backtest.banc_swing import bilan, parcourir
     from packages.strategies.moteur_swing import MarketStructureEngine
 
-    symboles = _univers(a.n)
+    symboles, source = _univers(a.n)
     if not symboles:
-        print("⛔ Aucun univers lisible. La base de prix est-elle en place ?")
-        print("   Diagnostic : python -c \"from apps.api.snapshot import "
-              "_price_db_path; print(_price_db_path())\"")
+        print("⛔ Aucun symbole à mesurer : ni watchlist ni catalogue lisible.")
+        print("   `make watchlist` régénère config/mobile_universe.csv.")
         return 1
+
+    from apps.api.snapshot import _price_db_path
+    base = _price_db_path()
+    if base is None:
+        # « 0 mesurés, 6 écartés (< 200 barres) » enverrait chercher un problème
+        # d'historique là où il n'y a simplement AUCUNE base. Un message qui nomme la
+        # mauvaise cause coûte plus cher qu'un message absent.
+        print("⛔ Aucune base de prix branchée — rien à lire.")
+        print("   `make hf-pull` récupère YAHOO.db · `make ingest` refait market.db")
+        print("   · ou export QUANT_PRICE_DB=/chemin/vers/une/base.db")
+        return 1
+    print(f"  base de prix : {base}")
 
     moteur = MarketStructureEngine()
     tous, couverts, ignores = [], 0, 0
-    print(f"\nBanc swing ICT · {len(symboles)} actif(s) candidats\n")
+    print(f"\nBanc swing ICT · {len(symboles)} actif(s) candidats "
+          f"(source : {source})\n")
     for s in symboles:
         barres = _barres(s)
         if len(barres) < MIN_BARRES:

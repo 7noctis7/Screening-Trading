@@ -1,5 +1,21 @@
 # 04 — JOURNAL
 
+## Session 2026-09-09 (21ᵉ) — Mon banc réclamait un catalogue
+
+**LE BANC NE DÉMARRAIT PAS SUR LE VPS.** `_db_full_universe` lit une table de MÉTADONNÉES
+absente de `market.db` (base OHLCV). Le banc réclamait un CATALOGUE là où il lui faut des
+symboles et des barres. Il lit désormais `config/mobile_universe.csv` — la watchlist,
+versionnée — et imprime sa source.
+
+**ET IL NOMMAIT LA MAUVAISE CAUSE.** Sans base de prix : « 0 mesurés · 6 écartés
+(< 200 barres) », ce qui envoie chercher un problème d'historique là où il n'y a aucune
+base. Détecté avant la boucle et nommé. La leçon de la journée, appliquée à mon propre outil.
+
+**VÉRIFIÉ DE BOUT EN BOUT** sur une base de test (plomberie uniquement) : −0,500 R par
+trade, DSR 0,0008, déployable NON — le comportement juste sur du bruit.
+
+ADR-0124.
+
 ## Session 2026-09-09 (20ᵉ) — Le swing ICT ne se décide pas, il se mesure
 
 **LA BONNE QUESTION POSÉE.** « Brancher le swing » veut dire quoi, et comment savoir si ça
