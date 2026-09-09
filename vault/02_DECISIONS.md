@@ -2,6 +2,43 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0122 — Une P0 que j'avais inventée, et deux libellés qui mentaient (2026-09-09)
+
+**LA P0 `legacy` N'EXISTAIT PAS.** J'ai ouvert en P0 « le panneau montre un sous-ensemble
+favorable », d'après la ligne de `diag_journal_compte`. Vérification faite : `/api/journal`
+appelle déjà `biais_fermeture.perimetre_affiche`, qui publie **les deux périmètres chiffrés**,
+et `apps/web/app/journal/page.tsx` affiche déjà le bandeau « Périmètre affiché ≠ compte »
+avec l'affiché ET le compte. Le produit traitait le problème ; j'ai lu le diagnostic sans
+lire ce qu'il avait déjà provoqué. **La P0 est annulée**, elle n'a jamais eu lieu.
+
+**« ACTIONS DIVERSES » N'EST PAS UN SECTEUR.** C'est le dernier recours de `_sector_of` :
+une ACTION au champ `sector` vide ou hors GICS y tombe (crypto, forex, ETF, indices et
+commodités ont chacun leur branche avant). Le post-mortem l'annonçait « secteur = Actions
+diverses 0,475 > 0,4 », ce qui envoie chercher **une allocation à corriger** là où c'est
+**le champ `sector` à peupler**. `concentration_report` prend désormais `secteur_inconnu` :
+le franchissement sort sous le type `secteur inconnu`.
+
+**IL RESTE SIGNALÉ.** Requalifier n'est pas absoudre : un livre à moitié non classé est un
+vrai problème, et une concentration sectorielle NON MESURABLE est plus inquiétante qu'une
+concentration mesurée. Il change de nom, pas de gravité. Un test le fixe, un autre vérifie
+en négatif que les VRAIS secteurs ne sont pas requalifiés — sans lui, élargir la règle
+ferait passer une vraie concentration pour un défaut de données.
+
+**`market_structure` MENTAIT AUSSI.** Son statut disait « aucun appelant en production ».
+Faux : `candidats_lab` et `signal_lab` (`make labs`) l'utilisent, ainsi que `liquidite_ict`
+et `moteur_sortie`. Le lire comme du code mort conduirait à le supprimer et à casser les
+bancs. Statut `BANC_UNCALIBRATED` : hors du chemin d'exécution, mais bien appelé.
+
+**Conséquences.** 2424 tests, 4 ajoutés. Dette de câblage 1 704 → **1 479 lignes**. Le
+verrou d'appelants exige désormais les trois paramètres (`index_names`, `index_sectors`,
+`secteur_inconnu`) sur chaque appel de `snapshot.py`.
+
+**CE QUI RESTE, ET QUI N'EST PAS DU CODE.** L'îlot swing (1 374 l.) : brancher change ce que
+le robot TRADE, sur une stratégie jamais validée hors échantillon — décision de produit.
+`frictions` : son `signal_inhibe` exige un gain attendu PAR ORDRE que le rebalanceur ne
+produit pas. Les secteurs GICS manquants : une donnée à peupler, mesurable seulement sur le
+VPS. L'armement du disjoncteur : il demande des semaines d'observation, pas une décision.
+
 ## ADR-0121 — Deux courbes tracées, une seule lisible (2026-09-09)
 
 **Constat, remonté à l'usage.** Sur le graphe des positions, le S&P 500 utilisait `--warn`

@@ -18,6 +18,7 @@ def concentration_report(weights_by_name: dict[str, float],
                          index_names: set[str] | frozenset[str] | None = None,
                          max_index: float = 0.60,
                          index_sectors: set[str] | frozenset[str] | None = None,
+                         secteur_inconnu: str | None = None,
                          ) -> dict:
     """Rapport de concentration + dépassements.
 
@@ -37,6 +38,14 @@ def concentration_report(weights_by_name: dict[str, float],
             09/09 : « nom QQQ 50 % » réparé, « secteur ETF 50 % » apparu le même jour).
             Le projet sait déjà que ces libellés n'en sont pas — `_themes_section` les
             exclut de la heatmap sectorielle.
+        secteur_inconnu: libellé du seau de DERNIER RECOURS (« Actions diverses »),
+            où `_sector_of` range une action au champ `sector` vide ou hors GICS. Ce
+            n'est pas un secteur : c'est « secteur inconnu ». Un franchissement y est
+            un défaut de DONNÉES, pas une concentration — 47,5 % dans ce seau ne dit
+            pas « la moitié du livre sur un secteur » mais « la moitié du livre non
+            classée », donc une concentration sectorielle NON MESURABLE. Il reste
+            signalé (le taire ferait disparaître un vrai problème de la vue) mais
+            sous son vrai type.
     Returns:
         {hhi, effective_n, top_name, top_name_weight, breaches:[{type,label,weight,limit}]}.
     """
@@ -52,8 +61,12 @@ def concentration_report(weights_by_name: dict[str, float],
             breaches.append({"type": kind, "label": nm, "weight": round(w, 4), "limit": cap})
     idx_sec = index_sectors or set()
     for sec, w in sorted((weights_by_sector or {}).items(), key=lambda kv: -kv[1]):
-        cap, kind = ((max_index, "secteur indiciel") if sec in idx_sec
-                     else (max_sector, "secteur"))
+        if sec in idx_sec:
+            cap, kind = max_index, "secteur indiciel"
+        elif secteur_inconnu is not None and sec == secteur_inconnu:
+            cap, kind = max_sector, "secteur inconnu"
+        else:
+            cap, kind = max_sector, "secteur"
         if w > cap:
             breaches.append({"type": kind, "label": sec, "weight": round(w, 4),
                              "limit": cap})
@@ -85,16 +98,18 @@ def correlation_aware_caps(base_max_name: float, base_max_sector: float,
     return base_max_name, base_max_sector, False
 
 
-def concentration_report_adaptive(weights_by_name: dict[str, float],
-                                  weights_by_sector: dict[str, float] | None = None,
-                                  corr_report: dict | None = None,
-                                  max_name: float = 0.20, max_sector: float = 0.40,
-                                  tighten: float = 0.5,
-                                  stress_corr: float = 0.75,
-                                  index_names: set[str] | frozenset[str] | None = None,
-                                  max_index: float = 0.60,
-                                  index_sectors: set[str] | frozenset[str] | None = None
-                                  ) -> dict:
+def concentration_report_adaptive(
+        weights_by_name: dict[str, float],
+        weights_by_sector: dict[str, float] | None = None,
+        corr_report: dict | None = None,
+        max_name: float = 0.20, max_sector: float = 0.40,
+        tighten: float = 0.5,
+        stress_corr: float = 0.75,
+        index_names: set[str] | frozenset[str] | None = None,
+        max_index: float = 0.60,
+        index_sectors: set[str] | frozenset[str] | None = None,
+        secteur_inconnu: str | None = None,
+) -> dict:
     """`concentration_report` avec plafonds RESSERRÉS si breakdown de corrélation.
 
     Ferme le gap d'audit : `conditional_correlation` ne faisait que signaler ; ici il
@@ -104,7 +119,8 @@ def concentration_report_adaptive(weights_by_name: dict[str, float],
                                                tighten, stress_corr)
     rep = concentration_report(weights_by_name, weights_by_sector, mn, ms,
                                index_names=index_names, max_index=max_index,
-                               index_sectors=index_sectors)
+                               index_sectors=index_sectors,
+                               secteur_inconnu=secteur_inconnu)
     rep["tightened"] = tightened
     rep["base_max_name"] = max_name
     rep["base_max_sector"] = max_sector

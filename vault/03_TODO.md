@@ -7,7 +7,12 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
-- [ ] **P0 — Le filtre `legacy` masque un sous-ensemble FAVORABLE.** Mesuré le 09/09 sur le
+- [x] **~~P0 — filtre `legacy`~~ — ANNULÉE, elle n'a jamais existé (09/09, ADR-0122).**
+      `/api/journal` publie déjà les deux périmètres via `perimetre_affiche`, et la page
+      `/journal` affiche le bandeau « Périmètre affiché ≠ compte » avec les deux chiffres.
+      J'avais lu la ligne du diagnostic CLI sans vérifier ce qu'elle avait déjà provoqué.
+
+- [x] **~~P0 (annulée) — texte d'origine conservé~~ —** Mesuré le 09/09 sur le
       VPS : `legacy=0` (affiché) = 55 fermés, 58 % de réussite, **+2 660,29 $**. `legacy=1`
       (masqué) = 211 fermés, 51 %, **−2 414,96 $**. Total subi par le compte : 52 %,
       **+245,33 $**. Le panneau ne ment pas, il montre une PART — et l'effet sur qui le lit
@@ -82,7 +87,11 @@
       post-mortem. Corrigé + invariant verrouillé par un test qui relit `snapshot.py`.
       Aucun poids ne bouge. ADR-0113.
 
-- [ ] **P1 — « Actions diverses » n'est pas un secteur, c'est « secteur inconnu ».**
+- [x] **Libellé corrigé (09/09, ADR-0122) : « Actions diverses » sort sous le type
+      `secteur inconnu`.** Reste la DONNÉE à peupler — mesurable sur le VPS seulement :
+      `make list-db` dit combien d'actions ont un champ `sector` vide.
+
+- [x] **~~P1 — « Actions diverses » n'est pas un secteur~~ —**
       `_sector_of` y range en dernier recours toute ACTION dont le champ secteur est vide ou
       hors GICS (crypto/forex/ETF/indices/commodités ont leur branche avant). Les 47,5 %
       signalés ne disent donc pas « la moitié du livre sur un secteur » mais « la moitié du

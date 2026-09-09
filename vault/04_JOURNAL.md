@@ -1,5 +1,23 @@
 # 04 — JOURNAL
 
+## Session 2026-09-09 (19ᵉ) — Une P0 que j'avais inventée
+
+**J'AI OUVERT UNE P0 QUI N'EXISTAIT PAS.** « Le panneau montre un sous-ensemble favorable » :
+j'avais lu la ligne de `diag_journal_compte` sans vérifier ce qu'elle avait déjà provoqué.
+`/api/journal` publie les deux périmètres depuis `perimetre_affiche`, et `/journal` affiche
+le bandeau « Périmètre affiché ≠ compte » avec les deux chiffres. Annulée.
+
+**DEUX LIBELLÉS QUI MENTAIENT, EUX, SONT CORRIGÉS.** « Actions diverses » n'est pas un
+secteur mais le dernier recours de `_sector_of` : le franchissement sort désormais sous le
+type `secteur inconnu`, ce qui envoie chercher le champ `sector` à peupler et non une
+allocation à corriger. Il RESTE signalé — un livre à moitié non classé est un vrai problème,
+et une concentration non mesurable est plus inquiétante qu'une concentration mesurée.
+
+Et `market_structure` affirmait « aucun appelant en production » alors que `make labs`
+l'utilise : le lire comme du code mort aurait conduit à le supprimer et à casser les bancs.
+
+**2424 tests passés, 4 ajoutés.** Dette de câblage 1 704 → 1 479. ADR-0122.
+
 ## Session 2026-09-09 (18ᵉ) — Deux courbes tracées, une seule lisible
 
 **REMONTÉ À L'USAGE.** S&P 500 en `--warn` (#d97706) et Bitcoin en #f7931a : deux oranges.

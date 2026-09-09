@@ -194,6 +194,11 @@ def contient_des_prix_reels(mode: str | None) -> bool:
 # 50 % » apparu dans le post-mortem du soir, même actif, même poids, autre libellé.
 # Forex/Commodités/Crypto n'y sont PAS : là, 40 % sur une classe est une vraie limite.
 _SECTEURS_VEHICULE = frozenset({"ETF", "Indices"})
+# Le seau de DERNIER RECOURS de `_sector_of` : une ACTION au champ `sector` vide ou
+# hors GICS y tombe. Le nommer ici permet aux limites de dire « secteur inconnu » au
+# lieu de « concentration sectorielle » — ce qui envoie chercher au bon endroit :
+# le champ `sector` à peupler, pas une allocation à corriger.
+_SECTEUR_INCONNU = "Actions diverses"
 
 
 def _sector_of(m: dict) -> str:
@@ -1986,15 +1991,18 @@ def build_snapshot(seed: int = 7) -> dict:
             limits = concentration_report_adaptive(w_by_name, w_by_sector, _corr_cond,
                                                    max_name=0.20, max_sector=0.40,
                                                    index_names=_index_names,
-                                                   index_sectors=_SECTEURS_VEHICULE)
+                                                   index_sectors=_SECTEURS_VEHICULE,
+                                                   secteur_inconnu=_SECTEUR_INCONNU)
         else:
             limits = concentration_report(w_by_name, w_by_sector, max_name=0.20,
                                           max_sector=0.40, index_names=_index_names,
-                                          index_sectors=_SECTEURS_VEHICULE)
+                                          index_sectors=_SECTEURS_VEHICULE,
+                                          secteur_inconnu=_SECTEUR_INCONNU)
     except Exception:  # noqa: BLE001 — repli sur le rapport fixe
         limits = concentration_report(w_by_name, w_by_sector, max_name=0.20,
                                       max_sector=0.40, index_names=_index_names,
-                                      index_sectors=_SECTEURS_VEHICULE)
+                                      index_sectors=_SECTEURS_VEHICULE,
+                                      secteur_inconnu=_SECTEUR_INCONNU)
 
     # --- STRESS-TESTS MACRO + COUVERTURE (axe 11) ---
     from packages.portfolio.scenarios import hedge_suggestion, scenario_analysis
@@ -2658,7 +2666,8 @@ def build_snapshot(seed: int = 7) -> dict:
             _pidx = {r["symbol"] for r in _pr if (r.get("asset_class") or "") == "etf"}
             _plim = concentration_report(_pwn, _pws, max_name=0.20, max_sector=0.40,
                                          index_names=_pidx,
-                                         index_sectors=_SECTEURS_VEHICULE)
+                                         index_sectors=_SECTEURS_VEHICULE,
+                                         secteur_inconnu=_SECTEUR_INCONNU)
             _pstress = {"scenarios": scenario_analysis(_pwc), "hedge": hedge_suggestion(_pwc, target_max_loss=-0.15)}
             _pagg = {**PL.metrics_payload(_peq), **_prel, **_prm, **_pmc}
             _port_payload = {**_pcomp, "metrics": PL.metrics_payload(_peq),
