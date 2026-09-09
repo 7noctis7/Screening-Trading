@@ -7,6 +7,24 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+- [ ] **P0 — Le filtre `legacy` masque un sous-ensemble FAVORABLE.** Mesuré le 09/09 sur le
+      VPS : `legacy=0` (affiché) = 55 fermés, 58 % de réussite, **+2 660,29 $**. `legacy=1`
+      (masqué) = 211 fermés, 51 %, **−2 414,96 $**. Total subi par le compte : 52 %,
+      **+245,33 $**. Le panneau ne ment pas, il montre une PART — et l'effet sur qui le lit
+      est le même. Deux issues : publier les deux chiffres côte à côte, ou justifier
+      l'exclusion là où elle s'affiche. Ne pas laisser un chiffre flatteur sans son total.
+
+- [ ] **P1 — Réparation du journal : mesurée, pas encore appliquée (09/09).** La simulation
+      donne : 18 ouvertures à reconstituer (83 804 $ de coût de revient), 23 fermetures
+      appariées à un fill réel (+666,76 $), 8 doublons pour +915,37 $ de réalisé compté
+      deux fois, 16 lots qu'aucune vente ne justifie et qui RESTENT ouverts. QQQ : 96,78
+      unités au journal contre 60,50 au courtier. Réconciliation d'ensemble saine — écart
+      +168,76 $ sur +990,08 $, soit `latent(début)`. Reste à lancer avec `--appliquer`.
+
+- [ ] **P2 — `models/ml_*.pkl` en mode 664 sur le VPS.** `safe_pickle` le signale à chaque
+      chargement : inscriptible par d'autres utilisateurs. Le garde-fou fonctionne ; la
+      permission reste à resserrer (`chmod 600`). Signalé le 09/09.
+
 - [x] **P0 « QQQ 50 % vs plafond 20 % » — FERMÉE, ce n'était pas un arbitrage (2026-09-09).**
       Le projet avait tranché le 06/07 : un tracker relève de `max_index` (60 %), pas de
       `max_name` (20 %). `index_names` étant optionnel, le site d'appel du portefeuille

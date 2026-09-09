@@ -1,5 +1,37 @@
 # 04 — JOURNAL
 
+## Session 2026-09-09 (11ᵉ) — Mon correctif déplaçait le défaut
+
+**CE QUE LE VPS A MONTRÉ.** Le post-mortem du soir : `n_breaches` passé de 3 à 2, la ligne
+« nom QQQ 50 % > 20 % » disparue — mon correctif du matin marchait. Et, à sa place,
+« **secteur ETF 50 % > 40 %** ». Même actif, même poids, autre libellé. J'avais bouché l'axe
+des noms et laissé celui des secteurs ouvert.
+
+**CORRIGÉ AUX QUATRE SITES.** `index_sectors` applique `max_index` aux libellés de véhicule.
+Le code savait déjà qu'« ETF » et « Indices » ne sont pas des secteurs — `_themes_section`
+les exclut de la heatmap — mais cette connaissance n'était pas branchée sur les limites.
+
+**GARDE-FOU CONTRE MON PROPRE CORRECTIF.** Un test NÉGATIF vérifie que Forex, Commodités et
+Crypto gardent le plafond sectoriel à 40 %. Requalifier est utile ; requalifier trop
+désarmerait la limite sans que rien ne le dise.
+
+**LE JOURNAL, MESURÉ (simulation, rien écrit).** Le compte est bien plus sain que le
+registre : écart de réconciliation **+168,76 $** sur +990,08 $, et le script explique que
+c'est `latent(début)`, pas une anomalie. Restent, chiffrés : 21 lots ouverts sur des titres
+que le courtier ne détient plus ; QQQ à **96,78 unités au journal contre 60,50 au courtier**
+(+36,28 fantômes ≈ 26 000 $, ce qui recoupe l'estimation d'ADR-0109) ; 8 doublons de
+fermeture pour **+915,37 $** de réalisé compté deux fois ; 18 achats sans prix de revient.
+
+**LA DÉCOUVERTE LA PLUS GÊNANTE.** Le filtre `legacy` masque **234 lots et −2 414,96 $** de
+réalisé. Le panneau affiche 58 % de réussite et +2 660 $ ; le compte a subi 52 % et
++245,33 $. Le journal ne ment pas — il montre un sous-ensemble FAVORABLE, ce qui produit le
+même effet sur qui le lit. Non voulu, réel, et à trancher.
+
+**AUSSI.** `safe_pickle` signale `models/ml_*.pkl` en mode 664 — inscriptible par d'autres
+utilisateurs sur le VPS. Le garde-fou fait son travail ; la permission reste à resserrer.
+
+**2386 tests passés, 3 ajoutés.** ADR-0114.
+
 ## Session 2026-09-09 (10ᵉ) — Je proposais un arbitrage ; le code avait déjà tranché
 
 **CE QUE J'AI EU FAUX.** J'ai soumis à l'utilisateur un choix entre « reclasser les trackers

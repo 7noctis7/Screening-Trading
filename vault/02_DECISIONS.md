@@ -2,6 +2,45 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0114 — Boucher un axe et laisser l'autre, ce n'est pas corriger (2026-09-09)
+
+**Contexte.** ADR-0113 a fait disparaître « nom QQQ 50 % > 20 % » du post-mortem. Le
+passage du soir sur le VPS a publié, le même jour, sur le même actif et le même poids :
+« **secteur ETF 50 % > 40 %** ». Le franchissement n'avait pas été réparé, il avait changé
+d'axe.
+
+**Pourquoi il repasse.** `_sector_of` renvoie « ETF » sur la CLASSE D'ACTIF, avant même de
+regarder le GICS. Le seau « ETF » n'est donc pas un secteur : c'est le même véhicule sous un
+autre libellé. `index_names` neutralise le plafond de NOM ; rien ne neutralisait le plafond
+de SECTEUR. Un look-through qui s'arrête à un seul axe ne fait pas de look-through.
+
+**Ce que le projet savait déjà.** `_themes_section` exclut littéralement `{"Forex",
+"Indices", "ETF", "Commodités"}` de la heatmap sectorielle — le code sait que ces libellés
+ne sont pas des secteurs. La connaissance était présente ; elle n'était pas branchée sur les
+limites.
+
+**Décision.** `concentration_report` prend `index_sectors` : ces libellés reçoivent
+`max_index` (60 %) au lieu de `max_sector` (40 %), et leur franchissement porte le type
+`secteur indiciel`. `_SECTEURS_VEHICULE = {"ETF", "Indices"}` est passé aux **quatre** sites
+d'appel de `snapshot.py`.
+
+**PÉRIMÈTRE STRICT, et un test négatif pour le tenir.** Forex, Commodités et Crypto ne sont
+PAS requalifiés : ce sont des classes d'actifs, et 45 % sur l'une d'elles est une vraie
+concentration. Un test le vérifie explicitement — sans lui, élargir `index_sectors` « pour
+faire propre » désarmerait la limite en silence, et personne ne le verrait.
+
+**Le verrou couvre les deux paramètres.** Le test qui relit `snapshot.py` exige désormais
+`index_names` ET `index_sectors` sur chaque appel. Sabotage vérifié sur le nouveau
+paramètre : retiré → échec, remis → succès.
+
+**Ce que ça ne règle pas.** « Actions diverses 47,5 % » reste. Le carnet du post-mortem en
+nomme les membres — TRV, TMO, THC, VZ, TEN, VLO, STT — tous des grandes capitalisations
+dont le secteur GICS est parfaitement connu. Ce n'est donc pas une requalification qu'il
+faut, c'est le champ `sector` à peupler. Défaut de données confirmé par la mesure, P1
+maintenue.
+
+**Conséquences.** 2386 tests, 3 ajoutés. Aucun poids ne bouge, ici non plus.
+
 ## ADR-0113 — QQQ à 50 % n'était pas un arbitrage : un appelant avait perdu la règle (2026-09-09)
 
 **Contexte.** J'ai présenté à l'utilisateur le franchissement « QQQ 50 % contre un plafond

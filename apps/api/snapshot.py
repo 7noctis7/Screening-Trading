@@ -187,6 +187,15 @@ def contient_des_prix_reels(mode: str | None) -> bool:
     return bool(mode) and not str(mode).startswith("synthetic")
 
 
+# « ETF » et « Indices » ne sont pas des secteurs, ce sont des VÉHICULES : `_sector_of`
+# les renvoie sur la classe d'actif, avant même de regarder le GICS. Leur appliquer le
+# plafond SECTORIEL refait, un cran plus haut, l'erreur que `index_names` corrige sur
+# l'axe des noms — mesuré le 09/09 : « nom QQQ 50 % » réparé le matin, « secteur ETF
+# 50 % » apparu dans le post-mortem du soir, même actif, même poids, autre libellé.
+# Forex/Commodités/Crypto n'y sont PAS : là, 40 % sur une classe est une vraie limite.
+_SECTEURS_VEHICULE = frozenset({"ETF", "Indices"})
+
+
 def _sector_of(m: dict) -> str:
     """Secteur/thème d'un instrument (cohérent entre génération de données et heatmap)."""
     ac = m.get("asset_class")
@@ -1976,13 +1985,16 @@ def build_snapshot(seed: int = 7) -> dict:
             _corr_cond = conditional_correlation(_aligned, _proxy)
             limits = concentration_report_adaptive(w_by_name, w_by_sector, _corr_cond,
                                                    max_name=0.20, max_sector=0.40,
-                                                   index_names=_index_names)
+                                                   index_names=_index_names,
+                                                   index_sectors=_SECTEURS_VEHICULE)
         else:
             limits = concentration_report(w_by_name, w_by_sector, max_name=0.20,
-                                          max_sector=0.40, index_names=_index_names)
+                                          max_sector=0.40, index_names=_index_names,
+                                          index_sectors=_SECTEURS_VEHICULE)
     except Exception:  # noqa: BLE001 — repli sur le rapport fixe
         limits = concentration_report(w_by_name, w_by_sector, max_name=0.20,
-                                      max_sector=0.40, index_names=_index_names)
+                                      max_sector=0.40, index_names=_index_names,
+                                      index_sectors=_SECTEURS_VEHICULE)
 
     # --- STRESS-TESTS MACRO + COUVERTURE (axe 11) ---
     from packages.portfolio.scenarios import hedge_suggestion, scenario_analysis
@@ -2645,7 +2657,8 @@ def build_snapshot(seed: int = 7) -> dict:
             # publié tous les jours sur un cœur core-satellite parfaitement conforme.
             _pidx = {r["symbol"] for r in _pr if (r.get("asset_class") or "") == "etf"}
             _plim = concentration_report(_pwn, _pws, max_name=0.20, max_sector=0.40,
-                                         index_names=_pidx)
+                                         index_names=_pidx,
+                                         index_sectors=_SECTEURS_VEHICULE)
             _pstress = {"scenarios": scenario_analysis(_pwc), "hedge": hedge_suggestion(_pwc, target_max_loss=-0.15)}
             _pagg = {**PL.metrics_payload(_peq), **_prel, **_prm, **_pmc}
             _port_payload = {**_pcomp, "metrics": PL.metrics_payload(_peq),
