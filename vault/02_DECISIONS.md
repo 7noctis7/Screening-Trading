@@ -2,6 +2,51 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0125 — Écrire la sortie avant l'entrée (2026-09-09)
+
+**Origine.** La seule idée reprise d'un rapport concurrent : une section « qu'est-ce qui
+invaliderait cette analyse ? ». Chez eux, le titre existe et **la section est vide**. La
+question est bonne ; la réponse manquait.
+
+**CE QUE CE N'EST PAS.** Pas un contre-argumentaire. Un texte qui plaide le camp adverse
+produit deux argumentaires convaincants et aucune décision — le rapport cité affichait un
+haussier et un baissier à ~50 % de confiance sur le même titre, avec des cibles de 50 $ à
+140 $. Ce n'est pas de l'information, c'est de la mise en scène du doute.
+
+**CE QUE C'EST.** Des FAITS MESURABLES qui, s'ils se produisent, ferment la position.
+Chacun porte sa valeur actuelle, son seuil et la distance relative qui les sépare — donc se
+vérifie le lendemain matin sur les cours, sans relire l'analyse.
+
+**TROIS RÈGLES.**
+
+1. **Un critère non calculable n'est pas publié.** Pas de « si les fondamentaux se
+   dégradent » : soit la donnée existe et le seuil est chiffré, soit le critère n'existe
+   pas. Le mandat données-réelles, appliqué à la SORTIE.
+2. **Un critère déjà franchi invalide la thèse, et le dit** — en tête de section, en
+   `[!danger]`. Sans cette règle, on publierait de beaux critères sous une recommandation
+   qu'ils contredisent déjà : le défaut exact du rapport cité, dont le gestionnaire de
+   risque REFUSE pendant que l'en-tête affiche « BULLISH 90 % ».
+3. **Le sens dépend de la recommandation.** Un critère de sortie d'achat n'est pas celui
+   d'une vente ; un test négatif le vérifie, car des critères inversés déclencheraient à
+   l'envers de façon parfaitement plausible. Sur une position neutre, la section se tait
+   plutôt que d'inventer une thèse à invalider.
+
+**AUCUNE DONNÉE NOUVELLE.** Le stop et le pire drawdown viennent de `risk_block`, la MM200
+du bloc technique, ROCE et WACC du DCF, la croissance du CA des états financiers. Un critère
+qui exigerait une source supplémentaire ne serait pas vérifiable les jours où cette source
+manque — donc pas un critère.
+
+**UN DÉTAIL QUI COMPTE.** `technical` publie l'ÉCART à la MM200, pas son niveau. On remonte
+au niveau avant de comparer, sinon on confronterait un prix à un pourcentage — une erreur
+qui passerait inaperçue parce que le résultat resterait un nombre.
+
+**PLACEMENT.** Juste après le bloc de risque, pas en fin de note : une sortie qu'il faut
+aller chercher n'est pas une sortie.
+
+**Conséquences.** 2446 tests, 12 ajoutés. Rendu Markdown (coffre Obsidian) et HTML.
+`falsification` est une clé de `build_company_report` : un rendu qui ne trouverait rien à
+afficher rendrait le calcul inutile, un test bout en bout le fixe.
+
 ## ADR-0124 — Le banc exigeait un catalogue dont il n'a pas besoin (2026-09-09)
 
 **Constat sur le VPS.** `make banc-swing` refusait de démarrer : « Aucun univers lisible ».

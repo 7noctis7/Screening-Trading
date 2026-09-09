@@ -1,5 +1,22 @@
 # 04 — JOURNAL
 
+## Session 2026-09-09 (22ᵉ) — Écrire la sortie avant l'entrée
+
+**LIVRÉ.** Section « ce qui invaliderait cette thèse » dans les notes d'analyse — Markdown
+(coffre) et HTML. Ce n'est PAS un bear case : ce sont des faits mesurables, chacun avec sa
+valeur actuelle, son seuil et la distance relative. Un critère qui ne se calcule pas n'est
+pas publié ; un critère déjà franchi invalide la note et le dit en `[!danger]`.
+
+**AUCUNE DONNÉE NOUVELLE.** Stop et pire drawdown depuis `risk_block`, MM200 depuis le bloc
+technique, ROCE/WACC depuis le DCF. Un critère qui exigerait une source de plus ne serait
+pas vérifiable les jours où elle manque.
+
+**LE PIÈGE ÉVITÉ.** `technical` publie l'ÉCART à la MM200, pas son niveau : on remonte au
+niveau avant de comparer, sinon on confronte un prix à un pourcentage — et le résultat reste
+un nombre, donc l'erreur passe.
+
+**2446 tests passés, 12 ajoutés.** ADR-0125.
+
 ## Session 2026-09-09 (21ᵉ) — Mon banc réclamait un catalogue
 
 **LE BANC NE DÉMARRAIT PAS SUR LE VPS.** `_db_full_universe` lit une table de MÉTADONNÉES
