@@ -2638,7 +2638,14 @@ def build_snapshot(seed: int = 7) -> dict:
             for r in _pr:
                 _pws[r["sector"]] = _pws.get(r["sector"], 0.0) + r["current_value"]/_pt
                 _pwc[r["asset_class"]] = _pwc.get(r["asset_class"], 0.0) + r["current_value"]/_pt
-            _plim = concentration_report(_pwn, _pws, max_name=0.20, max_sector=0.40)
+            # MÊME RÈGLE QUE LE TABLEAU DE BORD (l. 1928) : un tracker indiciel large
+            # n'est pas un risque d'émetteur unique. Ce site d'appel n'avait jamais reçu
+            # le correctif d'audit du 06/07 — et c'est LUI que lit le post-mortem
+            # (incident_note lit portfolio.analysis.limits), d'où « QQQ 50 % > 20 % »
+            # publié tous les jours sur un cœur core-satellite parfaitement conforme.
+            _pidx = {r["symbol"] for r in _pr if (r.get("asset_class") or "") == "etf"}
+            _plim = concentration_report(_pwn, _pws, max_name=0.20, max_sector=0.40,
+                                         index_names=_pidx)
             _pstress = {"scenarios": scenario_analysis(_pwc), "hedge": hedge_suggestion(_pwc, target_max_loss=-0.15)}
             _pagg = {**PL.metrics_payload(_peq), **_prel, **_prm, **_pmc}
             _port_payload = {**_pcomp, "metrics": PL.metrics_payload(_peq),

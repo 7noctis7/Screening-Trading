@@ -1,5 +1,31 @@
 # 04 — JOURNAL
 
+## Session 2026-09-09 (10ᵉ) — Je proposais un arbitrage ; le code avait déjà tranché
+
+**CE QUE J'AI EU FAUX.** J'ai soumis à l'utilisateur un choix entre « reclasser les trackers
+sous `max_index` » et « plafonner le cœur à 20 % ». Il n'y avait pas de choix : `limits.py`
+porte `index_names` + `max_index=0.60` depuis le 06/07, la raison est écrite dans le
+docstring (« un tracker n'est pas un risque d'émetteur unique »), et un test la vérifiait
+déjà. J'ai présenté comme une décision à prendre une décision déjà prise et écrite.
+
+**LA VRAIE CAUSE, TROUVÉE EN LISANT LES APPELANTS.** `index_names` est optionnel. Le rapport
+du tableau de bord le passe ; celui du portefeuille preset non. Le post-mortem lit le
+SECOND. Un cœur conforme était donc signalé en franchissement tous les jours d'un côté, et
+silencieux de l'autre. Le signal à repérer n'était pas le chiffre : c'était que deux
+rapports du même portefeuille, le même jour, ne disaient pas la même chose.
+
+**CORRIGÉ + VERROUILLÉ.** Le site preset déclare ses trackers. Un test relit `snapshot.py`
+et échoue si un appel omet `index_names` — sabotage vérifié dans les deux sens. Aucun poids
+ne bouge : le franchissement disparaît parce qu'il n'existait pas.
+
+**ET LE SECOND FRANCHISSEMENT EST D'UNE AUTRE NATURE.** « Actions diverses 47,5 % » n'est pas
+un secteur : c'est le seau de DERNIER RECOURS de `_sector_of` pour une action sans secteur
+GICS. Donc pas « la moitié du livre sur un secteur » mais « la moitié du livre non classée ».
+La concentration sectorielle n'est pas franchie, elle est NON MESURABLE. Défaut de données.
+Ouvert en P1 — à mesurer sur le VPS, pas ici : la base réelle est absente du conteneur.
+
+**2383 tests passés, 2 ajoutés.** ADR-0113.
+
 ## Session 2026-09-09 (9ᵉ) — Douze décisions datées de demain
 
 **CE QUE J'AI CASSÉ.** Les ADR-0100 à 0111, l'en-tête de séance et un enregistrement du

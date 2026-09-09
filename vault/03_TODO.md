@@ -7,6 +7,22 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+- [x] **P0 « QQQ 50 % vs plafond 20 % » — FERMÉE, ce n'était pas un arbitrage (2026-09-09).**
+      Le projet avait tranché le 06/07 : un tracker relève de `max_index` (60 %), pas de
+      `max_name` (20 %). `index_names` étant optionnel, le site d'appel du portefeuille
+      preset (`snapshot.py` l. 2641) ne le passait pas — et c'est celui que lit le
+      post-mortem. Corrigé + invariant verrouillé par un test qui relit `snapshot.py`.
+      Aucun poids ne bouge. ADR-0113.
+
+- [ ] **P1 — « Actions diverses » n'est pas un secteur, c'est « secteur inconnu ».**
+      `_sector_of` y range en dernier recours toute ACTION dont le champ secteur est vide ou
+      hors GICS (crypto/forex/ETF/indices/commodités ont leur branche avant). Les 47,5 %
+      signalés ne disent donc pas « la moitié du livre sur un secteur » mais « la moitié du
+      livre non classée » : la concentration sectorielle est NON MESURABLE, pas franchie.
+      À faire sur le VPS : lister ce que contient le seau (`make list-db` donne les secteurs
+      de YAHOO.db), combler les secteurs manquants, PUIS relire la limite. Tant que le seau
+      est gros, le plafond 40 % ne mesure rien — et le lever sans classer serait pire.
+
 - [x] **Horodatage du vault sous contrôle — FERMÉ (2026-09-09).** Douze ADR (0100→0111),
       l'en-tête de séance et un enregistrement d'`hypotheses.jsonl` étaient datés du
       2026-09-10 alors qu'on était le 09. Corrigés, et `make vault-lint` sort désormais en

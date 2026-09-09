@@ -2,6 +2,50 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0113 — QQQ à 50 % n'était pas un arbitrage : un appelant avait perdu la règle (2026-09-09)
+
+**Contexte.** J'ai présenté à l'utilisateur le franchissement « QQQ 50 % contre un plafond
+de nom à 20 % » comme un ARBITRAGE entre deux options : reclasser les trackers sous
+`max_index`, ou plafonner le cœur sous 20 %. C'était faux. Le projet avait déjà tranché.
+
+**CE QUE LE CODE DIT DÉJÀ.** `packages/risk/limits.py` porte le paramètre `index_names` et
+son plafond `max_index=0.60`, documentés mot pour mot : « Un tracker n'est pas un risque
+d'émetteur unique (look-through, esprit UCITS) → plafond dédié. Fix audit 06/07 : le cœur
+QQQ déclenchait à tort la limite « nom » 20 % → n_breaches=2 permanent, alarme devenue
+bruit. » Un test le vérifiait déjà — `test_index_vehicle_uses_dedicated_cap`.
+
+**LA VRAIE CAUSE.** `index_names` est OPTIONNEL, donc oubliable. Deux rapports de
+concentration coexistent dans `snapshot.py` : celui du tableau de bord (l. 1928) le passait,
+celui du portefeuille preset (l. 2641) non. Et c'est le SECOND que lit le post-mortem —
+`incident_note` va chercher `portfolio.analysis.limits`. D'où un franchissement publié tous
+les jours sur un cœur core-satellite conforme, pendant que le tableau de bord ne signalait
+rien. Deux verdicts, même portefeuille, même journée : c'est ce désaccord qui aurait dû
+alerter, pas le chiffre.
+
+**Décision.** Le site preset déclare ses véhicules indiciels, exactement comme le tableau
+de bord. Et l'invariant est verrouillé à la source : un test relit `snapshot.py` et échoue
+si un appel au rapport de concentration omet `index_names`. Vérifié par sabotage — le
+paramètre retiré fait tomber le test, remis le fait passer. Le plafond indiciel RESTE un
+plafond : à 65 %, le tracker franchit `max_index` et alerte.
+
+**CE QUE JE N'AI PAS FAIT, ET POURQUOI.** `decision_journal.py` appelle aussi sans
+`index_names`, et je l'ai laissé : il note des candidats de SCREENING, du stock-picking, où
+le plafond de nom à 20 % est le bon. Changer là serait appliquer une symétrie plutôt qu'une
+règle.
+
+**LE SECOND FRANCHISSEMENT N'EST PAS CE QU'IL PARAÎT.** « Secteur Actions diverses 47,5 % >
+40 % » : `_sector_of` renvoie « Actions diverses » en DERNIER RECOURS —
+`_GICS_MAP.get(sec, "Actions diverses")` — pour une ACTION dont le champ secteur est vide ou
+hors GICS. Crypto, forex, ETF, indices, commodités ont chacun leur branche avant. Ce n'est
+donc pas un secteur : c'est « secteur inconnu ». 47,5 % ne dit pas « la moitié du livre sur
+un secteur », mais « la moitié du livre non classée » — et donc une concentration
+sectorielle NON MESURABLE, pas une concentration constatée. Défaut de données, pas
+d'allocation. Non corrigé ici : la composition du seau demande la base réelle, absente de ce
+conteneur. Ouvert en P1.
+
+**Conséquences.** 2383 tests, 2 ajoutés. Le franchissement de nom disparaît des post-mortem
+sans qu'aucun poids ne bouge — parce qu'il n'existait pas.
+
 ## ADR-0112 — Douze décisions datées d'un jour qui n'existait pas encore (2026-09-09)
 
 **Contexte.** Les ADR-0100 à 0111, l'en-tête de séance du journal et un enregistrement du
