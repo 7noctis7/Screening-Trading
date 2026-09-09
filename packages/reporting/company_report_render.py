@@ -617,6 +617,24 @@ def company_report_html(r: dict[str, Any], theme: str = "dark") -> str:
             ("Stop suggéré (~2σ hebdo)", _pct(rk.get("suggested_stop")), _C["warn"]),
         ]))
 
+    # CE QUI INVALIDERAIT LA THÈSE — placé JUSTE APRÈS le risque, jamais en fin de
+    # note : une sortie qu'il faut chercher n'est pas une sortie.
+    falsif_card = ""
+    fal = r.get("falsification") or {}
+    if fal.get("applicable"):
+        lignes = []
+        for c in fal.get("criteres", []):
+            d = c.get("distance_relative")
+            etat = ("⛔ FRANCHI" if c["declenche"]
+                    else (f"à {abs(d):.1%}" if d is not None else "—"))
+            lignes.append((c["critere"], f'{_num(c["actuel"])} → {_num(c["seuil"])}'
+                           f' · {etat}',
+                           _C["neg"] if c["declenche"] else _C["fg"]))
+        alerte = (f'<div style="color:{_C["neg"]};font-weight:600;margin-bottom:8px">'
+                  f'{fal["motif"]}</div>' if fal.get("invalidee") else "")
+        falsif_card = _card("Ce qui invaliderait cette thèse",
+                            alerte + _kv_grid(lignes))
+
     # Actionnariat — top 5 institutionnels + insiders (barres horizontales)
     holders_card = ""
     hd = r.get("holders") or {}
@@ -677,6 +695,7 @@ Rapport effectué le {_fr_date(r['as_of'])}</div>
 {sector_card}
 {_card("Qualité & solidité", qual)}
 {risk_card}
+{falsif_card}
 {tech_card}
 {macro_card}
 {earn_card}
@@ -1149,6 +1168,35 @@ def _wrap(text: str, width: int) -> list[str]:
     return lines[:8]
 
 
+def _falsification_md(fal: dict[str, Any]) -> list[str]:
+    """Section « ce qui invaliderait cette thèse » en Markdown.
+
+    Le TABLEAU d'abord, la prose jamais : chaque ligne porte une valeur, un seuil et
+    la distance qui les sépare, donc se vérifie demain matin sans relire la note. Un
+    critère déjà franchi ouvre la section par un avertissement — sinon on publierait
+    de beaux critères sous une recommandation qu'ils contredisent.
+    """
+    if not fal:
+        return []
+    if not fal.get("applicable"):
+        return ["", "## Ce qui invaliderait cette thèse", "",
+                f"> [!note] {fal.get('motif', '—')}"]
+    out = ["", "## Ce qui invaliderait cette thèse", ""]
+    if fal.get("invalidee"):
+        out += [f"> [!danger] **{fal['motif']}.** Ne pas prendre la position sur "
+                "cette note.", ""]
+    out += ["| Critère | Actuel | Seuil | État |", "|---|--:|--:|---|"]
+    for c in fal.get("criteres", []):
+        d = c.get("distance_relative")
+        etat = ("⛔ **FRANCHI**" if c["declenche"]
+                else (f"à {abs(d):.1%}" if d is not None else "—"))
+        out.append(f"| {c['critere']} | {_num(c['actuel'])} | "
+                   f"{_num(c['seuil'])} | {etat} |")
+    out += ["", "<small>Chaque critère est OBSERVABLE : il se vérifie sur les cours "
+            "du jour, sans relire l'analyse.</small>"]
+    return out
+
+
 def company_report_markdown(r: dict[str, Any]) -> str:
     """Rendu Markdown Obsidian de la note — concis, fort impact, front matter Dataview + wikilinks.
     Quality over quantity : uniquement les chiffres décisifs. Réutilisable dans le coffre."""
@@ -1181,6 +1229,7 @@ def company_report_markdown(r: dict[str, Any]) -> str:
         body += ["", "## Forces", "", *[f"- ✅ {s}" for s in v["strengths"][:4]]]
     if v.get("watch"):
         body += ["", "## Vigilance", "", *[f"- ⚠️ {s}" for s in v["watch"][:4]]]
+    body += _falsification_md(r.get("falsification") or {})
     body += ["", f"<small>Sources gratuites · Vernimmen & Damodaran · maj {r.get('as_of')}.</small>"]
     return "\n".join(fm + body)
 

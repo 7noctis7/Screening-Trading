@@ -42,8 +42,12 @@ def _zigzag(n: int, pente: float, base: float = 100.0, ampl: float = 4.0,
     return out
 
 
-def test_le_module_demarre_en_SHADOW():
-    assert ms.STATUT == "SHADOW_UNCALIBRATED"
+def test_le_module_declare_son_statut_REEL():
+    """« Aucun appelant en production » était FAUX : `candidats_lab` et `signal_lab`
+    (`make labs`) l'utilisent, ainsi que `liquidite_ict` et `moteur_sortie`. Le lire
+    comme du code mort conduirait à le supprimer et à casser les bancs. BANC dit la
+    vérité : hors du chemin d'exécution, mais bien appelé."""
+    assert ms.STATUT == "BANC_UNCALIBRATED"
 
 
 # --------------------------------------------------------------- POINT-IN-TIME

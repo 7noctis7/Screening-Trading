@@ -2,6 +2,431 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0129 — Un Δ qui soustrayait deux paniers différents (2026-09-09)
+
+**Constat, sur la sortie réelle du VPS.** Premier appel de `/api/portfolio/sentiment` avec
+AAPL 60 % / MSFT 40 % : `mood_change: -0.1979`. Le chiffre est **sans référent**.
+`history.delta` calcule `mood_delta = moyenne(scores reçus) − moyenne(scores historisés)`.
+Les scores historisés sont ceux du **robot**, sur SES positions. Le nombre affiché disait
+donc « ces deux titres aujourd'hui, moins les positions du robot les jours d'avant ».
+
+**Pourquoi ce n'est pas un bug de `history.py`.** Pour le snapshot du robot, le panier est
+le même d'un jour à l'autre : la soustraction est légitime, et c'est l'usage pour lequel la
+fonction a été écrite. Le défaut est **ma réutilisation** de cet agrégat dans un contexte
+où le panier change. Les Δ **par actif** (`by_symbol`), eux, étaient corrects — chaque
+symbole y est comparé à son propre passé.
+
+**Décision.** `_revision_ponderee` : la révision du portefeuille est la moyenne des Δ **par
+actif**, pondérée comme l'humeur. Les lignes **sans historique sont exclues et comptées**
+(`n_revisions`), pas comptées à zéro — un Δ nul faute de passé se lit « stable » alors
+qu'il veut dire « inconnu », et l'inclure diluerait la révision vers zéro. Sans aucune
+ligne comparable, `mood_change` vaut `None` et l'infobulle dit pourquoi.
+
+**Ce que ça change à l'affichage.** Sur un portefeuille dont le robot ne détient aucune
+ligne : « — » au lieu de « −0,20 ». Sur les lignes que le robot suit, la révision devient
+enfin celle de ces lignes-là.
+
+**Garde.** Un test pose un historique ne contenant QUE des titres du robot et exige
+`mood_change is None` ; il tombe dès qu'on rebranche `mood_delta` (vérifié par sabotage).
+`history.delta` publie désormais `avec_historique` et porte un avertissement en clair sur
+la portée de `mood_delta`.
+
+**Leçon.** L'erreur n'était visible dans aucun test parce que tous mes cas partageaient un
+historique cohérent avec le portefeuille testé. C'est la **sortie réelle**, lue sur la
+machine, qui l'a montrée — le chiffre était plausible, jamais aberrant. Un agrégat repris
+d'un autre contexte doit être re-justifié dans le nouveau, pas seulement re-testé.
+
+## ADR-0128 — Le sentiment d'un portefeuille n'est pas la moyenne de ses lignes (2026-09-09)
+
+**Contexte.** Demande : reprendre l'onglet « Sentiment & news » dans « Analyser mon
+portefeuille », en plus concis et interactif, appliqué au portefeuille que l'utilisateur
+importe — l'onglet du robot restant inchangé sur ses propres positions.
+
+**Le constat qui a orienté la conception.** `_sentiment_section` moyenne ses lignes à
+**poids égal**. C'est correct pour l'univers détenu par le robot, mais faux dès qu'on
+connaît les poids : une ligne à 2 % franchement baissière y pèse autant qu'une ligne à
+30 % haussière, et le chiffre décrit alors un portefeuille que personne ne détient.
+
+**Décision.** Un module dédié `packages/sentiment/portefeuille.py`, qui renvoie les **deux**
+humeurs — simple et pondérée — et publie leur **écart** comme information à part entière :
+un pessimisme concentré sur les grosses lignes ne se traite pas comme un pessimisme
+éparpillé sur les miettes. La pondération est **renormalisée sur les seules lignes
+mesurées** : sans cela, une couverture partielle tirerait mécaniquement l'humeur vers zéro,
+ce qui se lit « neutre » alors que ça veut dire « non mesuré ».
+
+**Trois refus explicites, chacun tenu par un test.**
+1. Une ligne sans actualité *et* sans historique sort `disponible: False`, jamais `0.0`.
+   Zéro se lit « neutre » ; c'est une information fabriquée.
+2. `source` ne crédite pas le repli momentum quand aucun momentum n'a tourné — attribuer
+   le vide à une méthode jamais appelée fait croire à un résultat.
+3. Le poids non couvert est **affiché** : une humeur calculée sur 40 % du capital doit se
+   lire comme telle.
+
+**Non-persistance, et pourquoi ça compte.** `/api/portfolio/*` promet « aucune
+persistance », mais `history.record_and_delta` **écrit**. Un portefeuille de passage aurait
+donc alimenté `sentiment_history.json` avec des symboles que le robot ne détient pas, et
+faussé le Δ du lendemain **pour l'onglet du robot lui-même** — contamination silencieuse,
+invisible dans la page qui la subit. `history.delta` (lecture seule) a été extrait ;
+`record_and_delta` l'appelle puis persiste. Deux gardes : un test source (l'appel à
+`record_and_delta` est interdit dans le module) et un test de comportement (fichier
+d'historique neuf, qui doit rester absent). Les deux ont été vérifiés par sabotage.
+
+**Formule partagée.** Le repli momentum 63 j vivait en **deux copies** littérales dans
+`snapshot.py`. Elles sont remplacées par un appel à `score_momentum`, et un test interdit
+la recopie : deux copies finissent par diverger, et les deux onglets afficheraient alors
+deux « tendances 3 mois » différentes pour le même actif.
+
+**Conséquences.** Nouveau POST local `/api/portfolio/sentiment` (même garde
+`_webhook_authorized` que `/analyze`) ; panneau `SentimentPulse` + primitives
+`SentimentJauge` montés dans l'espace d'analyse. En statique le panneau dit qu'il faut
+`make start` — il n'affiche pas un vide. L'onglet `/sentiment` du robot est inchangé, à une
+exception : le fond de sa barre d'humeur était le littéral sombre `#1d212a`, illisible en
+thème clair — même défaut que les couleurs de benchmark corrigées ce matin, passé en jeton.
+
+## ADR-0127 — Le correctif existait dans un script et pas dans l'autre (2026-09-09)
+
+**Constat.** Après ADR-0126, `make reports` rend **22/22** sans plantage : le filtre sur les
+paires crypto tient. Mais deux pages HTML Yahoo complètes inondent encore le terminal — cette
+fois pour **IBM et NKE**, deux sociétés parfaitement légitimes. Ce n'était donc pas le même
+défaut : ce sont des 502 transitoires sur de vrais tickers.
+
+**LE VRAI PROBLÈME N'EST PAS L'ERREUR, C'EST SON VOLUME.** yfinance ne journalise pas un
+échec réseau, il **déverse la page que le serveur a renvoyée** : une centaine de lignes de
+« sad panda » Yahoo, au milieu de la liste des notes. Un 502 transitoire est normal et sans
+conséquence ; ce qui coûte, c'est que les lignes utiles se perdent dedans. Un run qu'on ne
+peut plus lire ne se lit plus — et c'est là qu'on rate ce qui compte vraiment.
+
+**LE CORRECTIF EXISTAIT DÉJÀ.** `dump_static.py` porte, depuis un moment, le silence des
+loggers `yfinance` / `urllib3` / `peewee`, avec le commentaire exact : « silence le bruit
+réseau (yfinance dumpe des pages HTML) ». Le problème était donc **connu et résolu dans un
+script**, et absent d'un autre qui appelle les mêmes fournisseurs. Même remède, même endroit.
+
+**LE TEST QUI COMPTE N'EST PAS CELUI DU SILENCE.** Vérifier que les loggers sont à CRITICAL
+ne protège que le script d'aujourd'hui. Un second test exige que **les deux scripts batch**
+portent la même précaution : sans lui, un troisième script réintroduirait le déversement
+sans que rien ne le signale. Une correction ponctuelle répare un cas ; une convention
+vérifiée répare la classe.
+
+**Conséquences.** 2453 tests, 2 ajoutés. Aucune donnée n'est masquée : seul le corps HTML
+d'une réponse en échec cesse d'être imprimé, l'échec lui-même reste visible.
+
+## ADR-0126 — Le banc a tranché : le swing ICT ne se branche pas (2026-09-09)
+
+**LA MESURE, sur 40 actifs de la watchlist et l'historique réel de `market.db`.**
+
+| | |
+|---|--:|
+| trades | **2 169** |
+| espérance | **−0,059 R** par trade |
+| taux de réussite | 26,8 % |
+| total | **−127,9 R** |
+| Sharpe par trade | −0,0366 |
+| sorties | 1 548 stops · 426 cibles · 195 horizon |
+| **DSR** | **0,0001** — déployable **NON** |
+
+**VERDICT : ne pas brancher.** Le DSR est à 0,0001 pour un seuil de 0,95. Aucune correction
+d'hypothèse ne franchit un tel écart.
+
+**MAIS L'HONNÊTETÉ EXIGE UNE NUANCE.** Avec un gain moyen de 2,51 R, le seuil d'équilibre
+est à 28,5 % de réussite ; on observe 26,8 %. **1,7 point d'écart**, soit ~37 trades sur
+2 169. Or ma règle la plus conservatrice — stop prioritaire quand stop ET cible tombent dans
+la même barre — porte précisément sur ces cas-là. Le résultat est donc une **borne
+inférieure**, pas un verdict sur la valeur du motif. Dire « la stratégie est nulle » serait
+aller plus loin que la mesure.
+
+**CE QUI LE RENDRAIT PIRE, ET QUI MANQUE.** Le banc mesure BRUT : ni commissions, ni
+fourchette, ni glissement. 2 169 trades sur 40 actifs en coûteraient largement plus que les
+0,059 R d'écart. La conclusion est donc robuste dans le bon sens : les coûts ne peuvent que
+l'enfoncer.
+
+**CE QUI TRANCHERAIT DÉFINITIVEMENT** : des barres INTRADAY, qui lèveraient l'ambiguïté sur
+l'ordre des extrêmes. Tant qu'on n'en a pas, la borne inférieure est ce qu'on sait.
+
+**DÉCISION.** L'îlot swing reste NON branché. On ne le supprime pas non plus : à 1,7 point
+de l'équilibre, ce n'est pas du bruit, et la question se rejugera sur données intraday. Il
+reste `SHADOW`, désormais avec un chiffre en face.
+
+**AUSSI — deux défauts de `make reports`, découverts au même run.** `ZEC/USDC`, `VET/USDC`
+et `LTC/USDC` ont été envoyés à Yahoo pour une analyse FONDAMENTALE : trois erreurs 500/502
+dont la page HTML entière a inondé le terminal, puis un plantage sur
+`note_ZEC/USDC.html` — un chemin qui désigne un fichier dans un dossier inexistant. 22 notes
+sur 25.
+
+Deux corrections : une paire cotée n'a pas de bilan, donc pas de note (filtre sur la FORME
+du symbole — une liste devrait être tenue à jour à chaque ajout d'actif, la forme non) ; et
+le symbole est assaini pour le nom de fichier, en gardant le point lisible (`BRK.B` reste
+`BRK.B`, il ne devient pas `BRK_B`).
+
+**Conséquences.** 2451 tests, 5 ajoutés.
+
+## ADR-0125 — Écrire la sortie avant l'entrée (2026-09-09)
+
+**Origine.** La seule idée reprise d'un rapport concurrent : une section « qu'est-ce qui
+invaliderait cette analyse ? ». Chez eux, le titre existe et **la section est vide**. La
+question est bonne ; la réponse manquait.
+
+**CE QUE CE N'EST PAS.** Pas un contre-argumentaire. Un texte qui plaide le camp adverse
+produit deux argumentaires convaincants et aucune décision — le rapport cité affichait un
+haussier et un baissier à ~50 % de confiance sur le même titre, avec des cibles de 50 $ à
+140 $. Ce n'est pas de l'information, c'est de la mise en scène du doute.
+
+**CE QUE C'EST.** Des FAITS MESURABLES qui, s'ils se produisent, ferment la position.
+Chacun porte sa valeur actuelle, son seuil et la distance relative qui les sépare — donc se
+vérifie le lendemain matin sur les cours, sans relire l'analyse.
+
+**TROIS RÈGLES.**
+
+1. **Un critère non calculable n'est pas publié.** Pas de « si les fondamentaux se
+   dégradent » : soit la donnée existe et le seuil est chiffré, soit le critère n'existe
+   pas. Le mandat données-réelles, appliqué à la SORTIE.
+2. **Un critère déjà franchi invalide la thèse, et le dit** — en tête de section, en
+   `[!danger]`. Sans cette règle, on publierait de beaux critères sous une recommandation
+   qu'ils contredisent déjà : le défaut exact du rapport cité, dont le gestionnaire de
+   risque REFUSE pendant que l'en-tête affiche « BULLISH 90 % ».
+3. **Le sens dépend de la recommandation.** Un critère de sortie d'achat n'est pas celui
+   d'une vente ; un test négatif le vérifie, car des critères inversés déclencheraient à
+   l'envers de façon parfaitement plausible. Sur une position neutre, la section se tait
+   plutôt que d'inventer une thèse à invalider.
+
+**AUCUNE DONNÉE NOUVELLE.** Le stop et le pire drawdown viennent de `risk_block`, la MM200
+du bloc technique, ROCE et WACC du DCF, la croissance du CA des états financiers. Un critère
+qui exigerait une source supplémentaire ne serait pas vérifiable les jours où cette source
+manque — donc pas un critère.
+
+**UN DÉTAIL QUI COMPTE.** `technical` publie l'ÉCART à la MM200, pas son niveau. On remonte
+au niveau avant de comparer, sinon on confronterait un prix à un pourcentage — une erreur
+qui passerait inaperçue parce que le résultat resterait un nombre.
+
+**PLACEMENT.** Juste après le bloc de risque, pas en fin de note : une sortie qu'il faut
+aller chercher n'est pas une sortie.
+
+**Conséquences.** 2446 tests, 12 ajoutés. Rendu Markdown (coffre Obsidian) et HTML.
+`falsification` est une clé de `build_company_report` : un rendu qui ne trouverait rien à
+afficher rendrait le calcul inutile, un test bout en bout le fixe.
+
+## ADR-0124 — Le banc exigeait un catalogue dont il n'a pas besoin (2026-09-09)
+
+**Constat sur le VPS.** `make banc-swing` refusait de démarrer : « Aucun univers lisible ».
+Le diagnostic corrigé le montre — `data/market.db` est PRÉSENT (220 Mo), mais
+`_db_full_universe` lit une table de MÉTADONNÉES (nom, secteur, place) qui vit dans
+`YAHOO.db` et pas dans une base OHLCV. Le banc réclamait un CATALOGUE là où il lui faut des
+symboles et des barres.
+
+**Décision.** Le banc lit d'abord `config/mobile_universe.csv` — la watchlist, versionnée,
+présente partout — et ne retombe sur le catalogue que si elle manque. La source est
+imprimée : un résultat ne se lit pas de la même façon selon l'univers mesuré. Mesurer sur ce
+que le robot TRADE vaut d'ailleurs mieux que sur tout ce qu'une base contient.
+
+**UN MESSAGE QUI NOMMAIT LA MAUVAISE CAUSE.** Sans base de prix, le banc affichait
+« 0 actif(s) mesurés · 6 écarté(s) (< 200 barres) » : il envoyait chercher un problème
+d'HISTORIQUE là où il n'y avait aucune BASE. Le cas est désormais détecté avant la boucle et
+nommé. Un message qui désigne la mauvaise cause coûte plus cher qu'un message absent —
+c'est la leçon de la journée, appliquée à mon propre outil.
+
+**VÉRIFICATION DE BOUT EN BOUT.** Sur une base de test (marche aléatoire, plomberie
+uniquement — jamais une mesure) : 16 trades, −0,500 R par trade, 12,5 % de réussite,
+DSR 0,0008, verdict **déployable NON**. C'est le comportement JUSTE sur des données sans
+signal : un banc à stop/cible qui rendrait positif sur du bruit serait truqué.
+
+**Conséquences.** 2434 tests. Le banc est prêt à tourner sur les données réelles du VPS.
+
+## ADR-0123 — Le swing ICT ne se décide pas, il se mesure (2026-09-09)
+
+**LA QUESTION POSÉE.** « Brancher le swing » signifie quoi, et comment savoir si ça vaut le
+coup ? La réponse honnête : on ne peut pas le savoir aujourd'hui, parce qu'aucun chiffre
+n'existe. Ce module produit ces chiffres.
+
+**CE QU'EST L'ÎLOT SWING, ET CE QU'IL N'EST PAS.** Ce n'est PAS le swing déjà backtesté du
+dépôt (`strategies/swing` + `backtest/fast_swing` : repli en tendance, SMA/RSI/ATR).
+`moteur_swing` est une stratégie ENTIÈREMENT DIFFÉRENTE, spécifiée le 02/09 : méthodologie
+ICT / Smart Money — Hurst hebdomadaire, SFP, BOS, OTE, order blocks, CHoCH, sur trois
+horizons (1W / 1D / 1H). Deux stratégies distinctes coexistent donc dans le dépôt, et seule
+la première a jamais été mesurée. Le dire compte : « brancher le swing » ne veut pas dire
+« activer ce qui est déjà testé ».
+
+**LE BANC. Trois règles, parce qu'un backtest à stop/cible se truque sur trois détails.**
+
+1. **L'entrée est une LIMITE, pas un marché.** On n'entre que si une barre postérieure
+   touche le prix nommé. Entrer « au marché à la clôture de détection » offrirait un prix
+   que le marché n'a pas donné, et transformerait CHAQUE signal en trade — ce qui gonfle le
+   nombre d'observations, donc la significativité apparente.
+2. **Stop et cible dans la même barre → c'est le STOP.** Une barre journalière ne dit pas
+   l'ordre de ses extrêmes. Choisir la cible, c'est choisir la version favorable d'une
+   information qu'on n'a pas ; sur un RR > 1, ce seul choix fait passer un banc du rouge au
+   vert.
+3. **Résultat en R**, pas en dollars : seule unité comparable entre actifs, et qui rend le
+   banc indépendant du dimensionnement.
+
+**L'ANTI-FUITE EST STRUCTURELLE, PAS DÉCLARATIVE.** `parcourir` passe au détecteur les
+barres TRONQUÉES à `i`. Même un détecteur qui lirait `barres[i+5]` ne les aurait pas. Deux
+tests : un espion vérifie que la dernière barre reçue EST toujours la barre `i` ; un
+détecteur TRICHEUR vérifie que sa tentative sort bien hors bornes — sans ce second test, le
+premier passerait au vert sur un `parcourir` qui n'appellerait jamais le détecteur.
+
+*Lecture préalable du code* : `liquidite` utilise `range(debut, i)`, strictement avant, et
+`sfp` documente `barres[:i+1]`. Le code est propre — mais on ne fait pas reposer un banc sur
+une lecture, on retire l'accès.
+
+**LE VERDICT PASSE PAR LA PORTE.** Le Sharpe par trade est déflaté par
+`gate.verdict_hors_echantillon`, dont le `n_essais` vient du ledger. Un banc qui choisirait
+son propre nombre d'essais s'auto-absoudrait.
+
+**ZÉRO TRADE EST UN RÉSULTAT.** Si le moteur ne produit aucune entrée exécutable, le banc le
+dit et s'arrête : un signal qui ne se remplit jamais ne se branche pas non plus.
+
+**AUSSI — un message d'erreur inapplicable.** `make list-db` renvoyait
+`export QUANT_PRICE_DB="$HOME/Desktop/YAHOO.db"` : un chemin de Mac, inutile sur le VPS. Il
+imprime désormais l'ORDRE DE RECHERCHE réel avec l'état de chaque emplacement — la commande
+à taper se lit dans la liste.
+
+**Conséquences.** 2434 tests, 10 ajoutés. `make banc-swing`. Rien n'est branché : le banc
+mesure, la décision reste entière.
+
+## ADR-0122 — Une P0 que j'avais inventée, et deux libellés qui mentaient (2026-09-09)
+
+**LA P0 `legacy` N'EXISTAIT PAS.** J'ai ouvert en P0 « le panneau montre un sous-ensemble
+favorable », d'après la ligne de `diag_journal_compte`. Vérification faite : `/api/journal`
+appelle déjà `biais_fermeture.perimetre_affiche`, qui publie **les deux périmètres chiffrés**,
+et `apps/web/app/journal/page.tsx` affiche déjà le bandeau « Périmètre affiché ≠ compte »
+avec l'affiché ET le compte. Le produit traitait le problème ; j'ai lu le diagnostic sans
+lire ce qu'il avait déjà provoqué. **La P0 est annulée**, elle n'a jamais eu lieu.
+
+**« ACTIONS DIVERSES » N'EST PAS UN SECTEUR.** C'est le dernier recours de `_sector_of` :
+une ACTION au champ `sector` vide ou hors GICS y tombe (crypto, forex, ETF, indices et
+commodités ont chacun leur branche avant). Le post-mortem l'annonçait « secteur = Actions
+diverses 0,475 > 0,4 », ce qui envoie chercher **une allocation à corriger** là où c'est
+**le champ `sector` à peupler**. `concentration_report` prend désormais `secteur_inconnu` :
+le franchissement sort sous le type `secteur inconnu`.
+
+**IL RESTE SIGNALÉ.** Requalifier n'est pas absoudre : un livre à moitié non classé est un
+vrai problème, et une concentration sectorielle NON MESURABLE est plus inquiétante qu'une
+concentration mesurée. Il change de nom, pas de gravité. Un test le fixe, un autre vérifie
+en négatif que les VRAIS secteurs ne sont pas requalifiés — sans lui, élargir la règle
+ferait passer une vraie concentration pour un défaut de données.
+
+**`market_structure` MENTAIT AUSSI.** Son statut disait « aucun appelant en production ».
+Faux : `candidats_lab` et `signal_lab` (`make labs`) l'utilisent, ainsi que `liquidite_ict`
+et `moteur_sortie`. Le lire comme du code mort conduirait à le supprimer et à casser les
+bancs. Statut `BANC_UNCALIBRATED` : hors du chemin d'exécution, mais bien appelé.
+
+**Conséquences.** 2424 tests, 4 ajoutés. Dette de câblage 1 704 → **1 479 lignes**. Le
+verrou d'appelants exige désormais les trois paramètres (`index_names`, `index_sectors`,
+`secteur_inconnu`) sur chaque appel de `snapshot.py`.
+
+**CE QUI RESTE, ET QUI N'EST PAS DU CODE.** L'îlot swing (1 374 l.) : brancher change ce que
+le robot TRADE, sur une stratégie jamais validée hors échantillon — décision de produit.
+`frictions` : son `signal_inhibe` exige un gain attendu PAR ORDRE que le rebalanceur ne
+produit pas. Les secteurs GICS manquants : une donnée à peupler, mesurable seulement sur le
+VPS. L'armement du disjoncteur : il demande des semaines d'observation, pas une décision.
+
+## ADR-0121 — Deux courbes tracées, une seule lisible (2026-09-09)
+
+**Constat, remonté à l'usage.** Sur le graphe des positions, le S&P 500 utilisait `--warn`
+(`#d97706`) et le Bitcoin `#f7931a`. Deux oranges. Les deux lignes étaient tracées, les deux
+boutons répondaient, et l'œil n'en distinguait qu'une : le pire des cas, puisque rien ne
+signale l'ambiguïté — on croit lire deux références.
+
+**Décision. Quatre teintes séparées, et des TOKENS de thème.** Le S&P passe en **ardoise
+désaturée** (`--bench-sp`) : c'est le marché large, la référence neutre, et sa faible chroma
+la sépare des trois autres même pour un œil daltonien. Le Nasdaq garde le violet, le Bitcoin
+son orange de marque, le portefeuille `--accent` — c'est lui qu'on suit.
+
+**LE DÉFAUT DE FOND N'ÉTAIT PAS LA TEINTE.** Nasdaq et Bitcoin étaient des littéraux `#a855f7`
+et `#f7931a` codés dans le composant : **la même valeur en clair et en sombre**, alors que
+le contraste n'y est pas le même. Les trois références deviennent des tokens définis pour
+les deux thèmes dans `globals.css`, comme le reste de la charte. Une couleur de graphe qui
+ne suit pas le thème est un bug qui attend son utilisateur.
+
+**Cohérence tableau ↔ courbe.** Les pastilles du tableau lisent les mêmes tokens : une
+pastille d'une autre teinte que sa ligne obligerait à retrouver la correspondance à chaque
+lecture.
+
+**Conséquences.** Aucun test à ajouter — c'est une valeur de charte, pas une logique. Build
+Next.js vert, `tsc` propre.
+
+## ADR-0120 — La courbe du compte face aux indices, en DOLLARS (2026-09-09)
+
+**Demande.** Dans l'onglet Positions, la performance du portefeuille depuis le début des
+trades, face au S&P 500, au Nasdaq et au Bitcoin, avec filtre des références et de la
+période, et le détail au survol.
+
+**LE CHOIX QUI DÉCIDE DE TOUT : DOLLARS, PAS BASE 100.** Chaque référence est replacée sur
+le capital de DÉPART du portefeuille. La question qu'on se pose devant ce graphe n'est pas
+« quel indice a fait +8 % » mais « où en serais-je si j'avais mis la même somme ailleurs » ;
+en base 100, il faut retraduire mentalement, en dollars l'écart entre deux courbes EST le
+montant. La colonne « vs portefeuille » du tableau le donne directement.
+
+**LA RÈGLE QUI PROTÈGE LA MESURE.** Pour une date du portefeuille, on prend la dernière
+clôture **connue à cette date** — jamais la suivante. Le compte est valorisé les jours où le
+cron passe ; les actions ne cotent pas le week-end, le crypto oui. Prendre la clôture du
+lundi pour un point du samedi ferait entrer une information que le samedi n'avait pas : un
+look-ahead minuscule, systématique, et qui flatterait toujours la référence la plus
+volatile. Un test le fixe avec une clôture de lundi à 999 qui ne doit pas apparaître.
+
+**UNE RÉFÉRENCE ABSENTE EST NOMMÉE, JAMAIS SIMULÉE.** `_index_series` sait retomber sur une
+série synthétique ; on ne l'utilise pas ici. Un utilisateur qui compare son compte à un
+indice ne peut pas deviner que l'indice a été inventé. Une référence introuvable, ou dont
+l'historique démarre après le portefeuille, sort du graphe et s'affiche dans `ecartees` avec
+la raison. La prolonger vers l'arrière afficherait une performance jamais observée.
+
+**CE QUI EXISTAIT DÉJÀ, ET QUE JE N'AI PAS RÉÉCRIT.** `EquityChart` portait déjà le toggle
+par référence, le tooltip en dollars et le zoom par glisser. Deux manques seulement : la
+couleur du Bitcoin (une référence sans couleur se traçait en `undefined` — ligne invisible,
+bouton actif : l'utilisateur croit l'avoir affichée) et des boutons de période. Ceux-ci sont
+en JOURS CALENDAIRES, pas en nombre de points : le portefeuille n'étant valorisé que les
+jours de passage, « 30 points » ne fait pas un mois. Un bouton plus long que l'historique
+est masqué plutôt que trompeur.
+
+**UN TEST DU DÉPÔT A ATTRAPÉ UN OUBLI RÉEL.**
+`test_aucune_route_appelee_n_est_absente_du_build` a échoué : la route était servie en local
+mais absente de `dump_static`, donc **404 sur le site en ligne**. Ajoutée. Sur le runner CI,
+sans clés courtier, elle répond `disponible: false` avec son motif — que le front affiche.
+
+**Conséquences.** 2420 tests, 13 ajoutés. Build Next.js vert. `main.py` n'a reçu que la
+route ; le chargement vit dans `apps/api/performance.py` (le fichier dépasse déjà 1300
+lignes, on ne l'alourdit pas).
+
+## ADR-0119 — Deux branchements, et le gate qui a attrapé le mien (2026-09-09)
+
+**`protocole_oos` → `research/gate`.** `promotion_verdict` recevait `dsr` comme un NOMBRE :
+l'appelant le calculait, donc l'appelant choisissait le nombre d'essais dont il déflatait.
+`verdict_hors_echantillon` lit `n_essais` du ledger et n'expose **aucun paramètre** pour le
+fournir — un garde-fou contournable par un argument nommé n'en est pas un. Un test vérifie
+l'absence de `dsr` et de `n_essais` dans la signature, un autre que 500 essais déflatent
+plus durement que 2. `promotion_verdict` reste inchangée : trois appelants s'en servent.
+
+**`disjoncteur` → `run_live`, DÉSARMÉ.** Il ne double pas `dd_kill_switch` : celui-ci coupe
+sur le DRAWDOWN (lent), celui-là sur la perte du JOUR (rapide). Un compte peut perdre 3 %
+dans la journée sans drawdown notable si le sommet est loin.
+
+Trois choix qui décident de ce branchement :
+
+1. **La perte du jour vient de l'EQUITY, pas du journal.** Le journal ne réconcilie pas
+   (ADR-0117) — un coupe-circuit adossé dessus déclencherait sur un chiffre faux.
+2. **L'état persiste sur disque.** Le cron lance un processus neuf à chaque passage ; un
+   verrou en mémoire seule se remettrait à zéro à chaque fois, donc ne verrouillerait
+   jamais. Un test le vérifie sur deux appels successifs.
+3. **Il OBSERVE, il n'agit pas.** Son déclenchement FERME LES POSITIONS — le geste le plus
+   destructeur du système, décidé par un composant jamais éprouvé en réel.
+   `QUANT_DISJONCTEUR=1` l'arme, après avoir vu sur plusieurs semaines les jours où il
+   aurait coupé. Armer sans cette vérification remplacerait un risque de marché par un
+   risque d'automatisme.
+
+**LE FAIT MARQUANT DE LA SESSION.** `make certification`, écrit deux heures plus tôt, a
+**refusé mon propre branchement** : `disjoncteur` devenait atteignable depuis `run_live`
+tout en déclarant « aucun appelant en production ». Le gate a fonctionné contre son auteur,
+ce qui est exactement le test qu'un garde-fou doit passer. Statuts corrigés en `CANDIDATE`
+et `CANDIDATE_OBSERVATION` ; le verrou d'inventaire des tests suit.
+
+**CE QUE JE N'AI PAS BRANCHÉ, ET POURQUOI.** `execution/frictions` : son `signal_inhibe`
+exige un GAIN ATTENDU par ordre, que le rebalanceur ne produit pas — il réplique des poids
+cibles, il n'estime pas un gain par ligne. Le brancher demanderait d'abord de produire cette
+estimation ; l'inventer serait pire que l'absence. L'îlot swing (1 374 l.) reste une
+décision de produit : le brancher change ce que le robot TRADE, sur une stratégie jamais
+validée hors échantillon.
+
+**Conséquences.** 2407 tests, 10 ajoutés. Dette de câblage 1 906 → **1 704 lignes**.
+
 ## ADR-0118 — 1 906 lignes jamais exécutées, et rien ne les comptait (2026-09-09)
 
 **Contexte.** Audit institutionnel demandé sur quatre axes (point-in-time, DSR/CPCV, HRP,

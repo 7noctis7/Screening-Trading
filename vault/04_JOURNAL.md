@@ -1,5 +1,283 @@
 # 04 — JOURNAL
 
+## Session 2026-09-09 (27ᵉ) — La vitrine annonçait trois nombres de tests différents
+
+**Fait.** README réécrit et `docs/COMMANDES.md` créé (référence des 125 cibles `make`, groupées
+par intention, avec les variables d'environnement). Cible `make help` ajoutée : la convention
+`##` du Makefile existait depuis toujours mais rien ne l'exposait.
+
+**Ce que l'état des lieux a trouvé.** Le README annonçait **825 tests** dans son badge, **825**
+dans le texte et **1160** dans « État du projet ». Le vrai chiffre est **2 475**. Trois nombres
+faux dans un même fichier, dont deux se contredisent : la vitrine du dépôt public avait dérivé
+sans que rien ne le signale.
+
+**Deux affirmations que j'allais reprendre sans vérifier.** J'avais écrit « PAPER TRADING READY
+✅ » sur la foi du cron vert de ce soir — or `docs/ROADMAP.md` porte encore **P0-3 ouvert**, et
+sa propre règle de lecture dit qu'un P0 ouvert interdit ce verdict. Et j'avais recopié « le test
+de biais du survivant ne mesure rien », alors que **P0-2 est fermé depuis le 25/08**. Les deux
+corrigées après lecture de la source. Reprendre le texte d'un ancien README est exactement le
+même défaut que reprendre un agrégat d'un autre contexte (ADR-0129) : ça a l'air vérifié parce
+que c'était écrit.
+
+**Chiffres publiés, tous re-mesurés** : 381 modules, 351 fichiers de test, 41 routes API, 28
+pages front, 129 ADR, 125 cibles `make`, 121 scripts.
+
+**Anonymisation.** Le dépôt suivi était déjà propre — aucune IP, aucun hostname, aucun email,
+que des placeholders. Les nouveaux fichiers ont été passés au même filtre (chemins, adresses,
+montants de compte) : rien. La section Sécurité l'énonce désormais explicitement.
+
+**Limites connues réécrites** pour dire ce que le projet ne sait PAS faire, dont le coût du
+turnover non instrumenté (colonnes `fees`/`slippage` jamais alimentées par l'exécution) mesuré
+ce soir.
+
+**Suite.** 2 475 passés, 7 ignorés. Vault lint vert.
+
+## Session 2026-09-09 (26ᵉ) — Le premier appel réel a montré un chiffre sans référent
+
+**Fait.** Services relancés sur le VPS (`make up`, build `ce52253`). Premier appel réel de
+`/api/portfolio/sentiment` : chemin complet vert — `couverture_news: 1.0`, 12 titres sur
+AAPL, `poids_mesure: 1.0`. **Mais `mood_change: -0.1979` était faux.**
+
+**Le défaut.** `history.mood_delta` soustrait la moyenne des scores REÇUS à la moyenne des
+scores HISTORISÉS — l'historique étant celui du robot, sur SES positions. Pour un
+portefeuille tiers, ça soustrait deux paniers sans rapport. Corrigé par
+`_revision_ponderee` : chaque actif comparé à SON propre passé, puis pondéré comme
+l'humeur ; les lignes sans historique exclues et comptées (`n_revisions`). Sans ligne
+comparable, `mood_change` vaut `None` — inconnu, pas nul (ADR-0129).
+
+**Ce que ça dit de ma méthode.** Aucun de mes tests ne l'attrapait : tous partageaient un
+historique cohérent avec le portefeuille testé. C'est la sortie réelle, lue sur la machine,
+qui l'a montrée — le chiffre était plausible, jamais aberrant. Un agrégat repris d'un autre
+contexte doit être re-justifié dans le nouveau, pas seulement re-testé.
+
+**Aussi.** Correction du `QUANT_NEWS=1` que j'avais mis en préfixe de `make start` :
+`scripts/env_quant.sh:11` le met déjà à `1`, et `svc_api.sh` le source — les news étaient
+déjà actives. Un import inutilisé (`timezone`), laissé par un correctif automatique dans
+`ce52253`, supprimé.
+
+**Mesuré.** Suite : **2 475 passés, 7 ignorés** (+3). Sabotage vérifié : rebrancher
+`mood_delta` fait tomber le nouveau test. Build Next OK. `engine: "lexique"` sur le VPS —
+FinBERT n'est pas installé, les scores viennent de la liste de mots-clés.
+
+## Session 2026-09-09 (25ᵉ) — Le sentiment du capital, pas celui des lignes
+
+**Fait.** « Pouls du portefeuille » livré dans *Analyser mon portefeuille* : sentiment &
+actualités du portefeuille IMPORTÉ, pondérés par ses poids. Nouveau module
+`packages/sentiment/portefeuille.py`, route locale `POST /api/portfolio/sentiment`,
+panneau `SentimentPulse` + primitives `SentimentJauge` (jauge à aiguille, barres signées,
+filtre segmenté avec compteurs, cartes dépliables sur les titres, fils macro/marché).
+L'onglet `/sentiment` du robot est inchangé — c'était la demande.
+
+**Ce que la mesure a corrigé dans ma conception.** L'onglet existant moyenne à **poids
+égal**. Sur un portefeuille dont on connaît les poids, ça décrit un portefeuille que
+personne ne détient. Les deux humeurs sont donc affichées, et leur **écart** est publié :
+il dit si le pessimisme est sur les grosses lignes ou sur les miettes.
+
+**Le piège qui n'était pas dans la demande.** `/api/portfolio/*` promet « aucune
+persistance » ; `history.record_and_delta` **écrit**. Un portefeuille de passage aurait
+pollué `sentiment_history.json` avec des symboles que le robot ne détient pas, faussant le
+Δ du lendemain **dans l'onglet du robot** — invisible depuis la page fautive.
+`history.delta` (lecture seule) extrait ; deux gardes (source + comportement), vérifiées
+par sabotage : les deux tombent quand on remet l'écriture.
+
+**Trouvé en passant.** Le repli momentum 63 j était recopié **deux fois** en dur dans
+`snapshot.py` : remplacé par un appel unique, avec un test qui interdit la recopie.
+`PortfolioSynergies.tsx` portait un second `return` **inatteignable** (JSX dupliqué) :
+supprimé. La barre d'humeur de `/sentiment` avait un fond `#1d212a` en dur, illisible en
+thème clair — même défaut que les couleurs de benchmark de ce matin, passé en jeton.
+
+**Mesuré.** Cas le pire (aucune base de prix, `QUANT_NEWS` absent) : `mood: null`,
+`poids_non_mesure: 1.0`, libellé « non mesuré ». Rien n'est inventé, et la page le dit.
+Suite : **2 472 passés, 7 ignorés** (+19). `make certification` vert, dette inchangée
+(1 479 l.). Build Next OK, `tsc` sans erreur nouvelle.
+
+**Suite.** P1 secteurs GICS (`make hf-pull`), P2 armer le disjoncteur, P2 `chmod 600
+models/*.pkl`, P2 backlog `ruff` du dépôt (line-length 88 vs style réel ~100).
+
+## Session 2026-09-09 (24ᵉ) — Le correctif était déjà écrit, ailleurs
+
+**22/22 NOTES, ZÉRO PLANTAGE.** Le filtre crypto tient. Mais deux pages Yahoo complètes
+inondaient encore le terminal — pour IBM et NKE, deux vraies sociétés : des 502 transitoires,
+donc un autre défaut.
+
+**LE PROBLÈME N'EST PAS L'ERREUR, C'EST SON VOLUME.** yfinance ne journalise pas un échec, il
+DÉVERSE la page du serveur : cent lignes de « sad panda » au milieu de la liste des notes. Un
+502 transitoire est sans conséquence ; ce qui coûte, c'est que les lignes utiles se perdent.
+
+**ET LE CORRECTIF EXISTAIT.** `dump_static.py` silence `yfinance`/`urllib3`/`peewee` depuis
+un moment, avec le commentaire « yfinance dumpe des pages HTML ». Connu, résolu dans un
+script, absent de l'autre qui appelle les mêmes fournisseurs.
+
+**LE TEST QUI COMPTE.** Pas celui du silence — celui qui exige que les DEUX scripts batch
+portent la précaution. Une correction ponctuelle répare un cas ; une convention vérifiée
+répare la classe.
+
+**2453 tests passés, 2 ajoutés.** ADR-0127.
+
+## Session 2026-09-09 (23ᵉ) — Le banc a tranché
+
+**2 169 TRADES SUR DONNÉES RÉELLES.** −0,059 R par trade, 26,8 % de réussite, −127,9 R au
+total, DSR **0,0001** pour un seuil de 0,95. **Le swing ICT ne se branche pas.**
+
+**LA NUANCE QUI COMPTE.** Gain moyen 2,51 R → équilibre à 28,5 % de réussite ; on observe
+26,8 %. **1,7 point**, soit ~37 trades sur 2 169. Et ma règle la plus conservatrice — stop
+prioritaire quand stop et cible tombent dans la même barre — porte exactement sur ces cas.
+C'est donc une BORNE INFÉRIEURE. Dire « la stratégie est nulle » irait plus loin que la
+mesure ; dire « elle ne franchit pas la porte » est exact.
+
+Les coûts ne sont pas modélisés — ils ne peuvent qu'enfoncer le résultat. Ce qui trancherait
+définitivement : des barres intraday.
+
+**DEUX BUGS DE `make reports` AU MÊME RUN.** ZEC/USDC, VET/USDC et LTC/USDC envoyés à Yahoo
+pour une analyse FONDAMENTALE — trois 500/502 dont la page HTML entière a inondé le
+terminal — puis plantage sur `note_ZEC/USDC.html`, un chemin vers un dossier inexistant.
+22 notes sur 25. Corrigé : une paire cotée n'a pas de bilan donc pas de note, et le nom de
+fichier est assaini en gardant le point lisible.
+
+**2451 tests passés, 5 ajoutés.** ADR-0126.
+
+## Session 2026-09-09 (22ᵉ) — Écrire la sortie avant l'entrée
+
+**LIVRÉ.** Section « ce qui invaliderait cette thèse » dans les notes d'analyse — Markdown
+(coffre) et HTML. Ce n'est PAS un bear case : ce sont des faits mesurables, chacun avec sa
+valeur actuelle, son seuil et la distance relative. Un critère qui ne se calcule pas n'est
+pas publié ; un critère déjà franchi invalide la note et le dit en `[!danger]`.
+
+**AUCUNE DONNÉE NOUVELLE.** Stop et pire drawdown depuis `risk_block`, MM200 depuis le bloc
+technique, ROCE/WACC depuis le DCF. Un critère qui exigerait une source de plus ne serait
+pas vérifiable les jours où elle manque.
+
+**LE PIÈGE ÉVITÉ.** `technical` publie l'ÉCART à la MM200, pas son niveau : on remonte au
+niveau avant de comparer, sinon on confronte un prix à un pourcentage — et le résultat reste
+un nombre, donc l'erreur passe.
+
+**2446 tests passés, 12 ajoutés.** ADR-0125.
+
+## Session 2026-09-09 (21ᵉ) — Mon banc réclamait un catalogue
+
+**LE BANC NE DÉMARRAIT PAS SUR LE VPS.** `_db_full_universe` lit une table de MÉTADONNÉES
+absente de `market.db` (base OHLCV). Le banc réclamait un CATALOGUE là où il lui faut des
+symboles et des barres. Il lit désormais `config/mobile_universe.csv` — la watchlist,
+versionnée — et imprime sa source.
+
+**ET IL NOMMAIT LA MAUVAISE CAUSE.** Sans base de prix : « 0 mesurés · 6 écartés
+(< 200 barres) », ce qui envoie chercher un problème d'historique là où il n'y a aucune
+base. Détecté avant la boucle et nommé. La leçon de la journée, appliquée à mon propre outil.
+
+**VÉRIFIÉ DE BOUT EN BOUT** sur une base de test (plomberie uniquement) : −0,500 R par
+trade, DSR 0,0008, déployable NON — le comportement juste sur du bruit.
+
+ADR-0124.
+
+## Session 2026-09-09 (20ᵉ) — Le swing ICT ne se décide pas, il se mesure
+
+**LA BONNE QUESTION POSÉE.** « Brancher le swing » veut dire quoi, et comment savoir si ça
+vaut le coup ? On ne pouvait pas le savoir : aucun chiffre n'existait.
+
+**ET UNE CONFUSION LEVÉE.** L'îlot swing n'est PAS le swing déjà backtesté du dépôt
+(`strategies/swing` + `fast_swing`, repli en tendance SMA/RSI/ATR). `moteur_swing` est une
+stratégie ICT / Smart Money entièrement différente — Hurst 1W, SFP, BOS, OTE, order blocks,
+CHoCH sur trois horizons. Deux stratégies coexistent, une seule a été mesurée.
+
+**LE BANC, ET SES TROIS RÈGLES.** Entrée en LIMITE (pas au marché, sinon chaque signal
+devient un trade et la significativité gonfle) ; stop prioritaire sur la cible dans une même
+barre (l'inverse choisit la version favorable d'une information qu'on n'a pas, et sur un
+RR > 1 ça suffit à faire passer un banc du rouge au vert) ; résultat en R.
+
+**L'ANTI-FUITE EST STRUCTURELLE.** `parcourir` tronque les barres à `i` : un détecteur qui
+lirait l'avenir ne l'aurait pas. Deux tests, dont un détecteur TRICHEUR — sans lui, le
+premier passerait au vert sur un banc qui n'appelle jamais le détecteur.
+
+**AUSSI.** `make list-db` renvoyait un chemin de Mac (`$HOME/Desktop/YAHOO.db`), inapplicable
+sur le VPS. Il imprime désormais l'ordre de recherche réel et l'état de chaque emplacement.
+
+**2434 tests passés, 10 ajoutés.** Rien n'est branché. ADR-0123.
+
+## Session 2026-09-09 (19ᵉ) — Une P0 que j'avais inventée
+
+**J'AI OUVERT UNE P0 QUI N'EXISTAIT PAS.** « Le panneau montre un sous-ensemble favorable » :
+j'avais lu la ligne de `diag_journal_compte` sans vérifier ce qu'elle avait déjà provoqué.
+`/api/journal` publie les deux périmètres depuis `perimetre_affiche`, et `/journal` affiche
+le bandeau « Périmètre affiché ≠ compte » avec les deux chiffres. Annulée.
+
+**DEUX LIBELLÉS QUI MENTAIENT, EUX, SONT CORRIGÉS.** « Actions diverses » n'est pas un
+secteur mais le dernier recours de `_sector_of` : le franchissement sort désormais sous le
+type `secteur inconnu`, ce qui envoie chercher le champ `sector` à peupler et non une
+allocation à corriger. Il RESTE signalé — un livre à moitié non classé est un vrai problème,
+et une concentration non mesurable est plus inquiétante qu'une concentration mesurée.
+
+Et `market_structure` affirmait « aucun appelant en production » alors que `make labs`
+l'utilise : le lire comme du code mort aurait conduit à le supprimer et à casser les bancs.
+
+**2424 tests passés, 4 ajoutés.** Dette de câblage 1 704 → 1 479. ADR-0122.
+
+## Session 2026-09-09 (18ᵉ) — Deux courbes tracées, une seule lisible
+
+**REMONTÉ À L'USAGE.** S&P 500 en `--warn` (#d97706) et Bitcoin en #f7931a : deux oranges.
+Les deux lignes tracées, les deux boutons actifs, une seule visible — et rien ne le signale.
+
+**CORRIGÉ, ET PLUS LARGEMENT.** Le S&P passe en ardoise désaturée : marché large = référence
+neutre, et sa faible chroma le sépare des trois autres même pour un œil daltonien. Surtout,
+Nasdaq et Bitcoin étaient des LITTÉRAUX dans le composant — même valeur en clair et en
+sombre. Les trois deviennent des tokens de `globals.css`, définis pour les deux thèmes. Une
+couleur de graphe qui ne suit pas le thème est un bug qui attend son utilisateur.
+
+Build vert, `tsc` propre. ADR-0121.
+
+## Session 2026-09-09 (17ᵉ) — La courbe du compte face aux indices
+
+**LIVRÉ.** Onglet Positions : la courbe d'equity RÉELLE face au S&P 500, au Nasdaq 100 et au
+Bitcoin, filtrables, avec période (1M/3M/6M/1A/Tout), zoom par glisser et détail au survol.
+Route `/api/performance`, module `apps/api/performance.py`, composant
+`PerformanceVsBenchmarks`.
+
+**EN DOLLARS, PAS EN BASE 100.** Chaque référence part du capital de DÉPART du portefeuille :
+l'écart entre deux courbes se lit comme un montant, pas comme un écart de pourcentages à
+retraduire.
+
+**LA RÈGLE QUI COMPTE.** Dernière clôture CONNUE à la date — jamais la suivante. Le compte
+est valorisé le samedi, l'action ne cote pas : prendre le lundi serait un look-ahead
+systématique qui flatterait la référence la plus volatile. Test avec un lundi à 999 qui ne
+doit pas apparaître.
+
+**PAS DE SYNTHÉTIQUE.** Une référence introuvable est NOMMÉE, jamais simulée. Un utilisateur
+qui compare son compte à un indice ne peut pas deviner que l'indice a été inventé.
+
+**UN TEST DU DÉPÔT M'A RATTRAPÉ.** `test_aucune_route_appelee_n_est_absente_du_build` : la
+route marchait en local et aurait rendu 404 en ligne. Ajoutée à `dump_static`.
+
+**AUSSI.** Une commande d'arrière-plan a terminé après moi et la route s'est retrouvée EN
+DOUBLE dans `main.py` — la seconde était silencieusement ignorée par FastAPI. Retirée, et
+un contrôle des noms de fonctions dupliqués confirme qu'il n'en reste aucun.
+
+**2420 tests passés, 13 ajoutés.** Build Next.js vert. ADR-0120.
+
+## Session 2026-09-09 (16ᵉ) — Mon propre garde-fou m'a refusé le passage
+
+**DEUX BRANCHEMENTS.** `protocole_oos` → `gate.verdict_hors_echantillon` : le DSR est
+désormais CALCULÉ avec un `n_essais` lu du ledger, et la signature n'offre aucun moyen de le
+fournir. `disjoncteur` → `run_live` via `coupe_circuit`, DÉSARMÉ : il observe, publie, et
+n'agit qu'avec `QUANT_DISJONCTEUR=1`.
+
+**LE MOMENT DE LA JOURNÉE.** `make certification`, écrit deux heures plus tôt, a REFUSÉ mon
+branchement : `disjoncteur` devenait atteignable depuis `run_live` tout en déclarant
+« aucun appelant en production ». Le gate a fonctionné contre son auteur — c'est le seul
+test qui compte pour un garde-fou.
+
+**TROIS CHOIX QUI COMPTENT.** La perte du jour se lit sur l'EQUITY, pas sur le journal qui
+ne réconcilie pas. L'état persiste sur disque, sinon le cron le remettrait à zéro à chaque
+passage et le verrou ne verrouillerait jamais. Et il n'agit pas : son déclenchement ferme
+les positions, on ne confie pas ça à un composant jamais éprouvé en réel.
+
+**UNE P0 REQUALIFIÉE.** Le « chemin d'écriture qui dédouble » n'existe pas : le code qui a
+produit les ids `LEG-` n'est plus dans l'arbre. C'est une contamination de données
+historiques, pas un bug vivant. Passée en P1, remède au niveau données.
+
+**PAS BRANCHÉ, ET DIT.** `frictions` exige un gain attendu par ordre que le rebalanceur ne
+produit pas. L'îlot swing change ce que le robot TRADE — décision de produit.
+
+**2407 tests passés, 10 ajoutés.** Dette de câblage 1 906 → 1 704. ADR-0119.
+
 ## Session 2026-09-09 (15ᵉ) — L'audit demandait ce qui existe déjà
 
 **CE QUE L'INVENTAIRE DIT.** Audit institutionnel sur quatre axes. CPCV, triple barrière,

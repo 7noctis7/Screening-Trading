@@ -88,6 +88,10 @@ def main() -> int:
         "meta": M.meta, "dashboard": M.dashboard, "screener": M.screener, "screen": M.screen,
         "crypto_cockpit": M.crypto_cockpit, "ticker": M.ticker, "failures": M.failures,
         "preset_ledger": M.preset_ledger, "portfolio": M.portfolio, "positions": M.positions,
+        # `performance` lit .cache/equity_history.json — absent du runner CI, qui
+        # n'a pas les clés courtier. La route répond alors `disponible: false`
+        # avec son motif, que le front affiche : comportement voulu, pas un échec.
+        "performance": M.performance,
         "trades": M.trades, "journal": M.journal_roundtrips, "sentiment": M.sentiment, "fundamentals": M.fundamentals,
         "universe": M.universe, "data": M.data, "themes": M.themes, "ml": M.ml,
         "live": M.live, "conviction": M.conviction, "investors": M.investors,

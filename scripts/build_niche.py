@@ -21,6 +21,36 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 
+def _diagnostic_base() -> None:
+    """Dit OÙ la base a été cherchée et ce qui existe — pas un chemin figé.
+
+    Le message d'origine renvoyait `$HOME/Desktop/YAHOO.db`, un chemin de Mac. Sur le
+    VPS il n'existe pas, et l'utilisateur se retrouve avec une consigne inapplicable
+    au lieu d'une piste. On imprime donc l'ORDRE DE RECHERCHE réel et l'état de chaque
+    emplacement : la commande à taper se lit alors dans la liste.
+    """
+    import os
+    from apps.api.snapshot import ROOT as _R
+    home = Path.home()
+    candidats = [(os.environ.get("QUANT_PRICE_DB"), "$QUANT_PRICE_DB"),
+                 (_R / "data" / "YAHOO.db", "data/YAHOO.db"),
+                 (_R / "data" / "market.db", "data/market.db"),
+                 (home / "Desktop" / "YAHOO.db", "~/Desktop/YAHOO.db"),
+                 (home / "Bureau" / "YAHOO.db", "~/Bureau/YAHOO.db")]
+    print("\n⛔ Aucun univers lisible dans la base de prix.\n")
+    print("   Emplacements cherchés, dans cet ordre :")
+    for chemin, libelle in candidats:
+        etat = "absent"
+        if chemin and Path(chemin).exists():
+            etat = f"PRÉSENT ({Path(chemin).stat().st_size // 1_000_000} Mo)"
+        elif not chemin:
+            etat = "non défini"
+        print(f"     {libelle:<24} {etat}")
+    print("\n   Une base PRÉSENTE mais sans univers lisible ne contient pas la table")
+    print("   attendue : `make hf-pull` la récupère, `make ingest` la reconstruit.")
+    print("   Aucune base présente : export QUANT_PRICE_DB=/chemin/vers/YAHOO.db\n")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Inspecte la base et construit une niche réelle")
     ap.add_argument("--class", dest="cls", default=None, help="filtre classe (equity/etf/crypto/forex/commodity/index)")
@@ -32,7 +62,7 @@ def main() -> None:
     from apps.api.snapshot import _db_full_universe
     uni = _db_full_universe()
     if not uni:
-        print("⛔ Base introuvable. Fais : export QUANT_PRICE_DB=\"$HOME/Desktop/YAHOO.db\"")
+        _diagnostic_base()
         return
 
     if not a.out:                                      # mode LISTE

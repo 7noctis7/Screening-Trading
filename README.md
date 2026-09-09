@@ -3,7 +3,7 @@
 [![CI](https://github.com/7noctis7/Screening-Trading/actions/workflows/ci.yml/badge.svg)](https://github.com/7noctis7/Screening-Trading/actions/workflows/ci.yml)
 [![Pages](https://github.com/7noctis7/Screening-Trading/actions/workflows/pages.yml/badge.svg)](https://github.com/7noctis7/Screening-Trading/actions/workflows/pages.yml)
 [![gitleaks](https://github.com/7noctis7/Screening-Trading/actions/workflows/gitleaks.yml/badge.svg)](https://github.com/7noctis7/Screening-Trading/actions/workflows/gitleaks.yml)
-![tests](https://img.shields.io/badge/tests-825%20passed-brightgreen)
+![tests](https://img.shields.io/badge/tests-2475%20passed-brightgreen)
 ![python](https://img.shields.io/badge/python-3.11-blue)
 ![licence](https://img.shields.io/badge/licence-MIT-green)
 ![paper](https://img.shields.io/badge/mode-paper%20par%20défaut-orange)
@@ -13,360 +13,264 @@
 > ETF, forex, crypto, commodités), méthodologie niveau institutionnel (López de Prado), 100 %
 > open-source, **infra 0 €**, **paper par défaut**.
 
-**🌐 Démo live (Mac éteint, 0 €) :** **https://7noctis7.github.io/Screening-Trading/** — PWA Next.js
-reconstruite chaque jour ouvré par GitHub Actions sur données réelles (yfinance / SEC EDGAR).
-
-### Ce qui rend ce projet différent
-- **🔬 Gate d'honnêteté à 4 étages** — aucune stratégie n'entre en prod sans passer *placebo →
-  Deflated Sharpe → PBO/CSCV → sabotage adverse*. **8 hypothèses rejetées**, publiées dans le
-  [**Registre des échecs**](https://7noctis7.github.io/Screening-Trading/echecs) (`packages/research/`).
-- **📉 Edge honnête** : DSR≈0 assumé (pas d'alpha directionnel prouvé) — le seul edge vérifié est la
-  **réduction du drawdown (~2,6×)**. On ne vend pas de rêve : donnée absente → `n/d`, jamais inventé.
-- **🛡️ Rigueur anti-fuite** : point-in-time partout (vintages ALFRED réels, prix ajustés splits),
-  purged/embargoed CV, verrous de non-régression testés (`packages/common/pit_guard.py`).
-- **⚙️ Ingénierie** : **825 tests**, gate CI, ADRs, architecture en plugins (« 1 fichier, jamais
-  toucher au cœur »), config-driven YAML. Voir [`vault/01_ARCHITECTURE.md`](vault/01_ARCHITECTURE.md)
-  et l'**[étude de cas du Gate anti-fuite](docs/CASE_STUDY.md)**.
-- **🤖 Exécution paper réelle** : réconciliation idempotente vers Alpaca (paper), journal des trades
-  avec features figées à la décision + round-trip PnL/MFE/MAE → verdict GO/NO-GO **mécanique**
-  (`make rdv-paper`).
+**🌐 Démo live :** **https://7noctis7.github.io/Screening-Trading/** — PWA Next.js reconstruite
+chaque jour ouvré par GitHub Actions sur données réelles (yfinance / SEC EDGAR). Poste éteint, 0 €.
 
 > ⚠️ Aide à la décision — **pas un conseil en investissement**. Risque de perte en capital.
 > Priorités : **robustesse & reproductibilité > risque > alpha > produit**.
 
 ---
 
-## ✨ Le terminal en un coup d'œil
+## Ce qui rend ce projet différent
 
-Fenêtres : **Dashboard** (perf vs benchmarks, régime, playbook VIX, screener+ML) ·
-**Thèmes de marché** (heatmap YTD par secteur 4ᵉ révolution industrielle) ·
-**Événements** (prochains résultats trimestriels — BPA & revenu **estimés et annoncés** — pour tes
-positions + le **top 5 %** des scores, et **IPOs US** via dépôts S‑1/S‑1/A **SEC EDGAR** + FMP) ·
-**Signaux ML** ·
-**Sentiment & news** (recentré sur **ton** portefeuille ; FinBERT optionnel / lexique / repli momentum, RSS gratuit) ·
-**Fondamentaux** (DCF, ratios, Piotroski, Altman Z, note technique + combinée) ·
-**Notes d'analyse** (note PDF/HTML par société — Vernimmen + Damodaran, audit PwC — archives datées) ·
-**Univers** (recherche/filtres, table virtualisée) · **Données** (collecte, qualité, **audit PwC**, couverture) ·
-**Portefeuille & Analyse** (Monte-Carlo, attribution, revue experte) · **Risque** (VaR/EVT/GARCH,
-backtest VaR, ACP, budget de risque, limites, stress, allocation HRP/ERC, multi-stratégie) ·
-**Positions** · **Trades** (ordres exécutés **+ ordres en attente**) · **Portefeuille réel** (Alpaca/Bitmart, réconciliation, TCA).
-
-> 🧭 Carte complète des modules : [`docs/MODULES.md`](docs/MODULES.md).
-> 📱 **Installable (PWA)** : sur le site en ligne, *Partager → Sur l'écran d'accueil* = vraie app
-> plein écran (encoche gérée, menu en tiroir style iOS). ⌘K · mode live · thème clair/sombre.
-
-- **Stratégie de production** : **50 % QQQ (cœur indiciel) + 50 % preset** (qualité top‑30 →
-  risk‑parity ERC → DD‑target → blackout résultats → no‑trade band → cap 10 %), capital de base
-  10 000 $, exposition **pilotée par le VIX**, **sans levier**. Choix **décidé par la donnée**
-  (`make index-core` / `ledger-sweep`) ; pas d'edge directionnel prouvé → on gagne par le **risque**.
-- **Frais réalistes** modélisés (commission + slippage + SEC/TAF) aux barèmes **Alpaca / IBKR /
-  Binance / BitMart** ; le **journal de trades** réconcilie à l'$ près avec la courbe (réalisé + latent + frais).
-- **Notes d'analyse institutionnelles** par société (icône 📄 + page `/notes`, **HTML & PDF, thème
-  clair/sombre**) : **Portfolio Snowflake** (radar VALUE/FUTURE/PAST/HEALTH/DIVIDEND), **Vernimmen**
-  (ROCE vs WACC, EVA, DuPont, gearing) + **Damodaran** (DCF scénarios & inversé, multiples vs secteur),
-  3 scores (fondamental/technique/ML), **risk management** (vol, VaR/CVaR, Sharpe/Sortino, stop),
-  résultats & estimations, historique CA/résultat **annuel + trimestriel** (yfinance → SEC EDGAR 10-Q),
-  **actionnariat** (top institutionnels/insiders), **conversion devise ADR**, et **gouvernance PwC** :
-  audit d'intégrité + **réconciliation GAAP vs Non-GAAP** (devise de dépôt) → **blocking alert** et
-  pénalité de surévaluation (DCF). Régénérées à chaque résultat trimestriel, archivées chaque nuit,
-  miroir Obsidian (`#company`).
-- **Données réelles** branchables (yfinance / FMP / SEC EDGAR / votre `YAHOO.db`, ~4 Go) avec repli
-  synthétique — le build affiche le **MODE DES DONNÉES** (réel / mixte / synthétique) et un **audit
-  PwC** (complétude / exactitude / point-in-time / biais du survivant) visible dans la fenêtre Données.
-- **ML** : Gradient Boosting (sklearn) ou logit numpy, **CV purgée + embargo** (López de Prado),
-  triple-barrier — aucune fuite du futur.
-- **Graphiques chandeliers** au clic (volumes, MA20/50/100/200, EMA, Bollinger, RSI, timeframe D/W/M,
-  marqueurs achat/vente ▲▼) · **tables triables** · **$ partout** · cash ≥ 0.
-- **Exécuteur paper** (`make live` / `make live-go`) : réplique l'allocation cible (poids × capital)
-  vers **Alpaca (paper)** et **Bitmart (crypto)** — **dry-run par défaut**.
-- Une **preview autonome** `apps/web/preview/interactive.html` (un seul fichier, aucune install).
-
-```bash
-python apps/web/preview/build_interactive.py   # génère/ouvre la preview interactive
-```
+- **🔬 Gate d'honnêteté à 4 étages** — aucune stratégie n'entre en production sans passer
+  *placebo → Deflated Sharpe → PBO/CSCV → sabotage adverse*. Les hypothèses rejetées sont
+  **publiées** dans le [Registre des échecs](https://7noctis7.github.io/Screening-Trading/echecs).
+- **📉 Edge honnête** : DSR ≈ 0 assumé (**aucun alpha directionnel prouvé**). Le seul edge
+  vérifié est la **réduction du drawdown**. Donnée absente → `n/d`, jamais inventée ; mesure
+  trop maigre → `UNCALIBRATED`, jamais extrapolée.
+- **🛡️ Rigueur anti-fuite** : point-in-time partout (vintages macro réels, prix ajustés des
+  splits), validation croisée purgée et embargoée, verrous de non-régression testés.
+- **⚖️ Garde-fous qui se mesurent eux-mêmes** : la convention la plus importante du dépôt est
+  que **tout garde-fou publie son compteur de déclenchements**. Un filet dont on ne voit pas
+  les prises n'est pas un filet.
+- **🔎 Certification** : `make certification` compare ce qu'un module **déclare** de son statut
+  à ce qui est **réellement atteignable** depuis la production. Un module qui ment est bloquant.
+- **🤖 Exécution paper réelle** : réconciliation idempotente vers un courtier paper, journal
+  des trades avec les features **figées à la décision** + allers-retours PnL/MFE/MAE → verdict
+  GO/NO-GO **mécanique**.
 
 ---
 
-## 🗺️ Architecture (cartographie)
+## 📐 Repères chiffrés
+
+| | |
+|---|---:|
+| Modules métier (`packages/`) | **381** fichiers, **29** sous-domaines |
+| Tests | **2 475** passés, 7 ignorés · **351** fichiers de test |
+| Décisions d'architecture consignées (ADR) | **129** |
+| Routes API | **41** |
+| Écrans du front | **28** pages, **44** composants |
+| Scripts CLI | **121** |
+| Commandes `make` documentées | **125** |
+| Fichiers de configuration YAML | **13** |
+
+Discipline de taille imposée et vérifiée par un hook : **< 400 lignes par fichier, < 50 par
+fonction**. Une nouvelle stratégie, source ou indicateur = **un fichier auto-enregistré**,
+jamais une modification du cœur.
+
+---
+
+## 🗺️ Architecture
 
 ```mermaid
 flowchart TD
   subgraph SRC["Sources de données"]
-    SEED["Seeds CSV (univers offline)"]; YF["yfinance / FMP"]; YAHOO["YAHOO.db (local, 4+ Go)"]; FRED["FRED / macro"]
+    SEED["Seeds CSV (univers hors-ligne)"]; YF["Fournisseurs de prix"]
+    LOCAL["Base de prix locale"]; MACRO["Séries macro point-in-time"]
   end
   subgraph CORE["packages/ — domaine (plugins)"]
     UNIV["data.universe<br/>builder multi-sources"]
-    PROV["data.providers<br/>synthetic · yfinance · db"]
-    STORE["storage<br/>bronze/silver/gold · feature store · quality"]
+    PROV["data.providers<br/>synthétique · en ligne · base locale"]
+    STORE["storage<br/>bronze/silver/gold · feature store · qualité"]
     IND["indicators"]; FUND["fundamentals"]; RANK["ranking (multi-facteur)"]
-    REG["regime (macro point-in-time)"]; STRAT["strategies (preset best-practice · cœur QQQ · swing legacy)"]
-    SIZE["portfolio.sizing (vol-target)"]; RISK["risk (kill-switch)"]
-    BT["backtest (preset ledger parts/cash · vectorisé)"]; EXEC["execution (Sim · Alpaca · BitMart)"]
-    ML["ml (CV purgée, triple-barrier)"]; PORT["portfolio (VaR/CVaR · Monte-Carlo · attribution · revue)"]
+    REG["regime (macro point-in-time)"]; STRAT["strategies (preset · cœur indiciel)"]
+    SIZE["portfolio.sizing (vol-target)"]; RISK["risk (portail + kill-switch)"]
+    BT["backtest (journal discret parts/cash)"]; EXEC["execution (Sim · courtiers)"]
+    ML["ml (CV purgée, triple-barrier)"]; PORT["portfolio (VaR/CVaR · Monte-Carlo · attribution)"]
+    SENT["sentiment (news · lexique/FinBERT)"]; RES["research (gate 4 étages · registre d'essais)"]
   end
   subgraph APP["apps/ — produit"]
     SNAP["api.snapshot<br/>assemble tout l'état"]
-    API["api.main (FastAPI)<br/>/api/* + cache TTL 15min"]
+    API["api.main (FastAPI)<br/>/api/* + cache TTL 15 min"]
     WEB["web (Next.js)"]; PREV["preview/interactive.html"]
   end
-  SEED --> UNIV; YF --> PROV; YAHOO --> PROV; FRED --> REG
+  SEED --> UNIV; YF --> PROV; LOCAL --> PROV; MACRO --> REG
   UNIV --> SNAP; PROV --> STORE --> SNAP
   IND & FUND --> RANK --> SNAP
   REG --> STRAT --> BT --> SNAP
   SIZE & RISK --> BT
-  ML --> SNAP; PORT --> SNAP; EXEC --> SNAP
+  ML --> SNAP; PORT --> SNAP; EXEC --> SNAP; SENT --> SNAP; RES --> SNAP
   SNAP --> API --> WEB
   SNAP --> PREV
 ```
 
-**Pipeline** : `données → (régime macro) → screening/ranking + ML → preset (qualité · risk-parity ERC ·
-DD-target) + cœur QQQ → sizing vol-target → risk engine (veto/kill-switch) → backtest discret (parts/cash,
-net de frais) → portefeuille (perf, VaR/CVaR, Monte-Carlo) → API → terminal web`. Mêmes interfaces
-backtest ↔ paper ↔ live (parité). Diagrammes vivants : [`vault/01_ARCHITECTURE.md`](vault/01_ARCHITECTURE.md).
+**Pipeline** : `données → régime macro → screening/ranking + ML → preset (qualité ·
+risk-parity ERC · DD-target) + cœur indiciel → sizing vol-target → portail de risque
+(veto/kill-switch) → backtest discret (parts/cash, net de frais) → portefeuille (perf,
+VaR/CVaR, Monte-Carlo) → API → terminal web`.
+
+Les interfaces **backtest ↔ paper ↔ live sont les mêmes** : c'est ce qui rend la parité
+vérifiable au lieu d'être promise.
 
 | Dossier | Rôle |
 |---|---|
-| `packages/` | Cœur métier en plugins (indicateurs, stratégies, risque, ML, portefeuille…) |
+| `packages/` | Cœur métier en plugins (indicateurs, stratégies, risque, ML, portefeuille, sentiment, recherche…) |
 | `apps/api/` | FastAPI : `snapshot.py` assemble l'état, `main.py` expose `/api/*` (cache TTL 15 min) |
-| `apps/web/` | Front Next.js + **preview autonome** `interactive.html` |
-| `config/` | YAML (univers, facteurs, risque, macro…) |
-| `data/seed/` | Univers offline (CSV) · `scripts/` ETL & démos · `tests/` miroir · `vault/` mémoire |
+| `apps/web/` | Front Next.js + preview autonome en un fichier |
+| `config/` | YAML (univers, facteurs, risque, macro, screening…) |
+| `scripts/` | ETL, diagnostics, bancs de mesure, démos |
+| `tests/` | Miroir de `packages/` + tests de propriété |
+| `vault/` | Mémoire longue du projet (Obsidian) : index, architecture, décisions, journal, TODO |
+| `docs/` | Cartes, audits, roadmap, **[référence des commandes](docs/COMMANDES.md)** |
 
-> 🧠 **Contexte agent** : `CLAUDE.md` (racine) est auto-chargé par Claude Code (rituel mémoire +
-> garde-fous). Skills prêts à l'emploi dans `.claude/commands/` : `/deploy`, `/audit-secrets`,
-> `/company-note`, `/close-session`. La mémoire long-terme vit dans `vault/` (Obsidian) + miroir Notion.
-
-### 🧠 Utiliser le vault Obsidian
-Ouvrir le dossier **`vault/`** comme vault (Open folder as vault) ; **`vault/00_INDEX.md`** est le
-tableau de bord (liens cliquables + raccourcis). **Rituel** : lire `00_INDEX → 01_ARCHITECTURE →
-04_JOURNAL (3 dernières) → 03_TODO` *avant*, puis maj `03_TODO` + entrée datée `04_JOURNAL` *après*.
-Les fichiers **auto-générés** (`Performance_Report.md`, `04_Companies/`, `_TOP200.md`) ne s'éditent
-pas à la main — ils sont (re)produits par `make analytics` / `reports` / `watchlist` / `vault-sync`
-(ou le cron). Détails pas-à-pas : note Notion « Comment utiliser Obsidian ».
-
-### 🧰 Stack locale gratuite & automatisation (« Mastermind 100 »)
-Améliorations **100 % open-source / gratuites**, sans dépendance payante :
-
-| Commande | Rôle | Brique gratuite |
-|---|---|---|
-| `make brief` | one-pager de session (priorités + journal + diffs + audit) | stdlib |
-| `make screen` | **screener à filtres** (config/screening.yaml) → candidats triés par z-score | stdlib/numpy |
-| `make repro` | **manifeste de reproductibilité** (git sha + config/data hash + env) → `out/repro.json` | stdlib |
-| `make vault-search Q="…"` | recherche **sémantique** du vault (`--code` pour le code) | TF-IDF · Ollama `nomic-embed-text` |
-| `make contracts` | **gate** d'intégrité OHLCV (bloque l'impossible) — aussi en CI | stdlib/pandera |
-| `make hf-push` / `make hf-pull` | cache OHLCV **souverain** (anti rate-limit yfinance) | Hugging Face Dataset |
-| `make notion-sync` | miroir Obsidian → Notion | API Notion |
-| `make supabase-kpis` | historique KPIs cloud (cross-device) | Supabase free |
-
-- **Screening → trading** : `packages/screening` (filtres YAML durs `op`/`between`/`on_missing` → scoring z-score cross-sectional, réutilise le registre de facteurs) exposé en `GET /api/screen` + page front **`/screener`**.
-- **Honnêteté statistique (le wedge)** : le dashboard affiche son **PSR** = P(Sharpe vrai > 0) et rappelle que le **DSR multi-essais ≈ 0** (pas d'alpha directionnel prouvé). L'attribution alpha/β est **gatée sur la significativité** (t-stat) : pas de « compétence » sans preuve. Cf. `vault/12_MANIFESTE_HONNETETE.md`.
-- **Gouvernance & antifragilité (audit « Conseil Suprême », 0 €)** : gate de publication anti « site muet » (`scripts/check_build.py`, échec rouge si vide/périmé) · **lignage & réconciliation** inter-sources (`packages/data/lineage.py`) · **SPC / Six Sigma** sur la qualité OHLCV (DPMO + niveau σ, `packages/data/spc.py`) · **isolation des fautes** par section (`safe_section` — une section qui plante ne tue plus le snapshot) · **garde anti-hallucination** des memos LLM (`packages/llm/guard.py`).
-- **CI** : `pytest` **bloquant** + `ruff`/`mypy`/`pip-audit` **informatifs** (`.github/workflows/ci.yml`) ; tests de **propriété** (`hypothesis`) sur les noyaux maths.
-- **FinOps IA** : `packages/llm` route les tâches simples vers un **LLM local** (Ollama, ex. `gemma3n:e4b`/`qwen2.5:3b`) → l'API payante n'est utilisée que pour le raisonnement complexe (`QUANT_LOCAL_LLM`).
-- **Perf** : hot-path prix **vectorisé** (1 scan au lieu de N), snapshot **incrémental** (mémoïsation par hash, `.cache/stages/`), brokers Alpaca∥Bitmart **en parallèle**, analytics **DuckDB** sur Parquet.
-- **Sécurité** : `gitleaks` (CI + pre-commit), CORS verrouillé, webhook signé, `safe_pickle` (anti-symlink + SHA-256). Audit dépôt public : propre.
-- **Event-driven** : workflow **n8n** prêt (`integrations/n8n/`) → `POST /api/tv/webhook` (veto risque, aucun ordre).
-- **Agent** : `CLAUDE.md` auto-chargé + skills `/deploy` `/audit-secrets` `/company-note` `/close-session` `/brief`.
-
-Clés optionnelles dans `.env` (cf. `.env.example`) : `OLLAMA_HOST`, `QUANT_LOCAL_LLM`, `QUANT_EMBED`, `HF_TOKEN`/`HF_DATASET`, `NOTION_TOKEN`/`NOTION_PARENT`, `SUPABASE_URL`/`SUPABASE_KEY`, `QUANT_WEBHOOK_TOKEN`. Tout est **best-effort** : absent → la fonctionnalité se désactive proprement.
+> 🧠 `CLAUDE.md` (racine) et [`AGENTS.md`](AGENTS.md) décrivent le contexte et les règles pour
+> un agent IA. La mémoire long-terme vit dans `vault/`.
 
 ---
 
-## 🧭 Les écrans (routes du front)
+## 🖥️ Les écrans
+
 | Route | Rôle |
 |---|---|
-| `/` | Landing (le Gate en 4 étages, manifeste, ticker live) |
-| `/dashboard` | Dashboard institutionnel : equity+underwater synchronisés, KPI, régime |
-| `/positions` | **Réel vs cible** : écart de réplication par poche, HHI/N effectif, badge earnings |
+| `/` | Landing : le gate en 4 étages, manifeste, ticker live |
+| `/dashboard` | Equity + underwater synchronisés, indicateurs clés, régime |
+| `/positions` | **Réel vs cible** : écart de réplication, HHI / N effectif, **courbe du portefeuille contre indices de référence** |
+| `/analyse-portefeuille` | Importez **votre** portefeuille : risque, scénarios, et **pouls sentiment pondéré par vos poids** |
 | `/screener` | Entonnoir de sélection + score **explicable** (z-scores factoriels par titre) |
-| `/crypto` | Cockpit crypto live : jauge sentiment, graphe multi-timeframe, sonar carnet, analyse |
-| `/echecs` | **Negative Results Registry** — les hypothèses rejetées au gate, publiées |
-| `/methode` | La méthode : gate placebo→DSR→PBO→sabotage (références López de Prado) |
-| `/accueil` | Présentation pédagogique + glossaire (PSR/DSR, HRP, VaR/CVaR…) |
-| `/portfolio` `/risk` `/trades` `/universe` `/sentiment` `/macro` `/themes` `/notes` … | analyse portefeuille, risque, journal, univers, news, macro, secteurs, notes sociétés |
+| `/conviction` | Score de conviction décomposé par contribution |
+| `/crypto` | Cockpit crypto : jauge de sentiment, multi-timeframe, carnet, analyse |
+| `/echecs` | **Registre des résultats négatifs** — les hypothèses rejetées, publiées |
+| `/methode` | La méthode : placebo → DSR → PBO → sabotage |
+| `/risk` | VaR/EVT/GARCH, backtest de VaR, ACP, budget de risque, limites, stress, HRP/ERC |
+| `/portfolio` | Monte-Carlo, attribution, revue experte |
+| `/journal` `/trades` | Journal des allers-retours · ordres exécutés **et** en attente |
+| `/ml` | Signaux du modèle, dérive, historique d'entraînement |
+| `/fundamentals` `/notes` `/fiche` | DCF, ratios, Piotroski, Altman Z · notes d'analyse par société |
+| `/sentiment` | Ton des actualités par position, macro et marché |
+| `/events` | Résultats trimestriels à venir (estimés et annoncés) + introductions en bourse |
+| `/macro` `/themes` `/universe` `/data` | Régimes macro · secteurs · univers · qualité des données |
+| `/investors` `/live` `/profil` `/accueil` `/glossaire` | Actionnariat · mode live · profil investisseur · pédagogie |
+
+**Installable (PWA)** : sur le site en ligne, *Partager → Sur l'écran d'accueil*. ⌘K · thème
+clair/sombre · tables triables · graphiques chandeliers au clic.
+
+---
+
+## 🔌 L'API
+
+FastAPI, **verrouillée sur la boucle locale par défaut**, cache TTL 15 min.
+
+**Lecture (`GET`)** — `/health` · `/api/meta` `/api/dashboard` `/api/screener` `/api/screen`
+`/api/conviction` `/api/universe` `/api/themes` `/api/macro` `/api/events` `/api/data`
+`/api/ml` `/api/sentiment` `/api/fundamentals` `/api/company_report` `/api/notes`
+`/api/note_file` `/api/investors` `/api/crypto_cockpit` `/api/ticker` `/api/failures`
+`/api/portfolio` `/api/positions` `/api/performance` `/api/trades` `/api/journal`
+`/api/preset_ledger` `/api/analytics` `/api/live` `/api/profil` `/api/overlays`
+`/api/object/{type}/{id}` · `/api/ai/status` `/api/ai/metrics` `/api/ai/commentary`
+`/api/ai/diagnostic`
+
+**Écriture (`POST`, locale uniquement)** — `/api/portfolio/analyze` ·
+`/api/portfolio/recommend` · `/api/portfolio/sentiment` · `/api/ai/chat` · `/api/tv/webhook`
+
+Les trois routes `/api/portfolio/*` sont **read-only par contrat** : elles calculent et ne
+persistent rien. Un portefeuille de passage n'écrit jamais dans l'historique du robot.
+
+---
 
 ## 🚀 Démarrage
+
+### Poste de travail
 
 ```bash
 uv venv && source .venv/bin/activate
 uv pip install -e ".[dev,quant,ml,reporting]"
-pytest -q
-# Terminal autonome (aucune API requise) :
-python apps/web/preview/build_interactive.py    # ouvre apps/web/preview/interactive.html
-# API + front EN UNE COMMANDE (maj du code + tue les vieux process + API en fond + site) :
-make start      # → http://localhost:3000  (laisse ~1-3 min au 1er build) ·  make stop pour arrêter
-# …ou en deux fenêtres séparées :
-make api        # uvicorn apps.api.main:app   (http://localhost:8000)
-make web        # cd apps/web && npm install && npm run dev (http://localhost:3000)
+make test                                       # 2 475 tests
+
+make start                                      # API + front → http://localhost:3000
+make stop                                       # arrêt
 ```
 
-## 🖥️ Se connecter en local (2 fenêtres de terminal)
+Ou en deux fenêtres, pour voir les deux journaux :
 
-Le terminal complet (API + front) tourne avec **deux fenêtres de terminal ouvertes en même temps** :
-l'une fait tourner le backend, l'autre le site. Laisse les deux ouvertes pendant que tu travailles.
-
-**Fenêtre 1 — le backend (API FastAPI)** → sert les données sur `http://localhost:8000`
 ```bash
-cd ~/Screening-Trading
-source .venv/bin/activate
-export QUANT_PRICE_DB="$HOME/Desktop/YAHOO.db"   # ta base réelle (adapte le chemin)
-export FRED_API_KEY="ta_cle_fred"               # page Macro chiffrée (le FMI marche sans clé)
-# fondamentaux réels via yfinance = défaut si en ligne (QUANT_FUND=synthetic pour forcer l'offline)
-export QUANT_NEWS=1                              # news RSS réelles
+make api      # → http://localhost:8000
+make web      # → http://localhost:3000
+```
+
+**Sans rien installer** : `python apps/web/preview/build_interactive.py` génère un fichier
+HTML autonome à ouvrir directement.
+
+### Serveur permanent (systemd)
+
+Sur une machine qui doit survivre à la déconnexion SSH :
+
+```bash
+make services     # installe l'API et le front en services systemd (une fois)
+make up           # sync + relance + attente que le front réponde
+make services-logs
+```
+
+> `make start` **refuse** de démarrer quand les services tournent, plutôt que d'entrer en
+> conflit sur le port. Le front tourne alors en mode production, pas en serveur de
+> développement : ce dernier supporte mal d'être un service au long cours.
+
+### Toutes les commandes
+
+**→ [`docs/COMMANDES.md`](docs/COMMANDES.md)** — les 125 cibles, groupées par intention, avec
+les variables d'environnement. En ligne de commande : `make help`.
+
+---
+
+## 📈 Brancher vos données réelles
+
+Le projet utilise une **vraie base si elle existe**, sinon un jeu synthétique — et il affiche
+toujours lequel des deux (**mode des données** : réel / mixte / synthétique).
+
+```bash
+export QUANT_PRICE_DB="/chemin/vers/votre/base.db"     # adaptez le chemin
 make api
+
+python scripts/ingest_prices.py --since 2015-01-01     # backfill complet
+python scripts/ingest_prices.py --daily                # incrémental quotidien
+make audit                                             # complétude · exactitude · point-in-time
 ```
 
-**Fenêtre 2 — le front (site Next.js)** → l'interface sur `http://localhost:3000`
-```bash
-cd ~/Screening-Trading/apps/web
-rm -rf .next        # ⚠️ obligatoire si tu viens de lancer `make site` (build statique incompatible avec dev)
-npm install         # la 1ʳᵉ fois seulement
-npm run dev
-```
+Détails : [`docs/REAL_DATA.md`](docs/REAL_DATA.md).
 
-> ⚠️ **Piège `localhost:3000` (`Cannot find module './682.js'` / `/_document`)** : `make site` laisse
-> `apps/web/.next` en **mode export statique**, que `next dev` ne sait pas relire. **Solution** :
-> `cd apps/web && rm -rf .next && npm run dev`. Règle : un `rm -rf .next` à chaque bascule
-> `make site` (statique :8080) ↔ `npm run dev` (dynamique :3000).
+**Biais du survivant** : l'univers ne contient que les titres *encore cotés*. Pour des
+backtests longs honnêtes, `make ingest-delisted` alimente la liste des délistés — et l'audit
+correspondant s'affiche dans l'écran Données.
 
-Puis ouvre **`http://localhost:3000`** dans ton navigateur (`Cmd+Shift+R` pour forcer le rechargement
-après un `git pull`). La fenêtre 1 doit rester lancée : le site interroge l'API en continu.
+---
 
-> 💡 **Sans rien installer** : `python apps/web/preview/build_interactive.py` génère un fichier
-> autonome `apps/web/preview/interactive.html` à ouvrir directement (aucune des 2 fenêtres requise).
-
-## 🌐 Site en ligne gratuit (GitHub Pages + PWA)
-
-Le **vrai front Next.js** (parité `make start`) est publié en statique sur **GitHub Pages**, reconstruit
-chaque jour ouvré (cron) **et** à chaque push sur `main` par GitHub Actions (`.github/workflows/pages.yml`),
-avec des **données réelles** récupérées gratuitement dans le cloud (yfinance / SEC EDGAR). **Mac éteint, 0 €.**
-
-- **URL** : `https://<ton-compte>.github.io/Screening-Trading/` (ex. `https://7noctis7.github.io/Screening-Trading/`).
-- **Activer (1 fois)** : *Settings → Pages → Source = **GitHub Actions***. Le dépôt doit être **public**
-  (les fichiers sensibles `.env`/`*.db` sont gitignorés → rien de privé n'est publié ; le build CI n'a
-  **pas** tes clés courtier, donc tes positions réelles **n'apparaissent jamais** sur le site public).
-- **Univers borné** : la PWA en ligne couvre `config/mobile_universe.csv` = **watchlist fixe + top 200 par note**
-  (généré par `make watchlist`), pour un site léger et rapide sur téléphone. En local, aucun bridage.
-- **Détails / dépannage** : [`docs/DEPLOY.md`](docs/DEPLOY.md).
-
-> 📵 **Positions réelles en privé** : le site public ne montre pas tes comptes. Pour voir Alpaca/Bitmart,
-> lance en **local** (`make start` avec ton `.env`) — jamais sur l'URL publique.
-
-**Construire / prévisualiser le site statique en local** (même rendu qu'en ligne) :
-```bash
-make site         # watchlist + top 200 → données figées → export Next.js → http://localhost:8080
-make site-lite    # variante LÉGÈRE sans Node (terminal autonome interactive.html)
-make watchlist    # (re)génère config/mobile_universe.csv (watchlist + top 200) + miroir Obsidian
-```
-
-## 📈 Brancher VOS données réelles (yfinance / FMP / YAHOO.db)
-
-Le projet utilise une **vraie base si elle existe**, sinon le synthétique (cf.
-[`docs/REAL_DATA.md`](docs/REAL_DATA.md)). Avec votre `YAHOO.db` (à garder hors Git) :
+## 🤖 Exécution paper
 
 ```bash
-# ⚠️ deux commandes SÉPARÉES — remplacez le chemin par le vôtre :
-export QUANT_PRICE_DB="/Users/vous/data/YAHOO.db"
-make api          # ou : python apps/web/preview/build_interactive.py
+make live          # APERÇU : affiche les ordres cibles, n'envoie RIEN
+make live-go       # EXÉCUTE en paper — clés requises
 ```
 
-Mettre à jour la base chaque jour (append idempotent, jamais d'écrasement) :
-```bash
-python scripts/ingest_prices.py --since 2015-01-01   # backfill complet
-python scripts/ingest_prices.py --daily              # incrémental quotidien
-```
-
-**Backtest walk-forward du preset best-practice** (qualité + risk-parity + DD-target + blackout +
-no-trade band) **et de l'overlay volatilité gérée**, sur VOS données (point-in-time, net de coûts) :
-```bash
-export QUANT_PRICE_DB="$HOME/Desktop/YAHOO.db"   # sinon synthétique
-make backtest-preset                              # preset vs swing vs équipondéré + Moreira-Muir
-make calibrate-preset                             # meilleure combo (DD × top-K × bande) par Sharpe déflaté
-make preset-report                                # rapport HTML (courbes + drawdowns) → out/preset_report.html
-```
-
-> **Screen d'exploitabilité d'une niche** (ticket #4) : avant de t'engager sur un micro-marché,
-> `make screen-niche` note son **exploitabilité 0-100** (autocorr · variance-ratio · dispersion ·
-> DSR momentum). Score bas = marché efficient, ne pas s'engager. Combine avec `QUANT_UNIVERSE`.
-
-> **Biais du survivant** : l'univers ne contient que les titres *encore cotés*. Pour des backtests
-> longs honnêtes, déposer `data/delisted.csv` (cf. `data/delisted.csv.example`) — l'audit s'affiche
-> sur la page Données. Allocation **Black-Litterman** (vues = conviction) et **régime de volatilité**
-> (calme/normal/stress) exposés dans Portefeuille / Risque.
-
-**Entraîner le modèle ML hors-ligne** (serving découplé — l'API charge l'artefact, ne réentraîne plus) :
-```bash
-make train         # → models/ (lancé aussi par le cron quotidien)
-```
-
-**Données & notes** (lancés aussi par le cron quotidien) :
-```bash
-make audit                 # audit PwC des bases (complétude/exactitude/PIT) — ARGS=--strict pour gater
-make ingest-delisted       # détecte les délistés → data/delisted.csv (anti-biais du survivant)
-make reports               # notes d'analyse (top-conviction + positions) → out/notes/AAAA-MM-JJ + coffre
-make analytics             # rapport perf QuantStats (Sortino/Calmar/Alpha-Beta) → vault/Performance_Report.md
-```
-
-**Automatiser la maj quotidienne en une commande** (macOS launchd / Linux crontab, 22h30 lun-ven) :
-```bash
-make cron-install      # active la tâche planifiée (logs : /tmp/quant_daily.log)
-make cron-uninstall    # la désactive
-```
-
-**Depuis le téléphone** : lancez l'API sur le Mac en réseau local
-(`make api-lan` → `uvicorn … --host 0.0.0.0`), puis ouvrez `http://IP_DU_MAC:8000` /
-le front depuis le navigateur du téléphone (même Wi-Fi). Détails et cron : `docs/REAL_DATA.md`.
-
-## 🤖 Répliquer l'allocation en paper (Alpaca + Binance)
-
-```bash
-make live          # APERÇU (dry-run) : affiche les ordres cibles, n'envoie RIEN
-make live-go       # EXÉCUTE en PAPER (clés API .env requises) — Alpaca reste en paper
-```
-
-### Interactive Brokers — compte DÉMO uniquement
-
-`packages/execution/ibkr_broker.py` **ne peut pas** passer d'ordre sur un compte IBKR réel.
-Trois verrous indépendants, un seul suffit pour refuser :
-
-| Verrou | Ce qu'il contrôle |
-|---|---|
-| **Port** | 7496 / 4001 = ports RÉELS → refusés avant toute connexion |
-| **Identifiant de compte** | lu **après** connexion. `DU…` / `DF…` = démo. Tout le reste est refusé, **y compris un identifiant vide** |
-| **Opt-in** | `QUANT_IBKR_ENABLE=1` requis |
-
-Le port n'est qu'un **indice** : il se reconfigure dans les réglages de TWS. Le verrou décisif
-est l'identifiant renvoyé par la passerelle, qui ne se falsifie pas depuis le poste client — et
-il est re-contrôlé **avant chaque ordre**, parce qu'une passerelle peut être relancée sur un
-autre compte pendant que le processus tourne.
-
-Il n'existe **aucun** paramètre ni variable d'environnement qui ouvrirait le réel. En ajouter un
-exigerait de modifier le fichier source : un geste visible, revu, tracé dans l'historique git.
-Un test le vérifie.
-
-État : **lecture seule** (equity, positions). L'émission d'ordres est refusée explicitement —
-IBKR raisonne en quantité et non en montant, et un ordre approximatif est pire qu'un ordre absent.
-
-Routage : actions/ETF → **Alpaca (paper)** · crypto → **Binance** par défaut
-(`QUANT_CRYPTO_VENUE=bitmart` pour changer de place). Le mode réel exige **`--live` ET `--yes`**
-ET des clés API présentes : si l'un des trois manque, on retombe en dry-run.
-
-### Backtest → Paper → Live
+**Trois conditions cumulatives** pour qu'un ordre parte : `--live` **ET** `--yes` **ET** des
+clés présentes. Si l'une manque, le moteur retombe en aperçu. Le courtier actions est **forcé
+en paper dans le code**, et toute place crypto réelle est neutralisée par défaut.
 
 ```
 BACKTEST              PAPER                    LIVE
 make backtest-*   →   make live-go        →    NON ACTIVÉ
-aucun ordre           Alpaca paper             exige une décision humaine explicite
+aucun ordre           courtier paper           décision humaine explicite requise
 ```
 
 L'activation d'un courtier réel est conditionnée à un rendez-vous d'évaluation daté et à une
-décision explicite du propriétaire (`vault/03_TODO.md`). Aucun agent ne peut la déclencher.
+décision explicite du propriétaire. **Aucun agent ne peut la déclencher.**
 
-## 🛡️ Risk Management
+### Courtier tiers — compte démo uniquement
 
-Le portail pré-trade (`packages/risk/order_gate.py`) s'insère **après la stratégie et avant le
-courtier**. Il ne connaît rien de la stratégie : il ne voit qu'un ordre, un état de compte, et
-des limites lues **dans l'environnement seul**. C'est ce qui le rend non contournable.
+Trois verrous indépendants, un seul suffit pour refuser : le **port** (les ports réels sont
+rejetés avant toute connexion), l'**identifiant de compte** lu *après* connexion (tout ce qui
+n'est pas un préfixe démo est refusé, **y compris un identifiant vide**), et un **opt-in
+explicite**. L'identifiant est re-contrôlé **avant chaque ordre**, parce qu'une passerelle
+peut être relancée sur un autre compte pendant que le processus tourne. Il n'existe aucun
+paramètre qui ouvrirait le réel : en ajouter un exigerait de modifier le code source — un
+geste visible, revu, tracé. Un test le vérifie.
+
+---
+
+## 🛡️ Gestion du risque
+
+Le portail pré-trade s'insère **après la stratégie et avant le courtier**. Il ne connaît rien
+de la stratégie : il ne voit qu'un ordre, un état de compte, et des limites lues **dans
+l'environnement seul**. C'est ce qui le rend non contournable.
 
 | Variable | Défaut | Effet |
 |---|---:|---|
@@ -382,14 +286,17 @@ Deux principes encodés et testés :
 2. **Un désengagement n'est jamais bloqué** — même compte saturé, même equity illisible. Un
    portail qui refuse une vente augmente le risque au lieu de le réduire.
 
-S'y ajoutent deux kill-switches indépendants : drawdown intraday réel et alertes techniques
-TradingView. Chacun peut ramener l'exposition à zéro.
+S'y ajoutent des kill-switches indépendants (drawdown intraday, coupe-circuit sur la perte du
+jour, alertes techniques externes). Chacun peut ramener l'exposition à zéro.
 
-**L'IA n'est pas dans la chaîne d'ordres.** `packages/llm` n'est importé que par les endpoints de
-génération de texte ; `packages/intelligence` n'importe ni `packages.execution` ni
-`packages.risk`, et un test le vérifie sur l'arbre syntaxique à chaque exécution de la suite.
+**L'IA n'est pas dans la chaîne d'ordres.** Le module de langage n'est importé que par les
+endpoints de génération de texte ; le module d'intelligence de marché n'importe ni
+l'exécution ni le risque, et un test le vérifie **sur l'arbre syntaxique** à chaque exécution
+de la suite.
 
-## 🛰️ Market Intelligence / X Intelligence
+---
+
+## 🛰️ Qualification de l'information
 
 `packages/intelligence` qualifie l'information de marché avant qu'elle n'atteigne l'analyse :
 
@@ -398,80 +305,80 @@ source → authentification → score de source → nature (fait/opinion/rumeur)
        → corroboration croisée → pertinence → statut + confiance
 ```
 
-Point d'entrée unique : `qualifier()`. Le verdict nomme toujours la raison d'un refus.
-
 Règles encodées : une **opinion ne devient jamais un fait** ; le **nombre d'abonnés** vaut au
-maximum 0,08 sur 1,00 ; un compte **non authentifié** est plafonné à 0,60 ; les niveaux **D et E
-ne confirment jamais** ; les **reprises d'une même origine** comptent pour une seule ; l'exigence
-de corroboration **croît avec l'impact** (1 / 2 / 3 sources indépendantes).
+maximum 0,08 sur 1,00 ; un compte **non authentifié** est plafonné à 0,60 ; les niveaux les
+plus bas **ne confirment jamais** ; les **reprises d'une même origine** comptent pour une
+seule ; l'exigence de corroboration **croît avec l'impact** (1 / 2 / 3 sources indépendantes).
 
-**Watchlist X : 66 comptes, zéro authentifié.** Le statut de vérification et le nombre d'abonnés
-ne sont pas renseignés — les inventer produirait exactement le défaut que cette couche existe
-pour empêcher. Tous sont plafonnés à 0,60 et aucun n'est utilisable seul sur une information à
-impact.
+**État : architecture complète et testée, aucun collecteur.** Il n'y a ni flux, ni
+persistance. C'est le premier livrable attendu de cette couche — et le dire vaut mieux que
+laisser croire qu'elle tourne.
 
-**État : architecture complète et testée, aucun collecteur.** Il n'y a ni accès à X, ni flux de
-news, ni persistance. C'est le premier livrable attendu de la couche d'intelligence.
+---
 
 ## 📊 État du projet
 
 | Niveau | Verdict |
 |---|---|
-| **CODE READY** | ✅ oui — 1160 tests passent, aucun échec, lint et gates CI verts |
-| **PAPER TRADING READY** | ⚠️ sous conditions — les 3 P0 de `docs/ROADMAP.md` d'abord |
+| **CODE READY** | ✅ oui — 2 475 tests passent, gates CI verts |
+| **PAPER TRADING READY** | ⚠️ en cours — le rebalancement paper tourne et le journal est vérifié (`make verify-journal`), mais **P0-3 reste ouvert** ([`docs/ROADMAP.md`](docs/ROADMAP.md)) |
 | **LIVE TRADING READY** | ❌ non — et ce n'est pas une question de code |
 
-Détail : [`docs/PROJECT_AUDIT.md`](docs/PROJECT_AUDIT.md) ·
-[`docs/TEST_REPORT.md`](docs/TEST_REPORT.md)
+Audits détaillés : [`docs/PROJECT_AUDIT.md`](docs/PROJECT_AUDIT.md) ·
+[`docs/AUDIT_SITE.md`](docs/AUDIT_SITE.md) · [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md).
 
-## ⚠️ Problèmes connus
+## ⚠️ Limites connues
 
-1. **13 sites `min(len(data[s]))` non migrés** vers `packages/backtest/panel` — les chiffres
-   publiés par ces modules sont suspects (le même défaut faisait tourner un backtest sur 7
-   rebalancements au lieu de 126).
-2. **Le test de biais du survivant ne mesure rien** : les délistés ingérés n'entrent jamais dans
-   le top-30. Il passe ; ce n'est pas la même chose que valider quelque chose.
-3. **`k_signal` médian = 1** sur 126 rebalancements : l'optimisation ERC répartit du risque sur
-   une covariance à une seule direction fiable.
-4. **La bande d'inaction bloque 99 % des pas** et ne laisse trader que ~7 % des noms.
-5. **`mcp_tradingview`** pilote un kill-switch avec 2 fichiers de test pour 7 modules.
-6. **Couverture de tests non mesurée** (`pytest-cov` absent de l'environnement).
+Ce que ce projet **ne** sait **pas** faire, écrit ici plutôt que découvert plus tard :
 
-Liste complète et priorisée : [`docs/ROADMAP.md`](docs/ROADMAP.md).
+1. **Aucun alpha directionnel prouvé.** Le DSR multi-essais est ≈ 0 et c'est assumé. Le seul
+   edge vérifié porte sur la réduction du drawdown.
+2. **Le coût du turnover n'est pas instrumenté.** Les colonnes frais et slippage existent au
+   journal mais ne sont pas alimentées par le chemin d'exécution : `make turnover-audit`
+   rapporte donc `0,00 $` de coût, ce qui est un champ vide, pas une mesure.
+3. **Aucune sortie n'est déclenchée par un stop ou un objectif** — toute clôture vient du
+   rebalancement. La capture médiane du potentiel mesurée est négative.
+4. **Échantillon de décisions réelles encore trop maigre** pour distinguer un effet du bruit.
+   Les mesures qui le concernent renvoient `UNCALIBRATED` au lieu d'un chiffre rassurant.
+5. **La bande d'inaction n'est pas instruite** (P0-3) : à 3 % en poids absolu, elle bloque
+   99 % des pas alors qu'une position pèse ~3,3 % — la bande vaut presque une ligne entière.
+   Une bande **relative** au poids cible reste à mesurer ; le labo doit trancher, pas l'intuition.
+6. **Dette de câblage** : des modules écrits et testés ne sont pas atteignables depuis la
+   production. `make certification` la chiffre et refuse qu'un module mente sur son statut.
 
-## 🔍 Audits
+Liste priorisée : [`docs/ROADMAP.md`](docs/ROADMAP.md) et `vault/03_TODO.md`.
 
-- [`docs/PROJECT_AUDIT.md`](docs/PROJECT_AUDIT.md) — architecture, état par module, risques
-  techniques et trading, dette technique
-- [`docs/AUDIT_SITE.md`](docs/AUDIT_SITE.md) — audit transversal UI/UX, ML, finance, data
-- [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) — campagne de tests réelle
+---
 
-## 🔭 Roadmap
+## 🔐 Sécurité & confidentialité
 
-[`docs/ROADMAP.md`](docs/ROADMAP.md) — priorisée P0 → P3, avec difficulté, dépendances et risques
-pour chaque élément.
+Dépôt **public**, et traité comme tel :
+
+- **Jamais committés** : `.env`, les bases de données, les caches, les exports du site et les
+  données de portefeuille. Tous ignorés par git.
+- **Aucun secret dans l'historique** — un scanner de secrets tourne en intégration continue
+  **et** en pre-commit.
+- **Les positions réelles ne quittent jamais la machine locale.** Le build en ligne n'a pas
+  les clés courtier : le site public ne peut structurellement pas les afficher.
+- **API verrouillée sur la boucle locale** (`QUANT_CORS_ORIGINS` pour élargir), endpoints en
+  écriture protégés par jeton.
+- **Aucune donnée personnelle dans le dépôt** : les chemins, adresses et identifiants qui
+  apparaissent dans la documentation sont des **placeholders** (`/chemin/vers/…`,
+  `utilisateur@<serveur>`), jamais des valeurs réelles.
+
+Voir [`SECURITY.md`](SECURITY.md) · audit du dépôt à la demande : skill `/audit-secrets`.
 
 ## 🤝 Contribution
 
-Voir [`CONTRIBUTING.md`](CONTRIBUTING.md). En résumé : `make test` avant tout commit, moins de
+[`CONTRIBUTING.md`](CONTRIBUTING.md). En résumé : `make test` avant tout commit, moins de
 400 lignes par fichier et 50 par fonction, une nouvelle stratégie ou source = **un fichier
-auto-enregistré** (jamais de modification du cœur).
+auto-enregistré** (jamais de modification du cœur), et tout garde-fou publie son compteur.
 
-## 🔐 Sécurité
+## 🧭 Pour les agents IA
 
-Voir [`SECURITY.md`](SECURITY.md). Dépôt **public** : `.env`, `*.db`, `.cache/` et les données
-exportées ne sont jamais committés ; gitleaks tourne en CI et en pre-commit ; les positions
-réelles du courtier sont local-only. CORS de l'API verrouillé sur localhost, webhook protégé par
-jeton. Aucun secret n'a jamais été ajouté à l'historique git (vérifié).
-
-## 🧭 Instructions pour les agents IA
-
-[`AGENTS.md`](AGENTS.md) — architecture, commandes, fichiers critiques, règles de modification,
-et la convention la plus importante du dépôt : **tout garde-fou publie son compteur de
-déclenchements**.
-
-Passation détaillée : [`docs/GROK_BOT_HANDOFF.md`](docs/GROK_BOT_HANDOFF.md).
+[`AGENTS.md`](AGENTS.md) — architecture, commandes, fichiers critiques, règles de
+modification. `CLAUDE.md` est chargé automatiquement et porte les garde-fous non négociables.
 
 ## Licence
 
-MIT recommandé (usage personnel open-source).
+MIT.

@@ -14,8 +14,10 @@ from packages.research.protocole_oos import (
 )
 
 
-def test_le_module_demarre_en_SHADOW():
-    assert STATUT == "SHADOW_UNCALIBRATED"
+def test_le_module_declare_son_statut_REEL():
+    """Branché le 09/09 sur research/gate.verdict_hors_echantillon. Il juge des
+    candidats de RECHERCHE, jamais des ordres : d'où CANDIDATE et non production."""
+    assert STATUT == "CANDIDATE"
 
 
 # ------------------------------------------------------------- partition

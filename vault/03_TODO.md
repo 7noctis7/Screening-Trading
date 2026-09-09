@@ -7,7 +7,17 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
-- [ ] **P0 — Le filtre `legacy` masque un sous-ensemble FAVORABLE.** Mesuré le 09/09 sur le
+- [x] **P1 — « Pouls du portefeuille » livré (09/09, ADR-0128).** Sentiment & news du
+      portefeuille importé, **pondérés par ses poids**, dans *Analyser mon portefeuille*.
+      L'onglet `/sentiment` du robot reste inchangé. Non-persistance garantie par deux
+      tests (source + comportement), vérifiés par sabotage.
+
+- [x] **~~P0 — filtre `legacy`~~ — ANNULÉE, elle n'a jamais existé (09/09, ADR-0122).**
+      `/api/journal` publie déjà les deux périmètres via `perimetre_affiche`, et la page
+      `/journal` affiche le bandeau « Périmètre affiché ≠ compte » avec les deux chiffres.
+      J'avais lu la ligne du diagnostic CLI sans vérifier ce qu'elle avait déjà provoqué.
+
+- [x] **~~P0 (annulée) — texte d'origine conservé~~ —** Mesuré le 09/09 sur le
       VPS : `legacy=0` (affiché) = 55 fermés, 58 % de réussite, **+2 660,29 $**. `legacy=1`
       (masqué) = 211 fermés, 51 %, **−2 414,96 $**. Total subi par le compte : 52 %,
       **+245,33 $**. Le panneau ne ment pas, il montre une PART — et l'effet sur qui le lit
@@ -30,13 +40,28 @@
 - [ ] **P1 — 1 906 lignes de DETTE DE CÂBLAGE (09/09, ADR-0118).** Dix modules déclarés
       SHADOW, aucun atteignable depuis la production. `make certification` les compte et
       bloque si l'un d'eux entre en prod sans changer de statut. À trancher, par ordre de
-      valeur : (1) `protocole_oos` → `gate.py`, pour que `n_essais` soit COMPTÉ et non
-      choisi ; (2) `disjoncteur`, perte journalière réalisée+latente, verrou sans
-      réarmement — complète `dd_kill_switch` qui, lui, coupe sur le drawdown ;
-      (3) `frictions`, décomposition des coûts, risque nul ; (4) `market_structure`, dont
-      le STATUT est faux (déjà utilisé par `make labs`).
+      valeur : ~~(1) protocole_oos~~ FAIT (ADR-0119) ; ~~(2) disjoncteur~~ FAIT, en
+      OBSERVATION — reste à l'ARMER (`QUANT_DISJONCTEUR=1`) après quelques semaines
+      d'observation des jours où il aurait coupé ; (3) `frictions` : `signal_inhibe` exige
+      un GAIN ATTENDU par ordre que le rebalanceur ne produit pas — produire cette
+      estimation d'abord, ne pas l'inventer ; (4) `market_structure`, dont le STATUT dit
+      « aucun appelant en production » alors que `make labs` l'utilise.
 
-- [ ] **P1 — ÎLOT SWING : 1 374 lignes, une stratégie entière jamais exécutée.**
+- [x] **ÎLOT SWING — MESURÉ le 09/09, verdict NON (ADR-0126).** 2 169 trades sur données
+      réelles : −0,059 R par trade, 26,8 % de réussite, −127,9 R au total, DSR 0,0001 pour
+      un seuil de 0,95. NE PAS BRANCHER. Nuance : 1,7 point sous le seuil d'équilibre, et
+      ma règle « stop prioritaire dans la même barre » porte sur ces cas — c'est une BORNE
+      INFÉRIEURE. Ne pas supprimer : la question se rejugera sur données INTRADAY, qui
+      lèveraient l'ambiguïté. Les coûts, non modélisés, ne peuvent qu'aggraver le résultat.
+
+- [x] **~~P1 — îlot swing mesurable~~ —**
+      Ce n'est PAS le swing déjà backtesté (`strategies/swing` + `fast_swing`) : c'est une
+      stratégie ICT/Smart Money distincte (Hurst 1W, SFP, BOS, OTE, order blocks, CHoCH).
+      Le banc simule ses propositions sur l'historique réel — entrée en LIMITE, stop
+      prioritaire sur la cible dans une même barre, résultat en R — et passe le Sharpe par
+      trade à la porte DSR. Reste à LANCER sur le VPS, puis décider sur les chiffres.
+
+- [x] **~~P1 — îlot swing : décision sans chiffres~~ —**
       `moteur_swing` et `moteur_sortie` n'ont AUCUN importeur, et tirent `ddm`,
       `garde_swing`, `liquidite_ict`, `caracteristiques_swing`. Brancher ou supprimer est
       une décision de produit, pas de linter — elle appartient à l'utilisateur.
@@ -45,7 +70,14 @@
       zéro implémentation (seul vrai manque de l'audit des 4 axes). N'a d'intérêt qu'une
       fois `protocole_oos` branché — sinon on ajoute une méthode sans porte pour la juger.
 
-- [ ] **P0 — LE CHEMIN D'ÉCRITURE DU JOURNAL DÉDOUBLE (09/09).** NWL porte 1,74× la
+- [ ] **P1 — Lots `LEG-` en double : DONNÉES historiques, PAS un bug vivant (09/09).**
+      Formulation corrigée : `diag_journal_compte.py:663` établit qu'« aucun script du
+      dépôt n'écrit d'identifiant `LEG-` — l'import qui les a produits n'est plus dans
+      l'arbre ». Il n'y a donc aucun chemin d'écriture à réparer : c'est une contamination
+      historique (NWL 1,74× la quantité achetée, MAS 1,91×). Remède au niveau DONNÉES,
+      après lecture des traces : `python scripts/diag_journal_compte.py --symbole NWL`.
+
+- [ ] **~~P0 — chemin d'écriture qui dédouble~~ — REQUALIFIÉ ci-dessus (09/09).** NWL porte 1,74× la
       quantité achetée, MAS 1,91×, sur 7 et 6 identifiants `LEG-…` distincts. Le
       diagnostic le nomme : « un seul préfixe portant 2× = le chemin d'ÉCRITURE crée deux
       identités ». C'est la cause AMONT de tout le reste, et aucune réparation aval ne
@@ -74,7 +106,11 @@
       post-mortem. Corrigé + invariant verrouillé par un test qui relit `snapshot.py`.
       Aucun poids ne bouge. ADR-0113.
 
-- [ ] **P1 — « Actions diverses » n'est pas un secteur, c'est « secteur inconnu ».**
+- [x] **Libellé corrigé (09/09, ADR-0122) : « Actions diverses » sort sous le type
+      `secteur inconnu`.** Reste la DONNÉE à peupler — mesurable sur le VPS seulement :
+      `make list-db` dit combien d'actions ont un champ `sector` vide.
+
+- [x] **~~P1 — « Actions diverses » n'est pas un secteur~~ —**
       `_sector_of` y range en dernier recours toute ACTION dont le champ secteur est vide ou
       hors GICS (crypto/forex/ETF/indices/commodités ont leur branche avant). Les 47,5 %
       signalés ne disent donc pas « la moitié du livre sur un secteur » mais « la moitié du

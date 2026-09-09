@@ -249,6 +249,7 @@ def build_company_report(f: Financials, *, name: str | None = None,
                      roe=dp.get("roe"), piotroski=piotroski, altman_z=altman.get("z"),
                      dividend_yield=getattr(f, "dividend_yield", None))
 
+    _risk = risk_block(price_series, beta)
     return {
         "as_of": datetime.now(timezone.utc).date().isoformat(),
         "identity": {"symbol": f.symbol, "name": name or f.symbol, "sector": f.sector,
@@ -290,9 +291,37 @@ def build_company_report(f: Financials, *, name: str | None = None,
         "charts": charts,
         "snowflake": snow,
         "dividend_yield": _f(getattr(f, "dividend_yield", None), 4),
-        "risk": risk_block(price_series, beta),
+        "risk": _risk,
+        "falsification": _falsification(reco, technical, _risk, price_series,
+                                        roce, wacc, f),
         "verdict": _verdict(f, global_score, reco, roce, wacc, val_scen, audit),
     }
+
+
+def _falsification(reco: str, technical: dict | None, risk: dict,
+                   price_series: list[float] | None, roce: float,
+                   wacc: float, f: Financials) -> dict:
+    """Ce qui invaliderait la thèse — assemblé de ce que la note calcule DÉJÀ.
+
+    Aucune donnée nouvelle n'est appelée : le stop et le pire drawdown viennent de
+    `risk_block`, la MM200 du bloc technique, ROCE et WACC du DCF. Un critère de
+    sortie qui exigerait une source supplémentaire ne serait pas vérifiable les
+    jours où cette source manque — donc pas un critère.
+    """
+    from packages.reporting.falsification import falsifieurs
+    px = [float(x) for x in (price_series or []) if x is not None]
+    cours = px[-1] if px else None
+    # `technical` publie l'ÉCART à la MM200, pas son niveau : on remonte au niveau,
+    # sinon on comparerait un prix à un pourcentage.
+    ecart200 = (technical or {}).get("vs_sma200")
+    ma200 = (cours / (1.0 + float(ecart200))
+             if cours and ecart200 is not None and float(ecart200) != -1.0 else None)
+    dd = (cours / max(px) - 1.0) if px and max(px) > 0 else None
+    return falsifieurs(
+        reco=reco, cours=cours, stop=risk.get("suggested_stop"), ma200=ma200,
+        roce=(roce if roce == roce else None), wacc=(wacc if wacc == wacc else None),
+        croissance_ca=f.revenue_growth, drawdown_courant=dd,
+        max_drawdown=risk.get("max_drawdown"))
 
 
 def snowflake(*, valuation_score: int, revenue_growth: float | None, ml_score: float | None,

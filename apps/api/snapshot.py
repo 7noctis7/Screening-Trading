@@ -194,6 +194,11 @@ def contient_des_prix_reels(mode: str | None) -> bool:
 # 50 % » apparu dans le post-mortem du soir, même actif, même poids, autre libellé.
 # Forex/Commodités/Crypto n'y sont PAS : là, 40 % sur une classe est une vraie limite.
 _SECTEURS_VEHICULE = frozenset({"ETF", "Indices"})
+# Le seau de DERNIER RECOURS de `_sector_of` : une ACTION au champ `sector` vide ou
+# hors GICS y tombe. Le nommer ici permet aux limites de dire « secteur inconnu » au
+# lieu de « concentration sectorielle » — ce qui envoie chercher au bon endroit :
+# le champ `sector` à peupler, pas une allocation à corriger.
+_SECTEUR_INCONNU = "Actions diverses"
 
 
 def _sector_of(m: dict) -> str:
@@ -873,6 +878,7 @@ def _sentiment_section(held: list, names: dict, sector_of: dict, data: dict) -> 
     import os
 
     from packages import sentiment as S
+    from packages.sentiment.portefeuille import score_momentum as _momentum
 
     use_news = os.environ.get("QUANT_NEWS") == "1"
     rows: list[dict] = []
@@ -883,8 +889,8 @@ def _sentiment_section(held: list, names: dict, sector_of: dict, data: dict) -> 
             score, n, heads = r["score"], r["n"], r["headlines"]
         if n == 0:                                  # repli momentum (hors-ligne)
             bars = data.get(s)
-            if bars and len(bars) > 64:
-                score = round(max(-1.0, min(1.0, (bars[-1].close / bars[-64].close - 1) * 3.0)), 4)
+            score = _momentum([b.close for b in bars]) if bars else None
+            score = 0.0 if score is None else score
         rows.append({"symbol": s, "name": names.get(s, ""), "sector": sector_of.get(s, ""),
                      "score": score, "label": S.label_of(score), "n_news": n,
                      "headlines": heads[:5]})
@@ -1986,15 +1992,18 @@ def build_snapshot(seed: int = 7) -> dict:
             limits = concentration_report_adaptive(w_by_name, w_by_sector, _corr_cond,
                                                    max_name=0.20, max_sector=0.40,
                                                    index_names=_index_names,
-                                                   index_sectors=_SECTEURS_VEHICULE)
+                                                   index_sectors=_SECTEURS_VEHICULE,
+                                                   secteur_inconnu=_SECTEUR_INCONNU)
         else:
             limits = concentration_report(w_by_name, w_by_sector, max_name=0.20,
                                           max_sector=0.40, index_names=_index_names,
-                                          index_sectors=_SECTEURS_VEHICULE)
+                                          index_sectors=_SECTEURS_VEHICULE,
+                                          secteur_inconnu=_SECTEUR_INCONNU)
     except Exception:  # noqa: BLE001 — repli sur le rapport fixe
         limits = concentration_report(w_by_name, w_by_sector, max_name=0.20,
                                       max_sector=0.40, index_names=_index_names,
-                                      index_sectors=_SECTEURS_VEHICULE)
+                                      index_sectors=_SECTEURS_VEHICULE,
+                                      secteur_inconnu=_SECTEUR_INCONNU)
 
     # --- STRESS-TESTS MACRO + COUVERTURE (axe 11) ---
     from packages.portfolio.scenarios import hedge_suggestion, scenario_analysis
@@ -2415,6 +2424,7 @@ def build_snapshot(seed: int = 7) -> dict:
     try:
         if _os.environ.get("QUANT_NEWS") == "1":
             from packages import sentiment as _Snews
+            from packages.sentiment.portefeuille import score_momentum as _momentum
             _pf_syms, _seen = [], set()
             for _s in ([p.get("symbol") for p in _live["real"]["positions"]]
                        + [o["symbol"] for o in _preset_alloc] + list(held)):
@@ -2432,8 +2442,7 @@ def build_snapshot(seed: int = 7) -> dict:
                 _score, _n, _heads = _r["score"], _r["n"], _r["headlines"]
                 if _n == 0:                                # repli momentum (hors-ligne) — cohérent
                     _b = data.get(_s)
-                    if _b and len(_b) > 64:
-                        _score = round(max(-1.0, min(1.0, (_b[-1].close / _b[-64].close - 1) * 3.0)), 4)
+                    _score = (_momentum([b.close for b in _b]) if _b else None) or 0.0
                 _new_rows.append({"symbol": _s, "name": names.get(_s, ""), "sector": sector_of.get(_s, ""),
                                   "score": _score, "label": _Snews.label_of(_score), "n_news": _n,
                                   "headlines": _heads[:5]})
@@ -2658,7 +2667,8 @@ def build_snapshot(seed: int = 7) -> dict:
             _pidx = {r["symbol"] for r in _pr if (r.get("asset_class") or "") == "etf"}
             _plim = concentration_report(_pwn, _pws, max_name=0.20, max_sector=0.40,
                                          index_names=_pidx,
-                                         index_sectors=_SECTEURS_VEHICULE)
+                                         index_sectors=_SECTEURS_VEHICULE,
+                                         secteur_inconnu=_SECTEUR_INCONNU)
             _pstress = {"scenarios": scenario_analysis(_pwc), "hedge": hedge_suggestion(_pwc, target_max_loss=-0.15)}
             _pagg = {**PL.metrics_payload(_peq), **_prel, **_prm, **_pmc}
             _port_payload = {**_pcomp, "metrics": PL.metrics_payload(_peq),

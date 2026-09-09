@@ -21,14 +21,18 @@ trace de capitaux institutionnels) est une lecture INTRADAY. Sur du quotidien, e
 décrit un fait de séance, pas un flux d'ordres. Le module est correct ; son pouvoir
 prédictif à cette fréquence n'est pas établi et reste à mesurer.
 
-STATUT : SHADOW. Aucun appelant en production.
+STATUT : BANC. Hors du chemin d'EXÉCUTION — aucun ordre ne dépend de ce module — mais
+utilisé par les bancs de mesure `candidats_lab` et `signal_lab` (`make labs`), ainsi que
+par `liquidite_ict` et `moteur_sortie`. « Aucun appelant » était donc faux : le lire
+comme du code mort conduirait à le supprimer et à casser les bancs. Le pouvoir
+prédictif reste, lui, à mesurer.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-STATUT = "SHADOW_UNCALIBRATED"
+STATUT = "BANC_UNCALIBRATED"
 
 PART_MECHE_MIN = 0.60          # mèche ≥ 60 % de la hauteur totale de la bougie
 MULTIPLE_VOLUME = 1.5          # volume > 1,5 × moyenne des 20 précédents

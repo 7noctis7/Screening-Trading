@@ -617,6 +617,10 @@ def main() -> None:
         _prepare_brokers(dry, a.equity, alert_engine)
     if not dry:                                                # kill-switch DRAWDOWN RÉEL (pas que TV)
         reduce = min(reduce, dd_kill_switch(alp_cap + bit_cap, bus, alert_engine))
+    # DISJONCTEUR JOURNALIER — second horizon : la perte du JOUR, pas le drawdown.
+    # Désarmé par défaut (`QUANT_DISJONCTEUR=1` pour agir) : il OBSERVE d'abord, parce
+    # que son déclenchement ferme les positions et qu'il n'a jamais tourné en réel.
+    reduce = min(reduce, _disjoncteur(alp_cap + bit_cap))
     if reduce <= 0.0:                                          # kill-switch total : on n'envoie rien
         for o in targets:
             print(f"  {o['side'].upper():4s} {o.get('broker_symbol', o['symbol']):14s} "
@@ -636,6 +640,33 @@ def main() -> None:
     _sync_obsidian()
     if fatal:                                        # après journal/equity : rien n'est perdu, mais le run est ROUGE
         fail_loud(fatal, alert_engine, code=4)
+
+
+def _disjoncteur(equity: float) -> float:
+    """Facteur d'exposition dicté par la perte du JOUR. 1.0 = rien à signaler.
+
+    Renvoie un FACTEUR et non un booléen pour se composer avec les autres kill-switches
+    par un simple `min` — un garde-fou qui aurait sa propre voie d'application finirait
+    par diverger de celle des autres.
+    """
+    try:
+        from packages.execution.coupe_circuit import evaluer
+        d = evaluer(equity)
+    except Exception as e:  # noqa: BLE001 — un garde-fou muet ne bloque jamais un run
+        print(f"· disjoncteur : évaluation indisponible ({str(e)[:60]}).")
+        return 1.0
+    if not d.get("disponible"):
+        return 1.0
+    if not d["verrouille"]:
+        print(f"· disjoncteur : perte du jour {-d['variation_jour']:,.0f} $ "
+              f"sous le seuil ({d['limite']:,.0f} $).".replace(",", " "))
+        return 1.0
+    if d["agit"]:
+        print(f"\n⛔ DISJONCTEUR ARMÉ — {d['motif']}. Aucune entrée aujourd'hui.")
+        return 0.0
+    print(f"\n⚠️  DISJONCTEUR (observation) — {d['motif']}.")
+    print("   Il AURAIT coupé. Rien n'est appliqué : QUANT_DISJONCTEUR=1 pour l'armer.")
+    return 1.0
 
 
 def _record_equity(alp_cap: float, bit_cap: float) -> None:

@@ -64,9 +64,8 @@ def test_le_depot_REEL_declare_bien_ses_modules_SHADOW():
     qu'on le veuille — un STATUT ajouté ou retiré à la légère — ce test le dit."""
     attendus = {
         "packages.execution.frictions", "packages.indicators.liquidite_ict",
-        "packages.indicators.market_structure", "packages.ml.caracteristiques_swing",
-        "packages.research.protocole_oos", "packages.risk.ddm",
-        "packages.risk.disjoncteur", "packages.risk.garde_swing",
+        "packages.ml.caracteristiques_swing",
+        "packages.risk.ddm", "packages.risk.garde_swing",
         "packages.strategies.moteur_sortie", "packages.strategies.moteur_swing",
     }
     assert set(declarés_shadow(RACINE)) == attendus

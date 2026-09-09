@@ -14,13 +14,24 @@ const shortDate = (t: any) => {
   return isNaN(+d) ? t.slice(0, 7) : `${MOIS[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`;
 };
 const compact = (v: number) => (Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${Math.round(v)}`);
-const BCOL: Record<string, string> = { "S&P 500": "var(--warn)", "Nasdaq 100": "#a855f7" };
+// Une référence sans couleur se traçait en `undefined` : ligne invisible, bouton actif —
+// le pire des deux mondes, l'utilisateur croit l'avoir affichée. Repli explicite.
+// Les teintes sont des TOKENS DE THÈME (globals.css), pas des littéraux : codées en dur,
+// elles gardaient la même valeur en clair et en sombre, où le contraste n'est pas le même.
+const BCOL: Record<string, string> = {
+  "S&P 500": "var(--bench-sp)", "Nasdaq 100": "var(--bench-ndx)", "Bitcoin": "var(--bench-btc)",
+};
+const col = (n: string) => BCOL[n] ?? "var(--muted)";
+
+// Périodes en JOURS CALENDAIRES, pas en nombre de points : le portefeuille n'est valorisé
+// que les jours de passage du cron, donc « 30 points » ne fait pas un mois.
+const PERIODES: [string, number][] = [["1M", 30], ["3M", 91], ["6M", 182], ["1A", 365]];
 
 export type Win = { t0: string; t1: string } | null;
 
-function EquityChartBase({ series, benchmarks, height = 260, title, syncId, win, onWin }:
+function EquityChartBase({ series, benchmarks, height = 260, title, syncId, win, onWin, periodes }:
   { series: any[]; benchmarks?: Record<string, { t: string; v: number }[]>; height?: number; title?: string;
-    syncId?: string; win?: Win; onWin?: (w: Win) => void }) {
+    syncId?: string; win?: Win; onWin?: (w: Win) => void; periodes?: boolean }) {
   const names = Object.keys(benchmarks ?? {});
   const [on, setOn] = useState<Record<string, boolean>>(() => Object.fromEntries(names.map((n) => [n, true])));
   const [sel, setSel] = useState<{ a: string | null; b: string | null }>({ a: null, b: null });
@@ -51,7 +62,29 @@ function EquityChartBase({ series, benchmarks, height = 260, title, syncId, win,
       <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
         <div className="text-xs uppercase tracking-wide text-muted">{title ?? "Performance — base 10 000 $ (ptf vs benchmarks)"}</div>
         <div className="flex gap-1.5 items-center">
-          {win && zoomable && (
+          {periodes && zoomable && series.length > 1 && (
+            <div className="flex gap-1 mr-1">
+              {PERIODES.map(([lbl, jours]) => {
+                const fin = series[series.length - 1].t as string;
+                const t0 = new Date(new Date(fin).getTime() - jours * 864e5).toISOString().slice(0, 10);
+                // Une période plus longue que l'historique afficherait « 1A » sur trois
+                // mois de données : le bouton est masqué plutôt que trompeur.
+                if (t0 < (series[0].t as string)) return null;
+                const actif = win?.t0 === t0 && win?.t1 === fin;
+                return (
+                  <button key={lbl} onClick={() => onWin!({ t0, t1: fin })}
+                    className="px-2 py-1 text-xs rounded-full border transition-colors"
+                    style={{ borderColor: actif ? "var(--accent)" : "var(--border)",
+                             color: actif ? "var(--fg)" : "var(--muted)" }}>{lbl}</button>
+                );
+              })}
+              <button onClick={() => onWin!(null)}
+                className="px-2 py-1 text-xs rounded-full border transition-colors"
+                style={{ borderColor: !win ? "var(--accent)" : "var(--border)",
+                         color: !win ? "var(--fg)" : "var(--muted)" }}>Tout</button>
+            </div>
+          )}
+          {win && zoomable && !periodes && (
             <button onClick={() => onWin!(null)} className="px-2 py-1 text-xs rounded-full border border-border text-muted hover:text-fg transition-colors">
               ↺ zoom
             </button>
@@ -59,8 +92,8 @@ function EquityChartBase({ series, benchmarks, height = 260, title, syncId, win,
           {names.map((n) => (
             <button key={n} onClick={() => setOn((s) => ({ ...s, [n]: !s[n] }))}
               className="px-2.5 py-1 text-xs rounded-full border transition-colors"
-              style={{ borderColor: on[n] ? BCOL[n] : "var(--border)", color: on[n] ? "var(--fg)" : "var(--muted)",
-                       background: on[n] ? `color-mix(in srgb, ${BCOL[n]} 14%, transparent)` : "transparent" }}>
+              style={{ borderColor: on[n] ? col(n) : "var(--border)", color: on[n] ? "var(--fg)" : "var(--muted)",
+                       background: on[n] ? `color-mix(in srgb, ${col(n)} 14%, transparent)` : "transparent" }}>
               {n}
             </button>
           ))}
@@ -89,7 +122,7 @@ function EquityChartBase({ series, benchmarks, height = 260, title, syncId, win,
             labelFormatter={(l) => (typeof l === "string" ? l.slice(0, 10) : `Point ${l}`)} />
           <Area type="monotone" dataKey="equity" name="Portefeuille" stroke="var(--accent)" strokeWidth={2} fill="url(#eq)" isAnimationActive={false} />
           {names.filter((n) => on[n]).map((n) => (
-            <Line key={n} type="monotone" dataKey={n} name={n} stroke={BCOL[n]} strokeWidth={1.4} dot={false} isAnimationActive={false} connectNulls />
+            <Line key={n} type="monotone" dataKey={n} name={n} stroke={col(n)} strokeWidth={1.4} dot={false} isAnimationActive={false} connectNulls />
           ))}
           {zoomable && sel.a && sel.b && <ReferenceArea x1={sel.a} x2={sel.b} strokeOpacity={0.3} fill="var(--accent)" fillOpacity={0.12} />}
         </ComposedChart>

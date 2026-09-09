@@ -82,7 +82,7 @@ def test_tous_les_appelants_declarent_leurs_vehicules_indiciels() -> None:
     motif = r"concentration_report(?:_adaptive)?\((?:[^()]|\([^()]*\))*\)"
     appels = re.findall(motif, src)
     assert appels, "aucun appel trouvé — le motif a dérivé, corriger le test"
-    for param in ("index_names", "index_sectors"):
+    for param in ("index_names", "index_sectors", "secteur_inconnu"):
         muets = [a for a in appels if param not in a]
         assert not muets, f"appel sans {param} : {muets}"
 
@@ -164,3 +164,55 @@ def test_les_classes_d_actifs_gardent_le_plafond_sectoriel() -> None:
     types = {(b["type"], b["label"]) for b in rep["breaches"]}
     assert ("secteur", "Crypto & Blockchain") in types
     assert ("secteur", "Technologie") in types
+
+
+def test_le_seau_SANS_SECTEUR_ne_se_lit_pas_comme_une_concentration() -> None:
+    """« Actions diverses » est le dernier recours de `_sector_of` : une ACTION au
+    champ `sector` vide ou hors GICS y tombe. 47,5 % dedans ne dit pas « la moitié du
+    livre sur un secteur » mais « la moitié du livre NON CLASSÉE » — donc une
+    concentration sectorielle non mesurable, pas franchie. Le post-mortem du 09/09
+    l'annonçait comme un franchissement sectoriel, ce qui envoie chercher une
+    allocation à corriger là où c'est le champ `sector` qu'il faut peupler.
+    """
+    from packages.risk.limits import concentration_report
+
+    secteurs = {"Actions diverses": 0.475, "Santé": 0.30, "Finance": 0.225}
+
+    avant = concentration_report({}, secteurs)
+    assert [(b["type"], b["label"]) for b in avant["breaches"]] == [
+        ("secteur", "Actions diverses")]
+
+    apres = concentration_report({}, secteurs, secteur_inconnu="Actions diverses")
+    assert [(b["type"], b["label"]) for b in apres["breaches"]] == [
+        ("secteur inconnu", "Actions diverses")]
+
+
+def test_il_reste_SIGNALE_le_taire_cacherait_le_defaut() -> None:
+    """Requalifier n'est pas absoudre. Un livre à moitié non classé est un vrai
+    problème : il sort du rapport sous son vrai nom, jamais du rapport tout court."""
+    from packages.risk.limits import concentration_report
+
+    r = concentration_report({}, {"Actions diverses": 0.60, "Santé": 0.40},
+                             secteur_inconnu="Actions diverses")
+    assert r["ok"] is False and len(r["breaches"]) == 1
+    assert r["breaches"][0]["weight"] == 0.60 and r["breaches"][0]["limit"] == 0.40
+
+
+def test_les_VRAIS_secteurs_ne_sont_pas_requalifies() -> None:
+    """Contrôle NÉGATIF : seul le seau NOMMÉ change de type. Sans ce test, élargir la
+    requalification ferait passer une vraie concentration pour un défaut de données."""
+    from packages.risk.limits import concentration_report
+
+    r = concentration_report({}, {"Santé": 0.55, "Actions diverses": 0.45},
+                             secteur_inconnu="Actions diverses")
+    types = {(b["type"], b["label"]) for b in r["breaches"]}
+    assert ("secteur", "Santé") in types
+    assert ("secteur inconnu", "Actions diverses") in types
+
+
+def test_sans_le_parametre_rien_ne_change() -> None:
+    """Rétrocompatibilité : un appelant qui ne le passe pas garde le comportement."""
+    from packages.risk.limits import concentration_report
+
+    r = concentration_report({}, {"Actions diverses": 0.50})
+    assert r["breaches"][0]["type"] == "secteur"
