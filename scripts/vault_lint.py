@@ -26,9 +26,19 @@ def main() -> int:
     a = ap.parse_args()
     r = lint_vault(ROOT / "vault")
     print(f"\nVault-lint · {r['n_notes']} notes")
-    print(f"  liens morts ({len(r['dead_links'])}) :")
-    for d in r["dead_links"][:20]:
-        print(f"     ✗ {d['in']} → {d['link']}")
+    # GROUPÉ PAR CIBLE. Cinquante occurrences de quinze liens se lisent comme cinquante
+    # problèmes ; la liste devient trop longue pour être parcourue, donc elle ne l'est
+    # plus. Ce qui se corrige, c'est une CIBLE manquante, pas chacune de ses mentions.
+    from collections import Counter
+    cibles = Counter(d["link"] for d in r["dead_links"])
+    print(f"  liens morts : {len(r['dead_links'])} mention(s), "
+          f"{len(cibles)} cible(s) absente(s)")
+    for lien, n in cibles.most_common(15):
+        ou = ", ".join(sorted({d["in"] for d in r["dead_links"]
+                               if d["link"] == lien})[:3])
+        print(f"     ✗ {lien:24s} ×{n:<3d} ({ou})")
+    if len(cibles) > 15:
+        print(f"     … et {len(cibles) - 15} autre(s) cible(s)")
     print(f"  ADR en double   : {r['duplicate_adrs'] or '—'}")
     print(f"  orphelins ({len(r['orphans'])}) : "
           f"{', '.join(r['orphans'][:15]) or '—'}")

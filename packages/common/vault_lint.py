@@ -13,6 +13,12 @@ from pathlib import Path
 _EXCLUDE_DIRS = {".obsidian", ".smart-env", ".trash", "04_Companies"}
 _EXCLUDE_NAMES = {"_TOP200.md", "Performance_Report.md", "Preset_Performance.md"}
 _WIKILINK = re.compile(r"\[\[([^\]\|#]+)")    # [[Note]] / [[Note|a]] / [[Note#h]]
+# Un lien CITÉ dans du code n'est pas un lien : c'est de la documentation. `00_INDEX.md`
+# explique « suivre un lien `[[...]]` » — le linter y voyait deux liens morts, `[[...]]`
+# et `` [[` ]] ``, et les comptait parmi les vrais. Deux fausses alertes noyées dans la
+# liste, dans un outil dont le seul travail est de faire remonter les vraies.
+_BLOC_CODE = re.compile(r"```.*?```", re.DOTALL)
+_CODE_INLINE = re.compile(r"`[^`\n]*`")
 _MDLINK = re.compile(r"\]\(([^)]+\.md)[^)]*\)")      # [txt](chemin.md)
 _ADR = re.compile(r"^#+\s*ADR-(\d{3,4})", re.MULTILINE)
 
@@ -25,10 +31,29 @@ def _iter_md(vault: Path):
         yield p
 
 
+def sans_code(text: str) -> str:
+    """Texte privé de ses blocs et de ses portions de code.
+
+    Les blocs d'abord : une portion en ligne peut vivre à l'intérieur d'un bloc, jamais
+    l'inverse. Remplacés par une espace plutôt que supprimés, pour ne pas coller deux
+    mots qui ne se touchaient pas.
+    """
+    return _CODE_INLINE.sub(" ", _BLOC_CODE.sub(" ", text))
+
+
 def extract_links(text: str) -> tuple[set[str], set[str]]:
-    """(wikilinks, liens-chemin .md) d'un texte Markdown."""
-    return ({m.strip() for m in _WIKILINK.findall(text)},
-            {m.strip() for m in _MDLINK.findall(text)})
+    """(wikilinks, liens-chemin .md) d'un texte Markdown, HORS code."""
+    utile = sans_code(text)
+    return ({m.strip() for m in _WIKILINK.findall(utile)},
+            {m.strip() for m in _MDLINK.findall(utile)})
+
+
+def _est_gabarit(p: Path) -> bool:
+    """Un gabarit contient des ESPACES RÉSERVÉS, pas des liens : `[[paper_xxx]]` y
+    attend d'être remplacé. Le signaler comme mort à chaque passage est un faux positif
+    permanent — et un avertissement permanent finit par être ignoré, y compris les
+    jours où il a raison."""
+    return "TEMPLATE" in p.stem.upper()
 
 
 def _is_index_like(p: Path) -> bool:
@@ -53,6 +78,9 @@ def lint_vault(vault: str | Path) -> dict:
     for p in files:
         text = p.read_text(encoding="utf-8", errors="ignore")
         wikis, paths = extract_links(text)
+        if _est_gabarit(p):
+            referenced.update(Path(w).name for w in wikis)   # placeholders : pas morts
+            continue
         for w in wikis:
             if Path(w).suffix and Path(w).suffix.lower() != ".md":
                 continue                                 # embed (.svg/.png) → ignoré

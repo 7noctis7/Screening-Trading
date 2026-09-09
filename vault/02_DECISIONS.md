@@ -2,6 +2,41 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0110 — Le linter du vault comptait sa propre documentation (2026-09-10)
+
+**Constat.** `make vault-lint` sur le VPS : **52 liens morts**. Deux d'entre eux venaient
+de `00_INDEX.md`, ligne 61 :
+
+```
+| `Cmd/Ctrl + clic` | suivre un lien `[[...]]` |
+```
+
+Ce `[[...]]` est **entre accents graves** : c'est de la documentation qui montre à quoi
+ressemble un lien, pas un lien. Le linter lisait le texte brut, y voyait `[[...]]` et
+`` [[` ]] ``, et les comptait comme morts. Un outil qui signale sa propre documentation.
+
+**Décision.** `extract_links` retire d'abord les blocs de code (```` ``` ````) puis les
+portions en ligne (`` ` ``) — dans cet ordre, parce qu'une portion en ligne peut vivre à
+l'intérieur d'un bloc, jamais l'inverse. Les gabarits (`_TEMPLATE.md`) sortent aussi du
+contrôle : `[[paper_xxx]]` y attend d'être remplacé, le signaler à chaque passage est un
+faux positif **permanent** — et un avertissement permanent finit par être ignoré, y
+compris les jours où il a raison. Localement, 3 liens morts → **0**.
+
+**Lisibilité.** Le rapport groupe désormais par CIBLE au lieu de lister chaque mention :
+« 52 mentions, 15 cibles absentes » se corrige, « 52 lignes » se saute. Ce qui se répare,
+c'est une note manquante, pas chacun de ses appels.
+
+**Ce qui n'est PAS un défaut.** Les ~50 liens restants sur le VPS sont des `[[THC]]`,
+`[[QQQ]]`, `[[TMO]]` émis par les notes hebdomadaires (`obsidian.py`, lignes 364-396).
+Ils pointent vers des notes par ticker qui n'existent pas ENCORE — et qui existeront dès
+qu'une étude d'événement en produira une (`vault/09_Events/{ticker}.md`). C'est le motif
+Obsidian normal du lien qui précède sa cible. On les compte, on ne les corrige pas.
+
+**Troisième outil de la semaine à corriger sur lui-même**, après la coche affichée sur
+les perdants du duel et la vérification de planification qui validait toute machine
+Linux. Chaque fois, le même mécanisme : l'instrument produisait du bruit ou du faux
+confort, et le bruit rendait invisible ce qu'il devait montrer.
+
 ## ADR-0109 — Les 69 % de QQQ n'existaient pas : le journal sur-comptait (2026-09-10)
 
 **Le compte réel, lu par `make live` en dry-run sur le compte RÉEL** (capital Alpaca

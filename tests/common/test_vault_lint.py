@@ -50,3 +50,43 @@ def test_clean_vault_ok(tmp_path):
     (v / "08_Alphas" / "x.md").write_text("lié", encoding="utf-8")
     r = lint_vault(v)
     assert r["ok"] and r["dead_links"] == [] and r["duplicate_adrs"] == []
+
+
+def test_un_lien_cite_dans_du_code_n_est_pas_un_lien(tmp_path) -> None:
+    """LE faux positif du 09/09. `00_INDEX.md` documente « suivre un lien `[[...]]` » ;
+    le linter y voyait deux liens morts et les comptait parmi les vrais. Deux fausses
+    alertes noyées dans la liste, dans un outil dont le seul travail est de faire
+    remonter les vraies."""
+    from packages.common.vault_lint import lint_vault
+
+    (tmp_path / "00_INDEX.md").write_text(
+        "Pour suivre un lien `[[...]]`, faire Cmd+clic.\n\n"
+        "```\nexemple : [[NoteQuiNExistePas]]\n```\n"
+        "Et un VRAI lien mort : [[Fantome]]\n", encoding="utf-8")
+
+    morts = {d["link"] for d in lint_vault(tmp_path)["dead_links"]}
+    assert morts == {"[[Fantome]]"}, morts
+
+
+def test_un_gabarit_ne_signale_pas_ses_espaces_reserves(tmp_path) -> None:
+    """`[[paper_xxx]]` dans un gabarit attend d'être remplacé. Le signaler à chaque
+    passage est un faux positif PERMANENT — et un avertissement permanent finit par
+    être ignoré, y compris les jours où il a raison."""
+    from packages.common.vault_lint import lint_vault
+
+    (tmp_path / "_TEMPLATE.md").write_text("Voir [[paper_xxx]]\n", encoding="utf-8")
+    (tmp_path / "note.md").write_text("Voir [[vraiment_absent]]\n", encoding="utf-8")
+
+    morts = {d["link"] for d in lint_vault(tmp_path)["dead_links"]}
+    assert morts == {"[[vraiment_absent]]"}, morts
+
+
+def test_le_code_en_bloc_est_retire_avant_le_code_en_ligne(tmp_path) -> None:
+    """Une portion en ligne peut vivre DANS un bloc, jamais l'inverse : retirer les
+    blocs d'abord évite de couper un bloc en deux sur une paire d'accents graves."""
+    from packages.common.vault_lint import sans_code
+
+    texte = "```\nvoici `du code` et [[UnLien]]\n```\napres [[Reste]]"
+    utile = sans_code(texte)
+    assert "UnLien" not in utile
+    assert "Reste" in utile
