@@ -90,3 +90,48 @@ def test_le_code_en_bloc_est_retire_avant_le_code_en_ligne(tmp_path) -> None:
     utile = sans_code(texte)
     assert "UnLien" not in utile
     assert "Reste" in utile
+
+
+def test_un_crochet_ouvrant_isole_n_avale_pas_le_fichier(tmp_path) -> None:
+    """LE défaut du 09/09, produit par le texte d'un ADR lui-même.
+
+    Une cible de wikilink ne franchit jamais une fin de ligne. Sans cette contrainte,
+    un `[[` isolé — dans un exemple, un extrait de code mal découpé — avalait tout le
+    fichier jusqu'au prochain `]`, et le rapport affichait un « lien mort » de plusieurs
+    paragraphes. Illisible, et faux.
+    """
+    from packages.common.vault_lint import extract_links
+
+    texte = "un [[ orphelin\n\nplein de texte\n\nfin ]] et [[Vrai]] ici\n"
+    wikis, _ = extract_links(texte)
+
+    assert all("\n" not in w for w in wikis), wikis
+    assert "Vrai" in wikis
+
+
+def test_les_accents_graves_multiples_delimitent_aussi(tmp_path) -> None:
+    """Markdown autorise N accents graves, et il en faut N pour refermer. ``  `x`  ``
+    — deux accents pour CITER un accent — est le cas qui a piégé la première version :
+    elle ne connaissait que le délimiteur simple, coupait au mauvais endroit et laissait
+    un `[[` orphelin derrière elle."""
+    from packages.common.vault_lint import extract_links, sans_code
+
+    texte = "Le linter voyait `` [[` ]] `` comme un lien. Et [[Reel]] en est un.\n"
+    assert "[[" not in sans_code(texte).split("Et")[0]
+
+    wikis, _ = extract_links(texte)
+    assert wikis == {"Reel"}, wikis
+
+
+def test_le_vault_reel_ne_produit_aucun_pseudo_lien(tmp_path) -> None:
+    """Contrôle sur les VRAIES notes : aucune cible ne doit contenir de saut de ligne
+    ni dépasser une longueur de nom de fichier plausible."""
+    from pathlib import Path
+
+    from packages.common.vault_lint import extract_links
+
+    racine = Path(__file__).resolve().parents[2] / "vault"
+    for note in racine.rglob("*.md"):
+        wikis, _ = extract_links(note.read_text(encoding="utf-8", errors="ignore"))
+        for w in wikis:
+            assert "\n" not in w and len(w) <= 120, f"{note.name} → {w[:80]!r}"

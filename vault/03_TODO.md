@@ -961,6 +961,17 @@ explicite, module par module, avec mesure.
       3. Laisser tourner une semaine AVANT de rejuger quoi que ce soit sur les sorties :
          les cinq décisions mesurées ne décrivent pas une stratégie, elles décrivent
          cinq lancements manuels.
+- [ ] **P0 — L'allocation franchit la politique de risque, tous les jours** (ADR-0111).
+      Post-mortems des 05, 07, 08 et 09/09 : `risk_limits_ok: false`, `n_breaches: 3`.
+      Le secteur « Actions diverses » pèse **47,5 % contre un plafond de 40 %**
+      (`config/risk.yaml`), et le cœur `QQQ` **50 % contre un plafond de nom à 20 %**
+      (`packages/risk/limits.py`). Ce sont les poids du portefeuille MODÈLE, pas une
+      somme de lots journal : le sur-comptage d'ADR-0109 n'explique rien ici.
+      **L'arbitrage, et il t'appartient** : soit la politique de risque reconnaît qu'un
+      cœur indiciel n'est pas une ligne comme une autre (plafond de nom séparé pour les
+      ETF larges — `max_index` existe déjà, à 60 %), soit le cœur descend sous 20 %.
+      En l'état, deux documents du projet se contredisent sur ce que le système doit
+      faire. Le rebalancement automatique applique l'allocation telle quelle.
 - [x] **P0 — ANNULÉ : les 69 % de QQQ n'existaient pas** (ADR-0109). Le courtier détient
       **43 562 $**, soit 43,3 % du compte, pour une cible à 44,9 % : la position est
       légèrement SOUS sa cible, l'écart est un ACHAT de 1 652 $. Le chiffre de 69 %

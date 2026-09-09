@@ -12,13 +12,21 @@ from pathlib import Path
 
 _EXCLUDE_DIRS = {".obsidian", ".smart-env", ".trash", "04_Companies"}
 _EXCLUDE_NAMES = {"_TOP200.md", "Performance_Report.md", "Preset_Performance.md"}
-_WIKILINK = re.compile(r"\[\[([^\]\|#]+)")    # [[Note]] / [[Note|a]] / [[Note#h]]
+# Le `\n` dans la classe exclue est ESSENTIEL : une cible de wikilink ne franchit jamais
+# une fin de ligne. Sans lui, un `[[` isolé — dans un exemple, un extrait de code mal
+# découpé — avalait tout le fichier jusqu'au prochain `]`, et le rapport affichait un
+# « lien mort » de plusieurs paragraphes. Vu le 09/09, produit par le texte d'un ADR.
+_WIKILINK = re.compile(r"\[\[([^\]\|#\n]+)")   # [[Note]] / [[Note|a]] / [[Note#h]]
 # Un lien CITÉ dans du code n'est pas un lien : c'est de la documentation. `00_INDEX.md`
 # explique « suivre un lien `[[...]]` » — le linter y voyait deux liens morts, `[[...]]`
 # et `` [[` ]] ``, et les comptait parmi les vrais. Deux fausses alertes noyées dans la
 # liste, dans un outil dont le seul travail est de faire remonter les vraies.
 _BLOC_CODE = re.compile(r"```.*?```", re.DOTALL)
-_CODE_INLINE = re.compile(r"`[^`\n]*`")
+# Les délimiteurs se comptent : Markdown autorise N accents graves, et il en faut N pour
+# refermer. `` `x` `` — deux accents pour citer un accent — est le cas exact qui a piégé
+# la première version : elle ne connaissait que le délimiteur simple, coupait au mauvais
+# endroit, et laissait derrière elle un `[[` orphelin.
+_CODE_INLINE = re.compile(r"(`+)(?:.|\n)+?\1")
 _MDLINK = re.compile(r"\]\(([^)]+\.md)[^)]*\)")      # [txt](chemin.md)
 _ADR = re.compile(r"^#+\s*ADR-(\d{3,4})", re.MULTILINE)
 

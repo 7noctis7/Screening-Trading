@@ -2,6 +2,44 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0111 — Le post-mortem annonçait trois causes et n'en nommait qu'une (2026-09-10)
+
+**Le fait, lu dans `incident_2026-09-09.md`.** L'en-tête déclare `n_breaches: 3` et
+`risk_limits_ok: false`. Le corps n'en nomme **qu'une** :
+
+```
+> [!danger] secteur=Actions diverses 0.475>0.4
+```
+
+Les deux autres n'apparaissent nulle part. `incident_note` chargeait pourtant `limits` —
+qui contient la liste complète `breaches: [{type, label, weight, limit}]` — et n'en
+affichait que le champ `top_name`. Un post-mortem qui tait deux causes sur trois envoie
+chercher au mauvais endroit, et **le compte en en-tête suffit à croire qu'on a tout lu**.
+
+**Décision.** Le post-mortem publie un tableau de TOUTES les limites franchies : type,
+libellé, poids, plafond. Et il signale le cas où les plafonds ont été **resserrés de
+moitié** par la corrélation de stress — sans cette mention, on compare un franchissement
+au plafond nominal alors qu'il a été jugé contre un plafond deux fois plus bas.
+
+**CE QUE DIT L'INCIDENT, ET IL N'EST PAS ISOLÉ.** Le secteur « Actions diverses » pèse
+**47,5 % contre un plafond de 40 %** (`config/risk.yaml : max_exposure_per_class_pct`).
+Et le carnet montre `QQQ 50 %` en concentration, contre un plafond de nom à 20 %
+(`packages/risk/limits.py : max_name`). Des incidents du même type existent aux dates du
+05, 07, 08 et 09 septembre : **ce n'est pas un accident, c'est l'allocation courante qui
+franchit la politique de risque du projet, tous les jours.**
+
+**Ce que ça n'est pas.** Ce n'est pas le sur-comptage du journal d'ADR-0109 : ces poids
+sont ceux du portefeuille MODÈLE, calculés par l'allocateur, pas une somme de lots. Le
+cœur à 50 % est un choix d'allocation (ADR-0103) ; la politique de risque dit 20 % par
+nom. **Les deux ne peuvent pas être vrais en même temps** — l'un des deux documents ment
+sur ce que le système est censé faire.
+
+**Ce qui n'est PAS décidé ici.** Lequel des deux corriger — desserrer la politique pour
+un cœur indiciel assumé, ou brider le cœur — est un arbitrage de risque, pas un
+correctif. Il est noté en P0. Le rebalancement automatique démarré aujourd'hui
+appliquera cette allocation en l'état : le portique d'ordres peut réduire, jamais
+augmenter, mais il ne remplace pas la décision.
+
 ## ADR-0110 — Le linter du vault comptait sa propre documentation (2026-09-10)
 
 **Constat.** `make vault-lint` sur le VPS : **52 liens morts**. Deux d'entre eux venaient

@@ -394,11 +394,33 @@ def incident_note(snapshot: dict, incident: dict, date: str | None = None) -> tu
          f"| Concentration top | {limits.get('top_name','—')} {_pct(limits.get('top_name_weight'))} |", "",
          "## Carnet — top 10 expositions", "", "| Actif | Secteur | Poids |", "|---|---|--:|",
          *[f"| [[{r.get('symbol','?')}]] | {r.get('sector','')} | {_pct(r.get('weight') or r.get('weight_pct'))} |" for r in top],
-         "", "## Actions correctives", "",
+         "", *_bloc_limites(limits), "## Actions correctives", "",
          "- [ ] Cause racine identifiée", "- [ ] Réduction d'exposition décidée",
          "- [ ] Mise à jour [[07_RISK_POLICY]]", "",
          f"<small>Lié : [[{_JOURNAL_DIR}/{dt}]] · [[Preset_Performance]]</small>"]
     return f"{_POSTMORTEM_DIR}/incident_{dt}.md", "\n".join(P)
+
+
+def _bloc_limites(limits: dict) -> list[str]:
+    """TOUTES les limites franchies, pas seulement celle du bandeau.
+
+    Le post-mortem du 09/09 annonçait `n_breaches: 3` en en-tête et n'en nommait
+    qu'UNE — « secteur=Actions diverses 0.475>0.4 ». Les deux autres n'apparaissaient
+    nulle part. Un post-mortem qui tait deux causes sur trois envoie chercher au mauvais
+    endroit, et le compte en tête suffit à croire qu'on a tout lu.
+    """
+    breaches = limits.get("breaches") or []
+    if not breaches:
+        return []
+    lignes = ["## Limites franchies", "", "| Type | Libellé | Poids | Plafond |",
+              "|---|---|--:|--:|"]
+    lignes += [f"| {b.get('type','?')} | {b.get('label','?')} | "
+               f"{_pct(b.get('weight'))} | {_pct(b.get('limit'))} |" for b in breaches]
+    if limits.get("tightened"):
+        lignes += ["", "> [!warning] Plafonds RESSERRÉS de moitié : la corrélation de "
+                   "stress signale une perte de diversification. Un franchissement se "
+                   "lit contre le plafond resserré, pas contre le plafond nominal."]
+    return [*lignes, ""]
 
 
 def preset_performance_hub(snapshot: dict, attr: dict, date: str | None = None) -> tuple[str, str]:
