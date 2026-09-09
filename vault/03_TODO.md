@@ -42,7 +42,14 @@
       estimation d'abord, ne pas l'inventer ; (4) `market_structure`, dont le STATUT dit
       « aucun appelant en production » alors que `make labs` l'utilise.
 
-- [ ] **P1 — ÎLOT SWING : 1 374 lignes, une stratégie entière jamais exécutée.**
+- [ ] **P1 — ÎLOT SWING : MESURABLE depuis le 09/09 (`make banc-swing`, ADR-0123).**
+      Ce n'est PAS le swing déjà backtesté (`strategies/swing` + `fast_swing`) : c'est une
+      stratégie ICT/Smart Money distincte (Hurst 1W, SFP, BOS, OTE, order blocks, CHoCH).
+      Le banc simule ses propositions sur l'historique réel — entrée en LIMITE, stop
+      prioritaire sur la cible dans une même barre, résultat en R — et passe le Sharpe par
+      trade à la porte DSR. Reste à LANCER sur le VPS, puis décider sur les chiffres.
+
+- [x] **~~P1 — îlot swing : décision sans chiffres~~ —**
       `moteur_swing` et `moteur_sortie` n'ont AUCUN importeur, et tirent `ddm`,
       `garde_swing`, `liquidite_ict`, `caracteristiques_swing`. Brancher ou supprimer est
       une décision de produit, pas de linter — elle appartient à l'utilisateur.

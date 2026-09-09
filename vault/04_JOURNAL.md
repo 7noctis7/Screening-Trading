@@ -1,5 +1,29 @@
 # 04 — JOURNAL
 
+## Session 2026-09-09 (20ᵉ) — Le swing ICT ne se décide pas, il se mesure
+
+**LA BONNE QUESTION POSÉE.** « Brancher le swing » veut dire quoi, et comment savoir si ça
+vaut le coup ? On ne pouvait pas le savoir : aucun chiffre n'existait.
+
+**ET UNE CONFUSION LEVÉE.** L'îlot swing n'est PAS le swing déjà backtesté du dépôt
+(`strategies/swing` + `fast_swing`, repli en tendance SMA/RSI/ATR). `moteur_swing` est une
+stratégie ICT / Smart Money entièrement différente — Hurst 1W, SFP, BOS, OTE, order blocks,
+CHoCH sur trois horizons. Deux stratégies coexistent, une seule a été mesurée.
+
+**LE BANC, ET SES TROIS RÈGLES.** Entrée en LIMITE (pas au marché, sinon chaque signal
+devient un trade et la significativité gonfle) ; stop prioritaire sur la cible dans une même
+barre (l'inverse choisit la version favorable d'une information qu'on n'a pas, et sur un
+RR > 1 ça suffit à faire passer un banc du rouge au vert) ; résultat en R.
+
+**L'ANTI-FUITE EST STRUCTURELLE.** `parcourir` tronque les barres à `i` : un détecteur qui
+lirait l'avenir ne l'aurait pas. Deux tests, dont un détecteur TRICHEUR — sans lui, le
+premier passerait au vert sur un banc qui n'appelle jamais le détecteur.
+
+**AUSSI.** `make list-db` renvoyait un chemin de Mac (`$HOME/Desktop/YAHOO.db`), inapplicable
+sur le VPS. Il imprime désormais l'ordre de recherche réel et l'état de chaque emplacement.
+
+**2434 tests passés, 10 ajoutés.** Rien n'est branché. ADR-0123.
+
 ## Session 2026-09-09 (19ᵉ) — Une P0 que j'avais inventée
 
 **J'AI OUVERT UNE P0 QUI N'EXISTAIT PAS.** « Le panneau montre un sous-ensemble favorable » :

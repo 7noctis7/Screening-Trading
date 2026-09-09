@@ -2,6 +2,58 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0123 — Le swing ICT ne se décide pas, il se mesure (2026-09-09)
+
+**LA QUESTION POSÉE.** « Brancher le swing » signifie quoi, et comment savoir si ça vaut le
+coup ? La réponse honnête : on ne peut pas le savoir aujourd'hui, parce qu'aucun chiffre
+n'existe. Ce module produit ces chiffres.
+
+**CE QU'EST L'ÎLOT SWING, ET CE QU'IL N'EST PAS.** Ce n'est PAS le swing déjà backtesté du
+dépôt (`strategies/swing` + `backtest/fast_swing` : repli en tendance, SMA/RSI/ATR).
+`moteur_swing` est une stratégie ENTIÈREMENT DIFFÉRENTE, spécifiée le 02/09 : méthodologie
+ICT / Smart Money — Hurst hebdomadaire, SFP, BOS, OTE, order blocks, CHoCH, sur trois
+horizons (1W / 1D / 1H). Deux stratégies distinctes coexistent donc dans le dépôt, et seule
+la première a jamais été mesurée. Le dire compte : « brancher le swing » ne veut pas dire
+« activer ce qui est déjà testé ».
+
+**LE BANC. Trois règles, parce qu'un backtest à stop/cible se truque sur trois détails.**
+
+1. **L'entrée est une LIMITE, pas un marché.** On n'entre que si une barre postérieure
+   touche le prix nommé. Entrer « au marché à la clôture de détection » offrirait un prix
+   que le marché n'a pas donné, et transformerait CHAQUE signal en trade — ce qui gonfle le
+   nombre d'observations, donc la significativité apparente.
+2. **Stop et cible dans la même barre → c'est le STOP.** Une barre journalière ne dit pas
+   l'ordre de ses extrêmes. Choisir la cible, c'est choisir la version favorable d'une
+   information qu'on n'a pas ; sur un RR > 1, ce seul choix fait passer un banc du rouge au
+   vert.
+3. **Résultat en R**, pas en dollars : seule unité comparable entre actifs, et qui rend le
+   banc indépendant du dimensionnement.
+
+**L'ANTI-FUITE EST STRUCTURELLE, PAS DÉCLARATIVE.** `parcourir` passe au détecteur les
+barres TRONQUÉES à `i`. Même un détecteur qui lirait `barres[i+5]` ne les aurait pas. Deux
+tests : un espion vérifie que la dernière barre reçue EST toujours la barre `i` ; un
+détecteur TRICHEUR vérifie que sa tentative sort bien hors bornes — sans ce second test, le
+premier passerait au vert sur un `parcourir` qui n'appellerait jamais le détecteur.
+
+*Lecture préalable du code* : `liquidite` utilise `range(debut, i)`, strictement avant, et
+`sfp` documente `barres[:i+1]`. Le code est propre — mais on ne fait pas reposer un banc sur
+une lecture, on retire l'accès.
+
+**LE VERDICT PASSE PAR LA PORTE.** Le Sharpe par trade est déflaté par
+`gate.verdict_hors_echantillon`, dont le `n_essais` vient du ledger. Un banc qui choisirait
+son propre nombre d'essais s'auto-absoudrait.
+
+**ZÉRO TRADE EST UN RÉSULTAT.** Si le moteur ne produit aucune entrée exécutable, le banc le
+dit et s'arrête : un signal qui ne se remplit jamais ne se branche pas non plus.
+
+**AUSSI — un message d'erreur inapplicable.** `make list-db` renvoyait
+`export QUANT_PRICE_DB="$HOME/Desktop/YAHOO.db"` : un chemin de Mac, inutile sur le VPS. Il
+imprime désormais l'ORDRE DE RECHERCHE réel avec l'état de chaque emplacement — la commande
+à taper se lit dans la liste.
+
+**Conséquences.** 2434 tests, 10 ajoutés. `make banc-swing`. Rien n'est branché : le banc
+mesure, la décision reste entière.
+
 ## ADR-0122 — Une P0 que j'avais inventée, et deux libellés qui mentaient (2026-09-09)
 
 **LA P0 `legacy` N'EXISTAIT PAS.** J'ai ouvert en P0 « le panneau montre un sous-ensemble
