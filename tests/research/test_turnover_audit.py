@@ -1,4 +1,5 @@
 """Audit du turnover, synthétique — valide la math (mandat données réelles)."""
+import dataclasses
 from datetime import UTC, datetime, timedelta
 
 from packages.core.models import AssetClass, Side, TradeRecord
@@ -172,3 +173,58 @@ def test_rapport_complet_separe_les_blocs():
     assert "DÉCISIONS DU SYSTÈME SEULEMENT" in txt
     assert "FERMETURES RECONSTRUITES" in txt
     assert "ne mesurent AUCUNE décision" in txt
+
+
+# ── P0-1 : un coût jamais renseigné n'est pas un coût nul ───────────────────
+
+def _sans_frais(i: int, tid: str | None = None) -> TradeRecord:
+    """Un trade tel que la PRODUCTION l'écrit : personne n'a renseigné les frais."""
+    t = _trade(i, 1.0, 0.01, 0.02, tid=tid)
+    return dataclasses.replace(t, fees=None, slippage=None)
+
+
+def test_des_frais_jamais_renseignes_rendent_UNCALIBRATED():
+    """Le défaut mesuré le 09/09 : `make turnover-audit` annonçait « 0.00 $ » sur un
+    journal où l'exécution n'avait JAMAIS alimenté la colonne. Zéro mesuré et champ
+    vide s'affichaient pareil."""
+    a = auditer([_sans_frais(0), _sans_frais(1)])
+    assert a.n_positions == 2
+    assert a.frais_totaux is None
+    assert a.n_frais_connus == 0
+    txt = rapport(a)
+    assert "UNCALIBRATED" in txt
+    assert "0.00 $" not in txt and "0,00 $" not in txt
+
+
+def test_un_zero_MESURE_reste_un_zero_affiche():
+    """Alpaca actions : commission réellement nulle. Ça se dit, ça ne se cache pas."""
+    a = auditer([_trade(0, 1.0, 0.01, 0.02, fees=0.0)])
+    assert a.frais_totaux == 0.0 and a.n_frais_connus == 1
+    assert "UNCALIBRATED" not in rapport(a).split("Détention")[0]
+
+
+def test_le_slippage_n_est_PAS_ajoute_aux_frais():
+    """Anti double comptage : le slippage est déjà dans les prix, donc déjà dans le
+    P&L. L'additionner aux frais le compterait une seconde fois."""
+    t = dataclasses.replace(_trade(0, 1.0, 0.01, 0.02, fees=1.0), slippage=99.0)
+    assert auditer([t]).frais_totaux == 1.0
+
+
+def test_les_doublons_de_reparation_sont_SIGNALES():
+    """Journal réel du 09/09 : `P-...-AAVE/USDC`, `-R1`, `-R2` — trois lignes pour un
+    événement. Le suffixe `-R` échappe au regroupement des tranches `-X`, donc ces
+    doublons comptent comme des positions distinctes. L'audit doit le DIRE."""
+    base = "P-20260707-Alpaca-AAVE"
+    trades = [_trade(0, 1.0, 0.05, 0.06, tid=base),
+              _trade(0, 1.0, 0.05, 0.06, tid=f"{base}-R1"),
+              _trade(0, 1.0, 0.05, 0.06, tid=f"{base}-R2")]
+    a = auditer(trades)
+    assert a.n_suffixes_reparation == 2
+    assert "réparation" in rapport(a)
+
+
+def test_un_journal_sain_ne_signale_aucun_doublon():
+    """Garde-fou du test précédent : sans suffixe `-R`, rien ne doit s'allumer."""
+    a = auditer([_trade(0, 1.0, 0.02, 0.03), _trade(1, 2.0, -0.01, 0.01)])
+    assert a.n_suffixes_reparation == 0
+    assert "réparation" not in rapport(a)

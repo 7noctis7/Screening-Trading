@@ -221,6 +221,71 @@ class Position:
 
 
 # --------------------------------------------------------------------------- #
+# Exécution : ce qui s'est RÉELLEMENT passé
+# --------------------------------------------------------------------------- #
+@dataclass(frozen=True, slots=True)
+class Fill:
+    """Résultat ÉCONOMIQUE d'un ordre exécuté.
+
+    `Order` est une intention, `Fill` est un fait.
+
+    Ce maillon manquait : `SimBroker.submit` calculait le prix d'exécution et la
+    commission, les appliquait au cash, puis les jetait — le coût réel n'avait nulle
+    part où vivre, et le journal écrivait 0,0 par défaut.
+
+    LA RÈGLE (anti double comptage). Le slippage est DÉJÀ dans `fill_price` : il a été
+    payé à l'exécution et il est déjà dans tout P&L calculé sur des prix de fill.
+    `shortfall_amount` est donc **descriptif** — il documente un coût subi, il ne se
+    retranche pas une seconde fois :
+
+        pnl_net = pnl_gross − commission − fees_other      ← jamais − shortfall_amount
+
+    `source` n'a que deux valeurs et c'est ce qui empêche le mensonge : `observed` quand
+    le courtier a donné le chiffre, `estimated` quand il vient d'un modèle de coûts.
+    """
+
+    instrument: str
+    side: Side
+    qty: float
+    fill_price: float
+    reference_price: float | None = None   # prix de décision — None si inconnu
+    commission: float = 0.0
+    fees_other: float = 0.0
+    shortfall_bps: float | None = None     # None = non mesurable, ≠ 0.0 (parfait)
+    currency: str = "USD"
+    source: str = "estimated"              # "observed" | "estimated"
+    ts: datetime = field(default_factory=utcnow)
+
+    @property
+    def notional(self) -> float:
+        return self.fill_price * self.qty
+
+    @property
+    def charge(self) -> float:
+        """Ce qui se RETRANCHE du P&L. Le shortfall n'y est pas : déjà dans le prix."""
+        return self.commission + self.fees_other
+
+    @property
+    def shortfall_amount(self) -> float | None:
+        """Coût de délai + exécution en devise. DESCRIPTIF — déjà payé dans le prix.
+
+        Rapporté au notionnel de RÉFÉRENCE, pas à celui du fill : c'est la convention
+        de l'implementation shortfall, et c'est la seule qui redonne exactement
+        `(fill − référence) × qty`. Sur le notionnel du fill, un achat à +5 bps rendrait
+        0,50025 $ au lieu de 0,50 $ — l'écart est petit, mais un coût qui ne se
+        reconstitue pas à la main est un coût qu'on ne peut pas vérifier.
+        """
+        if self.shortfall_bps is None or self.reference_price is None:
+            return None
+        return self.shortfall_bps / 1e4 * self.reference_price * self.qty
+
+    @property
+    def cout_total_portefeuille(self) -> float:
+        """Ce que l'ordre sort réellement du portefeuille : notionnel + charge."""
+        return self.notional + self.charge
+
+
+# --------------------------------------------------------------------------- #
 # Trade journal (miroir de la table du Module 8)
 # --------------------------------------------------------------------------- #
 @dataclass(slots=True)
@@ -236,8 +301,11 @@ class TradeRecord:
     avg_price: float  # PRU
     exit_ts: datetime | None = None
     exit_price: float | None = None
-    fees: float = 0.0
-    slippage: float = 0.0
+    # `None` = JAMAIS RENSEIGNÉ, ce qui n'est pas « nul ». Le défaut à 0.0 rendait les
+    # deux indiscernables : `make turnover-audit` annonçait « 0,00 $ » de frais sur un
+    # journal où l'exécution n'avait jamais alimenté la colonne (mesuré le 09/09).
+    fees: float | None = None          # commission + frais divers, en devise
+    slippage: float | None = None      # DESCRIPTIF : déjà contenu dans les prix de fill
     entry_reason: str = ""
     exit_reason: str = ""
     regime: str | None = None

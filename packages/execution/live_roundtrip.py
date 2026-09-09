@@ -73,7 +73,12 @@ def _close_record(lot: TradeRecord, qty: float, price: float, ts: datetime,
     return dataclasses.replace(
         lot, id=split_id or lot.id, qty=qty, exit_ts=ts, exit_price=price,
         exit_reason="reconciliation paper (reduce/close)",
-        pnl_gross=pnl, pnl_net=pnl,      # paper Alpaca/Bitmart spot : frais inconnus
+        # `pnl_net` égale `pnl_gross` parce que l'exécution ne renseigne AUCUN coût :
+        # le lot garde `fees=None` (inconnu), et l'audit de turnover le rapporte
+        # UNCALIBRATED au lieu de publier un coût nul. Ne JAMAIS retrancher ici le
+        # slippage : il est déjà contenu dans les deux prix de fill, donc déjà dans
+        # `pnl`. Le retrancher compterait deux fois le même coût.
+        pnl_gross=pnl, pnl_net=pnl,
         pnl_pct=round(price / lot.entry_price - 1, 6) if lot.entry_price > 0 else None,
         is_win=pnl > 0, duration_s=max(0.0, (ts - lot.entry_ts).total_seconds()),
         mfe=fe, mae=ae)

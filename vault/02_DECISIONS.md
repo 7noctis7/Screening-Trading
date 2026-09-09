@@ -2,6 +2,51 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0130 — P0-1 : le coût d'exécution n'avait nulle part où vivre (2026-09-09)
+
+**Constat.** `SimBroker.submit` calculait le prix d'exécution ET la commission, les
+appliquait au cash, puis **les jetait** : il retournait l'`Order` reçu. Aucun objet ne
+portait le résultat économique d'un ordre. Conséquence en cascade : `TradeRecord.fees`
+valait `0.0` par défaut, la production n'y touchait jamais, et `make turnover-audit`
+annonçait « 0,00 $ » de frais — indiscernable d'un coût réellement nul.
+
+**Ce que la mesure a corrigé dans mon diagnostic.** J'avais conclu que « le coût du
+turnover n'est pas compté ». Faux pour le slippage : `entry_price` et `exit_price` sont
+des prix de FILL dans les deux chemins, donc le slippage est déjà dans le P&L. La seule
+vraie fuite est **la commission** — débitée du cash du broker, jamais imputée au trade.
+Le P&L journalisé était brut de commission sous le nom `pnl_net`.
+
+**Décision.** Un objet `Fill` dans le domaine (le maillon manquant), et `fills.py` comme
+UNIQUE convention de calcul du shortfall. La règle centrale est encodée dans
+`Fill.charge` :
+
+    pnl_net = pnl_gross − commission − fees_other      ← jamais − shortfall_amount
+
+Le shortfall est **descriptif** : il documente un coût déjà payé dans le prix. Le
+retrancher le compterait deux fois — sur les 51 fills du journal réel qui portent les
+deux prix, c'est 51 occasions de faire l'erreur.
+
+**Inconnu ≠ zéro.** `TradeRecord.fees` et `slippage` passent à `None` par défaut. La
+production les laisse non renseignés et le DIT ; `turnover_audit` rapporte
+`UNCALIBRATED` au lieu de publier un coût nul. `shortfall_bps` vaut `None` sans prix de
+référence — un `0.0` s'y lirait « exécution parfaite ».
+
+**Un détail de modélisation attrapé par son propre test.** `shortfall_amount` doit se
+rapporter au notionnel de **référence**, pas à celui du fill : sur le notionnel du fill,
++5 bps rendait 0,50025 $ au lieu de 0,50 $. L'écart est minuscule, mais un coût qui ne se
+reconstitue pas à la main est un coût invérifiable. Le test avait raison, pas le code.
+
+**Conséquences.** Backtests câblés (`fast_swing`, `engine`) : `pnl_gross` et `pnl_net`
+distincts, `fees` renseigné, `is_win` et `pnl_pct` calculés sur le NET. Les chiffres des
+backtests baissent — c'est le signe que la correction fonctionne. Trois gardes vérifiées
+par sabotage : remettre `fees=0.0`, rajouter le slippage aux frais, ou le retrancher du
+P&L de production font chacun tomber un test.
+
+**Hors périmètre, relevé.** `SimBroker.equity()` marque les positions ouvertes au dernier
+prix VU, jamais rafraîchi dans la boucle de sortie de `fast_swing` — l'equity de backtest
+est donc marquée à des prix périmés. Découvert en instrumentant les coûts. Impact
+potentiel sur le vol-targeting ; à traiter séparément.
+
 ## ADR-0129 — Un Δ qui soustrayait deux paniers différents (2026-09-09)
 
 **Constat, sur la sortie réelle du VPS.** Premier appel de `/api/portfolio/sentiment` avec

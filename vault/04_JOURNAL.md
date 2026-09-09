@@ -1,5 +1,37 @@
 # 04 — JOURNAL
 
+## Session 2026-09-09 (28ᵉ) — P0-1 : le coût existait, personne ne le portait
+
+**Fait.** Audit puis réparation de l'instrumentation des coûts. Objet `Fill` (domaine),
+`packages/execution/fills.py` (convention unique), `SimBroker` émetteur de fills, les
+deux moteurs de backtest câblés, production rendue honnête, `turnover_audit` qui
+distingue « mesuré » de « jamais renseigné ». **33 tests ajoutés — 2 508 au vert.**
+
+**Ce que la donnée réelle a corrigé, deux fois.**
+1. Mon diagnostic disait « le coût du turnover n'est pas compté ». Faux pour le
+   slippage : il est déjà dans les prix de fill, donc déjà dans le P&L. La seule fuite
+   est la commission. J'ai failli faire retrancher deux fois le même coût.
+2. Le « slippage moyen de 12 bps » mesuré sur le journal n'existe pas : **15 doublons
+   sur 66**, dont un AAVE triplé (`-R1`, `-R2`, suffixes posés par un script de
+   réparation qui contourne l'identifiant déterministe). Dédupliqué : **−0,16 bps**. Le
+   signe s'inverse. Ces suffixes échappent aussi au regroupement `-X` de
+   `turnover_audit` : ils comptent comme des positions distinctes, donc P0-2 mesurait un
+   journal contaminé.
+
+**Un test m'a corrigé.** `shortfall_amount` doit se rapporter au notionnel de RÉFÉRENCE :
+sur celui du fill, +5 bps rendait 0,50025 $ au lieu de 0,50 $. Le test avait raison.
+
+**Mesuré, après.** Aller-retour de 5 000 $ à +2 % : commission 2,02 $ en actions, 1,51 $
+en ETF, **10,10 $ en crypto** — soit 12 % du gain brut, jusqu'ici invisible.
+
+**Trouvé en passant (HORS SCOPE).** `SimBroker.equity()` marque les positions ouvertes au
+dernier prix VU, que la boucle de sortie de `fast_swing` ne rafraîchit jamais. L'equity de
+backtest est marquée à des prix périmés — donc le vol-targeting aussi. Consigné, non
+corrigé.
+
+**Suite.** P0-1 câblé et testé ; reste à décider la politique d'estimation des
+commissions en production (modèle documenté vs `None`), et la déduplication du journal.
+
 ## Session 2026-09-09 (27ᵉ) — La vitrine annonçait trois nombres de tests différents
 
 **Fait.** README réécrit et `docs/COMMANDES.md` créé (référence des 125 cibles `make`, groupées

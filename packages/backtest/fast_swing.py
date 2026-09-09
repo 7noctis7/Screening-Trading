@@ -15,6 +15,7 @@ import math
 
 from packages.core.models import AssetClass, Order, OrderType, Side, TradeRecord
 from packages.execution.costs import CostModel
+from packages.execution.fills import charge_du_roundtrip, fill_produit
 from packages.execution.sim_broker import SimBroker
 from packages.indicators.momentum import RSI
 from packages.indicators.trend import SMA
@@ -254,6 +255,7 @@ def fast_swing_backtest(
                 if stub or qty * fillp < eq * 0.01:         # ligne trop petite → on saute
                     continue
                 before = broker.position(s)
+                _n_fills = len(getattr(broker, "fills", []))
                 broker.mark(s, fillp)                       # fill au prix d'exécution…
                 broker.submit(Order(s, Side.LONG, qty, OrderType.MARKET, limit_price=fillp))
                 broker.mark(s, b[t].close)                  # …puis on rétablit la clôture (MTM)
@@ -262,6 +264,7 @@ def fast_swing_backtest(
                     continue
                 gross += qty * fillp                        # consomme la marge d'exposition
                 open_t[s] = {"entry_price": pos.avg_price, "qty": qty, "entry_ts": fill_ts,
+                             "fill_entree": fill_produit(broker, _n_fills),
                              "t0": t,               # barre d'entrée (détention min)
                              "stop": fillp - atr_stop * a, "target": fillp + rr * atr_stop * a,
                              "reason": "pullback en tendance (top conviction)",
@@ -284,16 +287,26 @@ def fast_swing_backtest(
 
 
 def _close(broker, journal, sym, ot, price, ts, reason, costs, tid, ac) -> None:
+    """Ferme la position et journalise le trade, **commission comprise**.
+
+    `pnl_gross` porte l'écart de prix (slippage inclus : il est dans les prix de fill).
+    `pnl_net` en retranche la commission des DEUX jambes — et elle seule. Avant, la
+    commission était débitée du cash du broker et n'atteignait jamais le trade : le
+    journal publiait un P&L brut de commission sous le nom `pnl_net`.
+    """
     sell_fill = costs.apply_sell(price)
+    _n_fills = len(getattr(broker, "fills", []))
     broker.submit(Order(sym, Side.SHORT, ot["qty"], OrderType.MARKET, limit_price=price))
-    pnl = (sell_fill - ot["entry_price"]) * ot["qty"]
+    charge = charge_du_roundtrip(ot.get("fill_entree"), fill_produit(broker, _n_fills))
+    brut = (sell_fill - ot["entry_price"]) * ot["qty"]
+    net = brut if charge is None else brut - charge
     rpu = (ot["entry_price"] - ot["stop"]) if ot["stop"] else None
     r_mult = ((sell_fill - ot["entry_price"]) / rpu) if rpu and rpu > 0 else None
     journal.append(TradeRecord(
         id=f"T{tid:04d}", instrument=sym, asset_class=ac, venue=broker.name, side=Side.LONG,
         qty=ot["qty"], entry_ts=ot["entry_ts"], entry_price=ot["entry_price"],
-        avg_price=ot["entry_price"], exit_ts=ts, exit_price=sell_fill,
+        avg_price=ot["entry_price"], exit_ts=ts, exit_price=sell_fill, fees=charge,
         entry_reason=ot["reason"], exit_reason=reason, strategy="swing",
-        features_snapshot=dict(ot["features"]), pnl_net=pnl,
-        pnl_pct=pnl / (ot["entry_price"] * ot["qty"]) if ot["qty"] else 0.0,
-        r_multiple=r_mult, is_win=pnl > 0, mfe=ot["mfe"], mae=ot["mae"]))
+        features_snapshot=dict(ot["features"]), pnl_gross=brut, pnl_net=net,
+        pnl_pct=net / (ot["entry_price"] * ot["qty"]) if ot["qty"] else 0.0,
+        r_multiple=r_mult, is_win=net > 0, mfe=ot["mfe"], mae=ot["mae"]))

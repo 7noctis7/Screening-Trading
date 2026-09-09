@@ -128,6 +128,10 @@ def build_open(symbol: str, *, venue: str, asset_class: str | None, fill: dict |
         instrument=symbol, asset_class=_asset_class(symbol, asset_class),
         venue=venue, side=Side.LONG, qty=qty, entry_ts=ts, entry_price=price, avg_price=price,
         entry_reason="reconciliation paper (open/add)", regime=regime, strategy=strategy,
+        # `fees` et `slippage` restent NON RENSEIGNÉS (None) : le courtier ne les
+        # publie pas et un modèle de coûts n'est pas un fait. Écrire 0.0 les rendrait
+        # indiscernables d'un coût réellement nul — c'est ce que faisait le défaut du
+        # dataclass avant P0-1.
         features_snapshot=feats)
 
 

@@ -43,6 +43,11 @@ from dataclasses import dataclass
 from datetime import datetime
 
 _SPLIT = re.compile(r"-X\d+$")
+# Suffixe posé par les scripts de RÉPARATION. Il contourne l'identifiant
+# déterministe de `build_open` (donc l'UPSERT) et échappe au regroupement des
+# tranches : ces lignes comptent comme des positions distinctes. Mesuré le 09/09 :
+# 15 doublons sur 66 faisaient passer le slippage moyen de −0,16 à +11,97 bps.
+_REPARATION = re.compile(r"-R\d+$")
 _ADMIN = "reconciliation-journal:"
 
 
@@ -52,7 +57,9 @@ class AuditTurnover:
     n_fermetures: int                  # enregistrements clos (tranches comprises)
     n_administratives: int             # fermetures reconstruites après coup
     n_jours_couverts: float
-    frais_totaux: float
+    frais_totaux: float | None         # None = jamais renseigné (≠ zéro mesuré)
+    n_frais_connus: int                # fermetures portant un coût réellement mesuré
+    n_suffixes_reparation: int         # lignes issues d'un script de réparation
     duree_mediane_j: float | None
     taux_gain: float | None
     capture_mediane: float | None      # médiane de pnl_pct / mfe, positions mfe > 0
@@ -137,8 +144,8 @@ def auditer(trades: list, *, seulement: str | None = None) -> AuditTurnover:
         pos = [p for p in pos if p["admin"]]
     clos = [t for p in pos for t in p["tranches"]]
     if not clos:
-        return AuditTurnover(0, 0, 0, 0.0, 0.0, None, None, None, 0, frozenset(),
-                             None, None, None, False)
+        return AuditTurnover(0, 0, 0, 0.0, None, 0, 0, None, None, None, 0,
+                             frozenset(), None, None, None, False)
 
     pnls = [p["pnl_pct"] for p in pos if p["pnl_pct"] is not None]
     gains_ = sum(x for x in pnls if x > 0)
@@ -147,13 +154,19 @@ def auditer(trades: list, *, seulement: str | None = None) -> AuditTurnover:
                 and p["mfe"] > 1e-9 and p["pnl_pct"] is not None]
     durees = [p["duree_j"] for p in pos if p["duree_j"] is not None]
     tstat, signif = _tstat_vs_zero(pnls)
+    _connus = sum(1 for t in clos if t.fees is not None)
 
     return AuditTurnover(
         n_positions=len(pos), n_fermetures=len(clos),
         n_administratives=sum(1 for p in pos if p["admin"]),
         n_jours_couverts=round(_jours(min(t.entry_ts for t in clos),
                                       max(t.exit_ts for t in clos)), 1),
-        frais_totaux=round(sum((t.fees or 0.0) + (t.slippage or 0.0) for t in clos), 2),
+        # Le slippage n'entre PAS dans cette somme : il est déjà contenu dans les prix
+        # de fill, donc déjà dans le P&L. L'ajouter compterait deux fois le même coût.
+        frais_totaux=(round(sum(t.fees for t in clos if t.fees is not None), 2)
+                      if _connus else None),
+        n_frais_connus=_connus,
+        n_suffixes_reparation=sum(1 for t in clos if _REPARATION.search(t.id or "")),
         duree_mediane_j=round(_mediane(durees), 2) if durees else None,
         taux_gain=round(sum(1 for x in pnls if x > 0) / len(pnls), 3) if pnls else None,
         capture_mediane=round(_mediane(captures), 3) if captures else None,
@@ -185,7 +198,19 @@ def rapport(a: AuditTurnover) -> str:
         return ("UNCALIBRATED — aucun round-trip clos. Rien à mesurer : brancher le "
                 "journal RÉEL (Mac mini / VPS) avant toute décision.")
     L = _lignes_comptage(a)
-    L.append(f"Frais + slippage cumulés : {a.frais_totaux:.2f} $.")
+    if a.frais_totaux is None:
+        L.append("Coût d'exécution : UNCALIBRATED — l'exécution n'a renseigné aucun "
+                 "frais sur ces fermetures. Un champ vide n'est pas un coût nul.")
+    else:
+        L.append(f"Commissions cumulées : {a.frais_totaux:.2f} $ "
+                 f"({a.n_frais_connus}/{a.n_fermetures} fermeture(s) mesurée(s)).")
+        L.append("  (Le slippage n'y est pas : il est déjà dans les prix de fill, "
+                 "donc déjà dans le P&L — l'ajouter le compterait deux fois.)")
+    if a.n_suffixes_reparation:
+        L.append(f"⚠ {a.n_suffixes_reparation} enregistrement(s) portent un suffixe de "
+                 "réparation : ils échappent au regroupement des tranches et comptent "
+                 "comme des positions distinctes. Statistiques potentiellement "
+                 "dupliquées.")
     if a.duree_mediane_j is not None:
         L.append(f"Détention médiane : {a.duree_mediane_j:.1f} jour(s).")
     if a.taux_gain is not None:

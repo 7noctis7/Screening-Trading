@@ -6,8 +6,9 @@ immédiats au prix courant ajusté des coûts. Tient cash + positions + equity.
 
 from __future__ import annotations
 
-from packages.core.models import Order, OrderStatus, Position, Side
+from packages.core.models import Fill, Order, OrderStatus, Position, Side
 from packages.execution.costs import CostModel
+from packages.execution.fills import fill_de_l_ordre
 
 
 class SimBroker:
@@ -21,6 +22,10 @@ class SimBroker:
         self._last_price: dict[str, float] = {}
         self._seen_client_ids: set[str] = set()  # idempotence des retries
         self.fees_paid = 0.0
+        # Le RÉSULTAT ÉCONOMIQUE de chaque ordre. Sans cette liste, le prix d'exécution
+        # et la commission étaient calculés, appliqués au cash, puis JETÉS — et le
+        # journal écrivait 0,0 par défaut, indiscernable d'un coût réellement nul.
+        self.fills: list[Fill] = []
 
     def mark(self, instrument: str, price: float) -> None:
         self._last_price[instrument] = price
@@ -47,6 +52,9 @@ class SimBroker:
             self.cash += notional - fee
             self._reduce(order.instrument, order.qty)
         self.fees_paid += fee
+        # `price` est le prix AVANT coûts : c'est la référence d'arrivée du fill.
+        self.fills.append(fill_de_l_ordre(order, fill_price=fill, reference_price=price,
+                                          commission=fee, source="estimated"))
         if order.client_id:
             self._seen_client_ids.add(order.client_id)
         order.status = OrderStatus.FILLED
