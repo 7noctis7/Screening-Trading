@@ -108,6 +108,28 @@ def raison_fermeture(ts: datetime | None = None, asset_class: str = "equity") ->
     return f"hors séance — {quand} ({n:%H:%M} ET ; séance 09:30–16:00)"
 
 
+def minutes_avant_cloture(ts: datetime | None = None) -> float | None:
+    """Minutes restantes avant la clôture XNYS. `None` si la séance n'est pas ouverte.
+
+    POURQUOI CE CALCUL EXISTE. Planifier « une heure avant la clôture » avec une heure
+    FIXE ne tient pas l'année : la clôture de 16 h à New York tombe à 20 h UTC l'été et
+    à 21 h UTC l'hiver, et les deux changements d'heure (américain et européen) ne se
+    font pas le même dimanche. Une heure de cron gelée dérive donc deux fois par an, et
+    il faut y repenser à chaque fois — exactement ce qu'on veut éviter.
+
+    La sortie de cette fonction ne dépend d'aucun réglage : elle répond « combien de
+    minutes avant la fermeture sommes-nous », dans l'heure du MARCHÉ. Un planificateur
+    qui se réveille souvent et n'agit que quand ce nombre tombe dans sa fenêtre reste
+    juste toute l'année, sur n'importe quelle machine et quel que soit son fuseau, sans
+    jamais être retouché. Fériés et week-ends sont exclus par `is_open`, donc gratuits.
+    """
+    if not is_open(ts, "equity"):
+        return None
+    n = _et(ts or datetime.now(UTC))
+    fermeture = datetime.combine(n.date(), _FERMETURE, tzinfo=n.tzinfo)
+    return (fermeture - n).total_seconds() / 60.0
+
+
 def prochaine_ouverture(ts: datetime | None = None) -> datetime:
     """Prochaine ouverture XNYS, heure de New York — pour dire QUAND l'ordre partira."""
     n = _et(ts or datetime.now(UTC))

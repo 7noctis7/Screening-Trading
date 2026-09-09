@@ -19,9 +19,17 @@ cd "$ROOT"
 [ -f .venv/bin/activate ] && source .venv/bin/activate
 PY="${PYTHON:-python3}"
 
-DOW="$(date +%u)"                                   # 1=lundi … 7=dimanche
-if [ "$DOW" -ge 6 ]; then
-  echo "[$(date '+%F %T')] week-end (marché fermé) → rien à faire."; exit 0
+# FENÊTRE D'EXÉCUTION — le planificateur se réveille toutes les heures, ce garde-fou
+# décide s'il faut agir. Il raisonne dans l'heure du MARCHÉ (calendrier NYSE : fériés et
+# heure d'été inclus), donc l'installation reste juste toute l'année sans jamais être
+# retouchée : la clôture de 16 h à New York tombe à 20 h UTC l'été et 21 h l'hiver, et
+# une heure de cron figée dérive deux fois par an.
+# Sortie SILENCIEUSE hors fenêtre : vingt-trois réveils quotidiens qui écriraient
+# « rien à faire » rendraient le journal illisible, donc inutile.
+if [ "${QUANT_IGNORER_FENETRE:-0}" != "1" ]; then
+  if ! $PY scripts/fenetre_execution.py; then
+    exit 0
+  fi
 fi
 
 # Garde-fou crypto : couvre toutes les places connues et résiste au rechargement de `.env`.

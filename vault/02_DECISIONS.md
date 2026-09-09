@@ -2,6 +2,53 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0107 — Un cron qu'on ne retouche plus : la fenêtre, pas l'heure (2026-09-10)
+
+**Demande.** Rebalancer une heure avant la clôture, et ne plus jamais avoir à corriger la
+planification aux changements d'heure.
+
+**Pourquoi une heure fixe ne peut pas y arriver.** La clôture de 16 h à New York tombe à
+**20 h UTC l'été** et à **21 h UTC l'hiver**. Pire, les deux bascules ne tombent pas le
+même week-end : l'européenne au dernier dimanche d'octobre, l'américaine au premier de
+novembre — pendant une semaine par an, l'écart Paris↔New York passe à cinq heures. Une
+ligne de cron gelée dérive donc au moins deux fois par an, et sur une machine dont le
+fuseau n'est pas celui du marché, elle peut viser n'importe quoi. Aucun réglage
+d'installation ne résout cela, parce que le problème n'est pas le réglage : c'est de
+figer une heure alors que la cible est définie dans une AUTRE horloge.
+
+**Décision — on ne planifie plus une heure, on planifie une fenêtre.** Le cron devient
+`5 * * * 1-5` : un réveil par heure ouvrée. À chaque réveil,
+`scripts/fenetre_execution.py` demande au calendrier du projet combien de minutes il
+reste avant la clôture — **dans l'heure du marché** — et n'autorise l'exécution que si ce
+nombre tombe dans `[cible − 30, cible + 30)`. Une seule des vingt-quatre tentatives passe,
+quelle que soit la saison, quel que soit le fuseau de la machine. Les vingt-trois autres
+sortent **en silence** : un journal rempli de « rien à faire » ne se lit plus, donc ne
+protège plus.
+
+Le calendrier connaissait déjà les fériés NYSE et la règle d'heure d'été américaine
+(`market_calendar._et`, `is_open`). Il manquait seulement `minutes_avant_cloture` — six
+lignes qui transforment une connaissance déjà présente en décision d'exécution. Rien de
+neuf n'a été recopié.
+
+**La fenêtre est SEMI-OUVERTE**, `[cible − 30, cible + 30)`. Fermée des deux côtés, une
+minute pile sur la borne déclencherait deux fois le même jour : le rebalancement partirait
+en double. Un test fixe cette propriété.
+
+**Ce que les tests garantissent.** Exactement **un** déclenchement par séance, vérifié sur
+cinq dates choisies pour leur difficulté : plein été, plein hiver, le lendemain de la
+bascule américaine, la semaine où les deux fuseaux sont désynchronisés, et après les deux
+bascules. Zéro déclenchement les week-ends et les fériés NYSE. Et la preuve que rien
+n'est figé : l'heure UTC qui déclenche vaut **19 h l'été, 20 h l'hiver** — ce qu'une ligne
+de cron ne sait pas faire seule.
+
+**Réglages.** `QUANT_LIVE_AVANT_CLOTURE=30` pour viser plus près de la clôture ;
+`QUANT_LIVE_HOUR=20` pour revenir à une heure fixe (l'ancien comportement, conservé et
+testé). `QUANT_IGNORER_FENETRE=1` pour un lancement manuel hors fenêtre.
+
+**Conséquence.** Le choix de l'heure rejoint le petit ensemble des choses que ce projet
+n'a plus à savoir : comme les fériés, comme les jours de bourse, elle se déduit d'un
+calendrier au lieu d'être recopiée dans un réglage qui se périme.
+
 ## ADR-0106 — L'heure d'exécution : deux questions, une seule se mesure (2026-09-10)
 
 **Question posée.** « Quel créneau pour trader, là où historiquement ça performe le
