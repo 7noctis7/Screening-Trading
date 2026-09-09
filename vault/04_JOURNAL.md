@@ -1,5 +1,25 @@
 # 04 — JOURNAL
 
+## Session 2026-09-09 (24ᵉ) — Le correctif était déjà écrit, ailleurs
+
+**22/22 NOTES, ZÉRO PLANTAGE.** Le filtre crypto tient. Mais deux pages Yahoo complètes
+inondaient encore le terminal — pour IBM et NKE, deux vraies sociétés : des 502 transitoires,
+donc un autre défaut.
+
+**LE PROBLÈME N'EST PAS L'ERREUR, C'EST SON VOLUME.** yfinance ne journalise pas un échec, il
+DÉVERSE la page du serveur : cent lignes de « sad panda » au milieu de la liste des notes. Un
+502 transitoire est sans conséquence ; ce qui coûte, c'est que les lignes utiles se perdent.
+
+**ET LE CORRECTIF EXISTAIT.** `dump_static.py` silence `yfinance`/`urllib3`/`peewee` depuis
+un moment, avec le commentaire « yfinance dumpe des pages HTML ». Connu, résolu dans un
+script, absent de l'autre qui appelle les mêmes fournisseurs.
+
+**LE TEST QUI COMPTE.** Pas celui du silence — celui qui exige que les DEUX scripts batch
+portent la précaution. Une correction ponctuelle répare un cas ; une convention vérifiée
+répare la classe.
+
+**2453 tests passés, 2 ajoutés.** ADR-0127.
+
 ## Session 2026-09-09 (23ᵉ) — Le banc a tranché
 
 **2 169 TRADES SUR DONNÉES RÉELLES.** −0,059 R par trade, 26,8 % de réussite, −127,9 R au

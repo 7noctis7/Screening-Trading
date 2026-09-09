@@ -19,6 +19,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+# BRUIT RÉSEAU. yfinance ne journalise pas une erreur, il DÉVERSE la page HTML que le
+# serveur a renvoyée : cent lignes de « sad panda » Yahoo pour un 502 sur IBM, au milieu
+# de la liste des notes. Le run devient illisible et les vraies lignes se perdent —
+# mesuré le 09/09 sur IBM et NKE. `dump_static` portait déjà ce silence ; ce script,
+# qui appelle les mêmes fournisseurs, ne l'avait pas. Même remède, même endroit.
+import logging as _lg  # noqa: E402
+
+for _n in ("yfinance", "urllib3", "peewee"):
+    _lg.getLogger(_n).setLevel(_lg.CRITICAL)
+
 
 def _analysable(symbole: str) -> bool:
     """Une note FONDAMENTALE a-t-elle un sens pour ce symbole ?

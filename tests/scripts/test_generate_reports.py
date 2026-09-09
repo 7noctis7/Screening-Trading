@@ -44,3 +44,23 @@ def test_un_point_reste_LISIBLE_dans_le_nom():
     un nom de fichier, et le ticker doit rester reconnaissable dans le dossier."""
     assert _gr._nom_fichier("BRK.B") == "BRK.B"
     assert _gr._nom_fichier("ASML.AS") == "ASML.AS"
+
+
+def test_le_bruit_reseau_est_MUSELE_a_l_import():
+    """yfinance ne journalise pas une erreur, il DÉVERSE la page HTML du serveur : cent
+    lignes de « sad panda » Yahoo pour un 502 sur IBM, au milieu de la liste des notes.
+    Le run devient illisible et les vraies lignes se perdent. `dump_static` portait déjà
+    ce silence ; ce script, qui appelle les mêmes fournisseurs, ne l'avait pas."""
+    import logging
+    for nom in ("yfinance", "urllib3", "peewee"):
+        assert logging.getLogger(nom).level >= logging.CRITICAL, nom
+
+
+def test_les_DEUX_scripts_batch_partagent_le_silence():
+    """Le même remède au même endroit. Sans ce contrôle, un troisième script batch
+    réintroduirait le déversement sans que rien ne le signale."""
+    from pathlib import Path
+    racine = Path(__file__).resolve().parents[2] / "scripts"
+    for nom in ("generate_reports.py", "dump_static.py"):
+        src = (racine / nom).read_text(encoding="utf-8")
+        assert '"yfinance"' in src and "CRITICAL" in src, nom

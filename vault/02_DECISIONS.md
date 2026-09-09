@@ -2,6 +2,33 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0127 — Le correctif existait dans un script et pas dans l'autre (2026-09-09)
+
+**Constat.** Après ADR-0126, `make reports` rend **22/22** sans plantage : le filtre sur les
+paires crypto tient. Mais deux pages HTML Yahoo complètes inondent encore le terminal — cette
+fois pour **IBM et NKE**, deux sociétés parfaitement légitimes. Ce n'était donc pas le même
+défaut : ce sont des 502 transitoires sur de vrais tickers.
+
+**LE VRAI PROBLÈME N'EST PAS L'ERREUR, C'EST SON VOLUME.** yfinance ne journalise pas un
+échec réseau, il **déverse la page que le serveur a renvoyée** : une centaine de lignes de
+« sad panda » Yahoo, au milieu de la liste des notes. Un 502 transitoire est normal et sans
+conséquence ; ce qui coûte, c'est que les lignes utiles se perdent dedans. Un run qu'on ne
+peut plus lire ne se lit plus — et c'est là qu'on rate ce qui compte vraiment.
+
+**LE CORRECTIF EXISTAIT DÉJÀ.** `dump_static.py` porte, depuis un moment, le silence des
+loggers `yfinance` / `urllib3` / `peewee`, avec le commentaire exact : « silence le bruit
+réseau (yfinance dumpe des pages HTML) ». Le problème était donc **connu et résolu dans un
+script**, et absent d'un autre qui appelle les mêmes fournisseurs. Même remède, même endroit.
+
+**LE TEST QUI COMPTE N'EST PAS CELUI DU SILENCE.** Vérifier que les loggers sont à CRITICAL
+ne protège que le script d'aujourd'hui. Un second test exige que **les deux scripts batch**
+portent la même précaution : sans lui, un troisième script réintroduirait le déversement
+sans que rien ne le signale. Une correction ponctuelle répare un cas ; une convention
+vérifiée répare la classe.
+
+**Conséquences.** 2453 tests, 2 ajoutés. Aucune donnée n'est masquée : seul le corps HTML
+d'une réponse en échec cesse d'être imprimé, l'échec lui-même reste visible.
+
 ## ADR-0126 — Le banc a tranché : le swing ICT ne se branche pas (2026-09-09)
 
 **LA MESURE, sur 40 actifs de la watchlist et l'historique réel de `market.db`.**
