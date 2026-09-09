@@ -68,6 +68,26 @@ export async function analyzePortfolio(positions: { ticker: string; weight: numb
   return response.json();
 }
 
+// Sentiment & news du portefeuille IMPORTÉ, pondéré par ses poids. Même contrat que
+// `analyzePortfolio` : POST local uniquement, rien n'est conservé côté API. En statique
+// (GitHub Pages) il n'y a pas d'API à interroger — on le DIT au lieu d'afficher un vide.
+export async function portfolioSentiment(positions: { ticker: string; weight: number | null }[]) {
+  const rows = positions.filter((r) => r.weight != null)
+    .map((r) => ({ symbol: r.ticker, weight: Number(r.weight) / 100 }));
+  if (rows.length === 0) return { available: false, reason: "aucune ligne pondérée" };
+  if (STATIC) return { available: false, reason: "sentiment disponible en local avec make start" };
+  let response: Response;
+  try {
+    response = await fetch(`${BASE}/api/portfolio/sentiment`, { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ positions: rows }) });
+  } catch {
+    return { available: false, reason: _raisonTransport() };
+  }
+  if (!response.ok)
+    return { available: false, reason: `API ${BASE}/api/portfolio/sentiment : HTTP ${response.status}.` };
+  return response.json();
+}
+
 // Univers RECOMMANDÉ : ce que le robot proposerait de détenir, indépendamment de ce qui
 // est détenu. Distinct de `optimal_allocation`, qui ne répartit le risque que sur les
 // lignes déjà en portefeuille et ne peut donc rien proposer de nouveau.

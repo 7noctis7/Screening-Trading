@@ -32,7 +32,7 @@ export default function Sentiment() {
         <div className="flex items-center gap-4 mt-2">
           <div className="text-2xl font-semibold">{tag(s.market_label)}</div>
           <div className="flex-1">
-            <div className="h-2.5 rounded-md overflow-hidden" style={{ background: "#1d212a" }}>
+            <div className="h-2.5 rounded-md overflow-hidden" style={{ background: "color-mix(in srgb, var(--fg) 10%, transparent)" }}>
               <div style={{ height: "100%", width: `${moodPct}%`, background: "linear-gradient(90deg,#f43f5e,#9aa1ad,#22c55e)" }} />
             </div>
             <div className="text-xs text-muted mt-1.5">

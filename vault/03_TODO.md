@@ -7,6 +7,11 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+- [x] **P1 — « Pouls du portefeuille » livré (09/09, ADR-0128).** Sentiment & news du
+      portefeuille importé, **pondérés par ses poids**, dans *Analyser mon portefeuille*.
+      L'onglet `/sentiment` du robot reste inchangé. Non-persistance garantie par deux
+      tests (source + comportement), vérifiés par sabotage.
+
 - [x] **~~P0 — filtre `legacy`~~ — ANNULÉE, elle n'a jamais existé (09/09, ADR-0122).**
       `/api/journal` publie déjà les deux périmètres via `perimetre_affiche`, et la page
       `/journal` affiche le bandeau « Périmètre affiché ≠ compte » avec les deux chiffres.

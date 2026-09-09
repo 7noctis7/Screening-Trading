@@ -1,5 +1,40 @@
 # 04 — JOURNAL
 
+## Session 2026-09-09 (25ᵉ) — Le sentiment du capital, pas celui des lignes
+
+**Fait.** « Pouls du portefeuille » livré dans *Analyser mon portefeuille* : sentiment &
+actualités du portefeuille IMPORTÉ, pondérés par ses poids. Nouveau module
+`packages/sentiment/portefeuille.py`, route locale `POST /api/portfolio/sentiment`,
+panneau `SentimentPulse` + primitives `SentimentJauge` (jauge à aiguille, barres signées,
+filtre segmenté avec compteurs, cartes dépliables sur les titres, fils macro/marché).
+L'onglet `/sentiment` du robot est inchangé — c'était la demande.
+
+**Ce que la mesure a corrigé dans ma conception.** L'onglet existant moyenne à **poids
+égal**. Sur un portefeuille dont on connaît les poids, ça décrit un portefeuille que
+personne ne détient. Les deux humeurs sont donc affichées, et leur **écart** est publié :
+il dit si le pessimisme est sur les grosses lignes ou sur les miettes.
+
+**Le piège qui n'était pas dans la demande.** `/api/portfolio/*` promet « aucune
+persistance » ; `history.record_and_delta` **écrit**. Un portefeuille de passage aurait
+pollué `sentiment_history.json` avec des symboles que le robot ne détient pas, faussant le
+Δ du lendemain **dans l'onglet du robot** — invisible depuis la page fautive.
+`history.delta` (lecture seule) extrait ; deux gardes (source + comportement), vérifiées
+par sabotage : les deux tombent quand on remet l'écriture.
+
+**Trouvé en passant.** Le repli momentum 63 j était recopié **deux fois** en dur dans
+`snapshot.py` : remplacé par un appel unique, avec un test qui interdit la recopie.
+`PortfolioSynergies.tsx` portait un second `return` **inatteignable** (JSX dupliqué) :
+supprimé. La barre d'humeur de `/sentiment` avait un fond `#1d212a` en dur, illisible en
+thème clair — même défaut que les couleurs de benchmark de ce matin, passé en jeton.
+
+**Mesuré.** Cas le pire (aucune base de prix, `QUANT_NEWS` absent) : `mood: null`,
+`poids_non_mesure: 1.0`, libellé « non mesuré ». Rien n'est inventé, et la page le dit.
+Suite : **2 472 passés, 7 ignorés** (+19). `make certification` vert, dette inchangée
+(1 479 l.). Build Next OK, `tsc` sans erreur nouvelle.
+
+**Suite.** P1 secteurs GICS (`make hf-pull`), P2 armer le disjoncteur, P2 `chmod 600
+models/*.pkl`, P2 backlog `ruff` du dépôt (line-length 88 vs style réel ~100).
+
 ## Session 2026-09-09 (24ᵉ) — Le correctif était déjà écrit, ailleurs
 
 **22/22 NOTES, ZÉRO PLANTAGE.** Le filtre crypto tient. Mais deux pages Yahoo complètes

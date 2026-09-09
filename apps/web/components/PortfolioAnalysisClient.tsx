@@ -5,6 +5,7 @@ import { PortfolioEvidence } from "@/components/PortfolioEvidence";
 import { PortfolioImportWizard } from "@/components/PortfolioImportWizard";
 import { PortfolioScenarios } from "@/components/PortfolioScenarios";
 import { PortfolioSynergies } from "@/components/PortfolioSynergies";
+import { SentimentPulse } from "@/components/SentimentPulse";
 import { analyzePortfolio } from "@/lib/api";
 import type { PortfolioSnapshot } from "@/lib/portfolio-import";
 
@@ -43,6 +44,7 @@ export function PortfolioAnalysisClient() {
     <PortfolioImportWizard onSnapshot={setSnapshot} initialSnapshot={snapshot} />
     <PortfolioEvidence snapshot={snapshot} analysis={analysis} loading={loading} />
     <PortfolioScenarios snapshot={snapshot} analysis={analysis} loading={loading} />
+    <SentimentPulse snapshot={snapshot} />
     <PortfolioSynergies />
   </>;
 }

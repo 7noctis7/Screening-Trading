@@ -6,7 +6,7 @@ quotidien (un point par date) et on calcule l'écart au sentiment moyen récent.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from pathlib import Path
 
 _F = Path(__file__).resolve().parents[2] / ".cache" / "sentiment_history.json"
@@ -19,16 +19,19 @@ def _load() -> list[dict]:
         return []
 
 
-def record_and_delta(scores: dict[str, float], window: int = 20,
-                     today: str | None = None) -> dict:
-    """Enregistre les scores du jour et renvoie le Δsentiment par actif (vs moyenne des `window`
-    derniers jours, hors aujourd'hui). Au premier appel, Δ = 0 (pas d'historique).
+def delta(scores: dict[str, float], window: int = 20,
+          today: str | None = None) -> dict:
+    """Δsentiment par actif **SANS RIEN ÉCRIRE** — le calcul seul.
 
-    Renvoie `{by_symbol: {sym: delta}, mood_delta: float, history_days: int}`.
+    Séparé de `record_and_delta` parce que deux appelants ont des droits différents :
+    le snapshot du robot tourne une fois par jour et DOIT alimenter l'historique ;
+    l'analyse d'un portefeuille fourni par l'utilisateur est read-only par contrat
+    (`/api/portfolio/*` : « aucune persistance »). Un portefeuille de passage qui
+    écrirait dans l'historique polluerait la référence du robot avec des symboles
+    qu'il ne détient pas — et le Δ du lendemain serait faussé pour TOUT LE MONDE.
     """
-    today = today or datetime.now(timezone.utc).date().isoformat()
-    hist = [h for h in _load() if h.get("date") != today]      # dédoublonne la date du jour
-    prior = hist[-window:]
+    today = today or datetime.now(UTC).date().isoformat()
+    prior = [h for h in _load() if h.get("date") != today][-window:]
     by_symbol: dict[str, float] = {}
     for sym, sc in scores.items():
         past = [h["scores"][sym] for h in prior if sym in h.get("scores", {})]
@@ -38,12 +41,25 @@ def record_and_delta(scores: dict[str, float], window: int = 20,
     past_moods = [sum(h["scores"].values()) / len(h["scores"])
                   for h in prior if h.get("scores")]
     mood_base = sum(past_moods) / len(past_moods) if past_moods else cur_mood
-    # persiste (best effort) — alimenté quotidiennement par le cron
-    try:
-        hist.append({"date": today, "scores": {k: round(v, 4) for k, v in scores.items()}})
+    return {"by_symbol": by_symbol, "mood_delta": round(cur_mood - mood_base, 4),
+            "history_days": len(prior)}
+
+
+def record_and_delta(scores: dict[str, float], window: int = 20,
+                     today: str | None = None) -> dict:
+    """Enregistre les scores du jour et renvoie le Δsentiment par actif (vs moyenne
+    des `window` derniers jours, hors aujourd'hui). Au premier appel, Δ = 0.
+
+    Renvoie `{by_symbol: {sym: delta}, mood_delta: float, history_days: int}`.
+    """
+    today = today or datetime.now(UTC).date().isoformat()
+    mesure = delta(scores, window=window, today=today)
+    try:                                                       # persiste (best effort)
+        hist = [h for h in _load() if h.get("date") != today]
+        hist.append({"date": today,
+                     "scores": {k: round(v, 4) for k, v in scores.items()}})
         _F.parent.mkdir(parents=True, exist_ok=True)
         _F.write_text(json.dumps(hist[-120:]))                 # garde ~4 mois
     except Exception:  # noqa: BLE001
         pass
-    return {"by_symbol": by_symbol, "mood_delta": round(cur_mood - mood_base, 4),
-            "history_days": len(prior)}
+    return mesure

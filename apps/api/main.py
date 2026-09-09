@@ -290,6 +290,34 @@ def analyze_user_portfolio(body: PortfolioAnalysisRequest, request: Request) -> 
     return analyze(rows, years=body.years, series_by_symbol=series)
 
 
+class PortfolioSentimentRequest(BaseModel):
+    positions: list[PortfolioAnalysisPosition] = Field(min_length=1, max_length=40)
+
+
+@app.post("/api/portfolio/sentiment")
+def portfolio_sentiment(body: PortfolioSentimentRequest, request: Request) -> dict:
+    """Sentiment & news du portefeuille FOURNI, pondéré par ses poids. Read-only.
+
+    Même contrat que `/analyze` : rien n'est conservé, aucun chemin d'exécution. En
+    particulier l'historique de sentiment est LU et jamais écrit (`history.delta`) —
+    un portefeuille de passage n'a pas à déplacer la référence du robot.
+    """
+    if not _webhook_authorized(request):
+        return {"available": False, "reason": "endpoint local uniquement"}
+    import os
+
+    from packages.portfolio.user_analysis import charger_series
+    from packages.sentiment.portefeuille import analyse
+
+    rows = [{"symbol": p.symbol.upper(), "weight": p.weight} for p in body.positions]
+    symboles = [r["symbol"] for r in rows]
+    try:                                   # séries = repli momentum quand aucune news
+        series, _alias, _manquants = charger_series(symboles, years=1)
+    except Exception:  # noqa: BLE001
+        series = {}
+    return analyse(rows, use_news=os.environ.get("QUANT_NEWS") == "1", series=series)
+
+
 class ProfilInvestisseur(BaseModel):
     """Réponses du questionnaire, transmises À CHAQUE APPEL et jamais conservées.
 

@@ -878,6 +878,7 @@ def _sentiment_section(held: list, names: dict, sector_of: dict, data: dict) -> 
     import os
 
     from packages import sentiment as S
+    from packages.sentiment.portefeuille import score_momentum as _momentum
 
     use_news = os.environ.get("QUANT_NEWS") == "1"
     rows: list[dict] = []
@@ -888,8 +889,8 @@ def _sentiment_section(held: list, names: dict, sector_of: dict, data: dict) -> 
             score, n, heads = r["score"], r["n"], r["headlines"]
         if n == 0:                                  # repli momentum (hors-ligne)
             bars = data.get(s)
-            if bars and len(bars) > 64:
-                score = round(max(-1.0, min(1.0, (bars[-1].close / bars[-64].close - 1) * 3.0)), 4)
+            score = _momentum([b.close for b in bars]) if bars else None
+            score = 0.0 if score is None else score
         rows.append({"symbol": s, "name": names.get(s, ""), "sector": sector_of.get(s, ""),
                      "score": score, "label": S.label_of(score), "n_news": n,
                      "headlines": heads[:5]})
@@ -2423,6 +2424,7 @@ def build_snapshot(seed: int = 7) -> dict:
     try:
         if _os.environ.get("QUANT_NEWS") == "1":
             from packages import sentiment as _Snews
+            from packages.sentiment.portefeuille import score_momentum as _momentum
             _pf_syms, _seen = [], set()
             for _s in ([p.get("symbol") for p in _live["real"]["positions"]]
                        + [o["symbol"] for o in _preset_alloc] + list(held)):
@@ -2440,8 +2442,7 @@ def build_snapshot(seed: int = 7) -> dict:
                 _score, _n, _heads = _r["score"], _r["n"], _r["headlines"]
                 if _n == 0:                                # repli momentum (hors-ligne) — cohérent
                     _b = data.get(_s)
-                    if _b and len(_b) > 64:
-                        _score = round(max(-1.0, min(1.0, (_b[-1].close / _b[-64].close - 1) * 3.0)), 4)
+                    _score = (_momentum([b.close for b in _b]) if _b else None) or 0.0
                 _new_rows.append({"symbol": _s, "name": names.get(_s, ""), "sector": sector_of.get(_s, ""),
                                   "score": _score, "label": _Snews.label_of(_score), "n_news": _n,
                                   "headlines": _heads[:5]})

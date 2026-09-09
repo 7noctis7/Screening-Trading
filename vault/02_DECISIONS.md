@@ -2,6 +2,53 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0128 — Le sentiment d'un portefeuille n'est pas la moyenne de ses lignes (2026-09-09)
+
+**Contexte.** Demande : reprendre l'onglet « Sentiment & news » dans « Analyser mon
+portefeuille », en plus concis et interactif, appliqué au portefeuille que l'utilisateur
+importe — l'onglet du robot restant inchangé sur ses propres positions.
+
+**Le constat qui a orienté la conception.** `_sentiment_section` moyenne ses lignes à
+**poids égal**. C'est correct pour l'univers détenu par le robot, mais faux dès qu'on
+connaît les poids : une ligne à 2 % franchement baissière y pèse autant qu'une ligne à
+30 % haussière, et le chiffre décrit alors un portefeuille que personne ne détient.
+
+**Décision.** Un module dédié `packages/sentiment/portefeuille.py`, qui renvoie les **deux**
+humeurs — simple et pondérée — et publie leur **écart** comme information à part entière :
+un pessimisme concentré sur les grosses lignes ne se traite pas comme un pessimisme
+éparpillé sur les miettes. La pondération est **renormalisée sur les seules lignes
+mesurées** : sans cela, une couverture partielle tirerait mécaniquement l'humeur vers zéro,
+ce qui se lit « neutre » alors que ça veut dire « non mesuré ».
+
+**Trois refus explicites, chacun tenu par un test.**
+1. Une ligne sans actualité *et* sans historique sort `disponible: False`, jamais `0.0`.
+   Zéro se lit « neutre » ; c'est une information fabriquée.
+2. `source` ne crédite pas le repli momentum quand aucun momentum n'a tourné — attribuer
+   le vide à une méthode jamais appelée fait croire à un résultat.
+3. Le poids non couvert est **affiché** : une humeur calculée sur 40 % du capital doit se
+   lire comme telle.
+
+**Non-persistance, et pourquoi ça compte.** `/api/portfolio/*` promet « aucune
+persistance », mais `history.record_and_delta` **écrit**. Un portefeuille de passage aurait
+donc alimenté `sentiment_history.json` avec des symboles que le robot ne détient pas, et
+faussé le Δ du lendemain **pour l'onglet du robot lui-même** — contamination silencieuse,
+invisible dans la page qui la subit. `history.delta` (lecture seule) a été extrait ;
+`record_and_delta` l'appelle puis persiste. Deux gardes : un test source (l'appel à
+`record_and_delta` est interdit dans le module) et un test de comportement (fichier
+d'historique neuf, qui doit rester absent). Les deux ont été vérifiés par sabotage.
+
+**Formule partagée.** Le repli momentum 63 j vivait en **deux copies** littérales dans
+`snapshot.py`. Elles sont remplacées par un appel à `score_momentum`, et un test interdit
+la recopie : deux copies finissent par diverger, et les deux onglets afficheraient alors
+deux « tendances 3 mois » différentes pour le même actif.
+
+**Conséquences.** Nouveau POST local `/api/portfolio/sentiment` (même garde
+`_webhook_authorized` que `/analyze`) ; panneau `SentimentPulse` + primitives
+`SentimentJauge` montés dans l'espace d'analyse. En statique le panneau dit qu'il faut
+`make start` — il n'affiche pas un vide. L'onglet `/sentiment` du robot est inchangé, à une
+exception : le fond de sa barre d'humeur était le littéral sombre `#1d212a`, illisible en
+thème clair — même défaut que les couleurs de benchmark corrigées ce matin, passé en jeton.
+
 ## ADR-0127 — Le correctif existait dans un script et pas dans l'autre (2026-09-09)
 
 **Constat.** Après ADR-0126, `make reports` rend **22/22** sans plantage : le filtre sur les
