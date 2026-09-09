@@ -11,18 +11,25 @@ export default function Macro() {
   const m = data.fred ?? {}, imf = data.imf ?? {};
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-4">
-      <h1 className="text-xl font-semibold tracking-tight">Analyse macroéconomique</h1>
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight">Le contexte économique</h1>
+        <p className="text-muted text-sm mt-1 max-w-3xl">
+          Inflation, chômage, taux d'intérêt, croissance : la toile de fond dans laquelle les
+          marchés évoluent. C'est du contexte pour comprendre, pas un signal d'achat — aucun
+          de ces chiffres ne déclenche quoi que ce soit sur le site.
+        </p>
+      </div>
       <StepBanner active="macro" />
       {/* Indicateurs chiffrés (FRED) */}
       {!m.available ? (
         <div className="card p-4 text-sm">
-          <b>Indicateurs FRED indisponibles.</b>
+          <b>Les chiffres économiques ne sont pas disponibles.</b>
           <p className="text-muted mt-1">{m.reason}</p>
-          <p className="text-muted2 text-xs mt-2">Clé FRED gratuite : <a className="text-accent" href="https://fred.stlouisfed.org" target="_blank" rel="noopener noreferrer">fred.stlouisfed.org</a> → My Account → API Keys, puis <code className="mono">export FRED_API_KEY="…"</code> et relance l'API.</p>
+          <p className="text-muted2 text-xs mt-2">Ils viennent de la banque centrale américaine (FRED), gratuitement, mais il faut une clé d'accès : <a className="text-accent" href="https://fred.stlouisfed.org" target="_blank" rel="noopener noreferrer">fred.stlouisfed.org</a> → My Account → API Keys, puis <code className="mono">export FRED_API_KEY="…"</code> et relancez l'API.</p>
         </div>
       ) : (
         <>
-          <p className="text-muted text-xs">{m.source} · Indicatif, hors score.</p>
+          <p className="text-muted text-xs">{m.source} · Pour information : ces chiffres n'entrent dans aucun calcul du site.</p>
           {Object.entries(m.groups).map(([group, items]: any) => (
             <section key={group} className="card p-4">
               <h2 className="text-sm uppercase tracking-wide text-muted mb-3">{group}</h2>
@@ -44,10 +51,10 @@ export default function Macro() {
                     {it.perimee && (
                       <div className="text-[11px] mt-1 px-1.5 py-0.5 rounded inline-block"
                         style={{ background: `color-mix(in srgb, var(--warn) ${it.statut === "arretee" ? 16 : 9}%, transparent)`, color: "var(--warn)" }}
-                        title={`Dernière observation il y a ${it.retard_jours} jours.`}>
+                        title={`Dernier chiffre connu il y a ${it.retard_jours} jours.`}>
                         {it.statut === "arretee"
-                          ? "⚠ série arrêtée — ne reflète plus la situation actuelle"
-                          : `⏳ publication en retard (${it.retard_jours} j) — la série publie avec du décalage`}
+                          ? "⚠ plus mise à jour — ce chiffre ne dit plus rien de la situation d'aujourd'hui"
+                          : `⏳ chiffre normal mais publié avec du retard (${it.retard_jours} j) — c'est le rythme habituel de cette statistique`}
                       </div>
                     )}
                   </div>
@@ -61,8 +68,8 @@ export default function Macro() {
       {/* Projections FMI (WEO) */}
       {imf.available && (
         <>
-          <h2 className="text-sm uppercase tracking-wide text-muted pt-2">📈 Projections FMI (WEO)</h2>
-          <p className="text-muted2 text-xs">{imf.source}</p>
+          <h2 className="text-sm uppercase tracking-wide text-muted pt-2">📈 Ce que le FMI prévoit pour les prochaines années</h2>
+          <p className="text-muted2 text-xs">{imf.source} · Les années suivies d'un « e » sont des estimations, pas des chiffres constatés.</p>
           {imf.indicators.map((ind: any) => (
             <section key={ind.key} className="card p-4 overflow-x-auto">
               <h3 className="text-sm font-medium mb-2">{ind.label}</h3>

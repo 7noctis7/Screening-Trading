@@ -165,3 +165,47 @@ def test_weekly_note_structure():
     assert rel.startswith("06_Weekly/") and rel.endswith(".md")
     assert "type: weekly_review" in md and "Synthèse hebdomadaire" in md
     assert "[[Preset_Performance]]" in md and "[[MU]]" in md          # contributeur lié
+
+
+def test_le_post_mortem_nomme_TOUTES_les_limites_franchies() -> None:
+    """Le post-mortem du 09/09 annonçait `n_breaches: 3` en en-tête et n'en nommait
+    qu'UNE. Les deux autres n'apparaissaient nulle part : on cherchait la cause au
+    mauvais endroit, et le compte en tête suffisait à croire qu'on avait tout lu."""
+    from packages.reporting.obsidian import incident_note
+
+    limites = {"breaches": [
+        {"type": "secteur", "label": "Actions diverses",
+         "weight": 0.475, "limit": 0.40},
+        {"type": "nom", "label": "QQQ", "weight": 0.50, "limit": 0.20},
+        {"type": "indice", "label": "QQQ", "weight": 0.50, "limit": 0.60}]}
+    snap = {"portfolio": {"analysis": {"limits": limites, "risk": {}}}, "dashboard": {}}
+
+    _, texte = incident_note(snap, {"type": "limite_risque", "detail": "secteur…"})
+
+    for attendu in ("Actions diverses", "47.5%", "40.0%", "QQQ", "20.0%", "indice"):
+        assert attendu in texte, f"« {attendu} » absent du post-mortem"
+
+
+def test_un_post_mortem_sans_franchissement_n_invente_pas_de_tableau() -> None:
+    """Contrôle négatif : une section « Limites franchies » vide ferait croire à un
+    problème de rendu là où il n'y a simplement rien à signaler."""
+    from packages.reporting.obsidian import incident_note
+
+    snap = {"portfolio": {"analysis": {"limits": {"breaches": []}, "risk": {}}},
+            "dashboard": {}}
+    _, texte = incident_note(snap, {"type": "autre", "detail": "x"})
+
+    assert "Limites franchies" not in texte
+
+
+def test_le_resserrement_des_plafonds_est_dit() -> None:
+    """Un plafond divisé par deux par la corrélation de stress change la lecture du
+    franchissement : le taire ferait comparer au mauvais seuil."""
+    from packages.reporting.obsidian import incident_note
+
+    limites = {"tightened": True, "breaches": [
+        {"type": "nom", "label": "X", "weight": 0.15, "limit": 0.10}]}
+    snap = {"portfolio": {"analysis": {"limits": limites, "risk": {}}}, "dashboard": {}}
+
+    _, texte = incident_note(snap, {"type": "limite_risque", "detail": "x"})
+    assert "RESSERRÉS" in texte

@@ -1,4 +1,4 @@
-.PHONY: install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core coeur-multi diag-coeur-qqq index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto ingest-mktcap preset-report calibrate-preset preset-lab alpha-lab screen repro kill-check log-alpha sync-alphas event-study event-study-smid backtest-pead-smid funding-study risk-check sensitivity paper-watch vault-lint crypto-cockpit crypto-brief regime-study breakout-study microstructure-poc vault-ask crypto-screen screen-niche list-db live live-go live-cron-install live-cron-uninstall completer-ouvertures reconcilier-journal annuler-ventes diag-journal diag-fusion bench-backend verify-journal rdv-paper slippage alerts-test ingest-macro bitmart-check clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull journal-pull journal-push notion-sync contracts supabase-kpis sync labs
+.PHONY: install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core coeur-multi diag-coeur-qqq index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto diag-creneau diag-pv-latente diag-source-crypto calibrer-seuil ingest-mktcap preset-report calibrate-preset preset-lab alpha-lab screen repro kill-check log-alpha sync-alphas event-study event-study-smid backtest-pead-smid funding-study risk-check sensitivity paper-watch vault-lint certification crypto-cockpit crypto-brief regime-study breakout-study microstructure-poc vault-ask crypto-screen screen-niche list-db live live-sim live-go live-cron-install live-cron-uninstall completer-ouvertures reconcilier-journal annuler-ventes annuler-chronologie annuler-doublons diag-journal diag-surfermeture diag-fusion bench-backend verify-journal reparer-journal turnover-audit rdv-paper slippage alerts-test ingest-macro bitmart-check clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull journal-pull journal-push notion-sync contracts supabase-kpis sync labs
 # PYTHON : utilise AUTOMATIQUEMENT le venv s'il existe (.venv/bin/python), sinon python3 système.
 # Évite le piège « No module named numpy » quand le venv n'est pas activé. Surchargeable.
 TICKER ?= AAPL
@@ -39,8 +39,51 @@ preview:          ## régénère les aperçus HTML du dashboard/portefeuille
 	$(PYTHON) apps/web/preview/build_preview.py
 start:            ## TOUT EN UNE COMMANDE : maj code + kill vieux process + API (fond) + site
 	bash scripts/start.sh
+audit-univers:    ## trie les symboles sans nom en périmés / vivants, sur les PRIX locaux (lecture seule)
+	$(PYTHON) scripts/auditer_univers_perime.py
+
+noms-univers:     ## comble les noms manquants des seeds depuis les fournisseurs (jamais devinés)
+	$(PYTHON) scripts/completer_noms_univers.py $(ARGS)
+
+balayage-ic:      ## BALAYE horizons x classes d'actifs, corrigé Benjamini-Hochberg (long)
+	$(PYTHON) scripts/balayage_ic.py $(ARGS)
+
+valider-nouveautes: ## VALIDE sur données RÉELLES les modules non branchés (lecture seule)
+	$(PYTHON) scripts/valider_nouveautes.py $(ARGS)
+ic-screening:     ## MESURE l'IC hors échantillon du score de sélection (long, à lancer à la main)
+	$(PYTHON) scripts/mesurer_ic_screening.py $(ARGS)
+
+up:               ## TOUT EN UNE : sync + relance des services + attente que le front réponde
+	@$(MAKE) --no-print-directory sync
+	@bash scripts/verifier_service.sh --unite
+	@echo "→ Arrêt des services, puis des orphelins qui tiendraient encore les ports…"
+	@sudo systemctl stop quant-api quant-web 2>/dev/null || true
+	@# `systemctl restart` ne tue QUE les processus du service. Un `next dev` orphelin d'une
+	@# session SSH morte survit donc à toutes les relances, garde le port 3000, et le service
+	@# boucle en échec pendant que le navigateur parle à l'orphelin (mesuré le 07/09 :
+	@# PID 757591 tenait le port depuis des heures, service en « activating (auto-restart) »).
+	@# On arrête d'abord, on nettoie ensuite, on démarre enfin — dans cet ordre.
+	@bash scripts/stop_services.sh
+	@echo "→ Démarrage des services (le front recompile)…"
+	@sudo systemctl start quant-api quant-web
+	@printf "→ Attente du front"; \
+	 for i in $$(seq 1 90); do \
+	   if curl -sf -o /dev/null "http://127.0.0.1:$${QUANT_WEB_PORT:-3000}/"; then echo; break; fi; \
+	   printf "."; sleep 5; \
+	 done; \
+	 if ! curl -sf -o /dev/null "http://127.0.0.1:$${QUANT_WEB_PORT:-3000}/"; then \
+	   echo; echo "✗ le front n'a pas répondu en 7 min — voir : tail -40 logs/quant-web.log"; exit 1; \
+	 fi
+	@bash scripts/verifier_service.sh
+
+services:         ## installe API+front en services systemd (survivent à la déconnexion SSH)
+	sudo bash scripts/install_services.sh
+services-restart: ## relance les services après un `make sync` (reconstruit le front)
+	sudo systemctl restart quant-api quant-web && systemctl --no-pager status quant-api quant-web | head -20
+services-logs:    ## suit les logs des services
+	journalctl -u quant-web -u quant-api -f
 stop:             ## arrête l'API et le site (uvicorn + next dev)
-	@pkill -f "uvicorn apps.api.main" 2>/dev/null; lsof -ti:8000 2>/dev/null | xargs kill -9 2>/dev/null; lsof -ti:3000 2>/dev/null | xargs kill -9 2>/dev/null; echo "arrêté"
+	@bash scripts/stop_services.sh; echo "arrêté"
 api:              ## lance l'API FastAPI (localhost) — STABLE, sans reload (évite l'OOM pendant make daily)
 	$(PYTHON) -m uvicorn apps.api.main:app
 api-dev:          ## API avec reload du CODE seulement (apps/packages) — ne surveille PAS data/ (dev)
@@ -95,6 +138,14 @@ ledger-sweep:        ## perf RÉALISTE (journal discret) par % QQQ × DD-target 
 	$(PYTHON) scripts/ledger_sweep.py $(ARGS)
 ingest-crypto:       ## ingère les prix des top-N cryptos (yfinance) → data/crypto.db (prix RÉELS)
 	$(PYTHON) scripts/ingest_crypto.py $(ARGS)
+diag-creneau:        ## à quelle heure exécuter : décompose le rendement nuit / séance
+	$(PYTHON) scripts/diag_creneau.py $(ARGS)
+diag-pv-latente:     ## combien de PV latente a été rendue, ligne par ligne (yo-yo chiffré)
+	$(PYTHON) scripts/diag_pv_latente.py $(ARGS)
+diag-source-crypto:  ## confronte chaque série crypto en base à une référence indépendante (Binance)
+	$(PYTHON) scripts/diag_source_crypto.py $(ARGS)
+calibrer-seuil:      ## calibre SEUIL_ECART sur le VRAI panneau (coût / sensibilité) — n'écrit rien
+	$(PYTHON) scripts/calibrer_seuil_ecart.py $(ARGS)
 ingest-mktcap:       ## ingère les market caps (yfinance) → data/market_caps.json (cœur cap-weighted)
 	$(PYTHON) scripts/ingest_market_cap.py $(ARGS)
 preset-report:       ## rapport HTML autonome du backtest preset (courbes + drawdowns) → out/preset_report.html
@@ -132,6 +183,8 @@ sensitivity:         ## sensibilité des seuils (screening Jaccard + régime) �
 	$(PYTHON) scripts/sensitivity_cli.py $(ARGS)
 paper-watch:         ## watchdog dérive paper vs backtest (cron nocturne) — exit≠0 si dérive
 	$(PYTHON) scripts/paper_watch.py $(ARGS)
+certification:       ## les modules disent-ils la vérité sur leur place ? (SHADOW vs atteignable en prod)
+	$(PYTHON) scripts/certification_check.py $(ARGS)
 vault-lint:          ## intégrité du vault (liens morts, orphelins, ADR en double)
 	$(PYTHON) scripts/vault_lint.py $(ARGS)
 crypto-cockpit:      ## cockpit crypto marché (cap, dominance, F&G, TVL, narratifs, movers)
@@ -152,8 +205,10 @@ screen-niche:        ## audit d'exploitabilité d'un univers/niche (score 0-100)
 	$(PYTHON) scripts/screen_niche.py
 list-db:             ## liste ce que contient YAHOO.db (classes/secteurs) → pour bâtir une vraie niche
 	$(PYTHON) scripts/build_niche.py
-live:             ## APERÇU des ordres à répliquer (dry-run, aucun ordre envoyé)
-	$(PYTHON) scripts/run_live.py --equity 10000
+live:             ## APERÇU des ordres du PROCHAIN run réel (equity + positions RÉELLES, aucun ordre)
+	$(PYTHON) scripts/run_live.py $(ARGS)
+live-sim:         ## SIMULE un portefeuille NEUF (capital imposé, détenu ignoré) — ne décrit pas le compte
+	$(PYTHON) scripts/run_live.py --equity $(or $(EQUITY),10000)
 live-go:          ## EXÉCUTE en paper (Alpaca paper + Bitmart) — clés API requises
 	$(PYTHON) scripts/run_live.py --live --yes
 live-cron-install:   ## ACTIVE le rebalancement PAPER auto quotidien (lun-ven, launchd/cron)
@@ -162,14 +217,35 @@ live-cron-uninstall: ## désactive le rebalancement paper automatique
 	bash scripts/install_live_cron.sh --uninstall
 completer-ouvertures: ## reconstitue au journal les ACHATS que le courtier a exécutés (simulation par défaut) — À FAIRE AVANT reconcilier-journal
 	$(PYTHON) scripts/completer_ouvertures.py $(ARGS)
+reparer-journal:     ## LA commande de réparation du journal : chaîne complète, dans l'ordre, fail-closed
+	@echo "→ 1/6 entrées manquantes (refuse d'écrire un prix que le marché n'a pas coté)"
+	@$(MAKE) --no-print-directory completer-ouvertures ARGS=--appliquer
+	@echo "\n→ 2/6 sorties : fermetures appariées aux fills réels"
+	@$(MAKE) --no-print-directory reconcilier-journal ARGS=--appliquer
+	@echo "\n→ 3/6 lots ouverts qui sont en fait des ventes"
+	@$(MAKE) --no-print-directory annuler-ventes ARGS=--appliquer
+	@echo "\n→ 4/6 chronologies impossibles"
+	@$(MAKE) --no-print-directory annuler-chronologie ARGS=--appliquer
+	@echo "\n→ 5/6 réalisé compté deux fois"
+	@$(MAKE) --no-print-directory annuler-doublons ARGS=--appliquer
+	@echo "\n→ 6/6 vérification : l'écart doit être PETIT (identité comptable)"
+	@$(MAKE) --no-print-directory diag-journal
 reconcilier-journal: ## ferme les lots orphelins du journal avec les fills RÉELS (simulation par défaut)
 	$(PYTHON) scripts/reconcilier_journal.py $(ARGS)
 annuler-ventes:      ## retire les lots « ouverts » qui sont en fait des VENTES (simulation par défaut) — APRÈS reconcilier-journal
 	$(PYTHON) scripts/annuler_ventes_inversees.py $(ARGS)
+annuler-chronologie: ## retire les round-trips dont la sortie précède l'entrée (simulation par défaut)
+	$(PYTHON) scripts/annuler_chronologie_impossible.py $(ARGS)
+annuler-doublons:    ## retire les lots dont le « réalisé » double une correction nommée (simulation par défaut)
+	$(PYTHON) scripts/annuler_doublons_correction.py $(ARGS)
 diag-journal:        ## RÉCONCILIE le journal des round-trips avec la courbe du compte réel
 	$(PYTHON) scripts/diag_journal_compte.py $(ARGS)
 verify-journal:      ## vérifie que le cron paper ALIMENTE journal.db (legacy=0, cryptos, features) — BLOC 4
 	$(PYTHON) scripts/verify_journal.py $(ARGS)
+diag-surfermeture:   ## d'où vient l'écart quand le COURTIER détient ce que le journal ignore (lecture seule)
+	$(PYTHON) scripts/diag_sur_fermeture.py $(ARGS)
+turnover-audit:      ## coût réel du rebalancement quotidien (frais, durée, capture) — UNCALIBRATED si journal vide
+	$(PYTHON) scripts/turnover_audit.py $(ARGS)
 rdv-paper:           ## verdict GO/NO-GO mécanique du RDV 2026-08-06 (paper réel vs backtest)
 	$(PYTHON) scripts/rdv_paper.py
 bitmart-check:       ## diagnostic Bitmart LECTURE SEULE (verrous + connexion, zéro ordre) — BLOC 2

@@ -7,6 +7,97 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+- [ ] **P0 — Le filtre `legacy` masque un sous-ensemble FAVORABLE.** Mesuré le 09/09 sur le
+      VPS : `legacy=0` (affiché) = 55 fermés, 58 % de réussite, **+2 660,29 $**. `legacy=1`
+      (masqué) = 211 fermés, 51 %, **−2 414,96 $**. Total subi par le compte : 52 %,
+      **+245,33 $**. Le panneau ne ment pas, il montre une PART — et l'effet sur qui le lit
+      est le même. Deux issues : publier les deux chiffres côte à côte, ou justifier
+      l'exclusion là où elle s'affiche. Ne pas laisser un chiffre flatteur sans son total.
+
+- [x] **P0 — Journal du VPS RESTAURÉ (09/09).** `réalisé +245,33 $` au centime près.
+      Cause corrigée (ADR-0115) et garde-fou posé AVANT écriture (ADR-0116). Rejouable
+      par `make reparer-journal`, qui refuse d'écrire un prix que le marché n'a pas coté.
+
+- [ ] **~~P0 — RESTAURER le journal du VPS~~ (09/09).** La chaîne de
+      réparation appliquée ce matin a fabriqué des pertes : écart de réconciliation
+      +168,76 $ → **+4 490,52 $**, réalisé +245 $ → **−3 929 $**, pour un compte qui n'a
+      bougé que de +28 $. Cause corrigée dans le code (ADR-0115), mais la base porte encore
+      les écritures fausses. Commande :
+      `cp data/journal.avant-completion-20260909-091516.db data/journal.db`
+      puis `make sync && make diag-journal` — l'écart doit revenir à ~+169 $. Rejouer la
+      chaîne seulement APRÈS ce contrôle.
+
+- [ ] **P1 — 1 906 lignes de DETTE DE CÂBLAGE (09/09, ADR-0118).** Dix modules déclarés
+      SHADOW, aucun atteignable depuis la production. `make certification` les compte et
+      bloque si l'un d'eux entre en prod sans changer de statut. À trancher, par ordre de
+      valeur : (1) `protocole_oos` → `gate.py`, pour que `n_essais` soit COMPTÉ et non
+      choisi ; (2) `disjoncteur`, perte journalière réalisée+latente, verrou sans
+      réarmement — complète `dd_kill_switch` qui, lui, coupe sur le drawdown ;
+      (3) `frictions`, décomposition des coûts, risque nul ; (4) `market_structure`, dont
+      le STATUT est faux (déjà utilisé par `make labs`).
+
+- [ ] **P1 — ÎLOT SWING : 1 374 lignes, une stratégie entière jamais exécutée.**
+      `moteur_swing` et `moteur_sortie` n'ont AUCUN importeur, et tirent `ddm`,
+      `garde_swing`, `liquidite_ict`, `caracteristiques_swing`. Brancher ou supprimer est
+      une décision de produit, pas de linter — elle appartient à l'utilisateur.
+
+- [ ] **P2 — Barres non temporelles absentes.** Volume/tick/dollar/information-driven :
+      zéro implémentation (seul vrai manque de l'audit des 4 axes). N'a d'intérêt qu'une
+      fois `protocole_oos` branché — sinon on ajoute une méthode sans porte pour la juger.
+
+- [ ] **P0 — LE CHEMIN D'ÉCRITURE DU JOURNAL DÉDOUBLE (09/09).** NWL porte 1,74× la
+      quantité achetée, MAS 1,91×, sur 7 et 6 identifiants `LEG-…` distincts. Le
+      diagnostic le nomme : « un seul préfixe portant 2× = le chemin d'ÉCRITURE crée deux
+      identités ». C'est la cause AMONT de tout le reste, et aucune réparation aval ne
+      peut converger tant qu'elle est ouverte. À traiter là : qui écrit les `LEG-…`, et
+      pourquoi deux fois. Tant que ce n'est pas fermé, NE PAS lancer `make reparer-journal`
+      (ADR-0117 : deux tentatives, deux dégradations).
+
+- [x] **~~Réparation du journal à rejouer~~ — GELÉE (09/09, ADR-0117).** Le code est
+      correct (ADR-0115/0116, garde-fou vérifié : plus aucun prix incohérent écrit), mais
+      la chaîne annonce −222 $ et produit −1 448 $ de réalisé : elle RE-APPARIE le FIFO
+      au lieu d'ajouter. Journal restauré, laissé tel quel. Sans effet sur l'exécution. La simulation
+      donne : 18 ouvertures à reconstituer (83 804 $ de coût de revient), 23 fermetures
+      appariées à un fill réel (+666,76 $), 8 doublons pour +915,37 $ de réalisé compté
+      deux fois, 16 lots qu'aucune vente ne justifie et qui RESTENT ouverts. QQQ : 96,78
+      unités au journal contre 60,50 au courtier. Réconciliation d'ensemble saine — écart
+      +168,76 $ sur +990,08 $, soit `latent(début)`. Reste à lancer avec `--appliquer`.
+
+- [ ] **P2 — `models/ml_*.pkl` en mode 664 sur le VPS.** `safe_pickle` le signale à chaque
+      chargement : inscriptible par d'autres utilisateurs. Le garde-fou fonctionne ; la
+      permission reste à resserrer (`chmod 600`). Signalé le 09/09.
+
+- [x] **P0 « QQQ 50 % vs plafond 20 % » — FERMÉE, ce n'était pas un arbitrage (2026-09-09).**
+      Le projet avait tranché le 06/07 : un tracker relève de `max_index` (60 %), pas de
+      `max_name` (20 %). `index_names` étant optionnel, le site d'appel du portefeuille
+      preset (`snapshot.py` l. 2641) ne le passait pas — et c'est celui que lit le
+      post-mortem. Corrigé + invariant verrouillé par un test qui relit `snapshot.py`.
+      Aucun poids ne bouge. ADR-0113.
+
+- [ ] **P1 — « Actions diverses » n'est pas un secteur, c'est « secteur inconnu ».**
+      `_sector_of` y range en dernier recours toute ACTION dont le champ secteur est vide ou
+      hors GICS (crypto/forex/ETF/indices/commodités ont leur branche avant). Les 47,5 %
+      signalés ne disent donc pas « la moitié du livre sur un secteur » mais « la moitié du
+      livre non classée » : la concentration sectorielle est NON MESURABLE, pas franchie.
+      À faire sur le VPS : lister ce que contient le seau (`make list-db` donne les secteurs
+      de YAHOO.db), combler les secteurs manquants, PUIS relire la limite. Tant que le seau
+      est gros, le plafond 40 % ne mesure rien — et le lever sans classer serait pire.
+
+- [x] **Horodatage du vault sous contrôle — FERMÉ (2026-09-09).** Douze ADR (0100→0111),
+      l'en-tête de séance et un enregistrement d'`hypotheses.jsonl` étaient datés du
+      2026-09-10 alors qu'on était le 09. Corrigés, et `make vault-lint` sort désormais en
+      erreur sur un en-tête d'ADR ou de séance postérieur au jour. Contrôle borné aux
+      EN-TÊTES : une date future dans un corps d'ADR est un rendez-vous, pas une faute.
+      ADR-0112.
+
+- [ ] **P2 — `ruff check` est rouge AVANT toute modification.** Hors `packages`/`apps`,
+      l'arriéré dépasse 2000 signalements (longueur de ligne pour l'essentiel, plus quelques
+      `E741`/`UP034` dans `.claude/hooks/`). `packages apps` en compte davantage encore. Le
+      rituel de clôture demande `ruff check .` : rouge de base, il ne distingue plus une
+      régression d'un héritage, donc il ne protège plus rien. Soit on résorbe, soit on fixe
+      un périmètre et on l'écrit dans le Makefile — mais pas les deux à moitié. Constaté le
+      09/09, non traité : ce n'est pas une urgence, c'est une alarme qui ne sonne plus.
+
 - [x] **Build analyse de portefeuille réparé (2026-09-06)** : blocs dupliqués de fusion
       retirés, composant client unique et build Next.js ajouté aux contrôles de PR.
 
@@ -15,12 +106,33 @@
       raccord aux historiques/FX réels, le diagnostic, l'optimisation sous contraintes, puis
       OCR/simulations/ML facultatif. Contrat d'intégration documenté dans
       `docs/PORTFOLIO_ANALYSIS_INTEGRATION.md`. Jointure read-only screening/fondamentaux/ML/
-      résultats/macro livrée ; scénarios min-var/ERC/Black-Litterman affichés seulement pour un
+      résultats/macro livrée ; scénarios min-var/ERC/HRP affichés seulement pour un
       univers exact, avec turnover/coût/veto de plafond. Recalcul historique local livré avec alias
-      crypto et alignement sans fill. Step 4 réparée : plafond projeté si faisable, compteur et effet
-      moyen publiés. Restent FX multi-devises et dynamique `UNCALIBRATED` faute de μ OOS crédible.
-      crypto et alignement sans fill ; restent FX multi-devises et contraintes complètes.
-      univers exact, avec turnover/coût/veto de plafond. Reste le recalcul dédié historique/FX.
+      crypto et alignement par intersection sans fill. Step 4 réparée en deux temps : plafond projeté
+      si faisable (06/09), puis (07/09) alias `-USD` + lecture de `crypto.db`, clé `dynamique`
+      partagée front/back, `analyze()` purgé de son code mort de fusion. « Dynamique » = HRP, nommé
+      comme tel et sans verrou ML (il n'exige aucun μ). Reste FX multi-devises.
+      Recommandation d'univers livrée (07/09) : sélection = screening du jour, poids = mêmes
+      moteurs de risque, élagage T/N ≥ 30, écart affiché face aux lignes détenues. Reste à
+      MESURER l'IC hors échantillon du score de sélection (`packages/research/information_coefficient.py`
+      existe ; il manque l'historique des scores) — tant que ce n'est pas fait, la carte reste
+      étiquetée non validée OOS. **Fait le 07/09** : `make ic-screening` mesure l'IC
+      walk-forward (Spearman, fenêtres disjointes, coupe chronologique) et la carte publie le
+      résultat. Reste à LANCER la mesure sur le VPS et à décider de l'horizon retenu — en tester
+      plusieurs impose Benjamini-Hochberg. P1.
+- [ ] **P1 — univers pollué par des titres délistés** (07/09) : le dry-run de
+      `make noms-univers` a listé ATVI, CELG, ABC, CBS, DISCA/DISCK, ETFC, FRC, COL, FLIR, CBG,
+      HRS, COG, CXO, DPS, DNB, CA (+ EVHC, SCG vus dans la recommandation) — sociétés acquises,
+      renommées ou disparues entre 2018 et 2023. Elles occupent des places dans le screening et
+      arrivent sans historique dans la recommandation. Décider : purge des seeds, ou filtre de
+      fraîcheur sur la dernière barre. Mesurer d'abord le compte exact via le rapport groupé.
+
+- [ ] **P1 — deux sources de prix pour le même univers** (07/09) : `_screen_section` lit le
+      `panel` en mémoire du snapshot, `packages/portfolio/recommendation.py` lit
+      YAHOO.db/crypto.db via `load_bars`. Des tickers screenés (EVHC, SCG — délistés 2018/2019)
+      n'ont donc aucun historique côté recommandation. Soit passer le panel à la recommandation
+      (comme `/analyze` reçoit `series_by_symbol`), soit exclure du screening ce que le loader
+      ne sait pas charger. Mesurer d'abord combien de candidats sont concernés un jour normal.
 
 - [x] **Copilote IA read-only (2026-08-29)** : chat global contextualisé par page, scopes/outils
       bornés, positions détaillées en opt-in, citations/as-of, garde numérique stricte et compteurs
@@ -31,6 +143,90 @@
       sélection fraîche avant longueur, extension yfinance si le cache est périmé et alignement
       compte/indice sur les dates réelles. Un benchmark périmé est exclu, jamais forward-fill sur
       des mois avec l'étiquette « réel ».
+
+## ✅ Recherche — livré le 2026-09-05 (soir)
+
+- [x] **Information Coefficient mesurable — `packages/research/information_coefficient.py`.**
+      `breadth.py` avait toute la mécanique Grinold-Kahn (souffle effectif, TC, IR,
+      `optimal_horizon`) mais prenait l'IC en ENTRÉE. Rien ne le mesurait — vérifié
+      par `grep spearmanr` sur tout le dépôt, zéro résultat. `information_coefficient()`
+      (Spearman, NaN-safe, seuil N≥20, `None` si dégénéré) + `ic_in_sample_hors_echantillon()`
+      (gate robustesse OOS/IS ≥ 0,5, même seuil qu'ADR-0066). 10 tests, vérifié bout en
+      bout avec `ir_report` existant. Module d'analyse pur, aucun contact avec
+      `order_gate.py` ni l'exécution.
+- [ ] **P2 — Brancher l'IC sur un vrai signal de production.** Le module est prêt et
+      testé sur synthétique ; il reste à l'alimenter avec de vraies prédictions du
+      preset (ou d'un futur modèle ML) et des rendements réels, pour mesurer l'IC
+      RÉEL de la stratégie — ce que ce module rend possible, pas ce qu'il fait déjà.
+
+## 🔴 P0 — Le courtier détient ce que le journal ignore (constaté 2026-09-05)
+
+- [ ] **Écart en sens INVERSE, sur 8 symboles — À REFERMER MAINTENANT, pas un nouveau
+      bug.** `completer_ouvertures` avait tourné AVANT le retrait des 20 doublons ; en
+      supprimant les fermetures en double, `achats_non_journalises` a MÉCANIQUEMENT
+      augmenté (AVAX 274 → 605, LINK 66 → 228, LTC 1,5 → 61,6 — cf. `diag-surfermeture`
+      après coup). Le trou n'est pas pire qu'avant, il est enfin VISIBLE dans sa
+      taille réelle, démasqué par le nettoyage. Le correctif est déjà construit,
+      testé, et déjà utilisé cette session — il suffit de le REJOUER dans l'ordre
+      habituel, sur la vraie base, maintenant que les doublons sont partis :
+      `make completer-ouvertures` (simulation) → `ARGS=--appliquer` →
+      `make reconcilier-journal` (simulation) → `ARGS=--appliquer` → `make diag-journal`.
+      **À jouer sur la machine qui détient la VRAIE base** (Mac mini ou VPS). Vérifié le
+      07/09 : le `data/journal.db` d'une session distante contient 0 trade — c'est un
+      fichier d'amorçage vide, non suivi par git. Y lancer `--appliquer` ne réparerait
+      rien et produirait une archive trompeuse. Contrôle avant de lancer :
+      `sqlite3 data/journal.db "select count(*) from trades"` doit rendre ~313, pas 0.
+- [x] **Outillé le 05/09 — l'écart est DÉCOMPOSÉ** : `make diag-surfermeture`
+      (`packages/research/sur_fermeture.py`, 7 tests). Identité vérifiée par ligne :
+      `manque_ouvert = achats_non_journalises + sur_fermeture`. Sur les chiffres réels
+      d'AVAX : 331,847254 = 274,407653 (entrées jamais écrites) + **57,439601 (sorties
+      INVENTÉES)**. Les deux causes coexistent ; la seconde produit du « réalisé » sans
+      contrepartie et contamine les statistiques.
+- [x] **LANCÉ sur le VPS (05/09) — cause racine trouvée.** 95 lignes, TOUTES `P-`,
+      AUCUNE `C-` : ce `journal.db` est la version D'AVANT `reconcilier_journal
+      --appliquer` du Mac mini. PATH (0 ligne), NWL (1 ligne sur 1554,63) confirment
+      un trou de SORTIES massif, pas de l'invention (`invente`=0 partout, vérifié à la
+      main sur le relevé brut). Les deux machines n'ont jamais partagé le même fichier.
+- [x] **P0 SYNC — FAIT (05/09).** `journal-push` (Mac) → `journal-pull` (VPS) : 313
+      lignes des deux côtés. Confirmé, plus un risque théorique.
+- [x] **P0 CRITIQUE — invention identifiée ET corrigée dans le code de PRODUCTION
+      (05/09).** `diag-surfermeture` sur le journal réparé : +258,33 unités inventées
+      (AVAX 60,82 · LINK 74,05 · OSCR 85,27 · LTC 36,00). Dump brut OSCR + calcul
+      d'élimination : la ligne `P-20260831-Alpaca-OSCR` (motif `reconciliation paper
+      (reduce/close)`, sans UUID) porte à elle seule les 85,27 inventées. Cause : dans
+      `run_live.py`, `sold[].notional` portait le DELTA PLANIFIÉ (`cible − détenu`),
+      jamais le fill réel — `close_sells` fermait `notional/prix` au lieu du fill.
+      **Ce code tourne CHAQUE JOUR OUVRÉ** — sans correctif, la récidive était certaine
+      dès lundi. Corrigé : `_fill_vente_jour` lit prix ET quantité du fill réel du jour ;
+      `close_sells` accepte `qty_reelle`, prioritaire sur `notional/prix`, sans
+      régression quand aucun ordre n'est citable. 6 tests. Détail : `04_JOURNAL`.
+- [x] **AVAX + LTC vérifiés (05/09) — même mécanisme, reconstruit à ±0,0001 unité.**
+      AVAX +60,8196 (attendu +60,8195), LTC +36,0020 (exact). 6 doublons confirmés au
+      total (AVAX ×3, LINK ×2, LTC ×3) : un lot `-Xn` sans nom tombe sur la même
+      date+prix qu'une correction nommée postée plus tard. Résidu distinct (pas un
+      doublon) : l'ordre AVAX du 07-08 a 264,55 unités de vente réelle jamais
+      journalisées.
+- [x] **Outil de retrait construit (05/09) : `make annuler-doublons`.**
+      `packages/research/doublons_correction.py` + `scripts/annuler_doublons_correction.py`,
+      même squelette que `annuler_chronologie_impossible.py` (simulation par défaut,
+      sauvegarde + archive JSON, `--appliquer` explicite). Ne retire QUE le lot sans
+      nom — la correction nommée reste intacte. 10 tests, 6 cas réels en dur.
+- [x] **APPLIQUÉ sur le compte réel (05/09).** 20 doublons retirés (au-delà des 8
+      vérifiés à la main) · `INVENTÉ` 258,33 → **85,27** $ · sauvegarde + archive JSON.
+- [x] **P2 RÉPONDU par la mesure (05/09, après retrait des doublons).** Le
+      `diag-surfermeture` relancé après coup montre `invente = 0.0000` sur les 27
+      symboles SAUF OSCR (85,27) — colonne par colonne, isolé, pas un pattern qui se
+      répète. Répondu par les données déjà produites, pas par une nouvelle hypothèse.
+      Reste ouvert seulement : la CAUSE de ce lot précis (`P-20260831-Alpaca-OSCR`,
+      ouvert ET fermé le même jour) — creuser nécessite l'historique complet des
+      ordres OSCR chez le courtier, pas disponible hors de l'environnement réel.
+
+## 🟠 P1 — La détention médiane de 0,1 j reste NON expliquée (2026-09-05)
+
+- [ ] **L'hypothèse du plancher de ligne (1 000 $) n'est ni confirmée ni écartée.** L'aperçu
+      du 05/09 semblait la confirmer (7 cibles crypto « sous le plancher ») mais c'était un
+      artefact de `--equity 10000` : à l'équity réelle ces cibles valent ~2 000-2 600 $ et
+      ne touchent pas le plancher. À reprendre avec `make live` corrigé (equity réelle).
 
 ## 🔴 P1 — Trois dates d'arrêté distinctes sur le site (constaté 2026-09-04)
 
@@ -43,6 +239,16 @@
 
 ## ✅ Données & recherche — livré le 2026-09-04
 
+- [x] **Verrou de détention minimale : MESURÉ, hypothèse NON retenue (04/09).** Question de
+      l'utilisateur : laisser les trades ouverts au moins 10 jours pour « nettoyer » la
+      volatilité d'entrée. Paramètre `detention_min` ajouté à `fast_swing_backtest`, balayé
+      0/5/10/15 séances dans `sortie_lab`. Le 10 jours demandé est le PIRE des trois verrous
+      (177 $ net contre 937 $ sans), la suite des Sharpe zigzague (0.17/0.29/0.18/0.20 — forme
+      du bruit, pas d'un effet), la seule colonne monotone est le payoff qui BAISSE (2.65 →
+      2.22 : coût mécanique du différé), et aucun DSR n'atteint le tiers de 50 %. La stat du
+      journal réel qui motivait l'hypothèse est confondue : ses longues détentions sont des
+      tranches d'un même lot crypto sur un seul rallye. Production reste à `detention_min=0` ;
+      paramètre et 6 tests conservés pour re-mesurer plus tard. Détail : `04_JOURNAL` suite 13.
 - [x] **P1 — Les deux priorités de fusion opposées : CORRIGÉ.** `_load_prices` gardait le
       premier provider, `merge_bars` le dernier, sur les MÊMES bases — 0,71 %/an d'écart sur
       le cœur QQQ. Une seule implémentation (`packages/data/fusion_sources`), premier gagne,
@@ -118,6 +324,113 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       si les bases sont d'accord partout, le sens de fusion est sans effet et la cause est
       ailleurs. Correctif attendu : aligner `merge_bars` sur la sémantique de
       `_load_prices`, pas l'inverse.
+- [x] **P1 — Bêta 0,037 et « contribution alpha 1072 % » sur le tableau de bord : CORRIGÉ le 04/09.**
+      Cinquième occurrence de l'empilement positionnel : `packages/reporting/analytics.py` faisait
+      `min(len(r), len(b))` puis `[-m:]`. Le correctif du matin (ADR-0067) portait sur
+      `compute_attribution` (miroir Obsidian), pas sur ce que le web affiche. Sixième dans la
+      foulée : `_bench_series` posait le i-ème cours du S&P sur la i-ème date de l'equity.
+      Mesuré : 1,25 % de séances manquantes ramènent un bêta de 1,200 à 0,345 (corr 1,000 → 0,288).
+      `alignement` et `n_observations` sont désormais PUBLIÉS, et le front avertit en orange quand
+      l'appariement reste positionnel. ADR-0072.
+- [x] **P1 — Rebalancement journalier vs. tenir jusqu'au TP/SL : MESURÉ le 04/09.** Réponse :
+      la question ne se pose pas comme un réglage. `sortie_lab` (où l'on règle `rr` et le
+      suiveur) rejoue `fast_swing_backtest` ; la production applique des poids cibles
+      `preset risk-parity`. Deux moteurs. La production n'a ni stop ATR, ni cible, ni
+      suiveur — `rr 6 → rr 9` ne changerait pas un ordre. ADR-0073.
+      Journal réel, décisions du SYSTÈME seules : 6 positions en 57 j, détention médiane
+      **0,1 jour**, t = +0,92 (non significatif), capture −22 % sur 5 mesurables.
+- [x] **P0 — VPS bloqué sur `make daily`/`make ingest-crypto` : CORRIGÉ le 04/09.**
+      Deux bugs distincts, trouvés en lançant les commandes que j'avais moi-même données :
+      (a) `ingest_crypto.py` important `timezone` DEPUIS `apps.api.snapshot`, qui ne
+      l'exporte plus (il utilise `UTC`) — `ImportError` immédiat, crypto.db resté figé au
+      20/06. Corrigé : import direct depuis `datetime` stdlib.
+      (b) `ingest_prices.py` : le `market.db` tiré du cache HuggingFace public a un schéma
+      `prices` à 7 colonnes (sans `adj_close`) plus ancien que le code actuel (8 colonnes),
+      et `CREATE TABLE IF NOT EXISTS` ne migre pas une table déjà là → `sqlite3.OperationalError`
+      sur l'INSERT positionnel. Corrigé : `_migrer_schema` (ALTER TABLE idempotent), 3 tests.
+- [ ] **P0 — Pourquoi la production tient-elle ses positions 0,1 jour ?** Le banc de sortie
+      suppose 42 à 48 jours ; la production solde en quelques heures. Ce n'est pas un
+      désaccord statistique (n=6 n'y change rien), c'est une description de comportement.
+      **Hypothèse à vérifier, pas une cause établie** : le plancher de ligne (1 000 $)
+      solderait une ligne ouverte la veille dès que sa cible repasse sous le plancher —
+      ouvrir puis liquider, en boucle. Méthode : rejouer deux runs consécutifs de
+      `run_live.py --live --yes` sur un compte de test et tracer, pour chaque symbole, la
+      cible et le détenu d'un run à l'autre. Corriger seulement après avoir vu le cycle.
+- [ ] **P1 — `sortie_lab` : verdict instable entre deux fenêtres.** « Sans suiveur » donne
+      Sharpe 0,50 sur les données au 04/09 et 0,03 au 20/06 (rallye crypto de juillet-août
+      dans l'intervalle). Le banc avertit lui-même qu'on ne compare qu'à empreinte
+      identique. Refaire les deux runs sur la MÊME empreinte (le VPS est arrêté au 20/06 :
+      `make ingest` d'abord) avant d'accorder le moindre crédit au réglage.
+- [x] **P0 — 6 round-trips à chronologie impossible : OUTILLÉ le 04/09 (PATH etc).**
+      L'utilisateur a repéré PATH (entrée 03/09, sortie 01/09) directement dans le journal.
+      Confirmé : c'est le bug DUOL du 03/09 (`reconcilier_journal._plan` appariait au plus
+      ancien lot SANS regarder sa date), déjà corrigé par la garde `_anterieur` — mais la
+      garde n'est pas rétroactive. 6 enregistrements déjà écrits (SJM, STT, PATH, DUOL, TYL,
+      T) portent -142,33 $ de « réalisé » qui ne correspond à aucune opération.
+      `make annuler-chronologie` (simulation par défaut, sauvegarde + archive JSON avant tout
+      retrait, 5 tests) — retire, ne corrige pas : rouvrir supposerait de savoir à quel lot
+      RÉEL la vente aurait dû s'apparier, ce qui n'est pas mesurable ligne à ligne.
+      **Appliqué le 04/09 sur le Mac mini** : 6 round-trips retirés, sauvegarde + archive JSON.
+- [x] **P0 — « Deux chaînes fermées par la même vente » sur LINK : FAUSSE ALERTE, vérifiée
+      et retirée le 04/09.** Un lot `P-...-X1` (86,88 unités) et un lot `C-LINK-R3`
+      (88,60 unités) fermaient tous deux le 27/08 au même prix — j'ai lu ça comme un
+      double comptage sans faire l'addition qui aurait dû trancher AVANT de le consigner
+      en P0. Vérifié sur l'ordre réel `ee481ad2` (07/08, l'autre paire suspecte) :
+      quantité RÉELLE 273,12538382 $. Or 125,613741 (C-LINK-R1) + 147,511643 (P-lot)
+      = 273,125384 — exact au dix-millième. `_plan` regroupe déjà `P-` et `C-` dans UN
+      SEUL pool par symbole (`scripts/reconcilier_journal.py`, fonction `_plan`) : une
+      vente plus grosse que le premier lot de la file en ferme légitimement plusieurs à
+      la suite. C'est le comportement voulu, pas un bug. Leçon : `python3 -c` sur
+      `AlpacaBroker().orders()` filtré par symbole tranche ce genre de doute en une
+      commande — le réflexe à avoir AVANT d'écrire "bug" dans ce fichier.
+- [ ] **P1 — Détention minimale : PARAMÈTRE CONSTRUIT le 04/09, PAS ENCORE MESURÉ.**
+      Hypothèse de l'utilisateur devant son journal : « les trades < 10 j perdent, mieux
+      vaudrait tenir 10 j le temps que la volatilité d'entrée se nettoie ». Le journal ne
+      pouvait PAS trancher — toutes les longues détentions y sont des tranches d'un même
+      lot crypto du 07/07 sur le rallye de juillet-août, et toutes les courtes sont des
+      actions du rebalancement quotidien : comparer les deux compare des classes d'actifs
+      et une fenêtre de marché, pas des durées de détention.
+      Construit à la place : `fast_swing_backtest(detention_min=N)` (en séances) +
+      3ᵉ table dans `make labs` / `sortie_lab.py`, balayage 0/5/10/15 j. Le verrou DIFFÈRE
+      les sorties molles (cible, suiveur, cassure MM longue) et laisse TOUJOURS passer le
+      stop initial — sinon on mesurerait « tenir sans garde-fou » et le maxDD changerait
+      de sens. 6 tests sur la mécanique (`tests/backtest/test_detention_minimale.py`).
+      **À FAIRE : lancer `make labs` et lire la 3ᵉ table** — jours ET maxDD ensemble, un
+      verrou allonge la détention par construction, la question est ce qu'il coûte en
+      baisse maximale. DSR déjà déflaté des 4 essais supplémentaires.
+- [x] **Trois copies divergentes — RÉSOLU pour l'état actuel (05/09).** Source de vérité
+      tranchée : le VPS (réparé le plus récemment). `journal-push` (VPS) → `journal-pull`
+      (Mac mini) : les deux machines ont désormais le MÊME fichier (159 744 octets,
+      293 lignes, invention isolée à 85,27 $ sur OSCR). Le trou STRUCTUREL demeure : rien
+      n'automatise ce push/pull, donc une nouvelle divergence peut réapparaître si les
+      deux machines écrivent sans se resynchroniser. Discipline à tenir : le VPS écrit en
+      continu (`cron_live.sh`), le Mac/MacBook restent des postes de LECTURE — jamais un
+      second exécuteur live — et un `journal-push` régulier depuis le VPS reste manuel.
+- [ ] **P1 — Rebalancement journalier vs. tenir jusqu'au TP/SL : outillé le 04/09, PAS mesuré.**
+      Question de l'utilisateur : le rebalancement quotidien vers les poids cibles coupe-t-il
+      des positions gagnantes avant leur potentiel ? Constat de code (pas de mesure) :
+      `run_live.py` n'a AUCUNE sortie déclenchée par un TP/SL — une seule cause de clôture
+      existe, le rebalancement (`exit_reason` toujours "reconciliation paper (reduce/close)").
+      Outil construit : `make turnover-audit` (`packages/research/turnover_audit.py`, 8 tests
+      synthétiques) — frais/slippage cumulés, durée de détention médiane, taux de gain, et une
+      « capture » (`pnl_pct / mfe`) qui dit si une ligne sort loin de son meilleur point observé
+      PENDANT sa détention (limite explicite : ne dit rien de l'après-sortie, `mfe`/`mae` sont
+      bornés à la fenêtre [entrée, sortie]). **UNCALIBRATED sur cette session** : `data/journal.db`
+      est vide ici (conteneur cloud fraîchement cloné) — la vraie histoire vit sur le Mac mini /
+      le VPS. À faire : lancer `make turnover-audit` là où le journal réel existe, coller le
+      résultat, PUIS décider (bande de tolérance élargie sur le rebalancement existant, probable,
+      plutôt qu'un moteur TP/SL parallèle qui créerait un conflit d'arbitrage avec le risk-parity).
+- [ ] **P1 — Trois occurrences restantes du même moule, IDENTIFIÉES PAR LECTURE, pas mesurées.**
+      (a) `eqw` (indice équipondéré, `apps/api/snapshot.py`) : `zip(*norm)` empile la PREMIÈRE
+      barre de chaque titre — 2015 pour un ancien, 2023 pour une IPO récente. Il alimente
+      `multi_strategy`, `relative_metrics` et le benchmark « Univers (équipondéré) ».
+      (b) `fast_swing_backtest` : `n = max(len(b))` et horodatage pris du PREMIER symbole.
+      (c) `packages/portfolio/benchmark._align` : tronque par le DÉBUT face à une equity plus
+      longue que `eqw` — donc compare deux fenêtres différentes.
+      **Mesurer avant de corriger** (l'écart réel se chiffre sur la base locale, pas ici) : dumper
+      les longueurs et les dates de début/fin de `equity`, `eqw` et `data[s]`. Semantique à
+      préserver pour `eqw` : moyenne de NIVEAUX normalisés (achat-conservation), pas moyenne de
+      rendements — sinon deux changements se superposent et on ne sait plus lequel bouge le chiffre.
 - [ ] **P2 — L'alignement positionnel de `blend_equity` tombe juste par COÏNCIDENCE.**
       Mesuré : 0 séance d'écart entre le calendrier du cœur et l'axe du preset. Rien ne le
       garantit — un titre ajouté à l'univers change l'axe et casse silencieusement le
@@ -541,10 +854,13 @@ explicite, module par module, avec mesure.
       il en faudrait ~60 pour atteindre 0,05) et la CORRÉLATION entre variantes (rho 0,95 →
       0,99 fait passer de ±0,263 à ±0,118) — d'où le protocole apparié, une seule chose
       changée à la fois. Le labo publie désormais ces deux tableaux.
-- [ ] **P1 — Conséquence : le gate promeut à +0,05, seuil INATTEIGNABLE avec 11 ans.**
-      À décider : relever le seuil de promotion à ~0,12, ou exiger une confirmation hors
-      échantillon pour tout ce qui passe en dessous. Ne pas laisser un seuil que la donnée
-      ne peut pas honorer.
+- [x] **P1 — FERMÉ (2026-09-07) : le seuil n'est plus un nombre choisi.** Ni 0,05 ni 0,12 :
+      le seuil de promotion DEVIENT la résolution mesurée de l'échantillon
+      (`sharpe_diff.seuil_detectable`), avec le plancher d'exécution 0,05 comme borne basse.
+      Il se resserre seul quand l'historique s'allonge — 11 ans → +0,118 · 20 → +0,087 ·
+      60 → +0,051, soit exactement les valeurs relevées le 31/08. Verdict `🟡 INDISTINCT`
+      ajouté pour l'entre-deux (ni promu ni rejeté : la donnée ne tranche pas).
+      Garde-fou : `tests/research/test_seuil_de_promotion.py`.
 - [ ] **VIX : provenance publiée (31/08).** `vix`, `vix_playbook` et `vix_series` étaient
       publiés sans distinguer une série RÉELLE d'une série `_vix_series()` FABRIQUÉE — le
       graphe s'en protégeait déjà, pas le KPI. Corrigé : `vix_reel` publié, `null` +
@@ -563,12 +879,346 @@ explicite, module par module, avec mesure.
 - [ ] **Séries macro à ajouter** (identifiants à vérifier depuis le Mac, FRED joignable) :
       conditions financières NFCI, anticipations d'inflation 5a5a, dollar index, inscriptions
       hebdomadaires au chômage (seul indicateur haute fréquence), spread investment grade.
-- [ ] **Accessibilité** : `/ml`, `/conviction`, `/portfolio` gardent leur vocabulaire technique.
-- [ ] **Unifier les fenêtres du dashboard** : Sharpe 2,43 en haut, 1,07 dans le bloc honnêteté,
-      0,98 pour le preset pur — trois fenêtres, aucune ne le dit dans les tuiles héros.
-- [ ] **Bloc décision sur le screener** : il classe mais ne conclut pas (la fiche, elle, conclut).
-- [ ] **Registre d'essais complet** sur `/methode` : publier ce qui a marché ET ce qui n'a pas —
-      un lecteur ne peut pas juger un taux de réussite s'il ne voit qu'un côté.
+- [x] **Accessibilité — FERMÉ (2026-09-07)** : les 26 pages du site sont passées en langage
+      courant, à contenu strictement égal (chaque chiffre, seuil et réserve conservé). `/ml`,
+      `/conviction` et `/portfolio` traités à la suite 32 ; les treize dernières à la suite 33.
+      `accueil` volontairement laissée telle quelle : sa prose était déjà claire. Forme retenue :
+      la question posée avant la réponse technique, et l'explication au survol (`Col.title` sur
+      `SortableTable`) plutôt qu'en note de bas de page.
+- [x] **Lisibilité mobile — FERMÉ (2026-09-07, mesuré)** : 365 éléments étaient hors écran et
+      injoignables à 390 px (pire cas `/fundamentals`, +492 px, la moitié de ses colonnes) ;
+      0 après correction, témoin à l'ancien CSS rejoué pour valider l'audit. Cause : la
+      rencontre de `overflow-x:clip` (garde-fou) et de quatorze tableaux sans conteneur
+      défilable. Correction structurelle, pas au cas par cas : sur mobile tout `<table>`
+      défile dans lui-même. Bulles d'aide et encoche en paysage corrigées aussi.
+      Garde-fou : `tests/web/test_mobile_pas_de_hors_ecran.py`.
+- [ ] **P2 — Mobile : passer l'audit de débordement en CI.** L'audit de ce jour tournait avec
+      Playwright installé à la volée puis désinstallé. Le figer (navigateur déjà présent dans
+      l'image) donnerait la mesure à chaque PR au lieu d'une fois. Le test actuel garde la
+      RÈGLE CSS ; il ne mesure pas les pixels.
+- [ ] **P2 — `/universe` en 5 colonnes fixes sur mobile** : la grille se rétracte au lieu de
+      déborder (donc rien d'injoignable, vérifié), mais « Nom » et « Secteur » y sont tronqués
+      à quelques caractères. À repenser en deux lignes par actif sous 640 px.
+- [x] **Fenêtres du dashboard — FERMÉ (2026-09-07)** : chacun des trois « gain / risque »
+      énonce désormais sa période (tuiles héros = période choisie, avec les dates ; bandeau
+      honnêteté = tout l'historique ; socle+stratégie = tout l'historique aussi).
+- [x] **Bloc décision sur le screener — FERMÉ (2026-09-07)** : jointure extraite dans
+      `apps/web/lib/verdicts.ts`, MÊME moteur `decide()` que la fiche (pas de variante liste
+      plus permissive). Colonne « ce qu'on en conclut » + bloc complet dans la modale.
+- [x] **Registre d'essais complet — FERMÉ (2026-09-07)** : `/api/failures` publie `par_statut`
+      et `n_total` ; `/methode` affiche les quatre statuts. `items` reste les seuls rejets —
+      /echecs l'affiche sans filtrer, y glisser une idée retenue la dirait échouée.
+
+## 🖥️ Portabilité matérielle (2026-09-07, ADR-0079)
+
+- [x] **Module de détection — FAIT.** `packages/common/device.py` : CUDA → MPS → CPU,
+      `QUANT_DEVICE` pour forcer, bannière « Exécution sur : … », `params_arbres()` pour
+      XGBoost/LightGBM/CatBoost, `activer_cudf()`. 20 tests, contrôle négatif vérifié.
+- [x] **P2 — Déterminisme du banc — FERMÉ (2026-09-08).** Cause isolée par la mesure :
+      `GradientBoostingClassifier` sans `random_state` consomme le générateur aléatoire
+      GLOBAL de numpy pour départager les égalités entre découpes d'arbre. Graine posée
+      sur l'ESTIMATEUR (`SklearnModel.GRAINE`), jamais par `np.random.seed()`. Trois
+      exécutions de `demo_ml.py` désormais identiques au caractère près.
+      Garde-fou : `tests/ml/test_determinisme.py`.
+- [x] **P1 — VALIDÉ SUR DONNÉES RÉELLES (2026-09-08, six lancements)** — verdicts :
+      · `cvar_optimize` : **REJETÉ** hors échantillon (ADR-0087). Premier en échantillon,
+        DERNIER hors échantillon, seul à rendement négatif (−5,1 % contre +12,3 % pour HRP).
+        Cause : le CVaR 95 % sur 252 jours s'estime sur ~13 points de queue. Inscrit au
+        registre des négatifs. HRP reste le meilleur allocateur du projet.
+      · `generateur_signaux` : **VALIDÉ**. 96 candidats → 24 essais distincts → 13 retenus
+        par le seuil du blueprint NVIDIA → **0 promu** après Benjamini-Hochberg. Le registre
+        ne se remplit pas de bruit.
+      · `anomalies_panel` : **VALIDÉ**. 5 séries cassées et 7 figées trouvées, toutes des
+        paires `/USDC`. Actionnable immédiatement.
+      · `ml/explication` : **VALIDÉ** mécaniquement (mesuré EN échantillon : dit ce que le
+        modèle utilise, pas ce qui généralise).
+- [ ] **P1 — Réparer la source des paires `/USDC`** (trouvé le 08/09) : UNI, ARB, OP, STX,
+      TON avec des sauts jusqu'à +1 573 987 % (prix de la veille faux, proche de zéro) ;
+      SHIB figé 675 séances sur 1499, ARB 595. Écarter de l'univers tant que ce n'est pas
+      réparé — ces séries faussent tout optimiseur de risque.
+      **Instrument livré le 09/09** : `make diag-source-crypto` confronte chaque série de
+      `crypto.db` à une référence indépendante (Binance klines, sans clé) et sépare les
+      quatre causes, qui appellent des gestes OPPOSÉS : collision de ticker (forcer le bon
+      symbole), flux arrêté (retirer), précision (changer de source), conforme (l'anomalie
+      est réelle). Sans référence il rend « NON VÉRIFIABLE » plutôt qu'un verdict inventé.
+      `make ingest-crypto` liste désormais chaque base sans données au lieu de les avaler
+      en silence — c'est ce silence qui a laissé douze séries pourrir sans alerte.
+      **DIAGNOSTIC PASSÉ SUR LE VPS le 09/09 — causes établies** (ADR-0089, ADR-0090) :
+      · 5 collisions de ticker confirmées deux fois chacune (corrélation ≈ 0 contre
+        Binance, ET date de début antérieure à l'existence du jeton — la série Yahoo
+        d'`ARB-USD` commence en 2017, Arbitrum date de 2023) : TON, UNI, APT, ARB, STX.
+        **Réparé** : `SOURCE_FORCEE` route ces cinq bases vers Binance (historique
+        paginé, `packages/data/crypto_binance.py`), avec effacement annoncé des lignes
+        de l'homonyme — sinon la série serait cousue de deux actifs.
+      · SHIB n'est PAS un flux arrêté : corr +0,80 (le bon jeton) mais **3 % de clôtures
+        distinctes** — un cours à 0,00001 $ arrondi à six décimales. Cause = précision de
+        la source. **Non réparé** : demande une source à plus de décimales pour les
+        jetons sub-centimes. Nouveau P2 ci-dessous.
+      · **52 bases sur 102 n'avaient jamais été ingérées** — défaut `--top 50` contre un
+        univers de 102. **Réparé** : `--top 0` = tout l'univers, par défaut.
+      **VÉRIFIÉ LE 09/09 (2ᵉ passage)** : les cinq ressortent **CONFORMES, corr +1,00**,
+      et leur début de série change du tout au tout — `ARB` de 2017-11 (impossible) à
+      2023-03, `APT` de 2021-11 à 2022-10. Réparation confirmée par une mesure
+      indépendante de celle qui l'avait motivée. L'univers réel passe de 774 à **823
+      actifs, dont 97 cryptos au lieu de 48** (ADR-0094).
+      **2ᵉ LOT VÉRIFIÉ (09/09)** : SUI, TIA, JUP, STRK, APE ressortent CONFORMES à leur
+      tour, corr +1,00, avec des dates de naissance redevenues plausibles (`JUP` passe de
+      2017-11 à 2024-01). Dix bases réparées et vérifiées sur dix.
+      **3ᵉ ET 4ᵉ LOTS ajoutés à `SOURCE_FORCEE`, à vérifier au prochain passage** :
+      · collisions visibles seulement grâce à la référence PAGINÉE — IMX, GRT, GMX, GMT
+        (leur série s'arrête avant 2024, donc sans recouvrement avec l'ancienne fenêtre) ;
+      · `OP` : **SÉRIE RECOLLÉE** — corr −0,00 sur 1559 j mais +1,00 sur les 640 derniers.
+        Ticker réattribué : récent juste, ancien étranger (ADR-0096) ;
+      · source inadéquate — SHIB, BONK, XEC, FLOKI, COMP (arrondi : 3 % à 17 % de
+        clôtures distinctes) et PEPE (Yahoo ne rend que 119 barres). **Prédiction
+        falsifiable** : si l'arrondi vient de Yahoo, la part de clôtures distinctes doit
+        bondir au prochain passage ; s'il tient au pas de cotation du jeton, non.
+      **VÉRIFIÉ LE 09/09, la prédiction tenait** (ADR-0097) : SHIB 3 % → **63 %**,
+      BONK 4 % → 84 %, XEC 10 % → 83 %, FLOKI 14 % → 95 %, COMP 17 % → 89 %,
+      GMX 32 % → 84 %. Et les plages figées s'effondrent avec : SHIB 61 séances → 3,
+      GMX 256 → 2. Ce n'étaient pas des flux morts, c'était la source qui décrochait —
+      le geste qu'on aurait fait sans mesurer (retirer les séries) était le mauvais.
+      **P1 CLOS.** 102 bases sur 102 ingérées, 21 sources forcées et vérifiées,
+      92 séries CONFORMES. `RPL` ajouté au 5ᵉ lot sur la même signature (figée 24,
+      corr +1,00) avec la même prédiction — à confirmer au prochain passage.
+- [ ] **P2 — Trois séries sans référence indépendante** : OKB, LEO, KAS, que Binance ne
+      cote pas. Leur forme est saine (100 % de clôtures distinctes, à jour), mais rien
+      ne les confronte. On le DIT au lieu de les déclarer conformes par défaut. Ajouter
+      une seconde référence (CoinGecko, avec résolution du symbole par son endpoint de
+      recherche plutôt qu'une table écrite à la main) — pour trois bases sur 102, ce
+      n'est pas un préalable.
+- [ ] **P1 — Refaire les mesures d'allocation sur l'univers assaini** (09/09).
+      ADR-0087 (rejet du Mean-CVaR) et la validation de HRP portaient sur 774 actifs dont
+      48 cryptos, avec cinq séries décrivant d'AUTRES jetons et six rongées par l'arrondi.
+      Le panneau fait maintenant **823 actifs dont 97 cryptos**, tous confrontés à une
+      référence. Le rejet du Mean-CVaR ne devrait pas bouger — sa cause est le manque
+      d'observations de queue, que l'élargissement aggrave — mais **ce raisonnement n'est
+      pas une mesure**. `make valider-nouveautes` refait la comparaison ET applique pour
+      la première fois le seuil calibré à 24.
+      **FAIT LE 09/09 — et le verdict s'inverse (ADR-0098).** Le seuil tient sa promesse :
+      **45 actifs signalés sur 826, soit 5,4 % contre 5,5 % prédits**, zéro série cassée
+      (contre 5), une seule figée (contre 7). Mais hors échantillon, le Mean-CVaR
+      plafonné passe de DERNIER (2,91 % de CVaR, −5,1 %) à PREMIER (1,04 %, +9,7 %),
+      HRP restant stable (1,54 → 1,51 %). **Le rejet d'ADR-0087 est ANNULÉ** — sa mesure
+      portait sur cinq séries décrivant d'autres jetons. Ligne datée au registre,
+      `allocation_mean_cvar` repasse en `en_test`.
+- [ ] **P1 — Trancher le Mean-CVaR avec un protocole qui PEUT conclure** (09/09).
+      Le nouveau résultat ne valide rien : cinq fenêtres hors échantillon donnent une
+      p-valeur minimale de **2/2⁵ = 0,0625**. Même en gagnant les cinq, le test des
+      signes ne peut pas descendre sous 5 % — sans puissance par construction, un fait
+      de forme connaissable AVANT de regarder les données. Instrument livré
+      (`packages/portfolio/duel_hors_echantillon.py` : duel apparié, plancher de
+      puissance et recouvrement imprimés). **RESTE** : `make valider-nouveautes
+      ARGS="--pas 21"` (seize fenêtres au lieu de cinq), puis lire le duel apparié —
+      pas la moyenne. Deux réserves à porter : le Mean-CVaR sans plafond met 63,7 % sur
+      une seule ligne (AGG), et l'allocation gagnante est à 66 % en ETF obligataires —
+      vérifier qu'on mesure un allocateur et non la performance des obligations sur
+      cette fenêtre-là.
+      **RUN À 16 FENÊTRES FAIT LE 09/09 (ADR-0099)** : le Mean-CVaR bat HRP **15 fois
+      sur 16** (p = 0,001, écart médian −0,39 %), min-variance 2/16, ERC et équipondéré
+      0/16. Le protocole peut conclure. Deux défauts d'affichage corrigés — une coche
+      « concluant » s'affichait aussi sur les PERDANTS (le test des signes est
+      bilatéral), et le plancher de puissance non nul s'imprimait « 0.0000 ».
+      **MAIS LA LIMITE A CHANGÉ DE NATURE** : à `--pas 21` le recouvrement des périodes
+      d'ajustement monte à **92 %**. Le test reste valide comme comparaison de deux
+      PORTEFEUILLES sur seize périodes disjointes, faible comme comparaison de deux
+      MÉTHODES. Avec 601 dates communes, un test à fenêtres d'ajustement disjointes n'en
+      donnerait qu'une : **on ne peut pas acheter de l'indépendance qu'on n'a pas.**
+- [ ] **P1 — Allonger l'historique commun avant de conclure sur un allocateur** (09/09).
+      601 dates communes sur 802 jours de bourse : la grille exige que **tous** les 734
+      actifs cotent le même jour, ce qui coûte un quart des séances et borne le test hors
+      échantillon à ~1,7 an. Deux pistes, à mesurer avant de choisir : assouplir
+      l'intersection (masquer par date plutôt qu'exiger la ligne pleine), ou allonger la
+      profondeur d'ingestion. C'est cette contrainte, pas le réglage `--pas`, qui empêche
+      aujourd'hui de trancher sur une MÉTHODE d'allocation.
+- [ ] **P0 — AUCUN rebalancement planifié sur le VPS** (mesuré le 10/09, ADR-0104).
+      `crontab -l` → « no crontab for ubuntu ». Le portefeuille ne bouge que sur
+      lancement manuel : cela explique d'un coup les 5 décisions de sortie en 63 jours,
+      la détention médiane de 0,1 jour, et la poche QQQ montée à 69 % sans allègement.
+      **NON ÉTABLI** : le journal peut venir d'une autre machine (`journal-pull`,
+      launchd sur le Mac mini). L'absence de cron ici ne prouve pas que rien ne tourne
+      nulle part.
+      **À FAIRE, dans cet ordre** :
+      1. `make verify-journal` **sur la machine qui porte le planificateur** (le
+         Mac mini si c'est lui). Le contrôle sait enfin répondre sur Linux comme sur
+         macOS — il renvoyait « ✅ cron actif » sur toute machine Linux jusqu'au 10/09.
+      2. `make live-cron-install` sur la machine choisie — **il échouait jusqu'au 10/09**
+         sur toute machine sans crontab préexistant, sans le moindre message
+         (ADR-0105) : `grep` vide + `set -euo pipefail` tuaient le sous-shell avant
+         l'écriture. Corrigé et testé en exécutant vraiment le script. Puis
+         `make verify-journal` pour confirmer — **après `make sync`** : le premier
+         passage du 10/09 tournait encore l'ancien contrôle et concluait « ✅ cron
+         actif » sur un VPS sans crontab.
+      3. Laisser tourner une semaine AVANT de rejuger quoi que ce soit sur les sorties :
+         les cinq décisions mesurées ne décrivent pas une stratégie, elles décrivent
+         cinq lancements manuels.
+- [ ] **P0 — L'allocation franchit la politique de risque, tous les jours** (ADR-0111).
+      Post-mortems des 05, 07, 08 et 09/09 : `risk_limits_ok: false`, `n_breaches: 3`.
+      Le secteur « Actions diverses » pèse **47,5 % contre un plafond de 40 %**
+      (`config/risk.yaml`), et le cœur `QQQ` **50 % contre un plafond de nom à 20 %**
+      (`packages/risk/limits.py`). Ce sont les poids du portefeuille MODÈLE, pas une
+      somme de lots journal : le sur-comptage d'ADR-0109 n'explique rien ici.
+      **L'arbitrage, et il t'appartient** : soit la politique de risque reconnaît qu'un
+      cœur indiciel n'est pas une ligne comme une autre (plafond de nom séparé pour les
+      ETF larges — `max_index` existe déjà, à 60 %), soit le cœur descend sous 20 %.
+      En l'état, deux documents du projet se contredisent sur ce que le système doit
+      faire. Le rebalancement automatique applique l'allocation telle quelle.
+- [x] **P0 — ANNULÉ : les 69 % de QQQ n'existaient pas** (ADR-0109). Le courtier détient
+      **43 562 $**, soit 43,3 % du compte, pour une cible à 44,9 % : la position est
+      légèrement SOUS sa cible, l'écart est un ACHAT de 1 652 $. Le chiffre de 69 %
+      venait du JOURNAL, qui compte trois lots QQQ ouverts (42 862 + 25 977 + 617) là où
+      le courtier n'en détient qu'un — **25 894 $ de fantômes**, lots fermés chez le
+      courtier et jamais fermés au journal. Le journal n'est pas la source de vérité des
+      positions ; il reste celle des DÉCISIONS. Ancien libellé conservé ci-dessous pour
+      la trace.
+- [ ] ~~**P0 — 69 % du portefeuille sur UN SEUL ETF** (mesuré le 10/09, ADR-0102/0103).~~
+      Trois lots de QQQ pèsent ≈ 69 500 $ sur ≈ 100 000 $. Un total qui oscille de 101 k
+      à 100,4 k suit d'abord CELA : ±0,9 % sur QQQ font ±0,6 % sur le compte.
+      **CORRECTION du 10/09 (ADR-0103)** : j'avais écrit « pourquoi le rebalancement ne
+      ramène-t-il pas cette ligne à sa cible ? ». La question était mal posée — **la
+      CIBLE elle-même est ≈ 50 %**. Sur un portefeuille neuf de 10 000 $, l'allocateur
+      vise QQQ à 5 000 $, soit 54 % du capital réellement alloué, le reste étant
+      35 satellites à ~3 % chacun. C'est un cœur-satellite assumé, pas une panne : la
+      moitié du compte EST un ETF Nasdaq, et il bouge comme lui. Le yo-yo est
+      structurel et voulu.
+      **RESTE À TRANCHER — une décision, pas un correctif** : ce poids de cœur est-il
+      celui que tu veux ? À 50 % de cœur, le compte suivra le Nasdaq quoi qu'il arrive
+      aux 35 satellites. Le seul écart réellement anormal est **69 % constaté contre
+      ≈ 54 % visés**, soit ~15 points de surpoids à alléger : `make live` (positions
+      RÉELLES, aucun ordre) dit si l'ordre de vente est bien émis.
+- [ ] **P0 — Lots crypto incohérents au journal** (mesuré le 10/09) : `BCH` affiche
+      −2 509 $ de PV latente sur une position de 512 $, `ETH` −619 $ sur 6 $. Une
+      position longue ne peut pas perdre plus qu'elle ne vaut : `avg_price` ou `qty` est
+      faux. `make diag-pv-latente` les isole désormais. C'est la P0 de réconciliation du
+      journal, qui attend toujours d'être passée.
+- [ ] **P0 — Le yo-yo de la PV latente : mesurer, puis décider** (posé le 10/09).
+      Symptôme rapporté : total oscillant de 101 k à 100,4 k, PV latente impossible à
+      sécuriser. Mécanisme lu dans le code (ADR-0101) : la production n'a ni objectif de
+      gain ni stop, sa seule sortie est le rebalancement, et la **bande d'inaction vaut
+      ≈ 505 $ par ligne** (0,5 % du capital). Sous cette bande, une ligne ne peut PAS
+      être allégée — sa plus-value ne peut que revenir.
+      **ÉTAPE 1 FAITE le 10/09** — et elle renvoie ailleurs : frais + slippage = 0,00 $,
+      donc pas de friction ; 5 décisions de sortie en 63 jours seulement ; et 69 % du
+      portefeuille sur QQQ. Le yo-yo mesuré n'est pas un problème de sortie, c'est une
+      concentration. Voir les deux P0 ci-dessus.
+      **Commandes** : `make diag-pv-latente
+      ARGS="--capital <ton capital>"` puis `make turnover-audit`. Le premier chiffre le
+      yo-yo sur les positions VIVANTES (pic, PV du jour, rendu, et combien de lignes
+      dorment sous la bande) ; le second donne le coût des allers-retours sur les lots
+      clos.
+      **ÉTAPE 2, seulement ensuite** : choisir entre (a) resserrer la bande — plus de
+      prises de bénéfice mais plus de frais, à arbitrer sur le coût mesuré par
+      `turnover-audit` ; (b) brancher une règle de sécurisation explicite (suiveur, ou
+      allègement partiel au-delà d'un seuil de gain) — c'est un CHANGEMENT DE MOTEUR au
+      sens d'ADR-0073, à valider pour lui-même ; (c) ne rien changer si le rendu mesuré
+      est faible et que le yo-yo n'est que la volatilité du marché.
+      **NE PAS** régler `rr` ou le suiveur de `sortie_lab` en croyant agir : ce banc
+      rejoue `fast_swing_backtest`, pas le chemin de production (ADR-0073).
+- [x] **P1 — TRANCHÉ le 10/09 : HRP reste en production** (ADR-0100). La période
+      s'affiche : **2024-05-15 → 2026-05-19**, 336 séances — **aucun épisode de hausse
+      des taux**, le krach obligataire de 2022 est hors fenêtre. Or l'allocation gagnante
+      fait 63 % d'ETF obligataires, et sur le RENDEMENT le duel est indiscernable (7/16,
+      p = 0,80) : l'avantage porte sur le seul risque de queue, et ce risque de queue est
+      une exposition de classe d'actifs. On mesure « ces ETF ont été calmes deux ans »,
+      pas « cette méthode est meilleure ». Le Mean-CVaR reste `en_test` avec sa période
+      inscrite au registre ; il sera rejugé quand l'historique couvrira un choc de taux.
+- [x] **P1 — Un prix périmé comptait comme un prix RÉEL** (trouvé et corrigé le 10/09).
+      Le chargement ne regardait que le nombre de barres : `HYPE/USDC`, arrêtée le
+      27/08/2024, figurait dans l'univers réel du 08/09/2026 — le screener pouvait la
+      classer, le dimensionnement la dimensionner. `_load_prices` écarte désormais toute
+      série en retard de plus de 60 jours **sur la barre la plus fraîche de l'univers**
+      (pas sur la date du jour : un férié ne doit condamner personne). 5 tests.
+- [x] **P2 — Les splits suspects sont qualifiés, plus listés** (10/09). `corporate_actions`
+      existait depuis longtemps et n'était branché nulle part. La liste B se sépare en
+      « SPLIT CONFIRMÉ (ratio + volume) » / « volume non concordant » / « inexpliqué ».
+      Seule la dernière catégorie demande un œil humain.
+- [ ] **P1 — Sortir de l'univers les séries PÉRIMÉES** (trouvé le 09/09) : une douzaine
+      de séries s'arrêtent des années avant le reste du lot — MATIC en 2025-03 (migration
+      POL), RNDR en 2024-07, FTM en 2025-01, IMX en 2022-07, GRT en 2022-04, GMX en
+      2023-11, COMP en 2021-08. Rien ne cloche DANS ces séries : elles sont finies. Elles
+      sortaient « CONFORMES » et peuplaient l'univers en se faisant passer pour vivantes.
+      Le diagnostic les nomme désormais (verdict PÉRIMÉE, mesuré contre la barre la plus
+      fraîche du lot). **Liste arrêtée au 09/09** : HYPE (retard 742 j), TON (70 j, Binance
+      a cessé de coter la paire), MATIC (533 j), RNDR (779 j), FTM (603 j), GALA (52 j),
+      FXS (490 j). À noter : `RENDER` est DÉJÀ dans l'univers et conforme — `RNDR` y fait
+      donc doublon avec sa propre version morte.
+      **RESTE** : décider migration (MATIC→POL, RNDR→RENDER, FTM→S) ou retrait, puis
+      appliquer à `config/universe.yaml`. Sortir un instrument change l'ensemble
+      investissable : c'est une décision, pas un correctif de données — elle t'appartient.
+- [ ] **P2 — PEPE : 119 barres chez Yahoo**, sous le seuil des 250 (09/09). Seule base de
+      l'univers restée muette après l'ingestion complète. Basculer en `SOURCE_FORCEE`
+      vers Binance comme les collisions — à vérifier au prochain passage.
+- [x] **P2 — Recalibrer `SEUIL_ECART` : CAUSE TROUVÉE, ce n'était pas le seuil** (09/09).
+      430 actifs sur 774 signalés. J'avais écrit « les queues épaisses des marchés » —
+      **c'était faux, et mesurable**. Sur un panneau SAIN de 774 séries synthétiques
+      multi-classes, sans le moindre défaut injecté : **100 % des cryptos signalées, 0 %
+      du forex**, 12 974 événements pour zéro anomalie. La coupe du jour mélangeait des
+      échelles sans rapport (0,5 % / 1,5 % / 5 % par jour) : sa médiane et son MAD étaient
+      dictés par la classe la plus nombreuse, et une crypto vivant sa journée ordinaire se
+      retrouvait à seize écarts de cette coupe-là — signalée pour avoir été elle-même.
+      **Correctif** : chaque série est divisée par sa PROPRE échelle robuste avant la
+      comparaison (`echelle_par_actif`). Mesuré sur le même panneau sain : 75 actifs
+      signalés → **0**, et les quinze défauts injectés (splits ×4 et ticks erronés, dans
+      les trois classes) restent tous détectés. La gravité continue de se lire sur le
+      rendement RÉEL : « split non ajusté » se décide à −30 % de cours, pas à trente
+      unités d'écart normalisé (test dédié, vérifié par sabotage). ADR-0088.
+      **CONFRONTÉ AU VRAI PANNEAU LE 09/09 — ma correction était fausse elle aussi.**
+      Au seuil 8 AVEC normalisation : **57,6 %** de l'univers signalé, contre 55,6 %
+      (430/774) sans elle. La normalisation **n'a pas réduit le taux réel**. Elle corrige
+      un artefact démontré (le mélange d'échelles), mais ce n'était pas le facteur
+      dominant : le facteur dominant est bien celui que j'avais écrit puis rayé, **les
+      queues épaisses**. Un panneau gaussien ne pouvait pas trancher entre les deux
+      hypothèses, puisqu'il n'a pas de queues — et j'ai conclu comme s'il le pouvait.
+      Par classe à 8 : crypto 94 %, actions 65 %, forex 53 %, commodités 50 %,
+      indices 24 %, ETF 11 %. La normalisation est CONSERVÉE (la statistique dit enfin
+      ce qu'elle prétend dire), le seuil reste **UNCALIBRATED**.
+- [ ] **P2 — Trancher `SEUIL_ECART` avec un instrument réparé** (09/09). La première
+      proposition du script (24) est RETIRÉE : elle reposait sur une sensibilité
+      sous-estimée par un défaut de l'instrument — l'injection tirait sa date au hasard
+      et tombait une fois sur trois sur un jour NON COTÉ, où un défaut ne produit aucun
+      rendement (ADR-0091). Corrigé : l'injection ne vise que des séances réellement
+      cotées deux jours de suite, et le rapport publie l'effectif de chaque mesure.
+      **2ᵉ PASSAGE (09/09) — l'instrument est réparé, la conclusion ne l'est pas.** Les
+      sensibilités sont enfin crédibles : **100 % de détection des splits à tous les
+      seuils** sans normalisation, contre 33-73 % erratiques avant. Mais la proposition
+      (24) tombait sur le **plus grand seuil de la grille**, avec un score encore
+      croissant : ce n'était pas un maximum, c'était le dernier point essayé (ADR-0093).
+      Grille élargie à 64, avertissement explicite sur les bords, `N_INJECTIONS` 40 → 150.
+      **Et le mode n'est pas tranché non plus** (ADR-0092) : à seuil 8 l'ANCIEN mode gagne
+      sur les deux axes (coût 55,3 % contre 59,4 %, sensibilité 100 % contre 94 %) ; la
+      normalisation ne l'emporte qu'à partir de 12, et par le seul coût. Mode et seuil
+      sont couplés — trancher l'un sans l'autre, c'est choisir sur la moitié de la table.
+      **TRANCHÉ LE 09/09, 3ᵉ passage (ADR-0095).** Grille élargie, instrument réparé,
+      150 injections : **l'optimum est INTÉRIEUR dans les deux modes**. Maximum global à
+      **24 avec normalisation** (score 0,905), devant 32 sans (0,889). Les deux questions
+      se répondaient bien ensemble. **`SEUIL_ECART = 24,0` appliqué**, normalisation
+      conservée : 5,5 % de l'univers signalé (45 actifs au lieu de 489), 93 % des splits
+      et 99 % des ticks retrouvés, mesuré sur 138 actifs. Le prix est écrit : cinq points
+      de détection des splits contre une lecture divisée par trois, et l'angle mort (un
+      split ×4 sur une crypto d'échelle 5 %/jour) est **fixé par un test** qui vérifie
+      aussi qu'il ressort à seuil 12 — arbitrage, pas cécité.
+- [ ] **P2 — Source à plus de décimales pour les jetons sub-centimes** (trouvé le 09/09) :
+      SHIB n'a que 3 % de clôtures distinctes sur 1967 barres — le bon jeton, arrondi à
+      six décimales par la source. Un cours qui ne bouge qu'en marches d'escalier
+      fabrique une volatilité fausse et des plages figées. Concerne aussi PEPE, BONK,
+      FLOKI, XEC dès qu'ils seront ingérés. Binance rend huit décimales : vérifier si le
+      passage en `SOURCE_FORCEE` suffit, AVANT d'écrire quoi que ce soit.
+      **CONFIRMÉ ET ÉLARGI le 09/09** une fois l'univers complet : SHIB 3 % de clôtures
+      distinctes, BONK 4 %, XEC 10 %, FLOKI 14 %, COMP 17 %, GMX 32 %. Six séries, pas
+      une.
+- [ ] ~~**P1 — ancien libellé : à valider sur données réelles**~~
+- [ ] ~~**P2 — ancien libellé : `scripts/demo_ml.py` n'est pas déterministe.**~~ Constaté le 07/09 en cherchant à
+      prouver une non-régression : deux exécutions de la MÊME version donnent des accuracies
+      différentes (`GradientBoostingClassifier` sans `random_state`). Un banc dont deux runs
+      ne coïncident pas ne peut servir à comparer ni deux versions, ni deux matériels — ce
+      qui va précisément manquer au moment de valider la migration NVIDIA.
+- [ ] **P2 — Mesurer AVANT d'installer RAPIDS.** `cudf.pandas` accélère pandas ; le temps de
+      ce projet se passe surtout en lectures SQLite et en numpy. Profiler un `make daily`
+      avant de conclure que le GPU aidera — et vérifier que 7 Go tiennent en VRAM (sinon
+      déversement disque, qui peut être plus lent que pandas).
+- [ ] **P2 — À la migration : relancer un backtest identique sur les deux machines.** Deux
+      matériels ne donnent pas le bit près les mêmes flottants. Vérifier que l'écart reste
+      dans le bruit AVANT de faire confiance aux chiffres de la nouvelle machine.
 
 ## 🔵 Décisions en attente de l'utilisateur
 - [ ] **Bot Discord** (projet distinct) : vendre des signaux à des abonnés payants est une

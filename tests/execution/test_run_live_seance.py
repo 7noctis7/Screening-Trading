@@ -267,3 +267,86 @@ def test_le_recap_totalise_les_montants_en_valeur_absolue(capsys):
     from scripts.run_live import _recap_differes
     _recap_differes(_differes())
     assert "2 000$" in capsys.readouterr().out
+
+
+# APERÇU : Alpaca construit en LECTURE (05/09). `_make_brokers(dry)` renvoyait toujours
+# (None, None), donc l'aperçu n'avait aucun compte à lire — d'abord « détenu 0 $ »
+# sur un compte plein, puis « cible 0 $ » partout une fois l'equity demandée à un
+# broker absent.
+# Aucun ordre ne peut partir pour autant : `_reconcile` sort sur `dry` AVANT tout envoi.
+
+
+def test_simulation_ne_construit_aucun_broker(monkeypatch):
+    from scripts.run_live import _make_brokers
+    monkeypatch.setattr("scripts.run_live._alpaca_ou_rien",
+                        lambda: (_ for _ in ()).throw(AssertionError("ne doit pas")))
+    assert _make_brokers(dry=True, apercu=False) == (None, None)
+
+
+def test_apercu_construit_alpaca_seul(monkeypatch):
+    """La place crypto reste absente : `cron_live.sh` la neutralise de toute façon."""
+    monkeypatch.setattr("scripts.run_live._alpaca_ou_rien", lambda: "alpaca-lecture")
+    assert _make_brokers_apercu() == ("alpaca-lecture", None)
+
+
+def _make_brokers_apercu():
+    from scripts.run_live import _make_brokers
+    return _make_brokers(dry=True, apercu=True)
+
+
+# FILL RÉEL vs DELTA PLANIFIÉ (05/09) — cf. `packages/execution/live_roundtrip.py` et
+# `packages/research/sur_fermeture.py`. `_journal_sells` doit lire la QUANTITÉ du fill
+# réel quand un ordre du jour le permet, pas seulement son prix — sinon `close_sells`
+# retombe sur le delta planifié et ferme plus que ce qui a vraiment été vendu.
+
+
+class _CourtierAvecFill:
+    """Un ordre de vente réel du jour, plus petit que le delta planifié (cas OSCR)."""
+    name = "test"
+
+    def orders(self, limit=50):
+        return [{"symbol": "OSCR", "side": "sell", "price": 29.65,
+                 "qty": 14.0, "date": "2026-09-05T12:00:00+00:00"}]
+
+
+class _CourtierSansOrdre:
+    name = "test"
+
+    def orders(self, limit=50):
+        return []
+
+    def last_price(self, sym):
+        return 30.0
+
+    def positions_detailed(self):
+        return []
+
+
+def test_fill_vente_jour_lit_prix_ET_quantite(monkeypatch):
+    from scripts.run_live import _fill_vente_jour
+    monkeypatch.setattr("scripts.run_live.datetime", _horodatage_fixe())
+    fait = _fill_vente_jour(_CourtierAvecFill(), "OSCR")
+    assert fait == {"price": 29.65, "qty": 14.0}
+
+
+def test_fill_vente_jour_absent_rend_none(monkeypatch):
+    from scripts.run_live import _fill_vente_jour
+    monkeypatch.setattr("scripts.run_live.datetime", _horodatage_fixe())
+    assert _fill_vente_jour(_CourtierSansOrdre(), "OSCR") is None
+
+
+def test_exit_price_seul_repli_sans_ordre_du_jour(monkeypatch):
+    """Repli inchangé : sans ordre citable, `_exit_price` retombe sur `last_price`."""
+    from scripts.run_live import _exit_price
+    monkeypatch.setattr("scripts.run_live.datetime", _horodatage_fixe())
+    assert _exit_price(_CourtierSansOrdre(), "OSCR") == 30.0
+
+
+def _horodatage_fixe():
+    import datetime as _dt
+
+    class _Fixe(_dt.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return _dt.datetime(2026, 9, 5, 12, 0, tzinfo=tz)
+    return _Fixe

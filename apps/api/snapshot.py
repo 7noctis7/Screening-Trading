@@ -31,6 +31,7 @@ from packages.portfolio import (
     risk_metrics_fn,
 )
 from packages.portfolio.metrics import returns_from_equity
+from packages.reporting.bench_curves import bench_series
 from packages.ranking import RankingEngine
 from packages.regime import MacroImpactMap, MacroRegimeClassifier, synthetic_macro
 from packages.storage import MacroStore
@@ -123,8 +124,18 @@ def _universe_section(instruments: list[dict]) -> dict:
                       "as_of": datetime.fromtimestamp(path.stat().st_mtime,
                                                       UTC).isoformat()})
     rows = sorted(instruments, key=lambda r: (r["asset_class"], r["symbol"]))
+    # `as_of` répond « de QUAND datent ces données », jamais « quand cette page a été
+    # fabriquée ». Ici il publiait `now()` : la liste d'univers se déclarait donc fraîche
+    # du jour même quand ses fichiers sources n'avaient pas bougé depuis des mois, et
+    # l'inventaire du gate de publication la comptait parmi les blocs à jour. Une
+    # fraîcheur affirmée sans être vraie est pire qu'une date ancienne assumée : elle
+    # empêche de repérer la source qui a cessé d'être rafraîchie.
+    # La date des données = celle du fichier source le plus récent. La date de
+    # fabrication garde sa place, sous son propre nom.
+    dates_seed = [s["as_of"] for s in seeds if s.get("as_of")]
     return {
-        "as_of": datetime.now(UTC).isoformat(),
+        "as_of": max(dates_seed) if dates_seed else None,
+        "genere_le": datetime.now(UTC).isoformat(),
         "rebuild_cadence_days": cfg.get("rebuild_cadence_days"),
         "sources": src_rows,
         "sources_enabled": sum(1 for s in src_rows if s["enabled"]),
@@ -156,6 +167,33 @@ def is_real_mode(mode: str | None) -> bool:
     Une comparaison de chaînes n'est pas un contrat ; ce prédicat en est un, et il est testé.
     """
     return bool(mode) and str(mode).startswith("réel")
+
+
+def contient_des_prix_reels(mode: str | None) -> bool:
+    """Y a-t-il des horodatages RÉELS exploitables ? — question distincte de la certification.
+
+    `is_real_mode` répond à « tout l'univers est-il certifié réel ? » et refuse « mixte » à
+    juste titre : un seul titre en repli synthétique interdit de certifier l'ensemble. Mais
+    le NETTOYAGE DES TITRES PÉRIMÉS ne pose pas cette question-là. Il demande seulement si
+    les dernières barres sont de vraies dates comparables entre elles.
+
+    Le 07/09, faire porter les deux questions par le même prédicat a coûté cher : le VPS
+    tourne en mode « mixte », le nettoyage ne s'exécutait donc JAMAIS, et des titres arrêtés
+    depuis des mois (BK au 18 juin, CA au 26 mai) restaient dans l'univers. Pire, comme les
+    séries sont alignées par intersection, un seul de ces morts tronquait la fenêtre de
+    calcul de TOUT le portefeuille — la recommandation du jour finissait au 17 juin sans que
+    rien ne le signale.
+    """
+    return bool(mode) and not str(mode).startswith("synthetic")
+
+
+# « ETF » et « Indices » ne sont pas des secteurs, ce sont des VÉHICULES : `_sector_of`
+# les renvoie sur la classe d'actif, avant même de regarder le GICS. Leur appliquer le
+# plafond SECTORIEL refait, un cran plus haut, l'erreur que `index_names` corrige sur
+# l'axe des noms — mesuré le 09/09 : « nom QQQ 50 % » réparé le matin, « secteur ETF
+# 50 % » apparu dans le post-mortem du soir, même actif, même poids, autre libellé.
+# Forex/Commodités/Crypto n'y sont PAS : là, 40 % sur une classe est une vraie limite.
+_SECTEURS_VEHICULE = frozenset({"ETF", "Indices"})
 
 
 def _sector_of(m: dict) -> str:
@@ -1384,6 +1422,7 @@ def _load_prices(instruments, sector_of, start, end, seed):
             drift, vol = _SECTOR_DV.get(sector_of[s], (0.07, 0.18))
             data[s] = data_providers.create(
                 "synthetic", seed=seed, drift=drift, annual_vol=vol).fetch_ohlcv(s, "1d", start, end)
+    real_syms -= _series_perimees(data, real_syms)
     n_real = len(real_syms)
     _src = db.name if db else ("market.db" if prov_updates else "crypto.db" if prov_crypto else "?")
     _src += " + maj market.db" if (db and prov_updates) else ""
@@ -1394,6 +1433,36 @@ def _load_prices(instruments, sector_of, start, end, seed):
     else:
         mode = f"mixte ({n_real} réels / {len(instruments)} via {_src})"
     return data, mode, real_syms
+
+
+# Retard maximal toléré, en jours, sur la barre la plus fraîche de tout l'univers. On
+# compare au PANNEAU, pas à la date du jour : un lundi férié ou une ingestion de la
+# veille ne doivent condamner personne.
+RETARD_MAX_JOURS = 60
+
+
+def _series_perimees(data: dict, real_syms: set) -> set:
+    """Symboles dont la dernière barre est trop vieille pour être tenue pour RÉELLE.
+
+    LE DÉFAUT QUE ÇA CORRIGE. Une série s'arrête — jeton migré (MATIC→POL), délisté, ou
+    source qui lâche — et rien ne le remarquait : le chargement ne regardait que le
+    NOMBRE de barres. `HYPE/USDC`, arrêtée en août 2024, comptait pour un actif réel en
+    septembre 2026 avec un cours vieux de deux ans. Le screener pouvait le classer, le
+    dimensionnement le dimensionner, les graphiques l'afficher — tout cela sur un prix
+    qui n'existe plus. Un prix périmé est pire qu'un prix absent : il a l'air d'un prix.
+
+    Aucune donnée n'est modifiée ni supprimée : le symbole sort seulement de l'ensemble
+    des séries RÉELLES, exactement comme s'il n'avait jamais eu assez d'historique.
+    """
+    derniers = {s: max((b.ts for b in data.get(s, [])), default=None)
+                for s in real_syms}
+    fraiches = [d for d in derniers.values() if d is not None]
+    if not fraiches:
+        return set()
+    reference = max(fraiches)
+    trop_vieux = RETARD_MAX_JOURS
+    return {s for s, d in derniers.items()
+            if d is None or (reference - d).days > trop_vieux}
 
 
 def _index_series(aliases: list[str], start, end,
@@ -1698,7 +1767,7 @@ def build_snapshot(seed: int = 7) -> dict:
     # NETTOYAGE UNIVERS : écarte les titres PÉRIMÉS (delisted/renommés, ex. FB→META) dont
     # la dernière barre est trop ancienne → plus de 404 ni de cibles fantômes. Seuil RELATIF
     # (vs la barre la plus fraîche) → ne vide jamais l'univers, même hors-ligne.
-    if is_real_mode(data_mode) and data:
+    if contient_des_prix_reels(data_mode) and data:
         _fresh = max(b[-1].ts for b in data.values() if b)
         _cut = _fresh - timedelta(days=10)
         _stale = [s for s, b in data.items() if b and b[-1].ts < _cut]
@@ -1916,13 +1985,16 @@ def build_snapshot(seed: int = 7) -> dict:
             _corr_cond = conditional_correlation(_aligned, _proxy)
             limits = concentration_report_adaptive(w_by_name, w_by_sector, _corr_cond,
                                                    max_name=0.20, max_sector=0.40,
-                                                   index_names=_index_names)
+                                                   index_names=_index_names,
+                                                   index_sectors=_SECTEURS_VEHICULE)
         else:
             limits = concentration_report(w_by_name, w_by_sector, max_name=0.20,
-                                          max_sector=0.40, index_names=_index_names)
+                                          max_sector=0.40, index_names=_index_names,
+                                          index_sectors=_SECTEURS_VEHICULE)
     except Exception:  # noqa: BLE001 — repli sur le rapport fixe
         limits = concentration_report(w_by_name, w_by_sector, max_name=0.20,
-                                      max_sector=0.40, index_names=_index_names)
+                                      max_sector=0.40, index_names=_index_names,
+                                      index_sectors=_SECTEURS_VEHICULE)
 
     # --- STRESS-TESTS MACRO + COUVERTURE (axe 11) ---
     from packages.portfolio.scenarios import hedge_suggestion, scenario_analysis
@@ -2578,7 +2650,15 @@ def build_snapshot(seed: int = 7) -> dict:
             for r in _pr:
                 _pws[r["sector"]] = _pws.get(r["sector"], 0.0) + r["current_value"]/_pt
                 _pwc[r["asset_class"]] = _pwc.get(r["asset_class"], 0.0) + r["current_value"]/_pt
-            _plim = concentration_report(_pwn, _pws, max_name=0.20, max_sector=0.40)
+            # MÊME RÈGLE QUE LE TABLEAU DE BORD (l. 1928) : un tracker indiciel large
+            # n'est pas un risque d'émetteur unique. Ce site d'appel n'avait jamais reçu
+            # le correctif d'audit du 06/07 — et c'est LUI que lit le post-mortem
+            # (incident_note lit portfolio.analysis.limits), d'où « QQQ 50 % > 20 % »
+            # publié tous les jours sur un cœur core-satellite parfaitement conforme.
+            _pidx = {r["symbol"] for r in _pr if (r.get("asset_class") or "") == "etf"}
+            _plim = concentration_report(_pwn, _pws, max_name=0.20, max_sector=0.40,
+                                         index_names=_pidx,
+                                         index_sectors=_SECTEURS_VEHICULE)
             _pstress = {"scenarios": scenario_analysis(_pwc), "hedge": hedge_suggestion(_pwc, target_max_loss=-0.15)}
             _pagg = {**PL.metrics_payload(_peq), **_prel, **_prm, **_pmc}
             _port_payload = {**_pcomp, "metrics": PL.metrics_payload(_peq),
@@ -2608,7 +2688,7 @@ def build_snapshot(seed: int = 7) -> dict:
                                             plancher=_min_ligne())
     except Exception:  # noqa: BLE001 — diagnostic, jamais bloquant
         _replication = {"available": False}
-    return {
+    _payload = {
         "meta": {
             "generated_at": now.isoformat(),
             "last_bar": last_bar.isoformat(),
@@ -2651,7 +2731,12 @@ def build_snapshot(seed: int = 7) -> dict:
                            + [f"{int(round((1-_index_core_info['core_pct'])*100))}% preset"])
                 if _index_core_info.get("enabled")
                 else ("preset (risk-parity + DD-target)" if _pe.get("available") else "swing")),
-            "benchmarks": _bench_series({"S&P 500": sp, "Nasdaq 100": ndx}, _dash_dates, init_cap),
+            # Les dates des indices voyagent avec leurs cours : sans elles la courbe du
+            # benchmark était tracée sur le calendrier de l'equity (`bench_series`).
+            "benchmarks": bench_series(
+                {"S&P 500": (sp, _sp_dates if _sp_real else []),
+                 "Nasdaq 100": (ndx, _ndx_dates if _ndx_real else [])},
+                _dash_dates, init_cap),
             "dates": _dash_dates,
             "positions": comp["rows"], "totals": comp["totals"],
             "preset_allocation": _preset_alloc,        # allocation PRESET (production) → page Positions
@@ -2710,6 +2795,24 @@ def build_snapshot(seed: int = 7) -> dict:
         "conviction": conviction_sec,
         "live": _live,
     }
+    # DATES D'ARRÊTÉ — un seul endroit, calculé sur le payload FINI.
+    #
+    # Trois dates différentes coexistaient sur le site (18/06 pour le tableau de bord et
+    # les données, 04/09 pour les événements et les thèmes, 02/09 pour le tri) sans que
+    # rien ne l'explique au lecteur. Certaines divergences sont légitimes — une fenêtre de
+    # backtest close n'est pas la donnée du jour, et la crypto cote le samedi quand les
+    # actions non — mais le visiteur qui compare deux onglets n'a aucun moyen de le savoir.
+    # On publie donc l'inventaire complet : le front peut dire, sur chaque page, de quand
+    # datent ses chiffres ET s'ils sont en retard sur le reste du site.
+    try:
+        from packages.common.coherence_site import dates_d_arrete
+        _arretes = dates_d_arrete(_payload)
+        _payload["meta"]["arretes"] = _arretes
+        _payload["meta"]["arrete_le_plus_frais"] = max(_arretes.values()) if _arretes else None
+    except Exception:  # noqa: BLE001 — inventaire d'affichage, jamais bloquant
+        _payload["meta"]["arretes"] = {}
+        _payload["meta"]["arrete_le_plus_frais"] = None
+    return _payload
 
 
 def _earnings_risk(held: list) -> list[dict]:
@@ -2774,29 +2877,6 @@ def _account_compare(alp_curve: list, cr_curve: list, sp: list, ndx: list,
             series[name], st = b
             kpis.append({"name": name, **st})
     return {"available": bool(series), "window": [axis[0], axis[-1]], "series": series, "kpis": kpis}
-
-
-def _bench_series(benches: dict, dates: list, init_cap: float) -> dict:
-    """Rebasera chaque benchmark sur le capital initial, aligné sur les dates de l'equity (overlay)."""
-    out = {}
-    for name, px in benches.items():
-        if not px:
-            continue
-        # ffill anti-NaN (barres yfinance du jour parfois NaN) : courbe d'AFFICHAGE →
-        # dernière valeur connue ; jamais de NaN servi au front (JSON NaN-safe + tests).
-        clean, last = [], None
-        for v in px:
-            if v == v and v is not None:
-                last = v
-            clean.append(last)
-        px = [v for v in clean if v is not None]
-        if not px:
-            continue
-        L = min(len(px), len(dates))
-        base = px[len(px) - L] or 1.0
-        out[name] = [{"t": dates[len(dates) - L + i],
-                      "v": round(init_cap * px[len(px) - L + i] / base, 2)} for i in range(L)]
-    return out
 
 
 def _top_traded(journal, k: int) -> list[tuple[str, int]]:

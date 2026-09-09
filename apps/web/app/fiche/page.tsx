@@ -70,8 +70,9 @@ function BlocDecision({ d }: { d: Decision }) {
         <div className="text-muted text-[11px] uppercase tracking-wide mb-1">Et concrètement ?</div>
         <p className="text-sm">{d.ordre.phrase}</p>
         <p className="text-muted2 text-[11px] mt-1">
-          Portefeuille modèle en simulation (paper). Un étage sans donnée ne vote pas et n'est jamais
-          remplacé par une valeur moyenne — c'est pourquoi le compteur d'étages mesurés est affiché.
+          Portefeuille modèle, en simulation : aucun argent réel n'est engagé. Quand un critère n'a pas
+          de donnée, il ne compte pas — on ne le remplace jamais par une valeur moyenne pour faire joli.
+          C'est pourquoi le nombre de critères réellement mesurés est affiché.
         </p>
       </div>
     </section>
@@ -112,7 +113,7 @@ function Fiche() {
     valeurPortefeuille: o.valeurPtf,
   }), [o]);
 
-  if (!sym) return <EmptyState title="Aucun instrument" hint="Ouvre cette fiche depuis un ticker (screener, positions…) ou ajoute ?sym=NVDA à l'URL." />;
+  if (!sym) return <EmptyState title="Aucun actif sélectionné" hint="Ouvrez cette fiche en cliquant un symbole ailleurs sur le site, ou ajoutez ?sym=NVDA à la fin de l'adresse." />;
   if (!screen || !pos) return <PageSkeleton />;
   const known = o.screen || o.rank || o.fund || o.pos || o.tgt;
 
@@ -121,23 +122,23 @@ function Fiche() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight mono">{sym}
           {o.screen?.name && <span className="ml-3 text-base font-normal text-muted font-sans">{o.screen.name}</span>}</h1>
-        <p className="text-muted2 text-xs mt-1">{o.screen?.sector || o.fund?.sector || "—"} · toutes les données du site sur ce titre, jusqu'à la décision</p>
+        <p className="text-muted2 text-xs mt-1">{o.screen?.sector || o.fund?.sector || "—"} · tout ce que le site sait sur cet actif, et ce qu'il en conclut</p>
       </div>
       {!known ? (
-        <EmptyState title={`${sym} inconnu du snapshot`} hint="Hors univers courant (mobile_universe) — vérifie l'orthographe ou l'univers." />
+        <EmptyState title={`${sym} : cet actif n'est pas suivi`} hint="Il ne fait pas partie de la liste des actifs analysés. Vérifiez l'orthographe, ou consultez la page « Tout ce que le site surveille »." />
       ) : (
         <>
           <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <MetricCard label="Note du filtre" value={o.screen?.score != null ? o.screen.score.toFixed(2) : "n/d"} />
+            <MetricCard label="Note du tri" value={o.screen?.score != null ? o.screen.score.toFixed(2) : "n/d"} explication="Plus elle est haute, mieux l'actif se place dans le tri du jour." />
             <MetricCard label="Évolution sur 1 an" value={pct(o.screen?.ret_12m)} tone={(o.screen?.ret_12m ?? 0) >= 0 ? "pos" : "neg"} />
             <MetricCard label="Ce que je détiens" value={o.pos ? usd(o.pos.market_value) : "aucune"} />
-            <MetricCard label="Ce que je devrais détenir" value={o.tgt?.weight != null ? `${(o.tgt.weight * 100).toFixed(1)}%` : "hors cible"} />
+            <MetricCard label="Ce que je devrais détenir" value={o.tgt?.weight != null ? `${(o.tgt.weight * 100).toFixed(1)}%` : "hors cible"} explication="La part que le portefeuille modèle lui donnerait. « Hors cible » = il ne le retient pas." />
           </section>
 
           <BlocDecision d={decision} />
 
           {o.rank?.factors && Object.keys(o.rank.factors).length > 0 && (
-            <Bloc title="Le détail du score" source="ranking multi-facteur · z-scores">
+            <Bloc title="Le détail de sa note" source="chaque critère, en écart à la moyenne du marché">
               <div className="flex flex-wrap gap-2">
                 {Object.entries(o.rank.factors as Record<string, number>)
                   .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
@@ -149,27 +150,27 @@ function Fiche() {
             </Bloc>
           )}
 
-          <Bloc title="Santé de l'entreprise" source="valeur estimée (DCF) · qualité des comptes · risque de faillite">
+          <Bloc title="Santé de l'entreprise" source="ce qu'elle semble valoir · la qualité de ses comptes · son risque de faillite">
             {o.fund ? (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                 <div><div className="text-muted text-[11px]">Note globale</div><div className="mono text-lg">{o.fund.combined_score ?? "n/d"}</div></div>
                 <div><div className="text-muted text-[11px]">Qualité des comptes</div><div className="mono text-lg">{o.fund.piotroski ?? "n/d"}<span className="text-muted2 text-xs">/9</span></div></div>
-                <div><div className="text-muted text-[11px]">Distance à la faillite</div><div className="mono text-lg">{o.fund.altman_z ?? "n/d"}</div></div>
+                <div title="Au-dessus de 2,99 : solide. En dessous de 1,81 : en danger. Entre les deux : zone grise."><div className="text-muted text-[11px]">Distance à la faillite</div><div className="mono text-lg">{o.fund.altman_z ?? "n/d"}</div></div>
                 <div><div className="text-muted text-[11px]">Décote sur la valeur estimée</div><div className="mono text-lg">{pct(o.fund.margin_of_safety)}</div></div>
               </div>
-            ) : <p className="text-muted2 text-sm">n/d — pas de fondamentaux pour cet actif (crypto/ETF ou hors couverture).</p>}
+            ) : <p className="text-muted2 text-sm">Rien à afficher : une crypto ou un ETF n'a pas de comptes d'entreprise, et certaines sociétés ne sont pas couvertes par nos sources.</p>}
           </Bloc>
 
           <Bloc title="Ce que disent les nouvelles" source="fils de presse gratuits · analyse automatique du ton">
             {o.sent ? (
               <p className="text-sm"><span className="mono" style={{ color: (o.sent.score ?? 0) >= 0 ? "var(--pos)" : "#f43f5e" }}>
-                score {o.sent.score?.toFixed?.(2) ?? o.sent.score}</span>
+                ton des articles {o.sent.score?.toFixed?.(2) ?? o.sent.score}</span>
                 {o.sent.headline && <span className="text-muted"> · {o.sent.headline}</span>}</p>
-            ) : <p className="text-muted2 text-sm">n/d — aucune news récente pour cet actif.</p>}
+            ) : <p className="text-muted2 text-sm">Aucun article récent trouvé sur cet actif.</p>}
           </Bloc>
 
           {o.pos && (
-            <Bloc title="Ma position" source={`${o.pos.broker ?? "broker"} · paper`}>
+            <Bloc title="Ce que je détiens" source={`${o.pos.broker ?? "courtier"} · simulation`}>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mono">
                 <div><div className="text-muted text-[11px] font-sans">Quantité</div>{(o.pos.qty ?? 0).toFixed(4)}</div>
                 <div><div className="text-muted text-[11px] font-sans">Prix d'achat moyen</div>{usd(o.pos.avg_price)}</div>
@@ -179,7 +180,7 @@ function Fiche() {
               </div>
             </Bloc>
           )}
-          <p className="text-muted2 text-[10px]">Aide à la décision — pas un conseil en investissement.</p>
+          <p className="text-muted2 text-[10px]">De quoi décider en connaissance de cause — mais la décision reste la vôtre. Ce n'est pas un conseil en investissement.</p>
         </>
       )}
     </main>

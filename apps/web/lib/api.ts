@@ -19,14 +19,87 @@ async function get<T>(path: string): Promise<T> {
   return r.json();
 }
 
+// Une requête qui n'ARRIVE PAS à l'API n'est pas une donnée manquante. Le navigateur rend
+// « TypeError: Load failed » (Safari) ou « Failed to fetch » (Chrome) pour TOUTE panne de
+// transport — API éteinte, mauvais port, origine refusée par le CORS — et ces chaînes ne
+// disent rien de ce qu'il faut faire. Les relayer telles quelles sous « Analyse historique
+// indisponible » accusait la donnée alors que le corps de la requête n'était jamais parti
+// et qu'aucune base n'avait été ouverte (07/09).
+// Origines que l'API autorise par défaut (apps/api/main.py). Un front servi ailleurs — le cas
+// le plus courant : Next.js bascule tout seul sur 3001 quand 3000 est déjà pris — est refusé
+// par le CORS AVANT d'atteindre l'API, ce que le navigateur rapporte comme une panne réseau
+// indiscernable d'une API éteinte. Sans cette liste, le message renvoyait vers « make start »
+// pour une cause qui n'avait rien à voir (07/09).
+const ORIGINES_AUTORISEES = ["http://localhost:3000", "http://127.0.0.1:3000",
+  "http://localhost:3001", "http://127.0.0.1:3001", "http://localhost:8080"];
+
+function _raisonTransport(): string {
+  const origine = typeof location === "undefined" ? "" : location.origin;
+  const tete = `API injoignable à ${BASE} : la requête n'a pas abouti, aucun historique n'a été lu.`;
+  if (ORIGINES_AUTORISEES.includes(origine))
+    return `${tete} Vérifier que « make start » tourne — curl ${BASE}/health.`;
+  const local = /^https?:\/\/(localhost|127\.0\.0\.1)(:|$)/.test(origine);
+  if (local) return `${tete} La page est servie depuis ${origine}, qui n'est pas dans les origines `
+    + `autorisées PAR DÉFAUT par l'API (${ORIGINES_AUTORISEES.join(", ")}) : le CORS refuse alors la requête avant `
+    + `qu'elle parte. Libérez le port 3000 et relancez, ou ajoutez ${origine} à QUANT_CORS_ORIGINS.`;
+  return `${tete} La page est servie depuis ${origine} : « localhost » y désigne CET appareil, `
+    + `pas la machine qui héberge l'API. Définir NEXT_PUBLIC_API_URL sur son adresse et ajouter `
+    + `cette origine à QUANT_CORS_ORIGINS.`;
+}
+
+const _indisponible = (reason: string) => ({ available: false, reason, missing: [], coverage: 0 });
+
 export async function analyzePortfolio(positions: { ticker: string; weight: number | null }[]) {
-  if (STATIC) return { available: false, reason: "analyse dynamique disponible en local avec make start" };
+  if (STATIC) return _indisponible("analyse dynamique disponible en local avec make start");
   const payload = { positions: positions.filter((row) => row.weight != null).map((row) => ({
     symbol: row.ticker, weight: Number(row.weight) / 100,
   })), years: 5 };
-  const response = await fetch(`${BASE}/api/portfolio/analyze`, { method: "POST",
-    headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-  if (!response.ok) throw new Error(`Analyse portefeuille : ${response.status}`);
+  let response: Response;
+  try {
+    response = await fetch(`${BASE}/api/portfolio/analyze`, { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  } catch {
+    return _indisponible(_raisonTransport());
+  }
+  if (!response.ok) {
+    return _indisponible(`API ${BASE}/api/portfolio/analyze : HTTP ${response.status}. `
+      + `L'API répond mais refuse la requête ; l'historique n'est pas en cause.`);
+  }
+  return response.json();
+}
+
+// Univers RECOMMANDÉ : ce que le robot proposerait de détenir, indépendamment de ce qui
+// est détenu. Distinct de `optimal_allocation`, qui ne répartit le risque que sur les
+// lignes déjà en portefeuille et ne peut donc rien proposer de nouveau.
+// Le profil déclaré dans l'onglet « Mon profil » vit dans CE navigateur (clé `quant.profil`).
+// On le transmet à chaque appel, exactement comme la page de profil interroge déjà `/api/profil` :
+// l'API calcule et ne conserve rien. Sans profil enregistré, la recommandation reste ce qu'elle
+// était — bornée par le seul plafond de ligne.
+function _lireLocal(cle: string): unknown | null {
+  try {
+    const brut = localStorage.getItem(cle);
+    return brut ? JSON.parse(brut) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function recommendUniverse(n: number, maxWeight: number,
+  positions: { ticker: string; weight: number | null }[] = [], years = 5) {
+  if (STATIC) return _indisponible("recommandation disponible en local avec make start");
+  let response: Response;
+  try {
+    response = await fetch(`${BASE}/api/portfolio/recommend`, { method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ n, years, max_weight: maxWeight,
+        profil: _lireLocal("quant.profil"),
+        preferences: _lireLocal("quant.preferences"),
+        positions: positions.filter((r) => r.weight != null)
+          .map((r) => ({ symbol: r.ticker, weight: Number(r.weight) / 100 })) }) });
+  } catch {
+    return _indisponible(_raisonTransport());
+  }
+  if (!response.ok) return _indisponible(`API ${BASE}/api/portfolio/recommend : HTTP ${response.status}.`);
   return response.json();
 }
 

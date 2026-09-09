@@ -22,7 +22,9 @@ def main() -> None:
     except Exception as e:  # noqa: BLE001
         print(f"snapshot indisponible : {e}"); return
     cur = snap.get("index_core_curves", {}) or {}
-    pa = PerformanceAnalytics.from_curves(cur.get("preset") or [], cur.get("qqq") or [])
+    pa = PerformanceAnalytics.from_curves(cur.get("preset") or [], cur.get("qqq") or [],
+                                          dates=cur.get("dates") or [],
+                                          benchmark_dates=cur.get("qqq_dates") or [])
     md = pa.to_markdown_summary("Preset — performance (net de frais) vs QQQ")
     out = ROOT / "vault" / "Performance_Report.md"
     try:

@@ -75,6 +75,32 @@ def _expo_vol_cible(equity: list, vol_cible: float, fenetre: int) -> float:
     return min(1.0, vol_cible / vol)
 
 
+def _sortie(bar, ot: dict, atr_t: float, sma_longue: float, trail_atr: float,
+            *, verrouille: bool = False) -> tuple[float | None, str | None]:
+    """(prix, motif) de sortie pour cette barre, ou (None, None) pour tenir la position.
+
+    Trois sorties MOLLES — cible atteinte, stop suiveur, cassure de la MM longue — et
+    une sortie DURE, le stop initial. `verrouille=True` (détention minimale non écoulée)
+    diffère les molles et ne touche pas à la dure : laisser courir un trade ne veut pas
+    dire retirer son garde-fou, sinon le maxDD mesuré ne décrirait plus le même risque.
+    """
+    stop_dur = ot["stop"]
+    if stop_dur is not None and bar.low <= stop_dur:
+        return stop_dur, "stop_hit"
+    if verrouille:
+        return None, None                       # détention minimale : on tient
+    eff_stop = stop_dur                          # stop suiveur = protection des gains
+    if trail_atr > 0 and not _isnan(atr_t):
+        eff_stop = max(eff_stop, ot["hh"] - trail_atr * atr_t)
+    if eff_stop is not None and bar.low <= eff_stop:
+        return eff_stop, "trailing_stop"
+    if ot["target"] is not None and bar.high >= ot["target"]:
+        return ot["target"], "target_hit"
+    if not _isnan(sma_longue) and bar.close < sma_longue:
+        return bar.close, "cassure tendance (MM longue)"
+    return None, None
+
+
 def _taille(eq: float, fillp: float, atr: float, room: float, frac_cap: float,
             target_annual_vol: float, inst_vol: float, atr_stop: float,
             risque_par_trade: float, miette_min: float) -> tuple[float, bool]:
@@ -116,11 +142,19 @@ def fast_swing_backtest(
     rs_lookback: int = 126, daily_max_loss: float = 0.0, trail_atr: float = 0.0,
     next_open_fills: bool = False, risque_par_trade: float = 0.0,
     miette_min: float = 0.5, vol_cible: float = 0.0, vol_fenetre: int = 20,
+    detention_min: int = 0,
 ):
     """Retourne (broker, journal, equity_curve, timestamps).
 
     close_at_end=False laisse les positions ouvertes en fin de fenêtre (utile pour
     afficher les « trades en cours » : elles restent dans broker.positions()).
+
+    `detention_min` (en BARRES, donc en séances pour du daily) verrouille les sorties
+    MOLLES pendant les N premières barres : cible atteinte, stop suiveur et cassure de
+    tendance sont différés. **Le stop INITIAL passe toujours** — un verrou qui
+    l'ignorerait ne testerait pas « laisser respirer le trade », il testerait « tenir
+    sans risque contrôlé », et le maxDD mesuré ne voudrait plus rien dire.
+    0 = comportement actuel, aucun verrou.
     """
     costs = costs or CostModel()
     acmap = asset_classes or {}
@@ -162,20 +196,9 @@ def fast_swing_backtest(
             ot["mfe"] = max(ot["mfe"], bar.close - ot["entry_price"])
             ot["mae"] = min(ot["mae"], bar.close - ot["entry_price"])
             ot["hh"] = max(ot.get("hh", ot["entry_price"]), bar.high)
-            # stop effectif = max(stop initial, trailing stop ATR) → on protège les gains
-            eff_stop = ot["stop"]
-            if trail_atr > 0 and not _isnan(atr[s][t]):
-                eff_stop = max(eff_stop, ot["hh"] - trail_atr * atr[s][t])
-            exit_px = exit_reason = None
-            if eff_stop is not None and bar.low <= eff_stop:
-                exit_px = eff_stop
-                exit_reason = "trailing_stop" if eff_stop > ot["stop"] + 1e-9 else "stop_hit"
-            elif ot["target"] is not None and bar.high >= ot["target"]:
-                exit_px, exit_reason = ot["target"], "target_hit"
-            else:
-                smx = sma_x[s][t]                            # on laisse courir : sortie SEULEMENT
-                if not _isnan(smx) and bar.close < smx:      # sur cassure de la MM longue
-                    exit_px, exit_reason = bar.close, "cassure tendance (MM longue)"
+            exit_px, exit_reason = _sortie(
+                bar, ot, atr[s][t], sma_x[s][t], trail_atr,
+                verrouille=(t - ot.get("t0", t)) < detention_min)
             if exit_px is not None:
                 tid += 1
                 _close(broker, journal, s, ot, exit_px, bar.ts, exit_reason, costs, tid,
@@ -239,6 +262,7 @@ def fast_swing_backtest(
                     continue
                 gross += qty * fillp                        # consomme la marge d'exposition
                 open_t[s] = {"entry_price": pos.avg_price, "qty": qty, "entry_ts": fill_ts,
+                             "t0": t,               # barre d'entrée (détention min)
                              "stop": fillp - atr_stop * a, "target": fillp + rr * atr_stop * a,
                              "reason": "pullback en tendance (top conviction)",
                              "mfe": 0.0, "mae": 0.0, "hh": fillp,

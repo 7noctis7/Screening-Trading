@@ -2,6 +2,1842 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0118 — 1 906 lignes jamais exécutées, et rien ne les comptait (2026-09-09)
+
+**Contexte.** Audit institutionnel demandé sur quatre axes (point-in-time, DSR/CPCV, HRP,
+microstructure). **La quasi-totalité de ce qui était demandé existe déjà** : `ml/cpcv.py`,
+`ml/labeling.py` (triple barrière), `ml/meta.py`, `portfolio/psr.py` (formule
+Bailey–López de Prado, skew et kurtosis au dénominateur), `portfolio/pbo.py`,
+`research/fdr.py` (Benjamini-Hochberg), `data/survivorship.py`, `execution/impact.py`
+(racine carrée), `almgren_chriss.py`, `portfolio/evt.py`, `rmt_denoise.py`. 375 modules,
+373 fichiers de test.
+
+**UNE PRÉMISSE DE L'AUDIT ÉTAIT FAUSSE.** `cvar_historical` est NON PARAMÉTRIQUE — seuil
+empirique, moyenne de la queue observée. Il n'y a aucune hypothèse de normalité à corriger :
+les queues épaisses sont dans les données par construction.
+
+**LE SEUL MANQUE RÉEL DE LA LISTE** : les barres non temporelles (volume/tick/dollar/
+information-driven). Recherche élargie, zéro implémentation.
+
+**MAIS LE VRAI CONSTAT EST AILLEURS.** Dix modules déclarent `STATUT = "SHADOW_UNCALIBRATED"`
+et « Aucun appelant en production ». Mesure d'atteignabilité transitive depuis `run_live`,
+`snapshot` et `main` : **1 906 lignes jamais exécutées**. Le système ne manque pas de
+machinerie institutionnelle, il manque de CÂBLAGE. Ajouter CPCV ou la triple barrière
+produirait un onzième module fantôme.
+
+**CE QUI ÉTAIT PIRE ENCORE : rien ne revérifiait ces déclarations.** « Aucun appelant en
+production » était vrai le jour de l'écriture. Un import ajouté six semaines plus tard fait
+entrer un module en production sans qu'il cesse de jurer le contraire — et
+`15_CERTIFICATION.md` pose pourtant que « un composant non certifié en prod = finding P0 ».
+
+**Décision.** `packages/common/certification.py` mesure l'atteignabilité TRANSITIVE depuis
+les points d'entrée de production. `make certification` sort en 1 si un module SHADOW y est
+joignable. Sabotage vérifié : un import de `risk/disjoncteur` glissé dans `snapshot.py` fait
+tomber le gate ; retiré, il repasse.
+
+**DEUX GRAVITÉS, PAS UNE.** Un module SHADOW ATTEIGNABLE ment sur son statut → bloquant. Un
+module SHADOW inatteignable est une DETTE à trancher → compté, jamais bloquant. Confondre
+les deux ferait d'un inventaire une alarme permanente, donc une alarme ignorée.
+
+**CONTRÔLE NÉGATIF.** Un test vérifie que `atteignables` renvoie plus de 50 modules et
+contient `risk.limits` : sans lui, un calcul cassé donnerait « zéro incohérence » pour une
+mauvaise raison, et le gate passerait au vert en ne mesurant rien.
+
+**VERDICT PAR MODULE, mesuré.** Rien à supprimer — contrairement à ma première lecture,
+`disjoncteur` n'est PAS un doublon de `live_guards.dd_kill_switch` : celui-ci coupe sur le
+DRAWDOWN, celui-là sur la perte du JOUR, réalisée et latente, sans réarmement. Mécanismes
+différents. `frictions` ne renchérit pas `costs.CostModel`, il le DÉCOMPOSE (commission /
+fourchette / glissement) — même total, décisions opposées selon le poste dominant.
+
+| module | l. | verdict |
+|---|--:|---|
+| `research/protocole_oos` | 113 | BRANCHER sur `gate.py` — ferme le trou du `n_essais` choisi |
+| `risk/disjoncteur` | 89 | BRANCHER — perte journalière ≠ drawdown |
+| `execution/frictions` | 105 | BRANCHER en lecture — décomposition, risque nul |
+| `indicators/market_structure` | 225 | STATUT à corriger : déjà utilisé par `make labs` |
+| îlot swing (6 modules) | 1 374 | **DÉCISION UTILISATEUR** — stratégie entière jamais exécutée |
+
+**Conséquences.** 2397 tests, 6 ajoutés. Aucun code supprimé, aucun branchement fait : cette
+session mesure et outille. Les branchements changent le comportement d'exécution et méritent
+chacun leur décision.
+
+## ADR-0117 — J'arrête de recommander la réparation du journal (2026-09-09)
+
+**Contexte.** Deuxième passage de la chaîne, cette fois avec le code corrigé (ADR-0115) et
+le garde-fou de cohérence (ADR-0116). **Les deux correctifs ont fait leur travail** : les
+lots reconstitués portent des prix justes — BTC 79 499 $ le 04/09, 81 132 $ le 03/09,
+77 330 $ le 02/09, tous cohérents avec le marché — et le coût de revient reconstitué tombe
+de 83 804 $ à 16 538 $, c'est-à-dire aux seuls fills réellement non couverts. Le garde-fou
+n'a rien eu à refuser, parce qu'il n'y avait plus rien d'incohérent à écrire.
+
+**ET LE RÉSULTAT EST QUAND MÊME PIRE.**
+
+| | |
+|---|--:|
+| réalisé avant | +245,33 $ |
+| réalisé après | **−1 203,05 $** |
+| variation | **−1 448,38 $** |
+| annoncé par la chaîne (+39,98 fermetures, −262,38 doublon) | −222,40 $ |
+| **non expliqué** | **−1 225,98 $** |
+
+L'écart de réconciliation passe de +168,76 $ (état propre du matin) à **+1 693,66 $**.
+
+**CE QUE ÇA DIT, ET QUI N'EST PAS UNE HISTOIRE DE FUSION.** Une chaîne qui annonce −222 $
+et en produit −1 448 $ ne se contente pas d'écrire ce qu'elle décrit : ajouter des
+OUVERTURES ré-apparie le FIFO, et des fermetures déjà enregistrées changent de contrepartie.
+La réparation ne s'ajoute donc pas au registre, elle le RECALCULE — sans le dire.
+
+**LA CAUSE EST EN AMONT, ET LE DIAGNOSTIC LA NOMME.** NWL porte 1,74× la quantité achetée,
+MAS 1,91×, réparties sur 7 et 6 identifiants `LEG-…` distincts, tous `legacy=1`. Le
+diagnostic le lit lui-même : « un seul préfixe portant 2× = le chemin d'ÉCRITURE crée deux
+identités ». Et 0 lot ouvert sur 67 s'apparie à une vente du courtier. Le journal ne
+souffre pas d'un défaut de réparation : il souffre d'un **chemin d'écriture qui dédouble**.
+Réparer en aval d'un writer qui duplique, c'est empiler des corrections sur une base qui
+se corrompt pendant qu'on la corrige — ça ne peut pas converger.
+
+**Décision. J'ARRÊTE DE RECOMMANDER CETTE CHAÎNE.** Deux tentatives, deux dégradations de
+la réconciliation. Le journal du VPS est restauré depuis
+`journal.avant-completion-20260909-104503.db` et **laissé tel quel**. `make reparer-journal`
+reste dans le dépôt — la mécanique et les garde-fous sont justes — mais il ne doit plus
+être lancé avant que le dédoublement à l'écriture soit fermé.
+
+**CE QUE ÇA NE COÛTE PAS.** Rien à l'exécution. `run_live` lit les positions du COURTIER,
+jamais le journal. Le registre est une comptabilité, pas une commande : le robot tourne
+correctement avec un journal faux.
+
+**CE QUE ÇA COÛTE VRAIMENT.** Les statistiques du panneau. Et c'est la P0 `legacy` déjà
+ouverte, qui devient la seule chose à traiter côté journal.
+
+## ADR-0116 — Le contrôle existait, il tournait APRÈS l'écriture (2026-09-09)
+
+**Contexte.** ADR-0115 a corrigé la cause des faux lots. Restait la question qui compte
+davantage : pourquoi rien n'a arrêté l'écriture. Or le rapprochement qui l'aurait
+attrapée existait déjà — `diag_journal_compte._base_de_cout` compare le prix d'entrée de
+chaque lot à la clôture de son jour. Il tournait APRÈS. Il a donc constaté le dégât au
+lieu de l'empêcher : un lot BTC inscrit à 76 801 $ à une date où le marché cotait
+~61 700 $, soit **+24 %**.
+
+**Décision.** `lots_incoherents` — fonction pure, testable hors-ligne — compare chaque lot
+du PLAN au cours de sa date. `completer_ouvertures` la consulte **avant** toute écriture et
+sort en 1 si un seul lot dépasse 10 %.
+
+**FAIL-CLOSED, ET SUR LE LOT ENTIER.** Écrire les lots valides en taisant les autres
+laisserait un registre à moitié réparé dont personne ne saurait quelle moitié — l'état
+exact qui a coûté cette journée. Un outil qui écrit dans une comptabilité s'arrête quand il
+n'est plus sûr.
+
+**MAIS PAS SUR UN SILENCE.** Un cours introuvable ne condamne pas un lot : bloquer une
+réparation parce que la base de prix ne répond pas transformerait une absence de mesure en
+verdict. Un test le fixe.
+
+**POURQUOI 10 %.** Un fill s'exécute DANS la journée, la référence est la CLÔTURE :
+quelques points d'écart sont normaux, et le crypto bouge plus qu'une action. 10 % laisse
+passer une journée agitée et arrête ce qui n'est pas un prix de ce jour-là. Le lot fautif
+était à +24 %.
+
+**UNE SEULE COMMANDE.** `make reparer-journal` enchaîne les six étapes dans l'ordre imposé
+par les scripts eux-mêmes (entrées → sorties → ventes inversées → chronologie → doublons →
+vérification). Le `&&` implicite de make fait que le refus de l'étape 1 arrête tout. On ne
+demande plus à l'utilisateur de retenir un ordre dont l'inversion casse le registre.
+
+**Conséquences.** 2391 tests, 3 ajoutés. Le dernier vérifie que le plan CORRIGÉ passe le
+contrôle qui refuse le fusionné : les deux correctifs se répondent.
+
+## ADR-0115 — La réparation du journal fabriquait des pertes qui n'ont pas eu lieu (2026-09-09)
+
+**Contexte.** La chaîne de réparation a été appliquée sur le compte réel. Elle a DÉGRADÉ
+le registre, et son propre indicateur de succès le dit :
+
+| | avant | après |
+|---|--:|--:|
+| réalisé (tous lots) | +245,33 $ | **−3 928,58 $** |
+| écart de réconciliation | **+168,76 $** | **+4 490,52 $** |
+| variation RÉELLE du compte | +990,08 $ | +1 018,22 $ |
+
+Le compte a bougé de +28 $ pendant que le journal bougeait de −4 174 $. Une réparation ne
+peut pas changer ce qui s'est passé.
+
+**LA PREUVE QUI TRANCHE.** Trois écritures de fermeture impliquent des variations d'une
+nuit : BTC reconstitué à 76 801 $ le 07-07 puis fermé à 61 731 $ le 07-08 (**−19,6 %**),
+ETH **−29,1 %**, LTC **−13,1 %** — la même nuit. Elles pèsent −3 140 $, soit **davantage
+que la totalité** des −2 754 $ du lot : tout le reste est net positif. Et cette nuit-là
+n'existe pas sur la courbe du compte, que `diag_journal_compte` déclare sans mouvement
+suspect. L'écart de +4 490 $ devrait par ailleurs valoir `latent(début)` : il faudrait que
+les positions du 22 juin portent +4 490 $ de latent sur un compte de 99 594 $ à son
+premier point. Invraisemblable.
+
+**LA CAUSE, ET ELLE EST STRUCTURELLE.** `ouvertures_manquantes` fusionnait les fills non
+couverts en UN lot portant leur VWAP et la date du PLUS ANCIEN d'entre eux. Prix et date
+venaient donc de tranches différentes. Or `_reste_fifo` consomme les fills les plus
+ANCIENS : le reste non couvert est fait des plus RÉCENTS, donc des plus CHERS sur un actif
+qui monte — daté, lui, du plus ancien. Le FIFO fermait ensuite ce lot EN PREMIER, contre
+des ventes réelles. Sur un actif en hausse, la perte fabriquée est **systématique**, pas
+malchanceuse. BTC valait ~61,7 k$ en juillet et ~78 k$ en août-septembre : le VWAP tardif
+de 76 801 $ a été daté du 7 juillet, puis vendu au prix de juillet.
+
+**LE TEST LE DÉCRIVAIT DÉJÀ.** `test_fill_coupe_en_deux…` affirmait « 40 unités à 10 $ le
+08-01 + 100 à 30 $ le 08-02 → UN lot de 140 à 24,29 $ daté du 08-01 ». Un lot qui n'a
+jamais existé : au 08-01 il n'y avait que 40 unités, à 10 $. Le défaut était écrit noir sur
+blanc dans un test qui passait — un test peut verrouiller un bug aussi bien qu'un
+comportement.
+
+**Décision.** UN LOT PAR FILL non couvert, chacun à SA date et SON prix. La chronologie et
+le coût de revient sont conservés exactement ; le FIFO ferme ce qui a réellement été acheté
+en premier. L'identifiant du lot devient une empreinte du CONTENU (symbole, date, quantité,
+prix) : il y a désormais plusieurs lots par symbole, et une clé au seul symbole les aurait
+écrasés entre eux — la moitié du coût de revient aurait disparu en silence.
+
+**Conséquences.** 2388 tests, 3 régressions ajoutées, sabotage vérifié dans les deux sens.
+Le journal du VPS reste à restaurer depuis `journal.avant-completion-20260909-091516.db` :
+la mesure d'avant réparation (+168,76 $) était la bonne.
+
+## ADR-0114 — Boucher un axe et laisser l'autre, ce n'est pas corriger (2026-09-09)
+
+**Contexte.** ADR-0113 a fait disparaître « nom QQQ 50 % > 20 % » du post-mortem. Le
+passage du soir sur le VPS a publié, le même jour, sur le même actif et le même poids :
+« **secteur ETF 50 % > 40 %** ». Le franchissement n'avait pas été réparé, il avait changé
+d'axe.
+
+**Pourquoi il repasse.** `_sector_of` renvoie « ETF » sur la CLASSE D'ACTIF, avant même de
+regarder le GICS. Le seau « ETF » n'est donc pas un secteur : c'est le même véhicule sous un
+autre libellé. `index_names` neutralise le plafond de NOM ; rien ne neutralisait le plafond
+de SECTEUR. Un look-through qui s'arrête à un seul axe ne fait pas de look-through.
+
+**Ce que le projet savait déjà.** `_themes_section` exclut littéralement `{"Forex",
+"Indices", "ETF", "Commodités"}` de la heatmap sectorielle — le code sait que ces libellés
+ne sont pas des secteurs. La connaissance était présente ; elle n'était pas branchée sur les
+limites.
+
+**Décision.** `concentration_report` prend `index_sectors` : ces libellés reçoivent
+`max_index` (60 %) au lieu de `max_sector` (40 %), et leur franchissement porte le type
+`secteur indiciel`. `_SECTEURS_VEHICULE = {"ETF", "Indices"}` est passé aux **quatre** sites
+d'appel de `snapshot.py`.
+
+**PÉRIMÈTRE STRICT, et un test négatif pour le tenir.** Forex, Commodités et Crypto ne sont
+PAS requalifiés : ce sont des classes d'actifs, et 45 % sur l'une d'elles est une vraie
+concentration. Un test le vérifie explicitement — sans lui, élargir `index_sectors` « pour
+faire propre » désarmerait la limite en silence, et personne ne le verrait.
+
+**Le verrou couvre les deux paramètres.** Le test qui relit `snapshot.py` exige désormais
+`index_names` ET `index_sectors` sur chaque appel. Sabotage vérifié sur le nouveau
+paramètre : retiré → échec, remis → succès.
+
+**Ce que ça ne règle pas.** « Actions diverses 47,5 % » reste. Le carnet du post-mortem en
+nomme les membres — TRV, TMO, THC, VZ, TEN, VLO, STT — tous des grandes capitalisations
+dont le secteur GICS est parfaitement connu. Ce n'est donc pas une requalification qu'il
+faut, c'est le champ `sector` à peupler. Défaut de données confirmé par la mesure, P1
+maintenue.
+
+**Conséquences.** 2386 tests, 3 ajoutés. Aucun poids ne bouge, ici non plus.
+
+## ADR-0113 — QQQ à 50 % n'était pas un arbitrage : un appelant avait perdu la règle (2026-09-09)
+
+**Contexte.** J'ai présenté à l'utilisateur le franchissement « QQQ 50 % contre un plafond
+de nom à 20 % » comme un ARBITRAGE entre deux options : reclasser les trackers sous
+`max_index`, ou plafonner le cœur sous 20 %. C'était faux. Le projet avait déjà tranché.
+
+**CE QUE LE CODE DIT DÉJÀ.** `packages/risk/limits.py` porte le paramètre `index_names` et
+son plafond `max_index=0.60`, documentés mot pour mot : « Un tracker n'est pas un risque
+d'émetteur unique (look-through, esprit UCITS) → plafond dédié. Fix audit 06/07 : le cœur
+QQQ déclenchait à tort la limite « nom » 20 % → n_breaches=2 permanent, alarme devenue
+bruit. » Un test le vérifiait déjà — `test_index_vehicle_uses_dedicated_cap`.
+
+**LA VRAIE CAUSE.** `index_names` est OPTIONNEL, donc oubliable. Deux rapports de
+concentration coexistent dans `snapshot.py` : celui du tableau de bord (l. 1928) le passait,
+celui du portefeuille preset (l. 2641) non. Et c'est le SECOND que lit le post-mortem —
+`incident_note` va chercher `portfolio.analysis.limits`. D'où un franchissement publié tous
+les jours sur un cœur core-satellite conforme, pendant que le tableau de bord ne signalait
+rien. Deux verdicts, même portefeuille, même journée : c'est ce désaccord qui aurait dû
+alerter, pas le chiffre.
+
+**Décision.** Le site preset déclare ses véhicules indiciels, exactement comme le tableau
+de bord. Et l'invariant est verrouillé à la source : un test relit `snapshot.py` et échoue
+si un appel au rapport de concentration omet `index_names`. Vérifié par sabotage — le
+paramètre retiré fait tomber le test, remis le fait passer. Le plafond indiciel RESTE un
+plafond : à 65 %, le tracker franchit `max_index` et alerte.
+
+**CE QUE JE N'AI PAS FAIT, ET POURQUOI.** `decision_journal.py` appelle aussi sans
+`index_names`, et je l'ai laissé : il note des candidats de SCREENING, du stock-picking, où
+le plafond de nom à 20 % est le bon. Changer là serait appliquer une symétrie plutôt qu'une
+règle.
+
+**LE SECOND FRANCHISSEMENT N'EST PAS CE QU'IL PARAÎT.** « Secteur Actions diverses 47,5 % >
+40 % » : `_sector_of` renvoie « Actions diverses » en DERNIER RECOURS —
+`_GICS_MAP.get(sec, "Actions diverses")` — pour une ACTION dont le champ secteur est vide ou
+hors GICS. Crypto, forex, ETF, indices, commodités ont chacun leur branche avant. Ce n'est
+donc pas un secteur : c'est « secteur inconnu ». 47,5 % ne dit pas « la moitié du livre sur
+un secteur », mais « la moitié du livre non classée » — et donc une concentration
+sectorielle NON MESURABLE, pas une concentration constatée. Défaut de données, pas
+d'allocation. Non corrigé ici : la composition du seau demande la base réelle, absente de ce
+conteneur. Ouvert en P1.
+
+**Conséquences.** 2383 tests, 2 ajoutés. Le franchissement de nom disparaît des post-mortem
+sans qu'aucun poids ne bouge — parce qu'il n'existait pas.
+
+## ADR-0112 — Douze décisions datées d'un jour qui n'existait pas encore (2026-09-09)
+
+**Contexte.** Les ADR-0100 à 0111, l'en-tête de séance du journal et un enregistrement du
+registre d'hypothèses portaient la date **2026-09-10**. Nous étions le **2026-09-09** : les
+lancements sur le VPS sont horodatés `2026-09-09T07:33 UTC` et l'incident du jour est
+`incident_2026-09-09.md`. Quatorze horodatages écrits au lendemain, en une seule journée,
+sans que rien ne le signale.
+
+**Pourquoi ça compte plus qu'une coquille.** Toute la discipline du projet repose sur
+« quand a-t-on mesuré ça ». Une décision datée du futur casse l'ordre entre les ADR et les
+mesures qui les fondent : on ne peut plus dire si ADR-0109 a annulé ADR-0102 avant ou après
+le passage `make live` qui l'a permis. Et le registre d'hypothèses, dont la seule valeur est
+d'être un journal de mesures horodatées, portait deux protocoles différents du même facteur
+à deux dates dont l'une n'existait pas.
+
+**Décision.** Correction des quatorze horodatages, et surtout un **gate** : `dates_futures`
+refuse un en-tête d'ADR ou de séance daté après aujourd'hui, `make vault-lint` sort en
+erreur. Vérifié par sabotage — l'erreur exacte du jour remise en place fait sortir le linter
+en 1, sa correction le fait passer.
+
+**Contrôle volontairement ÉTROIT.** Seuls les EN-TÊTES. Une date future dans le CORPS d'un
+ADR — « à rejuger quand l'historique couvrira un choc de taux, au 2026-12-01 » — est un
+rendez-vous légitime, et la signaler serait un faux positif permanent. Le linter porte déjà
+cette leçon deux fois dans ses commentaires : un avertissement permanent finit par être
+ignoré, y compris les jours où il a raison. Un en-tête sans date n'est pas une erreur non
+plus : les ADR d'avant 0030 n'en portent pas.
+
+**Effet de bord corrigé.** La séance du jour devenait la deuxième « Session 2026-09-09 »
+sans numéro dans un journal qui en comptait déjà sept — renumérotée `(8ᵉ)`.
+
+**Conséquences.** 6 tests ajoutés, dont un qui balaie le vault RÉEL à la date du jour. Un
+horodatage faux ne peut plus atteindre un commit sans faire échouer le lint.
+
+## ADR-0111 — Le post-mortem annonçait trois causes et n'en nommait qu'une (2026-09-09)
+
+**Le fait, lu dans `incident_2026-09-09.md`.** L'en-tête déclare `n_breaches: 3` et
+`risk_limits_ok: false`. Le corps n'en nomme **qu'une** :
+
+```
+> [!danger] secteur=Actions diverses 0.475>0.4
+```
+
+Les deux autres n'apparaissent nulle part. `incident_note` chargeait pourtant `limits` —
+qui contient la liste complète `breaches: [{type, label, weight, limit}]` — et n'en
+affichait que le champ `top_name`. Un post-mortem qui tait deux causes sur trois envoie
+chercher au mauvais endroit, et **le compte en en-tête suffit à croire qu'on a tout lu**.
+
+**Décision.** Le post-mortem publie un tableau de TOUTES les limites franchies : type,
+libellé, poids, plafond. Et il signale le cas où les plafonds ont été **resserrés de
+moitié** par la corrélation de stress — sans cette mention, on compare un franchissement
+au plafond nominal alors qu'il a été jugé contre un plafond deux fois plus bas.
+
+**CE QUE DIT L'INCIDENT, ET IL N'EST PAS ISOLÉ.** Le secteur « Actions diverses » pèse
+**47,5 % contre un plafond de 40 %** (`config/risk.yaml : max_exposure_per_class_pct`).
+Et le carnet montre `QQQ 50 %` en concentration, contre un plafond de nom à 20 %
+(`packages/risk/limits.py : max_name`). Des incidents du même type existent aux dates du
+05, 07, 08 et 09 septembre : **ce n'est pas un accident, c'est l'allocation courante qui
+franchit la politique de risque du projet, tous les jours.**
+
+**Ce que ça n'est pas.** Ce n'est pas le sur-comptage du journal d'ADR-0109 : ces poids
+sont ceux du portefeuille MODÈLE, calculés par l'allocateur, pas une somme de lots. Le
+cœur à 50 % est un choix d'allocation (ADR-0103) ; la politique de risque dit 20 % par
+nom. **Les deux ne peuvent pas être vrais en même temps** — l'un des deux documents ment
+sur ce que le système est censé faire.
+
+**Ce qui n'est PAS décidé ici.** Lequel des deux corriger — desserrer la politique pour
+un cœur indiciel assumé, ou brider le cœur — est un arbitrage de risque, pas un
+correctif. Il est noté en P0. Le rebalancement automatique démarré aujourd'hui
+appliquera cette allocation en l'état : le portique d'ordres peut réduire, jamais
+augmenter, mais il ne remplace pas la décision.
+
+## ADR-0110 — Le linter du vault comptait sa propre documentation (2026-09-09)
+
+**Constat.** `make vault-lint` sur le VPS : **52 liens morts**. Deux d'entre eux venaient
+de `00_INDEX.md`, ligne 61 :
+
+```
+| `Cmd/Ctrl + clic` | suivre un lien `[[...]]` |
+```
+
+Ce `[[...]]` est **entre accents graves** : c'est de la documentation qui montre à quoi
+ressemble un lien, pas un lien. Le linter lisait le texte brut, y voyait `[[...]]` et
+`` [[` ]] ``, et les comptait comme morts. Un outil qui signale sa propre documentation.
+
+**Décision.** `extract_links` retire d'abord les blocs de code (```` ``` ````) puis les
+portions en ligne (`` ` ``) — dans cet ordre, parce qu'une portion en ligne peut vivre à
+l'intérieur d'un bloc, jamais l'inverse. Les gabarits (`_TEMPLATE.md`) sortent aussi du
+contrôle : `[[paper_xxx]]` y attend d'être remplacé, le signaler à chaque passage est un
+faux positif **permanent** — et un avertissement permanent finit par être ignoré, y
+compris les jours où il a raison. Localement, 3 liens morts → **0**.
+
+**Lisibilité.** Le rapport groupe désormais par CIBLE au lieu de lister chaque mention :
+« 52 mentions, 15 cibles absentes » se corrige, « 52 lignes » se saute. Ce qui se répare,
+c'est une note manquante, pas chacun de ses appels.
+
+**Ce qui n'est PAS un défaut.** Les ~50 liens restants sur le VPS sont des `[[THC]]`,
+`[[QQQ]]`, `[[TMO]]` émis par les notes hebdomadaires (`obsidian.py`, lignes 364-396).
+Ils pointent vers des notes par ticker qui n'existent pas ENCORE — et qui existeront dès
+qu'une étude d'événement en produira une (`vault/09_Events/{ticker}.md`). C'est le motif
+Obsidian normal du lien qui précède sa cible. On les compte, on ne les corrige pas.
+
+**Troisième outil de la semaine à corriger sur lui-même**, après la coche affichée sur
+les perdants du duel et la vérification de planification qui validait toute machine
+Linux. Chaque fois, le même mécanisme : l'instrument produisait du bruit ou du faux
+confort, et le bruit rendait invisible ce qu'il devait montrer.
+
+## ADR-0109 — Les 69 % de QQQ n'existaient pas : le journal sur-comptait (2026-09-09)
+
+**Le compte réel, lu par `make live` en dry-run sur le compte RÉEL** (capital Alpaca
+100 665 $, positions du courtier) :
+
+| source | QQQ détenu | part du compte |
+|---|---|---|
+| journal.db — 3 lots « ouverts » | 69 456 $ | 69,0 % |
+| **courtier Alpaca** | **43 562 $** | **43,3 %** |
+| cible de l'allocateur | 45 214 $ | 44,9 % |
+
+**Le journal sur-compte de 25 894 $**, et l'écart réel à la cible est de **−1 652 $, un
+ACHAT**. Il n'y a pas de surpoids sur QQQ : la position est légèrement SOUS sa cible.
+
+**Ce que ça annule.** J'ai publié « 69 % du portefeuille sur un seul ETF » en ADR-0102,
+puis bâti dessus en ADR-0103 (« 69 % constatés contre ≈ 54 % visés, ~15 points à
+alléger ») et une P0 au TODO. **Ce chiffre venait du journal, pas du courtier**, et il
+était faux. `diag_pv_latente` sommait trois lots QQQ que le journal croit ouverts —
+42 862 $, 25 977 $ et 617 $ — quand le courtier n'en détient qu'un. Le premier
+correspond à peu près à la position réelle ; les deux autres sont des **fantômes**, des
+lots fermés chez le courtier et jamais fermés au journal.
+
+**La leçon, et elle est déjà écrite ailleurs dans ce vault.** Le journal n'est pas la
+source de vérité des POSITIONS — le courtier l'est. `turnover_audit` le disait à sa
+façon dès le 04/09 (« 35 fermetures reconstruites après coup »), et la P0 de
+réconciliation est ouverte depuis. J'ai quand même traité une somme de lots journal comme
+une exposition réelle, et j'en ai tiré un diagnostic de concentration qui n'avait pas
+lieu d'être. **Un chiffre juste dans son fichier peut être faux dans le monde.**
+
+**Ce qui reste vrai d'ADR-0103.** Le cœur PÈSE bien la moitié du compte par construction :
+la cible QQQ est à 44,9 %, et c'est un choix d'allocation, pas une dérive. Le total suit
+donc le Nasdaq — ce point-là ne dépendait pas du chiffre faux.
+
+**Ce que le premier passage automatique fera vraiment** (19 ordres, 60 386 $) : surtout
+des ACHATS — le compte porte ~21 000 $ de cash non déployé (79 535 $ détenus sur
+100 665 $) — et six soldes (ASML, MRNA, OSCR, SJM, TSM, ZION). Côté crypto, BTC, LTC et
+ETH sont déjà sous la bande d'inaction ; `LINK` et `SOL`, hors univers cible, seront
+soldés. **Ce n'est pas le grand allègement que j'annonçais : c'est un déploiement de
+trésorerie.**
+
+**Correctif d'outil.** `diag_pv_latente` lit le journal — c'est sa raison d'être, il
+mesure la trajectoire des lots. Il dira désormais explicitement que les VALEURS qu'il
+affiche sont celles du journal et peuvent diverger du courtier, avec la commande qui
+tranche (`make live`). Un outil qui lit une source ne doit pas laisser croire qu'il lit
+l'autre.
+
+## ADR-0108 — Le crypto le week-end : ici, l'heure fixe est le BON choix (2026-09-09)
+
+**Demande.** Que le rebalancement tourne aussi le week-end pour le crypto.
+
+**Ce que ça change, et pourquoi ce n'est pas la même règle.** ADR-0107 vient d'établir
+qu'une heure fixe ne peut pas viser la clôture NYSE, parce que la cible bouge deux fois
+par an. Le crypto est le cas **exactement inverse** : il cote 24/7, il n'a ni clôture ni
+heure d'été, donc il n'y a rien à suivre. **Une heure UTC fixe est ici le choix juste**,
+et vouloir lui appliquer la mécanique de fenêtre serait de la symétrie mal placée.
+
+**Décision.** Le cron passe à `5 * * * *` — sept jours sur sept — et
+`fenetre_execution.py` route selon la nature du jour :
+
+| jour | déclencheur | ce qui part |
+|---|---|---|
+| séance NYSE | 60 min avant la clôture, heure du marché | tout, crypto compris |
+| week-end, férié | heure UTC fixe (00 h par défaut) | crypto seul — `run_live` reporte les actions |
+
+**Pourquoi 00 h UTC.** C'est la frontière du jour boursier crypto : la bougie quotidienne
+des sources du projet — klines Binance, `-USD` Yahoo — s'y ferme. Rebalancer juste après,
+c'est décider sur des barres COMPLÈTES plutôt qu'à cheval sur deux journées. Réglable par
+`QUANT_CRYPTO_HEURE_UTC`.
+
+**LE GARDE-FOU QUI COMPTE : pas de double passage.** Le déclencheur crypto ne s'arme QUE
+les jours sans séance. Les jours de bourse, le passage d'avant-clôture rebalance déjà
+tout — crypto inclus, puisqu'il cote en permanence. En ajouter un second ferait **deux
+rebalancements le même jour, donc deux fois les frais, pour exactement le même
+portefeuille**. Un test balaie un mois entier et vérifie deux choses à la fois : jamais
+les deux déclencheurs le même jour, et jamais zéro non plus — exactement un par jour, du
+lundi au dimanche, fériés compris.
+
+**Ce qui n'a pas eu à changer.** `run_live` sait déjà reporter les ordres actions hors
+séance et laisser passer le crypto (24/7). Le week-end, il fera donc spontanément un
+passage crypto seul, en le disant. Aucune logique d'exécution n'a été touchée : seule la
+question « faut-il agir maintenant ? » a reçu une seconde réponse.
+
+**Conséquence.** Un portefeuille rebalancé du lundi au vendredi dérive tout le week-end
+sur sa poche crypto, puis rattrape deux jours d'un coup le lundi — au pire moment, quand
+l'écart est maximal. C'était le cas jusqu'ici.
+
+## ADR-0107 — Un cron qu'on ne retouche plus : la fenêtre, pas l'heure (2026-09-09)
+
+**Demande.** Rebalancer une heure avant la clôture, et ne plus jamais avoir à corriger la
+planification aux changements d'heure.
+
+**Pourquoi une heure fixe ne peut pas y arriver.** La clôture de 16 h à New York tombe à
+**20 h UTC l'été** et à **21 h UTC l'hiver**. Pire, les deux bascules ne tombent pas le
+même week-end : l'européenne au dernier dimanche d'octobre, l'américaine au premier de
+novembre — pendant une semaine par an, l'écart Paris↔New York passe à cinq heures. Une
+ligne de cron gelée dérive donc au moins deux fois par an, et sur une machine dont le
+fuseau n'est pas celui du marché, elle peut viser n'importe quoi. Aucun réglage
+d'installation ne résout cela, parce que le problème n'est pas le réglage : c'est de
+figer une heure alors que la cible est définie dans une AUTRE horloge.
+
+**Décision — on ne planifie plus une heure, on planifie une fenêtre.** Le cron devient
+`5 * * * 1-5` : un réveil par heure ouvrée. À chaque réveil,
+`scripts/fenetre_execution.py` demande au calendrier du projet combien de minutes il
+reste avant la clôture — **dans l'heure du marché** — et n'autorise l'exécution que si ce
+nombre tombe dans `[cible − 30, cible + 30)`. Une seule des vingt-quatre tentatives passe,
+quelle que soit la saison, quel que soit le fuseau de la machine. Les vingt-trois autres
+sortent **en silence** : un journal rempli de « rien à faire » ne se lit plus, donc ne
+protège plus.
+
+Le calendrier connaissait déjà les fériés NYSE et la règle d'heure d'été américaine
+(`market_calendar._et`, `is_open`). Il manquait seulement `minutes_avant_cloture` — six
+lignes qui transforment une connaissance déjà présente en décision d'exécution. Rien de
+neuf n'a été recopié.
+
+**La fenêtre est SEMI-OUVERTE**, `[cible − 30, cible + 30)`. Fermée des deux côtés, une
+minute pile sur la borne déclencherait deux fois le même jour : le rebalancement partirait
+en double. Un test fixe cette propriété.
+
+**Ce que les tests garantissent.** Exactement **un** déclenchement par séance, vérifié sur
+cinq dates choisies pour leur difficulté : plein été, plein hiver, le lendemain de la
+bascule américaine, la semaine où les deux fuseaux sont désynchronisés, et après les deux
+bascules. Zéro déclenchement les week-ends et les fériés NYSE. Et la preuve que rien
+n'est figé : l'heure UTC qui déclenche vaut **19 h l'été, 20 h l'hiver** — ce qu'une ligne
+de cron ne sait pas faire seule.
+
+**Réglages.** `QUANT_LIVE_AVANT_CLOTURE=30` pour viser plus près de la clôture ;
+`QUANT_LIVE_HOUR=20` pour revenir à une heure fixe (l'ancien comportement, conservé et
+testé). `QUANT_IGNORER_FENETRE=1` pour un lancement manuel hors fenêtre.
+
+**Conséquence.** Le choix de l'heure rejoint le petit ensemble des choses que ce projet
+n'a plus à savoir : comme les fériés, comme les jours de bourse, elle se déduit d'un
+calendrier au lieu d'être recopiée dans un réglage qui se périme.
+
+## ADR-0106 — L'heure d'exécution : deux questions, une seule se mesure (2026-09-09)
+
+**Question posée.** « Quel créneau pour trader, là où historiquement ça performe le
+mieux ? » Elle en cache deux, qui n'ont pas la même nature de réponse.
+
+· **LE COÛT.** Stable, documenté, et sans besoin de mesurer : les trente premières
+  minutes concentrent l'écart achat-vente le plus large et la volatilité la plus forte ;
+  la fin de séance concentre la liquidité, l'enchère de clôture étant le moment le plus
+  liquide de la journée. Un carnet rebalancé UNE fois par jour s'exécute donc en fin de
+  séance. Cette partie ne dépend pas de l'univers.
+· **LE RENDEMENT.** Aucune règle générale ne vaut : cela dépend de l'univers, et cela se
+  mesure. D'où `make diag-creneau`.
+
+**Ce que l'instrument mesure.** Chaque séance se coupe en deux morceaux disjoints dont le
+produit redonne le rendement de clôture à clôture : la NUIT (clôture veille → ouverture,
+capturée en détenant à la clôture) et la SÉANCE (ouverture → clôture). Savoir lequel des
+deux porte le rendement historique de l'univers dit à quelle heure il faut être en
+position. Décomposition globale et par classe d'actifs.
+
+**UN GARDE-FOU QUI N'EN ÉTAIT PAS — et c'est le vrai enseignement de la journée.** Le
+danger de cette mesure est connu : si la clôture est corrigée des splits et dividendes et
+que l'ouverture ne l'est pas, chaque ajustement se loge ENTIÈREMENT dans le rendement de
+nuit. On lit « la nuit fait tout le rendement », ce qui est exactement la conclusion
+attendue — et complètement fausse.
+
+J'avais posé comme contrôle l'identité `(1+nuit)(1+journée) = 1+total`. **Elle ne
+contrôle rien.** L'ouverture s'y simplifie algébriquement : `(o/c₋₁)·(c/o) = c/c₋₁` tient
+pour n'importe quels nombres, cohérents ou non. Le test écrit pour la vérifier a renvoyé
+un écart de 0,0 sur des prix délibérément désalignés — c'est lui qui a démasqué le faux
+garde-fou, pas la relecture.
+
+Le contrôle qui mord regarde ailleurs : **l'ouverture et la clôture doivent tomber dans
+la fourchette [bas, haut] de la séance**. Si les colonnes ne partagent pas la même base,
+l'ouverture en sort, et aucune algèbre ne peut le masquer. Le script refuse de publier la
+décomposition au-delà de 1 % d'observations hors fourchette : UNCALIBRATED plutôt qu'un
+artefact.
+
+**Ce que le module ne dit pas.** Aucune stratégie. Capturer la seule nuit imposerait deux
+allers-retours quotidiens dont le coût dépasserait très probablement le gain — coût que
+ce script ne mesure pas. Il éclaire l'HEURE d'un rebalancement quotidien existant, il ne
+propose pas d'en faire deux.
+
+**Leçon de méthode, la troisième de la semaine du même genre.** Un contrôle qui ne peut
+pas échouer n'est pas un contrôle. Les deux précédents — la coche affichée sur les
+perdants du duel, la vérification de planification qui validait toute machine Linux —
+avaient la même forme : un garde-fou qui renvoyait « tout va bien » par construction.
+Celui-ci a été attrapé avant d'avoir servi, parce que le test a été écrit pour le faire
+échouer.
+
+## ADR-0105 — L'installateur de planification échouait sur la machine qui en avait besoin (2026-09-09)
+
+**Le symptôme, brut.** `make live-cron-install` sur le VPS :
+`make: *** [live-cron-install] Error 1`. Aucun message, rien d'installé.
+
+**La cause, en une ligne de shell.**
+
+```bash
+(crontab -l 2>/dev/null | grep -vF "$CRON_SH"; echo "$LINE") | crontab -
+```
+
+Sans crontab existant, `crontab -l` échoue et `grep` — qui ne sélectionne aucune ligne —
+sort en **1**. Le script tourne sous `set -euo pipefail` : le sous-shell meurt AVANT le
+`echo "$LINE"`, la nouvelle ligne n'est jamais écrite, et le tout rend 1 sans un mot.
+**L'installateur ne fonctionnait donc que sur une machine ayant DÉJÀ un crontab** —
+jamais sur celle qui en avait besoin. Reproduit ici en trois lignes de bash avant toute
+correction.
+
+**Correctif.** `{ crontab -l 2>/dev/null | grep -vF "$CRON_SH" || true; echo "$LINE"; }`
+— le `|| true` neutralise le grep vide sans masquer autre chose. Et le script **relit**
+désormais le crontab après écriture au lieu d'annoncer : il affiche la ligne trouvée, ou
+échoue explicitement en disant qu'elle n'y est pas. Un installateur qui dit « activé »
+sans vérifier est précisément ce qui a laissé ce défaut invisible.
+
+**Le test manquait, et il manquait pour une raison.** Le projet testait ce fichier en le
+lisant comme du TEXTE (`test_unite_systemd.py` cherche des accents graves). Aucun test ne
+l'EXÉCUTAIT. Une erreur de tuyauterie shell ne se voit pas à la relecture — celle-ci a
+survécu des mois. Le nouveau test pose un `crontab` factice sur le `PATH` et fait tourner
+le vrai script : installation depuis un crontab vide, idempotence, désinstallation,
+heure configurable. Contrôle négatif passé — l'ancienne version en échoue trois sur
+quatre.
+
+**La chaîne complète, pour mémoire.** Trois défauts empilés, chacun masquant le suivant :
+le rebalancement n'était pas planifié sur le VPS ; l'installateur qui l'aurait planifié
+échouait sans message ; et le contrôle censé signaler l'absence de planification
+répondait « ✅ cron actif » sur toute machine Linux (ADR-0104). Le portefeuille dérivait
+pendant ce temps — QQQ à 69 % contre 54 % visés, cinq décisions de sortie en soixante-
+trois jours, et une plus-value latente que rien ne venait sécuriser.
+
+## ADR-0104 — Le contrôle « mon robot tourne-t-il ? » répondait oui sans regarder (2026-09-09)
+
+**Le fait.** `crontab -l` sur le VPS : **`no crontab for ubuntu`**. Aucun rebalancement
+n'y est planifié. Le portefeuille ne bouge donc que sur lancement manuel — ce qui
+explique d'un coup les cinq décisions de sortie en soixante-trois jours, la détention
+médiane de 0,1 jour, et une poche QQQ montée à 69 % sans jamais être allégée.
+
+**Ce qui n'est PAS établi.** Le journal peut être synchronisé depuis une autre machine
+(`make journal-pull` / `journal-push` existent, et ADR-0073 parlait du « journal réel du
+Mac mini »). L'absence de cron sur le VPS ne prouve donc pas que rien ne tourne nulle
+part — elle prouve que rien ne tourne ICI. La vérification appartient à la machine qui
+porte le planificateur.
+
+**LE DÉFAUT DE FOND, et il est à nous.** `scripts/verify_journal.py` existe précisément
+pour répondre à « le rebalancement quotidien alimente-t-il le journal ? ». Sa première
+section n'interrogeait que `launchctl`. Sur Linux l'outil est absent : elle imprimait
+« vérif planif ignorée » et renvoyait **True**. Le contrôle censé garantir la
+planification **validait donc par construction toute machine Linux**, VPS sans crontab
+compris. Le symptôme dormait depuis des semaines dans le journal, et l'outil chargé de
+le lever répondait « ✅ cron actif ».
+
+**Décision.** La sonde interroge les DEUX planificateurs — `launchctl list` et
+`crontab -l` — et distingue trois réponses au lieu de deux : l'outil est absent, l'outil
+dit qu'il n'y a rien, l'outil dit que c'est planifié. Un seul « oui » suffit. Si aucun
+planificateur n'est interrogeable, le contrôle **échoue en le disant** : *ne pas savoir
+n'est pas une réussite*. Sept tests, dont le contrôle positif (un cron installé doit
+passer) et le cas macOS, pour que le correctif n'échange pas une cécité contre une autre.
+
+**Conséquence.** C'est le seul défaut de cette série qui rendait un symptôme INVISIBLE.
+Les autres — le seuil trop bas, la grille trop courte, la coche sur les perdants —
+produisaient des chiffres faux qu'on pouvait lire et contester. Celui-ci produisait un
+silence, et un silence ne se conteste pas.
+
+## ADR-0103 — La concentration est voulue : le cœur pèse la moitié du compte (2026-09-09)
+
+**Je t'avais envoyé sur la mauvaise commande.** `make live-sim` simule un portefeuille
+NEUF : `--equity 10000`, **détenu ignoré**. Sa propre ligne d'aide le dit — « ne décrit
+pas le compte ». Elle ne pouvait donc pas répondre à « pourquoi QQQ n'est-il pas
+allégé ». La commande qui lit les positions réelles est **`make live`** (aperçu des
+ordres du prochain run, aucun ordre envoyé).
+
+**Ce qu'elle a montré quand même, et qui change la question.** Sur 10 000 $ neufs,
+l'allocateur vise :
+
+| ligne | cible | part du capital alloué |
+|---|---|---|
+| **QQQ** | **5 000 $** | **54 %** |
+| 35 satellites | 160 à 325 $ chacun | ~3 % chacun |
+
+**La concentration n'est pas une panne de rebalancement : c'est la cible.** Le
+portefeuille est un cœur-satellite dont le cœur est un ETF Nasdaq pesant la moitié du
+compte. Un total qui oscille de 101 k à 100,4 k ne fait que suivre QQQ — c'est le
+comportement attendu de cette allocation, pas un défaut d'exécution ni une règle de
+sortie manquante. Ma P0 « pourquoi le rebalancement ne vend-il pas » était mal posée.
+
+**Ce qui reste anormal, et c'est bien plus petit** : 69 % constatés contre ≈ 54 % visés,
+soit une quinzaine de points de surpoids — largement au-dessus de la bande d'inaction de
+505 $, donc un allègement devrait être émis. `make live` le dira.
+
+**Deux observations à ne pas perdre.**
+
+· *Les cibles crypto sont toutes sous le plancher de ligne.* BTC 321 $, LTC 309 $,
+  ETH 273 $, BCH 230 $ contre un plancher de 1 000 $ : « on n'ouvre pas ce qui
+  deviendrait de la poussière ». Or le journal porte encore de vieux lots BTC, ETH, BCH
+  et LTC de quelques dollars — des miettes que le plancher empêche de reconstruire et
+  que personne ne solde. C'est la même famille de lots incohérents relevée en ADR-0102.
+· *Treize ordres actions reportés hors séance.* Le run tournait à 17 h 27 ET, après la
+  clôture ; ces ordres ne sont PAS mis en file d'attente. Le script le dit lui-même :
+  « si ce report revient chaque jour, c'est le planning, pas le marché ». Le cron par
+  défaut vise 16 h (`install_live_cron.sh`), ce qui tombe DANS la séance si l'horloge de
+  la machine est en UTC — mais cela n'a pas été vérifié, et un rebalancement qui ne
+  s'exécuterait jamais expliquerait à lui seul les cinq décisions de sortie en 63 jours.
+  **À vérifier avant toute conclusion : `crontab -l` sur le VPS.**
+
+**Décision.** Rien n'est changé dans l'allocation. Le poids du cœur est un choix, pas un
+bug — et le changer serait un changement de stratégie, à décider puis à valider, pas un
+correctif à glisser.
+
+## ADR-0102 — Mon propre instrument publiait deux chiffres faux (2026-09-09)
+
+**Premier passage réel de `diag-pv-latente`. Deux défauts, l'un grave.**
+
+1. *Une colonne « sécurisable ? » qui ne mesurait pas ce qu'elle disait.* J'avais écrit
+   `secu = pv_courante >= bande`. Or la bande d'inaction compare **l'écart à la cible en
+   VALEUR**, pas la plus-value. La colonne a donc affiché « non (< 505 $) » sur les
+   vingt-cinq lignes, y compris une position QQQ de **42 862 $** — évidemment
+   rééquilibrable. Et j'en avais tiré une conclusion : « 15 lignes ne peuvent pas être
+   allégées ». **Cette affirmation n'était pas soutenue par ce que je calculais.**
+   Colonne retirée : les cibles du jour ne sont pas dans ce script, `make live-sim`
+   montre les décisions réelles.
+2. *Une « part rendue » de 7 975 %.* `rendu = pic − courante` confond « j'ai rendu un
+   gain » et « je suis passé sous mon prix d'entrée ». `NWL` : pic à +17 $, aujourd'hui
+   −1 329 $. Seuls 17 $ ont jamais été un gain à sécuriser ; les 1 329 $ restants sont
+   une perte qu'aucun objectif de gain n'aurait évitée — cela demande un stop. Deux
+   problèmes, deux gestes, donc **deux chiffres** : `rendu_du_gain` (borné par le pic,
+   part dans [0, 1]) et `perte_sous_entree`. Le total ne somme plus que les pics
+   POSITIFS : additionner ceux des lignes jamais en gain donnait une « somme des pics »
+   de **−1 916 $**, un sommet sous zéro d'où l'on tirait une part rendue de 0 %. Faux et
+   rassurant, la pire combinaison.
+
+**CE QUE LE RUN A VRAIMENT MONTRÉ — et ce n'est pas le yo-yo.**
+
+· **Concentration.** Trois lots de QQQ pèsent **≈ 69 500 $ sur ≈ 100 000 $**, soit
+  **69 % du portefeuille**. Un total qui oscille de 101 k à 100,4 k suit d'abord cela :
+  ±0,9 % sur QQQ font ±0,6 % sur le compte. Aucune règle de sortie ne change ce fait.
+· **Les frais et le slippage cumulés valent 0,00 $** (`turnover-audit`). Le va-et-vient
+  ne coûte donc rien de mesurable : la baisse n'est pas de la friction.
+· **Le système n'a pris que CINQ décisions de sortie en 63 jours** — les 35 autres
+  fermetures viennent du script de réconciliation, dates et prix reconstruits après
+  coup. Sur ces cinq : détention médiane 0,1 jour, profit factor 0,29, t = −0,95.
+  Échantillon trop petit pour distinguer un effet du bruit, et l'outil le dit.
+· **Des lots crypto sont incohérents** : `BCH` affiche −2 509 $ de perte latente sur une
+  position de 512 $, `ETH` −619 $ sur 6 $. Une position longue ne peut pas perdre plus
+  qu'elle ne vaut : c'est `avg_price` ou `qty` qui est faux au journal. Le script les
+  isole désormais au lieu de les laisser polluer les totaux — c'est la P0 de
+  réconciliation, toujours ouverte.
+
+**Décision.** Le diagnostic publie maintenant la **concentration par instrument** (lots
+regroupés : trois achats du même ETF font une exposition, pas trois) et alerte au-delà de
+25 % sur une ligne. Il lit les bases LOCALES avant d'appeler le réseau — le premier
+passage interrogeait Yahoo avec le symbole nu (« AAVE », « SOL ») et récoltait des 404,
+alors que `crypto.db` contient ces séries depuis les réparations du 09/09.
+
+**Conséquence sur la question posée.** L'ordre des travaux change : avant toute règle de
+prise de bénéfice, il y a une exposition à 69 % sur un seul ETF et un journal dont
+certains lots sont faux. Poser un objectif de gain par-dessus reviendrait à régler la
+tenue de route d'une voiture dont on n'a pas vérifié que les roues sont boulonnées.
+
+## ADR-0101 — Le yo-yo de la PV latente : mesurer avant de poser une règle (2026-09-09)
+
+**Question posée.** « Ma PV latente chute et je ne parviens pas à la sécuriser ; mon
+total fait le yo-yo de 101 k à 100,4 k. »
+
+**Ce que dit le code, sans supposition.** Le moteur de production (`scripts/run_live.py`)
+n'a NI objectif de gain NI stop — c'était déjà l'objet d'ADR-0073. Sa seule sortie est le
+rebalancement vers les poids cibles, et il ne touche une ligne que si
+`|cible − détenu|` dépasse la **bande d'inaction**, fixée à `max(0,5 % du capital, 5 $)`.
+Sur 101 k, cela fait **≈ 505 $ par ligne**. Une ligne dont l'écart à sa cible reste sous
+505 $ n'est jamais allégée, quoi qu'elle gagne : sa plus-value ne peut que revenir.
+**C'est un mécanisme, pas encore un diagnostic** — il faut savoir combien de lignes sont
+dans ce cas et combien d'argent y dort.
+
+**Ce qui manquait pour trancher.** `research/turnover_audit` mesure déjà la capture sur
+les lots CLOS (ADR-0073 : capture −22 % sur cinq positions, détention médiane 0,1 jour).
+Rien ne regardait les positions VIVANTES — et ce sont elles qu'on voit chuter. Le tableau
+de bord affiche la PV du jour, jamais le chemin : une ligne montée à +900 € puis
+redescendue à +120 € y ressemble trait pour trait à une ligne montée tout droit à +120 €.
+
+**Livré.** `packages/portfolio/pv_latente.py` (pur, testé) et `make diag-pv-latente` :
+par position ouverte, le pic de PV latente depuis l'entrée, la PV du jour, l'écart, et
+la part rendue. Plus, en regard, la liste des lignes dont le gain est **sous la bande
+d'inaction**, donc structurellement impossibles à alléger. Le total est nommé « somme des
+pics » et non « pic du portefeuille » : les pics de deux lignes ne sont pas simultanés,
+et cette somme n'a jamais été affichée d'un seul coup.
+
+**Ce qui n'est PAS décidé.** Aucune règle de prise de bénéfice n'est ajoutée. En poser
+une change le moteur qui tourne en production — un changement gaté, à valider pour
+lui-même, exactement ce que dit ADR-0073 à propos de `sortie_lab` : régler `rr` ou un
+suiveur ATR dans le banc ne modifierait pas un seul ordre réel, parce que le banc rejoue
+un autre moteur.
+
+**Sur l'idée d'importer une bibliothèque.** `exitkit` (27 politiques de sortie) et `bt`
+(rebalancement) existent. Ni l'une ni l'autre ne répond au problème : il ne manque pas
+d'algorithmes de sortie au projet — `packages/strategies/moteur_sortie.py`, les stops et
+cibles ATR de `swing`/`ma_crossover`/`rsi_reversion` sont déjà là et déjà testés. Ce qui
+manque est une DÉCISION : quelle politique brancher sur le chemin de production, et
+validée sur quoi. Ajouter une dépendance ici répéterait l'erreur de Riskfolio-Lib —
+recommander un paquet dont les capacités étaient déjà natives.
+
+## ADR-0100 — HRP reste en production. Et deux avaries de fond, réparées (2026-09-09)
+
+**LA DÉCISION : on ne branche pas le Mean-CVaR.** Non par prudence de principe, mais
+parce que la mesure, une fois complète, ne soutient pas le changement.
+
+| duel apparié vs HRP, 16 fenêtres | CVaR | rendement |
+|---|---|---|
+| Mean-CVaR plafonné 25 % | **15/16**, p = 0,0005, −0,39 % | 7/16, p = 0,80 |
+
+Trois faits, chacun mesuré :
+
+1. **L'avantage porte sur le seul risque de queue.** Sur le rendement, le duel est
+   indiscernable (7/16, p = 0,80). Le Mean-CVaR ne gagne pas d'argent, il en perd moins
+   dans la queue.
+2. **Cet avantage EST une exposition de classe d'actifs.** L'allocation gagnante fait
+   63 % d'ETF obligataires (AGG 25 %, IEF 25 %, HYG 9,5 %) contre 31,8 % pour HRP. Un
+   duel sur le CVaR récompense mécaniquement qui détient la classe la moins volatile.
+3. **La période ne contient aucun régime défavorable aux obligations.** Le script
+   l'imprime désormais : **2024-05-15 → 2026-05-19**, 336 séances. Le krach obligataire
+   de 2022 est hors fenêtre. On mesure donc « ces ETF ont été calmes pendant deux ans »,
+   pas « cette méthode d'allocation est meilleure ».
+
+S'y ajoute la limite de forme d'ADR-0099 : 92 % de recouvrement entre périodes
+d'ajustement, donc un test qui compare deux PORTEFEUILLES, pas deux MÉTHODES. **HRP reste
+l'allocateur de production** — 66,9 % actions / 31,8 % ETF, une répartition qui ne repose
+pas sur le calme d'une seule classe. Le Mean-CVaR reste `en_test` au registre, avec sa
+période inscrite : il sera rejugé quand l'historique couvrira un choc de taux.
+
+**AVARIE 1 — un prix périmé comptait comme un prix réel.** Le chargement des prix ne
+regardait que le NOMBRE de barres. `HYPE/USDC`, arrêtée le 27 août 2024, figurait encore
+dans l'univers RÉEL du 8 septembre 2026 : le screener pouvait la classer, le
+dimensionnement la dimensionner, les graphiques l'afficher — sur un cours vieux de deux
+ans. Un prix périmé est pire qu'un prix absent : il a l'air d'un prix. `_load_prices`
+retire désormais du réel toute série dont la dernière barre a plus de 60 jours de retard
+**sur la barre la plus fraîche de l'univers** — pas sur la date du jour, sinon un férié
+ou une ingestion de la veille condamnerait tout le monde. Aucune donnée n'est effacée :
+le symbole sort de l'ensemble des séries réelles, comme s'il manquait d'historique.
+
+**AVARIE 2 — « 33 actifs à vérifier » n'est pas un rapport.** L'étape 1 listait les sauts
+suspects sans les qualifier ; personne n'ouvre une corvée de trente-trois lignes. Le
+projet possédait pourtant déjà `packages/data/corporate_actions.py`, qui ne conclut à un
+split que si DEUX signaux concordent — ratio de prix sur une fraction usuelle (1/2, 1/4,
+1/10…) ET volume changeant d'échelle en sens inverse. Un krach ne tombe pas pile sur
+0,250 en multipliant le volume par quatre. Il n'était branché nulle part. La liste B se
+sépare maintenant en « SPLIT CONFIRMÉ (ratio + volume) », « ratio de split, volume non
+concordant », et « inexpliqué » — cette dernière catégorie étant la seule qui mérite un
+œil. Sans volume exploitable, on ne tranche pas : c'est écrit « volume indisponible ».
+
+**Conséquences.** Le robot cesse de considérer comme vivants des instruments morts. Le
+rapport d'anomalies devient une liste courte de vraies questions. Et la question
+d'allocation est tranchée pour aujourd'hui, avec écrit noir sur blanc ce qui la
+rouvrira : un historique commun couvrant un choc de taux.
+
+## ADR-0099 — Le duel conclut, mon affichage mentait, et la vraie limite est ailleurs (2026-09-09)
+
+**Le résultat.** Seize fenêtres, duel apparié contre HRP sur le CVaR :
+
+| allocation | gagnées | p (signes) | écart médian |
+|---|---|---|---|
+| Mean-CVaR | 15/16 | 0,001 | −0,39 % |
+| Mean-CVaR plafonné 25 % | 15/16 | 0,001 | −0,37 % |
+| min-variance | 2/16 | 0,004 | +0,37 % |
+| ERC / équipondéré | 0/16 | <0,0001 | +0,76 % |
+
+Ce n'est plus une moyenne : le Mean-CVaR bat HRP fenêtre par fenêtre, quinze fois sur
+seize. Le protocole peut désormais conclure (plancher de puissance à 3,05·10⁻⁵).
+
+**DEUX DÉFAUTS DE MON AFFICHAGE, corrigés.**
+
+1. *Une coche à côté d'un perdant.* Le « ✓ » marquait `concluant`, c'est-à-dire « le test
+   des signes a tranché » — donc aussi pour l'équipondéré, battu **0 fois sur 16**. Le
+   test des signes est bilatéral : il dit qu'il y a un écart, jamais dans quel sens. Trois
+   lignes sur cinq portaient une coche qui se lit comme une validation alors qu'elles
+   décrivaient une défaite. Le sens vient du décompte, pas de la p-valeur : la colonne
+   affiche maintenant « mieux » ou « pire ».
+2. *Un zéro qui n'existe pas.* Le plancher de puissance à seize fenêtres vaut
+   3,05·10⁻⁵ ; arrondi à quatre décimales il s'imprimait « 0.0000 ». Dans un projet dont
+   toute la discipline est de ne jamais publier un chiffre qu'on n'a pas, un zéro fabriqué
+   par un format est exactement ce qu'il ne faut pas laisser passer. Sous 10⁻⁴, on écrit
+   « <0.0001 ».
+
+**LA VRAIE LIMITE N'EST NI LA PUISSANCE NI L'AFFICHAGE : C'EST LA LONGUEUR DES DONNÉES.**
+Passer de `--pas 63` à `--pas 21` a fait monter les fenêtres de 5 à 16 — et le
+recouvrement des périodes d'ajustement de 75 % à **92 %**. Deux fenêtres consécutives
+ajustent sur presque la même histoire, donc produisent presque les mêmes poids. Le test
+reste valide comme comparaison de DEUX PORTEFEUILLES sur seize périodes disjointes ; il
+est faible comme comparaison de deux MÉTHODES, parce que la méthode n'a été
+réellement exercée que deux ou trois fois indépendamment. Avec 601 dates communes, un
+test à fenêtres d'ajustement disjointes n'en donnerait qu'UNE seule. **On ne peut pas
+acheter de l'indépendance qu'on n'a pas** : la contrainte est la longueur de
+l'historique commun, pas le réglage.
+
+**Ce que le script dit maintenant de lui-même.** La période réellement mesurée est
+imprimée avec le tableau — dates de début et de fin des fenêtres hors échantillon. Sans
+elle, on ne peut pas juger : une poche obligataire brille sur certaines années et
+s'effondre sur d'autres, le chiffre est le même et la conclusion inverse. Un test
+d'alignement à un jour près garde ce calcul, parce qu'un décalage d'un cran afficherait
+une période fausse sous des chiffres justes — l'erreur la plus difficile à voir.
+
+**LA RÉSERVE QUI RESTE ENTIÈRE.** L'allocation gagnante est à **63 % en ETF obligataires**
+(AGG, IEF, HYG). Un duel sur le CVaR récompense mécaniquement qui détient la classe la
+moins volatile ; il ne mesure pas la qualité d'un allocateur mais son exposition. Le duel
+sur le RENDEMENT est publié à côté pour cette raison. Tant que la période mesurée n'aura
+pas été confrontée à un régime défavorable aux obligations, ce résultat dit « ce
+portefeuille a bien traversé CES mois-là », pas « cette méthode est meilleure ».
+
+**Conséquence de forme.** `scripts/valider_nouveautes.py` passait de 527 à 629 lignes,
+loin des 400 que s'impose le projet. La comparaison d'allocateurs part dans
+`scripts/comparaison_allocateurs.py` (476 + 175). `PLAFOND_LIGNE` n'y est plus défini
+qu'une fois : deux constantes jumelles qui divergent feraient comparer deux allocateurs
+différents sous le même nom, en échantillon et hors échantillon, sans que rien ne le dise.
+
+## ADR-0098 — Le rejet du Mean-CVaR est ANNULÉ : il portait sur des prix faux (2026-09-09)
+
+**Ce qui s'est passé.** `make valider-nouveautes` sur l'univers assaini. Le seuil calibré
+tient exactement sa promesse — **45 actifs signalés sur 826, soit 5,4 % contre 5,5 %
+prédits**, zéro série cassée (contre cinq), une seule série figée (contre sept). La
+partie qualité de données est réglée. Mais l'étape 3 renverse un verdict.
+
+| hors échantillon (252/63) | CVaR 95 % | rendement |
+|---|---|---|
+| **08/09 — panneau non réparé, 693 lignes, 6 fenêtres** | | |
+| HRP | **1,54 %** | **+12,3 %** |
+| Mean-CVaR | 2,91 % | −5,1 % |
+| **09/09 — panneau assaini, 734 lignes, 5 fenêtres** | | |
+| Mean-CVaR plafonné 25 % | **1,04 %** | +9,7 % |
+| Mean-CVaR | 1,06 % | +8,4 % |
+| HRP | 1,51 % | **+10,3 %** |
+| min-variance | 2,08 % | +10,2 % |
+| ERC / équipondéré | 2,64 % | +6,7 % |
+
+Là où le Mean-CVaR était **dernier et seul en perte**, il est **premier sur le risque de
+queue à rendement quasi égal**. HRP, lui, ne bouge presque pas (1,54 → 1,51 %).
+
+**Décision. Le rejet d'ADR-0087 est ANNULÉ — pas infirmé, annulé.** La distinction
+compte : sa mesure portait sur un panneau contenant cinq séries crypto qui décrivaient
+d'AUTRES jetons et six rongées par l'arrondi de la source. Ce chiffre ne prouvait pas ce
+qu'il disait, et il ne prouve pas davantage le contraire aujourd'hui. Le registre des
+négatifs reçoit une ligne datée qui rouvre l'hypothèse en `en_test` — le ledger est
+append-only, on n'efface pas la trace du rejet, on écrit qu'il ne vaut plus.
+
+**ET LE NOUVEAU RÉSULTAT NE VALIDE RIEN NON PLUS.** Le protocole ne donne que **cinq**
+fenêtres hors échantillon. Un test des signes sur cinq fenêtres a pour plus petite
+p-valeur atteignable **2/2⁵ = 0,0625** : même en gagnant les cinq, il ne peut pas
+descendre sous 5 %. Le protocole est donc sans puissance par construction, et c'est un
+fait de forme — connaissable AVANT de regarder les données, que j'aurais dû établir le
+08/09 avant de prononcer un rejet sur six fenêtres.
+
+**Ce qui est livré pour trancher.** `packages/portfolio/duel_hors_echantillon.py` : détail
+fenêtre par fenêtre, duel apparié contre l'allocateur en place, test des signes, et
+surtout deux honnêtetés imprimées à l'écran — le **plancher de puissance** (avec n
+fenêtres, rien sous 2/2ⁿ) et le **recouvrement** (à 252/63, deux fenêtres consécutives
+partagent 75 % de leur période d'ajustement, donc la p-valeur est optimiste). Les options
+`--fenetre` et `--pas` permettent d'acheter de la puissance : `--pas 21` donne seize
+fenêtres au lieu de cinq.
+
+**Deux réserves à porter dans la suite.** Le Mean-CVaR sans plafond met **63,7 % sur une
+seule ligne** (AGG, un ETF obligataire) : la variante plafonnée à 25 % fait aussi bien
+(1,04 %) pour un rendement supérieur, c'est elle la candidate sérieuse. Et l'allocation
+gagnante est à **66 % en ETF obligataires** — il faudra vérifier qu'on mesure une qualité
+d'allocateur et non la performance des obligations sur cette fenêtre-là.
+
+**Conséquence de forme, corrigée aujourd'hui.** `/api/failures` affichait toutes les
+lignes `rejete` du ledger append-only : une hypothèse rejetée puis rouverte y serait
+restée un échec pour toujours. L'endpoint retient désormais le dernier mot par facteur ;
+l'historique complet reste dans le fichier.
+
+## ADR-0097 — La prédiction falsifiable était juste : l'arrondi venait de la source (2026-09-09)
+
+**Contexte.** ADR-0096 basculait six séries vers Binance pour cause d'arrondi
+destructeur, en écrivant à l'avance ce qui devait se produire : *« si l'arrondi vient de
+Yahoo, la part de clôtures distinctes doit bondir au prochain passage ; s'il tient au pas
+de cotation du jeton, non »*. La prédiction pouvait échouer. Elle n'a pas échoué.
+
+| base | clôtures distinctes | plus longue plage figée |
+|---|---|---|
+| SHIB | 3 % → **63 %** | 61 séances → **3** |
+| BONK | 4 % → **84 %** | 130 → **2** |
+| XEC | 10 % → **83 %** | 70 → **2** |
+| FLOKI | 14 % → **95 %** | 25 → **2** |
+| COMP | 17 % → **89 %** | 46 → **2** |
+| GMX | 32 % → **84 %** | 256 → **2** |
+
+**Ce que ça règle, au-delà de ces six séries.** Les plages figées n'étaient pas des flux
+morts : c'était la SOURCE qui décrochait, et l'arrondi qui fabriquait des paliers. Le
+verdict « FLUX ARRÊTÉ » désignait un symptôme de la source, jamais l'état du marché — et
+il aurait conduit à retirer de l'univers des séries qu'il suffisait de resourcer. Le geste
+qu'on aurait fait sans la mesure était le mauvais.
+
+**Décision.** `RPL` rejoint `SOURCE_FORCEE` sur la même signature — bon jeton (corr
++1,00), à jour, mais 24 séances immobiles — avec la même prédiction falsifiable : la
+plage doit tomber à 2 au prochain passage. C'est la dernière série que le diagnostic
+signalait encore hors des périmées.
+
+**État final de la source crypto.** 102 bases sur 102 ingérées (PEPE incluse, que Yahoo
+limitait à 119 barres), **21 sources forcées et vérifiées**, 92 séries CONFORMES. Restent
+trois séries **NON VÉRIFIABLES** — OKB, LEO, KAS — que Binance ne cote pas : leur forme
+est saine (100 % de clôtures distinctes, à jour), mais aucune référence indépendante
+n'existe pour elles ici. On le DIT plutôt que de les déclarer conformes par défaut ;
+ajouter une seconde référence pour trois bases est un P2, pas un préalable.
+
+**La conséquence qui compte, et qui n'est pas dans ce fichier.** Toutes les mesures
+d'allocation antérieures au 09/09 — ADR-0087 compris, celui qui rejette le Mean-CVaR —
+portaient sur un univers de 774 actifs dont 48 cryptos, avec cinq séries décrivant
+d'autres jetons et six rongées par l'arrondi. Le panneau fait maintenant **823 actifs
+dont 97 cryptos**, tous confrontés à une référence. Le rejet du Mean-CVaR ne devrait pas
+bouger — sa cause est un manque d'observations de queue, que l'élargissement de l'univers
+aggrave au lieu de le corriger — mais ce raisonnement n'est pas une mesure. **À
+reprendre : `make valider-nouveautes`**, qui refait la comparaison d'allocateurs ET
+applique pour la première fois le seuil calibré à 24.
+
+## ADR-0096 — Un ticker réattribué, et un ordre destructeur (2026-09-09)
+
+**Le diagnostic s'est contredit, et il avait raison deux fois.** `OP` est sorti CONFORME
+(corrélation +1,00) à un passage, puis COLLISION (−0,00) au suivant, sur la même base.
+Seule la fenêtre de référence avait changé : 640 jours récents d'abord, 1559 jours après
+le passage à l'historique paginé. Ce n'était pas une contradiction — la série est
+**RECOLLÉE** : juste depuis la réattribution du ticker, étrangère avant. Une corrélation
+unique ne peut pas le dire, et le verdict dépendait alors de la fenêtre interrogée.
+
+**Décision.** Le diagnostic mesure désormais DEUX corrélations : sur tout le
+recouvrement, et sur les 365 derniers jours communs. Verdict `SÉRIE RECOLLÉE` quand la
+première est nulle et la seconde bonne. Le geste de réparation est le même que pour une
+collision — reprendre toute la série à la référence — mais le diagnostic rassure sur les
+données récentes au lieu de les condamner avec le reste.
+
+**Un ordre destructeur, corrigé avant qu'il ne coûte quelque chose.** `_ingerer`
+effaçait la série AVANT d'interroger la nouvelle source. Si celle-ci ne répondait pas, la
+base restait vide, sans rien pour la remplacer. Tant que la liste forcée tenait en cinq
+entrées mesurées ET vérifiées, le risque restait théorique ; il cesse de l'être à
+vingt-et-une entrées, dont onze dont on ignore encore si Binance les couvre. On récupère
+maintenant d'abord, on efface ensuite. Deux tests encadrent l'ordre, dont un contrôle
+négatif vérifié par sabotage. Détruire d'abord et espérer ensuite n'est jamais le bon
+ordre sur des données qu'on ne sait pas régénérer.
+
+**Quatre lots de sources forcées, quatre raisons distinctes.**
+
+| lot | bases | raison mesurée |
+|---|---|---|
+| 1 | TON UNI APT ARB STX | collision — **réparé et vérifié**, corr +1,00 |
+| 2 | SUI TIA JUP STRK APE | collision, visible une fois l'univers complet — **vérifié** |
+| 3 | IMX GRT GMX GMT | collision, visible une fois la référence paginée |
+| 3 | OP | série recollée |
+| 4 | SHIB BONK XEC FLOKI COMP | arrondi destructeur (3 % à 17 % de clôtures distinctes) |
+| 4 | PEPE | Yahoo ne rend que 119 barres, sous le seuil des 250 |
+
+Le quatrième lot porte une **prédiction falsifiable** : si l'arrondi vient de Yahoo, la
+part de clôtures distinctes doit bondir au prochain passage ; s'il tient au pas de
+cotation du jeton, non. On saura lequel sans avoir à en débattre.
+
+**Ce qui reste ouvert.** Sept séries **PÉRIMÉES** — HYPE, TON, MATIC, RNDR, FTM, GALA,
+FXS. Certaines sont des migrations réelles (MATIC→POL, RNDR→RENDER, FTM→S), et `RENDER`
+est déjà dans l'univers : `RNDR` y fait doublon avec sa propre version morte. Sortir un
+instrument de l'univers change l'ensemble investissable : c'est une décision de
+`config/universe.yaml`, pas un correctif de données. Signalé, pas appliqué.
+
+## ADR-0095 — SEUIL_ECART passe de 8 à 24, et le mode se tranche avec lui (2026-09-09)
+
+**Contexte.** Troisième passage, grille élargie (ADR-0093), instrument réparé (ADR-0091),
+150 injections. Cette fois **l'optimum est INTÉRIEUR dans les deux modes** — il n'est
+plus un artefact de borne, et l'avertissement de bord ne se déclenche pas.
+
+| seuil | 8 | 12 | 16 | 24 | 32 | 48 | 64 |
+|---|---|---|---|---|---|---|---|
+| score, sans normalisation | 0,45 | 0,63 | 0,71 | 0,84 | **0,89** | 0,88 | 0,65 |
+| score, avec normalisation | 0,39 | 0,69 | 0,83 | **0,91** | 0,90 | 0,81 | 0,70 |
+
+Le maximum global est **24 avec normalisation** (0,905), devant 32 sans (0,889). Les deux
+questions laissées ouvertes en ADR-0092 — quel mode, quel seuil — se répondent donc
+ensemble, comme il était dit qu'elles le devaient.
+
+**Décision. `SEUIL_ECART = 24,0`, normalisation par actif conservée par défaut.**
+Au point retenu : **5,5 % de l'univers signalé** (45 actifs au lieu de 489), 93 % des
+splits injectés retrouvés, 99 % des ticks, mesuré sur 138 actifs.
+
+**Le prix, écrit noir sur blanc.** À 16 la détection des splits vaut 98 % contre 93 % à
+24 — cinq points payés pour faire tomber la lecture de 128 actifs à 45. Ce n'est pas le
+score qui tranche cet arbitrage, c'est le principe inscrit dans le module depuis le
+premier jour : *un détecteur qui crie tout le temps devient invisible, et un rapport
+qu'on n'ouvre pas ne protège de rien*. L'angle mort est identifié : un split ×4 vaut
+−75 %, soit quinze unités seulement pour une crypto d'échelle 5 %/jour. **Un test le
+fixe** — il vérifie que ce défaut échappe bien à 24 ET qu'il ressort à 12, pour
+distinguer un arbitrage d'une cécité.
+
+**Robustesse.** 24 et 32 sont à cinq millièmes l'un de l'autre : le choix entre eux ne
+pèse rien. Ce qui pesait, c'était 8 — et 8 était moins bon que tout le reste de la
+grille. La conclusion ne tient donc pas à la forme exacte du critère.
+
+**Conséquences.** Le rapport d'anomalies redevient lisible, donc lu. Il aura fallu quatre
+passages : le mélange d'échelles, puis le calendrier de l'instrument, puis la borne de la
+grille, et enfin la mesure. Aucun de ces tours n'était évitable en raisonnant — chacun a
+été trouvé en regardant un chiffre impossible.
+
+## ADR-0094 — Réparer une source en révèle d'autres (2026-09-09)
+
+**Contexte.** Les cinq bases routées vers Binance (ADR-0089) ont été réingérées. Elles
+ressortent **toutes CONFORMES, corrélation +1,00**, et leur début de série change du tout
+au tout : `ARB` passe de novembre 2017 — impossible, Arbitrum n'existait pas — à mars
+2023 ; `APT` de novembre 2021 à octobre 2022 ; `UNI` de octobre 2019 à septembre 2020.
+La réparation est confirmée par une mesure indépendante de celle qui l'avait motivée.
+
+**Ce que le périmètre complet a fait apparaître.** Les 52 bases jamais ingérées
+(ADR-0090) apportaient leurs propres avaries :
+
+· **Cinq nouvelles collisions**, même signature : SUI (+0,06), TIA (−0,01), JUP (−0,00),
+  STRK (+0,08), APE (+0,00), toutes avec un début de série antérieure de plusieurs années
+  au jeton. `JUP-USD` commence en novembre 2017. Ajoutées à `SOURCE_FORCEE`.
+· **Six séries à l'arrondi destructeur** : SHIB (3 % de clôtures distinctes), BONK (4 %),
+  XEC (10 %), FLOKI (14 %), COMP (17 %), GMX (32 %). Les quatre premières sont des jetons
+  sub-centimes ; leur cours ne dispose que de quelques dizaines de valeurs possibles, ce
+  qui fabrique une volatilité fausse et des plages figées. Non réparé — c'est un P2.
+· **PEPE : 119 barres chez Yahoo**, sous le seuil des 250. La seule base restée muette.
+
+**Une avarie que personne ne cherchait : les séries mortes.** Une douzaine de séries
+s'arrêtent des années avant le reste du lot — MATIC en mars 2025 (migration vers POL),
+RNDR en juillet 2024, FTM en janvier 2025, IMX en juillet 2022, GRT en avril 2022. Rien
+ne cloche DANS ces séries : elles sont juste finies. Elles sortaient « CONFORMES » et
+continuaient de peupler l'univers en se faisant passer pour vivantes. Nouveau verdict
+**PÉRIMÉE**, mesuré contre la barre la plus fraîche du lot — pas contre la date du jour,
+sans quoi une base ingérée la veille au soir serait déclarée morte.
+
+**Un trou de la mesure, tombé exactement sur ses cibles.** Dix séries sortaient « NON
+VÉRIFIABLE ». La référence demandait les 1000 DERNIÈRES barres à Binance : toute série
+s'arrêtant avant fin 2023 n'avait aucun recouvrement avec elle. Or ce sont précisément
+les séries suspectes — celles qui s'arrêtent trop tôt — qui échappaient ainsi au
+contrôle. La référence utilise désormais l'historique paginé depuis 2015
+(`packages/data/crypto_binance.py`), le même que l'ingestion.
+
+**Conséquences.** L'univers réel passe de 774 à **823 actifs**, dont **97 cryptos au lieu
+de 48**. Toutes les mesures d'allocation et de risque antérieures au 09/09 portaient sur
+un univers amputé de moitié côté crypto, dont cinq séries décrivant d'autres jetons.
+Aucune n'est à refaire d'urgence — HRP a été validé hors échantillon sur la partie saine
+— mais aucune ne doit être citée comme portant sur « l'univers crypto ».
+
+## ADR-0093 — Un optimum posé sur le bord d'une grille n'est pas un optimum (2026-09-09)
+
+**Contexte.** Instrument réparé (ADR-0091), second passage. Les sensibilités deviennent
+enfin crédibles : **100 % de détection des splits à tous les seuils** dans le mode sans
+normalisation, contre les 33-73 % erratiques du premier passage. La correction du
+calendrier était la bonne. Le script propose alors `SEUIL_ECART = 24`.
+
+**Le défaut.** 24 était le plus grand seuil de la grille, et le score
+(sensibilité − coût) y était **encore croissant** :
+
+| seuil | 8 | 10 | 12 | 16 | 24 |
+|---|---|---|---|---|---|
+| score, avec normalisation | 0,35 | 0,50 | 0,66 | 0,81 | **0,87** |
+
+Une courbe qui monte jusqu'au dernier point mesuré ne désigne pas un maximum : elle dit
+qu'on n'a pas cherché plus loin. Proposer ce point sans le dire fait passer « je me suis
+arrêté là » pour « j'ai trouvé le meilleur ». C'est la même faute de forme que la grille
+d'hyperparamètres dont l'optimum tombe sur la borne.
+
+**Décision.** La grille monte à 64 (4 · 6 · 8 · 10 · 12 · 16 · 24 · 32 · 48 · 64) et
+`proposer` **avertit explicitement** quand l'argmax retombe sur un bord. Deux tests
+encadrent ce garde-fou, dont un contrôle négatif : un avertissement permanent ne veut
+plus rien dire. `N_INJECTIONS` passe de 40 à 150 — 89 % mesurés sur 37 actifs, c'est
+±5 points, trop lâche pour départager deux seuils voisins. Le balayage du panneau propre
+est mémorisé par seuil au lieu d'être refait quatre fois, ce qui paie la grille élargie.
+
+**Conséquences.** `SEUIL_ECART` reste **8,0 et UNCALIBRATED** pour un troisième passage.
+Ce n'est pas un enlisement : chaque tour a supprimé une raison de se tromper — le mélange
+d'échelles, puis le calendrier, maintenant la borne. On ne pose pas un seuil de qualité
+de données sur un chiffre dont on sait qu'il est un artefact de la grille.
+
+## ADR-0092 — La normalisation par actif n'est pas un progrès uniforme (2026-09-09)
+
+**Contexte.** ADR-0088 introduit la normalisation par actif et l'active par défaut.
+`make calibrer-seuil --comparer-ancien` mesure enfin les deux modes **sur le même
+panneau réel** (1500 dates × 823 actifs), avec un instrument réparé.
+
+| seuil | coût sans | coût avec | sensib. sans | sensib. avec |
+|---|---|---|---|---|
+| 8 | **55,3 %** | 59,4 % | **100 %** | 94 % |
+| 12 | 37,3 % | **30,3 %** | **100 %** | 96 % |
+| 24 | 15,4 % | **6,1 %** | **100 %** | 93 % |
+
+**Ce que ça dit, et que je n'avais pas prévu.** À seuil bas, l'ancien mode est meilleur
+sur les DEUX axes à la fois : il signale moins ET détecte plus. La normalisation ne
+devient gagnante qu'à partir de 12, et par le seul coût. Le mécanisme est clair une fois
+posé : diviser par l'échelle propre de l'actif **jette l'amplitude absolue**, or un
+−75 % en une séance est une donnée cassée quelle que soit la volatilité habituelle du
+titre. Pour une crypto d'échelle 5 %/jour, ce −75 % ne pèse plus que quinze unités.
+Symétriquement, la normalisation **amplifie** les classes calmes : le forex passe de 5 %
+à 58 % de signalements au seuil 8 — sa journée agitée ordinaire devient un événement.
+
+**Décision.** Ne rien trancher maintenant. Le choix du mode et celui du seuil sont
+**couplés** — l'ancien mode gagne en dessous de 12, le nouveau au-dessus — et le seuil
+n'est pas fixé (ADR-0093). Trancher l'un sans l'autre reviendrait à choisir sur la moitié
+de la table. Les deux modes restent disponibles et mesurés côte à côte.
+
+**Conséquences.** ADR-0088 est à lire avec cet amendement : la normalisation corrige un
+artefact réel et démontré, elle n'est pas pour autant un progrès en toutes circonstances.
+Ma démonstration synthétique était juste et son domaine de validité était étroit — un
+panneau gaussien ne contient ni queues épaisses, ni l'information d'amplitude absolue que
+la normalisation sacrifie. **Deux fois de suite, la même erreur de méthode : conclure sur
+un contrôle synthétique ce qui ne pouvait se trancher que sur le panneau réel.**
+
+## ADR-0091 — Un instrument de mesure qui mesurait le calendrier (2026-09-09)
+
+**Contexte.** `make calibrer-seuil` proposait `SEUIL_ECART = 24`, au motif qu'il ne
+signale que 4,8 % de l'univers pour une sensibilité comparable aux seuils plus bas. Le
+tableau qui fonde cette proposition contient deux impossibilités qu'il fallait regarder
+avant d'appliquer quoi que ce soit :
+
+| seuil | sensibilité aux splits |
+|---|---|
+| 4 | **33 %** |
+| 6 | 73 % |
+| 8 | 61 % |
+| 24 | 65 % |
+
+Un split ×4 fait **−75 % en une séance**. Aucun détecteur ne peut en manquer 39 %. Et la
+sensibilité ne peut pas *baisser* quand le seuil *baisse* : abaisser le seuil ne peut
+qu'ajouter des détections.
+
+**La cause, mesurée.** L'injection tirait sa date au hasard dans le panneau. Or un
+panneau multi-classes est plein de trous : une action ne cote pas le week-end, une
+crypto cote sept jours sur sept, chaque place a ses fériés. **Un défaut injecté un jour
+non coté ne produit aucun rendement** — il n'y a rien à détecter, et l'échec est compté
+contre le détecteur. Vérifié par sabotage sur un calendrier 5 jours sur 7 : la
+sensibilité tombe de 100 % à **40 %**, le même ordre de grandeur que sur le vrai panneau.
+La non-monotonie à 4, elle, vient d'un second défaut : à ce seuil 92 % de l'univers est
+déjà signalé, il ne reste qu'une poignée de séries vierges, et le pourcentage porte sur
+trois actifs.
+
+**Décision.** L'injection ne vise que des séances **réellement cotées deux jours de
+suite**, et le rapport publie l'effectif sur lequel chaque sensibilité est calculée. Un
+seuil laissant moins de dix séries vierges est exclu de la proposition au lieu d'y
+contribuer.
+
+**Conséquences.** La proposition de 24 est **retirée** : elle reposait sur un bénéfice
+sous-estimé. Le biais allait dans le sens qui désarme le détecteur — sous-estimer la
+détection pousse mécaniquement vers le seuil le plus silencieux — c'est-à-dire le pire
+des deux sens. `SEUIL_ECART` reste à 8,0 et **UNCALIBRATED** jusqu'au prochain passage.
+Leçon : un instrument de calibration qui se trompe est pire qu'aucun, parce qu'il rend
+un chiffre, et qu'un chiffre se croit.
+
+## ADR-0090 — Cinquante-deux cryptos sur cent deux n'avaient jamais été ingérées (2026-09-09)
+
+**Contexte.** Le diagnostic de source a examiné les 102 bases crypto de l'univers.
+**Cinquante-deux rendent zéro barre** — GALA, NEO, PEPE, SUI, SEI, LDO, CRV, ENS… La
+frontière ne doit rien au hasard : les cinquante premières bases de l'univers ont des
+données, la cinquante-et-unième et toutes les suivantes n'en ont aucune. C'est le défaut
+`--top 50` de `scripts/ingest_crypto.py`, alors que `config/universe.yaml` déclare
+`top_n: 100`. Ce n'était donc pas une source cassée : **c'était un périmètre**, jamais
+relu depuis le jour où le nombre a été écrit.
+
+**Ce que ça coûtait sans le dire.** Ces 52 bases n'apparaissaient nulle part comme
+manquantes. `_load_prices` bascule en synthétique sous 250 barres, et le panneau réel les
+écarte ensuite : elles sortaient de l'univers en silence. La moitié de la poche crypto
+n'existait pas, et aucune page ne le disait.
+
+**Décision.** Le périmètre est défini par l'univers, pas par un nombre rond : `--top`
+prend `0` par défaut, qui signifie « tout l'univers crypto ». `--top N` reste disponible
+pour un essai rapide.
+
+**Conséquences.** Le prochain `make ingest-crypto` interroge 102 bases au lieu de 50 et
+imprime, base par base, celles qui restent muettes — certaines le seront légitimement
+(jeton absent de Yahoo). La différence, c'est qu'on le saura.
+
+## ADR-0089 — Une source de prix qui échoue en silence (2026-09-09)
+
+> **MESURÉ LE JOUR MÊME.** `make diag-source-crypto` a tourné sur les 102 bases crypto
+> de l'univers. Verdict :
+>
+> · **Cinq collisions de ticker, confirmées deux fois chacune.** Corrélation des
+>   rendements contre Binance : TON −0,08 (691 j), UNI +0,25 (490 j), APT +0,11 (556 j),
+>   ARB +0,04 (994 j), STX +0,00 (496 j). Et, indépendamment, une date de début
+>   antérieure à l'existence du jeton — la série Yahoo d'`ARB-USD` commence en
+>   **novembre 2017**, Arbitrum a été lancé en mars 2023. Deux signaux qui ne partagent
+>   aucune hypothèse : la base contient bien d'autres jetons.
+> · **SHIB : ce n'est PAS un flux arrêté, c'est un arrondi.** Corrélation +0,80 — c'est
+>   le bon jeton — mais **3 % de clôtures distinctes** sur 1967 barres, et des plages
+>   immobiles de 61 séances. Un cours à 0,00001 $ arrondi à six décimales ne dispose que
+>   d'une trentaine de valeurs possibles. Les plages figées sont le SYMPTÔME de
+>   l'arrondi. C'est ce cas qui a fait corriger l'ordre des verdicts du diagnostic :
+>   UNI et ARB sortaient « flux arrêté » alors que leur immobilité est celle de
+>   l'homonyme. Les gestes sont opposés — changer de source, ou retirer la série — donc
+>   l'ordre décide du geste, et il passe désormais par la corrélation d'abord.
+>
+> **Décision de réparation.** Ne PAS partir en chasse du bon symbole Yahoo. La source
+> contre laquelle la mesure vient d'être faite est déjà connue et déjà utilisée dans le
+> projet : `SOURCE_FORCEE` route ces cinq bases vers **Binance klines**
+> (`packages/data/crypto_binance.py`, historique paginé). Une histoire plus courte et
+> JUSTE vaut mieux qu'une histoire longue qui décrit un autre actif. Le changement de
+> source **efface d'abord** les lignes de l'homonyme : sans cela, les jours que Binance
+> ne couvre pas — précisément l'histoire d'avant l'existence du jeton, celle qui
+> trahissait la substitution — resteraient, et la série serait cousue de deux actifs,
+> pire que l'une ou l'autre et indétectable ensuite. L'effacement est annoncé à l'écran.
+
+
+**Contexte.** L'audit croisé du 08/09 a trouvé 5 séries cassées et 7 figées, **toutes des
+paires `/USDC`** : UNI, ARB, OP, STX, TON avec des sauts jusqu'à +1 573 987 %, SHIB
+immobile 675 séances sur 1499. Douze séries sur un même format de symbole, ce n'est pas
+le marché : c'est la source. En relisant `scripts/ingest_crypto.py`, on trouve pourquoi
+personne ne l'a vu : la boucle d'ingestion faisait `except Exception: continue` et
+`if len(df) < 250: continue`, puis ne renvoyait que le NOMBRE de succès. **Une base qui
+ne répond pas ne laissait aucune trace.** L'univers paraissait complet parce que rien ne
+disait le contraire.
+
+**Décision.** Deux gestes, séparés.
+
+1. *L'ingestion dit ce qu'elle n'a pas pu faire.* `_ingerer` renvoie désormais la liste
+   des échecs (base, ticker interrogé, cause) et `main` les imprime. Une série absente
+   vaut mieux qu'une série fausse — mais elle doit se voir.
+2. *La cause se mesure, elle ne se devine pas.* `make diag-source-crypto` confronte chaque
+   série de `crypto.db` à une référence indépendante (Binance klines, gratuit, sans clé,
+   déjà utilisé pour le funding) et sépare **quatre causes aux gestes opposés** :
+   collision de ticker (`UNI-USD` chez Yahoo peut désigner un homonyme illiquide → forcer
+   le bon symbole via `ALIAS_YAHOO`), flux arrêté (retirer jusqu'à réparation), précision
+   (un jeton à 0,00001 $ arrondi à six décimales bouge en marches d'escalier → changer de
+   source), conforme (l'anomalie est réelle). Sans réseau, le verdict est
+   « NON VÉRIFIABLE » : pas de référence, pas de conclusion inventée.
+
+**Ce qui n'est PAS décidé ici.** `ALIAS_YAHOO` est **vide**. Le vrai ticker de chacune de
+ces cinq bases se mesure sur la machine qui détient `crypto.db` ; l'écrire d'après une
+intuition reviendrait à remplacer une série fausse par une autre. Le script imprime la
+ligne exacte à ajouter — l'ajouter reste un geste humain, après mesure.
+
+**Conséquences.** Le prochain `make ingest-crypto` dira combien de bases sont muettes.
+Tant que le diagnostic n'a pas tourné, les douze séries restent à écarter de l'univers :
+un cours immobile paraît sans risque à la variance comme au CVaR, et hériterait d'un
+poids qu'il ne mérite pas.
+
+## ADR-0088 — Le détecteur d'anomalies reprochait à une crypto d'être une crypto (2026-09-09)
+
+> **CORRIGÉ LE MÊME JOUR PAR LES DONNÉES RÉELLES — lire d'abord ceci.** Le raisonnement
+> ci-dessous est juste sur son propre terrain et sa conclusion est fausse hors de lui.
+> `make calibrer-seuil` sur le vrai panneau (1500 dates × 774 actifs) donne, au seuil de
+> 8 et **avec** la normalisation, un taux de signalement de **57,6 %** — contre 55,6 %
+> (430/774) mesurés le 08/09 **sans** elle. **La normalisation n'a pas réduit le taux de
+> signalement réel.** Elle corrige un artefact réel — le mélange d'échelles, démontré
+> sur panneau synthétique — mais ce n'était pas le facteur dominant. Le facteur dominant
+> est bien celui que j'avais écrit au TODO puis rayé : **les queues épaisses**. Un
+> panneau gaussien ne pouvait pas en décider, puisqu'il n'en a pas ; ma mesure ne
+> pouvait donc pas distinguer les deux hypothèses, et j'ai conclu comme si elle le
+> pouvait. **La note initiale du TODO n'était pas fausse, elle était incomplète — et ma
+> correction l'était tout autant.** Par classe, au seuil 8 et après normalisation :
+> crypto 94 %, actions 65 %, forex 53 %, commodités 50 %, indices 24 %, ETF 11 %. Une
+> crypto reste signalée neuf fois sur dix parce que ses rendements sont réellement à
+> queues épaisses **par rapport à sa propre échelle**, pas parce qu'on la compare à des
+> actions. La normalisation est conservée : la statistique qu'elle produit veut dire ce
+> qu'elle prétend dire. Elle ne dispense pas de trancher le seuil, qui reste
+> **UNCALIBRATED** — et la première proposition chiffrée du script (24) est écartée pour
+> la raison décrite en ADR-0090.
+
+
+**Contexte.** Premier passage réel d'`anomalies_panel` : **430 actifs sur 774 signalés**.
+À ce taux, ce n'est plus un détecteur, c'est un bruit de fond qu'on apprend à ignorer —
+et un rapport qu'on n'ouvre plus ne protège de rien. J'avais noté au TODO « les queues
+épaisses des marchés, pas des anomalies », et rangé l'affaire en P2 « recalibrer le
+seuil ». **C'était une explication plausible, non mesurée, et fausse.**
+
+**La mesure.** Panneau synthétique de 774 séries reproduisant le mélange réel du projet —
+300 forex à 0,5 % de volatilité quotidienne, 400 actions à 1,5 %, 74 cryptos à 5 % — et
+**aucune anomalie injectée, pas une seule**. Résultat au seuil de 8 écarts robustes :
+
+| classe | actifs signalés |
+|---|---|
+| forex | 0 / 300 |
+| action | 1 / 400 |
+| crypto | **74 / 74** |
+
+12 974 événements pour zéro défaut réel. Le mécanisme est alors évident : la coupe du
+jour mélange des échelles sans rapport, sa médiane et son MAD sont dictés par la classe
+la plus nombreuse, et une crypto qui vit sa journée ordinaire se retrouve à seize écarts
+de cette coupe-là. **Le seuil n'était pas trop bas : la statistique comparait des choses
+non comparables.** Monter le seuil aurait fait taire le détecteur sans corriger cela — on
+aurait perdu les vrais défauts du forex pour cesser d'accuser les cryptos.
+
+**Décision.** Diviser chaque série par sa PROPRE échelle robuste (MAD temporel de ses
+rendements) avant la comparaison transversale — `echelle_par_actif`, appliqué par défaut.
+La coupe devient homogène et ce qui reste signalé est un mouvement anormal **pour cet
+actif**, ce qu'on cherchait depuis le début.
+
+**Vérifié dans les deux sens, parce que se taire est facile :**
+
+| mesure, même panneau | avant | après |
+|---|---|---|
+| actifs sains signalés | 75 / 774 | **0 / 774** |
+| splits ×4 injectés retrouvés | 3 / 3 | **3 / 3** |
+| ticks erronés retrouvés (×1,5 à ×10, trois classes) | 12 / 12 | **12 / 12** |
+
+Le plancher de détection tombe à 8–10 écarts propres à l'actif, uniformément dans les
+trois classes : la sensibilité s'exprime enfin dans l'unité de l'actif au lieu d'être un
+accident de la classe majoritaire.
+
+**Deux pièges tenus à l'œil.** La gravité (« split non ajusté » / « donnée cassée »)
+continue de se lire sur le rendement **réel** : elle se décide à −30 % de cours, pas à
+trente unités d'écart normalisé — sans quoi un −25 % de forex passerait pour une donnée
+cassée et un −40 % de crypto pour une valeur extrême, classement inversé, geste de
+réparation inversé. Test dédié, dont j'ai vérifié par sabotage qu'il échoue quand on
+publie la valeur normalisée. Et une série d'échelle nulle sort de la comparaison au lieu
+de faire diverger la division : c'est `series_figees` qui la signale, avec le bon motif.
+
+**Le seuil, lui, reste UNCALIBRATED.** 8,0 est conservé faute d'une mesure sur le vrai
+panneau. `make calibrer-seuil` la fournit : taux de fond par classe (le coût — ce qu'un
+humain doit lire) et sensibilité mesurée par injection de défauts connus dans le panneau
+réel (le bénéfice). Sans le second on choisirait le seuil qui parle le moins, l'infini ;
+sans le premier celui qui attrape tout, zéro. Le script propose et **n'écrit rien**.
+
+**Conséquences.** L'affaire ne relevait pas de la calibration mais de la statistique
+elle-même : régler le seuil aurait donné un détecteur silencieux, pas un détecteur juste.
+La leçon vaut au-delà de ce module — j'ai écrit une cause plausible dans le TODO sans la
+mesurer, et elle a tenu une journée entière avant d'être démentie par un panneau
+synthétique de vingt lignes.
+
+## ADR-0087 — Mean-CVaR : REJETÉ par la mesure hors échantillon (2026-09-08)
+
+**Verdict.** Le Mean-CVaR (ADR-0080) n'est PAS mis en production. Il est inscrit au registre
+des négatifs (`allocation_mean_cvar`, visible sur `/echecs`).
+
+**La mesure.** Six réajustements glissants — 252 jours d'ajustement, 63 jours de mesure sur
+des données jamais vues — univers négociable (693 actifs), séries cassées et figées écartées :
+
+| allocateur          | CVaR dedans | CVaR dehors | rendement |
+|---------------------|------------:|------------:|----------:|
+| HRP                 |      1,46 % |  **1,54 %** | **+12,3 %** |
+| min-variance        |      1,65 % |      1,96 % |   +10,9 % |
+| risk parity (ERC)   |      2,32 % |      2,42 % |   +12,0 % |
+| équipondéré         |      2,32 % |      2,42 % |   +12,0 % |
+| Mean-CVaR plafonné  |      0,62 % |      2,54 % |    −2,4 % |
+| Mean-CVaR           |  **0,58 %** |  **2,91 %** | **−5,1 %** |
+
+Le classement s'INVERSE complètement. Premier en échantillon, dernier hors échantillon — et
+seul allocateur à rendement négatif quand tous les autres font +11 à +12 %. Il ne bat même pas
+l'équipondéré, qui ne demande aucun calcul.
+
+**La cause, et elle était prévisible.** Le CVaR à 95 % sur 252 jours est estimé sur **treize
+observations de queue**. Ajuster 693 poids contre treize points, c'est optimiser du bruit.
+min-variance exploite les 252 jours entiers ; HRP la structure de corrélation : tous deux
+estiment des quantités infiniment mieux échantillonnées. Le programme linéaire était juste — il
+touche l'optimum à 7,8e-08 — mais l'optimum d'une quantité mal estimée n'a aucune valeur.
+
+**Ce que ça confirme, plus largement.** Le cas piège synthétique du 07/09 (min-variance 33,5 %
+contre Mean-CVaR 14,85 % sur un actif à krachs) était juste ET sans portée : il opposait deux
+actifs dont la vraie distribution était connue par construction. Sur des données réelles, ce
+qu'on estime compte plus que ce qu'on optimise.
+
+**Ce qui est confirmé au passage : HRP tient.** Meilleur des six hors échantillon, sur le
+risque ET le rendement, avec la plus faible dégradation dedans → dehors (1,46 % → 1,54 %).
+L'allocateur déjà présent dans le projet est le bon.
+
+**Le module reste dans le dépôt**, testé et documenté. Un négatif mesuré vaut d'être gardé : il
+évite de refaire l'essai, et `cvar_du_portefeuille` sert de métrique de comparaison même quand
+l'optimiseur n'est pas utilisé.
+
+## ADR-0086 — Comparer deux optimiseurs en échantillon est circulaire (2026-09-08)
+
+**Contexte.** Cinquième lancement, le premier honnête : univers négociable (693 actifs,
+678 jours communs), séries cassées et figées écartées, répartition par classe publiée.
+
+**Résultat obtenu.** CVaR 0,58 % pour Mean-CVaR contre 1,65 % pour min-variance, 1,46 % pour
+HRP, 2,32 % pour l'équipondéré. Pire jour 1,29 % contre 4,26 %. Répartition : 69 % d'ETF
+(AGG 67 % à lui seul), 29 % d'actions, 2 % de crypto.
+
+**Et pourtant ce chiffre ne prouve rien.** Chaque allocateur est ajusté sur les 678 mêmes
+jours qui servent ensuite à le noter. Mean-CVaR MINIMISE exactement le nombre rapporté : il ne
+peut pas perdre ce concours, c'est sa fonction objectif. Et min-variance perd sur le CVaR par
+construction, parce qu'il minimise la variance — pas par infériorité. « 0,58 % contre 1,65 % »
+énonce donc uniquement que l'optimiseur a bien optimisé ce qu'on lui a demandé.
+
+C'est le même défaut que le projet traque partout ailleurs — CV purgée, hors-échantillon,
+DSR — et qui s'était réinstallé ici sans qu'on le voie, parce que le chiffre était flatteur.
+
+**Décision.** Test à fenêtre glissante : poids ajustés sur 252 jours, appliqués aux 63
+suivants, jamais vus, répété le long de l'historique. Les segments hors échantillon sont mis
+bout à bout et notés ensemble. Un avantage qui survit est réel ; un avantage qui s'évapore
+était du surajustement — et les deux sont indiscernables en échantillon.
+
+Le RENDEMENT est publié à côté du risque. Un allocateur qui divise la perte extrême par trois
+en divisant aussi le rendement par trois n'a rien amélioré : il a moins investi. Sans cette
+colonne, « minimiser le CVaR » a une réponse triviale — acheter des obligations — que le run a
+d'ailleurs donnée (AGG 67 %).
+
+**Note sur le plafond.** Passer de 67 % à 25 % de poids maximal coûte 0,04 point de CVaR
+(0,58 % → 0,62 %). Si ce résultat tient hors échantillon, la diversification est presque
+gratuite — un fait actionnable indépendamment du verdict sur le Mean-CVaR.
+
+**Verdict inchangé : non branché.** Cinq lancements, cinq défauts du BANC (dépendance
+manquante, saturation mémoire, filtre calendaire, investabilité, circularité). Le sixième
+mesurera enfin quelque chose.
+
+## ADR-0085 — Un minimiseur de risque multi-classes ne fait pas une allocation (2026-09-08)
+
+**Contexte.** Validation du Mean-CVaR (ADR-0080) sur données réelles, quatre lancements
+successifs. Chacun a corrigé un défaut du banc lui-même ; le quatrième a produit un résultat
+apparemment excellent — et c'est celui qui a le plus appris.
+
+**Le résultat, et pourquoi il ne vaut rien.** CVaR 0,06 % contre 1,06 % pour min-variance,
+soit dix-sept fois mieux. Allocation proposée : USD/HKD 41,7 %, AUD/USD 12,9 %, USD/SGD
+12,1 %, EUR/AUD 9,6 % — **cent pour cent de forex**.
+
+Deux raisons, l'une factuelle et l'autre structurelle :
+
+1. *Le forex est marqué NON NÉGOCIABLE dans ce projet* (`03_TODO`, aucun courtier branché).
+   L'allocateur proposait ce que le système ne peut pas acheter. Un banc de comparaison qui
+   ignore l'investabilité ne compare rien.
+
+2. *USD/HKD est un cours ANCRÉ* par la banque centrale de Hong Kong dans une bande étroite.
+   Sa volatilité est proche de zéro **par construction, pas par qualité**. Le détecteur de
+   séries figées ne l'attrape pas — il bouge, à peine — mais il joue exactement le même rôle
+   que les séries figées de l'étape 1 : un actif qui paraît sans risque et rafle la mise chez
+   tout minimiseur.
+
+**La leçon générale, qui dépasse ce cas.** Un minimiseur de risque appliqué à un univers
+mêlant forex (~0,3 %/jour), obligataire, actions (~1,8 %) et crypto (~4,5 %) ne produit pas une
+allocation : il **choisit la classe la moins agitée et y reste**. Le CVaR obtenu est imbattable
+et ne mesure rien d'autre que ce choix de classe. C'est la même dégénérescence que
+« min-variance concentre sur l'actif le plus calme » (06/09), remontée d'un cran : de l'actif
+à la CLASSE d'actifs.
+
+**Décisions.** Filtre d'investabilité aligné sur celui du screener, étendu aux classes sans
+courtier. Et surtout : la RÉPARTITION PAR CLASSE de chaque allocateur est désormais publiée —
+c'est la lecture qui manquait, celle qui rend le piège visible. La dissimuler ferait passer une
+dégénérescence pour une performance.
+
+**Verdict sur le Mean-CVaR : NON VALIDÉ, et non branché.** Quatre lancements n'ont jamais
+produit une comparaison honnête, parce que le banc était faux à chaque fois pour une raison
+différente. La cinquième mesure dira quelque chose ; les quatre premières ne disaient rien.
+
+**Ce qui EST validé.** Le générateur de signaux : 96 candidats ramenés à 24 essais distincts,
+13 retenus par le seuil du blueprint NVIDIA, **zéro promu** après Benjamini-Hochberg. Le
+registre ne s'est pas rempli de bruit — c'est le comportement voulu, mesuré sur données
+réelles. Et l'audit d'anomalies, qui a trouvé cinq séries cassées et sept figées, toutes des
+paires `/USDC`.
+
+## ADR-0084 — Revue d'une liste de dépôts « indispensables » : un seul trou réel (2026-09-08)
+
+**Contexte.** Liste argumentée de dépôts standards de l'industrie, avec deux qualifiés
+d'urgents. Vérification faite contre le code plutôt que contre la réputation des projets.
+
+**Le seul trou réel : LightGBM.** Déclaré dans `pyproject.toml` (groupe `ml`) et importé
+**nulle part**. Une dépendance qu'on installe, met à jour et audite pour ses vulnérabilités,
+sans qu'elle serve. `params_arbres("lightgbm")` savait déjà lui parler depuis ADR-0079 ; il ne
+manquait que l'adaptateur. Branché dans `make_model`.
+
+*Le point subtil qui justifie le test* : LightGBM fait croître ses arbres PAR FEUILLE, XGBoost
+par NIVEAU. Laisser `num_leaves=31` (défaut) avec `max_depth=3` donnerait un arbre bien plus
+complexe que son équivalent XGBoost à réglages « identiques » : on croirait comparer deux
+algorithmes, on comparerait deux capacités de mémorisation. `num_leaves=7` (2³−1). Contrôle
+négatif vérifié : remettre 31 fait rougir le test.
+
+**La correction factuelle : Riskfolio-Lib n'est pas à intégrer d'urgence.** Il est présenté
+comme apportant HRP, CVaR et Black-Litterman. Les trois existent DÉJÀ nativement ici :
+`optimize.hrp_weights`, `cvar_optimize.mean_cvar_weights` (ADR-0080), `black_litterman`. Comme
+LightGBM, riskfolio est déclaré et importé nulle part — mais son cas est l'inverse : ce n'est
+pas un trou à combler, c'est une dépendance à RETIRER. L'ajouter donnerait deux implémentations
+de HRP susceptibles de diverger, et un désaccord entre deux allocateurs est indétectable à
+l'œil.
+
+**Écartés, avec raison mesurée plutôt qu'avec un principe.**
+· *Transformers séries temporelles (PatchTST, Informer) et apprentissage par renforcement
+  (TradeMaster)* : le seuil de promotion mesuré ici vaut ±0,118 de Sharpe sur onze ans
+  (ADR-0079). Ajouter des familles de modèles multiplie les essais donc resserre encore la
+  déflation, sans lever le blocage — qui est la longueur de l'historique, pas la richesse des
+  modèles. Mesuré : sur du bruit pur, enrichir l'espace de recherche fait passer les faux
+  positifs d'un seuil non corrigé de 45/75 à 88/96 (ADR-0083).
+· *`jpmorganchase/perspective`* : réel, remarquable, conçu pour des millions de lignes en
+  streaming. Les tableaux d'ici en comptent ~750, et le front est un export statique. Un moteur
+  WebAssembly pour ça alourdirait la page sans rien résoudre.
+· *`apple/mlx`* : l'argument « prototyper vite sur le M4 » est juste, mais MLX est un framework
+  DISTINCT de torch — du code écrit pour MLX ne migrerait pas vers CUDA. Cela contredit
+  frontalement la portabilité établie en ADR-0079.
+· *Kalshi / Polymarket* : l'argument a changé et s'est amélioré (probabilités implicites FED
+  comme variables de CONTEXTE, non comme signal). Il reste à trancher par la mesure d'un IC sur
+  le panel réel — pas ce soir, faute de données. Inscrit au TODO plutôt que tranché à l'aveugle.
+· *gs-quant, connecteurs Binance/Coinbase, sec-gov* : dérivés hors périmètre ; le passage d'un
+  courtier en réel est conditionné aux P0-SI-LIVE ; SEC EDGAR est déjà dans la chaîne
+  fondamentale (yfinance → FMP → SEC).
+
+## ADR-0083 — Grammaire de signaux à deux étages, inspirée d'Alpha158 (2026-09-08)
+
+**Contexte.** Revue d'une vingtaine d'organisations GitHub (Microsoft, Goldman Sachs,
+Bloomberg, JPMorgan, Apple, Google, Databricks, places de marché…). Une seule a désigné un
+manque RÉEL et immédiat : `microsoft/qlib` (MIT) et ses jeux de facteurs Alpha158/Alpha360.
+
+**Le manque était dans ce que je venais d'écrire la veille.** La grammaire du générateur
+(ADR-0081) produisait 75 candidats du type `identite(open, 0)` ou `log(volume, 5)` : le prix
+brut, le volume brut. Aucun ne dit rien de RELATIF — ni au passé de l'actif, ni aux autres
+actifs. Explorer cet espace revenait à tirer 75 fois à pile ou face en croyant chercher. Le
+garde-fou était bon, le champ de recherche était vide.
+
+**Décision.** Expressions à DEUX ÉTAGES, la forme qu'emploient les jeux de facteurs publiés :
+  · TEMPOREL — l'actif face à son propre passé sur une fenêtre (momentum, volatilité, écart à
+    la moyenne, position dans la bande, pente, ratio de volume) ;
+  · TRANSVERSAL — l'actif face aux autres à la même date (brut, rang, z-score, inverse).
+
+C'est la COMPOSITION qui fait le signal : un momentum brut n'est pas comparable entre une
+action calme et une crypto ; son rang dans la coupe du jour l'est. 96 candidats qui ont un
+sens (`rang(momentum, 63j)`) au lieu de 75 qui n'en avaient aucun.
+
+**La règle non négociable, et son test.** Chaque opérateur à l'instant `t` ne lit que
+`t-w+1 … t`. Un décalage d'UNE ligne fabrique un signal spectaculaire et parfaitement faux —
+et ça ne ressemble pas à un bug, puisque les chiffres deviennent justement très beaux. Aucun
+contrôle statistique ne le rattrape ensuite : un IC de 0,4 obtenu en trichant passe toutes les
+portes du gate. Test appliqué à CHAQUE opérateur : on saccage le futur, on exige que le passé
+ne bouge pas d'un bit. Contrôle négatif vérifié (momentum décalé d'une ligne → 4 rouges).
+
+**Effet mesuré sur la démonstration.** Sur du bruit pur, la grammaire riche AGGRAVE le problème
+du seuil |IC| ≥ 0,02 : 88 candidats sur 96 seraient retenus par le blueprint NVIDIA (contre 45
+sur 75 avec la grammaire pauvre), 0 par notre gate. Plus l'espace de recherche est riche, plus
+un critère sans correction pour essais multiples devient dangereux — exactement l'inverse de
+l'intuition.
+
+**Écarté, avec raison.** `gs-quant` (Goldman) : dérivés, dont une bonne part exige leur API ; le
+projet ne trade pas d'options et le TODO diffère les dérivés faute de Grecs et de surface de
+volatilité. Kalshi / Polymarket : les marchés de prédiction ont été RETIRÉS délibérément en
+juillet (aucune décision ne les consommait) — les réintroduire annulerait cette décision sans
+élément neuf. `riskfolio-lib` : déjà déclaré en dépendance. `tradingview/lightweight-charts` :
+déjà utilisé. Apple MLX : accélère Apple Silicon, or la cible est NVIDIA.
+
+## ADR-0082 — Expliquer le modèle, et voir ce qu'un contrôle ligne par ligne rate (2026-09-08)
+
+**Contexte.** Suite de la revue des dépôts NVIDIA. Deux manques identifiés puis comblés,
+tous deux INDÉPENDANTS du matériel : le GPU les accélère, il ne les rend pas possibles.
+
+**1. Le score ML entrait dans le site comme un nombre opaque.** `/fiche` détaille ses six
+étages, mais « le modèle donne 68 % » n'explique rien — c'est la chose même qu'il faudrait
+expliquer. C'est ce que comble `cuml.explainer` (SHAP). Implémenté en numpy :
+`importance_par_permutation` (globale : sur quoi le modèle s'appuie) et `valeurs_de_shapley`
+(locale : pourquoi CE titre aujourd'hui).
+
+*Le garde-fou est l'EFFICIENCE* : les contributions somment exactement à
+`f(x) − moyenne(f(fond))`. C'est un théorème, donc une implémentation fausse le viole — sans
+ce test, n'importe quel histogramme normalisé passerait pour une explication. Une première
+version tirait la référence AU HASARD à chaque permutation : la somme retombait alors sur la
+moyenne de l'échantillon tiré, pas du fond, et l'efficience n'était plus exacte. Corrigé par
+un parcours systématique de chaque référence, sans surcoût.
+
+**2. L'audit de données ne voyait que l'impossible.** Les contrôles existants vérifient chaque
+série SÉPARÉMENT (prix > 0, cohérence OHLC, dates croissantes). Ils attrapent l'impossible,
+jamais le POSSIBLE MAIS ABSURDE : un split non ajusté, un tick erroné, un flux figé. C'est
+l'angle utile de NV-Tesseract — pas prédire, surveiller. `anomalies_panel` compare chaque
+actif à la COUPE du jour (médiane et MAD, jamais moyenne et écart-type : un krach déplacerait
+la moyenne au point de rendre le reste « normal ») et repère les cours immobiles quand le
+marché cote.
+
+Le flux figé est le cas le plus dangereux des trois, et il rejoint ADR-0080 : un cours
+immobile n'a ni dispersion ni queue, donc il paraît sans risque à TOUS les optimiseurs,
+variance comme CVaR. Aucun contrôle de forme ne peut le voir.
+
+**3. Le banc n'était pas déterministe.** `GradientBoostingClassifier` sans `random_state`
+consomme le générateur aléatoire GLOBAL de numpy pour départager les égalités entre découpes
+d'arbre. Vérifié en figeant ce générateur, ce qui a isolé la cause. La graine est posée sur
+l'ESTIMATEUR, jamais par `np.random.seed()` : figer le générateur global depuis une
+bibliothèque contaminerait tout le processus.
+
+**Conséquences.** `demo_ml.py` rend désormais trois exécutions identiques au caractère près —
+sans quoi la migration Mac → NVIDIA n'aurait pas pu être validée. Rien n'est corrigé
+automatiquement par l'audit d'anomalies : on signale, l'humain tranche. Aucun des trois
+modules n'est branché en production.
+
+## ADR-0081 — Découverte de signaux : la moitié qui propose, tenue par celle qui refuse (2026-09-07)
+
+**Contexte.** Le blueprint `quantitative-signal-discovery-agent` boucle : un modèle invente
+une formule, un second l'écrit en Python, un troisième la teste au Rank IC, et la retient si
+|IC| ≥ 0,02 avec p ≤ 0,05. La documentation n'évoque AUCUNE correction pour essais multiples.
+
+**Le problème, en chiffres plutôt qu'en argument.** La sélection de ce projet a été mesurée à
+IC = +0,0202 (t = 0,76). Elle FRANCHIT le seuil de 0,02 du blueprint alors que notre méthode
+la rejette. Et mesuré ici sur 75 candidats évalués contre des rendements INDÉPENDANTS des
+prix — donc du bruit par construction : **45 retenus par le seuil du blueprint, 0 par le
+nôtre**. Le critère d'un signal isolé, appliqué à une machine qui en produit des centaines,
+ne filtre rien.
+
+**Décision.** `packages/research/generateur_signaux.py` — la boucle de génération, sous trois
+contraintes que le blueprint n'a pas :
+
+1. *Aucun code exécuté.* Un signal est une EXPRESSION dans une grammaire fermée (champ,
+   opérateur, retard), validée avant toute évaluation, interprétée par notre code. Le
+   blueprint fait écrire du Python par un modèle puis l'exécute : dans un dépôt qui peut
+   passer des ordres réels, c'est une porte ouverte. Un modèle pourra proposer des
+   expressions ; il ne pourra jamais injecter de code.
+2. *Inscription au registre AVANT le verdict.* `trial_count()` monte à chaque candidat, donc
+   `deflation_params()` resserre le Sharpe déflaté de TOUT le programme. Générer beaucoup
+   n'est plus gratuit — c'est exactement ce qui manque à une boucle qui génère sans compter.
+3. *Trois issues, pas deux.* « rejeté » ≠ « non mesuré ». Les confondre remplirait le registre
+   de faux négatifs et fausserait le taux de réussite affiché sur /methode.
+
+**Conséquences.** `accepte_par_le_blueprint()` est conservé comme point de COMPARAISON, jamais
+comme critère : il rend l'écart mesurable sur chaque campagne. Le retard ne décale que vers le
+passé (test dédié) — l'autre sens fabriquerait de l'information. L'énumération est
+déterministe : deux campagnes restent comparables.
+
+**Non fait.** Aucun modèle de langage n'est branché. `enumerer()` produit les candidats de
+façon déterministe et suffit à démontrer la mécanique ; le modèle remplacera cette énumération
+quand il viendra, jamais le garde-fou. Rien n'est branché en production.
+
+## ADR-0080 — Mean-CVaR : minimiser la perte extrême, pas la dispersion (2026-09-07)
+
+**Contexte.** Inspiration : le blueprint `NVIDIA-AI-Blueprints/portfolio-optimization`
+(vérifié, 487 étoiles), qui résout du Mean-CVaR sur GPU avec cuOpt et annonce jusqu'à 160×.
+Ce chiffre suppose un H100 et porte sur le SOLVEUR. La question utile n'était donc pas
+« comment aller 160× plus vite » mais « qu'est-ce que ce blueprint calcule que nous ne
+calculons pas ».
+
+**Le manque.** Tous les optimiseurs de `optimize.py` raisonnent en variance : min-variance,
+inverse-variance, ERC, HRP. La variance traite +8 % et −8 % à l'identique. `cvar_historical`
+existait mais ne servait qu'à RAPPORTER, jamais à décider. Mesuré le 06/09 : min-variance
+pose 87 % à 99 % sur l'actif le plus calme — définitionnel, pas un bug. Or « le plus calme »
+et « celui qui perdra le moins le jour où tout tombe » diffèrent dès que les pertes sont
+asymétriques.
+
+**Décision.** `packages/portfolio/cvar_optimize.py` — Mean-CVaR par Rockafellar-Uryasev,
+résolu EXACTEMENT en programmation linéaire (HiGHS via scipy, matrice creuse), avec repli
+sous-gradient projeté si scipy est absent. Même formulation que celle que le blueprint confie
+à cuOpt : seul le solveur changerait sur GPU.
+
+**Mesuré sur le cas piège** (un actif calme à krachs, un actif agité sans trou) :
+optimum vrai par balayage 14,85 % / CVaR 0,03803 · solveur LP 14,85 % / 0,03803 (écart
+7,8e-08) · min-variance 33,5 % / 0,03989. L'écart n'est pas cosmétique : min-variance met
+plus du double sur l'actif qui ruine.
+
+**Deux erreurs commises et corrigées, consignées parce qu'elles se reproduiront.**
+1. *Mise à l'échelle du pas.* La première version calait le pas de sous-gradient sur
+   l'amplitude des rendements (O(0,01)) alors que les poids sont O(1). Partie de 50 %, elle
+   finissait à 44 % là où l'optimum était à 15 % — donc PIRE que min-variance sur son propre
+   objectif. Le code tournait et semblait converger. Seule la comparaison à min-variance l'a
+   attrapé ; la lecture ne l'aurait pas fait.
+2. *Fausse prémisse dans un test.* J'y exigeais 87 % pour min-variance, chiffre repris du cas
+   à dix actifs ; à deux actifs il ne se reproduit pas. La prémisse était fausse, pas le
+   code — corrigée, pas ajustée jusqu'à passer.
+
+**Conséquences.** Rien n'est branché en production : le module est disponible, pas imposé.
+L'intégrer comme profil supplémentaire demande une comparaison sur données réelles, pas sur
+le cas piège synthétique. Publié : `mean_cvar_detail()` rend la MÉTHODE employée — « exact »
+et « approché » ne sont pas des chiffres de même nature.
+
+## ADR-0079 — Le matériel se détecte, il ne se code pas en dur (2026-09-07)
+
+**Contexte.** Développement sur Mac Apple Silicon (backend MPS), migration prévue sur une
+machine NVIDIA (CUDA). Un `.to("mps")` écrit dans un module de calcul marche sur un poste et
+casse sur l'autre, des semaines plus tard, loin de la ligne fautive.
+
+**Constat avant d'agir.** Audit du dépôt : **aucun** `.to("mps")`, `.cuda()` ni `.to("cpu")`
+n'existait. `torch` n'apparaît que dans une docstring ; FinBERT passe par
+`transformers.pipeline`, qui choisissait son matériel seul. `lightgbm` est déclaré en
+dépendance mais n'est importé nulle part ; `catboost` n'existe pas dans le projet. Le seul
+appel à accélérer était UNE instanciation `XGBClassifier`. La refonte demandée portait donc
+sur trois points de contact, pas sur une passe globale — et le dire valait mieux que produire
+un diff impressionnant sur du code inexistant.
+
+**Décision.** Toute la logique matérielle dans `packages/common/device.py` :
+`get_optimal_device()` (CUDA → MPS → CPU, surchargeable par `QUANT_DEVICE`), `torch_device()`,
+`device_index()` pour les pipelines HuggingFace, `params_arbres(lib)` pour XGBoost / LightGBM /
+CatBoost, `activer_cudf()` et une bannière « Exécution sur : … ».
+
+**Trois choix non évidents.**
+
+1. *Rien d'importé au niveau module.* Le cœur du dépôt ne déclare aucune dépendance ; `torch`,
+   `xgboost` et `cudf` sont absents de la CI. Tout est importé dans les fonctions, sous `try`.
+   Importer ce module ne peut pas échouer.
+
+2. *La version d'XGBoost est LUE, pas supposée.* La 2.0 a remplacé `tree_method="gpu_hist"`
+   par `tree_method="hist"` + `device="cuda"`. L'ancienne forme est ignorée **en silence** par
+   la nouvelle : parier ferait tourner sur processeur une machine à 10 000 € sans un message.
+
+3. *`cudf.pandas` n'est PAS un import de repli.* C'est un crochet d'importation à poser AVANT
+   que pandas n'entre en mémoire. Posé après, il ne fait rien **et ne lève rien** — on se croit
+   accéléré en tournant sur processeur. D'où l'appel en tête des points d'entrée et un
+   diagnostic explicite quand il est trop tard. Le `try/except` autour d'un
+   `import cudf.pandas as pd` demandé initialement aurait produit un module qui n'a pas l'API
+   de pandas.
+
+**Conséquences.** Aucun hyperparamètre de modèle ne change : `params_arbres` ne rend QUE des
+réglages matériels. Un dictionnaire qui mélangerait les deux ferait dériver la forme du modèle
+appris à chaque changement de machine. Corrigé au passage : `use_label_encoder=False`, retiré
+d'XGBoost 2.0, faisait lever l'instanciation sur toute installation récente.
+
+**Non traité, volontairement.** L'accélération de pandas suppose que le temps se passe dans
+pandas ; ici il se passe surtout en lectures SQLite et en numpy. Non mesuré, donc non promis.
+
+## ADR-0074 — La recommandation d'univers SÉLECTIONNE ; elle ne prédit pas (2026-09-07)
+
+**Contexte.** Demande : une carte où le robot propose quels actifs détenir, pas seulement comment
+repondérer l'existant. `optimal_allocation` ressemblait à la réponse toute faite — elle ne l'est
+pas : `snapshot.py:1858` pose `corr_syms = held[:12]`, ce sont les lignes DÉJÀ détenues. L'exposer
+sous ce nom aurait répondu à la question du rééquilibrage sous l'étiquette de la sélection.
+
+**Décision.** Sélection = top N du screening quotidien ; poids = les mêmes moteurs de risque
+(min-variance, ERC, HRP) que l'étape 4. Aucun rendement attendu n'entre dans ces trois profils :
+« idéal » signifie « bien réparti sur une sélection », jamais « le plus rentable ».
+
+**Conséquences.** L'écart de performance entre les deux cartes vient donc ENTIÈREMENT de l'étape
+de sélection — la seule que rien ne validait au moment de la livraison (cf. ADR-0075). Les lignes
+détenues absentes de la sélection s'affichent à 0 % : les omettre sous-estimerait le turnover et
+cacherait la moitié de la décision. Un élagage T/N ≥ 30 retire les candidats qui rendraient la
+covariance non estimable, et publie ce qu'il retire avec sa date de début.
+
+## ADR-0075 — Mesurer l'IC AVANT d'autoriser un profil orienté rendement (2026-09-07)
+
+**Contexte.** « Maximiser les gains » exige un rendement attendu, donc un signal dont le pouvoir
+prédictif est établi. Rien ne l'établissait. La tentation habituelle est de livrer quand même en
+qualifiant le résultat d'« exploratoire ».
+
+**Décision.** Construire la MESURE d'abord (`packages/research/screening_ic.py` : IC de Spearman
+walk-forward, information tronquée à `t`, fenêtres disjointes, coupe hors échantillon
+chronologique), puis n'ouvrir le profil « Conviction » que si elle passe. L'amplitude des vues vaut
+IC × σ × z (Grinold) : un IC faible ramène mécaniquement le postérieur sur le prior ERC.
+
+**Mesuré** (779 symboles réels, horizon 21 j, 83 fenêtres disjointes) : IC **+0,0202**, erreur-type
+0,0266, **t = 0,76** (p = 0,45), intervalle à 95 % **[−0,032 ; +0,072]** contenant zéro, première
+moitié +0,0322 contre seconde +0,0084 — **−74 %**. Il faudrait 2,6 fois cet IC pour atteindre t = 2.
+
+**Conséquences.** Le profil « Conviction » reste FERMÉ, et la carte affiche la raison chiffrée. Le
+verrou ayant été écrit AVANT la mesure, il n'a pas pu être assoupli pour accommoder le résultat —
+c'est l'intérêt de l'ordre choisi. Chaque mesure est consignée au registre des hypothèses, succès
+comme échec : un essai non consigné fausserait le compteur qui déflate le Sharpe.
+
+**Réserve.** Un seul horizon testé. L'absence de significativité à 21 jours ne prouve rien aux
+autres horizons, mais en tester plusieurs impose Benjamini-Hochberg avant de publier le meilleur.
+
+## ADR-0076 — Le profil déclaré BORNE le calcul, il ne le commente pas (2026-09-07)
+
+**Contexte.** La page « Mon profil » l'écrivait elle-même : « Elles ne contraignent aujourd'hui
+aucun autre écran ». Un questionnaire de risque sans effet est un ornement.
+
+**Décision.** Le front transmet le profil à chaque appel — comme le fait déjà `/api/profil`, l'API
+calcule et ne conserve rien. Deux contraintes, dans cet ORDRE : le plafond de ligne (RELATIF,
+projection sur le simplex à somme constante), puis l'exposition (ABSOLUE, lue sur la volatilité des
+poids DÉFINITIFS via `vol_target_from_drawdown`, la conversion du dimensionnement de production).
+
+**Conséquences.** Mesuré sur un profil horizon 10 ans / perte max 25 % : exposition ramenée à
+72,1 %, 27,9 % en liquidités, volatilité finale exactement à la cible. L'inversion de l'ordre
+mesurerait la volatilité d'une allocation qu'on ne détiendra pas. Les liquidités sont une LIGNE du
+tableau, exclue du turnover : le cash est ce qui reste après les ventes, pas un achat.
+
+## ADR-0077 — Séparer « certifier réel » de « comparer des dates » (2026-09-07)
+
+**Contexte.** `is_real_mode` refuse le mode « mixte » à juste titre : un seul titre en repli
+synthétique interdit de certifier l'univers réel. Mais le NETTOYAGE des titres périmés était gardé
+par ce même prédicat, alors qu'il ne pose pas cette question. Le VPS tournant en « mixte », le
+nettoyage ne s'est jamais exécuté en production.
+
+**Conséquences mesurées.** BK (dernière barre au 18 juin), EA (10 août) et EQR (21 août)
+occupaient 57 % de la recommandation. Deux dégâts : l'alignement par intersection ramenait la
+fenêtre commune de TOUT le portefeuille au 17 juin ; et une série figée, n'ayant plus de variance
+récente, est prise par un min-variance pour l'actif le moins risqué de l'univers. **La donnée morte
+n'est pas seulement inutile : elle attire le capital.**
+
+**Décision.** Un prédicat par question — `contient_des_prix_reels` pour la comparabilité des
+horodatages — et une défense en profondeur (`ecarter_perimes`) qui retire les séries arrêtées avant
+tout calcul. Les deux prédicats sont testés comme DISTINCTS, pour qu'ils ne reconvergent pas.
+
+## ADR-0078 — Un outil doit vérifier ce qu'il affirme, pas ce qui lui ressemble (2026-09-07)
+
+**Contexte.** Quatre outils ont menti dans la même journée : `make stop` annonçait « arrêté » sans
+rien arrêter (un `pkill -f` qui se tuait lui-même depuis une recette Make), une garde de port
+répondait « libre » sur un port occupé (elle testait `0.0.0.0` quand Node se lie à `::`),
+`make up` annonçait « prêt » parce que QUELQUE CHOSE répondait, et l'installateur d'unités se
+relançait récursivement (accents graves exécutés dans un heredoc non protégé).
+
+**Point commun.** Chaque vérification portait sur un SYMPTÔME — ça répond, ça rend 0, un listener
+existe — et non sur le FAIT : qui répond, avec quel code, sous quelle supervision.
+
+**Décision.** Trois contrôles explicites dans `make up` : la version de l'unité installée (en
+PREMIER, avant toute recompilation), la filiation du processus qui tient le port jusqu'au MainPID
+du service, et le commit du build servi. En cas d'échec, le diagnostic IMPRIME CE QU'IL A VU.
+
+**Conséquence décisive.** C'est ce dernier point qui a résolu la journée : la filiation imprimée a
+révélé `next-server ← sh ← npm run start ← PM2 God`. **Un processus qui renaît n'est pas un
+orphelin : c'est quelqu'un qui le redémarre.** Huit heures de correctifs contre des « orphelins »
+étaient justes et incapables d'atteindre la cause. L'assertion sans preuve avait tenu toute la
+journée ; le premier diagnostic qui montre ses observations l'a close.
+
+
 ## ADR-0052 — Le stop suiveur ne protégeait pas les gains, il les COUPAIT (2026-09-02)
 
 **Contexte.** `fast_swing` visait une cible à `rr = 6` fois le stop de 4 ATR, soit +24 ATR, avec
@@ -1500,3 +3336,69 @@ publiés et la parité local/en-ligne. Il ne garantit pas qu'un chiffre soit jus
 économique — aucun automate ne le peut. Et le journal réel reste local-only : les chiffres de
 compte du site public ne sont pas ceux du Mac. Ce n'est pas une incohérence mais un périmètre,
 désormais affiché sur la page concernée.
+
+## ADR-0072 — L'appariement par date est une règle de dépôt, pas un correctif ponctuel (2026-09-04)
+
+**Contexte.** Question de l'utilisateur devant le tableau de bord : « contribution alpha, est-ce
+correct ? Il me semble élevé. » 1 072,2 % de contribution alpha, bêta 0,037, corrélation 0,031
+vis-à-vis de QQQ, pour un portefeuille long-only d'actions américaines. Le chiffre à regarder
+n'était pas la contribution mais le bêta : une contribution alpha, c'est le RÉSIDU `r − β·b`.
+Un bêta écrasé bascule mécaniquement tout le rendement du côté « alpha ».
+
+L'ADR-0067 avait corrigé `compute_attribution` (miroir Obsidian) le matin même. Le panneau web ne
+passe pas par là : il lit `/api/analytics`, donc `packages/reporting/analytics.py`, qui faisait
+exactement la même chose — `m = min(len(r), len(b))` puis `r[-m:], b[-m:]`. **Cinquième
+occurrence.** Une sixième a été trouvée dans la foulée : `_bench_series` posait le i-ème cours du
+S&P sur la i-ème date du portefeuille — la courbe de comparaison tracée sous l'equity.
+
+**Mesure, pas déduction.** Deux fois la même courbe, 400 séances, cinq séances retirées du
+calendrier du benchmark (1,25 %) : par date bêta 1,200 et corrélation 1,000 ; par position bêta
+0,345 et corrélation 0,288. Un peu plus de 1 % de calendrier suffit à détruire 71 % du bêta. Sur
+un levier pur 1,2× (alpha nul par construction), la part « alpha » passe de 5,5 % à 47,6 %.
+
+**Décision.** Toute comparaison entre deux séries de calendriers différents passe par
+`apparier_deux_series` (deux séries) ou `aligner_par_date` (N séries). Le résultat publié PORTE la
+manière dont il a été obtenu : `attribution()` expose `alignement` (`"date"` / `"position"`) et
+`n_observations`, et le tableau de bord affiche un avertissement orange quand l'appariement est
+positionnel. Sans calendrier commun suffisant, `available: False` + motif.
+
+**Conséquences.** Six occurrences en un jour disent que la revue au cas par cas ne suffit pas :
+`min(len(a), len(b))` sur deux séries de sources différentes est à traiter comme un défaut par
+défaut, pas comme un choix. L'inventaire des occurrences restantes (indice équipondéré `eqw`,
+horodatage de `fast_swing`, `_align` de `packages/portfolio/benchmark`) est au TODO en P1 : elles
+sont identifiées par lecture du code, pas encore MESURÉES sur données réelles, et on ne remplace
+pas un chiffre publié par un autre sans l'avoir mesuré.
+
+## ADR-0073 — Le banc de sortie ne mesure pas ce qui tourne en production (2026-09-04)
+
+**Contexte.** Question de l'utilisateur : « plutôt qu'un rebalancement quotidien, ne
+vaudrait-il pas mieux tenir les positions jusqu'au TP ou au SL ? » Trois mesures ont été
+nécessaires pour répondre, et chacune a d'abord donné un faux résultat qu'il a fallu
+corriger (comptage des tranches, fermetures administratives). Photo finale du journal
+réel du Mac mini, décisions du SYSTÈME seulement : **6 positions closes en 57 jours,
+détention médiane 0,1 jour, taux de gain 33 %, t = +0,92 (non significatif), capture
+−22 % sur 5 positions mesurables**.
+
+**Le vrai constat n'est pas statistique, il est structurel.** `sortie_lab` — le banc où
+l'on règle `rr` et le suiveur ATR, et qui annonce des détentions de 42 à 48 jours —
+rejoue `fast_swing_backtest` : stop 4 ATR, cible en R-multiples, suiveur. Le chemin de
+production, lui, est `run_live.py` → poids cibles `preset risk-parity + DD-target`
+(`apps/api/snapshot.py`). **Ce sont deux moteurs différents.** La production ne lit ni
+`rr`, ni le suiveur, ni un stop ATR : elle n'a aucune notion de TP ou de SL, et son seul
+motif de sortie est le rebalancement. Passer `rr 6 → rr 9` ou retirer le suiveur dans le
+banc ne changerait **pas un seul ordre** envoyé en production.
+
+**Décision.** Ne pas régler les paramètres de `sortie_lab` en croyant agir sur la
+production. Les deux systèmes sont nommés séparément partout où ils apparaissent, et
+tout résultat du banc porte désormais la mention du moteur qu'il mesure. La question
+« tenir jusqu'au TP/SL » n'est pas un réglage : c'est le choix de faire tourner en
+production un autre moteur que celui qui y tourne — un changement gaté, à valider pour
+lui-même, pas un ajustement.
+
+**Conséquences.** L'instabilité relevée le même jour sur `sortie_lab` (« sans suiveur »
+à Sharpe 0,50 sur les données au 04/09 contre 0,03 au 20/06, un rallye crypto de
+juillet-août dans l'intervalle) devient secondaire : même robuste, ce réglage ne
+toucherait pas la production. Reste une observation à diagnostiquer, formulée comme
+hypothèse et non comme fait : une détention médiane de 0,1 jour sur les décisions du
+système suggère un cycle ouvrir-puis-solder dans la même journée — le plancher de ligne
+(1 000 $) est le premier suspect, à vérifier avant toute correction.

@@ -105,3 +105,42 @@ def test_sell_exceeding_lots_ignores_excess(tmp_path):
     n = close_sells(j, [{"symbol": "AAPL", "venue": "Alpaca",
                          "exit_price": 100.0, "notional": 10_000.0}])  # 100 > 2 détenues
     assert n == 1 and open_lots(j) == []           # ferme ce qui existe, ignore l'excédent
+
+
+# QTY_REELLE prime sur notional/prix (05/09) — cf. `packages/research/sur_fermeture.py`.
+# Sur le compte réel, OSCR a été fermé à 99,18 unités (le delta PLANIFIÉ) alors que le
+# fill réel du courtier était bien plus petit : ~85 unités de « réalisé » inventées.
+
+
+def test_qty_reelle_prime_sur_le_delta_planifie(tmp_path):
+    """Le fill RÉEL (14) doit fermer 14, pas les 99 du delta planifié — sinon on
+    invente ~85 unités de « réalisé », exactement le cas OSCR mesuré le 05/09."""
+    j = _journal(tmp_path)
+    j.append(_lot("L1", qty=100.0), legacy=False)
+    n = close_sells(j, [{"symbol": "AAPL", "venue": "Alpaca", "exit_price": 100.0,
+                         "notional": 9900.0,
+                         "qty_reelle": 14.0}])   # planifié 99, fait 14
+    assert n == 1
+    lots = open_lots(j)
+    assert len(lots) == 1 and abs(lots[0].qty - 86.0) < 1e-9   # 100 - 14, PAS 100-99
+    closed = [t for t in j.all(legacy=False) if t.exit_ts is not None][0]
+    assert abs(closed.qty - 14.0) < 1e-9
+
+
+def test_sans_qty_reelle_le_comportement_est_inchange(tmp_path):
+    """Repli : sans fill citable, `notional / prix` reste le seul calcul disponible."""
+    j = _journal(tmp_path)
+    j.append(_lot("L1", qty=10.0), legacy=False)
+    n = close_sells(j, [{"symbol": "AAPL", "venue": "Alpaca",
+                         "exit_price": 100.0, "notional": 400.0}])   # aucun qty_reelle
+    assert n == 1
+    assert abs(open_lots(j)[0].qty - 6.0) < 1e-9
+
+
+def test_qty_reelle_nulle_ou_negative_retombe_sur_le_notional(tmp_path):
+    """`qty_reelle=0` (champ absent côté prod) ne doit pas bloquer la fermeture."""
+    j = _journal(tmp_path)
+    j.append(_lot("L1", qty=10.0), legacy=False)
+    n = close_sells(j, [{"symbol": "AAPL", "venue": "Alpaca", "exit_price": 100.0,
+                         "notional": 1000.0, "qty_reelle": 0.0}])
+    assert n == 1 and open_lots(j) == []

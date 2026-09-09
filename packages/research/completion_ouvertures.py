@@ -16,8 +16,21 @@ chez le courtier à celle que le journal connaît (lots fermés compris — un l
 bien été ouvert). L'écart est la quantité manquante. Son prix de revient n'est PAS le
 VWAP de tous les achats du symbole : ce serait mélanger les fills déjà couverts avec
 ceux qui manquent. On consomme donc les fills en FIFO à hauteur de ce que le journal
-couvre déjà, et le prix retenu est le VWAP des fills QUI RESTENT — c'est-à-dire
-précisément ceux que le registre ignore.
+couvre déjà, et on reconstitue UN LOT PAR FILL RESTANT — chacun avec SA date et SON
+prix.
+
+POURQUOI UN LOT PAR FILL, ET PAS UN SEUL AU VWAP. La première version fusionnait les
+fills restants en un lot unique portant leur VWAP et la date du PLUS ANCIEN d'entre eux.
+Prix et date venaient donc de tranches différentes, et le lot obtenu n'avait jamais
+existé. Le FIFO le fermait ensuite en PREMIER, contre des ventes réelles. Mesuré sur le
+compte réel le 09/09 : BTC reconstitué à 76 801 $ daté du 07-07 puis fermé le 07-08 à
+61 731 $, soit -19,6 % en une nuit ; ETH -29,1 %, LTC -13,1 %, la même nuit. Ces trois
+écritures pesaient -3 140 $ — davantage que la totalité du lot corrigé — et
+cette nuit-là n'existe pas sur la courbe du compte. Le biais était STRUCTUREL,
+pas malchanceux : le
+FIFO consomme les fills les plus ANCIENS, donc le reste non couvert est fait des plus
+RÉCENTS — les plus chers sur un actif qui monte — tout en étant daté du plus ancien
+d'entre eux. Sur un actif en hausse, la perte fabriquée est systématique.
 
 CE QUE CES LOTS SONT, ET POURQUOI ILS SONT `legacy`. Ce sont des fills importés APRÈS
 COUP : les features de décision de ces achats n'ont jamais été capturées et ne peuvent
@@ -38,6 +51,11 @@ from packages.research.biais_fermeture import symbole_canonique
 
 TOLERANCE = 0.01                 # 1 % de la quantité achetée — arrondis de fills
 MOTIF = "completion-ouvertures"
+# Un fill s'exécute DANS la journée, la référence est la CLÔTURE : quelques points
+# d'écart sont normaux, et le crypto bouge plus qu'une action. 10 % laisse passer une
+# journée agitée et arrête ce qui n'est pas un prix de ce jour-là — le lot fautif du
+# 09/09 était à +24 % du cours de sa date.
+INCOHERENCE_MAX = 0.10
 
 
 def achats_par_symbole(ordres: list[dict]) -> dict[str, list[dict]]:
@@ -89,19 +107,14 @@ def _reste_fifo(fills: list[dict], deja: float) -> list[dict]:
     return reste
 
 
-def _vwap(fills: list[dict]) -> tuple[float, float]:
-    q = sum(f["qty"] for f in fills)
-    return (q, sum(f["qty"] * f["price"] for f in fills) / q) if q > 0 else (0.0, 0.0)
-
-
 def ouvertures_manquantes(
         ordres: list[dict], journalise: dict[str, float],
         tolerance: float = TOLERANCE) -> tuple[list[dict], list[dict]]:
     """(lots à créer, écarts NÉGATIFS signalés). Aucune écriture — c'est un PLAN.
 
-    Le lot proposé porte la quantité manquante, le VWAP des fills non couverts, et la
-    date du PREMIER d'entre eux : c'est la date à laquelle l'exposition a réellement
-    commencé, pas celle où l'on répare."""
+    UN LOT PAR FILL non couvert, chacun à sa propre date et à son propre prix. Fusionner
+    les fills restants fabriquerait un lot au prix des uns et à la date des autres, que
+    le FIFO fermerait en premier contre des ventes réelles (cf. l'en-tête du module)."""
     a_creer, en_trop = [], []
     for sym, fills in sorted(achats_par_symbole(ordres).items()):
         achete = sum(f["qty"] for f in fills)
@@ -112,11 +125,33 @@ def ouvertures_manquantes(
             continue
         if ecart <= tolerance * max(1.0, achete):
             continue
-        reste = _reste_fifo(fills, connu)
-        qty, prix = _vwap(reste)
-        if qty <= 0 or prix <= 0:
-            continue
-        a_creer.append({"symbole": sym, "qty": round(min(qty, ecart), 10), "prix": prix,
-                        "date": reste[0]["date"], "venue": reste[0]["venue"],
-                        "achete": achete, "journal": connu})
+        for f in _reste_fifo(fills, connu):
+            if f["qty"] <= 0 or f["price"] <= 0:
+                continue
+            a_creer.append({"symbole": sym, "qty": round(f["qty"], 10),
+                            "prix": f["price"], "date": f["date"],
+                            "venue": f["venue"], "achete": achete, "journal": connu})
     return a_creer, en_trop
+
+
+def lots_incoherents(a_creer: list[dict], cours, seuil: float = INCOHERENCE_MAX
+                     ) -> list[dict]:
+    """Lots dont le prix s'écarte du cours de LEUR date au-delà de `seuil`.
+
+    LE CONTRÔLE QUI MANQUAIT. Ce rapprochement existait déjà — `diag_journal_compte`
+    compare le prix d'entrée de chaque lot à la clôture de son jour — mais il tournait
+    APRÈS l'écriture. Le 09/09, il a donc constaté le dégât au lieu de l'empêcher : un
+    lot BTC inscrit à 76 801 $ à une date où le marché cotait ~61 700 $, soit +24 %.
+
+    `cours` : appelable (symbole, date ISO) → float | None. Un cours introuvable ne
+    condamne pas le lot — on ne bloque pas une écriture sur une base de prix muette.
+    """
+    hors: list[dict] = []
+    for lot in a_creer:
+        px = cours(lot["symbole"], lot["date"])
+        if not px or px <= 0:
+            continue
+        ecart = float(lot["prix"]) / float(px) - 1.0
+        if abs(ecart) > seuil:
+            hors.append({**lot, "cours": float(px), "ecart": ecart})
+    return hors

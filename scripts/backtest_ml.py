@@ -17,6 +17,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+# MATÉRIEL — avant tout autre import du projet, et surtout avant pandas.
+#
+# `activer_cudf()` pose un crochet d'importation qui doit précéder l'entrée de pandas
+# en mémoire : posé après, il ne fait plus rien ET ne lève rien, ce qui donnerait un
+# script se croyant accéléré alors qu'il tourne sur processeur. Sur Mac, cudf est
+# absent : la fonction rend False sans bruit et pandas reste pandas.
+from packages.common.device import activer_cudf, banniere  # noqa: E402
+
+activer_cudf()
+banniere()
+
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Backtest ML walk-forward (point-in-time)")

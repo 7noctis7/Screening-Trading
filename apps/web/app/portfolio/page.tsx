@@ -18,7 +18,9 @@ export default function Portfolio() {
         {data.strategy_label && <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full align-middle"
           style={{ background: "color-mix(in srgb, var(--accent) 16%, transparent)", color: "var(--accent2)" }}>
           {data.strategy_label}</span>}</h1>
-      <p className="text-muted text-xs">Analyse de l'<b>allocation de production</b> (ce qui est réellement alloué/tradé), pas du swing legacy. Risque, corrélation, stress et revue calculés sur ces positions.</p>
+      <p className="text-muted text-xs">Analyse de ce que le robot alloue <b>réellement</b> aujourd'hui — pas d'une ancienne
+      stratégie. Risque, corrélations entre lignes, résistance aux crises passées et revue critique,
+      tous calculés sur ces positions-là.</p>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <section className="card p-4">
           <h2 className="text-sm uppercase tracking-wide text-muted mb-2">Mesures relatives</h2>

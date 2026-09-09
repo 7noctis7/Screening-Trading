@@ -35,8 +35,14 @@ for _noisy in ("watchfiles", "watchfiles.main"):   # silence le rechargeur (logs
 app = FastAPI(title="Quant Trading API", version="0.1.0")
 # CORS verrouillé par défaut sur localhost (l'API n'a pas d'auth). Élargir EXPLICITEMENT via
 # QUANT_CORS_ORIGINS="https://mon-domaine" si tu exposes l'API (jamais "*" sur réseau ouvert).
+# 3001 est autorisé au même titre que 3000 : Next bascule tout seul sur 3001 quand 3000 est
+# pris, et l'omettre transformait un simple décalage de port en panne totale et muette — page
+# affichée, requêtes refusées par le CORS avant d'être émises, navigateur rapportant une panne
+# réseau anonyme (07/09). On reste strictement en localhost : aucune surface réseau ajoutée.
 _cors_env = os.environ.get("QUANT_CORS_ORIGINS",
-                           "http://localhost:3000,http://127.0.0.1:3000,http://localhost:8080")
+                           "http://localhost:3000,http://127.0.0.1:3000,"
+                           "http://localhost:3001,http://127.0.0.1:3001,"
+                           "http://localhost:8080")
 _cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()] or ["http://localhost:3000"]
 app.add_middleware(CORSMiddleware, allow_origins=_cors_origins, allow_methods=["*"],
                    allow_headers=["*"])
@@ -205,17 +211,51 @@ def ticker() -> dict:
     return _snap().get("ticker", {"available": False})
 
 
+def _dernier_mot(recs: list[dict]) -> list[dict]:
+    """Un enregistrement par facteur : le plus récent. Les lignes sans facteur passent
+    telles quelles — elles ne prétendent pas décrire un état, juste un essai."""
+    dernier: dict[str, dict] = {}
+    autres: list[dict] = []
+    for r in recs:
+        facteur = r.get("facteur")
+        if not facteur:
+            autres.append(r)
+            continue
+        connu = dernier.get(str(facteur))
+        if connu is None or str(r.get("date") or "") >= str(connu.get("date") or ""):
+            dernier[str(facteur)] = r
+    return [*dernier.values(), *autres]
+
+
 @app.get("/api/failures")
 def failures() -> dict:
     """Registre des négatifs (Negative Results Registry) — lu directement du ledger.
 
     Autorité par la transparence : chaque hypothèse rejetée est citable/reproductible.
     """
+    from collections import Counter
+
     from packages.research.ledger import read_records
     recs = read_records()
-    rejected = [r for r in recs if r.get("statut") == "rejete"]
+    # LE LEDGER EST APPEND-ONLY : rouvrir une hypothèse s'y écrit en AJOUTANT une ligne,
+    # jamais en corrigeant l'ancienne — c'est la trace qui fait sa valeur. Mais le
+    # registre des négatifs doit montrer l'ÉTAT COURANT : sans ce dédoublonnage, une
+    # hypothèse rejetée puis rouverte resterait affichée comme rejetée pour toujours.
+    # Vu le 09/09 sur `allocation_mean_cvar`, dont le rejet reposait sur des séries de
+    # prix depuis réparées. Le dernier mot par facteur, l'historique reste au fichier.
+    rejected = [r for r in _dernier_mot(recs) if r.get("statut") == "rejete"]
+    # LES DEUX CÔTÉS DU REGISTRE — on ne peut pas juger un taux de réussite en n'en
+    # voyant qu'un. Publier « 6 rejetées » sans dire combien ont été essayées laisse
+    # croire soit à une rigueur écrasante, soit à un projet qui ne trouve jamais rien :
+    # les deux lectures sont fausses, et rien ne permettait de trancher.
+    # `items` reste les seuls rejets (c'est le contrat de /echecs) ; le décompte
+    # complet part à côté, et /methode l'affiche en entier.
+    par_statut = Counter(str(r.get("statut") or "inconnu") for r in recs)
+    promus = [r for r in recs if r.get("statut") == "promu"]
     return {"available": bool(rejected), "n_total": len(recs),
-            "n_rejected": len(rejected), "items": rejected}
+            "n_rejected": len(rejected), "items": rejected,
+            "par_statut": dict(par_statut),
+            "n_promus": len(promus), "promus": promus}
 
 
 @app.get("/api/preset_ledger")
@@ -248,6 +288,66 @@ def analyze_user_portfolio(body: PortfolioAnalysisRequest, request: Request) -> 
     rows = [{"symbol": row.symbol, "weight": row.weight} for row in body.positions]
     series = ((_snap().get("dashboard") or {}).get("chart_series") or {})
     return analyze(rows, years=body.years, series_by_symbol=series)
+
+
+class ProfilInvestisseur(BaseModel):
+    """Réponses du questionnaire, transmises À CHAQUE APPEL et jamais conservées.
+
+    Même contrat que `/api/profil` : le front garde le profil dans son navigateur, l'API
+    ne fait qu'un calcul avec ce qu'on lui passe. Aucune écriture, aucune session.
+    """
+    horizon_annees: float = Field(ge=0, le=60)
+    perte_max_toleree: float = Field(ge=0.01, le=0.9)
+    part_du_patrimoine: float = Field(ge=0, le=1)
+    besoin_liquidite: float = Field(default=0.0, ge=0, le=1)
+    revenus_stables: bool = True
+    experience_annees: float = Field(default=0.0, ge=0, le=60)
+
+
+class RecommendationRequest(BaseModel):
+    n: int = Field(default=15, ge=3, le=30)
+    years: int = Field(default=5, ge=1, le=15)
+    max_weight: float = Field(default=0.20, gt=0, le=1)
+    profil: ProfilInvestisseur | None = None
+    # 0 = filtre désactivé. La valeur par défaut suit le gate QUANT_EARNINGS du snapshot :
+    # deux réglages concurrents pour la même source finiraient par diverger.
+    blackout_resultats: int | None = Field(default=None, ge=0, le=30)
+    # Positions détenues : servent UNIQUEMENT au chemin de moindre effort (quels mouvements
+    # achètent le plus de risque évité). Elles n'influencent pas la sélection.
+    positions: list[PortfolioAnalysisPosition] | None = None
+    # Préférences sectorielles : des CONTRAINTES personnelles (exclure, planchers,
+    # plafonds). Transmises à chaque appel comme le profil, jamais conservées.
+    preferences: dict | None = None
+
+
+@app.post("/api/portfolio/recommend")
+def recommend_universe(body: RecommendationRequest, request: Request) -> dict:
+    """Univers RECOMMANDÉ : sélection issue du screening du jour, poids par les moteurs de risque.
+
+    Distinct de `optimal_allocation`, qui répartit le risque sur les lignes DÉJÀ détenues
+    (`snapshot.py` : `corr_syms = held[:12]`) et ne peut donc rien proposer de nouveau.
+    Read-only, aucune persistance, aucun chemin d'exécution — comme `/analyze`.
+    """
+    if not _webhook_authorized(request):
+        return {"available": False, "reason": "endpoint local uniquement"}
+    from packages.portfolio.recommendation import recommander
+    from packages.portfolio.filtre_resultats import FENETRE_DEFAUT
+    defaut = FENETRE_DEFAUT if os.environ.get("QUANT_EARNINGS") == "1" else 0
+    fenetre = defaut if body.blackout_resultats is None else body.blackout_resultats
+    snap = _snap()
+    ml = snap.get("ml") or {}
+    # Le régime module l'EXPOSITION (jamais le choix des titres) et seulement vers le bas ;
+    # le score ML n'entre que dans « Conviction », pondéré par son AUC converti en IC.
+    return recommander(snap.get("screen") or {}, n=body.n, years=body.years,
+                       plafond=body.max_weight,
+                       profil=body.profil.model_dump() if body.profil else None,
+                       blackout_resultats=fenetre,
+                       regime=(snap.get("regime") or {}).get("macro_real") or snap.get("regime"),
+                       ml_scores={r.get("symbol"): r.get("ml_score") or r.get("ml")
+                                  for r in (ml.get("rows") or [])},
+                       ml_auc=ml.get("auc") if ml.get("edge_ok") else None,
+                       positions={p.symbol.upper(): p.weight for p in (body.positions or [])},
+                       preferences=body.preferences)
 
 
 @app.get("/api/positions")
@@ -516,7 +616,17 @@ def events() -> dict:
             ipos = upcoming_ipos()
         except Exception as e:  # noqa: BLE001
             log.warning("upcoming_ipos failed: %s", e); ipos = []
+        # FENÊTRE D'EXCLUSION — publiée pour que le calendrier puisse la DIRE.
+        #
+        # La recommandation écarte déjà les candidats dont les résultats tombent dans les
+        # jours qui viennent : un résultat trimestriel est un tirage binaire, pas un signal.
+        # Mais le lien n'était visible d'aucun côté — le calendrier ne disait pas « ce titre
+        # est en ce moment écarté des recommandations », et la recommandation ne disait pas
+        # « écarté à cause d'une publication mardi ». On publie donc LA MÊME constante, pas
+        # une copie : deux nombres qui dériveraient l'un de l'autre seraient pires que rien.
+        from packages.portfolio.filtre_resultats import FENETRE_DEFAUT as _fenetre_blackout
         _EVENTS = {"available": bool(earn or ipos), "earnings": earn, "ipos": ipos,
+                   "blackout_jours": _fenetre_blackout,
                    "n_symbols": len(eq), "fmp": bool(os.environ.get("FMP_API_KEY")),
                    "fmp_earnings": any(e.get("source") == "FMP" for e in earn),
                    "fmp_ipos": any(p.get("source") == "FMP" for p in ipos),
@@ -558,7 +668,10 @@ def analytics() -> dict:
     preset, qqq = cur.get("preset") or [], cur.get("qqq") or []
     if len(preset) < 30:
         return {"available": False}
-    pa = PerformanceAnalytics.from_curves(preset, qqq)
+    # Les DEUX calendriers voyagent avec les courbes : le preset suit l'univers
+    # négociable, QQQ suit les indices. Par position : bêta 0,037 (cf. `from_curves`).
+    pa = PerformanceAnalytics.from_curves(preset, qqq, dates=cur.get("dates") or [],
+                                          benchmark_dates=cur.get("qqq_dates") or [])
     return {"available": True, "metrics": pa.metrics().to_dict(),
             "attribution": pa.attribution(),
             "html": pa.to_html_snippet("Preset vs QQQ (net de frais)")}

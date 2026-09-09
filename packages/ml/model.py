@@ -49,10 +49,28 @@ class LogitModel:
 class SklearnModel:
     name = "sklearn"
 
-    def __init__(self, estimator=None) -> None:
+    # Graine par défaut. Le CHIFFRE n'a aucune importance ; ce qui compte est qu'il
+    # y en ait un. Sans lui, scikit-learn tire du générateur aléatoire GLOBAL de numpy
+    # pour départager les égalités entre découpes d'arbre — et deux exécutions du même
+    # code sur les mêmes données donnent des scores différents. Mesuré le 07/09 :
+    # `demo_ml.py` rendait 0,425 puis 0,382 d'un appel à l'autre.
+    #
+    # Un banc dont deux exécutions ne coïncident pas ne peut comparer NI deux versions
+    # du code, NI deux machines — ce qui manquera précisément au moment de valider la
+    # migration Mac → NVIDIA, où l'on veut distinguer un écart de matériel d'un écart
+    # de logique.
+    #
+    # On fixe la graine sur l'ESTIMATEUR, jamais via `np.random.seed()` : figer le
+    # générateur global depuis une bibliothèque contaminerait tout le processus, y
+    # compris les tirages qui doivent rester indépendants.
+    GRAINE = 0
+
+    def __init__(self, estimator=None, graine: int | None = None) -> None:
         if estimator is None:
             from sklearn.ensemble import GradientBoostingClassifier
-            estimator = GradientBoostingClassifier(n_estimators=80, max_depth=3)
+            estimator = GradientBoostingClassifier(
+                n_estimators=80, max_depth=3,
+                random_state=self.GRAINE if graine is None else graine)
         from sklearn.impute import SimpleImputer
         from sklearn.pipeline import Pipeline
         self.pipe = Pipeline([("impute", SimpleImputer(strategy="mean")),
@@ -75,8 +93,44 @@ def make_model(kind: str = "logit", **kw):
         return SklearnModel(**kw)
     if kind == "xgboost":
         from xgboost import XGBClassifier  # adaptateur prod
-        return SklearnModel(XGBClassifier(n_estimators=100, max_depth=3,
-                                          use_label_encoder=False, eval_metric="logloss"))
+
+        from packages.common.device import params_arbres
+        # Les hyperparamètres du modèle sont INCHANGÉS (100 arbres, profondeur 3) :
+        # seuls s'ajoutent les réglages matériels, qui ne touchent pas la forme du
+        # modèle appris. `params_arbres` rend `tree_method="hist"` sur processeur et
+        # y ajoute `device="cuda"` sur machine NVIDIA — la même forêt, calculée
+        # ailleurs, pas une autre forêt.
+        #
+        # `use_label_encoder` a été RETIRÉ de XGBoost 2.0 : le laisser faisait lever
+        # l'instanciation sur toute installation récente. Il était déjà à False,
+        # c'est-à-dire à la valeur devenue le seul comportement possible — le retirer
+        # ne change donc rien à l'entraînement.
+        return SklearnModel(XGBClassifier(
+            n_estimators=100, max_depth=3, eval_metric="logloss",
+            random_state=SklearnModel.GRAINE,   # même raison que ci-dessus
+            **params_arbres("xgboost")))
+    if kind == "lightgbm":
+        from lightgbm import LGBMClassifier
+
+        from packages.common.device import params_arbres
+        # LightGBM était DÉCLARÉ en dépendance (`pyproject.toml`, groupe ml) et importé
+        # nulle part : une dépendance qu'on installe, qu'on met à jour, qu'on audite, et
+        # qui ne sert à rien. Le device module savait déjà lui parler
+        # (`params_arbres("lightgbm")`), il ne manquait que l'adaptateur.
+        #
+        # Hyperparamètres alignés sur ceux d'XGBoost — 100 arbres, profondeur 3 — pour
+        # que la comparaison entre les deux porte sur l'ALGORITHME et non sur des
+        # réglages différents. `num_leaves` doit suivre `max_depth` : LightGBM fait
+        # croître ses arbres par feuille et non par niveau, donc laisser le défaut (31)
+        # avec une profondeur de 3 donnerait un arbre bien plus complexe que celui
+        # d'XGBoost, et la comparaison ne voudrait plus rien dire.
+        #
+        # `verbose=-1` : sans lui, LightGBM écrit sur la sortie standard à chaque
+        # ajustement, ce qui noierait les journaux d'une validation croisée.
+        return SklearnModel(LGBMClassifier(
+            n_estimators=100, max_depth=3, num_leaves=7, verbose=-1,
+            random_state=SklearnModel.GRAINE,
+            **params_arbres("lightgbm")))
     raise ValueError(f"modèle inconnu: {kind}")
 
 

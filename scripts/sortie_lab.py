@@ -30,10 +30,12 @@ sys.path.insert(0, str(ROOT))
 
 RR = [2.0, 4.0, 6.0, 9.0]        # cible = rr × stop (4 ATR) ; production = 6
 TRAILS = [0.0, 3.0, 5.0, 8.0]    # suiveur ATR ; 0 = aucun ; production = 5
+DETENTIONS = [0, 5, 10, 15]      # détention MIN en séances ; 0 = aucune (production)
 RR_PROD, TRAIL_PROD, RISQUE_PROD = 6.0, 5.0, 0.005
 
 
-def _mesure(data, acmap, vix, n_essais, rr: float, trail: float) -> dict:
+def _mesure(data, acmap, vix, n_essais, rr: float, trail: float,
+            detention: int = 0) -> dict:
     from packages.backtest.fast_swing import fast_swing_backtest
     from packages.execution.costs import CostModel
     from packages.portfolio import fragilite as F
@@ -45,7 +47,7 @@ def _mesure(data, acmap, vix, n_essais, rr: float, trail: float) -> dict:
         target_annual_vol=0.30, max_capital_frac=0.15, max_positions=20, max_pct=0.20,
         atr_stop=4.0, rr=rr, vix=vix, close_at_end=False,
         daily_max_loss=0.06, trail_atr=trail, next_open_fills=True,
-        risque_par_trade=RISQUE_PROD)
+        risque_par_trade=RISQUE_PROD, detention_min=detention)
     trades = [t for t in journal.all() if t.pnl_net is not None]
     trades.sort(key=lambda t: t.exit_ts or t.entry_ts)
     pnls = [t.pnl_net for t in trades]
@@ -86,8 +88,8 @@ def _table(titre: str, data, acmap, vix, n_essais, variantes) -> None:
     larg = (14, 5, 6, 7, 5, 6, 7, 5, 7, 9)
     print("  " + " | ".join(f"{c:>{w}}" for c, w in zip(cols, larg, strict=True)))
     print("  " + "-" * 94)
-    for nom, rr, trail in variantes:
-        print(_ligne(nom, _mesure(data, acmap, vix, n_essais, rr, trail)))
+    for nom, rr, trail, det in variantes:
+        print(_ligne(nom, _mesure(data, acmap, vix, n_essais, rr, trail, det)))
 
 
 def main() -> None:
@@ -97,20 +99,34 @@ def main() -> None:
         print("⚠️  Aucune base réelle branchée — ce banc ne décide de rien.")
         return
     vix, prov = _vix(data, debut, fin)
-    n_essais = _essais(len(RR) + len(TRAILS))
+    n_essais = _essais(len(RR) + len(TRAILS) + len(DETENTIONS))
     print(f"\nmode {mode} · risque {RISQUE_PROD:.1%} par trade")
     print(f"empreinte : {empreinte(data, prov)}")
     print("  (deux runs ne se comparent QUE si cette empreinte est identique)")
 
     _table(f"CIBLE (rr × stop 4 ATR), suiveur figé à {TRAIL_PROD:.0f} ATR",
            data, acmap, vix, n_essais,
-           [(f"rr {r:.0f}" + (" ◀ prod" if r == RR_PROD else ""), r, TRAIL_PROD)
+           [(f"rr {r:.0f}" + (" ◀ prod" if r == RR_PROD else ""), r, TRAIL_PROD, 0)
             for r in RR])
     _table(f"SUIVEUR (ATR), cible figée à rr {RR_PROD:.0f}",
            data, acmap, vix, n_essais,
            [(("sans suiveur" if t == 0 else f"trail {t:.0f}")
-             + (" ◀ prod" if t == TRAIL_PROD else ""), RR_PROD, t) for t in TRAILS])
+             + (" ◀ prod" if t == TRAIL_PROD else ""), RR_PROD, t, 0) for t in TRAILS])
 
+    _table(f"DÉTENTION MINIMALE (séances), cible rr {RR_PROD:.0f} + suiveur "
+           f"{TRAIL_PROD:.0f} ATR",
+           data, acmap, vix, n_essais,
+           [(("aucune" if d == 0 else f"min {d:d} j")
+             + (" ◀ prod" if d == 0 else ""), RR_PROD, TRAIL_PROD, d)
+            for d in DETENTIONS])
+
+    print("\n  DÉTENTION MINIMALE — ce que le verrou bloque, et ce qu'il épargne.")
+    print("  Il DIFFÈRE les sorties molles (cible, stop suiveur, cassure de la")
+    print("  MM longue) pendant N séances. Le stop INITIAL à 4 ATR passe toujours :")
+    print("  laisser courir un trade n'est pas retirer son garde-fou, sinon le maxDD")
+    print("  de cette table ne décrirait plus le même risque que celui des autres.")
+    print("  Lire « jours » ET « maxDD » ensemble : un verrou allonge la détention par")
+    print("  construction — la question est ce que ça coûte en baisse maximale.")
     print("\n  « marge » = de combien le payoff dépasse le seuil (1−p)/p imposé par le")
     print("  taux de réussite. Un payoff ne se lit JAMAIS seul : à 31 % de réussite il")
     print("  faut 2,24 pour ne rien gagner. « jours » = durée moyenne de détention.")

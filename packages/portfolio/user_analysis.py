@@ -1,29 +1,95 @@
 """Analyse read-only d'un portefeuille importé, sur historiques réels uniquement."""
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from math import sqrt
+from types import SimpleNamespace
+
 import numpy as np
-import pandas as pd
 
 from packages.data.price_loader import load_bars
-from packages.portfolio.optimize import equal_risk_contribution, hrp_weights, min_variance_weights
+from packages.portfolio.optimize import (
+    equal_risk_contribution,
+    hrp_weights,
+    min_variance_weights,
+)
 
 MIN_OBSERVATIONS = 60
 
 
-def _aliases(symbol: str) -> list[str]:
+# Devises de cotation rencontrées dans les paires crypto. Triées par LONGUEUR décroissante :
+# tester « USD » avant « USDC » amputerait « TRX-USDC » en « TRX-C ».
+DEVISES_DE_COTATION = ("FDUSD", "USDC", "USDT", "BUSD", "USD")
+
+
+def _base_crypto(clean: str) -> str:
+    """Base d'une paire cotée en dollar, ou le symbole inchangé si ce n'en est pas une."""
+    for devise in DEVISES_DE_COTATION:
+        if clean.endswith("-" + devise):
+            return clean[: -(len(devise) + 1)]
+        if "-" not in clean and clean.endswith(devise) and len(clean) > len(devise):
+            return clean[: -len(devise)]
+    return clean
+
+
+def _aliases(symbol: str, classe: str | None = None) -> list[str]:
+    """Variantes à essayer, dans l'ordre. `ETH`, `ETHUSDT` et `ETH/USDC` doivent tous
+    mener à `ETH-USD`, le format que `data/crypto.db` stocke (cf. `scripts/ingest_crypto.py`).
+
+    MESURÉ le 06/09 : un ticker crypto NU ne produisait que lui-même, alors que la base
+    stocke `{base}-USD` — un portefeuille mixte tombait en « historique insuffisant ».
+    MESURÉ le 07/09 : le correctif ne couvrait que le suffixe `USDT`. Le screening publie
+    aussi des paires en USDC (`TRX/USDC`, `BTC/USDC`…) : normalisées en `TRX-USDC`, elles
+    contenaient un tiret, la variante `-USD` n'était donc jamais tentée, et 7 des 15
+    candidats du jour partaient en « sans historique exploitable ». La devise de cotation
+    est désormais reconnue quelle qu'elle soit, séparateur ou non.
+
+    Pour une action, l'alias nu répond en premier et `-USD` n'est jamais essayé (`_load`
+    sort au premier succès) — le coût est nul là où ça marche déjà.
+    """
     clean = symbol.upper().replace("/", "-")
-    aliases = [clean]
-    if clean.endswith("USDT"):
-        aliases += [f"{clean[:-4]}-USD", clean[:-4]]
-    return list(dict.fromkeys(aliases))
+    if clean.startswith("CASH:"):
+        return [clean]
+    base = _base_crypto(clean)
+    if base != clean:
+        return list(dict.fromkeys([clean, f"{base}-USD", base]))
+    # LE REPLI `-USD` NE S'APPLIQUE QU'À CE QUI PEUT ÊTRE UNE CRYPTO.
+    # Mesuré le 07/09 : `ABC` (AmerisourceBergen, action délistée, donc sans barres
+    # locales) tombait sur `ABC-USD` et se voyait attribuer « Abell Coin USD » — une
+    # cryptomonnaie. Sur le chemin des prix, la même chaîne aurait valorisé une action
+    # avec la série d'un jeton. Un repli conçu pour retrouver `ETH-USD` depuis `ETH` ne
+    # doit jamais s'appliquer à un instrument dont on SAIT qu'il n'est pas une crypto :
+    # une correspondance plausible et fausse est pire qu'une absence, elle rassure.
+    connue_non_crypto = classe is not None and str(classe).lower() != "crypto"
+    if "-" not in clean and not connue_non_crypto:
+        return list(dict.fromkeys([clean, f"{clean}-USD"]))
+    return [clean]
 
 
-def _load(symbol: str, years: int) -> tuple[str | None, list]:
-    for alias in _aliases(symbol):
-        bars = load_bars(alias, years=years)
-        if len(bars) >= MIN_OBSERVATIONS:
-            return alias, bars
+def _bars_crypto(symbole: str, years: int) -> list:
+    """Barres depuis `data/crypto.db`, que `load_bars` ne consulte JAMAIS.
+
+    `_price_db_path()` ne liste que `YAHOO.db`/`market.db` : la base crypto dédiée,
+    alimentée par `make ingest-crypto`, est hors de son chemin de recherche. Même
+    schéma que `apps/api/main.py::_company_closes`, qui lit déjà market.db PUIS
+    crypto.db — on réutilise sa convention plutôt que d'en inventer une seconde."""
+    try:
+        from packages.data.engine import read_prices_rows
+        limite = (datetime.now(UTC) - timedelta(days=365 * years)).date().isoformat()
+        rows = read_prices_rows("crypto.db", symbols=[symbole]) or []
+        return [SimpleNamespace(ts=str(r.get("ts") or "")[:10], close=float(r["close"]))
+                for r in sorted(rows, key=lambda r: r.get("ts") or "")
+                if r.get("close") and str(r.get("ts") or "")[:10] >= limite]
+    except Exception:  # noqa: BLE001 — base absente ou illisible : on le dit par le vide
+        return []
+
+
+def _load(symbol: str, years: int, classe: str | None = None) -> tuple[str | None, list]:
+    """Premier alias qui rend assez de barres, en cherchant AUSSI la base crypto."""
+    for alias in _aliases(symbol, classe):
+        for bars in (load_bars(alias, years=years), _bars_crypto(alias, years)):
+            if len(bars) >= MIN_OBSERVATIONS:
+                return alias, bars
     return None, []
 
 
@@ -37,26 +103,30 @@ def _dated_closes(bars: list) -> dict[str, float]:
     return out
 
 
+ALIGNEMENT = "intersection de dates, aucun remplissage"
+
+
 def _align(series: dict[str, dict[str, float]]) -> tuple[list[str], np.ndarray]:
-    dates = sorted(set.intersection(*(set(values) for values in series.values()))) if series else []
-    matrix = np.asarray([[series[symbol][date] for date in dates] for symbol in series], dtype=float)
+    """Dates communes à TOUS les actifs, sans remplissage — et l'étiquette le dit.
+
+    POURQUOI PAS DE FORWARD-FILL, alors qu'une version l'avait introduit (06/09) :
+    sur un portefeuille mixte actions + crypto, la crypto cote 7 j/7 et l'action 5.
+    Remplir l'action le week-end lui invente deux rendements NULS par semaine — sa
+    volatilité mesurée baisse d'environ 15 %, sa corrélation à la crypto se dilue, et
+    la covariance qui en sort fait paraître les actions plus sûres qu'elles ne sont.
+    Un optimiseur min-variance nourri de cette matrice sur-pondère mécaniquement les
+    actions. L'intersection ne coûte que les week-ends (~252 jours/an conservés) et ne
+    fabrique aucun prix.
+
+    Cette version ANNONÇAIT « aucun remplissage » tout en faisant un ffill : le champ
+    `alignment` publié était faux. La constante partagée interdit désormais que le
+    calcul et son étiquette divergent à nouveau.
+    """
     if not series:
         return [], np.array([])
-        
-    # Création d'un DataFrame global pour aligner tous les calendriers
-    df = pd.DataFrame(series)
-    df = df.sort_index()
-    
-    # 1. Forward Fill : Remplissage des week-ends/jours fériés avec le dernier prix connu
-    df = df.ffill()
-    
-    # 2. Dropna : Suppression des dates anciennes où l'actif le plus jeune n'existait pas encore
-    df = df.dropna()
-    
-    dates = df.index.astype(str).tolist()
-    # Transposition pour revenir au format numpy attendu (lignes = symboles, colonnes = dates)
-    matrix = df.T.to_numpy(dtype=float)
-    
+    dates = sorted(set.intersection(*(set(values) for values in series.values())))
+    matrix = np.asarray([[series[symbol][date] for date in dates] for symbol in series],
+                        dtype=float)
     return dates, matrix
 
 
@@ -83,30 +153,100 @@ def _json_matrix(matrix: np.ndarray) -> list[list[float | None]]:
     return [[float(value) if np.isfinite(value) else None for value in row] for row in np.atleast_2d(matrix)]
 
 
-def analyze(positions: list[dict], years: int = 5, series_by_symbol: dict | None = None) -> dict:
-    """Charge, aligne sans remplissage, puis mesure et optimise un portefeuille long-only."""
-    requested = [(str(row["symbol"]).upper(), float(row["weight"])) for row in positions]
+def _collecter(requested: list[tuple[str, float]], years: int,
+               series_by_symbol: dict | None,
+               classes: dict[str, str] | None = None) -> tuple[dict, dict, list, list]:
+    """(séries chargées, alias retenus, manquants, lignes de cash). Aucune invention :
+    un symbole sans historique suffisant part en `missing`, il n'est jamais comblé."""
     loaded, aliases, missing, cash = {}, {}, [], []
-    """Charge, aligne avec ffill, puis mesure et optimise un portefeuille long-only."""
-    requested = [(str(row["symbol"]).upper(), float(row["weight"])) for row in positions]
-    loaded, aliases, missing, cash = {}, {}, [], []
-    
+    fournies = series_by_symbol or {}
     for symbol, _weight in requested:
         if symbol.startswith("CASH:"):
             cash.append(symbol)
             continue
-        supplied = (series_by_symbol or {}).get(symbol) or (series_by_symbol or {}).get(symbol.replace("USDT", "/USDT"))
+        supplied = fournies.get(symbol) or fournies.get(symbol.replace("USDT", "/USDT"))
         if supplied and len(supplied) >= MIN_OBSERVATIONS:
             loaded[symbol], aliases[symbol] = _dated_closes(supplied), symbol
             continue
-        alias, bars = _load(symbol, years)
+        alias, bars = _load(symbol, years, (classes or {}).get(symbol))
         if alias:
             loaded[symbol], aliases[symbol] = _dated_closes(bars), alias
         else:
             missing.append(symbol)
-            
+    return loaded, aliases, missing, cash
+
+
+def scenarios_risque(covariance: np.ndarray) -> dict:
+    """Trois allocations calculées sur la MÊME covariance.
+
+    `dynamique` est un HRP (Hierarchical Risk Parity), pas un Black-Litterman : BL
+    exige des rendements attendus (μ) que rien ici ne calibre. Le front annonçait
+    « Black-Litterman avec vues » pour une clé `hrp` que personne ne lui envoyait —
+    d'où un scénario perpétuellement indisponible SOUS UN NOM QU'IL N'AURAIT PAS
+    honoré de toute façon. On calcule ce qu'on sait calculer, et on le nomme ainsi.
+    """
+    return {"prudent": min_variance_weights(covariance),
+            "neutre": equal_risk_contribution(covariance),
+            "dynamique": hrp_weights(covariance)}
+
+
+def charger_series(symboles: list[str], years: int = 5,
+                   classes: dict[str, str] | None = None) -> tuple[dict, dict, list]:
+    """(séries datées par symbole, alias retenus, manquants) — chargement partagé.
+
+    Exposé pour que la recommandation d'univers réutilise EXACTEMENT ce chargement :
+    mêmes alias crypto, même lecture de `crypto.db`, même seuil d'observations. Deux
+    définitions concurrentes du chargement finiraient par diverger sans que rien ne le
+    signale — c'est précisément ce qui avait produit la clé `hrp`/`black_litterman`.
+    """
+    loaded, aliases, missing, _cash = _collecter([(s, 1.0) for s in symboles], years, None, classes)
+    return loaded, aliases, missing
+
+
+def covariance_annuelle(series: dict[str, dict[str, float]]) -> tuple[list[str], np.ndarray, list[str]]:
+    """(symboles, covariance annualisée à 252 j, dates communes) — intersection stricte."""
+    dates, prices = _align(series)
+    if len(dates) < 2:
+        return list(series), np.array([]), dates
+    returns = prices[:, 1:] / prices[:, :-1] - 1
+    return list(series), np.atleast_2d(np.cov(returns) * 252), dates
+
+
+def diagnostic_par_actif(loaded: dict, symboles: list[str], returns: np.ndarray) -> list[dict]:
+    """Volatilité annualisée et dernière barre, PAR ACTIF — de quoi expliquer un poids.
+
+    POURQUOI C'EST INDISPENSABLE ICI. Un min-variance concentre sur l'actif de plus faible
+    variance : c'est sa définition, pas un défaut. Mais sans les volatilités individuelles
+    sous les yeux, un poids de 99 % sur une ligne est indistinguable d'un bug — et, plus
+    grave, indistinguable d'une SÉRIE ARRÊTÉE, qui n'a plus de variance récente et que
+    l'optimiseur prend alors pour l'actif le plus sûr de l'univers.
+
+    On ne retire RIEN ici, contrairement à la recommandation : ces lignes sont celles que
+    l'utilisateur DÉTIENT. On ne peut pas les écarter de son propre portefeuille — on
+    l'avertit, et il décide.
+    """
+    from datetime import date, timedelta
+    fins = {s: max(loaded[s]) for s in symboles if loaded.get(s)}
+    fraiche = max(fins.values()) if fins else ""
+    try:
+        limite = (date.fromisoformat(fraiche[:10]) - timedelta(days=10)).isoformat()
+    except ValueError:
+        limite = ""
+    vols = np.std(returns, axis=1, ddof=1) * sqrt(252)
+    return [{"symbol": s,
+             "vol_annuelle": float(vols[i]) if i < len(vols) else None,
+             "derniere_barre": fins.get(s),
+             "arretee": bool(limite and fins.get(s, "")[:10] < limite)}
+            for i, s in enumerate(symboles)]
+
+
+def analyze(positions: list[dict], years: int = 5, series_by_symbol: dict | None = None) -> dict:
+    """Charge, aligne sans remplissage, puis mesure et optimise un portefeuille long-only."""
+    requested = [(str(row["symbol"]).upper(), float(row["weight"])) for row in positions]
+    loaded, aliases, missing, cash = _collecter(requested, years, series_by_symbol)
     if missing:
-        return _unavailable("historique insuffisant", missing, len(loaded) + len(cash), len(requested))
+        return _unavailable("historique insuffisant", missing,
+                            len(loaded) + len(cash), len(requested))
     if cash and not loaded:
         return _unavailable("aucun actif risqué avec historique", [], len(cash), len(requested))
     calendar = sorted(set.union(*(set(values) for values in loaded.values())))
@@ -114,71 +254,26 @@ def analyze(positions: list[dict], years: int = 5, series_by_symbol: dict | None
         loaded[symbol], aliases[symbol] = {date: 1.0 for date in calendar}, symbol
     dates, prices = _align(loaded)
     if len(dates) < MIN_OBSERVATIONS + 1:
-        return _unavailable("calendrier commun insuffisant", [], len(loaded), len(requested), max(0, len(dates) - 1))
+        return _unavailable("calendrier commun insuffisant", [], len(loaded),
+                            len(requested), max(0, len(dates) - 1))
     returns = prices[:, 1:] / prices[:, :-1] - 1
     weights = np.asarray([weight for _symbol, weight in requested], dtype=float)
     weights /= weights.sum()
     covariance = np.atleast_2d(np.cov(returns) * 252)
     variance = float(weights @ covariance @ weights)
-    contribution = weights * (covariance @ weights) / variance if variance > 0 else np.full(len(weights), np.nan)
+    contribution = (weights * (covariance @ weights) / variance if variance > 0
+                    else np.full(len(weights), np.nan))
     with np.errstate(invalid="ignore", divide="ignore"):
         correlation = np.corrcoef(returns)
-    return {"available": True, "symbols": [symbol for symbol, _ in requested], "aliases": aliases,
-            "as_of": dates[-1], "start": dates[0], "n_observations": returns.shape[1], "frequency": "daily",
-            "annualization": 252, "alignment": "intersection de dates, aucun remplissage",
+    return {"available": True, "symbols": [symbol for symbol, _ in requested],
+            "aliases": aliases, "as_of": dates[-1], "start": dates[0],
+            "n_observations": returns.shape[1], "frequency": "daily",
+            "annualization": 252, "alignment": ALIGNEMENT,
             "metrics": _metrics(returns, weights),
-            "risk_contribution": [float(value) if np.isfinite(value) else None for value in contribution],
-            "correlation": _json_matrix(correlation), "scenarios": {"prudent": min_variance_weights(covariance),
-            "neutre": equal_risk_contribution(covariance), "hrp": hrp_weights(covariance)}, "coverage": 1.0}
-        
-    calendar = sorted(set.union(*(set(values) for values in loaded.values())))
-    for symbol in cash:
-        loaded[symbol], aliases[symbol] = {date: 1.0 for date in calendar}, symbol
-        
-    dates, prices = _align(loaded)
-    
-    if len(dates) < MIN_OBSERVATIONS + 1:
-        return _unavailable("calendrier commun insuffisant", [], len(loaded), len(requested), max(0, len(dates) - 1))
-        
-    returns = prices[:, 1:] / prices[:, :-1] - 1
-    weights = np.asarray([weight for _symbol, weight in requested], dtype=float)
-    weights /= weights.sum()
-    
-    try:
-        # Base de covariance annualisée (mixte actions/cryptos)
-        covariance = np.atleast_2d(np.cov(returns) * 252)
-        variance = float(weights @ covariance @ weights)
-        contribution = weights * (covariance @ weights) / variance if variance > 0 else np.full(len(weights), np.nan)
-        
-        with np.errstate(invalid="ignore", divide="ignore"):
-            correlation = np.corrcoef(returns)
-            
-        try:
-            scenarios_dict = {
-                "prudent": min_variance_weights(covariance),
-                "neutre": equal_risk_contribution(covariance),
-                "dynamique": hrp_weights(covariance)
-            }
-        except Exception:
-            n_assets = len(requested)
-            eq_w = [1.0 / n_assets] * n_assets
-            scenarios_dict = {"prudent": eq_w, "neutre": eq_w, "dynamique": eq_w}
-
-        return {
-            "available": True, 
-            "symbols": [symbol for symbol, _ in requested], 
-            "aliases": aliases,
-            "as_of": dates[-1], 
-            "start": dates[0], 
-            "n_observations": returns.shape[1], 
-            "frequency": "daily",
-            "annualization": 252, 
-            "alignment": "forward-fill (week-ends) puis intersection",
-            "metrics": _metrics(returns, weights),
-            "risk_contribution": [float(value) if np.isfinite(value) else None for value in contribution],
-            "correlation": _json_matrix(correlation), 
-            "scenarios": scenarios_dict, 
-            "coverage": 1.0
-        }
-    except Exception as e:
-        return _unavailable(f"Erreur critique de calcul: {str(e)}", [], len(loaded), len(requested))
+            # De quoi EXPLIQUER un poids : sans les volatilités individuelles, un
+            # min-variance à 99 % sur une ligne ne se distingue ni d'un bug ni d'une
+            # série arrêtée. On avertit, on ne retire pas : ces lignes sont détenues.
+            "par_actif": diagnostic_par_actif(loaded, [s for s, _ in requested], returns),
+            "risk_contribution": [float(v) if np.isfinite(v) else None for v in contribution],
+            "correlation": _json_matrix(correlation),
+            "scenarios": scenarios_risque(covariance), "coverage": 1.0}

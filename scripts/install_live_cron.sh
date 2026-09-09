@@ -1,21 +1,23 @@
 #!/usr/bin/env bash
 # Active le REBALANCEMENT PAPER quotidien automatique en UNE commande.
-#   macOS → launchd (LaunchAgent, lun-ven, heure LOCALE)
+#   macOS → launchd (LaunchAgent, 7 j/7, heure LOCALE)
 #   Linux → crontab (idem)
 # Désinstaller : bash scripts/install_live_cron.sh --uninstall
 #
-# HEURE — configurable, et le défaut n'est pas anodin :
-#   QUANT_LIVE_HOUR=20 QUANT_LIVE_MIN=5 make live-cron-install
+# QUAND — par défaut, une heure avant la clôture NYSE, TOUTE L'ANNÉE, sans réglage.
+#   QUANT_LIVE_AVANT_CLOTURE=30 make live-cron-install    # viser 30 min avant
+#   QUANT_LIVE_HOUR=20 make live-cron-install             # revenir à une heure fixe
 #
-# La séance NYSE va de 15h30 à 22h00 heure de Paris. Le défaut 16h05 vise juste après
-# l'ouverture ; 20h05 vise les deux dernières heures, ce qui convient mieux à un
-# rebalancement QUOTIDIEN (plus de liquidité, moins de bruit intraday) et surtout à une
-# machine qui n'est allumée que le soir. Hors séance, `run_live` ne passe rien en force :
-# il REPORTE les ordres actions et le dit (le crypto, lui, tourne 24/7).
+# Le planificateur se réveille chaque heure ouvrée et `scripts/fenetre_execution.py`
+# décide, dans l'heure du MARCHÉ, s'il faut agir : une seule des vingt-quatre tentatives
+# tombe dans la fenêtre, et les autres sortent en silence.
 #
-# Éviter 21h30-22h00 : entre le changement d'heure européen (dernier dimanche d'octobre)
-# et américain (premier dimanche de novembre), l'écart Paris↔New York passe à 5 h une
-# semaine par an — la clôture tombe alors à 21h00 heure de Paris.
+# POURQUOI PAS UNE HEURE FIXE. La clôture de 16 h à New York tombe à 20 h UTC l'été et à
+# 21 h UTC l'hiver. Les bascules américaine (1er dim. de novembre) et européenne (dernier
+# dim. d'octobre) ne tombent pas le même week-end : pendant une semaine par an, l'écart
+# Paris↔New York passe à 5 h. Une heure de cron gelée dérive donc au moins deux fois par
+# an, et il faut y repenser à chaque fois. Le calendrier du projet connaît déjà ces
+# règles et les fériés NYSE : autant les lui demander plutôt que de les recopier ici.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -23,8 +25,33 @@ CRON_SH="$ROOT/scripts/cron_live.sh"
 chmod +x "$CRON_SH" 2>/dev/null || true
 LABEL="com.quant.live"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
-HOUR="${QUANT_LIVE_HOUR:-16}"
+# HEURE FIXE = LEGACY. Par défaut on ne fixe PLUS d'heure : le planificateur se réveille
+# toutes les heures et `scripts/fenetre_execution.py` décide, dans l'heure du MARCHÉ, s'il
+# faut agir. C'est la seule façon de viser « une heure avant la clôture » sans rien
+# retoucher : la clôture de 16 h à New York tombe à 20 h UTC l'été et 21 h l'hiver, les
+# bascules américaine et européenne ne tombent pas le même dimanche, et la machine peut
+# vivre dans n'importe quel fuseau. Une heure gelée dérive au moins deux fois par an.
+# `QUANT_LIVE_HOUR=20` force encore une heure précise pour qui le souhaite.
+HOUR="${QUANT_LIVE_HOUR:-}"
 MIN="${QUANT_LIVE_MIN:-5}"
+CIBLE="${QUANT_LIVE_AVANT_CLOTURE:-60}"
+CRYPTO_H="${QUANT_CRYPTO_HEURE_UTC:-0}"
+if [ -n "$HOUR" ]; then
+  QUAND="tous les jours ouvrés à $(printf "%02dh%02d" "$HOUR" "$MIN") (heure fixe)"
+  CRON_HEURE="$HOUR"
+  JOURS="1-5"
+  PLIST_HEURE="    <key>Hour</key><integer>$HOUR</integer>"
+  PLIST_JOURS="1 2 3 4 5"
+else
+  QUAND="chaque heure, 7 j/7 : actions ${CIBLE} min avant la clôture NYSE,\
+ crypto à ${CRYPTO_H} h UTC les jours fermés"
+  CRON_HEURE="*"
+  # 7 J/7 : le crypto cote le week-end et les fériés. `fenetre_execution.py` décide ce
+  # qui part — passage complet les jours de bourse, crypto seul les autres.
+  JOURS="*"
+  PLIST_HEURE=""
+  PLIST_JOURS="0 1 2 3 4 5 6"
+fi
 ACTION="${1:-install}"
 
 is_macos() { [ "$(uname -s)" = "Darwin" ]; }
@@ -52,8 +79,8 @@ if is_macos; then
     echo "    <string>/bin/bash</string><string>$CRON_SH</string>"
     echo '  </array>'
     echo '  <key>StartCalendarInterval</key><array>'
-    for d in 1 2 3 4 5; do
-      echo "    <dict><key>Weekday</key><integer>$d</integer><key>Hour</key><integer>$HOUR</integer><key>Minute</key><integer>$MIN</integer></dict>"
+    for d in $PLIST_JOURS; do
+      echo "    <dict><key>Weekday</key><integer>$d</integer>$PLIST_HEURE<key>Minute</key><integer>$MIN</integer></dict>"
     done
     echo '  </array>'
     echo "  <key>StandardOutPath</key><string>$LOG</string>"
@@ -63,14 +90,30 @@ if is_macos; then
   } > "$PLIST"
   launchctl unload "$PLIST" 2>/dev/null || true
   launchctl load "$PLIST"
-  echo "✅ launchd activé : rebalancement PAPER lun-ven $(printf "%02dh%02d" "$HOUR" "$MIN") → $LOG"
+  echo "✅ launchd activé : rebalancement PAPER — $QUAND → $LOG"
   echo "   (Alpaca paper forcé ; crypto réel neutralisé. Désactiver : make live-cron-uninstall)"
 else
-  LINE="$MIN $HOUR * * 1-5 $CRON_SH >> $LOG 2>&1"
+  LINE="$MIN $CRON_HEURE * * $JOURS $CRON_SH >> $LOG 2>&1"
   if [ "$ACTION" = "--uninstall" ]; then
-    (crontab -l 2>/dev/null | grep -vF "$CRON_SH") | crontab - || true
+    { crontab -l 2>/dev/null | grep -vF "$CRON_SH" || true; } | crontab - || true
     echo "✅ crontab nettoyé — plus de rebalancement auto."; exit 0
   fi
-  (crontab -l 2>/dev/null | grep -vF "$CRON_SH"; echo "$LINE") | crontab -
-  echo "✅ crontab activé : rebalancement PAPER lun-ven $(printf "%02dh%02d" "$HOUR" "$MIN") → $LOG"
+  # `|| true` OBLIGATOIRE, et c'est tout sauf cosmétique. Sans crontab existant,
+  # `crontab -l` échoue et `grep` ne sélectionne aucune ligne : il sort en 1. Avec
+  # `set -euo pipefail`, le sous-shell meurt AVANT le `echo "$LINE"`, la nouvelle ligne
+  # n'est jamais écrite, et le script rend 1 sans un mot. Autrement dit : l'installateur
+  # ne fonctionnait QUE sur une machine ayant déjà un crontab — jamais sur celle qui en
+  # a besoin. Constaté sur le VPS le 10/09 : « make: *** [live-cron-install] Error 1 »,
+  # aucun message, et pas une ligne installée.
+  { crontab -l 2>/dev/null | grep -vF "$CRON_SH" || true; echo "$LINE"; } | crontab -
+  # On VÉRIFIE au lieu d'annoncer. Un installateur qui dit « activé » sans relire ce
+  # qu'il a écrit est exactement ce qui a laissé ce défaut invisible.
+  if crontab -l 2>/dev/null | grep -qF "$CRON_SH"; then
+    echo "✅ crontab activé : rebalancement PAPER — $QUAND → $LOG"
+    echo "   vérifié : $(crontab -l | grep -F "$CRON_SH")"
+  else
+    echo "❌ la ligne n'est PAS dans le crontab après écriture — rien n'est planifié." >&2
+    echo "   Vérifier que \`crontab\` est installé et utilisable par $(whoami)." >&2
+    exit 1
+  fi
 fi

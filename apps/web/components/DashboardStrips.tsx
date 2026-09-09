@@ -57,8 +57,9 @@ export function HonestyStrip({ honesty }: { honesty: any }) {
       </span>
       <span className="mono">PSR <b className="text-fg">{Math.round((honesty.psr ?? 0) * 100)}%</b>{" "}
         <span className="text-muted2">P(Sharpe&gt;0)</span></span>
-      <span className="mono text-muted">Sharpe ann. {honesty.sharpe_annualized}</span>
-      <span className="mono text-muted">n={honesty.n_obs}</span>
+      <span className="mono text-muted" title="Calculé sur la TOTALITÉ de l'historique, pas sur la période choisie plus haut. Les deux chiffres diffèrent donc légitimement.">
+        Gain / risque {honesty.sharpe_annualized} <span className="text-muted2">sur tout l'historique</span></span>
+      <span className="mono text-muted" title="Nombre de journées de bourse derrière ce calcul.">{honesty.n_obs} séances</span>
       <span className="text-muted2 basis-full md:basis-auto md:flex-1 md:min-w-0">{honesty.note}</span>
     </div>
   );

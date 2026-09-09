@@ -237,6 +237,8 @@ html, body { overflow-x:clip; max-width:100%; }
    home-indicator. (Sans effet en navigation Safari classique.) */
 .nav-safe { padding-top:env(safe-area-inset-top); }
 .nav-safe-bottom { padding-bottom:env(safe-area-inset-bottom); }
+/* Le tiroir mobile colle au bord DROIT : en paysage, ses boutons passeraient sous l'encoche. */
+.drawer-panel { padding-right:env(safe-area-inset-right); }
 
 /* Défilement inertiel iOS pour tout conteneur scrollable (tableaux, heatmaps). */
 .overflow-x-auto, .overflow-y-auto, .overflow-auto { -webkit-overflow-scrolling:touch; }
@@ -244,12 +246,50 @@ html, body { overflow-x:clip; max-width:100%; }
 .overflow-x-auto { scrollbar-width:thin; }
 
 @media (max-width: 640px) {
-  /* Respiration horizontale compacte : on récupère de la largeur utile (les pages utilisent p-6). */
-  main { padding-left:14px !important; padding-right:14px !important; padding-top:14px !important; }
+  /* Respiration horizontale compacte : on récupère de la largeur utile (les pages utilisent p-6).
+     En PAYSAGE sur un iPhone à encoche, 14 px passent SOUS l'encoche : `max()` garde le plus grand
+     des deux, donc la marge de sécurité l'emporte quand elle existe et coûte 0 px quand elle vaut 0. */
+  main {
+    padding-left:max(14px, env(safe-area-inset-left)) !important;
+    padding-right:max(14px, env(safe-area-inset-right)) !important;
+    padding-top:14px !important;
+  }
   .card { padding:14px; border-radius:14px; }
   h1 { font-size:20px; }
   /* Les cartes contenant un tableau scrollent horizontalement au lieu de déborder l'écran. */
   .card { max-width:100%; }
+
+  /* ------------------------------------------------------------------------
+     TABLEAUX LARGES : mesuré le 2026-09-07 à 390 px de large — le calendrier des
+     résultats dépassait de 437 px, `html,body{overflow-x:clip}` avalait ce
+     dépassement, et la page ne scrollait pas : SIX colonnes sur dix étaient
+     définitivement hors d'atteinte. Aucun avertissement, aucune barre : le
+     tableau paraissait simplement s'arrêter à « Bénéfice attendu ».
+     Envelopper chaque tableau à la main marchait, mais le prochain tableau écrit
+     sans conteneur ramenait le bug. La table devient donc SON PROPRE conteneur
+     de défilement, une fois pour toutes.
+     `width:max-content` la laisse s'étendre à son contenu, `min-width:100%` la
+     force à remplir la carte quand elle est étroite. Vérifié : colonnes de
+     l'en-tête et du corps toujours alignées au pixel, tableau étroit inchangé,
+     aucun défilement latéral parasite de la page.
+     ------------------------------------------------------------------------ */
+  table { display:block; overflow-x:auto; max-width:100%; width:max-content; min-width:100%;
+          overscroll-behavior-x:contain; }
+
+  /* ------------------------------------------------------------------------
+     BULLES D'AIDE : ancrées au centre de leur icône (`left:50%`), 240 px de large.
+     Mesuré : une icône à moins de 120 px du bord — le cas ORDINAIRE en colonne de
+     droite — projetait 99 px de texte hors de l'écran, définitivement coupés.
+     Sur mobile, la bulle quitte donc l'ancrage et se pose en bas de l'écran, sur
+     toute la largeur : jamais coupée, quelle que soit la position de l'icône.
+     ------------------------------------------------------------------------ */
+  [role="tooltip"] {
+    position:fixed; left:14px; right:14px; width:auto; max-width:none;
+    top:auto; bottom:calc(16px + env(safe-area-inset-bottom));
+    transform:none; margin:0; z-index:80;
+    box-shadow:0 12px 40px rgba(0,0,0,.5);
+  }
+
   /* iOS ne zoome plus au focus d'un champ (police ≥ 16 px). */
   input, select, textarea { font-size:16px; }
   /* Cibles tactiles confortables. */

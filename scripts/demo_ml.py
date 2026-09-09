@@ -18,6 +18,17 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+# MATÉRIEL — avant tout autre import du projet, et surtout avant pandas.
+#
+# `activer_cudf()` pose un crochet d'importation qui doit précéder l'entrée de pandas
+# en mémoire : posé après, il ne fait plus rien ET ne lève rien, ce qui donnerait un
+# script se croyant accéléré alors qu'il tourne sur processeur. Sur Mac, cudf est
+# absent : la fonction rend False sans bruit et pandas reste pandas.
+from packages.common.device import activer_cudf, banniere  # noqa: E402
+
+activer_cudf()
+banniere()
+
 from packages.common import load_yaml  # noqa: E402
 from packages.data import data_providers  # noqa: E402
 from packages.ml import (  # noqa: E402

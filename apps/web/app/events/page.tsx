@@ -3,18 +3,29 @@ import { useMemo, useState } from "react";
 import { useEvents } from "@/lib/api";
 import { PageSkeleton, EmptyState } from "@/components/ui";
 import { IR } from "@/lib/ir";
+import { DateArrete } from "@/components/DateArrete";
 
 // étiquettes de suivi : couleur, emoji et description (pour la légende + filtre)
 const TAGS: Record<string, { c: string; bg: string; emoji: string; desc: string }> = {
-  position: { c: "#22c55e", bg: "color-mix(in srgb,#22c55e 16%,transparent)", emoji: "💼", desc: "Tu détiens ce titre (compte réel)" },
-  conviction: { c: "#a78bfa", bg: "color-mix(in srgb,#8b5cf6 16%,transparent)", emoji: "⭐", desc: "Top 5 % de la note de conviction (fusion des lentilles)" },
-  ML: { c: "#22d3ee", bg: "color-mix(in srgb,#22d3ee 16%,transparent)", emoji: "🤖", desc: "Top 5 % du score Machine Learning" },
-  "fond.": { c: "#f59e0b", bg: "color-mix(in srgb,#f59e0b 16%,transparent)", emoji: "📊", desc: "Top 5 % du score fondamental" },
-  "invest.": { c: "#60a5fa", bg: "color-mix(in srgb,#3b82f6 16%,transparent)", emoji: "🏦", desc: "Top 5 % du score investisseurs (13F / superinvestisseurs)" },
-  base: { c: "#9aa1ad", bg: "color-mix(in srgb,#9aa1ad 16%,transparent)", emoji: "•", desc: "Présent dans ta base, hors top scores" },
+  position: { c: "#22c55e", bg: "color-mix(in srgb,#22c55e 16%,transparent)", emoji: "💼", desc: "Vous détenez ce titre sur un compte réel" },
+  conviction: { c: "#a78bfa", bg: "color-mix(in srgb,#8b5cf6 16%,transparent)", emoji: "⭐", desc: "Dans les 5 % les mieux notés quand on croise tous les signaux" },
+  ML: { c: "#22d3ee", bg: "color-mix(in srgb,#22d3ee 16%,transparent)", emoji: "🤖", desc: "Dans les 5 % préférés du modèle appris sur l'historique" },
+  "fond.": { c: "#f59e0b", bg: "color-mix(in srgb,#f59e0b 16%,transparent)", emoji: "📊", desc: "Dans les 5 % dont les comptes sont les plus solides" },
+  "invest.": { c: "#60a5fa", bg: "color-mix(in srgb,#3b82f6 16%,transparent)", emoji: "🏦", desc: "Dans les 5 % les mieux notés par les grilles d'investisseurs célèbres" },
+  base: { c: "#9aa1ad", bg: "color-mix(in srgb,#9aa1ad 16%,transparent)", emoji: "•", desc: "Suivie par le site, sans se distinguer dans aucun classement" },
 };
 const TAGC = (t: string): [string, string] => [TAGS[t]?.c ?? "#9aa1ad", TAGS[t]?.bg ?? "color-mix(in srgb,#9aa1ad 16%,transparent)"];
 const dt = (s?: string) => (s ? String(s).slice(0, 10) : "—");
+// Une publication à venir dans la fenêtre d'exclusion : le titre est écarté des
+// recommandations jusqu'à ce qu'elle soit passée. La fenêtre vient de l'API — c'est la
+// MÊME constante que celle appliquée côté moteur, jamais une copie recalculée ici.
+function enBlackout(date?: string, jours?: number | null): boolean {
+  if (!date || !jours) return false;
+  const t = Date.parse(String(date).slice(0, 10));
+  if (!Number.isFinite(t)) return false;
+  const ecart = (t - Date.now()) / 86_400_000;
+  return ecart >= -0.5 && ecart <= jours;
+}
 const eps = (x?: number | null) => (x == null ? "—" : `$${x.toFixed(2)}`);
 const big = (x?: number | null) => {
   if (x == null) return "—";
@@ -84,24 +95,42 @@ export default function Events() {
 
   return (
     <main className="max-w-6xl mx-auto p-6 space-y-4">
-      <h1 className="text-xl font-semibold tracking-tight">Événements</h1>
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight">Ce qui arrive dans les prochains jours</h1>
+        <p className="text-muted text-sm mt-1 max-w-3xl">
+          Deux choses à surveiller au calendrier : les entreprises qui publient bientôt leurs
+          résultats — un jour où le cours peut bouger fort, dans un sens ou dans l'autre — et
+          les sociétés qui s'apprêtent à entrer en bourse.
+        </p>
+      </div>
+      <DateArrete date={data.as_of} quoi="Calendrier" />
       <p className="text-muted text-xs">
-        Résultats trimestriels (BPA &amp; revenu estimés et annoncés) de tes positions réelles, du top 5 % des scores
-        (conviction, ML, fondamentaux, investisseurs) et des sociétés de ta base,
-        et IPOs US (dépôts S-1/S-1/A SEC EDGAR{data.fmp ? " + calendrier FMP" : ""}). 100 % sources publiques réelles
-        {data.fmp ? "." : " — ajoute FMP_API_KEY pour le ticker, la fourchette de prix et la valorisation des IPOs."}
+        Sont listées : les sociétés que vous détenez, les 5 % les mieux notées du site, et les autres
+        entreprises suivies. Les entrées en bourse viennent des dossiers officiels déposés auprès du
+        régulateur américain{data.fmp ? ", complétés par un calendrier commercial" : ""}. Toutes ces
+        informations sont publiques et vérifiables
+        {data.fmp ? "." : " — avec une clé FMP_API_KEY, on obtient en plus le symbole, la fourchette de prix et la valorisation attendue des entrées en bourse."}
       </p>
 
       {!data.available ? (
-        <EmptyState title="Aucun événement disponible"
-          hint="Réseau requis (yfinance / SEC EDGAR). Lance l'API en ligne ; le calendrier se remplit (cache 6 h)." />
+        <EmptyState title="Calendrier vide"
+          hint="Ces informations se récupèrent en ligne. Lancez l'API avec une connexion internet : le calendrier se remplit, puis reste en mémoire environ 6 heures." />
       ) : (
       <>
       {/* ===== RÉSULTATS TRIMESTRIELS ===== */}
       <section className="card p-4 overflow-x-auto">
         <h2 className="text-sm uppercase tracking-wide text-muted mb-1">📅 Prochains résultats trimestriels ({earnRows.length}/{earnings.length})</h2>
-        <p className="text-muted2 text-xs mb-2">BPA et revenu <b>estimés</b> (consensus) puis <b>annoncés (réels)</b> dès publication. « Surprise » = écart réel vs estimé (donc « — » pour les rapports à venir, c'est normal).
-        {!data.fmp_earnings && <> · <span className="text-muted2">Source yfinance : le <b>revenu réel</b> n'est renseigné que pour le dernier trimestre publié ; le calendrier FMP (plan payant) le fournit pour tous.</span></>}</p>
+        {data.blackout_jours != null && (
+          <p className="text-xs mb-2" style={{ color: "var(--warn)" }}>
+            ⏸ Une société qui publie dans les <b>{data.blackout_jours} jours</b> est
+            automatiquement <b>écartée des recommandations</b> : un résultat trimestriel fait
+            bouger le cours dans un sens ou dans l'autre selon ce qu'il contient, et personne
+            ne sait lequel à l'avance. Ce n'est pas un avis sur l'entreprise, c'est un refus de
+            jouer à pile ou face. Les lignes concernées portent la pastille ⏸ ci-dessous.
+          </p>
+        )}
+        <p className="text-muted2 text-xs mb-2">D'abord ce que les analystes <b>attendent</b>, puis ce que l'entreprise <b>annonce vraiment</b> le jour venu. La « surprise » est l'écart entre les deux : c'est souvent elle qui fait bouger le cours, pas le résultat lui-même. Pour les publications à venir, elle affiche « — », c'est normal.
+        {!data.fmp_earnings && <> · <span className="text-muted2">Avec la source gratuite, le <b>chiffre d'affaires réellement annoncé</b> n'est disponible que pour le dernier trimestre publié ; un abonnement FMP le fournirait pour tous.</span></>}</p>
         {/* LÉGENDE des étiquettes « Suivi » */}
         <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3 text-xs">
           <span className="text-muted2 uppercase tracking-wide">Légende :</span>
@@ -117,13 +146,13 @@ export default function Events() {
             <button onClick={() => setEScope("top")}
               className={`px-2.5 py-1 ${eScope === "top" ? "bg-accent text-bg" : "bg-surfaceAlt text-muted hover:text-fg"}`}>⭐ Top 5 %</button>
             <button onClick={() => setEScope("all")}
-              className={`px-2.5 py-1 ${eScope === "all" ? "bg-accent text-bg" : "bg-surfaceAlt text-muted hover:text-fg"}`}>Toute la base</button>
+              className={`px-2.5 py-1 ${eScope === "all" ? "bg-accent text-bg" : "bg-surfaceAlt text-muted hover:text-fg"}`}>Toutes les sociétés</button>
           </div>
-          <input value={eQ} onChange={(e) => setEQ(e.target.value)} placeholder="rechercher (ticker ou société)"
+          <input value={eQ} onChange={(e) => setEQ(e.target.value)} placeholder="chercher un symbole ou un nom de société"
             className="text-sm px-2 py-1 rounded bg-surfaceAlt border border-border outline-none w-56" />
           <select value={eTag} onChange={(e) => setETag(e.target.value)}
             className="text-sm px-2 py-1 rounded bg-surfaceAlt border border-border outline-none">
-            <option value="tout">Tous les suivis</option>
+            <option value="tout">Toutes les étiquettes</option>
             {Object.keys(TAGS).map((k) => <option key={k} value={k}>{TAGS[k].emoji} {k}</option>)}
           </select>
           <select value={eWhen} onChange={(e) => setEWhen(e.target.value)}
@@ -132,15 +161,15 @@ export default function Events() {
             <option value="à venir">À venir</option>
             <option value="publié">Publiés</option>
           </select>
-          <span className="text-muted2 text-xs">clique un en-tête pour trier{eScope === "all" ? " · « Toute la base » = sociétés au calendrier disponible (échantillon yfinance le plus large ; FMP plan = exhaustif)" : ""}</span>
+          <span className="text-muted2 text-xs">cliquez un titre de colonne pour trier{eScope === "all" ? " · « Toutes les sociétés » n'affiche que celles dont la date de publication est connue : c'est le plus large échantillon gratuit, pas la liste exhaustive du marché" : ""}</span>
         </div>
-        {earnRows.length === 0 ? <p className="text-muted text-sm">Aucun résultat ne correspond.</p> : (
+        {earnRows.length === 0 ? <p className="text-muted text-sm">Aucune publication ne correspond à ces filtres.</p> : (
         <table className="w-full text-sm mono">
           <thead className="text-muted text-xs"><tr>
             <Th k="date" label="Date" sort={eSort} set={setESort} /><Th k="symbol" label="Actif" sort={eSort} set={setESort} />
-            <Th k="name" label="Société" sort={eSort} set={setESort} /><th className="text-left font-normal pl-2">Suivi</th>
-            <Th k="eps_estimate" label="BPA est." r sort={eSort} set={setESort} /><Th k="eps_actual" label="BPA réel" r sort={eSort} set={setESort} />
-            <Th k="revenue_estimate" label="Rev. est." r sort={eSort} set={setESort} /><Th k="revenue_actual" label="Rev. réel" r sort={eSort} set={setESort} />
+            <Th k="name" label="Société" sort={eSort} set={setESort} /><th className="text-left font-normal pl-2">Pourquoi elle est là</th>
+            <Th k="eps_estimate" label="Bénéfice attendu" r sort={eSort} set={setESort} /><Th k="eps_actual" label="Bénéfice annoncé" r sort={eSort} set={setESort} />
+            <Th k="revenue_estimate" label="Ventes attendues" r sort={eSort} set={setESort} /><Th k="revenue_actual" label="Ventes annoncées" r sort={eSort} set={setESort} />
             <Th k="_sp" label="Surprise" r sort={eSort} set={setESort} /><Th k="_when" label="Quand" sort={eSort} set={setESort} />
           </tr></thead>
           <tbody>{earnRows.map((e: any, i: number) => (
@@ -148,7 +177,11 @@ export default function Events() {
               <td className="py-1.5"><span style={{ color: e._when === "à venir" ? "#22d3ee" : "#9aa1ad" }}>{dt(e.date)}</span></td>
               <td><IR ticker={e.symbol} name={e.name} className="text-accent hover:underline" /></td>
               <td className="font-sans text-xs text-muted2 max-w-[180px] truncate">{e.name || "—"}</td>
-              <td className="pl-2 font-sans">{((e.tags ?? []).length === 0 ? ["base"] : e.tags).map((t: string) => (
+              <td className="pl-2 font-sans">{enBlackout(e.date, data.blackout_jours) && (
+                <span className="text-[10px] px-1 py-0.5 rounded whitespace-nowrap mr-1"
+                  style={{ background: "color-mix(in srgb, #f59e0b 16%, transparent)", color: "#f59e0b" }}
+                  title={`Publie dans moins de ${data.blackout_jours} jours : écartée des recommandations jusqu'à la publication.`}>⏸ écartée</span>)}
+                {((e.tags ?? []).length === 0 ? ["base"] : e.tags).map((t: string) => (
                 <span key={t} className="text-[10px] px-1 py-0.5 rounded mr-1 whitespace-nowrap"
                   style={{ background: TAGC(t)[1], color: TAGC(t)[0] }}>{TAGS[t]?.emoji} {t}</span>))}</td>
               <td className="text-right">{eps(e.eps_estimate)}</td>
@@ -164,20 +197,20 @@ export default function Events() {
 
       {/* ===== IPOS ===== */}
       <section className="card p-4 overflow-x-auto">
-        <h2 className="text-sm uppercase tracking-wide text-muted mb-1">🚀 Prochaines IPOs US ({ipoRows.length}/{ipos.length})</h2>
-        <p className="text-muted2 text-xs mb-3">Pipeline d'introductions en bourse : dépôts S-1/S-1/A auprès de la SEC (EDGAR){data.fmp ? " + calendrier FMP (ticker, fourchette, valorisation)" : ""}. Cliquer ouvre le dépôt SEC.</p>
+        <h2 className="text-sm uppercase tracking-wide text-muted mb-1">🚀 Sociétés qui vont entrer en bourse aux États-Unis ({ipoRows.length}/{ipos.length})</h2>
+        <p className="text-muted2 text-xs mb-3">Avant d'être cotée, une société dépose un dossier public auprès du régulateur américain. C'est cette file d'attente qu'on lit ici{data.fmp ? ", complétée par un calendrier commercial qui donne le symbole, la fourchette de prix et la valorisation attendue" : ""}. Cliquez un nom pour ouvrir le dossier officiel.</p>
         <div className="flex flex-wrap items-center gap-2 mb-3">
-          <input value={iQ} onChange={(e) => setIQ(e.target.value)} placeholder="rechercher (société, ticker, secteur)"
+          <input value={iQ} onChange={(e) => setIQ(e.target.value)} placeholder="chercher une société, un symbole, un secteur"
             className="text-sm px-2 py-1 rounded bg-surfaceAlt border border-border outline-none w-64" />
-          <span className="text-muted2 text-xs">clique un en-tête pour trier</span>
+          <span className="text-muted2 text-xs">cliquez un titre de colonne pour trier</span>
         </div>
-        {ipoRows.length === 0 ? <p className="text-muted text-sm">Aucune IPO ne correspond.</p> : (
+        {ipoRows.length === 0 ? <p className="text-muted text-sm">Aucune entrée en bourse ne correspond à cette recherche.</p> : (
         <table className="w-full text-sm mono">
           <thead className="text-muted text-xs"><tr>
             <Th k="date" label="Date" sort={iSort} set={setISort} /><Th k="ticker" label="Ticker" sort={iSort} set={setISort} />
-            <Th k="name" label="Société" sort={iSort} set={setISort} /><Th k="industry" label="Secteur/Bourse" sort={iSort} set={setISort} />
-            <th className="text-right font-normal">Fourchette</th><Th k="valuation" label="Valorisation" r sort={iSort} set={setISort} />
-            <Th k="status" label="Statut" sort={iSort} set={setISort} /><Th k="source" label="Source" sort={iSort} set={setISort} />
+            <Th k="name" label="Société" sort={iSort} set={setISort} /><Th k="industry" label="Secteur / Bourse" sort={iSort} set={setISort} />
+            <th className="text-right font-normal" title="Prix envisagé pour l'action lors de l'introduction.">Prix envisagé</th><Th k="valuation" label="Valeur visée" r sort={iSort} set={setISort} />
+            <Th k="status" label="Où en est le dossier" sort={iSort} set={setISort} /><Th k="source" label="Source" sort={iSort} set={setISort} />
           </tr></thead>
           <tbody>{ipoRows.map((p: any, i: number) => (
             <tr key={i} className="border-t border-border">
@@ -195,7 +228,7 @@ export default function Events() {
       </section>
       </>
       )}
-      <p className="text-muted text-xs">Mise à jour ~toutes les 6 h · {dt(data.as_of)} · {data.n_symbols ?? 0} sociétés suivies.</p>
+      <p className="text-muted text-xs">Actualisé environ toutes les 6 heures · dernière mise à jour le {dt(data.as_of)} · {data.n_symbols ?? 0} sociétés suivies.</p>
     </main>
   );
 }
