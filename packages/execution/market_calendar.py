@@ -108,6 +108,16 @@ def raison_fermeture(ts: datetime | None = None, asset_class: str = "equity") ->
     return f"hors séance — {quand} ({n:%H:%M} ET ; séance 09:30–16:00)"
 
 
+def est_jour_de_bourse(j: date) -> bool:
+    """Ce jour-là, la place ouvre-t-elle ? (indépendamment de l'heure qu'il est)
+
+    `is_open` répond « maintenant » ; celle-ci répond « aujourd'hui ». La distinction
+    compte pour planifier : un samedi et un mardi à 3 h du matin sont tous deux
+    « fermés », mais le mardi la séance viendra, et le samedi non.
+    """
+    return j.weekday() < 5 and not est_ferie(j)
+
+
 def minutes_avant_cloture(ts: datetime | None = None) -> float | None:
     """Minutes restantes avant la clôture XNYS. `None` si la séance n'est pas ouverte.
 

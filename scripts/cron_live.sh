@@ -7,7 +7,9 @@
 #   - Alpaca est forcé en paper → aucun ordre réel sur actions, quoi qu'il arrive.
 #   - Toute place crypto est neutralisée par défaut. Les variables sont définies VIDES plutôt
 #     que supprimées : le chargeur `.env` ne peut ainsi pas réinjecter les clés pendant le run.
-#   - Ne tourne QUE les jours de bourse US (lun-ven) ; sort proprement le week-end.
+#   - Le créneau est décidé par `scripts/fenetre_execution.py`, pas par le cron :
+#     passage complet une heure avant la clôture NYSE les jours de bourse, passage
+#     crypto seul à heure fixe UTC les jours fermés (le crypto cote 24/7).
 #
 # Installation : make live-cron-install   ·   Désinstallation : make live-cron-uninstall
 set -uo pipefail

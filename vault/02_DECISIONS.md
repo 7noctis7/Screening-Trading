@@ -2,6 +2,46 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0108 — Le crypto le week-end : ici, l'heure fixe est le BON choix (2026-09-10)
+
+**Demande.** Que le rebalancement tourne aussi le week-end pour le crypto.
+
+**Ce que ça change, et pourquoi ce n'est pas la même règle.** ADR-0107 vient d'établir
+qu'une heure fixe ne peut pas viser la clôture NYSE, parce que la cible bouge deux fois
+par an. Le crypto est le cas **exactement inverse** : il cote 24/7, il n'a ni clôture ni
+heure d'été, donc il n'y a rien à suivre. **Une heure UTC fixe est ici le choix juste**,
+et vouloir lui appliquer la mécanique de fenêtre serait de la symétrie mal placée.
+
+**Décision.** Le cron passe à `5 * * * *` — sept jours sur sept — et
+`fenetre_execution.py` route selon la nature du jour :
+
+| jour | déclencheur | ce qui part |
+|---|---|---|
+| séance NYSE | 60 min avant la clôture, heure du marché | tout, crypto compris |
+| week-end, férié | heure UTC fixe (00 h par défaut) | crypto seul — `run_live` reporte les actions |
+
+**Pourquoi 00 h UTC.** C'est la frontière du jour boursier crypto : la bougie quotidienne
+des sources du projet — klines Binance, `-USD` Yahoo — s'y ferme. Rebalancer juste après,
+c'est décider sur des barres COMPLÈTES plutôt qu'à cheval sur deux journées. Réglable par
+`QUANT_CRYPTO_HEURE_UTC`.
+
+**LE GARDE-FOU QUI COMPTE : pas de double passage.** Le déclencheur crypto ne s'arme QUE
+les jours sans séance. Les jours de bourse, le passage d'avant-clôture rebalance déjà
+tout — crypto inclus, puisqu'il cote en permanence. En ajouter un second ferait **deux
+rebalancements le même jour, donc deux fois les frais, pour exactement le même
+portefeuille**. Un test balaie un mois entier et vérifie deux choses à la fois : jamais
+les deux déclencheurs le même jour, et jamais zéro non plus — exactement un par jour, du
+lundi au dimanche, fériés compris.
+
+**Ce qui n'a pas eu à changer.** `run_live` sait déjà reporter les ordres actions hors
+séance et laisser passer le crypto (24/7). Le week-end, il fera donc spontanément un
+passage crypto seul, en le disant. Aucune logique d'exécution n'a été touchée : seule la
+question « faut-il agir maintenant ? » a reçu une seconde réponse.
+
+**Conséquence.** Un portefeuille rebalancé du lundi au vendredi dérive tout le week-end
+sur sa poche crypto, puis rattrape deux jours d'un coup le lundi — au pire moment, quand
+l'écart est maximal. C'était le cas jusqu'ici.
+
 ## ADR-0107 — Un cron qu'on ne retouche plus : la fenêtre, pas l'heure (2026-09-10)
 
 **Demande.** Rebalancer une heure avant la clôture, et ne plus jamais avoir à corriger la

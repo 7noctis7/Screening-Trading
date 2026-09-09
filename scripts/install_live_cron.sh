@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Active le REBALANCEMENT PAPER quotidien automatique en UNE commande.
-#   macOS → launchd (LaunchAgent, lun-ven, heure LOCALE)
+#   macOS → launchd (LaunchAgent, 7 j/7, heure LOCALE)
 #   Linux → crontab (idem)
 # Désinstaller : bash scripts/install_live_cron.sh --uninstall
 #
@@ -35,14 +35,22 @@ PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 HOUR="${QUANT_LIVE_HOUR:-}"
 MIN="${QUANT_LIVE_MIN:-5}"
 CIBLE="${QUANT_LIVE_AVANT_CLOTURE:-60}"
+CRYPTO_H="${QUANT_CRYPTO_HEURE_UTC:-0}"
 if [ -n "$HOUR" ]; then
   QUAND="tous les jours ouvrés à $(printf "%02dh%02d" "$HOUR" "$MIN") (heure fixe)"
   CRON_HEURE="$HOUR"
+  JOURS="1-5"
   PLIST_HEURE="    <key>Hour</key><integer>$HOUR</integer>"
+  PLIST_JOURS="1 2 3 4 5"
 else
-  QUAND="chaque heure ouvrée, agit ${CIBLE} min avant la clôture NYSE"
+  QUAND="chaque heure, 7 j/7 : actions ${CIBLE} min avant la clôture NYSE,\
+ crypto à ${CRYPTO_H} h UTC les jours fermés"
   CRON_HEURE="*"
+  # 7 J/7 : le crypto cote le week-end et les fériés. `fenetre_execution.py` décide ce
+  # qui part — passage complet les jours de bourse, crypto seul les autres.
+  JOURS="*"
   PLIST_HEURE=""
+  PLIST_JOURS="0 1 2 3 4 5 6"
 fi
 ACTION="${1:-install}"
 
@@ -71,7 +79,7 @@ if is_macos; then
     echo "    <string>/bin/bash</string><string>$CRON_SH</string>"
     echo '  </array>'
     echo '  <key>StartCalendarInterval</key><array>'
-    for d in 1 2 3 4 5; do
+    for d in $PLIST_JOURS; do
       echo "    <dict><key>Weekday</key><integer>$d</integer>$PLIST_HEURE<key>Minute</key><integer>$MIN</integer></dict>"
     done
     echo '  </array>'
@@ -82,10 +90,10 @@ if is_macos; then
   } > "$PLIST"
   launchctl unload "$PLIST" 2>/dev/null || true
   launchctl load "$PLIST"
-  echo "✅ launchd activé : rebalancement PAPER lun-ven — $QUAND → $LOG"
+  echo "✅ launchd activé : rebalancement PAPER — $QUAND → $LOG"
   echo "   (Alpaca paper forcé ; crypto réel neutralisé. Désactiver : make live-cron-uninstall)"
 else
-  LINE="$MIN $CRON_HEURE * * 1-5 $CRON_SH >> $LOG 2>&1"
+  LINE="$MIN $CRON_HEURE * * $JOURS $CRON_SH >> $LOG 2>&1"
   if [ "$ACTION" = "--uninstall" ]; then
     { crontab -l 2>/dev/null | grep -vF "$CRON_SH" || true; } | crontab - || true
     echo "✅ crontab nettoyé — plus de rebalancement auto."; exit 0
@@ -101,7 +109,7 @@ else
   # On VÉRIFIE au lieu d'annoncer. Un installateur qui dit « activé » sans relire ce
   # qu'il a écrit est exactement ce qui a laissé ce défaut invisible.
   if crontab -l 2>/dev/null | grep -qF "$CRON_SH"; then
-    echo "✅ crontab activé : rebalancement PAPER lun-ven — $QUAND → $LOG"
+    echo "✅ crontab activé : rebalancement PAPER — $QUAND → $LOG"
     echo "   vérifié : $(crontab -l | grep -F "$CRON_SH")"
   else
     echo "❌ la ligne n'est PAS dans le crontab après écriture — rien n'est planifié." >&2
