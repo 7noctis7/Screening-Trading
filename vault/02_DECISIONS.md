@@ -2,6 +2,55 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0106 — L'heure d'exécution : deux questions, une seule se mesure (2026-09-10)
+
+**Question posée.** « Quel créneau pour trader, là où historiquement ça performe le
+mieux ? » Elle en cache deux, qui n'ont pas la même nature de réponse.
+
+· **LE COÛT.** Stable, documenté, et sans besoin de mesurer : les trente premières
+  minutes concentrent l'écart achat-vente le plus large et la volatilité la plus forte ;
+  la fin de séance concentre la liquidité, l'enchère de clôture étant le moment le plus
+  liquide de la journée. Un carnet rebalancé UNE fois par jour s'exécute donc en fin de
+  séance. Cette partie ne dépend pas de l'univers.
+· **LE RENDEMENT.** Aucune règle générale ne vaut : cela dépend de l'univers, et cela se
+  mesure. D'où `make diag-creneau`.
+
+**Ce que l'instrument mesure.** Chaque séance se coupe en deux morceaux disjoints dont le
+produit redonne le rendement de clôture à clôture : la NUIT (clôture veille → ouverture,
+capturée en détenant à la clôture) et la SÉANCE (ouverture → clôture). Savoir lequel des
+deux porte le rendement historique de l'univers dit à quelle heure il faut être en
+position. Décomposition globale et par classe d'actifs.
+
+**UN GARDE-FOU QUI N'EN ÉTAIT PAS — et c'est le vrai enseignement de la journée.** Le
+danger de cette mesure est connu : si la clôture est corrigée des splits et dividendes et
+que l'ouverture ne l'est pas, chaque ajustement se loge ENTIÈREMENT dans le rendement de
+nuit. On lit « la nuit fait tout le rendement », ce qui est exactement la conclusion
+attendue — et complètement fausse.
+
+J'avais posé comme contrôle l'identité `(1+nuit)(1+journée) = 1+total`. **Elle ne
+contrôle rien.** L'ouverture s'y simplifie algébriquement : `(o/c₋₁)·(c/o) = c/c₋₁` tient
+pour n'importe quels nombres, cohérents ou non. Le test écrit pour la vérifier a renvoyé
+un écart de 0,0 sur des prix délibérément désalignés — c'est lui qui a démasqué le faux
+garde-fou, pas la relecture.
+
+Le contrôle qui mord regarde ailleurs : **l'ouverture et la clôture doivent tomber dans
+la fourchette [bas, haut] de la séance**. Si les colonnes ne partagent pas la même base,
+l'ouverture en sort, et aucune algèbre ne peut le masquer. Le script refuse de publier la
+décomposition au-delà de 1 % d'observations hors fourchette : UNCALIBRATED plutôt qu'un
+artefact.
+
+**Ce que le module ne dit pas.** Aucune stratégie. Capturer la seule nuit imposerait deux
+allers-retours quotidiens dont le coût dépasserait très probablement le gain — coût que
+ce script ne mesure pas. Il éclaire l'HEURE d'un rebalancement quotidien existant, il ne
+propose pas d'en faire deux.
+
+**Leçon de méthode, la troisième de la semaine du même genre.** Un contrôle qui ne peut
+pas échouer n'est pas un contrôle. Les deux précédents — la coche affichée sur les
+perdants du duel, la vérification de planification qui validait toute machine Linux —
+avaient la même forme : un garde-fou qui renvoyait « tout va bien » par construction.
+Celui-ci a été attrapé avant d'avoir servi, parce que le test a été écrit pour le faire
+échouer.
+
 ## ADR-0105 — L'installateur de planification échouait sur la machine qui en avait besoin (2026-09-10)
 
 **Le symptôme, brut.** `make live-cron-install` sur le VPS :
