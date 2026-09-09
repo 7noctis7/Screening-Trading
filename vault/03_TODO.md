@@ -30,11 +30,12 @@
 - [ ] **P1 — 1 906 lignes de DETTE DE CÂBLAGE (09/09, ADR-0118).** Dix modules déclarés
       SHADOW, aucun atteignable depuis la production. `make certification` les compte et
       bloque si l'un d'eux entre en prod sans changer de statut. À trancher, par ordre de
-      valeur : (1) `protocole_oos` → `gate.py`, pour que `n_essais` soit COMPTÉ et non
-      choisi ; (2) `disjoncteur`, perte journalière réalisée+latente, verrou sans
-      réarmement — complète `dd_kill_switch` qui, lui, coupe sur le drawdown ;
-      (3) `frictions`, décomposition des coûts, risque nul ; (4) `market_structure`, dont
-      le STATUT est faux (déjà utilisé par `make labs`).
+      valeur : ~~(1) protocole_oos~~ FAIT (ADR-0119) ; ~~(2) disjoncteur~~ FAIT, en
+      OBSERVATION — reste à l'ARMER (`QUANT_DISJONCTEUR=1`) après quelques semaines
+      d'observation des jours où il aurait coupé ; (3) `frictions` : `signal_inhibe` exige
+      un GAIN ATTENDU par ordre que le rebalanceur ne produit pas — produire cette
+      estimation d'abord, ne pas l'inventer ; (4) `market_structure`, dont le STATUT dit
+      « aucun appelant en production » alors que `make labs` l'utilise.
 
 - [ ] **P1 — ÎLOT SWING : 1 374 lignes, une stratégie entière jamais exécutée.**
       `moteur_swing` et `moteur_sortie` n'ont AUCUN importeur, et tirent `ddm`,
@@ -45,7 +46,14 @@
       zéro implémentation (seul vrai manque de l'audit des 4 axes). N'a d'intérêt qu'une
       fois `protocole_oos` branché — sinon on ajoute une méthode sans porte pour la juger.
 
-- [ ] **P0 — LE CHEMIN D'ÉCRITURE DU JOURNAL DÉDOUBLE (09/09).** NWL porte 1,74× la
+- [ ] **P1 — Lots `LEG-` en double : DONNÉES historiques, PAS un bug vivant (09/09).**
+      Formulation corrigée : `diag_journal_compte.py:663` établit qu'« aucun script du
+      dépôt n'écrit d'identifiant `LEG-` — l'import qui les a produits n'est plus dans
+      l'arbre ». Il n'y a donc aucun chemin d'écriture à réparer : c'est une contamination
+      historique (NWL 1,74× la quantité achetée, MAS 1,91×). Remède au niveau DONNÉES,
+      après lecture des traces : `python scripts/diag_journal_compte.py --symbole NWL`.
+
+- [ ] **~~P0 — chemin d'écriture qui dédouble~~ — REQUALIFIÉ ci-dessus (09/09).** NWL porte 1,74× la
       quantité achetée, MAS 1,91×, sur 7 et 6 identifiants `LEG-…` distincts. Le
       diagnostic le nomme : « un seul préfixe portant 2× = le chemin d'ÉCRITURE crée deux
       identités ». C'est la cause AMONT de tout le reste, et aucune réparation aval ne

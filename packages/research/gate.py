@@ -46,3 +46,42 @@ def promotion_verdict(*, dsr: float | None = None, pbo: float | None = None,
             reasons.append(f"edge net {edge} ≤ 0")
     promoted = bool(checks) and all(checks.values())
     return {"promoted": promoted, "checks": checks, "reasons": reasons}
+
+
+def verdict_hors_echantillon(*, sharpe_oos: float, n_obs_oos: int,
+                             pbo: float | None = None, edge: float | None = None,
+                             placebo_p: float | None = None,
+                             skew: float = 0.0, kurtosis: float = 3.0,
+                             ecart_type_sharpe: float | None = None,
+                             chemin_ledger=None, **seuils) -> dict:
+    """`promotion_verdict` dont le DSR est CALCULÉ, jamais fourni.
+
+    LE TROU QUE ÇA FERME. `promotion_verdict` reçoit `dsr` comme un nombre : c'est
+    l'appelant qui l'a calculé, donc c'est lui qui a choisi le nombre d'essais dont il
+    déflate. Or `protocole_oos` le dit sans détour — « le DSR n'a de sens que si le
+    nombre d'essais qu'il déflate est COMPTÉ, pas choisi ». Un appelant optimiste qui
+    déclare un seul essai obtient un seuil bas et une porte grande ouverte.
+
+    Ici `n_essais` vient du ledger et de nulle part ailleurs. Il n'y a volontairement
+    AUCUN paramètre pour le fournir : un garde-fou contournable par un argument nommé
+    n'est pas un garde-fou.
+
+    `promotion_verdict` reste inchangée — trois appelants s'en servent et rien n'oblige
+    un backtest déjà écrit à migrer. Le verdict renvoyé porte en plus `dsr_calcule`,
+    `n_essais` et `deployable` (la porte à 95 % de `protocole_oos`, plus stricte que le
+    `dsr_min` de promotion : la première dit « déployable », la seconde
+    « promouvable »).
+    """
+    from packages.research.protocole_oos import essais_du_ledger, porte_de_deploiement
+    n_essais = essais_du_ledger(chemin_ledger)
+    porte = porte_de_deploiement(sharpe_oos, n_obs_oos, n_essais,
+                                 ecart_type_sharpe=ecart_type_sharpe,
+                                 skew=skew, kurtosis=kurtosis)
+    verdict = promotion_verdict(dsr=porte["dsr"], pbo=pbo, edge=edge,
+                                placebo_p=placebo_p, **seuils)
+    verdict["dsr_calcule"] = porte["dsr"]
+    verdict["n_essais"] = n_essais
+    verdict["deployable"] = porte["deployable"]
+    if porte["motif"]:
+        verdict["reasons"] = [*verdict["reasons"], porte["motif"]]
+    return verdict

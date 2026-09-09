@@ -14,8 +14,10 @@ DEUX POINTS QUI DÉCIDENT DE LA CORRECTION, et qu'une lecture rapide de la spec 
    lendemain » veut dire jusqu'au lendemain. Un disjoncteur qui se réarme sur un rebond
    intrajournalier laisse rentrer précisément dans la volatilité qui l'a déclenché.
 
-STATUT : SHADOW. Aucun appelant en production ; `execution/live_guards` porte déjà les
-kill-switches actifs. Le brancher est une décision explicite.
+STATUT : CANDIDATE. Branché le 09/09 sur `run_live` via `execution/coupe_circuit`, en
+OBSERVATION : il calcule et publie, il n'agit pas. `QUANT_DISJONCTEUR=1` l'arme. Il ne
+remplace pas `live_guards.dd_kill_switch` — celui-ci coupe sur le DRAWDOWN, celui-ci sur
+la perte du JOUR. Deux horizons.
 """
 
 from __future__ import annotations
@@ -23,7 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 
-STATUT = "SHADOW_UNCALIBRATED"
+STATUT = "CANDIDATE_OBSERVATION"
 
 # Fourchette imposée par la spec : entre 2 % et 4 % de l'equity globale.
 SEUIL_MIN, SEUIL_MAX = 0.02, 0.04

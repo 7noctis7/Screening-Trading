@@ -16,14 +16,16 @@ Conséquence à assumer : un DSR de 95 % en OOS est un seuil très haut. Peu de 
 réelles le franchissent. Ne pas le franchir n'est pas un échec du protocole — c'est le
 protocole qui fait son travail.
 
-STATUT : SHADOW. Aucun appelant en production.
+STATUT : CANDIDATE. Appelé par `research/gate.verdict_hors_echantillon` (09/09), qui
+rend le DSR incontournable pour tout nouvel appelant. Reste hors du chemin
+d'EXÉCUTION : il juge des candidats de recherche, pas des ordres.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-STATUT = "SHADOW_UNCALIBRATED"
+STATUT = "CANDIDATE"
 PART_IS_DEFAUT = 0.60
 MAX_PARAMETRES = 3
 SEUIL_DSR = 0.95

@@ -13,8 +13,11 @@ from packages.risk.disjoncteur import STATUT, DisjoncteurJournalier
 T0 = datetime(2026, 9, 1, 14, 0, tzinfo=UTC)
 
 
-def test_le_module_demarre_en_SHADOW():
-    assert STATUT == "SHADOW_UNCALIBRATED"
+def test_le_module_declare_son_statut_REEL():
+    """Branché le 09/09 sur run_live, en OBSERVATION : il calcule et publie, il
+    n'agit pas. Le statut le dit — un module branché ne doit plus prétendre
+    qu'aucun appelant ne l'utilise (make certification bloque sur ce mensonge)."""
+    assert STATUT == "CANDIDATE_OBSERVATION"
 
 
 def test_sous_le_seuil_rien_ne_bouge():

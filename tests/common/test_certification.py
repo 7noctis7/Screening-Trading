@@ -65,8 +65,7 @@ def test_le_depot_REEL_declare_bien_ses_modules_SHADOW():
     attendus = {
         "packages.execution.frictions", "packages.indicators.liquidite_ict",
         "packages.indicators.market_structure", "packages.ml.caracteristiques_swing",
-        "packages.research.protocole_oos", "packages.risk.ddm",
-        "packages.risk.disjoncteur", "packages.risk.garde_swing",
+        "packages.risk.ddm", "packages.risk.garde_swing",
         "packages.strategies.moteur_sortie", "packages.strategies.moteur_swing",
     }
     assert set(declarés_shadow(RACINE)) == attendus

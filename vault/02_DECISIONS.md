@@ -2,6 +2,47 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0119 — Deux branchements, et le gate qui a attrapé le mien (2026-09-09)
+
+**`protocole_oos` → `research/gate`.** `promotion_verdict` recevait `dsr` comme un NOMBRE :
+l'appelant le calculait, donc l'appelant choisissait le nombre d'essais dont il déflatait.
+`verdict_hors_echantillon` lit `n_essais` du ledger et n'expose **aucun paramètre** pour le
+fournir — un garde-fou contournable par un argument nommé n'en est pas un. Un test vérifie
+l'absence de `dsr` et de `n_essais` dans la signature, un autre que 500 essais déflatent
+plus durement que 2. `promotion_verdict` reste inchangée : trois appelants s'en servent.
+
+**`disjoncteur` → `run_live`, DÉSARMÉ.** Il ne double pas `dd_kill_switch` : celui-ci coupe
+sur le DRAWDOWN (lent), celui-là sur la perte du JOUR (rapide). Un compte peut perdre 3 %
+dans la journée sans drawdown notable si le sommet est loin.
+
+Trois choix qui décident de ce branchement :
+
+1. **La perte du jour vient de l'EQUITY, pas du journal.** Le journal ne réconcilie pas
+   (ADR-0117) — un coupe-circuit adossé dessus déclencherait sur un chiffre faux.
+2. **L'état persiste sur disque.** Le cron lance un processus neuf à chaque passage ; un
+   verrou en mémoire seule se remettrait à zéro à chaque fois, donc ne verrouillerait
+   jamais. Un test le vérifie sur deux appels successifs.
+3. **Il OBSERVE, il n'agit pas.** Son déclenchement FERME LES POSITIONS — le geste le plus
+   destructeur du système, décidé par un composant jamais éprouvé en réel.
+   `QUANT_DISJONCTEUR=1` l'arme, après avoir vu sur plusieurs semaines les jours où il
+   aurait coupé. Armer sans cette vérification remplacerait un risque de marché par un
+   risque d'automatisme.
+
+**LE FAIT MARQUANT DE LA SESSION.** `make certification`, écrit deux heures plus tôt, a
+**refusé mon propre branchement** : `disjoncteur` devenait atteignable depuis `run_live`
+tout en déclarant « aucun appelant en production ». Le gate a fonctionné contre son auteur,
+ce qui est exactement le test qu'un garde-fou doit passer. Statuts corrigés en `CANDIDATE`
+et `CANDIDATE_OBSERVATION` ; le verrou d'inventaire des tests suit.
+
+**CE QUE JE N'AI PAS BRANCHÉ, ET POURQUOI.** `execution/frictions` : son `signal_inhibe`
+exige un GAIN ATTENDU par ordre, que le rebalanceur ne produit pas — il réplique des poids
+cibles, il n'estime pas un gain par ligne. Le brancher demanderait d'abord de produire cette
+estimation ; l'inventer serait pire que l'absence. L'îlot swing (1 374 l.) reste une
+décision de produit : le brancher change ce que le robot TRADE, sur une stratégie jamais
+validée hors échantillon.
+
+**Conséquences.** 2407 tests, 10 ajoutés. Dette de câblage 1 906 → **1 704 lignes**.
+
 ## ADR-0118 — 1 906 lignes jamais exécutées, et rien ne les comptait (2026-09-09)
 
 **Contexte.** Audit institutionnel demandé sur quatre axes (point-in-time, DSR/CPCV, HRP,

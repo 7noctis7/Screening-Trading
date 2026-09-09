@@ -1,5 +1,31 @@
 # 04 — JOURNAL
 
+## Session 2026-09-09 (16ᵉ) — Mon propre garde-fou m'a refusé le passage
+
+**DEUX BRANCHEMENTS.** `protocole_oos` → `gate.verdict_hors_echantillon` : le DSR est
+désormais CALCULÉ avec un `n_essais` lu du ledger, et la signature n'offre aucun moyen de le
+fournir. `disjoncteur` → `run_live` via `coupe_circuit`, DÉSARMÉ : il observe, publie, et
+n'agit qu'avec `QUANT_DISJONCTEUR=1`.
+
+**LE MOMENT DE LA JOURNÉE.** `make certification`, écrit deux heures plus tôt, a REFUSÉ mon
+branchement : `disjoncteur` devenait atteignable depuis `run_live` tout en déclarant
+« aucun appelant en production ». Le gate a fonctionné contre son auteur — c'est le seul
+test qui compte pour un garde-fou.
+
+**TROIS CHOIX QUI COMPTENT.** La perte du jour se lit sur l'EQUITY, pas sur le journal qui
+ne réconcilie pas. L'état persiste sur disque, sinon le cron le remettrait à zéro à chaque
+passage et le verrou ne verrouillerait jamais. Et il n'agit pas : son déclenchement ferme
+les positions, on ne confie pas ça à un composant jamais éprouvé en réel.
+
+**UNE P0 REQUALIFIÉE.** Le « chemin d'écriture qui dédouble » n'existe pas : le code qui a
+produit les ids `LEG-` n'est plus dans l'arbre. C'est une contamination de données
+historiques, pas un bug vivant. Passée en P1, remède au niveau données.
+
+**PAS BRANCHÉ, ET DIT.** `frictions` exige un gain attendu par ordre que le rebalanceur ne
+produit pas. L'îlot swing change ce que le robot TRADE — décision de produit.
+
+**2407 tests passés, 10 ajoutés.** Dette de câblage 1 906 → 1 704. ADR-0119.
+
 ## Session 2026-09-09 (15ᵉ) — L'audit demandait ce qui existe déjà
 
 **CE QUE L'INVENTAIRE DIT.** Audit institutionnel sur quatre axes. CPCV, triple barrière,
