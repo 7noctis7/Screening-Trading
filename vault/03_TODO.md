@@ -27,6 +27,24 @@
       puis `make sync && make diag-journal` — l'écart doit revenir à ~+169 $. Rejouer la
       chaîne seulement APRÈS ce contrôle.
 
+- [ ] **P1 — 1 906 lignes de DETTE DE CÂBLAGE (09/09, ADR-0118).** Dix modules déclarés
+      SHADOW, aucun atteignable depuis la production. `make certification` les compte et
+      bloque si l'un d'eux entre en prod sans changer de statut. À trancher, par ordre de
+      valeur : (1) `protocole_oos` → `gate.py`, pour que `n_essais` soit COMPTÉ et non
+      choisi ; (2) `disjoncteur`, perte journalière réalisée+latente, verrou sans
+      réarmement — complète `dd_kill_switch` qui, lui, coupe sur le drawdown ;
+      (3) `frictions`, décomposition des coûts, risque nul ; (4) `market_structure`, dont
+      le STATUT est faux (déjà utilisé par `make labs`).
+
+- [ ] **P1 — ÎLOT SWING : 1 374 lignes, une stratégie entière jamais exécutée.**
+      `moteur_swing` et `moteur_sortie` n'ont AUCUN importeur, et tirent `ddm`,
+      `garde_swing`, `liquidite_ict`, `caracteristiques_swing`. Brancher ou supprimer est
+      une décision de produit, pas de linter — elle appartient à l'utilisateur.
+
+- [ ] **P2 — Barres non temporelles absentes.** Volume/tick/dollar/information-driven :
+      zéro implémentation (seul vrai manque de l'audit des 4 axes). N'a d'intérêt qu'une
+      fois `protocole_oos` branché — sinon on ajoute une méthode sans porte pour la juger.
+
 - [ ] **P0 — LE CHEMIN D'ÉCRITURE DU JOURNAL DÉDOUBLE (09/09).** NWL porte 1,74× la
       quantité achetée, MAS 1,91×, sur 7 et 6 identifiants `LEG-…` distincts. Le
       diagnostic le nomme : « un seul préfixe portant 2× = le chemin d'ÉCRITURE crée deux

@@ -1,5 +1,35 @@
 # 04 — JOURNAL
 
+## Session 2026-09-09 (15ᵉ) — L'audit demandait ce qui existe déjà
+
+**CE QUE L'INVENTAIRE DIT.** Audit institutionnel sur quatre axes. CPCV, triple barrière,
+meta-labeling, PSR/DSR (formule Bailey–López de Prado complète), PBO, Benjamini-Hochberg,
+survivorship, impact en racine carrée, Almgren-Chriss, EVT, débruitage RMT : **tout est
+déjà là**. 375 modules, 373 fichiers de test. Une prémisse de l'audit était même fausse —
+`cvar_historical` est NON PARAMÉTRIQUE, il n'y a pas de normalité à corriger.
+
+**LE SEUL MANQUE RÉEL** : les barres non temporelles. Zéro implémentation.
+
+**ET LE VRAI CONSTAT.** Dix modules se déclarent SHADOW : **1 906 lignes jamais exécutées**,
+mesurées par atteignabilité transitive depuis `run_live`/`snapshot`/`main`. Le système ne
+manque pas de machinerie, il manque de câblage. Ajouter CPCV ferait un onzième fantôme.
+
+**CE QUI M'A LE PLUS FRAPPÉ.** Rien ne revérifiait ces déclarations. « Aucun appelant en
+production » était vrai le jour de l'écriture ; un import ajouté plus tard le rend faux en
+silence. `make certification` mesure désormais, et bloque. Sabotage vérifié.
+
+**MA PREMIÈRE LECTURE ÉTAIT FAUSSE, ET JE L'AI CORRIGÉE AVANT D'AGIR.** J'ai d'abord classé
+`disjoncteur` et `frictions` en « doublons à supprimer ». Lecture faite : `dd_kill_switch`
+coupe sur le DRAWDOWN, le disjoncteur sur la perte du JOUR — mécanismes différents ; et
+`frictions` DÉCOMPOSE les coûts au lieu de les renchérir. **Rien à supprimer.** Un premier
+filtre trop large m'avait aussi fait compter 16 modules SHADOW au lieu de 10 : les six
+autres portaient « UNCALIBRATED » comme statut de RETOUR, c'est-à-dire le mandat
+données-réelles qui fonctionne.
+
+**AUCUN BRANCHEMENT FAIT.** Chacun change le comportement d'exécution et mérite sa décision.
+
+**2397 tests passés, 6 ajoutés.** ADR-0118.
+
 ## Session 2026-09-09 (14ᵉ) — Les correctifs marchent, la chaîne reste à geler
 
 **LES DEUX CORRECTIFS ONT TENU.** Second passage : les lots reconstitués portent des prix

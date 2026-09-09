@@ -2,6 +2,65 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0118 — 1 906 lignes jamais exécutées, et rien ne les comptait (2026-09-09)
+
+**Contexte.** Audit institutionnel demandé sur quatre axes (point-in-time, DSR/CPCV, HRP,
+microstructure). **La quasi-totalité de ce qui était demandé existe déjà** : `ml/cpcv.py`,
+`ml/labeling.py` (triple barrière), `ml/meta.py`, `portfolio/psr.py` (formule
+Bailey–López de Prado, skew et kurtosis au dénominateur), `portfolio/pbo.py`,
+`research/fdr.py` (Benjamini-Hochberg), `data/survivorship.py`, `execution/impact.py`
+(racine carrée), `almgren_chriss.py`, `portfolio/evt.py`, `rmt_denoise.py`. 375 modules,
+373 fichiers de test.
+
+**UNE PRÉMISSE DE L'AUDIT ÉTAIT FAUSSE.** `cvar_historical` est NON PARAMÉTRIQUE — seuil
+empirique, moyenne de la queue observée. Il n'y a aucune hypothèse de normalité à corriger :
+les queues épaisses sont dans les données par construction.
+
+**LE SEUL MANQUE RÉEL DE LA LISTE** : les barres non temporelles (volume/tick/dollar/
+information-driven). Recherche élargie, zéro implémentation.
+
+**MAIS LE VRAI CONSTAT EST AILLEURS.** Dix modules déclarent `STATUT = "SHADOW_UNCALIBRATED"`
+et « Aucun appelant en production ». Mesure d'atteignabilité transitive depuis `run_live`,
+`snapshot` et `main` : **1 906 lignes jamais exécutées**. Le système ne manque pas de
+machinerie institutionnelle, il manque de CÂBLAGE. Ajouter CPCV ou la triple barrière
+produirait un onzième module fantôme.
+
+**CE QUI ÉTAIT PIRE ENCORE : rien ne revérifiait ces déclarations.** « Aucun appelant en
+production » était vrai le jour de l'écriture. Un import ajouté six semaines plus tard fait
+entrer un module en production sans qu'il cesse de jurer le contraire — et
+`15_CERTIFICATION.md` pose pourtant que « un composant non certifié en prod = finding P0 ».
+
+**Décision.** `packages/common/certification.py` mesure l'atteignabilité TRANSITIVE depuis
+les points d'entrée de production. `make certification` sort en 1 si un module SHADOW y est
+joignable. Sabotage vérifié : un import de `risk/disjoncteur` glissé dans `snapshot.py` fait
+tomber le gate ; retiré, il repasse.
+
+**DEUX GRAVITÉS, PAS UNE.** Un module SHADOW ATTEIGNABLE ment sur son statut → bloquant. Un
+module SHADOW inatteignable est une DETTE à trancher → compté, jamais bloquant. Confondre
+les deux ferait d'un inventaire une alarme permanente, donc une alarme ignorée.
+
+**CONTRÔLE NÉGATIF.** Un test vérifie que `atteignables` renvoie plus de 50 modules et
+contient `risk.limits` : sans lui, un calcul cassé donnerait « zéro incohérence » pour une
+mauvaise raison, et le gate passerait au vert en ne mesurant rien.
+
+**VERDICT PAR MODULE, mesuré.** Rien à supprimer — contrairement à ma première lecture,
+`disjoncteur` n'est PAS un doublon de `live_guards.dd_kill_switch` : celui-ci coupe sur le
+DRAWDOWN, celui-là sur la perte du JOUR, réalisée et latente, sans réarmement. Mécanismes
+différents. `frictions` ne renchérit pas `costs.CostModel`, il le DÉCOMPOSE (commission /
+fourchette / glissement) — même total, décisions opposées selon le poste dominant.
+
+| module | l. | verdict |
+|---|--:|---|
+| `research/protocole_oos` | 113 | BRANCHER sur `gate.py` — ferme le trou du `n_essais` choisi |
+| `risk/disjoncteur` | 89 | BRANCHER — perte journalière ≠ drawdown |
+| `execution/frictions` | 105 | BRANCHER en lecture — décomposition, risque nul |
+| `indicators/market_structure` | 225 | STATUT à corriger : déjà utilisé par `make labs` |
+| îlot swing (6 modules) | 1 374 | **DÉCISION UTILISATEUR** — stratégie entière jamais exécutée |
+
+**Conséquences.** 2397 tests, 6 ajoutés. Aucun code supprimé, aucun branchement fait : cette
+session mesure et outille. Les branchements changent le comportement d'exécution et méritent
+chacun leur décision.
+
 ## ADR-0117 — J'arrête de recommander la réparation du journal (2026-09-09)
 
 **Contexte.** Deuxième passage de la chaîne, cette fois avec le code corrigé (ADR-0115) et
