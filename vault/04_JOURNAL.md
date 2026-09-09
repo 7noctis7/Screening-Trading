@@ -1,5 +1,18 @@
 # 04 — JOURNAL
 
+## Session 2026-09-09 (18ᵉ) — Deux courbes tracées, une seule lisible
+
+**REMONTÉ À L'USAGE.** S&P 500 en `--warn` (#d97706) et Bitcoin en #f7931a : deux oranges.
+Les deux lignes tracées, les deux boutons actifs, une seule visible — et rien ne le signale.
+
+**CORRIGÉ, ET PLUS LARGEMENT.** Le S&P passe en ardoise désaturée : marché large = référence
+neutre, et sa faible chroma le sépare des trois autres même pour un œil daltonien. Surtout,
+Nasdaq et Bitcoin étaient des LITTÉRAUX dans le composant — même valeur en clair et en
+sombre. Les trois deviennent des tokens de `globals.css`, définis pour les deux thèmes. Une
+couleur de graphe qui ne suit pas le thème est un bug qui attend son utilisateur.
+
+Build vert, `tsc` propre. ADR-0121.
+
 ## Session 2026-09-09 (17ᵉ) — La courbe du compte face aux indices
 
 **LIVRÉ.** Onglet Positions : la courbe d'equity RÉELLE face au S&P 500, au Nasdaq 100 et au

@@ -2,6 +2,31 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0121 — Deux courbes tracées, une seule lisible (2026-09-09)
+
+**Constat, remonté à l'usage.** Sur le graphe des positions, le S&P 500 utilisait `--warn`
+(`#d97706`) et le Bitcoin `#f7931a`. Deux oranges. Les deux lignes étaient tracées, les deux
+boutons répondaient, et l'œil n'en distinguait qu'une : le pire des cas, puisque rien ne
+signale l'ambiguïté — on croit lire deux références.
+
+**Décision. Quatre teintes séparées, et des TOKENS de thème.** Le S&P passe en **ardoise
+désaturée** (`--bench-sp`) : c'est le marché large, la référence neutre, et sa faible chroma
+la sépare des trois autres même pour un œil daltonien. Le Nasdaq garde le violet, le Bitcoin
+son orange de marque, le portefeuille `--accent` — c'est lui qu'on suit.
+
+**LE DÉFAUT DE FOND N'ÉTAIT PAS LA TEINTE.** Nasdaq et Bitcoin étaient des littéraux `#a855f7`
+et `#f7931a` codés dans le composant : **la même valeur en clair et en sombre**, alors que
+le contraste n'y est pas le même. Les trois références deviennent des tokens définis pour
+les deux thèmes dans `globals.css`, comme le reste de la charte. Une couleur de graphe qui
+ne suit pas le thème est un bug qui attend son utilisateur.
+
+**Cohérence tableau ↔ courbe.** Les pastilles du tableau lisent les mêmes tokens : une
+pastille d'une autre teinte que sa ligne obligerait à retrouver la correspondance à chaque
+lecture.
+
+**Conséquences.** Aucun test à ajouter — c'est une valeur de charte, pas une logique. Build
+Next.js vert, `tsc` propre.
+
 ## ADR-0120 — La courbe du compte face aux indices, en DOLLARS (2026-09-09)
 
 **Demande.** Dans l'onglet Positions, la performance du portefeuille depuis le début des

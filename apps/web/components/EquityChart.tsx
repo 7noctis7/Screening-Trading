@@ -16,7 +16,11 @@ const shortDate = (t: any) => {
 const compact = (v: number) => (Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${Math.round(v)}`);
 // Une référence sans couleur se traçait en `undefined` : ligne invisible, bouton actif —
 // le pire des deux mondes, l'utilisateur croit l'avoir affichée. Repli explicite.
-const BCOL: Record<string, string> = { "S&P 500": "var(--warn)", "Nasdaq 100": "#a855f7", "Bitcoin": "#f7931a" };
+// Les teintes sont des TOKENS DE THÈME (globals.css), pas des littéraux : codées en dur,
+// elles gardaient la même valeur en clair et en sombre, où le contraste n'est pas le même.
+const BCOL: Record<string, string> = {
+  "S&P 500": "var(--bench-sp)", "Nasdaq 100": "var(--bench-ndx)", "Bitcoin": "var(--bench-btc)",
+};
 const col = (n: string) => BCOL[n] ?? "var(--muted)";
 
 // Périodes en JOURS CALENDAIRES, pas en nombre de points : le portefeuille n'est valorisé
