@@ -1,5 +1,37 @@
 # 04 — JOURNAL
 
+## Session 2026-09-09 (27ᵉ) — La vitrine annonçait trois nombres de tests différents
+
+**Fait.** README réécrit et `docs/COMMANDES.md` créé (référence des 125 cibles `make`, groupées
+par intention, avec les variables d'environnement). Cible `make help` ajoutée : la convention
+`##` du Makefile existait depuis toujours mais rien ne l'exposait.
+
+**Ce que l'état des lieux a trouvé.** Le README annonçait **825 tests** dans son badge, **825**
+dans le texte et **1160** dans « État du projet ». Le vrai chiffre est **2 475**. Trois nombres
+faux dans un même fichier, dont deux se contredisent : la vitrine du dépôt public avait dérivé
+sans que rien ne le signale.
+
+**Deux affirmations que j'allais reprendre sans vérifier.** J'avais écrit « PAPER TRADING READY
+✅ » sur la foi du cron vert de ce soir — or `docs/ROADMAP.md` porte encore **P0-3 ouvert**, et
+sa propre règle de lecture dit qu'un P0 ouvert interdit ce verdict. Et j'avais recopié « le test
+de biais du survivant ne mesure rien », alors que **P0-2 est fermé depuis le 25/08**. Les deux
+corrigées après lecture de la source. Reprendre le texte d'un ancien README est exactement le
+même défaut que reprendre un agrégat d'un autre contexte (ADR-0129) : ça a l'air vérifié parce
+que c'était écrit.
+
+**Chiffres publiés, tous re-mesurés** : 381 modules, 351 fichiers de test, 41 routes API, 28
+pages front, 129 ADR, 125 cibles `make`, 121 scripts.
+
+**Anonymisation.** Le dépôt suivi était déjà propre — aucune IP, aucun hostname, aucun email,
+que des placeholders. Les nouveaux fichiers ont été passés au même filtre (chemins, adresses,
+montants de compte) : rien. La section Sécurité l'énonce désormais explicitement.
+
+**Limites connues réécrites** pour dire ce que le projet ne sait PAS faire, dont le coût du
+turnover non instrumenté (colonnes `fees`/`slippage` jamais alimentées par l'exécution) mesuré
+ce soir.
+
+**Suite.** 2 475 passés, 7 ignorés. Vault lint vert.
+
 ## Session 2026-09-09 (26ᵉ) — Le premier appel réel a montré un chiffre sans référent
 
 **Fait.** Services relancés sur le VPS (`make up`, build `ce52253`). Premier appel réel de
