@@ -102,6 +102,48 @@ def _record(lot: dict):
         features_snapshot={})
 
 
+def _cours_de_reference():
+    """Appelable (symbole, date ISO) → clôture de ce jour-là, ou None si base muette."""
+    from datetime import timedelta
+
+    from apps.api.snapshot import _price_db_path
+    from packages.data.providers.db_provider import DBPriceProvider
+    chemin = _price_db_path()
+    if chemin is None or not Path(chemin).exists():
+        return lambda _s, _d: None
+    prov = DBPriceProvider(chemin)
+
+    def cours(symbole: str, date_iso: str):
+        ts = _horodatage(date_iso)
+        if ts is None:
+            return None
+        try:
+            barres = prov.fetch_ohlcv(symbole, "1d", ts - timedelta(days=6),
+                                      ts + timedelta(days=1))
+        except Exception:  # noqa: BLE001 — une base muette ne condamne pas un lot
+            return None
+        return float(barres[-1].close) if barres else None
+    return cours
+
+
+def _barrage(hors: list[dict]) -> None:
+    """Refus d'écriture, avec le détail. FAIL-CLOSED, et sur le LOT ENTIER.
+
+    Écrire les lots valides et taire les autres laisserait un registre à moitié réparé
+    dont personne ne saurait quelle moitié — exactement le genre d'état qui a coûté la
+    journée du 09/09. Un outil qui écrit dans une comptabilité s'arrête quand il n'est
+    plus sûr."""
+    print(f"\n  ❌ REFUS D'ÉCRITURE — {len(hors)} lot(s) au prix que le marché n'a pas")
+    print("     coté à leur date. Un lot reconstitué doit porter le prix de SON jour ;")
+    print("     sinon le FIFO le ferme contre une vente réelle et fabrique un P&L.\n")
+    for x in sorted(hors, key=lambda d: -abs(d["ecart"]))[:12]:
+        print(f"    {x['symbole']:<12} le {str(x['date'])[:10]} · lot "
+              f"{x['prix']:>12.4f} · cours {x['cours']:>12.4f} · {x['ecart']:+7.1%}")
+    if len(hors) > 12:
+        print(f"    … et {len(hors) - 12} autre(s)")
+    print("\n     Rien n'a été écrit. Le journal est intact.")
+
+
 def _resume(a_creer: list[dict], en_trop: list[dict]) -> None:
     syms = len({x["symbole"] for x in a_creer})
     print(f"\n  PLAN — {len(a_creer)} fill(s) à reconstituer sur {syms} symbole(s), "
@@ -145,6 +187,11 @@ def main() -> None:
     if "--appliquer" not in sys.argv:
         print("\n  SIMULATION — rien n'a été écrit. Relancer avec `--appliquer`.")
         return
+    from packages.research.completion_ouvertures import lots_incoherents
+    hors = lots_incoherents(a_creer, _cours_de_reference())
+    if hors:
+        _barrage(hors)
+        raise SystemExit(1)
     src = ROOT / "data" / "journal.db"
     if src.exists():
         dest = src.with_suffix(f".avant-completion-{datetime.now():%Y%m%d-%H%M%S}.db")

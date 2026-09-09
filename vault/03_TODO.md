@@ -14,7 +14,11 @@
       est le même. Deux issues : publier les deux chiffres côte à côte, ou justifier
       l'exclusion là où elle s'affiche. Ne pas laisser un chiffre flatteur sans son total.
 
-- [ ] **P0 — RESTAURER le journal du VPS avant toute autre lecture (09/09).** La chaîne de
+- [x] **P0 — Journal du VPS RESTAURÉ (09/09).** `réalisé +245,33 $` au centime près.
+      Cause corrigée (ADR-0115) et garde-fou posé AVANT écriture (ADR-0116). Rejouable
+      par `make reparer-journal`, qui refuse d'écrire un prix que le marché n'a pas coté.
+
+- [ ] **~~P0 — RESTAURER le journal du VPS~~ (09/09).** La chaîne de
       réparation appliquée ce matin a fabriqué des pertes : écart de réconciliation
       +168,76 $ → **+4 490,52 $**, réalisé +245 $ → **−3 929 $**, pour un compte qui n'a
       bougé que de +28 $. Cause corrigée dans le code (ADR-0115), mais la base porte encore

@@ -167,3 +167,46 @@ def test_chaque_lot_reconstitue_a_un_identifiant_DISTINCT():
     assert len(set(ids)) == len(ids) == 2, ids
     # déterministe : rejouer le même plan REDONNE les mêmes clés (donc un UPSERT)
     assert [mod._record(lot).id for lot in a_creer] == ids
+
+
+def test_un_lot_au_prix_que_le_marche_n_a_pas_cote_est_REFUSE():
+    """Le contrôle qui manquait le 09/09. Il existait — `diag_journal_compte` compare le
+    prix d'entrée de chaque lot à la clôture de son jour — mais il tournait APRÈS
+    l'écriture : il a constaté le dégât au lieu de l'empêcher."""
+    from packages.research.completion_ouvertures import lots_incoherents
+
+    plan = [{"symbole": "BTC", "date": "2026-07-07T10:00:00Z", "prix": 76801.0,
+             "qty": 0.1},
+            {"symbole": "QQQ", "date": "2026-07-07T10:00:00Z", "prix": 500.0,
+             "qty": 10.0}]
+    cours = {"BTC": 61731.0, "QQQ": 498.0}.get
+
+    hors = lots_incoherents(plan, lambda s, _d: cours(s))
+    assert [x["symbole"] for x in hors] == ["BTC"]          # +24 % : refusé
+    assert abs(hors[0]["ecart"] - (76801.0 / 61731.0 - 1)) < 1e-9
+    # QQQ à +0,4 % passe : un fill s'exécute dans la journée, pas à la clôture pile
+
+
+def test_une_base_de_prix_MUETTE_ne_condamne_aucun_lot():
+    """Fail-closed sur l'incohérence, pas sur l'absence. Bloquer une réparation parce
+    que la base de prix ne répond pas, c'est transformer un silence en verdict."""
+    from packages.research.completion_ouvertures import lots_incoherents
+
+    plan = [{"symbole": "BTC", "date": "2026-07-07T10:00:00Z", "prix": 76801.0,
+             "qty": 0.1}]
+    assert lots_incoherents(plan, lambda _s, _d: None) == []
+    assert lots_incoherents(plan, lambda _s, _d: 0.0) == []
+
+
+def test_le_plan_CORRIGE_passe_le_controle_de_coherence():
+    """Boucle la démonstration : un lot par fill porte le prix de SA date, donc le
+    contrôle qui refuse la version fusionnée laisse passer la version juste."""
+    from packages.research.completion_ouvertures import lots_incoherents
+
+    ordres = [_achat("BTC/USD", 1, 100.0, "2026-01-01T10:00:00Z"),
+              _achat("BTC/USD", 1, 100.0, "2026-02-01T10:00:00Z"),
+              _achat("BTC/USD", 1, 200.0, "2026-03-01T10:00:00Z")]
+    a_creer, _ = ouvertures_manquantes(ordres, {"BTC": 1.0})
+
+    marche = {"2026-02": 100.0, "2026-03": 200.0}          # le marché de chaque date
+    assert lots_incoherents(a_creer, lambda _s, d: marche[d[:7]]) == []

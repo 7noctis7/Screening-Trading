@@ -51,6 +51,11 @@ from packages.research.biais_fermeture import symbole_canonique
 
 TOLERANCE = 0.01                 # 1 % de la quantité achetée — arrondis de fills
 MOTIF = "completion-ouvertures"
+# Un fill s'exécute DANS la journée, la référence est la CLÔTURE : quelques points
+# d'écart sont normaux, et le crypto bouge plus qu'une action. 10 % laisse passer une
+# journée agitée et arrête ce qui n'est pas un prix de ce jour-là — le lot fautif du
+# 09/09 était à +24 % du cours de sa date.
+INCOHERENCE_MAX = 0.10
 
 
 def achats_par_symbole(ordres: list[dict]) -> dict[str, list[dict]]:
@@ -127,3 +132,26 @@ def ouvertures_manquantes(
                             "prix": f["price"], "date": f["date"],
                             "venue": f["venue"], "achete": achete, "journal": connu})
     return a_creer, en_trop
+
+
+def lots_incoherents(a_creer: list[dict], cours, seuil: float = INCOHERENCE_MAX
+                     ) -> list[dict]:
+    """Lots dont le prix s'écarte du cours de LEUR date au-delà de `seuil`.
+
+    LE CONTRÔLE QUI MANQUAIT. Ce rapprochement existait déjà — `diag_journal_compte`
+    compare le prix d'entrée de chaque lot à la clôture de son jour — mais il tournait
+    APRÈS l'écriture. Le 09/09, il a donc constaté le dégât au lieu de l'empêcher : un
+    lot BTC inscrit à 76 801 $ à une date où le marché cotait ~61 700 $, soit +24 %.
+
+    `cours` : appelable (symbole, date ISO) → float | None. Un cours introuvable ne
+    condamne pas le lot — on ne bloque pas une écriture sur une base de prix muette.
+    """
+    hors: list[dict] = []
+    for lot in a_creer:
+        px = cours(lot["symbole"], lot["date"])
+        if not px or px <= 0:
+            continue
+        ecart = float(lot["prix"]) / float(px) - 1.0
+        if abs(ecart) > seuil:
+            hors.append({**lot, "cours": float(px), "ecart": ecart})
+    return hors

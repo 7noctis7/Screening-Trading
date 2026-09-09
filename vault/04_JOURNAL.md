@@ -1,5 +1,28 @@
 # 04 — JOURNAL
 
+## Session 2026-09-09 (13ᵉ) — Le garde-fou existait, il regardait trop tard
+
+**RETOUR ARRIÈRE CONFIRMÉ.** Le journal du VPS est restauré : `réalisé +245,33 $`, au
+centime près comme avant. L'écart affiche +596 $ au lieu de +169 $ uniquement parce que le
+LATENT a bougé avec le marché (+576 → +56 $) — le journal, lui, est identique.
+
+**CE QUE J'AI FERMÉ.** ADR-0115 corrigeait la cause des faux lots. Restait pourquoi rien ne
+l'avait arrêtée. Le contrôle existait — `_base_de_cout` compare chaque prix d'entrée à la
+clôture de son jour — mais APRÈS l'écriture. Il constatait au lieu d'empêcher.
+`lots_incoherents` le fait désormais AVANT, et `completer_ouvertures` refuse d'écrire.
+
+**FAIL-CLOSED SUR L'INCOHÉRENCE, PAS SUR LE SILENCE.** Un cours introuvable ne condamne pas
+un lot : une base muette n'est pas un verdict. Deux tests tiennent les deux bords.
+
+**UNE COMMANDE.** `make reparer-journal` enchaîne les six étapes dans l'ordre imposé par les
+scripts. On ne demande plus de retenir un ordre dont l'inversion casse le registre.
+
+**CE QUI RESTE VRAI ET QU'IL FAUT DIRE.** Le robot FONCTIONNE. `run_live` lit les positions
+du COURTIER, jamais le journal : le rebalancement n'a jamais dépendu de cet état. Le journal
+est un registre, pas une commande.
+
+**2391 tests passés, 3 ajoutés.** ADR-0116.
+
 ## Session 2026-09-09 (12ᵉ) — La réparation a cassé ce qu'elle devait réparer
 
 **CE QUE J'AI FAIT APPLIQUER, ET QUI ÉTAIT FAUX.** J'ai recommandé la chaîne de réparation

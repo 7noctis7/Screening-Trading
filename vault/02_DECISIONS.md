@@ -2,6 +2,41 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0116 — Le contrôle existait, il tournait APRÈS l'écriture (2026-09-09)
+
+**Contexte.** ADR-0115 a corrigé la cause des faux lots. Restait la question qui compte
+davantage : pourquoi rien n'a arrêté l'écriture. Or le rapprochement qui l'aurait
+attrapée existait déjà — `diag_journal_compte._base_de_cout` compare le prix d'entrée de
+chaque lot à la clôture de son jour. Il tournait APRÈS. Il a donc constaté le dégât au
+lieu de l'empêcher : un lot BTC inscrit à 76 801 $ à une date où le marché cotait
+~61 700 $, soit **+24 %**.
+
+**Décision.** `lots_incoherents` — fonction pure, testable hors-ligne — compare chaque lot
+du PLAN au cours de sa date. `completer_ouvertures` la consulte **avant** toute écriture et
+sort en 1 si un seul lot dépasse 10 %.
+
+**FAIL-CLOSED, ET SUR LE LOT ENTIER.** Écrire les lots valides en taisant les autres
+laisserait un registre à moitié réparé dont personne ne saurait quelle moitié — l'état
+exact qui a coûté cette journée. Un outil qui écrit dans une comptabilité s'arrête quand il
+n'est plus sûr.
+
+**MAIS PAS SUR UN SILENCE.** Un cours introuvable ne condamne pas un lot : bloquer une
+réparation parce que la base de prix ne répond pas transformerait une absence de mesure en
+verdict. Un test le fixe.
+
+**POURQUOI 10 %.** Un fill s'exécute DANS la journée, la référence est la CLÔTURE :
+quelques points d'écart sont normaux, et le crypto bouge plus qu'une action. 10 % laisse
+passer une journée agitée et arrête ce qui n'est pas un prix de ce jour-là. Le lot fautif
+était à +24 %.
+
+**UNE SEULE COMMANDE.** `make reparer-journal` enchaîne les six étapes dans l'ordre imposé
+par les scripts eux-mêmes (entrées → sorties → ventes inversées → chronologie → doublons →
+vérification). Le `&&` implicite de make fait que le refus de l'étape 1 arrête tout. On ne
+demande plus à l'utilisateur de retenir un ordre dont l'inversion casse le registre.
+
+**Conséquences.** 2391 tests, 3 ajoutés. Le dernier vérifie que le plan CORRIGÉ passe le
+contrôle qui refuse le fusionné : les deux correctifs se répondent.
+
 ## ADR-0115 — La réparation du journal fabriquait des pertes qui n'ont pas eu lieu (2026-09-09)
 
 **Contexte.** La chaîne de réparation a été appliquée sur le compte réel. Elle a DÉGRADÉ
