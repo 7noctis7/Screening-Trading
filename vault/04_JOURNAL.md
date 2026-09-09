@@ -1,5 +1,36 @@
 # 04 — JOURNAL
 
+## Session 2026-09-09 (12ᵉ) — La réparation a cassé ce qu'elle devait réparer
+
+**CE QUE J'AI FAIT APPLIQUER, ET QUI ÉTAIT FAUX.** J'ai recommandé la chaîne de réparation
+du journal. Appliquée sur le compte réel, elle a fait passer l'écart de réconciliation de
+**+168,76 $ à +4 490,52 $** — 26 fois pire — et le réalisé de +245 $ à **−3 929 $**. Le
+compte, lui, n'a bougé que de +28 $ en vingt minutes.
+
+**LA PREUVE.** BTC reconstitué à 76 801 $ le 07-07 puis fermé à 61 731 $ le 07-08 : −19,6 %
+en une nuit. ETH −29,1 %, LTC −13,1 %, la même nuit, −3 140 $ à eux trois — plus que la
+totalité du lot. Cette nuit n'existe pas sur la courbe du compte.
+
+**LA CAUSE.** `ouvertures_manquantes` fusionnait les fills non couverts en un lot au VWAP
+des uns et à la DATE des autres. Le FIFO consomme les fills anciens, donc le reste est fait
+des plus récents — les plus chers sur un actif qui monte — mais daté du plus ancien. Le
+FIFO fermait ce lot en premier. Biais STRUCTUREL : sur un actif en hausse, la perte
+fabriquée est systématique.
+
+**CE QUI M'A LE PLUS APPRIS.** Le défaut était écrit dans un test qui PASSAIT :
+`test_fill_coupe_en_deux…` exigeait un lot de 140 unités à 24,29 $ daté d'un jour où il n'y
+en avait que 40, à 10 $. J'avais lu ce test comme une garantie ; c'était la spécification du
+bug. Un test verrouille un comportement — il ne dit pas que ce comportement est juste.
+
+**CORRIGÉ.** Un lot par fill, chacun à sa date et à son prix. Identifiant dérivé du CONTENU
+— plusieurs lots par symbole désormais, une clé au seul symbole les aurait écrasés.
+3 régressions, sabotage vérifié dans les deux sens.
+
+**À FAIRE SUR LE VPS.** Restaurer `journal.avant-completion-20260909-091516.db` : l'état
+d'avant (+168,76 $) était le bon. Puis rejouer la chaîne avec le code corrigé.
+
+**2388 tests passés, 3 ajoutés.** ADR-0115.
+
 ## Session 2026-09-09 (11ᵉ) — Mon correctif déplaçait le défaut
 
 **CE QUE LE VPS A MONTRÉ.** Le post-mortem du soir : `n_breaches` passé de 3 à 2, la ligne

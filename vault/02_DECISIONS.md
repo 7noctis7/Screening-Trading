@@ -2,6 +2,54 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0115 — La réparation du journal fabriquait des pertes qui n'ont pas eu lieu (2026-09-09)
+
+**Contexte.** La chaîne de réparation a été appliquée sur le compte réel. Elle a DÉGRADÉ
+le registre, et son propre indicateur de succès le dit :
+
+| | avant | après |
+|---|--:|--:|
+| réalisé (tous lots) | +245,33 $ | **−3 928,58 $** |
+| écart de réconciliation | **+168,76 $** | **+4 490,52 $** |
+| variation RÉELLE du compte | +990,08 $ | +1 018,22 $ |
+
+Le compte a bougé de +28 $ pendant que le journal bougeait de −4 174 $. Une réparation ne
+peut pas changer ce qui s'est passé.
+
+**LA PREUVE QUI TRANCHE.** Trois écritures de fermeture impliquent des variations d'une
+nuit : BTC reconstitué à 76 801 $ le 07-07 puis fermé à 61 731 $ le 07-08 (**−19,6 %**),
+ETH **−29,1 %**, LTC **−13,1 %** — la même nuit. Elles pèsent −3 140 $, soit **davantage
+que la totalité** des −2 754 $ du lot : tout le reste est net positif. Et cette nuit-là
+n'existe pas sur la courbe du compte, que `diag_journal_compte` déclare sans mouvement
+suspect. L'écart de +4 490 $ devrait par ailleurs valoir `latent(début)` : il faudrait que
+les positions du 22 juin portent +4 490 $ de latent sur un compte de 99 594 $ à son
+premier point. Invraisemblable.
+
+**LA CAUSE, ET ELLE EST STRUCTURELLE.** `ouvertures_manquantes` fusionnait les fills non
+couverts en UN lot portant leur VWAP et la date du PLUS ANCIEN d'entre eux. Prix et date
+venaient donc de tranches différentes. Or `_reste_fifo` consomme les fills les plus
+ANCIENS : le reste non couvert est fait des plus RÉCENTS, donc des plus CHERS sur un actif
+qui monte — daté, lui, du plus ancien. Le FIFO fermait ensuite ce lot EN PREMIER, contre
+des ventes réelles. Sur un actif en hausse, la perte fabriquée est **systématique**, pas
+malchanceuse. BTC valait ~61,7 k$ en juillet et ~78 k$ en août-septembre : le VWAP tardif
+de 76 801 $ a été daté du 7 juillet, puis vendu au prix de juillet.
+
+**LE TEST LE DÉCRIVAIT DÉJÀ.** `test_fill_coupe_en_deux…` affirmait « 40 unités à 10 $ le
+08-01 + 100 à 30 $ le 08-02 → UN lot de 140 à 24,29 $ daté du 08-01 ». Un lot qui n'a
+jamais existé : au 08-01 il n'y avait que 40 unités, à 10 $. Le défaut était écrit noir sur
+blanc dans un test qui passait — un test peut verrouiller un bug aussi bien qu'un
+comportement.
+
+**Décision.** UN LOT PAR FILL non couvert, chacun à SA date et SON prix. La chronologie et
+le coût de revient sont conservés exactement ; le FIFO ferme ce qui a réellement été acheté
+en premier. L'identifiant du lot devient une empreinte du CONTENU (symbole, date, quantité,
+prix) : il y a désormais plusieurs lots par symbole, et une clé au seul symbole les aurait
+écrasés entre eux — la moitié du coût de revient aurait disparu en silence.
+
+**Conséquences.** 2388 tests, 3 régressions ajoutées, sabotage vérifié dans les deux sens.
+Le journal du VPS reste à restaurer depuis `journal.avant-completion-20260909-091516.db` :
+la mesure d'avant réparation (+168,76 $) était la bonne.
+
 ## ADR-0114 — Boucher un axe et laisser l'autre, ce n'est pas corriger (2026-09-09)
 
 **Contexte.** ADR-0113 a fait disparaître « nom QQQ 50 % > 20 % » du post-mortem. Le

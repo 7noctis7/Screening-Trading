@@ -25,6 +25,7 @@ là où le journal en sait PLUS que le courtier — cet écart-là est signalé,
 
 from __future__ import annotations
 
+import hashlib
 import shutil
 import sys
 from datetime import UTC, datetime
@@ -78,26 +79,33 @@ def _horodatage(brut) -> datetime | None:
 def _record(lot: dict):
     """TradeRecord d'ouverture correctrice, ou None si la date du fill est illisible.
 
-    `id` déterministe par symbole : un second passage UPSERTe le même enregistrement au
-    lieu d'en empiler un nouveau. Combiné au recalcul de l'écart (qui tombe à zéro une
-    fois le lot écrit), l'outil est rejouable sans jamais doubler quoi que ce soit."""
+    `id` déterministe par CONTENU (symbole, date, quantité, prix) : il y a désormais un
+    lot par fill non couvert, donc plusieurs par symbole — une clé au seul symbole les
+    écraserait l'un l'autre et n'en garderait qu'un. Un second passage UPSERTe les mêmes
+    enregistrements au lieu d'en empiler de nouveaux ; combiné au recalcul de l'écart
+    (qui tombe à zéro une fois les lots écrits), l'outil reste rejouable sans
+    doubler."""
     from packages.core.models import AssetClass, Side, TradeRecord
     from packages.research.completion_ouvertures import MOTIF
     ts = _horodatage(lot["date"])
     if ts is None:
         return None
     crypto = (lot.get("venue") or "").lower() == "bitmart"
+    graine = f"{lot['symbole']}|{lot['date']}|{lot['qty']:.10f}|{lot['prix']:.10f}"
+    empreinte = hashlib.sha1(graine.encode()).hexdigest()[:8]  # noqa: S324 — clé, pas sécurité
     return TradeRecord(
-        id=f"C-{lot['symbole']}", instrument=lot["symbole"],
+        id=f"C-{lot['symbole']}-{empreinte}", instrument=lot["symbole"],
         asset_class=AssetClass.CRYPTO if crypto else AssetClass.EQUITY,
         venue=lot.get("venue") or "Alpaca", side=Side.LONG, qty=float(lot["qty"]),
         entry_ts=ts, entry_price=float(lot["prix"]), avg_price=float(lot["prix"]),
-        entry_reason=f"{MOTIF}: VWAP des fills non couverts", features_snapshot={})
+        entry_reason=f"{MOTIF}: fill non couvert du {str(lot['date'])[:10]}",
+        features_snapshot={})
 
 
 def _resume(a_creer: list[dict], en_trop: list[dict]) -> None:
-    print(f"\n  PLAN — {len(a_creer)} ouverture(s) à reconstituer, "
-          f"{len(en_trop)} symbole(s) où le journal en sait PLUS que le courtier\n")
+    syms = len({x["symbole"] for x in a_creer})
+    print(f"\n  PLAN — {len(a_creer)} fill(s) à reconstituer sur {syms} symbole(s), "
+          f"{len(en_trop)} où le journal en sait PLUS que le courtier\n")
     for x in sorted(a_creer, key=lambda d: -d["qty"] * d["prix"])[:15]:
         print(f"    {x['symbole']:<12} {x['qty']:>12.4f} @ {x['prix']:>10.4f} "
               f"le {x['date'][:10]}   (acheté {x['achete']:.4f}, "

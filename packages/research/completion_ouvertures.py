@@ -16,8 +16,21 @@ chez le courtier à celle que le journal connaît (lots fermés compris — un l
 bien été ouvert). L'écart est la quantité manquante. Son prix de revient n'est PAS le
 VWAP de tous les achats du symbole : ce serait mélanger les fills déjà couverts avec
 ceux qui manquent. On consomme donc les fills en FIFO à hauteur de ce que le journal
-couvre déjà, et le prix retenu est le VWAP des fills QUI RESTENT — c'est-à-dire
-précisément ceux que le registre ignore.
+couvre déjà, et on reconstitue UN LOT PAR FILL RESTANT — chacun avec SA date et SON
+prix.
+
+POURQUOI UN LOT PAR FILL, ET PAS UN SEUL AU VWAP. La première version fusionnait les
+fills restants en un lot unique portant leur VWAP et la date du PLUS ANCIEN d'entre eux.
+Prix et date venaient donc de tranches différentes, et le lot obtenu n'avait jamais
+existé. Le FIFO le fermait ensuite en PREMIER, contre des ventes réelles. Mesuré sur le
+compte réel le 09/09 : BTC reconstitué à 76 801 $ daté du 07-07 puis fermé le 07-08 à
+61 731 $, soit -19,6 % en une nuit ; ETH -29,1 %, LTC -13,1 %, la même nuit. Ces trois
+écritures pesaient -3 140 $ — davantage que la totalité du lot corrigé — et
+cette nuit-là n'existe pas sur la courbe du compte. Le biais était STRUCTUREL,
+pas malchanceux : le
+FIFO consomme les fills les plus ANCIENS, donc le reste non couvert est fait des plus
+RÉCENTS — les plus chers sur un actif qui monte — tout en étant daté du plus ancien
+d'entre eux. Sur un actif en hausse, la perte fabriquée est systématique.
 
 CE QUE CES LOTS SONT, ET POURQUOI ILS SONT `legacy`. Ce sont des fills importés APRÈS
 COUP : les features de décision de ces achats n'ont jamais été capturées et ne peuvent
@@ -89,19 +102,14 @@ def _reste_fifo(fills: list[dict], deja: float) -> list[dict]:
     return reste
 
 
-def _vwap(fills: list[dict]) -> tuple[float, float]:
-    q = sum(f["qty"] for f in fills)
-    return (q, sum(f["qty"] * f["price"] for f in fills) / q) if q > 0 else (0.0, 0.0)
-
-
 def ouvertures_manquantes(
         ordres: list[dict], journalise: dict[str, float],
         tolerance: float = TOLERANCE) -> tuple[list[dict], list[dict]]:
     """(lots à créer, écarts NÉGATIFS signalés). Aucune écriture — c'est un PLAN.
 
-    Le lot proposé porte la quantité manquante, le VWAP des fills non couverts, et la
-    date du PREMIER d'entre eux : c'est la date à laquelle l'exposition a réellement
-    commencé, pas celle où l'on répare."""
+    UN LOT PAR FILL non couvert, chacun à sa propre date et à son propre prix. Fusionner
+    les fills restants fabriquerait un lot au prix des uns et à la date des autres, que
+    le FIFO fermerait en premier contre des ventes réelles (cf. l'en-tête du module)."""
     a_creer, en_trop = [], []
     for sym, fills in sorted(achats_par_symbole(ordres).items()):
         achete = sum(f["qty"] for f in fills)
@@ -112,11 +120,10 @@ def ouvertures_manquantes(
             continue
         if ecart <= tolerance * max(1.0, achete):
             continue
-        reste = _reste_fifo(fills, connu)
-        qty, prix = _vwap(reste)
-        if qty <= 0 or prix <= 0:
-            continue
-        a_creer.append({"symbole": sym, "qty": round(min(qty, ecart), 10), "prix": prix,
-                        "date": reste[0]["date"], "venue": reste[0]["venue"],
-                        "achete": achete, "journal": connu})
+        for f in _reste_fifo(fills, connu):
+            if f["qty"] <= 0 or f["price"] <= 0:
+                continue
+            a_creer.append({"symbole": sym, "qty": round(f["qty"], 10),
+                            "prix": f["price"], "date": f["date"],
+                            "venue": f["venue"], "achete": achete, "journal": connu})
     return a_creer, en_trop

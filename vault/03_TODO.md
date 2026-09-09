@@ -14,7 +14,16 @@
       est le même. Deux issues : publier les deux chiffres côte à côte, ou justifier
       l'exclusion là où elle s'affiche. Ne pas laisser un chiffre flatteur sans son total.
 
-- [ ] **P1 — Réparation du journal : mesurée, pas encore appliquée (09/09).** La simulation
+- [ ] **P0 — RESTAURER le journal du VPS avant toute autre lecture (09/09).** La chaîne de
+      réparation appliquée ce matin a fabriqué des pertes : écart de réconciliation
+      +168,76 $ → **+4 490,52 $**, réalisé +245 $ → **−3 929 $**, pour un compte qui n'a
+      bougé que de +28 $. Cause corrigée dans le code (ADR-0115), mais la base porte encore
+      les écritures fausses. Commande :
+      `cp data/journal.avant-completion-20260909-091516.db data/journal.db`
+      puis `make sync && make diag-journal` — l'écart doit revenir à ~+169 $. Rejouer la
+      chaîne seulement APRÈS ce contrôle.
+
+- [ ] **P1 — Réparation du journal : à rejouer avec le code corrigé (09/09).** La simulation
       donne : 18 ouvertures à reconstituer (83 804 $ de coût de revient), 23 fermetures
       appariées à un fill réel (+666,76 $), 8 doublons pour +915,37 $ de réalisé compté
       deux fois, 16 lots qu'aucune vente ne justifie et qui RESTENT ouverts. QQQ : 96,78
