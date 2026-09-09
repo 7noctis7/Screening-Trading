@@ -2,6 +2,48 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0120 — La courbe du compte face aux indices, en DOLLARS (2026-09-09)
+
+**Demande.** Dans l'onglet Positions, la performance du portefeuille depuis le début des
+trades, face au S&P 500, au Nasdaq et au Bitcoin, avec filtre des références et de la
+période, et le détail au survol.
+
+**LE CHOIX QUI DÉCIDE DE TOUT : DOLLARS, PAS BASE 100.** Chaque référence est replacée sur
+le capital de DÉPART du portefeuille. La question qu'on se pose devant ce graphe n'est pas
+« quel indice a fait +8 % » mais « où en serais-je si j'avais mis la même somme ailleurs » ;
+en base 100, il faut retraduire mentalement, en dollars l'écart entre deux courbes EST le
+montant. La colonne « vs portefeuille » du tableau le donne directement.
+
+**LA RÈGLE QUI PROTÈGE LA MESURE.** Pour une date du portefeuille, on prend la dernière
+clôture **connue à cette date** — jamais la suivante. Le compte est valorisé les jours où le
+cron passe ; les actions ne cotent pas le week-end, le crypto oui. Prendre la clôture du
+lundi pour un point du samedi ferait entrer une information que le samedi n'avait pas : un
+look-ahead minuscule, systématique, et qui flatterait toujours la référence la plus
+volatile. Un test le fixe avec une clôture de lundi à 999 qui ne doit pas apparaître.
+
+**UNE RÉFÉRENCE ABSENTE EST NOMMÉE, JAMAIS SIMULÉE.** `_index_series` sait retomber sur une
+série synthétique ; on ne l'utilise pas ici. Un utilisateur qui compare son compte à un
+indice ne peut pas deviner que l'indice a été inventé. Une référence introuvable, ou dont
+l'historique démarre après le portefeuille, sort du graphe et s'affiche dans `ecartees` avec
+la raison. La prolonger vers l'arrière afficherait une performance jamais observée.
+
+**CE QUI EXISTAIT DÉJÀ, ET QUE JE N'AI PAS RÉÉCRIT.** `EquityChart` portait déjà le toggle
+par référence, le tooltip en dollars et le zoom par glisser. Deux manques seulement : la
+couleur du Bitcoin (une référence sans couleur se traçait en `undefined` — ligne invisible,
+bouton actif : l'utilisateur croit l'avoir affichée) et des boutons de période. Ceux-ci sont
+en JOURS CALENDAIRES, pas en nombre de points : le portefeuille n'étant valorisé que les
+jours de passage, « 30 points » ne fait pas un mois. Un bouton plus long que l'historique
+est masqué plutôt que trompeur.
+
+**UN TEST DU DÉPÔT A ATTRAPÉ UN OUBLI RÉEL.**
+`test_aucune_route_appelee_n_est_absente_du_build` a échoué : la route était servie en local
+mais absente de `dump_static`, donc **404 sur le site en ligne**. Ajoutée. Sur le runner CI,
+sans clés courtier, elle répond `disponible: false` avec son motif — que le front affiche.
+
+**Conséquences.** 2420 tests, 13 ajoutés. Build Next.js vert. `main.py` n'a reçu que la
+route ; le chargement vit dans `apps/api/performance.py` (le fichier dépasse déjà 1300
+lignes, on ne l'alourdit pas).
+
 ## ADR-0119 — Deux branchements, et le gate qui a attrapé le mien (2026-09-09)
 
 **`protocole_oos` → `research/gate`.** `promotion_verdict` recevait `dsr` comme un NOMBRE :

@@ -8,6 +8,7 @@ import { useMemo, useState } from "react";
 import { usePositions } from "@/lib/api";
 import { TechnicalChart } from "@/components/TechnicalChart";
 import { MetricCard } from "@/components/MetricCard";
+import { PerformanceVsBenchmarks } from "@/components/PerformanceVsBenchmarks";
 import { SortableTable, type Col } from "@/components/SortableTable";
 import { PageSkeleton } from "@/components/ui";
 import { compteCrypto, envVenue, nomVenue } from "@/lib/venue";
@@ -260,6 +261,11 @@ export default function Positions() {
         <MetricCard label="Vraie diversification" terme="N effectif" value={nEff ? nEff.toFixed(1) : "n/d"}
           explication="Nombre de positions RÉELLEMENT indépendantes. Dix lignes très corrélées en valent trois." />
       </section>
+      {/* PERFORMANCE — la question que les cartes ci-dessus ne répondent pas : ce capital,
+          ailleurs, aurait donné quoi ? Placée AVANT le détail ligne à ligne, parce qu'un
+          écart de réplication ne se juge pas sans savoir si le portefeuille bat le marché. */}
+      <PerformanceVsBenchmarks />
+
       <section className="card p-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted">
         <span title="Somme des poids au carré (HHI) : 1/N si équipondéré. N effectif = 1/HHI.">
           Concentration : HHI <b className="mono text-fg">{hhi ? hhi.toFixed(3) : "n/d"}</b> · top 3 <b className="mono text-fg">{pctf(top3)}</b> sur {pos.length} lignes</span>

@@ -1,5 +1,33 @@
 # 04 — JOURNAL
 
+## Session 2026-09-09 (17ᵉ) — La courbe du compte face aux indices
+
+**LIVRÉ.** Onglet Positions : la courbe d'equity RÉELLE face au S&P 500, au Nasdaq 100 et au
+Bitcoin, filtrables, avec période (1M/3M/6M/1A/Tout), zoom par glisser et détail au survol.
+Route `/api/performance`, module `apps/api/performance.py`, composant
+`PerformanceVsBenchmarks`.
+
+**EN DOLLARS, PAS EN BASE 100.** Chaque référence part du capital de DÉPART du portefeuille :
+l'écart entre deux courbes se lit comme un montant, pas comme un écart de pourcentages à
+retraduire.
+
+**LA RÈGLE QUI COMPTE.** Dernière clôture CONNUE à la date — jamais la suivante. Le compte
+est valorisé le samedi, l'action ne cote pas : prendre le lundi serait un look-ahead
+systématique qui flatterait la référence la plus volatile. Test avec un lundi à 999 qui ne
+doit pas apparaître.
+
+**PAS DE SYNTHÉTIQUE.** Une référence introuvable est NOMMÉE, jamais simulée. Un utilisateur
+qui compare son compte à un indice ne peut pas deviner que l'indice a été inventé.
+
+**UN TEST DU DÉPÔT M'A RATTRAPÉ.** `test_aucune_route_appelee_n_est_absente_du_build` : la
+route marchait en local et aurait rendu 404 en ligne. Ajoutée à `dump_static`.
+
+**AUSSI.** Une commande d'arrière-plan a terminé après moi et la route s'est retrouvée EN
+DOUBLE dans `main.py` — la seconde était silencieusement ignorée par FastAPI. Retirée, et
+un contrôle des noms de fonctions dupliqués confirme qu'il n'en reste aucun.
+
+**2420 tests passés, 13 ajoutés.** Build Next.js vert. ADR-0120.
+
 ## Session 2026-09-09 (16ᵉ) — Mon propre garde-fou m'a refusé le passage
 
 **DEUX BRANCHEMENTS.** `protocole_oos` → `gate.verdict_hors_echantillon` : le DSR est

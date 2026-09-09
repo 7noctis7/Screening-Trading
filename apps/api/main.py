@@ -366,6 +366,16 @@ def positions() -> dict:
             "markers": dash.get("real_markers", {})}
 
 
+@app.get("/api/performance")
+def performance() -> dict:
+    """Courbe d'equity RÉELLE vs S&P 500 / Nasdaq 100 / Bitcoin, replacés sur le capital
+    de départ (donc lisibles en dollars). Une référence introuvable dans les bases est
+    NOMMÉE dans `ecartees`, jamais simulée : on ne compare pas un compte réel à
+    un indice inventé."""
+    from apps.api.performance import payload
+    return payload()
+
+
 @app.get("/api/object/{obj_type}/{obj_id}")
 def object_360(obj_type: str, obj_id: str) -> dict:
     """Endpoint ONTOLOGIQUE générique : un objet métier + ses relations résolues.
