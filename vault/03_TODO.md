@@ -951,8 +951,13 @@ explicite, module par module, avec mesure.
       1. `make verify-journal` **sur la machine qui porte le planificateur** (le
          Mac mini si c'est lui). Le contrôle sait enfin répondre sur Linux comme sur
          macOS — il renvoyait « ✅ cron actif » sur toute machine Linux jusqu'au 10/09.
-      2. Si rien ne tourne nulle part : `make live-cron-install` sur la machine choisie,
-         puis `make verify-journal` pour confirmer.
+      2. `make live-cron-install` sur la machine choisie — **il échouait jusqu'au 10/09**
+         sur toute machine sans crontab préexistant, sans le moindre message
+         (ADR-0105) : `grep` vide + `set -euo pipefail` tuaient le sous-shell avant
+         l'écriture. Corrigé et testé en exécutant vraiment le script. Puis
+         `make verify-journal` pour confirmer — **après `make sync`** : le premier
+         passage du 10/09 tournait encore l'ancien contrôle et concluait « ✅ cron
+         actif » sur un VPS sans crontab.
       3. Laisser tourner une semaine AVANT de rejuger quoi que ce soit sur les sorties :
          les cinq décisions mesurées ne décrivent pas une stratégie, elles décrivent
          cinq lancements manuels.

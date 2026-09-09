@@ -68,9 +68,25 @@ if is_macos; then
 else
   LINE="$MIN $HOUR * * 1-5 $CRON_SH >> $LOG 2>&1"
   if [ "$ACTION" = "--uninstall" ]; then
-    (crontab -l 2>/dev/null | grep -vF "$CRON_SH") | crontab - || true
+    { crontab -l 2>/dev/null | grep -vF "$CRON_SH" || true; } | crontab - || true
     echo "✅ crontab nettoyé — plus de rebalancement auto."; exit 0
   fi
-  (crontab -l 2>/dev/null | grep -vF "$CRON_SH"; echo "$LINE") | crontab -
-  echo "✅ crontab activé : rebalancement PAPER lun-ven $(printf "%02dh%02d" "$HOUR" "$MIN") → $LOG"
+  # `|| true` OBLIGATOIRE, et c'est tout sauf cosmétique. Sans crontab existant,
+  # `crontab -l` échoue et `grep` ne sélectionne aucune ligne : il sort en 1. Avec
+  # `set -euo pipefail`, le sous-shell meurt AVANT le `echo "$LINE"`, la nouvelle ligne
+  # n'est jamais écrite, et le script rend 1 sans un mot. Autrement dit : l'installateur
+  # ne fonctionnait QUE sur une machine ayant déjà un crontab — jamais sur celle qui en
+  # a besoin. Constaté sur le VPS le 10/09 : « make: *** [live-cron-install] Error 1 »,
+  # aucun message, et pas une ligne installée.
+  { crontab -l 2>/dev/null | grep -vF "$CRON_SH" || true; echo "$LINE"; } | crontab -
+  # On VÉRIFIE au lieu d'annoncer. Un installateur qui dit « activé » sans relire ce
+  # qu'il a écrit est exactement ce qui a laissé ce défaut invisible.
+  if crontab -l 2>/dev/null | grep -qF "$CRON_SH"; then
+    echo "✅ crontab activé : rebalancement PAPER lun-ven $(printf "%02dh%02d" "$HOUR" "$MIN") → $LOG"
+    echo "   vérifié : $(crontab -l | grep -F "$CRON_SH")"
+  else
+    echo "❌ la ligne n'est PAS dans le crontab après écriture — rien n'est planifié." >&2
+    echo "   Vérifier que \`crontab\` est installé et utilisable par $(whoami)." >&2
+    exit 1
+  fi
 fi

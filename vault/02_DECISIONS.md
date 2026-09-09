@@ -2,6 +2,45 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0105 — L'installateur de planification échouait sur la machine qui en avait besoin (2026-09-10)
+
+**Le symptôme, brut.** `make live-cron-install` sur le VPS :
+`make: *** [live-cron-install] Error 1`. Aucun message, rien d'installé.
+
+**La cause, en une ligne de shell.**
+
+```bash
+(crontab -l 2>/dev/null | grep -vF "$CRON_SH"; echo "$LINE") | crontab -
+```
+
+Sans crontab existant, `crontab -l` échoue et `grep` — qui ne sélectionne aucune ligne —
+sort en **1**. Le script tourne sous `set -euo pipefail` : le sous-shell meurt AVANT le
+`echo "$LINE"`, la nouvelle ligne n'est jamais écrite, et le tout rend 1 sans un mot.
+**L'installateur ne fonctionnait donc que sur une machine ayant DÉJÀ un crontab** —
+jamais sur celle qui en avait besoin. Reproduit ici en trois lignes de bash avant toute
+correction.
+
+**Correctif.** `{ crontab -l 2>/dev/null | grep -vF "$CRON_SH" || true; echo "$LINE"; }`
+— le `|| true` neutralise le grep vide sans masquer autre chose. Et le script **relit**
+désormais le crontab après écriture au lieu d'annoncer : il affiche la ligne trouvée, ou
+échoue explicitement en disant qu'elle n'y est pas. Un installateur qui dit « activé »
+sans vérifier est précisément ce qui a laissé ce défaut invisible.
+
+**Le test manquait, et il manquait pour une raison.** Le projet testait ce fichier en le
+lisant comme du TEXTE (`test_unite_systemd.py` cherche des accents graves). Aucun test ne
+l'EXÉCUTAIT. Une erreur de tuyauterie shell ne se voit pas à la relecture — celle-ci a
+survécu des mois. Le nouveau test pose un `crontab` factice sur le `PATH` et fait tourner
+le vrai script : installation depuis un crontab vide, idempotence, désinstallation,
+heure configurable. Contrôle négatif passé — l'ancienne version en échoue trois sur
+quatre.
+
+**La chaîne complète, pour mémoire.** Trois défauts empilés, chacun masquant le suivant :
+le rebalancement n'était pas planifié sur le VPS ; l'installateur qui l'aurait planifié
+échouait sans message ; et le contrôle censé signaler l'absence de planification
+répondait « ✅ cron actif » sur toute machine Linux (ADR-0104). Le portefeuille dérivait
+pendant ce temps — QQQ à 69 % contre 54 % visés, cinq décisions de sortie en soixante-
+trois jours, et une plus-value latente que rien ne venait sécuriser.
+
 ## ADR-0104 — Le contrôle « mon robot tourne-t-il ? » répondait oui sans regarder (2026-09-10)
 
 **Le fait.** `crontab -l` sur le VPS : **`no crontab for ubuntu`**. Aucun rebalancement
