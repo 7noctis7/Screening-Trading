@@ -1,5 +1,31 @@
 # 04 — JOURNAL
 
+## Session 2026-09-10 (9ᵉ) — Quatre fichiers de données publiés depuis toujours
+
+**Trouvé dans une sortie de `make sync`**, pas par un garde-fou : `M data/market.db-shm`,
+`M data/market.db-wal`. Ces fichiers étaient **suivis sur un dépôt public**.
+
+**La cause.** `.gitignore` porte `*.db` — qui **ne matche pas** `market.db-wal` : le
+suffixe casse le glob. Quatre sidecars SQLite passaient par là, dont deux de 32 Ko. Un
+`-wal` porte les pages écrites et pas encore intégrées : c'est de la donnée.
+
+**Le vrai risque était à côté.** `journal.db-wal` — les fills réels du courtier — tombait
+dans le même trou. Il n'était pas suivi **par chance**, pas par règle.
+
+**Corrigé.** `*.db-wal`, `*.db-shm`, `*.db-journal` ignorés ; les quatre retirés de
+l'index. Et `tests/test_fichiers_suivis.py` lit désormais **l'index git** : il échoue si
+un fichier de données redevient suivi.
+
+**Ce que ça dit du dispositif.** `gitleaks` tourne en CI et en pre-commit, et n'a rien vu :
+il cherche des SECRETS, pas des DONNÉES. Le dépôt avait un contrôle pour les clés, aucun
+pour les bases.
+
+**Aussi.** Comblement MFE appliqué : 14 lignes crypto, MFE bornées à 0 comme prévu. Les
+six paires qui affichaient une MFE négative rendent maintenant 0,00 % — le trade n'est
+jamais repassé au-dessus de son entrée, et ça se lit ainsi.
+
+**Mesuré.** 2 559 passés, 7 ignorés (+3).
+
 ## Session 2026-09-10 (8ᵉ) — Le crypto récupéré, et une MFE qui se contredisait
 
 **Le correctif de source a marché.** 14 lignes crypto comblées, 273 déjà mesurées. La

@@ -2,6 +2,30 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0138 — `*.db` ne matche pas `market.db-wal` : quatre fichiers de données publiés (2026-09-10)
+
+**Constat.** La sortie de `make sync` affichait `M data/market.db-shm` et
+`M data/market.db-wal`. Ces fichiers étaient **suivis par git**, sur un dépôt **public**.
+
+**La cause est un motif de glob.** `.gitignore` porte `*.db` depuis toujours — et
+`*.db` **ne matche pas** `market.db-wal` : le suffixe casse le motif. Quatre sidecars
+SQLite passaient par ce trou (`crypto.db-shm`, `crypto.db-wal`, `market.db-shm`,
+`market.db-wal`), dont deux de 32 Ko.
+
+**Pourquoi ça compte.** Un `-wal` porte les pages écrites et pas encore intégrées à la
+base : c'est de la DONNÉE, pas un artefact vide. Et surtout, `journal.db-wal` — les fills
+RÉELS du courtier, la donnée la plus sensible du dépôt — tombait dans le même trou. Il
+n'était pas suivi par chance, pas par règle.
+
+**Décision.** `*.db-wal`, `*.db-shm`, `*.db-journal` ajoutés au `.gitignore` ;
+`git rm --cached` sur les quatre. Et un test qui lit **l'index git**, pas le disque :
+`tests/test_fichiers_suivis.py` échoue si un fichier de données redevient suivi.
+
+**Ce que ça dit du garde-fou.** `gitleaks` tourne en CI et en pre-commit, et n'a rien vu :
+il cherche des SECRETS, pas des DONNÉES. Le dépôt avait un contrôle pour les clés, aucun
+pour les bases. C'est un utilisateur lisant une sortie de `make sync` qui l'a trouvé — pas
+une automatisation.
+
 ## ADR-0137 — Une MFE négative est une contradiction dans les termes (2026-09-10)
 
 **Constat, sur la sortie réelle.** Le comblement crypto rendait des MFE **négatives** :
