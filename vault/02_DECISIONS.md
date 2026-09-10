@@ -2,6 +2,40 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0134 — La MFE incluait un plus haut que la position n'a jamais pu toucher (2026-09-10)
+
+**Constat, sur l'aperçu réel du comblement.** MFE de 0,98 % à 2,26 % sur une détention
+médiane d'**un jour**, avec des captures très négatives (−79 %, −223 %, −210 %). Le
+chiffre était trop beau pour la thèse « nos sorties rendent les gains » — j'ai vérifié la
+mesure avant de la croire.
+
+**Le biais.** `mfe_mae` filtrait les barres **par DATE** : `d0 <= b["t"] <= d1`, où `d0`
+est le JOUR d'entrée. Or l'exécution tombe **une heure avant la clôture** : le plus haut
+de la journée d'entrée est presque toujours ANTÉRIEUR à l'achat — un prix que la position
+n'a jamais pu atteindre.
+
+**Mesuré.** Achat à 100 le jour où le marché avait fait +8 % le matin avant de finir à
++1,5 % : la capture d'une sortie à +1 % passe de **67 % à 12 %**. Un facteur **5**, du
+même ordre de grandeur que le signal cherché. La MFE était surestimée, donc la capture
+sous-estimée — **exactement dans le sens qui fabrique la conclusion attendue**.
+
+**Décision.** Le jour d'entrée est EXCLU : `d0 < b["t"] <= d1`. Le biais restant est
+conservateur (la MFE rate les mouvements post-entrée du jour même, donc la capture est
+plutôt flattée) — c'est le sens qui n'invente pas le défaut qu'on cherche.
+
+**Conséquence assumée.** Un aller-retour intraday rend `None`. Une excursion intraday ne
+se mesure pas sur des barres quotidiennes, et le dire vaut mieux que publier un chiffre
+indéfendable.
+
+**Deux nuisances corrigées au passage.** Les paires crypto (`BTC/USDC`) partaient telles
+quelles chez un fournisseur d'actions : requête vouée à l'échec, page d'erreur HTML dans
+le terminal, et 77 lignes « sans barres ». Traduites (`BTC-USD`). Et le script batch
+tait désormais les journaux réseau, comme ses deux frères.
+
+**Leçon de méthode.** Un chiffre qui CONFIRME l'hypothèse mérite la même défiance qu'un
+chiffre qui la contredit. Ici, l'aperçu allait dans le sens attendu — c'est pour ça qu'il
+fallait remonter à la définition.
+
 ## ADR-0133 — P0-2 : sans MFE, aucune recherche de sortie n'est possible (2026-09-10)
 
 **Constat.** L'audit de turnover annonce « capture médiane du potentiel : **mesurable sur

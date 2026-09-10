@@ -148,3 +148,28 @@ def test_qty_reelle_nulle_ou_negative_retombe_sur_le_notional(tmp_path):
     n = close_sells(j, [{"symbol": "AAPL", "venue": "Alpaca", "exit_price": 100.0,
                          "notional": 1000.0, "qty_reelle": 0.0}])
     assert n == 1 and open_lots(j) == []
+
+
+def test_le_jour_d_ENTREE_est_exclu_de_la_MFE():
+    """Le cron achète une heure avant la clôture : le plus haut du jour d'entrée est
+    presque toujours antérieur à l'achat. L'inclure surestime la MFE, donc sous-estime
+    la capture — dans le sens exact qui fabriquerait « nos sorties rendent les gains ».
+
+    Mesuré le 10/09 : capture d'une sortie à +1 % — 12 % avec le jour d'entrée,
+    67 % sans. Un facteur 5, du même ordre que le signal cherché."""
+    e = datetime(2026, 8, 3, 19, 5, tzinfo=timezone.utc)     # 15h05 ET
+    x = datetime(2026, 8, 4, 19, 5, tzinfo=timezone.utc)
+    serie = [{"t": "2026-08-03", "h": 108.0, "l": 99.0},     # +8 % LE MATIN, hors portée
+             {"t": "2026-08-04", "h": 101.5, "l": 97.0}]
+    fe, ae = mfe_mae(serie, e, x, 100.0)
+    assert abs(fe - 0.015) < 1e-9, "le haut du jour d'entrée ne doit pas compter"
+    assert abs(ae - (-0.03)) < 1e-9
+
+
+def test_un_aller_retour_INTRADAY_rend_None():
+    """Entrée et sortie le même jour : aucune barre postérieure. Une excursion intraday
+    ne se mesure pas sur des barres quotidiennes — on le dit au lieu de l'inventer."""
+    e = datetime(2026, 8, 3, 14, 0, tzinfo=timezone.utc)
+    x = datetime(2026, 8, 3, 19, 0, tzinfo=timezone.utc)
+    serie = [{"t": "2026-08-03", "h": 108.0, "l": 99.0}]
+    assert mfe_mae(serie, e, x, 100.0) == (None, None)

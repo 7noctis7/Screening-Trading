@@ -53,11 +53,26 @@ def open_lots(journal, instrument: str | None = None,
 
 def mfe_mae(series: list[dict] | None, entry_ts: datetime, exit_ts: datetime,
             entry_price: float) -> tuple[float | None, float | None]:
-    """(MFE, MAE) en fraction du prix d'entrée, barres [entrée, sortie] ; None sinon."""
+    """(MFE, MAE) en fraction du prix d'entrée, sur les barres APRÈS le jour d'entrée.
+
+    POURQUOI LE JOUR D'ENTRÉE EST EXCLU. L'exécution tombe une heure avant la clôture :
+    le plus haut de la journée d'entrée est presque toujours ANTÉRIEUR à l'achat — un
+    prix que la position n'a jamais pu toucher. L'inclure surestime la MFE, donc
+    sous-estime la capture, exactement dans le sens qui fabriquerait la conclusion
+    « nos sorties rendent les gains ».
+
+    Mesuré le 10/09 : sur un achat à 100 le jour où le marché avait fait +8 % le matin
+    avant de finir à +1,5 %, la capture d'une sortie à +1 % passait de **67 % à 12 %** —
+    un facteur 5, du même ordre que le signal cherché.
+
+    Conséquence assumée : un aller-retour intraday (entrée et sortie le même jour) rend
+    `None`. Une excursion intraday ne se mesure pas sur des barres quotidiennes, et le
+    dire vaut mieux que publier un chiffre qu'on ne peut pas défendre.
+    """
     if not series or entry_price <= 0:
         return None, None
     d0, d1 = entry_ts.date().isoformat(), exit_ts.date().isoformat()
-    win = [b for b in series if "t" in b and d0 <= b["t"][:10] <= d1]
+    win = [b for b in series if "t" in b and d0 < b["t"][:10] <= d1]
     highs = [b["h"] for b in win if b.get("h")]
     lows = [b["l"] for b in win if b.get("l")]
     if not highs or not lows:

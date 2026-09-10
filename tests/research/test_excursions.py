@@ -114,8 +114,38 @@ def test_le_chemin_de_reparation_ne_passe_plus_None():
     from pathlib import Path
     src = (Path(__file__).resolve().parents[2] / "scripts"
            / "reconcilier_journal.py").read_text(encoding="utf-8")
-    appels = [l for l in src.splitlines() if "_close_record(" in l and "def " not in l]
+    appels = [x for x in src.splitlines()
+              if "_close_record(" in x and "def " not in x]
     assert appels, "aucun appel à `_close_record` trouvé — le test a perdu sa cible"
     assert all("None" not in a for a in appels), (
         "une fermeture reconstruite naîtrait sans MFE : "
         f"{[a.strip() for a in appels if 'None' in a]}")
+
+
+# ── crypto : le symbole du journal n'est pas celui du fournisseur ───────────
+
+def test_une_paire_crypto_est_traduite_pour_la_base():
+    """`BTC/USDC` n'existe chez aucun fournisseur d'actions : la requête part, échoue,
+    et dumpe une page d'erreur HTML dans le terminal. Mesuré le 10/09 : 77 lignes
+    « sans barres » — presque toutes du crypto jamais traduit."""
+    from packages.research.excursions import symbole_barres
+    assert symbole_barres("BTC/USDC") == "BTC-USD"
+    assert symbole_barres("AAVE/USDC") == "AAVE-USD"
+    assert symbole_barres("AAPL") == "AAPL"
+    assert symbole_barres("ASML.AS") == "ASML.AS"
+
+
+def test_le_comblement_utilise_le_symbole_TRADUIT():
+    """Le fournisseur doit recevoir le symbole du marché, pas celui du journal."""
+    vus = []
+
+    def fournisseur(sym):
+        vus.append(sym)
+        return [_bar(1, 118.0, 92.0), _bar(2, 110.0, 95.0)]
+
+    t = TradeRecord(
+        id="c1", instrument="BTC/USDC", asset_class=AssetClass.CRYPTO, venue="Alpaca",
+        side=Side.LONG, qty=1.0, entry_ts=_T0, entry_price=100.0, avg_price=100.0,
+        exit_ts=_T0 + timedelta(days=3), exit_price=104.0)
+    combler([t], fournisseur)
+    assert vus == ["BTC-USD"]

@@ -1,5 +1,32 @@
 # 04 — JOURNAL
 
+## Session 2026-09-10 (5ᵉ) — Le chiffre confirmait ma thèse, donc je l'ai vérifié
+
+**L'aperçu du comblement** donnait 222 lignes mesurables, avec des captures très
+négatives (−79 %, −223 %, −210 %). Ça confirmait « nos sorties rendent les gains ». C'est
+précisément pour ça que j'ai remonté à la définition de la mesure.
+
+**Le biais trouvé.** `mfe_mae` incluait le JOUR d'entrée. Le cron achète une heure avant
+la clôture : le plus haut de ce jour est presque toujours antérieur à l'achat — un prix
+que la position n'a jamais pu toucher. **Mesuré : capture d'une sortie à +1 %, 67 % sans
+le jour d'entrée contre 12 % avec.** Un facteur 5, du même ordre que le signal cherché.
+
+La MFE était surestimée, donc la capture sous-estimée — **dans le sens exact qui fabrique
+la conclusion attendue**. Corrigé : `d0 < b["t"] <= d1`. Le biais restant est
+conservateur, il flatte les sorties plutôt que de les accuser.
+
+**Conséquence assumée.** Un aller-retour intraday rend `None` : une excursion intraday ne
+se mesure pas sur des barres quotidiennes.
+
+**Deux nuisances.** Les paires crypto partaient non traduites chez un fournisseur
+d'actions (77 lignes « sans barres » + pages d'erreur HTML) → `BTC/USDC` → `BTC-USD`. Et
+le script tait maintenant les journaux réseau, comme ses deux frères.
+
+**Mesuré.** 2 544 passés, 7 ignorés (+4).
+
+**Leçon.** Un chiffre qui confirme l'hypothèse mérite la même défiance qu'un chiffre qui
+la contredit.
+
 ## Session 2026-09-10 (4ᵉ) — P0-2 ouvert : la MFE manquait sur 9 lignes sur 10
 
 **Le blocage, trouvé dans le code.** `reconcilier_journal.py:262` passait `None` comme

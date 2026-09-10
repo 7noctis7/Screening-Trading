@@ -22,6 +22,18 @@ from __future__ import annotations
 import dataclasses
 
 
+def symbole_barres(symbole: str) -> str:
+    """Symbole tel que les fournisseurs de PRIX l'indexent.
+
+    Le journal stocke la paire telle que le courtier la nomme (`BTC/USDC`). Aucun
+    fournisseur d'actions ne connaît cette forme : la requête part quand même, échoue,
+    et dumpe une page d'erreur HTML dans le terminal. Mesuré le 10/09 — 77 lignes
+    « sans barres exploitables », presque toutes du crypto jamais traduit.
+    """
+    s = (symbole or "").upper()
+    return s.split("/")[0] + "-USD" if "/" in s else s
+
+
 def serie_pour_mfe(bars) -> list[dict] | None:
     """Barres → série `{t, h, l}` pour `mfe_mae`. `None` si les hauts/bas manquent.
 
@@ -65,12 +77,13 @@ def combler(trades: list, fournisseur) -> dict:
             ignores += 1
             sortie.append(t)
             continue
-        if t.instrument not in cache:
+        cle = symbole_barres(t.instrument)
+        if cle not in cache:
             try:
-                cache[t.instrument] = serie_pour_mfe(fournisseur(t.instrument))
+                cache[cle] = serie_pour_mfe(fournisseur(cle))
             except Exception:  # noqa: BLE001 — un symbole muet n'arrête pas les autres
-                cache[t.instrument] = None
-        fe, ae = mfe_mae(cache[t.instrument], t.entry_ts, t.exit_ts, t.entry_price)
+                cache[cle] = None
+        fe, ae = mfe_mae(cache[cle], t.entry_ts, t.exit_ts, t.entry_price)
         if fe is None:
             sans_donnee += 1
             sortie.append(t)

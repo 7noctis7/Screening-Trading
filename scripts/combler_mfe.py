@@ -23,6 +23,11 @@ from pathlib import Path
 RACINE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RACINE))
 
+import logging as _lg  # noqa: E402
+
+for _n in ("yfinance", "urllib3", "peewee"):  # yfinance dumpe des pages HTML
+    _lg.getLogger(_n).setLevel(_lg.CRITICAL)
+
 from packages.data.price_loader import load_bars  # noqa: E402
 from packages.research.excursions import combler, rapport  # noqa: E402
 from packages.storage.journal_sqlite import DEFAULT_DB, SqliteTradeJournal  # noqa: E402
