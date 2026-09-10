@@ -186,3 +186,30 @@ def test_une_ligne_crypto_SANS_haut_ni_bas_ne_donne_rien(monkeypatch):
     monkeypatch.setattr(E, "_lignes_crypto", lambda s, a: [
         {"ts": "2026-08-02", "close": 100.0}])
     assert serie_pour_mfe(E.barres_locales("BTC-USD", 3)) is None
+
+
+def test_des_barres_sans_haut_ni_bas_ne_masquent_pas_la_crypto(monkeypatch):
+    """LE défaut mesuré le 10/09. `load_bars` retombe sur un fournisseur en ligne qui
+    rend `ts/close/volume` — 1097 barres, aucune utilisable pour une MFE. Comme elles
+    étaient NON VIDES, elles court-circuitaient la base crypto qui, elle, portait 1093
+    lignes avec de vrais hauts et bas. 67 lignes perdues pour un critère mal choisi :
+    « non vide » au lieu de « exploitable »."""
+    import packages.research.excursions as E
+    closes_seuls = [SimpleNamespace(ts=_T0, close=100.0, volume=0.0)
+                    for _ in range(1097)]
+    monkeypatch.setattr(E, "_barres_actions", lambda s, a: closes_seuls)
+    monkeypatch.setattr(E, "_lignes_crypto", lambda s, a: [
+        {"ts": "2026-08-02", "high": 118.0, "low": 92.0, "close": 100.0}])
+    serie = serie_pour_mfe(E.barres_locales("BTC-USD", 3))
+    assert serie is not None, "les barres sans haut/bas ont masqué la base crypto"
+    assert serie[0]["h"] == 118.0
+
+
+def test_aucune_source_exploitable_rend_du_vide(monkeypatch):
+    """Garde-fou : si les DEUX sources sont inutilisables, on ne fabrique rien."""
+    import packages.research.excursions as E
+    monkeypatch.setattr(E, "_barres_actions", lambda s, a: [
+        SimpleNamespace(ts=_T0, close=100.0, volume=0.0)])
+    monkeypatch.setattr(E, "_lignes_crypto",
+                        lambda s, a: [{"ts": "2026-08-02", "close": 1.0}])
+    assert serie_pour_mfe(E.barres_locales("X", 3)) is None

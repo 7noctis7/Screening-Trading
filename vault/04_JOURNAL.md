@@ -1,5 +1,31 @@
 # 04 — JOURNAL
 
+## Session 2026-09-10 (7ᵉ) — Deux correctifs justes, tous deux inopérants
+
+**Le symptôme.** Deux tentatives pour récupérer les MFE crypto : 197/102 à l'identique,
+deux fois. Un correctif qui ne change pas le chiffre n'est pas un correctif.
+
+**Le diagnostic par symbole a tranché en une ligne.** `AAVE-USD` : 1097 barres actions,
+**1093 lignes crypto avec de vrais hauts et bas**. La donnée était là. `barres_locales`
+retenait la première source NON VIDE — et `load_bars` retombe sur le fournisseur en
+ligne, qui rend `ts/close/volume` sans haut ni bas. **1097 barres inutilisables
+masquaient 1093 bonnes.**
+
+**Corrigé.** On retient la première source dont on peut TIRER UNE SÉRIE, pas la première
+non vide. `serie_pour_mfe(bars) is not None` devient le critère.
+
+**Ce que ça dit de ma méthode.** Mes deux correctifs précédents (traduction de symbole,
+repli crypto) étaient justes — et inopérants, masqués par un défaut en amont que je
+n'avais pas mesuré. J'aurais dû lancer le diagnostic AVANT le premier.
+
+**Appliqué en production.** 197 lignes comblées, sauvegarde
+`journal.avant-mfe-20260910T081608Z.db`. L'audit rend désormais « capture 58 % sur **1**
+position tenue ≥ 3 jours » — un seul cas, ce qui confirme ADR-0135 : sur une détention
+médiane d'un jour, la question des sorties n'est pas mesurable.
+
+**Mesuré.** 2 553 passés, 7 ignorés (+2). 29 lignes restent hors de portée : allers-retours
+intraday, `None` par conception.
+
 ## Session 2026-09-10 (6ᵉ) — La question posée n'est pas mesurable sur cet horizon
 
 **Ce que l'aperçu corrigé a montré.** Après exclusion du jour d'entrée, une détention

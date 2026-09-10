@@ -45,25 +45,34 @@ def _lignes_crypto(symbole: str, annees: int) -> list[dict]:
 
 
 def barres_locales(symbole: str, annees: int = 3) -> list:
-    """Barres du symbole : base ACTIONS d'abord, base CRYPTO ensuite.
+    """Barres du symbole, choisies sur leur EXPLOITABILITÉ — pas sur leur nombre.
 
-    `load_bars` ne consulte que la base actions — `_price_db_path()` ne liste pas
-    `crypto.db`. Sans ce repli, toute position crypto sortait « sans barres ».
+    Deux sources : la base ACTIONS (`load_bars`, avec son repli en ligne) puis la base
+    CRYPTO (`crypto.db`, que `_price_db_path()` ne liste pas).
+
+    LE PIÈGE, mesuré le 10/09. Retenir la première source NON VIDE laissait le repli en
+    ligne — qui rend `ts/close/volume`, sans haut ni bas — masquer la base crypto :
+    1097 barres inutilisables court-circuitaient 1093 lignes portant de vrais hauts et
+    bas. **67 lignes perdues pour un critère mal choisi.** On retient donc la première
+    source dont on peut réellement tirer une série.
     """
     from types import SimpleNamespace
-    try:
-        bars = _barres_actions(symbole, annees)
-    except Exception:  # noqa: BLE001
-        bars = []
-    if bars:
-        return bars
-    try:
-        lignes = _lignes_crypto(symbole, annees)
-    except Exception:  # noqa: BLE001
-        return []
-    return [SimpleNamespace(ts=str(r.get("ts") or "")[:10],
-                            high=r.get("high"), low=r.get("low"),
-                            close=r.get("close")) for r in lignes]
+
+    def _crypto() -> list:
+        return [SimpleNamespace(ts=str(r.get("ts") or "")[:10], high=r.get("high"),
+                                low=r.get("low"), close=r.get("close"))
+                for r in _lignes_crypto(symbole, annees)]
+
+    dernier: list = []
+    for source in (lambda: _barres_actions(symbole, annees), _crypto):
+        try:
+            bars = source() or []
+        except Exception:  # noqa: BLE001 — une source muette n'empêche pas l'autre
+            continue
+        if serie_pour_mfe(bars) is not None:
+            return bars
+        dernier = dernier or bars
+    return dernier
 
 
 def symbole_barres(symbole: str) -> str:

@@ -2,6 +2,33 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0136 — « Non vide » n'est pas « exploitable » : 1097 barres inutiles en masquaient 1093 bonnes (2026-09-10)
+
+**Constat.** Deux tentatives successives pour récupérer les MFE crypto n'ont rien changé :
+197 comblés / 102 sans barres, à l'identique. Un diagnostic PAR SYMBOLE a tranché.
+
+```
+AAVE/USDC   AAVE-USD    1097 actions    1093 crypto   h=54.13 l=51.57
+BTC/USDC    BTC-USD     1097 actions    1093 crypto   h=25883.9 l=24930.3
+```
+
+**La base crypto avait la donnée.** `barres_locales` retenait la première source **NON
+VIDE** — or `load_bars` retombe sur le fournisseur en ligne, qui rend `ts/close/volume`
+sans haut ni bas. **1097 barres inutilisables court-circuitaient 1093 lignes exploitables.**
+
+**Décision.** On retient la première source dont on peut réellement TIRER UNE SÉRIE, pas
+la première non vide. `serie_pour_mfe(bars) is not None` devient le critère de choix.
+
+**La leçon, et elle est générale.** J'ai corrigé ce point deux fois à l'aveugle — une
+traduction de symbole, puis un repli sur `crypto.db` — sans jamais mesurer POURQUOI ça
+échouait. Les deux correctifs étaient justes et tous deux inopérants, masqués par un
+troisième défaut en amont. **Un correctif qui ne change pas le chiffre n'est pas un
+correctif : c'est une hypothèse non réfutée.** Le diagnostic par symbole a coûté cinq
+minutes et donné la réponse en une ligne.
+
+**Ce qui reste hors de portée.** 29 lignes sont des allers-retours **intraday** : `None`
+par conception (ADR-0134). Aucune donnée quotidienne ne les rendra mesurables.
+
 ## ADR-0135 — La capture n'est pas mesurable sur une détention d'un jour (2026-09-10)
 
 **Constat.** Après exclusion du jour d'entrée (ADR-0134), une détention d'UN jour ne
