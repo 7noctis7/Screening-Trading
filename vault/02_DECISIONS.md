@@ -2,6 +2,28 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0137 — Une MFE négative est une contradiction dans les termes (2026-09-10)
+
+**Constat, sur la sortie réelle.** Le comblement crypto rendait des MFE **négatives** :
+BTC/USDC −0,35 %, LTC/USDC −2,28 %, AVAX/USDC −2,30 %. *Maximum Favorable Excursion*
+défavorable — impossible par définition.
+
+**La cause.** `mfe_mae` calcule `max(hauts) / entrée − 1` sur les barres POSTÉRIEURES au
+jour d'entrée (ADR-0134). Si le titre gappe à la baisse et ne revient jamais, le plus
+haut de la fenêtre reste sous le prix d'entrée. Mathématiquement cohérent, **conceptuel-
+lement faux** : j'avais oublié que le **point d'entrée fait partie du chemin du trade**.
+
+**Décision.** MFE bornée à ≥ 0, MAE bornée à ≤ 0. Le chemin commence au prix d'entrée :
+l'excursion favorable minimale est nulle, l'adverse maximale aussi.
+
+**Ce qu'on ne perd pas.** L'information « ce trade n'est jamais repassé au-dessus de son
+entrée » reste lisible dans `MAE` et `pnl_pct`. Elle n'avait pas à être encodée dans un
+champ dont le nom affirme le contraire.
+
+**Effet de bord bienvenu.** `capture = pnl / MFE` était déjà protégée par `mfe > 1e-9` ;
+avec MFE bornée à 0, ces lignes sont désormais écartées pour la BONNE raison — le trade
+n'a jamais été en profit — et non par accident de signe.
+
 ## ADR-0136 — « Non vide » n'est pas « exploitable » : 1097 barres inutiles en masquaient 1093 bonnes (2026-09-10)
 
 **Constat.** Deux tentatives successives pour récupérer les MFE crypto n'ont rien changé :

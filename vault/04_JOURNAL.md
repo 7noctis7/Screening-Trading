@@ -1,5 +1,29 @@
 # 04 — JOURNAL
 
+## Session 2026-09-10 (8ᵉ) — Le crypto récupéré, et une MFE qui se contredisait
+
+**Le correctif de source a marché.** 14 lignes crypto comblées, 273 déjà mesurées. La
+base crypto est enfin lue avec ses hauts et ses bas.
+
+**Mais la sortie affichait des MFE NÉGATIVES** — BTC/USDC −0,35 %, LTC/USDC −2,28 %,
+AVAX/USDC −2,30 %. *Maximum Favorable Excursion* défavorable : impossible par
+définition. J'avais oublié que le **point d'entrée fait partie du chemin** : si le titre
+gappe à la baisse sans revenir, le plus haut des barres postérieures reste sous l'entrée.
+Corrigé — MFE ≥ 0, MAE ≤ 0.
+
+**Le premier signal exploitable de P0-2.** Sur les deux lignes crypto à détention longue :
+
+| | MFE | capture |
+|---|---:|---:|
+| AAVE/USDC | +53,79 % | **67 %** |
+| BCH/USDC | +24,44 % | **5 %** |
+
+BCH avait 24 % de gain latent et n'en a gardé que 5 %. **C'est exactement le motif que
+P0-2 cherche** — et il n'apparaît que là où la détention est assez longue pour être
+mesurable, ce qui confirme ADR-0135.
+
+**Mesuré.** 2 556 passés, 7 ignorés (+3).
+
 ## Session 2026-09-10 (7ᵉ) — Deux correctifs justes, tous deux inopérants
 
 **Le symptôme.** Deux tentatives pour récupérer les MFE crypto : 197/102 à l'identique,

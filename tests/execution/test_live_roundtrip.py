@@ -173,3 +173,40 @@ def test_un_aller_retour_INTRADAY_rend_None():
     x = datetime(2026, 8, 3, 19, 0, tzinfo=timezone.utc)
     serie = [{"t": "2026-08-03", "h": 108.0, "l": 99.0}]
     assert mfe_mae(serie, e, x, 100.0) == (None, None)
+
+
+def test_une_MFE_ne_peut_PAS_etre_negative():
+    """« Maximum Favorable Excursion » ne peut pas être défavorable. Le chemin d'un
+    trade commence au prix d'ENTRÉE : l'excursion favorable minimale est zéro.
+
+    Mesuré le 10/09 sur le journal réel : BTC/USDC MFE −0,35 %, LTC/USDC −2,28 %,
+    AVAX/USDC −2,30 %. Le titre avait gappé à la baisse sans jamais revenir — le plus
+    haut des barres postérieures restait sous l'entrée."""
+    e = datetime(2026, 8, 3, tzinfo=timezone.utc)
+    x = datetime(2026, 8, 5, tzinfo=timezone.utc)
+    serie = [{"t": "2026-08-04", "h": 97.0, "l": 93.0},     # jamais au-dessus de 100
+             {"t": "2026-08-05", "h": 98.0, "l": 90.0}]
+    fe, ae = mfe_mae(serie, e, x, 100.0)
+    assert fe == 0.0, "le prix n'est jamais remonté : l'excursion favorable est nulle"
+    assert abs(ae - (-0.10)) < 1e-9
+
+
+def test_une_MAE_ne_peut_PAS_etre_positive():
+    """Symétrique : un titre qui ne redescend jamais sous son entrée n'a pas subi
+    d'excursion adverse."""
+    e = datetime(2026, 8, 3, tzinfo=timezone.utc)
+    x = datetime(2026, 8, 5, tzinfo=timezone.utc)
+    serie = [{"t": "2026-08-04", "h": 112.0, "l": 104.0},
+             {"t": "2026-08-05", "h": 115.0, "l": 108.0}]
+    fe, ae = mfe_mae(serie, e, x, 100.0)
+    assert abs(fe - 0.15) < 1e-9
+    assert ae == 0.0
+
+
+def test_les_excursions_normales_ne_sont_PAS_ecrasees():
+    """Garde-fou : le bornage ne doit toucher QUE les cas contradictoires."""
+    e = datetime(2026, 8, 3, tzinfo=timezone.utc)
+    x = datetime(2026, 8, 5, tzinfo=timezone.utc)
+    serie = [{"t": "2026-08-04", "h": 112.0, "l": 95.0}]
+    fe, ae = mfe_mae(serie, e, x, 100.0)
+    assert abs(fe - 0.12) < 1e-9 and abs(ae - (-0.05)) < 1e-9

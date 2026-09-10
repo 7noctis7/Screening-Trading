@@ -77,7 +77,13 @@ def mfe_mae(series: list[dict] | None, entry_ts: datetime, exit_ts: datetime,
     lows = [b["l"] for b in win if b.get("l")]
     if not highs or not lows:
         return None, None
-    return round(max(highs) / entry_price - 1, 6), round(min(lows) / entry_price - 1, 6)
+    # BORNÉES À ZÉRO. Le chemin d'un trade commence au prix d'ENTRÉE : l'excursion
+    # favorable minimale est nulle, l'adverse maximale l'est aussi. Sans ce bornage,
+    # un titre qui gappe à la baisse sans jamais revenir rendait une MFE NÉGATIVE —
+    # « maximum favorable excursion » défavorable, une contradiction dans les termes.
+    # Mesuré le 10/09 : BTC/USDC −0,35 %, LTC/USDC −2,28 %, AVAX/USDC −2,30 %.
+    return (round(max(0.0, max(highs) / entry_price - 1), 6),
+            round(min(0.0, min(lows) / entry_price - 1), 6))
 
 
 def _close_record(lot: TradeRecord, qty: float, price: float, ts: datetime,
