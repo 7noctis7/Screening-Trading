@@ -42,12 +42,12 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 
-_SPLIT = re.compile(r"-X\d+$")
-# Suffixe posé par les scripts de RÉPARATION. Il contourne l'identifiant
-# déterministe de `build_open` (donc l'UPSERT) et échappe au regroupement des
-# tranches : ces lignes comptent comme des positions distinctes. Mesuré le 09/09 :
-# 15 doublons sur 66 faisaient passer le slippage moyen de −0,16 à +11,97 bps.
-_REPARATION = re.compile(r"-R\d+$")
+# DEUX conventions de tranche pour une seule notion : `-X` et `-R`, posées par deux
+# scripts différents (`reconcilier_journal.py:266` pour `-R`, sur une fermeture
+# PARTIELLE). Ne reconnaître que `-X` faisait compter chaque tranche comme une position
+# distincte : mesuré le 10/09 sur le journal réel, 126 lignes concernées, dont un lot
+# soldé en six fois qui pesait six positions avec son gain répété six fois.
+_SPLIT = re.compile(r"-[XR]\d+$")
 _ADMIN = "reconciliation-journal:"
 
 
@@ -60,7 +60,6 @@ class AuditTurnover:
     frais_totaux: float | None         # None = jamais renseigné (≠ zéro mesuré)
     n_frais_connus: int                # fermetures portant un coût renseigné
     n_frais_estimes: int               # ... dont estimés depuis un barème (≠ observés)
-    n_suffixes_reparation: int         # lignes issues d'un script de réparation
     duree_mediane_j: float | None
     taux_gain: float | None
     capture_mediane: float | None      # médiane de pnl_pct / mfe, positions mfe > 0
@@ -85,8 +84,9 @@ def _mediane(xs: list[float]) -> float | None:
     return v[m] if n % 2 else (v[m - 1] + v[m]) / 2.0
 
 
-def _lot_origine(identifiant: str) -> str:
-    """`abc-X3` → `abc`. Les tranches d'une même vente partagent une seule entrée."""
+def lot_origine(identifiant: str) -> str:
+    """`abc-X3` ou `abc-R3` → `abc`. Les tranches d'une même vente partagent une
+    seule entrée, donc une seule position."""
     return _SPLIT.sub("", identifiant or "")
 
 
@@ -109,7 +109,7 @@ def _agreger(clos: list) -> list[dict]:
     """Tranches → positions. Rendement pondéré par la quantité, durée la plus longue."""
     par_lot: dict[str, list] = {}
     for t in clos:
-        par_lot.setdefault(_lot_origine(t.id), []).append(t)
+        par_lot.setdefault(lot_origine(t.id), []).append(t)
     positions = []
     for tranches in par_lot.values():
         qtes = [abs(t.qty or 0.0) for t in tranches]
@@ -145,7 +145,7 @@ def auditer(trades: list, *, seulement: str | None = None) -> AuditTurnover:
         pos = [p for p in pos if p["admin"]]
     clos = [t for p in pos for t in p["tranches"]]
     if not clos:
-        return AuditTurnover(0, 0, 0, 0.0, None, 0, 0, 0, None, None, None, 0,
+        return AuditTurnover(0, 0, 0, 0.0, None, 0, 0, None, None, None, 0,
                              frozenset(), None, None, None, False)
 
     pnls = [p["pnl_pct"] for p in pos if p["pnl_pct"] is not None]
@@ -168,7 +168,6 @@ def auditer(trades: list, *, seulement: str | None = None) -> AuditTurnover:
                       if _connus else None),
         n_frais_connus=_connus,
         n_frais_estimes=sum(1 for t in clos if t.fees_source == "estimated"),
-        n_suffixes_reparation=sum(1 for t in clos if _REPARATION.search(t.id or "")),
         duree_mediane_j=round(_mediane(durees), 2) if durees else None,
         taux_gain=round(sum(1 for x in pnls if x > 0) / len(pnls), 3) if pnls else None,
         capture_mediane=round(_mediane(captures), 3) if captures else None,
@@ -213,11 +212,6 @@ def rapport(a: AuditTurnover) -> str:
                  f"{origine}).")
         L.append("  (Le slippage n'y est pas : il est déjà dans les prix de fill, "
                  "donc déjà dans le P&L — l'ajouter le compterait deux fois.)")
-    if a.n_suffixes_reparation:
-        L.append(f"⚠ {a.n_suffixes_reparation} enregistrement(s) portent un suffixe de "
-                 "réparation : ils échappent au regroupement des tranches et comptent "
-                 "comme des positions distinctes. Statistiques potentiellement "
-                 "dupliquées.")
     if a.duree_mediane_j is not None:
         L.append(f"Détention médiane : {a.duree_mediane_j:.1f} jour(s).")
     if a.taux_gain is not None:

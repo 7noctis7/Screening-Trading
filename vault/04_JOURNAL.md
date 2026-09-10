@@ -1,5 +1,36 @@
 # 04 — JOURNAL
 
+## Session 2026-09-10 (2ᵉ) — Le journal était sain, c'est mon comptage qui ne l'était pas
+
+**Fait.** Retrait de l'outil de déduplication (module, script, tests, cible `make`) et
+correction du vrai défaut : le regroupement des tranches.
+
+**Ce que la simulation a révélé.** `make dedupliquer-journal` : **126 ambiguës, 0
+supprimable**. Les identifiants (`C-AAVE-R1`, préfixe `C-`) ne correspondaient pas à mon
+hypothèse. Lecture du code : `reconcilier_journal.py:266` pose `-R{n}` sur une fermeture
+**PARTIELLE**. **`R` = reste, pas réparation.** J'avais construit tout un chantier sur un
+mot que je n'avais pas vérifié.
+
+**Ce qui a sauvé les données.** La règle fail-closed — ne supprimer que si la base existe
+ET que l'économie est identique — a refusé les 126 suppressions. Un outil bâti sur une
+prémisse fausse n'a rien détruit uniquement grâce à elle.
+
+**Le vrai défaut, remède inverse.** `_SPLIT` ne reconnaissait que `-X\d+` : les tranches
+`-R` comptaient comme des positions distinctes. Un lot soldé en six fois pesait six
+positions avec son gain répété six fois — dans l'expectancy, le taux de gain et le profit
+factor. Il fallait les **regrouper**, pas les supprimer. `_SPLIT` devient `-[XR]\d+$`.
+
+**Et la mesure de slippage.** Une observation par ÉVÉNEMENT D'ENTRÉE, plus par
+enregistrement : les tranches héritent du prix d'entrée et du `decision_price` du lot
+parent, donc le même fill était compté N fois.
+
+**Conclusion sur le chiffre d'hier.** Les « 15 doublons sur 66 » étaient des tranches. Le
+biais (+11,97 vs −0,16 bps) était réel, mais sa cause était une **erreur de comptage**,
+pas une corruption. **Le journal était sain depuis le début** — et j'ai passé une partie
+de la session à vouloir le réparer.
+
+**Mesuré.** 2 527 passés, 7 ignorés.
+
 ## Session 2026-09-10 — Un bug inventé, un bug trouvé
 
 **J'ai signalé hier un bug qui n'existe pas.** `fast_swing` marque bien tous les symboles

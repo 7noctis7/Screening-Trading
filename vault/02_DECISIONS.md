@@ -2,6 +2,43 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0132 — « -R » ne voulait pas dire réparation : l'outil de déduplication est retiré (2026-09-10)
+
+**Constat.** `make dedupliquer-journal` a rendu **126 lignes ambiguës, 0 supprimable** sur
+le journal réel. Les identifiants n'étaient pas ceux que j'attendais : `C-AAVE-R1`,
+`C-BTC-10f5f006-R1` — préfixe `C-`, pas `P-`.
+
+**La lecture du code tranche.** `reconcilier_journal.py:266` pose
+`split_id=f"{lot.id}-R{compteur}"` sur une fermeture **PARTIELLE**, et réinjecte le reste
+du lot. `-R` signifie **reste**, pas réparation : c'est une TRANCHE, exactement au même
+titre que `-X`. J'avais bâti l'ADR-0131 sur une hypothèse jamais vérifiée.
+
+**Ce qui a bien fonctionné.** La règle fail-closed a refusé les 126 suppressions parce
+que l'économie diffère d'une tranche à l'autre. Elle a protégé des données réelles d'un
+outil construit sur une prémisse fausse. C'est le seul motif pour lequel ce chantier n'a
+rien détruit.
+
+**Décision.** `packages/research/deduplication.py`, son script, ses tests et la cible
+`make dedupliquer-journal` sont **supprimés**. Un outil qui propose de supprimer des
+lignes légitimes finit par être lancé avec `--appliquer`. L'avertissement « suffixe de
+réparation » de `turnover_audit` disparaît pour la même raison : un faux positif pousse
+à détruire.
+
+**Le vrai défaut, et son remède inverse.** Les tranches `-R` n'étaient pas regroupées :
+`_SPLIT` ne reconnaissait que `-X\d+`. Elles comptaient donc comme des positions
+distinctes dans l'expectancy, le taux de gain et le profit factor — un lot soldé en six
+fois pesait six positions avec son gain répété six fois. `_SPLIT` devient `-[XR]\d+$`.
+
+**Et la mesure de slippage.** Les tranches héritent du prix d'entrée ET du
+`decision_price` de leur lot parent (`dataclasses.replace` les recopie) :
+`measured_slippage` comptait le même fill N fois. Corrigé — **une observation par
+événement d'entrée**, via `lot_origine()`, désormais publique et unique dans le dépôt.
+
+**Ce que ça dit du chiffre d'hier.** Les « 15 doublons sur 66 » n'étaient pas des
+doublons : c'étaient des tranches d'un même lot. Le biais était réel (+11,97 vs −0,16 bps)
+mais sa cause était une erreur de COMPTAGE, pas une corruption de données. Le journal
+était sain depuis le début.
+
 ## ADR-0131 — Estimation marquée, déduplication fail-closed, et un bug que j'avais inventé (2026-09-10)
 
 **1. Le bug d'equity que j'avais signalé n'existe pas.** J'avais consigné en ADR-0130 que

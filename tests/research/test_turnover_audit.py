@@ -210,24 +210,6 @@ def test_le_slippage_n_est_PAS_ajoute_aux_frais():
     assert auditer([t]).frais_totaux == 1.0
 
 
-def test_les_doublons_de_reparation_sont_SIGNALES():
-    """Journal réel du 09/09 : `P-...-AAVE/USDC`, `-R1`, `-R2` — trois lignes pour un
-    événement. Le suffixe `-R` échappe au regroupement des tranches `-X`, donc ces
-    doublons comptent comme des positions distinctes. L'audit doit le DIRE."""
-    base = "P-20260707-Alpaca-AAVE"
-    trades = [_trade(0, 1.0, 0.05, 0.06, tid=base),
-              _trade(0, 1.0, 0.05, 0.06, tid=f"{base}-R1"),
-              _trade(0, 1.0, 0.05, 0.06, tid=f"{base}-R2")]
-    a = auditer(trades)
-    assert a.n_suffixes_reparation == 2
-    assert "réparation" in rapport(a)
-
-
-def test_un_journal_sain_ne_signale_aucun_doublon():
-    """Garde-fou du test précédent : sans suffixe `-R`, rien ne doit s'allumer."""
-    a = auditer([_trade(0, 1.0, 0.02, 0.03), _trade(1, 2.0, -0.01, 0.01)])
-    assert a.n_suffixes_reparation == 0
-    assert "réparation" not in rapport(a)
 
 
 def test_une_commission_ESTIMEE_est_annoncee_comme_telle():
@@ -245,3 +227,30 @@ def test_une_commission_OBSERVEE_ne_porte_pas_la_reserve():
     a = auditer([t])
     assert a.n_frais_estimes == 0
     assert "ESTIMÉES" not in rapport(a) and "observées" in rapport(a)
+
+
+# ── les tranches `-R` sont des TRANCHES, pas des doublons ───────────────────
+
+def test_les_tranches_R_comptent_pour_UNE_position():
+    """`reconcilier_journal.py:266` pose `-R{n}` sur une fermeture PARTIELLE : c'est
+    une tranche, au même titre que `-X`. Non regroupées, six tranches d'un lot soldé
+    en six fois comptaient pour six positions — et gonflaient n, le taux de gain et
+    le profit factor. Mesuré le 10/09 sur le journal réel : 126 lignes concernées."""
+    tranches = [_trade(0, 50, 0.40, None, tid=f"C-AAVE-R{n}") for n in range(1, 7)]
+    a = auditer(tranches)
+    assert a.n_fermetures == 6
+    assert a.n_positions == 1
+
+
+def test_les_deux_conventions_de_tranche_se_regroupent_pareil():
+    """`-X` et `-R` viennent de deux scripts différents pour la même notion."""
+    mix = [_trade(0, 10, 0.05, None, tid="lot-X1"), _trade(0, 10, 0.05, None, tid="lot-X2"),
+           _trade(1, 10, 0.05, None, tid="autre-R1"), _trade(1, 10, 0.05, None, tid="autre-R2")]
+    assert auditer(mix).n_positions == 2
+
+
+def test_une_tranche_ne_declenche_AUCUNE_alerte():
+    """L'audit annonçait « suffixe de réparation » sur des lignes légitimes. Un
+    avertissement faux pousse à supprimer de vraies données."""
+    a = auditer([_trade(0, 50, 0.40, None, tid=f"C-AAVE-R{n}") for n in range(1, 4)])
+    assert "réparation" not in rapport(a)
