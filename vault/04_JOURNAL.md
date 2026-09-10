@@ -1,5 +1,30 @@
 # 04 — JOURNAL
 
+## Session 2026-09-10 (6ᵉ) — La question posée n'est pas mesurable sur cet horizon
+
+**Ce que l'aperçu corrigé a montré.** Après exclusion du jour d'entrée, une détention
+d'UN jour ne laisse qu'UNE barre : celle de la sortie. `pnl/MFE` y mesure la position
+dans le range d'une journée, pas la restitution d'un gain. STT : MFE 0,41 % → capture
+−220 %. PATH : 0,86 % → −269 %. Des artefacts de dénominateur.
+
+**Décision.** `DETENTION_MIN_CAPTURE_J = 3.0` : sous ce seuil, la capture est écartée et
+le rapport DIT pourquoi. La détention médiane du système étant d'un jour, l'essentiel des
+positions sort du périmètre — **c'est la bonne réponse**. « Rendons-nous nos gains ? »
+n'est pas mesurable sur cet horizon avec des barres quotidiennes. Publier un chiffre
+reviendrait à en inventer un.
+
+**Ce qui reste mesurable, et qui est parlant.** Les MAE dépassent les MFE en magnitude
+sur la majorité des lignes (STT −2,80 vs +0,41 ; TMO −2,52 vs +0,98 ; PATH −2,86 vs
++0,86 ; TFX −4,15 vs +1,42). Ça informe sur **l'ENTRÉE**, pas sur la sortie. C'est la
+piste P0-2 qui a un support de données.
+
+**Le trou crypto, comblé.** `load_bars` ne consulte que la base actions, et
+`_bars_crypto` — qui lit `crypto.db` — ne garde que les clôtures. Or `read_prices_rows`
+expose `high`/`low` : la donnée était là, personne ne la lisait. `barres_locales()`
+essaie les deux bases, hauts et bas compris.
+
+**Mesuré.** 2 551 passés, 7 ignorés (+7).
+
 ## Session 2026-09-10 (5ᵉ) — Le chiffre confirmait ma thèse, donc je l'ai vérifié
 
 **L'aperçu du comblement** donnait 222 lignes mesurables, avec des captures très

@@ -149,3 +149,40 @@ def test_le_comblement_utilise_le_symbole_TRADUIT():
         exit_ts=_T0 + timedelta(days=3), exit_price=104.0)
     combler([t], fournisseur)
     assert vus == ["BTC-USD"]
+
+
+# ── la base crypto a des hauts/bas, personne ne les lisait ──────────────────
+
+def test_le_fournisseur_local_retombe_sur_la_base_CRYPTO(monkeypatch):
+    """`load_bars` ne consulte QUE la base actions : `_price_db_path()` ne liste pas
+    `crypto.db`. Et `user_analysis._bars_crypto`, qui la lit, ne garde que les
+    clôtures — aucune MFE crypto n'était donc calculable. Or `read_prices_rows`
+    expose bien `high`/`low` : la donnée était là, personne ne la lisait. Mesuré le
+    10/09 — 102 lignes « sans barres », presque toutes crypto."""
+    import packages.research.excursions as E
+    monkeypatch.setattr(E, "_barres_actions", lambda s, a: [])
+    monkeypatch.setattr(E, "_lignes_crypto", lambda s, a: [
+        {"ts": "2026-08-02", "high": 118.0, "low": 92.0, "close": 100.0},
+        {"ts": "2026-08-03", "high": 110.0, "low": 95.0, "close": 105.0}])
+    serie = serie_pour_mfe(E.barres_locales("BTC-USD", 3))
+    assert serie is not None and len(serie) == 2
+    assert serie[0]["h"] == 118.0 and serie[0]["l"] == 92.0
+
+
+def test_la_base_actions_est_ESSAYEE_en_premier(monkeypatch):
+    """Le repli crypto ne doit pas masquer une série d'actions valide."""
+    import packages.research.excursions as E
+    monkeypatch.setattr(E, "_barres_actions", lambda s, a: [_bar(1, 200.0, 190.0)])
+    monkeypatch.setattr(E, "_lignes_crypto", lambda s, a: [
+        {"ts": "2026-08-02", "high": 1.0, "low": 0.5, "close": 0.7}])
+    serie = serie_pour_mfe(E.barres_locales("AAPL", 3))
+    assert serie[0]["h"] == 200.0
+
+
+def test_une_ligne_crypto_SANS_haut_ni_bas_ne_donne_rien(monkeypatch):
+    """Une base qui ne stocke que des clôtures ne permet pas de MFE. On le dit."""
+    import packages.research.excursions as E
+    monkeypatch.setattr(E, "_barres_actions", lambda s, a: [])
+    monkeypatch.setattr(E, "_lignes_crypto", lambda s, a: [
+        {"ts": "2026-08-02", "close": 100.0}])
+    assert serie_pour_mfe(E.barres_locales("BTC-USD", 3)) is None

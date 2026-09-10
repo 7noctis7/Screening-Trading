@@ -28,8 +28,7 @@ import logging as _lg  # noqa: E402
 for _n in ("yfinance", "urllib3", "peewee"):  # yfinance dumpe des pages HTML
     _lg.getLogger(_n).setLevel(_lg.CRITICAL)
 
-from packages.data.price_loader import load_bars  # noqa: E402
-from packages.research.excursions import combler, rapport  # noqa: E402
+from packages.research.excursions import barres_locales, combler, rapport  # noqa: E402
 from packages.storage.journal_sqlite import DEFAULT_DB, SqliteTradeJournal  # noqa: E402
 
 
@@ -70,7 +69,7 @@ def main() -> int:
     journal = SqliteTradeJournal(chemin)
     tous = journal.all(legacy=False) + journal.all(legacy=True)
     avant = {t.id: t.mfe for t in tous}
-    res = combler(tous, lambda s: load_bars(s, years=a.annees))
+    res = combler(tous, lambda s: barres_locales(s, annees=a.annees))
     print(rapport(res))
     _apercu(res["trades"], avant)
 

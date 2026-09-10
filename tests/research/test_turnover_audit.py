@@ -104,15 +104,16 @@ def test_motifs_administratifs_ne_masquent_pas_l_absence_de_tp_sl():
 # ── capture, profit factor, significativité ──
 
 def test_capture_negative_signale_un_gagnant_devenu_perdant():
-    """Le vrai journal : +1,9 % de MFE puis sortie à −1,0 %."""
-    a = auditer([_trade(0, 2, -0.0103, 0.0192)])
+    """Le vrai journal : +1,9 % de MFE puis sortie à −1,0 %. Détention allongée à
+    5 jours : sous 3, la capture est écartée par construction (ADR-0135)."""
+    a = auditer([_trade(0, 5, -0.0103, 0.0192)])
     assert a.capture_mediane is not None and a.capture_mediane < 0
     assert "NÉGATIVE" in rapport(a)
 
 
 def test_capture_ignore_mfe_absent_ou_nul():
-    trades = [_trade(0, 1, 0.02, 0.04), _trade(1, 1, 0.01, None),
-              _trade(2, 1, -0.01, 0.0)]
+    trades = [_trade(0, 5, 0.02, 0.04), _trade(1, 5, 0.01, None),
+              _trade(2, 5, -0.01, 0.0)]
     a = auditer(trades)
     assert a.n_capture_mesurable == 1
     assert a.capture_mediane == 0.5                  # 0.02 / 0.04
@@ -285,3 +286,35 @@ def test_un_melange_ancien_nouveau_ne_compte_que_le_nouveau():
     assert a.n_frais_connus == 1 and a.n_frais_estimes == 1
     assert a.frais_totaux == 2.5
     assert "1/2" in rapport(a)
+
+
+# ── la capture n'est pas mesurable sur une détention d'un jour ──────────────
+
+def test_la_capture_d_une_detention_TROP_COURTE_est_ecartee():
+    """Le jour d'entrée est exclu de la MFE (biais d'exécution en fin de séance) : une
+    détention d'un jour ne laisse qu'UNE barre, celle de la sortie. `pnl/mfe` y mesure
+    la position dans le range d'une journée, pas la restitution d'un gain. Mesuré le
+    10/09 : MFE 0,41 % → capture −220 %, un artefact de dénominateur."""
+    court = [_trade(0, 1.0, -0.009, 0.004)]          # 1 jour, MFE 0,4 %
+    a = auditer(court)
+    assert a.n_capture_mesurable == 0
+    assert a.capture_mediane is None
+
+
+def test_la_capture_d_une_detention_SUFFISANTE_est_gardee():
+    a = auditer([_trade(0, 5.0, 0.01, 0.03)])
+    assert a.n_capture_mesurable == 1
+    assert a.capture_mediane is not None
+
+
+def test_le_rapport_DIT_pourquoi_la_capture_manque():
+    """Un « non mesurable » sans motif se lit comme une panne."""
+    txt = rapport(auditer([_trade(0, 1.0, -0.009, 0.004) for _ in range(3)]))
+    assert "détention" in txt and "barres quotidiennes" in txt
+
+
+def test_le_seuil_de_detention_est_franchi_STRICTEMENT():
+    """Deux barres pleines après le jour d'entrée : le plus petit échantillon où
+    « passé positif puis reculé » veut dire quelque chose."""
+    assert auditer([_trade(0, 2.0, 0.01, 0.03)]).n_capture_mesurable == 0
+    assert auditer([_trade(0, 3.0, 0.01, 0.03)]).n_capture_mesurable == 1

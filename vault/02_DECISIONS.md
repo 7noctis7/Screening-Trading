@@ -2,6 +2,39 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0135 — La capture n'est pas mesurable sur une détention d'un jour (2026-09-10)
+
+**Constat.** Après exclusion du jour d'entrée (ADR-0134), une détention d'UN jour ne
+laisse plus qu'**une seule barre** dans la fenêtre : celle de la sortie. `MFE` y vaut le
+haut de cette journée, `MAE` son bas. Le ratio `pnl / MFE` mesure alors **la position du
+prix de sortie dans le range d'une journée**, pas la restitution d'un gain.
+
+**Le symptôme, sur données réelles.** STT : MFE 0,41 %, capture **−220 %**. PATH : MFE
+0,86 %, capture **−269 %**. Ces nombres ne disent rien de plus que « le trade a fini
+négatif » — leur magnitude est un artefact de dénominateur.
+
+**Décision.** `DETENTION_MIN_CAPTURE_J = 3.0`. Sous ce seuil, la capture est **écartée**,
+et le rapport dit POURQUOI : « une seule barre sépare l'entrée de la sortie… des barres
+quotidiennes ne peuvent pas trancher plus fin ». Trois jours = deux barres pleines après
+l'entrée, le plus petit échantillon où « passé positif puis reculé » a un sens.
+
+**Ce que ça coûte, et pourquoi c'est juste.** La détention médiane du système est d'UN
+jour : l'essentiel des positions sort donc du périmètre de la capture. C'est la bonne
+réponse. La question « rendons-nous nos gains ? » **n'est pas mesurable** sur cet horizon
+avec des barres quotidiennes — ni par ce code, ni par un autre. Publier un chiffre
+reviendrait à en inventer un.
+
+**Ce qui reste mesurable, et qui est déjà parlant.** Les MAE dépassent les MFE en
+magnitude sur la majorité des lignes de l'aperçu (STT −2,80 vs +0,41 ; TMO −2,52 vs
++0,98 ; PATH −2,86 vs +0,86 ; TFX −4,15 vs +1,42). Ça informe sur **l'entrée**, pas sur la
+sortie — et c'est une piste P0-2 en soi.
+
+**Le trou crypto, comblé.** `load_bars` ne consulte que la base actions
+(`_price_db_path()` ne liste pas `crypto.db`), et `user_analysis._bars_crypto`, qui la
+lit, **ne garde que les clôtures**. Aucune MFE crypto n'était donc calculable. Or
+`read_prices_rows` expose bien `high`/`low` : la donnée était là, personne ne la lisait.
+`barres_locales()` essaie la base actions puis la base crypto, hauts et bas compris.
+
 ## ADR-0134 — La MFE incluait un plus haut que la position n'a jamais pu toucher (2026-09-10)
 
 **Constat, sur l'aperçu réel du comblement.** MFE de 0,98 % à 2,26 % sur une détention

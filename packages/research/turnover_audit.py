@@ -49,6 +49,14 @@ from datetime import datetime
 # soldé en six fois qui pesait six positions avec son gain répété six fois.
 _SPLIT = re.compile(r"-[XR]\d+$")
 _ADMIN = "reconciliation-journal:"
+# DÉTENTION MINIMALE pour que `pnl/mfe` veuille dire quelque chose. Le jour d'entrée est
+# exclu de la MFE (l'exécution tombe en fin de séance : le haut du jour est presque
+# toujours antérieur à l'achat). Une détention d'un jour ne laisse donc qu'UNE barre —
+# celle de la sortie — et le ratio y mesure la position dans le range d'une journée, pas
+# la restitution d'un gain. Mesuré le 10/09 : MFE 0,41 % → capture −220 %, artefact de
+# dénominateur. Trois jours = deux barres pleines après l'entrée, le plus petit
+# échantillon où « passé positif puis reculé » a un sens.
+DETENTION_MIN_CAPTURE_J = 3.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,7 +160,8 @@ def auditer(trades: list, *, seulement: str | None = None) -> AuditTurnover:
     gains_ = sum(x for x in pnls if x > 0)
     pertes_ = -sum(x for x in pnls if x < 0)
     captures = [p["pnl_pct"] / p["mfe"] for p in pos if p["mfe"] is not None
-                and p["mfe"] > 1e-9 and p["pnl_pct"] is not None]
+                and p["mfe"] > 1e-9 and p["pnl_pct"] is not None
+                and (p["duree_j"] or 0) >= DETENTION_MIN_CAPTURE_J]
     durees = [p["duree_j"] for p in pos if p["duree_j"] is not None]
     tstat, signif = _tstat_vs_zero(pnls)
     # Un coût n'est MESURÉ que s'il déclare sa source. L'ancien schéma portait
@@ -239,11 +248,15 @@ def rapport(a: AuditTurnover) -> str:
     if a.capture_mediane is not None:
         L.append(f"Capture médiane du potentiel (pnl / MFE) : "
                  f"{a.capture_mediane * 100:.0f} % sur {a.n_capture_mesurable} "
-                 "position(s) mesurable(s)"
+                 f"position(s) tenue(s) ≥ {DETENTION_MIN_CAPTURE_J:.0f} jours"
                  + (" — NÉGATIVE : passées en positif puis sorties en perte."
                     if a.capture_mediane < 0 else "."))
     else:
-        L.append("Capture du potentiel : non mesurable (MFE absent).")
+        L.append(f"Capture du potentiel : non mesurable. Il faut une détention d'au "
+                 f"moins {DETENTION_MIN_CAPTURE_J:.0f} jours ET une MFE renseignée — "
+                 "sous ce seuil, une seule barre sépare l'entrée de la sortie et le "
+                 "ratio mesure le range d'une journée, pas la restitution d'un gain. "
+                 "Des barres quotidiennes ne peuvent pas trancher plus fin.")
     strategie = {m for m in a.motifs_de_sortie if not m.startswith(_ADMIN)}
     if len(strategie) <= 1:
         L.append("⚠ Un seul motif de sortie côté système : aucune sortie déclenchée "
