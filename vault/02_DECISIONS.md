@@ -2,6 +2,43 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0133 — P0-2 : sans MFE, aucune recherche de sortie n'est possible (2026-09-10)
+
+**Constat.** L'audit de turnover annonce « capture médiane du potentiel : **mesurable sur
+4 position(s)** » alors que 40 sont closes. Cause trouvée dans le code :
+`scripts/reconcilier_journal.py:262` et `:265` passaient **`None`** comme série de prix à
+`_close_record`. `mfe_mae` rend alors `(None, None)` — toute fermeture reconstruite naît
+sans excursion. Or 36 des 40 positions viennent de ce chemin.
+
+**Pourquoi c'est bloquant pour P0-2.** On ne peut pas dire qu'un trade a rendu ses gains
+sans savoir combien il en avait. MFE est l'entrée obligatoire de toute recherche de
+sortie : trailing stop, protection des gains, take-profit partiel, time stop. Sans elle,
+il n'y a rien à mesurer et tout à supposer.
+
+**Décision.** `packages/research/excursions.py` : comblement de MFE/MAE sur les trades
+CLOS qui n'en ont pas, depuis la base de prix locale. Une MFE est un **fait sur le chemin
+de prix** entre deux dates — pas une reconstruction de décision, contrairement à un prix
+de sortie retrouvé après coup. La calculer après coup est donc légitime là où combler un
+prix ne l'était pas.
+
+**Le refus qui compte.** Des CLÔTURES SEULES ne suffisent pas. Le repli yfinance de
+`price_loader` ne rend que `ts/close/volume` : une excursion calculée là-dessus est
+**sous-estimée**, et une MFE minorée fait passer une sortie médiocre pour une bonne —
+exactement l'inverse de ce que P0-2 cherche. Sans haut/bas : `None`.
+
+**Deux garde-fous supplémentaires.** Une mesure existante n'est **jamais réécrite** (elle
+vient peut-être d'une source intraday plus fine). Un trade **ouvert** est ignoré : sa
+fenêtre n'est pas close, son excursion n'est pas finale.
+
+**Câblage.** `reconcilier_journal` fournit désormais une série : les futures fermetures
+reconstruites captureront leur MFE. Un test de source interdit le retour à `None` —
+vérifié par sabotage.
+
+**Conséquences.** `make combler-mfe` (simulation par défaut, sauvegarde horodatée, écrit
+UNIQUEMENT `mfe`/`mae` — jamais un prix, une quantité, une date ou un P&L). Reste à
+mesurer sur le journal réel : c'est la première fois que la capture du potentiel sera
+lisible sur autre chose que 4 lignes.
+
 ## ADR-0132 — « -R » ne voulait pas dire réparation : l'outil de déduplication est retiré (2026-09-10)
 
 **Constat.** `make dedupliquer-journal` a rendu **126 lignes ambiguës, 0 supprimable** sur

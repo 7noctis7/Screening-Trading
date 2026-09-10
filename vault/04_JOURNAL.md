@@ -1,5 +1,29 @@
 # 04 — JOURNAL
 
+## Session 2026-09-10 (4ᵉ) — P0-2 ouvert : la MFE manquait sur 9 lignes sur 10
+
+**Le blocage, trouvé dans le code.** `reconcilier_journal.py:262` passait `None` comme
+série de prix : toute fermeture reconstruite naissait sans MFE ni MAE. 36 des 40
+positions closes viennent de ce chemin — d'où « capture mesurable sur 4 positions ».
+
+**Pourquoi ça bloque tout P0-2.** On ne peut pas dire qu'un trade a rendu ses gains sans
+savoir combien il en avait. Trailing stop, protection des gains, take-profit partiel,
+time stop : tout part de la MFE.
+
+**Livré.** `packages/research/excursions.py` + `make combler-mfe` (simulation par défaut,
+sauvegarde horodatée, écrit UNIQUEMENT `mfe`/`mae`). Et `reconcilier_journal` fournit
+désormais la série, pour que les futures fermetures la capturent — test de source vérifié
+par sabotage.
+
+**Le refus qui compte.** Le repli yfinance ne rend que `ts/close/volume`. Une excursion
+calculée sur des clôtures est SOUS-ESTIMÉE, et une MFE minorée ferait passer une sortie
+médiocre pour une bonne — l'inverse exact de ce qu'on cherche. Sans haut/bas : `None`.
+
+**Mesuré.** 2 540 passés, 7 ignorés (+10).
+
+**Suite.** Lancer `make combler-mfe` sur le VPS. C'est la première fois que la capture du
+potentiel sera lisible sur autre chose que 4 lignes.
+
 ## Session 2026-09-10 (3ᵉ) — Le regroupement fait tomber le chiffre qui flattait
 
 **Mesuré sur le journal réel, après regroupement des tranches :**
