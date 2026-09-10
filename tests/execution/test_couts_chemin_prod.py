@@ -26,12 +26,14 @@ def test_un_trade_neuf_a_des_frais_INCONNUS_pas_nuls():
     assert t.slippage is None
 
 
-def test_l_ouverture_de_production_laisse_les_couts_NON_RENSEIGNES():
+def test_l_ouverture_de_production_MARQUE_son_estimation():
+    """La production estime la commission depuis le barème — et le DIT. Une estimation
+    non marquée deviendrait un fait à la première relecture."""
     tr = build_open("QQQ", venue="Alpaca", asset_class="equity",
                     fill={"avg_price": 100.0, "qty": 3.0}, features={"x": 1.0})
     assert tr is not None
-    assert tr.fees is None, "la production a écrit un coût qu'elle n'a pas mesuré"
-    assert tr.slippage is None
+    assert tr.fees is not None and tr.fees_source == "estimated"
+    assert tr.slippage is None, "le slippage n'est pas estimable sans prix de référence"
 
 
 def test_la_fermeture_de_production_ne_retranche_PAS_le_slippage():
@@ -55,7 +57,7 @@ def test_la_fermeture_de_production_ne_retranche_PAS_le_slippage():
             executables.append(ligne)
     assert not any("slippage" in x for x in executables), (
         "`_close_record` manipule le slippage : il est déjà dans les prix de fill")
-    assert any("pnl_net=pnl" in x for x in executables), (
+    assert any("pnl_net=round(pnl - charge" in x for x in executables), (
         "le P&L net de production a changé de forme — revérifier la règle")
 
 

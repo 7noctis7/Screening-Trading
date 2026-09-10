@@ -21,6 +21,7 @@ import dataclasses
 from datetime import datetime, timezone
 
 from packages.core.models import TradeRecord
+from packages.execution.costs import broker_charge
 
 _EPS = 1e-6
 
@@ -70,15 +71,18 @@ def _close_record(lot: TradeRecord, qty: float, price: float, ts: datetime,
     """TradeRecord FERMÉ pour `qty` du lot (features d'entrée conservées)."""
     fe, ae = mfe_mae(series, lot.entry_ts, ts, lot.entry_price)
     pnl = round((price - lot.entry_price) * qty, 6)
+    # COMMISSION ESTIMÉE des DEUX jambes, marquée `estimated`. Celle de l'entrée est
+    # déjà portée par le lot ; on y ajoute celle de la sortie (le réglementaire SEC/TAF
+    # ne frappe QU'À la vente). Ne JAMAIS retrancher le slippage ici : il est déjà
+    # contenu dans les deux prix de fill, donc déjà dans `pnl` — le retrancher
+    # compterait deux fois le même coût.
+    classe = getattr(lot.asset_class, "value", str(lot.asset_class))
+    charge = round((lot.fees or 0.0) + broker_charge(classe, price * qty, side="SELL"), 6)
     return dataclasses.replace(
         lot, id=split_id or lot.id, qty=qty, exit_ts=ts, exit_price=price,
         exit_reason="reconciliation paper (reduce/close)",
-        # `pnl_net` égale `pnl_gross` parce que l'exécution ne renseigne AUCUN coût :
-        # le lot garde `fees=None` (inconnu), et l'audit de turnover le rapporte
-        # UNCALIBRATED au lieu de publier un coût nul. Ne JAMAIS retrancher ici le
-        # slippage : il est déjà contenu dans les deux prix de fill, donc déjà dans
-        # `pnl`. Le retrancher compterait deux fois le même coût.
-        pnl_gross=pnl, pnl_net=pnl,
+        fees=charge, fees_source="estimated",
+        pnl_gross=pnl, pnl_net=round(pnl - charge, 6),
         pnl_pct=round(price / lot.entry_price - 1, 6) if lot.entry_price > 0 else None,
         is_win=pnl > 0, duration_s=max(0.0, (ts - lot.entry_ts).total_seconds()),
         mfe=fe, mae=ae)

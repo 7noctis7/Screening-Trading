@@ -296,6 +296,12 @@ def _close(broker, journal, sym, ot, price, ts, reason, costs, tid, ac) -> None:
     """
     sell_fill = costs.apply_sell(price)
     _n_fills = len(getattr(broker, "fills", []))
+    # Le broker DOIT encaisser le prix de sortie journalisé. `_sortie` rend un prix de
+    # stop ou de cible, jamais la clôture ; `submit` encaisse au dernier prix marqué,
+    # qui EST la clôture. Mesuré le 10/09 : journal à 95, broker à 80 — 150 $ d'écart
+    # sur un seul trade, à coûts nuls. La courbe d'equity et le journal décrivaient
+    # deux sorties différentes.
+    broker.mark(sym, price)
     broker.submit(Order(sym, Side.SHORT, ot["qty"], OrderType.MARKET, limit_price=price))
     charge = charge_du_roundtrip(ot.get("fill_entree"), fill_produit(broker, _n_fills))
     brut = (sell_fill - ot["entry_price"]) * ot["qty"]

@@ -1,5 +1,31 @@
 # 04 — JOURNAL
 
+## Session 2026-09-10 — Un bug inventé, un bug trouvé
+
+**J'ai signalé hier un bug qui n'existe pas.** `fast_swing` marque bien tous les symboles
+à chaque barre (`fast_swing.py:182-185`) ; j'avais lu la boucle de sortie sans voir celle
+d'avant. Demandé de le corriger, j'ai d'abord vérifié — et il n'y avait rien à corriger.
+
+**Mais la vérification en a trouvé un vrai.** `_sortie` rend un prix de stop ou de cible ;
+`broker.submit` encaissait au dernier prix marqué, la clôture. **150 $ d'écart sur un seul
+trade, à coûts nuls** — mesuré, pas déduit. Toute sortie par stop ou cible était
+concernée. Corrigé dans les deux moteurs.
+
+**Estimation marquée (décision utilisateur).** `broker_charge()` estime commission +
+réglementaire **sans slippage**, et le journal porte `fees_source="estimated"`. Nouveau
+champ, migration additive : le schéma ne faisait que `CREATE TABLE IF NOT EXISTS`, un
+INSERT sur colonne neuve aurait cassé la journalisation de production sans un bruit.
+
+**Déduplication livrée, fail-closed.** `make dedupliquer-journal` — simulation par défaut,
+sauvegarde horodatée, et une ligne `-R` n'est supprimée QUE si sa base existe avec une
+économie identique au centime. Tout le reste est conservé et signalé.
+
+**Limite assumée.** L'estimation crypto utilise le barème BitMart (25 bps) alors que le
+crypto est tradé sur Alpaca : elle est majorée. Marquée `estimated`, révisable dès que le
+vrai taux est connu — je ne l'invente pas.
+
+**Mesuré.** 2 531 passés (+23), certification et contracts verts.
+
 ## Session 2026-09-09 (28ᵉ) — P0-1 : le coût existait, personne ne le portait
 
 **Fait.** Audit puis réparation de l'instrumentation des coûts. Objet `Fill` (domaine),

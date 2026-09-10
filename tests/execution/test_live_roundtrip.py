@@ -39,7 +39,11 @@ def test_full_close_sets_exit_and_pnl(tmp_path):
     assert open_lots(j) == []
     t = [x for x in j.all(legacy=False) if x.id == "L1"][0]
     assert t.exit_price == 110.0 and t.exit_ts is not None
-    assert abs(t.pnl_net - 100.0) < 1e-6          # (110-100) × 10
+    assert abs(t.pnl_gross - 100.0) < 1e-6        # (110-100) × 10, avant frais
+    # La commission estimée du barème (réglementaire SEC/TAF à la vente) creuse
+    # l'écart : `pnl_net` ne peut plus égaler `pnl_gross` (ADR-0131).
+    assert t.pnl_net < t.pnl_gross
+    assert t.fees_source == "estimated"
     assert abs(t.pnl_pct - 0.10) < 1e-9
     assert t.is_win is True and t.duration_s == 4 * 86400.0
     assert t.features_snapshot == {"rank_score": 1.5}   # features de décision intactes

@@ -142,6 +142,10 @@ class BacktestEngine:
             return
         sell_fill = self.broker.costs.apply_sell(price)
         _n_fills = len(getattr(self.broker, "fills", []))
+        # Même règle que `fast_swing._close` : le broker encaisse le prix de sortie
+        # journalisé, pas la dernière clôture marquée. Sans ce mark, un stop touché
+        # créditait le cash au cours de clôture de la barre.
+        self.broker.mark(sym, price)
         order = Order(sym, Side.SHORT, ot.qty, OrderType.MARKET, limit_price=price)
         self.broker.submit(order)
         # `pnl_gross` porte l'écart de prix (slippage inclus : il EST dans les prix de

@@ -58,7 +58,8 @@ class AuditTurnover:
     n_administratives: int             # fermetures reconstruites après coup
     n_jours_couverts: float
     frais_totaux: float | None         # None = jamais renseigné (≠ zéro mesuré)
-    n_frais_connus: int                # fermetures portant un coût réellement mesuré
+    n_frais_connus: int                # fermetures portant un coût renseigné
+    n_frais_estimes: int               # ... dont estimés depuis un barème (≠ observés)
     n_suffixes_reparation: int         # lignes issues d'un script de réparation
     duree_mediane_j: float | None
     taux_gain: float | None
@@ -144,7 +145,7 @@ def auditer(trades: list, *, seulement: str | None = None) -> AuditTurnover:
         pos = [p for p in pos if p["admin"]]
     clos = [t for p in pos for t in p["tranches"]]
     if not clos:
-        return AuditTurnover(0, 0, 0, 0.0, None, 0, 0, None, None, None, 0,
+        return AuditTurnover(0, 0, 0, 0.0, None, 0, 0, 0, None, None, None, 0,
                              frozenset(), None, None, None, False)
 
     pnls = [p["pnl_pct"] for p in pos if p["pnl_pct"] is not None]
@@ -166,6 +167,7 @@ def auditer(trades: list, *, seulement: str | None = None) -> AuditTurnover:
         frais_totaux=(round(sum(t.fees for t in clos if t.fees is not None), 2)
                       if _connus else None),
         n_frais_connus=_connus,
+        n_frais_estimes=sum(1 for t in clos if t.fees_source == "estimated"),
         n_suffixes_reparation=sum(1 for t in clos if _REPARATION.search(t.id or "")),
         duree_mediane_j=round(_mediane(durees), 2) if durees else None,
         taux_gain=round(sum(1 for x in pnls if x > 0) / len(pnls), 3) if pnls else None,
@@ -202,8 +204,13 @@ def rapport(a: AuditTurnover) -> str:
         L.append("Coût d'exécution : UNCALIBRATED — l'exécution n'a renseigné aucun "
                  "frais sur ces fermetures. Un champ vide n'est pas un coût nul.")
     else:
+        origine = ("ESTIMÉES depuis le barème courtier, non observées"
+                   if a.n_frais_estimes == a.n_frais_connus else
+                   f"dont {a.n_frais_estimes} estimée(s)" if a.n_frais_estimes else
+                   "observées")
         L.append(f"Commissions cumulées : {a.frais_totaux:.2f} $ "
-                 f"({a.n_frais_connus}/{a.n_fermetures} fermeture(s) mesurée(s)).")
+                 f"({a.n_frais_connus}/{a.n_fermetures} fermeture(s) renseignée(s), "
+                 f"{origine}).")
         L.append("  (Le slippage n'y est pas : il est déjà dans les prix de fill, "
                  "donc déjà dans le P&L — l'ajouter le compterait deux fois.)")
     if a.n_suffixes_reparation:

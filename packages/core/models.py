@@ -306,6 +306,7 @@ class TradeRecord:
     # journal où l'exécution n'avait jamais alimenté la colonne (mesuré le 09/09).
     fees: float | None = None          # commission + frais divers, en devise
     slippage: float | None = None      # DESCRIPTIF : déjà contenu dans les prix de fill
+    fees_source: str | None = None     # "observed" (courtier) | "estimated" (barème)
     entry_reason: str = ""
     exit_reason: str = ""
     regime: str | None = None

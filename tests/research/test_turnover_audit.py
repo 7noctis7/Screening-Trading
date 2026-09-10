@@ -228,3 +228,20 @@ def test_un_journal_sain_ne_signale_aucun_doublon():
     a = auditer([_trade(0, 1.0, 0.02, 0.03), _trade(1, 2.0, -0.01, 0.01)])
     assert a.n_suffixes_reparation == 0
     assert "réparation" not in rapport(a)
+
+
+def test_une_commission_ESTIMEE_est_annoncee_comme_telle():
+    """Un chiffre issu d'un barème ne doit pas se lire comme un relevé de courtier."""
+    t = dataclasses.replace(_trade(0, 1.0, 0.01, 0.02, fees=1.5),
+                            fees_source="estimated")
+    a = auditer([t])
+    assert a.n_frais_connus == 1 and a.n_frais_estimes == 1
+    assert "ESTIMÉES" in rapport(a)
+
+
+def test_une_commission_OBSERVEE_ne_porte_pas_la_reserve():
+    t = dataclasses.replace(_trade(0, 1.0, 0.01, 0.02, fees=1.5),
+                            fees_source="observed")
+    a = auditer([t])
+    assert a.n_frais_estimes == 0
+    assert "ESTIMÉES" not in rapport(a) and "observées" in rapport(a)

@@ -2,6 +2,46 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0131 — Estimation marquée, déduplication fail-closed, et un bug que j'avais inventé (2026-09-10)
+
+**1. Le bug d'equity que j'avais signalé n'existe pas.** J'avais consigné en ADR-0130 que
+`fast_swing` ne rafraîchissait pas les marks des positions ouvertes. Faux :
+`fast_swing.py:182-185` marque TOUS les symboles à CHAQUE barre (`# mark-to-market`), et
+`engine.py:79` fait de même. J'avais lu la boucle de sortie sans voir celle qui la
+précède. Consigné ici pour que l'erreur ne survive pas dans le vault.
+
+**2. Mais en le vérifiant, un vrai défaut.** `_sortie` rend un prix de STOP ou de CIBLE ;
+`broker.submit` encaisse au dernier prix MARQUÉ, c'est-à-dire la clôture de la barre.
+Mesuré : journal à 95, broker à 80 — **150 $ d'écart sur un seul trade, à coûts nuls**.
+La courbe d'equity et le journal décrivaient deux sorties différentes, sur toute sortie
+par stop ou cible, c'est-à-dire la majorité. Corrigé par un `broker.mark(sym, price)`
+avant la soumission, dans les deux moteurs.
+
+**3. Commission estimée, et MARQUÉE.** Le courtier ne publie pas ses frais dans ce que
+lit `run_live`. Écrire `0.0` est un mensonge, `None` un silence. Décision : écrire
+l'estimation du barème documenté **avec `fees_source="estimated"`**. Nouveau champ au
+domaine et au schéma, avec une migration additive (`ALTER TABLE … ADD COLUMN`) — le
+schéma ne faisait que `CREATE TABLE IF NOT EXISTS`, donc un INSERT citant une colonne
+neuve aurait cassé la journalisation sur la base existante, silencieusement.
+
+`broker_charge()` estime **commission + réglementaire, sans slippage** : c'est
+`Fill.charge` appliqué à l'estimateur. Le réglementaire SEC/TAF ne frappe qu'à la vente.
+
+**Limite connue et assumée.** `broker_for("crypto")` rend BitMart (25 bps) alors que le
+crypto est tradé sur Alpaca. L'estimation crypto est donc **majorée** — 50 bps
+aller-retour au lieu du taux réel. Elle est marquée `estimated` précisément pour être
+révisable : le barème d'Alpaca-crypto manque à `BROKER_FEES`, et je ne l'invente pas.
+
+**4. Déduplication FAIL-CLOSED.** Une ligne `-R\d+` n'est supprimable QUE si la ligne de
+base existe ET que l'économie est identique (quantité, prix, dates, sortie). Tout écart
+→ `ambigus`, conservé. Simulation par défaut, sauvegarde horodatée avant écriture. Deux
+réparations « évidentes » avaient déjà fabriqué des pertes sur ce projet le 09/09 ; la
+règle est écrite pour que ça ne se reproduise pas.
+
+**Conséquences.** `pnl_net` de production retranche désormais la commission estimée : le
+réalisé affiché baisse. Négligeable en actions (0,3 bps aller-retour), **significatif en
+crypto** tant que le barème n'est pas corrigé. 2 531 tests au vert.
+
 ## ADR-0130 — P0-1 : le coût d'exécution n'avait nulle part où vivre (2026-09-09)
 
 **Constat.** `SimBroker.submit` calculait le prix d'exécution ET la commission, les
