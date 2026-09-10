@@ -21,6 +21,7 @@ import dataclasses
 from datetime import datetime, timezone
 
 from packages.core.models import TradeRecord
+from packages.execution.costs import broker_charge
 
 _EPS = 1e-6
 
@@ -52,16 +53,37 @@ def open_lots(journal, instrument: str | None = None,
 
 def mfe_mae(series: list[dict] | None, entry_ts: datetime, exit_ts: datetime,
             entry_price: float) -> tuple[float | None, float | None]:
-    """(MFE, MAE) en fraction du prix d'entrée, barres [entrée, sortie] ; None sinon."""
+    """(MFE, MAE) en fraction du prix d'entrée, sur les barres APRÈS le jour d'entrée.
+
+    POURQUOI LE JOUR D'ENTRÉE EST EXCLU. L'exécution tombe une heure avant la clôture :
+    le plus haut de la journée d'entrée est presque toujours ANTÉRIEUR à l'achat — un
+    prix que la position n'a jamais pu toucher. L'inclure surestime la MFE, donc
+    sous-estime la capture, exactement dans le sens qui fabriquerait la conclusion
+    « nos sorties rendent les gains ».
+
+    Mesuré le 10/09 : sur un achat à 100 le jour où le marché avait fait +8 % le matin
+    avant de finir à +1,5 %, la capture d'une sortie à +1 % passait de **67 % à 12 %** —
+    un facteur 5, du même ordre que le signal cherché.
+
+    Conséquence assumée : un aller-retour intraday (entrée et sortie le même jour) rend
+    `None`. Une excursion intraday ne se mesure pas sur des barres quotidiennes, et le
+    dire vaut mieux que publier un chiffre qu'on ne peut pas défendre.
+    """
     if not series or entry_price <= 0:
         return None, None
     d0, d1 = entry_ts.date().isoformat(), exit_ts.date().isoformat()
-    win = [b for b in series if "t" in b and d0 <= b["t"][:10] <= d1]
+    win = [b for b in series if "t" in b and d0 < b["t"][:10] <= d1]
     highs = [b["h"] for b in win if b.get("h")]
     lows = [b["l"] for b in win if b.get("l")]
     if not highs or not lows:
         return None, None
-    return round(max(highs) / entry_price - 1, 6), round(min(lows) / entry_price - 1, 6)
+    # BORNÉES À ZÉRO. Le chemin d'un trade commence au prix d'ENTRÉE : l'excursion
+    # favorable minimale est nulle, l'adverse maximale l'est aussi. Sans ce bornage,
+    # un titre qui gappe à la baisse sans jamais revenir rendait une MFE NÉGATIVE —
+    # « maximum favorable excursion » défavorable, une contradiction dans les termes.
+    # Mesuré le 10/09 : BTC/USDC −0,35 %, LTC/USDC −2,28 %, AVAX/USDC −2,30 %.
+    return (round(max(0.0, max(highs) / entry_price - 1), 6),
+            round(min(0.0, min(lows) / entry_price - 1), 6))
 
 
 def _close_record(lot: TradeRecord, qty: float, price: float, ts: datetime,
@@ -70,10 +92,18 @@ def _close_record(lot: TradeRecord, qty: float, price: float, ts: datetime,
     """TradeRecord FERMÉ pour `qty` du lot (features d'entrée conservées)."""
     fe, ae = mfe_mae(series, lot.entry_ts, ts, lot.entry_price)
     pnl = round((price - lot.entry_price) * qty, 6)
+    # COMMISSION ESTIMÉE des DEUX jambes, marquée `estimated`. Celle de l'entrée est
+    # déjà portée par le lot ; on y ajoute celle de la sortie (le réglementaire SEC/TAF
+    # ne frappe QU'À la vente). Ne JAMAIS retrancher le slippage ici : il est déjà
+    # contenu dans les deux prix de fill, donc déjà dans `pnl` — le retrancher
+    # compterait deux fois le même coût.
+    classe = getattr(lot.asset_class, "value", str(lot.asset_class))
+    charge = round((lot.fees or 0.0) + broker_charge(classe, price * qty, side="SELL"), 6)
     return dataclasses.replace(
         lot, id=split_id or lot.id, qty=qty, exit_ts=ts, exit_price=price,
         exit_reason="reconciliation paper (reduce/close)",
-        pnl_gross=pnl, pnl_net=pnl,      # paper Alpaca/Bitmart spot : frais inconnus
+        fees=charge, fees_source="estimated",
+        pnl_gross=pnl, pnl_net=round(pnl - charge, 6),
         pnl_pct=round(price / lot.entry_price - 1, 6) if lot.entry_price > 0 else None,
         is_win=pnl > 0, duration_s=max(0.0, (ts - lot.entry_ts).total_seconds()),
         mfe=fe, mae=ae)

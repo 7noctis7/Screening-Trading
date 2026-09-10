@@ -16,6 +16,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from packages.core.models import AssetClass, Side, TradeRecord
+from packages.execution.costs import broker_charge
 
 
 def _asset_class(sym: str, hint: str | None) -> AssetClass:
@@ -109,6 +110,11 @@ def agreger_achats(ordres: list[dict], jour: str) -> dict[str, dict]:
             for k, v in par_sym.items() if v["qty"] > 0}
 
 
+def _classe_de_frais(symbole: str, hint: str | None) -> str:
+    """Classe d'actif au sens des BARÈMES (le courtier, pas la taxonomie interne)."""
+    return _asset_class(symbole, hint).value
+
+
 def build_open(symbol: str, *, venue: str, asset_class: str | None, fill: dict | None,
                features: dict | None, regime: str | None = None,
                strategy: str = "preset", ts: datetime | None = None) -> TradeRecord | None:
@@ -128,6 +134,14 @@ def build_open(symbol: str, *, venue: str, asset_class: str | None, fill: dict |
         instrument=symbol, asset_class=_asset_class(symbol, asset_class),
         venue=venue, side=Side.LONG, qty=qty, entry_ts=ts, entry_price=price, avg_price=price,
         entry_reason="reconciliation paper (open/add)", regime=regime, strategy=strategy,
+        # COMMISSION ESTIMÉE, et marquée comme telle. Le courtier ne la publie pas dans
+        # les réponses que lit `run_live` ; écrire 0.0 serait un mensonge et `None` un
+        # silence. On écrit le barème documenté ET `fees_source="estimated"`, pour
+        # qu'aucun lecteur ne confonde plus tard cette estimation avec un fait.
+        # Le SLIPPAGE reste `None` : il n'est pas estimable sans prix de référence, et
+        # il est de toute façon déjà contenu dans le prix de fill.
+        fees=broker_charge(_classe_de_frais(symbol, asset_class), price * qty, side="BUY"),
+        fees_source="estimated",
         features_snapshot=feats)
 
 

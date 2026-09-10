@@ -20,6 +20,13 @@ htmlcov/
 
 # Données & artefacts locaux
 *.db
+# SIDECARS SQLITE. `*.db` ne matche PAS `market.db-wal` : le suffixe casse le motif, et
+# quatre de ces fichiers étaient SUIVIS sur un dépôt public (mesuré le 10/09). Le `-wal`
+# porte les pages écrites et pas encore intégrées — c'est de la donnée de base, pas un
+# artefact vide.
+*.db-wal
+*.db-shm
+*.db-journal
 data/journal.db          # journal de trades persistant — local-only (fills réels courtier)
 # Archives des lignes retirées du journal : elles portent les fills RÉELS du courtier
 # (symbole, quantité, prix, date, identifiant). Dépôt PUBLIC — jamais versionnées.

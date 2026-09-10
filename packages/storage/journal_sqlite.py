@@ -37,8 +37,9 @@ CREATE TABLE IF NOT EXISTS trades (
     avg_price         REAL NOT NULL,
     exit_ts           TEXT,
     exit_price        REAL,
-    fees              REAL DEFAULT 0,
-    slippage          REAL DEFAULT 0,
+    fees              REAL,             -- NULL = jamais renseigné (≠ zéro mesuré)
+    slippage          REAL,             -- DESCRIPTIF : déjà dans les prix de fill
+    fees_source       TEXT,             -- 'observed' | 'estimated' | NULL
     entry_reason      TEXT DEFAULT '',
     exit_reason       TEXT DEFAULT '',
     regime            TEXT,
@@ -62,6 +63,7 @@ CREATE INDEX IF NOT EXISTS idx_trades_strategy ON trades(strategy);
 _COLS = [
     "id", "instrument", "asset_class", "venue", "side", "qty", "entry_ts",
     "entry_price", "avg_price", "exit_ts", "exit_price", "fees", "slippage",
+    "fees_source",
     "entry_reason", "exit_reason", "regime", "strategy", "features_snapshot",
     "pnl_gross", "pnl_net", "pnl_pct", "r_multiple", "is_win", "duration_s",
     "mfe", "mae", "legacy", "ingested_at",
@@ -80,6 +82,22 @@ class SqliteTradeJournal:
             Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(str(db_path))
         self.conn.executescript(_DDL)          # migration auto
+        self._ajouter_colonnes_manquantes()
+        self.conn.commit()
+
+    def _ajouter_colonnes_manquantes(self) -> None:
+        """Ajoute les colonnes apparues APRÈS la création de la base.
+
+        `_DDL` ne fait que `CREATE TABLE IF NOT EXISTS` : sur une base existante il ne
+        change rien, et un INSERT citant une colonne neuve échouerait — la
+        journalisation de production s'arrêterait sans que rien ne le signale. Idempotent
+        et sans perte : `ADD COLUMN` laisse les lignes existantes à NULL, ce qui est
+        exactement le sens voulu (« jamais renseigné »).
+        """
+        connues = {r[1] for r in self.conn.execute("PRAGMA table_info(trades)")}
+        for nom, typ in (("fees_source", "TEXT"),):
+            if nom not in connues:
+                self.conn.execute(f"ALTER TABLE trades ADD COLUMN {nom} {typ}")
         self.conn.commit()
 
     def append(self, trade: TradeRecord, *, legacy: bool = False) -> None:
@@ -171,7 +189,8 @@ class SqliteTradeJournal:
         return (
             t.id, t.instrument, t.asset_class.value, t.venue, t.side.value, t.qty,
             _iso(t.entry_ts), t.entry_price, t.avg_price, _iso(t.exit_ts), t.exit_price,
-            t.fees, t.slippage, t.entry_reason, t.exit_reason, t.regime, t.strategy,
+            t.fees, t.slippage, t.fees_source,
+            t.entry_reason, t.exit_reason, t.regime, t.strategy,
             json.dumps(t.features_snapshot, sort_keys=True), t.pnl_gross, t.pnl_net,
             t.pnl_pct, t.r_multiple,
             None if t.is_win is None else int(t.is_win),
@@ -190,6 +209,7 @@ class SqliteTradeJournal:
             entry_price=d["entry_price"], avg_price=d["avg_price"],
             exit_ts=datetime.fromisoformat(d["exit_ts"]) if d["exit_ts"] else None,
             exit_price=d["exit_price"], fees=d["fees"], slippage=d["slippage"],
+            fees_source=d.get("fees_source"),
             entry_reason=d["entry_reason"], exit_reason=d["exit_reason"],
             regime=d["regime"], strategy=d["strategy"],
             features_snapshot=json.loads(d["features_snapshot"] or "{}"),

@@ -250,7 +250,26 @@ def _appliquer(journal, fermetures: list, ids_vivants: set) -> int:
     import dataclasses
 
     from packages.execution.live_roundtrip import _close_record
-    n, compteur = 0, {}
+    n, compteur, series = 0, {}, {}
+
+    def _serie(symbole: str):
+        """Barres du symbole, pour que la fermeture capture MFE/MAE.
+
+        Avant, ce chemin passait `None` : TOUTE fermeture reconstruite naissait sans
+        excursion. Mesuré le 10/09 — 36 des 40 positions closes venaient d'ici, d'où
+        une capture du potentiel mesurable sur 4 lignes seulement. Sans haut/bas,
+        `serie_pour_mfe` rend `None` et on retombe simplement sur l'ancien
+        comportement : mieux vaut pas de MFE qu'une MFE minorée.
+        """
+        if symbole not in series:
+            try:
+                from packages.data.price_loader import load_bars
+                from packages.research.excursions import serie_pour_mfe
+                series[symbole] = serie_pour_mfe(load_bars(symbole, years=3))
+            except Exception:  # noqa: BLE001 — un symbole muet n'arrête pas la chaîne
+                series[symbole] = None
+        return series[symbole]
+
     for f in fermetures:
         lot, q = f["lot"], f["qty"]
         ts = _horodatage(f["date"])
@@ -259,10 +278,10 @@ def _appliquer(journal, fermetures: list, ids_vivants: set) -> int:
         est_vivant = lot.id.split("-R")[0] in ids_vivants
         total = float(lot.qty)
         if q >= total - 1e-9:
-            rec = _close_record(lot, total, f["prix"], ts, None)
+            rec = _close_record(lot, total, f["prix"], ts, _serie(lot.instrument))
         else:
             compteur[lot.id] = compteur.get(lot.id, 0) + 1
-            rec = _close_record(lot, q, f["prix"], ts, None,
+            rec = _close_record(lot, q, f["prix"], ts, _serie(lot.instrument),
                                 split_id=f"{lot.id}-R{compteur[lot.id]}")
             journal.append(dataclasses.replace(lot, qty=round(total - q, 10)),
                            legacy=not est_vivant)

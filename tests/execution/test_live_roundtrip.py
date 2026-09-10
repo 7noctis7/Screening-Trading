@@ -39,7 +39,11 @@ def test_full_close_sets_exit_and_pnl(tmp_path):
     assert open_lots(j) == []
     t = [x for x in j.all(legacy=False) if x.id == "L1"][0]
     assert t.exit_price == 110.0 and t.exit_ts is not None
-    assert abs(t.pnl_net - 100.0) < 1e-6          # (110-100) × 10
+    assert abs(t.pnl_gross - 100.0) < 1e-6        # (110-100) × 10, avant frais
+    # La commission estimée du barème (réglementaire SEC/TAF à la vente) creuse
+    # l'écart : `pnl_net` ne peut plus égaler `pnl_gross` (ADR-0131).
+    assert t.pnl_net < t.pnl_gross
+    assert t.fees_source == "estimated"
     assert abs(t.pnl_pct - 0.10) < 1e-9
     assert t.is_win is True and t.duration_s == 4 * 86400.0
     assert t.features_snapshot == {"rank_score": 1.5}   # features de décision intactes
@@ -144,3 +148,65 @@ def test_qty_reelle_nulle_ou_negative_retombe_sur_le_notional(tmp_path):
     n = close_sells(j, [{"symbol": "AAPL", "venue": "Alpaca", "exit_price": 100.0,
                          "notional": 1000.0, "qty_reelle": 0.0}])
     assert n == 1 and open_lots(j) == []
+
+
+def test_le_jour_d_ENTREE_est_exclu_de_la_MFE():
+    """Le cron achète une heure avant la clôture : le plus haut du jour d'entrée est
+    presque toujours antérieur à l'achat. L'inclure surestime la MFE, donc sous-estime
+    la capture — dans le sens exact qui fabriquerait « nos sorties rendent les gains ».
+
+    Mesuré le 10/09 : capture d'une sortie à +1 % — 12 % avec le jour d'entrée,
+    67 % sans. Un facteur 5, du même ordre que le signal cherché."""
+    e = datetime(2026, 8, 3, 19, 5, tzinfo=timezone.utc)     # 15h05 ET
+    x = datetime(2026, 8, 4, 19, 5, tzinfo=timezone.utc)
+    serie = [{"t": "2026-08-03", "h": 108.0, "l": 99.0},     # +8 % LE MATIN, hors portée
+             {"t": "2026-08-04", "h": 101.5, "l": 97.0}]
+    fe, ae = mfe_mae(serie, e, x, 100.0)
+    assert abs(fe - 0.015) < 1e-9, "le haut du jour d'entrée ne doit pas compter"
+    assert abs(ae - (-0.03)) < 1e-9
+
+
+def test_un_aller_retour_INTRADAY_rend_None():
+    """Entrée et sortie le même jour : aucune barre postérieure. Une excursion intraday
+    ne se mesure pas sur des barres quotidiennes — on le dit au lieu de l'inventer."""
+    e = datetime(2026, 8, 3, 14, 0, tzinfo=timezone.utc)
+    x = datetime(2026, 8, 3, 19, 0, tzinfo=timezone.utc)
+    serie = [{"t": "2026-08-03", "h": 108.0, "l": 99.0}]
+    assert mfe_mae(serie, e, x, 100.0) == (None, None)
+
+
+def test_une_MFE_ne_peut_PAS_etre_negative():
+    """« Maximum Favorable Excursion » ne peut pas être défavorable. Le chemin d'un
+    trade commence au prix d'ENTRÉE : l'excursion favorable minimale est zéro.
+
+    Mesuré le 10/09 sur le journal réel : BTC/USDC MFE −0,35 %, LTC/USDC −2,28 %,
+    AVAX/USDC −2,30 %. Le titre avait gappé à la baisse sans jamais revenir — le plus
+    haut des barres postérieures restait sous l'entrée."""
+    e = datetime(2026, 8, 3, tzinfo=timezone.utc)
+    x = datetime(2026, 8, 5, tzinfo=timezone.utc)
+    serie = [{"t": "2026-08-04", "h": 97.0, "l": 93.0},     # jamais au-dessus de 100
+             {"t": "2026-08-05", "h": 98.0, "l": 90.0}]
+    fe, ae = mfe_mae(serie, e, x, 100.0)
+    assert fe == 0.0, "le prix n'est jamais remonté : l'excursion favorable est nulle"
+    assert abs(ae - (-0.10)) < 1e-9
+
+
+def test_une_MAE_ne_peut_PAS_etre_positive():
+    """Symétrique : un titre qui ne redescend jamais sous son entrée n'a pas subi
+    d'excursion adverse."""
+    e = datetime(2026, 8, 3, tzinfo=timezone.utc)
+    x = datetime(2026, 8, 5, tzinfo=timezone.utc)
+    serie = [{"t": "2026-08-04", "h": 112.0, "l": 104.0},
+             {"t": "2026-08-05", "h": 115.0, "l": 108.0}]
+    fe, ae = mfe_mae(serie, e, x, 100.0)
+    assert abs(fe - 0.15) < 1e-9
+    assert ae == 0.0
+
+
+def test_les_excursions_normales_ne_sont_PAS_ecrasees():
+    """Garde-fou : le bornage ne doit toucher QUE les cas contradictoires."""
+    e = datetime(2026, 8, 3, tzinfo=timezone.utc)
+    x = datetime(2026, 8, 5, tzinfo=timezone.utc)
+    serie = [{"t": "2026-08-04", "h": 112.0, "l": 95.0}]
+    fe, ae = mfe_mae(serie, e, x, 100.0)
+    assert abs(fe - 0.12) < 1e-9 and abs(ae - (-0.05)) < 1e-9

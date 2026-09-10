@@ -95,6 +95,27 @@ def broker_fee(asset_class: str, notional: float, side: str = "BUY") -> float:
     return commission + slippage + regulatory
 
 
+def broker_charge(asset_class: str, notional: float, side: str = "BUY") -> float:
+    """Ce qui se DÉBITE en plus du prix : commission + réglementaire. **Sans slippage.**
+
+    `broker_fee` rend le coût total attendu, slippage compris — utile pour un backtest
+    qui décide d'un prix d'exécution. Ici on estime ce qu'un courtier PRÉLÈVE une fois
+    le prix obtenu : le slippage est déjà dans ce prix, l'ajouter le compterait deux
+    fois (même règle que `Fill.charge`).
+
+    Un notionnel nul ne facture rien : le minimum par ordre s'applique à un ordre qui a
+    eu lieu, pas à une ligne vide.
+    """
+    n = abs(float(notional or 0.0))
+    if n <= 0:
+        return 0.0
+    b = BROKER_FEES.get(broker_for(asset_class), BROKER_FEES["alpaca"])
+    commission = max(float(b.get("min_fee", 0.0)), n * b["commission_bps"] / 1e4)
+    regulatory = (n * float(b.get("reg_bps", 0.0)) / 1e4
+                  if str(side).upper() == "SELL" else 0.0)
+    return commission + regulatory
+
+
 def broker_assumptions() -> list[dict]:
     """Table des barèmes courtiers (pour transparence UI / TCA)."""
     return [{"broker": k, **v, "round_trip_bps": 2 * (v["commission_bps"] + v["slippage_bps"])}

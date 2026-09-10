@@ -24,6 +24,7 @@ from packages.core.models import (
     SignalDirection,
     TradeRecord,
 )
+from packages.execution.fills import charge_du_roundtrip, fill_produit
 from packages.execution.sim_broker import SimBroker
 from packages.risk.engine import RiskEngine
 from packages.storage.journal import TradeJournal
@@ -39,6 +40,7 @@ class _OpenTrade:
     target: float | None
     mfe: float = 0.0
     mae: float = 0.0
+    fill_entree: object = None   # le Fill d'ouverture — porte la commission payée
 
 
 @dataclass
@@ -125,20 +127,33 @@ class BacktestEngine:
         if not decision.approved:
             return
         before = self.broker.position(sym)
+        _n_fills = len(getattr(self.broker, "fills", []))
         self.broker.submit(order)
         pos = self.broker.position(sym)
         if pos is None or pos is before:
             return
-        self._open[sym] = _OpenTrade(sig, pos.avg_price, qty, bar.ts, sig.stop, sig.target)
+        self._open[sym] = _OpenTrade(
+            sig, pos.avg_price, qty, bar.ts, sig.stop, sig.target,
+            fill_entree=fill_produit(self.broker, _n_fills))
 
     def _close(self, sym, price, ts, reason, result) -> None:
         ot = self._open.pop(sym, None)
         if ot is None:
             return
         sell_fill = self.broker.costs.apply_sell(price)
+        _n_fills = len(getattr(self.broker, "fills", []))
+        # Même règle que `fast_swing._close` : le broker encaisse le prix de sortie
+        # journalisé, pas la dernière clôture marquée. Sans ce mark, un stop touché
+        # créditait le cash au cours de clôture de la barre.
+        self.broker.mark(sym, price)
         order = Order(sym, Side.SHORT, ot.qty, OrderType.MARKET, limit_price=price)
         self.broker.submit(order)
+        # `pnl_gross` porte l'écart de prix (slippage inclus : il EST dans les prix de
+        # fill). `pnl_net` en retranche la commission des deux jambes, et elle seule.
+        charge = charge_du_roundtrip(ot.fill_entree,
+                                     fill_produit(self.broker, _n_fills))
         pnl = (sell_fill - ot.entry_price) * ot.qty
+        net = pnl if charge is None else pnl - charge
         risk_per_unit = (ot.entry_price - ot.stop) if ot.stop else None
         r_mult = ((sell_fill - ot.entry_price) / risk_per_unit
                   if risk_per_unit and risk_per_unit > 0 else None)
@@ -150,6 +165,7 @@ class BacktestEngine:
             entry_ts=ot.entry_ts, entry_price=ot.entry_price, avg_price=ot.entry_price,
             exit_ts=ts, exit_price=sell_fill, entry_reason=ot.signal.reason,
             exit_reason=reason, strategy=self.strategy.name, regime=regime_lbl,
-            features_snapshot=dict(ot.signal.features),
-            pnl_net=pnl, pnl_pct=pnl / (ot.entry_price * ot.qty) if ot.qty else 0.0,
-            r_multiple=r_mult, is_win=pnl > 0, mfe=ot.mfe, mae=ot.mae))
+            features_snapshot=dict(ot.signal.features), fees=charge,
+            pnl_gross=pnl, pnl_net=net,
+            pnl_pct=net / (ot.entry_price * ot.qty) if ot.qty else 0.0,
+            r_multiple=r_mult, is_win=net > 0, mfe=ot.mfe, mae=ot.mae))

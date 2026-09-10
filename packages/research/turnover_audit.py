@@ -42,8 +42,21 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 
-_SPLIT = re.compile(r"-X\d+$")
+# DEUX conventions de tranche pour une seule notion : `-X` et `-R`, posées par deux
+# scripts différents (`reconcilier_journal.py:266` pour `-R`, sur une fermeture
+# PARTIELLE). Ne reconnaître que `-X` faisait compter chaque tranche comme une position
+# distincte : mesuré le 10/09 sur le journal réel, 126 lignes concernées, dont un lot
+# soldé en six fois qui pesait six positions avec son gain répété six fois.
+_SPLIT = re.compile(r"-[XR]\d+$")
 _ADMIN = "reconciliation-journal:"
+# DÉTENTION MINIMALE pour que `pnl/mfe` veuille dire quelque chose. Le jour d'entrée est
+# exclu de la MFE (l'exécution tombe en fin de séance : le haut du jour est presque
+# toujours antérieur à l'achat). Une détention d'un jour ne laisse donc qu'UNE barre —
+# celle de la sortie — et le ratio y mesure la position dans le range d'une journée, pas
+# la restitution d'un gain. Mesuré le 10/09 : MFE 0,41 % → capture −220 %, artefact de
+# dénominateur. Trois jours = deux barres pleines après l'entrée, le plus petit
+# échantillon où « passé positif puis reculé » a un sens.
+DETENTION_MIN_CAPTURE_J = 3.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,7 +65,9 @@ class AuditTurnover:
     n_fermetures: int                  # enregistrements clos (tranches comprises)
     n_administratives: int             # fermetures reconstruites après coup
     n_jours_couverts: float
-    frais_totaux: float
+    frais_totaux: float | None         # None = jamais renseigné (≠ zéro mesuré)
+    n_frais_connus: int                # fermetures portant un coût renseigné
+    n_frais_estimes: int               # ... dont estimés depuis un barème (≠ observés)
     duree_mediane_j: float | None
     taux_gain: float | None
     capture_mediane: float | None      # médiane de pnl_pct / mfe, positions mfe > 0
@@ -77,8 +92,9 @@ def _mediane(xs: list[float]) -> float | None:
     return v[m] if n % 2 else (v[m - 1] + v[m]) / 2.0
 
 
-def _lot_origine(identifiant: str) -> str:
-    """`abc-X3` → `abc`. Les tranches d'une même vente partagent une seule entrée."""
+def lot_origine(identifiant: str) -> str:
+    """`abc-X3` ou `abc-R3` → `abc`. Les tranches d'une même vente partagent une
+    seule entrée, donc une seule position."""
     return _SPLIT.sub("", identifiant or "")
 
 
@@ -101,7 +117,7 @@ def _agreger(clos: list) -> list[dict]:
     """Tranches → positions. Rendement pondéré par la quantité, durée la plus longue."""
     par_lot: dict[str, list] = {}
     for t in clos:
-        par_lot.setdefault(_lot_origine(t.id), []).append(t)
+        par_lot.setdefault(lot_origine(t.id), []).append(t)
     positions = []
     for tranches in par_lot.values():
         qtes = [abs(t.qty or 0.0) for t in tranches]
@@ -137,23 +153,34 @@ def auditer(trades: list, *, seulement: str | None = None) -> AuditTurnover:
         pos = [p for p in pos if p["admin"]]
     clos = [t for p in pos for t in p["tranches"]]
     if not clos:
-        return AuditTurnover(0, 0, 0, 0.0, 0.0, None, None, None, 0, frozenset(),
-                             None, None, None, False)
+        return AuditTurnover(0, 0, 0, 0.0, None, 0, 0, None, None, None, 0,
+                             frozenset(), None, None, None, False)
 
     pnls = [p["pnl_pct"] for p in pos if p["pnl_pct"] is not None]
     gains_ = sum(x for x in pnls if x > 0)
     pertes_ = -sum(x for x in pnls if x < 0)
     captures = [p["pnl_pct"] / p["mfe"] for p in pos if p["mfe"] is not None
-                and p["mfe"] > 1e-9 and p["pnl_pct"] is not None]
+                and p["mfe"] > 1e-9 and p["pnl_pct"] is not None
+                and (p["duree_j"] or 0) >= DETENTION_MIN_CAPTURE_J]
     durees = [p["duree_j"] for p in pos if p["duree_j"] is not None]
     tstat, signif = _tstat_vs_zero(pnls)
+    # Un coût n'est MESURÉ que s'il déclare sa source. L'ancien schéma portait
+    # `fees REAL DEFAULT 0` : ces lignes ont un zéro que personne n'a relevé, et sans
+    # cette règle elles s'affichaient « 51/51 renseignées, observées, 0,00 $ » —
+    # la formulation la plus confiante possible pour une donnée absente (10/09).
+    _mesures = [t for t in clos if t.fees is not None and t.fees_source]
+    _connus = len(_mesures)
 
     return AuditTurnover(
         n_positions=len(pos), n_fermetures=len(clos),
         n_administratives=sum(1 for p in pos if p["admin"]),
         n_jours_couverts=round(_jours(min(t.entry_ts for t in clos),
                                       max(t.exit_ts for t in clos)), 1),
-        frais_totaux=round(sum((t.fees or 0.0) + (t.slippage or 0.0) for t in clos), 2),
+        # Le slippage n'entre PAS dans cette somme : il est déjà contenu dans les prix
+        # de fill, donc déjà dans le P&L. L'ajouter compterait deux fois le même coût.
+        frais_totaux=round(sum(t.fees for t in _mesures), 2) if _connus else None,
+        n_frais_connus=_connus,
+        n_frais_estimes=sum(1 for t in _mesures if t.fees_source == "estimated"),
         duree_mediane_j=round(_mediane(durees), 2) if durees else None,
         taux_gain=round(sum(1 for x in pnls if x > 0) / len(pnls), 3) if pnls else None,
         capture_mediane=round(_mediane(captures), 3) if captures else None,
@@ -185,7 +212,20 @@ def rapport(a: AuditTurnover) -> str:
         return ("UNCALIBRATED — aucun round-trip clos. Rien à mesurer : brancher le "
                 "journal RÉEL (Mac mini / VPS) avant toute décision.")
     L = _lignes_comptage(a)
-    L.append(f"Frais + slippage cumulés : {a.frais_totaux:.2f} $.")
+    if a.frais_totaux is None:
+        L.append("Coût d'exécution : UNCALIBRATED — aucune de ces fermetures ne "
+                 "déclare la source de ses frais. Un zéro hérité du schéma n'est pas "
+                 "une mesure.")
+    else:
+        origine = ("ESTIMÉES depuis le barème courtier, non observées"
+                   if a.n_frais_estimes == a.n_frais_connus else
+                   f"dont {a.n_frais_estimes} estimée(s)" if a.n_frais_estimes else
+                   "observées")
+        L.append(f"Commissions cumulées : {a.frais_totaux:.2f} $ "
+                 f"({a.n_frais_connus}/{a.n_fermetures} fermeture(s) renseignée(s), "
+                 f"{origine}).")
+        L.append("  (Le slippage n'y est pas : il est déjà dans les prix de fill, "
+                 "donc déjà dans le P&L — l'ajouter le compterait deux fois.)")
     if a.duree_mediane_j is not None:
         L.append(f"Détention médiane : {a.duree_mediane_j:.1f} jour(s).")
     if a.taux_gain is not None:
@@ -208,11 +248,15 @@ def rapport(a: AuditTurnover) -> str:
     if a.capture_mediane is not None:
         L.append(f"Capture médiane du potentiel (pnl / MFE) : "
                  f"{a.capture_mediane * 100:.0f} % sur {a.n_capture_mesurable} "
-                 "position(s) mesurable(s)"
+                 f"position(s) tenue(s) ≥ {DETENTION_MIN_CAPTURE_J:.0f} jours"
                  + (" — NÉGATIVE : passées en positif puis sorties en perte."
                     if a.capture_mediane < 0 else "."))
     else:
-        L.append("Capture du potentiel : non mesurable (MFE absent).")
+        L.append(f"Capture du potentiel : non mesurable. Il faut une détention d'au "
+                 f"moins {DETENTION_MIN_CAPTURE_J:.0f} jours ET une MFE renseignée — "
+                 "sous ce seuil, une seule barre sépare l'entrée de la sortie et le "
+                 "ratio mesure le range d'une journée, pas la restitution d'un gain. "
+                 "Des barres quotidiennes ne peuvent pas trancher plus fin.")
     strategie = {m for m in a.motifs_de_sortie if not m.startswith(_ADMIN)}
     if len(strategie) <= 1:
         L.append("⚠ Un seul motif de sortie côté système : aucune sortie déclenchée "

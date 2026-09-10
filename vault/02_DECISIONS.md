@@ -2,6 +2,305 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0138 — `*.db` ne matche pas `market.db-wal` : quatre fichiers de données publiés (2026-09-10)
+
+**Constat.** La sortie de `make sync` affichait `M data/market.db-shm` et
+`M data/market.db-wal`. Ces fichiers étaient **suivis par git**, sur un dépôt **public**.
+
+**La cause est un motif de glob.** `.gitignore` porte `*.db` depuis toujours — et
+`*.db` **ne matche pas** `market.db-wal` : le suffixe casse le motif. Quatre sidecars
+SQLite passaient par ce trou (`crypto.db-shm`, `crypto.db-wal`, `market.db-shm`,
+`market.db-wal`), dont deux de 32 Ko.
+
+**Pourquoi ça compte.** Un `-wal` porte les pages écrites et pas encore intégrées à la
+base : c'est de la DONNÉE, pas un artefact vide. Et surtout, `journal.db-wal` — les fills
+RÉELS du courtier, la donnée la plus sensible du dépôt — tombait dans le même trou. Il
+n'était pas suivi par chance, pas par règle.
+
+**Décision.** `*.db-wal`, `*.db-shm`, `*.db-journal` ajoutés au `.gitignore` ;
+`git rm --cached` sur les quatre. Et un test qui lit **l'index git**, pas le disque :
+`tests/test_fichiers_suivis.py` échoue si un fichier de données redevient suivi.
+
+**Ce que ça dit du garde-fou.** `gitleaks` tourne en CI et en pre-commit, et n'a rien vu :
+il cherche des SECRETS, pas des DONNÉES. Le dépôt avait un contrôle pour les clés, aucun
+pour les bases. C'est un utilisateur lisant une sortie de `make sync` qui l'a trouvé — pas
+une automatisation.
+
+## ADR-0137 — Une MFE négative est une contradiction dans les termes (2026-09-10)
+
+**Constat, sur la sortie réelle.** Le comblement crypto rendait des MFE **négatives** :
+BTC/USDC −0,35 %, LTC/USDC −2,28 %, AVAX/USDC −2,30 %. *Maximum Favorable Excursion*
+défavorable — impossible par définition.
+
+**La cause.** `mfe_mae` calcule `max(hauts) / entrée − 1` sur les barres POSTÉRIEURES au
+jour d'entrée (ADR-0134). Si le titre gappe à la baisse et ne revient jamais, le plus
+haut de la fenêtre reste sous le prix d'entrée. Mathématiquement cohérent, **conceptuel-
+lement faux** : j'avais oublié que le **point d'entrée fait partie du chemin du trade**.
+
+**Décision.** MFE bornée à ≥ 0, MAE bornée à ≤ 0. Le chemin commence au prix d'entrée :
+l'excursion favorable minimale est nulle, l'adverse maximale aussi.
+
+**Ce qu'on ne perd pas.** L'information « ce trade n'est jamais repassé au-dessus de son
+entrée » reste lisible dans `MAE` et `pnl_pct`. Elle n'avait pas à être encodée dans un
+champ dont le nom affirme le contraire.
+
+**Effet de bord bienvenu.** `capture = pnl / MFE` était déjà protégée par `mfe > 1e-9` ;
+avec MFE bornée à 0, ces lignes sont désormais écartées pour la BONNE raison — le trade
+n'a jamais été en profit — et non par accident de signe.
+
+## ADR-0136 — « Non vide » n'est pas « exploitable » : 1097 barres inutiles en masquaient 1093 bonnes (2026-09-10)
+
+**Constat.** Deux tentatives successives pour récupérer les MFE crypto n'ont rien changé :
+197 comblés / 102 sans barres, à l'identique. Un diagnostic PAR SYMBOLE a tranché.
+
+```
+AAVE/USDC   AAVE-USD    1097 actions    1093 crypto   h=54.13 l=51.57
+BTC/USDC    BTC-USD     1097 actions    1093 crypto   h=25883.9 l=24930.3
+```
+
+**La base crypto avait la donnée.** `barres_locales` retenait la première source **NON
+VIDE** — or `load_bars` retombe sur le fournisseur en ligne, qui rend `ts/close/volume`
+sans haut ni bas. **1097 barres inutilisables court-circuitaient 1093 lignes exploitables.**
+
+**Décision.** On retient la première source dont on peut réellement TIRER UNE SÉRIE, pas
+la première non vide. `serie_pour_mfe(bars) is not None` devient le critère de choix.
+
+**La leçon, et elle est générale.** J'ai corrigé ce point deux fois à l'aveugle — une
+traduction de symbole, puis un repli sur `crypto.db` — sans jamais mesurer POURQUOI ça
+échouait. Les deux correctifs étaient justes et tous deux inopérants, masqués par un
+troisième défaut en amont. **Un correctif qui ne change pas le chiffre n'est pas un
+correctif : c'est une hypothèse non réfutée.** Le diagnostic par symbole a coûté cinq
+minutes et donné la réponse en une ligne.
+
+**Ce qui reste hors de portée.** 29 lignes sont des allers-retours **intraday** : `None`
+par conception (ADR-0134). Aucune donnée quotidienne ne les rendra mesurables.
+
+## ADR-0135 — La capture n'est pas mesurable sur une détention d'un jour (2026-09-10)
+
+**Constat.** Après exclusion du jour d'entrée (ADR-0134), une détention d'UN jour ne
+laisse plus qu'**une seule barre** dans la fenêtre : celle de la sortie. `MFE` y vaut le
+haut de cette journée, `MAE` son bas. Le ratio `pnl / MFE` mesure alors **la position du
+prix de sortie dans le range d'une journée**, pas la restitution d'un gain.
+
+**Le symptôme, sur données réelles.** STT : MFE 0,41 %, capture **−220 %**. PATH : MFE
+0,86 %, capture **−269 %**. Ces nombres ne disent rien de plus que « le trade a fini
+négatif » — leur magnitude est un artefact de dénominateur.
+
+**Décision.** `DETENTION_MIN_CAPTURE_J = 3.0`. Sous ce seuil, la capture est **écartée**,
+et le rapport dit POURQUOI : « une seule barre sépare l'entrée de la sortie… des barres
+quotidiennes ne peuvent pas trancher plus fin ». Trois jours = deux barres pleines après
+l'entrée, le plus petit échantillon où « passé positif puis reculé » a un sens.
+
+**Ce que ça coûte, et pourquoi c'est juste.** La détention médiane du système est d'UN
+jour : l'essentiel des positions sort donc du périmètre de la capture. C'est la bonne
+réponse. La question « rendons-nous nos gains ? » **n'est pas mesurable** sur cet horizon
+avec des barres quotidiennes — ni par ce code, ni par un autre. Publier un chiffre
+reviendrait à en inventer un.
+
+**Ce qui reste mesurable, et qui est déjà parlant.** Les MAE dépassent les MFE en
+magnitude sur la majorité des lignes de l'aperçu (STT −2,80 vs +0,41 ; TMO −2,52 vs
++0,98 ; PATH −2,86 vs +0,86 ; TFX −4,15 vs +1,42). Ça informe sur **l'entrée**, pas sur la
+sortie — et c'est une piste P0-2 en soi.
+
+**Le trou crypto, comblé.** `load_bars` ne consulte que la base actions
+(`_price_db_path()` ne liste pas `crypto.db`), et `user_analysis._bars_crypto`, qui la
+lit, **ne garde que les clôtures**. Aucune MFE crypto n'était donc calculable. Or
+`read_prices_rows` expose bien `high`/`low` : la donnée était là, personne ne la lisait.
+`barres_locales()` essaie la base actions puis la base crypto, hauts et bas compris.
+
+## ADR-0134 — La MFE incluait un plus haut que la position n'a jamais pu toucher (2026-09-10)
+
+**Constat, sur l'aperçu réel du comblement.** MFE de 0,98 % à 2,26 % sur une détention
+médiane d'**un jour**, avec des captures très négatives (−79 %, −223 %, −210 %). Le
+chiffre était trop beau pour la thèse « nos sorties rendent les gains » — j'ai vérifié la
+mesure avant de la croire.
+
+**Le biais.** `mfe_mae` filtrait les barres **par DATE** : `d0 <= b["t"] <= d1`, où `d0`
+est le JOUR d'entrée. Or l'exécution tombe **une heure avant la clôture** : le plus haut
+de la journée d'entrée est presque toujours ANTÉRIEUR à l'achat — un prix que la position
+n'a jamais pu atteindre.
+
+**Mesuré.** Achat à 100 le jour où le marché avait fait +8 % le matin avant de finir à
++1,5 % : la capture d'une sortie à +1 % passe de **67 % à 12 %**. Un facteur **5**, du
+même ordre de grandeur que le signal cherché. La MFE était surestimée, donc la capture
+sous-estimée — **exactement dans le sens qui fabrique la conclusion attendue**.
+
+**Décision.** Le jour d'entrée est EXCLU : `d0 < b["t"] <= d1`. Le biais restant est
+conservateur (la MFE rate les mouvements post-entrée du jour même, donc la capture est
+plutôt flattée) — c'est le sens qui n'invente pas le défaut qu'on cherche.
+
+**Conséquence assumée.** Un aller-retour intraday rend `None`. Une excursion intraday ne
+se mesure pas sur des barres quotidiennes, et le dire vaut mieux que publier un chiffre
+indéfendable.
+
+**Deux nuisances corrigées au passage.** Les paires crypto (`BTC/USDC`) partaient telles
+quelles chez un fournisseur d'actions : requête vouée à l'échec, page d'erreur HTML dans
+le terminal, et 77 lignes « sans barres ». Traduites (`BTC-USD`). Et le script batch
+tait désormais les journaux réseau, comme ses deux frères.
+
+**Leçon de méthode.** Un chiffre qui CONFIRME l'hypothèse mérite la même défiance qu'un
+chiffre qui la contredit. Ici, l'aperçu allait dans le sens attendu — c'est pour ça qu'il
+fallait remonter à la définition.
+
+## ADR-0133 — P0-2 : sans MFE, aucune recherche de sortie n'est possible (2026-09-10)
+
+**Constat.** L'audit de turnover annonce « capture médiane du potentiel : **mesurable sur
+4 position(s)** » alors que 40 sont closes. Cause trouvée dans le code :
+`scripts/reconcilier_journal.py:262` et `:265` passaient **`None`** comme série de prix à
+`_close_record`. `mfe_mae` rend alors `(None, None)` — toute fermeture reconstruite naît
+sans excursion. Or 36 des 40 positions viennent de ce chemin.
+
+**Pourquoi c'est bloquant pour P0-2.** On ne peut pas dire qu'un trade a rendu ses gains
+sans savoir combien il en avait. MFE est l'entrée obligatoire de toute recherche de
+sortie : trailing stop, protection des gains, take-profit partiel, time stop. Sans elle,
+il n'y a rien à mesurer et tout à supposer.
+
+**Décision.** `packages/research/excursions.py` : comblement de MFE/MAE sur les trades
+CLOS qui n'en ont pas, depuis la base de prix locale. Une MFE est un **fait sur le chemin
+de prix** entre deux dates — pas une reconstruction de décision, contrairement à un prix
+de sortie retrouvé après coup. La calculer après coup est donc légitime là où combler un
+prix ne l'était pas.
+
+**Le refus qui compte.** Des CLÔTURES SEULES ne suffisent pas. Le repli yfinance de
+`price_loader` ne rend que `ts/close/volume` : une excursion calculée là-dessus est
+**sous-estimée**, et une MFE minorée fait passer une sortie médiocre pour une bonne —
+exactement l'inverse de ce que P0-2 cherche. Sans haut/bas : `None`.
+
+**Deux garde-fous supplémentaires.** Une mesure existante n'est **jamais réécrite** (elle
+vient peut-être d'une source intraday plus fine). Un trade **ouvert** est ignoré : sa
+fenêtre n'est pas close, son excursion n'est pas finale.
+
+**Câblage.** `reconcilier_journal` fournit désormais une série : les futures fermetures
+reconstruites captureront leur MFE. Un test de source interdit le retour à `None` —
+vérifié par sabotage.
+
+**Conséquences.** `make combler-mfe` (simulation par défaut, sauvegarde horodatée, écrit
+UNIQUEMENT `mfe`/`mae` — jamais un prix, une quantité, une date ou un P&L). Reste à
+mesurer sur le journal réel : c'est la première fois que la capture du potentiel sera
+lisible sur autre chose que 4 lignes.
+
+## ADR-0132 — « -R » ne voulait pas dire réparation : l'outil de déduplication est retiré (2026-09-10)
+
+**Constat.** `make dedupliquer-journal` a rendu **126 lignes ambiguës, 0 supprimable** sur
+le journal réel. Les identifiants n'étaient pas ceux que j'attendais : `C-AAVE-R1`,
+`C-BTC-10f5f006-R1` — préfixe `C-`, pas `P-`.
+
+**La lecture du code tranche.** `reconcilier_journal.py:266` pose
+`split_id=f"{lot.id}-R{compteur}"` sur une fermeture **PARTIELLE**, et réinjecte le reste
+du lot. `-R` signifie **reste**, pas réparation : c'est une TRANCHE, exactement au même
+titre que `-X`. J'avais bâti l'ADR-0131 sur une hypothèse jamais vérifiée.
+
+**Ce qui a bien fonctionné.** La règle fail-closed a refusé les 126 suppressions parce
+que l'économie diffère d'une tranche à l'autre. Elle a protégé des données réelles d'un
+outil construit sur une prémisse fausse. C'est le seul motif pour lequel ce chantier n'a
+rien détruit.
+
+**Décision.** `packages/research/deduplication.py`, son script, ses tests et la cible
+`make dedupliquer-journal` sont **supprimés**. Un outil qui propose de supprimer des
+lignes légitimes finit par être lancé avec `--appliquer`. L'avertissement « suffixe de
+réparation » de `turnover_audit` disparaît pour la même raison : un faux positif pousse
+à détruire.
+
+**Le vrai défaut, et son remède inverse.** Les tranches `-R` n'étaient pas regroupées :
+`_SPLIT` ne reconnaissait que `-X\d+`. Elles comptaient donc comme des positions
+distinctes dans l'expectancy, le taux de gain et le profit factor — un lot soldé en six
+fois pesait six positions avec son gain répété six fois. `_SPLIT` devient `-[XR]\d+$`.
+
+**Et la mesure de slippage.** Les tranches héritent du prix d'entrée ET du
+`decision_price` de leur lot parent (`dataclasses.replace` les recopie) :
+`measured_slippage` comptait le même fill N fois. Corrigé — **une observation par
+événement d'entrée**, via `lot_origine()`, désormais publique et unique dans le dépôt.
+
+**Ce que ça dit du chiffre d'hier.** Les « 15 doublons sur 66 » n'étaient pas des
+doublons : c'étaient des tranches d'un même lot. Le biais était réel (+11,97 vs −0,16 bps)
+mais sa cause était une erreur de COMPTAGE, pas une corruption de données. Le journal
+était sain depuis le début.
+
+## ADR-0131 — Estimation marquée, déduplication fail-closed, et un bug que j'avais inventé (2026-09-10)
+
+**1. Le bug d'equity que j'avais signalé n'existe pas.** J'avais consigné en ADR-0130 que
+`fast_swing` ne rafraîchissait pas les marks des positions ouvertes. Faux :
+`fast_swing.py:182-185` marque TOUS les symboles à CHAQUE barre (`# mark-to-market`), et
+`engine.py:79` fait de même. J'avais lu la boucle de sortie sans voir celle qui la
+précède. Consigné ici pour que l'erreur ne survive pas dans le vault.
+
+**2. Mais en le vérifiant, un vrai défaut.** `_sortie` rend un prix de STOP ou de CIBLE ;
+`broker.submit` encaisse au dernier prix MARQUÉ, c'est-à-dire la clôture de la barre.
+Mesuré : journal à 95, broker à 80 — **150 $ d'écart sur un seul trade, à coûts nuls**.
+La courbe d'equity et le journal décrivaient deux sorties différentes, sur toute sortie
+par stop ou cible, c'est-à-dire la majorité. Corrigé par un `broker.mark(sym, price)`
+avant la soumission, dans les deux moteurs.
+
+**3. Commission estimée, et MARQUÉE.** Le courtier ne publie pas ses frais dans ce que
+lit `run_live`. Écrire `0.0` est un mensonge, `None` un silence. Décision : écrire
+l'estimation du barème documenté **avec `fees_source="estimated"`**. Nouveau champ au
+domaine et au schéma, avec une migration additive (`ALTER TABLE … ADD COLUMN`) — le
+schéma ne faisait que `CREATE TABLE IF NOT EXISTS`, donc un INSERT citant une colonne
+neuve aurait cassé la journalisation sur la base existante, silencieusement.
+
+`broker_charge()` estime **commission + réglementaire, sans slippage** : c'est
+`Fill.charge` appliqué à l'estimateur. Le réglementaire SEC/TAF ne frappe qu'à la vente.
+
+**Limite connue et assumée.** `broker_for("crypto")` rend BitMart (25 bps) alors que le
+crypto est tradé sur Alpaca. L'estimation crypto est donc **majorée** — 50 bps
+aller-retour au lieu du taux réel. Elle est marquée `estimated` précisément pour être
+révisable : le barème d'Alpaca-crypto manque à `BROKER_FEES`, et je ne l'invente pas.
+
+**4. Déduplication FAIL-CLOSED.** Une ligne `-R\d+` n'est supprimable QUE si la ligne de
+base existe ET que l'économie est identique (quantité, prix, dates, sortie). Tout écart
+→ `ambigus`, conservé. Simulation par défaut, sauvegarde horodatée avant écriture. Deux
+réparations « évidentes » avaient déjà fabriqué des pertes sur ce projet le 09/09 ; la
+règle est écrite pour que ça ne se reproduise pas.
+
+**Conséquences.** `pnl_net` de production retranche désormais la commission estimée : le
+réalisé affiché baisse. Négligeable en actions (0,3 bps aller-retour), **significatif en
+crypto** tant que le barème n'est pas corrigé. 2 531 tests au vert.
+
+## ADR-0130 — P0-1 : le coût d'exécution n'avait nulle part où vivre (2026-09-09)
+
+**Constat.** `SimBroker.submit` calculait le prix d'exécution ET la commission, les
+appliquait au cash, puis **les jetait** : il retournait l'`Order` reçu. Aucun objet ne
+portait le résultat économique d'un ordre. Conséquence en cascade : `TradeRecord.fees`
+valait `0.0` par défaut, la production n'y touchait jamais, et `make turnover-audit`
+annonçait « 0,00 $ » de frais — indiscernable d'un coût réellement nul.
+
+**Ce que la mesure a corrigé dans mon diagnostic.** J'avais conclu que « le coût du
+turnover n'est pas compté ». Faux pour le slippage : `entry_price` et `exit_price` sont
+des prix de FILL dans les deux chemins, donc le slippage est déjà dans le P&L. La seule
+vraie fuite est **la commission** — débitée du cash du broker, jamais imputée au trade.
+Le P&L journalisé était brut de commission sous le nom `pnl_net`.
+
+**Décision.** Un objet `Fill` dans le domaine (le maillon manquant), et `fills.py` comme
+UNIQUE convention de calcul du shortfall. La règle centrale est encodée dans
+`Fill.charge` :
+
+    pnl_net = pnl_gross − commission − fees_other      ← jamais − shortfall_amount
+
+Le shortfall est **descriptif** : il documente un coût déjà payé dans le prix. Le
+retrancher le compterait deux fois — sur les 51 fills du journal réel qui portent les
+deux prix, c'est 51 occasions de faire l'erreur.
+
+**Inconnu ≠ zéro.** `TradeRecord.fees` et `slippage` passent à `None` par défaut. La
+production les laisse non renseignés et le DIT ; `turnover_audit` rapporte
+`UNCALIBRATED` au lieu de publier un coût nul. `shortfall_bps` vaut `None` sans prix de
+référence — un `0.0` s'y lirait « exécution parfaite ».
+
+**Un détail de modélisation attrapé par son propre test.** `shortfall_amount` doit se
+rapporter au notionnel de **référence**, pas à celui du fill : sur le notionnel du fill,
++5 bps rendait 0,50025 $ au lieu de 0,50 $. L'écart est minuscule, mais un coût qui ne se
+reconstitue pas à la main est un coût invérifiable. Le test avait raison, pas le code.
+
+**Conséquences.** Backtests câblés (`fast_swing`, `engine`) : `pnl_gross` et `pnl_net`
+distincts, `fees` renseigné, `is_win` et `pnl_pct` calculés sur le NET. Les chiffres des
+backtests baissent — c'est le signe que la correction fonctionne. Trois gardes vérifiées
+par sabotage : remettre `fees=0.0`, rajouter le slippage aux frais, ou le retrancher du
+P&L de production font chacun tomber un test.
+
+**Hors périmètre, relevé.** `SimBroker.equity()` marque les positions ouvertes au dernier
+prix VU, jamais rafraîchi dans la boucle de sortie de `fast_swing` — l'equity de backtest
+est donc marquée à des prix périmés. Découvert en instrumentant les coûts. Impact
+potentiel sur le vol-targeting ; à traiter séparément.
+
 ## ADR-0129 — Un Δ qui soustrayait deux paniers différents (2026-09-09)
 
 **Constat, sur la sortie réelle du VPS.** Premier appel de `/api/portfolio/sentiment` avec

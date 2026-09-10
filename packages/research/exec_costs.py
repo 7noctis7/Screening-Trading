@@ -19,11 +19,19 @@ def measured_slippage(journal, *, min_n: int = 20) -> dict:
         {available, n, median_bps, mean_bps, p90_bps, worst_bps} ou
         {available: False, status: "UNCALIBRATED", n} si l'échantillon est insuffisant.
     """
-    obs: list[float] = []
+    # UNE observation par ÉVÉNEMENT D'ENTRÉE, pas par enregistrement. Les tranches
+    # d'une vente (`-X1`, `-R1`, …) héritent du prix d'entrée et du `decision_price`
+    # de leur lot parent (`dataclasses.replace` les recopie) : les compter séparément
+    # comptait le même fill N fois. Mesuré le 10/09 sur le journal réel — le slippage
+    # moyen passait de −0,16 à +11,97 bps sur la foi d'un lot soldé en six fois.
+    from packages.research.turnover_audit import lot_origine
+
+    par_lot: dict[str, float] = {}
     for t in journal.all(legacy=False):
         dp = (t.features_snapshot or {}).get("decision_price")
         if dp and dp > 0 and t.entry_price > 0:
-            obs.append((t.entry_price / dp - 1.0) * 10_000)
+            par_lot[lot_origine(t.id)] = (t.entry_price / dp - 1.0) * 10_000
+    obs = list(par_lot.values())
     n = len(obs)
     if n < min_n:
         return {"available": False, "status": "UNCALIBRATED", "n": n, "min_n": min_n,
