@@ -1,5 +1,36 @@
 # 04 — JOURNAL
 
+## Session 2026-09-10 (3ᵉ) — Le regroupement fait tomber le chiffre qui flattait
+
+**Mesuré sur le journal réel, après regroupement des tranches :**
+
+| | avant | après |
+|---|---:|---:|
+| positions closes | 46 | **40** |
+| rendement moyen / position | **+1,26 %** | **+0,03 %** |
+| profit factor | 1,97 | **1,03** |
+| t-stat | +0,91 | +0,04 |
+
+Le « +1,26 % par position » n'existait pas : chaque tranche portait le `pnl_pct` du LOT
+ENTIER, donc un lot gagnant vendu en six fois comptait six fois son gain. Regroupé, il
+reste +0,03 % — indistinguable de zéro, et le t-stat le confirme.
+
+**Un mensonge de plus, débusqué par la même sortie.** L'audit annonçait
+« Commissions cumulées : 0.00 $ (51/51 fermeture(s) renseignée(s), **observées**) ». Ces
+51 lignes datent de l'ancien schéma (`fees REAL DEFAULT 0`) : le zéro est un défaut de
+colonne, jamais un relevé. Ma migration avait bien mis le nouveau défaut à NULL sans
+retoucher l'existant, et `fees_source` vide se lisait « observé » par omission — la
+formulation la plus confiante possible pour une donnée absente.
+
+**Règle posée :** un coût n'est MESURÉ que s'il déclare sa source. Sans `fees_source`, la
+valeur est ignorée quelle qu'elle soit, et l'audit rend UNCALIBRATED.
+
+**Note de méthode.** Deux de mes propres tests supposaient qu'un `fees` suffisait. J'ai
+corrigé le fixture, pas la règle : le fixture représente un trade MESURÉ, il doit donc
+déclarer sa source.
+
+**Mesuré.** 2 530 passés, 7 ignorés.
+
 ## Session 2026-09-10 (2ᵉ) — Le journal était sain, c'est mon comptage qui ne l'était pas
 
 **Fait.** Retrait de l'outil de déduplication (module, script, tests, cible `make`) et

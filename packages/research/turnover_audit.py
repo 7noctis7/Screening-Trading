@@ -155,7 +155,12 @@ def auditer(trades: list, *, seulement: str | None = None) -> AuditTurnover:
                 and p["mfe"] > 1e-9 and p["pnl_pct"] is not None]
     durees = [p["duree_j"] for p in pos if p["duree_j"] is not None]
     tstat, signif = _tstat_vs_zero(pnls)
-    _connus = sum(1 for t in clos if t.fees is not None)
+    # Un coût n'est MESURÉ que s'il déclare sa source. L'ancien schéma portait
+    # `fees REAL DEFAULT 0` : ces lignes ont un zéro que personne n'a relevé, et sans
+    # cette règle elles s'affichaient « 51/51 renseignées, observées, 0,00 $ » —
+    # la formulation la plus confiante possible pour une donnée absente (10/09).
+    _mesures = [t for t in clos if t.fees is not None and t.fees_source]
+    _connus = len(_mesures)
 
     return AuditTurnover(
         n_positions=len(pos), n_fermetures=len(clos),
@@ -164,10 +169,9 @@ def auditer(trades: list, *, seulement: str | None = None) -> AuditTurnover:
                                       max(t.exit_ts for t in clos)), 1),
         # Le slippage n'entre PAS dans cette somme : il est déjà contenu dans les prix
         # de fill, donc déjà dans le P&L. L'ajouter compterait deux fois le même coût.
-        frais_totaux=(round(sum(t.fees for t in clos if t.fees is not None), 2)
-                      if _connus else None),
+        frais_totaux=round(sum(t.fees for t in _mesures), 2) if _connus else None,
         n_frais_connus=_connus,
-        n_frais_estimes=sum(1 for t in clos if t.fees_source == "estimated"),
+        n_frais_estimes=sum(1 for t in _mesures if t.fees_source == "estimated"),
         duree_mediane_j=round(_mediane(durees), 2) if durees else None,
         taux_gain=round(sum(1 for x in pnls if x > 0) / len(pnls), 3) if pnls else None,
         capture_mediane=round(_mediane(captures), 3) if captures else None,
@@ -200,8 +204,9 @@ def rapport(a: AuditTurnover) -> str:
                 "journal RÉEL (Mac mini / VPS) avant toute décision.")
     L = _lignes_comptage(a)
     if a.frais_totaux is None:
-        L.append("Coût d'exécution : UNCALIBRATED — l'exécution n'a renseigné aucun "
-                 "frais sur ces fermetures. Un champ vide n'est pas un coût nul.")
+        L.append("Coût d'exécution : UNCALIBRATED — aucune de ces fermetures ne "
+                 "déclare la source de ses frais. Un zéro hérité du schéma n'est pas "
+                 "une mesure.")
     else:
         origine = ("ESTIMÉES depuis le barème courtier, non observées"
                    if a.n_frais_estimes == a.n_frais_connus else

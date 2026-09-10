@@ -10,14 +10,18 @@ _T0 = datetime(2026, 8, 1, tzinfo=UTC)
 
 def _trade(i: int, duree_j: float, pnl_pct: float, mfe: float | None, *,
            motif: str = "reconciliation paper (reduce/close)",
-           fees: float = 1.0, tid: str | None = None,
+           fees: float = 1.0, source: str = "estimated", tid: str | None = None,
            qty: float = 1.0) -> TradeRecord:
+    """Un trade MESURÉ par défaut : `fees` accompagné de sa source. Un coût sans source
+    est un zéro hérité du schéma, pas une mesure — les tests qui visent ce cas passent
+    explicitement `source=None`."""
     entry = _T0 + timedelta(days=i)
     exit_ = entry + timedelta(days=duree_j)
     return TradeRecord(
         id=tid or f"t{i}", instrument="QQQ", asset_class=AssetClass.EQUITY,
         venue="Alpaca", side=Side.LONG, qty=qty, entry_ts=entry, entry_price=100.0,
         avg_price=100.0, exit_ts=exit_, exit_price=100.0 * (1 + pnl_pct), fees=fees,
+        fees_source=source,
         slippage=0.0, exit_reason=motif, pnl_pct=pnl_pct, is_win=pnl_pct > 0,
         duration_s=duree_j * 86400.0, mfe=mfe, mae=None,
     )
@@ -178,9 +182,8 @@ def test_rapport_complet_separe_les_blocs():
 # ── P0-1 : un coût jamais renseigné n'est pas un coût nul ───────────────────
 
 def _sans_frais(i: int, tid: str | None = None) -> TradeRecord:
-    """Un trade tel que la PRODUCTION l'écrit : personne n'a renseigné les frais."""
-    t = _trade(i, 1.0, 0.01, 0.02, tid=tid)
-    return dataclasses.replace(t, fees=None, slippage=None)
+    """Un trade dont l'exécution n'a RIEN renseigné : ni valeur, ni source."""
+    return _trade(i, 1.0, 0.01, 0.02, tid=tid, fees=None, source=None)
 
 
 def test_des_frais_jamais_renseignes_rendent_UNCALIBRATED():
@@ -214,17 +217,13 @@ def test_le_slippage_n_est_PAS_ajoute_aux_frais():
 
 def test_une_commission_ESTIMEE_est_annoncee_comme_telle():
     """Un chiffre issu d'un barème ne doit pas se lire comme un relevé de courtier."""
-    t = dataclasses.replace(_trade(0, 1.0, 0.01, 0.02, fees=1.5),
-                            fees_source="estimated")
-    a = auditer([t])
+    a = auditer([_trade(0, 1.0, 0.01, 0.02, fees=1.5)])
     assert a.n_frais_connus == 1 and a.n_frais_estimes == 1
     assert "ESTIMÉES" in rapport(a)
 
 
 def test_une_commission_OBSERVEE_ne_porte_pas_la_reserve():
-    t = dataclasses.replace(_trade(0, 1.0, 0.01, 0.02, fees=1.5),
-                            fees_source="observed")
-    a = auditer([t])
+    a = auditer([_trade(0, 1.0, 0.01, 0.02, fees=1.5, source="observed")])
     assert a.n_frais_estimes == 0
     assert "ESTIMÉES" not in rapport(a) and "observées" in rapport(a)
 
@@ -244,8 +243,10 @@ def test_les_tranches_R_comptent_pour_UNE_position():
 
 def test_les_deux_conventions_de_tranche_se_regroupent_pareil():
     """`-X` et `-R` viennent de deux scripts différents pour la même notion."""
-    mix = [_trade(0, 10, 0.05, None, tid="lot-X1"), _trade(0, 10, 0.05, None, tid="lot-X2"),
-           _trade(1, 10, 0.05, None, tid="autre-R1"), _trade(1, 10, 0.05, None, tid="autre-R2")]
+    mix = [_trade(0, 10, 0.05, None, tid="lot-X1"),
+           _trade(0, 10, 0.05, None, tid="lot-X2"),
+           _trade(1, 10, 0.05, None, tid="autre-R1"),
+           _trade(1, 10, 0.05, None, tid="autre-R2")]
     assert auditer(mix).n_positions == 2
 
 
@@ -254,3 +255,33 @@ def test_une_tranche_ne_declenche_AUCUNE_alerte():
     avertissement faux pousse à supprimer de vraies données."""
     a = auditer([_trade(0, 50, 0.40, None, tid=f"C-AAVE-R{n}") for n in range(1, 4)])
     assert "réparation" not in rapport(a)
+
+
+# ── un zéro hérité de l'ancien schéma n'est pas une mesure ──────────────────
+
+def test_un_zero_SANS_SOURCE_ne_compte_pas_comme_mesure():
+    """Mesuré le 10/09 sur le journal réel : « 51/51 renseignées, observées, 0,00 $ ».
+    Ces lignes datent de l'ancien schéma (`fees REAL DEFAULT 0`) — le zéro est un défaut
+    de colonne, jamais un relevé. Sans `fees_source`, le coût est INCONNU."""
+    vieux = [_trade(i, 1.0, 0.01, 0.02, fees=0.0, source=None) for i in range(3)]
+    a = auditer(vieux)
+    assert a.n_frais_connus == 0
+    assert a.frais_totaux is None
+    assert "UNCALIBRATED" in rapport(a)
+
+
+def test_un_zero_AVEC_source_reste_une_mesure():
+    """Alpaca actions à l'achat : commission réellement nulle, et déclarée."""
+    a = auditer([_trade(0, 1.0, 0.01, 0.02, fees=0.0)])
+    assert a.n_frais_connus == 1 and a.frais_totaux == 0.0
+
+
+def test_un_melange_ancien_nouveau_ne_compte_que_le_nouveau():
+    """Le journal réel sera longtemps hybride : anciennes lignes muettes, nouvelles
+    marquées. Le compteur doit dire la vérité sur la PART réellement mesurée."""
+    ancien = _trade(0, 1.0, 0.01, 0.02, fees=0.0, source=None)
+    neuf = _trade(1, 1.0, 0.01, 0.02, fees=2.5)
+    a = auditer([ancien, neuf])
+    assert a.n_frais_connus == 1 and a.n_frais_estimes == 1
+    assert a.frais_totaux == 2.5
+    assert "1/2" in rapport(a)
