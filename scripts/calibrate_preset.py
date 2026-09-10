@@ -16,8 +16,9 @@ sys.path.insert(0, str(ROOT))
 
 
 def main() -> None:
+    from datetime import timezone
     from apps.api.snapshot import (_HISTORY_DAYS, _fundamentals_section, _load_prices,
-                                   _seed_universe, _sector_of, datetime, timedelta, timezone)
+                                   _seed_universe, _sector_of, datetime, timedelta)
     from packages.backtest.calibrate import calibrate_preset
 
     instruments = _seed_universe()

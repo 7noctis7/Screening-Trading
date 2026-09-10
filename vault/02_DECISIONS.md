@@ -2,6 +2,38 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0139 — Treize commandes mortes, dont l'entraînement du modèle (2026-09-10)
+
+**Constat.** `make preset-lab` lève `ImportError: cannot import name 'timezone' from
+'apps.api.snapshot'`. Le nom a disparu au commit **2b37ba8**, lors d'une modernisation
+`timezone.utc` → `UTC`. Ce n'est pas une régression de cette session.
+
+**L'étendue.** Treize scripts importaient des noms **stdlib** *à travers*
+`apps.api.snapshot` — un ré-export implicite que rien ne déclare et que rien ne protège.
+Treize cibles `make` levaient donc `ImportError` au premier appel :
+`preset-lab`, `calibrate-preset`, `ledger-sweep`, `crypto-core`, `screen-niche`,
+`ingest-mktcap`, `backtest-ml`, `backtest-breakout`, `backtest-earnings`,
+`backtest-megacap`, `backtest-sentiment`, `backtest-weighting`, et **`train`**.
+
+**Le plus grave.** `cron_daily.sh:23` lance `python scripts/train_model.py || true`. Le
+`|| true` avale l'échec : **le modèle ML n'était plus réentraîné**, et le cron ne l'a
+jamais signalé. Un échec silencieux dans une chaîne quotidienne est pire qu'un échec
+bruyant — il produit un système qui *paraît* tourner.
+
+**Décision.** Les noms stdlib s'importent de `datetime`, pas d'un module applicatif.
+Correction sur les treize.
+
+**La garde qui compte, et elle est générale.** `tests/scripts/test_imports_snapshot.py`
+lit la SOURCE de chaque script, extrait les noms importés de `apps.api.snapshot`
+(imports différés compris) et vérifie que le module les expose vraiment. Il ne teste pas
+ce que les scripts font — il teste **qu'ils démarrent**. Un garde-fou du garde-fou
+échoue si le repérage cesse de trouver ses cibles.
+
+**Ce que ça dit du dispositif.** 2 559 tests passaient au vert pendant que treize
+commandes étaient mortes. Les tests couvraient les MODULES, jamais le fait qu'un script
+puisse s'importer. La dette de câblage a un symétrique : du code atteignable qui ne
+démarre pas.
+
 ## ADR-0138 — `*.db` ne matche pas `market.db-wal` : quatre fichiers de données publiés (2026-09-10)
 
 **Constat.** La sortie de `make sync` affichait `M data/market.db-shm` et

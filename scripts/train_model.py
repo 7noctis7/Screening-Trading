@@ -33,8 +33,10 @@ def main() -> None:
         for p in models.glob("ml_*.pkl"):
             p.unlink()
 
+    from datetime import timezone
+
     from apps.api.snapshot import (_HISTORY_DAYS, _load_prices, _ml_section, _sector_of,
-                                   _seed_universe, datetime, timedelta, timezone)
+                                   _seed_universe, datetime, timedelta)
     instruments = _seed_universe()
     sector_of = {m["symbol"]: _sector_of(m) for m in instruments}
     names = {m["symbol"]: m.get("name", m["symbol"]) for m in instruments}

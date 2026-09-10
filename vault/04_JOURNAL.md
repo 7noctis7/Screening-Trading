@@ -1,5 +1,33 @@
 # 04 — JOURNAL
 
+## Session 2026-09-10 (10ᵉ) — Treize commandes mortes, dont `make train`
+
+**Trouvé en lançant `make preset-lab`** : `ImportError: cannot import name 'timezone'
+from 'apps.api.snapshot'`. Le nom a disparu au commit **2b37ba8** (modernisation
+`timezone.utc` → `UTC`) — pas une régression de cette session.
+
+**Treize scripts** importaient des noms **stdlib** à travers `apps.api.snapshot`, un
+ré-export implicite que rien ne déclare. Treize cibles `make` levaient `ImportError` au
+premier appel : `preset-lab`, `calibrate-preset`, `ledger-sweep`, `crypto-core`,
+`screen-niche`, `ingest-mktcap`, les six `backtest-*`, et **`train`**.
+
+**Le plus grave.** `cron_daily.sh:23` : `python scripts/train_model.py || true`. Le
+`|| true` avale l'échec — **le modèle ML n'était plus réentraîné**, et rien ne le disait.
+Un échec silencieux dans une chaîne quotidienne produit un système qui *paraît* tourner.
+
+**Corrigé** sur les treize, avec un test qui lit la source de CHAQUE script et confronte
+les noms importés à ce que le module expose. Il ne teste pas ce que les scripts font — il
+teste **qu'ils démarrent**.
+
+**Ce que ça dit du dispositif.** 2 559 tests au vert pendant que treize commandes étaient
+mortes. Les tests couvraient les modules, jamais le démarrage d'un script. La dette de
+câblage a un symétrique : du code atteignable qui ne démarre pas.
+
+**Aussi.** PR #382 fusionnée (`93846da`) : les quatre fichiers de données ont quitté
+`main`. Branche resynchronisée.
+
+**Mesuré.** 2 601 passés, 74 ignorés (+42).
+
 ## Session 2026-09-10 (9ᵉ) — Quatre fichiers de données publiés depuis toujours
 
 **Trouvé dans une sortie de `make sync`**, pas par un garde-fou : `M data/market.db-shm`,

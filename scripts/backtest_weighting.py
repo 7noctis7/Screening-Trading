@@ -25,8 +25,10 @@ def main() -> None:
     ap.add_argument("--band", type=float, default=0.0, help="bande de non-trading (ex. 0.03)")
     a = ap.parse_args()
 
+    from datetime import timezone
+
     from apps.api.snapshot import (_HISTORY_DAYS, _load_prices, _seed_universe, _sector_of,
-                                   datetime, timedelta, timezone)
+                                   datetime, timedelta)
     from packages.backtest.weighting_backtest import weighting_backtest
 
     instruments = _seed_universe()

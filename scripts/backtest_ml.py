@@ -35,8 +35,10 @@ def main() -> None:
     ap.add_argument("--step", type=int, default=21)
     a = ap.parse_args()
 
+    from datetime import timezone
+
     from apps.api.snapshot import (_HISTORY_DAYS, _load_prices, _seed_universe, _sector_of,
-                                   datetime, timedelta, timezone)
+                                   datetime, timedelta)
     from packages.backtest.ml_walkforward import ml_walkforward
 
     instruments = _seed_universe()
