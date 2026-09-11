@@ -1,5 +1,33 @@
 # 04 — JOURNAL
 
+## Session 2026-09-11 (12ᵉ) — Métriques du champion : deux persistées, une refusée
+
+**Reprise après la mesure ATR.** Les 458 journées distinctes au seuil 2,50 confirment que
+la règle n'est pas inerte ; l'effet est un rebond, pas un risque à fuir. Aucun modèle de
+régime n'est activé.
+
+**Artefact ML.** Le payload n'est plus seulement `{"fn": fn}` : il mémorise maintenant
+`auc` (CV purgée OOS) et `brier` brut (split temporel OOS), avec `dsr: null` explicite.
+Le DSR ne peut pas être honnêtement calculé ici : le classifieur produit des labels binaires
+et ne conserve aucune série de rendements OOS. Le dériver de l'AUC rendrait comparable une
+mesure de classement et une mesure de rendement, donc inventerait le garde-fou qu'on cherche
+à brancher. ADR-0142.
+
+**Suite P0.** Construire et persister les rendements OOS du modèle ; seulement alors
+`should_promote` pourra opposer un challenger au champion. Le cron ne passe pas encore par
+ce gate et continue donc de remplacer le modèle sans comparaison.
+
+**Correctif de contrat.** Un ancien payload (sans métriques), un payload malformé, ou un
+échec d'écriture ne peut plus se faire passer pour un champion mesuré : les trois métriques
+sont alors publiées à `null` et `artifact_persisted` porte le résultat de l'écriture. Le
+serving reste disponible, mais une promotion future devra refuser cet état non calibré.
+
+**Promotion câblée, conservatrice.** `make train` compare désormais le candidat au champion
+via `should_promote`. Si l'un des deux n'a pas DSR/Brier/AUC, ou si l'artefact est illisible,
+le candidat est retiré et le champion restauré. Le premier artefact reste un bootstrap ; aucun
+modèle existant ne peut être remplacé tant que les rendements OOS manquent. Deux tests couvrent
+le refus DSR absent et la promotion d'un candidat complet supérieur.
+
 ## Session 2026-09-11 (11ᵉ) — MLOps : ce qui existe déjà, et ce que la mesure interdit
 
 **Demande.** Watchdog (win rate + Sharpe glissants sur 100 trades, alerte à −15 % vs

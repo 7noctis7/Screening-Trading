@@ -719,10 +719,13 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
     _cached = _art.load(_sig)
     if _cached is not None:
         model = _cached[0]
+        _artifact_metrics = _art.metrics_from_payload(_cached[1])
+        _artifact_persisted = True
         _served = "artefact (cron)"
     else:
         model.fit(X, y)                          # entraînement inline (repli sûr)
-        _art.save(_sig, model, {"fn": fn})
+        _artifact_metrics = _art.metrics_payload(dsr=None, brier=None, auc=None)
+        _artifact_persisted = False
         _served = "inline"
     imp = _feat_importance(model, fn, X, y)
     mx = max((v for _, v in imp), default=1.0) or 1.0
@@ -853,11 +856,31 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
     edge_ok = bool(cv_auc is not None and cv_auc >= 0.52)
     edge_msg = ("Edge OOS détecté (AUC ≥ 0.52) — utilisable avec prudence." if edge_ok
                 else "Pas d'edge OOS prouvé (AUC ≤ 0.52) : score indicatif, ne pas surpondérer.")
+    # Le champion doit porter les nombres qui ont motivé son adoption : sans cela,
+    # `should_promote` ne peut comparer qu'un challenger à du vide. DSR reste
+    # explicitement non calibré : ce classifieur produit des labels binaires, pas une
+    # série de rendements OOS à laquelle appliquer un Sharpe déflaté. Le fabriquer à
+    # partir de l'AUC serait une fausse métrique de risque.
+    if _cached is None:
+        _artifact_metrics = _art.metrics_payload(
+            dsr=None,
+            brier=calibration.get("brier_raw") if calibration["available"] else None,
+            auc=cv_auc,
+        )
+        _artifact_persisted = _art.save(
+            _sig, model, {"fn": fn, "metrics": _artifact_metrics}
+        )
+        if not _artifact_persisted:
+            # Ne pas présenter des métriques calculées mais perdues comme celles du
+            # champion : l'écriture est le contrat qui les lie au modèle servi.
+            _artifact_metrics = _art.metrics_payload(dsr=None, brier=None, auc=None)
     return {
         "available": True, "model": model_name, "horizon_days": H,
         "validation": f"CV purgée + embargo (k={n_splits})", "served_from": _served,
         "edge_ok": edge_ok, "edge_message": edge_msg, "auc_floor": 0.52,
         "n_train": int(len(X)), "n_splits": len(aucs), "auc": cv_auc,
+        "artifact_metrics": _artifact_metrics,
+        "artifact_persisted": _artifact_persisted,
         "feature_importance": [{"feature": f, "weight": round(v / mx, 3)} for f, v in imp],
         "top_conviction": [{"symbol": s, "name": names.get(s, ""),
                             "sector": sector_of.get(s, ""), "ml_score": round(p, 3)}

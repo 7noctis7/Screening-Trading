@@ -78,6 +78,44 @@ def _oublier(abri: Path | None) -> None:
     abri.rmdir()
 
 
+def _metrics(path: Path):
+    """Renvoie les métriques comparables d'un artefact, sinon ``None``.
+
+    L'absence d'une métrique requise est un refus de promotion, pas un zéro qui
+    rendrait le challenger artificiellement comparable au champion.
+    """
+    from packages.common import safe_pickle
+    from packages.ml.artifact import metrics_from_payload
+    from packages.ml.promotion import ModelMetrics
+
+    try:
+        record = safe_pickle.load(path)
+        values = metrics_from_payload(record.get("payload"))
+        if any(values[name] is None for name in ("dsr", "brier", "auc")):
+            return None
+        return ModelMetrics(**values)
+    except Exception:  # noqa: BLE001 — artefact illisible = jamais promouvable
+        return None
+
+
+def _decider_promotion(abri: Path | None, candidat: Path) -> tuple[bool, str]:
+    """Compare le candidat au champion homonyme, ou bootstrappe sans incumbent."""
+    if abri is None:
+        return True, "aucun champion — bootstrap de l'artefact"
+    champion = abri / candidat.name
+    champion_metrics, candidat_metrics = _metrics(champion), _metrics(candidat)
+    if champion_metrics is None or candidat_metrics is None:
+        return False, "métriques OOS incomplètes ou artefact illisible — champion conservé"
+    from packages.ml.promotion import should_promote
+    return should_promote(candidat_metrics, champion_metrics)
+
+
+def _retirer_candidat(models: Path) -> None:
+    """Supprime le candidat refusé et son empreinte avant de restaurer le champion."""
+    for f in _artefacts(models):
+        f.unlink()
+
+
 def main() -> None:
     models = ROOT / "models"
     models.mkdir(parents=True, exist_ok=True)
@@ -110,9 +148,17 @@ def main() -> None:
                  else "aucun artefact écrit")
         print(f"⛔ {motif.capitalize()} — champion restauré ({rendus} fichier(s)).")
         raise SystemExit(1)
-    _oublier(abri)                                # le remplaçant est en place
-    print(f"✅ Modèle entraîné · AUC OOS {ml.get('auc')} · edge {'OUI' if ml.get('edge_ok') else 'non'}")
-    print(f"   Artefact : {arts[0] if arts else '(non écrit)'} · servi : {ml.get('served_from')}")
+    promu, raison = _decider_promotion(abri, arts[0])
+    if promu:
+        _oublier(abri)
+    else:
+        _retirer_candidat(models)
+        rendus = _restaurer(abri)
+        arts = list(models.glob("ml_*.pkl"))
+        print(f"⚠️ Candidat refusé — {raison} · champion restauré ({rendus} fichier(s)).")
+    statut = "candidat promu" if promu else "champion conservé"
+    print(f"✅ Modèle entraîné · AUC OOS {ml.get('auc')} · {statut}")
+    print(f"   Artefact actif : {arts[0] if arts else '(non écrit)'}")
     print("   L'API chargera cet artefact (plus de réentraînement par requête).")
 
     # MLOps : tracking MLflow (López de Prado) — hyperparams + métriques + importances + artefact,
@@ -124,7 +170,7 @@ def main() -> None:
         record_run(metrics={"auc_oos": ml.get("auc") or 0.0, "edge_ok": 1.0 if ml.get("edge_ok") else 0.0},
                    params={"model": ml.get("model"), "validation": ml.get("validation"),
                            "n_train": ml.get("n_train"), "data_mode": mode},
-                   status="production-ready" if ml.get("edge_ok") else "candidate")
+                   status="production-ready" if promu and ml.get("edge_ok") else "candidate")
         logged = track_training(
             run_name="train_model",
             params={"model": ml.get("model"), "horizon_days": ml.get("horizon_days"),
@@ -132,9 +178,9 @@ def main() -> None:
                     "n_splits": ml.get("n_splits"), "data_mode": mode},
             metrics={"auc_oos": ml.get("auc") or 0.0, "edge_ok": 1.0 if ml.get("edge_ok") else 0.0},
             importances=imp, artifact=str(arts[0]) if arts else None,
-            tags={"status": "production-ready" if ml.get("edge_ok") else "candidate",
+            tags={"status": "production-ready" if promu and ml.get("edge_ok") else "candidate",
                   "validation": "purged_cv_embargo"})
-        print("   MLflow : " + ("logué (" + ("production-ready" if ml.get("edge_ok") else "candidate") + ")"
+        print("   MLflow : " + ("logué (" + ("production-ready" if promu and ml.get("edge_ok") else "candidate") + ")"
                                  if logged else "ignoré (mlflow absent)"))
     except Exception:  # noqa: BLE001 — le tracking ne doit jamais faire échouer l'entraînement
         pass
