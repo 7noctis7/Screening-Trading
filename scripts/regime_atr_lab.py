@@ -73,6 +73,8 @@ def mesurer(data: dict, seuil: float, horizon: int) -> dict:
     """Agrège les rendements des deux régimes sur tout l'univers."""
     haute: list[float] = []
     basse: list[float] = []
+    haute_d: list[tuple[str, float]] = []
+    basse_d: list[tuple[str, float]] = []
     retenus, ecartes = 0, 0
     ratios_max: list[float] = []
     for barres in data.values():
@@ -81,12 +83,16 @@ def mesurer(data: dict, seuil: float, horizon: int) -> dict:
             continue
         retenus += 1
         d = R.classer([b.high for b in barres], [b.low for b in barres],
-                      [b.close for b in barres], seuil=seuil, horizon=horizon)
+                      [b.close for b in barres], dates=[b.ts for b in barres],
+                      seuil=seuil, horizon=horizon)
         haute.extend(d["haute"])
         basse.extend(d["basse"])
+        haute_d.extend(d["haute_datees"])
+        basse_d.extend(d["basse_datees"])
         if d["ratio_max"] is not None:
             ratios_max.append(d["ratio_max"])
-    v = R.verdict(haute, basse, seuil=seuil)
+    v = R.verdict(haute, basse, seuil=seuil,
+                  haute_datees=haute_d, basse_datees=basse_d)
     v["symboles_retenus"] = retenus
     v["symboles_ecartes"] = ecartes
     v["ratio_max_median"] = R._mediane(ratios_max)
@@ -116,13 +122,25 @@ def rapport(v: dict, horizon: int) -> str:
     ]
     w = v.get("welch") or {}
     if w.get("disponible"):
-        lignes.append(f"  Welch         : t = {w['t']} sur {w['ddl']} ddl"
-                      f" · écart de moyenne {pct(w['ecart_moyen'])}")
+        lignes.append(f"  Welch BRUT    : t = {w['t']} sur {w['ddl']} ddl"
+                      f" · écart de moyenne {pct(w['ecart_moyen'])}"
+                      "  ← compte chaque (symbole, jour) comme un tirage")
+    if v.get("n_jours_haute") is not None:
+        lignes.append(f"  épisodes      : {v['n_jours_haute']} JOURNÉES de haute vol"
+                      f" · {v['n_jours_basse']} de basse vol")
+        wg = v.get("welch_groupe") or {}
+        if wg.get("disponible"):
+            lignes.append(f"  Welch GROUPÉ  : t = {wg['t']} sur {wg['ddl']} ddl"
+                          f" · écart de moyenne {pct(wg['ecart_moyen'])}"
+                          "  ← une observation par journée de marché")
+        else:
+            lignes.append(f"  Welch GROUPÉ  : indisponible ({wg.get('motif')})")
     lignes.append("  fenêtres SANS chevauchement (une observation tous les"
                   f" {horizon} jours) — sinon n serait gonflé d'un facteur {horizon}"
                   " par des jours partagés.")
-    lignes.append("  RESTE une corrélation transversale : les symboles bougent"
-                  " ensemble. Le t est une BORNE HAUTE de l'évidence.")
+    lignes.append("  Un pic d'ATR est un ÉVÉNEMENT DE MARCHÉ : tout l'univers le")
+    lignes.append("  traverse le même jour. Seul le t groupé compte des épisodes ;")
+    lignes.append("  c'est lui, et non le t brut, qui décide du verdict.")
     lignes.append(f"  VERDICT       : {v['statut']} — {v['message']}")
     return "\n".join(lignes)
 

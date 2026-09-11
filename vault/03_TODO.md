@@ -7,11 +7,18 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
-- [ ] **P0 — MESURER la règle de régime ATR avant d'écrire la moindre bascule (11/09,
-      ADR-0141).** `make regime-atr-lab` est livré et testé ; il n'a **pas encore tourné
-      sur les vraies bases** (le conteneur de dev n'a pas les prix). À lancer sur le VPS :
-      `make sync && make regime-atr-lab 1.5 2.0 2.5`. Trois verdicts sur quatre
-      (`REGLE_INERTE`, `UNCALIBRATED`, `NON_ENTRAINABLE`) ferment le sujet sans code.
+- [ ] **P0 — Régime ATR : mesuré une fois, à REMESURER groupé par date (11/09,
+      ADR-0141, ADR-0142).** Premier passage VPS : règle non inerte, effet **inverse de la
+      spec** (haute vol +2,09 % à 5 j contre +0,34 %), monotone sur trois seuils. Mais le
+      t affiché comptait 800 symboles comme 800 tirages ; le regroupement par date est
+      livré et c'est lui qui décide désormais. À relancer :
+      `make sync && make regime-atr-lab ARGS="1.5 2.0 2.5"` — la ligne `épisodes :` dit le
+      nombre réel de journées. Sous 30, le verdict retombe à `UNCALIBRATED` et la question
+      est close sans écrire de bascule.
+- [ ] **P1 — L'effet mesuré n'est pas celui qu'on cherchait (11/09).** La spec voulait un
+      modèle DÉFENSIF en haute volatilité ; la mesure montre un **rebond**. Avant d'en
+      faire quoi que ce soit : vérifier que l'effet ne tient pas à une poignée d'épisodes
+      (mars 2020), et le passer au gate placebo comme `regime-study` / `breakout-study`.
 - [ ] **P0 — `should_promote` ne peut PAS être câblé en l'état (11/09, ADR-0140).** Le
       payload persisté avec l'artefact vaut `{"fn": fn}` : aucune métrique, donc aucun
       champion à opposer au challenger. Persister DSR/Brier/AUC à côté du modèle est le

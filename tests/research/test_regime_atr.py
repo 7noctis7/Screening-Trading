@@ -107,12 +107,52 @@ def test_sous_le_plancher_d_entrainement_le_modele_dedie_est_impossible():
     assert v["entrainable_basse"] is True
 
 
-def test_un_echantillon_suffisant_rend_une_mesure():
-    haute = [0.05, -0.05] * 300
-    basse = [0.01, -0.01] * 300
-    v = R.verdict(haute, basse)
-    assert v["statut"] == "MESURE"
+def test_sans_dates_le_verdict_refuse_de_dire_MESURE():
+    """Le t brut est une borne haute. Il ne doit pas se faire passer pour une mesure."""
+    v = R.verdict([0.05, -0.05] * 300, [0.01, -0.01] * 300)
+    assert v["statut"] == "MESURE_NON_GROUPEE"
+    assert "borne haute" in v["message"]
     assert v["welch"]["disponible"] is True
+
+
+def _datees(valeurs, n_jours):
+    """Répartit `valeurs` sur `n_jours` journées distinctes, en tournant."""
+    return [(f"2020-01-{1 + i % n_jours:02d}", x) for i, x in enumerate(valeurs)]
+
+
+def test_mille_lignes_sur_trois_journees_ne_font_pas_mille_tirages():
+    """Le cas qui compte : un pic de volatilité traversé par tout l'univers.
+
+    Mille observations brutes, trois épisodes. Le t brut « prouve » une séparation ;
+    le regroupement rend les trois journées visibles et le verdict refuse de conclure.
+    """
+    haute, basse = [0.05, -0.03] * 500, [0.01, -0.01] * 500
+    v = R.verdict(haute, basse, haute_datees=_datees(haute, 3),
+                  basse_datees=_datees(basse, 400))
+    assert v["statut"] == "UNCALIBRATED"
+    assert v["n_jours_haute"] == 3
+    assert v["welch"]["disponible"] is True        # le t brut existe bien…
+    assert "pas autant d'épisodes distincts" in v["message"]   # …et ne décide pas
+
+
+def test_assez_de_journees_distinctes_rend_une_mesure():
+    haute, basse = [0.05, -0.03] * 300, [0.01, -0.01] * 300
+    v = R.verdict(haute, basse, haute_datees=_datees(haute, 31),
+                  basse_datees=_datees(basse, 31))
+    assert v["statut"] == "MESURE"
+    assert v["welch_groupe"]["disponible"] is True
+    assert v["n_jours_haute"] == 31
+
+
+def test_le_regroupement_par_date_moyenne_dans_la_journee():
+    obs = [("2020-01-01", 0.10), ("2020-01-01", 0.20), ("2020-01-02", 0.30)]
+    assert R.moyennes_par_date(obs) == [0.15000000000000002, 0.3]
+
+
+def test_un_horodatage_se_reduit_a_sa_journee_quelle_que_soit_sa_forme():
+    from datetime import datetime
+    assert R.jour(datetime(2020, 3, 16, 20, 0)) == "2020-03-16"
+    assert R.jour("2020-03-16T20:00:00Z") == "2020-03-16"
 
 
 def test_welch_refuse_une_variance_nulle_des_deux_cotes():

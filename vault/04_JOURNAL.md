@@ -35,15 +35,31 @@ sur échec, oublié seulement quand le remplaçant est écrit. ADR-0140.
 
 **Livré au lieu de la bascule.** `packages/research/regime_atr.py` + `make regime-atr-lab`
 (cinquième banc) : combien de barres franchissent le seuil, les rendements futurs
-diffèrent-ils (Welch), reste-t-il 500 lignes du côté rare. Quatre verdicts possibles, dont
-trois ferment le sujet. Lecture seule. ADR-0141. **La mesure reste à lancer sur le VPS**
-(ce conteneur n'a pas les bases de prix).
+diffèrent-ils (Welch), reste-t-il 500 lignes du côté rare. Lecture seule. ADR-0141.
+
+**Passé sur la base réelle (VPS, 820 symboles).** La règle n'est **pas inerte** et l'écart
+va **dans le sens inverse de la spec** : la haute volatilité rend PLUS. Schéma monotone
+sur trois seuils — 1,50 → +1,05 % (t 5,72 · n 14 754) · 2,00 → +2,09 % (t 3,81 · n 2 624)
+· 2,50 → +4,14 % (t 3,13 · n 697). L'écart grossit quand le seuil se resserre, le t baisse
+quand n s'effondre : signature d'un effet de fond, pas d'un seuil choisi après coup. Ce
+qui est mesuré est un **rebond de volatilité**, pas un risque à fuir — un modèle « haute
+volatilité » défensif serait à contre-sens.
+
+**Et le banc se trompait sur sa propre force.** Il annonçait son t comme « borne haute »
+à cause de la corrélation transversale, puis rendait quand même `MESURE`. Un
+avertissement à côté d'un verdict qui l'ignore ne protège personne : on lit le chiffre,
+pas la note. Or un pic d'ATR est un **événement de marché** — les 697 observations du
+seuil 2,50 sont quelques journées vues par des centaines de titres. Regroupement par date
+ajouté : on moyenne dans la journée, puis on compare des journées. Le t brut reste affiché
+(l'écart entre les deux mesure ce qu'on aurait cru à tort) mais **le statut suit le
+groupé**, et sous 30 journées distinctes le verdict est `UNCALIBRATED` quel que soit le t
+brut. ADR-0142. **À relancer sur le VPS** pour connaître le nombre réel d'épisodes.
 
 **Prochaine brique, petite.** `should_promote` ne peut pas être câblé tant que le payload
 de l'artefact vaut `{"fn": fn}` : rien n'y joue le champion. Persister les métriques
 (DSR/Brier/AUC) à côté du modèle est un préalable de quelques lignes.
 
-**Mesuré.** 2 622 passés, 74 ignorés (+21).
+**Mesuré.** 2 626 passés, 74 ignorés.
 
 ## Session 2026-09-10 (10ᵉ) — Treize commandes mortes, dont `make train`
 

@@ -2,6 +2,50 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0142 — Le t brut du banc de régime comptait 800 symboles comme 800 tirages (2026-09-11)
+
+**Premier passage sur la base réelle** (VPS, 820 symboles retenus, 821 séries réelles,
+seuil 2,0, horizon 5 j) :
+
+```
+barres        : 2 624 haute vol · 414 482 basse vol · part haute 0,63 %
+ratio max médian par symbole : 2,27
+rendement 5 j moyen : haute +2,091 % · basse +0,342 %
+Welch : t = 3,813 sur 2 625,8 ddl · écart +1,750 %
+```
+
+Et sur trois seuils, un schéma monotone : 1,50 → +1,046 % (t 5,716, n 14 754) ·
+2,00 → +2,091 % (t 3,813, n 2 624) · 2,50 → +4,143 % (t 3,129, n 697). L'écart
+grossit quand le seuil se resserre, le t baisse quand n s'effondre — la signature
+d'un effet de fond plutôt que d'un artefact de seuil choisi après coup.
+
+**Trois choses acquises.** La règle n'est pas inerte (le symbole médian franchit bien
+2,0). Les deux régimes dépassent le plancher de 500 lignes aux trois seuils. Et l'écart
+va dans le sens **inverse de la spec** : la haute volatilité rend PLUS, pas moins — un
+modèle « haute volatilité » conçu comme défensif serait à contre-sens de ce qui est
+mesuré. C'est un rebond de volatilité, pas un risque à fuir.
+
+**Le défaut.** Le banc annonçait son t comme « borne haute » à cause de la corrélation
+transversale, puis rendait quand même `MESURE`. Une mise en garde en toutes lettres à
+côté d'un verdict qui l'ignore, c'est un verdict qui l'ignore : personne ne relit
+l'avertissement une fois le chiffre lu. Or un pic d'ATR n'est pas un accident propre à
+un titre, c'est un **événement de marché** que tout l'univers traverse le même jour. Les
+2 624 observations ne sont pas 2 624 épisodes.
+
+**Décision.** Regroupement par date : on moyenne à l'intérieur de chaque journée, puis
+on compare des journées. Le t brut reste affiché — l'écart entre les deux mesure
+exactement ce qu'on aurait cru à tort — mais **le statut suit le t groupé**. Sous 30
+journées distinctes, le verdict est `UNCALIBRATED` quel que soit le t brut. Sans dates
+fournies, le statut devient `MESURE_NON_GROUPEE` : le banc ne peut plus dire « mesuré »
+sur une statistique qu'il sait gonflée.
+
+**Ce que cela ne corrige toujours pas.** Deux journées consécutives d'une même crise
+restent corrélées. Le t groupé est une borne haute plus serrée, pas une preuve. Le
+verdict reste subordonné aux gates de `vault/15_CERTIFICATION.md`.
+
+**Sabotage.** Remettre le t brut aux commandes fait tomber le test des « mille lignes sur
+trois journées » ; supprimer la moyenne intra-journée en fait tomber trois.
+
 ## ADR-0141 — La bascule de modèle par régime : on mesure la règle avant de l'écrire (2026-09-11)
 
 **Contexte.** Spec reçue : « si l'ATR dépasse 200 % de sa moyenne 30 périodes, basculer
