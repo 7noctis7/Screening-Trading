@@ -20,7 +20,11 @@ python scripts/ingest_prices.py --daily            # backfill incrémental idemp
 python scripts/data_audit.py || true                # audit PwC des bases (complétude/exactitude/PIT)
 python scripts/ingest_delisted.py || true           # met à jour data/delisted.csv (anti-biais survivant)
 # Gate optionnelle : QUANT_AUDIT=strict fait refuser au build tout prix à anomalie CRITIQUE.
-python scripts/train_model.py || true               # ré-entraîne le modèle ML (serving découplé)
+# Le ré-entraînement ne doit pas faire tomber la chaîne (rapports, watchlist, miroirs),
+# mais son échec doit se VOIR : `|| true` seul rendait la panne indétectable dans le log.
+# Le champion précédent est conservé par le script lui-même (cf. `_mettre_de_cote`).
+python scripts/train_model.py \
+  || echo "⚠️  train_model.py EN ÉCHEC — modèle non ré-entraîné, champion précédent conservé"
 python apps/web/preview/build_interactive.py        # régénère le terminal autonome
 python scripts/mcp_populate_overlays.py --offline || true   # cônes VaR/EVT + blackouts → charts (best-effort)
 python -m packages.reporting.obsidian || true               # coffre Obsidian : journal + attribution + post-mortems
