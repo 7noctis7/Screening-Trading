@@ -2,6 +2,78 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0141 — La bascule de modèle par régime : on mesure la règle avant de l'écrire (2026-09-11)
+
+**Contexte.** Spec reçue : « si l'ATR dépasse 200 % de sa moyenne 30 périodes, basculer
+sur `model_high_volatility.pkl` ». Trois constats avant d'écrire quoi que ce soit.
+
+1. `model_high_volatility.pkl` n'existe pas, et aucune ligne du dépôt n'y fait référence.
+2. `artifact.load()` adresse l'artefact par la **forme du jeu de données**
+   (`_sig = (len(X), X.shape[1], len(last), T1.max())`, `snapshot.py:718`), pas par une
+   identité de modèle. Aucun emplacement ne peut recevoir un modèle « de régime ».
+3. `_ml_section` refuse d'entraîner sous **500 lignes** (`snapshot.py:686`). Couper
+   l'échantillon par régime le divise ; le côté rare peut passer sous ce plancher, auquel
+   cas le modèle dédié est **impossible** — et toute la mécanique de bascule serait du
+   code qui ne peut rien charger.
+
+**Ce qui a décidé.** Une règle de seuil non mesurée a deux façons d'échouer qui
+produisent le même code, les mêmes tests verts et le même sentiment de progrès : elle
+ne mord **jamais** (et se lit alors comme « régime géré »), ou elle mord **sans cesse**.
+Dans les deux cas on ne l'apprend qu'après l'avoir câblée. Et le modèle courant passe le
+seuil d'AUC de 0,004 (0,524 contre 0,52) : rien n'autorise à parier qu'il survivrait à
+une division de l'échantillon.
+
+**Décision.** Un banc de mesure d'abord, aucune bascule. `packages/research/regime_atr.py`
+(math pure, sans E/S) + `scripts/regime_atr_lab.py` (`make regime-atr-lab`) répondent dans
+cet ordre : combien de barres franchissent le seuil, les rendements futurs diffèrent-ils
+(Welch, variances inégales assumées), et **reste-t-il 500 lignes du côté rare**. Le
+verdict peut valoir `REGLE_INERTE`, `UNCALIBRATED`, `NON_ENTRAINABLE` ou `MESURE` — trois
+sorties sur quatre ferment le sujet sans qu'une ligne de bascule soit écrite.
+
+**Le piège évité en chemin.** À horizon 5, prendre chaque barre donne cinq fois plus
+d'observations — mais deux barres voisines partagent quatre de leurs cinq jours. Les
+compter comme indépendantes gonfle n, rétrécit l'erreur-type et fabrique un t qui
+« prouve » une séparation jamais mesurée. Les fenêtres ne se chevauchent donc PAS par
+défaut. Il reste la corrélation transversale (les symboles bougent ensemble) : le banc
+le dit, et présente son t comme une **borne haute** de l'évidence.
+
+**Conséquences.** Le banc rejoint `make labs` (cinq bancs). Il est en LECTURE SEULE :
+aucune écriture, aucun ordre, aucune activation. Le classement d'une barre n'utilise que
+l'ATR arrêté à cette barre et le rendement mesuré lui est postérieur — vérifié par
+sabotage (remplacer le rendement futur par le passé fait tomber le test dédié). La
+mesure elle-même reste à lancer sur le VPS : ce conteneur n'a pas les bases de prix.
+
+## ADR-0140 — Le ré-entraînement prenait le modèle de production en otage (2026-09-11)
+
+**Constat, trouvé en remettant `make train` en service (ADR-0139).** `train_model.py`
+supprimait `models/ml_*.pkl` **avant** d'entraîner. La suppression avait sa raison :
+`artifact.load()` sert le cache si l'artefact est là, donc sans purge la commande
+n'entraîne rien et se termine en succès. Mais elle faisait dépendre l'existence du
+champion de la réussite du challenger.
+
+**Le coût, qui n'était pas là où on le croit.** `models/` vide ⇒ `artifact.load()` rend
+`None` ⇒ `_ml_section` retombe sur un entraînement **inline à chaque requête** de l'API.
+Le découplage entraînement/serving, seule raison d'être de l'artefact, disparaît — et le
+chemin de repli est silencieux **par construction** : c'est un repli, il n'a pas vocation
+à crier. Avec `|| true` dans le cron, la panne n'avait aucun témoin. Le symptôme visible
+aurait été « l'API est lente », à plusieurs jours de sa cause.
+
+**Décision.** On DÉPLACE le champion dans `models/.rollback/` — hors du chemin de
+chargement, donc l'entraînement reste bien frais — puis on le restaure sur échec, et on
+ne l'oublie qu'une fois le remplaçant écrit. Un run tué en plein vol laisse l'abri : le
+run suivant le vide avant de commencer. L'échec sort en code 1 (au lieu d'un `return`
+muet), et `cron_daily.sh` l'écrit dans le journal sans faire tomber la chaîne.
+
+**Détail qui a déjà coûté cette semaine.** `ml_*.pkl` ne matche pas `ml_*.pkl.sha256` :
+le glob d'origine laissait des empreintes orphelines. Même piège de globbing que
+`*.db` / `market.db-wal` (ADR-0138), deux jours plus tard, dans un autre fichier.
+
+**Ce que cela ne règle pas.** `packages/ml/promotion.py::should_promote` (champion vs
+challenger, DSR + Brier) n'a **toujours aucun appelant en production**, et il ne peut pas
+en avoir : le payload persisté avec l'artefact vaut `{"fn": fn}` — aucune métrique. Il n'y
+a donc rien qui puisse jouer le rôle du champion dans la comparaison. C'est la prochaine
+brique, et elle est petite.
+
 ## ADR-0139 — Treize commandes mortes, dont l'entraînement du modèle (2026-09-10)
 
 **Constat.** `make preset-lab` lève `ImportError: cannot import name 'timezone' from

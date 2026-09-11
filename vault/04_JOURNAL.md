@@ -1,5 +1,50 @@
 # 04 — JOURNAL
 
+## Session 2026-09-11 (11ᵉ) — MLOps : ce qui existe déjà, et ce que la mesure interdit
+
+**Demande.** Watchdog (win rate + Sharpe glissants sur 100 trades, alerte à −15 % vs
+baseline), détection de régime ATR avec bascule sur `model_high_volatility.pkl`, bot
+d'exécution en boucle async avec hot-swap du `.pkl`. Inventaire avant d'écrire.
+
+**Le plus gros morceau existe.** `paper_watch.drift_report` (le watchdog),
+`garde_swing.regime_marche` (régime, `STATUT = "SHADOW_UNCALIBRATED"`),
+`ml/promotion.should_promote` (gate champion/challenger), `ml/drift.psi`,
+`ml/artifact.save/load`, `risk/atr_stops.atr`, `alerts/handlers`. Aucun de ces modules
+n'est appelé par la chaîne quotidienne : `should_promote` n'a **aucun appelant hors
+tests**, `regime_marche` n'est atteint que par un banc.
+
+**Trouvé en tirant ce fil : `train_model.py` supprimait le modèle AVANT d'entraîner.**
+Tout échec — exception, ou `available: False` sur échantillon insuffisant — laissait
+`models/` vide. L'API retombait alors sur un entraînement **inline à chaque requête** :
+le découplage entraînement/serving disparaissait, en silence, le repli n'ayant pas
+vocation à crier. Corrigé : le champion est déplacé dans `models/.rollback/`, restauré
+sur échec, oublié seulement quand le remplaçant est écrit. ADR-0140.
+
+**Ce que la mesure interdit, aujourd'hui.**
+- `snapshot.py:2072` : `_edge_proven = edge_ok and dsr >= 0.90`, avec DSR ≈ 0 — le code
+  l'écrit lui-même. **Le modèle ne pilote rien** : l'allocation est 100 % risk-parity.
+  Bâtir un watchdog et un hot-swap autour de lui protégerait un composant hors circuit.
+- Le watchdog demande 100 trades glissants. Le journal réel en compte **40** après
+  regroupement des tranches, pour un rendement moyen de **+0,03 %** et un t de **+0,04**.
+  « −15 % vs baseline » appliqué à une baseline nulle n'est pas une règle : c'est du bruit
+  avec un seuil dessus.
+- `model_high_volatility.pkl` n'existe pas, et `artifact.load()` adresse par la **forme du
+  jeu de données**, pas par une identité de modèle : aucun emplacement ne peut le recevoir.
+- `_ml_section` refuse sous 500 lignes. Couper par régime peut rendre le modèle dédié
+  **impossible** — question réglée par la mesure, pas par du code.
+
+**Livré au lieu de la bascule.** `packages/research/regime_atr.py` + `make regime-atr-lab`
+(cinquième banc) : combien de barres franchissent le seuil, les rendements futurs
+diffèrent-ils (Welch), reste-t-il 500 lignes du côté rare. Quatre verdicts possibles, dont
+trois ferment le sujet. Lecture seule. ADR-0141. **La mesure reste à lancer sur le VPS**
+(ce conteneur n'a pas les bases de prix).
+
+**Prochaine brique, petite.** `should_promote` ne peut pas être câblé tant que le payload
+de l'artefact vaut `{"fn": fn}` : rien n'y joue le champion. Persister les métriques
+(DSR/Brier/AUC) à côté du modèle est un préalable de quelques lignes.
+
+**Mesuré.** 2 622 passés, 74 ignorés (+21).
+
 ## Session 2026-09-10 (10ᵉ) — Treize commandes mortes, dont `make train`
 
 **Trouvé en lançant `make preset-lab`** : `ImportError: cannot import name 'timezone'

@@ -1,4 +1,4 @@
-.PHONY: combler-mfe help install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core coeur-multi diag-coeur-qqq index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto diag-creneau diag-pv-latente diag-source-crypto calibrer-seuil ingest-mktcap preset-report calibrate-preset preset-lab alpha-lab screen repro kill-check log-alpha sync-alphas event-study event-study-smid backtest-pead-smid funding-study risk-check sensitivity paper-watch vault-lint certification crypto-cockpit crypto-brief regime-study breakout-study microstructure-poc vault-ask crypto-screen screen-niche list-db live live-sim live-go live-cron-install live-cron-uninstall completer-ouvertures reconcilier-journal annuler-ventes annuler-chronologie annuler-doublons diag-journal diag-surfermeture diag-fusion bench-backend verify-journal reparer-journal banc-swing turnover-audit rdv-paper slippage alerts-test ingest-macro bitmart-check clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull journal-pull journal-push notion-sync contracts supabase-kpis sync labs
+.PHONY: combler-mfe help install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core coeur-multi diag-coeur-qqq index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto diag-creneau diag-pv-latente diag-source-crypto calibrer-seuil ingest-mktcap preset-report calibrate-preset preset-lab alpha-lab screen repro kill-check log-alpha sync-alphas event-study event-study-smid backtest-pead-smid funding-study risk-check sensitivity paper-watch vault-lint certification crypto-cockpit crypto-brief regime-study breakout-study microstructure-poc vault-ask crypto-screen screen-niche list-db live live-sim live-go live-cron-install live-cron-uninstall completer-ouvertures reconcilier-journal annuler-ventes annuler-chronologie annuler-doublons diag-journal diag-surfermeture diag-fusion bench-backend verify-journal reparer-journal banc-swing turnover-audit rdv-paper slippage alerts-test ingest-macro bitmart-check clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull journal-pull journal-push notion-sync contracts supabase-kpis sync labs regime-atr-lab
 # PYTHON : utilise AUTOMATIQUEMENT le venv s'il existe (.venv/bin/python), sinon python3 système.
 # Évite le piège « No module named numpy » quand le venv n'est pas activé. Surchargeable.
 TICKER ?= AAPL
@@ -24,11 +24,14 @@ sync:             ## RÉCUPÈRE la branche de dev sans jamais créer de conflit 
 	@git checkout $(BRANCHE) 2>/dev/null || git checkout -b $(BRANCHE) origin/$(BRANCHE)
 	@git reset --hard origin/$(BRANCHE)
 	@echo "→ $(BRANCHE) alignée sur origin : $$(git log --oneline -1)"
-labs:             ## lance les quatre bancs de mesure (candidats, sorties, dimensionnement, signaux)
+labs:             ## les cinq bancs de mesure (candidats, sorties, taille, signaux, régime ATR)
 	$(PYTHON) scripts/candidats_lab.py
 	$(PYTHON) scripts/sortie_lab.py
 	$(PYTHON) scripts/sizing_lab.py
 	$(PYTHON) scripts/signal_lab.py
+	$(PYTHON) scripts/regime_atr_lab.py
+regime-atr-lab:   ## éprouve la règle « ATR > 200 % de sa moyenne 30 » AVANT toute bascule
+	$(PYTHON) scripts/regime_atr_lab.py $(ARGS)
 test:             ## lance la suite de tests
 	$(PYTHON) -m pytest -q
 coverage:         ## couverture de tests réelle (pytest-cov) → terme + rappel des trous

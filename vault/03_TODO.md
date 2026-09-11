@@ -7,6 +7,28 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+- [ ] **P0 — MESURER la règle de régime ATR avant d'écrire la moindre bascule (11/09,
+      ADR-0141).** `make regime-atr-lab` est livré et testé ; il n'a **pas encore tourné
+      sur les vraies bases** (le conteneur de dev n'a pas les prix). À lancer sur le VPS :
+      `make sync && make regime-atr-lab 1.5 2.0 2.5`. Trois verdicts sur quatre
+      (`REGLE_INERTE`, `UNCALIBRATED`, `NON_ENTRAINABLE`) ferment le sujet sans code.
+- [ ] **P0 — `should_promote` ne peut PAS être câblé en l'état (11/09, ADR-0140).** Le
+      payload persisté avec l'artefact vaut `{"fn": fn}` : aucune métrique, donc aucun
+      champion à opposer au challenger. Persister DSR/Brier/AUC à côté du modèle est le
+      préalable — quelques lignes — à toute promotion gatée. Aujourd'hui le cron remplace
+      le modèle **sans jamais le comparer**.
+- [ ] **P1 — le watchdog demande 100 trades, le journal en a 40 (11/09).** Fenêtre
+      glissante win-rate + Sharpe : n = 40 après regroupement des tranches, rendement
+      moyen +0,03 %, t = +0,04. Un déclencheur « −15 % vs baseline » sur une baseline
+      nulle déclenche sur du bruit. `paper_watch.drift_report` existe et n'est appelé que
+      par `make paper-watch` (manuel, hors cron). À câbler en SHADOW, avec un verdict
+      capable de dire UNCALIBRATED tant que n < fenêtre.
+- [ ] **P2 — boucle d'exécution continue : différée, et pour une raison mesurée (11/09).**
+      La spec demande un bot async qui ne « rate aucun tick ». La production décide **une
+      fois par jour**, une heure avant la clôture NYSE (`cron_live.sh` + `fenetre_execution.py`),
+      et la détention médiane mesurée est de **1 jour**. À cette cadence un hot-swap se
+      réduit à « lire le fichier au début du run ». La boucle continue n'a de sens que si
+      la détention passe en intraday — question ouverte depuis P0-2.
 - [x] **P1 — « Pouls du portefeuille » livré (09/09, ADR-0128).** Sentiment & news du
       portefeuille importé, **pondérés par ses poids**, dans *Analyser mon portefeuille*.
       L'onglet `/sentiment` du robot reste inchangé. Non-persistance garantie par deux
