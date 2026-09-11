@@ -20,8 +20,9 @@ sys.path.insert(0, str(ROOT))
 
 def main() -> None:
     import os
+    from datetime import timezone
     from apps.api.snapshot import (_HISTORY_DAYS, _load_prices, _seed_universe, _sector_of,
-                                   datetime, timedelta, timezone)
+                                   datetime, timedelta)
     from packages.data.inefficiency import inefficiency_report
 
     inst = _seed_universe()

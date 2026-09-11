@@ -90,6 +90,8 @@ def _load_real_data():
     """(data, acmap) RÉELS ou None (synthétique interdit — mandat données-réelles)."""
     import os
 
+    from datetime import timezone
+
     from apps.api.snapshot import (
         _HISTORY_DAYS,
         _load_prices,
@@ -97,7 +99,6 @@ def _load_real_data():
         _seed_universe,
         datetime,
         timedelta,
-        timezone,
     )
     instruments = _seed_universe()
     sector_of = {m["symbol"]: _sector_of(m) for m in instruments}
@@ -433,7 +434,6 @@ def _survivorship(data, acmap) -> None:
         _sector_of,
         datetime,
         timedelta,
-        timezone,
     )
     from packages.backtest.survivorship_delta import survivorship_delta
     from packages.data.survivorship import load_delisted

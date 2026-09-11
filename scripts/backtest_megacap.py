@@ -23,8 +23,10 @@ def main() -> None:
     ap.add_argument("--step", type=int, default=63, help="jours entre rééquilibrages (63=trimestre)")
     a = ap.parse_args()
 
+    from datetime import timezone
+
     from apps.api.snapshot import (_HISTORY_DAYS, _index_closes, _load_prices, _sector_of,
-                                   _seed_universe, datetime, timedelta, timezone)
+                                   _seed_universe, datetime, timedelta)
     from packages.backtest.conviction_backtest import _stats
     from packages.backtest.megacap import megacap_rotation
     import numpy as np

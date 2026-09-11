@@ -35,8 +35,10 @@ def main() -> None:
     ap.add_argument("--hold", type=int, default=21)
     a = ap.parse_args()
 
+    from datetime import timezone
+
     from apps.api.snapshot import (_HISTORY_DAYS, _load_prices, _seed_universe, _sector_of,
-                                   datetime, timedelta, timezone)
+                                   datetime, timedelta)
     from packages.strategies.earnings_pead import pead_backtest
 
     instruments = _seed_universe()

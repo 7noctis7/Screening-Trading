@@ -20,8 +20,9 @@ STEPS = {"hebdo": 5, "mensuel": 21, "trimestriel": 63}
 
 
 def main() -> None:
+    from datetime import timezone
     from apps.api.snapshot import (_HISTORY_DAYS, _index_closes, _load_prices, _sector_of,
-                                   _seed_universe, datetime, timedelta, timezone)
+                                   _seed_universe, datetime, timedelta)
     from packages.backtest.preset_backtest import preset_ledger
     from packages.backtest.index_core import _stats
     from packages.execution.routing import is_tradeable

@@ -23,8 +23,10 @@ def main() -> None:
     ap.add_argument("--assets", type=int, default=200)
     a = ap.parse_args()
 
+    from datetime import timezone
+
     from apps.api.snapshot import (_HISTORY_DAYS, _load_prices, _seed_universe, _sector_of,
-                                   datetime, timedelta, timezone)
+                                   datetime, timedelta)
     from packages.backtest.breakout_backtest import breakout_backtest
 
     instruments = _seed_universe()

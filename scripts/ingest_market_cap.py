@@ -28,8 +28,10 @@ def main() -> None:
 
     import numpy as np
 
+    from datetime import timezone
+
     from apps.api.snapshot import (_HISTORY_DAYS, _load_prices, _sector_of, _seed_universe,
-                                   datetime, timedelta, timezone)
+                                   datetime, timedelta)
     from packages.data.market_cap import market_cap_path
     from packages.execution.routing import is_tradeable
 

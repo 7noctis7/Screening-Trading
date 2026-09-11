@@ -38,8 +38,10 @@ def main() -> None:
         print("   Sources gratuites : FinNLP, OpenBB, GDELT, ou un export de tes flux RSS archivés.")
         return
 
+    from datetime import timezone
+
     from apps.api.snapshot import (_HISTORY_DAYS, _load_prices, _seed_universe, _sector_of,
-                                   datetime as _dt, timedelta, timezone)
+                                   datetime as _dt, timedelta)
     from packages.sentiment.news_backtest import sentiment_event_study
 
     inst = _seed_universe()

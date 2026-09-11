@@ -22,7 +22,8 @@ MAJORS = ["ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", "ADA-USD", "DOGE-USD", "AV
 
 def main() -> None:
     import numpy as np
-    from apps.api.snapshot import (_HISTORY_DAYS, _index_closes, datetime, timedelta, timezone)
+    from datetime import timezone
+    from apps.api.snapshot import (_HISTORY_DAYS, _index_closes, datetime, timedelta)
     from packages.backtest.index_core import _stats, blend_equity
 
     end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
