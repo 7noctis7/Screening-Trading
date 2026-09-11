@@ -43,6 +43,23 @@ l'ATR arrêté à cette barre et le rendement mesuré lui est postérieur — v�
 sabotage (remplacer le rendement futur par le passé fait tomber le test dédié). La
 mesure elle-même reste à lancer sur le VPS : ce conteneur n'a pas les bases de prix.
 
+
+## ADR-0142 — Un DSR ML absent vaut `null`, jamais une approximation (2026-09-11)
+
+**Constat.** Le payload de l'artefact ML ne contenait que les noms de features. AUC de la
+CV purgée et Brier du split temporel existaient en mémoire mais étaient perdus dès la fin de
+l'entraînement : aucun champion n'était donc comparable par `should_promote`.
+
+**Décision.** Les deux métriques OOS sont persistées avec le modèle. Le champ `dsr` est
+persisté aussi, mais à `null` : ce pipeline classe une hausse/baisse et ne produit pas de
+rendements OOS. Un Sharpe déflaté exige précisément cette série de rendements et un nombre
+d'essais ; convertir une AUC en DSR changerait le sens statistique du garde-fou.
+
+**Conséquence.** La persistance est observable et le gate est désormais branché dans
+`make train` : un candidat incomplet, illisible ou moins bon est retiré, puis le champion
+est restauré. Tant que le DSR est `null`, ce gate conserve donc mécaniquement le champion ;
+seul le tout premier artefact bootstrappe le serving. Produire les rendements OOS reste le
+préalable à une promotion effective, pas à l'application du refus de sécurité.
 ## ADR-0140 — Le ré-entraînement prenait le modèle de production en otage (2026-09-11)
 
 **Constat, trouvé en remettant `make train` en service (ADR-0139).** `train_model.py`

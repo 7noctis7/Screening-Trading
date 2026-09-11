@@ -83,3 +83,30 @@ def test_sans_champion_il_n_y_a_rien_a_mettre_de_cote(tmp_path: Path):
     assert mod._mettre_de_cote(tmp_path) is None
     assert mod._restaurer(None) == 0
     mod._oublier(None)                              # ne doit pas lever
+
+
+def _artefact(path: Path, metrics: dict) -> None:
+    from packages.common import safe_pickle
+    safe_pickle.dump({"model": "m", "payload": {"metrics": metrics}}, path)
+
+
+def test_candidat_sans_dsr_ne_remplace_pas_le_champion(tmp_path: Path):
+    mod = _module()
+    abri = tmp_path / mod.ABRI
+    abri.mkdir()
+    candidat = tmp_path / "ml_abc.pkl"
+    _artefact(abri / candidat.name, {"dsr": 0.7, "brier": 0.2, "auc": 0.55})
+    _artefact(candidat, {"dsr": None, "brier": 0.18, "auc": 0.56})
+
+    assert mod._decider_promotion(abri, candidat)[0] is False
+
+
+def test_candidat_mesure_et_meilleur_peut_etre_promu(tmp_path: Path):
+    mod = _module()
+    abri = tmp_path / mod.ABRI
+    abri.mkdir()
+    candidat = tmp_path / "ml_abc.pkl"
+    _artefact(abri / candidat.name, {"dsr": 0.4, "brier": 0.2, "auc": 0.52})
+    _artefact(candidat, {"dsr": 0.6, "brier": 0.19, "auc": 0.54})
+
+    assert mod._decider_promotion(abri, candidat)[0] is True

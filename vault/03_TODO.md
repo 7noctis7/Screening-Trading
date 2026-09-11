@@ -12,11 +12,12 @@
       sur les vraies bases** (le conteneur de dev n'a pas les prix). À lancer sur le VPS :
       `make sync && make regime-atr-lab 1.5 2.0 2.5`. Trois verdicts sur quatre
       (`REGLE_INERTE`, `UNCALIBRATED`, `NON_ENTRAINABLE`) ferment le sujet sans code.
-- [ ] **P0 — `should_promote` ne peut PAS être câblé en l'état (11/09, ADR-0140).** Le
-      payload persisté avec l'artefact vaut `{"fn": fn}` : aucune métrique, donc aucun
-      champion à opposer au challenger. Persister DSR/Brier/AUC à côté du modèle est le
-      préalable — quelques lignes — à toute promotion gatée. Aujourd'hui le cron remplace
-      le modèle **sans jamais le comparer**.
+- [ ] **P0 — Produire les rendements OOS ML avant toute promotion effective (11/09,
+      ADR-0142).** Le cron appelle désormais `should_promote` et CONSERVE le champion si
+      DSR/Brier/AUC sont incomplets ; il ne remplace donc plus un modèle sans comparaison.
+      DSR reste explicitement `null`, car ce classifieur n'a pas de série de rendements OOS.
+      Ne pas le déduire de l'AUC : définir un portefeuille, coûts et cadence OOS, puis
+      persister ses rendements avant qu'un challenger puisse passer le gate.
 - [ ] **P1 — le watchdog demande 100 trades, le journal en a 40 (11/09).** Fenêtre
       glissante win-rate + Sharpe : n = 40 après regroupement des tranches, rendement
       moyen +0,03 %, t = +0,04. Un déclencheur « −15 % vs baseline » sur une baseline
