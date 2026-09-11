@@ -13,7 +13,7 @@ projet reprenable par une autre instance, mémoire à jour.
 4. **`vault/02_DECISIONS.md`** : 1 entrée ADR **uniquement** si un choix structurant a été tranché.
 5. **`vault/00_INDEX.md`** : mettre à jour la ligne « État actuel » (date + 1 phrase) si l'état a changé.
 6. Si l'architecture a changé : mettre à jour les diagrammes de `vault/01_ARCHITECTURE.md`.
-7. **Committer + pousser** sur `claude/clever-lovelace-ognwya` (message clair, sans identifiant de modèle).
+7. **Committer + pousser** sur `claude/screening-trading-platform-me9p11` (message clair, sans identifiant de modèle).
    Si du code applicatif a aussi changé, enchaîner avec le skill `/deploy`.
 
 Garde-fous : ne jamais éditer les fichiers auto-générés (`Performance_Report.md`, `04_Companies/`,
