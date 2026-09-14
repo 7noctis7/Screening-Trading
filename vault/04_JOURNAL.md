@@ -28,6 +28,39 @@ le candidat est retiré et le champion restauré. Le premier artefact reste un b
 modèle existant ne peut être remplacé tant que les rendements OOS manquent. Deux tests couvrent
 le refus DSR absent et la promotion d'un candidat complet supérieur.
 
+## Session 2026-09-14 (12ᵉ) — Le t survit au regroupement ; reste à savoir s'il se joue
+
+**Ma prédiction était fausse, et la mesure le dit.** J'avais écrit que les 697
+observations du seuil 2,50 étaient « peut-être six journées de marché ». Ce sont **458
+journées distinctes**. À ces seuils un pic d'ATR n'est pas un événement de marché : il
+est **idiosyncratique**, 2,7 titres par jour. L'effet survit donc au regroupement —
+t groupé 4,585 (seuil 1,50) · 3,273 (2,00) · 2,315 (2,50). Le correctif restait juste :
+il fallait le mesurer pour le savoir, et le t baisse bien à chaque seuil.
+
+**Mais `MESURE` répondait à la mauvaise question.** Un t de Welch dit que deux moyennes
+diffèrent. Il ne dit pas que l'écart se joue. Rien dans la sortie ne séparait les deux, et
+ce dépôt a déjà payé cette confusion : `sizing_lab`, profit factor 1,15 → **0,89** privé
+des cinq meilleurs trades sur 477. Perdant. L'agrégat était vrai.
+
+**Livré.** `packages/research/regime_robustesse.py` — module séparé, question distincte.
+Quatre mesures sur les moyennes par journée : médiane + taux de gain + queues ; amputation
+du 1 % supérieur ; **épisodes contigus** (des jours à moins de 5 jours d'écart sont UNE
+secousse — le regroupement par date corrige la corrélation transversale, pas la sérielle) ;
+concentration par épisode et par année, alerte au-delà de 50 %. Le banc affiche un bloc
+« exploitabilité » et dit en toutes lettres quand un résultat est un ÉVÉNEMENT, pas un
+régime. ADR-0144. 16 tests, trois sabotages vérifiés.
+
+**Croisé une autre main.** La PR #384 a fusionné pendant ce travail et livré le P0 que
+j'avais relevé (métriques persistées, cron qui conserve le champion). Elle va plus loin
+que mon diagnostic : le DSR reste `null` par REFUS de le dériver de l'AUC — un classement
+n'est pas un rendement. Conflit de vault résolu, collision de numéro d'ADR arbitrée en
+faveur du sien (publié), le mien passe en ADR-0143.
+
+**À relancer sur le VPS** — c'est cette commande qui tranche :
+`make sync && make regime-atr-lab ARGS="1.5 2.0 2.5"`.
+
+**Mesuré.** 2 649 passés, 74 ignorés.
+
 ## Session 2026-09-11 (11ᵉ) — MLOps : ce qui existe déjà, et ce que la mesure interdit
 
 **Demande.** Watchdog (win rate + Sharpe glissants sur 100 trades, alerte à −15 % vs

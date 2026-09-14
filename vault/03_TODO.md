@@ -16,9 +16,16 @@
       nombre réel de journées. Sous 30, le verdict retombe à `UNCALIBRATED` et la question
       est close sans écrire de bascule.
 - [ ] **P1 — L'effet mesuré n'est pas celui qu'on cherchait (11/09).** La spec voulait un
-      modèle DÉFENSIF en haute volatilité ; la mesure montre un **rebond**. Avant d'en
-      faire quoi que ce soit : vérifier que l'effet ne tient pas à une poignée d'épisodes
-      (mars 2020), et le passer au gate placebo comme `regime-study` / `breakout-study`.
+      modèle DÉFENSIF en haute volatilité ; la mesure montre un **rebond**.
+- [ ] **P0 — Relancer le banc avec le bloc exploitabilité (14/09, ADR-0144).** Les quatre
+      contrôles sont livrés et testés mais n'ont **jamais tourné sur les vraies données**.
+      `make sync && make regime-atr-lab ARGS="1.5 2.0 2.5"`. Trois lignes décident :
+      médiane vs moyenne (loterie ?), « sans le 1 % du haut » (TIENT / S EFFONDRE), et la
+      part du plus gros épisode. Au-delà de 50 %, c'est mars 2020 et non un régime.
+- [ ] **P1 — Gate placebo sur l'effet de rebond ATR (14/09).** Même traitement que
+      `regime-study` et `breakout-study` : aucune hypothèse d'alpha n'entre dans ce dépôt
+      sans lui. À faire APRÈS le bloc exploitabilité — inutile de placebo-tester une
+      loterie.
 - [ ] **P0 — Produire les rendements OOS ML avant toute promotion effective (11/09,
       ADR-0142).** Le cron appelle désormais `should_promote` et CONSERVE le champion si
       DSR/Brier/AUC sont incomplets ; il ne remplace donc plus un modèle sans comparaison.
