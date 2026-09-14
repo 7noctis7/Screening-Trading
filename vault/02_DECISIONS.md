@@ -2,6 +2,45 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0146 — Le brief du matin appelait un binaire qui n'existe pas sur le VPS (2026-09-14)
+
+**Constat, dans la sortie de `make brief`** : `## 🩺 Audit données` → `(audit
+indisponible)`. Un message poli, qui se lit comme un état normal.
+
+**La cause.** `daily_brief.py::_data_audit` lançait `["python", "scripts/data_audit.py"]`
+— un binaire nommé **exactement** `python`, cherché dans le PATH. Ubuntu n'expose que
+`python3` ; le `FileNotFoundError` tombait dans un `except Exception` général qui rendait
+la chaîne de repli. L'audit des bases n'avait donc **jamais** tourné depuis le brief sur
+ce VPS, et rien ne le disait.
+
+**Même famille que ADR-0139** (treize commandes mortes derrière un `|| true`). Ce n'est
+pas l'appel cassé qui coûte, c'est le repli silencieux qui le rend invisible — et qui
+fait lire « rien à signaler » là où il faut lire « je n'ai pas regardé ».
+
+**Décision.** `sys.executable` : l'interpréteur qui fait tourner le brief est déjà le
+`.venv/bin/python` choisi par le Makefile, donc celui qui a les dépendances de l'audit.
+Et le repli NOMME désormais ce qui a cassé — type d'exception et message, ou code de
+retour et dernière ligne de `stderr`. Un diagnostic vaut mieux qu'un mot poli.
+`(pas de base locale auditée)` reste, mais uniquement pour le cas légitime : l'audit a
+tourné et n'a rien trouvé à auditer.
+
+**Trouvé en même temps, et corrigé.** Le journal affichait en tête une entrée du 11/09
+alors que la plus récente datait du 14/09 : deux mains avaient inséré une entrée le même
+jour, toutes deux numérotées 12ᵉ. Le brief lit la PREMIÈRE entrée du fichier — il
+annonçait donc « dernière entrée de journal » sur du périmé. Ordre rétabli, mon entrée
+renumérotée 13ᵉ.
+
+**Ce que les tests NE vérifient pas, délibérément.** Le numéro de session n'est pas un
+identifiant unique dans ce dépôt — il repart à 2 après 28 le 10/09. Et le journal compte
+185 entrées avec deux ruptures chronologiques anciennes (positions 41 et 183). Imposer
+l'ordre total reviendrait à réécrire de l'historique que personne ne lit pour protéger
+une ligne que tout le monde lit. Les garde-fous ne portent donc que sur le **sommet** :
+l'entrée de tête est la plus récente, et deux entrées adjacentes ne partagent pas leur
+numéro.
+
+**Sabotage.** Interpréteur remis en dur : 2 tests tombent · repli muet restauré : 1 ·
+entrée périmée remise en tête : 1.
+
 ## ADR-0145 — La bascule de modèle par régime ATR est ABANDONNÉE (2026-09-14)
 
 **La mesure est complète, et elle ferme le sujet.** VPS, 820 symboles, 2015→2026, trois

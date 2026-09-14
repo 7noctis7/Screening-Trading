@@ -1,34 +1,6 @@
 # 04 — JOURNAL
 
-## Session 2026-09-11 (12ᵉ) — Métriques du champion : deux persistées, une refusée
-
-**Reprise après la mesure ATR.** Les 458 journées distinctes au seuil 2,50 confirment que
-la règle n'est pas inerte ; l'effet est un rebond, pas un risque à fuir. Aucun modèle de
-régime n'est activé.
-
-**Artefact ML.** Le payload n'est plus seulement `{"fn": fn}` : il mémorise maintenant
-`auc` (CV purgée OOS) et `brier` brut (split temporel OOS), avec `dsr: null` explicite.
-Le DSR ne peut pas être honnêtement calculé ici : le classifieur produit des labels binaires
-et ne conserve aucune série de rendements OOS. Le dériver de l'AUC rendrait comparable une
-mesure de classement et une mesure de rendement, donc inventerait le garde-fou qu'on cherche
-à brancher. ADR-0142.
-
-**Suite P0.** Construire et persister les rendements OOS du modèle ; seulement alors
-`should_promote` pourra opposer un challenger au champion. Le cron ne passe pas encore par
-ce gate et continue donc de remplacer le modèle sans comparaison.
-
-**Correctif de contrat.** Un ancien payload (sans métriques), un payload malformé, ou un
-échec d'écriture ne peut plus se faire passer pour un champion mesuré : les trois métriques
-sont alors publiées à `null` et `artifact_persisted` porte le résultat de l'écriture. Le
-serving reste disponible, mais une promotion future devra refuser cet état non calibré.
-
-**Promotion câblée, conservatrice.** `make train` compare désormais le candidat au champion
-via `should_promote`. Si l'un des deux n'a pas DSR/Brier/AUC, ou si l'artefact est illisible,
-le candidat est retiré et le champion restauré. Le premier artefact reste un bootstrap ; aucun
-modèle existant ne peut être remplacé tant que les rendements OOS manquent. Deux tests couvrent
-le refus DSR absent et la promotion d'un candidat complet supérieur.
-
-## Session 2026-09-14 (12ᵉ) — Le t survit au regroupement ; reste à savoir s'il se joue
+## Session 2026-09-14 (13ᵉ) — Le t survit au regroupement ; reste à savoir s'il se joue
 
 **Ma prédiction était fausse, et la mesure le dit.** J'avais écrit que les 697
 observations du seuil 2,50 étaient « peut-être six journées de marché ». Ce sont **458
@@ -84,7 +56,48 @@ l'univers ou l'horizon changent.
 volatilité. Elle dit qu'à 5 jours, sur cet univers, avec un stop, il n'est pas captable.
 Un autre horizon serait une AUTRE hypothèse — à pré-enregistrer, pas à déduire.
 
-**Mesuré.** 2 649 passés, 74 ignorés.
+**Et le brief du matin mentait poliment.** `make brief` affichait `(audit indisponible)`
+— lu comme un état normal. En fait `_data_audit` lançait `["python", ...]`, un binaire
+que le VPS n'expose pas (Ubuntu n'a que `python3`), et un `except Exception` transformait
+le `FileNotFoundError` en phrase rassurante. L'audit des bases n'avait **jamais** tourné
+depuis le brief. Même famille que les treize commandes mortes : ce n'est pas l'appel
+cassé qui coûte, c'est le repli qui le rend invisible. `sys.executable` + un repli qui
+NOMME la panne. ADR-0146.
+
+**Et le brief affichait une entrée périmée en tête** : #384 et moi avions inséré une
+entrée le même jour, toutes deux 12ᵉ, la sienne au-dessus. Ordre rétabli, la mienne
+renumérotée 13ᵉ. Garde-fou posé sur le SOMMET seulement — le numéro de session repart à 2
+après 28 dans ce dépôt, et l'ordre total réécrirait 185 entrées pour protéger une ligne.
+
+**Mesuré.** 2 657 passés, 74 ignorés.
+
+## Session 2026-09-11 (12ᵉ) — Métriques du champion : deux persistées, une refusée
+
+**Reprise après la mesure ATR.** Les 458 journées distinctes au seuil 2,50 confirment que
+la règle n'est pas inerte ; l'effet est un rebond, pas un risque à fuir. Aucun modèle de
+régime n'est activé.
+
+**Artefact ML.** Le payload n'est plus seulement `{"fn": fn}` : il mémorise maintenant
+`auc` (CV purgée OOS) et `brier` brut (split temporel OOS), avec `dsr: null` explicite.
+Le DSR ne peut pas être honnêtement calculé ici : le classifieur produit des labels binaires
+et ne conserve aucune série de rendements OOS. Le dériver de l'AUC rendrait comparable une
+mesure de classement et une mesure de rendement, donc inventerait le garde-fou qu'on cherche
+à brancher. ADR-0142.
+
+**Suite P0.** Construire et persister les rendements OOS du modèle ; seulement alors
+`should_promote` pourra opposer un challenger au champion. Le cron ne passe pas encore par
+ce gate et continue donc de remplacer le modèle sans comparaison.
+
+**Correctif de contrat.** Un ancien payload (sans métriques), un payload malformé, ou un
+échec d'écriture ne peut plus se faire passer pour un champion mesuré : les trois métriques
+sont alors publiées à `null` et `artifact_persisted` porte le résultat de l'écriture. Le
+serving reste disponible, mais une promotion future devra refuser cet état non calibré.
+
+**Promotion câblée, conservatrice.** `make train` compare désormais le candidat au champion
+via `should_promote`. Si l'un des deux n'a pas DSR/Brier/AUC, ou si l'artefact est illisible,
+le candidat est retiré et le champion restauré. Le premier artefact reste un bootstrap ; aucun
+modèle existant ne peut être remplacé tant que les rendements OOS manquent. Deux tests couvrent
+le refus DSR absent et la promotion d'un candidat complet supérieur.
 
 ## Session 2026-09-11 (11ᵉ) — MLOps : ce qui existe déjà, et ce que la mesure interdit
 
