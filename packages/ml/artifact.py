@@ -8,6 +8,7 @@ ou périmé, le pipeline retombe sur un entraînement inline (jamais bloquant). 
 from __future__ import annotations
 
 import hashlib
+import math
 import time
 from pathlib import Path
 
@@ -17,6 +18,38 @@ _TTL = 86_400.0   # 24 h
 
 def _key(signature) -> str:
     return hashlib.sha256(str(signature).encode()).hexdigest()[:16]
+
+
+def metrics_payload(
+    *, dsr: float | None, brier: float | None, auc: float | None
+) -> dict:
+    """Normalise les métriques OOS embarquées avec un modèle.
+
+    Une métrique absente reste explicitement ``None`` : la remplacer par zéro ferait
+    croire qu'un test a échoué alors qu'il n'a jamais été calculé, et permettrait à un
+    futur promoteur de comparer des grandeurs imaginaires.
+    """
+    def finite(value: float | None) -> float | None:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        return number if math.isfinite(number) else None
+
+    return {"dsr": finite(dsr), "brier": finite(brier), "auc": finite(auc)}
+
+
+def metrics_from_payload(payload: object) -> dict:
+    """Lit un payload ancien ou corrompu sans rendre le serving indisponible.
+
+    Un artefact antérieur à ce contrat ne possède pas de métriques ; il doit rester
+    chargeable, mais ne doit jamais être pris pour un champion comparable.
+    """
+    stored = payload.get("metrics") if isinstance(payload, dict) else None
+    stored = stored if isinstance(stored, dict) else {}
+    return metrics_payload(
+        dsr=stored.get("dsr"), brier=stored.get("brier"), auc=stored.get("auc")
+    )
 
 
 def save(signature, model, payload: dict) -> bool:

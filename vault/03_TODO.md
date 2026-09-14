@@ -8,7 +8,7 @@
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
 - [ ] **P0 — Régime ATR : mesuré une fois, à REMESURER groupé par date (11/09,
-      ADR-0141, ADR-0142).** Premier passage VPS : règle non inerte, effet **inverse de la
+      ADR-0141, ADR-0143).** Premier passage VPS : règle non inerte, effet **inverse de la
       spec** (haute vol +2,09 % à 5 j contre +0,34 %), monotone sur trois seuils. Mais le
       t affiché comptait 800 symboles comme 800 tirages ; le regroupement par date est
       livré et c'est lui qui décide désormais. À relancer :
@@ -19,11 +19,12 @@
       modèle DÉFENSIF en haute volatilité ; la mesure montre un **rebond**. Avant d'en
       faire quoi que ce soit : vérifier que l'effet ne tient pas à une poignée d'épisodes
       (mars 2020), et le passer au gate placebo comme `regime-study` / `breakout-study`.
-- [ ] **P0 — `should_promote` ne peut PAS être câblé en l'état (11/09, ADR-0140).** Le
-      payload persisté avec l'artefact vaut `{"fn": fn}` : aucune métrique, donc aucun
-      champion à opposer au challenger. Persister DSR/Brier/AUC à côté du modèle est le
-      préalable — quelques lignes — à toute promotion gatée. Aujourd'hui le cron remplace
-      le modèle **sans jamais le comparer**.
+- [ ] **P0 — Produire les rendements OOS ML avant toute promotion effective (11/09,
+      ADR-0142).** Le cron appelle désormais `should_promote` et CONSERVE le champion si
+      DSR/Brier/AUC sont incomplets ; il ne remplace donc plus un modèle sans comparaison.
+      DSR reste explicitement `null`, car ce classifieur n'a pas de série de rendements OOS.
+      Ne pas le déduire de l'AUC : définir un portefeuille, coûts et cadence OOS, puis
+      persister ses rendements avant qu'un challenger puisse passer le gate.
 - [ ] **P1 — le watchdog demande 100 trades, le journal en a 40 (11/09).** Fenêtre
       glissante win-rate + Sharpe : n = 40 après regroupement des tranches, rendement
       moyen +0,03 %, t = +0,04. Un déclencheur « −15 % vs baseline » sur une baseline
