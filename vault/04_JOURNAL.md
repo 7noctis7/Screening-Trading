@@ -56,8 +56,33 @@ que mon diagnostic : le DSR reste `null` par REFUS de le dériver de l'AUC — u
 n'est pas un rendement. Conflit de vault résolu, collision de numéro d'ADR arbitrée en
 faveur du sien (publié), le mien passe en ADR-0143.
 
-**À relancer sur le VPS** — c'est cette commande qui tranche :
-`make sync && make regime-atr-lab ARGS="1.5 2.0 2.5"`.
+**Et le banc a tranché : NON.** Pas parce que la statistique échoue — elle passe partout
+(t groupé 4,489 / 3,006 / 2,174) — mais parce qu'elle mesurait la mauvaise chose.
+
+| Seuil | médiane haute | médiane basse | gagnantes haute | gagnantes basse | moyenne haute |
+|---|---|---|---|---|---|
+| 1,50 | +0,376 % | **+0,415 %** | 53,9 % | **56,0 %** | +1,907 % |
+| 2,00 | +0,000 % | **+0,437 %** | 49,9 % | **56,3 %** | +3,023 % |
+| 2,50 | +0,000 % | **+0,431 %** | 46,9 % | **56,2 %** | +3,887 % |
+
+Aux TROIS seuils, la journée typique en haute volatilité est MOINS bonne qu'en marché
+calme. Monotone dans le mauvais sens : la médiane tombe et le taux de gain s'effondre
+(53,9 → 49,9 → 46,9 %) pendant que la moyenne grimpe. La moyenne est la SEULE statistique
+qui favorise le régime. La règle ne sélectionne pas un régime, elle sélectionne des
+**billets de loterie** — et d'autant mieux qu'on la resserre.
+
+**Le point qui aurait suffi seul.** Le chiffre mesuré est un rendement à 5 jours SANS
+STOP ; la production porte `atr_stop=4.0` (`snapshot.py:1853`). Capter un p90 de +21 %
+suppose de survivre à un p10 de −18 %, ce que le stop empêche par construction. La
+quantité qui passe le test n'est pas celle que le système encaisserait.
+
+**Bascule abandonnée.** Aucun `model_high_volatility.pkl`, aucun code d'aiguillage, gate
+placebo sans objet. ADR-0145. Le banc reste : c'est lui qui a tranché, il retranchera si
+l'univers ou l'horizon changent.
+
+**Ce que la mesure ne dit PAS** : qu'il n'y a pas d'effet de rebond après un pic de
+volatilité. Elle dit qu'à 5 jours, sur cet univers, avec un stop, il n'est pas captable.
+Un autre horizon serait une AUTRE hypothèse — à pré-enregistrer, pas à déduire.
 
 **Mesuré.** 2 649 passés, 74 ignorés.
 

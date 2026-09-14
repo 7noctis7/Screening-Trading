@@ -7,25 +7,16 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
-- [ ] **P0 — Régime ATR : mesuré une fois, à REMESURER groupé par date (11/09,
-      ADR-0141, ADR-0143).** Premier passage VPS : règle non inerte, effet **inverse de la
-      spec** (haute vol +2,09 % à 5 j contre +0,34 %), monotone sur trois seuils. Mais le
-      t affiché comptait 800 symboles comme 800 tirages ; le regroupement par date est
-      livré et c'est lui qui décide désormais. À relancer :
-      `make sync && make regime-atr-lab ARGS="1.5 2.0 2.5"` — la ligne `épisodes :` dit le
-      nombre réel de journées. Sous 30, le verdict retombe à `UNCALIBRATED` et la question
-      est close sans écrire de bascule.
-- [ ] **P1 — L'effet mesuré n'est pas celui qu'on cherchait (11/09).** La spec voulait un
-      modèle DÉFENSIF en haute volatilité ; la mesure montre un **rebond**.
-- [ ] **P0 — Relancer le banc avec le bloc exploitabilité (14/09, ADR-0144).** Les quatre
-      contrôles sont livrés et testés mais n'ont **jamais tourné sur les vraies données**.
-      `make sync && make regime-atr-lab ARGS="1.5 2.0 2.5"`. Trois lignes décident :
-      médiane vs moyenne (loterie ?), « sans le 1 % du haut » (TIENT / S EFFONDRE), et la
-      part du plus gros épisode. Au-delà de 50 %, c'est mars 2020 et non un régime.
-- [ ] **P1 — Gate placebo sur l'effet de rebond ATR (14/09).** Même traitement que
-      `regime-study` et `breakout-study` : aucune hypothèse d'alpha n'entre dans ce dépôt
-      sans lui. À faire APRÈS le bloc exploitabilité — inutile de placebo-tester une
-      loterie.
+- [x] **~~P0/P1 — Régime ATR : bascule de modèle~~ — FERMÉE PAR LA MESURE (14/09,
+      ADR-0145).** Trois seuils, 820 symboles, t groupé significatif partout — et pourtant
+      non. Aux TROIS seuils la journée typique en haute volatilité est moins bonne qu'en
+      marché calme : médiane +0,000 % contre +0,437 %, taux de gain 46,9 % contre 56,2 %
+      au seuil 2,50. La moyenne est la seule statistique qui favorise le régime. La règle
+      sélectionne des billets de loterie, d'autant mieux qu'on la resserre.
+      Point décisif : le rendement mesuré est SANS STOP, alors que la production porte
+      `atr_stop=4.0` — capter un p90 de +21 % suppose de survivre à un p10 de −18 %.
+      Aucun `model_high_volatility.pkl`, aucune bascule, gate placebo sans objet.
+      `make regime-atr-lab` reste : c'est lui qui a tranché.
 - [ ] **P0 — Produire les rendements OOS ML avant toute promotion effective (11/09,
       ADR-0142).** Le cron appelle désormais `should_promote` et CONSERVE le champion si
       DSR/Brier/AUC sont incomplets ; il ne remplace donc plus un modèle sans comparaison.

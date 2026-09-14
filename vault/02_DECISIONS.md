@@ -2,6 +2,53 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0145 — La bascule de modèle par régime ATR est ABANDONNÉE (2026-09-14)
+
+**La mesure est complète, et elle ferme le sujet.** VPS, 820 symboles, 2015→2026, trois
+seuils, fenêtres sans chevauchement, t de Welch regroupé par journée de marché.
+
+**Ce qui passe.** La règle n'est pas inerte. Les deux régimes dépassent le plancher de
+500 lignes. Le t groupé reste significatif aux trois seuils (4,489 / 3,006 / 2,174) et
+l'écart de MOYENNE va dans le sens d'un rebond (+1,44 % / +2,52 % / +3,36 % à 5 jours).
+L'amputation du 1 % supérieur ne le tue pas : `[TIENT]` partout.
+
+**Ce qui ferme.** La moyenne est la SEULE statistique qui favorise la haute volatilité :
+
+| Seuil | médiane haute | médiane basse | gagnantes haute | gagnantes basse |
+|---|---|---|---|---|
+| 1,50 | +0,376 % | **+0,415 %** | 53,9 % | **56,0 %** |
+| 2,00 | +0,000 % | **+0,437 %** | 49,9 % | **56,3 %** |
+| 2,50 | +0,000 % | **+0,431 %** | 46,9 % | **56,2 %** |
+
+Aux trois seuils, la journée typique en haute volatilité est MOINS bonne qu'en marché
+calme. Et c'est monotone dans le mauvais sens : plus le seuil se resserre, plus la
+médiane tombe et plus le taux de gain s'effondre (53,9 → 49,9 → **46,9 %**), pendant que
+la moyenne grimpe (1,907 → 3,023 → 3,887 %). La règle ne sélectionne pas un régime : elle
+sélectionne des **billets de loterie**, et d'autant mieux qu'on la resserre.
+
+**Le point qui serait décisif même si tout le reste passait.** Le chiffre mesuré est un
+rendement à 5 jours SANS STOP. Le preset de production porte `atr_stop=4.0` et
+`risque_par_trade=0.005` (`snapshot.py:1853-1877`). Capter un p90 de +21 % suppose de
+survivre à un p10 de −18 % — ce que le stop empêche par construction. **La quantité qui
+passe le test statistique n'est pas la quantité que le système encaisserait.** Mesurer un
+rendement non stoppé pour piloter un système stoppé, c'est comparer deux stratégies
+différentes et attribuer l'écart au régime.
+
+**Reste, pour mémoire.** Au seuil 2,50 un seul épisode (2020-12-28 → 2021-03-22) porte
+50,4 % du total et 2021 en porte 62,8 % — le banc l'a signalé de lui-même. Post-COVID et
+saison meme-stock. Le seuil où l'effet paraît le plus fort est celui où il tient le moins.
+
+**Décision.** Aucun `model_high_volatility.pkl`, aucune bascule, aucun code d'aiguillage.
+La question posée par la spec est close par la mesure. Le gate placebo devient sans objet :
+inutile de placebo-tester une loterie dont on sait déjà qu'un stop l'annule.
+
+**Conséquences.** `make regime-atr-lab` RESTE — c'est lui qui a tranché, et il retranchera
+si l'univers, l'horizon ou le régime de marché changent. Ce que cette mesure ne dit PAS :
+qu'il n'y a pas d'effet de rebond après un pic de volatilité. Elle dit qu'à horizon 5
+jours, sur cet univers, avec un stop, il n'est pas captable. Un horizon plus court, ou une
+sortie sans stop dimensionnée en conséquence, serait une AUTRE hypothèse — à pré-enregistrer
+et à mesurer, pas à déduire de celle-ci.
+
 ## ADR-0144 — « Les régimes diffèrent » et « l'écart est jouable » sont deux questions (2026-09-14)
 
 **Contexte.** Le regroupement par date (ADR-0143) a tenu : l'effet survit, t groupé
