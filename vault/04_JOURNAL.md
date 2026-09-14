@@ -81,6 +81,23 @@ moyenne. Quelques dizaines de barres sur 2 624 ont pu être faussement classées
 volatilité » — dans le sens qui FLATTE l'effet. Le verdict d'abandon n'en est que plus
 solide.
 
+**Et un déclencheur que git ne connaît pas.** `systemctl list-timers` révèle un
+`quant-rebalance.timer` quotidien à 14:40 UTC, absent de tout fichier du dépôt, lançant le
+MÊME `cron_live.sh` que le crontab horaire. Or 14:40 UTC n'est pas dans la fenêtre
+d'exécution (une heure avant la clôture NYSE) : soit il était inerte, soit il portait
+`QUANT_IGNORER_FENETRE=1` dans un `Environment=` illisible et passait des ordres en pleine
+séance. Les deux réponses menant à la même action, désactivé sans attendre de savoir
+laquelle. ADR-0148.
+
+**Le vrai trou était à côté** : `/tmp/quant_daily.log` n'existait pas — la chaîne
+quotidienne n'avait **jamais** tourné ici. Ni prix, ni ML, ni audit, ni rapports.
+Installée après avoir coupé le timer, pour ne pas risquer deux ingestions concurrentes.
+
+**Ce qui corrige une chose que j'ai dite ce matin** : j'avais fait du `|| true` de
+`cron_daily.sh` la raison de l'échec silencieux du ré-entraînement. Le masquage existait,
+mais la chaîne n'avait aucun appelant sur cette machine. Le correctif tient ; mon
+explication de sa portée était fausse.
+
 **Mesuré.** 2 664 passés, 74 ignorés.
 
 ## Session 2026-09-11 (12ᵉ) — Métriques du champion : deux persistées, une refusée

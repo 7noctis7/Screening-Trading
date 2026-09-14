@@ -2,6 +2,48 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0148 — Un déclencheur invisible depuis git doublait le rebalancement (2026-09-14)
+
+**Constat, en répondant à « mon cron tourne-t-il toujours ? »** Le crontab de `ubuntu` ne
+portait qu'une ligne — `cron_live.sh` toutes les heures. Mais `systemctl list-timers`
+révélait un `quant-rebalance.timer`, quotidien à 14:40 UTC, dont **aucun fichier du dépôt
+ne parle**. `install_services.sh` n'installe que `quant-api` et `quant-web`.
+
+**Ce qu'il lançait.** `ExecStart=/bin/bash .../scripts/cron_live.sh` — le MÊME script que
+le crontab. Deux déclencheurs, un script, deux horaires.
+
+**Pourquoi c'était à trancher.** `cron_live.sh` est gardé par `fenetre_execution.py` :
+passage complet une heure avant la clôture NYSE, soit ~19:00 UTC l'été. **14:40 UTC n'est
+pas dans cette fenêtre.** Le timer était donc soit inerte — il se réveillait chaque jour
+pour sortir en silence — soit porteur de `QUANT_IGNORER_FENETRE=1` dans un `Environment=`
+que l'utilisateur ne pouvait pas lire (unité en 600), auquel cas il passait des ordres à
+10:40 à New York, en pleine séance, en contournant le garde-fou.
+
+**Décision : désactivé, sans attendre de savoir lequel des deux.** Les deux réponses
+mènent à la même action — inerte, on ne perd rien ; contournant, il faut le couper. Le
+crontab horaire est conservé : c'est le mécanisme que `cron_live.sh` documente en tête de
+fichier, et c'est lui qui a écrit `rebalancement paper — fin` le 13/09 dans
+`/tmp/quant_live.log` (le service systemd, lui, écrit dans le journal systemd — le
+fichier prouve donc qui a tourné).
+
+**Le vrai trou, découvert au passage.** `/tmp/quant_daily.log` n'existait pas :
+`cron_daily.sh` n'avait **jamais** tourné sur ce VPS. Ni prix incrémentaux, ni
+ré-entraînement ML, ni audit, ni rapports, ni watchlist, ni miroirs. Installé
+(`make cron-install`, ligne `30 22 * * 1-5`) une fois le timer coupé — l'installer avant
+aurait risqué deux ingestions concurrentes sur les mêmes bases SQLite.
+
+**Correction d'une affirmation antérieure.** J'avais présenté le `|| true` de
+`cron_daily.sh` comme LA raison pour laquelle l'échec du ré-entraînement passait inaperçu
+(ADR-0139). Le masquage était réel dans le code, mais sur cette machine la chaîne n'avait
+aucun appelant : le correctif reste juste, mon explication de sa portée était fausse.
+
+**Vérifié, pas supposé.** Le garde-fou `[ -f .venv/bin/activate ] && source ...` sous
+`set -euo pipefail` n'interrompt PAS la chaîne quand le venv manque : `set -e` exempte une
+commande qui précède `&&`. Testé plutôt que déduit — le commentaire du script disait vrai.
+
+**Ce qui reste ouvert.** L'unité `quant-rebalance.service` existe toujours sur disque,
+simplement désactivée. Une machine porte donc encore un état que git ne décrit pas.
+
 ## ADR-0147 — Quatre des dix « critiques » de l'audit étaient un fait de marché (2026-09-14)
 
 **Le premier `make audit` qui tourne depuis longtemps** (ADR-0146 l'avait débloqué) sort
