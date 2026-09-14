@@ -2,6 +2,104 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0144 — « Les régimes diffèrent » et « l'écart est jouable » sont deux questions (2026-09-14)
+
+**Contexte.** Le regroupement par date (ADR-0143) a tenu : l'effet survit, t groupé
+4,585 / 3,273 / 2,315 selon le seuil. Le banc rendait donc `MESURE` — et s'arrêtait là.
+Or un t de Welch répond à « les deux distributions ont-elles la même moyenne ». Il ne
+répond pas à « peut-on jouer cet écart », et rien dans la sortie ne distinguait les deux.
+
+**Le précédent qui rend ce contrôle obligatoire ici.** `scripts/sizing_lab.py` a mesuré
+un système au profit factor 1,15 qui tombait à **0,89** — perdant — privé de ses cinq
+meilleurs trades sur 477. L'agrégat était juste ; la conclusion qu'on en tirait, fausse.
+Un écart moyen de +4,14 % sur des titres choisis pour leur volatilité est exactement la
+configuration où une moyenne ment.
+
+**Ce qui restait aussi non mesuré.** 458 journées distinctes ne sont pas 458 tirages :
+des jours consécutifs d'une même secousse restent corrélés. Le regroupement par date
+corrige la corrélation TRANSVERSALE (800 symboles le même jour), pas la corrélation
+SÉRIELLE (le même symbole cinq jours de suite). Mars 2020 suffit à colorer onze ans.
+
+**Décision.** Un module séparé, `packages/research/regime_robustesse.py` — la question
+est distincte, le fichier l'est aussi. Quatre mesures, calculées sur les moyennes PAR
+JOURNÉE (mesurer la dispersion sur les lignes brutes réintroduirait par la bande le
+comptage que le regroupement vient d'écarter) :
+
+1. **médiane, taux de gain, p10/p90** et surtout l'écart moyenne − médiane ;
+2. **amputation du 1 % supérieur** — l'écart survit-il au retrait de ses meilleurs jours ;
+3. **épisodes contigus** — des journées à moins de 5 jours calendaires d'écart forment
+   UNE secousse, et le nombre de secousses est le vrai nombre de réponses du marché ;
+4. **concentration** par épisode et par année, avec alerte au-delà de 50 % du total.
+
+**Conséquences.** Le banc affiche un bloc « exploitabilité » et signale en toutes lettres
+qu'un résultat porté à plus de 50 % par un épisode ou une année est un ÉVÉNEMENT, pas un
+régime. Aucun seuil ne BLOQUE : ce module mesure, l'appelant tranche — et le gate
+placebo de `regime-study` / `breakout-study` reste à passer par-dessus.
+
+**Sabotage.** Retirer le plancher d'une observation dans l'amputation, supprimer le
+regroupement en épisodes, ou faire de la médiane un alias de la moyenne : chacun fait
+tomber les tests prévus (1, 5 et 1 respectivement).
+
+## ADR-0143 — Le t brut du banc de régime comptait 800 symboles comme 800 tirages (2026-09-11)
+
+**Premier passage sur la base réelle** (VPS, 820 symboles retenus, 821 séries réelles,
+seuil 2,0, horizon 5 j) :
+
+```
+barres        : 2 624 haute vol · 414 482 basse vol · part haute 0,63 %
+ratio max médian par symbole : 2,27
+rendement 5 j moyen : haute +2,091 % · basse +0,342 %
+Welch : t = 3,813 sur 2 625,8 ddl · écart +1,750 %
+```
+
+Et sur trois seuils, un schéma monotone : 1,50 → +1,046 % (t 5,716, n 14 754) ·
+2,00 → +2,091 % (t 3,813, n 2 624) · 2,50 → +4,143 % (t 3,129, n 697). L'écart
+grossit quand le seuil se resserre, le t baisse quand n s'effondre — la signature
+d'un effet de fond plutôt que d'un artefact de seuil choisi après coup.
+
+**Trois choses acquises.** La règle n'est pas inerte (le symbole médian franchit bien
+2,0). Les deux régimes dépassent le plancher de 500 lignes aux trois seuils. Et l'écart
+va dans le sens **inverse de la spec** : la haute volatilité rend PLUS, pas moins — un
+modèle « haute volatilité » conçu comme défensif serait à contre-sens de ce qui est
+mesuré. C'est un rebond de volatilité, pas un risque à fuir.
+
+**Le défaut.** Le banc annonçait son t comme « borne haute » à cause de la corrélation
+transversale, puis rendait quand même `MESURE`. Une mise en garde en toutes lettres à
+côté d'un verdict qui l'ignore, c'est un verdict qui l'ignore : personne ne relit
+l'avertissement une fois le chiffre lu. Or un pic d'ATR n'est pas un accident propre à
+un titre, c'est un **événement de marché** que tout l'univers traverse le même jour. Les
+2 624 observations ne sont pas 2 624 épisodes.
+
+**Décision.** Regroupement par date : on moyenne à l'intérieur de chaque journée, puis
+on compare des journées. Le t brut reste affiché — l'écart entre les deux mesure
+exactement ce qu'on aurait cru à tort — mais **le statut suit le t groupé**. Sous 30
+journées distinctes, le verdict est `UNCALIBRATED` quel que soit le t brut. Sans dates
+fournies, le statut devient `MESURE_NON_GROUPEE` : le banc ne peut plus dire « mesuré »
+sur une statistique qu'il sait gonflée.
+
+**Ce que cela ne corrige toujours pas.** Deux journées consécutives d'une même crise
+restent corrélées. Le t groupé est une borne haute plus serrée, pas une preuve. Le
+verdict reste subordonné aux gates de `vault/15_CERTIFICATION.md`.
+
+**Sabotage.** Remettre le t brut aux commandes fait tomber le test des « mille lignes sur
+trois journées » ; supprimer la moyenne intra-journée en fait tomber trois.
+
+## ADR-0142 — Un DSR ML absent vaut `null`, jamais une approximation (2026-09-11)
+
+**Constat.** Le payload de l'artefact ML ne contenait que les noms de features. AUC de la
+CV purgée et Brier du split temporel existaient en mémoire mais étaient perdus dès la fin de
+l'entraînement : aucun champion n'était donc comparable par `should_promote`.
+
+**Décision.** Les deux métriques OOS sont persistées avec le modèle. Le champ `dsr` est
+persisté aussi, mais à `null` : ce pipeline classe une hausse/baisse et ne produit pas de
+rendements OOS. Un Sharpe déflaté exige précisément cette série de rendements et un nombre
+d'essais ; convertir une AUC en DSR changerait le sens statistique du garde-fou.
+
+**Conséquence.** La persistance est observable et le gate est désormais branché dans
+`make train` : un candidat incomplet, illisible ou moins bon est retiré, puis le champion
+est restauré. Tant que le DSR est `null`, ce gate conserve donc mécaniquement le champion ;
+seul le tout premier artefact bootstrappe le serving. Produire les rendements OOS reste le
+préalable à une promotion effective, pas à l'application du refus de sécurité.
 ## ADR-0141 — La bascule de modèle par régime : on mesure la règle avant de l'écrire (2026-09-11)
 
 **Contexte.** Spec reçue : « si l'ATR dépasse 200 % de sa moyenne 30 périodes, basculer
@@ -44,22 +142,6 @@ sabotage (remplacer le rendement futur par le passé fait tomber le test dédié
 mesure elle-même reste à lancer sur le VPS : ce conteneur n'a pas les bases de prix.
 
 
-## ADR-0142 — Un DSR ML absent vaut `null`, jamais une approximation (2026-09-11)
-
-**Constat.** Le payload de l'artefact ML ne contenait que les noms de features. AUC de la
-CV purgée et Brier du split temporel existaient en mémoire mais étaient perdus dès la fin de
-l'entraînement : aucun champion n'était donc comparable par `should_promote`.
-
-**Décision.** Les deux métriques OOS sont persistées avec le modèle. Le champ `dsr` est
-persisté aussi, mais à `null` : ce pipeline classe une hausse/baisse et ne produit pas de
-rendements OOS. Un Sharpe déflaté exige précisément cette série de rendements et un nombre
-d'essais ; convertir une AUC en DSR changerait le sens statistique du garde-fou.
-
-**Conséquence.** La persistance est observable et le gate est désormais branché dans
-`make train` : un candidat incomplet, illisible ou moins bon est retiré, puis le champion
-est restauré. Tant que le DSR est `null`, ce gate conserve donc mécaniquement le champion ;
-seul le tout premier artefact bootstrappe le serving. Produire les rendements OOS reste le
-préalable à une promotion effective, pas à l'application du refus de sécurité.
 ## ADR-0140 — Le ré-entraînement prenait le modèle de production en otage (2026-09-11)
 
 **Constat, trouvé en remettant `make train` en service (ADR-0139).** `train_model.py`

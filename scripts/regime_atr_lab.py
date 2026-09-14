@@ -34,6 +34,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from packages.research import regime_atr as R  # noqa: E402
+from packages.research import regime_robustesse as RR  # noqa: E402
 
 MIN_BARRES = R.FENETRE_ATR + R.FENETRE_MOYENNE + R.HORIZON + 20
 
@@ -73,6 +74,8 @@ def mesurer(data: dict, seuil: float, horizon: int) -> dict:
     """Agrège les rendements des deux régimes sur tout l'univers."""
     haute: list[float] = []
     basse: list[float] = []
+    haute_d: list[tuple[str, float]] = []
+    basse_d: list[tuple[str, float]] = []
     retenus, ecartes = 0, 0
     ratios_max: list[float] = []
     for barres in data.values():
@@ -81,15 +84,28 @@ def mesurer(data: dict, seuil: float, horizon: int) -> dict:
             continue
         retenus += 1
         d = R.classer([b.high for b in barres], [b.low for b in barres],
-                      [b.close for b in barres], seuil=seuil, horizon=horizon)
+                      [b.close for b in barres], dates=[b.ts for b in barres],
+                      seuil=seuil, horizon=horizon)
         haute.extend(d["haute"])
         basse.extend(d["basse"])
+        haute_d.extend(d["haute_datees"])
+        basse_d.extend(d["basse_datees"])
         if d["ratio_max"] is not None:
             ratios_max.append(d["ratio_max"])
-    v = R.verdict(haute, basse, seuil=seuil)
+    v = R.verdict(haute, basse, seuil=seuil,
+                  haute_datees=haute_d, basse_datees=basse_d)
     v["symboles_retenus"] = retenus
     v["symboles_ecartes"] = ecartes
     v["ratio_max_median"] = R._mediane(ratios_max)
+    # EXPLOITABILITÉ — questions distinctes de « les régimes diffèrent-ils ». On les
+    # calcule sur les moyennes PAR JOURNÉE, la série qui décide déjà du verdict :
+    # mesurer la dispersion sur les lignes brutes reviendrait à réintroduire par la
+    # bande le comptage que le regroupement vient d'écarter.
+    jours_haute = R.moyennes_par_date(haute_d)
+    v["distribution_haute"] = RR.distribution(jours_haute)
+    v["distribution_basse"] = RR.distribution(R.moyennes_par_date(basse_d))
+    v["amputation"] = RR.sans_les_meilleurs(jours_haute)
+    v["concentration"] = RR.concentration(haute_d)
     return v
 
 
@@ -116,15 +132,68 @@ def rapport(v: dict, horizon: int) -> str:
     ]
     w = v.get("welch") or {}
     if w.get("disponible"):
-        lignes.append(f"  Welch         : t = {w['t']} sur {w['ddl']} ddl"
-                      f" · écart de moyenne {pct(w['ecart_moyen'])}")
+        lignes.append(f"  Welch BRUT    : t = {w['t']} sur {w['ddl']} ddl"
+                      f" · écart de moyenne {pct(w['ecart_moyen'])}"
+                      "  ← compte chaque (symbole, jour) comme un tirage")
+    if v.get("n_jours_haute") is not None:
+        lignes.append(f"  épisodes      : {v['n_jours_haute']} JOURNÉES de haute vol"
+                      f" · {v['n_jours_basse']} de basse vol")
+        wg = v.get("welch_groupe") or {}
+        if wg.get("disponible"):
+            lignes.append(f"  Welch GROUPÉ  : t = {wg['t']} sur {wg['ddl']} ddl"
+                          f" · écart de moyenne {pct(wg['ecart_moyen'])}"
+                          "  ← une observation par journée de marché")
+        else:
+            lignes.append(f"  Welch GROUPÉ  : indisponible ({wg.get('motif')})")
     lignes.append("  fenêtres SANS chevauchement (une observation tous les"
                   f" {horizon} jours) — sinon n serait gonflé d'un facteur {horizon}"
                   " par des jours partagés.")
-    lignes.append("  RESTE une corrélation transversale : les symboles bougent"
-                  " ensemble. Le t est une BORNE HAUTE de l'évidence.")
+    lignes.append("  Un pic d'ATR est un ÉVÉNEMENT DE MARCHÉ : tout l'univers le")
+    lignes.append("  traverse le même jour. Seul le t groupé compte des épisodes ;")
+    lignes.append("  c'est lui, et non le t brut, qui décide du verdict.")
+    lignes += _exploitabilite(v, pct)
     lignes.append(f"  VERDICT       : {v['statut']} — {v['message']}")
     return "\n".join(lignes)
+
+
+def _exploitabilite(v: dict, pct) -> list[str]:
+    """Un écart de moyenne se joue-t-il ? Quatre lignes, et elles peuvent dire non."""
+    dh, db = v.get("distribution_haute") or {}, v.get("distribution_basse") or {}
+    if not dh.get("n"):
+        return []
+    out = ["  ── exploitabilité (sur les moyennes par journée) ──",
+           f"  haute vol     : médiane {pct(dh['mediane'])}"
+           f" · moyenne {pct(dh['moyenne'])}"
+           f" · gagnantes {dh['taux_gain'] * 100:.1f} %"
+           f" · p10 {pct(dh['p10'])} / p90 {pct(dh['p90'])}"]
+    if db.get("n"):
+        out.append(f"  basse vol     : médiane {pct(db['mediane'])}"
+                   f" · moyenne {pct(db['moyenne'])}"
+                   f" · gagnantes {db['taux_gain'] * 100:.1f} %")
+    a = v.get("amputation") or {}
+    if a.get("disponible"):
+        n = a["retirees"]
+        out.append(f"  sans le 1 % du haut ({n} journée{'s' if n > 1 else ''}) : "
+                   f"{pct(a['moyenne_complete'])} → {pct(a['moyenne_amputee'])}"
+                   f"  [{'TIENT' if a['survit'] else 'S EFFONDRE'}]")
+    c = v.get("concentration") or {}
+    if c.get("disponible"):
+        pe, pa = c["part_plus_gros_episode"], c["part_annee_dominante"]
+        out.append(f"  épisodes      : {c['n_episodes']} secousses distinctes sur "
+                   f"{c['n_jours']} journées"
+                   f" (médiane {c['jours_par_episode_median']} j)")
+        out.append(f"  le plus gros  : {c['episode_dominant']} porte "
+                   + ("n/d" if pe is None else f"{pe * 100:+.1f} %") + " du total")
+        out.append(f"  année pesante : {c['annee_dominante']} porte "
+                   + ("n/d" if pa is None else f"{pa * 100:+.1f} %") + " du total")
+        alerte = [n for n, x in (("un épisode", pe), ("une année", pa))
+                  if x is not None and abs(x) >= RR.PART_ALERTE]
+        if alerte:
+            verbe = "portent" if len(alerte) > 1 else "porte"
+            out.append(f"  ⚠ {' et '.join(alerte)} {verbe} plus de "
+                       f"{RR.PART_ALERTE * 100:.0f} % du total — c'est un ÉVÉNEMENT, "
+                       "pas un régime.")
+    return out
 
 
 def main() -> None:

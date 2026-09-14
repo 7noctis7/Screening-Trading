@@ -140,7 +140,7 @@ Sur une machine qui doit survivre à la déconnexion SSH, les services remplacen
 | `make breakout-study` | les cassures de canal prédisent-elles un rendement ? gate placebo |
 | `make screen-niche` | exploitabilité d'un univers (score 0-100) avant de s'y engager |
 | `make banc-swing` | un moteur de stratégie mérite-t-il d'être branché ? **mesure, ne branche rien** |
-| `make regime-atr-lab` | la règle « ATR > 200 % de sa moyenne 30 » mord-elle, et sépare-t-elle quoi que ce soit ? **mesure, ne bascule rien** |
+| `make regime-atr-lab` | la règle « ATR > 200 % de sa moyenne 30 » mord-elle, sépare-t-elle quelque chose, et cet écart est-il **jouable** (médiane, amputation du 1 %, concentration par épisode/année) ? **mesure, ne bascule rien** |
 | `make labs` | les cinq bancs de mesure d'un coup |
 | `make valider-nouveautes` | valide sur données réelles les modules non branchés (lecture seule) |
 | `make certification` | **les modules disent-ils la vérité sur leur place ?** (déclaré hors-prod vs réellement atteignable) |

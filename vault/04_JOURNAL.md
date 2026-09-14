@@ -28,6 +28,39 @@ le candidat est retiré et le champion restauré. Le premier artefact reste un b
 modèle existant ne peut être remplacé tant que les rendements OOS manquent. Deux tests couvrent
 le refus DSR absent et la promotion d'un candidat complet supérieur.
 
+## Session 2026-09-14 (12ᵉ) — Le t survit au regroupement ; reste à savoir s'il se joue
+
+**Ma prédiction était fausse, et la mesure le dit.** J'avais écrit que les 697
+observations du seuil 2,50 étaient « peut-être six journées de marché ». Ce sont **458
+journées distinctes**. À ces seuils un pic d'ATR n'est pas un événement de marché : il
+est **idiosyncratique**, 2,7 titres par jour. L'effet survit donc au regroupement —
+t groupé 4,585 (seuil 1,50) · 3,273 (2,00) · 2,315 (2,50). Le correctif restait juste :
+il fallait le mesurer pour le savoir, et le t baisse bien à chaque seuil.
+
+**Mais `MESURE` répondait à la mauvaise question.** Un t de Welch dit que deux moyennes
+diffèrent. Il ne dit pas que l'écart se joue. Rien dans la sortie ne séparait les deux, et
+ce dépôt a déjà payé cette confusion : `sizing_lab`, profit factor 1,15 → **0,89** privé
+des cinq meilleurs trades sur 477. Perdant. L'agrégat était vrai.
+
+**Livré.** `packages/research/regime_robustesse.py` — module séparé, question distincte.
+Quatre mesures sur les moyennes par journée : médiane + taux de gain + queues ; amputation
+du 1 % supérieur ; **épisodes contigus** (des jours à moins de 5 jours d'écart sont UNE
+secousse — le regroupement par date corrige la corrélation transversale, pas la sérielle) ;
+concentration par épisode et par année, alerte au-delà de 50 %. Le banc affiche un bloc
+« exploitabilité » et dit en toutes lettres quand un résultat est un ÉVÉNEMENT, pas un
+régime. ADR-0144. 16 tests, trois sabotages vérifiés.
+
+**Croisé une autre main.** La PR #384 a fusionné pendant ce travail et livré le P0 que
+j'avais relevé (métriques persistées, cron qui conserve le champion). Elle va plus loin
+que mon diagnostic : le DSR reste `null` par REFUS de le dériver de l'AUC — un classement
+n'est pas un rendement. Conflit de vault résolu, collision de numéro d'ADR arbitrée en
+faveur du sien (publié), le mien passe en ADR-0143.
+
+**À relancer sur le VPS** — c'est cette commande qui tranche :
+`make sync && make regime-atr-lab ARGS="1.5 2.0 2.5"`.
+
+**Mesuré.** 2 649 passés, 74 ignorés.
+
 ## Session 2026-09-11 (11ᵉ) — MLOps : ce qui existe déjà, et ce que la mesure interdit
 
 **Demande.** Watchdog (win rate + Sharpe glissants sur 100 trades, alerte à −15 % vs
@@ -63,15 +96,35 @@ sur échec, oublié seulement quand le remplaçant est écrit. ADR-0140.
 
 **Livré au lieu de la bascule.** `packages/research/regime_atr.py` + `make regime-atr-lab`
 (cinquième banc) : combien de barres franchissent le seuil, les rendements futurs
-diffèrent-ils (Welch), reste-t-il 500 lignes du côté rare. Quatre verdicts possibles, dont
-trois ferment le sujet. Lecture seule. ADR-0141. **La mesure reste à lancer sur le VPS**
-(ce conteneur n'a pas les bases de prix).
+diffèrent-ils (Welch), reste-t-il 500 lignes du côté rare. Lecture seule. ADR-0141.
 
-**Prochaine brique, petite.** `should_promote` ne peut pas être câblé tant que le payload
-de l'artefact vaut `{"fn": fn}` : rien n'y joue le champion. Persister les métriques
-(DSR/Brier/AUC) à côté du modèle est un préalable de quelques lignes.
+**Passé sur la base réelle (VPS, 820 symboles).** La règle n'est **pas inerte** et l'écart
+va **dans le sens inverse de la spec** : la haute volatilité rend PLUS. Schéma monotone
+sur trois seuils — 1,50 → +1,05 % (t 5,72 · n 14 754) · 2,00 → +2,09 % (t 3,81 · n 2 624)
+· 2,50 → +4,14 % (t 3,13 · n 697). L'écart grossit quand le seuil se resserre, le t baisse
+quand n s'effondre : signature d'un effet de fond, pas d'un seuil choisi après coup. Ce
+qui est mesuré est un **rebond de volatilité**, pas un risque à fuir — un modèle « haute
+volatilité » défensif serait à contre-sens.
 
-**Mesuré.** 2 622 passés, 74 ignorés (+21).
+**Et le banc se trompait sur sa propre force.** Il annonçait son t comme « borne haute »
+à cause de la corrélation transversale, puis rendait quand même `MESURE`. Un
+avertissement à côté d'un verdict qui l'ignore ne protège personne : on lit le chiffre,
+pas la note. Or un pic d'ATR est un **événement de marché** — les 697 observations du
+seuil 2,50 sont quelques journées vues par des centaines de titres. Regroupement par date
+ajouté : on moyenne dans la journée, puis on compare des journées. Le t brut reste affiché
+(l'écart entre les deux mesure ce qu'on aurait cru à tort) mais **le statut suit le
+groupé**, et sous 30 journées distinctes le verdict est `UNCALIBRATED` quel que soit le t
+brut. ADR-0143. **À relancer sur le VPS** pour connaître le nombre réel d'épisodes.
+
+**Prochaine brique — FAITE entre-temps, par une autre main.** J'avais relevé que
+`should_promote` ne pouvait pas être câblé tant que le payload de l'artefact valait
+`{"fn": fn}` : rien n'y jouait le champion. La PR #384 a livré exactement ça (métriques
+persistées, cron qui conserve le champion si elles sont incomplètes) — et elle est allée
+plus loin que mon diagnostic : le DSR reste `null` par REFUS de le dériver de l'AUC, qui
+mesure un classement et non un rendement. Le garde-fou existe donc, et il est honnête sur
+ce qu'il ne sait pas. Reste à produire de vrais rendements OOS pour qu'il puisse trancher.
+
+**Mesuré.** 2 626 passés, 74 ignorés.
 
 ## Session 2026-09-10 (10ᵉ) — Treize commandes mortes, dont `make train`
 

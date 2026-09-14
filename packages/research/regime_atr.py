@@ -66,7 +66,7 @@ def ratios(hauts, bas, clotures, *, fenetre_atr: int = FENETRE_ATR,
             for a, m in zip(atr, moy, strict=True)]
 
 
-def classer(hauts, bas, clotures, *, seuil: float = SEUIL_SPEC,
+def classer(hauts, bas, clotures, *, dates=None, seuil: float = SEUIL_SPEC,
             horizon: int = HORIZON, chevauchement: bool = False, **kw) -> dict:
     """Range les rendements FUTURS de chaque barre dans son régime.
 
@@ -84,16 +84,54 @@ def classer(hauts, bas, clotures, *, seuil: float = SEUIL_SPEC,
     r = ratios(hauts, bas, clotures, **kw)
     haute: list[float] = []
     basse: list[float] = []
+    haute_d: list[tuple[str, float]] = []
+    basse_d: list[tuple[str, float]] = []
     pas = 1 if chevauchement else max(1, horizon)
     for i in range(0, len(r), pas):
         ratio = r[i]
         j = i + horizon
         if ratio is None or j >= len(clotures) or clotures[i] <= 0:
             continue
-        (haute if ratio > seuil else basse).append(clotures[j] / clotures[i] - 1.0)
+        rendement = clotures[j] / clotures[i] - 1.0
+        (haute if ratio > seuil else basse).append(rendement)
+        if dates is not None and i < len(dates) and dates[i] is not None:
+            (haute_d if ratio > seuil else basse_d).append((jour(dates[i]), rendement))
     connus = [x for x in r if x is not None]
     return {"haute": haute, "basse": basse, "ratios": connus,
+            "haute_datees": haute_d, "basse_datees": basse_d,
             "ratio_median": _mediane(connus), "ratio_max": max(connus, default=None)}
+
+
+def jour(ts) -> str:
+    """Un horodatage, quelle que soit sa forme, réduit à sa journée.
+
+    Les barres arrivent tantôt en `datetime`, tantôt en chaîne ISO selon la source.
+    Le regroupement par date ne tolère pas deux conventions : deux écritures du même
+    jour formeraient deux grappes, et le nombre de grappes est précisément ce qui
+    décide de la force du résultat.
+    """
+    if hasattr(ts, "strftime"):
+        return ts.strftime("%Y-%m-%d")
+    return str(ts)[:10]
+
+
+def moyennes_par_date(observations: list[tuple[str, float]]) -> list[float]:
+    """Une observation par JOUR de marché, et non par couple (symbole, jour).
+
+    LA CORRECTION QUI DÉCIDE DE TOUT ICI. Un pic d'ATR n'est pas un accident propre à
+    un titre : c'est un événement de marché que 800 symboles traversent le même jour.
+    Les compter comme 800 tirages indépendants divise l'erreur-type par ~28 et fabrique
+    un t qui n'a rien mesuré. On moyenne donc à l'intérieur de chaque journée, puis on
+    compare des journées — n devient le nombre d'épisodes réellement observés, ce qui
+    est le nombre de fois où le marché a répondu à la question.
+
+    Cela ne corrige PAS tout : deux journées consécutives d'une même crise restent
+    corrélées. C'est une borne haute plus serrée, pas une preuve.
+    """
+    par_jour: dict[str, list[float]] = {}
+    for d, x in observations:
+        par_jour.setdefault(d, []).append(x)
+    return [sum(v) / len(v) for _, v in sorted(par_jour.items())]
 
 
 def _mediane(xs: list[float]) -> float | None:
@@ -134,12 +172,18 @@ def welch(a: list[float], b: list[float]) -> dict:
 
 
 def verdict(haute: list[float], basse: list[float], *,
-            seuil: float = SEUIL_SPEC) -> dict:
+            seuil: float = SEUIL_SPEC, haute_datees=None, basse_datees=None) -> dict:
     """Ce que la mesure autorise à conclure — y compris « rien ».
 
-    Deux garde-fous, et ils bloquent AVANT le test statistique : un régime sous
+    Deux garde-fous bloquent AVANT le test statistique : un régime sous
     `MIN_OBS_VERDICT` ne porte aucune moyenne lisible, et un régime sous
     `PLANCHER_ENTRAINEMENT` ne peut pas porter de modèle dédié, quel que soit le t.
+
+    QUAND LES DATES SONT FOURNIES, C'EST LE t GROUPÉ QUI DÉCIDE. Le t brut compte
+    chaque couple (symbole, jour) comme un tirage ; or un pic d'ATR est un événement
+    de marché que tout l'univers traverse ensemble. Le t groupé compare des JOURNÉES,
+    donc des épisodes. Les deux sont rendus — l'écart entre eux est la mesure de ce
+    qu'on aurait cru à tort — mais le statut suit le groupé, jamais le brut.
     """
     n_h, n_b = len(haute), len(basse)
     mh, _ = _moyenne_ecart(haute)
@@ -159,11 +203,32 @@ def verdict(haute: list[float], basse: list[float], *,
                 "message": f"{min(n_h, n_b)} observations du côté le plus mince "
                            f"(< {MIN_OBS_VERDICT}) — l'écart n'est pas lisible"}
     w = welch(haute, basse)
+    base["welch"] = w
     if not base["entrainable_haute"]:
-        return {**base, "welch": w, "statut": "NON_ENTRAINABLE",
+        return {**base, "statut": "NON_ENTRAINABLE",
                 "message": f"{n_h} lignes en haute volatilité < plancher "
                            f"{PLANCHER_ENTRAINEMENT} de `_ml_section` — un modèle "
                            "dédié à ce régime ne peut pas être entraîné"}
-    return {**base, "welch": w, "statut": "MESURE",
-            "message": f"t de Welch {w.get('t')} sur {w.get('ddl')} ddl — "
-                       "à confronter au gate de certification avant toute bascule"}
+    if haute_datees is None or basse_datees is None:
+        return {**base, "statut": "MESURE_NON_GROUPEE",
+                "message": f"t de Welch {w.get('t')} sur {w.get('ddl')} ddl, SANS "
+                           "regroupement par date — borne haute, pas une mesure"}
+
+    jh, jb = moyennes_par_date(haute_datees), moyennes_par_date(basse_datees)
+    wg = welch(jh, jb)
+    base.update({"n_jours_haute": len(jh), "n_jours_basse": len(jb),
+                 "welch_groupe": wg})
+    if len(jh) < MIN_OBS_VERDICT:
+        return {**base, "statut": "UNCALIBRATED",
+                "message": f"{len(jh)} JOURNÉES de haute volatilité seulement "
+                           f"(< {MIN_OBS_VERDICT}) — les {n_h} observations brutes "
+                           "sont ces mêmes journées vues par des centaines de "
+                           "symboles, pas autant d'épisodes distincts"}
+    if not wg.get("disponible"):
+        return {**base, "statut": "UNCALIBRATED",
+                "message": f"t groupé indisponible : {wg.get('motif')}"}
+    return {**base, "statut": "MESURE",
+            "message": f"t groupé {wg['t']} sur {wg['ddl']} ddl "
+                       f"({len(jh)} journées contre {len(jb)}) — le t brut "
+                       f"{w.get('t')} comptait {n_h} lignes comme indépendantes. "
+                       "À confronter au gate de certification avant toute bascule"}
