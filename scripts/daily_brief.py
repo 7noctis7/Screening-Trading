@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -55,13 +56,31 @@ def _priorities() -> list[str]:
 
 
 def _data_audit() -> str:
+    """L'audit des bases, lancé avec l'interpréteur QUI FAIT TOURNER CE BRIEF.
+
+    `["python", ...]` cherchait un binaire nommé exactement `python` dans le PATH.
+    Sur le VPS il n'y en a pas — Ubuntu n'expose que `python3` — et le brief
+    affichait « (audit indisponible) » chaque matin, message qui se lit comme
+    un état normal.
+    Même famille que les treize commandes mortes : un appel cassé qu'un `except` général
+    déguise en situation prévue. `sys.executable` est le `.venv/bin/python` que le
+    Makefile a déjà choisi, donc celui qui a les dépendances de l'audit.
+
+    Et quand ça rate quand même, on DIT quoi : un diagnostic vaut mieux qu'un mot poli.
+    """
     try:
-        r = subprocess.run(["python", "scripts/data_audit.py"], cwd=str(ROOT),
+        r = subprocess.run([sys.executable, "scripts/data_audit.py"], cwd=str(ROOT),
                            capture_output=True, text=True, timeout=120)
-        lines = [ln for ln in r.stdout.splitlines() if ln.startswith("·")]
-        return "\n".join(lines) or "(pas de base locale auditée)"
-    except Exception:  # noqa: BLE001
-        return "(audit indisponible)"
+    except Exception as e:  # noqa: BLE001
+        return f"(audit non lancé : {type(e).__name__} — {e})"
+    lignes = [ln for ln in r.stdout.splitlines() if ln.startswith("·")]
+    if lignes:
+        return "\n".join(lignes)
+    if r.returncode != 0:
+        detail = (r.stderr or r.stdout).strip().splitlines()
+        fin = detail[-1] if detail else "aucune sortie"
+        return f"(audit en échec, code {r.returncode} : {fin})"
+    return "(pas de base locale auditée)"
 
 
 def build() -> str:
