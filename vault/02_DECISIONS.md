@@ -2,6 +2,47 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0147 — Quatre des dix « critiques » de l'audit étaient un fait de marché (2026-09-14)
+
+**Le premier `make audit` qui tourne depuis longtemps** (ADR-0146 l'avait débloqué) sort
+10 anomalies critiques. Elles ne disent pas toutes la même chose.
+
+**Les quatre fausses.** `CL=F` — le contrat WTI — les 20 et 21 avril 2020 :
+`close ≤ 0 (-37.63)`, `low ≤ 0 (-40.32)`, `open ≤ 0 (-14.0)`. C'est **arrivé**. Le
+contrat de mai s'est réglé sous zéro ce jour-là : quand stocker coûte plus cher que le
+baril ne vaut, le détenteur paie pour se défaire de la livraison. Le chiffre relevé
+correspond au règlement documenté. La donnée est JUSTE ; c'est la règle qui était fausse.
+
+**Les six vraies.** `AAVE-USD` le 2020-10-02, `ICP-USD` le 2021-05-10, `DYDX-USD` le
+2021-09-08 : `open = 0.0` et `low = 0.0`, exactement. Trois jours d'introduction, trois
+fournisseurs sans donnée qui l'ont rendue en zéro. Un jeton ne cote pas zéro alors qu'il
+a un haut et une clôture.
+
+**Pourquoi cela comptait.** Un cri-au-loup ne coûte pas seulement son bruit : il coûte la
+crédibilité des vrais. Quatre faux positifs sur dix apprennent à passer le rouge, et les
+six qui restent sont précisément les défauts qu'on voulait voir. La règle `val <= 0 →
+critique` mélangeait deux affirmations : « ce prix est impossible » et « ce prix est
+absent ».
+
+**Décision.** `_peut_coter_negatif(symbol)` — convention `=F` du dépôt (`snapshot.py:91`
+en déduit déjà `commodity`). Sur un terme, un prix **négatif** devient un *warning*
+(plausible, mais visible : plausible n'est pas invisible). Le **zéro exact** reste
+critique partout, terme compris — un prix peut être négatif, il ne peut pas être ABSENT.
+Sur toute autre classe, `<= 0` reste critique.
+
+**Ce que cela change ailleurs.** La gate CI `--strict` devient utilisable : elle ne
+serait plus rouge en permanence à cause d'un fait de 2020.
+
+**Contamination à signaler, sans la corriger ici.** Un `low = 0.0` gonfle le true range
+de la barre, donc l'ATR sur 14 barres et sa moyenne sur 30. Les trois jetons concernés
+ont ainsi pu produire des barres faussement « haute volatilité » dans
+`make regime-atr-lab` — de l'ordre de quelques dizaines sur 2 624, et dans le sens qui
+FLATTE l'effet mesuré. Le verdict d'ADR-0145 était l'abandon ; cette contamination ne
+peut que le renforcer.
+
+**Sabotage.** Règle aveugle restaurée : 2 tests tombent · zéro toléré sur un terme : 1 ·
+tout symbole traité comme un terme : 2.
+
 ## ADR-0146 — Le brief du matin appelait un binaire qui n'existe pas sur le VPS (2026-09-14)
 
 **Constat, dans la sortie de `make brief`** : `## 🩺 Audit données` → `(audit

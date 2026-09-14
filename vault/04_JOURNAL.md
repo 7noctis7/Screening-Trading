@@ -69,7 +69,19 @@ entrée le même jour, toutes deux 12ᵉ, la sienne au-dessus. Ordre rétabli, l
 renumérotée 13ᵉ. Garde-fou posé sur le SOMMET seulement — le numéro de session repart à 2
 après 28 dans ce dépôt, et l'ordre total réécrirait 185 entrées pour protéger une ligne.
 
-**Mesuré.** 2 657 passés, 74 ignorés.
+**Puis l'audit débloqué a parlé, et la moitié de son rouge était faux.** 10 critiques :
+quatre sur `CL=F` les 20-21 avril 2020 (`close -37,63`) — le règlement négatif du WTI, un
+fait de marché documenté, pas une corruption ; six zéros EXACTS sur AAVE, ICP et DYDX à
+leur jour d'introduction — ceux-là sont de vrais trous. La règle `val <= 0 → critique`
+confondait « ce prix est impossible » et « ce prix est absent ». Un terme peut coter
+négatif ; rien ne peut coter zéro. ADR-0147.
+
+**À noter pour la mesure ATR** : un `low = 0.0` gonfle le true range, donc l'ATR et sa
+moyenne. Quelques dizaines de barres sur 2 624 ont pu être faussement classées « haute
+volatilité » — dans le sens qui FLATTE l'effet. Le verdict d'abandon n'en est que plus
+solide.
+
+**Mesuré.** 2 664 passés, 74 ignorés.
 
 ## Session 2026-09-11 (12ᵉ) — Métriques du champion : deux persistées, une refusée
 
