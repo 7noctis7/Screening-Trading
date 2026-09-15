@@ -2,6 +2,69 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0150 — Le portail refusait des achats financés par des ventes du même lot (2026-09-14)
+
+**Mesuré sur le run paper du 14/09**, log de production à l'appui. `_reconcile` parcourait
+les lignes par **cible décroissante**. Or une ligne à SOLDER a une cible de zéro : elle
+passait donc en dernier. Le portail de risque évaluait chaque achat en voyant encore, dans
+l'exposition brute, tout ce que le même lot s'apprêtait à liquider.
+
+| Étape | Montant |
+|---|---|
+| Brut au départ | 80 785 $ / 100 194 $ (80,6 %) |
+| Achats acceptés | +19 408 $ → plafond **saturé** |
+| Achats REFUSÉS | **9 961 $** (LTC, LNC, NWS, SIG, ETH, T, BCH) |
+| Ventes, ensuite | **13 720 $** (DUOL, LINKUSD, NWSA, OXY, PATH, PSX, SOLUSD) |
+
+Les ventes libéraient 3 759 $ de PLUS que le total des refus. Traitées d'abord, les sept
+passaient. Conséquence visible : 57 180 $ immobilisés en liquidités et huit lignes cibles
+jamais achetées — sans qu'aucune interface ne dise pourquoi.
+
+**Décision.** `ordre_de_traitement(tgt, detenu)` : ventes d'abord, puis achats. Dans chaque
+groupe, du plus gros au plus petit — l'ordre entre achats est celui d'avant.
+
+**Pourquoi c'est sûr.** Une vente n'est JAMAIS bloquée par le portail (« désengagement —
+jamais bloqué »). Les passer d'abord ne peut donc rien refuser de plus. L'ordre est
+strictement plus permissif à décisions de stratégie inchangées : il ne choisit rien, il
+cesse seulement de compter deux fois le même capital.
+
+**Ce qu'il ne corrige pas.** Le portail reste séquentiel et ne planifie pas : il ne sait
+toujours pas qu'un achat refusé aurait pu attendre trois lignes de plus. Un ordonnancement
+global (résoudre le lot comme un problème de sac à dos sous contrainte) serait une autre
+décision, à mesurer avant d'être écrite.
+
+## ADR-0151 — Un cœur indiciel à 50 % était interdit par un plafond fait pour les titres (2026-09-14)
+
+**Constat, même log.** `QQQ cible 46 087 $ détenu 43 028 $ ⛔ REFUSÉ [poids_ligne] ligne
+plafonnée à 20 %`. L'allocation de production vise pourtant « 50 % QQQ + 50 % preset ». Le
+refus tombait à chaque passage. Et comme une vente n'est jamais bloquée, la ligne ne pouvait
+que **décroître** : l'allocation affichée sur la page était inatteignable par construction.
+
+**Ce qui manquait.** Le plafond de ligne borne le risque IDIOSYNCRATIQUE — ce qu'on perd si
+UN émetteur s'effondre. Un panier de cent lignes ne porte pas ce risque-là. Appliquer le
+même nombre aux deux confond « une position » et « un risque ».
+
+**Pourquoi ce sens plutôt que l'inverse, et c'est l'argument qui décide.** Il y avait trois
+options : monter le plafond, descendre le cœur sous 20 %, ou exempter le cœur. Descendre le
+cœur forcerait 80 % du portefeuille vers le satellite — c'est-à-dire vers la partie dont ce
+dépôt a MESURÉ qu'elle n'a pas d'edge prouvé (DSR ≈ 0, `_edge_proven` faux, allocation
+100 % risk-parity, cf. ADR-0145). Concentrer le capital là où l'avantage n'est pas démontré,
+au nom du risque, revient à échanger du bêta diversifié contre du bruit. L'exemption, elle,
+supprimerait la limite au lieu de l'adapter.
+
+**Décision.** Un plafond SÉPARÉ, pas une exemption. `MAX_POIDS_LIGNE_PANIER = 0,60`
+(`QUANT_RISK_MAX_WEIGHT_BASKET`), appliqué quand l'appelant DÉCLARE un véhicule diversifié —
+`run_live.py` le déduit de la classe d'actifs déjà résolue, le portail ne devine rien d'un
+ticker. Défaut `panier=False` : aucun appelant existant ne voit son plafond bouger.
+
+**0,60 est une POLITIQUE, pas une mesure.** Elle laisse vivre un cœur à 50 % avec de la
+marge et refuse le 100 % — un ETF reste un émetteur, un dépositaire, et pour QQQ une
+concentration interne réelle. Aucun test ne prétend que 0,60 soit le bon chiffre ; ils
+vérifient que panier et titre unique ne partagent plus le même plafond, et que le panier
+reste borné.
+
+**Sabotage.** Plafond unique restauré : 2 tests tombent · panier porté à 100 % : 2.
+
 ## ADR-0149 — Le bandeau « LIVE » mesurait l'aller-retour réseau (2026-09-14)
 
 **Constat, apporté par l'utilisateur.** La page Positions affichait 19 lignes et

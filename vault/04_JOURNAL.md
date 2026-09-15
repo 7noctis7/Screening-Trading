@@ -1,5 +1,38 @@
 # 04 — JOURNAL
 
+## Session 2026-09-14 (15ᵉ) — Deux ordres de grandeur, et un rideau d'entrée
+
+**Le log de production a tranché, contre mon hypothèse.** J'avais avancé que les 57 180 $
+en liquidités venaient d'un report hors séance. Faux. C'est le portail de risque, et la
+cause est un ORDRE DE TRAITEMENT : `_reconcile` parcourait les lignes par cible
+décroissante, donc les lignes à solder (cible zéro) passaient EN DERNIER. Le portail
+évaluait les achats en voyant encore, dans l'exposition brute, tout ce que le lot allait
+vendre. 9 961 $ d'achats refusés ; 13 720 $ libérés juste après. ADR-0150.
+
+**Et QQQ était interdit par construction.** Plafond de ligne à 20 %, cœur visé à 50 % :
+refus à chaque passage, et comme les ventes ne sont jamais bloquées, la ligne ne pouvait
+que décroître. Le plafond bornait le risque IDIOSYNCRATIQUE ; l'appliquer à un panier de
+cent lignes confond « une position » et « un risque ». Plafond SÉPARÉ à 0,60, pas une
+exemption — et le sens du choix vient de ce qu'on a mesuré : descendre le cœur pousserait
+80 % du capital vers le satellite, la partie sans edge prouvé (DSR ≈ 0). ADR-0151.
+
+**Rideau d'entrée.** `components/intro/` — canvas 2D, zéro dépendance, 3,9 s. Carnet de
+profondeur, chandeliers vectoriels, graphe qui s'allume couche par couche, enveloppe de
+risque qui se resserre, HUD de terminal. Les couleurs viennent des variables CSS : l'intro
+suit la charte ET le thème, au lieu du noir proposé qui jurerait avec `--bg:#0a1118`. Les
+métriques du HUD convergent vers NOS ordres de grandeur — AUC 0,524, pas 0,94.
+
+**Ce que la landing avait déjà.** Scène R3F, ticker live, et la séquence
+`01 PLACEBO → 02 DSR → 03 PBO → 04 SABOTAGE` avec les vrais chiffres. L'intro ne la
+remplace pas : elle se monte AU-DESSUS, la page est déjà là dessous.
+
+**Quatrième hypothèse fausse de la journée**, après les 458 journées, l'effet de régime et
+le report hors séance. Et un cinquième piège évité de justesse : un `__pycache__` figé par
+mon propre sabotage m'a fait lire `1.0` là où la source disait `0.60`. Le code était juste.
+Purger `__pycache__` entre restauration et re-test.
+
+**Mesuré.** 2 688 passés, 74 ignorés. Build Next.js vert, landing à 7,16 kB.
+
 ## Session 2026-09-14 (14ᵉ) — Un bandeau vert sur des positions vendues
 
 **Apporté par l'utilisateur, pas par un garde-fou.** Sa page Positions affichait 19 lignes

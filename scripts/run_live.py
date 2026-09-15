@@ -153,6 +153,37 @@ def _log_rejet(bsym: str, bname: str, intention, issue: str) -> None:
         pass
 
 
+def ordre_de_traitement(tgt: dict, detenu: dict) -> list:
+    """Les VENTES d'abord. L'ordre de passage décide de ce que le portail accepte.
+
+    Le tri d'origine allait par cible décroissante. Or une ligne à SOLDER a une cible de
+    zéro : elle partait donc en dernier. Le portail de risque évaluait les achats en
+    voyant encore, dans l'exposition brute, tout ce que le même lot allait vendre.
+    Il refusait ainsi des achats financés par ces ventes.
+
+    MESURÉ le 14/09 sur le compte paper. Brut 80 785 $ pour un plafond de 100 194 $ ;
+    19 408 $ d'achats acceptés saturent le plafond ; SEPT achats sont alors refusés pour
+    9 961 $ — puis sept lignes sont soldées, libérant 13 720 $. Soit 3 759 $ de plus que
+    le total des refus. Dans l'autre sens, les sept passaient.
+
+    Pourquoi c'est sûr : une vente n'est JAMAIS bloquée par le portail
+    (« désengagement — jamais bloqué »). Les passer d'abord ne peut donc rien
+    refuser de plus qu'avant. Cet
+    ordre est strictement plus permissif, à décisions de stratégie inchangées — il ne
+    choisit rien, il cesse seulement de compter deux fois le capital.
+    """
+    def cle(kv):
+        nkey, info = kv
+        delta = info["val"] - detenu.get(nkey, 0.0)
+        # 0 = vente (libère l'exposition) · 1 = achat (la consomme). Puis, dans
+        # chaque groupe du plus gros au plus petit : l'ordre entre achats est
+        # celui d'avant.
+        return (1 if delta >= 0 else 0,
+                -abs(delta) if delta < 0 else -info["val"])
+
+    return sorted(tgt.items(), key=cle)
+
+
 def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, list]:
     """Réconciliation idempotente + ANTI-LEVIER. Retourne (nb ordres, ouvertures, ventes).
 
@@ -195,7 +226,7 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, 
         _npos = sum(1 for v in curn.values() if abs(v) > 0)
         if not dry:
             print(f"  portail de risque : {_lim.resume()} · brut actuel {_expo:.0f}$ / {cap:.0f}$")
-        for nkey, info in sorted(tgt.items(), key=lambda kv: -kv[1]["val"]):
+        for nkey, info in ordre_de_traitement(tgt, curn):
             o, bsym = info["o"], info["sym"]
             detenu = curn.get(nkey, 0.0)
             delta = info["val"] - detenu                      # >0 acheter · <0 vendre
@@ -224,8 +255,13 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, 
             # DERNIÈRE BARRIÈRE : le portail peut réduire ou refuser, jamais
             # augmenter. Un
             # désengagement le traverse toujours (le bloquer augmenterait le risque).
+            # Le portail ne devine pas ce qu'est un panier : on le lui DIT, depuis la
+            # classe d'actifs déjà résolue plus haut. Un ETF indiciel porte un risque
+            # d'émetteur, pas le risque d'un titre unique — il a donc son propre plafond
+            # de ligne (cf. `MAX_POIDS_LIGNE_PANIER`), sans quoi aucun cœur indiciel ne
+            # peut exister au-dessus de 20 % du compte.
             _etat = EtatCompte(equity=cap, exposition_brute=_expo, n_positions=_npos,
-                               detenu_ligne=detenu)
+                               detenu_ligne=detenu, panier=(_ac == "etf"))
             _v = evaluer(intention.action, intention.montant, _etat, _lim,
                          liquidation=intention.liquidation)
             if not _v.autorise:

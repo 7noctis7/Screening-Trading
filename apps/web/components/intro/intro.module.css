@@ -1,0 +1,113 @@
+/* Rideau d'entrée. Le fond vient du design system : l'intro ne connaît aucune couleur. */
+.overlay {
+  position: fixed; inset: 0; z-index: 90;
+  background: var(--bg);
+  display: grid; place-items: center;
+  /* La sortie est une transition, pas une coupure : l'opacité descend pendant que le
+     contenu monte d'un cheveu — le hero semble arriver, pas remplacer. */
+  transition: opacity 620ms cubic-bezier(0.16, 1, 0.3, 1),
+              transform 620ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+.overlay[data-sortie="1"] { opacity: 0; transform: scale(1.012); pointer-events: none; }
+
+/* Halo radial très faible — la profondeur vient de là, pas d'un glow visible. */
+.overlay::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(60% 45% at 50% 50%,
+              color-mix(in oklab, var(--accent) 7%, transparent), transparent 70%);
+}
+/* Grain. 2 % d'opacité : invisible isolément, sensible à l'ensemble. */
+.overlay::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .02;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+.centre {
+  position: relative; text-align: center; padding: 0 1.25rem;
+  display: flex; flex-direction: column; align-items: center; gap: .55rem;
+}
+
+/* Micro-étiquettes d'initialisation : une seule à la fois, remplacée en fondu. */
+.labels {
+  font-family: ui-monospace, "JetBrains Mono", "IBM Plex Mono", monospace;
+  font-size: 10px; letter-spacing: .22em; color: var(--muted2);
+  height: 1.1em; opacity: 0; transition: opacity 280ms ease-out;
+}
+.labels[data-on="1"] { opacity: .7; }
+
+.brand {
+  font-size: clamp(1.5rem, 4.4vw, 2.75rem); font-weight: 600; letter-spacing: -.02em;
+  color: var(--fg); margin: 0;
+  opacity: 0; filter: blur(8px); transform: scale(.985);
+  transition: opacity 760ms cubic-bezier(0.16, 1, 0.3, 1),
+              filter 760ms cubic-bezier(0.16, 1, 0.3, 1),
+              transform 760ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.baseline {
+  font-family: ui-monospace, "JetBrains Mono", "IBM Plex Mono", monospace;
+  font-size: 10px; letter-spacing: .26em; color: var(--muted);
+  opacity: 0; transform: translateY(4px);
+  transition: opacity 620ms cubic-bezier(0.16, 1, 0.3, 1) 120ms,
+              transform 620ms cubic-bezier(0.16, 1, 0.3, 1) 120ms;
+}
+.centre[data-reveal="1"] .brand { opacity: 1; filter: blur(0); transform: scale(1); }
+.centre[data-reveal="1"] .baseline { opacity: .62; transform: none; }
+
+/* Passer l'intro. Discret jusqu'à l'effacement — mais focusable au clavier. */
+.skip {
+  position: absolute; right: max(1rem, env(safe-area-inset-right)); bottom: max(1rem, env(safe-area-inset-bottom));
+  font-family: ui-monospace, monospace; font-size: 10px; letter-spacing: .18em;
+  color: var(--muted2); background: none; border: 0; padding: .5rem .25rem;
+  cursor: pointer; opacity: .32; transition: opacity 200ms ease-out;
+}
+.skip:hover, .skip:focus-visible { opacity: .9; }
+.skip:focus-visible { outline: 1px solid var(--accent); outline-offset: 3px; }
+
+/* prefers-reduced-motion : plus de canvas, plus de mouvement — un fondu et le nom. */
+@media (prefers-reduced-motion: reduce) {
+  .overlay, .overlay[data-sortie="1"] { transition: opacity 320ms linear; transform: none; }
+  .brand, .baseline { transition: opacity 320ms linear; filter: none; transform: none; }
+}
+
+/* ─── HUD : les coins d'un terminal. Minuscule, monospace, jamais au centre du regard. ─── */
+.hud {
+  position: absolute; inset: 0; pointer-events: none;
+  font-family: ui-monospace, "JetBrains Mono", "IBM Plex Mono", monospace;
+  font-size: 9.5px; letter-spacing: .16em; color: var(--muted2);
+  opacity: 0; transition: opacity 500ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.hud[data-on="1"] { opacity: .55; }
+.hud[data-fade="1"] { opacity: 0; }
+
+.hudTL { position: absolute; top: max(1.1rem, env(safe-area-inset-top)); left: 1.1rem; }
+.hudTR { position: absolute; top: max(1.1rem, env(safe-area-inset-top)); right: 1.1rem; text-align: right; }
+.hudBL { position: absolute; bottom: max(1.1rem, env(safe-area-inset-bottom)); left: 1.1rem; }
+
+/* Une métrique : libellé à gauche, valeur monospace tabulaire à droite — les chiffres
+   ne doivent pas danser pendant qu'ils défilent. */
+.metric { display: flex; gap: .6rem; align-items: baseline; line-height: 1.75; }
+.metricK { color: var(--muted2); min-width: 8.5em; }
+.metricV { color: var(--accent); font-variant-numeric: tabular-nums; }
+.metricV[data-risk="1"] { color: var(--neg); }
+.metricV[data-ok="1"] { color: var(--accent2); }
+
+/* Barre de progression d'une finesse extrême, collée en bas. */
+.progress {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 1px;
+  background: color-mix(in oklab, var(--fg) 8%, transparent);
+}
+.progressFill {
+  height: 100%; width: 0; background: var(--accent);
+  transition: width 90ms linear;
+}
+
+@media (max-width: 760px) {
+  .hudTR { display: none; }          /* deux colonnes sur 400 px, c'est une de trop */
+  .metricK { min-width: 7em; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hud, .progress { display: none; }
+}

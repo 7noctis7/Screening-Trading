@@ -22,6 +22,14 @@
       16:00 ET → `run_live.py:212` reporte toute action. À trancher sur le log :
       `tail -n 200 /tmp/quant_live.log | grep -vE '"level":' | tail -n 60`. Chercher
       `⏸ REPORTÉ`, `disjoncteur`, `sous le plancher`.
+- [x] **~~P1 — 57 180 $ en liquidités après le rebalancement~~ — RÉSOLU (14/09,
+      ADR-0150).** Ni disjoncteur ni séance : ordre de traitement. Ventes d'abord.
+- [ ] **P2 — Le portail reste séquentiel, il ne planifie pas (14/09, ADR-0150).** Il ne
+      sait toujours pas qu'un achat refusé aurait pu attendre trois lignes. Résoudre le lot
+      comme un sac à dos sous contrainte serait une autre décision — à mesurer d'abord.
+- [ ] **P2 — `MAX_POIDS_LIGNE_PANIER = 0,60` est une politique, pas une mesure (14/09,
+      ADR-0151).** À confronter à un vrai calcul look-through sur la concentration interne
+      de QQQ si le cœur devait monter au-delà.
 - [ ] **P1 — Une unité systemd hors git subsiste sur le VPS (14/09, ADR-0148).**
       `quant-rebalance.service` est DÉSACTIVÉ mais présent sur disque, et son
       `Environment=` reste illisible (unité en 600). Décider : la supprimer, ou la

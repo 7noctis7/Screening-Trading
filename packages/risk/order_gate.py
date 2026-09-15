@@ -35,6 +35,19 @@ from dataclasses import dataclass
 # Défauts : compte sans levier, portefeuille de conviction moyenne. Chaque valeur est un plafond
 # DUR, pas une cible — la stratégie reste libre en dessous.
 MAX_POIDS_LIGNE = 0.20       # QUANT_RISK_MAX_WEIGHT      — une ligne ne dépasse pas 20 % du compte
+# PLAFOND SÉPARÉ POUR LES VÉHICULES DIVERSIFIÉS (ETF indiciels). Le plafond de
+# ligne borne le risque IDIOSYNCRATIQUE : ce qu'on perd si UN émetteur s'effondre.
+# Appliquer le même nombre à un titre unique et à un panier de cent lignes confond
+# « une position » et « un risque » — et interdit tout cœur indiciel.
+#
+# Constaté le 14/09 : cœur visé à 50 % de QQQ, plafond 20 %, donc REFUS à chaque
+# passage. Les ventes n'étant jamais bloquées, la ligne ne pouvait que décroître :
+# l'allocation annoncée sur la page était inatteignable, et rien ne le disait.
+#
+# 0,60 n'est PAS une valeur mesurée : c'est une POLITIQUE. Elle laisse vivre un cœur
+# à 50 % avec de la marge et refuse le 100 % — un ETF reste un émetteur, un
+# dépositaire, et pour QQQ une concentration interne réelle.
+MAX_POIDS_LIGNE_PANIER = 0.60   # QUANT_RISK_MAX_WEIGHT_BASKET
 MAX_POSITIONS = 40           # QUANT_RISK_MAX_POSITIONS   — au-delà, on n'OUVRE plus (on peut solder)
 MAX_ORDRE_PCT = 0.15         # QUANT_RISK_MAX_ORDER_PCT   — un ordre ne dépasse pas 15 % du compte
 MAX_EXPOSITION = 1.00        # QUANT_RISK_MAX_GROSS       — 1,00 = aucun levier, jamais
@@ -54,6 +67,7 @@ def _env(nom: str, defaut: float) -> float:
 class Limites:
     """Plafonds durs. `depuis_env()` est la SEULE fabrique utilisée en production."""
     max_poids_ligne: float = MAX_POIDS_LIGNE
+    max_poids_ligne_panier: float = MAX_POIDS_LIGNE_PANIER
     max_positions: int = MAX_POSITIONS
     max_ordre_pct: float = MAX_ORDRE_PCT
     max_exposition: float = MAX_EXPOSITION
@@ -62,13 +76,17 @@ class Limites:
     def depuis_env() -> Limites:
         return Limites(
             max_poids_ligne=_env("QUANT_RISK_MAX_WEIGHT", MAX_POIDS_LIGNE),
+            max_poids_ligne_panier=_env("QUANT_RISK_MAX_WEIGHT_BASKET",
+                                        MAX_POIDS_LIGNE_PANIER),
             max_positions=int(_env("QUANT_RISK_MAX_POSITIONS", MAX_POSITIONS)),
             max_ordre_pct=_env("QUANT_RISK_MAX_ORDER_PCT", MAX_ORDRE_PCT),
             max_exposition=_env("QUANT_RISK_MAX_GROSS", MAX_EXPOSITION),
         )
 
     def resume(self) -> str:
-        return (f"ligne ≤ {self.max_poids_ligne:.0%} · positions ≤ {self.max_positions} · "
+        return (f"ligne ≤ {self.max_poids_ligne:.0%} "
+                f"(panier ≤ {self.max_poids_ligne_panier:.0%}) · "
+                f"positions ≤ {self.max_positions} · "
                 f"ordre ≤ {self.max_ordre_pct:.0%} · brut ≤ {self.max_exposition:.0%}")
 
 
@@ -80,6 +98,10 @@ class EtatCompte:
     exposition_brute: float      # somme des valeurs absolues des positions, en monnaie
     n_positions: int
     detenu_ligne: float = 0.0    # valeur déjà détenue sur CE symbole
+    # VÉHICULE DIVERSIFIÉ ? L'appelant le DÉCLARE, le portail ne devine pas : le
+    # deviner d'après le ticker ferait dépendre une limite de risque du nommage.
+    # Défaut `False` → comportement inchangé pour tout appelant qui ne dit rien.
+    panier: bool = False
 
 
 @dataclass(frozen=True)
@@ -127,11 +149,14 @@ def evaluer(action: str, montant: float, etat: EtatCompte,
         return _veto("montant_nul", "montant nul")
 
     # 3. PLAFONDS. Chacun peut RÉDUIRE le montant ; le plus contraignant l'emporte.
+    # Un panier diversifié a son propre plafond : cf. `MAX_POIDS_LIGNE_PANIER`.
+    _pl = lim.max_poids_ligne_panier if etat.panier else lim.max_poids_ligne
     plafonds: list[tuple[str, float, str]] = [
         ("taille_ordre", lim.max_ordre_pct * etat.equity,
          f"ordre plafonné à {lim.max_ordre_pct:.0%} du compte"),
-        ("poids_ligne", max(0.0, lim.max_poids_ligne * etat.equity - etat.detenu_ligne),
-         f"ligne plafonnée à {lim.max_poids_ligne:.0%} du compte"),
+        ("poids_ligne", max(0.0, _pl * etat.equity - etat.detenu_ligne),
+         f"ligne plafonnée à {_pl:.0%} du compte"
+         + (" (véhicule diversifié)" if etat.panier else "")),
         ("exposition_brute", max(0.0, lim.max_exposition * etat.equity - etat.exposition_brute),
          f"exposition brute plafonnée à {lim.max_exposition:.0%} — aucun levier"),
     ]
