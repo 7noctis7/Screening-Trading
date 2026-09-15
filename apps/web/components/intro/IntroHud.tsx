@@ -11,12 +11,14 @@ import { ML_LABELS, PHASES, RISK_LABELS } from "./introConfig";
  * exactement le genre de vitrine que ce dépôt passe son temps à démonter.
  */
 export function IntroHud({ t, sortie }: { t: number; sortie: boolean }) {
-  const on = t > 0.04 && t < PHASES.risk + 0.06;
+  const on = t > 0.01 && t < PHASES.exec + 0.03;
   const p = (a: number, b: number) => Math.max(0, Math.min(1, (t - a) / (b - a)));
 
-  const ml = p(PHASES.flow, PHASES.neural);
-  const risk = p(PHASES.neural, PHASES.risk);
-  const flux = p(PHASES.init, PHASES.flow);
+  const flux = p(PHASES.init, PHASES.market);
+  const ml = p(PHASES.features, PHASES.ml);
+  const gate = p(PHASES.ml, PHASES.gate);
+  const risk = p(PHASES.gate, PHASES.risk);
+  const exec = p(PHASES.risk, PHASES.exec);
 
   // Convergence : chaque métrique part d'une valeur instable et se fige.
   const auc = 0.500 + 0.024 * ml;
@@ -28,6 +30,9 @@ export function IntroHud({ t, sortie }: { t: number; sortie: boolean }) {
 
   const val = [auc.toFixed(3), brier.toFixed(3), ic.toFixed(3)];
   const rsk = [`${gross.toFixed(0)} %`, `${vol.toFixed(1)} %`, `−${dd.toFixed(0)} %`];
+  // Compteurs de l'acte VALIDATION puis EXECUTION : ils ne bougent QUE pendant leur acte.
+  const portes = Math.round(gate * 4);
+  const ordres = Math.round(exec * 16);
 
   return (
     <div className={s.hud} data-on={on ? "1" : "0"} data-fade={sortie ? "1" : "0"}
@@ -55,6 +60,20 @@ export function IntroHud({ t, sortie }: { t: number; sortie: boolean }) {
       </div>
 
       <div className={s.hudBL}>
+        {gate > 0.02 && (
+          <div className={s.metric}>
+            <span className={s.metricK}>PORTES</span>
+            <span className={s.metricV} data-risk={portes >= 2 ? "1" : "0"}>
+              {portes} / 4 — 1 PASSÉE
+            </span>
+          </div>
+        )}
+        {exec > 0.02 && (
+          <div className={s.metric}>
+            <span className={s.metricK}>ORDRES</span>
+            <span className={s.metricV} data-ok="1">{ordres} · PAPER</span>
+          </div>
+        )}
         {RISK_LABELS.map((k, i) => (
           <div key={k} className={s.metric}>
             <span className={s.metricK}>{k}</span>

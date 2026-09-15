@@ -33,6 +33,43 @@ toujours pas qu'un achat refusé aurait pu attendre trois lignes de plus. Un ord
 global (résoudre le lot comme un problème de sac à dos sous contrainte) serait une autre
 décision, à mesurer avant d'être écrite.
 
+## ADR-0152 — Une intro de 75 s ne se fabrique pas en ralentissant une intro de 4 s (2026-09-15)
+
+**Demande.** Porter le rideau d'entrée de 3,9 s à 60–90 s.
+
+**Réserve, exprimée une fois puis levée.** Un rideau de 75 s avant un site fait fuir. Le
+brief d'origine disait lui-même « 2,5 à 4 s maximum, jamais frustrer ». La décision
+appartient au propriétaire du produit ; elle est prise, et l'implémentation en tire les
+conséquences plutôt que de la contourner à moitié.
+
+**Le vrai problème technique.** Étirer cinq phases sur 75 s donne un RALENTI, et un ralenti
+se voit. Une durée longue exige du CONTENU. On passe donc de 5 phases à **8 actes**, un par
+étage du pipeline réel : INITIALISATION · MARKET DATA · FEATURE ENGINE · MACHINE LEARNING ·
+VALIDATION · RISK ENGINE · EXECUTION · révélation. ~9 s chacun — le temps de lire, pas celui
+de s'ennuyer.
+
+**L'acte qui justifie l'ensemble.** VALIDATION rejoue les quatre portes de la landing avec
+leurs verdicts RÉELS : placebo p = 0,039 ✓, DSR 0,00 ✗, PBO 0,88 ✗, sabotage −11,7 ✗. Une
+porte sur quatre passe. C'est le seul moment de l'intro où le produit dit quelque chose
+qu'un concurrent ne dirait pas — et c'est ce qui la sauve d'être une vitrine.
+
+**Conséquences assumées de la durée.**
+- Le bouton de sortie CESSE d'être discret : bordure, fond, et un compte à rebours en
+  secondes. Soixante-quinze secondes sans issue visible, ce n'est plus de la sobriété,
+  c'est un piège. Échap sort aussi.
+- La politique reste « une fois par onglet ». À 4 s on pouvait discuter ; à 75 s, rejouer
+  à chaque navigation serait indéfendable.
+- `prefers-reduced-motion` coupe tout : fondu, nom, site.
+
+**Structure.** Trois fichiers courts plutôt qu'un long : `introDraw` (primitives, aucune
+règle), `introActs` (un acte = une fonction pure, ignorante du temps global), `introScene`
+(état, choix de l'acte, décor). Les bornes viennent d'`ACTS` — `PHASES` en est dérivé, une
+seule source de vérité.
+
+**Ce qui n'a pas changé.** Couleurs lues depuis les variables CSS (charte + thème courant),
+zéro dépendance ajoutée, canvas 2D, montée AU-DESSUS de la landing. Build vert, landing
+inchangée à 7,16 kB.
+
 ## ADR-0151 — Un cœur indiciel à 50 % était interdit par un plafond fait pour les titres (2026-09-14)
 
 **Constat, même log.** `QQQ cible 46 087 $ détenu 43 028 $ ⛔ REFUSÉ [poids_ligne] ligne

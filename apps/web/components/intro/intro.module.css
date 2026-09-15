@@ -63,7 +63,15 @@
   color: var(--muted2); background: none; border: 0; padding: .5rem .25rem;
   cursor: pointer; opacity: .32; transition: opacity 200ms ease-out;
 }
-.skip:hover, .skip:focus-visible { opacity: .9; }
+.skip:hover, .skip:focus-visible { opacity: 1; }
+/* Rideau LONG : le bouton cesse d'être discret. Soixante-quinze secondes sans issue
+   visible, ce n'est plus de la sobriété — c'est un piège. */
+.skip[data-long="1"] {
+  opacity: .62; border: 1px solid var(--border2); border-radius: 6px;
+  padding: .55rem .85rem; background: color-mix(in oklab, var(--surface) 55%, transparent);
+  backdrop-filter: blur(6px);
+}
+.skip[data-long="1"]:hover { opacity: 1; border-color: var(--accent); }
 .skip:focus-visible { outline: 1px solid var(--accent); outline-offset: 3px; }
 
 /* prefers-reduced-motion : plus de canvas, plus de mouvement — un fondu et le nom. */

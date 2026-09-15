@@ -1,5 +1,27 @@
 # 04 — JOURNAL
 
+## Session 2026-09-15 (16ᵉ) — Le rideau passe à 75 s, en huit actes
+
+**Demande : 60–90 s.** Réserve exprimée une fois — un rideau si long fait fuir, et le brief
+d'origine disait « 4 s maximum » — puis levée : c'est la décision du propriétaire.
+
+**Étirer cinq phases donnerait un RALENTI.** Une durée longue exige du contenu, pas de la
+lenteur. Huit actes, un par étage du pipeline : INITIALISATION · MARKET DATA · FEATURE
+ENGINE · MACHINE LEARNING · VALIDATION · RISK ENGINE · EXECUTION · révélation.
+
+**L'acte VALIDATION est celui qui justifie les 75 s** : les quatre portes avec leurs
+verdicts réels — placebo ✓, DSR ✗, PBO ✗, sabotage ✗. Une sur quatre. C'est le seul moment
+où le produit dit ce qu'un concurrent tairait.
+
+**La durée a des conséquences, et elles sont assumées** : le bouton de sortie cesse d'être
+discret (bordure, fond, compte à rebours), Échap sort, et la politique « une fois par
+onglet » n'est plus discutable. ADR-0152.
+
+**Refactor** : `introDraw` (primitives) · `introActs` (un acte = une fonction pure) ·
+`introScene` (orchestration). Trois fichiers courts, aucun au-dessus de 250 lignes.
+
+**Mesuré.** Build Next.js vert, landing inchangée à 7,16 kB.
+
 ## Session 2026-09-14 (15ᵉ) — Deux ordres de grandeur, et un rideau d'entrée
 
 **Le log de production a tranché, contre mon hypothèse.** J'avais avancé que les 57 180 $
