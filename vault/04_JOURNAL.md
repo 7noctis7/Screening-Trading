@@ -1,5 +1,34 @@
 # 04 — JOURNAL
 
+## Session 2026-09-14 (14ᵉ) — Un bandeau vert sur des positions vendues
+
+**Apporté par l'utilisateur, pas par un garde-fou.** Sa page Positions affichait 19 lignes
+et 80 817 $ ; Alpaca, au même instant, une seule — QQQ, 42 976 $ — et 57 180 $ de
+liquidités. Dix-huit lignes, ~38 000 $, **vendues treize minutes plus tôt**. Le bandeau
+disait « LIVE · il y a 1s », point vert pulsant.
+
+**La donnée était périmée, pas fausse.** `_snap()` sert depuis un cache de 15 min
+(stale-while-revalidate) et reconstruit en fond : choix d'architecture assumé, la
+navigation reste instantanée. Le défaut était l'indicateur — `LiveBadge` lisait
+`dataUpdatedAt`, l'instant de la requête du NAVIGATEUR. Il mesurait la latence réseau et
+la présentait comme l'âge de la donnée.
+
+**Corrigé.** `snapshot_age_s` + `snapshot_ttl_s` publiés par `/api/dashboard`, mesurés
+serveur depuis `_CACHE_TS` ; le front y ajoute le temps écoulé depuis la réponse. Âge
+RELATIF, jamais un epoch — sinon le navigateur devrait croire son horloge, et l'erreur
+serait invisible. Au-delà du TTL : `DIFFÉRÉ` en ambre ; au double : rouge. ADR-0149.
+
+**Troisième fois aujourd'hui.** `|| true` sur le ré-entraînement, `except Exception` sur
+l'audit, badge vert par construction : à chaque fois une sortie qui se lit « tout va
+bien » sans avoir vérifié ce qu'elle prétend mesurer. C'est le fil de la journée.
+
+**Resté ouvert, faute de log.** 57 180 $ dorment en liquidités, aucune ligne « à acheter »
+exécutée. Hypothèse non vérifiée : les ventes sont passées à 15:40 ET, et si la boucle
+d'achats a franchi 16:00 ET, `run_live.py:212` reporte toute action (TimeInForce.DAY sans
+extended hours). À confirmer dans `/tmp/quant_live.log` — hypothèse, pas diagnostic.
+
+**Mesuré.** 2 672 passés, 74 ignorés.
+
 ## Session 2026-09-14 (13ᵉ) — Le t survit au regroupement ; reste à savoir s'il se joue
 
 **Ma prédiction était fausse, et la mesure le dit.** J'avais écrit que les 697

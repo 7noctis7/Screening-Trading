@@ -17,6 +17,11 @@
       `atr_stop=4.0` — capter un p90 de +21 % suppose de survivre à un p10 de −18 %.
       Aucun `model_high_volatility.pkl`, aucune bascule, gate placebo sans objet.
       `make regime-atr-lab` reste : c'est lui qui a tranché.
+- [ ] **P1 — 57 180 $ en liquidités après le rebalancement du 14/09 (ADR-0149).** Les
+      ventes sont passées, aucun achat. Hypothèse NON VÉRIFIÉE : boucle d'achats après
+      16:00 ET → `run_live.py:212` reporte toute action. À trancher sur le log :
+      `tail -n 200 /tmp/quant_live.log | grep -vE '"level":' | tail -n 60`. Chercher
+      `⏸ REPORTÉ`, `disjoncteur`, `sous le plancher`.
 - [ ] **P1 — Une unité systemd hors git subsiste sur le VPS (14/09, ADR-0148).**
       `quant-rebalance.service` est DÉSACTIVÉ mais présent sur disque, et son
       `Environment=` reste illisible (unité en 600). Décider : la supprimer, ou la

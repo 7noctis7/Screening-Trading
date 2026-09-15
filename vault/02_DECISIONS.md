@@ -2,6 +2,45 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0149 — Le bandeau « LIVE » mesurait l'aller-retour réseau (2026-09-14)
+
+**Constat, apporté par l'utilisateur.** La page Positions affichait 19 lignes et
+80 817 $ de positions ; Alpaca, au même instant, n'en montrait qu'une — QQQ, 42 976 $ —
+et 57 180 $ de liquidités. Dix-huit lignes, ~38 000 $, avaient été **vendues treize
+minutes plus tôt** (ordres remplis à 19:40 UTC : VZ, TRV, THC, TEN, T…). Le bandeau,
+lui, affichait « LIVE · il y a 1s », point vert pulsant.
+
+**La donnée n'était pas fausse : elle était périmée, et le bandeau l'affirmait fraîche.**
+`_snap()` sert le snapshot depuis un cache (`_TTL_S = 900`, stale-while-revalidate) et ne
+le reconstruit qu'en arrière-plan ; `/api/positions` lit ce cache, donc les positions
+courtier qu'il renvoie datent du dernier BUILD. C'est un choix d'architecture assumé — la
+navigation reste instantanée. Le défaut n'est pas le cache : c'est l'indicateur.
+
+**Le défaut.** `LiveBadge.tsx` calculait son âge depuis `dataUpdatedAt`, l'horodatage
+React Query de la dernière requête **du navigateur**. Il mesurait donc la latence réseau
+et la présentait comme l'âge de la donnée. Sur un snapshot de quinze minutes, il disait
+« il y a 1s ». Un indicateur de fraîcheur qui ne regarde pas la donnée est pire qu'aucun :
+il ne se contente pas de ne rien dire, il affirme — et ici sur des positions réelles.
+
+**Décision.** `/api/dashboard` publie `snapshot_age_s` et `snapshot_ttl_s`, mesurés
+SERVEUR depuis `_CACHE_TS`. Le front y ajoute le temps écoulé depuis la réponse.
+
+**Âge relatif, jamais un horodatage absolu.** Un epoch obligerait le navigateur à croire
+sa propre horloge, qui dérive — et l'erreur serait invisible, exactement le travers qu'on
+corrige. Un âge relatif ne demande aucune synchronisation.
+
+**Le badge sait désormais dire NON.** Au-delà du TTL il affiche `DIFFÉRÉ` en ambre ; au
+double, en rouge (la reconstruction elle-même a probablement échoué). Le seuil vient du
+serveur, pas d'un 900 codé en dur qui se désynchroniserait au premier changement de
+`_TTL_S`. Au survol : l'heure de calcul des données, en toutes lettres.
+
+**Famille.** Troisième fois ce jour : `|| true` sur le ré-entraînement, `except Exception`
+sur l'audit, et maintenant un badge vert par construction. À chaque fois, une sortie qui
+se lit « tout va bien » sans avoir vérifié ce qu'elle prétend mesurer.
+
+**Sabotage.** Âge déduit de la seule requête : 1 test tombe · « LIVE » inconditionnel : 1 ·
+âge constant côté serveur : 2.
+
 ## ADR-0148 — Un déclencheur invisible depuis git doublait le rebalancement (2026-09-14)
 
 **Constat, en répondant à « mon cron tourne-t-il toujours ? »** Le crontab de `ubuntu` ne
