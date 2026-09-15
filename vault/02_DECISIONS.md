@@ -2,6 +2,116 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0155 — Un seul rebalancement par journée, et c'est le COURTIER qui le dit (2026-09-15)
+
+**Mesuré sur le compte paper du 15/09.** TROIS rebalancements dans la même journée, chacun
+défaisant le précédent :
+
+| heure UTC | déclencheur | ordres |
+|---|---|---|
+| 18:25 → 18:33 | GitHub Actions `paper.yml` #53 | 13 achats |
+| 19:00 → 19:04 | launchd du Mac (`com.quant.live`, 21:00 Paris) | 10 ventes + 12 achats |
+| 19:05 → 19:11 | crontab du VPS | 26 ordres |
+
+Le Mac a soldé sept lignes **à la quantité près** (VEEV 7,41221008, TYL 6,27606728,
+SWKS 33,28650542, SNOW 9,16030606, PLTR 10,53971696, OSCR 86,28256206, ASST 62,01927883)
+ouvertes 32 minutes plus tôt par le runner cloud ; le VPS a ensuite vendu LINKUSD et MDB
+que le Mac venait d'acheter. **−60,79 $ (−0,31 %) sur 19 886 $, 74 676 $ brassés dans la
+journée pour aucune exposition gagnée.**
+
+**Ce qui n'a pas protégé, et pourquoi.** `scripts/fenetre_execution.py` ouvre un créneau de
+soixante minutes et ne déduplique RIEN : son propre commentaire dit « un réveil horaire y
+tombe exactement une fois ». L'hypothèse est dans la CADENCE du planificateur, pas dans le
+code. Trois planificateurs, et le créneau les laisse tous passer. Aucun verrou journalier
+n'existait : `run_live` recalcule sa cible de zéro à chaque appel.
+
+**Décision.** `packages/execution/garde_journaliere` ne demande pas « quelle heure est-il ? »
+mais « ce compte a-t-il DÉJÀ tradé aujourd'hui ? », **au courtier**. Un verrou sur disque
+n'aurait protégé que la machine qui le porte ; le compte est le seul point commun entre le
+VPS, le cloud, le Mac et la main humaine. Deux seuils conjoints (≥ 2 ordres remplis ET
+≥ 50 $). Branché dans `run_live.main` avant `_reconcile`, mode live uniquement.
+
+**Conséquences.** Historique illisible ⇒ le passage CONTINUE — un garde-fou qui se déclenche
+sur sa propre panne gèlerait le robot une journée sans motif. Un passage interrompu à
+mi-chemin verra sa reprise refusée : compromis assumé, `--forcer` rend la main à l'humain.
+Le refus NOMME ce qui a déjà été fait, sinon il ressemble à une panne et on le contourne.
+
+## ADR-0156 — La planification GitHub Actions est retirée : son heure n'est pas la sienne (2026-09-15)
+
+**Mesuré sur les vingt derniers runs de `paper.yml`.** Le workflow demande 14:35 UTC.
+GitHub l'a livré avec un retard **médian de 201 minutes**, entre 28 min (#34, 19/08) et
+**9 h 19** (#40, 27/08 — démarré à 23:54 UTC, près de quatre heures après la clôture).
+
+En août le retard tournait autour de 30 min et le run tombait en début de séance. Depuis le
+01/09 il s'est installé entre 17:44 et 19:33 UTC, c'est-à-dire **dans la fenêtre du VPS**
+([18:30, 19:30) le 15/09). La collision n'est pas apparue d'un coup : **elle a dérivé**, et
+rien ne surveillait cette dérive.
+
+**Ce qui tenait lieu de garde-fou** était un commentaire : « Idempotent : si le launchd du
+Mac a déjà rebalancé, le second run voit des deltas ~0 et n'envoie rien. » Le relevé du
+15/09 le contredit. Les deltas ne sont nuls que si les deux passages calculent la MÊME
+cible — et ils ne le font pas : le runner part du cache HF, le VPS de sa propre base.
+
+**Décision.** Bloc `schedule:` retiré, `workflow_dispatch` conservé. Le VPS reste seul
+maître : il tourne 24/7, porte la base réelle, et vise DÉLIBÉRÉMENT l'heure avant clôture.
+Le Mac est désinstallé (`make live-cron-uninstall`, 15/09).
+
+**Conséquences.** Un test interdit désormais `schedule:` dans `paper.yml` : on ne se
+retrouve plus à deux sans s'en apercevoir. On perd le filet « Mac éteint, 0 € » — assumé,
+le VPS l'a remplacé. Le raisonnement chiffré est écrit DANS le workflow, avec la consigne
+de ne pas réintroduire la phrase fausse.
+
+## ADR-0157 — Le roulement d'un contrat à terme n'est pas un split (2026-09-15)
+
+**Lu dans le log du VPS du 15/09.** `ingest_prices --daily` re-backfillait onze ans
+d'historique, CHAQUE JOUR, pour `CL=F BZ=F HO=F RB=F GC=F HG=F ALI=F ZC=F ZW=F ZS=F SB=F
+KC=F CC=F CT=F LE=F`, `USD/JPY` et `USD/MXN` — « ajustement rétroactif détecté
+(split/dividende) ».
+
+Aucun de ces instruments ne peut splitter : **un split est un acte d'ÉMETTEUR**, et un
+future n'en a pas. Ce que `_split_drift` voyait, c'est le **ROULEMENT** — les tickers `=F`
+de Yahoo sont des contrats CONTINUS dont le passé se réécrit à chaque changement
+d'échéance. Le détecteur avait raison sur le fait et tort sur la cause, et il en tirait la
+seule action qu'il connaisse : tout réécrire.
+
+**Le coût visible** : ingest incrémental de quelques secondes à **4 min 25** (20 668 barres
+réinsérées avant le 75ᵉ symbole sur 929). **Le coût invisible, et c'est le grave** :
+l'historique de ces séries n'était pas STABLE — le passé de `CL=F` au jour J diffère de
+celui du jour J−1. Un backtest relancé rend un autre résultat sans qu'une ligne de code ait
+changé. Ce genre d'instabilité se prend facilement pour de l'alpha.
+
+**Décision.** `PEUT_SPLITTER = ("equity", "etf", "")`. La logique du détecteur n'est PAS
+touchée — un split sur une action déclenche toujours le re-backfill, et c'est testé. Seul
+son PÉRIMÈTRE change.
+
+**Conséquence secondaire, découverte au passage.** La ligne de résumé annonçait
+« 736 OK · 0 échecs · 102 crypto ignorées » sur **929** symboles : 929 − 736 − 102 = **91**
+comptés nulle part, parce qu'un `history()` vide ne lève pas d'exception. Un chiffre
+qu'aucune ligne ne porte n'existe pas — c'est ainsi qu'un univers pourrit. Le résumé compte,
+NOMME et vérifie que la somme se referme.
+
+## ADR-0158 — Une ligne d'audit doit établir ce qu'elle affirme (2026-09-15)
+
+**Dernière décision du passage VPS du 15/09** :
+
+```
+[risk-gate] BCH/USD  acheter  demandé 796$ → 796$  RÉDUIT
+            [exposition_brute] … : 796 $ réduit à 796 $
+```
+
+« 796 $ réduit à 796 $ » n'est pas une trace, c'est une contradiction apparente. La
+réduction était RÉELLE (796,40 → 795,60) mais inférieure au dollar, et l'arrondi à l'unité
+la mangeait. Celui qui relit six mois plus tard ne peut ni la croire ni la vérifier — et
+pire, elle apprend à douter de la mention `RÉDUIT` plutôt que de l'arrondi, donc à se
+méfier du bon organe.
+
+**Décision.** `_reduction_lisible` descend au centime quand l'unité ne suffit pas, dans le
+motif comme dans la colonne du journal. Une réduction franche garde l'unité ; un ordre
+accepté garde le format entier.
+
+**Conséquence.** Le plafond ne bouge pas d'un centime : on corrige ce que la trace DIT,
+jamais ce que le portail FAIT. Un test le verrouille explicitement.
+
 ## ADR-0150 — Le portail refusait des achats financés par des ventes du même lot (2026-09-14)
 
 **Mesuré sur le run paper du 14/09**, log de production à l'appui. `_reconcile` parcourait

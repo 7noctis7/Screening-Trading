@@ -1,5 +1,53 @@
 # 04 — JOURNAL
 
+## Session 2026-09-15 (19ᵉ) — Trois robots sur un seul compte
+
+**La question de l'utilisateur était la bonne** : « pourquoi a-t-il acheté et vendu si
+vite ? y a-t-il 2 crons ? » Il y en avait **trois**. Sur la seule journée du 15/09 :
+GitHub Actions #53 (18:25→18:33 UTC, 13 achats), le launchd du Mac (19:00→19:04, 10 ventes
++ 12 achats), le crontab du VPS (19:05→19:11, 26 ordres). Chacun défaisant le précédent.
+
+**Sept lignes soldées à la quantité près** trente-deux minutes après leur ouverture — VEEV
+7,41221008 achetées puis vendues, TYL 6,27606728, SWKS 33,28650542, SNOW 9,16030606,
+PLTR 10,53971696, OSCR 86,28256206, ASST 62,01927883. **−60,79 $ (−0,31 %) sur 19 886 $**,
+74 676 $ brassés dans la journée pour aucune exposition gagnée.
+
+**Ce qui n'a pas protégé.** `fenetre_execution.py` ouvre soixante minutes et compte sur un
+réveil HORAIRE — c'est écrit dans son commentaire. L'hypothèse est dans la cadence du
+planificateur, pas dans le code. Et `paper.yml` affirmait en commentaire que le doublon
+était sans effet : « le second run voit des deltas ~0 ». Faux dès que la cible change entre
+deux calculs, et elle change — le runner part du cache HF, le VPS de sa propre base.
+**Deux garde-fous qui étaient des phrases.** ADR-0155, ADR-0156.
+
+**Pourquoi maintenant.** Le retard de GitHub sur `paper.yml` (demandé 14:35 UTC) est passé
+d'environ 30 min en août à **201 min de médiane** en septembre — le run a DÉRIVÉ dans la
+fenêtre du VPS. Et le log du Mac montre un trou du 05 au 13/09 : la machine était éteinte.
+Elle est revenue le 14, jour exact où le triple passage a commencé.
+
+**Le verrou est posé au bon endroit** : on demande au COURTIER « ce compte a-t-il déjà
+tradé aujourd'hui ? ». Un verrou sur disque n'aurait protégé qu'une machine ; le compte est
+le seul point commun entre le VPS, le cloud, le Mac et la main humaine.
+
+**Deux défauts trouvés dans le log en cherchant le coupable.** Le roulement des futures pris
+pour un split : onze ans re-backfillés chaque jour sur dix-sept séries, ingest à 4 min 25,
+et surtout un historique NON STABLE — un backtest relancé rendait un autre résultat
+(ADR-0157). Et « 736 OK · 0 échecs » sur 929 symboles : **91 invisibles**, parce qu'un
+`history()` vide ne lève pas d'exception.
+
+**Une ligne d'audit qui se contredisait** : « 796 $ réduit à 796 $ ». La réduction était
+réelle, sous le dollar. Corrigée au centime — sans toucher au plafond (ADR-0158).
+
+**Fait aussi** : les sept améliorations de l'intro (ligne base 100, graduation en multiple,
+morphing entre fenêtres, compteurs, crises nommées, écart chiffré, son opt-in, pause WCAG
+2.2.2 — qui EXIGE une pause au-delà de cinq secondes de mouvement).
+
+**Mesuré.** 2746 tests passés, 74 ignorés (+42). Mac désinstallé, planification Actions
+retirée, un seul robot trade désormais.
+
+**Prochaine priorité** : chiffrer le coût CUMULÉ du churn Actions+VPS, qui tournait
+probablement depuis des semaines — et dire à partir de quelle date la courbe d'equity est
+biaisée.
+
 ## Session 2026-09-15 (18ᵉ) — Les chiffres de l'intro cessent d'être saisis
 
 **L'utilisateur avait raison deux fois.** L'univers n'est pas 821 mais **929** symboles

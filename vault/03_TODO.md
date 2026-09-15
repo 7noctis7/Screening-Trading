@@ -17,6 +17,24 @@
       `atr_stop=4.0` — capter un p90 de +21 % suppose de survivre à un p10 de −18 %.
       Aucun `model_high_volatility.pkl`, aucune bascule, gate placebo sans objet.
       `make regime-atr-lab` reste : c'est lui qui a tranché.
+- [x] **~~P0 — Trois planificateurs sur le même compte paper~~ — FERMÉE (15/09,
+      ADR-0155/0156).** Actions + launchd du Mac + crontab du VPS, chacun défaisant le
+      précédent. −60,79 $ le 15/09. Garde journalière branchée (le COURTIER décide),
+      planification `paper.yml` retirée, Mac désinstallé. Test : `schedule:` interdit.
+- [ ] **P1 — Chiffrer le coût CUMULÉ du churn (15/09).** Actions + VPS coexistaient depuis
+      des semaines : le doublon ne date pas du 15/09, seul le Mac est intermittent. Relire
+      l'historique d'ordres Alpaca, compter les allers-retours intra-journaliers sur une
+      même ligne, et dire À PARTIR DE QUELLE DATE la courbe d'equity est biaisée. Tant que
+      ce n'est pas mesuré, `vault/10_BACKTEST_RESULTS.md` compare du paper pollué.
+- [ ] **P1 — Rien ne surveille la DÉRIVE d'un planificateur (15/09, ADR-0156).** Le retard
+      de GitHub est passé de 30 min à 201 min de médiane sans qu'aucune alerte ne le dise.
+      La garde journalière traite la CONSÉQUENCE ; la dérive elle-même reste invisible.
+- [ ] **P2 — 91 symboles sur 929 ne rendent aucune donnée (15/09, ADR-0157).** Désormais
+      comptés et nommés par `ingest_prices`. Trancher périmés / vivants : `make audit-univers`.
+- [ ] **P2 — L'historique des futures a été réécrit chaque jour jusqu'au 15/09
+      (ADR-0157).** Le correctif arrête la réécriture, il ne dit pas si les séries
+      actuellement en base sont cohérentes. Un `make contracts` / `make audit` ciblé sur
+      les `=F` le dirait.
 - [ ] **P1 — 57 180 $ en liquidités après le rebalancement du 14/09 (ADR-0149).** Les
       ventes sont passées, aucun achat. Hypothèse NON VÉRIFIÉE : boucle d'achats après
       16:00 ET → `run_live.py:212` reporte toute action. À trancher sur le log :
