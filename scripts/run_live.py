@@ -34,6 +34,10 @@ def _parse_args():
                     help="dry-run : SIMULE un portefeuille neuf de ce capital (détenu "
                          "ignoré). Sans lui, l'aperçu lit l'equity et les positions "
                          "RÉELLES. En live : toujours l'equity réelle du broker.")
+    ap.add_argument("--forcer", action="store_true",
+                    help="passer outre le garde-fou « déjà rebalancé aujourd'hui ». "
+                         "À n'utiliser qu'en sachant ce qui a déjà été envoyé au "
+                         "courtier : un second passage recalcule une cible différente.")
     return ap.parse_args()
 
 
@@ -637,6 +641,36 @@ def _prepare_brokers(dry: bool, cli_equity: float | None, alert_engine):
     return alpaca, bitmart, alp_cap, bit_cap, cur_alp, cur_bit, fatal
 
 
+def _deja_rebalance_aujourdhui(brokers: tuple) -> bool:
+    """Le COURTIER dit s'il a déjà tradé aujourd'hui — pas l'horloge, pas un fichier.
+
+    La question est posée au seul endroit que le VPS, le Mac, GitHub Actions et la main
+    humaine ont en commun : le compte. Un verrou sur disque ne verrouillerait que la
+    machine qui le porte, et c'est justement la mauvaise granularité — cf.
+    `packages/execution/garde_journaliere`.
+    """
+    from packages.execution.garde_journaliere import evaluer, message
+    fills: list[dict] = []
+    for bname, br, _cap, _cur in brokers:
+        if br is None:
+            continue
+        try:
+            fills += br.orders(limit=200) or []
+        except Exception as e:  # noqa: BLE001
+            # Historique illisible ⇒ on N'EMPÊCHE PAS le passage : un garde-fou qui se
+            # déclenche sur sa propre panne gèlerait le robot une journée sans motif.
+            print(f"· garde journalière : historique {bname} illisible ({str(e)[:60]}) "
+                  "— contrôle non concluant, le passage continue.")
+            return False
+    d = evaluer(fills)
+    if not d["deja_rebalance"]:
+        if d["desarme"]:
+            print("· garde journalière : DÉSARMÉE (QUANT_REBAL_MULTI=1).")
+        return False
+    print(message(d))
+    return True
+
+
 def main() -> None:
     a = _parse_args()
     if a.live and not a.yes:
@@ -665,6 +699,8 @@ def main() -> None:
         return
 
     brokers = (("Alpaca", alpaca, alp_cap, cur_alp), ("Bitmart", bitmart, bit_cap, cur_bit))
+    if not dry and not a.forcer and _deja_rebalance_aujourdhui(brokers):
+        return                                     # doublon : on sort AVANT tout envoi
     sent, opened, sold = _reconcile(targets, brokers, reduce, alert_engine, dry)
     print(f"\nTerminé : {sent} ordre(s) de réconciliation envoyé(s) (paper, sans levier)." if not dry else
           "\nAperçu (dry-run). Réconciliation réelle : python3 scripts/run_live.py --live --yes")
