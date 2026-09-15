@@ -1,8 +1,12 @@
 name: Rebalancement paper cloud (Mac éteint, 0 €)
 
-# Réplique le portefeuille modèle chez Alpaca PAPER chaque jour de bourse, même Mac éteint.
-# Idempotent : si le launchd du Mac a déjà rebalancé (ou l'inverse), le second run voit des
-# deltas ~0 et n'envoie rien. Journal (features + round-trips) persisté sur un dataset HF PRIVÉ.
+# Réplique le portefeuille modèle chez Alpaca PAPER — À LA DEMANDE uniquement (cf. le bloc
+# `on:` ci-dessous : la planification a été retirée le 15/09 après un doublon mesuré).
+# Journal (features + round-trips) persisté sur un dataset HF PRIVÉ.
+#
+# NE PAS réintroduire « idempotent : le second run voit des deltas ~0 et n'envoie rien ».
+# Cette phrase a tenu lieu de garde-fou pendant des mois et elle est fausse : les deltas ne
+# sont nuls que si les deux passages calculent la MÊME cible.
 #
 # SÉCURITÉ (garde-fous CLAUDE.md) :
 #   - Alpaca est TOUJOURS paper (AlpacaBroker force paper=True) → aucun ordre réel possible ;
@@ -14,10 +18,31 @@ name: Rebalancement paper cloud (Mac éteint, 0 €)
 #   ALPACA_API_KEY / ALPACA_API_SECRET  (clés du compte PAPER Alpaca)
 #   HF_TOKEN  (optionnel mais recommandé : persistance du journal sur HF privé)
 
+# PLANIFICATION RETIRÉE LE 15/09 — mesurée, pas supposée.
+#
+# Ce workflow demandait 14:35 UTC. Sur les vingt derniers runs, GitHub l'a livré avec un
+# retard MÉDIAN de 201 minutes, entre 28 min (#34, 19/08) et 9 h 19 (#40, 27/08 — démarré
+# à 23:54 UTC, soit près de quatre heures après la clôture). En août le retard tournait
+# autour de 30 min et le run tombait bien en séance ; depuis le 01/09 il s'est installé
+# entre 17:44 et 19:33 UTC, c'est-à-dire DANS la fenêtre d'exécution du VPS ([18:30,
+# 19:30) le 15/09). La collision n'est pas apparue : elle a dérivé jusqu'ici.
+#
+# Le 15/09, le run #53 (18:25:26 → 18:33:48 UTC) a ouvert treize lignes actions à 18:32:44.
+# Trente-deux minutes plus tard, le passage du VPS en a soldé sept à la quantité près.
+# Coût mesuré : −60,79 $ pour 74 676 $ brassés, et aucune exposition gagnée.
+#
+# Le commentaire d'origine de ce fichier affirmait que le doublon était sans effet :
+# « si le launchd du Mac a déjà rebalancé, le second run voit des deltas ~0 et n'envoie
+# rien ». C'est FAUX dès que la cible change entre les deux calculs — et elle change,
+# parce que chaque passage la recalcule de zéro sur des données qui ne sont pas les mêmes
+# (le runner part du cache HF, le VPS de sa propre base).
+#
+# Le VPS reste seul maître : il tourne 24/7, porte la base réelle, et vise DÉLIBÉRÉMENT
+# l'heure avant clôture via `scripts/fenetre_execution.py`. `workflow_dispatch` est
+# conservé : un lancement manuel reste possible, et `packages/execution/garde_journaliere`
+# refusera de toute façon un second passage le même jour.
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "35 14 * * 1-5"   # 14:35 UTC = 10:35 ET été / 9:35 ET hiver → marché US ouvert
 
 permissions:
   contents: read
