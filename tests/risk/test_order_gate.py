@@ -125,3 +125,47 @@ def test_journal_explique_chaque_decision():
     assert "NVDA" in ligne and "RÉDUIT" in ligne and "taille_ordre" in ligne
     refus = ligne_journal("NVDA", "acheter", 1_000, evaluer("acheter", 1_000, _etat(equity=0), LIM))
     assert "REFUSÉ" in refus and "equity_inconnue" in refus
+
+
+# ─── La trace doit ÉTABLIR ce qu'elle affirme (constaté le 15/09) ──────────────────────
+
+def test_une_reduction_inferieure_au_dollar_reste_visible():
+    """« 796 $ réduit à 796 $ » : la ligne affirmait une réduction et montrait deux
+    nombres égaux. Le cas réel du passage VPS du 15/09 sur BCH/USD."""
+    from packages.risk.order_gate import EtatCompte, Limites, evaluer, ligne_journal
+    lim = Limites()
+    etat = EtatCompte(equity=100_000.0, exposition_brute=99_204.40, n_positions=20)
+    v = evaluer("acheter", 796.40, etat, lim)
+    assert v.reduit and v.montant == 795.60
+    assert "796.40 $ réduit à 795.60 $" in v.motif
+    ligne = ligne_journal("BCH/USD", "acheter", 796.40, v)
+    assert "796.40$" in ligne and "795.60$" in ligne
+
+
+def test_une_reduction_franche_garde_l_unite():
+    """Quand le dollar suffit, rien ne change — on n'encombre pas la trace de centimes."""
+    from packages.risk.order_gate import EtatCompte, Limites, evaluer, ligne_journal
+    v = evaluer("acheter", 20_000.0,
+                EtatCompte(equity=100_000.0, exposition_brute=0.0, n_positions=3), Limites())
+    assert "20000 $ réduit à 15000 $" in v.motif
+    assert ".00$" not in ligne_journal("AAPL", "acheter", 20_000.0, v)
+
+
+def test_un_ordre_accepte_garde_le_format_entier():
+    """La précision au centime ne s'applique QU'aux réductions : un OK n'a rien à montrer."""
+    from packages.risk.order_gate import EtatCompte, Limites, evaluer, ligne_journal
+    v = evaluer("acheter", 1_000.0,
+                EtatCompte(equity=100_000.0, exposition_brute=0.0, n_positions=3), Limites())
+    assert not v.reduit
+    assert "1000$" in ligne_journal("AAPL", "acheter", 1_000.0, v)
+
+
+def test_le_plafond_lui_meme_est_inchange():
+    """On corrige ce que la trace DIT, jamais ce que le portail FAIT : le montant retenu
+    reste exactement le plafond, au centime près."""
+    from packages.risk.order_gate import EtatCompte, Limites, evaluer
+    etat = EtatCompte(equity=100_000.0, exposition_brute=99_204.40, n_positions=20)
+    assert evaluer("acheter", 796.40, etat, Limites()).montant == 795.60
+    # …et un montant SOUS le plafond passe entier, sans mention de réduction.
+    v = evaluer("acheter", 700.0, etat, Limites())
+    assert v.montant == 700.0 and not v.reduit

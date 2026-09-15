@@ -56,14 +56,30 @@
 .centre[data-reveal="1"] .brand { opacity: 1; filter: blur(0); transform: scale(1); }
 .centre[data-reveal="1"] .baseline { opacity: .62; transform: none; }
 
-/* Passer l'intro. Discret jusqu'à l'effacement — mais focusable au clavier. */
-.skip {
-  position: absolute; right: max(1rem, env(safe-area-inset-right)); bottom: max(1rem, env(safe-area-inset-bottom));
-  font-family: ui-monospace, monospace; font-size: 10px; letter-spacing: .18em;
-  color: var(--muted2); background: none; border: 0; padding: .5rem .25rem;
-  cursor: pointer; opacity: .32; transition: opacity 200ms ease-out;
+/* Les commandes du rideau, groupées en bas à droite : son, pause, sortie.
+   WCAG 2.2.2 impose la PAUSE au-delà de cinq secondes de mouvement automatique — ce n'est
+   pas un agrément, c'est la condition pour que ce rideau soit acceptable. */
+.controles {
+  position: absolute;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  display: flex; align-items: center; gap: .15rem;
 }
-.skip:hover, .skip:focus-visible { opacity: 1; }
+.ctrl, .skip {
+  font-family: ui-monospace, "JetBrains Mono", monospace; font-size: 10px;
+  letter-spacing: .18em; color: var(--muted2); background: none; border: 0;
+  padding: .5rem .55rem; cursor: pointer; opacity: .32;
+  transition: opacity 200ms ease-out, color 200ms ease-out;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.ctrl:hover, .ctrl:focus-visible, .skip:hover, .skip:focus-visible { opacity: 1; }
+/* Un réglage ACTIF doit se voir sans survol : sinon on ne sait plus si le son est coupé. */
+.ctrl[aria-pressed="true"] { opacity: .95; color: var(--accent); }
+.ctrl:focus-visible { outline: 1px solid var(--accent); outline-offset: 3px; }
+
+/* Calque décoratif : il porte les battements et les courbes. Positionné, donc retiré du
+   flux de la grille — sans cela il deviendrait une ligne de plus et décentrerait le nom. */
+.decor { position: absolute; inset: 0; pointer-events: none; }
 /* Rideau LONG : le bouton cesse d'être discret. Soixante-quinze secondes sans issue
    visible, ce n'est plus de la sobriété — c'est un piège. */
 .skip[data-long="1"] {
@@ -118,4 +134,132 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .hud, .progress { display: none; }
+}
+
+/* ─── Les quatre battements. Typographie DOM : nette, dans la police du site. ─── */
+.beat {
+  position: absolute; left: 50%; top: 34%;
+  transform: translate(-50%, -50%);
+  width: min(92vw, 44rem); text-align: center; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; gap: .35rem;
+  opacity: 0;
+  transition: opacity 420ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.beat[data-on="1"] { opacity: 1; }
+
+/* Le sur-titre : ce qu'on s'apprête à affirmer. Petit, espacé, jamais en gras. */
+.beatSur {
+  font-family: ui-monospace, "JetBrains Mono", "IBM Plex Mono", monospace;
+  font-size: 10px; letter-spacing: .3em; color: var(--muted2);
+  opacity: 0; transform: translateY(6px);
+  transition: opacity 500ms cubic-bezier(0.16, 1, 0.3, 1),
+              transform 500ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+/* LE chiffre. Tabulaire : les chiffres ne doivent pas danser pendant qu'ils arrivent. */
+.beatNum {
+  font-size: clamp(2.6rem, 11vw, 5.5rem); font-weight: 600; letter-spacing: -.035em;
+  line-height: 1; color: var(--fg); font-variant-numeric: tabular-nums;
+  opacity: 0; transform: translateY(14px) scale(.97); filter: blur(6px);
+  transition: opacity 620ms cubic-bezier(0.16, 1, 0.3, 1) 60ms,
+              transform 620ms cubic-bezier(0.16, 1, 0.3, 1) 60ms,
+              filter 620ms cubic-bezier(0.16, 1, 0.3, 1) 60ms;
+}
+.beatUnite {
+  font-family: ui-monospace, "JetBrains Mono", "IBM Plex Mono", monospace;
+  font-size: clamp(10px, 2.4vw, 12px); letter-spacing: .22em; color: var(--accent);
+  opacity: 0; transform: translateY(8px);
+  transition: opacity 560ms cubic-bezier(0.16, 1, 0.3, 1) 140ms,
+              transform 560ms cubic-bezier(0.16, 1, 0.3, 1) 140ms;
+}
+.beatSous {
+  font-size: clamp(11px, 2.6vw, 13px); color: var(--muted); max-width: 34rem;
+  line-height: 1.5; margin-top: .3rem;
+  opacity: 0; transform: translateY(8px);
+  transition: opacity 560ms cubic-bezier(0.16, 1, 0.3, 1) 220ms,
+              transform 560ms cubic-bezier(0.16, 1, 0.3, 1) 220ms;
+}
+.beat[data-on="1"] .beatSur,
+.beat[data-on="1"] .beatUnite,
+.beat[data-on="1"] .beatSous { opacity: 1; transform: none; }
+.beat[data-on="1"] .beatSur { opacity: .7; }
+.beat[data-on="1"] .beatSous { opacity: .75; }
+.beat[data-on="1"] .beatNum { opacity: 1; transform: none; filter: blur(0); }
+
+/* Barre de progression : dix secondes se supportent mieux quand on en voit la fin. */
+.progress {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 1px;
+  background: color-mix(in oklab, var(--fg) 8%, transparent);
+}
+.progressFill { height: 100%; width: 0; background: var(--accent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .beat, .beatSur, .beatNum, .beatUnite, .beatSous {
+    transition: opacity 260ms linear; transform: none; filter: none;
+  }
+  .progress { display: none; }
+}
+
+/* ─── Courbes comparées : robot contre référence, une fenêtre à la fois. ─── */
+.courbes {
+  position: absolute; left: 50%; top: 62%; transform: translateX(-50%);
+  width: min(88vw, 40rem); pointer-events: none;
+  display: flex; flex-direction: column; gap: .5rem;
+  opacity: 0; transition: opacity 420ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.beatWrap[data-courbes="1"] .courbes { opacity: 1; }
+.courbesCanvas { width: 100%; height: clamp(90px, 18vh, 150px); display: block; }
+
+.legende {
+  display: flex; justify-content: center; gap: 1.6rem; flex-wrap: wrap;
+  font-family: ui-monospace, "JetBrains Mono", "IBM Plex Mono", monospace;
+  font-size: 10px; letter-spacing: .14em; color: var(--muted);
+}
+.legItem { display: inline-flex; align-items: center; gap: .45rem; }
+.legItem b { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
+.legDot { width: 14px; height: 2px; border-radius: 1px; display: inline-block; }
+.legDot[data-k="nous"] { background: var(--accent); }
+.legDot[data-k="ref"] { background: var(--muted2); }
+
+/* L'ÉCART. Le dessin dit qui passe devant ; ce chiffre dit de combien. */
+.legEcart { display: inline-flex; align-items: center; gap: .45rem; color: var(--muted2); }
+.legEcart b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.legEcart[data-signe="pos"] b { color: var(--accent2, var(--accent)); }
+.legEcart[data-signe="neg"] b { color: var(--neg); }
+
+/* La fenêtre en cours : petite, au-dessus des courbes, elle DIT ce qu'on regarde. */
+.fenetre {
+  text-align: center;
+  font-family: ui-monospace, "JetBrains Mono", "IBM Plex Mono", monospace;
+  font-size: 10px; letter-spacing: .28em; color: var(--accent);
+}
+/* L'avertissement. Jamais caché : ce sont des chiffres de BACKTEST. */
+.avert {
+  position: absolute; left: 50%; bottom: 2.2rem; transform: translateX(-50%);
+  font-family: ui-monospace, monospace; font-size: 9px; letter-spacing: .16em;
+  color: var(--muted2); opacity: .5; text-align: center; padding: 0 1rem;
+}
+@media (max-width: 760px) {
+  .courbes { top: 60%; width: 92vw; }
+  .legende { gap: .9rem; font-size: 9px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .courbes { transition: opacity 240ms linear; }
+}
+
+/* Enveloppe d'un battement de période : le bloc de texte ET ses courbes. */
+.beatWrap { position: absolute; inset: 0; pointer-events: none; }
+.beatWrap .beat { top: 26%; }
+
+/* Attente des chiffres. L'intro ne raconte rien sans eux : sept de ses neuf battements en
+   viennent. Deux secondes de rideau noir muet se lisent comme une panne — cette ligne dit
+   que quelque chose se passe, sans promettre un délai qu'on ne tient pas. */
+.attente {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 10px; letter-spacing: .3em; color: var(--muted2);
+  opacity: .45; animation: attentePouls 1.6s ease-in-out infinite;
+}
+@keyframes attentePouls { 0%, 100% { opacity: .25; } 50% { opacity: .6; } }
+@media (prefers-reduced-motion: reduce) {
+  .attente { animation: none; opacity: .45; }
 }

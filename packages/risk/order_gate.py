@@ -121,6 +121,27 @@ def _veto(regle: str, motif: str) -> Verdict:
     return Verdict(False, 0.0, regle, motif)
 
 
+def _reduction_lisible(demande: float, retenu: float) -> str:
+    """Écrit la réduction avec ASSEZ de précision pour qu'elle se VOIE.
+
+    CONSTATÉ LE 15/09, sur la dernière ligne du passage du VPS :
+
+        [risk-gate] BCH/USD  acheter  demandé 796$ → 796$  RÉDUIT
+                    [exposition_brute] … : 796 $ réduit à 796 $
+
+    « 796 $ réduit à 796 $ » n'est pas une trace, c'est une contradiction apparente : la
+    ligne affirme une réduction et montre deux nombres égaux. Celui qui la relit six mois
+    plus tard ne peut ni la croire ni la vérifier — et une ligne d'audit qui n'établit pas
+    ce qu'elle affirme ne vaut pas mieux qu'une ligne absente. La réduction était réelle,
+    seulement inférieure au dollar : l'arrondi à l'unité la mangeait.
+
+    On descend donc au centime quand l'unité ne suffit pas. Le plafond, lui, ne bouge pas —
+    ici on corrige ce que la trace DIT, jamais ce que le portail FAIT.
+    """
+    d = 0 if f"{demande:.0f}" != f"{retenu:.0f}" else 2
+    return f"{demande:.{d}f} $ réduit à {retenu:.{d}f} $"
+
+
 def evaluer(action: str, montant: float, etat: EtatCompte,
             limites: Limites | None = None, *, liquidation: bool = False) -> Verdict:
     """Autorise, réduit ou refuse UN ordre. `action` ∈ {acheter, alleger, solder}.
@@ -174,12 +195,15 @@ def evaluer(action: str, montant: float, etat: EtatCompte,
     if montant <= autorise_max:
         return Verdict(True, montant, "ok", "dans toutes les limites")
     return Verdict(True, round(autorise_max, 2), regle,
-                   f"{motif} : {montant:.0f} $ réduit à {autorise_max:.0f} $")
+                   f"{motif} : {_reduction_lisible(montant, autorise_max)}")
 
 
 def ligne_journal(symbole: str, action: str, demande: float, v: Verdict) -> str:
     """Trace auditable d'UNE décision. Répond après coup à « pourquoi cet ordre a-t-il été
     accepté / réduit / refusé ? » — sans cette ligne, la question reste sans réponse."""
     etat = "REFUSÉ" if not v.autorise else ("RÉDUIT" if v.reduit else "OK")
-    return (f"[risk-gate] {symbole:14s} {action:8s} demandé {demande:9.0f}$ → "
-            f"{v.montant:9.0f}$  {etat:7s} [{v.regle}] {v.motif}")
+    # Même précaution que `_reduction_lisible` : deux colonnes égales sous une mention
+    # RÉDUIT feraient douter de la mention plutôt que de l'arrondi.
+    d = 0 if not v.reduit or f"{demande:.0f}" != f"{v.montant:.0f}" else 2
+    return (f"[risk-gate] {symbole:14s} {action:8s} demandé {demande:9.{d}f}$ → "
+            f"{v.montant:9.{d}f}$  {etat:7s} [{v.regle}] {v.motif}")

@@ -1782,6 +1782,24 @@ def _ticker_section(data: dict, acmap: dict, n: int = 20) -> dict:
     return {"available": bool(out), "stocks": out[:n]}
 
 
+def _intro_section(equity, trade_stats, sp_dates, sp_closes, instruments) -> dict:
+    """Assemble la section `intro`. Toute absence de donnée est DITE, jamais comblée."""
+    from apps.api.intro_payload import construire
+    ref = None
+    if sp_dates and sp_closes and len(sp_dates) == len(sp_closes):
+        ref = [{"t": d, "v": v}
+               for d, v in zip(sp_dates, sp_closes, strict=False)]
+    classes: dict[str, int] = {}
+    for m in instruments or []:
+        k = (m.get("asset_class") or "equity").strip() or "equity"
+        classes[k] = classes.get(k, 0) + 1
+    univers = {"total": len(instruments or []), "par_classe": classes}
+    try:
+        return construire({"equity": equity}, trade_stats, univers, reference=ref)
+    except Exception as e:  # noqa: BLE001 — l'intro ne doit jamais casser le snapshot
+        return {"disponible": False, "motif": f"{type(e).__name__}: {e}"}
+
+
 def build_snapshot(seed: int = 7) -> dict:
     # --- univers COMPLET + fenêtre jusqu'à AUJOURD'HUI ---
     instruments = _seed_universe()
@@ -2741,6 +2759,20 @@ def build_snapshot(seed: int = 7) -> dict:
             "n_trades": len(all_trades),
             "profile": "offensif · moyen-long terme",
         },
+        # SECTION INTRO — chiffres du rideau d'entrée, DÉRIVÉS de la même courbe
+        # que le tableau de bord. Rien n'est saisi à la main : un nombre recopié
+        # dans un composant se détache de ce qu'il mesure — cf. le « −9 % » de la
+        # landing, issu d'un run `backtest-preset` sur fenêtre courte quand la
+        # production affiche −25,3 %. Régénéré à chaque snapshot.
+        # RÉFÉRENCE RÉELLE OU AUCUNE. `sp` retombe sur une série SYNTHÉTIQUE quand l'indice
+        # n'est pas en base (`_sp_syn`). Comparer la courbe du robot à un S&P 500 inventé
+        # serait le mensonge le plus efficace du site : une légende « S&P 500 », une courbe
+        # crédible, et rien derrière. Le reste du dashboard fait déjà ce tri (`_sp_real`
+        # garde les dates) ; l'intro doit le faire aussi. Sans référence réelle, elle
+        # affiche notre seule courbe et le dit.
+        "intro": _intro_section(_dash_equity, trade_stats,
+                                _sp_dates if _sp_real else [], sp if _sp_real else [],
+                                instruments),
         "dashboard": {
             "as_of": last_bar.isoformat(),
             "regime": {**PL.regime_payload(regime, expo), "macro_real": _macro_real,

@@ -202,6 +202,17 @@ def dashboard() -> dict:
     return d
 
 
+@app.get("/api/intro")
+def intro() -> dict:
+    """Chiffres du rideau d'entrée — dérivés du snapshot, jamais saisis.
+
+    Exposé comme une route pour une raison : `dump_static.py` fige chaque route en JSON,
+    donc le site statique reçoit les mêmes chiffres que le local, rafraîchis par
+    la même construction quotidienne. Ni second pipeline, ni fichier à la main.
+    """
+    return _snap().get("intro") or {"disponible": False, "motif": "section absente"}
+
+
 @app.get("/api/screener")
 def screener() -> dict:
     return _snap()["screener"]

@@ -15,7 +15,12 @@ def test_snapshot_keys_and_json():
                          "crypto_cockpit", "ticker", "portfolio", "trades",
                          "open_trades", "trade_stats", "universe", "data", "themes", "ml",
                          "sentiment", "fundamentals", "investors", "conviction", "live",
-                         "preset_trades", "index_core_curves", "preset_ledger"}
+                         "preset_trades", "index_core_curves", "preset_ledger",
+                         # `intro` : chiffres du rideau, DÉRIVÉS de la courbe
+                         # d'equity du dashboard (ADR-0154). Déclarée ici à dessein :
+                         # ce test exige une décision à chaque nouvelle clé, ce qui
+                         # empêche une section de s'installer sans qu'on l'ait voulue.
+                         "intro"}
     # screener à filtres (packages.screening) : structure attendue
     scr = snap["screen"]
     assert scr["available"] and scr["universe_size"] > 0 and isinstance(scr["rows"], list)
