@@ -56,14 +56,30 @@
 .centre[data-reveal="1"] .brand { opacity: 1; filter: blur(0); transform: scale(1); }
 .centre[data-reveal="1"] .baseline { opacity: .62; transform: none; }
 
-/* Passer l'intro. Discret jusqu'à l'effacement — mais focusable au clavier. */
-.skip {
-  position: absolute; right: max(1rem, env(safe-area-inset-right)); bottom: max(1rem, env(safe-area-inset-bottom));
-  font-family: ui-monospace, monospace; font-size: 10px; letter-spacing: .18em;
-  color: var(--muted2); background: none; border: 0; padding: .5rem .25rem;
-  cursor: pointer; opacity: .32; transition: opacity 200ms ease-out;
+/* Les commandes du rideau, groupées en bas à droite : son, pause, sortie.
+   WCAG 2.2.2 impose la PAUSE au-delà de cinq secondes de mouvement automatique — ce n'est
+   pas un agrément, c'est la condition pour que ce rideau soit acceptable. */
+.controles {
+  position: absolute;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  display: flex; align-items: center; gap: .15rem;
 }
-.skip:hover, .skip:focus-visible { opacity: 1; }
+.ctrl, .skip {
+  font-family: ui-monospace, "JetBrains Mono", monospace; font-size: 10px;
+  letter-spacing: .18em; color: var(--muted2); background: none; border: 0;
+  padding: .5rem .55rem; cursor: pointer; opacity: .32;
+  transition: opacity 200ms ease-out, color 200ms ease-out;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.ctrl:hover, .ctrl:focus-visible, .skip:hover, .skip:focus-visible { opacity: 1; }
+/* Un réglage ACTIF doit se voir sans survol : sinon on ne sait plus si le son est coupé. */
+.ctrl[aria-pressed="true"] { opacity: .95; color: var(--accent); }
+.ctrl:focus-visible { outline: 1px solid var(--accent); outline-offset: 3px; }
+
+/* Calque décoratif : il porte les battements et les courbes. Positionné, donc retiré du
+   flux de la grille — sans cela il deviendrait une ligne de plus et décentrerait le nom. */
+.decor { position: absolute; inset: 0; pointer-events: none; }
 /* Rideau LONG : le bouton cesse d'être discret. Soixante-quinze secondes sans issue
    visible, ce n'est plus de la sobriété — c'est un piège. */
 .skip[data-long="1"] {
@@ -203,6 +219,12 @@
 .legDot { width: 14px; height: 2px; border-radius: 1px; display: inline-block; }
 .legDot[data-k="nous"] { background: var(--accent); }
 .legDot[data-k="ref"] { background: var(--muted2); }
+
+/* L'ÉCART. Le dessin dit qui passe devant ; ce chiffre dit de combien. */
+.legEcart { display: inline-flex; align-items: center; gap: .45rem; color: var(--muted2); }
+.legEcart b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.legEcart[data-signe="pos"] b { color: var(--accent2, var(--accent)); }
+.legEcart[data-signe="neg"] b { color: var(--neg); }
 
 /* La fenêtre en cours : petite, au-dessus des courbes, elle DIT ce qu'on regarde. */
 .fenetre {

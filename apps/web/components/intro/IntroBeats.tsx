@@ -1,6 +1,7 @@
 "use client";
 import s from "./intro.module.css";
 import { BEATS, CHIFFRES_FIXES } from "./introConfig";
+import { clamp01, easeOut } from "./introCourbeDraw";
 import { IntroCourbes, Periode } from "./IntroCourbes";
 
 export type IntroData = {
@@ -20,6 +21,15 @@ const pct = (v: number | null | undefined, d = 1) =>
 const num = (v: number | null | undefined, d = 2) =>
   v == null ? "n/d" : v.toFixed(d);
 
+/** Le chiffre monte de zéro à sa valeur sur le premier tiers du battement.
+ *
+ *  Un nombre POSÉ se lit ; un nombre qui MONTE se regarde monter — c'est la seule seconde
+ *  où l'œil reste sur lui. Le compteur s'arrête net à la valeur réelle : il n'a pas le
+ *  droit de dépasser puis revenir, ce serait afficher un chiffre qui n'existe pas. */
+const DEBUT_COMPTE = 0.04;
+const FIN_COMPTE = 0.34;
+const compte = (p: number) => easeOut(clamp01((p - DEBUT_COMPTE) / (FIN_COMPTE - DEBUT_COMPTE)));
+
 /**
  * Les mots de l'intro, rendus par le DOM — pas par le canvas.
  *
@@ -35,20 +45,24 @@ export function IntroBeats({ i, p, sortie, data }: {
   const b = BEATS[i];
   if (!b || b.genre === "reveal") return null;
   const on = p > 0.05 && p < 0.9 && !sortie;
+  const k = compte(p);
 
   if (b.genre === "chiffre") {
     const c = CHIFFRES_FIXES[b.cle];
     if (!c) return null;
-    return (
-      <Bloc on={on} sur={b.sur} chiffre={c.chiffre} unite={c.unite} sous={c.sous} />
-    );
+    const chiffre = c.valeur != null
+      ? Math.round(c.valeur * k).toLocaleString("fr-FR")
+      : c.chiffre;
+    return <Bloc on={on} sur={b.sur} chiffre={chiffre} unite={c.unite} sous={c.sous} />;
   }
 
   if (b.genre === "trades") {
     const t = data?.trades;
     if (!t?.disponible) return null;
     return (
-      <Bloc on={on} sur={b.sur} chiffre={num(t.profit_factor)} unite="PROFIT FACTOR"
+      <Bloc on={on} sur={b.sur}
+            chiffre={t.profit_factor == null ? "n/d" : num(t.profit_factor * k)}
+            unite="PROFIT FACTOR"
             sous={`R:R ${num(t.ratio_gain_perte)} · espérance ${pct(t.esperance_pct, 2)} `
                   + `par trade · ${t.n} trades clôturés`} />
     );
@@ -61,7 +75,9 @@ export function IntroBeats({ i, p, sortie, data }: {
     <div className={s.beatWrap} data-courbes={on ? "1" : "0"}>
       <div className={s.beat} data-on={on ? "1" : "0"}>
         <div className={s.beatSur}>{d.libelle}</div>
-        <div className={s.beatNum}>{pct(d.croissance, 0)}</div>
+        <div className={s.beatNum}>
+          {d.croissance == null ? "n/d" : pct(d.croissance * k, 0)}
+        </div>
         <div className={s.beatUnite}>
           {d.cagr != null ? `${pct(d.cagr)} PAR AN` : "CROISSANCE TOTALE"}
           {d.max_drawdown != null && ` · PIRE RECUL ${pct(d.max_drawdown, 0)}`}

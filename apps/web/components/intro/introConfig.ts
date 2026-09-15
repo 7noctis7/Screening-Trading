@@ -61,9 +61,14 @@ export const BEATS = [
 
 /** Les deux chiffres qui ne viennent PAS de l'API : ils décrivent le dispositif, pas la
  *  performance. `929` est la taille des seeds, vérifiable par `make audit`. */
-export const CHIFFRES_FIXES: Record<string, { chiffre: string; unite: string; sous: string }> = {
+export const CHIFFRES_FIXES: Record<string, {
+  chiffre: string; unite: string; sous: string;
+  /** Valeur NUMÉRIQUE quand le chiffre peut être compté de zéro. « 7 / 7 » n'en a pas :
+   *  un compteur qui monte vers une fraction afficherait des états qui n'existent pas. */
+  valeur?: number;
+}> = {
   echelle: {
-    chiffre: "929", unite: "INSTRUMENTS",
+    chiffre: "929", valeur: 929, unite: "INSTRUMENTS",
     sous: "757 actions · 111 ETF · 108 crypto · 20 forex · 20 commodités · 20 indices",
   },
   rejet: {

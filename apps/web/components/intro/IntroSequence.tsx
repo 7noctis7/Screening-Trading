@@ -6,6 +6,7 @@ import {
 } from "./introConfig";
 import { IntroBeats } from "./IntroBeats";
 import { useIntro } from "@/lib/api";
+import { IntroSon, creerSon } from "./introSon";
 import { Palette, SceneIntro, paletteDuTheme } from "./introScene";
 import { machineModeste, marquerVue, useIntroGate } from "./useIntroGate";
 
@@ -20,6 +21,13 @@ const SORTIE_MS = 620;      // doit valoir la transition CSS de `.overlay`
  *
  * Il ne bloque jamais l'accès : la landing est montée DESSOUS dès le premier rendu, le rideau
  * se contente d'être au-dessus. Passer l'intro ne charge donc rien — ça retire un calque.
+ *
+ * ACCESSIBILITÉ. WCAG 2.2.2 (« Pause, Stop, Hide ») EXIGE un moyen de mettre en pause tout
+ * mouvement automatique qui dure plus de cinq secondes. Dix-huit secondes sans pause ne sont
+ * pas un choix de style, c'est un manquement — d'où le bouton et la barre d'espace. Et les
+ * commandes ne sont PAS dans un `aria-hidden` : un bouton focusable à l'intérieur d'une
+ * région masquée est atteignable au clavier mais invisible au lecteur d'écran, ce qui est
+ * pire que pas de bouton du tout. Seul le décor est masqué.
  */
 export function IntroSequence({ onFini }: { onFini?: () => void }) {
   const { jouer, reduit } = useIntroGate();
@@ -29,14 +37,21 @@ export function IntroSequence({ onFini }: { onFini?: () => void }) {
   const [monte, setMonte] = useState(false);
   const [sortie, setSortie] = useState(false);
   const [reveal, setReveal] = useState(false);
+  const [pause, setPause] = useState(false);
+  const [son, setSon] = useState(false);
   const [beat, setBeat] = useState<{ i: number; p: number }>({ i: 0, p: 0 });
   // Avancement partagé avec le HUD. Un état par frame serait 60 rendus React par
   // seconde ; on n'écrit que par pas de 1 % — invisible à l'œil, dix fois moins cher.
   const [avance, setAvance] = useState(0);
   const cvRef = useRef<HTMLCanvasElement>(null);
   const fini = useRef(false);
+  // La boucle rAF est montée une seule fois : elle lit la pause par référence plutôt que
+  // par dépendance, sinon chaque bascule la redémarrerait et l'intro repartirait de zéro.
+  const enPause = useRef(false);
+  const audio = useRef<IntroSon | null>(null);
 
   useEffect(() => { if (jouer) setMonte(true); }, [jouer]);
+  useEffect(() => { enPause.current = pause; }, [pause]);
 
   const terminer = useCallback(() => {
     if (fini.current) return;
@@ -46,13 +61,32 @@ export function IntroSequence({ onFini }: { onFini?: () => void }) {
     window.setTimeout(() => { setMonte(false); onFini?.(); }, SORTIE_MS);
   }, [onFini]);
 
-  // Échap passe l'intro : un rideau dont on ne peut pas sortir au clavier est un piège.
+  // Échap passe l'intro, Espace la met en pause : un rideau dont on ne peut ni sortir ni
+  // arrêter le mouvement au clavier est un piège.
   useEffect(() => {
     if (!monte) return;
-    const k = (e: KeyboardEvent) => { if (e.key === "Escape") terminer(); };
+    const k = (e: KeyboardEvent) => {
+      if (e.key === "Escape") terminer();
+      if (e.key === " " || e.code === "Space") {
+        const cible = e.target as HTMLElement | null;
+        if (cible?.tagName === "BUTTON") return;   // le bouton gère déjà son propre espace
+        e.preventDefault();
+        setPause((v) => !v);
+      }
+    };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
   }, [monte, terminer]);
+
+  // Le son n'existe QUE tant qu'il est demandé : coupé, le contexte est fermé, pas
+  // seulement mis en sourdine — un contexte audio ouvert garde le matériel réveillé.
+  useEffect(() => {
+    if (!son) { audio.current?.fermer(); audio.current = null; return; }
+    audio.current = creerSon();
+    return () => { audio.current?.fermer(); audio.current = null; };
+  }, [son]);
+  useEffect(() => { if (!sortie) audio.current?.battement(beat.i); }, [beat.i, sortie]);
+  useEffect(() => { if (reveal) audio.current?.final(); }, [reveal]);
 
   // Mouvement réduit : ni canvas ni phases — le nom, puis la landing.
   useEffect(() => {
@@ -82,17 +116,22 @@ export function IntroSequence({ onFini }: { onFini?: () => void }) {
     let precedent = 0;
     const boucle = (ts: number) => {
       if (!t0) { t0 = ts; precedent = ts; pal = paletteDuTheme(); }
+      const ecoule = ts - precedent;
+      precedent = ts;
+      // EN PAUSE, on décale l'origine du même pas : le temps écoulé n'entre pas dans `t`,
+      // donc rien n'avance. Repeindre quand même (avec `dt` nul) garde la toile correcte
+      // après un redimensionnement, sans faire bouger une seule particule.
+      if (enPause.current) t0 += ecoule;
       const t = Math.min(1, (ts - t0) / duree);
-      const dt = Math.min(0.05, (ts - precedent) / 1000);   // borné : un onglet réveillé
-      precedent = ts;                                        // ne doit pas téléporter le flux
-      scene.peindre(t, dt, pal);
-      setAvance((a) => (Math.abs(t - a) > 0.008 ? t : a));
+      const dt = enPause.current ? 0 : Math.min(0.05, ecoule / 1000);   // borné : un onglet
+      scene.peindre(t, dt, pal);                                        // réveillé ne doit
+      setAvance((a) => (Math.abs(t - a) > 0.008 ? t : a));              // pas téléporter le flux
       // Le DOM ne suit PAS le canvas image par image : on n'écrit l'état du battement que
-      // lorsqu'il change, ou par pas de 2 % à l'intérieur. Soixante rendus React par
-      // seconde pour quatre mots serait le seul vrai coût de cette intro.
+      // lorsqu'il change, ou par pas de 1 % à l'intérieur. Un pas plus large hacherait le
+      // compteur de `IntroBeats`, qui monte précisément sur cette valeur.
       setBeat((b) => {
         const n = scene.battement(t);
-        return n.i !== b.i || Math.abs(n.p - b.p) > 0.02 ? { i: n.i, p: n.p } : b;
+        return n.i !== b.i || Math.abs(n.p - b.p) > 0.01 ? { i: n.i, p: n.p } : b;
       });
       if (t >= PHASES.trades) setReveal(true);
       if (t >= 1) { terminer(); return; }
@@ -104,11 +143,13 @@ export function IntroSequence({ onFini }: { onFini?: () => void }) {
 
   if (!monte) return null;
   return (
-    <div className={s.overlay} data-sortie={sortie ? "1" : "0"} role="presentation"
-         aria-hidden="true">
-      {!reduit && <canvas ref={cvRef} className={s.canvas} />}
+    <div className={s.overlay} data-sortie={sortie ? "1" : "0"} role="region"
+         aria-label="Introduction animée">
+      {!reduit && <canvas ref={cvRef} className={s.canvas} aria-hidden="true" />}
       {!reduit && (
-        <IntroBeats i={beat.i} p={beat.p} sortie={sortie} data={intro} />
+        <div className={s.decor} aria-hidden="true">
+          <IntroBeats i={beat.i} p={beat.p} sortie={sortie} data={intro} />
+        </div>
       )}
       {!reduit && (
         <div className={s.progress} aria-hidden="true">
@@ -119,10 +160,28 @@ export function IntroSequence({ onFini }: { onFini?: () => void }) {
         <h1 className={s.brand}>{INTRO_BRAND}</h1>
         {INTRO_BASELINE && <div className={s.baseline}>{INTRO_BASELINE}</div>}
       </div>
-      <button className={s.skip} onClick={terminer}
-              aria-label="Passer l'introduction et entrer sur le site">
-        PASSER →
-      </button>
+      <div className={s.controles}>
+        {!reduit && (
+          <>
+            <button className={s.ctrl} onClick={() => setSon((v) => !v)}
+                    aria-pressed={son}
+                    aria-label={son ? "Couper le son de l'introduction"
+                                    : "Activer le son de l'introduction"}>
+              {son ? "SON ■" : "SON ▶"}
+            </button>
+            <button className={s.ctrl} onClick={() => setPause((v) => !v)}
+                    aria-pressed={pause}
+                    aria-label={pause ? "Reprendre l'introduction"
+                                      : "Mettre l'introduction en pause"}>
+              {pause ? "REPRENDRE ▶" : "PAUSE ❚❚"}
+            </button>
+          </>
+        )}
+        <button className={s.skip} onClick={terminer}
+                aria-label="Passer l'introduction et entrer sur le site">
+          PASSER →
+        </button>
+      </div>
     </div>
   );
 }
