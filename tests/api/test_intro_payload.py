@@ -142,3 +142,33 @@ def test_les_cinq_fenetres_sont_toujours_rendues_meme_vides():
 def test_une_exception_interne_ne_casse_pas_le_snapshot():
     r = construire({"equity": [{"t": "pas-une-date", "v": 10}]}, {}, {}, AUJ)
     assert r["periodes"][0]["disponible"] is False
+
+
+# ─── La référence doit être RÉELLE ou absente (15/09) ─────────────────────────────────
+
+def test_le_snapshot_n_envoie_jamais_une_reference_synthetique():
+    """`sp` retombe sur une série SYNTHÉTIQUE quand l'indice n'est pas en base. Comparer la
+    courbe du robot à un S&P 500 inventé serait le mensonge le plus efficace du site : une
+    légende crédible, une courbe crédible, et rien derrière.
+
+    Le reste du dashboard fait déjà ce tri avec `_sp_real` ; l'intro le faisait PAS.
+    """
+    import pathlib
+    src = (pathlib.Path(__file__).resolve().parents[2]
+           / "apps" / "api" / "snapshot.py").read_text(encoding="utf-8")
+    appel = src.split('"intro": _intro_section(', 1)[1].split("instruments)", 1)[0]
+    assert appel.count("_sp_real") == 2, (
+        "les DEUX séries de référence (dates et valeurs) doivent être conditionnées à "
+        "`_sp_real` — en conditionner une seule produirait un désalignement silencieux")
+
+
+def test_sans_reference_l_intro_reste_disponible_et_le_dit():
+    """Pas d'indice réel ⇒ on affiche NOTRE courbe seule, on n'invente pas de comparaison."""
+    courbe = [{"t": f"2024-{m:02d}-01", "v": 100.0 + m} for m in range(1, 13)]
+    out = construire({"equity": courbe}, {"count": 0}, {"total": 929}, reference=None)
+    assert out["disponible"] is True
+    p0 = out["periodes"][-1]                      # « depuis le début »
+    assert p0["disponible"] is True
+    assert p0["courbe"]                            # la nôtre est bien là
+    assert p0["reference"] is None
+    assert "aucune série de référence" in p0["reference_motif"]

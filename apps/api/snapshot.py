@@ -2764,7 +2764,14 @@ def build_snapshot(seed: int = 7) -> dict:
         # dans un composant se détache de ce qu'il mesure — cf. le « −9 % » de la
         # landing, issu d'un run `backtest-preset` sur fenêtre courte quand la
         # production affiche −25,3 %. Régénéré à chaque snapshot.
-        "intro": _intro_section(_dash_equity, trade_stats, _sp_dates, sp,
+        # RÉFÉRENCE RÉELLE OU AUCUNE. `sp` retombe sur une série SYNTHÉTIQUE quand l'indice
+        # n'est pas en base (`_sp_syn`). Comparer la courbe du robot à un S&P 500 inventé
+        # serait le mensonge le plus efficace du site : une légende « S&P 500 », une courbe
+        # crédible, et rien derrière. Le reste du dashboard fait déjà ce tri (`_sp_real`
+        # garde les dates) ; l'intro doit le faire aussi. Sans référence réelle, elle
+        # affiche notre seule courbe et le dit.
+        "intro": _intro_section(_dash_equity, trade_stats,
+                                _sp_dates if _sp_real else [], sp if _sp_real else [],
                                 instruments),
         "dashboard": {
             "as_of": last_bar.isoformat(),

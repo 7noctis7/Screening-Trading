@@ -12,6 +12,19 @@ import { machineModeste, marquerVue, useIntroGate } from "./useIntroGate";
 
 const SORTIE_MS = 620;      // doit valoir la transition CSS de `.overlay`
 
+/** Combien de temps on ATTEND les chiffres avant de jouer quand même.
+ *
+ * L'intro ne raconte rien sans eux : cinq fenêtres de performance et la qualité des trades
+ * sont SEPT de ses neuf battements. Jouée trop tôt, elle déroule un décor et deux chiffres
+ * fixes — ce que l'utilisateur a vu le 15/09 après un `make up`, et qui ressemble à un bug
+ * sans en être un : l'API venait de redémarrer, son cache disque était invalidé par le
+ * changement de code, et elle reconstruisait le snapshot pendant une à trois minutes.
+ *
+ * Deux secondes et demie couvrent une API tiède et le site statique (JSON déjà sur disque).
+ * Au-delà, on joue sans : un rideau qui ne se lève jamais serait pire qu'une intro courte.
+ */
+const ATTENTE_DONNEES_MS = 2_500;
+
 /**
  * Rideau d'entrée : flux de marché → graphe → enveloppe de risque → nom → landing.
  *
@@ -43,6 +56,7 @@ export function IntroSequence({ onFini }: { onFini?: () => void }) {
   // Avancement partagé avec le HUD. Un état par frame serait 60 rendus React par
   // seconde ; on n'écrit que par pas de 1 % — invisible à l'œil, dix fois moins cher.
   const [avance, setAvance] = useState(0);
+  const [attenteEcoulee, setAttenteEcoulee] = useState(false);
   const cvRef = useRef<HTMLCanvasElement>(null);
   const fini = useRef(false);
   // La boucle rAF est montée une seule fois : elle lit la pause par référence plutôt que
@@ -50,7 +64,15 @@ export function IntroSequence({ onFini }: { onFini?: () => void }) {
   const enPause = useRef(false);
   const audio = useRef<IntroSon | null>(null);
 
+  // Le rideau SE LÈVE tout de suite (sinon la landing apparaîtrait puis serait recouverte,
+  // ce qui est exactement le clignotement que `useIntroGate` évite par ailleurs)…
   useEffect(() => { if (jouer) setMonte(true); }, [jouer]);
+  // …mais l'ANIMATION attend les chiffres, au plus `ATTENTE_DONNEES_MS`.
+  useEffect(() => {
+    if (!monte) return;
+    const t = window.setTimeout(() => setAttenteEcoulee(true), ATTENTE_DONNEES_MS);
+    return () => window.clearTimeout(t);
+  }, [monte]);
   useEffect(() => { enPause.current = pause; }, [pause]);
 
   const terminer = useCallback(() => {
@@ -96,8 +118,12 @@ export function IntroSequence({ onFini }: { onFini?: () => void }) {
     return () => window.clearTimeout(t);
   }, [monte, reduit, terminer]);
 
+  // `intro` défini = la requête a répondu, disponible ou non. `undefined` = elle court
+  // encore : c'est CE cas qu'on attend, pas une donnée absente (qu'on sait déjà afficher).
+  const pret = intro !== undefined || attenteEcoulee;
+
   useEffect(() => {
-    if (!monte || reduit) return;
+    if (!monte || reduit || !pret) return;
     const cv = cvRef.current;
     if (!cv) return;
     const ctx = cv.getContext("2d", { alpha: true });
@@ -139,14 +165,19 @@ export function IntroSequence({ onFini }: { onFini?: () => void }) {
     };
     raf = requestAnimationFrame(boucle);
     return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", redim); };
-  }, [monte, reduit, terminer]);
+  }, [monte, reduit, pret, terminer]);
 
   if (!monte) return null;
   return (
     <div className={s.overlay} data-sortie={sortie ? "1" : "0"} role="region"
          aria-label="Introduction animée">
       {!reduit && <canvas ref={cvRef} className={s.canvas} aria-hidden="true" />}
-      {!reduit && (
+      {!reduit && !pret && (
+        // L'attente se DIT. Un rideau noir muet pendant deux secondes se lit comme une
+        // panne ; une ligne de terminal se lit comme un chargement.
+        <div className={s.attente} aria-hidden="true">LECTURE DU SNAPSHOT…</div>
+      )}
+      {!reduit && pret && (
         <div className={s.decor} aria-hidden="true">
           <IntroBeats i={beat.i} p={beat.p} sortie={sortie} data={intro} />
         </div>

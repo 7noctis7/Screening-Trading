@@ -249,3 +249,17 @@
 /* Enveloppe d'un battement de période : le bloc de texte ET ses courbes. */
 .beatWrap { position: absolute; inset: 0; pointer-events: none; }
 .beatWrap .beat { top: 26%; }
+
+/* Attente des chiffres. L'intro ne raconte rien sans eux : sept de ses neuf battements en
+   viennent. Deux secondes de rideau noir muet se lisent comme une panne — cette ligne dit
+   que quelque chose se passe, sans promettre un délai qu'on ne tient pas. */
+.attente {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 10px; letter-spacing: .3em; color: var(--muted2);
+  opacity: .45; animation: attentePouls 1.6s ease-in-out infinite;
+}
+@keyframes attentePouls { 0%, 100% { opacity: .25; } 50% { opacity: .6; } }
+@media (prefers-reduced-motion: reduce) {
+  .attente { animation: none; opacity: .45; }
+}
