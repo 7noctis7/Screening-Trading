@@ -113,6 +113,26 @@ def _is_crypto(symbol: str) -> bool:
     return "/USDC" in s or "/USDT" in s or s.endswith(("-USD", "-USDT"))
 
 
+def _peut_coter_negatif(symbol: str) -> bool:
+    """Un contrat À TERME peut coter sous zéro. Une action, un jeton : jamais.
+
+    Le 20 avril 2020 le contrat WTI de mai s'est réglé à **−37,63 $**. Ce n'est
+    pas une donnée corrompue : quand stocker coûte plus cher que le baril ne
+    vaut, le détenteur paie pour se défaire de la livraison. L'audit criait donc
+    au rouge sur un fait de marché documenté — et quatre faux positifs sur dix
+    suffisent à apprendre au lecteur à ignorer le rouge. Un cri-au-loup coûte la
+    crédibilité des vrais.
+
+    LE ZÉRO EXACT RESTE CRITIQUE, y compris sur un terme. Un prix peut être
+    négatif ; il ne peut pas être ABSENT. `0.0` pile est la signature d'une
+    valeur manquante convertie en nombre — ce qu'on observe sur AAVE, ICP et
+    DYDX à leur jour d'introduction.
+
+    Convention `=F` : celle du dépôt (`snapshot.py:91` en déduit `commodity`).
+    """
+    return symbol.upper().endswith("=F")
+
+
 # ─────────────────────────── audit par série ───────────────────────────
 def audit_series(symbol: str, bars: Iterable[Any], *, now: date | None = None,
                  max_gap_ratio: float = 0.10, split_jump: float = 0.50,
@@ -134,8 +154,14 @@ def audit_series(symbol: str, bars: Iterable[Any], *, now: date | None = None,
             dates.append(d)
             if d > today:                                  # FUITE POINT-IN-TIME : date future
                 out.append(Anomaly(symbol, "point_in_time", "critical", f"barre future {d} > {today}"))
+        negatif_ok = _peut_coter_negatif(symbol)
         for name, val in (("open", o), ("high", h), ("low", l), ("close", c)):
-            if val is not None and val <= 0:
+            if val is None:
+                continue
+            if val < 0 and negatif_ok:    # fait de marché, pas corruption
+                out.append(Anomaly(symbol, "accuracy", "warning",
+                                   f"{name} négatif ({val}) le {d} — terme"))
+            elif val <= 0:
                 out.append(Anomaly(symbol, "accuracy", "critical", f"{name} ≤ 0 ({val}) le {d}"))
         if h is not None and l is not None and h < l:
             out.append(Anomaly(symbol, "accuracy", "critical", f"high<low ({h}<{l}) le {d}"))

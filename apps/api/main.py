@@ -188,6 +188,17 @@ def meta() -> dict:
 def dashboard() -> dict:
     d = dict(_snap()["dashboard"])
     d.pop("chart_series", None)      # lourd & inutile ici (utilisé par Positions/Trades/Live)
+    # ÂGE DU SNAPSHOT, MESURÉ CÔTÉ SERVEUR. Le front ne peut pas le déduire :
+    # il ne connaît que l'instant de SA requête, et l'API répond depuis un cache
+    # vieux d'au plus `_TTL_S`. Sans ce champ, le bandeau « LIVE » mesurait
+    # l'aller-retour réseau et affichait « il y a 1s » sur des positions vendues
+    # un quart d'heure plus tôt.
+    #
+    # Âge RELATIF, jamais un horodatage absolu : un epoch obligerait le navigateur
+    # à croire sa propre horloge, qui dérive. Le front ajoute le temps écoulé
+    # depuis la réponse — aucune synchronisation requise.
+    d["snapshot_age_s"] = max(0.0, round(time.time() - _CACHE_TS, 1))
+    d["snapshot_ttl_s"] = _TTL_S
     return d
 
 

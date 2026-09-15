@@ -17,6 +17,29 @@
       `atr_stop=4.0` — capter un p90 de +21 % suppose de survivre à un p10 de −18 %.
       Aucun `model_high_volatility.pkl`, aucune bascule, gate placebo sans objet.
       `make regime-atr-lab` reste : c'est lui qui a tranché.
+- [ ] **P1 — 57 180 $ en liquidités après le rebalancement du 14/09 (ADR-0149).** Les
+      ventes sont passées, aucun achat. Hypothèse NON VÉRIFIÉE : boucle d'achats après
+      16:00 ET → `run_live.py:212` reporte toute action. À trancher sur le log :
+      `tail -n 200 /tmp/quant_live.log | grep -vE '"level":' | tail -n 60`. Chercher
+      `⏸ REPORTÉ`, `disjoncteur`, `sous le plancher`.
+- [x] **~~P1 — 57 180 $ en liquidités après le rebalancement~~ — RÉSOLU (14/09,
+      ADR-0150).** Ni disjoncteur ni séance : ordre de traitement. Ventes d'abord.
+- [ ] **P2 — Le portail reste séquentiel, il ne planifie pas (14/09, ADR-0150).** Il ne
+      sait toujours pas qu'un achat refusé aurait pu attendre trois lignes. Résoudre le lot
+      comme un sac à dos sous contrainte serait une autre décision — à mesurer d'abord.
+- [ ] **P2 — `MAX_POIDS_LIGNE_PANIER = 0,60` est une politique, pas une mesure (14/09,
+      ADR-0151).** À confronter à un vrai calcul look-through sur la concentration interne
+      de QQQ si le cœur devait monter au-delà.
+- [ ] **P1 — Une unité systemd hors git subsiste sur le VPS (14/09, ADR-0148).**
+      `quant-rebalance.service` est DÉSACTIVÉ mais présent sur disque, et son
+      `Environment=` reste illisible (unité en 600). Décider : la supprimer, ou la
+      versionner dans `install_services.sh` si elle porte une configuration utile.
+      Tant qu'elle est là, la machine porte un état que le dépôt ne décrit pas.
+- [ ] **P1 — Surveiller le PREMIER passage de la chaîne quotidienne (14/09).** Installée
+      aujourd'hui, elle n'avait jamais tourné : ingestion, ML, audit, rapports et
+      watchlist vont s'enchaîner d'un coup à 22h30. `tail -n 40 /tmp/quant_daily.log`
+      le lendemain. Un premier run sur une base qui n'a pas été rafraîchie par cron
+      depuis longtemps peut être long et révéler des ruptures.
 - [ ] **P0 — Produire les rendements OOS ML avant toute promotion effective (11/09,
       ADR-0142).** Le cron appelle désormais `should_promote` et CONSERVE le champion si
       DSR/Brier/AUC sont incomplets ; il ne remplace donc plus un modèle sans comparaison.

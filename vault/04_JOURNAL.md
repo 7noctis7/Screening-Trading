@@ -1,5 +1,89 @@
 # 04 — JOURNAL
 
+## Session 2026-09-15 (16ᵉ) — Le rideau passe à 75 s, en huit actes
+
+**Demande : 60–90 s.** Réserve exprimée une fois — un rideau si long fait fuir, et le brief
+d'origine disait « 4 s maximum » — puis levée : c'est la décision du propriétaire.
+
+**Étirer cinq phases donnerait un RALENTI.** Une durée longue exige du contenu, pas de la
+lenteur. Huit actes, un par étage du pipeline : INITIALISATION · MARKET DATA · FEATURE
+ENGINE · MACHINE LEARNING · VALIDATION · RISK ENGINE · EXECUTION · révélation.
+
+**L'acte VALIDATION est celui qui justifie les 75 s** : les quatre portes avec leurs
+verdicts réels — placebo ✓, DSR ✗, PBO ✗, sabotage ✗. Une sur quatre. C'est le seul moment
+où le produit dit ce qu'un concurrent tairait.
+
+**La durée a des conséquences, et elles sont assumées** : le bouton de sortie cesse d'être
+discret (bordure, fond, compte à rebours), Échap sort, et la politique « une fois par
+onglet » n'est plus discutable. ADR-0152.
+
+**Refactor** : `introDraw` (primitives) · `introActs` (un acte = une fonction pure) ·
+`introScene` (orchestration). Trois fichiers courts, aucun au-dessus de 250 lignes.
+
+**Mesuré.** Build Next.js vert, landing inchangée à 7,16 kB.
+
+## Session 2026-09-14 (15ᵉ) — Deux ordres de grandeur, et un rideau d'entrée
+
+**Le log de production a tranché, contre mon hypothèse.** J'avais avancé que les 57 180 $
+en liquidités venaient d'un report hors séance. Faux. C'est le portail de risque, et la
+cause est un ORDRE DE TRAITEMENT : `_reconcile` parcourait les lignes par cible
+décroissante, donc les lignes à solder (cible zéro) passaient EN DERNIER. Le portail
+évaluait les achats en voyant encore, dans l'exposition brute, tout ce que le lot allait
+vendre. 9 961 $ d'achats refusés ; 13 720 $ libérés juste après. ADR-0150.
+
+**Et QQQ était interdit par construction.** Plafond de ligne à 20 %, cœur visé à 50 % :
+refus à chaque passage, et comme les ventes ne sont jamais bloquées, la ligne ne pouvait
+que décroître. Le plafond bornait le risque IDIOSYNCRATIQUE ; l'appliquer à un panier de
+cent lignes confond « une position » et « un risque ». Plafond SÉPARÉ à 0,60, pas une
+exemption — et le sens du choix vient de ce qu'on a mesuré : descendre le cœur pousserait
+80 % du capital vers le satellite, la partie sans edge prouvé (DSR ≈ 0). ADR-0151.
+
+**Rideau d'entrée.** `components/intro/` — canvas 2D, zéro dépendance, 3,9 s. Carnet de
+profondeur, chandeliers vectoriels, graphe qui s'allume couche par couche, enveloppe de
+risque qui se resserre, HUD de terminal. Les couleurs viennent des variables CSS : l'intro
+suit la charte ET le thème, au lieu du noir proposé qui jurerait avec `--bg:#0a1118`. Les
+métriques du HUD convergent vers NOS ordres de grandeur — AUC 0,524, pas 0,94.
+
+**Ce que la landing avait déjà.** Scène R3F, ticker live, et la séquence
+`01 PLACEBO → 02 DSR → 03 PBO → 04 SABOTAGE` avec les vrais chiffres. L'intro ne la
+remplace pas : elle se monte AU-DESSUS, la page est déjà là dessous.
+
+**Quatrième hypothèse fausse de la journée**, après les 458 journées, l'effet de régime et
+le report hors séance. Et un cinquième piège évité de justesse : un `__pycache__` figé par
+mon propre sabotage m'a fait lire `1.0` là où la source disait `0.60`. Le code était juste.
+Purger `__pycache__` entre restauration et re-test.
+
+**Mesuré.** 2 688 passés, 74 ignorés. Build Next.js vert, landing à 7,16 kB.
+
+## Session 2026-09-14 (14ᵉ) — Un bandeau vert sur des positions vendues
+
+**Apporté par l'utilisateur, pas par un garde-fou.** Sa page Positions affichait 19 lignes
+et 80 817 $ ; Alpaca, au même instant, une seule — QQQ, 42 976 $ — et 57 180 $ de
+liquidités. Dix-huit lignes, ~38 000 $, **vendues treize minutes plus tôt**. Le bandeau
+disait « LIVE · il y a 1s », point vert pulsant.
+
+**La donnée était périmée, pas fausse.** `_snap()` sert depuis un cache de 15 min
+(stale-while-revalidate) et reconstruit en fond : choix d'architecture assumé, la
+navigation reste instantanée. Le défaut était l'indicateur — `LiveBadge` lisait
+`dataUpdatedAt`, l'instant de la requête du NAVIGATEUR. Il mesurait la latence réseau et
+la présentait comme l'âge de la donnée.
+
+**Corrigé.** `snapshot_age_s` + `snapshot_ttl_s` publiés par `/api/dashboard`, mesurés
+serveur depuis `_CACHE_TS` ; le front y ajoute le temps écoulé depuis la réponse. Âge
+RELATIF, jamais un epoch — sinon le navigateur devrait croire son horloge, et l'erreur
+serait invisible. Au-delà du TTL : `DIFFÉRÉ` en ambre ; au double : rouge. ADR-0149.
+
+**Troisième fois aujourd'hui.** `|| true` sur le ré-entraînement, `except Exception` sur
+l'audit, badge vert par construction : à chaque fois une sortie qui se lit « tout va
+bien » sans avoir vérifié ce qu'elle prétend mesurer. C'est le fil de la journée.
+
+**Resté ouvert, faute de log.** 57 180 $ dorment en liquidités, aucune ligne « à acheter »
+exécutée. Hypothèse non vérifiée : les ventes sont passées à 15:40 ET, et si la boucle
+d'achats a franchi 16:00 ET, `run_live.py:212` reporte toute action (TimeInForce.DAY sans
+extended hours). À confirmer dans `/tmp/quant_live.log` — hypothèse, pas diagnostic.
+
+**Mesuré.** 2 672 passés, 74 ignorés.
+
 ## Session 2026-09-14 (13ᵉ) — Le t survit au regroupement ; reste à savoir s'il se joue
 
 **Ma prédiction était fausse, et la mesure le dit.** J'avais écrit que les 697
@@ -69,7 +153,36 @@ entrée le même jour, toutes deux 12ᵉ, la sienne au-dessus. Ordre rétabli, l
 renumérotée 13ᵉ. Garde-fou posé sur le SOMMET seulement — le numéro de session repart à 2
 après 28 dans ce dépôt, et l'ordre total réécrirait 185 entrées pour protéger une ligne.
 
-**Mesuré.** 2 657 passés, 74 ignorés.
+**Puis l'audit débloqué a parlé, et la moitié de son rouge était faux.** 10 critiques :
+quatre sur `CL=F` les 20-21 avril 2020 (`close -37,63`) — le règlement négatif du WTI, un
+fait de marché documenté, pas une corruption ; six zéros EXACTS sur AAVE, ICP et DYDX à
+leur jour d'introduction — ceux-là sont de vrais trous. La règle `val <= 0 → critique`
+confondait « ce prix est impossible » et « ce prix est absent ». Un terme peut coter
+négatif ; rien ne peut coter zéro. ADR-0147.
+
+**À noter pour la mesure ATR** : un `low = 0.0` gonfle le true range, donc l'ATR et sa
+moyenne. Quelques dizaines de barres sur 2 624 ont pu être faussement classées « haute
+volatilité » — dans le sens qui FLATTE l'effet. Le verdict d'abandon n'en est que plus
+solide.
+
+**Et un déclencheur que git ne connaît pas.** `systemctl list-timers` révèle un
+`quant-rebalance.timer` quotidien à 14:40 UTC, absent de tout fichier du dépôt, lançant le
+MÊME `cron_live.sh` que le crontab horaire. Or 14:40 UTC n'est pas dans la fenêtre
+d'exécution (une heure avant la clôture NYSE) : soit il était inerte, soit il portait
+`QUANT_IGNORER_FENETRE=1` dans un `Environment=` illisible et passait des ordres en pleine
+séance. Les deux réponses menant à la même action, désactivé sans attendre de savoir
+laquelle. ADR-0148.
+
+**Le vrai trou était à côté** : `/tmp/quant_daily.log` n'existait pas — la chaîne
+quotidienne n'avait **jamais** tourné ici. Ni prix, ni ML, ni audit, ni rapports.
+Installée après avoir coupé le timer, pour ne pas risquer deux ingestions concurrentes.
+
+**Ce qui corrige une chose que j'ai dite ce matin** : j'avais fait du `|| true` de
+`cron_daily.sh` la raison de l'échec silencieux du ré-entraînement. Le masquage existait,
+mais la chaîne n'avait aucun appelant sur cette machine. Le correctif tient ; mon
+explication de sa portée était fausse.
+
+**Mesuré.** 2 664 passés, 74 ignorés.
 
 ## Session 2026-09-11 (12ᵉ) — Métriques du champion : deux persistées, une refusée
 

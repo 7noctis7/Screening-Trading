@@ -2,6 +2,228 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0150 — Le portail refusait des achats financés par des ventes du même lot (2026-09-14)
+
+**Mesuré sur le run paper du 14/09**, log de production à l'appui. `_reconcile` parcourait
+les lignes par **cible décroissante**. Or une ligne à SOLDER a une cible de zéro : elle
+passait donc en dernier. Le portail de risque évaluait chaque achat en voyant encore, dans
+l'exposition brute, tout ce que le même lot s'apprêtait à liquider.
+
+| Étape | Montant |
+|---|---|
+| Brut au départ | 80 785 $ / 100 194 $ (80,6 %) |
+| Achats acceptés | +19 408 $ → plafond **saturé** |
+| Achats REFUSÉS | **9 961 $** (LTC, LNC, NWS, SIG, ETH, T, BCH) |
+| Ventes, ensuite | **13 720 $** (DUOL, LINKUSD, NWSA, OXY, PATH, PSX, SOLUSD) |
+
+Les ventes libéraient 3 759 $ de PLUS que le total des refus. Traitées d'abord, les sept
+passaient. Conséquence visible : 57 180 $ immobilisés en liquidités et huit lignes cibles
+jamais achetées — sans qu'aucune interface ne dise pourquoi.
+
+**Décision.** `ordre_de_traitement(tgt, detenu)` : ventes d'abord, puis achats. Dans chaque
+groupe, du plus gros au plus petit — l'ordre entre achats est celui d'avant.
+
+**Pourquoi c'est sûr.** Une vente n'est JAMAIS bloquée par le portail (« désengagement —
+jamais bloqué »). Les passer d'abord ne peut donc rien refuser de plus. L'ordre est
+strictement plus permissif à décisions de stratégie inchangées : il ne choisit rien, il
+cesse seulement de compter deux fois le même capital.
+
+**Ce qu'il ne corrige pas.** Le portail reste séquentiel et ne planifie pas : il ne sait
+toujours pas qu'un achat refusé aurait pu attendre trois lignes de plus. Un ordonnancement
+global (résoudre le lot comme un problème de sac à dos sous contrainte) serait une autre
+décision, à mesurer avant d'être écrite.
+
+## ADR-0152 — Une intro de 75 s ne se fabrique pas en ralentissant une intro de 4 s (2026-09-15)
+
+**Demande.** Porter le rideau d'entrée de 3,9 s à 60–90 s.
+
+**Réserve, exprimée une fois puis levée.** Un rideau de 75 s avant un site fait fuir. Le
+brief d'origine disait lui-même « 2,5 à 4 s maximum, jamais frustrer ». La décision
+appartient au propriétaire du produit ; elle est prise, et l'implémentation en tire les
+conséquences plutôt que de la contourner à moitié.
+
+**Le vrai problème technique.** Étirer cinq phases sur 75 s donne un RALENTI, et un ralenti
+se voit. Une durée longue exige du CONTENU. On passe donc de 5 phases à **8 actes**, un par
+étage du pipeline réel : INITIALISATION · MARKET DATA · FEATURE ENGINE · MACHINE LEARNING ·
+VALIDATION · RISK ENGINE · EXECUTION · révélation. ~9 s chacun — le temps de lire, pas celui
+de s'ennuyer.
+
+**L'acte qui justifie l'ensemble.** VALIDATION rejoue les quatre portes de la landing avec
+leurs verdicts RÉELS : placebo p = 0,039 ✓, DSR 0,00 ✗, PBO 0,88 ✗, sabotage −11,7 ✗. Une
+porte sur quatre passe. C'est le seul moment de l'intro où le produit dit quelque chose
+qu'un concurrent ne dirait pas — et c'est ce qui la sauve d'être une vitrine.
+
+**Conséquences assumées de la durée.**
+- Le bouton de sortie CESSE d'être discret : bordure, fond, et un compte à rebours en
+  secondes. Soixante-quinze secondes sans issue visible, ce n'est plus de la sobriété,
+  c'est un piège. Échap sort aussi.
+- La politique reste « une fois par onglet ». À 4 s on pouvait discuter ; à 75 s, rejouer
+  à chaque navigation serait indéfendable.
+- `prefers-reduced-motion` coupe tout : fondu, nom, site.
+
+**Structure.** Trois fichiers courts plutôt qu'un long : `introDraw` (primitives, aucune
+règle), `introActs` (un acte = une fonction pure, ignorante du temps global), `introScene`
+(état, choix de l'acte, décor). Les bornes viennent d'`ACTS` — `PHASES` en est dérivé, une
+seule source de vérité.
+
+**Ce qui n'a pas changé.** Couleurs lues depuis les variables CSS (charte + thème courant),
+zéro dépendance ajoutée, canvas 2D, montée AU-DESSUS de la landing. Build vert, landing
+inchangée à 7,16 kB.
+
+## ADR-0151 — Un cœur indiciel à 50 % était interdit par un plafond fait pour les titres (2026-09-14)
+
+**Constat, même log.** `QQQ cible 46 087 $ détenu 43 028 $ ⛔ REFUSÉ [poids_ligne] ligne
+plafonnée à 20 %`. L'allocation de production vise pourtant « 50 % QQQ + 50 % preset ». Le
+refus tombait à chaque passage. Et comme une vente n'est jamais bloquée, la ligne ne pouvait
+que **décroître** : l'allocation affichée sur la page était inatteignable par construction.
+
+**Ce qui manquait.** Le plafond de ligne borne le risque IDIOSYNCRATIQUE — ce qu'on perd si
+UN émetteur s'effondre. Un panier de cent lignes ne porte pas ce risque-là. Appliquer le
+même nombre aux deux confond « une position » et « un risque ».
+
+**Pourquoi ce sens plutôt que l'inverse, et c'est l'argument qui décide.** Il y avait trois
+options : monter le plafond, descendre le cœur sous 20 %, ou exempter le cœur. Descendre le
+cœur forcerait 80 % du portefeuille vers le satellite — c'est-à-dire vers la partie dont ce
+dépôt a MESURÉ qu'elle n'a pas d'edge prouvé (DSR ≈ 0, `_edge_proven` faux, allocation
+100 % risk-parity, cf. ADR-0145). Concentrer le capital là où l'avantage n'est pas démontré,
+au nom du risque, revient à échanger du bêta diversifié contre du bruit. L'exemption, elle,
+supprimerait la limite au lieu de l'adapter.
+
+**Décision.** Un plafond SÉPARÉ, pas une exemption. `MAX_POIDS_LIGNE_PANIER = 0,60`
+(`QUANT_RISK_MAX_WEIGHT_BASKET`), appliqué quand l'appelant DÉCLARE un véhicule diversifié —
+`run_live.py` le déduit de la classe d'actifs déjà résolue, le portail ne devine rien d'un
+ticker. Défaut `panier=False` : aucun appelant existant ne voit son plafond bouger.
+
+**0,60 est une POLITIQUE, pas une mesure.** Elle laisse vivre un cœur à 50 % avec de la
+marge et refuse le 100 % — un ETF reste un émetteur, un dépositaire, et pour QQQ une
+concentration interne réelle. Aucun test ne prétend que 0,60 soit le bon chiffre ; ils
+vérifient que panier et titre unique ne partagent plus le même plafond, et que le panier
+reste borné.
+
+**Sabotage.** Plafond unique restauré : 2 tests tombent · panier porté à 100 % : 2.
+
+## ADR-0149 — Le bandeau « LIVE » mesurait l'aller-retour réseau (2026-09-14)
+
+**Constat, apporté par l'utilisateur.** La page Positions affichait 19 lignes et
+80 817 $ de positions ; Alpaca, au même instant, n'en montrait qu'une — QQQ, 42 976 $ —
+et 57 180 $ de liquidités. Dix-huit lignes, ~38 000 $, avaient été **vendues treize
+minutes plus tôt** (ordres remplis à 19:40 UTC : VZ, TRV, THC, TEN, T…). Le bandeau,
+lui, affichait « LIVE · il y a 1s », point vert pulsant.
+
+**La donnée n'était pas fausse : elle était périmée, et le bandeau l'affirmait fraîche.**
+`_snap()` sert le snapshot depuis un cache (`_TTL_S = 900`, stale-while-revalidate) et ne
+le reconstruit qu'en arrière-plan ; `/api/positions` lit ce cache, donc les positions
+courtier qu'il renvoie datent du dernier BUILD. C'est un choix d'architecture assumé — la
+navigation reste instantanée. Le défaut n'est pas le cache : c'est l'indicateur.
+
+**Le défaut.** `LiveBadge.tsx` calculait son âge depuis `dataUpdatedAt`, l'horodatage
+React Query de la dernière requête **du navigateur**. Il mesurait donc la latence réseau
+et la présentait comme l'âge de la donnée. Sur un snapshot de quinze minutes, il disait
+« il y a 1s ». Un indicateur de fraîcheur qui ne regarde pas la donnée est pire qu'aucun :
+il ne se contente pas de ne rien dire, il affirme — et ici sur des positions réelles.
+
+**Décision.** `/api/dashboard` publie `snapshot_age_s` et `snapshot_ttl_s`, mesurés
+SERVEUR depuis `_CACHE_TS`. Le front y ajoute le temps écoulé depuis la réponse.
+
+**Âge relatif, jamais un horodatage absolu.** Un epoch obligerait le navigateur à croire
+sa propre horloge, qui dérive — et l'erreur serait invisible, exactement le travers qu'on
+corrige. Un âge relatif ne demande aucune synchronisation.
+
+**Le badge sait désormais dire NON.** Au-delà du TTL il affiche `DIFFÉRÉ` en ambre ; au
+double, en rouge (la reconstruction elle-même a probablement échoué). Le seuil vient du
+serveur, pas d'un 900 codé en dur qui se désynchroniserait au premier changement de
+`_TTL_S`. Au survol : l'heure de calcul des données, en toutes lettres.
+
+**Famille.** Troisième fois ce jour : `|| true` sur le ré-entraînement, `except Exception`
+sur l'audit, et maintenant un badge vert par construction. À chaque fois, une sortie qui
+se lit « tout va bien » sans avoir vérifié ce qu'elle prétend mesurer.
+
+**Sabotage.** Âge déduit de la seule requête : 1 test tombe · « LIVE » inconditionnel : 1 ·
+âge constant côté serveur : 2.
+
+## ADR-0148 — Un déclencheur invisible depuis git doublait le rebalancement (2026-09-14)
+
+**Constat, en répondant à « mon cron tourne-t-il toujours ? »** Le crontab de `ubuntu` ne
+portait qu'une ligne — `cron_live.sh` toutes les heures. Mais `systemctl list-timers`
+révélait un `quant-rebalance.timer`, quotidien à 14:40 UTC, dont **aucun fichier du dépôt
+ne parle**. `install_services.sh` n'installe que `quant-api` et `quant-web`.
+
+**Ce qu'il lançait.** `ExecStart=/bin/bash .../scripts/cron_live.sh` — le MÊME script que
+le crontab. Deux déclencheurs, un script, deux horaires.
+
+**Pourquoi c'était à trancher.** `cron_live.sh` est gardé par `fenetre_execution.py` :
+passage complet une heure avant la clôture NYSE, soit ~19:00 UTC l'été. **14:40 UTC n'est
+pas dans cette fenêtre.** Le timer était donc soit inerte — il se réveillait chaque jour
+pour sortir en silence — soit porteur de `QUANT_IGNORER_FENETRE=1` dans un `Environment=`
+que l'utilisateur ne pouvait pas lire (unité en 600), auquel cas il passait des ordres à
+10:40 à New York, en pleine séance, en contournant le garde-fou.
+
+**Décision : désactivé, sans attendre de savoir lequel des deux.** Les deux réponses
+mènent à la même action — inerte, on ne perd rien ; contournant, il faut le couper. Le
+crontab horaire est conservé : c'est le mécanisme que `cron_live.sh` documente en tête de
+fichier, et c'est lui qui a écrit `rebalancement paper — fin` le 13/09 dans
+`/tmp/quant_live.log` (le service systemd, lui, écrit dans le journal systemd — le
+fichier prouve donc qui a tourné).
+
+**Le vrai trou, découvert au passage.** `/tmp/quant_daily.log` n'existait pas :
+`cron_daily.sh` n'avait **jamais** tourné sur ce VPS. Ni prix incrémentaux, ni
+ré-entraînement ML, ni audit, ni rapports, ni watchlist, ni miroirs. Installé
+(`make cron-install`, ligne `30 22 * * 1-5`) une fois le timer coupé — l'installer avant
+aurait risqué deux ingestions concurrentes sur les mêmes bases SQLite.
+
+**Correction d'une affirmation antérieure.** J'avais présenté le `|| true` de
+`cron_daily.sh` comme LA raison pour laquelle l'échec du ré-entraînement passait inaperçu
+(ADR-0139). Le masquage était réel dans le code, mais sur cette machine la chaîne n'avait
+aucun appelant : le correctif reste juste, mon explication de sa portée était fausse.
+
+**Vérifié, pas supposé.** Le garde-fou `[ -f .venv/bin/activate ] && source ...` sous
+`set -euo pipefail` n'interrompt PAS la chaîne quand le venv manque : `set -e` exempte une
+commande qui précède `&&`. Testé plutôt que déduit — le commentaire du script disait vrai.
+
+**Ce qui reste ouvert.** L'unité `quant-rebalance.service` existe toujours sur disque,
+simplement désactivée. Une machine porte donc encore un état que git ne décrit pas.
+
+## ADR-0147 — Quatre des dix « critiques » de l'audit étaient un fait de marché (2026-09-14)
+
+**Le premier `make audit` qui tourne depuis longtemps** (ADR-0146 l'avait débloqué) sort
+10 anomalies critiques. Elles ne disent pas toutes la même chose.
+
+**Les quatre fausses.** `CL=F` — le contrat WTI — les 20 et 21 avril 2020 :
+`close ≤ 0 (-37.63)`, `low ≤ 0 (-40.32)`, `open ≤ 0 (-14.0)`. C'est **arrivé**. Le
+contrat de mai s'est réglé sous zéro ce jour-là : quand stocker coûte plus cher que le
+baril ne vaut, le détenteur paie pour se défaire de la livraison. Le chiffre relevé
+correspond au règlement documenté. La donnée est JUSTE ; c'est la règle qui était fausse.
+
+**Les six vraies.** `AAVE-USD` le 2020-10-02, `ICP-USD` le 2021-05-10, `DYDX-USD` le
+2021-09-08 : `open = 0.0` et `low = 0.0`, exactement. Trois jours d'introduction, trois
+fournisseurs sans donnée qui l'ont rendue en zéro. Un jeton ne cote pas zéro alors qu'il
+a un haut et une clôture.
+
+**Pourquoi cela comptait.** Un cri-au-loup ne coûte pas seulement son bruit : il coûte la
+crédibilité des vrais. Quatre faux positifs sur dix apprennent à passer le rouge, et les
+six qui restent sont précisément les défauts qu'on voulait voir. La règle `val <= 0 →
+critique` mélangeait deux affirmations : « ce prix est impossible » et « ce prix est
+absent ».
+
+**Décision.** `_peut_coter_negatif(symbol)` — convention `=F` du dépôt (`snapshot.py:91`
+en déduit déjà `commodity`). Sur un terme, un prix **négatif** devient un *warning*
+(plausible, mais visible : plausible n'est pas invisible). Le **zéro exact** reste
+critique partout, terme compris — un prix peut être négatif, il ne peut pas être ABSENT.
+Sur toute autre classe, `<= 0` reste critique.
+
+**Ce que cela change ailleurs.** La gate CI `--strict` devient utilisable : elle ne
+serait plus rouge en permanence à cause d'un fait de 2020.
+
+**Contamination à signaler, sans la corriger ici.** Un `low = 0.0` gonfle le true range
+de la barre, donc l'ATR sur 14 barres et sa moyenne sur 30. Les trois jetons concernés
+ont ainsi pu produire des barres faussement « haute volatilité » dans
+`make regime-atr-lab` — de l'ordre de quelques dizaines sur 2 624, et dans le sens qui
+FLATTE l'effet mesuré. Le verdict d'ADR-0145 était l'abandon ; cette contamination ne
+peut que le renforcer.
+
+**Sabotage.** Règle aveugle restaurée : 2 tests tombent · zéro toléré sur un terme : 1 ·
+tout symbole traité comme un terme : 2.
+
 ## ADR-0146 — Le brief du matin appelait un binaire qui n'existe pas sur le VPS (2026-09-14)
 
 **Constat, dans la sortie de `make brief`** : `## 🩺 Audit données` → `(audit

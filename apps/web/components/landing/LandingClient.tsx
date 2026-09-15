@@ -7,6 +7,10 @@ import s from "@/app/landing/landing.module.css";
 const Scene = dynamic(() => import("./Scene"), { ssr: false });
 // Ticker LIVE façon Bloomberg (WebSocket navigateur) — client-only.
 const LandingTicker = dynamic(() => import("./LandingTicker"), { ssr: false });
+// Rideau d'entrée. `ssr: false` : la décision de le jouer dépend de `sessionStorage`,
+// qui n'existe pas au rendu serveur — le rendre au SSR le ferait clignoter.
+const IntroSequence = dynamic(() => import("@/components/intro/IntroSequence"),
+  { ssr: false });
 import {
   VizPlacebo, VizDsr, VizPbo, VizSabotage, VizDrawdown, VizScreen, VizRisk, VizPaper,
 } from "./LandingViz";
@@ -122,6 +126,7 @@ export default function LandingClient() {
 
   return (
     <div className={s.root}>
+      <IntroSequence />
       <div className={s.canvas} aria-hidden="true"><Scene /></div>
 
       <main className={s.content}>
