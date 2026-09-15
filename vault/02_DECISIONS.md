@@ -33,6 +33,54 @@ toujours pas qu'un achat refusé aurait pu attendre trois lignes de plus. Un ord
 global (résoudre le lot comme un problème de sac à dos sous contrainte) serait une autre
 décision, à mesurer avant d'être écrite.
 
+## ADR-0154 — Les chiffres de l'intro sont dérivés, jamais saisis (2026-09-15)
+
+**Deux constats de l'utilisateur, tous deux fondés.**
+
+**1. L'univers était sous-déclaré.** L'intro affichait « 821 instruments ». C'est le
+sous-ensemble CHARGÉ au dernier run (`Mode : mixte (821 réels / 929)`), pas la couverture.
+Le compte réel des seeds : **929 symboles uniques** — 757 actions, 111 ETF, 108 crypto,
+20 forex, 20 commodités, 20 indices.
+
+**2. Le « −9 % » de la landing est ambigu.** Il vient d'un `make backtest-preset` du 23/06
+portant sur le **preset seul**, sur une fenêtre courte : son indice de comparaison y affiche
+180 % de CAGR, ce qui n'est pas un chiffre décennal. Le même dépôt enregistre, pour
+l'allocation de PRODUCTION sur 2016→2026, un maxDD de **−25,3 %** (ADR-0053). Les deux
+chiffres sont vrais ; ils ne décrivent pas la même chose, et rien à l'écran ne le disait.
+
+**La leçon, et elle vaut au-delà de l'intro.** Un nombre recopié dans un composant se
+détache de ce qu'il mesure — silencieusement, et d'autant plus vite qu'il flatte. Le
+problème n'était pas le chiffre, c'était sa PROVENANCE laissée implicite.
+
+**Décision : une route, pas un fichier.** `/api/intro` dérive tout de la même courbe
+d'equity que le tableau de bord. `dump_static.py` fige chaque route en JSON, donc le site
+statique reçoit les mêmes chiffres que le local, rafraîchis par la même construction
+quotidienne — ni second pipeline, ni fichier à régénérer. La demande « mise à jour chaque
+jour » est ainsi satisfaite par construction, pas par une tâche de plus.
+
+**Ce que le module REFUSE de faire.**
+- Annualiser une fenêtre courte. +20 % en trois mois donneraient +107 % de « CAGR » —
+  un taux qu'aucune année ne reproduit. Sous 190 points ou 0,75 an : croissance brute, et
+  le motif écrit à côté.
+- Diviser par une perte moyenne nulle. Le ratio gain/perte devient `null`, pas `inf`.
+- Comparer depuis la borne théorique de la fenêtre. La référence est tranchée au départ
+  RÉEL de notre série : sinon l'indice gagnerait une avance qu'il n'a pas eue face à nous.
+- Masquer la nature de la série. `avertissement` et `source` voyagent AVEC les chiffres :
+  « Backtest — pas un rendement réalisé. Paper par défaut. »
+
+**Comparaison graphique.** Cinq fenêtres (YTD, 3, 5, 10 ans, depuis le début), deux courbes
+en base 100 au même jour, échelle COMMUNE — deux échelles séparées feraient se ressembler
+une série qui double et une qui stagne. 60 points par courbe : assez pour dessiner une
+décennie sans escalier, assez peu pour que cinq fenêtres × deux séries tiennent en quelques
+kilo-octets.
+
+**Durée portée à 18 s**, neuf battements : deux affirmations, cinq preuves, un bilan de
+trades, le nom. Les battements de période se SAUTENT si la donnée manque — l'intro
+raccourcit, elle n'invente pas.
+
+**Sabotage.** Annualisation sans garde-fou : 3 tests tombent · drawdown mesuré depuis le
+départ au lieu d'un sommet : 1 · référence non tranchée au départ réel : 1.
+
 ## ADR-0153 — Dix secondes ne racontent pas un pipeline : elles posent un argument (2026-09-15)
 
 **Demande.** Ramener le rideau de 75 s à **10 s** — fluide, concis, « qui vende le site ».

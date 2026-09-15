@@ -5,6 +5,7 @@ import {
   INTRO_BASELINE, INTRO_BRAND, INTRO_DURATION, INTRO_DURATION_MOBILE, PHASES,
 } from "./introConfig";
 import { IntroBeats } from "./IntroBeats";
+import { useIntro } from "@/lib/api";
 import { Palette, SceneIntro, paletteDuTheme } from "./introScene";
 import { machineModeste, marquerVue, useIntroGate } from "./useIntroGate";
 
@@ -22,6 +23,9 @@ const SORTIE_MS = 620;      // doit valoir la transition CSS de `.overlay`
  */
 export function IntroSequence({ onFini }: { onFini?: () => void }) {
   const { jouer, reduit } = useIntroGate();
+  // Les chiffres viennent du snapshot, pas du code. Absents → les battements de
+  // période se sautent d'eux-mêmes : l'intro raccourcit, elle n'invente pas.
+  const { data: intro } = useIntro();
   const [monte, setMonte] = useState(false);
   const [sortie, setSortie] = useState(false);
   const [reveal, setReveal] = useState(false);
@@ -90,7 +94,7 @@ export function IntroSequence({ onFini }: { onFini?: () => void }) {
         const n = scene.battement(t);
         return n.i !== b.i || Math.abs(n.p - b.p) > 0.02 ? { i: n.i, p: n.p } : b;
       });
-      if (t >= PHASES.resultat) setReveal(true);
+      if (t >= PHASES.trades) setReveal(true);
       if (t >= 1) { terminer(); return; }
       raf = requestAnimationFrame(boucle);
     };
@@ -103,7 +107,9 @@ export function IntroSequence({ onFini }: { onFini?: () => void }) {
     <div className={s.overlay} data-sortie={sortie ? "1" : "0"} role="presentation"
          aria-hidden="true">
       {!reduit && <canvas ref={cvRef} className={s.canvas} />}
-      {!reduit && <IntroBeats i={beat.i} p={beat.p} sortie={sortie} />}
+      {!reduit && (
+        <IntroBeats i={beat.i} p={beat.p} sortie={sortie} data={intro} />
+      )}
       {!reduit && (
         <div className={s.progress} aria-hidden="true">
           <div className={s.progressFill} style={{ width: `${avance * 100}%` }} />

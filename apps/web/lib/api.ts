@@ -136,6 +136,9 @@ const q = (key: string, path: string, ms: number = LIVE) =>
 
 export const useMeta = () => q("meta", "/api/meta", 60000);
 export const useDashboard = () => q("dashboard", "/api/dashboard", 15000);
+// Chiffres de l'intro : ils ne changent qu'au rebuild quotidien du snapshot —
+// les re-demander toutes les 15 s coûterait sans rien apprendre.
+export const useIntro = () => q("intro", "/api/intro", 3_600_000);
 export const useScreener = () => q("screener", "/api/screener");
 export const useScreen = () => q("screen", "/api/screen", 60000);
 export const useCryptoCockpit = () => q("crypto_cockpit", "/api/crypto_cockpit", 600000);

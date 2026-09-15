@@ -5,10 +5,10 @@
 // qui jurerait avec `--bg:#0a1118`.
 
 /** Durée totale, en ms. En dessous de ~8 s, le troisième battement devient illisible. */
-export const INTRO_DURATION = 10_000;
+export const INTRO_DURATION = 18_000;
 
 /** Idem sur petit écran. Un peu plus court : on y revient plus souvent. */
-export const INTRO_DURATION_MOBILE = 8_500;
+export const INTRO_DURATION_MOBILE = 15_000;
 
 /** Particules de fond. Réduit automatiquement sur mobile / machine modeste. */
 export const PARTICLE_COUNT = 340;
@@ -34,42 +34,43 @@ export const INTRO_BRAND = "Quant Terminal";
 export const INTRO_BASELINE = "0 € · OPEN SOURCE · PAPER PAR DÉFAUT";
 
 /**
- * LES QUATRE BATTEMENTS. Bornes en fraction de `INTRO_DURATION`, croissantes, la dernière à 1.
+ * LES NEUF BATTEMENTS. Bornes en fraction de `INTRO_DURATION`, croissantes, la dernière à 1.
  *
- * DIX SECONDES NE RACONTENT PAS UN PIPELINE — elles posent un argument. La version longue
- * déroulait les huit étages du produit ; celle-ci fait le contraire : elle retient QUATRE
- * chiffres, et chacun doit tenir debout seul.
+ * DEUX AFFIRMATIONS, CINQ PREUVES, UN BILAN. Les deux premiers battements posent ce que la
+ * machine regarde et ce qu'elle a rejeté ; les cinq suivants MONTRENT — une fenêtre chacun,
+ * courbe contre référence ; le huitième donne la qualité des trades ; le dernier le nom.
  *
- * L'ordre est celui d'une démonstration, pas d'un flux de données :
- *   1. l'échelle    — ce que la machine regarde
- *   2. l'honnêteté  — ce qu'elle a REJETÉ (l'argument que personne d'autre ne fait)
- *   3. le résultat  — le drawdown comparé, seul chiffre qui parle d'argent
- *   4. la promesse  — gratuit, ouvert, sans ordre réel
- *
- * Le battement 2 est le plus important. Un site de trading qui affiche ses échecs déplace
- * la conversation : on ne vend plus une performance, on vend une méthode.
+ * Aucun chiffre n'est écrit ici. Les battements `periode` et `trades` lisent `/api/intro`,
+ * régénéré à chaque construction du snapshot — donc chaque jour ouvré. Un nombre saisi dans
+ * un composant se détache de ce qu'il mesure, et d'autant plus vite qu'il flatte.
  */
 export const BEATS = [
-  {
-    cle: "echelle", fin: 0.22,
-    sur: "CE QUE LA MACHINE REGARDE",
-    chiffre: "821", unite: "INSTRUMENTS",
-    sous: "2,03 M de barres · actions · ETF · crypto · forex · commodités",
+  { cle: "echelle", fin: 0.12, genre: "chiffre",
+    sur: "CE QUE LA MACHINE REGARDE", fenetre: null },
+  { cle: "rejet", fin: 0.22, genre: "chiffre",
+    sur: "CE QU'ELLE A REJETÉ", fenetre: null },
+  { cle: "p_ytd", fin: 0.33, genre: "periode", sur: "", fenetre: "ytd" },
+  { cle: "p_3a", fin: 0.44, genre: "periode", sur: "", fenetre: "3a" },
+  { cle: "p_5a", fin: 0.55, genre: "periode", sur: "", fenetre: "5a" },
+  { cle: "p_10a", fin: 0.66, genre: "periode", sur: "", fenetre: "10a" },
+  { cle: "p_tout", fin: 0.77, genre: "periode", sur: "", fenetre: "tout" },
+  { cle: "trades", fin: 0.88, genre: "trades",
+    sur: "QUALITÉ DES TRADES", fenetre: null },
+  { cle: "reveal", fin: 1.0, genre: "reveal", sur: "", fenetre: null },
+] as const;
+
+/** Les deux chiffres qui ne viennent PAS de l'API : ils décrivent le dispositif, pas la
+ *  performance. `929` est la taille des seeds, vérifiable par `make audit`. */
+export const CHIFFRES_FIXES: Record<string, { chiffre: string; unite: string; sous: string }> = {
+  echelle: {
+    chiffre: "929", unite: "INSTRUMENTS",
+    sous: "757 actions · 111 ETF · 108 crypto · 20 forex · 20 commodités · 20 indices",
   },
-  {
-    cle: "rejet", fin: 0.48,
-    sur: "CE QU'ELLE A REJETÉ",
+  rejet: {
     chiffre: "7 / 7", unite: "PISTES ÉCARTÉES",
     sous: "placebo · Sharpe déflaté · surajustement · sabotage — publiés, pas cachés",
   },
-  {
-    cle: "resultat", fin: 0.76,
-    sur: "PERTE MAXIMALE",
-    chiffre: "−9 %", unite: "CONTRE −23 % POUR LE MARCHÉ",
-    sous: "le risque d'abord — la performance vient après, ou ne vient pas",
-  },
-  { cle: "reveal", fin: 1.0, sur: "", chiffre: "", unite: "", sous: "" },
-] as const;
+};
 
 export type BeatCle = (typeof BEATS)[number]["cle"];
 
@@ -77,6 +78,10 @@ export type BeatCle = (typeof BEATS)[number]["cle"];
 export const PHASES = Object.fromEntries(
   BEATS.map((b) => [b.cle, b.fin]),
 ) as Record<BeatCle, number>;
+
+/** Repli quand `/api/intro` est indisponible : on n'affiche RIEN plutôt qu'un chiffre
+ *  inventé. Les battements `periode` se sautent d'eux-mêmes, l'intro raccourcit. */
+export const SANS_DONNEES_SAUTE_PERIODES = true;
 
 /** Les quatre portes, avec leur verdict RÉEL. Une seule passe. */
 export const GATES = [

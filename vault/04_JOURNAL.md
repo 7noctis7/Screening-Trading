@@ -1,5 +1,32 @@
 # 04 — JOURNAL
 
+## Session 2026-09-15 (18ᵉ) — Les chiffres de l'intro cessent d'être saisis
+
+**L'utilisateur avait raison deux fois.** L'univers n'est pas 821 mais **929** symboles
+uniques (757 actions · 111 ETF · 108 crypto · 20 forex · 20 commodités · 20 indices) ; 821
+était le sous-ensemble chargé au dernier run. Et le « −9 % » de la landing vient d'un
+`backtest-preset` sur le PRESET SEUL, fenêtre courte — la production sur 2016→2026 affiche
+**−25,3 %**. Les deux sont vrais, ils ne mesurent pas la même chose, rien ne le disait.
+
+**La leçon dépasse l'intro** : un nombre recopié dans un composant se détache de ce qu'il
+mesure, d'autant plus vite qu'il flatte. Le défaut n'était pas le chiffre, c'était sa
+provenance laissée implicite.
+
+**Une route, pas un fichier.** `/api/intro` dérive tout de la courbe d'equity du dashboard ;
+`dump_static.py` la fige en JSON comme les autres routes. Le site statique reçoit donc les
+mêmes chiffres que le local, rafraîchis par la même construction quotidienne — la demande
+« mise à jour chaque jour » est satisfaite par construction. ADR-0154.
+
+**Ce que le module refuse** : annualiser trois mois (+20 % deviendraient +107 %), diviser
+par une perte moyenne nulle, comparer depuis une borne théorique plutôt que depuis le
+départ réel de notre série, ou taire qu'il s'agit d'un BACKTEST.
+
+**18 secondes, neuf battements** : 929 instruments · 7/7 pistes écartées · cinq fenêtres
+avec courbes comparées au S&P 500 (base 100, échelle commune, légende) · profit factor,
+R:R et espérance · le nom. Les battements de période se SAUTENT si la donnée manque.
+
+**Mesuré.** Build Next.js vert, landing 7,17 kB.
+
 ## Session 2026-09-15 (17ᵉ) — Dix secondes : on n'explique plus, on affirme
 
 **Le rideau passe de 75 s à 10 s.** Ce n'est pas une coupe, c'est un changement de genre.
