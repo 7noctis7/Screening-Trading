@@ -85,6 +85,25 @@ def _last_date(conn, symbol: str) -> str | None:
     return r[0] if r and r[0] else None
 
 
+# CE QUI PEUT SPLITTER. Un split ou un dividende est un acte d'ÉMETTEUR : seules les
+# actions et les ETF en ont un. Un future, une paire de devises et un indice n'en ont pas.
+#
+# CONSTATÉ LE 15/09 dans le log du VPS : `--daily` re-backfillait onze ans d'historique,
+# CHAQUE JOUR, pour CL=F BZ=F HO=F RB=F GC=F HG=F ALI=F ZC=F ZW=F ZS=F SB=F KC=F CC=F CT=F
+# LE=F, USD/JPY et USD/MXN — « ajustement rétroactif détecté (split/dividende) ». Aucun de
+# ces contrats n'a jamais splitté. Ce que le détecteur voyait, c'est le ROULEMENT : les
+# tickers `=F` de Yahoo sont des contrats CONTINUS, dont le passé se réécrit à chaque
+# changement d'échéance. Le détecteur avait donc raison sur le fait (les prix ont bougé) et
+# tort sur la cause — et il en tirait la seule action qu'il connaisse : tout réécrire.
+#
+# DEUX CONSÉQUENCES, dont la seconde est la grave. L'ingest incrémental passait de quelques
+# secondes à 4 min 25 (mesuré : 20 668 barres réinsérées avant même le 75ᵉ symbole sur 929).
+# Et surtout, l'historique de ces séries n'était PAS STABLE : le passé de CL=F du jour J
+# n'est pas celui du jour J−1. Un backtest relancé donne alors un autre résultat sans qu'une
+# ligne de code ait changé — le genre d'instabilité qui se prend pour de l'alpha.
+PEUT_SPLITTER = ("equity", "etf", "")
+
+
 def _split_drift(conn, symbol: str, rows: list[tuple], tol: float = 5e-3) -> bool:
     """True si, sur les dates de chevauchement, le close FRAIS (ajusté) dévie du close STOCKÉ
     (> tol relatif) → un split/dividende est passé depuis le dernier ingest, la série stockée
@@ -129,6 +148,8 @@ def ingest(symbols: list[tuple[str, str]], since: str, daily: bool) -> None:
     conn = _connect()
     end = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
     total, ok, fail, skip = 0, 0, 0, 0
+    vides: list[str] = []            # ni OK ni échec : le fournisseur a répondu « rien »
+    ajour: list[str] = []            # déjà à jour, rien à demander
     for i, (sym, ac) in enumerate(symbols, 1):
         ysym = _ysym(sym, ac)
         if ysym is None:                              # crypto → ignoré (make ingest-crypto)
@@ -143,6 +164,7 @@ def ingest(symbols: list[tuple[str, str]], since: str, daily: bool) -> None:
                 # de `since` (re-backfill complet du symbole) au lieu de coller une série cassée.
                 start = (datetime.strptime(last, "%Y-%m-%d") - timedelta(days=7)).strftime("%Y-%m-%d")
                 if last >= end[:10]:
+                    ajour.append(sym)
                     continue
         try:
             rows = _fetch_yf(sym, start, end, ysym=ysym)
@@ -152,7 +174,7 @@ def ingest(symbols: list[tuple[str, str]], since: str, daily: bool) -> None:
                 print(f"[{i}/{len(symbols)}] {sym}: échec ({str(e)[:60]})")
             continue
         if rows:
-            if daily and _split_drift(conn, sym, rows):
+            if daily and ac in PEUT_SPLITTER and _split_drift(conn, sym, rows):
                 print(f"  ↺ {sym}: ajustement rétroactif détecté (split/dividende) → re-backfill")
                 rows = _fetch_yf(sym, since, end, ysym=ysym)
                 conn.execute("DELETE FROM prices WHERE symbol=?", (sym,))
@@ -160,13 +182,47 @@ def ingest(symbols: list[tuple[str, str]], since: str, daily: bool) -> None:
             conn.commit()
             total += len(rows)
             ok += 1
+        else:
+            # LE TROU. Un `history()` vide ne lève rien : le symbole n'était donc compté ni
+            # en OK ni en échec, et la ligne finale annonçait « 0 échecs » pendant que 91
+            # symboles sur 929 ne rendaient aucune donnée (mesuré le 15/09). Un chiffre
+            # qu'aucune ligne ne porte n'existe pas — c'est ainsi qu'un univers pourrit.
+            vides.append(sym)
         if i % 25 == 0:
             print(f"  … {i}/{len(symbols)} symboles, {ok} OK, {total} barres insérées")
-    print(f"Terminé : {ok} OK · {fail} échecs · {skip} crypto ignorées · {total} barres → {DB}")
+    print(f"Terminé : {ok} OK · {fail} échecs · {len(vides)} sans donnée · "
+          f"{len(ajour)} déjà à jour · {skip} crypto ignorées · {total} barres → {DB}")
+    # Le total doit se refermer. Un écart signifierait un chemin de sortie non compté —
+    # exactement le défaut que ces compteurs corrigent.
+    reste = len(symbols) - (ok + fail + len(vides) + len(ajour) + skip)
+    if reste:
+        print(f"  ⚠ {reste} symbole(s) sortis par un chemin non comptabilisé.")
+    if vides:
+        apercu = ", ".join(vides[:15]) + ("…" if len(vides) > 15 else "")
+        print(f"  ⚠ sans donnée ({len(vides)}/{len(symbols)}) : {apercu}")
+        print("     Probablement délistés. Trancher sur VOS prix : make audit-univers")
     conn.close()
 
 
+def _silence_yfinance() -> None:
+    """Coupe le bavardage par symbole de yfinance — pas les erreurs du script.
+
+    Le log du cron est le SEUL relevé de ce qui s'est passé la nuit. Le 15/09 il fallait
+    filtrer cinquante lignes « possibly delisted » pour atteindre la première ligne utile :
+    un journal qu'on ne peut plus lire ne protège de rien. Le symbole muet n'est pas perdu
+    pour autant — il est compté et nommé dans le résumé final, ce qui est plus utile qu'une
+    ligne par symbole noyée dans le flot. `QUANT_VERBOSE_YF=1` rend le détail.
+    """
+    import os
+    if os.environ.get("QUANT_VERBOSE_YF") == "1":
+        return
+    import logging
+    for nom in ("yfinance", "urllib3", "peewee"):
+        logging.getLogger(nom).setLevel(logging.CRITICAL)
+
+
 if __name__ == "__main__":
+    _silence_yfinance()
     ap = argparse.ArgumentParser(description="Ingestion de prix réels vers data/market.db")
     ap.add_argument("--symbols", nargs="*", help="liste de tickers (défaut: univers complet)")
     ap.add_argument("--since", default="2015-01-01", help="date de début du backfill")
