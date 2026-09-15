@@ -4,7 +4,7 @@ import s from "./intro.module.css";
 import {
   INTRO_BASELINE, INTRO_BRAND, INTRO_DURATION, INTRO_DURATION_MOBILE, PHASES,
 } from "./introConfig";
-import { IntroHud } from "./IntroHud";
+import { IntroBeats } from "./IntroBeats";
 import { Palette, SceneIntro, paletteDuTheme } from "./introScene";
 import { machineModeste, marquerVue, useIntroGate } from "./useIntroGate";
 
@@ -25,7 +25,7 @@ export function IntroSequence({ onFini }: { onFini?: () => void }) {
   const [monte, setMonte] = useState(false);
   const [sortie, setSortie] = useState(false);
   const [reveal, setReveal] = useState(false);
-  const [reste, setReste] = useState(0);
+  const [beat, setBeat] = useState<{ i: number; p: number }>({ i: 0, p: 0 });
   // Avancement partagé avec le HUD. Un état par frame serait 60 rendus React par
   // seconde ; on n'écrit que par pas de 1 % — invisible à l'œil, dix fois moins cher.
   const [avance, setAvance] = useState(0);
@@ -82,14 +82,15 @@ export function IntroSequence({ onFini }: { onFini?: () => void }) {
       const dt = Math.min(0.05, (ts - precedent) / 1000);   // borné : un onglet réveillé
       precedent = ts;                                        // ne doit pas téléporter le flux
       scene.peindre(t, dt, pal);
-      setAvance((a) => (Math.abs(t - a) > 0.01 ? t : a));
-      // Compte à rebours en SECONDES ENTIÈRES : à 75 s, le spectateur a le droit de savoir
-      // combien il reste. Un rideau long sans horizon se vit comme une panne.
-      setReste((r) => {
-        const v = Math.ceil((duree - (ts - t0)) / 1000);
-        return v !== r ? Math.max(0, v) : r;
+      setAvance((a) => (Math.abs(t - a) > 0.008 ? t : a));
+      // Le DOM ne suit PAS le canvas image par image : on n'écrit l'état du battement que
+      // lorsqu'il change, ou par pas de 2 % à l'intérieur. Soixante rendus React par
+      // seconde pour quatre mots serait le seul vrai coût de cette intro.
+      setBeat((b) => {
+        const n = scene.battement(t);
+        return n.i !== b.i || Math.abs(n.p - b.p) > 0.02 ? { i: n.i, p: n.p } : b;
       });
-      if (t >= PHASES.exec) setReveal(true);
+      if (t >= PHASES.resultat) setReveal(true);
       if (t >= 1) { terminer(); return; }
       raf = requestAnimationFrame(boucle);
     };
@@ -102,14 +103,19 @@ export function IntroSequence({ onFini }: { onFini?: () => void }) {
     <div className={s.overlay} data-sortie={sortie ? "1" : "0"} role="presentation"
          aria-hidden="true">
       {!reduit && <canvas ref={cvRef} className={s.canvas} />}
-      {!reduit && <IntroHud t={avance} sortie={sortie} />}
+      {!reduit && <IntroBeats i={beat.i} p={beat.p} sortie={sortie} />}
+      {!reduit && (
+        <div className={s.progress} aria-hidden="true">
+          <div className={s.progressFill} style={{ width: `${avance * 100}%` }} />
+        </div>
+      )}
       <div className={s.centre} data-reveal={reveal ? "1" : "0"}>
         <h1 className={s.brand}>{INTRO_BRAND}</h1>
         {INTRO_BASELINE && <div className={s.baseline}>{INTRO_BASELINE}</div>}
       </div>
-      <button className={s.skip} data-long="1" onClick={terminer}
+      <button className={s.skip} onClick={terminer}
               aria-label="Passer l'introduction et entrer sur le site">
-        PASSER L'INTRO{!reduit && reste > 0 ? ` · ${reste}s` : ""} →
+        PASSER →
       </button>
     </div>
   );

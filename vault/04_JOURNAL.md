@@ -1,5 +1,31 @@
 # 04 — JOURNAL
 
+## Session 2026-09-15 (17ᵉ) — Dix secondes : on n'explique plus, on affirme
+
+**Le rideau passe de 75 s à 10 s.** Ce n'est pas une coupe, c'est un changement de genre.
+75 s déroulaient les huit étages du produit — une démonstration. 10 s ne permettent pas
+d'expliquer : quatre battements, quatre chiffres, tous déjà affirmés par la landing.
+
+  821 instruments · 7/7 pistes écartées · −9 % contre −23 % · le nom
+
+**Le battement 2 est le cœur** : afficher ses échecs déplace la conversation. On ne vend
+plus une performance — invendable ici, DSR ≈ 0 — on vend une méthode. **Le battement 3 est
+la preuve** : deux barres de drawdown, celle du marché partant la première et plus loin, on
+voit l'écart avant de lire le chiffre.
+
+**La typographie passe au DOM.** Au canvas, à cette taille, le texte est plus flou, ignore
+la police du site et ne se sélectionne pas. Le canvas fait le mouvement, le DOM fait les
+mots — et React n'est écrit qu'au changement de battement ou par pas de 2 %.
+
+**Le bouton de sortie redevient discret** : à 75 s il fallait une bordure et un compte à
+rebours, à 10 s le piège n'existe plus. ADR-0153.
+
+**Ce que l'intro ne dit pas, délibérément** : aucune promesse de rendement. Le seul chiffre
+de performance est une PERTE, comparée et plus faible. C'est la seule affirmation que ce
+dépôt tient sans se contredire trois écrans plus loin.
+
+**Mesuré.** Build vert, landing inchangée à 7,16 kB.
+
 ## Session 2026-09-15 (16ᵉ) — Le rideau passe à 75 s, en huit actes
 
 **Demande : 60–90 s.** Réserve exprimée une fois — un rideau si long fait fuir, et le brief

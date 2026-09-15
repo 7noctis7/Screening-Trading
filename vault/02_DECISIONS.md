@@ -33,6 +33,51 @@ toujours pas qu'un achat refusé aurait pu attendre trois lignes de plus. Un ord
 global (résoudre le lot comme un problème de sac à dos sous contrainte) serait une autre
 décision, à mesurer avant d'être écrite.
 
+## ADR-0153 — Dix secondes ne racontent pas un pipeline : elles posent un argument (2026-09-15)
+
+**Demande.** Ramener le rideau de 75 s à **10 s** — fluide, concis, « qui vende le site ».
+
+**Ce que ça change, et ce n'est pas la durée.** La version 75 s déroulait les huit étages
+du produit : c'était une DÉMONSTRATION. Dix secondes ne permettent pas d'expliquer ; elles
+permettent d'affirmer. Il ne s'agit donc pas de couper des actes, mais de changer de genre —
+et donc de changer les chiffres retenus.
+
+**Quatre battements, quatre chiffres, tous déjà affirmés par la landing :**
+
+| # | Sur-titre | Chiffre | Pourquoi lui |
+|---|---|---|---|
+| 1 | Ce que la machine regarde | **821** instruments | l'échelle, vérifiable (`make audit`) |
+| 2 | Ce qu'elle a **rejeté** | **7 / 7** pistes écartées | l'argument que personne d'autre ne fait |
+| 3 | Perte maximale | **−9 %** contre −23 % | le seul chiffre qui parle d'argent |
+| 4 | — | le nom | 0 € · open source · paper par défaut |
+
+**Le battement 2 est le cœur.** Un site de trading qui affiche ses échecs déplace la
+conversation : on ne vend plus une performance — invendable ici, DSR ≈ 0 — on vend une
+MÉTHODE. C'est le seul argument de ce produit qui soit à la fois vrai et rare.
+
+**Le battement 3 est la preuve.** Deux barres de drawdown, celle du marché partant la
+première et plus loin : on VOIT l'écart avant de lire le chiffre. Un repère pointillé
+matérialise le plafond, sans quoi deux barres ne comparent rien.
+
+**Décision technique : la typographie passe au DOM.** Les grands chiffres étaient rendus au
+canvas dans la version longue. À cette taille c'est un défaut — texte plus flou (rastérisé
+au DPR, sans hinting), police du site ignorée, rien de sélectionnable. Le canvas fait le
+MOUVEMENT, le DOM fait les MOTS. Le React n'est écrit qu'au changement de battement ou par
+pas de 2 % : soixante rendus par seconde pour quatre mots serait le seul vrai coût de cette
+intro.
+
+**Le bouton de sortie redevient discret.** À 75 s il fallait une bordure, un fond et un
+compte à rebours — un rideau si long sans issue visible est un piège. À 10 s, le piège
+n'existe plus : `PASSER →`, sobre, et Échap.
+
+**Ce qui n'a pas changé.** Couleurs lues depuis les variables CSS, zéro dépendance, canvas
+2D, montée au-dessus de la landing, une fois par onglet, `prefers-reduced-motion` respecté.
+Build vert, landing toujours à 7,16 kB.
+
+**Ce que cette intro NE dit pas, et c'est délibéré.** Aucune promesse de rendement. Le seul
+chiffre de performance affiché est une PERTE — comparée, et plus faible. C'est la seule
+affirmation que ce dépôt peut tenir sans se contredire trois écrans plus loin.
+
 ## ADR-0152 — Une intro de 75 s ne se fabrique pas en ralentissant une intro de 4 s (2026-09-15)
 
 **Demande.** Porter le rideau d'entrée de 3,9 s à 60–90 s.
