@@ -298,6 +298,9 @@ site-lite:        ## variante LÉGÈRE sans Node (terminal autonome interactive.
 	bash scripts/start_mobile.sh
 analytics:        ## rapport de perf QuantStats (Sortino/Calmar/Alpha-Beta vs QQQ) → vault/Performance_Report.md
 	$(PYTHON) scripts/perf_report.py
+verrou:           ## ce que constraints.txt NE couvre PAS pour l'entraînement
+	$(PYTHON) scripts/verrou_env.py
+
 registre:         ## registre des modèles : production, candidats, archives (ARGS=--rollback --motif "…")
 	$(PYTHON) scripts/registre_modeles.py $(ARGS)
 

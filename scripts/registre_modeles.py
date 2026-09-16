@@ -44,12 +44,37 @@ def afficher(reg) -> None:
             repro = (e.manifest or {}).get("git_commit", "")
             if repro.endswith("-sale"):
                 print("      ⚠ entraîné depuis un arbre GIT MODIFIÉ — non reproductible")
+            _derive(e)
     print("  " + "─" * 100)
+    _verrou()
     soucis = reg.incoherences()
     for s in soucis:
         print(f"  ⚠ {s}")
     if not soucis:
         print("  ✓ aucune incohérence")
+
+
+def _verrou() -> None:
+    """Dit ce que le verrou d'environnement NE couvre pas.
+
+    Un modèle sérialisé sous scikit-learn 1.5 et rechargé sous 1.7 ne lève pas toujours
+    d'erreur : il peut se charger et prédire DIFFÉREMMENT. Une reproductibilité qu'on croit
+    acquise coûte plus cher qu'une reproductibilité absente, parce qu'on cesse de vérifier.
+    """
+    from packages.mlops.environnement import commande_regeneration, non_verrouillees
+    libres = non_verrouillees()
+    if not libres:
+        print("  ✓ verrou d'environnement : toutes les bibliothèques d'entraînement épinglées")
+        return
+    print(f"  ⚠ NON épinglées dans constraints.txt : {', '.join(libres)}")
+    print(f"    Régénérer sur la machine qui entraîne :\n      {commande_regeneration()}")
+
+
+def _derive(e) -> None:
+    """Écarts entre l'environnement du run et celui d'aujourd'hui."""
+    from packages.mlops.environnement import resume
+    if (dit := resume((e.manifest or {}).get("env") or {})):
+        print(f"      ⚠ {dit}")
 
 
 def main() -> int:
