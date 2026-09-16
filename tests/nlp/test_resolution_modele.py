@@ -4,7 +4,8 @@ Ce qui est vérifié ici tient en une phrase : aucun identifiant de modèle n'es
 Il est demandé au fournisseur, ou il est explicitement demandé par l'utilisateur — et
 quand il y a ambiguïté, PERSONNE ne tranche en silence.
 
-POURQUOI ÇA COMPTE ICI PLUS QU'AILLEURS. `alpha_nlp_lab` inscrit ce nom dans la mesure qui
+POURQUOI ÇA COMPTE ICI PLUS QU'AILLEURS. `alpha_nlp_lab` inscrit ce nom dans la mesure
+qui
 décidera du poids donné au NLP. Un signal estampillé d'un modèle qui ne l'a pas produit
 n'est pas un détail cosmétique : c'est une mesure qu'on ne pourra plus refaire.
 """
@@ -40,7 +41,8 @@ class Fournisseur:
         return BON
 
 
-# ─── Le nom demandé ────────────────────────────────────────────────────────────────────
+# ─── Le nom demandé
+# ────────────────────────────────────────────────────────────────────
 
 def test_un_modele_demande_et_expose_revient_tel_quel():
     m, motif = resoudre_modele(Fournisseur(["qwen3-9b", "gemma-2-2b"]), "qwen3-9b")
@@ -48,8 +50,8 @@ def test_un_modele_demande_et_expose_revient_tel_quel():
 
 
 def test_un_nom_approximatif_est_CANONISE_vers_l_identifiant_du_fournisseur():
-    """« qwen3.5 » n'existe nulle part ; l'identifiant exact, si. C'est lui qui part dans
-    la requête, et c'est lui qui doit être estampillé."""
+    """« qwen3.5 » n'existe nulle part ; l'identifiant exact, si. C'est lui qui part
+    dans la requête, et c'est lui qui doit être estampillé."""
     m, motif = resoudre_modele(Fournisseur(["qwen3.5-9b-instruct-mlx", "gemma-2-2b"]),
                                "qwen3.5")
     assert m == "qwen3.5-9b-instruct-mlx"
@@ -70,7 +72,8 @@ def test_un_nom_absent_est_signale_comme_absent_pas_remplace():
     assert m == "qwen3-9b" and "ABSENT" in motif
 
 
-# ─── Aucun nom demandé ─────────────────────────────────────────────────────────────────
+# ─── Aucun nom demandé
+# ─────────────────────────────────────────────────────────────────
 
 def test_un_seul_modele_expose_ne_laisse_aucune_ambiguite():
     m, motif = resoudre_modele(Fournisseur(["gemma-2-2b"]), "")
@@ -94,7 +97,8 @@ def test_un_fournisseur_qui_LEVE_ne_fait_pas_tomber_la_resolution():
     assert m == "" and motif
 
 
-# ─── Ce que le signal porte VRAIMENT ───────────────────────────────────────────────────
+# ─── Ce que le signal porte VRAIMENT
+# ───────────────────────────────────────────────────
 
 def test_le_signal_est_estampille_du_modele_SERVI_pas_du_souhait_vide():
     """Le cœur du correctif. `cfg.modele` vide + un fournisseur qui expose un modèle :
@@ -123,10 +127,11 @@ def test_un_modele_demande_explicitement_n_est_PAS_ecrase_par_la_decouverte():
     assert s.modele == "demande"
 
 
-# ─── La régression qu'on ne veut plus jamais revoir ────────────────────────────────────
+# ─── La régression qu'on ne veut plus jamais revoir
+# ────────────────────────────────────
 
 def test_AUCUN_identifiant_de_modele_n_est_ecrit_en_dur_dans_la_config():
-    """Un nom plausible par défaut est le pire des deux mondes : il fonctionne chez celui
+    """Un nom plausible par défaut est le pire des deux mondes : il marche chez celui
     qui l'a écrit et ment chez tous les autres, sans jamais lever."""
     assert MODELE_DEFAUT == ""
     assert ConfigNLP().modele == ""
@@ -136,7 +141,8 @@ def test_le_resume_dit_qu_il_ne_sait_pas_encore():
     assert "à découvrir" in ConfigNLP().resume()
 
 
-# ─── Le voyant de santé ────────────────────────────────────────────────────────────────
+# ─── Le voyant de santé
+# ────────────────────────────────────────────────────────────────
 
 def test_sans_modele_demande_le_voyant_NOMME_celui_qui_serait_servi():
     """`"" in m` est vrai pour TOUT m : sans traitement explicite, le voyant passait au

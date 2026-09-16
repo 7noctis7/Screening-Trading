@@ -2,6 +2,43 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0168 — Le raisonnement du modèle est éteint par défaut, sur mesure (2026-09-16)
+
+**La mesure, d'abord.** `nlp-check` sur le Mac, `qwen/qwen3.5-9b`, après que les motifs
+soient devenus lisibles (ADR-0167) : **3 cas sur 3** rendent
+`RAISONNEMENT mais AUCUN contenu`. Latence médiane **4 981 ms**, p90 5 290 ms, **0 timeout**,
+`finish_reason` ≠ `length`. Le modèle ne rame pas et n'est pas tronqué : il réfléchit dans un
+canal séparé, s'arrête, et le canal contraint par le schéma ne reçoit **rien**. Toute la
+chaîne part en repli.
+
+**Décision. `enable_thinking: false` est envoyé par défaut** — via `chat_template_kwargs`
+côté LM Studio, `think: false` côté Ollama. Le commutateur passe par le GABARIT et non par
+l'invite : un `/no_think` glissé dans le texte marcherait aussi, mais polluerait la consigne
+que l'on mesure ensuite. `QUANT_NLP_RAISONNEMENT=1` le rétablit pour qui veut comparer.
+
+**Le raisonnement n'est pas refusé par principe, il est refusé sur constat** : sur une
+classification à cinq champs contraints, il ne fait rien gagner de mesurable — et ici il
+coûte la réponse entière. Si un banc montre un jour qu'il améliore l'accord, la variable
+existe pour le rallumer.
+
+**Deux filets, parce qu'un gabarit peut ignorer la clé.** `_json_dans` retire désormais un
+bloc `<think>…</think>` **fermé** en tête de réponse — retirer un bloc délimité n'est pas
+deviner, c'est ce qu'on fait déjà pour les clôtures « ``` ». Un bloc NON fermé reste
+illisible : sans balise de fin on ne sait pas où s'arrête le raisonnement, et couper au jugé
+accepterait un JSON tronqué en croyant l'avoir compris. Et le message de diagnostic dit
+maintenant que la requête demande DÉJÀ l'extinction — si le symptôme persiste, c'est le
+gabarit qui ignore la clé, et le remède est dans LM Studio.
+
+**Le défaut d'ADR-0167 s'était déjà reproduit.** `banc.eprouver` reconstruisait sa config
+champ par champ : il venait de perdre `max_jetons`, il aurait perdu `raisonnement` le
+lendemain. Il passe à `replace(ConfigNLP.depuis_env(), …)`. Un banc qui mesure sous d'autres
+réglages que la production classe des modèles qu'on ne fait pas tourner.
+
+**Éprouvé de bout en bout** contre un faux fournisseur qui rejoue le comportement observé :
+raisonnement éteint → **3/3 et chaîne opérationnelle** ; `QUANT_NLP_RAISONNEMENT=1` →
+**0/3**, la panne exacte du 16/09. Ce qui reste à mesurer sur le Mac : si le gabarit de
+`qwen3.5-9b` honore la clé.
+
 ## ADR-0167 — Une panne doit nommer son remède, et un score ne doit jamais flatter (2026-09-16)
 
 **Contexte.** Premier `nlp-check` réel sur le Mac (LM Studio, `qwen/qwen3.5-9b`) : trois

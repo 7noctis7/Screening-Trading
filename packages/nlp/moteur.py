@@ -1,24 +1,30 @@
 """Le moteur NLP — asynchrone, borné, et incapable de faire tomber quoi que ce soit.
 
-CE QU'IL GARANTIT, ET C'EST TOUT CE QUI COMPTE. `classer()` rend TOUJOURS un `SignalNLP`.
+CE QU'IL GARANTIT, ET C'EST TOUT CE QUI COMPTE. `classer()` rend TOUJOURS un
+`SignalNLP`.
 Fournisseur éteint, modèle absent, JSON invalide, délai dépassé, disjoncteur ouvert,
-exception inattendue : la réponse est un repli NEUTRE à confiance nulle, marqué `repli=True`.
+exception inattendue : la réponse est un repli NEUTRE à confiance nulle, marqué
+`repli=True`.
 Aucune exception ne remonte. Une classification de dépêche n'a pas à pouvoir interrompre
 les prix, la stratégie, le risque ou l'exécution — qui passent tous avant elle.
 
 LES QUATRE BORNES
   · TEMPS         `asyncio.wait_for` — un titre qui n'a pas répondu en douze secondes ne
                   vaut plus qu'on l'attende ; la séance, elle, n'attend pas.
-  · CONCURRENCE   un sémaphore. Deux requêtes simultanées sur un 7B quantifié saturent déjà
-                  la mémoire unifiée d'un Mac 16 Go ; au-delà, macOS échange sur disque et
-                  la latence explose — ce qui ressemble exactement à une panne de modèle.
-  · MÉMOIRE       cache LRU borné. Sans borne, classer deux cents titres par jour pendant
+  · CONCURRENCE un sémaphore. Deux requêtes simultanées sur un 7B quantifié saturent
+  déjà
+                  la mémoire unifiée d'un Mac 16 Go ; au-delà, macOS échange sur
+                  disque et
+                  la latence explose — ce qui ressemble exactement à une panne de
+                  modèle.
+  · MÉMOIRE cache LRU borné. Sans borne, classer deux cents titres par jour pendant
                   un mois garde tout en RAM pour un gain de cache proche de zéro.
   · ÉCHECS        le disjoncteur. Sans lui, fournisseur éteint = deux cents fois douze
                   secondes d'attente, soit quarante minutes à ne rien faire.
 
 LE CACHE EST VOLONTAIREMENT NAÏF : même texte, même titre, même modèle, même version
-d'invite ⇒ même réponse. Changer l'invite invalide donc le cache, ce qui est l'effet voulu —
+d'invite ⇒ même réponse. Changer l'invite invalide donc le cache, ce qui est l'effet
+voulu —
 comparer deux versions d'invite sur des réponses mises en cache par l'ancienne ne
 comparerait rien.
 """
@@ -55,7 +61,8 @@ class MoteurNLP:
         self._compteurs = {"appels": 0, "cache": 0, "replis": 0, "timeouts": 0,
                            "disjoncteur": 0, "invalides": 0, "succes": 0, "neutres": 0}
 
-    # ── pilote ─────────────────────────────────────────────────────────────────────────
+    # ── pilote
+    # ─────────────────────────────────────────────────────────────────────────
     def pilote(self):
         """Résolu UNE fois, paresseusement : sonder les fournisseurs à l'import ferait
         payer trois secondes de réseau à tout script qui importe ce paquet.
@@ -82,7 +89,8 @@ class MoteurNLP:
         p = self._pilote
         return (getattr(p, "modele", "") if p is not None else "") or self.cfg.modele
 
-    # ── cache ──────────────────────────────────────────────────────────────────────────
+    # ── cache
+    # ──────────────────────────────────────────────────────────────────────────
     def _cle(self, ticker: str, texte: str, version: str) -> str:
         empreinte = hashlib.sha256(texte.encode("utf-8")).hexdigest()[:24]
         return f"{ticker.upper()}|{empreinte}|{self._modele()}|{version}"
@@ -103,7 +111,8 @@ class MoteurNLP:
         while len(self._cache) > self.cfg.cache_max:
             self._cache.popitem(last=False)
 
-    # ── classification ─────────────────────────────────────────────────────────────────
+    # ── classification
+    # ─────────────────────────────────────────────────────────────────
     async def classer(self, ticker: str, texte: str,
                       version_invite: str = invites.VERSION_COURANTE) -> SignalNLP:
         """Rend TOUJOURS un signal. Ne lève jamais."""
@@ -135,7 +144,8 @@ class MoteurNLP:
                 # `wait_for` deux secondes de marge « par prudence » — ce qui rendait le
                 # délai annoncé mensonger : configurer 12 s en attendait 14.
                 #
-                # `to_thread` ne s'annule pas : quand `wait_for` expire, le fil du pilote
+                # `to_thread` ne s'annule pas : quand `wait_for` expire, le fil du
+                # pilote
                 # continue jusqu'à ce que SA socket lâche. C'est précisément pourquoi il
                 # doit avoir un délai lui aussi — sans lui, un fil orphelin par appel.
                 brut = await asyncio.wait_for(
@@ -188,7 +198,8 @@ class MoteurNLP:
         taches = [self.classer(t, x, version_invite) for t, x in items]
         return list(await asyncio.gather(*taches))
 
-    # ── observabilité ──────────────────────────────────────────────────────────────────
+    # ── observabilité
+    # ──────────────────────────────────────────────────────────────────
     def metriques(self) -> dict:
         """Ce que `/api/ai/metrics` doit montrer. Un taux de neutres qui s'envole est le
         premier symptôme visible d'un problème de source, d'invite ou de modèle — sans

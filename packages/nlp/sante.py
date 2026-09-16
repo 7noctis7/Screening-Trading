@@ -1,17 +1,21 @@
 """État de la chaîne IA — ce que l'interface doit pouvoir montrer sans deviner.
 
-TROIS ÉTATS, ET UN SEUL EST AMBIGU. `EN_LIGNE` : le fournisseur répond et le modèle demandé
-est chargé. `HORS_LIGNE` : rien ne répond — sans NLP, le reste du système fonctionne, c'est
+TROIS ÉTATS, ET UN SEUL EST AMBIGU. `EN_LIGNE` : le fournisseur répond et le modèle
+demandé
+est chargé. `HORS_LIGNE` : rien ne répond — sans NLP, le reste du système fonctionne,
+c'est
 un choix d'architecture et pas une panne. `DÉGRADÉ` : le fournisseur répond mais quelque
 chose cloche — le modèle demandé n'est pas celui qui est chargé, ou le disjoncteur s'est
 ouvert. C'est l'état qui compte, parce que c'est le seul qu'on peut avoir sans s'en
 apercevoir : tout a l'air de marcher, et les signaux sont des replis.
 
 LA VERSION DU MODÈLE ET CELLE DES DONNÉES VIENNENT DU REGISTRE, pas d'une constante. Un
-numéro de version écrit en dur se détache de ce qu'il désigne — c'est la leçon des chiffres
+numéro de version écrit en dur se détache de ce qu'il désigne — c'est la leçon des
+chiffres
 de la landing (ADR-0154), et elle vaut ici aussi.
 
-Ce module ne fait AUCUN appel au LLM : il lit des états déjà mesurés. Un voyant qui déclenche
+Ce module ne fait AUCUN appel au LLM : il lit des états déjà mesurés. Un voyant qui
+déclenche
 une inférence coûterait une seconde à chaque rafraîchissement de page.
 """
 
@@ -59,7 +63,8 @@ def _pilote(moteur, cfg):
 def _verdict(demande: str, charges: list[str], disjoncteur: dict | None) -> dict:
     """Le voyant doit tester ce que fera le BOUTON, pas seulement le port.
 
-    Même leçon que `/api/ai/status` sur l'assistant (25/08) : un statut fondé sur la seule
+    Même leçon que `/api/ai/status` sur l'assistant (25/08) : un statut fondé sur la
+    seule
     réponse du serveur affichait « connecté » puis échouait en 404 dès qu'on générait,
     parce que le modèle demandé n'appartenait pas au fournisseur de l'URL.
     """
@@ -104,7 +109,8 @@ def etat_modeles() -> dict:
         "feature_version": m.get("feature_version"),
         "metriques": m.get("metriques") or {},
         "entraine_le": m.get("cree_le"),
-        # Un arbre git sale au moment du run signifie que ce modèle n'est PAS reproductible
+        # Un arbre git sale au moment du run signifie que ce modèle n'est PAS
+        # reproductible
         # depuis ce commit — l'information la plus utile avant d'essayer de le refaire.
         "reproductible": not str(m.get("git_commit") or "").endswith("-sale"),
         "candidats": [e.version for e in candidats],

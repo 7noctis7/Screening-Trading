@@ -1,6 +1,7 @@
 """Réglages du NLP local. TOUT ce qui se change sans lire le code est ici.
 
-LE BUDGET MÉMOIRE EST UNE CONTRAINTE, PAS UN RÉGLAGE. Le Mac Mini a 16 Go unifiés, dont au
+LE BUDGET MÉMOIRE EST UNE CONTRAINTE, PAS UN RÉGLAGE. Le Mac Mini a 16 Go unifiés,
+dont au
 plus 7,5 Go pour le LLM et son cache. En quantification Q4, un modèle pèse grossièrement
 0,6 Go par milliard de paramètres — 7B ≈ 4,5 Go, 9B ≈ 5,5 Go — et chaque requête
 concurrente y ajoute son contexte. C'est un ORDRE DE GRANDEUR, pas une mesure : la seule
@@ -29,7 +30,8 @@ from dataclasses import dataclass, replace
 
 # Défauts pensés pour LM Studio sur Mac Mini M4 16 Go.
 # VIDE À DESSEIN : « je ne sais pas quel modèle est chargé » est la vérité tant qu'on
-# n'a pas interrogé le fournisseur. Un nom plausible ici serait une supposition que tout le
+# n'a pas interrogé le fournisseur. Un nom plausible ici serait une supposition que
+# tout le
 # reste de la chaîne propagerait comme un fait. Cf. `pilotes.resoudre_modele()`.
 MODELE_DEFAUT = ""
 TIMEOUT_S = 12.0          # au-delà, un titre ne vaut plus qu'on attende
@@ -41,6 +43,14 @@ CACHE_MAX = 256           # entrées ; une entrée pèse quelques centaines d'oc
 # est alors tronquée : `finish_reason=length`, JSON coupé, illisible. Le symptôme ne
 # ressemble pas à une troncature, il ressemble à un modèle incapable de tenir le schéma.
 MAX_JETONS = 400
+# LE RAISONNEMENT EST DÉSACTIVÉ PAR DÉFAUT, et ce n'est pas une préférence de style.
+# Mesuré le 16/09 sur `qwen/qwen3.5-9b` : 3 cas d'école sur 3 rendent un raisonnement et
+# un contenu VIDE. Le modèle réfléchit dans un canal séparé, s'arrête, et le canal
+# contraint par le schéma ne reçoit rien — la chaîne entière part en repli. Pour une
+# classification à cinq champs, le raisonnement ne fait rien gagner de mesurable et
+# coûte
+# la réponse. `QUANT_NLP_RAISONNEMENT=1` le rétablit pour qui veut le comparer.
+RAISONNEMENT = False
 PILOTE = "auto"           # auto | lmstudio | ollama
 
 
@@ -56,6 +66,17 @@ def _entier(nom: str, defaut: int) -> int:
     return int(_flottant(nom, float(defaut)))
 
 
+def _booleen(nom: str, defaut: bool) -> bool:
+    """« 0 » et « false » valent faux. Une valeur inconnue rend le DÉFAUT, jamais vrai :
+    une faute de frappe ne doit pas rallumer un réglage éteint pour une raison."""
+    v = (os.environ.get(nom) or "").strip().lower()
+    if v in ("1", "true", "oui", "yes"):
+        return True
+    if v in ("0", "false", "non", "no"):
+        return False
+    return defaut
+
+
 @dataclass(frozen=True)
 class ConfigNLP:
     """Résolue à chaque appel, jamais mémorisée — même principe que `llm.client.Config`."""
@@ -67,6 +88,7 @@ class ConfigNLP:
     concurrence: int = CONCURRENCE
     cache_max: int = CACHE_MAX
     max_jetons: int = MAX_JETONS
+    raisonnement: bool = RAISONNEMENT
 
     @staticmethod
     def depuis_env() -> ConfigNLP:
@@ -84,6 +106,7 @@ class ConfigNLP:
             concurrence=max(1, _entier("QUANT_NLP_CONCURRENCE", CONCURRENCE)),
             cache_max=max(0, _entier("QUANT_NLP_CACHE", CACHE_MAX)),
             max_jetons=max(64, _entier("QUANT_NLP_MAX_JETONS", MAX_JETONS)),
+            raisonnement=_booleen("QUANT_NLP_RAISONNEMENT", RAISONNEMENT),
         )
 
     def avec_modele(self, modele: str) -> ConfigNLP:
@@ -95,4 +118,5 @@ class ConfigNLP:
         nom = self.modele or "(à découvrir auprès du fournisseur)"
         return (f"{nom} · pilote {self.pilote} · timeout {self.timeout_s:.0f} s · "
                 f"concurrence {self.concurrence} · cache {self.cache_max} · "
-                f"max {self.max_jetons} jetons")
+                f"max {self.max_jetons} jetons · "
+                f"raisonnement {'oui' if self.raisonnement else 'non'}")

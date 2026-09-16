@@ -1,16 +1,22 @@
 """Deux fournisseurs, une interface — LM Studio et Ollama.
 
-POURQUOI DEUX. LM Studio expose une API compatible OpenAI (`/v1/chat/completions`), Ollama
-une API native (`/api/chat`). Les deux savent contraindre la sortie à un schéma JSON, mais
-par des champs DIFFÉRENTS : `response_format.json_schema` d'un côté, `format` de l'autre.
-Écrire le code contre un seul enfermerait le projet dans ce fournisseur, alors que le choix
+POURQUOI DEUX. LM Studio expose une API compatible OpenAI (`/v1/chat/completions`),
+Ollama
+une API native (`/api/chat`). Les deux savent contraindre la sortie à un schéma JSON,
+mais
+par des champs DIFFÉRENTS : `response_format.json_schema` d'un côté, `format` de
+l'autre.
+Écrire le code contre un seul enfermerait le projet dans ce fournisseur, alors que le
+choix
 dépend de ce qui est installé sur la machine — LM Studio ici, Ollama sur une autre.
 
-CE QUE LES PILOTES NE FONT PAS. Ils n'interprètent rien, ne réessaient pas, ne décident pas
+CE QUE LES PILOTES NE FONT PAS. Ils n'interprètent rien, ne réessaient pas, ne
+décident pas
 du repli. Ils envoient, lisent, et rendent un dictionnaire ou `None`. Le moteur décide.
 Cette séparation est ce qui rend le moteur testable sans réseau.
 
-Bibliothèque standard uniquement : ce paquet doit fonctionner dans l'environnement allégé
+Bibliothèque standard uniquement : ce paquet doit fonctionner dans l'environnement
+allégé
 de la CI, où ni `requests` ni `openai` ne sont installés.
 """
 
@@ -21,7 +27,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 
-from packages.nlp.config import MAX_JETONS
+from packages.nlp.config import MAX_JETONS, RAISONNEMENT
 from packages.nlp.schemas import SCHEMA
 
 LMSTUDIO_BASE = "http://localhost:1234/v1"
@@ -74,8 +80,9 @@ def pourquoi_illisible(contenu: str, message: dict, fin: str, max_jetons: int) -
                        or message.get("reasoning") or "")
     if not contenu.strip() and raisonnement:
         return ("le modèle a produit un RAISONNEMENT mais AUCUN contenu — modèle "
-                "« thinking » : désactiver le raisonnement dans LM Studio, ou "
-                "prendre la variante « instruct »")
+                "« thinking ». La requête demande déjà enable_thinking=false ; si "
+                "cela persiste, le gabarit du modèle l'ignore : éteindre le "
+                "raisonnement dans LM Studio, ou prendre une variante « instruct »")
     if not contenu.strip():
         return "contenu VIDE — le fournisseur a répondu sans rien écrire"
     return f"JSON illisible · début reçu : {contenu.strip()[:160]!r}"
@@ -92,12 +99,20 @@ def _obtenir(url: str, timeout: float) -> dict | None:
 def _json_dans(texte: str) -> dict | None:
     """Lit le JSON d'une réponse. Tolère un préambule, refuse de deviner.
 
-    La sortie structurée devrait rendre ce nettoyage inutile ; il existe parce qu'un modèle
-    quantifié agressif ajoute parfois « ```json » autour. On retire les clôtures de bloc et
+    La sortie structurée devrait rendre ce nettoyage inutile ; il existe parce qu'un
+    modèle
+    quantifié agressif ajoute parfois « ```json » autour. On retire les clôtures de
+    bloc et
     on tente UN décodage — pas d'extraction par expression régulière, qui accepterait un
     JSON tronqué en croyant l'avoir compris.
     """
     t = (texte or "").strip()
+    # Certains fournisseurs séparent le raisonnement dans `reasoning_content` ; d'autres
+    # le laissent EN LIGNE, entre balises. Retirer un bloc délimité n'est pas deviner —
+    # c'est la même opération que retirer une clôture « ``` » juste en dessous.
+    for ouvrante, fermante in (("<think>", "</think>"), ("<thinking>", "</thinking>")):
+        if t.startswith(ouvrante) and fermante in t:
+            t = t.split(fermante, 1)[1].strip()
     if t.startswith("```"):
         t = t.split("\n", 1)[-1] if "\n" in t else t
         t = t.rsplit("```", 1)[0].strip()
@@ -116,12 +131,14 @@ class PiloteLMStudio:
     base: str = LMSTUDIO_BASE
     nom: str = "lmstudio"
     # Jetons du DERNIER appel. Mesurer des jetons/seconde en les ESTIMANT depuis la
-    # longueur du texte donnerait un chiffre faux de 20 à 40 % selon le tokeniseur — et un
+    # longueur du texte donnerait un chiffre faux de 20 à 40 % selon le tokeniseur —
+    # et un
     # comparatif de modèles reposant sur une estimation ne compare pas les modèles.
     dernier_usage: dict = field(default_factory=dict)
     dernier_incident: str = ""
     derniere_reponse: dict | None = None
     max_jetons: int = MAX_JETONS
+    raisonnement: bool = RAISONNEMENT
 
     def disponible(self, timeout: float = 3.0) -> bool:
         d = _obtenir(f"{self.base.rstrip('/')}/models", timeout)
@@ -142,6 +159,12 @@ class PiloteLMStudio:
                 "type": "json_schema",
                 "json_schema": {"name": NOM_SCHEMA, "strict": True, "schema": SCHEMA},
             },
+            # LE COMMUTATEUR DE RAISONNEMENT PASSE PAR LE GABARIT, pas par l'invite.
+            # `/no_think` dans le texte marcherait aussi, mais polluerait la consigne
+            # envoyée au modèle — et nous mesurons ensuite CETTE consigne. Un gabarit
+            # qui
+            # ignore la clé la laisse simplement inutilisée.
+            "chat_template_kwargs": {"enable_thinking": self.raisonnement},
         }
         url = f"{self.base.rstrip('/')}/chat/completions"
         d, incident = _poster(url, charge, timeout)
@@ -172,6 +195,7 @@ class PiloteOllama:
     dernier_incident: str = ""
     derniere_reponse: dict | None = None
     max_jetons: int = MAX_JETONS
+    raisonnement: bool = RAISONNEMENT
 
     def disponible(self, timeout: float = 3.0) -> bool:
         d = _obtenir(f"{self.base.rstrip('/')}/api/tags", timeout)
@@ -188,14 +212,16 @@ class PiloteOllama:
                          {"role": "user", "content": utilisateur}],
             "stream": False,
             "format": SCHEMA,
-            "options": {"temperature": 0.0},
+            "think": self.raisonnement,     # équivalent natif du commutateur ci-dessus
+            "options": {"temperature": 0.0, "num_predict": self.max_jetons},
         }
         d, incident = _poster(f"{self.base.rstrip('/')}/api/chat", charge, timeout)
         self.derniere_reponse, self.dernier_incident = d, incident
         if not d:
             self.dernier_usage = {}
             return None
-        # Ollama nomme autrement les mêmes grandeurs : on les ramène au vocabulaire OpenAI
+        # Ollama nomme autrement les mêmes grandeurs : on les ramène au vocabulaire
+        # OpenAI
         # pour que le comparatif n'ait pas à connaître le fournisseur.
         self.dernier_usage = {"completion_tokens": d.get("eval_count"),
                               "prompt_tokens": d.get("prompt_eval_count"),
@@ -253,20 +279,26 @@ def resoudre_modele(pilote, demande: str = "") -> tuple[str, str]:
                         "de la liste. Fixer LOCAL_TRADING_MODEL pour trancher")
 
 
-def choisir(modele: str, pilote: str = "auto", base: str = "",
-            timeout: float = 3.0, max_jetons: int = MAX_JETONS):
+def choisir(modele: str, pilote: str = "auto", base: str = "", timeout: float = 3.0,
+            max_jetons: int = MAX_JETONS, raisonnement: bool = RAISONNEMENT):
     """Le pilote à utiliser, ou `None` si aucun fournisseur ne répond.
 
-    En mode `auto`, LM Studio est essayé d'abord : c'est ce qui est installé sur le poste
-    de développement. L'ordre est un défaut, pas une préférence technique — `QUANT_NLP_PILOTE`
+    En mode `auto`, LM Studio est essayé d'abord : c'est ce qui est installé sur le
+    poste
+    de développement. L'ordre est un défaut, pas une préférence technique —
+    `QUANT_NLP_PILOTE`
     tranche quand les deux tournent.
     """
     if pilote == "lmstudio":
-        return PiloteLMStudio(modele, base or LMSTUDIO_BASE, max_jetons=max_jetons)
+        return PiloteLMStudio(modele, base or LMSTUDIO_BASE, max_jetons=max_jetons,
+                              raisonnement=raisonnement)
     if pilote == "ollama":
-        return PiloteOllama(modele, base or OLLAMA_BASE, max_jetons=max_jetons)
-    for p in (PiloteLMStudio(modele, base or LMSTUDIO_BASE, max_jetons=max_jetons),
-              PiloteOllama(modele, base or OLLAMA_BASE, max_jetons=max_jetons)):
+        return PiloteOllama(modele, base or OLLAMA_BASE, max_jetons=max_jetons,
+                            raisonnement=raisonnement)
+    for p in (PiloteLMStudio(modele, base or LMSTUDIO_BASE, max_jetons=max_jetons,
+                              raisonnement=raisonnement),
+              PiloteOllama(modele, base or OLLAMA_BASE, max_jetons=max_jetons,
+                            raisonnement=raisonnement)):
         if p.disponible(timeout):
             return p
     return None
@@ -282,4 +314,4 @@ def pilote_pour(cfg, timeout: float = 3.0):
     absent — l'absent se voit. Passer la config ENTIÈRE ne laisse rien à oublier.
     """
     return choisir(cfg.modele, cfg.pilote, cfg.base, timeout=timeout,
-                   max_jetons=cfg.max_jetons)
+                   max_jetons=cfg.max_jetons, raisonnement=cfg.raisonnement)

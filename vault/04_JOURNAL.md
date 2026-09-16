@@ -1,5 +1,38 @@
 # 04 — JOURNAL
 
+## Session 2026-09-16 (25ᵉ) — Le modèle réfléchissait au lieu de répondre
+
+**LE DIAGNOSTIC EST TOMBÉ, ET SANS AMBIGUÏTÉ.** Les motifs devenus lisibles ont rendu leur
+verdict au premier essai : `qwen/qwen3.5-9b`, **3 cas sur 3** →
+`RAISONNEMENT mais AUCUN contenu`. Latence médiane **4 981 ms**, **0 timeout**, pas de
+troncature. Le modèle ne ramait pas : il réfléchissait dans un canal séparé et laissait vide
+celui que le schéma contraint.
+
+Les deux `TIMEOUT` du premier essai n'étaient donc pas des lenteurs de fond — c'était le
+même phénomène, avec un raisonnement plus long. Une seule cause, trois symptômes différents.
+
+**Correctif : `enable_thinking: false` par défaut** (`chat_template_kwargs` côté LM Studio,
+`think` côté Ollama), par le GABARIT et non par l'invite — un `/no_think` dans le texte
+polluerait la consigne qu'on mesure ensuite. `QUANT_NLP_RAISONNEMENT=1` rallume. ADR-0168.
+
+**Deux filets si le gabarit ignore la clé** : `_json_dans` retire un bloc `<think>…</think>`
+FERMÉ en tête (même opération que les clôtures « ``` ») — un bloc non fermé reste illisible,
+parce que couper au jugé accepterait un JSON tronqué en croyant l'avoir lu. Et le message
+dit désormais que l'extinction est DÉJÀ demandée, donc que le remède restant est côté
+LM Studio.
+
+**Le défaut d'hier s'était déjà reproduit, à un jour d'intervalle.** `banc.eprouver`
+reconstruisait sa config champ par champ — il venait de perdre `max_jetons`, il aurait perdu
+`raisonnement` le lendemain. Passé à `replace()`. La leçon d'ADR-0167 ne valait rien tant
+qu'elle n'était pas appliquée là où le même motif existait.
+
+**Éprouvé contre un faux fournisseur qui rejoue le comportement réel** : raisonnement
+éteint → **3/3, chaîne opérationnelle** ; rallumé → **0/3**, la panne exacte du jour. Ce que
+ça prouve : le code envoie le commutateur et traite les deux cas. Ce que ça ne prouve pas,
+et que seul le Mac dira : si le gabarit de `qwen3.5-9b` honore la clé.
+
+`make test` : **3 078 passed, 80 skipped**. Zéro alerte ruff sur les fichiers touchés.
+
 ## Session 2026-09-16 (24ᵉ) — Trois échecs muets, et deux chiffres qui mentaient derrière
 
 **La résolution de modèle a fonctionné du premier coup** : `2 modèle(s) exposé(s)` →

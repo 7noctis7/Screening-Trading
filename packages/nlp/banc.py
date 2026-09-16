@@ -1,21 +1,29 @@
 """Comparatif de modèles locaux — ce qu'il mesure, et surtout ce qu'il NE mesure PAS.
 
-CE QU'IL MESURE : des qualités OPÉRATIONNELLES. Latence, jetons par seconde, taux de repli,
+CE QU'IL MESURE : des qualités OPÉRATIONNELLES. Latence, jetons par seconde, taux de
+repli,
 taux de sortie conforme au schéma, STABILITÉ (le même titre deux fois donne-t-il la même
 réponse ?) et ACCORD entre modèles.
 
-CE QU'IL NE MESURE PAS, ET C'EST ESSENTIEL : la valeur PRÉDICTIVE. Aucun classement obtenu
-ici ne dit qu'un modèle fait gagner de l'argent. Un modèle peut être rapide, stable, d'accord
-avec ses pairs, et parfaitement inutile — l'accord entre modèles mesure leur ressemblance,
-pas leur justesse, et deux modèles entraînés sur le même web se ressemblent par construction.
+CE QU'IL NE MESURE PAS, ET C'EST ESSENTIEL : la valeur PRÉDICTIVE. Aucun classement
+obtenu
+ici ne dit qu'un modèle fait gagner de l'argent. Un modèle peut être rapide, stable,
+d'accord
+avec ses pairs, et parfaitement inutile — l'accord entre modèles mesure leur
+ressemblance,
+pas leur justesse, et deux modèles entraînés sur le même web se ressemblent par
+construction.
 Seul `make alpha-nlp`, sur des rendements réalisés, tranche la question qui compte.
 
-L'usage juste de ce banc est donc d'ÉLIMINER : écarter un modèle trop lent pour la séance,
+L'usage juste de ce banc est donc d'ÉLIMINER : écarter un modèle trop lent pour la
+séance,
 trop instable pour être reproductible, ou qui ne tient pas le schéma. Ce qui reste va au
 banc d'alpha.
 
-LES MODÈLES SONT ÉPROUVÉS EN SÉRIE, jamais en parallèle : sur 16 Go unifiés, alterner entre
-deux modèles chargés fait payer un rechargement à chaque bascule, et les latences mesurées
+LES MODÈLES SONT ÉPROUVÉS EN SÉRIE, jamais en parallèle : sur 16 Go unifiés, alterner
+entre
+deux modèles chargés fait payer un rechargement à chaque bascule, et les latences
+mesurées
 ne décriraient plus le modèle mais l'ordre des appels.
 """
 
@@ -23,14 +31,16 @@ from __future__ import annotations
 
 import asyncio
 import statistics
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from packages.nlp.config import ConfigNLP
 from packages.nlp.moteur import MoteurNLP
 from packages.nlp.pilotes import pilote_pour
 
-# Cas d'école : un fait clairement favorable, un clairement défavorable, un non-événement.
-# Ce ne sont PAS une vérité terrain — ce sont des contrôles de bon sens. Un modèle qui les
+# Cas d'école : un fait clairement favorable, un clairement défavorable, un
+# non-événement.
+# Ce ne sont PAS une vérité terrain — ce sont des contrôles de bon sens. Un modèle qui
+# les
 # rate est disqualifié ; un modèle qui les passe n'a rien prouvé.
 CAS: tuple[tuple[str, str, str], ...] = (
     ("AAPL", "Résultats trimestriels très au-dessus du consensus, marge brute en hausse.",
@@ -99,13 +109,13 @@ class Resultat:
 def eprouver(modele: str, pilote_nom: str = "auto", base: str = "",
              cas: tuple = CAS, repetitions: int = REPETITIONS) -> Resultat | None:
     """Éprouve UN modèle sur le jeu commun. `None` si aucun fournisseur ne répond."""
-    # Le plafond de jetons vient de l'ENVIRONNEMENT : un banc qui mesurerait sous un
-    # plafond différent de celui de la production classerait des modèles qu'on ne fait
-    # pas tourner.
-    env = ConfigNLP.depuis_env()
-    cfg = ConfigNLP(modele=modele, base=base, pilote=pilote_nom,
-                    max_jetons=env.max_jetons,
-                    cache_max=0)     # cache DÉSACTIVÉ : il fausserait latence et stabilité
+    # `replace` et non un constructeur énumératif : celui-ci venait de perdre
+    # `max_jetons`,
+    # il aurait perdu `raisonnement` le lendemain. Le banc doit mesurer les modèles SOUS
+    # LES RÉGLAGES DE PRODUCTION, sinon il classe des modèles qu'on ne fait pas tourner.
+    cfg = replace(ConfigNLP.depuis_env(), modele=modele, base=base, pilote=pilote_nom,
+                  # cache DÉSACTIVÉ : il fausserait latence et stabilité
+                  cache_max=0)
     p = pilote_pour(cfg)
     if p is None:
         return None
@@ -137,7 +147,8 @@ def eprouver(modele: str, pilote_nom: str = "auto", base: str = "",
 def _stabilite(moteur: MoteurNLP, cas: tuple, repetitions: int) -> bool | None:
     """Le même titre, plusieurs fois : la réponse change-t-elle ?
 
-    À température nulle un modèle devrait être déterministe. Les modèles quantifiés ne le
+    À température nulle un modèle devrait être déterministe. Les modèles quantifiés ne
+    le
     sont pas toujours selon le moteur d'inférence, et l'ignorer rendrait irreproductible
     tout ce qui s'appuie dessus — y compris une mesure d'alpha.
     """
@@ -154,8 +165,10 @@ def _stabilite(moteur: MoteurNLP, cas: tuple, repetitions: int) -> bool | None:
 def accord(resultats: list[Resultat]) -> list[dict]:
     """Part des cas où deux modèles disent la même chose.
 
-    ATTENTION à la lecture : l'accord mesure la RESSEMBLANCE, pas la justesse. Deux modèles
-    entraînés sur le même web se ressemblent par construction, et deux modèles d'accord sur
+    ATTENTION à la lecture : l'accord mesure la RESSEMBLANCE, pas la justesse. Deux
+    modèles
+    entraînés sur le même web se ressemblent par construction, et deux modèles
+    d'accord sur
     une erreur restent d'accord.
     """
     out: list[dict] = []
