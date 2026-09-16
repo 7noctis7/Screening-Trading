@@ -148,40 +148,81 @@ class PiloteLMStudio:
         d = _obtenir(f"{self.base.rstrip('/')}/models", timeout) or {}
         return [str(m.get("id", "")) for m in (d.get("data") or [])]
 
-    def classer(self, systeme: str, utilisateur: str, timeout: float) -> dict | None:
+    def _charge(self, systeme: str, utilisateur: str, grammaire: bool) -> dict:
         charge = {
             "model": self.modele,
             "messages": [{"role": "system", "content": systeme},
                          {"role": "user", "content": utilisateur}],
-            "temperature": 0.0,       # une classification n'a pas à varier d'un appel à l'autre
+            "temperature": 0.0,      # une classification ne varie pas d'un appel à l'autre
             "max_tokens": self.max_jetons,
-            "response_format": {
-                "type": "json_schema",
-                "json_schema": {"name": NOM_SCHEMA, "strict": True, "schema": SCHEMA},
-            },
-            # LE COMMUTATEUR DE RAISONNEMENT PASSE PAR LE GABARIT, pas par l'invite.
-            # `/no_think` dans le texte marcherait aussi, mais polluerait la consigne
-            # envoyée au modèle — et nous mesurons ensuite CETTE consigne. Un gabarit
-            # qui
-            # ignore la clé la laisse simplement inutilisée.
+            # LE COMMUTATEUR DE RAISONNEMENT PASSE PAR LE GABARIT, pas par l'invite :
+            # un `/no_think` glissé dans le texte polluerait la consigne qu'on mesure
+            # ensuite. Un gabarit qui ignore la clé la laisse simplement inutilisée.
             "chat_template_kwargs": {"enable_thinking": self.raisonnement},
         }
+        if grammaire:
+            charge["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {"name": NOM_SCHEMA, "strict": True, "schema": SCHEMA},
+            }
+        return charge
+
+    def _essai(self, systeme: str, utilisateur: str, timeout: float,
+               grammaire: bool) -> tuple[dict | None, str, dict]:
+        """Un aller-retour. Rend `(charge_lue, incident, message)`."""
         url = f"{self.base.rstrip('/')}/chat/completions"
+        charge = self._charge(systeme, utilisateur, grammaire)
         d, incident = _poster(url, charge, timeout)
-        self.derniere_reponse, self.dernier_incident = d, incident
+        self.derniere_reponse = d
         if not d:
             self.dernier_usage = {}
-            return None
+            return None, incident, {}
         self.dernier_usage = dict(d.get("usage") or {})
         choix = (d.get("choices") or [{}])[0]
         message = choix.get("message") or {}
         contenu = str(message.get("content") or "")
-        charge_lue = _json_dans(contenu)
-        if charge_lue is None:
-            fin = str(choix.get("finish_reason") or "")
-            self.dernier_incident = pourquoi_illisible(contenu, message, fin,
-                                                       self.max_jetons)
-        return charge_lue
+        lue = _json_dans(contenu)
+        if lue is None:
+            incident = pourquoi_illisible(contenu, message,
+                                          str(choix.get("finish_reason") or ""),
+                                          self.max_jetons)
+        return lue, incident, message
+
+    def classer(self, systeme: str, utilisateur: str, timeout: float) -> dict | None:
+        """Un essai sous grammaire, et UN SEUL repli sans elle.
+
+        POURQUOI CE REPLI EXISTE — il est né d'une mesure, pas d'une précaution. Sur un
+        modèle « à raisonnement », sortie structurée et raisonnement se neutralisent :
+        le modèle réfléchit, s'arrête, et le canal contraint par la grammaire reste VIDE
+        (16/09, 3 cas sur 3, y compris avec `enable_thinking=false`). Sans grammaire, le
+        même modèle écrit son JSON dans le contenu, précédé du raisonnement que
+        `_json_dans` sait retirer.
+
+        UN SEUL repli, et JAMAIS en silence : le signal porte l'incident qui dit que la
+        grammaire a dû être abandonnée. `valider()` reste seule juge — un JSON hors
+        schéma redevient un repli, sortie non contrainte ou non.
+        """
+        lue, incident, message = self._essai(systeme, utilisateur, timeout, True)
+        self.dernier_incident = incident
+        if lue is not None:
+            return lue
+        # Le repli ne se déclenche QUE sur le symptôme précis qu'il traite : un contenu
+        # vide alors qu'un raisonnement a été produit. Sur une panne réseau ou un JSON
+        # malformé, réessayer sans grammaire ne ferait que doubler l'attente.
+        vide_apres_raisonnement = (
+            self.derniere_reponse is not None
+            and not str(message.get("content") or "").strip()
+            and bool(message.get("reasoning_content") or message.get("reasoning")))
+        if not vide_apres_raisonnement:
+            return None
+        lue2, incident2, _ = self._essai(systeme, utilisateur, timeout, False)
+        if lue2 is None:
+            self.dernier_incident = (f"{incident} · repli SANS grammaire tenté, "
+                                     f"échoué aussi : {incident2}")
+            return None
+        self.dernier_incident = ("obtenu SANS contrainte de grammaire (contenu vide "
+                                 "avec elle) — provenance à retenir")
+        return lue2
 
 
 @dataclass
@@ -235,6 +276,16 @@ class PiloteOllama:
         return charge_lue
 
 
+# Marqueurs de nom des modèles d'EMBEDDING. Heuristique de NOM, et elle est assumée :
+# `/v1/models` de LM Studio ne dit pas le type. Elle sert uniquement à ne pas CHOISIR
+# automatiquement un modèle incapable de discuter — un nom demandé explicitement passe.
+_MARQUEURS_EMBEDDING = ("embed", "embedding", "-rerank", "reranker")
+
+
+def _sait_discuter(identifiant: str) -> bool:
+    return not any(m in identifiant.lower() for m in _MARQUEURS_EMBEDDING)
+
+
 def resoudre_modele(pilote, demande: str = "") -> tuple[str, str]:
     """Le modèle RÉELLEMENT exposé par le fournisseur, et POURQUOI celui-là.
 
@@ -273,10 +324,22 @@ def resoudre_modele(pilote, demande: str = "") -> tuple[str, str]:
 
     if not charges:
         return "", "aucun modèle exposé — fournisseur éteint, ou rien de chargé"
-    if len(charges) == 1:
-        return charges[0], "seul modèle exposé — aucune ambiguïté"
-    return charges[0], (f"{len(charges)} modèles exposés et aucun demandé : premier "
-                        "de la liste. Fixer LOCAL_TRADING_MODEL pour trancher")
+    # Un modèle d'embedding EST exposé par `/v1/models` et ne sait pas discuter. Le
+    # choisir automatiquement produirait une panne incompréhensible ; le compter comme
+    # « second modèle à essayer » ferait perdre une soirée à croire qu'on a une solution
+    # de repli. Constaté le 16/09 : les « 2 modèles exposés » étaient un modèle de chat
+    # et `text-embedding-nomic-embed-text-v1.5`.
+    causants = [m for m in charges if _sait_discuter(m)]
+    ecartes = len(charges) - len(causants)
+    suffixe = f" ({ecartes} modèle(s) d'embedding écarté(s))" if ecartes else ""
+    if not causants:
+        return "", (f"{len(charges)} modèle(s) exposé(s), AUCUN capable de discuter — "
+                    "charger un modèle de chat dans LM Studio")
+    if len(causants) == 1:
+        return causants[0], f"seul modèle de chat exposé — aucune ambiguïté{suffixe}"
+    return causants[0], (f"{len(causants)} modèles de chat exposés et aucun demandé : "
+                         f"premier de la liste{suffixe}. Fixer LOCAL_TRADING_MODEL "
+                         "pour trancher")
 
 
 def choisir(modele: str, pilote: str = "auto", base: str = "", timeout: float = 3.0,

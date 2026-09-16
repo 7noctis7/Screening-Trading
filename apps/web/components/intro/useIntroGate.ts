@@ -19,6 +19,20 @@ export function machineModeste(): boolean {
   return coeurs <= 4 || memoire <= 4;
 }
 
+/** Forçage par l'URL : `?intro=1` rejoue, `?intro=0` saute. `null` = rien de demandé.
+ *
+ *  POURQUOI C'EST NÉCESSAIRE. La politique « session » ne joue l'intro qu'une fois par
+ *  onglet — ce qui est le bon comportement pour un visiteur, et un enfer pour qui la
+ *  RÈGLE : chaque essai demande un nouvel onglet, et on finit par croire qu'un correctif
+ *  n'a pas pris alors qu'on regarde une page qui n'a simplement pas rejoué. */
+export function forcageUrl(): boolean | null {
+  if (typeof window === "undefined") return null;
+  const v = new URLSearchParams(window.location.search).get("intro");
+  if (v === "1" || v === "true") return true;
+  if (v === "0" || v === "false") return false;
+  return null;
+}
+
 function dejaVu(): boolean {
   try {
     if (INTRO_SESSION_POLICY === "always") return false;
@@ -52,7 +66,9 @@ export function useIntroGate(): { jouer: boolean | null; reduit: boolean } {
   const [etat, setEtat] = useState<{ jouer: boolean | null; reduit: boolean }>(
     { jouer: null, reduit: false });
   useEffect(() => {
-    setEtat({ jouer: ENABLE_INTRO && !dejaVu(), reduit: motionReduit() });
+    const force = forcageUrl();
+    const jouer = force !== null ? force : ENABLE_INTRO && !dejaVu();
+    setEtat({ jouer, reduit: motionReduit() });
   }, []);
   return etat;
 }

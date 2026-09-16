@@ -39,9 +39,10 @@
 - [ ] **P1 — Éprouver la chaîne NLP sur le Mac (16/09).** CAUSE TROUVÉE : `qwen3.5-9b`
       est un modèle « à raisonnement » — 3/3 rendent un raisonnement et un contenu vide
       (0 timeout, 4 981 ms de médiane). `enable_thinking: false` est désormais envoyé par
-      défaut (ADR-0168). **Relancer `make nlp-check`** : si le symptôme persiste, le
-      gabarit ignore la clé → éteindre le raisonnement dans LM Studio, ou
-      `make nlp-check ARGS="--modele google/gemma-…"` sur l'autre modèle exposé.
+      défaut (ADR-0168) — **mais le gabarit de ce modèle l'IGNORE**. Un repli sans
+      grammaire a été ajouté (ADR-0169). **Relancer `make nlp-check`.** À savoir : le
+      second modèle exposé est un modèle d'EMBEDDING, il n'y a aucun repli côté modèle —
+      charger un modèle « instruct » dans LM Studio reste la voie la plus sûre.
 - [ ] **P1 — `make alpha-nlp` dès ~200 titres au corpus (16/09, ADR-0163).** C'est ce
       verdict qui conditionne l'étape 6 (Lambda GPU). Poids NLP validé, ou ZÉRO.
 - [ ] **P1 — L'AUC du modèle de production est 0,504 (16/09, ADR-0161).** Indiscernable du

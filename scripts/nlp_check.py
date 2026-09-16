@@ -67,11 +67,20 @@ def _fournisseur(cfg):
     resolu, motif = resoudre_modele(p, cfg.modele)
     print(f"  Modèle retenu : {resolu or '(aucun)'} — {motif}")
     if not resolu or resolu not in modeles:
+        # ON S'ARRÊTE, on ne se contente plus d'avertir. Le 16/09, un `--modele` mal
+        # orthographié a produit trois classifications complètes : LM Studio sert ce
+        # qu'il a chargé et répond 200, et les signaux repartaient estampillés d'un
+        # modèle INEXISTANT. Un avertissement ne protège pas une mesure — seul un arrêt
+        # le fait.
+        print(f"⛔ « {cfg.modele or resolu} » n'est pas servi par ce fournisseur.")
+        print("   Poursuivre estamperait la mesure du nom d'un modèle qui n'a rien "
+              "produit.")
         for m in modeles[:8]:
             print(f"    · {m}")
         if len(modeles) > 8:
             print(f"    … et {len(modeles) - 8} autre(s)")
         print("   → --modele <un de ceux-ci>, ou LOCAL_TRADING_MODEL=<…>")
+        return None, cfg
     p.modele = resolu
     return p, cfg.avec_modele(resolu)
 

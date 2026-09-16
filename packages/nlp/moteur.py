@@ -184,8 +184,14 @@ class MoteurNLP:
             self._compteurs["replis"] += 1
             return signal
         self._compteurs["succes"] += 1
+        # UN SUCCÈS PEUT AVOIR UN PRIX, et il doit se voir. Quand le pilote a dû
+        # abandonner la contrainte de grammaire pour obtenir une réponse, le signal est
+        # valide mais sa provenance diffère : le taire ferait passer une sortie non
+        # contrainte pour une sortie contrainte, dans une mesure qu'on relira plus tard.
+        note = str(getattr(p, "dernier_incident", "") or "")
+        incidents = [*signal.incidents, note] if note else signal.incidents
         return SignalNLP(**{**signal.en_dict(), "latence_ms": round(ms, 1),
-                            "incidents": signal.incidents})
+                            "incidents": incidents})
 
     def _repli(self, ticker: str, motif: str, version: str) -> SignalNLP:
         self._compteurs["replis"] += 1

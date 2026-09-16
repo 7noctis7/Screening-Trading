@@ -2,6 +2,37 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0169 — Trois choses que la mesure a démenties, dont une de mes affirmations (2026-09-16)
+
+**1. `enable_thinking: false` n'a PAS suffi.** Envoyé par ADR-0168, ignoré par le gabarit de
+`qwen/qwen3.5-9b` : 3 cas sur 3 rendent toujours un raisonnement et un contenu vide (4 377 ms
+de médiane contre 4 981 — l'écart est du bruit). L'hypothèse était juste sur la CAUSE et
+fausse sur le REMÈDE.
+
+**Décision — un repli, UN SEUL, et jamais silencieux.** Quand la réponse sous grammaire est
+vide ALORS QU'UN RAISONNEMENT a été produit, le pilote réessaie **une fois sans
+`response_format`**. Sortie structurée et raisonnement se neutralisent ; sans grammaire, le
+même modèle écrit son JSON dans le contenu, précédé du raisonnement que `_json_dans` retire.
+Le repli ne se déclenche que sur ce symptôme précis — sur une panne réseau ou un JSON
+malformé, il ne ferait que doubler l'attente. Et **le signal porte l'incident** : taire qu'une
+sortie n'était pas contrainte la ferait passer pour contrainte dans une mesure qu'on relira.
+
+**2. LE SECOND « MODÈLE » N'EN ÉTAIT PAS UN, et c'est moi qui ai envoyé l'utilisateur dans
+le mur.** J'avais écrit « ou prends l'autre modèle exposé », en supposant un Gemma. Les deux
+modèles exposés étaient `qwen/qwen3.5-9b` et **`text-embedding-nomic-embed-text-v1.5`** — un
+modèle d'embedding, incapable de discuter. Il n'y a jamais eu de solution de repli.
+`resoudre_modele` écarte désormais les modèles d'embedding du choix AUTOMATIQUE (heuristique
+de NOM, assumée comme telle : `/v1/models` ne dit pas le type) et dit combien il en a écartés.
+Une demande explicite reste honorée.
+
+**3. LE REFUS REMPLACE L'AVERTISSEMENT — et c'est le vrai défaut de la soirée.** Lancé avec
+`--modele google/gemma-…`, un identifiant qui n'existe pas, `nlp-check` a **averti puis
+tourné quand même** : trois classifications complètes, que LM Studio a servies avec le modèle
+qu'il avait chargé. Les signaux repartaient estampillés d'un modèle INEXISTANT. C'est
+exactement la fuite de provenance qu'ADR-0166 prétendait avoir fermée : la résolution était
+juste, mais l'appelant passait outre. `nlp_check` et `alpha_nlp_lab` **s'arrêtent** désormais.
+**Un avertissement ne protège pas une mesure ; seul un arrêt le fait.**
+
 ## ADR-0168 — Le raisonnement du modèle est éteint par défaut, sur mesure (2026-09-16)
 
 **La mesure, d'abord.** `nlp-check` sur le Mac, `qwen/qwen3.5-9b`, après que les motifs

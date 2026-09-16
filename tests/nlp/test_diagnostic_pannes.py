@@ -298,3 +298,96 @@ def test_le_banc_mesure_sous_les_REGLAGES_DE_PRODUCTION(monkeypatch):
     assert vu["cfg"].raisonnement is True
     assert vu["cfg"].timeout_s == 30.0
     assert vu["cfg"].cache_max == 0      # la seule surcharge voulue par le banc
+
+
+# ─── Un modèle d'embedding n'est pas un modèle de repli ──────────────────────────────
+
+class Fournisseur:
+    """N'expose qu'une liste — c'est tout ce que la résolution consulte."""
+
+    nom = "factice"
+
+    def __init__(self, charges):
+        self._charges = charges
+
+    def modeles(self):
+        return list(self._charges)
+
+
+def test_un_modele_d_embedding_n_est_JAMAIS_choisi_automatiquement():
+    """Mesuré le 16/09 : les « 2 modèles exposés » étaient un modèle de chat et
+    `text-embedding-nomic-embed-text-v1.5`. Compter le second comme un repli possible
+    fait perdre une soirée à croire qu'on en a un."""
+    from packages.nlp.pilotes import resoudre_modele as r
+    charges = ["text-embedding-nomic-embed-text-v1.5", "qwen/qwen3.5-9b"]
+    m, motif = r(Fournisseur(charges), "")
+    assert m == "qwen/qwen3.5-9b"
+    assert "embedding écarté" in motif
+
+
+def test_aucun_modele_de_chat_est_DIT_et_non_deguise_en_choix():
+    from packages.nlp.pilotes import resoudre_modele as r
+    m, motif = r(Fournisseur(["text-embedding-nomic-embed-text-v1.5"]), "")
+    assert m == ""
+    assert "AUCUN capable de discuter" in motif
+
+
+def test_un_modele_d_embedding_DEMANDE_explicitement_reste_possible():
+    """L'heuristique de nom écarte du choix AUTOMATIQUE ; elle ne censure pas une
+    demande explicite, qui pourrait viser un modèle mal nommé."""
+    from packages.nlp.pilotes import resoudre_modele as r
+    m, _ = r(Fournisseur(["text-embedding-nomic-embed-text-v1.5"]),
+             "text-embedding-nomic-embed-text-v1.5")
+    assert m == "text-embedding-nomic-embed-text-v1.5"
+
+
+# ─── Le repli sans grammaire : borné, et jamais silencieux ───────────────────────────
+
+class LMFactice(PiloteLMStudio):
+    """Rejoue le comportement observé : vide sous grammaire, JSON sans elle."""
+
+    def __init__(self, sans_grammaire_marche=True):
+        super().__init__("m")
+        self.appels = []
+        self._marche = sans_grammaire_marche
+
+    def _essai(self, systeme, utilisateur, timeout, grammaire):
+        self.appels.append(grammaire)
+        if grammaire:
+            self.derniere_reponse = {"choices": [{}]}
+            return None, "vide", {"content": "", "reasoning_content": "Analysons…"}
+        if not self._marche:
+            return None, "toujours vide", {"content": "", "reasoning_content": "…"}
+        return dict(BON), "", {"content": "{…}"}
+
+
+def test_un_contenu_vide_apres_raisonnement_declenche_UN_essai_sans_grammaire():
+    p = LMFactice()
+    assert p.classer("s", "u", 1.0) == BON
+    assert p.appels == [True, False], "un seul repli, et dans cet ordre"
+    assert "SANS contrainte de grammaire" in p.dernier_incident
+
+
+def test_le_repli_sans_grammaire_ne_se_declenche_PAS_sur_une_autre_panne(monkeypatch):
+    """Sur une panne réseau ou un JSON malformé, réessayer ne ferait que doubler
+    l'attente : le repli ne traite que le symptôme pour lequel il a été écrit."""
+    p = PiloteLMStudio("m")
+    monkeypatch.setattr(P, "_poster", lambda *a, **k: (None, "URLError"))
+    assert p.classer("s", "u", 1.0) is None
+    assert "URLError" in p.dernier_incident
+
+
+def test_un_repli_sans_grammaire_qui_echoue_AUSSI_le_dit():
+    p = LMFactice(sans_grammaire_marche=False)
+    assert p.classer("s", "u", 1.0) is None
+    assert p.appels == [True, False]
+    assert "repli SANS grammaire tenté" in p.dernier_incident
+
+
+def test_la_provenance_du_repli_REMONTE_dans_les_incidents_du_signal():
+    """Un succès obtenu sans grammaire reste un succès — mais taire comment il a été
+    obtenu ferait passer une sortie non contrainte pour une sortie contrainte."""
+    m = MoteurNLP(cfg=ConfigNLP(modele="test"), pilote=LMFactice())
+    s = asyncio.run(m.classer("AAPL", "texte"))
+    assert not s.repli and s.sentiment == "BULLISH"
+    assert any("SANS contrainte de grammaire" in i for i in s.incidents)

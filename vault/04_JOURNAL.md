@@ -1,5 +1,40 @@
 # 04 — JOURNAL
 
+## Session 2026-09-16 (26ᵉ) — Le repli n'existait pas, et j'avais dit le contraire
+
+**`enable_thinking: false` n'a pas suffi.** Le gabarit de `qwen/qwen3.5-9b` l'ignore : 3 cas
+sur 3 rendent toujours un raisonnement et un contenu vide. L'hypothèse était juste sur la
+cause, fausse sur le remède. Correctif : **un seul repli, sans grammaire**, déclenché
+uniquement sur ce symptôme précis, et **le signal porte l'incident** qui dit que la sortie
+n'était pas contrainte. ADR-0169.
+
+**LE SECOND MODÈLE N'EN ÉTAIT PAS UN.** J'avais écrit « ou prends l'autre modèle exposé » en
+supposant un Gemma. Les deux modèles étaient `qwen/qwen3.5-9b` et
+**`text-embedding-nomic-embed-text-v1.5`** — un modèle d'embedding. Il n'y a jamais eu de
+solution de repli, et j'ai envoyé l'utilisateur essayer une porte qui n'existait pas.
+`resoudre_modele` écarte maintenant les modèles d'embedding du choix automatique et DIT
+combien il en a écartés.
+
+**ET LE VRAI DÉFAUT DE LA SOIRÉE.** Lancé avec `--modele google/gemma-…` — un identifiant
+inexistant — `nlp-check` a **averti puis tourné quand même**. Trois classifications
+complètes, servies par LM Studio avec le modèle qu'il avait sous la main, et estampillées
+d'un modèle qui n'existe pas. C'est la fuite de provenance qu'ADR-0166 prétendait avoir
+fermée : la résolution était juste, l'appelant passait outre. `nlp_check` et `alpha_nlp_lab`
+s'arrêtent désormais. **Un avertissement ne protège pas une mesure ; seul un arrêt le fait.**
+
+**Question du soir — « pourquoi je n'ai plus l'animation d'intro sur localhost:3000 ? »** Ce
+n'était pas une panne : `INTRO_SESSION_POLICY = "session"`, l'intro joue une fois par ONGLET
+(`sessionStorage`). Recharger le même onglet ne la rejoue jamais. Mais régler une animation
+qu'il faut un nouvel onglet pour revoir est un piège à soi tout seul — on finit par croire
+qu'un correctif n'a pas pris alors qu'on regarde une page qui n'a pas rejoué. Ajouté :
+**`?intro=1` force la relecture, `?intro=0` la saute.**
+
+**Éprouvé contre un faux fournisseur qui rejoue le cas réel** (2 exposés dont un embedding,
+contenu vide sous grammaire) : **3/3, chaîne opérationnelle, chaque signal portant sa
+provenance de repli**. Et le modèle inexistant fait bien s'arrêter la commande.
+
+`make test` : **3 085 passed, 80 skipped**.
+
 ## Session 2026-09-16 (25ᵉ) — Le modèle réfléchissait au lieu de répondre
 
 **LE DIAGNOSTIC EST TOMBÉ, ET SANS AMBIGUÏTÉ.** Les motifs devenus lisibles ont rendu leur

@@ -53,9 +53,15 @@ def _scoreur_nlp(evenements) -> list[float] | None:
     # lui qui dira, dans six mois, QUI a produit l'alpha qu'on paiera. On le fait
     # donc trancher par le fournisseur avant le premier appel.
     resolu, motif = resoudre_modele(pilote, cfg.modele)
+    print(f"  Modèle : {resolu or '(aucun)'} — {motif}")
+    if not resolu or resolu not in (pilote.modeles() or []):
+        # Une mesure d'alpha signée d'un modèle qui ne tourne pas ne se refait pas :
+        # dans six mois, plus personne ne saura qui a produit le signal. On refuse.
+        print("  ⛔ modèle non servi par le fournisseur — mesure ABANDONNÉE plutôt que "
+              "signée d'un nom faux.")
+        return None
     pilote.modele = resolu
     cfg = cfg.avec_modele(resolu)
-    print(f"  Modèle : {resolu or '(aucun)'} — {motif}")
     moteur = MoteurNLP(cfg=cfg, pilote=pilote)
     items = [(e.symbole, e.titre) for e in evenements]
     signaux = asyncio.run(moteur.classer_lot(items))
