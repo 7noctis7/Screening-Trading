@@ -1,5 +1,38 @@
 # 04 — JOURNAL
 
+## Session 2026-09-16 (29ᵉ) — La marque rejoue le rideau
+
+**Demande** : revoir l'animation « performance du robot contre le S&P 500 » en cliquant
+« Quant Terminal » en haut à gauche. Le rideau entier est rejoué — les cinq fenêtres de
+performance en sont sept battements sur neuf — et `Échap` le passe.
+
+**Deux pièges, et ils étaient tous deux silencieux.**
+
+1. **`fini` est une RÉFÉRENCE**, elle survit au premier passage. Un second rideau se
+   lançait bien, mais `terminer()` ne faisait plus rien à la fin : le rideau serait resté
+   baissé SUR la landing, sans message, et il aurait fallu recharger la page. Le rejeu
+   remet tout à zéro, `fini.current` compris.
+2. **`jouer` reste vrai d'un passage à l'autre.** Une dépendance sur `jouer` seul ne se
+   serait jamais redéclenchée : le clic aurait été sans effet, ce qui ressemble trait pour
+   trait à un bouton mort. D'où le compteur `rejeu`.
+
+**Et un troisième, de conception** : cliquer la marque depuis `/trades` déclenche une
+NAVIGATION — le rideau n'est pas encore monté quand le clic part, donc aucun écouteur ne
+peut l'entendre. La demande est donc un état de MODULE, qui survit à la navigation côté
+client et se fait consommer par le rideau à son montage. L'événement ne sert que l'autre
+cas : on est déjà sur la landing, il n'y a pas de navigation du tout.
+
+Les deux barres (mobile et bureau) portent la marque ; n'en câbler qu'une donnerait un site
+qui se comporte autrement selon la largeur de la fenêtre. Un test l'exige. 8 tests ajoutés,
+`next build` vérifié.
+
+**`make churn` du soir — toujours aucun verdict.** Aucune ligne au 16/09 : la fenêtre du
+robot est 18:30–19:30 UTC et la mesure a été prise au moment où elle s'ouvrait. Le total
+tient (−620,13 $, 15 jours sur 32 à plus d'un passage, dernier doublon le 15/09). **C'est
+demain matin que le correctif se tranche.**
+
+`make test` : **2 953 passed, 77 skipped**.
+
 ## Session 2026-09-16 (28ᵉ) — Le port basculait en silence, la page venait d'ailleurs
 
 **« Je n'ai toujours pas l'intro sur localhost:3000 » — et la réponse était dans la sortie**,

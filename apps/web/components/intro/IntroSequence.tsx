@@ -43,7 +43,7 @@ const ATTENTE_DONNEES_MS = 2_500;
  * pire que pas de bouton du tout. Seul le décor est masqué.
  */
 export function IntroSequence({ onFini }: { onFini?: () => void }) {
-  const { jouer, reduit } = useIntroGate();
+  const { jouer, reduit, rejeu } = useIntroGate();
   // Les chiffres viennent du snapshot, pas du code. Absents → les battements de
   // période se sautent d'eux-mêmes : l'intro raccourcit, elle n'invente pas.
   const { data: intro } = useIntro();
@@ -66,7 +66,23 @@ export function IntroSequence({ onFini }: { onFini?: () => void }) {
 
   // Le rideau SE LÈVE tout de suite (sinon la landing apparaîtrait puis serait recouverte,
   // ce qui est exactement le clignotement que `useIntroGate` évite par ailleurs)…
-  useEffect(() => { if (jouer) setMonte(true); }, [jouer]);
+  //
+  // REJOUER, C'EST REPARTIR DE ZÉRO. `fini` est une RÉFÉRENCE : elle survit au premier
+  // passage. Sans remise à zéro, le second se lancerait bien, mais `terminer()` ne ferait
+  // plus rien à la fin — le rideau resterait baissé sur la landing, et il faudrait
+  // recharger la page pour s'en sortir. `rejeu` est dans les dépendances parce que
+  // `jouer` reste vrai d'un passage à l'autre et ne déclencherait donc jamais.
+  useEffect(() => {
+    if (!jouer) return;
+    fini.current = false;
+    setSortie(false);
+    setReveal(false);
+    setPause(false);
+    setBeat({ i: 0, p: 0 });
+    setAvance(0);
+    setAttenteEcoulee(false);
+    setMonte(true);
+  }, [jouer, rejeu]);
   // …mais l'ANIMATION attend les chiffres, au plus `ATTENTE_DONNEES_MS`.
   useEffect(() => {
     if (!monte) return;
