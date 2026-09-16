@@ -298,6 +298,9 @@ site-lite:        ## variante LÉGÈRE sans Node (terminal autonome interactive.
 	bash scripts/start_mobile.sh
 analytics:        ## rapport de perf QuantStats (Sortino/Calmar/Alpha-Beta vs QQQ) → vault/Performance_Report.md
 	$(PYTHON) scripts/perf_report.py
+registre:         ## registre des modèles : production, candidats, archives (ARGS=--rollback --motif "…")
+	$(PYTHON) scripts/registre_modeles.py $(ARGS)
+
 churn:            ## coût CUMULÉ des rebalancements en double (historique RÉEL du courtier)
 	$(PYTHON) scripts/cout_churn.py $(ARGS)
 
