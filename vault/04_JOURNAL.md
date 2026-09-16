@@ -1,5 +1,36 @@
 # 04 — JOURNAL
 
+## Session 2026-09-16 (22ᵉ) — L'audit d'archivage rend zéro fichier, et c'est le résultat
+
+**Mission : archiver l'obsolète sous `old/`. Résultat livré : rien n'a bougé.** Sur les
+**1 279 fichiers suivis**, **959 modules Python**, **955 atteignables** depuis les points
+d'entrée réels. **4 orphelins**, et pas un seul que l'on puisse archiver sans risque :
+`preset_rolling.py` porte encore trois fonctions dont un P1 ouvert aura besoin ;
+`check_db.py`/`index_db.py` forment un îlot fermé mais visent `YAHOO.db`, toujours vivante ;
+`reglage_capitulation.py` est le banc dont `candidats_lab.py:247` cite le verdict. Option A
+retenue par l'utilisateur : **ne rien archiver**. `old/` n'a jamais été créé. ADR-0165.
+
+**Ce que l'audit rapporte vraiment, ce sont les faux positifs.** Ce dépôt charge par
+CONVENTION plus que par import — `load_config_dir()` sur un répertoire entier, plugins
+auto-enregistrés par décorateur, racines Next.js (`page`/`layout`/`error`/…), `.claude/agents/*`
+lu par nom de dossier, et des imports TARDIFS à l'intérieur des fonctions dans
+`apps/api/main.py`. Un analyseur d'imports naïf y archiverait du code qui tourne.
+
+**Et il m'y a pris, deux fois.** Mon analyseur a déclaré `packages/sentiment/finbert.py`
+orphelin : d'abord parce que `from . import finbert` porte un `module` à `None`, puis parce
+que le paquet d'un `__init__.py` était résolu vers son parent. Le fichier est ACTIF. La règle
+qui en sort : ici, « jamais importé » est une hypothèse à vérifier à la main, pas un verdict.
+
+**Discipline de la mission, tenue de bout en bout** : travail sur une branche d'isolement,
+aucun `git reset --hard`, aucun `git clean`, aucune suppression, arrêt obligatoire avant tout
+déplacement. La branche `chore/cleanup-archive-old` étant restée strictement identique à la
+branche de dev (zéro commit, zéro diff), elle a été supprimée en local ; rien n'a été poussé
+hors de `claude/screening-trading-platform-me9p11`.
+
+**Prochain pas inchangé, et il n'attend que le terminal du soir** : `make news` (P0 — chaque
+jour manqué est perdu pour toujours), puis `make registre`, `make verrou`, `make churn` sur le
+VPS ; `make nlp-check` et `make benchmark-nlp` sur le Mac.
+
 ## Session 2026-09-16 (21ᵉ) — Chantier IA : l'audit a réordonné la mission
 
 **Le cahier des charges demandait un GPU. L'audit a mesuré pourquoi ce serait prématuré** :

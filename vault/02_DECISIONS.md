@@ -2,6 +2,44 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0165 — Un audit d'archivage dont la bonne conclusion est « ne rien archiver » (2026-09-16)
+
+**Contexte.** Mission : repérer les fichiers obsolètes du dépôt et les déplacer sous `old/`,
+jamais les supprimer. Analyse d'atteignabilité sur les **1 279 fichiers suivis** : **959
+modules Python**, dont **955 atteignables** depuis les points d'entrée réels (API, scripts,
+cibles du Makefile, workflows, tests). **4 orphelins**, aucun classé SAFE_TO_ARCHIVE.
+
+**Les quatre candidats, et pourquoi chacun reste :**
+- `packages/backtest/preset_rolling.py` — sélection supplantée, mais le fichier porte encore
+  `frottement`, `appliquer_bande` et `poids_par_symbole`, dont un P1 ouvert aura besoin. Le
+  test qu'il cite en en-tête n'a jamais existé.
+- `scripts/check_db.py` + `scripts/index_db.py` — îlot fermé (ils ne s'appellent que l'un
+  l'autre), mais ils visent `YAHOO.db`, base toujours vivante.
+- `scripts/reglage_capitulation.py` — banc dont le verdict est cité dans
+  `candidats_lab.py:247`. L'archiver, c'est orpheliner la justification d'un seuil en place.
+
+Front : 2 candidats, tous deux vérifiés faux positifs. Hors Python et hors front : tout faux
+positif.
+
+**Décision (utilisateur, option A) : ne rien archiver.** `old/` n'a pas été créé ; aucun
+fichier n'a été déplacé, modifié ni supprimé de toute la mission.
+
+**Conséquence — et c'est elle qui vaut le détour.** Ce qui rend cet audit rentable n'est pas
+le nombre de fichiers déplacés (zéro), c'est la carte des **faux positifs**. Un analyseur
+d'imports naïf archiverait ici du code VIVANT, parce que ce dépôt charge par CONVENTION bien
+plus que par import : `load_config_dir()` avale un répertoire de YAML entier sans en nommer
+un seul ; les plugins s'enregistrent par décorateur (`@indicators.register`,
+`@strategies.register`, `@factor_calcs.register`, `@risk_rules.register`) ; Next.js monte
+`page`/`layout`/`template`/`error`/`loading`/`not-found` sans qu'aucun import n'y mène ;
+`.claude/agents/*` est lu par nom de dossier ; et `apps/api/main.py` importe TARDIVEMENT, à
+l'intérieur des fonctions — une analyse au niveau module s'y tromperait massivement.
+
+Deux fois mon propre analyseur a déclaré `packages/sentiment/finbert.py` orphelin : d'abord
+parce que `from . import finbert` porte un `module` à `None`, puis parce que le paquet d'un
+`__init__.py` était résolu vers son parent. **`finbert.py` est ACTIF.** La règle qui en
+sort : sur ce dépôt, un fichier « jamais importé » est une HYPOTHÈSE à vérifier à la main,
+jamais un verdict.
+
 ## ADR-0161 — L'ordre du chantier IA est dicté par ce qui rend la suite MESURABLE (2026-09-16)
 
 **Le cahier des charges demandait Lambda GPU tôt.** L'audit (`docs/AI_ARCHITECTURE_AUDIT.md`)
