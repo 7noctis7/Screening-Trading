@@ -2,6 +2,54 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0172 — On annote la courbe réelle, on ne la corrige pas (2026-09-16)
+
+**Contexte.** `make churn` a mesuré **−620,13 $** sur 594 362 $ brassés, sur 14 jours, depuis
+le **27/08**. La courbe d'equity du compte porte donc ce gâchis, et toute comparaison
+« modèle contre réel » postérieure à cette date le compte comme de la performance.
+
+**Décision : ANNOTER.** Retrancher le churn de la série publierait une courbe qui n'a jamais
+existé — le compte a bien encaissé ces allers-retours. Une performance « telle qu'elle aurait
+été sans notre erreur » est une SIMULATION, et elle porterait le nom d'un compte réel. La
+série reste vraie ; c'est la note qui dit ce qu'elle porte.
+
+**TROIS ÉTATS, et ils ne se confondent pas** : *non mesuré* (historique du courtier illisible
+— le cas nominal en CI, sans clés), *mesuré et sain*, *mesuré et pollué*. Les deux premiers se
+ressemblent à l'écran si on n'y prend pas garde, et c'est la confusion la plus coûteuse de ce
+projet : un silence qui se lit comme un feu vert. `applicable` ne suffit donc pas, `mesure`
+l'accompagne.
+
+**Un cache, et pourquoi.** Le rapport se calcule sur l'historique du COURTIER — appel réseau,
+clés que le build public n'a pas. Le faire depuis le snapshot le rendrait lent, faillible et
+impossible en CI. `make churn` le dépose donc dans `.cache/churn.json` une fois par jour
+(branché dans `cron_daily.sh`), et le site le relit sans réseau. L'annotation porte la DATE de
+la mesure : un cache d'une semaine sous-estime le churn survenu depuis, et rien ne le dirait.
+
+**Ce qu'on refuse d'inventer** : sans capital connu, le montant est rendu seul. Convertir
+−620 $ en points de performance exige de savoir sur quoi ; un dénominateur supposé
+fabriquerait un chiffre faux, d'autant plus crédible qu'il serait précis.
+
+## ADR-0171b — Un artefact qui SERT sans être tracé doit se voir (2026-09-16)
+
+**Correction d'un diagnostic que j'avais posé de travers.** J'avais écrit qu'il fallait
+« brancher `train_model.py` sur le registre ». C'est faux : `_tracer()` existe depuis
+`afc5eed`, sur le chemin de production, et `cron_daily.sh` entraîne chaque nuit. Le registre
+est vide parce que **l'entraînement n'a pas encore tourné depuis le câblage**, livré le jour
+même. Il n'y avait pas de code à écrire là.
+
+**Le vrai trou était ailleurs, et il était ouvert.** `incoherences()` n'inspectait que les
+entrées DÉJÀ inscrites. Un artefact posé dans `models/` sans passer par le registre lui
+restait donc invisible — or c'est exactement le cas qui compte. Le 16/09, l'artefact à
+AUC 0,504 servait en production et le registre annonçait « vide » : les deux affirmations
+étaient vraies, et **rien ne les confrontait**.
+
+**Décision.** `Registre.orphelins()` balaie le dossier et signale tout `ml_*.pkl` dont aucune
+entrée ne parle ; `incoherences()` les inclut, donc `/api/ai/modeles` et `make registre` les
+montrent. Un modèle qui sert sans trace ne dit ni de quelles données ni de quel commit il
+vient, et `rollback` n'a rien vers quoi revenir. C'est un constat, pas une panne : il se
+SIGNALE, il ne bloque rien. L'empreinte `.sha256` posée à côté n'est pas comptée comme un
+second artefact — un avertissement permanent cesse d'être lu.
+
 ## ADR-0171 — Un basculement de port silencieux vaut une panne, donc il échoue (2026-09-16)
 
 **Le constat.** Après le correctif d'intro, `npm run dev` sur le VPS a écrit

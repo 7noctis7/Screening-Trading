@@ -298,6 +298,9 @@ site-lite:        ## variante LÉGÈRE sans Node (terminal autonome interactive.
 	bash scripts/start_mobile.sh
 analytics:        ## rapport de perf QuantStats (Sortino/Calmar/Alpha-Beta vs QQQ) → vault/Performance_Report.md
 	$(PYTHON) scripts/perf_report.py
+alpha-lexique:    ## le lexique apporte-t-il un alpha ? (étude d'événement + placebo, sans LLM)
+	$(PYTHON) scripts/alpha_lexique_lab.py $(ARGS)
+
 news:             ## accumule le corpus de news datées (ARGS=--etat pour l'état seul)
 	$(PYTHON) scripts/collecter_news.py $(ARGS)
 

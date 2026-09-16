@@ -23,6 +23,11 @@ python scripts/ingest_delisted.py || true           # met à jour data/delisted.
 # perdu DÉFINITIVEMENT. C'est la seule tâche de la chaîne dont le coût augmente avec le
 # retard, d'où sa place ici plutôt que dans un script qu'on lance quand on y pense.
 python scripts/collecter_news.py --silencieux || true   # data/news.csv (append-only, daté)
+# CHURN — mesure l'historique du courtier et DÉPOSE le rapport pour le site, qui ne peut
+# pas l'appeler lui-même (pas de clés dans le build public). Sans ce passage quotidien, la
+# courbe d'equity réelle s'afficherait sans annotation — donc comme si elle était saine.
+python scripts/cout_churn.py >/dev/null \
+  || echo "⚠️  cout_churn.py EN ÉCHEC — la courbe réelle s'affichera « churn non mesuré »"
 # Gate optionnelle : QUANT_AUDIT=strict fait refuser au build tout prix à anomalie CRITIQUE.
 # Le ré-entraînement ne doit pas faire tomber la chaîne (rapports, watchlist, miroirs),
 # mais son échec doit se VOIR : `|| true` seul rendait la panne indétectable dans le log.

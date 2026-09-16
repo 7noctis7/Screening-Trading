@@ -36,6 +36,12 @@ def afficher(reg) -> None:
     print(f"\n  PRODUCTION : {prod.version if prod else '(aucune)'}")
     if not reg.entrees:
         print("  (registre vide — aucun entraînement n'a encore été tracé)")
+        # UN REGISTRE VIDE N'EST PAS LA MÊME CHOSE QU'UN SYSTÈME SANS MODÈLE. S'il y a
+        # des
+        # artefacts sur disque, ils SERVENT — et personne ne sait d'où ils viennent. Le
+        # taire ferait lire « rien à tracer » là où il faut lire « rien n'est tracé ».
+        for souci in reg.orphelins():
+            print(f"  ⚠ {souci}")
         return
     print("  " + "─" * 100)
     for statut in ("production", "candidate", "archived", "rejected"):

@@ -42,3 +42,46 @@ def test_la_route_du_registre_survit_au_retrait_de_la_chaine_NLP():
                   "/api/ai/metrics", "/api/ai/modeles"):
         assert route in src
     assert "packages.nlp" not in src, "plus aucune trace de la chaîne NLP locale"
+
+
+# ─── Un artefact qui SERT sans être tracé
+# ──────────────────────────────────────────────
+
+def test_un_artefact_non_trace_est_SIGNALE(tmp_path):
+    """LE CAS RÉEL DU 16/09. Le registre annonçait « vide » pendant que l'artefact à
+    AUC 0,504 servait en production. Les deux affirmations étaient vraies, et rien ne
+    les confrontait : `incoherences()` n'inspectait que les entrées déjà inscrites, donc
+    un modèle jamais inscrit lui restait invisible — précisément le cas qui compte."""
+    from packages.mlops.registre import Registre
+
+    (tmp_path / "ml_swing.pkl").write_bytes(b"artefact")
+    reg = Registre(tmp_path)
+    assert not reg.entrees
+    soucis = reg.orphelins()
+    assert len(soucis) == 1 and "ml_swing.pkl" in soucis[0]
+    assert "NON TRACÉ" in soucis[0]
+    assert soucis == reg.incoherences(), "l'orphelin remonte dans les incohérences"
+
+
+def test_un_artefact_TRACÉ_n_est_pas_signale(tmp_path):
+    from packages.mlops.manifest import Manifest
+    from packages.mlops.registre import Registre
+
+    art = tmp_path / "ml_swing.pkl"
+    art.write_bytes(b"artefact")
+    reg = Registre(tmp_path)
+    reg.enregistrer(Manifest.creer(modele="m", run_id="r", dataset_hash="h",
+                                   feature_version="1-feat", seed=7,
+                                   artefact_sha256="", metriques={}, config={}),
+                    art, "test")
+    assert reg.orphelins() == []
+
+
+def test_l_empreinte_sha256_a_cote_n_est_PAS_prise_pour_un_modele(tmp_path):
+    """`ml_*.pkl` ne doit pas matcher `ml_*.pkl.sha256` : compter l'empreinte comme un
+    second artefact ferait apparaître un orphelin permanent, et un avertissement
+    permanent cesse d'être lu."""
+    from packages.mlops.registre import Registre
+
+    (tmp_path / "ml_swing.pkl.sha256").write_text("abc")
+    assert Registre(tmp_path).orphelins() == []

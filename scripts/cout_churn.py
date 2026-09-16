@@ -69,10 +69,11 @@ def afficher(rap: dict) -> None:
         # rien. Dater la pollution du premier doublon condamnerait des semaines correctes.
         print(f"  ⚠ Premier ALLER-RETOUR : {rap['depuis_cout']} — c'est DEPUIS CETTE DATE "
               "que la courbe d'equity porte du churn.")
-        print(f"  ⚠ Coût cumulé : {rap['pnl_churn']:+,.2f} $ sur "
-              f"{rap['notionnel_churn']:,.0f} $ brassés "
-              f"({len(rap['jours_a_cout'])} jour(s) concerné(s))."
-              .replace(",", " "))
+        from packages.execution.annotation_churn import _montant
+        signe = "-" if rap["pnl_churn"] < 0 else "+"
+        print(f"  ⚠ Coût cumulé : {signe}{_montant(rap['pnl_churn'])} $ sur "
+              f"{_montant(rap['notionnel_churn'], 0)} $ brassés "
+              f"({len(rap['jours_a_cout'])} jour(s) concerné(s)).")
     elif rap["depuis"]:
         print("  ✓ Des doublons, mais AUCUN aller-retour : les passages ont abouti à la "
               "même cible. Rien à déduire de la courbe.")
@@ -93,12 +94,30 @@ def main() -> int:
               file=sys.stderr)
         return 2
 
+    from datetime import UTC, datetime
+
+    from packages.execution.annotation_churn import annotation, ecrire_cache
     from packages.execution.passages import rapport
     rap = rapport(_filtrer(ordres, a.jours))
+
+    # LE RAPPORT EST POSÉ SUR DISQUE, parce que c'est ici — et seulement ici — qu'on a
+    # l'historique du courtier. Le site le relit sans réseau pour ANNOTER sa courbe
+    # d'equity réelle ; sans ce dépôt, la page ne pourrait que se taire, et un silence
+    # se lit comme « rien à signaler ».
+    quand = datetime.now(UTC).isoformat(timespec="seconds")
+    if a.jours is None:            # un rapport TRONQUÉ ne doit pas écraser l'entier
+        try:
+            ecrire_cache(rap, quand)
+        except Exception as e:  # noqa: BLE001 — un cache non écrit n'invalide pas la mesure
+            print(f"⚠ cache non écrit ({type(e).__name__}: {e})", file=sys.stderr)
+
     if a.json:
         print(json.dumps(rap, ensure_ascii=False, indent=2))
-    else:
-        afficher(rap)
+        return 0
+    afficher(rap)
+    note = annotation(rap, mesure_le=quand)
+    if note["applicable"]:
+        print(f"\n  ANNOTATION DE LA COURBE RÉELLE\n  {note['texte']}")
     return 0
 
 

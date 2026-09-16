@@ -32,17 +32,17 @@
       PASSAGE RÉUSSI sur le VPS le 16/09 : **2 375 titres · 199 symboles · 71 jours**
       (2026-05-19 → 2026-09-16), 1 symbole muet. Reste à VÉRIFIER que le passage
       automatique de `cron_daily.sh` prend le relais demain — un flux RSS ne se rejoue pas.
-- [ ] **P1 — Le registre des modèles est VIDE alors qu'un modèle tourne (16/09).** `make
-      registre` sur le VPS : « aucun entraînement tracé ». L'artefact à AUC 0,504 existe
-      et sert, mais aucune trace ne dit de quelles données ni de quel commit il vient.
-      Tant que c'est vrai, `rollback` n'a rien vers quoi revenir.
+- [ ] **P1 — Le registre se remplira au prochain entraînement (16/09, ADR-0171b).** Le
+      câblage EXISTE (`_tracer`, `afc5eed`) et `cron_daily.sh` entraîne chaque nuit : il
+      n'y avait pas de code à écrire. `Registre.orphelins()` signale désormais l'artefact
+      qui sert sans être tracé. **À VÉRIFIER demain** : `make registre` doit montrer une
+      entrée, et plus d'orphelin.
 - [x] **~~P1 — Éprouver la chaîne NLP sur le Mac~~ — ABANDONNÉE (16/09, ADR-0170).**
       Quatre tentatives, zéro classification. La chaîne locale est RETIRÉE du dépôt.
-- [ ] **P1 — Mesurer l'alpha du LEXIQUE sur le corpus (16/09, ADR-0170).** Le corpus
-      existe (2 375 titres) et `packages/research/alpha_incremental.py` ne dépend d'AUCUN
-      LLM : étude d'événement, comparaison appariée, placebo. Blocage constaté le 16/09 :
-      « prix absents ou fenêtre trop courte » — la base de prix n'est pas sur la machine
-      qui a le corpus. **À lancer sur le VPS**, qui a les deux.
+- [ ] **P1 — Mesurer l'alpha du LEXIQUE sur le corpus (16/09, ADR-0170).** `make
+      alpha-lexique` LIVRÉ — sans LLM, et il nomme la cause quand il ne peut pas conclure
+      (symboles sans barres vs corpus trop récent). **À lancer sur le VPS**, seule machine
+      à avoir le corpus ET les prix.
 - [ ] **P1 — L'AUC du modèle de production est 0,504 (16/09, ADR-0161).** Indiscernable du
       hasard, Brier à 0,0004 du seuil de rejet, DSR jamais calculé. Aucune accélération de
       calcul ne corrige une absence de signal — c'est le vrai sujet ML du projet.
@@ -55,10 +55,10 @@
       le superviseur et la double protection existent et sont testés sur `BackendLocal`.
       N'écrire le backend distant que si une mesure d'alpha a démontré quelque chose à
       accélérer. La chaîne NLP locale, elle, est retirée (ADR-0170).
-- [ ] **P1 — La courbe d'equity RÉELLE est biaisée depuis le 27/08 (16/09, ADR-0159).**
-      −620 $ de churn ≈ −0,62 point de performance cumulée sur un compte de ~100 k$. Toute
-      comparaison « modèle contre réel » postérieure au 27/08 doit le retrancher ou le
-      dire. À trancher : corriger la série, ou l'annoter et l'afficher telle quelle.
+- [x] **~~P1 — La courbe d'equity RÉELLE est biaisée depuis le 27/08~~ — TRANCHÉE
+      (16/09, ADR-0172).** ANNOTÉE, pas corrigée : retrancher le churn publierait une
+      courbe qui n'a jamais existé. `make churn` dépose le rapport, le site le relit sans
+      réseau, et « non mesuré » ne se confond pas avec « aucun churn ».
 - [ ] **P2 — 3 300 anomalies MAJEURES sur `market.db`, 7 CRITIQUES sur `crypto.db`
       (16/09).** Le brief les affiche à chaque lancement et personne ne les a ouvertes.
       Un compteur qu'on ne regarde plus ne protège de rien : `make audit` puis trancher.

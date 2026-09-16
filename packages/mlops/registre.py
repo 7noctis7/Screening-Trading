@@ -207,9 +207,30 @@ class Registre:
                            "depuis son enregistrement")
         return True, "empreinte vérifiée"
 
+    def orphelins(self) -> list[str]:
+        """Artefacts PRÉSENTS sur disque dont aucune entrée ne parle.
+
+        LE TROU QUE ÇA BOUCHE, ET IL ÉTAIT OUVERT. `incoherences()` n'inspectait que les
+        entrées DÉJÀ inscrites : un modèle posé dans `models/` sans passer par le
+        registre
+        lui restait donc invisible — or c'est exactement le cas qui compte. Le 16/09,
+        l'artefact à AUC 0,504 servait en production et le registre annonçait « vide » ;
+        les deux affirmations étaient vraies, et rien ne les confrontait.
+
+        Un artefact qui sert sans trace ne dit ni de quelles données ni de quel commit
+        il
+        vient, et `rollback` n'a rien vers quoi revenir. C'est un constat, pas une
+        panne :
+        il se SIGNALE, il ne bloque rien.
+        """
+        connus = {Path(e.chemin).name for e in self.entrees.values() if e.chemin}
+        vus = sorted(p.name for p in self.dossier.glob("ml_*.pkl"))
+        return [f"artefact NON TRACÉ : {n} — présent dans {self.dossier.name}/, "
+                "aucune entrée ne le décrit" for n in vus if n not in connus]
+
     def incoherences(self) -> list[str]:
         """Ce qui ne devrait jamais arriver, et qu'on veut voir si ça arrive."""
-        soucis = []
+        soucis = list(self.orphelins())
         prods = self.par_statut(PRODUCTION)
         if len(prods) > 1:
             soucis.append(f"{len(prods)} versions en production : "

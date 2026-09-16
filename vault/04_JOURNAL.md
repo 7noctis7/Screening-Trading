@@ -1,5 +1,42 @@
 # 04 — JOURNAL
 
+## Session 2026-09-16 (31ᵉ) — Les trois P1, et un diagnostic que j'avais posé de travers
+
+**① LE REGISTRE — je m'étais trompé de cause.** J'avais écrit qu'il fallait « brancher
+`train_model.py` sur le registre ». `_tracer()` existe depuis `afc5eed`, sur le chemin de
+production, et `cron_daily.sh` entraîne chaque nuit : le registre est vide parce que
+**l'entraînement n'a pas tourné depuis le câblage**, livré le jour même. Il n'y avait pas de
+code à écrire là — la mesure a été plus rapide que ma supposition.
+
+**Mais le vrai trou était ailleurs.** `incoherences()` n'inspectait que les entrées DÉJÀ
+inscrites : un artefact posé dans `models/` sans passer par le registre lui restait
+invisible. Or c'est LE cas qui compte — l'artefact à AUC 0,504 servait en production pendant
+que le registre annonçait « vide », les deux affirmations étaient vraies, et rien ne les
+confrontait. `Registre.orphelins()` les signale désormais, et `/api/ai/modeles` comme
+`make registre` les montrent. ADR-0171b.
+
+**② LA COURBE RÉELLE EST ANNOTÉE, PAS CORRIGÉE.** Retrancher les −620,13 $ de churn
+publierait une courbe qui n'a jamais existé : le compte a bien encaissé ces allers-retours.
+Trois états qui ne se confondent pas — *non mesuré*, *mesuré et sain*, *mesuré et pollué* —
+parce que les deux premiers se ressemblent à l'écran, et qu'un silence se lit comme un feu
+vert. Le rapport est déposé par `make churn` dans `.cache/churn.json` (branché au cron
+quotidien) et relu sans réseau par le snapshot, qui n'a pas les clés du courtier. La note
+porte la DATE de la mesure : un cache d'une semaine sous-estimerait le churn survenu depuis.
+ADR-0172.
+
+**③ `make alpha-lexique` EXISTE.** Étude d'événement, comparaison appariée, placebo — sans
+aucun LLM. Et surtout, il DIT pourquoi il ne peut pas conclure : le 16/09, « prix absents ou
+fenêtre trop courte » ne disait pas laquelle des deux causes s'appliquait, sur une machine
+qui avait le corpus et pas les prix. Le nouveau banc compte les symboles sans barres, les
+nomme, et renvoie vers la bonne machine — ou dit qu'il ne manque que du temps.
+
+**Deux de mes propres tests cassés par mes propres reformulations de ligne.** Ils
+vérifiaient une phrase au mot près ; raccourcir une ligne pour la typographie les faisait
+tomber. Recalés sur le SENS. Une assertion sur une formulation exacte est un test de
+traitement de texte, pas de comportement.
+
+`make test` : **2 980 passed, 77 skipped**. Zéro alerte ruff sur les lignes touchées.
+
 ## Session 2026-09-16 (30ᵉ) — Chaque fenêtre dit enfin DE QUAND À QUAND
 
 **Demande** : afficher la date de départ et la date d'arrivée pour chaque fenêtre de

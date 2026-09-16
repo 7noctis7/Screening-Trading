@@ -2531,6 +2531,23 @@ def build_snapshot(seed: int = 7) -> dict:
     # Repli "modèle" (backtest du sleeve) UNIQUEMENT si le compte n'est pas connecté.
     from packages.execution.equity_history import series as _eq_series
 
+    def _note_churn(capital: float | None) -> dict:
+        """L'annotation de churn, LUE SUR DISQUE et jamais calculée ici.
+
+        Le rapport vient de l'historique du courtier — un appel réseau, avec des clés
+        que
+        le build public n'a pas. `make churn` le mesure une fois par jour et le dépose ;
+        on se contente de le relire. Cache absent ⇒ « NON MESURÉ », ce qui ne se confond
+        pas avec « aucun churn » : c'est toute la valeur de l'annotation.
+        """
+        try:
+            from packages.execution.annotation_churn import annotation, lire_cache
+            rap, quand = lire_cache()
+            return annotation(rap, capital, quand)
+        except Exception as e:  # noqa: BLE001 — une note ne fait pas tomber une courbe
+            return {"applicable": False, "mesure": False,
+                    "motif": f"annotation indisponible ({type(e).__name__}: {e})"}
+
     def _broker_perf(bd: dict, broker_key: str, model_curve: list | None) -> dict:
         if bd.get("ok"):                                   # compte connecté → on veut du RÉEL
             rc = bd.get("history") or []                   # Alpaca portfolio history (réel)
@@ -2539,7 +2556,8 @@ def build_snapshot(seed: int = 7) -> dict:
             if len(rc) >= 10:
                 return {**_curve_stats([p["v"] for p in rc], compte_reel=True,
                                        dates=[str(p.get("t", ""))[:10] for p in rc]),
-                        "curve": rc, "source": "réel"}
+                        "curve": rc, "source": "réel",
+                        "churn": _note_churn(float(rc[-1].get("v") or 0.0))}
             return {"available": False, "source": "réel-court",
                     "note": "Compte récent : historique réel en cours de constitution "
                             "(quelques jours de suivi nécessaires)."}
@@ -2604,7 +2622,12 @@ def build_snapshot(seed: int = 7) -> dict:
         if len(_comb) >= 2:
             _real_portfolio = {"available": True,
                                "stats": _curve_stats(_comb, compte_reel=True, dates=_rdates),
-                               "curve": [{"t": d, "v": round(v, 2)} for d, v in zip(_rdates, _comb)]}
+                               "curve": [{"t": d, "v": round(v, 2)}
+                                         for d, v in zip(_rdates, _comb, strict=False)],
+                               # La courbe reste CELLE DU COMPTE ; c'est la note qui dit
+                               # ce qu'elle porte. Corriger la série publierait une
+                               # performance qui n'a jamais eu lieu.
+                               "churn": _note_churn(_comb[-1])}
     # BLACK-LITTERMAN : prior équipondéré + vues = conviction z-scorée → poids postérieurs
     try:
         import numpy as _np2
