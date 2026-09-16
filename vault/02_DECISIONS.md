@@ -2,6 +2,31 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0171 — Un basculement de port silencieux vaut une panne, donc il échoue (2026-09-16)
+
+**Le constat.** Après le correctif d'intro, `npm run dev` sur le VPS a écrit
+`⚠ Port 3000 is in use, trying 3001 instead.` — une ligne au milieu du démarrage. Le
+navigateur, lui, restait sur `localhost:3000`, **servi par le service systemd `quant-web`**,
+qui tourne un build de PRODUCTION (`next build` + `next start`). L'intro corrigée vivait sur
+3001 ; la page regardée venait d'ailleurs.
+
+**C'est la troisième fois que ce motif coûte une conversation** : le cache `.next` qui
+ressert l'ancien rendu, `make start` qui ramenait la branche sur `main`, et maintenant le
+port. Toujours la même forme — **le code est juste, l'écran montre autre chose, et rien ne
+le signale**.
+
+**Décision.** `npm run dev` **échoue** si le port est pris, via un `predev`
+(`apps/web/scripts/verifier_port.mjs`), et `dev` fixe explicitement `-p ${PORT:-3000}` au
+lieu de laisser Next choisir. Le message nomme les trois sorties : qui tient le port,
+`make up` si c'est le service, et `PORT=3001 npm run dev` pour développer à côté — avec le
+tunnel qui va avec. Un basculement silencieux coûte plus qu'une erreur : l'erreur s'arrête,
+le basculement fait chercher ailleurs.
+
+**Corollaire sur l'intro, à ne pas confondre.** Sur le VPS, le port 3000 sert un build de
+production : la politique y est `"session"`, donc une lecture par onglet — **c'est voulu**,
+c'est le comportement du site public. `?intro=1` force la relecture même là. Le mode
+`"always"` d'ADR-0170 ne vaut que pour un vrai `next dev`.
+
 ## ADR-0170 — La chaîne NLP locale est retirée. Ce qui reste, et pourquoi (2026-09-16)
 
 **Décision de l'utilisateur, après quatre tentatives mesurées.** `qwen/qwen3.5-9b` sous

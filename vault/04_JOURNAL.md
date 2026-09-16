@@ -1,5 +1,29 @@
 # 04 — JOURNAL
 
+## Session 2026-09-16 (28ᵉ) — Le port basculait en silence, la page venait d'ailleurs
+
+**« Je n'ai toujours pas l'intro sur localhost:3000 » — et la réponse était dans la sortie**,
+sur une ligne que personne ne lit : `⚠ Port 3000 is in use, trying 3001 instead.` Le serveur
+de développement fraîchement lancé était sur **3001** ; le navigateur parlait au service
+systemd `quant-web` sur **3000**, qui sert un build de PRODUCTION.
+
+**Troisième occurrence du même motif sur ce projet** : le cache `.next` qui ressert l'ancien
+rendu, `make start` qui ramenait la branche sur `main`, et maintenant le port. Toujours la
+même forme — le code est juste, l'écran montre autre chose, **et rien ne le signale**.
+
+**Correctif : `npm run dev` ÉCHOUE désormais si le port est pris** (`predev` +
+`verifier_port.mjs`), et `dev` fixe `-p ${PORT:-3000}` au lieu de laisser Next choisir. Le
+message nomme les trois sorties : qui tient le port, `make up` si c'est le service,
+`PORT=3001 npm run dev` pour développer à côté. Éprouvé dans les deux sens. ADR-0171.
+
+**Et une distinction à ne pas perdre** : sur le VPS, le 3000 est un build de production —
+la politique d'intro y est `"session"`, une fois par onglet, **ce qui est voulu**. C'est le
+comportement du site public. `?intro=1` force la relecture même là ; le mode `"always"` ne
+vaut que pour un vrai `next dev`.
+
+**Ma commande était juste pour le Mac et fausse pour le VPS** : `rm -rf .next && npm run dev`
+suppose qu'aucun service ne tient le port. Sur le VPS, la commande est `make up`.
+
 ## Session 2026-09-16 (27ᵉ) — On arrête le LLM local, et l'intro cesse de mentir
 
 **DÉCISION : la chaîne NLP locale est retirée.** Quatre tentatives mesurées, zéro
