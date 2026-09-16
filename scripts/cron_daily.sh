@@ -19,6 +19,10 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] maj quotidienne — début"
 python scripts/ingest_prices.py --daily            # backfill incrémental idempotent
 python scripts/data_audit.py || true                # audit PwC des bases (complétude/exactitude/PIT)
 python scripts/ingest_delisted.py || true           # met à jour data/delisted.csv (anti-biais survivant)
+# CORPUS DE NEWS — un flux RSS ne se rejoue pas : chaque jour sans collecte est un jour
+# perdu DÉFINITIVEMENT. C'est la seule tâche de la chaîne dont le coût augmente avec le
+# retard, d'où sa place ici plutôt que dans un script qu'on lance quand on y pense.
+python scripts/collecter_news.py --silencieux || true   # data/news.csv (append-only, daté)
 # Gate optionnelle : QUANT_AUDIT=strict fait refuser au build tout prix à anomalie CRITIQUE.
 # Le ré-entraînement ne doit pas faire tomber la chaîne (rapports, watchlist, miroirs),
 # mais son échec doit se VOIR : `|| true` seul rendait la panne indétectable dans le log.
