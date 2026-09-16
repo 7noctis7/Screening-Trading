@@ -87,3 +87,66 @@ def test_la_fenetre_est_nommee_meme_sans_donnee():
     libelles = src.split("const LIBELLES", 1)[1].split("};", 1)[0]
     for cle in ("ytd", "3a", "5a", "10a", "tout"):
         assert f'"{cle}"' in libelles or f"{cle}:" in libelles
+
+
+# ─── Lisibilité : une courbe ne se lit pas en deux secondes (16/09) ────────────────────
+
+def _const(nom: str) -> float:
+    src = (INTRO / "introConfig.ts").read_text(encoding="utf-8")
+    m = re.search(rf"export const {nom} = ([0-9_.]+);", src)
+    assert m, f"constante {nom} introuvable"
+    return float(m.group(1).replace("_", ""))
+
+
+def _durees_des_battements(total_ms: float) -> dict[str, float]:
+    """Durée RÉELLE de chaque battement, en ms, déduite des bornes cumulées."""
+    src = (INTRO / "introConfig.ts").read_text(encoding="utf-8")
+    bloc = src.split("export const BEATS = [", 1)[1].split("] as const;", 1)[0]
+    paires = re.findall(r'cle:\s*"([^"]+)",\s*fin:\s*([0-9.]+)', bloc)
+    out, prec = {}, 0.0
+    for cle, fin in paires:
+        out[cle] = (float(fin) - prec) * total_ms
+        prec = float(fin)
+    return out
+
+
+def test_les_bornes_sont_croissantes_et_finissent_a_un():
+    src = (INTRO / "introConfig.ts").read_text(encoding="utf-8")
+    bloc = src.split("export const BEATS = [", 1)[1].split("] as const;", 1)[0]
+    fins = [float(f) for f in re.findall(r"fin:\s*([0-9.]+)", bloc)]
+    assert fins == sorted(fins) and len(set(fins)) == len(fins)
+    assert fins[-1] == 1.0
+
+
+def test_chaque_fenetre_de_performance_est_lisible_sur_les_deux_durees():
+    """Le défaut du 16/09 : 2,0 s par fenêtre, dont 0,6 s de déformation et 0,7 s de
+    compteur — il restait moins d'une seconde pour REGARDER la courbe. Une intro qui
+    montre une preuve trop vite pour qu'on la lise ne montre pas une preuve."""
+    plancher = _const("MIN_BATTEMENT_PERIODE_MS")
+    for nom in ("INTRO_DURATION", "INTRO_DURATION_MOBILE"):
+        durees = _durees_des_battements(_const(nom))
+        for cle in ("p_ytd", "p_3a", "p_5a", "p_10a", "p_tout"):
+            assert durees[cle] >= plancher, (
+                f"{nom} : le battement {cle} ne dure que {durees[cle]:.0f} ms "
+                f"(plancher {plancher:.0f} ms) — la courbe défilerait sans être lue")
+
+
+def test_les_fenetres_occupent_la_majorite_de_l_intro():
+    """Ce sont elles la preuve. Si elles passent sous la moitié du temps, l'intro est
+    redevenue une bande-annonce."""
+    durees = _durees_des_battements(_const("INTRO_DURATION"))
+    perf = sum(durees[c] for c in ("p_ytd", "p_3a", "p_5a", "p_10a", "p_tout"))
+    assert perf / _const("INTRO_DURATION") > 0.5
+
+
+def test_les_transitions_internes_restent_breves():
+    """Allonger le battement sans resserrer morphing et compteur aurait seulement fait
+    durer les ANIMATIONS plus longtemps — pas donné plus de temps de lecture."""
+    morph = float(re.search(r"const MORPH = ([0-9.]+);",
+                            (INTRO / "IntroCourbes.tsx").read_text(encoding="utf-8")).group(1))
+    fin_compte = float(re.search(r"const FIN_COMPTE = ([0-9.]+);",
+                                 (INTRO / "IntroBeats.tsx").read_text(encoding="utf-8")).group(1))
+    assert morph <= 0.25, "la déformation mange le temps de lecture"
+    assert fin_compte <= 0.30, "le compteur monte trop longtemps"
+    # …et la lecture nette (hors transition la plus longue) doit rester majoritaire.
+    assert 1 - max(morph, fin_compte) >= 0.7

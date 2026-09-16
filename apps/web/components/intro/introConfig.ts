@@ -4,11 +4,30 @@
 // design system. L'intro suit donc la charte ET le thème courant, au lieu de figer un noir
 // qui jurerait avec `--bg:#0a1118`.
 
-/** Durée totale, en ms. En dessous de ~8 s, le troisième battement devient illisible. */
-export const INTRO_DURATION = 18_000;
+/** Durée totale, en ms.
+ *
+ * 26 s, et la raison tient en une phrase : LIRE UNE COURBE PREND DU TEMPS. À 18 s, chaque
+ * fenêtre de performance durait 2,0 s — dont 0,6 s de déformation depuis la fenêtre
+ * précédente et 0,7 s de compteur qui monte. Il restait moins d'une seconde pour regarder
+ * réellement le graphique, c'est-à-dire pas assez pour en tirer quoi que ce soit.
+ *
+ * Une intro qui montre une preuve trop vite pour qu'on la lise ne montre pas une preuve :
+ * elle montre qu'elle en a une. C'est le contraire de l'intention.
+ *
+ * Chaque fenêtre dispose maintenant de 3,4 s — environ 2 s de lecture nette une fois la
+ * transition passée — et les cinq fenêtres occupent 65 % de la séquence. Le reste a été
+ * resserré plutôt qu'allongé : la révélation du nom perd 0,6 s, elle n'a rien à démontrer.
+ */
+export const INTRO_DURATION = 26_000;
 
-/** Idem sur petit écran. Un peu plus court : on y revient plus souvent. */
-export const INTRO_DURATION_MOBILE = 15_000;
+/** Idem sur petit écran. Un peu plus court : on y revient plus souvent — mais PAS assez
+ *  court pour retomber sous le seuil de lisibilité (2,9 s par fenêtre ici). */
+export const INTRO_DURATION_MOBILE = 22_000;
+
+/** Plancher de lisibilité d'un battement de période, en ms. En dessous, la courbe défile
+ *  sans qu'on ait le temps de la lire — c'est le défaut corrigé le 16/09. Un test le
+ *  vérifie sur les DEUX durées, mobile comprise. */
+export const MIN_BATTEMENT_PERIODE_MS = 2_800;
 
 /** Particules de fond. Réduit automatiquement sur mobile / machine modeste. */
 export const PARTICLE_COUNT = 340;
@@ -45,16 +64,17 @@ export const INTRO_BASELINE = "0 € · OPEN SOURCE · PAPER PAR DÉFAUT";
  * un composant se détache de ce qu'il mesure, et d'autant plus vite qu'il flatte.
  */
 export const BEATS = [
-  { cle: "echelle", fin: 0.12, genre: "chiffre",
+  // Bornes calculées pour 26 s : 2,6 · 2,2 · 3,4 × 5 · 2,6 · 1,6 secondes.
+  { cle: "echelle", fin: 0.100, genre: "chiffre",
     sur: "CE QUE LA MACHINE REGARDE", fenetre: null },
-  { cle: "rejet", fin: 0.22, genre: "chiffre",
+  { cle: "rejet", fin: 0.185, genre: "chiffre",
     sur: "CE QU'ELLE A REJETÉ", fenetre: null },
-  { cle: "p_ytd", fin: 0.33, genre: "periode", sur: "", fenetre: "ytd" },
-  { cle: "p_3a", fin: 0.44, genre: "periode", sur: "", fenetre: "3a" },
-  { cle: "p_5a", fin: 0.55, genre: "periode", sur: "", fenetre: "5a" },
-  { cle: "p_10a", fin: 0.66, genre: "periode", sur: "", fenetre: "10a" },
-  { cle: "p_tout", fin: 0.77, genre: "periode", sur: "", fenetre: "tout" },
-  { cle: "trades", fin: 0.88, genre: "trades",
+  { cle: "p_ytd", fin: 0.315, genre: "periode", sur: "", fenetre: "ytd" },
+  { cle: "p_3a", fin: 0.446, genre: "periode", sur: "", fenetre: "3a" },
+  { cle: "p_5a", fin: 0.577, genre: "periode", sur: "", fenetre: "5a" },
+  { cle: "p_10a", fin: 0.708, genre: "periode", sur: "", fenetre: "10a" },
+  { cle: "p_tout", fin: 0.838, genre: "periode", sur: "", fenetre: "tout" },
+  { cle: "trades", fin: 0.938, genre: "trades",
     sur: "QUALITÉ DES TRADES", fenetre: null },
   { cle: "reveal", fin: 1.0, genre: "reveal", sur: "", fenetre: null },
 ] as const;

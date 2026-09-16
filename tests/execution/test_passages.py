@@ -192,3 +192,30 @@ def test_le_brief_surveille_les_passages():
     # Et il doit nommer les planificateurs à vérifier : un avertissement sans geste à
     # faire se lit une fois, puis se saute.
     assert "crontab -l" in src and "list-timers" in src
+
+
+def test_un_doublon_sans_aller_retour_ne_pollue_rien():
+    """APPRIS DE L'HISTORIQUE RÉEL (16/09). Les doublons du 07/07 et du 24/08 n'ont produit
+    aucun aller-retour : deux passages qui aboutissent à la même cible ne se contredisent
+    pas, ils se répètent. Le gâchis n'a commencé que le 27/08. Ne rendre que la première
+    date de doublon ferait dater la pollution de la courbe de sept semaines trop tôt."""
+    o = [  # 07-07 : deux passages, que des achats — aucune contradiction
+        _o("2026-07-07T16:38:06+00:00", "A", "buy", 1, 100),
+        _o("2026-07-07T16:58:23+00:00", "B", "buy", 1, 100),
+        # 08-27 : deux passages qui se contredisent
+        _o("2026-08-27T21:52:11+00:00", "C", "buy", 10, 100),
+        _o("2026-08-27T23:56:34+00:00", "C", "sell", 10, 95),
+    ]
+    r = rapport(o)
+    assert r["depuis"] == "2026-07-07"          # premier doublon
+    assert r["depuis_cout"] == "2026-08-27"     # premier aller-retour — la vraie date
+    assert r["jours_a_doublon"] == ["2026-07-07", "2026-08-27"]
+    assert r["jours_a_cout"] == ["2026-08-27"]
+    assert r["pnl_churn"] == pytest.approx(-50.0)
+
+
+def test_sans_aucun_aller_retour_la_date_de_cout_est_nulle():
+    o = [_o("2026-07-07T16:38:06+00:00", "A", "buy", 1, 100),
+         _o("2026-07-07T16:58:23+00:00", "B", "buy", 1, 100)]
+    r = rapport(o)
+    assert r["depuis"] == "2026-07-07" and r["depuis_cout"] is None

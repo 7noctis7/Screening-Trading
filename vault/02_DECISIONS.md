@@ -2,6 +2,63 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0159 — Le churn a coûté 620 $, et la courbe d'equity est polluée depuis le 27/08 (2026-09-16)
+
+**Mesuré par `make churn` sur l'historique RÉEL du courtier**, 32 jours d'activité :
+
+| | |
+|---|---|
+| Jours avec plus d'un passage | **15 sur 32** |
+| Premier doublon | 2026-07-07 |
+| Premier ALLER-RETOUR | **2026-08-27** |
+| Coût cumulé | **−620,13 $** sur **594 362 $** brassés (−0,104 %) |
+| Pires journées | 08/09 −156,22 $ · 31/08 −126,27 $ · 15/09 −100,93 $ |
+
+**LA MESURE A CORRIGÉ SA PROPRE QUESTION.** Le module rendait « premier doublon » comme
+date de pollution. L'historique dit autre chose : les doublons du 07/07 et du 24/08 ont
+produit **zéro** aller-retour. Deux passages qui aboutissent à la même cible ne se
+contredisent pas — ils se répètent, et ne coûtent rien. Dater la pollution du premier
+doublon aurait condamné sept semaines de mesures correctes. `rapport()` rend donc DEUX
+dates, et c'est `depuis_cout` qui compte.
+
+**CE QUE LA CHRONOLOGIE CONFIRME.** Les allers-retours commencent le 27/08 et deviennent
+quasi quotidiens en septembre (27, 28, 31 août ; 1, 2, 3, 7, 8, 9, 10, 11, 14, 15
+septembre). C'est exactement la fenêtre où le retard de GitHub sur `paper.yml` est passé
+d'environ trente minutes à plus de trois heures (ADR-0156) : le runner cloud a glissé dans
+la fenêtre du VPS. La cause mesurée indépendamment et l'effet mesuré ici datent du même
+moment — ce n'est pas une coïncidence, c'est la même histoire vue des deux bouts.
+
+**CONSÉQUENCE SUR CE QU'ON PEUT AFFIRMER.** Sur un compte d'environ 100 000 $, −620 $
+représentent **−0,62 point de performance cumulée**. Toute lecture de la courbe d'equity
+RÉELLE après le 27/08 doit en tenir compte. Les backtests ne sont pas touchés (ils ne
+passent pas par le courtier), mais la comparaison « modèle contre réel » l'est.
+
+**DÉCISION.** `make churn` entre au catalogue, et `make brief` porte une section
+« Passages du robot (7 j) ». La dérive d'un planificateur se verra désormais le lendemain
+matin, pas six semaines plus tard par ses conséquences.
+
+## ADR-0160 — Une preuve montrée trop vite pour être lue n'est pas une preuve (2026-09-16)
+
+**Constaté à l'écran**, pas déduit : à 18 s, chaque fenêtre de performance de l'intro durait
+2,0 s — dont 0,6 s de déformation depuis la fenêtre précédente et 0,7 s de compteur qui
+monte. Il restait **moins d'une seconde** pour regarder la courbe.
+
+Une intro qui montre une preuve trop vite pour qu'on la lise ne montre pas une preuve :
+elle montre qu'elle en a une. C'est exactement le contraire de l'intention — ces cinq
+fenêtres existent parce que la landing affirmait des chiffres sans dire d'où ils venaient
+(ADR-0154).
+
+**Décision.** 26 s (22 s sur mobile), chaque fenêtre à 3,4 s, les cinq occupant 65 % de la
+séquence. Le temps n'a pas seulement été ajouté : les transitions internes ont été
+RESSERRÉES (morphing 0,30 → 0,22 du battement ; compteur 0,34 → 0,25). Allonger le
+battement sans cela aurait fait durer les animations plus longtemps, pas donné du temps de
+lecture. Le reste a été raccourci plutôt qu'étiré — la révélation du nom perd 0,6 s, elle
+n'a rien à démontrer.
+
+**Conséquence.** `MIN_BATTEMENT_PERIODE_MS = 2 800` et un test qui le vérifie sur les DEUX
+durées, mobile comprise : c'est la variante courte qui retomberait sous le seuil en premier,
+et personne n'y penserait.
+
 ## ADR-0155 — Un seul rebalancement par journée, et c'est le COURTIER qui le dit (2026-09-15)
 
 **Mesuré sur le compte paper du 15/09.** TROIS rebalancements dans la même journée, chacun

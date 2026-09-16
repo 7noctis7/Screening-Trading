@@ -62,11 +62,20 @@ def afficher(rap: dict) -> None:
     print("  " + "─" * 88)
     print(f"  {rap['n_jours']} jour(s) d'activité · {n2} avec PLUS D'UN passage")
     if rap["depuis"]:
-        print(f"  ⚠ Premier doublon : {rap['depuis']} — la courbe d'equity porte du churn "
-              "depuis cette date.")
-        print(f"  ⚠ Coût cumulé des allers-retours : {rap['pnl_churn']:+,.2f} $ "
-              f"sur {rap['notionnel_churn']:,.0f} $ brassés."
+        print(f"  ⚠ Premier doublon : {rap['depuis']} — deux passages le même jour.")
+    if rap["depuis_cout"]:
+        # La date qui compte n'est pas celle du premier doublon mais celle du premier
+        # doublon qui se CONTREDIT : deux passages aboutissant à la même cible ne coûtent
+        # rien. Dater la pollution du premier doublon condamnerait des semaines correctes.
+        print(f"  ⚠ Premier ALLER-RETOUR : {rap['depuis_cout']} — c'est DEPUIS CETTE DATE "
+              "que la courbe d'equity porte du churn.")
+        print(f"  ⚠ Coût cumulé : {rap['pnl_churn']:+,.2f} $ sur "
+              f"{rap['notionnel_churn']:,.0f} $ brassés "
+              f"({len(rap['jours_a_cout'])} jour(s) concerné(s))."
               .replace(",", " "))
+    elif rap["depuis"]:
+        print("  ✓ Des doublons, mais AUCUN aller-retour : les passages ont abouti à la "
+              "même cible. Rien à déduire de la courbe.")
     else:
         print("  ✓ Aucun jour à doublon sur la fenêtre : un seul passage par journée.")
 

@@ -1,5 +1,43 @@
 # 04 — JOURNAL
 
+## Session 2026-09-16 (20ᵉ) — Le churn chiffré : 620 $, et depuis le 27 août
+
+**La mesure a répondu, et elle a corrigé sa propre question.** `make churn` sur
+l'historique réel : 15 jours sur 32 à plus d'un passage, **−620,13 $** cumulés sur
+**594 362 $** brassés. Mais la date qui compte n'est pas celle du premier doublon
+(07/07) : c'est celle du premier **aller-retour** (**27/08**). Deux passages qui
+aboutissent à la même cible ne se contredisent pas, ils se répètent — le 07/07 et le 24/08
+n'ont rien coûté. Dater la pollution du premier doublon aurait condamné sept semaines de
+mesures correctes. ADR-0159.
+
+**Les deux bouts de l'histoire se rejoignent.** Les allers-retours commencent le 27/08 et
+deviennent quotidiens en septembre. C'est exactement la fenêtre où le retard de GitHub sur
+`paper.yml` est passé de trente minutes à plus de trois heures (ADR-0156, mesuré la veille
+et indépendamment). Cause et effet datent du même moment.
+
+**Ce qu'on ne peut plus dire sans précaution** : sur ~100 000 $ de compte, −620 $ valent
+**−0,62 point de performance cumulée**. Toute lecture de la courbe d'equity RÉELLE après le
+27/08 doit en tenir compte. Les backtests ne passent pas par le courtier et ne sont pas
+touchés ; la comparaison « modèle contre réel », si.
+
+**Trois bugs d'intro trouvés à l'œil, pas par un test.** Le `switch` de `SceneIntro`
+datait des quatre battements d'origine et citait encore une clé supprimée : les sept
+battements ajoutés tombaient tous dans `default`. Pendant les deux tiers de l'intro, la
+toile ne peignait qu'une grille et un trait. Rien ne POUVAIT le signaler — un `switch` avec
+un `default` ne se plaint jamais d'une clé qu'il ignore. Corollaire : une période sans
+donnée rendait `null`, donc cinq secondes de noir indiscernables d'une panne. Deux
+allers-retours de diagnostic y sont passés ; l'absence se DIT désormais, avec son motif.
+
+**Et la preuve défilait trop vite pour être lue** : 2,0 s par fenêtre, dont 1,3 s
+d'animation. 26 s maintenant, fenêtres à 3,4 s, transitions RESSERRÉES — allonger sans
+resserrer aurait seulement fait durer les animations. ADR-0160, avec un plancher testé sur
+les deux durées.
+
+**Mesuré.** 2779 tests passés, 75 ignorés. Build Next.js vert.
+
+**Prochaine priorité** : `data_audit` signale 3 300 majeurs sur `market.db` et 7 critiques
+sur `crypto.db` — personne ne les a regardés depuis que l'audit tourne.
+
 ## Session 2026-09-15 (19ᵉ) — Trois robots sur un seul compte
 
 **La question de l'utilisateur était la bonne** : « pourquoi a-t-il acheté et vendu si

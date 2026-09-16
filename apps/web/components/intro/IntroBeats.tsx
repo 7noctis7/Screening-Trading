@@ -33,8 +33,11 @@ const num = (v: number | null | undefined, d = 2) =>
  *  Un nombre POSÉ se lit ; un nombre qui MONTE se regarde monter — c'est la seule seconde
  *  où l'œil reste sur lui. Le compteur s'arrête net à la valeur réelle : il n'a pas le
  *  droit de dépasser puis revenir, ce serait afficher un chiffre qui n'existe pas. */
-const DEBUT_COMPTE = 0.04;
-const FIN_COMPTE = 0.34;
+const DEBUT_COMPTE = 0.03;
+// 0,25 d'un battement de 3,4 s ≈ 0,85 s de montée, puis 2,5 s de chiffre POSÉ. Allonger le
+// battement sans resserrer le compteur aurait seulement fait monter le nombre plus
+// longtemps — pas donné plus de temps pour le lire.
+const FIN_COMPTE = 0.25;
 const compte = (p: number) => easeOut(clamp01((p - DEBUT_COMPTE) / (FIN_COMPTE - DEBUT_COMPTE)));
 
 /**

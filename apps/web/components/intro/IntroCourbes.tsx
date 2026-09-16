@@ -17,8 +17,13 @@ export type Periode = {
 const pct = (v: number | null | undefined) =>
   v == null ? "n/d" : `${v >= 0 ? "+" : ""}${(v * 100).toFixed(v > 1 || v < -1 ? 0 : 1)} %`;
 
-/** Fraction du battement consacrée à la déformation d'une fenêtre vers la suivante. */
-const MORPH = 0.3;
+/** Fraction du battement consacrée à la déformation d'une fenêtre vers la suivante.
+ *
+ *  Une FRACTION, donc elle s'allonge avec le battement — ce qui n'est pas souhaitable :
+ *  la transition doit rester brève pour laisser du temps de LECTURE. À 3,4 s de battement,
+ *  0,22 donne 0,75 s de déformation puis 2,6 s de courbe immobile. C'est le bon partage :
+ *  la transition explique la continuité, elle n'est pas le sujet. */
+const MORPH = 0.22;
 
 /**
  * Robot contre référence, sur UNE fenêtre. Les deux courbes sont déjà en base 100 au même
@@ -78,8 +83,11 @@ export function IntroCourbes({ p, periode, nomRef }: {
 
     // La PREMIÈRE fenêtre se trace (on voit l'écart se creuser) ; les suivantes sont déjà
     // entières et se déforment — deux animations simultanées ne se liraient ni l'une ni l'autre.
-    const avRef = prec ? 1 : easeOut((p - 0.04) * 1.8);
-    const avNous = prec ? 1 : easeOut((p - 0.1) * 1.8);
+    // Tracé de la PREMIÈRE fenêtre. Plus vif qu'avant : sur un battement de 3,4 s, un
+    // tracé qui s'étire jusqu'aux deux tiers mangerait le temps de lecture qu'on vient
+    // d'ajouter. Il se termine désormais vers 1,5 s, laissant 1,9 s de courbe posée.
+    const avRef = prec ? 1 : easeOut((p - 0.03) * 2.6);
+    const avNous = prec ? 1 : easeOut((p - 0.07) * 2.6);
     const aRepere = easeOut(clamp01((p - (prec ? MORPH : 0.45)) * 3));
 
     ligneBase(ctx, c, cFg, prec ? 1 : easeOut(p * 4));

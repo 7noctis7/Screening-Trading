@@ -140,13 +140,22 @@ def rapport(ordres: list[dict], ecart_max_s: float = ECART_PASSAGE_S) -> dict:
                       "allers_retours": ar})
 
     doubles = [j for j in jours if j["n_passages"] > 1]
+    # DEUX DATES, ET ELLES DIFFÈRENT — l'historique réel l'a appris au module le 16/09.
+    # Les doublons du 07/07 et du 24/08 n'ont produit AUCUN aller-retour : deux passages
+    # qui aboutissent à la même cible ne se contredisent pas, ils se répètent. Le gâchis
+    # commence le 27/08. Ne rendre que la première date ferait dater la pollution de la
+    # courbe d'equity de sept semaines trop tôt — et condamnerait à tort des mesures qui
+    # sont bonnes.
+    couteux = [j for j in jours if j["allers_retours"]["n_lignes"] > 0]
     return {
         "n_jours": len(jours),
         "jours": jours,
         "jours_a_doublon": [j["jour"] for j in doubles],
-        # PREMIÈRE date à doublon : c'est à partir de là que la courbe d'equity porte du
-        # churn qu'aucune stratégie n'a décidé. La dire est plus utile que le total.
+        "jours_a_cout": [j["jour"] for j in couteux],
+        # Premier jour où le robot est passé DEUX FOIS, coûteux ou non.
         "depuis": doubles[0]["jour"] if doubles else None,
+        # Premier jour où ces passages se sont CONTREDITS — la vraie date de pollution.
+        "depuis_cout": couteux[0]["jour"] if couteux else None,
         "pnl_churn": round(sum(j["allers_retours"]["pnl"] for j in jours), 2),
         "notionnel_churn": round(sum(j["allers_retours"]["notionnel"] for j in jours), 2),
     }

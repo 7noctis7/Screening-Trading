@@ -122,8 +122,14 @@ def _passages_du_robot(jours: int = 7) -> str:
         lignes.append(f"{marque} {j['jour']}  {n} passage(s)  "
                       f"{' '.join(j['heures'])}{cout}")
     if rap["depuis"]:
-        lignes.append(f"⚠ DOUBLON depuis {rap['depuis']} — un planificateur de trop. "
-                      "Vérifier : crontab -l · systemctl list-timers · launchd · Actions")
+        # « depuis » est relatif à la FENÊTRE de 7 jours : l'écrire sans le dire ferait
+        # lire une date de début absolue qui n'en est pas une.
+        lignes.append(f"⚠ DOUBLON sur cette fenêtre dès le {rap['depuis']} — un "
+                      "planificateur de trop. Vérifier : crontab -l · "
+                      "systemctl list-timers · launchd (Mac) · Actions")
+        if rap["depuis_cout"]:
+            lignes.append(f"  allers-retours depuis le {rap['depuis_cout']} : "
+                          f"{rap['pnl_churn']:+.2f} $ — historique complet : make churn")
     return "\n".join(lignes)
 
 

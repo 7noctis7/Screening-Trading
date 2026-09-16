@@ -21,14 +21,20 @@
       ADR-0155/0156).** Actions + launchd du Mac + crontab du VPS, chacun défaisant le
       précédent. −60,79 $ le 15/09. Garde journalière branchée (le COURTIER décide),
       planification `paper.yml` retirée, Mac désinstallé. Test : `schedule:` interdit.
-- [ ] **P1 — Chiffrer le coût CUMULÉ du churn (15/09).** Actions + VPS coexistaient depuis
-      des semaines : le doublon ne date pas du 15/09, seul le Mac est intermittent. Relire
-      l'historique d'ordres Alpaca, compter les allers-retours intra-journaliers sur une
-      même ligne, et dire À PARTIR DE QUELLE DATE la courbe d'equity est biaisée. Tant que
-      ce n'est pas mesuré, `vault/10_BACKTEST_RESULTS.md` compare du paper pollué.
-- [ ] **P1 — Rien ne surveille la DÉRIVE d'un planificateur (15/09, ADR-0156).** Le retard
-      de GitHub est passé de 30 min à 201 min de médiane sans qu'aucune alerte ne le dise.
-      La garde journalière traite la CONSÉQUENCE ; la dérive elle-même reste invisible.
+- [x] **~~P1 — Chiffrer le coût CUMULÉ du churn~~ — MESURÉ (16/09, ADR-0159).**
+      `make churn` : 15 jours sur 32 à plus d'un passage, **−620,13 $** sur **594 362 $**
+      brassés. La date de pollution est le **27/08** (premier aller-retour), pas le 07/07
+      (premier doublon) — deux passages qui aboutissent à la même cible ne coûtent rien.
+- [x] **~~P1 — Rien ne surveille la DÉRIVE d'un planificateur~~ — FERMÉE (16/09).**
+      `make brief` porte une section « Passages du robot (7 j) » avec les commandes à
+      lancer. Un doublon se voit le lendemain matin.
+- [ ] **P1 — La courbe d'equity RÉELLE est biaisée depuis le 27/08 (16/09, ADR-0159).**
+      −620 $ de churn ≈ −0,62 point de performance cumulée sur un compte de ~100 k$. Toute
+      comparaison « modèle contre réel » postérieure au 27/08 doit le retrancher ou le
+      dire. À trancher : corriger la série, ou l'annoter et l'afficher telle quelle.
+- [ ] **P2 — 3 300 anomalies MAJEURES sur `market.db`, 7 CRITIQUES sur `crypto.db`
+      (16/09).** Le brief les affiche à chaque lancement et personne ne les a ouvertes.
+      Un compteur qu'on ne regarde plus ne protège de rien : `make audit` puis trancher.
 - [ ] **P2 — 91 symboles sur 929 ne rendent aucune donnée (15/09, ADR-0157).** Désormais
       comptés et nommés par `ingest_prices`. Trancher périmés / vivants : `make audit-univers`.
 - [ ] **P2 — L'historique des futures a été réécrit chaque jour jusqu'au 15/09
