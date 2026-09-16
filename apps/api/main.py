@@ -73,6 +73,7 @@ async def _log_requests(request: Request, call_next):
     return resp
 
 import threading
+from datetime import UTC
 
 _CACHE: dict | None = None
 _CACHE_TS: float = 0.0
@@ -380,8 +381,8 @@ def recommend_universe(body: RecommendationRequest, request: Request) -> dict:
     """
     if not _webhook_authorized(request):
         return {"available": False, "reason": "endpoint local uniquement"}
-    from packages.portfolio.recommendation import recommander
     from packages.portfolio.filtre_resultats import FENETRE_DEFAUT
+    from packages.portfolio.recommendation import recommander
     defaut = FENETRE_DEFAUT if os.environ.get("QUANT_EARNINGS") == "1" else 0
     fenetre = defaut if body.blackout_resultats is None else body.blackout_resultats
     snap = _snap()
@@ -618,7 +619,7 @@ def events() -> dict:
     global _EVENTS, _EVENTS_TS
     if _EVENTS is None or (time.time() - _EVENTS_TS) > 21600:
         import os
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         from packages.events import earnings_for, upcoming_ipos
         snap = _snap()
@@ -684,13 +685,15 @@ def events() -> dict:
         # est en ce moment écarté des recommandations », et la recommandation ne disait pas
         # « écarté à cause d'une publication mardi ». On publie donc LA MÊME constante, pas
         # une copie : deux nombres qui dériveraient l'un de l'autre seraient pires que rien.
-        from packages.portfolio.filtre_resultats import FENETRE_DEFAUT as _fenetre_blackout
+        from packages.portfolio.filtre_resultats import (
+            FENETRE_DEFAUT as _fenetre_blackout,
+        )
         _EVENTS = {"available": bool(earn or ipos), "earnings": earn, "ipos": ipos,
                    "blackout_jours": _fenetre_blackout,
                    "n_symbols": len(eq), "fmp": bool(os.environ.get("FMP_API_KEY")),
                    "fmp_earnings": any(e.get("source") == "FMP" for e in earn),
                    "fmp_ipos": any(p.get("source") == "FMP" for p in ipos),
-                   "as_of": datetime.now(timezone.utc).isoformat()}
+                   "as_of": datetime.now(UTC).isoformat()}
         _EVENTS_TS = time.time()
     return _EVENTS
 
@@ -1047,7 +1050,10 @@ def _enrich_cross_source(report: dict, f: Any, sym: str) -> None:
     ajusté = « non-GAAP ») au dépôt SEC EDGAR (10-K, GAAP). Construit la table de réconciliation et,
     si un écart > 10 % sur CA OU RN, lève une BLOCKING ALERT (protocole PwC). Best-effort."""
     try:
-        from packages.fundamentals.sec_provider import financial_history, quarterly_history
+        from packages.fundamentals.sec_provider import (
+            financial_history,
+            quarterly_history,
+        )
         # PÉRIODE ALIGNÉE : la source primaire (yfinance) est en TTM → on compare au TTM SEC (somme des
         # 4 derniers trimestres 10-Q), pas au dernier exercice annuel (sinon faux écarts énormes).
         period = "TTM"
@@ -1149,7 +1155,7 @@ def company_report(ticker: str, format: str = "html", theme: str = "dark") -> An
     `format` : html (page autonome), json (données), pdf (weasyprint/reportlab si présent, sinon HTML).
     `theme` : dark (défaut) | light. Sources gratuites réelles (yfinance→FMP→SEC EDGAR), repli
     synthétique hors-ligne. Note mise en cache et REGÉNÉRÉE à chaque nouveau résultat trimestriel."""
-    from fastapi.responses import HTMLResponse, FileResponse
+    from fastapi.responses import FileResponse, HTMLResponse
 
     from packages.reporting import company_report_html, company_report_pdf
     sym = (ticker or "").strip().upper()
@@ -1252,7 +1258,10 @@ def profil(horizon_annees: float = 10.0, perte_max_toleree: float = 0.25,
     (le front les garde dans son navigateur) et ne servent qu'à borner SON propre outil.
     """
     from packages.profile.investor import (
-        Profil, allocation_strategique, budget_perte, risque_retenu,
+        Profil,
+        allocation_strategique,
+        budget_perte,
+        risque_retenu,
     )
     from packages.profile.tilts import force_preuve, incliner, vues_depuis_regime
 
@@ -1356,7 +1365,50 @@ def ai_chat(body: AIChatRequest, request: Request) -> dict:
 
 @app.get("/api/ai/metrics")
 def ai_metrics() -> dict:
-    """Observabilité : fréquence effective de rejet du garde IA."""
+    """Observabilité : garde anti-hallucination ET chaîne NLP locale.
+
+    Les deux voisinent parce qu'ils décrivent le même organe vu de deux côtés : l'assistant
+    (ce qu'on a refusé de dire à l'utilisateur) et le classificateur (ce qu'on n'a pas pu
+    classer). Un taux de repli NLP qui monte et un taux de rejet du garde qui monte n'ont
+    pas la même cause, et les séparer permet de le voir.
+    """
     from packages.llm.assistant import assistant_metrics
 
-    return assistant_metrics()
+    charge = dict(assistant_metrics())
+    try:
+        from packages.nlp.sante import etat_chaine
+        # `sonder=False` : un compteur ne doit pas ouvrir de connexion. Une page qui
+        # rafraîchit ses métriques toutes les cinq secondes sonderait le fournisseur
+        # autant de fois, et une latence de voyant se prendrait pour une latence de modèle.
+        charge["nlp"] = etat_chaine(sonder=False)
+    except Exception as e:  # noqa: BLE001 — l'observabilité ne fait jamais tomber la route
+        charge["nlp"] = {"disponible": False, "motif": f"{type(e).__name__}: {e}"}
+    return charge
+
+
+@app.get("/api/ai/modeles")
+def ai_modeles() -> dict:
+    """Le modèle EN PRODUCTION, ses candidats, ses archives — lus dans le registre.
+
+    Une version écrite en dur dans le front se détache de ce qu'elle désigne : c'est
+    exactement la leçon des chiffres de la landing (ADR-0154). Ici tout vient du registre,
+    y compris le fait qu'un modèle ait été entraîné depuis un arbre git modifié — donc
+    qu'il ne soit PAS reproductible depuis ce commit.
+    """
+    from packages.nlp.sante import etat_modeles
+
+    return etat_modeles()
+
+
+@app.get("/api/ai/chaine")
+def ai_chaine() -> dict:
+    """État de la chaîne NLP locale : EN_LIGNE, DÉGRADÉ ou HORS_LIGNE, avec le motif.
+
+    DÉGRADÉ est l'état qui compte : le fournisseur répond, tout a l'air de marcher, et les
+    signaux sont pourtant des replis — parce que le modèle demandé n'est pas celui qui est
+    chargé, ou parce que le disjoncteur s'est ouvert. C'est le seul état qu'on peut avoir
+    sans s'en apercevoir.
+    """
+    from packages.nlp.sante import etat_chaine
+
+    return etat_chaine(sonder=True)

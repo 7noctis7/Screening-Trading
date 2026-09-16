@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from packages.nlp.schemas import SCHEMA
 
@@ -74,6 +74,10 @@ class PiloteLMStudio:
     modele: str
     base: str = LMSTUDIO_BASE
     nom: str = "lmstudio"
+    # Jetons du DERNIER appel. Mesurer des jetons/seconde en les ESTIMANT depuis la
+    # longueur du texte donnerait un chiffre faux de 20 à 40 % selon le tokeniseur — et un
+    # comparatif de modèles reposant sur une estimation ne compare pas les modèles.
+    dernier_usage: dict = field(default_factory=dict)
 
     def disponible(self, timeout: float = 3.0) -> bool:
         d = _obtenir(f"{self.base.rstrip('/')}/models", timeout)
@@ -97,7 +101,9 @@ class PiloteLMStudio:
         }
         d = _poster(f"{self.base.rstrip('/')}/chat/completions", charge, timeout)
         if not d:
+            self.dernier_usage = {}
             return None
+        self.dernier_usage = dict(d.get("usage") or {})
         try:
             return _json_dans(d["choices"][0]["message"]["content"])
         except Exception:  # noqa: BLE001
@@ -111,6 +117,7 @@ class PiloteOllama:
     modele: str
     base: str = OLLAMA_BASE
     nom: str = "ollama"
+    dernier_usage: dict = field(default_factory=dict)
 
     def disponible(self, timeout: float = 3.0) -> bool:
         d = _obtenir(f"{self.base.rstrip('/')}/api/tags", timeout)
@@ -131,7 +138,13 @@ class PiloteOllama:
         }
         d = _poster(f"{self.base.rstrip('/')}/api/chat", charge, timeout)
         if not d:
+            self.dernier_usage = {}
             return None
+        # Ollama nomme autrement les mêmes grandeurs : on les ramène au vocabulaire OpenAI
+        # pour que le comparatif n'ait pas à connaître le fournisseur.
+        self.dernier_usage = {"completion_tokens": d.get("eval_count"),
+                              "prompt_tokens": d.get("prompt_eval_count"),
+                              "duree_ns": d.get("eval_duration")}
         try:
             return _json_dans(d["message"]["content"])
         except Exception:  # noqa: BLE001
