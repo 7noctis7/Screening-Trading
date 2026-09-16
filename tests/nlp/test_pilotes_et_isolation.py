@@ -28,7 +28,7 @@ def _charge_envoyee(pilote, monkeypatch) -> dict:
 
     def faux_poster(url, charge, timeout):
         vu["url"], vu["charge"], vu["timeout"] = url, charge, timeout
-        return None
+        return None, "fournisseur factice"      # `(reponse, incident)`
 
     import packages.nlp.pilotes as P
     monkeypatch.setattr(P, "_poster", faux_poster)
@@ -111,7 +111,7 @@ def test_un_tableau_n_est_pas_un_objet():
 
 def test_une_reponse_mal_formee_du_fournisseur_ne_leve_pas(monkeypatch):
     import packages.nlp.pilotes as P
-    monkeypatch.setattr(P, "_poster", lambda *a, **k: {"inattendu": True})
+    monkeypatch.setattr(P, "_poster", lambda *a, **k: ({"inattendu": True}, ""))
     assert PiloteLMStudio("m").classer("s", "u", 1.0) is None
     assert PiloteOllama("m").classer("s", "u", 1.0) is None
 

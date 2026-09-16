@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 
 from packages.nlp.config import ConfigNLP
 from packages.nlp.moteur import MoteurNLP
-from packages.nlp.pilotes import choisir
+from packages.nlp.pilotes import pilote_pour
 
 # Cas d'école : un fait clairement favorable, un clairement défavorable, un non-événement.
 # Ce ne sont PAS une vérité terrain — ce sont des contrôles de bon sens. Un modèle qui les
@@ -99,11 +99,16 @@ class Resultat:
 def eprouver(modele: str, pilote_nom: str = "auto", base: str = "",
              cas: tuple = CAS, repetitions: int = REPETITIONS) -> Resultat | None:
     """Éprouve UN modèle sur le jeu commun. `None` si aucun fournisseur ne répond."""
-    p = choisir(modele, pilote_nom, base)
+    # Le plafond de jetons vient de l'ENVIRONNEMENT : un banc qui mesurerait sous un
+    # plafond différent de celui de la production classerait des modèles qu'on ne fait
+    # pas tourner.
+    env = ConfigNLP.depuis_env()
+    cfg = ConfigNLP(modele=modele, base=base, pilote=pilote_nom,
+                    max_jetons=env.max_jetons,
+                    cache_max=0)     # cache DÉSACTIVÉ : il fausserait latence et stabilité
+    p = pilote_pour(cfg)
     if p is None:
         return None
-    cfg = ConfigNLP(modele=modele, base=base, pilote=pilote_nom,
-                    cache_max=0)     # cache DÉSACTIVÉ : il fausserait latence et stabilité
     moteur = MoteurNLP(cfg=cfg, pilote=p)
     r = Resultat(modele=modele, pilote=p.nom)
     for ticker, texte, attendu in cas:

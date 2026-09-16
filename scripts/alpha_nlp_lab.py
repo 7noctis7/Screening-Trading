@@ -44,9 +44,9 @@ def _scoreur_nlp(evenements) -> list[float] | None:
     """
     from packages.nlp.config import ConfigNLP
     from packages.nlp.moteur import MoteurNLP
-    from packages.nlp.pilotes import choisir, resoudre_modele
+    from packages.nlp.pilotes import pilote_pour, resoudre_modele
     cfg = ConfigNLP.depuis_env()
-    pilote = choisir(cfg.modele, cfg.pilote, cfg.base)
+    pilote = pilote_pour(cfg)
     if pilote is None:
         return None
     # LE NOM DU MODÈLE EST UNE DONNÉE DE LA MESURE, pas un détail d'affichage : c'est

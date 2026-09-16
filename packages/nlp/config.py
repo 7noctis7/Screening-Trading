@@ -35,6 +35,12 @@ MODELE_DEFAUT = ""
 TIMEOUT_S = 12.0          # au-delà, un titre ne vaut plus qu'on attende
 CONCURRENCE = 2           # cf. budget mémoire ci-dessus
 CACHE_MAX = 256           # entrées ; une entrée pèse quelques centaines d'octets
+# Plafond de jetons produits. 400 suffit LARGEMENT au schéma (cinq champs courts) — mais
+# un modèle « à raisonnement » dépense son quota à réfléchir AVANT d'écrire, et la
+# réponse
+# est alors tronquée : `finish_reason=length`, JSON coupé, illisible. Le symptôme ne
+# ressemble pas à une troncature, il ressemble à un modèle incapable de tenir le schéma.
+MAX_JETONS = 400
 PILOTE = "auto"           # auto | lmstudio | ollama
 
 
@@ -60,6 +66,7 @@ class ConfigNLP:
     timeout_s: float = TIMEOUT_S
     concurrence: int = CONCURRENCE
     cache_max: int = CACHE_MAX
+    max_jetons: int = MAX_JETONS
 
     @staticmethod
     def depuis_env() -> ConfigNLP:
@@ -76,6 +83,7 @@ class ConfigNLP:
             timeout_s=_flottant("QUANT_NLP_TIMEOUT_S", TIMEOUT_S),
             concurrence=max(1, _entier("QUANT_NLP_CONCURRENCE", CONCURRENCE)),
             cache_max=max(0, _entier("QUANT_NLP_CACHE", CACHE_MAX)),
+            max_jetons=max(64, _entier("QUANT_NLP_MAX_JETONS", MAX_JETONS)),
         )
 
     def avec_modele(self, modele: str) -> ConfigNLP:
@@ -86,4 +94,5 @@ class ConfigNLP:
     def resume(self) -> str:
         nom = self.modele or "(à découvrir auprès du fournisseur)"
         return (f"{nom} · pilote {self.pilote} · timeout {self.timeout_s:.0f} s · "
-                f"concurrence {self.concurrence} · cache {self.cache_max}")
+                f"concurrence {self.concurrence} · cache {self.cache_max} · "
+                f"max {self.max_jetons} jetons")

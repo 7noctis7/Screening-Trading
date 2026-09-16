@@ -21,6 +21,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 
+from packages.nlp.config import MAX_JETONS
 from packages.nlp.schemas import SCHEMA
 
 LMSTUDIO_BASE = "http://localhost:1234/v1"
@@ -28,16 +29,56 @@ OLLAMA_BASE = "http://127.0.0.1:11434"
 NOM_SCHEMA = "signal_marche"
 
 
-def _poster(url: str, charge: dict, timeout: float) -> dict | None:
-    """POST JSON → dict, ou `None`. Aucune exception ne sort d'ici."""
+def _poster(url: str, charge: dict, timeout: float) -> tuple[dict | None, str]:
+    """POST JSON → `(reponse, incident)`. Aucune exception ne sort d'ici.
+
+    L'INCIDENT EST LA MOITIÉ UTILE, et il manquait. La version d'avant rendait `None`
+    sur toute panne : un 400 de LM Studio disant que le modèle ne sait pas
+    contraindre sa sortie arrivait au moteur sous le même « rien » qu'un serveur
+    éteint, et l'utilisateur lisait « REPONSE_ILLISIBLE » sans voir le motif exact.
+    """
     donnees = json.dumps(charge).encode("utf-8")
     req = urllib.request.Request(url, data=donnees,
                                  headers={"Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 — hôte local
-            return json.loads(r.read().decode("utf-8"))
-    except Exception:  # noqa: BLE001
-        return None
+            return json.loads(r.read().decode("utf-8")), ""
+    except urllib.error.HTTPError as e:
+        # Le CORPS d'une erreur HTTP porte le motif EXACT du fournisseur. Le jeter,
+        # c'est
+        # remplacer « ce modèle ne gère pas response_format » par un silence.
+        try:
+            corps = e.read().decode("utf-8", "replace").strip()[:400]
+        except Exception:  # noqa: BLE001
+            corps = ""
+        return None, f"HTTP {e.code} — {corps or e.reason}"
+    except Exception as e:  # noqa: BLE001
+        return None, f"{type(e).__name__}: {e}"
+
+
+def pourquoi_illisible(contenu: str, message: dict, fin: str, max_jetons: int) -> str:
+    """NOMMER la panne plutôt que rendre un « rien » indifférencié.
+
+    Les trois causes vues en vrai sur un modèle local n'ont pas le même remède :
+    une réponse tronquée au plafond, un modèle « à raisonnement » qui dépense son quota
+    avant d'écrire, et un JSON réellement malformé. Les confondre fait chercher un bug
+    de schéma là où il suffisait de lever un plafond.
+    """
+    if fin == "length":
+        # Le remède propose un plafond PLUS HAUT que celui en vigueur — proposer le
+        # chiffre courant n'aurait rien changé et aurait fait croire à un mur.
+        return (f"réponse TRONQUÉE au plafond de {max_jetons} jetons "
+                f"(finish_reason=length) — modèle bavard ou « à raisonnement » : "
+                f"QUANT_NLP_MAX_JETONS={max_jetons * 3}")
+    raisonnement = str(message.get("reasoning_content")
+                       or message.get("reasoning") or "")
+    if not contenu.strip() and raisonnement:
+        return ("le modèle a produit un RAISONNEMENT mais AUCUN contenu — modèle "
+                "« thinking » : désactiver le raisonnement dans LM Studio, ou "
+                "prendre la variante « instruct »")
+    if not contenu.strip():
+        return "contenu VIDE — le fournisseur a répondu sans rien écrire"
+    return f"JSON illisible · début reçu : {contenu.strip()[:160]!r}"
 
 
 def _obtenir(url: str, timeout: float) -> dict | None:
@@ -78,6 +119,9 @@ class PiloteLMStudio:
     # longueur du texte donnerait un chiffre faux de 20 à 40 % selon le tokeniseur — et un
     # comparatif de modèles reposant sur une estimation ne compare pas les modèles.
     dernier_usage: dict = field(default_factory=dict)
+    dernier_incident: str = ""
+    derniere_reponse: dict | None = None
+    max_jetons: int = MAX_JETONS
 
     def disponible(self, timeout: float = 3.0) -> bool:
         d = _obtenir(f"{self.base.rstrip('/')}/models", timeout)
@@ -93,21 +137,28 @@ class PiloteLMStudio:
             "messages": [{"role": "system", "content": systeme},
                          {"role": "user", "content": utilisateur}],
             "temperature": 0.0,       # une classification n'a pas à varier d'un appel à l'autre
-            "max_tokens": 400,
+            "max_tokens": self.max_jetons,
             "response_format": {
                 "type": "json_schema",
                 "json_schema": {"name": NOM_SCHEMA, "strict": True, "schema": SCHEMA},
             },
         }
-        d = _poster(f"{self.base.rstrip('/')}/chat/completions", charge, timeout)
+        url = f"{self.base.rstrip('/')}/chat/completions"
+        d, incident = _poster(url, charge, timeout)
+        self.derniere_reponse, self.dernier_incident = d, incident
         if not d:
             self.dernier_usage = {}
             return None
         self.dernier_usage = dict(d.get("usage") or {})
-        try:
-            return _json_dans(d["choices"][0]["message"]["content"])
-        except Exception:  # noqa: BLE001
-            return None
+        choix = (d.get("choices") or [{}])[0]
+        message = choix.get("message") or {}
+        contenu = str(message.get("content") or "")
+        charge_lue = _json_dans(contenu)
+        if charge_lue is None:
+            fin = str(choix.get("finish_reason") or "")
+            self.dernier_incident = pourquoi_illisible(contenu, message, fin,
+                                                       self.max_jetons)
+        return charge_lue
 
 
 @dataclass
@@ -118,6 +169,9 @@ class PiloteOllama:
     base: str = OLLAMA_BASE
     nom: str = "ollama"
     dernier_usage: dict = field(default_factory=dict)
+    dernier_incident: str = ""
+    derniere_reponse: dict | None = None
+    max_jetons: int = MAX_JETONS
 
     def disponible(self, timeout: float = 3.0) -> bool:
         d = _obtenir(f"{self.base.rstrip('/')}/api/tags", timeout)
@@ -136,7 +190,8 @@ class PiloteOllama:
             "format": SCHEMA,
             "options": {"temperature": 0.0},
         }
-        d = _poster(f"{self.base.rstrip('/')}/api/chat", charge, timeout)
+        d, incident = _poster(f"{self.base.rstrip('/')}/api/chat", charge, timeout)
+        self.derniere_reponse, self.dernier_incident = d, incident
         if not d:
             self.dernier_usage = {}
             return None
@@ -145,10 +200,13 @@ class PiloteOllama:
         self.dernier_usage = {"completion_tokens": d.get("eval_count"),
                               "prompt_tokens": d.get("prompt_eval_count"),
                               "duree_ns": d.get("eval_duration")}
-        try:
-            return _json_dans(d["message"]["content"])
-        except Exception:  # noqa: BLE001
-            return None
+        message = d.get("message") or {}
+        contenu = str(message.get("content") or "")
+        charge_lue = _json_dans(contenu)
+        if charge_lue is None:
+            self.dernier_incident = pourquoi_illisible(
+                contenu, message, str(d.get("done_reason") or ""), self.max_jetons)
+        return charge_lue
 
 
 def resoudre_modele(pilote, demande: str = "") -> tuple[str, str]:
@@ -196,7 +254,7 @@ def resoudre_modele(pilote, demande: str = "") -> tuple[str, str]:
 
 
 def choisir(modele: str, pilote: str = "auto", base: str = "",
-            timeout: float = 3.0):
+            timeout: float = 3.0, max_jetons: int = MAX_JETONS):
     """Le pilote à utiliser, ou `None` si aucun fournisseur ne répond.
 
     En mode `auto`, LM Studio est essayé d'abord : c'est ce qui est installé sur le poste
@@ -204,11 +262,24 @@ def choisir(modele: str, pilote: str = "auto", base: str = "",
     tranche quand les deux tournent.
     """
     if pilote == "lmstudio":
-        return PiloteLMStudio(modele, base or LMSTUDIO_BASE)
+        return PiloteLMStudio(modele, base or LMSTUDIO_BASE, max_jetons=max_jetons)
     if pilote == "ollama":
-        return PiloteOllama(modele, base or OLLAMA_BASE)
-    for p in (PiloteLMStudio(modele, base or LMSTUDIO_BASE),
-              PiloteOllama(modele, base or OLLAMA_BASE)):
+        return PiloteOllama(modele, base or OLLAMA_BASE, max_jetons=max_jetons)
+    for p in (PiloteLMStudio(modele, base or LMSTUDIO_BASE, max_jetons=max_jetons),
+              PiloteOllama(modele, base or OLLAMA_BASE, max_jetons=max_jetons)):
         if p.disponible(timeout):
             return p
     return None
+
+
+def pilote_pour(cfg, timeout: float = 3.0):
+    """Le pilote décrit par une `ConfigNLP`, tous réglages compris.
+
+    POURQUOI ELLE EXISTE. `choisir()` prend des champs séparés, et six appelants les
+    recopiaient à la main. Le jour où `max_jetons` est apparu, TROIS d'entre eux l'ont
+    laissé au défaut sans rien dire : `QUANT_NLP_MAX_JETONS=1200` était accepté,
+    affiché, et sans effet sur la requête. Un réglage muet est pire qu'un réglage
+    absent — l'absent se voit. Passer la config ENTIÈRE ne laisse rien à oublier.
+    """
+    return choisir(cfg.modele, cfg.pilote, cfg.base, timeout=timeout,
+                   max_jetons=cfg.max_jetons)

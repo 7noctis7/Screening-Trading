@@ -33,7 +33,7 @@ from collections import OrderedDict, deque
 from packages.nlp import invites
 from packages.nlp.config import ConfigNLP
 from packages.nlp.disjoncteur import Disjoncteur
-from packages.nlp.pilotes import choisir, resoudre_modele
+from packages.nlp.pilotes import pilote_pour, resoudre_modele
 from packages.nlp.schemas import SignalNLP, repli, valider
 
 LATENCES_GARDEES = 200        # de quoi calculer une médiane sans grossir sans fin
@@ -65,7 +65,7 @@ class MoteurNLP:
         cela, un `modele` vide partirait tel quel dans la requête et le fournisseur
         répondrait avec ce qui traîne, sous un nom que personne n'a servi."""
         if not self._pilote_resolu:
-            p = choisir(self.cfg.modele, self.cfg.pilote, self.cfg.base)
+            p = pilote_pour(self.cfg)
             if p is not None and not self.cfg.modele:
                 p.modele, self.motif_modele = resoudre_modele(p, "")
             self._pilote = p
@@ -146,7 +146,9 @@ class MoteurNLP:
         except TimeoutError:
             self._compteurs["timeouts"] += 1
             self.disjoncteur.echec()
-            return self._repli(ticker, "TIMEOUT", version)
+            motif = (f"TIMEOUT après {self.cfg.timeout_s:.0f} s "
+                     f"(plafond {self.cfg.max_jetons} jetons)")
+            return self._repli(ticker, motif, version)
         except asyncio.CancelledError:
             raise                      # une annulation est une décision de l'appelant
         except Exception:              # noqa: BLE001 — aucune panne ne remonte
@@ -158,7 +160,13 @@ class MoteurNLP:
         if brut is None:
             self._compteurs["invalides"] += 1
             self.disjoncteur.echec()
-            return self._repli(ticker, "REPONSE_ILLISIBLE", version)
+            # LE POURQUOI VOYAGE AVEC L'ÉCHEC. « REPONSE_ILLISIBLE » seul envoie
+            # chercher
+            # un défaut de schéma alors que le pilote sait déjà si la réponse était
+            # tronquée, vide, ou refusée par le fournisseur — et le remède diffère.
+            detail = str(getattr(p, "dernier_incident", "") or "")
+            motif = f"REPONSE_ILLISIBLE · {detail}" if detail else "REPONSE_ILLISIBLE"
+            return self._repli(ticker, motif, version)
 
         self.disjoncteur.succes()
         signal = valider(brut, ticker, modele=self._modele(), version_invite=version)

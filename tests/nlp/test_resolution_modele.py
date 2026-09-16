@@ -103,15 +103,15 @@ def test_le_signal_est_estampille_du_modele_SERVI_pas_du_souhait_vide():
     m = MoteurNLP(cfg=ConfigNLP(modele=""), pilote=None)
     m._pilote_resolu = False          # la résolution paresseuse n'a pas encore eu lieu
 
-    # `choisir()` est court-circuité : ce test porte sur la RÉSOLUTION DU NOM, pas sur la
-    # découverte du fournisseur, et aucun test ne doit dépendre d'un port ouvert.
+    # La découverte du fournisseur est court-circuitée : ce test porte sur la RÉSOLUTION
+    # DU NOM, et aucun test ne doit dépendre d'un port ouvert.
     import packages.nlp.moteur as mod
-    ancien = mod.choisir
-    mod.choisir = lambda *a, **k: p
+    ancien = mod.pilote_pour
+    mod.pilote_pour = lambda *a, **k: p
     try:
         s = asyncio.run(m.classer("AAPL", "texte"))
     finally:
-        mod.choisir = ancien
+        mod.pilote_pour = ancien
     assert s.modele == "qwen3.5-9b-instruct-mlx"
     assert m.motif_modele and "seul modèle" in m.motif_modele
 

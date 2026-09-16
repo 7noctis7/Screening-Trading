@@ -33,6 +33,21 @@ CAS = [
 ]
 
 
+def config_depuis(modele: str | None, pilote: str | None):
+    """La config de l'environnement, plus les deux réglages de la ligne de commande.
+
+    `replace` plutôt qu'un `ConfigNLP(...)` recopié champ par champ : la recopie a
+    silencieusement PERDU `max_jetons` le jour où le champ est apparu — configurer
+    `QUANT_NLP_MAX_JETONS=1200` n'avait alors aucun effet, et le résumé affichait 400
+    sans que rien ne signale l'écart. Un constructeur énumératif oublie ; `replace` non.
+    """
+    from dataclasses import replace
+
+    from packages.nlp.config import ConfigNLP
+    surcharges = {k: v for k, v in (("modele", modele), ("pilote", pilote)) if v}
+    return replace(ConfigNLP.depuis_env(), **surcharges)
+
+
 def _fournisseur(cfg):
     """Le pilote ET le modèle servi. Rend `(pilote, cfg)` — `(None, cfg)` si muet.
 
@@ -40,8 +55,8 @@ def _fournisseur(cfg):
     qu'il expose, et `resoudre_modele` tranche. Le motif est imprimé à chaque fois — une
     résolution silencieuse serait une supposition, simplement mieux cachée.
     """
-    from packages.nlp.pilotes import choisir, resoudre_modele
-    p = choisir(cfg.modele, cfg.pilote, cfg.base)
+    from packages.nlp.pilotes import pilote_pour, resoudre_modele
+    p = pilote_pour(cfg)
     if p is None:
         print("⛔ Aucun fournisseur local ne répond.")
         print("   LM Studio : ouvrir l'onglet « Developer » → Start Server (port 1234)")
@@ -67,8 +82,12 @@ async def _essais(moteur) -> int:
     print("\n  " + "─" * 78)
     for ticker, texte, attendu in CAS:
         s = await moteur.classer(ticker, texte)
-        ok = "✓" if s.sentiment == attendu else ("⛔" if s.repli else "≠")
-        justes += int(s.sentiment == attendu)
+        # UN REPLI N'EST PAS UNE RÉPONSE. Il rend NEUTRAL par convention ; sur un cas
+        # dont la réponse attendue EST « NEUTRAL », l'ancien comptage marquait ✓ et
+        # créditait un point. Le 16/09, un « 1/3 » affiché valait en réalité 0/3 — le
+        # chiffre flattait exactement là où la chaîne était en panne.
+        ok = "⛔" if s.repli else ("✓" if s.sentiment == attendu else "≠")
+        justes += int(not s.repli and s.sentiment == attendu)
         lat = f"{s.latence_ms:.0f} ms" if s.latence_ms else "—"
         print(f"  {ok} {ticker:5s} attendu {attendu:8s} → {s.sentiment:8s} "
               f"conf {s.confiance:.2f} · {s.horizon:9s} · {lat}")
@@ -100,6 +119,8 @@ def _verdict(justes: int, moteur) -> int:
         print("  → ou réduire la charge mémoire : QUANT_NLP_CONCURRENCE=1")
     if m["replis"]:
         print("\n⛔ Des replis : la chaîne ne tient pas. Voir les motifs ci-dessus.")
+        print("  → voir la réponse brute du fournisseur : make nlp-check ARGS=--brut")
+        print("  → ou l'autre modèle exposé : make nlp-check ARGS=\"--modele <id>\"")
         return 1
     if justes < len(CAS):
         # Un désaccord n'est PAS un échec technique : le modèle a répondu, correctement
@@ -117,20 +138,33 @@ def main() -> int:
     ap.add_argument("--pilote", default=None, choices=["auto", "lmstudio", "ollama"])
     ap.add_argument("--texte", default=None, help="tester UN texte libre sur --ticker")
     ap.add_argument("--ticker", default="AAPL")
+    ap.add_argument("--brut", action="store_true",
+                    help="afficher la réponse BRUTE du fournisseur (dernier recours)")
     a = ap.parse_args()
 
-    from packages.nlp.config import ConfigNLP
     from packages.nlp.moteur import MoteurNLP
-    base = ConfigNLP.depuis_env()
-    cfg = ConfigNLP(modele=a.modele or base.modele, base=base.base,
-                    pilote=a.pilote or base.pilote, timeout_s=base.timeout_s,
-                    concurrence=base.concurrence, cache_max=base.cache_max)
+    cfg = config_depuis(a.modele, a.pilote)
     print(f"\n  Configuration : {cfg.resume()}")
     p, cfg = _fournisseur(cfg)
     if p is None:
         return 2
     print(f"  Configuration résolue : {cfg.resume()}")
     moteur = MoteurNLP(cfg=cfg, pilote=p)
+
+    if a.brut:
+        # LE DERNIER RECOURS, et il doit exister. Quand les motifs ne suffisent pas, on
+        # regarde ce que le fournisseur a VRAIMENT renvoyé — plutôt que de deviner à
+        # partir d'un symptôme.
+        import json
+        asyncio.run(moteur.classer(a.ticker, a.texte or CAS[0][1]))
+        print("\n  ── réponse brute du fournisseur " + "─" * 46)
+        brut = getattr(p, "derniere_reponse", None)
+        if brut:
+            print(json.dumps(brut, indent=2, ensure_ascii=False)[:2000])
+        else:
+            print(f"  (aucune réponse) — {getattr(p, 'dernier_incident', '—')}")
+        print("  " + "─" * 78)
+        return 0
 
     if a.texte:
         s = asyncio.run(moteur.classer(a.ticker, a.texte))

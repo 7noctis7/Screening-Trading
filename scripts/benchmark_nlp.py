@@ -30,9 +30,12 @@ sys.path.insert(0, str(ROOT))
 
 def _modeles_disponibles(pilote_nom: str, base: str) -> list[str]:
     from packages.nlp.config import ConfigNLP
-    from packages.nlp.pilotes import choisir
+    from dataclasses import replace
+
+    from packages.nlp.pilotes import pilote_pour
     cfg = ConfigNLP.depuis_env()
-    p = choisir(cfg.modele, pilote_nom or cfg.pilote, base or cfg.base)
+    p = pilote_pour(replace(cfg, pilote=pilote_nom or cfg.pilote,
+                            base=base or cfg.base))
     return p.modeles() if p is not None else []
 
 

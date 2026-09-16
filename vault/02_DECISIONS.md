@@ -2,6 +2,41 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0167 — Une panne doit nommer son remède, et un score ne doit jamais flatter (2026-09-16)
+
+**Contexte.** Premier `nlp-check` réel sur le Mac (LM Studio, `qwen/qwen3.5-9b`) : trois
+échecs — deux `TIMEOUT`, un `REPONSE_ILLISIBLE` — et **aucun ne disait quoi changer**. Or
+les remèdes sont exclusifs : lever un plafond de jetons, désactiver un mode « raisonnement »,
+ou corriger l'invite. Un motif indifférencié envoie chercher un défaut de schéma là où il
+suffisait d'un réglage.
+
+**Décision — le pourquoi voyage avec l'échec.** `_poster` rend `(reponse, incident)` et
+capture le **corps** des erreurs HTTP (LM Studio y écrit le motif exact). `pourquoi_illisible`
+distingue quatre causes : réponse **tronquée** au plafond (`finish_reason=length`), modèle
+**« thinking »** qui a produit un raisonnement sans contenu, contenu **vide**, et JSON
+réellement malformé — ce dernier montrant les 160 premiers caractères reçus. Le motif
+remonte jusqu'au rapport, et le plafond devient un réglage (`QUANT_NLP_MAX_JETONS`), le
+remède proposant toujours un plafond **plus haut** que celui en vigueur.
+
+**DEUX VRAIS DÉFAUTS, trouvés en éprouvant le correctif contre un faux fournisseur.**
+
+1. **Le score flattait au moment exact de la panne.** Un repli rend `NEUTRAL` par
+   convention. Sur le cas dont la réponse attendue EST `NEUTRAL`, l'ancien comptage marquait
+   ✓ et créditait un point : le **« 1/3 » affiché valait 0/3**. Le chiffre était le plus
+   faux là où la chaîne était la plus cassée. Un repli ne compte plus jamais comme un accord.
+2. **Un réglage accepté, affiché, et sans le moindre effet.** `max_jetons` était recopié à
+   la main par six appelants ; **trois** l'ont laissé au défaut à son ajout.
+   `QUANT_NLP_MAX_JETONS=1200` passait la config, s'affichait dans le résumé, et n'atteignait
+   jamais la requête. `pilote_pour(cfg)` passe désormais la config ENTIÈRE — il n'y a plus
+   rien à recopier — et un test AST interdit tout appel direct à `choisir()` hors de
+   `pilotes.py`, pour que le prochain champ ajouté ne puisse pas se perdre de la même façon.
+
+**Conséquence.** Un réglage muet est pire qu'un réglage absent : l'absent se voit. Et un
+score qui compte une non-mesure comme une réussite est la troisième occurrence de la même
+famille sur ce projet (zéros qui ressemblent à des absences, capitulations comptées comme
+sorties). La règle se durcit : **toute non-mesure doit être exclue du numérateur ET du
+dénominateur, ou signalée — jamais convertie en succès.**
+
 ## ADR-0166 — Aucun identifiant de modèle n'est écrit dans le code (2026-09-16)
 
 **Contexte.** `config.py` portait `MODELE_DEFAUT = "qwen2.5-7b-instruct"` — un nom plausible,

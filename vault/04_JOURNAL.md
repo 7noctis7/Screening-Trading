@@ -1,5 +1,41 @@
 # 04 — JOURNAL
 
+## Session 2026-09-16 (24ᵉ) — Trois échecs muets, et deux chiffres qui mentaient derrière
+
+**La résolution de modèle a fonctionné du premier coup** : `2 modèle(s) exposé(s)` →
+`qwen/qwen3.5-9b`, avec le motif affiché et le remède nommé. Le nom n'est plus supposé.
+
+**Mais les trois cas d'école ont échoué, et aucun ne disait quoi faire** : deux `TIMEOUT`,
+un `REPONSE_ILLISIBLE`. Trois remèdes possibles, exclusifs, et rien pour choisir. C'est
+l'aveuglement qui était le défaut, pas l'échec.
+
+**Corrigé** : `_poster` rend `(reponse, incident)` et capture le CORPS des erreurs HTTP —
+LM Studio y écrit le motif exact, on le jetait. `pourquoi_illisible` sépare quatre causes :
+tronquée au plafond, modèle « thinking » sans contenu, contenu vide, JSON malformé (avec le
+début de ce qui a été reçu). Éprouvé contre un faux fournisseur qui rejoue les trois pannes :
+les trois motifs sortent justes. ADR-0167.
+
+**ET C'EST EN L'ÉPROUVANT QUE DEUX VRAIS DÉFAUTS SONT SORTIS.**
+
+**Le « 1/3 » valait 0/3.** Un repli rend `NEUTRAL` par convention ; sur le cas KO — dont la
+réponse attendue EST `NEUTRAL` — le comptage marquait ✓ et créditait un point. **Le score
+était le plus faux exactement là où la chaîne était la plus cassée.** Troisième occurrence
+de cette famille sur ce projet. La règle se durcit : une non-mesure ne devient jamais un
+succès.
+
+**Un réglage accepté, affiché, inerte.** `QUANT_NLP_MAX_JETONS=1200` passait la config,
+s'affichait dans le résumé — et n'atteignait pas la requête. `max_jetons` était recopié à la
+main par six appelants ; trois l'avaient laissé au défaut à son ajout. `pilote_pour(cfg)`
+passe la config entière, et un test AST interdit désormais tout appel direct à `choisir()`
+hors de `pilotes.py` : le prochain champ ajouté ne pourra plus se perdre en route.
+
+**Ce qu'il reste à trancher sur le Mac, et c'est une mesure, pas une supposition** : le
+prochain `make nlp-check` nommera lui-même la cause parmi les quatre. Si c'est la troncature
+ou le raisonnement, le remède est dans le message ; sinon `make nlp-check ARGS=--brut`
+montre la réponse telle que le fournisseur l'a rendue.
+
+`make test` : **3 072 passed, 80 skipped**. Zéro nouvelle alerte ruff.
+
 ## Session 2026-09-16 (23ᵉ) — Le corpus existe enfin, et un nom de modèle qui mentait
 
 **LE CORPUS N'EST PLUS UNE INTENTION.** Premier `make news` sur le VPS : **2 375 titres ·

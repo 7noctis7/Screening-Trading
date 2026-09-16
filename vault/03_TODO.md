@@ -36,9 +36,10 @@
       registre` sur le VPS : « aucun entraînement tracé ». L'artefact à AUC 0,504 existe
       et sert, mais aucune trace ne dit de quelles données ni de quel commit il vient.
       Tant que c'est vrai, `rollback` n'a rien vers quoi revenir.
-- [ ] **P1 — Éprouver la chaîne NLP sur le Mac (16/09).** `make nlp-check` avec LM Studio.
-      Le modèle n'est plus nommé dans le code : il est DEMANDÉ au fournisseur (ADR-0166).
-      Distingue un échec technique (code 1) d'un désaccord du modèle (code 0).
+- [ ] **P1 — Éprouver la chaîne NLP sur le Mac (16/09).** 1ʳᵉ tentative : modèle résolu
+      (`qwen/qwen3.5-9b`), mais **0/3** — 2 timeouts + 1 réponse illisible, sans motif
+      exploitable. Les motifs nomment désormais la cause et le remède (ADR-0167).
+      Relancer `make nlp-check`, puis `ARGS=--brut` si le message ne suffit pas.
 - [ ] **P1 — `make alpha-nlp` dès ~200 titres au corpus (16/09, ADR-0163).** C'est ce
       verdict qui conditionne l'étape 6 (Lambda GPU). Poids NLP validé, ou ZÉRO.
 - [ ] **P1 — L'AUC du modèle de production est 0,504 (16/09, ADR-0161).** Indiscernable du

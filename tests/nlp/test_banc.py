@@ -43,12 +43,12 @@ class PiloteScripte:
 
 def _eprouver(pilote, **kw):
     import packages.nlp.banc as B
-    original = B.choisir
-    B.choisir = lambda *a, **k: pilote
+    original = B.pilote_pour
+    B.pilote_pour = lambda *a, **k: pilote
     try:
         return B.eprouver("factice", **kw)
     finally:
-        B.choisir = original
+        B.pilote_pour = original
 
 
 # ─── Le jeu commun ─────────────────────────────────────────────────────────────────────
@@ -135,12 +135,12 @@ def test_un_repli_n_est_pas_compte_comme_conforme():
 
 def test_aucun_fournisseur_rend_None():
     import packages.nlp.banc as B
-    original = B.choisir
-    B.choisir = lambda *a, **k: None
+    original = B.pilote_pour
+    B.pilote_pour = lambda *a, **k: None
     try:
         assert B.eprouver("absent") is None
     finally:
-        B.choisir = original
+        B.pilote_pour = original
 
 
 # ─── Accord ────────────────────────────────────────────────────────────────────────────

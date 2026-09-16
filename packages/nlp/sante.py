@@ -52,8 +52,8 @@ def etat_chaine(moteur=None, sonder: bool = True) -> dict:
 def _pilote(moteur, cfg):
     if moteur is not None:
         return moteur.pilote()
-    from packages.nlp.pilotes import choisir
-    return choisir(cfg.modele, cfg.pilote, cfg.base)
+    from packages.nlp.pilotes import pilote_pour
+    return pilote_pour(cfg)
 
 
 def _verdict(demande: str, charges: list[str], disjoncteur: dict | None) -> dict:
