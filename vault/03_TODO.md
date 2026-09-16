@@ -21,6 +21,9 @@
       ADR-0155/0156).** Actions + launchd du Mac + crontab du VPS, chacun défaisant le
       précédent. −60,79 $ le 15/09. Garde journalière branchée (le COURTIER décide),
       planification `paper.yml` retirée, Mac désinstallé. Test : `schedule:` interdit.
+- [x] **~~P0 — Trois planificateurs~~ — CORRECTIF VÉRIFIÉ (16/09).** `make churn` du
+      16/09 : **1 passage · 8 ordres · 0 aller-retour**. Premier jour propre. La garde
+      journalière tient.
 - [x] **~~P1 — Chiffrer le coût CUMULÉ du churn~~ — MESURÉ (16/09, ADR-0159).**
       `make churn` : 15 jours sur 32 à plus d'un passage, **−620,13 $** sur **594 362 $**
       brassés. La date de pollution est le **27/08** (premier aller-retour), pas le 07/07
@@ -40,9 +43,9 @@
 - [x] **~~P1 — Éprouver la chaîne NLP sur le Mac~~ — ABANDONNÉE (16/09, ADR-0170).**
       Quatre tentatives, zéro classification. La chaîne locale est RETIRÉE du dépôt.
 - [ ] **P1 — Mesurer l'alpha du LEXIQUE sur le corpus (16/09, ADR-0170).** `make
-      alpha-lexique` LIVRÉ — sans LLM, et il nomme la cause quand il ne peut pas conclure
-      (symboles sans barres vs corpus trop récent). **À lancer sur le VPS**, seule machine
-      à avoir le corpus ET les prix.
+      alpha-lexique` LIVRÉ et LANCÉ (16/09) : 199/199 symboles ont leurs prix, mais la
+      première collecte datant du 16/09, `utilisable_le` vaut le 16/09 pour les 2 375
+      titres — zéro jour d'observation. **Relancer vers le 23/09** (ADR-0174).
 - [ ] **P1 — L'AUC du modèle de production est 0,504 (16/09, ADR-0161).** Indiscernable du
       hasard, Brier à 0,0004 du seuil de rejet, DSR jamais calculé. Aucune accélération de
       calcul ne corrige une absence de signal — c'est le vrai sujet ML du projet.

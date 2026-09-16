@@ -2,6 +2,51 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0173 — La pollution se date au premier DOUBLON coûteux, pas au premier A/R (2026-09-16)
+
+**Mon propre défaut, et il portait une affirmation PUBLIQUE.** L'annotation livrée quelques
+heures plus tôt lisait `depuis_cout` — le premier aller-retour tout court — et affichait
+« depuis le 23/06/2026 ». Or le 23/06 est un jour à **UN SEUL passage** : son A/R de −1,56 $
+est du va-et-vient intra-passage, pas deux robots qui se défont. Dater la double
+planification du 23/06 lui attribuait **neuf semaines qu'elle n'a pas causées**, et
+condamnait à tort toutes les mesures de la période.
+
+Le plus embarrassant : `passages.py` PORTAIT DÉJÀ ce raisonnement en commentaire — « ne
+rendre que la première date ferait dater la pollution de sept semaines trop tôt » — pour
+distinguer doublon et doublon coûteux. J'ai ajouté un troisième cas sans le voir.
+
+**Décision.** `rapport()` rend une troisième population : `depuis_doublon_cout`,
+`jours_a_doublon_cout`, `pnl_doublon` et `pnl_hors_doublon` — l'intersection des jours à
+doublon ET à aller-retour. L'annotation lit celle-là. Le churn intra-passage est dit
+SÉPARÉMENT : le taire ferait croire que tout le va-et-vient vient de la double
+planification, et le corriger un jour laisserait un écart inexpliqué.
+
+**Chiffres réels du 16/09** : −618,57 $ imputables aux doublons depuis le 27/08, sur
+13 jours ; −1,56 $ d'intra-passage depuis le 23/06. Total inchangé : −620,13 $.
+
+**LE CORRECTIF DE PLANIFICATION EST VÉRIFIÉ.** Le 16/09 : `1 passage [19:08:35] · 8 ordres ·
+0 A/R`. Premier jour propre depuis le 15/09. La garde journalière tient.
+
+## ADR-0174 — Une date de publication n'est pas une date utilisable (2026-09-16)
+
+**Le symptôme.** `make alpha-lexique` sur le VPS : « 2 375 titres · 71 jours · 2026-05-19 →
+2026-09-16 », puis « aucun titre n'a 5 jours de bourse APRÈS son entrée ». Les deux phrases
+se contredisent en apparence, et la seconde envoie chercher un bug.
+
+**Elles ne se contredisent pas.** Les dates affichées sont des dates de PUBLICATION. La date
+qui gouverne l'étude d'événement est `utilisable_le = max(date, vu_le)` — et la première
+collecte a eu lieu le 16/09. Les 2 375 titres ont donc TOUS la même date utilisable, celle
+du jour. Le corpus couvre quatre mois de publications et zéro jour d'observation exploitable.
+
+**C'est le fonctionnement voulu**, pas un défaut : 84,2 % des titres sont rétro-publiés, et
+les entrer à leur date de parution serait exactement la fuite que le schéma à deux
+horodatages existe pour empêcher. Ce qui manquait, c'est de le DIRE.
+
+**Décision.** Le diagnostic affiche la fourchette des dates UTILISABLES, combien de titres
+tombent sur la plus récente, et conclut : le banc devient mesurable environ une semaine après
+la PREMIÈRE COLLECTE, pas après la plus ancienne publication. Un diagnostic qui laisse croire
+à une contradiction est pire qu'un silence — il fait chercher là où il n'y a rien.
+
 ## ADR-0172 — On annote la courbe réelle, on ne la corrige pas (2026-09-16)
 
 **Contexte.** `make churn` a mesuré **−620,13 $** sur 594 362 $ brassés, sur 14 jours, depuis

@@ -48,11 +48,25 @@ def test_l_absence_de_prix_renvoie_vers_LA_MACHINE_qui_les_a(diagnostic):
 
 def test_avec_TOUS_les_prix_la_cause_est_le_TEMPS_pas_les_donnees(diagnostic):
     """Aucune ambiguïté possible : si toutes les barres sont là, il ne manque que des
-    jours de bourse après l'entrée."""
-    d = diagnostic(CORPUS, {"AAPL": [1], "MSFT": [1], "XYZ": [1]}, 5)
+    séances après la date UTILISABLE."""
+    corpus = [{**r, "date": "2026-05-19", "vu_le": "2026-09-16"} for r in CORPUS]
+    d = diagnostic(corpus, {"AAPL": [1], "MSFT": [1], "XYZ": [1]}, 5)
     assert "les prix sont là" in d
-    assert "trop récent" in d and "attendre" in d
     assert "VPS" not in d, "ne pas renvoyer ailleurs quand ce n'est pas la cause"
+
+
+def test_le_diagnostic_montre_les_dates_UTILISABLES_pas_de_publication(diagnostic):
+    """LE PIÈGE DU 16/09. Le corpus s'étalait sur quatre mois de publications et n'avait
+    AUCUNE date utilisable ancienne : la première collecte ayant eu lieu ce jour-là,
+    `max(date, vu_le)` valait le 16/09 pour les 2 375 titres. Afficher « corpus trop
+    récent » à côté d'un « 19/05 → 16/09 » se lit comme une contradiction."""
+    corpus = [{"symbol": "AAPL", "date": "2026-05-19", "vu_le": "2026-09-16"},
+              {"symbol": "MSFT", "date": "2026-06-01", "vu_le": "2026-09-16"}]
+    d = diagnostic(corpus, {"AAPL": [1], "MSFT": [1]}, 5)
+    assert "UTILISABLES" in d and "2026-09-16" in d
+    assert "2 titre(s) sur 2" in d
+    assert "découverts ce jour-là, pas publiés ce jour-là" in d
+    assert "PREMIÈRE" in d and "collecte" in d
 
 
 # ─── Ce que le banc n'est PAS

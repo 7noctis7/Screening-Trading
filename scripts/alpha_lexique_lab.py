@@ -74,8 +74,27 @@ def _diagnostic(corpus: list[dict], data: dict, hold: int) -> str:
         lignes.append("→ cette machine n'a pas la base de prix : lancer le banc SUR LE "
                       "VPS, ou ingérer les prix ici (`make daily`).")
     else:
-        lignes.append(f"→ les prix sont là : aucun titre n'a {hold} jour(s) de bourse "
-                      "APRÈS son entrée. Le corpus est trop récent, il faut attendre.")
+        # LA DATE QUI COMPTE N'EST PAS CELLE DE PUBLICATION. Un corpus qui s'étale sur
+        # quatre mois de publications peut n'avoir AUCUNE date utilisable ancienne :
+        # si la
+        # première collecte a eu lieu aujourd'hui, `utilisable_le = max(date, vu_le)`
+        # vaut
+        # aujourd'hui pour TOUS les titres. Afficher « corpus trop récent » à côté d'un
+        # « 19/05 → 16/09 » se lit comme une contradiction, et envoie chercher un bug.
+        from packages.sentiment.corpus import utilisable_le
+        jours = sorted(j for j in (utilisable_le(r) for r in corpus) if j)
+        if not jours:
+            lignes.append("→ aucun titre n'a de date utilisable : corpus illisible.")
+            return "\n  ".join(lignes)
+        dernier = jours[-1]
+        au_dernier = sum(1 for j in jours if j == dernier)
+        lignes.append("les prix sont là. Dates UTILISABLES "
+                      f"(max(publication, vu_le)) : {jours[0]} → {dernier}")
+        lignes.append(f"{au_dernier} titre(s) sur {len(jours)} sont utilisables au "
+                      f"{dernier} — découverts ce jour-là, pas publiés ce jour-là")
+        lignes.append(f"→ il faut {hold} séance(s) APRÈS la date utilisable. Le banc "
+                      "deviendra mesurable environ une semaine après la PREMIÈRE "
+                      "collecte, pas après la plus ancienne publication.")
     return "\n  ".join(lignes)
 
 

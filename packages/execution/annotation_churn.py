@@ -66,13 +66,21 @@ def annotation(rapport: dict | None, capital: float | None = None,
                 "motif": "historique du courtier illisible — churn NON MESURÉ, "
                          "ce qui n'est pas la même chose qu'un churn nul"}
 
-    depuis = rapport.get("depuis_cout")
-    pnl = float(rapport.get("pnl_churn") or 0.0)
+    # LA DATE QUI COMPTE EST CELLE DU PREMIER DOUBLON QUI SE CONTREDIT, pas celle du
+    # premier aller-retour tout court. Mesuré le 16/09 : le 23/06 porte un A/R de
+    # −1,56 $
+    # sur un jour à UN SEUL passage — du va-et-vient intra-passage, pas deux robots
+    # qui se
+    # défont. Dater l'annotation du 23/06 attribuait à la double planification neuf
+    # semaines qu'elle n'a pas causées, et condamnait à tort les mesures de la période.
+    depuis = rapport.get("depuis_doublon_cout")
+    pnl = float(rapport.get("pnl_doublon") or 0.0)
+    autre = float(rapport.get("pnl_hors_doublon") or 0.0)
     if not depuis:
         return {"applicable": False, "mesure": True,
                 "motif": "aucun aller-retour de doublon : la courbe est saine"}
 
-    jours = len(rapport.get("jours_a_cout") or [])
+    jours = len(rapport.get("jours_a_doublon_cout") or [])
     notionnel = float(rapport.get("notionnel_churn") or 0.0)
     points = None if not capital or capital <= 0 else round(pnl / capital * 100.0, 2)
 
@@ -92,11 +100,20 @@ def annotation(rapport: dict | None, capital: float | None = None,
     # sous-estime
     # le churn survenu depuis, et rien à l'écran ne le dirait — le lecteur croirait lire
     # l'état du jour.
+    # LE RESTE DU CHURN EXISTE AUSSI, et il n'a pas la même cause. Le taire ferait
+    # croire que tout le va-et-vient vient de la double planification — et le corriger
+    # un
+    # jour laisserait un écart inexpliqué.
+    if abs(autre) >= 0.01:
+        mot = "coûté" if autre < 0 else "rapporté"
+        texte += (f" S'y ajoute {_montant(autre)} $ {mot} par des allers-retours "
+                  "INTRA-passage, de cause différente.")
     if mesure_le:
         texte += f" (Mesuré le {_fr(mesure_le[:10])}.)"
 
     return {"applicable": True, "mesure": True, "depuis": depuis, "pnl": round(pnl, 2),
             "notionnel": round(notionnel, 2), "jours": jours, "points": points,
+            "pnl_hors_doublon": round(autre, 2),
             "mesure_le": mesure_le[:10], "texte": texte}
 
 

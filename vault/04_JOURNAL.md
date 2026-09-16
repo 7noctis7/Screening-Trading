@@ -1,5 +1,37 @@
 # 04 — JOURNAL
 
+## Session 2026-09-16 (32ᵉ) — Le correctif tient, et mon annotation datait de travers
+
+**LE CORRECTIF DE PLANIFICATION EST VÉRIFIÉ.** `make churn` sur le VPS montre enfin le
+16/09 : **1 passage [19:08:35] · 8 ordres · 0 aller-retour**. Premier jour propre depuis le
+15/09. Trois robots sur un compte, c'est fini.
+
+**MON ANNOTATION DATAIT LA POLLUTION DU 23/06, ET C'ÉTAIT FAUX.** Elle lisait `depuis_cout`,
+le premier aller-retour tout court. Or le 23/06 n'a eu **qu'un seul passage** : son A/R de
+−1,56 $ est de l'intra-passage, pas deux robots qui se défont. Neuf semaines attribuées à
+tort à la double planification — sur une phrase destinée au SITE.
+
+Le plus embarrassant : `passages.py` portait déjà ce raisonnement en commentaire, pour
+distinguer doublon et doublon coûteux. J'ai ajouté un troisième cas sans le voir. Corrigé :
+`depuis_doublon_cout` = intersection des jours à doublon ET à A/R. **−618,57 $ depuis le
+27/08 sur 13 jours** ; les −1,56 $ d'intra-passage sont dits séparément. ADR-0173.
+
+**`make alpha-lexique` a répondu, et sa réponse est « pas encore ».** 199 symboles sur 199
+ont leurs prix — la machine est la bonne. Ce qui manque, c'est du temps : la première
+collecte a eu lieu aujourd'hui, donc `utilisable_le = max(date, vu_le)` vaut le 16/09 pour
+les 2 375 titres. Le corpus couvre quatre mois de PUBLICATIONS et zéro jour d'OBSERVATION.
+C'est le fonctionnement voulu — 84,2 % de rétro-publiés — mais le message affichait des
+dates de publication à côté d'un « trop récent », ce qui se lit comme une contradiction.
+Le diagnostic montre désormais les dates UTILISABLES. Banc mesurable vers le **23/09**.
+ADR-0174.
+
+**Le registre révèle SIX artefacts non tracés**, pas un. `ml_<signature>.pkl` est un cache
+par configuration : six fichiers, six signatures, pas six champions rivaux. Six
+avertissements identiques auraient cessé d'être lus — on nomme le plus récent, seul
+susceptible de servir, et on compte les autres.
+
+`make test` : **2 985 passed, 77 skipped**.
+
 ## Session 2026-09-16 (31ᵉ) — Les trois P1, et un diagnostic que j'avais posé de travers
 
 **① LE REGISTRE — je m'étais trompé de cause.** J'avais écrit qu'il fallait « brancher

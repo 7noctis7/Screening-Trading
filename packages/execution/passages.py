@@ -147,7 +147,25 @@ def rapport(ordres: list[dict], ecart_max_s: float = ECART_PASSAGE_S) -> dict:
     # courbe d'equity de sept semaines trop tôt — et condamnerait à tort des mesures qui
     # sont bonnes.
     couteux = [j for j in jours if j["allers_retours"]["n_lignes"] > 0]
+    # TROISIÈME POPULATION, et c'est ELLE qui date la pollution par double
+    # planification.
+    # Le 23/06 porte un aller-retour pour −1,56 $ sur un jour à UN SEUL passage :
+    # c'est du
+    # va-et-vient intra-passage, pas deux robots qui se contredisent. Dater
+    # l'annotation de
+    # ce jour-là attribue à la double planification neuf semaines qu'elle n'a pas
+    # causées —
+    # et condamne à tort toutes les mesures de cette période.
+    doubles_jours = {j["jour"] for j in doubles}
+    doubles_couteux = [j for j in couteux if j["jour"] in doubles_jours]
+    pnl_doublon = round(sum(j["allers_retours"]["pnl"] for j in doubles_couteux), 2)
+    total = round(sum(j["allers_retours"]["pnl"] for j in jours), 2)
     return {
+        # Ce que la DOUBLE PLANIFICATION a coûté, distinct du churn total.
+        "depuis_doublon_cout": doubles_couteux[0]["jour"] if doubles_couteux else None,
+        "jours_a_doublon_cout": [j["jour"] for j in doubles_couteux],
+        "pnl_doublon": pnl_doublon,
+        "pnl_hors_doublon": round(total - pnl_doublon, 2),
         "n_jours": len(jours),
         "jours": jours,
         "jours_a_doublon": [j["jour"] for j in doubles],

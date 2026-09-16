@@ -85,3 +85,21 @@ def test_l_empreinte_sha256_a_cote_n_est_PAS_prise_pour_un_modele(tmp_path):
 
     (tmp_path / "ml_swing.pkl.sha256").write_text("abc")
     assert Registre(tmp_path).orphelins() == []
+
+
+def test_six_orphelins_ne_produisent_pas_six_avertissements(tmp_path):
+    """UN AVERTISSEMENT PERMANENT CESSE D'ÊTRE LU. `ml_<signature>.pkl` est un cache par
+    configuration : six fichiers, c'est six signatures, pas six champions rivaux. On
+    nomme le plus récent — le seul susceptible de servir — et on compte les autres."""
+    import os
+
+    from packages.mlops.registre import Registre
+
+    for i, nom in enumerate(["ml_vieux.pkl", "ml_moyen.pkl", "ml_frais.pkl"]):
+        f = tmp_path / nom
+        f.write_bytes(b"x")
+        os.utime(f, (1000 + i * 100, 1000 + i * 100))
+    soucis = Registre(tmp_path).orphelins()
+    assert len(soucis) == 2, soucis
+    assert "ml_frais.pkl" in soucis[0] and "plus récent" in soucis[0]
+    assert "2 autre(s)" in soucis[1]

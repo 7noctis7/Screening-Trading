@@ -224,9 +224,22 @@ class Registre:
         il se SIGNALE, il ne bloque rien.
         """
         connus = {Path(e.chemin).name for e in self.entrees.values() if e.chemin}
-        vus = sorted(p.name for p in self.dossier.glob("ml_*.pkl"))
-        return [f"artefact NON TRACÉ : {n} — présent dans {self.dossier.name}/, "
-                "aucune entrée ne le décrit" for n in vus if n not in connus]
+        # Trié du PLUS RÉCENT au plus ancien : `ml_<signature>.pkl` est un cache par
+        # configuration, pas une succession de champions rivaux. Six fichiers, c'est six
+        # signatures — et seul le plus frais a des chances de servir aujourd'hui.
+        vus = sorted((p for p in self.dossier.glob("ml_*.pkl") if p.name not in connus),
+                     key=lambda p: p.stat().st_mtime, reverse=True)
+        if not vus:
+            return []
+        # UN AVERTISSEMENT PERMANENT CESSE D'ÊTRE LU. Nommer le plus récent, compter les
+        # autres : après le prochain entraînement, une seule ligne restera pertinente et
+        # les anciennes ne noieront pas le registre.
+        soucis = [f"artefact NON TRACÉ : {vus[0].name} — le plus récent dans "
+                  f"{self.dossier.name}/, aucune entrée ne le décrit"]
+        if len(vus) > 1:
+            soucis.append(f"{len(vus) - 1} autre(s) artefact(s) non tracé(s), plus "
+                          "anciens (cache par signature d'entraînement)")
+        return soucis
 
     def incoherences(self) -> list[str]:
         """Ce qui ne devrait jamais arriver, et qu'on veut voir si ça arrive."""

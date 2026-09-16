@@ -12,8 +12,12 @@ projet, déjà rencontrée sur les zéros qui ressemblaient à des absences.
 
 from packages.execution.annotation_churn import annotation
 
-RAPPORT = {"depuis_cout": "2026-08-27", "pnl_churn": -620.13,
-           "notionnel_churn": 594362.0, "jours_a_cout": ["j"] * 14}
+# Les clés qui comptent sont celles du churn PAR DOUBLON — pas celles du churn total.
+# Le 23/06 portait un aller-retour sur un jour à UN SEUL passage : l'inclure daterait la
+# double planification de neuf semaines trop tôt.
+RAPPORT = {"depuis_doublon_cout": "2026-08-27", "pnl_doublon": -618.57,
+           "pnl_hors_doublon": -1.56, "notionnel_churn": 594362.0,
+           "jours_a_doublon_cout": ["j"] * 13}
 
 
 # ─── Les trois états
@@ -29,7 +33,7 @@ def test_un_historique_illisible_se_distingue_d_un_churn_nul():
 
 
 def test_un_historique_lisible_et_sain_le_dit_positivement():
-    a = annotation({"depuis_cout": None, "pnl_churn": 0.0})
+    a = annotation({"depuis_doublon_cout": None, "pnl_doublon": 0.0})
     assert a["applicable"] is False and a["mesure"] is True
     assert "saine" in a["motif"] and "NON MESURÉ" not in a["motif"]
 
@@ -37,7 +41,8 @@ def test_un_historique_lisible_et_sain_le_dit_positivement():
 def test_une_courbe_polluee_dit_DEPUIS_QUAND_et_COMBIEN():
     a = annotation(RAPPORT)
     assert a["applicable"] is True and a["mesure"] is True
-    assert a["depuis"] == "2026-08-27" and a["pnl"] == -620.13 and a["jours"] == 14
+    assert a["depuis"] == "2026-08-27" and a["pnl"] == -618.57
+    assert a["jours"] == 13
     assert "27/08/2026" in a["texte"]
 
 
@@ -83,11 +88,52 @@ def test_le_formatage_francais_ne_mange_pas_la_ponctuation():
     """Une première version passait un `replace(",", " ")` sur la PHRASE entière, et
     effaçait donc aussi les virgules de ponctuation."""
     t = annotation(RAPPORT, capital=100_000)["texte"]
-    assert "594 362 $" in t and "620,13 $" in t
+    assert "594 362 $" in t and "618,57 $" in t
     assert "concerné(s), " in t, "les virgules de la phrase doivent survivre"
 
 
 def test_une_date_inattendue_ne_fait_pas_tomber_l_annotation():
     """L'annotation accompagne une courbe : pas le droit de la faire disparaître."""
-    a = annotation({**RAPPORT, "depuis_cout": "pas-une-date"})
+    a = annotation({**RAPPORT, "depuis_doublon_cout": "pas-une-date"})
     assert a["applicable"] is True and "pas-une-date" in a["texte"]
+
+
+# ─── La date de pollution : celle des DOUBLONS, pas du premier aller-retour
+# ────────────
+
+def test_un_aller_retour_sur_un_jour_A_UN_SEUL_PASSAGE_ne_date_rien():
+    """LE DÉFAUT DU 16/09, et il portait une affirmation PUBLIQUE. Le 23/06 porte un
+    aller-retour de −1,56 $ sur un jour à un seul passage : du va-et-vient
+    intra-passage,
+    pas deux robots qui se défont. L'annotation le datait pourtant du 23/06 — attribuant
+    à la double planification neuf semaines qu'elle n'a pas causées, et condamnant à
+    tort
+    toutes les mesures de la période."""
+    from packages.execution.passages import rapport
+
+    def o(d, sym, side, qty, px):
+        return {"date": d, "symbol": sym, "side": side, "qty": qty, "price": px}
+
+    ordres = [
+        o("2026-06-23T15:55:12Z", "A", "buy", 1, 100),    # un seul passage…
+        o("2026-06-23T15:55:20Z", "A", "sell", 1, 98),    # …mais un A/R
+        o("2026-08-27T21:52:11Z", "B", "buy", 1, 100),    # deux passages…
+        o("2026-08-27T23:56:34Z", "B", "sell", 1, 90),    # …qui se contredisent
+    ]
+    r = rapport(ordres)
+    assert r["depuis_cout"] == "2026-06-23", "le premier A/R tout court"
+    assert r["depuis_doublon_cout"] == "2026-08-27", "le premier A/R DE DOUBLON"
+    assert annotation(r)["depuis"] == "2026-08-27"
+
+
+def test_le_churn_HORS_doublon_est_dit_separement():
+    """Le taire ferait croire que tout le va-et-vient vient de la double planification —
+    et le corriger un jour laisserait un écart inexpliqué."""
+    t = annotation(RAPPORT)["texte"]
+    assert "INTRA-passage" in t and "1,56 $" in t
+    assert annotation(RAPPORT)["pnl_hors_doublon"] == -1.56
+
+
+def test_un_churn_hors_doublon_NEGLIGEABLE_n_encombre_pas_la_phrase():
+    t = annotation({**RAPPORT, "pnl_hors_doublon": 0.0})["texte"]
+    assert "INTRA-passage" not in t
