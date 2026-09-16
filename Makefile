@@ -298,6 +298,9 @@ site-lite:        ## variante LÉGÈRE sans Node (terminal autonome interactive.
 	bash scripts/start_mobile.sh
 analytics:        ## rapport de perf QuantStats (Sortino/Calmar/Alpha-Beta vs QQQ) → vault/Performance_Report.md
 	$(PYTHON) scripts/perf_report.py
+churn:            ## coût CUMULÉ des rebalancements en double (historique RÉEL du courtier)
+	$(PYTHON) scripts/cout_churn.py $(ARGS)
+
 brief:            ## brief unifié (priorités + journal + changements + audit) → stdout (ARGS=--write → vault/_BRIEF.md)
 	$(PYTHON) scripts/daily_brief.py $(ARGS)
 macro-verify:      ## vérifie que chaque identifiant FRED existe et publie encore (FRED_API_KEY requise)

@@ -40,7 +40,7 @@ NOTIONNEL_MINIMUM = 50.0
 ORDRES_MINIMUM = 2
 
 
-def _jour(iso: str) -> date | None:
+def jour_utc(iso: str) -> date | None:
     """Date UTC d'un horodatage de fill. Illisible → None, et l'ordre ne compte pas.
 
     Un horodatage qu'on ne sait pas lire ne doit jamais être compté comme « aujourd'hui » :
@@ -57,10 +57,14 @@ def _jour(iso: str) -> date | None:
     return d.astimezone(UTC).date()
 
 
+# Nom historique, conservé : `packages.execution.passages` et les tests l'utilisent.
+_jour = jour_utc
+
+
 def ordres_du_jour(ordres: list[dict], jour: date) -> list[dict]:
     """Ordres REMPLIS dont le fill tombe le jour UTC donné."""
     return [o for o in (ordres or [])
-            if _jour(str(o.get("date") or "")) == jour
+            if jour_utc(str(o.get("date") or "")) == jour
             and float(o.get("qty") or 0) > 0]
 
 
