@@ -298,6 +298,9 @@ site-lite:        ## variante LÉGÈRE sans Node (terminal autonome interactive.
 	bash scripts/start_mobile.sh
 analytics:        ## rapport de perf QuantStats (Sortino/Calmar/Alpha-Beta vs QQQ) → vault/Performance_Report.md
 	$(PYTHON) scripts/perf_report.py
+nlp-check:        ## le NLP local répond-il, et répond-il JUSTE ? (LM Studio / Ollama)
+	$(PYTHON) scripts/nlp_check.py $(ARGS)
+
 verrou:           ## ce que constraints.txt NE couvre PAS pour l'entraînement
 	$(PYTHON) scripts/verrou_env.py
 
