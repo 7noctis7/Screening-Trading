@@ -7,7 +7,7 @@ import {
 } from "./introCourbeDraw";
 
 export type Periode = {
-  cle: string; libelle: string; disponible: boolean;
+  cle: string; libelle: string; disponible: boolean; motif?: string;
   debut?: string; fin?: string;
   croissance?: number; cagr?: number | null; max_drawdown?: number;
   courbe?: number[]; reference?: number[] | null; reference_croissance?: number | null;

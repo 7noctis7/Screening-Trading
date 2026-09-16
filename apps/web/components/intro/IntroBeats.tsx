@@ -4,12 +4,19 @@ import { BEATS, CHIFFRES_FIXES } from "./introConfig";
 import { clamp01, easeOut } from "./introCourbeDraw";
 import { IntroCourbes, Periode } from "./IntroCourbes";
 
+/** Libellés de repli : quand la période manque, on nomme quand même la fenêtre — sinon
+ *  « donnée indisponible » ne dit pas DE QUOI. */
+const LIBELLES: Record<string, string> = {
+  ytd: "DEPUIS LE 1ᵉʳ JANVIER", "3a": "3 ANS", "5a": "5 ANS",
+  "10a": "10 ANS", tout: "DEPUIS LE DÉBUT",
+};
+
 export type IntroData = {
   disponible?: boolean;
   reference_nom?: string;
   periodes?: Periode[];
   trades?: {
-    disponible?: boolean; n?: number; profit_factor?: number | null;
+    disponible?: boolean; motif?: string; n?: number; profit_factor?: number | null;
     ratio_gain_perte?: number | null; esperance_par_trade?: number;
     esperance_pct?: number | null; taux_reussite?: number | null;
   };
@@ -58,7 +65,11 @@ export function IntroBeats({ i, p, sortie, data }: {
 
   if (b.genre === "trades") {
     const t = data?.trades;
-    if (!t?.disponible) return null;
+    if (!t?.disponible) {
+      return <Absent on={on} sur={b.sur}
+                     motif={t?.motif || (data ? "aucun trade clôturé"
+                                              : "/api/intro n'a rien renvoyé")} />;
+    }
     return (
       <Bloc on={on} sur={b.sur}
             chiffre={t.profit_factor == null ? "n/d" : num(t.profit_factor * k)}
@@ -70,7 +81,15 @@ export function IntroBeats({ i, p, sortie, data }: {
 
   // Battement de période : la fenêtre, les trois chiffres, puis les deux courbes.
   const d = (data?.periodes || []).find((x) => x.cle === b.fenetre);
-  if (!d?.disponible) return null;
+  // UNE ABSENCE SE DIT. Rendre `null` faisait disparaître le battement sans un mot : cinq
+  // secondes de noir au milieu de l'intro, impossibles à distinguer d'une panne. On ne sait
+  // alors ni que la donnée manque, ni pourquoi — et on cherche le défaut dans le composant
+  // qui, lui, fonctionne. C'est ce qui a coûté deux allers-retours de diagnostic le 16/09.
+  if (!d?.disponible) {
+    return <Absent on={on} sur={LIBELLES[b.fenetre ?? ""] ?? "FENÊTRE"}
+                   motif={d?.motif || (data ? "période absente du payload"
+                                             : "/api/intro n'a rien renvoyé")} />;
+  }
   return (
     <div className={s.beatWrap} data-courbes={on ? "1" : "0"}>
       <div className={s.beat} data-on={on ? "1" : "0"}>
@@ -85,6 +104,17 @@ export function IntroBeats({ i, p, sortie, data }: {
       </div>
       <IntroCourbes p={p} periode={d} nomRef={data?.reference_nom || "S&P 500"} />
       {data?.avertissement && <div className={s.avert}>{data.avertissement}</div>}
+    </div>
+  );
+}
+
+/** Ce qui s'affiche quand la donnée manque : la fenêtre, et POURQUOI elle est vide. */
+function Absent({ on, sur, motif }: { on: boolean; sur: string; motif: string }) {
+  return (
+    <div className={s.beat} data-on={on ? "1" : "0"} aria-hidden="true">
+      <div className={s.beatSur}>{sur}</div>
+      <div className={s.absent}>DONNÉE INDISPONIBLE</div>
+      <div className={s.absentMotif}>{motif}</div>
     </div>
   );
 }
