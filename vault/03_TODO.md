@@ -36,15 +36,13 @@
       registre` sur le VPS : « aucun entraînement tracé ». L'artefact à AUC 0,504 existe
       et sert, mais aucune trace ne dit de quelles données ni de quel commit il vient.
       Tant que c'est vrai, `rollback` n'a rien vers quoi revenir.
-- [ ] **P1 — Éprouver la chaîne NLP sur le Mac (16/09).** CAUSE TROUVÉE : `qwen3.5-9b`
-      est un modèle « à raisonnement » — 3/3 rendent un raisonnement et un contenu vide
-      (0 timeout, 4 981 ms de médiane). `enable_thinking: false` est désormais envoyé par
-      défaut (ADR-0168) — **mais le gabarit de ce modèle l'IGNORE**. Un repli sans
-      grammaire a été ajouté (ADR-0169). **Relancer `make nlp-check`.** À savoir : le
-      second modèle exposé est un modèle d'EMBEDDING, il n'y a aucun repli côté modèle —
-      charger un modèle « instruct » dans LM Studio reste la voie la plus sûre.
-- [ ] **P1 — `make alpha-nlp` dès ~200 titres au corpus (16/09, ADR-0163).** C'est ce
-      verdict qui conditionne l'étape 6 (Lambda GPU). Poids NLP validé, ou ZÉRO.
+- [x] **~~P1 — Éprouver la chaîne NLP sur le Mac~~ — ABANDONNÉE (16/09, ADR-0170).**
+      Quatre tentatives, zéro classification. La chaîne locale est RETIRÉE du dépôt.
+- [ ] **P1 — Mesurer l'alpha du LEXIQUE sur le corpus (16/09, ADR-0170).** Le corpus
+      existe (2 375 titres) et `packages/research/alpha_incremental.py` ne dépend d'AUCUN
+      LLM : étude d'événement, comparaison appariée, placebo. Blocage constaté le 16/09 :
+      « prix absents ou fenêtre trop courte » — la base de prix n'est pas sur la machine
+      qui a le corpus. **À lancer sur le VPS**, qui a les deux.
 - [ ] **P1 — L'AUC du modèle de production est 0,504 (16/09, ADR-0161).** Indiscernable du
       hasard, Brier à 0,0004 du seuil de rejet, DSR jamais calculé. Aucune accélération de
       calcul ne corrige une absence de signal — c'est le vrai sujet ML du projet.
@@ -55,7 +53,8 @@
       rien.
 - [ ] **P2 — Étape 6 (LambdaBackend) — CONDITIONNÉE (16/09, ADR-0161/0164).** L'interface,
       le superviseur et la double protection existent et sont testés sur `BackendLocal`.
-      N'écrire le backend distant que si `make alpha-nlp` a démontré un alpha à accélérer.
+      N'écrire le backend distant que si une mesure d'alpha a démontré quelque chose à
+      accélérer. La chaîne NLP locale, elle, est retirée (ADR-0170).
 - [ ] **P1 — La courbe d'equity RÉELLE est biaisée depuis le 27/08 (16/09, ADR-0159).**
       −620 $ de churn ≈ −0,62 point de performance cumulée sur un compte de ~100 k$. Toute
       comparaison « modèle contre réel » postérieure au 27/08 doit le retrancher ou le

@@ -2,6 +2,45 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0170 — La chaîne NLP locale est retirée. Ce qui reste, et pourquoi (2026-09-16)
+
+**Décision de l'utilisateur, après quatre tentatives mesurées.** `qwen/qwen3.5-9b` sous
+LM Studio n'a jamais rendu une seule classification : raisonnement sans contenu, puis
+timeouts à 12 s malgré tous les correctifs. Le second modèle exposé était un modèle
+d'embedding — il n'y a jamais eu de repli. Continuer, c'était payer un cinquième essai sur
+une hypothèse qui n'avait rien produit.
+
+**Retiré** : `packages/nlp/` (8 modules), `scripts/nlp_check.py`, `scripts/benchmark_nlp.py`,
+`scripts/alpha_nlp_lab.py`, les cibles `nlp-check` / `benchmark-nlp` / `alpha-nlp`, les
+variables `QUANT_NLP_*` et `LOCAL_TRADING_MODEL`, la route `/api/ai/chaine`, le bloc `nlp`
+de `/api/ai/metrics`, et 140 tests. ADR-0166 à 0169 décrivent du code qui n'existe plus ;
+ils restent comme trace de ce qui a été mesuré.
+
+**CE QUI A ÉTÉ SAUVÉ AVANT DE COUPER, et c'est le seul travail délicat de l'opération.**
+`etat_modeles()` — la version du modèle ML en production, son jeu de données, son commit —
+vivait dans `packages/nlp/sante.py`, à côté de l'état du fournisseur LLM. Les deux n'ont
+rien à voir : l'un décrit le registre ML, l'autre un serveur local. Supprimer le paquet
+aurait emporté la version affichée par `/api/ai/modeles` sur le site. Déplacé vers
+`packages/mlops/etat.py`, avec ses tests. **Un module rangé au mauvais endroit tombe avec
+ses voisins.**
+
+**CE QUI RESTE, ET QUI NE DÉPENDAIT PAS DU LLM :**
+- `make news` et `packages/sentiment/corpus.py` — 2 375 titres datés, 84 % rétro-publiés.
+  Le corpus était le vrai blocage et il est résolu ; aucune ligne n'y touche à un LLM.
+- `packages/research/alpha_incremental.py` — étude d'événement, comparaison appariée,
+  placebo. Aucun fournisseur requis : il mesure ce qu'un scoreur QUELCONQUE apporte aux
+  rendements réalisés. Le lexique en est un. La question qui a motivé le chantier survit
+  au moyen qu'on avait choisi pour y répondre.
+- `packages/llm/` — CONSERVÉ, et ce n'est pas un oubli. Il sert `/api/ai/commentary`,
+  `/api/ai/chat` et `_enrich_ai_memo`, qui tournent sur le site. Le retirer aurait été
+  élargir la demande jusqu'à casser des fonctions qui marchent.
+
+**Un fait à ne pas perdre dans le bruit** : le dernier `make alpha-nlp` a échoué sur
+« aucun événement exploitable : prix absents ou fenêtre trop courte » — **avant même
+d'appeler un modèle**. La mesure d'alpha était bloquée par l'absence de prix sur la machine,
+pas par le LLM. Le retrait de la chaîne ne débloque donc rien de ce côté, et il ne faut pas
+croire l'inverse.
+
 ## ADR-0169 — Trois choses que la mesure a démenties, dont une de mes affirmations (2026-09-16)
 
 **1. `enable_thinking: false` n'a PAS suffi.** Envoyé par ADR-0168, ignoré par le gabarit de

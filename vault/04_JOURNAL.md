@@ -1,5 +1,41 @@
 # 04 — JOURNAL
 
+## Session 2026-09-16 (27ᵉ) — On arrête le LLM local, et l'intro cesse de mentir
+
+**DÉCISION : la chaîne NLP locale est retirée.** Quatre tentatives mesurées, zéro
+classification. `qwen/qwen3.5-9b` rendait un raisonnement sans contenu, puis des timeouts à
+12 s. Et le « second modèle exposé » sur lequel je l'avais renvoyé était un modèle
+d'EMBEDDING : il n'y a jamais eu de repli. ADR-0170.
+
+Retirés : `packages/nlp/` (8 modules), trois scripts, trois cibles `make`, les variables
+`QUANT_NLP_*`, la route `/api/ai/chaine`, et 140 tests. Suite : **3 085 → 2 945, tout vert.**
+
+**LE SEUL TRAVAIL DÉLICAT DE L'OPÉRATION.** `etat_modeles()` — version du modèle ML en
+production, jeu de données, commit — vivait dans `packages/nlp/sante.py`, à côté de l'état
+du fournisseur LLM. Supprimer le paquet aurait emporté la version affichée sur le site par
+`/api/ai/modeles`. Déplacé vers `packages/mlops/etat.py` avec ses tests, avant de couper.
+**Un module rangé au mauvais endroit tombe avec ses voisins.**
+
+**Conservé, et volontairement** : `make news` et le corpus (2 375 titres — aucun LLM
+dedans), `alpha_incremental.py` (étude d'événement et placebo : ils mesurent un scoreur
+QUELCONQUE, le lexique compris), et `packages/llm/` qui sert `/api/ai/commentary`,
+`/api/ai/chat` et les mémos du site. Retirer ce dernier aurait cassé des fonctions qui
+marchent.
+
+**UN FAIT À NE PAS PERDRE** : le dernier `make alpha-nlp` a échoué sur « aucun événement
+exploitable : prix absents ou fenêtre trop courte » — **avant d'appeler le moindre modèle**.
+La mesure d'alpha était bloquée par l'absence de base de prix sur le Mac, pas par le LLM.
+Retirer la chaîne ne débloque rien de ce côté.
+
+**L'intro : le piège est supprimé, pas contourné.** `INTRO_SESSION_POLICY` valait `"session"`
+— une lecture par ONGLET. On recharge, rien ne se passe, et on conclut qu'un correctif n'a
+pas pris. Même famille que le cache `.next` qui ressert l'ancien rendu : le code est juste,
+l'écran montre autre chose, et rien ne le signale. La politique est désormais **`"always"`
+en développement** et `"session"` en production — plus `?intro=1` / `?intro=0` pour forcer.
+`next build` vérifié, `.next` purgé.
+
+`make test` : **2 945 passed, 77 skipped**.
+
 ## Session 2026-09-16 (26ᵉ) — Le repli n'existait pas, et j'avais dit le contraire
 
 **`enable_thinking: false` n'a pas suffi.** Le gabarit de `qwen/qwen3.5-9b` l'ignore : 3 cas

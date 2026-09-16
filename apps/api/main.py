@@ -1365,24 +1365,14 @@ def ai_chat(body: AIChatRequest, request: Request) -> dict:
 
 @app.get("/api/ai/metrics")
 def ai_metrics() -> dict:
-    """Observabilité : garde anti-hallucination ET chaîne NLP locale.
+    """Observabilité de la garde anti-hallucination : ce qu'on a refusé de dire.
 
-    Les deux voisinent parce qu'ils décrivent le même organe vu de deux côtés : l'assistant
-    (ce qu'on a refusé de dire à l'utilisateur) et le classificateur (ce qu'on n'a pas pu
-    classer). Un taux de repli NLP qui monte et un taux de rejet du garde qui monte n'ont
-    pas la même cause, et les séparer permet de le voir.
+    La chaîne NLP locale y figurait aussi jusqu'au 16/09 ; elle a été retirée avec le
+    reste du classificateur local (ADR-0170).
     """
     from packages.llm.assistant import assistant_metrics
 
     charge = dict(assistant_metrics())
-    try:
-        from packages.nlp.sante import etat_chaine
-        # `sonder=False` : un compteur ne doit pas ouvrir de connexion. Une page qui
-        # rafraîchit ses métriques toutes les cinq secondes sonderait le fournisseur
-        # autant de fois, et une latence de voyant se prendrait pour une latence de modèle.
-        charge["nlp"] = etat_chaine(sonder=False)
-    except Exception as e:  # noqa: BLE001 — l'observabilité ne fait jamais tomber la route
-        charge["nlp"] = {"disponible": False, "motif": f"{type(e).__name__}: {e}"}
     return charge
 
 
@@ -1395,20 +1385,6 @@ def ai_modeles() -> dict:
     y compris le fait qu'un modèle ait été entraîné depuis un arbre git modifié — donc
     qu'il ne soit PAS reproductible depuis ce commit.
     """
-    from packages.nlp.sante import etat_modeles
+    from packages.mlops.etat import etat_modeles
 
     return etat_modeles()
-
-
-@app.get("/api/ai/chaine")
-def ai_chaine() -> dict:
-    """État de la chaîne NLP locale : EN_LIGNE, DÉGRADÉ ou HORS_LIGNE, avec le motif.
-
-    DÉGRADÉ est l'état qui compte : le fournisseur répond, tout a l'air de marcher, et les
-    signaux sont pourtant des replis — parce que le modèle demandé n'est pas celui qui est
-    chargé, ou parce que le disjoncteur s'est ouvert. C'est le seul état qu'on peut avoir
-    sans s'en apercevoir.
-    """
-    from packages.nlp.sante import etat_chaine
-
-    return etat_chaine(sonder=True)

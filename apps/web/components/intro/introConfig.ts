@@ -40,14 +40,26 @@ export const NODE_COUNT_MOBILE = 16;
 /** `false` désactive l'intro partout, sans toucher au reste. */
 export const ENABLE_INTRO = true;
 
+export type PolitiqueIntro = "session" | "day" | "always" | "never";
+
 /**
  * Quand la rejouer.
- *   "session" — une fois par onglet (défaut)
+ *   "session" — une fois par onglet
  *   "day"     — une fois par 24 h
- *   "always"  — à chaque chargement (pour la régler)
+ *   "always"  — à chaque chargement
  *   "never"   — jamais
+ *
+ * EN DÉVELOPPEMENT, C'EST TOUJOURS "always", ET CE N'EST PAS UN CONFORT. Avec "session",
+ * l'intro ne rejoue qu'une fois par ONGLET : on recharge, rien ne se passe, et on conclut
+ * que le correctif n'a pas pris. C'est la même famille de piège que le cache `.next` qui
+ * ressert l'ancien rendu — le code est juste, l'écran montre autre chose, et RIEN ne le
+ * signale. Le 16/09 elle a coûté une conversation entière.
+ *
+ * En production (`make site`, `next build`) la politique redevient "session" : un visiteur
+ * qui recharge une page n'a pas à revoir le rideau d'entrée.
  */
-export const INTRO_SESSION_POLICY: "session" | "day" | "always" | "never" = "session";
+export const INTRO_SESSION_POLICY: PolitiqueIntro =
+  process.env.NODE_ENV === "production" ? "session" : "always";
 
 export const INTRO_BRAND = "Quant Terminal";
 export const INTRO_BASELINE = "0 € · OPEN SOURCE · PAPER PAR DÉFAUT";

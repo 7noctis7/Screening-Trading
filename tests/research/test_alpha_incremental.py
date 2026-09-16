@@ -297,39 +297,15 @@ def test_la_p_valeur_est_arrondie_VERS_LE_HAUT():
         assert p <= plancher + 1e-6
 
 
-# ─── Le banc refuse de parler trop tôt ─────────────────────────────────────────────────
+# ─── Le banc qui consommait ce module a été retiré ─────────────────────────────────────
+#
+# Quatre tests inspectaient la source de `scripts/alpha_nlp_lab.py` : plancher
+# d'observations avant de conclure, repli traduit en ABSENCE d'avis, pondération par la
+# confiance, ligne de base sans fournisseur. Le script est parti avec la chaîne NLP locale
+# (ADR-0170) et ces tests avec lui — ils décrivaient un appelant, pas ce module.
+#
+# CE MODULE RESTE, et la distinction compte : l'étude d'événement, la comparaison appariée
+# et le placebo ne dépendent d'AUCUN fournisseur de LLM. Ils mesurent ce qu'un scoreur
+# quelconque — le lexique par exemple — apporte aux rendements réalisés. C'est la question
+# qui a motivé tout ce chantier, et elle survit au moyen qu'on avait choisi pour y répondre.
 
-def test_le_banc_exige_un_corpus_avant_de_conclure():
-    """Une étude d'événement sur quelques dizaines d'observations ne conclut rien, et
-    prétendre le contraire serait la pire sortie possible de ce banc."""
-    import pathlib
-    src = (pathlib.Path(__file__).resolve().parents[2] / "scripts"
-           / "alpha_nlp_lab.py").read_text(encoding="utf-8")
-    assert "MIN_POUR_PARLER" in src
-    assert "return 2" in src, "il doit SORTIR en erreur, pas afficher un tableau vide"
-
-
-def test_le_banc_traduit_un_repli_NLP_en_ABSENCE_d_avis():
-    """Un repli vaut 0 — « pas d'avis » — et surtout pas « neutre convaincu » : confondre
-    les deux ferait compter une panne de LLM comme une classification."""
-    import pathlib
-    src = (pathlib.Path(__file__).resolve().parents[2] / "scripts"
-           / "alpha_nlp_lab.py").read_text(encoding="utf-8")
-    assert "0.0 if s.repli else" in src
-
-
-def test_le_banc_pondere_le_sentiment_par_la_CONFIANCE():
-    """Un BULLISH à 0,3 de confiance ne doit pas peser autant qu'un BULLISH à 0,9."""
-    import pathlib
-    src = (pathlib.Path(__file__).resolve().parents[2] / "scripts"
-           / "alpha_nlp_lab.py").read_text(encoding="utf-8")
-    assert "signe[s.sentiment] * s.confiance" in src
-
-
-def test_un_scoreur_absent_ne_fait_pas_echouer_la_comparaison():
-    """Sans fournisseur LLM, le banc compare le lexique à lui-même et le dit — plutôt que
-    de refuser de tourner, ce qui empêcherait d'établir la ligne de base."""
-    import pathlib
-    src = (pathlib.Path(__file__).resolve().parents[2] / "scripts"
-           / "alpha_nlp_lab.py").read_text(encoding="utf-8")
-    assert "aucun fournisseur LLM" in src and "lexique seul" in src
