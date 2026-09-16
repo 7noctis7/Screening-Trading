@@ -28,6 +28,21 @@
 - [x] **~~P1 — Rien ne surveille la DÉRIVE d'un planificateur~~ — FERMÉE (16/09).**
       `make brief` porte une section « Passages du robot (7 j) » avec les commandes à
       lancer. Un doublon se voit le lendemain matin.
+- [ ] **P0 — Lancer `make news` chaque jour, sans exception (16/09, ADR-0162).** Branché
+      dans `cron_daily.sh`, mais À VÉRIFIER après le premier passage : un flux RSS ne se
+      rejoue pas, chaque jour manqué est perdu définitivement. `make news ARGS=--etat`.
+- [ ] **P1 — Éprouver la chaîne NLP sur le Mac (16/09).** `make nlp-check` avec LM Studio +
+      Qwen 2.5. Distingue un échec technique (code 1) d'un désaccord du modèle (code 0).
+- [ ] **P1 — `make alpha-nlp` dès ~200 titres au corpus (16/09, ADR-0163).** C'est ce
+      verdict qui conditionne l'étape 6 (Lambda GPU). Poids NLP validé, ou ZÉRO.
+- [ ] **P1 — L'AUC du modèle de production est 0,504 (16/09, ADR-0161).** Indiscernable du
+      hasard, Brier à 0,0004 du seuil de rejet, DSR jamais calculé. Aucune accélération de
+      calcul ne corrige une absence de signal — c'est le vrai sujet ML du projet.
+- [ ] **P2 — Régénérer `constraints.txt` avec les extras `ml` et `sentiment` (16/09).**
+      `make verrou` donne la commande. À lancer SUR LA MACHINE QUI ENTRAÎNE.
+- [ ] **P2 — Étape 6 (LambdaBackend) — CONDITIONNÉE (16/09, ADR-0161/0164).** L'interface,
+      le superviseur et la double protection existent et sont testés sur `BackendLocal`.
+      N'écrire le backend distant que si `make alpha-nlp` a démontré un alpha à accélérer.
 - [ ] **P1 — La courbe d'equity RÉELLE est biaisée depuis le 27/08 (16/09, ADR-0159).**
       −620 $ de churn ≈ −0,62 point de performance cumulée sur un compte de ~100 k$. Toute
       comparaison « modèle contre réel » postérieure au 27/08 doit le retrancher ou le

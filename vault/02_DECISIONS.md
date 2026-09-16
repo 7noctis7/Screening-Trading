@@ -2,6 +2,88 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0161 — L'ordre du chantier IA est dicté par ce qui rend la suite MESURABLE (2026-09-16)
+
+**Le cahier des charges demandait Lambda GPU tôt.** L'audit (`docs/AI_ARCHITECTURE_AUDIT.md`)
+a mesuré l'artefact en production : **AUC 0,504 · Brier 0,2496 · DSR non calculé**. Le modèle
+est une régression logistique / XGBoost sur features tabulaires — il s'entraîne en secondes
+sur CPU. Louer un GPU pour l'entraîner plus vite, c'est payer pour atteindre le hasard plus
+rapidement.
+
+**Ordre retenu, validé par l'utilisateur** : registre → verrou d'environnement → NLP
+structuré → MESURE de l'alpha incrémental → abstraction compute locale → Lambda seulement si
+la mesure a démontré quelque chose. Les cinq premières étapes sont à coût nul.
+
+**Conséquence.** L'étape 6 n'est pas reportée par prudence : elle est *conditionnée*. Si le
+NLP ne montre aucun alpha incrémental, son poids est zéro et il n'y a rien à accélérer.
+
+## ADR-0162 — Le vrai blocage n'était pas le LLM, c'était le corpus (2026-09-16)
+
+**Découvert en préparant l'étape 4.** Le dépôt sait lire des flux (`rss.py`), scorer
+(`lexicon.py`), conduire une étude d'événement avec IC et Sharpe déflaté (`news_backtest`) et
+gérer le point-in-time (`pit.py`). Tout est là **sauf le corpus** : `data/news.csv` n'existait
+pas, rien ne l'écrivait, et `.cache/sentiment_history.json` ne garde que des SCORES agrégés —
+irréversibles, donc impossibles à re-scorer avec un autre modèle.
+
+Mesurer si un LLM bat le lexique était donc impossible, et le serait resté : **un flux RSS ne
+se rejoue pas**. C'est la seule tâche du chantier dont le coût augmente avec le retard.
+
+**Décision.** `packages/sentiment/corpus.py`, branché dans `cron_daily.sh` — pas dans un
+script qu'on lance quand on y pense, car une collecte trouée produit un corpus troué.
+
+**Le point de conception qui compte : DEUX horodatages.** `date` (ce que dit l'éditeur) et
+`vu_le` (quand nous l'avons lu). Leur différence EST une fuite : un flux qui rétro-publie un
+article de la semaine dernière nous le fait découvrir aujourd'hui, et se fier à `date` seule
+laisserait une stratégie « savoir » avant d'avoir pu savoir. Le seul instant utilisable est
+`max(date, vu_le)`, calculable uniquement si l'on enregistre les deux AU MOMENT de la
+collecte. Append-only : réécrire permettrait de fabriquer une antériorité.
+
+## ADR-0163 — Comparer deux scoreurs exige le MÊME échantillon (2026-09-16)
+
+**Le piège qui invalide la plupart des comparaisons.** `sentiment_event_study` écarte les
+événements au score nul. Or « score nul » dépend du scoreur : le lexique ignore un titre sans
+mot de son dictionnaire, un LLM le classe NEUTRE, et pas sur les mêmes titres. Les comparer
+ainsi les mesure sur des échantillons différents, et l'écart mélange alors deux choses
+inséparables — pouvoir prédictif et sélection.
+
+**Décision.** `packages/research/alpha_incremental` extrait les événements UNE fois, puis
+chaque scoreur note exactement les mêmes. La comparaison devient APPARIÉE, ce qui élimine la
+variance commune. Trois portes CONJOINTES : placebo par permutation, Sharpe déflaté, |IC|.
+`n_essais` compte tous les scoreurs comparés.
+
+**Trois défauts trouvés par les tests pendant l'écriture**, tous corrigés :
+1. **Le canal plat, encore.** `std() == 0` est faux en virgule flottante : soixante fois 0,3
+   donnent un écart-type de 5e-17, des rangs arbitraires, et un **IC de 0,21 pour un scoreur
+   strictement constant**. Même piège que `channel_break` (CLAUDE.md), même remède : tolérance
+   relative + test exact sur les valeurs distinctes.
+2. **La p-valeur passait sous son propre plancher** (`round(1/501, 6)` < 1/501). Arrondie
+   désormais vers le HAUT — seule direction juste, arrondir une p-valeur vers le bas fait
+   paraître un résultat plus significatif qu'il ne l'est.
+3. **Le signe de l'écart apparié était ininterprétable** (paires ordonnées alphabétiquement).
+   Renommé `ecart_moyen_a_moins_b`.
+
+## ADR-0164 — La double protection contre la facture, et laquelle compte (2026-09-16)
+
+**Protection 1, applicative** : le superviseur arrête dans un `finally`. Sans lui, une
+exception entre « entraînement fini » et « artefacts récupérés » laisserait la machine
+allumée, et l'erreur remontée masquerait la facture qui court. Le `finally` attrape aussi
+`KeyboardInterrupt`, qui n'hérite pas d'`Exception`.
+
+**Protection 2, infrastructure** : `max_runtime_s` honoré par le fournisseur. C'est la SEULE
+qui joue quand c'est le superviseur qui meurt — coupure, processus tué, Mac éteint — et c'est
+précisément le scénario qui laisse un GPU facturer une semaine.
+
+**Décision.** `impose_max_runtime()` est INTERROGÉ, jamais supposé : un backend qui ne sait
+pas imposer de plafond le déclare, et le superviseur AVERTIT au lieu d'interdire (un backend
+local n'a pas de facture). `Travail` exige un plafond — il n'existe pas de valeur « illimité »
+par construction.
+
+**Conséquences.** Un succès silencieux (sortie 0, aucun artefact attendu produit) est traité
+comme un ÉCHEC : c'est le plus coûteux de tous, puisqu'il promeut du vide. Un secret en ligne
+de commande est refusé — il apparaîtrait dans `ps` de toute machine partagée, et un GPU loué
+en est une. La commande est un `argv`, jamais une chaîne shell : une chaîne laisserait un
+manifeste distant injecter « ; rm -rf ».
+
 ## ADR-0159 — Le churn a coûté 620 $, et la courbe d'equity est polluée depuis le 27/08 (2026-09-16)
 
 **Mesuré par `make churn` sur l'historique RÉEL du courtier**, 32 jours d'activité :

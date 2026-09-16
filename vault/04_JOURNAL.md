@@ -1,5 +1,50 @@
 # 04 — JOURNAL
 
+## Session 2026-09-16 (21ᵉ) — Chantier IA : l'audit a réordonné la mission
+
+**Le cahier des charges demandait un GPU. L'audit a mesuré pourquoi ce serait prématuré** :
+l'artefact en production affiche **AUC 0,504 · Brier 0,2496 · DSR non calculé**, sur une
+régression logistique qui s'entraîne en secondes. Louer du calcul pour l'accélérer, c'est
+payer pour atteindre le hasard plus vite. ADR-0161.
+
+**Et l'essentiel du cahier des charges décrivait du travail DÉJÀ FAIT** : CV purgée avec
+embargo, CPCV, unicité des labels, triple-barrière, calibration de Brier, dérive PSI, HPO
+Optuna, gate DSR/Brier, MFE/MAE, banc de sorties, quatre routes `/api/ai/*`. Vingt modules
+dans `packages/ml`. L'audit a servi à ne pas reconstruire.
+
+**Quatre trous réels, quatre étapes livrées.**
+1. **Registre** — `governance.ModelRegistry` vivait EN MÉMOIRE, `artifact.py` est un cache
+   TTL. Rien ne gardait le prédécesseur : le rollback n'était pas « non implémenté », il
+   était IMPOSSIBLE.
+2. **Verrou d'environnement** — `constraints.txt` épingle numpy et pandas, et laisse LIBRES
+   scikit-learn, xgboost, lightgbm, torch. Un modèle sérialisé sous 1.5 et rechargé sous 1.7
+   peut se charger ET PRÉDIRE DIFFÉREMMENT. Détecter plutôt qu'imposer : un lockfile que
+   personne ne régénère devient de la cérémonie.
+3. **NLP structuré** — le dépôt parlait déjà à Ollama ET à LM Studio, mais rendait du texte
+   brut. Schéma imposé et revalidé, disjoncteur trois états, quatre bornes (temps,
+   concurrence, mémoire, échecs). `wait_for` avait deux secondes de marge « par prudence » :
+   configurer 12 s en attendait 14 — trouvé par un test.
+4. **Compute + artefacts** — double protection contre la facture, `finally` compris
+   `KeyboardInterrupt`, succès silencieux traité comme échec. ADR-0164.
+
+**Le vrai blocage n'était pas le LLM.** En préparant la mesure d'alpha, découvert que
+`data/news.csv` n'existe pas et que rien ne l'écrit. Le dépôt sait tout faire sauf GARDER le
+texte des dépêches. Un flux RSS ne se rejoue pas : chaque jour sans collecte est perdu
+définitivement. Corpus branché dans la chaîne quotidienne, avec DEUX horodatages — `date` et
+`vu_le`, dont la différence est exactement une fuite. ADR-0162.
+
+**Trois défauts trouvés par les tests en écrivant l'instrument de mesure** (ADR-0163), dont
+un déjà connu du dépôt sous un autre nom : `std() == 0` est faux en virgule flottante, et un
+scoreur strictement constant obtenait un **IC de 0,21**. C'est le canal plat de
+`channel_break`, réapparu ailleurs.
+
+**Mesuré.** 3012 tests passés, 79 ignorés (+233 sur la journée). Huit `make` nouveaux :
+`registre`, `verrou`, `churn`, `news`, `nlp-check`, `alpha-nlp`.
+
+**Prochaine priorité** : `make nlp-check` sur le Mac (LM Studio + Qwen 2.5), puis attendre
+que le corpus atteigne quelques centaines de titres avant `make alpha-nlp`. L'étape 6
+(Lambda) reste CONDITIONNÉE à ce verdict.
+
 ## Session 2026-09-16 (20ᵉ) — Le churn chiffré : 620 $, et depuis le 27 août
 
 **La mesure a répondu, et elle a corrigé sa propre question.** `make churn` sur
