@@ -122,6 +122,42 @@ export function tracer(ctx: CanvasRenderingContext2D, c: Cadre, vals: number[],
   ctx.restore();
 }
 
+/** Une date ISO → `jj/mm/aaaa`. Lue à la MAIN, jamais par `Date`.
+ *
+ *  `new Date("2016-05-19")` vaut minuit UTC ; `toLocaleDateString` dans un fuseau négatif
+ *  afficherait alors le 18/05. Une borne de fenêtre de performance qui recule d'un jour
+ *  selon l'endroit d'où on regarde le site n'est pas un détail d'affichage : c'est la
+ *  période même de la mesure qui change. On découpe la chaîne, et on rend « » si elle
+ *  n'a pas la forme attendue — une date illisible ne s'invente pas. */
+export function dateCourte(iso: string | undefined): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || "");
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
+}
+
+/** Les deux BORNES de la fenêtre, sous le cadre : départ à gauche, arrivée à droite.
+ *
+ *  Sans elles, « +142 % sur 10 ans » ne dit pas DE QUAND À QUAND. Deux fenêtres de dix ans
+ *  qui ne commencent pas la même année ne se comparent pas, et le lecteur n'a aucun moyen
+ *  de s'en apercevoir. La position les rend lisibles sans légende : la date de gauche est
+ *  sous le début du tracé, celle de droite sous sa fin. */
+export function bornesDates(ctx: CanvasRenderingContext2D, c: Cadre,
+                            debut: string | undefined, fin: string | undefined,
+                            couleur: string, alpha: number) {
+  if (alpha <= 0.01) return;
+  const d = dateCourte(debut), f = dateCourte(fin);
+  if (!d || !f) return;
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.5;
+  ctx.font = '8px ui-monospace, "JetBrains Mono", monospace';
+  ctx.fillStyle = couleur;
+  const y = c.h - 3;
+  ctx.textAlign = "left";
+  ctx.fillText(d, c.pad, y);
+  ctx.textAlign = "right";
+  ctx.fillText(f, c.w - c.pad, y);
+  ctx.restore();
+}
+
 /** Graduation au HAUT de l'échelle, en multiple du départ.
  *
  *  Sans elle, une courbe qui monte et une courbe qui triple ont la même allure : le cadre

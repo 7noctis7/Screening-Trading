@@ -172,3 +172,35 @@ def test_sans_reference_l_intro_reste_disponible_et_le_dit():
     assert p0["courbe"]                            # la nôtre est bien là
     assert p0["reference"] is None
     assert "aucune série de référence" in p0["reference_motif"]
+
+
+# ── les BORNES de chaque fenêtre : l'intro les affiche, donc elles sont un contrat ──
+
+def test_chaque_fenetre_disponible_porte_SES_deux_bornes():
+    """« +142 % sur 10 ans » ne dit pas DE QUAND À QUAND. Deux fenêtres décennales
+    qui ne commencent pas la même année ne se comparent pas, et rien à l'écran ne le
+    signalerait. L'intro dessine ces deux dates : c'est un contrat, pas un détail
+    interne du calcul."""
+    for cle, libelle, ans in (("ytd", "YTD", 0), ("3a", "3 ANS", 3),
+                              ("10a", "10 ANS", 10), ("tout", "DEPUIS LE DÉBUT", None)):
+        p = periode(_serie(400, 0.001), cle, libelle, ans, AUJ)
+        assert p["disponible"], cle
+        assert p["debut"] and p["fin"], f"bornes manquantes pour {cle}"
+
+
+def test_les_bornes_sont_des_dates_ISO_lisibles_sans_fuseau():
+    """Le front les découpe à la main plutôt que de passer par `Date` : minuit UTC
+    reculerait d'un jour dans un fuseau négatif, et la période mesurée changerait selon
+    l'endroit d'où on regarde le site."""
+    import re
+    p = periode(_serie(400, 0.001), "3a", "3 ANS", 3, AUJ)
+    for borne in ("debut", "fin"):
+        assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", p[borne]), p[borne]
+
+
+def test_les_bornes_sont_celles_de_la_serie_REELLE_pas_du_calendrier_demande():
+    """Demander dix ans sur une série qui en compte un ne doit pas afficher un départ
+    vieux de dix ans : la borne annonce ce qui a été MESURÉ."""
+    p = periode(_serie(30, 0.001), "10a", "10 ANS", 10, AUJ)
+    assert p["debut"] == (AUJ - timedelta(days=29)).isoformat()
+    assert p["fin"] == AUJ.isoformat()

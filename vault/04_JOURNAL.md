@@ -1,5 +1,33 @@
 # 04 — JOURNAL
 
+## Session 2026-09-16 (30ᵉ) — Chaque fenêtre dit enfin DE QUAND À QUAND
+
+**Demande** : afficher la date de départ et la date d'arrivée pour chaque fenêtre de
+l'intro. Les deux bornes sont dessinées sous le cadre — départ à gauche, sous le début du
+tracé ; arrivée à droite, sous sa fin. Aucune légende nécessaire : la position suffit.
+
+**Ce que ça répare vraiment.** « +142 % sur 10 ans » ne dit pas de quand à quand. Deux
+fenêtres décennales qui ne commencent pas la même année ne se comparent pas, et **rien à
+l'écran ne le signalait**.
+
+**La date est lue À LA MAIN, jamais par `Date`.** `new Date("2016-05-19")` vaut minuit UTC ;
+`toLocaleDateString` dans un fuseau négatif afficherait le 18/05. Une borne de fenêtre de
+performance qui recule d'un jour selon l'endroit d'où on regarde le site, ce n'est pas un
+détail d'affichage : **c'est la période même de la mesure qui change.** On découpe la chaîne
+ISO, et une date qui n'a pas la forme attendue ne s'affiche pas — plutôt qu'une date
+approchée, qui elle ne se verrait pas.
+
+**Les bornes suivent `aRepere`**, donc elles n'apparaissent qu'une fois la courbe POSÉE :
+des dates qui sauteraient pendant que le tracé glisse d'une fenêtre à la suivante se
+liraient comme une erreur d'affichage.
+
+**Le contrat est testé des deux côtés** : côté serveur, chaque fenêtre disponible porte ses
+deux bornes, au format ISO, et ce sont celles de la série RÉELLE — demander dix ans sur une
+série d'un mois n'affiche pas un départ vieux de dix ans. Côté front, la lecture manuelle est
+exigée par un test qui refuse `new Date` et `toLocale` dans cette fonction. 7 tests ajoutés.
+
+`make test` : **2 960 passed, 77 skipped**. `next build` vérifié, `.next` purgé.
+
 ## Session 2026-09-16 (29ᵉ) — La marque rejoue le rideau
 
 **Demande** : revoir l'animation « performance du robot contre le S&P 500 » en cliquant

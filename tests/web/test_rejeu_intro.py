@@ -90,3 +90,37 @@ def test_un_rejeu_remet_TOUT_a_zero_y_compris_la_reference_fini():
                    "setBeat({ i: 0, p: 0 });", "setAvance(0);",
                    "setAttenteEcoulee(false);", "setMonte(true);"):
         assert remise in bloc, f"remise à zéro manquante au rejeu : {remise}"
+
+
+# ─── Les bornes de fenêtre sont DESSINÉES, et lues sans fuseau ───────────────────────
+
+DRAW = (WEB / "intro" / "introCourbeDraw.ts").read_text(encoding="utf-8")
+COURBES = (WEB / "intro" / "IntroCourbes.tsx").read_text(encoding="utf-8")
+
+
+def test_les_deux_bornes_de_la_fenetre_sont_dessinees():
+    """« +142 % sur 10 ans » ne dit pas DE QUAND À QUAND."""
+    assert "export function bornesDates(" in DRAW
+    assert "bornesDates(ctx, c, d.debut, d.fin, cFg, aRepere)" in COURBES
+
+
+def test_la_date_est_lue_A_LA_MAIN_jamais_par_Date():
+    """`new Date("2016-05-19")` vaut minuit UTC : dans un fuseau négatif,
+    `toLocaleDateString` afficherait le 18/05. La période MESURÉE changerait alors
+    selon l'endroit d'où on regarde le site."""
+    bloc = DRAW.split("export function dateCourte")[1].split("\n}")[0]
+    assert "new Date" not in bloc and "toLocale" not in bloc
+    assert "exec(iso" in bloc
+
+
+def test_une_date_illisible_ne_s_invente_pas():
+    """Rendre « » plutôt qu'une date approchée : les bornes ne s'affichent alors pas,
+    ce qui se voit — contrairement à une date fausse."""
+    bloc = DRAW.split("export function bornesDates")[1].split("\n}")[0]
+    assert "if (!d || !f) return;" in bloc
+
+
+def test_les_bornes_apparaissent_avec_les_reperes_pas_pendant_la_deformation():
+    """Des dates qui sauteraient d'un coup pendant que le tracé glisse d'une fenêtre à
+    la suivante se liraient comme une erreur d'affichage."""
+    assert "bornesDates(ctx, c, d.debut, d.fin, cFg, aRepere)" in COURBES

@@ -2,8 +2,8 @@
 import { useEffect, useRef } from "react";
 import s from "./intro.module.css";
 import {
-  CRISES, cadre, clamp01, easeOut, fondu, graduationMax, indexDeDate, ligneBase,
-  marqueurCrise, tracer,
+  CRISES, bornesDates, cadre, clamp01, easeOut, fondu, graduationMax, indexDeDate,
+  ligneBase, marqueurCrise, tracer,
 } from "./introCourbeDraw";
 
 export type Periode = {
@@ -92,6 +92,10 @@ export function IntroCourbes({ p, periode, nomRef }: {
 
     ligneBase(ctx, c, cFg, prec ? 1 : easeOut(p * 4));
     graduationMax(ctx, c, cFg, aRepere);
+    // Les bornes suivent `aRepere`, donc elles n'apparaissent qu'une fois la courbe
+    // POSÉE. Pendant la déformation d'une fenêtre vers la suivante, des dates qui
+    // sauteraient d'un coup pendant que le tracé glisse se liraient comme une erreur.
+    bornesDates(ctx, c, d.debut, d.fin, cFg, aRepere);
 
     if (d.debut && d.fin) {
       for (const cr of CRISES) {
