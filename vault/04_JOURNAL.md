@@ -1,5 +1,50 @@
 # 04 — JOURNAL
 
+## Session 2026-09-16 (23ᵉ) — Le corpus existe enfin, et un nom de modèle qui mentait
+
+**LE CORPUS N'EST PLUS UNE INTENTION.** Premier `make news` sur le VPS : **2 375 titres ·
+199 symboles · 71 jours**, du 19/05 au 16/09, 0 sans date, 1 symbole muet. Et le chiffre
+qui justifie à lui seul le schéma à deux horodatages : **84,2 % des titres sont
+rétro-publiés** — découverts APRÈS leur date de publication. Se fier à `date` seule aurait
+introduit une fuite sur cinq titres sur six. `utilisable_le = max(date, vu_le)` n'était pas
+une précaution d'école.
+
+**Le seuil des ~200 titres visé pour `make alpha-nlp` est dépassé d'un facteur douze.** Le
+verdict qui conditionne l'étape 6 est désormais mesurable.
+
+**Le registre est VIDE alors qu'un modèle tourne.** `make registre` : « aucun entraînement
+tracé ». L'artefact à AUC 0,504 sert en production sans qu'aucune trace ne dise de quelles
+données ni de quel commit il vient — et `rollback` n'a donc rien vers quoi revenir. Nouvelle
+P1.
+
+**Le VPS n'est pas la machine qui entraîne**, et `make verrou` le dit sans détour :
+`scikit-learn` LIBRE, `xgboost` / `lightgbm` / `torch` **absents**. Régénérer
+`constraints.txt` ici épinglerait un environnement qui n'entraîne rien.
+
+**Churn — une nuance que je n'avais pas vue.** Le total tient (**−620,13 $** sur 594 362 $,
+15 jours sur 32 à plus d'un passage), mais le premier aller-retour date du **23/06**, un
+jour à UN SEUL passage, pour −1,56 $. Autrement dit : la double planification explique
+618,57 $ des 620,13 $, pas la totalité. Le reste est du va-et-vient intra-passage, et c'est
+un autre sujet. Le 16/09 n'avait pas encore tourné à l'heure de la mesure : **le correctif
+n'est pas encore vérifié**, il le sera demain matin.
+
+**Un nom de modèle qui mentait en silence.** `config.py` portait
+`MODELE_DEFAUT = "qwen2.5-…"`, écrit quand le cahier des charges parlait de ce modèle-là.
+L'utilisateur en fait tourner un autre. Le défaut est devenu faux **sans jamais lever** :
+LM Studio sert ce qu'il a chargé et répond 200, le signal repart estampillé d'un modèle qui
+n'a rien produit — et ce nom part dans la mesure d'alpha et dans la clé de cache. Le défaut
+est maintenant VIDE et le fournisseur tranche (ADR-0166), avec canonisation des noms
+approximatifs, refus explicite de choisir quand c'est ambigu, et motif affiché à chaque
+fois.
+
+**Défaut trouvé en chemin** : `sante._verdict` testait `demande.lower() in m.lower()` —
+avec un `demande` vide, `"" in m` est vrai pour TOUT `m`. Le voyant serait passé au vert
+sans désigner personne. Même famille que les zéros qui ressemblent à des absences : **une
+condition qui réussit pour la mauvaise raison est pire qu'une qui échoue.**
+
+`make test` : **3 057 passed, 80 skipped**. Aucune nouvelle alerte ruff sur les fichiers
+touchés.
+
 ## Session 2026-09-16 (22ᵉ) — L'audit d'archivage rend zéro fichier, et c'est le résultat
 
 **Mission : archiver l'obsolète sous `old/`. Résultat livré : rien n'a bougé.** Sur les

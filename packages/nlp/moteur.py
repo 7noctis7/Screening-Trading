@@ -33,7 +33,7 @@ from collections import OrderedDict, deque
 from packages.nlp import invites
 from packages.nlp.config import ConfigNLP
 from packages.nlp.disjoncteur import Disjoncteur
-from packages.nlp.pilotes import choisir
+from packages.nlp.pilotes import choisir, resoudre_modele
 from packages.nlp.schemas import SignalNLP, repli, valider
 
 LATENCES_GARDEES = 200        # de quoi calculer une médiane sans grossir sans fin
@@ -47,6 +47,7 @@ class MoteurNLP:
         self.cfg = cfg or ConfigNLP.depuis_env()
         self._pilote = pilote                     # injecté en test ; sinon résolu au 1er appel
         self._pilote_resolu = pilote is not None
+        self.motif_modele = "modèle demandé explicitement" if self.cfg.modele else ""
         self.disjoncteur = disjoncteur or Disjoncteur()
         self._cache: OrderedDict[str, SignalNLP] = OrderedDict()
         self._semaphore = asyncio.Semaphore(self.cfg.concurrence)
@@ -57,16 +58,34 @@ class MoteurNLP:
     # ── pilote ─────────────────────────────────────────────────────────────────────────
     def pilote(self):
         """Résolu UNE fois, paresseusement : sonder les fournisseurs à l'import ferait
-        payer trois secondes de réseau à tout script qui importe ce paquet."""
+        payer trois secondes de réseau à tout script qui importe ce paquet.
+
+        Le MODÈLE est résolu au même moment, et seulement s'il n'a pas été demandé :
+        sans
+        cela, un `modele` vide partirait tel quel dans la requête et le fournisseur
+        répondrait avec ce qui traîne, sous un nom que personne n'a servi."""
         if not self._pilote_resolu:
-            self._pilote = choisir(self.cfg.modele, self.cfg.pilote, self.cfg.base)
+            p = choisir(self.cfg.modele, self.cfg.pilote, self.cfg.base)
+            if p is not None and not self.cfg.modele:
+                p.modele, self.motif_modele = resoudre_modele(p, "")
+            self._pilote = p
             self._pilote_resolu = True
         return self._pilote
+
+    def _modele(self) -> str:
+        """Le nom qui sera ESTAMPILLÉ sur le signal : celui du pilote qui a répondu.
+
+        `cfg.modele` n'est qu'un souhait ; le pilote porte ce qui a été effectivement
+        envoyé. Les faire diverger, c'est signer une mesure du nom d'un modèle qui n'a
+        rien produit — exactement la fuite de provenance que le mandat données-réelles
+        interdit."""
+        p = self._pilote
+        return (getattr(p, "modele", "") if p is not None else "") or self.cfg.modele
 
     # ── cache ──────────────────────────────────────────────────────────────────────────
     def _cle(self, ticker: str, texte: str, version: str) -> str:
         empreinte = hashlib.sha256(texte.encode("utf-8")).hexdigest()[:24]
-        return f"{ticker.upper()}|{empreinte}|{self.cfg.modele}|{version}"
+        return f"{ticker.upper()}|{empreinte}|{self._modele()}|{version}"
 
     def _lire_cache(self, cle: str) -> SignalNLP | None:
         s = self._cache.get(cle)
@@ -89,7 +108,8 @@ class MoteurNLP:
                       version_invite: str = invites.VERSION_COURANTE) -> SignalNLP:
         """Rend TOUJOURS un signal. Ne lève jamais."""
         self._compteurs["appels"] += 1
-        cle = self._cle(ticker, texte, version_invite)
+        self.pilote()      # résout le modèle AVANT la clé : sinon le premier appel
+        cle = self._cle(ticker, texte, version_invite)   # se rangerait sous un nom vide
         if (cache := self._lire_cache(cle)) is not None:
             return cache
         signal = await self._classer_sans_cache(ticker, texte, version_invite)
@@ -141,7 +161,7 @@ class MoteurNLP:
             return self._repli(ticker, "REPONSE_ILLISIBLE", version)
 
         self.disjoncteur.succes()
-        signal = valider(brut, ticker, modele=self.cfg.modele, version_invite=version)
+        signal = valider(brut, ticker, modele=self._modele(), version_invite=version)
         if signal.repli:
             self._compteurs["replis"] += 1
             return signal
@@ -151,7 +171,7 @@ class MoteurNLP:
 
     def _repli(self, ticker: str, motif: str, version: str) -> SignalNLP:
         self._compteurs["replis"] += 1
-        return repli(ticker, motif, modele=self.cfg.modele, version_invite=version)
+        return repli(ticker, motif, modele=self._modele(), version_invite=version)
 
     async def classer_lot(self, items: list[tuple[str, str]],
                           version_invite: str = invites.VERSION_COURANTE) -> list[SignalNLP]:

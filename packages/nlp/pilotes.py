@@ -151,6 +151,50 @@ class PiloteOllama:
             return None
 
 
+def resoudre_modele(pilote, demande: str = "") -> tuple[str, str]:
+    """Le modèle RÉELLEMENT exposé par le fournisseur, et POURQUOI celui-là.
+
+    UN IDENTIFIANT EN DUR MENT EN SILENCE. Le pilote envoie `model: "<nom>"` ; LM
+    Studio,
+    en chargement à la demande, sert ce qu'il a sous la main et répond quand même. Le
+    signal repart alors estampillé d'un nom que personne n'a servi — et c'est ce nom que
+    `alpha_nlp_lab` inscrira dans la mesure. Le seul moyen de ne pas se mentir est de
+    DEMANDER au fournisseur ce qu'il expose, jamais de le supposer.
+
+    Rend `(modele, motif)`. Le motif est fait pour être AFFICHÉ : une résolution muette
+    redeviendrait une supposition, simplement mieux cachée.
+    """
+    charges = []
+    if pilote is not None:
+        try:
+            charges = list(pilote.modeles() or [])
+        except Exception:  # noqa: BLE001 — un fournisseur muet n'est pas une panne ici
+            charges = []
+
+    if demande:
+        if demande in charges:
+            return demande, "demandé, et exposé tel quel"
+        d = demande.lower()
+        proches = [m for m in charges if d in m.lower() or m.lower() in d]
+        if len(proches) == 1:
+            return proches[0], (f"« {demande} » → « {proches[0]} » "
+                                "(identifiant exact du fournisseur)")
+        if len(proches) > 1:
+            return demande, (f"« {demande} » correspond à {len(proches)} modèles "
+                             f"exposés ({', '.join(proches[:3])}…) — AUCUN choix fait")
+        if charges:
+            return demande, (f"« {demande} » est ABSENT des {len(charges)} "
+                             "modèles exposés")
+        return demande, "demandé ; le fournisseur n'expose aucune liste"
+
+    if not charges:
+        return "", "aucun modèle exposé — fournisseur éteint, ou rien de chargé"
+    if len(charges) == 1:
+        return charges[0], "seul modèle exposé — aucune ambiguïté"
+    return charges[0], (f"{len(charges)} modèles exposés et aucun demandé : premier "
+                        "de la liste. Fixer LOCAL_TRADING_MODEL pour trancher")
+
+
 def choisir(modele: str, pilote: str = "auto", base: str = "",
             timeout: float = 3.0):
     """Le pilote à utiliser, ou `None` si aucun fournisseur ne répond.

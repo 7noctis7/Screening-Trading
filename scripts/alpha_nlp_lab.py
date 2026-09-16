@@ -44,11 +44,18 @@ def _scoreur_nlp(evenements) -> list[float] | None:
     """
     from packages.nlp.config import ConfigNLP
     from packages.nlp.moteur import MoteurNLP
-    from packages.nlp.pilotes import choisir
+    from packages.nlp.pilotes import choisir, resoudre_modele
     cfg = ConfigNLP.depuis_env()
     pilote = choisir(cfg.modele, cfg.pilote, cfg.base)
     if pilote is None:
         return None
+    # LE NOM DU MODÈLE EST UNE DONNÉE DE LA MESURE, pas un détail d'affichage : c'est
+    # lui qui dira, dans six mois, QUI a produit l'alpha qu'on paiera. On le fait
+    # donc trancher par le fournisseur avant le premier appel.
+    resolu, motif = resoudre_modele(pilote, cfg.modele)
+    pilote.modele = resolu
+    cfg = cfg.avec_modele(resolu)
+    print(f"  Modèle : {resolu or '(aucun)'} — {motif}")
     moteur = MoteurNLP(cfg=cfg, pilote=pilote)
     items = [(e.symbole, e.titre) for e in evenements]
     signaux = asyncio.run(moteur.classer_lot(items))

@@ -1,23 +1,37 @@
 """Réglages du NLP local. TOUT ce qui se change sans lire le code est ici.
 
 LE BUDGET MÉMOIRE EST UNE CONTRAINTE, PAS UN RÉGLAGE. Le Mac Mini a 16 Go unifiés, dont au
-plus 7,5 Go pour le LLM et son cache. Un modèle 7B quantifié en Q4 occupe environ 4,5 Go ;
-chaque requête concurrente y ajoute son contexte. La concurrence par défaut est donc de 2 —
-pas par prudence vague, mais parce qu'au-delà on entre dans la zone où macOS commence à
-échanger sur disque, et une latence qui explose ressemble à une panne de modèle.
+plus 7,5 Go pour le LLM et son cache. En quantification Q4, un modèle pèse grossièrement
+0,6 Go par milliard de paramètres — 7B ≈ 4,5 Go, 9B ≈ 5,5 Go — et chaque requête
+concurrente y ajoute son contexte. C'est un ORDRE DE GRANDEUR, pas une mesure : la seule
+vraie mesure est celle que `scripts/benchmark_nlp.py` lit sur le processus d'inférence.
+La concurrence par défaut est de 2, parce qu'au-delà on entre dans la zone où macOS
+échange sur disque — et une latence qui explose ressemble exactement à une panne de
+modèle.
+Plus le modèle est gros, plus cette marge se referme : sur un 9B,
+`QUANT_NLP_CONCURRENCE=1` est prudent si le banc montre une p90 qui décroche.
 
-UN SEUL MODÈLE ACTIF. Charger Qwen 7B et Gemma 2B en même temps tient en mémoire, mais
-alterner entre eux fait payer un rechargement à chaque bascule. Le comparatif entre modèles
-se fait donc en série (`scripts/benchmark_nlp.py`), jamais en parallèle.
+AUCUN MODÈLE N'EST ÉCRIT EN DUR. Un identifiant figé dans le code devient faux dès que
+l'utilisateur change de modèle, et il ment en SILENCE : le fournisseur sert ce qu'il a
+chargé, le signal repart estampillé du nom qu'on croyait. `pilotes.resoudre_modele()`
+demande donc au fournisseur ce qu'il expose. `LOCAL_TRADING_MODEL` reste le mot de la
+fin quand plusieurs modèles sont exposés.
+
+UN SEUL MODÈLE ACTIF À LA FOIS. Deux modèles chargés simultanément peuvent tenir en
+mémoire, mais alterner entre eux fait payer un rechargement à chaque bascule. Le
+comparatif se fait donc en série (`scripts/benchmark_nlp.py`), jamais en parallèle.
 """
 
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 # Défauts pensés pour LM Studio sur Mac Mini M4 16 Go.
-MODELE_DEFAUT = "qwen2.5-7b-instruct"
+# VIDE À DESSEIN : « je ne sais pas quel modèle est chargé » est la vérité tant qu'on
+# n'a pas interrogé le fournisseur. Un nom plausible ici serait une supposition que tout le
+# reste de la chaîne propagerait comme un fait. Cf. `pilotes.resoudre_modele()`.
+MODELE_DEFAUT = ""
 TIMEOUT_S = 12.0          # au-delà, un titre ne vaut plus qu'on attende
 CONCURRENCE = 2           # cf. budget mémoire ci-dessus
 CACHE_MAX = 256           # entrées ; une entrée pèse quelques centaines d'octets
@@ -64,6 +78,12 @@ class ConfigNLP:
             cache_max=max(0, _entier("QUANT_NLP_CACHE", CACHE_MAX)),
         )
 
+    def avec_modele(self, modele: str) -> ConfigNLP:
+        """La même config, avec le modèle RÉSOLU. `replace` plutôt qu'une mutation :
+        la config est gelée pour qu'une trace de signal ne change pas après coup."""
+        return replace(self, modele=modele)
+
     def resume(self) -> str:
-        return (f"{self.modele} · pilote {self.pilote} · timeout {self.timeout_s:.0f} s · "
+        nom = self.modele or "(à découvrir auprès du fournisseur)"
+        return (f"{nom} · pilote {self.pilote} · timeout {self.timeout_s:.0f} s · "
                 f"concurrence {self.concurrence} · cache {self.cache_max}")

@@ -2,13 +2,13 @@
 """Le NLP local répond-il, et répond-il JUSTE ? — à lancer sur la machine qui héberge le LLM.
 
   python scripts/nlp_check.py                      (ou : make nlp-check)
-  python scripts/nlp_check.py --modele qwen2.5-7b-instruct
+  python scripts/nlp_check.py --modele <identifiant exact du fournisseur>
   python scripts/nlp_check.py --texte "Rappel produit massif annoncé ce matin."
 
 CE QU'IL VÉRIFIE, DANS L'ORDRE OÙ ÇA CASSE EN VRAI :
   1. un fournisseur répond-il (LM Studio sur :1234, sinon Ollama sur :11434) ;
-  2. le modèle demandé est-il RÉELLEMENT chargé — un fournisseur qui répond avec un autre
-     modèle chargé échoue à la première vraie requête, pas au diagnostic ;
+  2. QUEL modèle est réellement exposé — aucun identifiant n'est en dur, on demande au
+     fournisseur ; un nom supposé ment en silence, le fournisseur servant ce qu'il a ;
   3. la sortie structurée tient-elle le schéma ;
   4. combien de temps, et le repli fonctionne-t-il quand on coupe.
 
@@ -34,21 +34,31 @@ CAS = [
 
 
 def _fournisseur(cfg):
-    from packages.nlp.pilotes import choisir
+    """Le pilote ET le modèle servi. Rend `(pilote, cfg)` — `(None, cfg)` si muet.
+
+    C'est ici que le nom cesse d'être un souhait : on demande au fournisseur ce
+    qu'il expose, et `resoudre_modele` tranche. Le motif est imprimé à chaque fois — une
+    résolution silencieuse serait une supposition, simplement mieux cachée.
+    """
+    from packages.nlp.pilotes import choisir, resoudre_modele
     p = choisir(cfg.modele, cfg.pilote, cfg.base)
     if p is None:
         print("⛔ Aucun fournisseur local ne répond.")
         print("   LM Studio : ouvrir l'onglet « Developer » → Start Server (port 1234)")
         print("   Ollama    : `ollama serve`")
-        return None
+        return None, cfg
     modeles = p.modeles()
-    print(f"✓ Fournisseur : {p.nom} · {len(modeles)} modèle(s) chargé(s)")
-    if modeles and not any(cfg.modele.lower() in m.lower() for m in modeles):
-        print(f"⚠ Le modèle demandé « {cfg.modele} » n'est pas dans la liste :")
+    print(f"✓ Fournisseur : {p.nom} · {len(modeles)} modèle(s) exposé(s)")
+    resolu, motif = resoudre_modele(p, cfg.modele)
+    print(f"  Modèle retenu : {resolu or '(aucun)'} — {motif}")
+    if not resolu or resolu not in modeles:
         for m in modeles[:8]:
-            print(f"    {m}")
+            print(f"    · {m}")
+        if len(modeles) > 8:
+            print(f"    … et {len(modeles) - 8} autre(s)")
         print("   → --modele <un de ceux-ci>, ou LOCAL_TRADING_MODEL=<…>")
-    return p
+    p.modele = resolu
+    return p, cfg.avec_modele(resolu)
 
 
 async def _essais(moteur) -> int:
@@ -79,6 +89,15 @@ def _verdict(justes: int, moteur) -> int:
     print(f"  Replis : {m['replis']} · timeouts : {m['timeouts']} · "
           f"disjoncteur : {m['disjoncteur']['etat']}")
     print(f"  Config : {m['config']}")
+    if m["timeouts"]:
+        # UN TIMEOUT N'EST PAS UNE PANNE, c'est un plafond trop bas pour CE modèle.
+        # distinguer importe : un gros modèle qui répond en 15 s sur un plafond de 12 s
+        # ressemble trait pour trait à un fournisseur mort.
+        print(f"\n⚠ {m['timeouts']} dépassement(s) du plafond "
+              f"de {moteur.cfg.timeout_s:.0f} s.")
+        print("  Le modèle répond peut-être JUSTE, mais plus lentement que le plafond.")
+        print("  → plafond plus haut : QUANT_NLP_TIMEOUT_S=25 make nlp-check")
+        print("  → ou réduire la charge mémoire : QUANT_NLP_CONCURRENCE=1")
     if m["replis"]:
         print("\n⛔ Des replis : la chaîne ne tient pas. Voir les motifs ci-dessus.")
         return 1
@@ -107,9 +126,10 @@ def main() -> int:
                     pilote=a.pilote or base.pilote, timeout_s=base.timeout_s,
                     concurrence=base.concurrence, cache_max=base.cache_max)
     print(f"\n  Configuration : {cfg.resume()}")
-    p = _fournisseur(cfg)
+    p, cfg = _fournisseur(cfg)
     if p is None:
         return 2
+    print(f"  Configuration résolue : {cfg.resume()}")
     moteur = MoteurNLP(cfg=cfg, pilote=p)
 
     if a.texte:

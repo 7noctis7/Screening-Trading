@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Comparer les modèles locaux sur le MÊME jeu — latence, stabilité, conformité, accord.
 
-  python scripts/benchmark_nlp.py                       # tous les modèles chargés
-  python scripts/benchmark_nlp.py --modeles qwen2.5-7b-instruct gemma-2-2b-it
+  python scripts/benchmark_nlp.py                       # tous les modèles exposés
+  python scripts/benchmark_nlp.py --modeles <id-1> <id-2>   # ids EXACTS du fournisseur
   python scripts/benchmark_nlp.py --repetitions 5       # stabilité plus exigeante
 
 CE QU'IL NE MESURE PAS, ET IL FAUT LE LIRE AVANT LE TABLEAU : la valeur PRÉDICTIVE. Aucun

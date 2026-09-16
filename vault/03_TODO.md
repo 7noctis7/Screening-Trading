@@ -28,18 +28,27 @@
 - [x] **~~P1 — Rien ne surveille la DÉRIVE d'un planificateur~~ — FERMÉE (16/09).**
       `make brief` porte une section « Passages du robot (7 j) » avec les commandes à
       lancer. Un doublon se voit le lendemain matin.
-- [ ] **P0 — Lancer `make news` chaque jour, sans exception (16/09, ADR-0162).** Branché
-      dans `cron_daily.sh`, mais À VÉRIFIER après le premier passage : un flux RSS ne se
-      rejoue pas, chaque jour manqué est perdu définitivement. `make news ARGS=--etat`.
-- [ ] **P1 — Éprouver la chaîne NLP sur le Mac (16/09).** `make nlp-check` avec LM Studio +
-      Qwen 2.5. Distingue un échec technique (code 1) d'un désaccord du modèle (code 0).
+- [ ] **P0 — Lancer `make news` chaque jour, sans exception (16/09, ADR-0162).** PREMIER
+      PASSAGE RÉUSSI sur le VPS le 16/09 : **2 375 titres · 199 symboles · 71 jours**
+      (2026-05-19 → 2026-09-16), 1 symbole muet. Reste à VÉRIFIER que le passage
+      automatique de `cron_daily.sh` prend le relais demain — un flux RSS ne se rejoue pas.
+- [ ] **P1 — Le registre des modèles est VIDE alors qu'un modèle tourne (16/09).** `make
+      registre` sur le VPS : « aucun entraînement tracé ». L'artefact à AUC 0,504 existe
+      et sert, mais aucune trace ne dit de quelles données ni de quel commit il vient.
+      Tant que c'est vrai, `rollback` n'a rien vers quoi revenir.
+- [ ] **P1 — Éprouver la chaîne NLP sur le Mac (16/09).** `make nlp-check` avec LM Studio.
+      Le modèle n'est plus nommé dans le code : il est DEMANDÉ au fournisseur (ADR-0166).
+      Distingue un échec technique (code 1) d'un désaccord du modèle (code 0).
 - [ ] **P1 — `make alpha-nlp` dès ~200 titres au corpus (16/09, ADR-0163).** C'est ce
       verdict qui conditionne l'étape 6 (Lambda GPU). Poids NLP validé, ou ZÉRO.
 - [ ] **P1 — L'AUC du modèle de production est 0,504 (16/09, ADR-0161).** Indiscernable du
       hasard, Brier à 0,0004 du seuil de rejet, DSR jamais calculé. Aucune accélération de
       calcul ne corrige une absence de signal — c'est le vrai sujet ML du projet.
 - [ ] **P2 — Régénérer `constraints.txt` avec les extras `ml` et `sentiment` (16/09).**
-      `make verrou` donne la commande. À lancer SUR LA MACHINE QUI ENTRAÎNE.
+      `make verrou` sur le VPS (16/09) : `scikit-learn` LIBRE, `xgboost`/`lightgbm`/`torch`
+      **absents**. Le VPS n'est donc PAS la machine qui entraîne — la commande doit tourner
+      là où le modèle est produit, sinon le verrou épingle un environnement qui n'entraîne
+      rien.
 - [ ] **P2 — Étape 6 (LambdaBackend) — CONDITIONNÉE (16/09, ADR-0161/0164).** L'interface,
       le superviseur et la double protection existent et sont testés sur `BackendLocal`.
       N'écrire le backend distant que si `make alpha-nlp` a démontré un alpha à accélérer.

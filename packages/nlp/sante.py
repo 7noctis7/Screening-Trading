@@ -26,7 +26,8 @@ def etat_chaine(moteur=None, sonder: bool = True) -> dict:
     """État de la chaîne NLP locale. `sonder=False` pour ne pas toucher au réseau."""
     from packages.nlp.config import ConfigNLP
     cfg = (moteur.cfg if moteur is not None else ConfigNLP.depuis_env())
-    base: dict = {"modele_demande": cfg.modele, "config": cfg.resume(),
+    base: dict = {"modele_demande": cfg.modele, "modele_servi": None,
+                  "config": cfg.resume(),
                   "etat": HORS_LIGNE, "motif": "", "pilote": None,
                   "modeles_charges": [], "disjoncteur": None, "metriques": None}
     if moteur is not None:
@@ -68,12 +69,21 @@ def _verdict(demande: str, charges: list[str], disjoncteur: dict | None) -> dict
                           f"envoyés, réouverture dans {disjoncteur.get('reouverture_dans_s')} s")}
     if not charges:
         return {"etat": DEGRADE, "motif": "le fournisseur répond mais aucun modèle n'est chargé"}
+    if not demande:
+        # Aucun modèle demandé : LÉGITIME depuis que le fournisseur tranche le nom.
+        # Mais sans le dire, `""` passerait le test de sous-chaîne ci-dessous —
+        # `"" in m`
+        # est vrai pour TOUT m — et le voyant s'allumerait vert sans désigner personne.
+        from packages.nlp.pilotes import resoudre_modele
+        servi, motif = resoudre_modele(_Liste(charges), "")
+        return {"etat": EN_LIGNE, "modele_servi": servi,
+                "motif": f"aucun modèle demandé — servi : « {servi} » ({motif})"}
     if not any(demande.lower() in m.lower() or m.lower() in demande.lower()
                for m in charges):
         return {"etat": DEGRADE,
                 "motif": (f"le modèle demandé « {demande} » n'est pas chargé — "
                           f"disponibles : {', '.join(charges[:4])}")}
-    return {"etat": EN_LIGNE, "motif": ""}
+    return {"etat": EN_LIGNE, "modele_servi": demande, "motif": ""}
 
 
 def etat_modeles() -> dict:
@@ -101,3 +111,17 @@ def etat_modeles() -> dict:
         "archives": [e.version for e in reg.archives()][:5],
         "incoherences": reg.incoherences(),
     }
+
+
+class _Liste:
+    """Adaptateur minimal : `resoudre_modele` ne demande qu'un `.modeles()`.
+
+    Passer la liste déjà obtenue évite un SECOND appel réseau — et surtout évite que
+    l'état affiché soit calculé sur une liste différente de celle qu'on montre.
+    """
+
+    def __init__(self, charges: list[str]):
+        self._charges = charges
+
+    def modeles(self) -> list[str]:
+        return self._charges

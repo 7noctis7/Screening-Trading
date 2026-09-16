@@ -2,6 +2,41 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0166 — Aucun identifiant de modèle n'est écrit dans le code (2026-09-16)
+
+**Contexte.** `config.py` portait `MODELE_DEFAUT = "qwen2.5-7b-instruct"` — un nom plausible,
+écrit le jour où le cahier des charges parlait de Qwen 2.5. L'utilisateur fait tourner autre
+chose. Le défaut est alors devenu faux, et **il ne lève pas** : le pilote envoie
+`model: "<nom>"`, LM Studio en chargement à la demande sert ce qu'il a, et rend 200. Le
+signal repart estampillé d'un modèle qui n'a rien produit.
+
+**Pourquoi ce n'est pas cosmétique.** Ce nom est inscrit dans la mesure de `alpha_nlp_lab`,
+celle qui décidera du poids donné au NLP — et dans la clé de cache du moteur. Une mesure
+signée du mauvais modèle ne se refait pas : six mois plus tard, plus personne ne sait qui a
+produit l'alpha qu'on paie. C'est exactement ce que le mandat données-réelles interdit.
+
+**Décision.** Le défaut devient **vide**, et `pilotes.resoudre_modele()` DEMANDE au
+fournisseur ce qu'il expose :
+- un nom demandé et exposé → rendu tel quel ;
+- un nom approximatif qui ne correspond qu'à un seul exposé → **canonisé** vers
+  l'identifiant exact du fournisseur (`qwen3.5` → `qwen3.5-9b-instruct-mlx`) ;
+- un nom ambigu (plusieurs correspondances) → **aucun choix**, le motif nomme les
+  candidats ;
+- un nom absent → rendu tel quel, signalé ABSENT — jamais remplacé en douce ;
+- aucun nom, un seul modèle exposé → celui-là ;
+- aucun nom, plusieurs exposés → le premier, et le motif nomme le remède
+  (`LOCAL_TRADING_MODEL`).
+
+La fonction rend toujours `(modele, motif)`, et **le motif est affiché** : une résolution
+muette redeviendrait une supposition, simplement mieux cachée. Le signal est désormais
+estampillé du modèle porté par le PILOTE, plus du souhait de la config.
+
+**Conséquence, et un défaut trouvé en chemin.** `sante._verdict` testait
+`demande.lower() in m.lower()` : avec un `demande` vide, `"" in m` est vrai pour TOUT `m`,
+donc le voyant serait passé au vert **sans désigner personne**. Le cas vide est maintenant
+traité en premier et nomme le modèle servi. 13 tests ajoutés, dont celui qui interdit le
+retour d'un identifiant en dur.
+
 ## ADR-0165 — Un audit d'archivage dont la bonne conclusion est « ne rien archiver » (2026-09-16)
 
 **Contexte.** Mission : repérer les fichiers obsolètes du dépôt et les déplacer sous `old/`,
