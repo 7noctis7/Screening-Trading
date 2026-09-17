@@ -2,6 +2,29 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0175 — Le marqueur « non reproductible » ne doit pas être permanent (2026-09-17)
+
+**Le constat, et il est sans appel.** Le tout PREMIER modèle jamais inscrit au registre —
+`Gradient Boosting (sklearn)-20260916-223954-4a0ed2d` — portait déjà « entraîné depuis un
+arbre GIT MODIFIÉ, non reproductible ». Cause : `cron_daily.sh` régénère
+`config/mobile_universe.csv` et `data/delisted.csv`, deux fichiers SUIVIS, quelques minutes
+avant d'entraîner. **Aucun run n'aurait jamais pu être déclaré reproductible.** Un
+avertissement qui s'allume à chaque fois n'avertit plus de rien.
+
+**Décision.** `git_commit()` ne suffixe `-sale` que si des fichiers HORS
+`DONNEES_REGENEREES` sont modifiés. Ce n'est pas un assouplissement : le commit sert à figer
+le CODE ; les données d'entrée changent tous les jours par nature, et c'est `dataset_hash`
+qui les capture. La liste est explicite plutôt que devinée — une heuristique sur les
+extensions laisserait passer du code un jour.
+
+**UN DÉFAUT DANS MON PROPRE CORRECTIF, trouvé en le vérifiant.** `git status --porcelain`
+aligne son statut sur DEUX colonnes : « M fichier » (modifié non indexé) commence par une
+ESPACE. L'appel git faisait un `.strip()` global, qui la supprimait, décalait tout d'un
+caractère et transformait `config/mobile_universe.csv` en `onfig/mobile_universe.csv` — ne
+correspondant plus à aucune exclusion. **Le filtre aurait semblé posé tout en ne filtrant
+rien**, et le marqueur serait resté permanent sans que rien ne le dise. Drapeau `brut=True`,
+et un test sur les quatre formes de ligne porcelain.
+
 ## ADR-0173 — La pollution se date au premier DOUBLON coûteux, pas au premier A/R (2026-09-16)
 
 **Mon propre défaut, et il portait une affirmation PUBLIQUE.** L'annotation livrée quelques

@@ -28,24 +28,71 @@ RACINE = Path(__file__).resolve().parents[2]
 BIBLIOTHEQUES = ("numpy", "pandas", "scikit-learn", "xgboost", "lightgbm", "torch", "scipy")
 
 
+# Fichiers SUIVIS que la chaîne quotidienne réécrit d'elle-même, quelques minutes avant
+# l'entraînement. Les compter comme une saleté rend le marqueur « -sale » PERMANENT — et
+# un avertissement permanent cesse d'être lu.
+#
+# MESURÉ LE 17/09 : le tout premier modèle jamais tracé portait déjà « entraîné depuis
+# un arbre GIT MODIFIÉ — non reproductible », à cause de ces deux fichiers seuls. Aucun
+# entraînement n'aurait JAMAIS pu être déclaré reproductible.
+#
+# Ce n'est pas un assouplissement : le commit fige le CODE. Les données d'entrée, elles,
+# changent tous les jours par nature — c'est `dataset_hash` qui les capture, et lui
+# qu'il faut regarder pour savoir sur quoi le modèle a été entraîné.
+DONNEES_REGENEREES = ("config/mobile_universe.csv", "data/delisted.csv")
+
+
+def _git(racine: Path, *a: str, brut: bool = False) -> str:
+    """`brut=True` conserve les espaces de tête.
+
+    POURQUOI CE DRAPEAU EXISTE. `git status --porcelain` aligne son statut sur DEUX
+    colonnes : « M fichier » (modifié non indexé) commence par une espace. Un `.strip()`
+    global la supprime, tout décale d'un caractère, et `config/mobile_universe.csv`
+    devient `onfig/mobile_universe.csv` — qui ne correspond à aucune exclusion. Le
+    filtre aurait semblé posé tout en ne filtrant rien, et le marqueur « -sale » serait
+    resté permanent sans que rien ne le dise.
+    """
+    try:
+        r = subprocess.run(["git", "-C", str(racine), *a], capture_output=True,
+                           text=True, timeout=10)
+        if r.returncode != 0:
+            return ""
+        return r.stdout if brut else r.stdout.strip()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _chemin_porcelain(ligne: str) -> str:
+    """Le chemin d'une ligne `git status --porcelain`, renommages compris."""
+    reste = ligne[3:] if len(ligne) > 3 else ""
+    return reste.split(" -> ")[-1].strip().strip('"')
+
+
+def fichiers_salissants(racine: Path = RACINE,
+                        regenerees: tuple[str, ...] = DONNEES_REGENEREES) -> list[str]:
+    """Les fichiers modifiés qui rendent VRAIMENT le run irreproductible.
+
+    Ceux que la chaîne régénère d'elle-même sont exclus, et ils sont nommés dans la
+    constante ci-dessus plutôt que devinés : une heuristique sur les extensions
+    laisserait passer du code un jour.
+    """
+    lignes = _git(racine, "status", "--porcelain", brut=True).splitlines()
+    return sorted({c for ligne in lignes
+                   if (c := _chemin_porcelain(ligne)) and c not in regenerees})
+
+
 def git_commit(racine: Path = RACINE) -> str:
-    """SHA du commit, suffixé `-sale` si l'arbre de travail est modifié.
+    """SHA du commit, suffixé `-sale` si du CODE a été modifié.
 
     Le suffixe n'est pas cosmétique : un modèle entraîné depuis un arbre sale n'est pas
     reproductible à partir de ce commit, et c'est exactement ce qu'il faut savoir avant
-    d'essayer de le refaire.
+    d'essayer de le refaire. Encore faut-il qu'il ne se déclenche pas chaque jour pour
+    des fichiers de données que la chaîne réécrit elle-même — cf. `DONNEES_REGENEREES`.
     """
-    def _git(*a: str) -> str:
-        try:
-            r = subprocess.run(["git", "-C", str(racine), *a], capture_output=True,
-                               text=True, timeout=10)
-            return r.stdout.strip() if r.returncode == 0 else ""
-        except Exception:  # noqa: BLE001
-            return ""
-    sha = _git("rev-parse", "HEAD")
+    sha = _git(racine, "rev-parse", "HEAD")
     if not sha:
         return "inconnu"
-    return f"{sha}-sale" if _git("status", "--porcelain") else sha
+    return f"{sha}-sale" if fichiers_salissants(racine) else sha
 
 
 def environnement() -> dict[str, str | None]:

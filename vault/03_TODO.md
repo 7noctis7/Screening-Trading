@@ -35,11 +35,14 @@
       PASSAGE RÉUSSI sur le VPS le 16/09 : **2 375 titres · 199 symboles · 71 jours**
       (2026-05-19 → 2026-09-16), 1 symbole muet. Reste à VÉRIFIER que le passage
       automatique de `cron_daily.sh` prend le relais demain — un flux RSS ne se rejoue pas.
-- [ ] **P1 — Le registre se remplira au prochain entraînement (16/09, ADR-0171b).** Le
-      câblage EXISTE (`_tracer`, `afc5eed`) et `cron_daily.sh` entraîne chaque nuit : il
-      n'y avait pas de code à écrire. `Registre.orphelins()` signale désormais l'artefact
-      qui sert sans être tracé. **À VÉRIFIER demain** : `make registre` doit montrer une
-      entrée, et plus d'orphelin.
+- [x] **~~P1 — Le registre se remplira au prochain entraînement~~ — FAIT (17/09).**
+      Première entrée : `Gradient Boosting (sklearn)-20260916-223954-4a0ed2d`,
+      **AUC 0,532**, statut `rejected` (non promu). Le câblage fonctionne de bout en bout.
+- [ ] **P1 — AUCUNE version en PRODUCTION au registre (17/09).** Le candidat du 16/09 a
+      été REJETÉ, et rien n'a été promu : `PRODUCTION : (aucune)` pendant qu'un artefact
+      non tracé sert. Tant que c'est vrai, `rollback` n'a toujours rien vers quoi revenir.
+      À trancher : promouvoir l'artefact en service, ou accepter que la production ne soit
+      pas gouvernée par le registre — mais le dire.
 - [x] **~~P1 — Éprouver la chaîne NLP sur le Mac~~ — ABANDONNÉE (16/09, ADR-0170).**
       Quatre tentatives, zéro classification. La chaîne locale est RETIRÉE du dépôt.
 - [ ] **P1 — Mesurer l'alpha du LEXIQUE sur le corpus (16/09, ADR-0170).** `make
@@ -49,11 +52,15 @@
 - [ ] **P1 — L'AUC du modèle de production est 0,504 (16/09, ADR-0161).** Indiscernable du
       hasard, Brier à 0,0004 du seuil de rejet, DSR jamais calculé. Aucune accélération de
       calcul ne corrige une absence de signal — c'est le vrai sujet ML du projet.
-- [ ] **P2 — Régénérer `constraints.txt` avec les extras `ml` et `sentiment` (16/09).**
-      `make verrou` sur le VPS (16/09) : `scikit-learn` LIBRE, `xgboost`/`lightgbm`/`torch`
-      **absents**. Le VPS n'est donc PAS la machine qui entraîne — la commande doit tourner
-      là où le modèle est produit, sinon le verrou épingle un environnement qui n'entraîne
-      rien.
+- [ ] **P1 — Régénérer `constraints.txt` SUR LE VPS (17/09).** J'avais conclu le 16/09
+      que « le VPS n'est pas la machine qui entraîne » parce que `xgboost`/`lightgbm`/
+      `torch` y sont absents. **C'EST FAUX** : le registre du 17/09 montre un run
+      `Gradient Boosting (sklearn)` du 16/09 à 22:39:54, `cpu:x86_64`, sur le VPS. Les
+      trois bibliothèques absentes ne sont simplement pas utilisées. Celle qui compte est
+      `scikit-learn 1.9.0`, **LIBRE** — donc une mise à jour silencieuse peut changer le
+      modèle sans que rien ne le dise. Passe en P1 :
+      `pip-compile --extra=api --extra=data --extra=quant --extra=ml --extra=sentiment
+      --strip-extras --output-file=constraints.txt pyproject.toml`
 - [ ] **P2 — Étape 6 (LambdaBackend) — CONDITIONNÉE (16/09, ADR-0161/0164).** L'interface,
       le superviseur et la double protection existent et sont testés sur `BackendLocal`.
       N'écrire le backend distant que si une mesure d'alpha a démontré quelque chose à

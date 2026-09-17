@@ -1,5 +1,48 @@
 # 04 — JOURNAL
 
+## Session 2026-09-17 (33ᵉ) — Le registre parle, et il dit trois choses
+
+**LA CHAÎNE MLOPS FONCTIONNE DE BOUT EN BOUT.** Première entrée jamais écrite :
+`Gradient Boosting (sklearn)-20260916-223954-4a0ed2d` · **AUC 0,532** · seed 7 ·
+`cpu:x86_64` · statut **rejected**. L'entraînement de 22:39:54 a tracé son run tout seul.
+
+**TROIS CHOSES QUE CETTE SEULE LIGNE APPREND :**
+
+1. **Le VPS ENTRAÎNE — j'avais affirmé le contraire.** J'avais conclu le 16/09 que « le VPS
+   n'est pas la machine qui entraîne » parce que `xgboost`, `lightgbm` et `torch` y sont
+   absents. Ils ne sont simplement pas utilisés : le modèle est un Gradient Boosting
+   scikit-learn, et il tourne là. Conséquence : `scikit-learn 1.9.0` est **LIBRE** dans
+   `constraints.txt`, donc une mise à jour silencieuse peut changer le modèle sans que rien
+   ne le dise. La tâche passe de P2 à **P1**, et elle vise le VPS.
+2. **AUC 0,532**, contre 0,504 pour l'artefact en service. Mieux, et toujours très faible.
+3. **Aucune version en PRODUCTION** : le candidat a été rejeté, rien n'a été promu, et
+   l'artefact qui sert reste non tracé. `rollback` n'a toujours rien vers quoi revenir.
+
+**LE MARQUEUR « NON REPRODUCTIBLE » ÉTAIT CONDAMNÉ À ÊTRE PERMANENT.** `cron_daily.sh`
+régénère `config/mobile_universe.csv` et `data/delisted.csv` — deux fichiers SUIVIS — juste
+avant d'entraîner. Le premier run jamais tracé portait donc déjà le marqueur, et tous les
+suivants l'auraient porté. Corrigé : seuls les fichiers hors données régénérées salissent
+l'arbre. ADR-0175.
+
+**Et un défaut dans mon propre correctif, trouvé en le vérifiant.** `git status --porcelain`
+commence par une ESPACE pour un fichier modifié non indexé ; le `.strip()` de l'appel git la
+supprimait et décalait tout d'un caractère. `config/mobile_universe.csv` devenait
+`onfig/mobile_universe.csv` : **le filtre aurait semblé posé tout en ne filtrant rien.**
+
+**Collecte automatique confirmée** : le corpus est passé de 2 375 à 2 591 pendant la nuit
+sans intervention — `cron_daily.sh` collecte bien. Puis 2 658 après le passage manuel du
+matin. 72 jours, 76,3 % de rétro-publiés.
+
+**`make alpha-lexique` : toujours « pas encore », et sa raison est désormais lisible** —
+dates UTILISABLES 2026-09-16 → 2026-09-17, 67 titres au 17/09. Il faut 5 séances après la
+date utilisable, pas après la publication. Rendez-vous le 23/09.
+
+**Churn** : pas encore de ligne au 17/09 (le robot passe à 19:05 UTC). Le 16/09 reste à
+1 passage, 0 aller-retour. L'annotation dit bien « depuis le 27/08 · 618,57 $ » plus
+« 1,56 $ intra-passage ».
+
+`make test` : **2 988 passed, 77 skipped**.
+
 ## Session 2026-09-16 (32ᵉ) — Le correctif tient, et mon annotation datait de travers
 
 **LE CORRECTIF DE PLANIFICATION EST VÉRIFIÉ.** `make churn` sur le VPS montre enfin le

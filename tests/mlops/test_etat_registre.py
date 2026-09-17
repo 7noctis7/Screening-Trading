@@ -103,3 +103,65 @@ def test_six_orphelins_ne_produisent_pas_six_avertissements(tmp_path):
     assert len(soucis) == 2, soucis
     assert "ml_frais.pkl" in soucis[0] and "plus récent" in soucis[0]
     assert "2 autre(s)" in soucis[1]
+
+
+# ─── Le marqueur « -sale » ne doit pas être permanent ────────────────────────────────
+
+def test_les_donnees_REGENEREES_ne_salissent_pas_l_arbre(tmp_path):
+    """MESURÉ LE 17/09. Le premier modèle jamais tracé portait déjà « entraîné depuis
+    un arbre GIT MODIFIÉ — non reproductible », à cause de deux fichiers que
+    `cron_daily.sh` réécrit quelques minutes avant l'entraînement. Aucun run n'aurait
+    JAMAIS pu être déclaré reproductible, et l'avertissement aurait cessé d'être lu.
+
+    Le commit fige le CODE ; les données d'entrée changent tous les jours par nature —
+    c'est `dataset_hash` qui les capture."""
+    import subprocess
+
+    from packages.mlops.manifest import fichiers_salissants, git_commit
+
+    def sh(*a):
+        subprocess.run(["git", "-C", str(tmp_path), *a],
+                       capture_output=True, check=False)
+
+    sh("init", "-q")
+    sh("config", "user.email", "t@t")
+    sh("config", "user.name", "t")
+    (tmp_path / "config").mkdir()
+    (tmp_path / "data").mkdir()
+    (tmp_path / "config" / "mobile_universe.csv").write_text("a\n")
+    (tmp_path / "data" / "delisted.csv").write_text("b\n")
+    (tmp_path / "code.py").write_text("x = 1\n")
+    sh("add", "-A")
+    sh("commit", "-qm", "initial")
+    assert fichiers_salissants(tmp_path) == []
+    propre = git_commit(tmp_path)
+    assert not propre.endswith("-sale")
+
+    # Les DEUX fichiers régénérés bougent : l'arbre reste propre au sens du manifeste.
+    (tmp_path / "config" / "mobile_universe.csv").write_text("a2\n")
+    (tmp_path / "data" / "delisted.csv").write_text("b2\n")
+    assert fichiers_salissants(tmp_path) == []
+    assert git_commit(tmp_path) == propre
+
+    # Du CODE bouge : là, le run n'est plus reproductible, et on le dit.
+    (tmp_path / "code.py").write_text("x = 2\n")
+    assert fichiers_salissants(tmp_path) == ["code.py"]
+    assert git_commit(tmp_path).endswith("-sale")
+
+
+def test_le_statut_porcelain_est_lu_SANS_perdre_sa_premiere_colonne():
+    """LE DÉFAUT DANS MON PROPRE CORRECTIF. `git status --porcelain` aligne son statut
+    sur deux colonnes : « M fichier » (modifié non indexé) commence par une ESPACE. Un
+    `.strip()` global la supprime, tout décale d'un caractère, et
+    `config/mobile_universe.csv` devient `onfig/mobile_universe.csv` — qui ne correspond
+    à aucune exclusion. Le filtre aurait semblé posé tout en ne filtrant rien."""
+    from packages.mlops.manifest import _chemin_porcelain
+    attendu = "config/mobile_universe.csv"
+    assert _chemin_porcelain(f" M {attendu}") == attendu
+    assert _chemin_porcelain("M  data/delisted.csv") == "data/delisted.csv"
+    assert _chemin_porcelain("?? nouveau.txt") == "nouveau.txt"
+
+
+def test_un_renommage_rend_la_DESTINATION():
+    from packages.mlops.manifest import _chemin_porcelain
+    assert _chemin_porcelain("R  vieux.py -> neuf.py") == "neuf.py"
