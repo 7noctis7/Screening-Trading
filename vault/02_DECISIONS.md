@@ -2,6 +2,36 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0178 — Une consigne qui nomme un outil absent est pire qu'un silence (2026-09-17)
+
+**Le symptôme.** `make verrou-regen`, livré le matin même, a rendu sur le VPS :
+`make: pip-compile: No such file or directory`. Et `make verrou` imprimait la même commande
+comme remède — donc la commande de réparation était elle-même en panne.
+
+**La cause est une supposition de ma part.** J'ai écrit la cible avec `pip-compile`, qui
+appartient à `pip-tools`. Ce projet s'installe avec **uv** (`make install` → `uv venv && uv
+pip install`) et n'a jamais eu `pip-tools` dans ses dépendances. `uv pip compile` fait
+exactement le même travail, avec les mêmes extras, et retire les extras par défaut — d'où
+l'absence de `--strip-extras`, qui n'existe pas chez lui.
+
+**Ce qui est grave n'est pas l'échec, c'est le message.** « No such file or directory » fait
+chercher du côté de l'environnement, alors que c'est la CONSIGNE qui était fausse. Même
+famille que les pièges déjà consignés : on cherche là où il n'y a rien.
+
+**Décision.** Une constante unique, `COMMANDE_REGENERATION`, sert à la fois le message de
+`make verrou` et la recette de `make verrou-regen` — **un test les lie**, pour que le conseil
+et l'outil ne puissent plus diverger. Vérifié en exécutant réellement la commande : elle rend
+`scikit-learn`, `xgboost`, `lightgbm` et `torch`, c'est-à-dire précisément les quatre
+bibliothèques que le verrou ne couvrait pas.
+
+**Un test préexistant est tombé, et il avait raison sur le fond.** Il exigeait la syntaxe
+`--extra=ml` ; uv écrit `--extra ml`. L'assertion porte désormais sur le NOM de l'extra, pas
+sur la ponctuation du résolveur — un test qui fige la syntaxe d'un outil ne teste plus
+l'intention.
+
+**Et le P0 des trois planificateurs est DÉFINITIVEMENT clos** : 16/09 puis 17/09, un seul
+passage chacun (19:08:35 puis 19:08:28), zéro aller-retour. Deux jours propres d'affilée.
+
 ## ADR-0176 — Un verrou qu'on n'applique pas est pire qu'une absence de verrou (2026-09-17)
 
 **Le constat, mesuré avant d'agir.** `constraints.txt` n'était passé qu'aux TROIS workflows

@@ -101,14 +101,27 @@ def resume(env_du_run: dict, env_courant: dict | None = None) -> str:
     return f"{tete} : {detail}" + ("…" if len(es) > 4 else "")
 
 
+# `uv`, PAS `pip-compile`. Ce projet s'installe avec uv (`make install`), et
+# `pip-compile` appartient à `pip-tools`, absent de ses dépendances. Mesuré le 17/09 :
+# `make verrou-regen` a rendu « pip-compile: No such file or directory ». Une consigne
+# qui
+# nomme un outil absent de la machine est pire qu'une absence de consigne — elle fait
+# croire à un environnement cassé là où c'est la consigne qui l'était.
+#
+# uv retire les extras par DÉFAUT (d'où l'absence de `--strip-extras`, qui n'existe pas
+# chez lui ; son option est `--no-strip-extras`).
+COMMANDE_REGENERATION = (
+    "uv pip compile --extra api --extra data --extra quant --extra ml "
+    "--extra sentiment -o constraints.txt pyproject.toml")
+
+
 def commande_regeneration() -> str:
     """La commande EXACTE qui produirait un verrou couvrant l'entraînement.
 
     Elle est rendue plutôt qu'exécutée : régénérer un verrou télécharge les dépendances et
     doit se faire sur la machine qui entraîne, pas dans un conteneur d'analyse.
     """
-    return ("pip-compile --extra=api --extra=data --extra=quant --extra=ml "
-            "--extra=sentiment --strip-extras --output-file=constraints.txt pyproject.toml")
+    return COMMANDE_REGENERATION
 
 
 def applique(racine: Path = RACINE) -> tuple[bool, str]:

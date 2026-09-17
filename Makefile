@@ -17,8 +17,9 @@ install:          ## installe les dépendances (uv) SOUS le verrou de constraint
 
 verrou-regen:     ## régénère constraints.txt AVEC les extras d'entraînement (sur la machine qui entraîne)
 	@echo "→ Cette commande doit tourner SUR LA MACHINE QUI ENTRAÎNE (cf. make verrou)."
-	pip-compile --extra=api --extra=data --extra=quant --extra=ml --extra=sentiment \
-	  --strip-extras --output-file=constraints.txt pyproject.toml
+	@# `uv`, pas `pip-compile` : ce projet s'installe avec uv et n'a jamais eu pip-tools.
+	uv pip compile --extra api --extra data --extra quant --extra ml --extra sentiment -o constraints.txt pyproject.toml
+	@echo "→ Verrou régénéré. Réinstaller pour s'y conformer :  make install"
 setup:            ## installation locale guidée (venv, détection YAHOO.db, build, cron) — 1 commande
 	bash scripts/setup_local.sh
 sync:             ## RÉCUPÈRE la branche de dev sans jamais créer de conflit (jamais `git pull`)

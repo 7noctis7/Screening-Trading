@@ -21,9 +21,9 @@
       ADR-0155/0156).** Actions + launchd du Mac + crontab du VPS, chacun défaisant le
       précédent. −60,79 $ le 15/09. Garde journalière branchée (le COURTIER décide),
       planification `paper.yml` retirée, Mac désinstallé. Test : `schedule:` interdit.
-- [x] **~~P0 — Trois planificateurs~~ — CORRECTIF VÉRIFIÉ (16/09).** `make churn` du
-      16/09 : **1 passage · 8 ordres · 0 aller-retour**. Premier jour propre. La garde
-      journalière tient.
+- [x] **~~P0 — Trois planificateurs~~ — DÉFINITIVEMENT CLOS (17/09).** Deux jours
+      propres d'affilée : 16/09 (1 passage 19:08:35, 0 A/R) et 17/09 (1 passage 19:08:28,
+      0 A/R). La garde journalière tient à vingt secondes près.
 - [x] **~~P1 — Chiffrer le coût CUMULÉ du churn~~ — MESURÉ (16/09, ADR-0159).**
       `make churn` : 15 jours sur 32 à plus d'un passage, **−620,13 $** sur **594 362 $**
       brassés. La date de pollution est le **27/08** (premier aller-retour), pas le 07/07
@@ -62,8 +62,10 @@
       modèle sans que rien ne le dise. Passe en P1 :
       **DÉFAUT PLUS GRAVE TROUVÉ EN CHEMIN (ADR-0176)** : `constraints.txt` n'était
       appliqué QUE dans les trois workflows GitHub — `make install` n'en tenait aucun
-      compte. Le verrou protégeait la CI, qui n'entraîne pas. Corrigé. **Reste à lancer
-      SUR LE VPS** : `make verrou-regen`, puis `make verrou` doit passer au vert.
+      compte. Le verrou protégeait la CI, qui n'entraîne pas. Corrigé — ainsi que la
+      cible elle-même, qui nommait `pip-compile` au lieu d'`uv` (ADR-0178). **Reste à
+      lancer SUR LE VPS** : `make verrou-regen && make install`, puis `make verrou` doit
+      passer au vert sur ses DEUX lignes.
 - [ ] **P2 — Étape 6 (LambdaBackend) — CONDITIONNÉE (16/09, ADR-0161/0164).** L'interface,
       le superviseur et la double protection existent et sont testés sur `BackendLocal`.
       N'écrire le backend distant que si une mesure d'alpha a démontré quelque chose à

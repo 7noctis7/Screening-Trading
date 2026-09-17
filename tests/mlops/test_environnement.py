@@ -118,10 +118,14 @@ def test_le_resume_est_borne():
 
 def test_la_commande_couvre_les_extras_d_entrainement():
     """Le verrou actuel a été généré SANS `ml` ni `sentiment` — c'est toute l'origine du
-    trou. La commande rendue doit les inclure, sinon on régénère le même défaut."""
+    trou. La commande rendue doit les inclure, sinon on régénère le même défaut.
+
+    L'assertion porte sur le NOM de l'extra, pas sur la ponctuation du résolveur : elle
+    exigeait `--extra=ml` et serait tombée au passage de `pip-compile` à `uv`, qui écrit
+    `--extra ml`. Un test qui fige une syntaxe d'outil ne teste plus l'intention."""
     c = commande_regeneration()
-    for extra in ("--extra=ml", "--extra=sentiment", "--extra=quant", "--extra=data"):
-        assert extra in c
+    for extra in ("ml", "sentiment", "quant", "data", "api"):
+        assert f"--extra={extra}" in c or f"--extra {extra}" in c, extra
     assert "constraints.txt" in c
 
 
@@ -161,3 +165,37 @@ def test_le_module_ne_regenere_rien_lui_meme():
               if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)}
     for interdit in ("system", "run", "Popen", "check_call", "check_output", "main"):
         assert interdit not in appels, f"ce module d'analyse appelle « {interdit}() »"
+
+
+# ─── Une consigne qui nomme un outil absent est pire qu'un silence ────────────────────
+
+def test_la_commande_annoncee_est_CELLE_QUE_LE_MAKEFILE_LANCE():
+    """MESURÉ LE 17/09. `make verrou` imprimait « pip-compile … » et `make verrou-regen`
+    lançait la même chose — sauf que `pip-compile` appartient à `pip-tools`, qui n'est
+    nulle part dans les dépendances de ce projet. Résultat sur le VPS :
+    « pip-compile: No such file or directory ».
+
+    Le pire n'est pas l'échec, c'est le message : il faisait croire à un environnement
+    cassé là où c'était la CONSIGNE qui l'était. Ce test lie les deux, pour que le
+    message et l'outil ne puissent plus diverger."""
+    from packages.mlops.environnement import commande_regeneration
+
+    commande = commande_regeneration()
+    makefile = (RACINE / "Makefile").read_text(encoding="utf-8")
+    cible = makefile.split("verrou-regen:")[1].split("\n\n")[0]
+    assert commande in cible, (
+        "la commande annoncée par `make verrou` doit être EXACTEMENT celle que "
+        f"`make verrou-regen` exécute.\n  annoncée : {commande}\n  cible    : {cible}")
+
+
+def test_la_commande_utilise_uv_l_outil_du_projet():
+    """`make install` utilise `uv`. Régénérer le verrou avec un autre résolveur
+    produirait un fichier que l'installateur du projet n'a jamais vu résoudre."""
+    from packages.mlops.environnement import commande_regeneration
+
+    commande = commande_regeneration()
+    assert commande.startswith("uv pip compile")
+    assert "pip-compile" not in commande
+    makefile = (RACINE / "Makefile").read_text(encoding="utf-8")
+    assert "uv venv && uv pip install" in makefile, "l'installateur reste uv"
+

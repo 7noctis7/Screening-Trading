@@ -1,5 +1,36 @@
 # 04 — JOURNAL
 
+## Session 2026-09-17 (35ᵉ) — Deux jours propres, et une consigne qui nommait un outil absent
+
+**LE P0 DES TROIS PLANIFICATEURS EST DÉFINITIVEMENT CLOS.**
+
+    2026-09-16  1 passage [19:08:35]  8 ordres · 0 A/R
+    2026-09-17  1 passage [19:08:28]  9 ordres · 0 A/R
+
+Deux jours propres d'affilée, à vingt secondes près. La garde journalière tient, et
+l'annotation reste stable : 27/08, 13 jours, 618,57 $, plus 1,56 $ d'intra-passage.
+
+**MA CIBLE `verrou-regen`, LIVRÉE LE MATIN, ÉTAIT EN PANNE.** `pip-compile: No such file or
+directory`. J'avais écrit la commande avec `pip-compile`, de `pip-tools` — un outil que ce
+projet n'a jamais eu. Il s'installe avec **uv**, et `uv pip compile` fait le même travail.
+
+**Ce qui est grave n'est pas l'échec, c'est le message** : « No such file or directory » fait
+chercher du côté de l'environnement, alors que c'était la CONSIGNE qui était fausse. Et
+`make verrou` imprimait cette même commande comme remède — la réparation était en panne
+aussi.
+
+Corrigé par une constante unique qui sert le message ET la recette, avec **un test qui les
+lie** pour qu'ils ne puissent plus diverger. Vérifié en exécutant vraiment la commande : elle
+rend `scikit-learn`, `xgboost`, `lightgbm`, `torch` — exactement les quatre que le verrou ne
+couvrait pas. ADR-0178.
+
+**Un test préexistant est tombé, à raison sur le fond** : il exigeait `--extra=ml`, uv écrit
+`--extra ml`. L'assertion porte désormais sur le NOM de l'extra. Un test qui fige la syntaxe
+d'un outil ne teste plus l'intention. Deuxième fois en deux jours qu'un test par sous-chaîne
+interdit une évolution légitime.
+
+`make test` : **2 995 passed, 77 skipped**.
+
 ## Session 2026-09-17 (34ᵉ) — Les deux P1, et un verrou qui ne verrouillait rien
 
 **① LE VERROU N'ÉTAIT APPLIQUÉ NULLE PART OÙ ÇA COMPTE.** Avant d'épingler `scikit-learn`,
