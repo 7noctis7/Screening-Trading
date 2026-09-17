@@ -168,6 +168,7 @@ def _resume(a_creer: list[dict], en_trop: list[dict]) -> None:
 def main() -> None:
     print(__doc__.split("    python")[0].rstrip())
     from packages.research.completion_ouvertures import (
+        deja_journalises,
         ouvertures_manquantes,
         quantites_journalisees,
     )
@@ -178,8 +179,9 @@ def main() -> None:
         print("\n  Aucun ordre récupéré — rien ne peut être reconstitué sans la vérité "
               "du courtier.")
         return
+    lots = journal.all()
     a_creer, en_trop = ouvertures_manquantes(
-        ordres, quantites_journalisees(journal.all()))
+        ordres, quantites_journalisees(lots), deja_journalises(lots))
     _resume(a_creer, en_trop)
     if not a_creer:
         print("\n  Le journal couvre tous les achats du courtier — rien à écrire.")

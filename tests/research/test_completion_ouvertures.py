@@ -210,3 +210,64 @@ def test_le_plan_CORRIGE_passe_le_controle_de_coherence():
 
     marche = {"2026-02": 100.0, "2026-03": 200.0}          # le marché de chaque date
     assert lots_incoherents(a_creer, lambda _s, d: marche[d[:7]]) == []
+
+
+# ─── Un fill DÉJÀ journalisé ne doit pas être recréé (17/09) ────────────────────────
+
+class _Lot:
+    """Un enregistrement de journal, vu par `deja_journalises`."""
+
+    def __init__(self, instrument, qty, entry_price, entry_ts):
+        self.instrument, self.qty = instrument, qty
+        self.entry_price, self.entry_ts = entry_price, entry_ts
+
+
+def test_un_fill_DEJA_journalise_n_est_pas_recree():
+    """LE CAS MESURÉ. Second passage de `make reparer-journal` : QQQ acheté 101,9076
+    au total, journal 81,7644 — dont l'achat du 17/09 (3,586126 @ 716,86), journalisé
+    le soir même par le robot. La couverture d'un symbole n'est donc PAS un préfixe
+    chronologique de ses achats, et le raisonnement agrégé consommait les 3,58 connues
+    sur le fill le PLUS ANCIEN. Le « reste » contenait alors le fill du 17/09, recréé
+    sous un second identifiant — `diag-journal` a vu « QQQ ×2, 3,586126 @ 716,86 ».
+    Un lot ouvert en double fournit un lot de plus à apparier en FIFO : du réalisé sans
+    contrepartie réelle, exactement ce que cette chaîne est censée réparer.
+    """
+    from packages.research.completion_ouvertures import deja_journalises
+
+    vieux = _achat("QQQ", 20.1432, 698.72, "2026-07-17T18:01:16Z")
+    recent = _achat("QQQ", 3.586126, 716.86, "2026-09-17T21:08:28Z")
+    lots = [_Lot("QQQ", 3.586126, 716.86, "2026-09-17T21:08:28Z")]
+
+    a_creer, _ = ouvertures_manquantes(
+        [vieux, recent], quantites_journalisees(lots), deja_journalises(lots))
+
+    vus = [(x["date"][:10], round(x["qty"], 4)) for x in a_creer]
+    assert vus == [("2026-07-17", 20.1432)], "seul le fill NON journalisé est recréé"
+
+
+def test_deux_achats_IDENTIQUES_le_meme_jour_ne_sont_pas_avales_ensemble():
+    """L'appariement est un MULTIENSEMBLE, pas un ensemble. Le robot achète deux fois
+    le même titre au même prix le même jour lors d'un passage scindé ; si le journal
+    n'en connaît qu'un, l'autre reste à reconstituer. Un appariement par présence
+    simple les effacerait tous les deux — une réparation qui creuse le trou."""
+    from packages.research.completion_ouvertures import deja_journalises
+
+    f = _achat("SIG", 10.0, 99.60, "2026-09-15T21:04:14Z")
+    lots = [_Lot("SIG", 10.0, 99.60, "2026-09-15T21:04:14Z")]
+
+    a_creer, _ = ouvertures_manquantes(
+        [f, dict(f)], quantites_journalisees(lots), deja_journalises(lots))
+
+    assert len(a_creer) == 1
+    assert round(a_creer[0]["qty"], 4) == 10.0
+
+
+def test_sans_signatures_le_comportement_reste_L_ANCIEN():
+    """Le paramètre est facultatif : un appelant qui ne le passe pas retrouve le calcul
+    d'avant. Il ne peut qu'ÉVITER une écriture, jamais en provoquer une nouvelle."""
+    fills = [_achat("QQQ", 20.0, 698.72, "2026-07-17T18:01:16Z"),
+             _achat("QQQ", 3.5, 716.86, "2026-09-17T21:08:28Z")]
+    connu = {"QQQ": 3.5}
+    sans = ouvertures_manquantes(fills, connu)[0]
+    assert sum(x["qty"] for x in sans) == 20.0         # FIFO sur le plus ancien
+    assert len(sans) == 2, "l'ancien calcul coupait le vieux fill ET gardait le récent"
