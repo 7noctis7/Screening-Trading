@@ -1,8 +1,9 @@
 """Verrou d'environnement — savoir si deux runs sont comparables.
 
-CE QUE L'AUDIT A MESURÉ. `constraints.txt` est généré par `pip-compile` pour les extras
-`api`, `data` et `quant`. Il épingle donc `numpy`, `pandas`, `scipy`… et **aucune** des
-bibliothèques qui entraînent réellement un modèle : `scikit-learn`, `xgboost`, `lightgbm`,
+CE QUE L'AUDIT A MESURÉ. `constraints.txt` a été généré pour les seuls extras
+`api`, `data` et `quant` (la régénération passe aujourd'hui par `make verrou-regen`).
+Il épingle donc `numpy`, `pandas`, `scipy`… et **aucune** des bibliothèques qui
+entraînent réellement un modèle : `scikit-learn`, `xgboost`, `lightgbm`,
 `optuna`, `mlflow`, `torch`, `transformers` sont toutes libres.
 
 POURQUOI C'EST LE TROU LE PLUS SOURNOIS. Un modèle sérialisé avec scikit-learn 1.5 et

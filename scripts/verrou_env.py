@@ -8,8 +8,10 @@ numpy, pandas et scipy — et laisse libres scikit-learn, xgboost, lightgbm et t
 à-dire précisément ce qui entraîne. Un modèle sérialisé sous une version et rechargé sous
 une autre peut se charger ET PRÉDIRE DIFFÉREMMENT, sans lever d'erreur.
 
-Ce script ne régénère rien : `pip-compile` télécharge les dépendances et doit tourner sur
-la machine qui entraîne, pas dans un conteneur d'analyse. Il rend la commande exacte.
+Ce script ne régénère rien : la résolution télécharge les dépendances et doit tourner
+sur la machine qui entraîne, pas dans un conteneur d'analyse. Il rend la commande
+exacte —
+et cette commande est une CIBLE du Makefile, jamais un binaire supposé présent.
 """
 from __future__ import annotations
 

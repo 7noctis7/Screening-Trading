@@ -1,9 +1,15 @@
-.PHONY: combler-mfe help install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core coeur-multi diag-coeur-qqq index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto diag-creneau diag-pv-latente diag-source-crypto calibrer-seuil ingest-mktcap preset-report calibrate-preset preset-lab alpha-lab screen repro kill-check log-alpha sync-alphas event-study event-study-smid backtest-pead-smid funding-study risk-check sensitivity paper-watch vault-lint certification crypto-cockpit crypto-brief regime-study breakout-study microstructure-poc vault-ask crypto-screen screen-niche list-db live live-sim live-go live-cron-install live-cron-uninstall completer-ouvertures reconcilier-journal annuler-ventes annuler-chronologie annuler-doublons diag-journal diag-surfermeture diag-fusion bench-backend verify-journal reparer-journal banc-swing turnover-audit rdv-paper slippage alerts-test ingest-macro bitmart-check clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull journal-pull journal-push notion-sync contracts supabase-kpis sync labs regime-atr-lab
+.PHONY: combler-mfe help install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core coeur-multi diag-coeur-qqq index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto diag-creneau diag-pv-latente diag-source-crypto calibrer-seuil ingest-mktcap preset-report calibrate-preset preset-lab alpha-lab screen repro kill-check log-alpha sync-alphas event-study event-study-smid backtest-pead-smid funding-study risk-check sensitivity paper-watch vault-lint certification crypto-cockpit crypto-brief regime-study breakout-study microstructure-poc vault-ask crypto-screen screen-niche list-db live live-sim live-go live-cron-install live-cron-uninstall completer-ouvertures reconcilier-journal annuler-ventes annuler-chronologie annuler-doublons diag-journal diag-surfermeture diag-fusion bench-backend verify-journal reparer-journal banc-swing turnover-audit rdv-paper slippage alerts-test ingest-macro bitmart-check clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull journal-pull journal-push notion-sync contracts supabase-kpis sync sync-garde labs regime-atr-lab
 # PYTHON : utilise AUTOMATIQUEMENT le venv s'il existe (.venv/bin/python), sinon python3 système.
 # Évite le piège « No module named numpy » quand le venv n'est pas activé. Surchargeable.
 TICKER ?= AAPL
 BRANCHE ?= claude/screening-trading-platform-me9p11
 PYTHON ?= $(shell [ -x .venv/bin/python ] && echo .venv/bin/python || echo python3)
+# Fichiers SUIVIS que la chaîne quotidienne réécrit d'elle-même : les mettre de côté à
+# chaque `make sync` produirait un avertissement permanent, donc plus lu du tout.
+# MÊME LISTE que `DONNEES_REGENEREES` (packages/mlops/manifest.py) — un test le vérifie.
+# Elle est redite ici en dur POUR QUE `sync` NE DÉPENDE DE RIEN : c'est la cible qu'on
+# lance quand l'environnement Python est cassé.
+FICHIERS_REGENERES ?= config/mobile_universe.csv data/delisted.csv
 help:             ## liste toutes les cibles avec leur rôle (référence : docs/COMMANDES.md)
 	@grep -hE '^[a-z][a-z0-9-]*:.*##' $(MAKEFILE_LIST) \
 	  | sed -E 's/^([a-z0-9-]+):[^#]*## *(.*)$$/\1|\2/' \
@@ -33,7 +39,11 @@ verrou-regen:     ## régénère constraints.txt AVEC les extras d'entraînement
 	$(PYTHON) -m uv --version >/dev/null 2>&1 || $(PYTHON) -m pip install --quiet uv
 	$(PYTHON) -m uv pip compile --extra api --extra data --extra quant --extra ml \
 	  --extra sentiment -o constraints.txt pyproject.toml
-	@echo "→ Verrou régénéré. Réinstaller pour s'y conformer :  make install"
+	@echo "→ Verrou régénéré. DEUX gestes, dans cet ordre :"
+	@echo "     1.  make install     # s'y conformer, puis  make verrou  pour le vérifier"
+	@echo "     2.  git add constraints.txt && git commit && git push -u origin $(BRANCHE)"
+	@echo "   NE PAS SAUTER LE 2. Mesuré le 17/09 : le verrou régénéré (159 paquets) a"
+	@echo "   disparu au « make sync » suivant — reset --hard détruit ce qui n'est pas commité."
 setup:            ## installation locale guidée (venv, détection YAHOO.db, build, cron) — 1 commande
 	bash scripts/setup_local.sh
 sync:             ## RÉCUPÈRE la branche de dev sans jamais créer de conflit (jamais `git pull`)
@@ -42,12 +52,35 @@ sync:             ## RÉCUPÈRE la branche de dev sans jamais créer de conflit 
 	@# laisse des marqueurs `<<<<<<<` dans les sources — d'où des `SyntaxError` sur du
 	@# code pourtant valide à l'origine. `fetch` + `reset --hard` est la seule opération
 	@# correcte ici : la branche n'a jamais de commit local à préserver.
+	@# `reset --hard` DÉTRUIT les modifications locales non commitées, sans rien dire.
+	@# Mesuré le 17/09 : un `constraints.txt` régénéré la veille sur le VPS a disparu
+	@# ainsi, et c'est `make verrou` qui l'a appris à son propriétaire — deux étapes
+	@# plus tard, sous la forme d'un chiffre qui avait « régressé ». D'où `sync-garde`.
 	@git merge --abort 2>/dev/null || true
 	@git rebase --abort 2>/dev/null || true
+	@$(MAKE) --no-print-directory sync-garde
 	@git fetch origin $(BRANCHE)
 	@git checkout $(BRANCHE) 2>/dev/null || git checkout -b $(BRANCHE) origin/$(BRANCHE)
 	@git reset --hard origin/$(BRANCHE)
 	@echo "→ $(BRANCHE) alignée sur origin : $$(git log --oneline -1)"
+	@n=$$(git stash list | wc -l | tr -d ' '); [ "$$n" = 0 ] || \
+	  echo "⚠ $$n entrée(s) en attente dans git stash — « git stash pop » pour les récupérer."
+sync-garde:       ## met de côté (git stash) ce qu'un « reset --hard » détruirait — appelé par `sync`
+	@# Une cible à part, SANS réseau : elle est éprouvée telle quelle par les tests.
+	@# Tout en shell + git : `sync` doit marcher même quand le venv est cassé.
+	@perdus=$$(git status --porcelain --untracked-files=no \
+	    | cut -c4- | sed -e 's/.* -> //' -e 's/^"//' -e 's/"$$//'); \
+	 for f in $(FICHIERS_REGENERES); do \
+	   perdus=$$(printf '%s\n' "$$perdus" | grep -vxF "$$f" || true); done; \
+	 perdus=$$(printf '%s\n' "$$perdus" | sed '/^$$/d'); \
+	 [ -n "$$perdus" ] || exit 0; \
+	 echo "⚠ modifications locales NON COMMITÉES qu'un « reset --hard » allait détruire :"; \
+	 printf '%s\n' "$$perdus" | sed 's/^/     /'; \
+	 printf '%s\n' "$$perdus" \
+	   | xargs git stash push --quiet -m "avant-sync $$(date -u +%Y-%m-%dT%H:%M:%SZ)" -- \
+	   || { echo "✗ mise de côté IMPOSSIBLE — sync INTERROMPU plutôt que de détruire."; exit 1; }; \
+	 echo "→ mises de côté. Les relire : git stash show -p · les remettre : git stash pop"; \
+	 echo "  Puis COMMITER : sinon le prochain make sync rejoue exactement cette scène."
 labs:             ## les cinq bancs de mesure (candidats, sorties, taille, signaux, régime ATR)
 	$(PYTHON) scripts/candidats_lab.py
 	$(PYTHON) scripts/sortie_lab.py
