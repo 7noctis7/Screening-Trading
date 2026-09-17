@@ -47,8 +47,29 @@
       passages SECONDAIRES : c'est le résidu de la période à plusieurs planificateurs.
       Confirmation : **aucun lot orphelin daté du 16 ou du 17/09**, les deux journées à
       un seul passage. La dérive a cessé, le passif reste.
-      Réparer SUR LE VPS (clés courtier) : `make diag-journal` puis `make reparer-journal`.
-      Tant que ce n'est pas fait, l'expectancy et le turnover portent des lots fantômes.
+      **RÉPARÉ EN PARTIE (17/09 21:13, `make reparer-journal`).** 85 ouvertures
+      reconstituées, 182 écritures de correction postées au prix et à la date des
+      fills réels, 9 doublons de fermeture retirés (+376,17 $ de « réalisé » qui
+      était compté deux fois). Orphelins 53 → 27, achats non couverts 48 → 8, lots
+      ouverts 61 → 22, round-trips fermés 62 → 112.
+      **Ce que le panneau affiche a changé de signe** : réalisé +139,75 $ sur 62
+      trades (espérance +2,25 $) devient **−23,15 $ sur 112 trades (−0,21 $)**. Le
+      premier chiffre était un sous-ensemble favorable — les pertes n'étaient pas
+      appariées. Le second est le chiffre honnête.
+      RESTE À FAIRE :
+      - 27 lots ouverts sur des titres que le courtier ne détient plus (AVAX 378,
+        NWL 1151, SOL 68, MAS 86, LTC +99, T +89, OSCR +87) — aucune vente du
+        courtier n'en rend compte, les fermer inventerait un prix ;
+      - 8 symboles dont les ACHATS ne sont pas couverts (LINK, OSCR, T, VZ, QQQ,
+        OKTA, RRC, MPC). Les deux écarts NÉGATIFS (VZ −36,48 · QQQ −7,93) sont
+        couverts par ces achats manquants (66,89 · 20,14) : c'est un trou, pas une
+        sur-fermeture. La chaîne n'est pas un point fixe après un passage —
+        `completer-ouvertures` tourne AVANT la réconciliation, donc un second
+        passage complet peut encore en fermer ;
+      - NWL (1,74×) et MAS (1,91×) portent deux fois leur achat, tout en `legacy=1`,
+        préfixe `LEG` unique : le chemin d'IMPORT crée deux identités. Non traité.
+      - le panneau (`legacy=0`) masque désormais 421 lots et −1 647,58 $ de réalisé.
+        Question ouverte : le journal affiché doit-il rester ce sous-ensemble ?
 - [x] **~~P1 — `make sync` détruisait en silence un fichier non commité~~ — FERMÉE
       (17/09).** `constraints.txt` régénéré le 16/09 sur le VPS (159 paquets au lieu de
       81) a disparu au `make sync` suivant : la recette fait `git reset --hard`. Le seul
