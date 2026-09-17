@@ -2,7 +2,6 @@
 // Journal des round-trips RÉELS (paper) — le « proof of work » du RDV 2026-08-06 :
 // chaque aller-retour avec prix de décision, fill, PnL, MFE/MAE. Expectancy GATÉE
 // (UNCALIBRATED sous 20 trades fermés) — on n'affiche jamais une stat inventée.
-import { useState } from "react";
 import { useJournal } from "@/lib/api";
 import { MetricCard } from "@/components/MetricCard";
 import { SortableTable, type Col } from "@/components/SortableTable";
@@ -13,31 +12,35 @@ const pct = (x?: number | null) => (x == null ? "—" : `${x >= 0 ? "+" : ""}${(
 
 export default function Journal() {
   const { data } = useJournal();
-  // « Tout » PAR DÉFAUT, et ce n'est pas un détail d'ergonomie. Masquer les lots encore
-  // ouverts transformerait cette page en palmarès de trades soldés — exactement le biais
-  // que son propre avertissement dénonce deux paragraphes plus haut. Le filtre sert à
-  // LIRE les round-trips proprement, jamais à faire disparaître ce qui manque au tableau.
-  const [vue, setVue] = useState<"tout" | "fermé" | "ouvert">("tout");
   if (!data) return <PageSkeleton />;
+  // CE QUE CETTE TABLE CONTIENT, ET C'EST UNE DÉFINITION, PAS UN FILTRE. Les
+  // aller-retours que le ROBOT a pris et qui ont été réellement OUVERTS PUIS CLÔTURÉS.
+  // `/api/journal` les sélectionne sur l'ORIGINE de l'enregistrement, et NON PLUS sur le
+  // drapeau `legacy` : un ordre du robot journalisé après coup depuis le fill réel
+  // porte `legacy=1` et reste un trade du robot. Le tri par `legacy` affichait
+  // +139,75 $ sur 62 trades quand le robot avait fait −23,15 $ sur 112.
+  //
+  // Les lots ENCORE OUVERTS ne sont pas dans la table — ce ne sont pas des trades,
+  // ce sont des positions. Ils ne disparaissent pas pour autant : leur nombre et leur
+  // latent sont affichés en tête, parce que les masquer SANS LE DIRE ferait de cette
+  // page le palmarès de trades soldés que son propre avertissement dénonce.
+  //
   // LES TRANCHES D'UN MÊME LOT NE SONT PAS DES DOUBLONS. Une vente partielle crée une
-  // ligne par tranche (`split_id` + `qty` dans `live_roundtrip`) et laisse le reliquat
-  // ouvert : QQQ acheté le 07/07 à 716,69 $ apparaît trois fois — deux sorties et un
-  // reliquat. Sans marque, ça se lit comme une duplication, et c'est de là que vient
-  // l'essentiel du sentiment de « trop de lignes ».
-  const brut = (data.rows ?? []).map((r: any) => ({ ...r, status: r.exit_ts ? "fermé" : "ouvert" }));
+  // ligne par tranche (`split_id` + `qty` dans `live_roundtrip`) : QQQ acheté le 07/07
+  // à 716,69 $ apparaît plusieurs fois, une par sortie. Sans marque, ça se lit comme
+  // une duplication, et c'est de là que vient l'essentiel du sentiment de « trop de
+  // lignes ».
+  const brut = (data.rows ?? []) as any[];
   const compte = new Map<string, number>();
   for (const r of brut) {
     const cle = `${r.symbol}|${r.venue}|${r.entry_ts}|${r.entry_price}`;
     compte.set(cle, (compte.get(cle) ?? 0) + 1);
   }
-  const toutes = brut.map((r: any) => ({
+  const rows = brut.map((r: any) => ({
     ...r,
     fractionne: (compte.get(`${r.symbol}|${r.venue}|${r.entry_ts}|${r.entry_price}`) ?? 1) > 1,
   }));
-  const nFermes = toutes.filter((r: any) => r.status === "fermé").length;
-  const rows = vue === "fermé" ? toutes.filter((r: any) => r.status === "fermé")
-    : vue === "ouvert" ? toutes.filter((r: any) => r.status === "ouvert")
-    : toutes;
+  const ouverts = (data.ouverts ?? []) as any[];
   const st = data.stats ?? {};
   const sl = data.slippage ?? {};
 
@@ -49,10 +52,6 @@ export default function Journal() {
               title="Ce lot d'entrée a été soldé en PLUSIEURS tranches : une ligne par tranche, plus le reliquat s'il reste ouvert. Ce ne sont pas des doublons.">
               ⧉ fractionné</span>)}
         </span>) },
-    { key: "status", label: "Statut", render: (v) => (
-        <span className="text-xs px-1.5 py-0.5 rounded font-sans"
-          style={{ background: v === "fermé" ? "color-mix(in srgb, var(--pos) 14%, transparent)" : "var(--surface2)",
-                   color: v === "fermé" ? "var(--pos)" : "var(--muted)" }}>{v}</span>) },
     { key: "entry_ts", label: "Entrée", render: (v, r) => (
         <span className="mono text-xs">{v?.slice(0, 10)} · {usd(r.entry_price)}</span>) },
     { key: "exit_ts", label: "Sortie", render: (v, r) => v ? (
@@ -78,6 +77,10 @@ export default function Journal() {
       <p className="text-muted text-xs">Chaque achat suivi de sa revente, en simulation. Pour chacun : ce que le robot voyait
         <b>au moment de décider</b>, le prix réellement obtenu, le gain ou la perte, et jusqu'où
         le trade est monté puis descendu avant d'être soldé. Tout est publié, les pertes comprises.</p>
+      <p className="text-muted text-xs">Cette page montre les aller-retours que le robot a pris et qui ont été
+        <b> réellement ouverts puis clôturés</b> — décision journalisée ou ordre reconstitué depuis le fill réel du
+        courtier, les deux comptent. Ce qu'un tiers a importé dans le registre n'y figure pas, et le chiffre est
+        donné plus bas.</p>
       <p className="text-muted text-xs">Attention : cette page montre les <b>trades terminés</b>, pas la performance du compte.
         Les positions perdantes encore ouvertes n'y figurent pas, ce qui embellit le tableau.
         Pour juger, regardez la <b>courbe du compte</b> chez le courtier — c'est la seule mesure
@@ -100,6 +103,28 @@ export default function Journal() {
             <MetricCard label="Expectancy / trade" value={st.expectancy != null ? usd(st.expectancy) : "UNCALIBRATED"} />
           </section>
           {st.status && <p className="text-muted2 text-xs">⚠️ {st.status} — les stats agrégées n'apparaissent qu'avec un échantillon suffisant (jamais de chiffre inventé).</p>}
+          {st.honnete && (st.honnete.n_ouverts ?? 0) > 0 && (
+            <section className="card p-3 text-xs space-y-1">
+              <p className="text-muted"><b>Ce que la table ne montre pas.</b> Elle porte
+                les aller-retours CLÔTURÉS. {st.honnete.n_ouverts} lot(s) restent ouverts
+                et pèsent <b className="mono" style={{ color: (st.honnete.pnl_latent ?? 0) >= 0 ? "var(--pos)" : "#ef4444" }}>
+                {usd(st.honnete.pnl_latent)}</b> de latent. Le rééquilibrage ferme ce qui a monté et
+                conserve ce qui a baissé : lire les deux colonnes, pas la première seule.</p>
+              <p className="text-muted2 mono">
+                fermés : {st.honnete.n_fermes} · réalisé {usd(st.honnete.pnl_realise)}
+                {st.honnete.expectancy_ferme != null && ` · ${usd(st.honnete.expectancy_ferme)}/trade`}
+                {st.honnete.win_rate_ferme != null && ` · ${(st.honnete.win_rate_ferme * 100).toFixed(0)}% de réussite`}
+                {"  —  "}
+                toutes positions : {(st.honnete.n_fermes ?? 0) + (st.honnete.n_ouverts ?? 0)} · {usd(st.honnete.pnl_total)}
+                {st.honnete.expectancy_toutes_positions != null && ` · ${usd(st.honnete.expectancy_toutes_positions)}/position`}
+                {st.honnete.win_rate_toutes_positions != null && ` · ${(st.honnete.win_rate_toutes_positions * 100).toFixed(0)}% de réussite`}
+              </p>
+              {st.honnete.lots_sans_prix > 0 && (
+                <p className="text-muted2">{st.honnete.lots_sans_prix} lot(s) sans prix courant : exclus du latent plutôt qu'estimés.</p>
+              )}
+              {st.honnete.avertissement && <p style={{ color: "#f59e0b" }}>⚠ {st.honnete.avertissement}</p>}
+            </section>
+          )}
           {st.perimetre?.avertissement && (
             <section className="card p-3 text-xs space-y-1">
               <p className="text-muted"><b>Périmètre affiché ≠ compte.</b> {st.perimetre.avertissement}</p>
@@ -110,6 +135,14 @@ export default function Journal() {
                 compte : {st.perimetre.compte?.n ?? 0} lots · réalisé {usd(st.perimetre.compte?.pnl_realise ?? 0)}
                 {st.perimetre.compte?.win_rate != null && ` · ${(st.perimetre.compte.win_rate * 100).toFixed(0)}% de réussite`}
               </p>
+              {st.origines && (
+                <p className="text-muted2 mono">
+                  origine des lots — robot : {st.origines.robot?.n ?? 0} ({usd(st.origines.robot?.pnl_realise ?? 0)})
+                  {" · "}import historique : {st.origines["import"]?.n ?? 0} ({usd(st.origines["import"]?.pnl_realise ?? 0)})
+                  {(st.origines.inconnu?.n ?? 0) > 0 &&
+                    ` · NON RECONNUS : ${st.origines.inconnu.n} (${(st.origines.inconnus ?? []).join(", ")})`}
+                </p>
+              )}
             </section>
           )}
           {sl.available ? (
@@ -121,25 +154,17 @@ export default function Journal() {
             <p className="text-muted2 text-xs">Slippage réel : {sl.status} ({sl.hint ?? ""}).</p>
           )}
           <section className="card p-4 space-y-3">
-            <div className="flex items-center gap-1 flex-wrap text-xs font-sans">
-              {([["tout", `Tout (${toutes.length})`],
-                 ["fermé", `Round-trips fermés (${nFermes})`],
-                 ["ouvert", `Lots ouverts (${toutes.length - nFermes})`]] as const).map(([k, label]) => (
-                <button key={k} onClick={() => setVue(k)}
-                  aria-pressed={vue === k}
-                  className="px-2.5 py-1 rounded-[8px] border transition-colors"
-                  style={{ background: vue === k ? "var(--surfaceAlt)" : "transparent",
-                           borderColor: vue === k ? "var(--border2)" : "transparent",
-                           color: vue === k ? "var(--fg)" : "var(--muted)" }}>{label}</button>
-              ))}
-              {vue === "fermé" && (
-                <span className="text-muted2 text-[11px] ml-1">
-                  ⚠ vue partielle : les {toutes.length - nFermes} lots encore ouverts — dont
-                  les perdants — sont masqués.
+            <div className="flex items-baseline gap-2 flex-wrap text-xs font-sans">
+              <span className="text-fg">{rows.length} aller-retour(s) clôturé(s)</span>
+              {ouverts.length > 0 && (
+                <span className="text-muted2 text-[11px]">
+                  · {ouverts.length} lot(s) encore ouvert(s) ne figurent pas ici : une
+                  position n'est pas un trade tant qu'elle n'est pas refermée. Leur
+                  latent est chiffré ci-dessus.
                 </span>
               )}
             </div>
-            <SortableTable rows={rows} cols={cols} filterKeys={["symbol", "venue", "status", "regime"]}
+            <SortableTable rows={rows} cols={cols} filterKeys={["symbol", "venue", "regime"]}
               csvName="journal_roundtrips.csv" initialSort={{ key: "entry_ts", dir: "desc" }} dense />
           </section>
         </>

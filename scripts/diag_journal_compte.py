@@ -69,30 +69,39 @@ def _ligne(nom: str, b: dict) -> None:
 
 
 def _journal() -> None:
+    """DEUX AXES, ET LES CONFONDRE A COÛTÉ CHER.
+
+    `legacy` dit « ce lot porte-t-il les features de décision ? » — la question de la
+    calibration ML. L'ORIGINE dit « le robot a-t-il pris ce trade ? » — celle du
+    panneau. Le panneau a longtemps utilisé le premier pour répondre à la seconde, et
+    écartait donc les ordres du robot journalisés après coup (`C-`), qui étaient
+    perdants. Depuis le 17/09 il lit l'origine ; on imprime les deux axes.
+    """
+    from packages.execution.perimetre_journal import pris_par_le_robot
     from packages.storage import SqliteTradeJournal
     j = SqliteTradeJournal()
     tous = j.all()
+    robot = [t for t in tous if pris_par_le_robot(t.id)]
+    hors = [t for t in tous if not pris_par_le_robot(t.id)]
     non_legacy = j.all(legacy=False)
-    ids = {t.id for t in non_legacy}
-    legacy = [t for t in tous if t.id not in ids]
     print("  JOURNAL — ce que le panneau montre, et ce qu'il n'affiche pas\n")
-    print(f"  {'périmètre':<22} {'lots':>5} {'fermés':>7} {'ouverts':>8} "
+    print(f"  {'périmètre':<26} {'lots':>5} {'fermés':>7} {'ouverts':>8} "
           f"{'win':>6} {'réalisé $':>11} {'esp./tr':>8}   fenêtre des sorties")
     print("  " + "-" * 100)
-    b_nl, b_l, b_t = _bilan(non_legacy), _bilan(legacy), _bilan(tous)
-    _ligne("legacy=0 (AFFICHÉ)", b_nl)
-    _ligne("legacy=1 (MASQUÉ)", b_l)
+    b_r, b_h, b_t = _bilan(robot), _bilan(hors), _bilan(tous)
+    _ligne("ROBOT (AFFICHÉ au panneau)", b_r)
+    _ligne("hors périmètre (import)", b_h)
     _ligne("TOTAL (subi par le compte)", b_t)
-    if b_l["n"] == 0:
-        print("\n  → Aucun fill legacy. Le filtre n'explique RIEN de l'écart : chercher"
-              " ailleurs.")
-    else:
-        ecart = b_t["realise"] - b_nl["realise"]
-        print(f"\n  → Le filtre `legacy` masque {b_l['n']} lots et {ecart:+.2f} $ de "
-              "réalisé.")
-        if ecart < 0:
-            print("    Le journal montre donc un sous-ensemble FAVORABLE — non voulu, "
-                  "mais réel.")
+    _ligne("dont legacy=0 (calib. ML)", _bilan(non_legacy))
+    if b_h["n"] == 0:
+        print("\n  → Aucun lot hors périmètre. Le panneau décrit tout le registre.")
+        return
+    ecart = b_t["realise"] - b_r["realise"]
+    print(f"\n  → Le périmètre écarte {b_h['n']} lots et {ecart:+.2f} $ de réalisé — "
+          "un import\n    historique dont la provenance n'est plus lisible.")
+    if ecart < 0:
+        print("    Le panneau montre donc un sous-ensemble FAVORABLE — assumé, "
+              "et chiffré ici.")
 
 
 BROKERS = ("alpaca", "crypto", "binance", "bitmart")

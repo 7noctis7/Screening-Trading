@@ -478,59 +478,21 @@ def _qtes_courtier() -> dict:
 
 @app.get("/api/journal")
 def journal_roundtrips() -> dict:
-    """Round-trips RÉELS du journal paper (legacy=0) : lots ouverts + fermés + stats honnêtes.
+    """Round-trips du ROBOT réellement OUVERTS PUIS CLÔTURÉS, + le latent laissé de côté.
 
-    Lecture directe de data/journal.db (absente en CI publique → available=False, n/d)."""
+    Tout le calcul vit dans `apps.api.journal_payload` — y compris le périmètre, qui a
+    changé le 17/09 et dont le module porte la démonstration. La route n'est que
+    l'emballage HTTP, ce qui rend le contrat éprouvable sans FastAPI.
+
+    Lecture directe de data/journal.db (absente en CI publique → available=False, n/d).
+    """
     try:
-        from packages.research.exec_costs import measured_slippage
+        from apps.api.journal_payload import construire
         from packages.storage import SqliteTradeJournal
-        j = SqliteTradeJournal()
-        trades = j.all(legacy=False)
-        rows = [{
-            "id": t.id, "symbol": t.instrument, "venue": t.venue, "qty": t.qty,
-            "entry_ts": t.entry_ts.isoformat(), "entry_price": t.entry_price,
-            "exit_ts": t.exit_ts.isoformat() if t.exit_ts else None,
-            "exit_price": t.exit_price, "pnl_net": t.pnl_net, "pnl_pct": t.pnl_pct,
-            "mfe": t.mfe, "mae": t.mae, "is_win": t.is_win,
-            "duration_d": round(t.duration_s / 86400, 1) if t.duration_s else None,
-            "regime": t.regime,
-            "decision_price": (t.features_snapshot or {}).get("decision_price"),
-        } for t in trades]
-        closed = [r for r in rows if r["exit_ts"]]
-        wins = [r for r in closed if r["is_win"]]
-        stats = {"n_open": len(rows) - len(closed), "n_closed": len(closed)}
-        if len(closed) >= 20:                     # expectancy gatée (mandat données réelles)
-            stats["win_rate"] = round(len(wins) / len(closed), 3)
-            stats["expectancy"] = round(sum(r["pnl_net"] or 0 for r in closed) / len(closed), 2)
-        else:
-            stats["status"] = f"UNCALIBRATED (expectancy à N≥20 fermés ; actuel {len(closed)})"
-        # LE WIN RATE DES FERMÉS EST UN ÉCHANTILLON CHOISI : le rééquilibrage ferme
-        # ce qui a monté et conserve ce qui a baissé. On publie donc le latent des lots
-        # ouverts À CÔTÉ, jamais à la place — les trades fermés ont bien été gagnants.
-        from packages.research import biais_fermeture as _bf
-        _ouverts = [r for r in rows if not r["exit_ts"]]
-        stats["honnete"] = _bf.statistiques_honnetes(
-            closed, _bf.marquer_lots(_ouverts, _prix_courants()))
-        # RÉCONCILIATION D'ABORD : mesuré le 03/09, le journal portait ~80 actions que
-        # le compte ne détient pas et deux fois trop de QQQ. Un win rate calculé sur un
-        # registre qui ne décrit pas le compte n'est pas un chiffre prudent à afficher,
-        # c'est un chiffre faux. On le marque plutôt que de le retirer : le retirer
-        # ferait disparaître le problème de la vue.
-        stats["reconciliation"] = _bf.reconcilier(_ouverts, _qtes_courtier())
-        # PÉRIMÈTRE. `legacy=0` est le bon filtre pour la calibration ML, et le mauvais
-        # pour répondre « combien le compte a-t-il gagné ». Mesuré le 03/09 : +6 260 $
-        # affichés contre +569 $ subis, l'écart tenant à 266 lots importés. On publie
-        # les deux, chiffrés, plutôt que de laisser lire le premier comme le second.
-        stats["perimetre"] = _bf.perimetre_affiche(
-            [{"exit_ts": t.exit_ts.isoformat() if t.exit_ts else None,
-              "pnl_net": t.pnl_net, "is_win": t.is_win} for t in j.all()], rows)
-        if not stats["reconciliation"]["reconcilie"]:
-            stats["fiable"] = False
-            stats["motif_non_fiable"] = stats["reconciliation"]["motif"]
-        return {"available": True, "rows": rows, "stats": stats,
-                "slippage": measured_slippage(j)}
+        return construire(SqliteTradeJournal(), _prix_courants(), _qtes_courtier())
     except Exception as e:  # noqa: BLE001
-        return {"available": False, "reason": str(e)[:80], "rows": [], "stats": {}}
+        return {"available": False, "reason": str(e)[:80], "rows": [],
+                "ouverts": [], "stats": {}}
 
 
 @app.get("/api/trades")
