@@ -68,8 +68,23 @@
         passage complet peut encore en fermer ;
       - NWL (1,74×) et MAS (1,91×) portent deux fois leur achat, tout en `legacy=1`,
         préfixe `LEG` unique : le chemin d'IMPORT crée deux identités. Non traité.
-      - le panneau (`legacy=0`) masque désormais 421 lots et −1 647,58 $ de réalisé.
-        Question ouverte : le journal affiché doit-il rester ce sous-ensemble ?
+      - **TRANCHÉ (17/09)** : le panneau montre les trades du ROBOT réellement ouverts
+        PUIS clôturés. Le périmètre se lit sur l'ORIGINE du lot (`P-` décision, `C-`
+        fill reconstitué), plus sur `legacy` — qui répond à la question de la
+        calibration ML, pas à celle du panneau. `packages/execution/perimetre_journal`.
+- [x] **~~P1 — La réparation recréait un fill déjà journalisé~~ — FERMÉE (17/09).**
+      Second passage de `make reparer-journal` : `diag-journal` a vu « QQQ ×2,
+      3,586126 @ 716,86 le 17/09 ». La couverture était jugée sur la quantité AGRÉGÉE
+      d'un symbole, puis le reste calculé en consommant les fills les plus anciens —
+      ce qui suppose que ce que le journal connaît forme un PRÉFIXE CHRONOLOGIQUE des
+      achats. Faux : l'achat du 17/09 était journalisé, 20 unités plus anciennes ne
+      l'étaient pas. `deja_journalises` apparie d'abord les fills reconnus exactement.
+- [ ] **P2 — `sync-garde` protège le travail NON COMMITÉ, pas un commit local.**
+      `git reset --hard origin/<branche>` détruit aussi les commits locaux non poussés,
+      et le garde-fou du 17/09 ne couvre que l'arbre de travail. Sur une machine restée
+      en arrière qui vient de commiter, `make sync` perd le commit en silence — même
+      classe de défaut, autre porte. Piste : avertir (ou poser une branche de secours)
+      quand `git log origin/<branche>..HEAD` n'est pas vide.
 - [x] **~~P1 — `make sync` détruisait en silence un fichier non commité~~ — FERMÉE
       (17/09).** `constraints.txt` régénéré le 16/09 sur le VPS (159 paquets au lieu de
       81) a disparu au `make sync` suivant : la recette fait `git reset --hard`. Le seul
