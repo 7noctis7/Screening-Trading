@@ -133,7 +133,31 @@ def test_le_script_de_rapport_sort_en_erreur_si_des_libs_sont_libres():
 
 def test_le_module_ne_regenere_rien_lui_meme():
     """`pip-compile` télécharge des dépendances : il doit tourner sur la machine qui
-    entraîne, pas être déclenché par un module d'analyse."""
+    entraîne, pas être déclenché par un module d'analyse.
+
+    VÉRIFIÉ PAR L'AST, plus par sous-chaîne. La version d'avant interdisait le TEXTE
+    « pip install » n'importe où dans le fichier — elle est tombée le jour où le
+    module a
+    eu besoin de CHERCHER cette chaîne dans le Makefile pour vérifier que le verrou y
+    est
+    appliqué. Chercher un texte et l'exécuter sont deux choses opposées ; un test qui
+    les
+    confond interdit la mesure en croyant interdire l'action."""
+    import ast
+
     src = (RACINE / "packages" / "mlops" / "environnement.py").read_text(encoding="utf-8")
-    for interdit in ("subprocess", "os.system", "pip install"):
-        assert interdit not in src
+    arbre = ast.parse(src)
+
+    importes = set()
+    for n in ast.walk(arbre):
+        if isinstance(n, ast.Import):
+            importes.update(a.name.split(".")[0] for a in n.names)
+        elif isinstance(n, ast.ImportFrom) and n.module:
+            importes.add(n.module.split(".")[0])
+    for interdit in ("subprocess", "os", "shutil", "pip"):
+        assert interdit not in importes, f"ce module d'analyse importe « {interdit} »"
+
+    appels = {n.func.attr for n in ast.walk(arbre)
+              if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)}
+    for interdit in ("system", "run", "Popen", "check_call", "check_output", "main"):
+        assert interdit not in appels, f"ce module d'analyse appelle « {interdit}() »"

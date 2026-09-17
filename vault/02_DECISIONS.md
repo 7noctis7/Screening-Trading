@@ -2,6 +2,52 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0176 — Un verrou qu'on n'applique pas est pire qu'une absence de verrou (2026-09-17)
+
+**Le constat, mesuré avant d'agir.** `constraints.txt` n'était passé qu'aux TROIS workflows
+GitHub — `ci.yml`, `paper.yml`, `pages.yml`. `make install` faisait
+`uv pip install -e ".[dev,data,quant,api,ml]"` **sans `-c`**. Autrement dit : le verrou
+s'appliquait partout SAUF sur la machine qui produit réellement le modèle.
+
+La CI et le VPS pouvaient donc installer deux `scikit-learn` différents, produire deux
+modèles différents, et rien ne l'aurait signalé. Épingler `scikit-learn` dans un fichier que
+la machine d'entraînement n'ouvre jamais aurait été de la décoration.
+
+**Décision.** `make install` passe `-c constraints.txt`. `make verrou-regen` régénère le
+fichier avec les extras d'entraînement, en une commande, sur la machine qui entraîne. Et
+`make verrou` VÉRIFIE que le verrou est appliqué — il listait des versions épinglées, ce qui
+donnait le sentiment d'être protégé sans l'être.
+
+**Un test tombé, et il avait raison sur le fond.** `test_le_module_ne_regenere_rien_lui_meme`
+interdisait le TEXTE « pip install » dans le module d'analyse — il est tombé le jour où ce
+module a eu besoin de CHERCHER cette chaîne dans le Makefile. Chercher un texte et l'exécuter
+sont deux choses opposées ; un test par sous-chaîne les confond, et interdit la mesure en
+croyant interdire l'action. Réécrit par l'AST : aucun import de `subprocess`/`os`/`shutil`/
+`pip`, aucun appel `run`/`system`/`Popen`/`check_call`.
+
+## ADR-0177 — Le registre doit s'expliquer, pas seulement classer (2026-09-17)
+
+**Contexte.** `PRODUCTION : (aucune)` se lit comme un trou à combler. Ce n'en est pas un : le
+seul candidat jamais soumis a été REJETÉ par le gate, et le motif — « DSR ≤ seuil, pas d'edge
+OOS » — était **stocké depuis toujours dans l'historique de l'entrée, et jamais affiché**.
+
+**C'est la bonne décision du gate, et il faut le dire.** Un modèle sans edge DOIT être
+refusé ; l'absence de production est alors un RÉSULTAT, pas une lacune. Laisser l'écran muet
+invite à « combler le trou » — c'est-à-dire à promouvoir un modèle que la mesure vient de
+rejeter.
+
+**Décision.** `Entree.dernier_motif()` rend le pourquoi de la dernière décision, et
+`registre_modeles.py` l'affiche sous chaque ligne. `Registre.pourquoi_pas_de_production()`
+distingue deux silences qui ne se ressemblent que de loin : « rien n'a jamais été soumis »
+(un trou) et « ce qui l'a été a été refusé, voici pourquoi » (une décision). `etat_modeles()`
+expose le champ, donc `/api/ai/modeles` aussi.
+
+**Ce qui n'est PAS fait, et volontairement** : promouvoir l'artefact actuellement en service.
+Il n'a aucun manifeste — ni dataset, ni commit, ni empreinte. L'inscrire reviendrait à
+FABRIQUER une provenance, exactement ce que le mandat données-réelles interdit. La production
+restera vide jusqu'à ce qu'un modèle la mérite par le gate ; entre-temps, `orphelins()` dit
+qu'un artefact sert sans être gouverné.
+
 ## ADR-0175 — Le marqueur « non reproductible » ne doit pas être permanent (2026-09-17)
 
 **Le constat, et il est sans appel.** Le tout PREMIER modèle jamais inscrit au registre —

@@ -56,6 +56,14 @@ class Entree:
     manifest: dict = field(default_factory=dict)
     historique: list[dict] = field(default_factory=list)
 
+    def dernier_motif(self) -> str:
+        """Le POURQUOI de la dernière décision. Vide si l'entrée n'a pas d'histoire.
+
+        Un registre qui affiche « rejected » sans dire pourquoi ne répond pas à la seule
+        question qu'on lui pose. Le motif était STOCKÉ depuis toujours, jamais montré.
+        """
+        return str(self.historique[-1].get("motif") or "") if self.historique else ""
+
     def noter(self, statut: str, motif: str) -> None:
         """Change le statut en GARDANT la trace du précédent. Un registre qui écrase son
         historique ne répond plus à « pourquoi ce modèle est-il en production ? »."""
@@ -111,6 +119,26 @@ class Registre:
             if e.statut == PRODUCTION:
                 return e
         return None
+
+    def pourquoi_pas_de_production(self) -> str:
+        """POURQUOI aucune version ne sert, quand c'est le cas. Vide s'il y en a une.
+
+        « PRODUCTION : (aucune) » se lit comme un trou à combler. Ce n'en est pas
+        forcément un : un modèle sans edge DOIT être refusé, et l'absence de production
+        est alors le bon résultat du gate — encore faut-il le DIRE. Le 17/09, le seul
+        candidat jamais soumis avait été rejeté, et l'écran n'en disait rien.
+        """
+        if self.par_statut(PRODUCTION):
+            return ""
+        if not self.entrees:
+            return "aucun entraînement n'a encore été soumis au gate de promotion"
+        decides = [e for e in self.entrees.values() if e.historique]
+        if not decides:
+            return (f"{len(self.entrees)} version(s) au registre, "
+                    "aucune décision enregistrée")
+        dernier = max(decides, key=lambda e: str(e.historique[-1].get("le") or ""))
+        return (f"dernier candidat {dernier.version} → {dernier.statut} : "
+                f"{dernier.dernier_motif() or 'motif non enregistré'}")
 
     def par_statut(self, statut: str) -> list[Entree]:
         return sorted((e for e in self.entrees.values() if e.statut == statut),

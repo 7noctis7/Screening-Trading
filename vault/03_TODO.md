@@ -38,11 +38,12 @@
 - [x] **~~P1 — Le registre se remplira au prochain entraînement~~ — FAIT (17/09).**
       Première entrée : `Gradient Boosting (sklearn)-20260916-223954-4a0ed2d`,
       **AUC 0,532**, statut `rejected` (non promu). Le câblage fonctionne de bout en bout.
-- [ ] **P1 — AUCUNE version en PRODUCTION au registre (17/09).** Le candidat du 16/09 a
-      été REJETÉ, et rien n'a été promu : `PRODUCTION : (aucune)` pendant qu'un artefact
-      non tracé sert. Tant que c'est vrai, `rollback` n'a toujours rien vers quoi revenir.
-      À trancher : promouvoir l'artefact en service, ou accepter que la production ne soit
-      pas gouvernée par le registre — mais le dire.
+- [x] **~~P1 — AUCUNE version en PRODUCTION au registre~~ — TRANCHÉE (17/09, ADR-0177).**
+      Ce n'est pas un trou : le candidat a été refusé pour absence d'edge OOS, et le motif
+      dormait dans l'historique sans être affiché. Il s'affiche désormais, et « jamais
+      soumis » se distingue de « refusé ». L'artefact en service n'est PAS promu : sans
+      manifeste, l'inscrire fabriquerait une provenance. La production restera vide
+      jusqu'à ce qu'un modèle la mérite — c'est le gate qui fonctionne, pas une lacune.
 - [x] **~~P1 — Éprouver la chaîne NLP sur le Mac~~ — ABANDONNÉE (16/09, ADR-0170).**
       Quatre tentatives, zéro classification. La chaîne locale est RETIRÉE du dépôt.
 - [ ] **P1 — Mesurer l'alpha du LEXIQUE sur le corpus (16/09, ADR-0170).** `make
@@ -59,8 +60,10 @@
       trois bibliothèques absentes ne sont simplement pas utilisées. Celle qui compte est
       `scikit-learn 1.9.0`, **LIBRE** — donc une mise à jour silencieuse peut changer le
       modèle sans que rien ne le dise. Passe en P1 :
-      `pip-compile --extra=api --extra=data --extra=quant --extra=ml --extra=sentiment
-      --strip-extras --output-file=constraints.txt pyproject.toml`
+      **DÉFAUT PLUS GRAVE TROUVÉ EN CHEMIN (ADR-0176)** : `constraints.txt` n'était
+      appliqué QUE dans les trois workflows GitHub — `make install` n'en tenait aucun
+      compte. Le verrou protégeait la CI, qui n'entraîne pas. Corrigé. **Reste à lancer
+      SUR LE VPS** : `make verrou-regen`, puis `make verrou` doit passer au vert.
 - [ ] **P2 — Étape 6 (LambdaBackend) — CONDITIONNÉE (16/09, ADR-0161/0164).** L'interface,
       le superviseur et la double protection existent et sont testés sur `BackendLocal`.
       N'écrire le backend distant que si une mesure d'alpha a démontré quelque chose à

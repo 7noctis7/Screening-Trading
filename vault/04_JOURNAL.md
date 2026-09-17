@@ -1,5 +1,33 @@
 # 04 — JOURNAL
 
+## Session 2026-09-17 (34ᵉ) — Les deux P1, et un verrou qui ne verrouillait rien
+
+**① LE VERROU N'ÉTAIT APPLIQUÉ NULLE PART OÙ ÇA COMPTE.** Avant d'épingler `scikit-learn`,
+j'ai vérifié où `constraints.txt` était seulement LU : dans les trois workflows GitHub, et
+c'est tout. `make install` installait **sans `-c`**. Le verrou protégeait donc la CI — qui
+n'entraîne pas — et laissait libre la machine qui produit le modèle. Épingler une
+bibliothèque dans un fichier que le VPS n'ouvre jamais aurait été de la décoration.
+`make install` applique désormais le verrou, `make verrou-regen` le régénère en une commande,
+et `make verrou` VÉRIFIE qu'il est appliqué. ADR-0176.
+
+**Un test est tombé, et il avait raison sur le fond.** Il interdisait le texte « pip install »
+dans le module d'analyse ; il est tombé quand ce module a eu besoin de CHERCHER cette chaîne
+dans le Makefile. Chercher un texte et l'exécuter sont opposés — un test par sous-chaîne les
+confond et interdit la mesure en croyant interdire l'action. Réécrit par l'AST.
+
+**② LE REGISTRE SAVAIT POURQUOI, ET NE LE DISAIT PAS.** `PRODUCTION : (aucune)` se lit comme
+un trou à combler. C'est en réalité une décision : le candidat du 16/09 a été rejeté pour
+absence d'edge OOS, et le motif dormait dans son historique depuis le premier jour. Laisser
+l'écran muet invite à « combler le trou » — c'est-à-dire à promouvoir un modèle que la mesure
+vient de refuser. Le motif s'affiche maintenant sous chaque ligne, et deux silences sont
+distingués : « rien n'a jamais été soumis » et « ce qui l'a été a été refusé ». ADR-0177.
+
+**Ce que je n'ai PAS fait, et volontairement** : promouvoir l'artefact en service. Il n'a
+aucun manifeste — ni dataset, ni commit, ni empreinte. L'inscrire reviendrait à FABRIQUER une
+provenance. La production restera vide jusqu'à ce qu'un modèle la mérite.
+
+`make test` : **2 993 passed, 77 skipped**.
+
 ## Session 2026-09-17 (33ᵉ) — Le registre parle, et il dit trois choses
 
 **LA CHAÎNE MLOPS FONCTIONNE DE BOUT EN BOUT.** Première entrée jamais écrite :

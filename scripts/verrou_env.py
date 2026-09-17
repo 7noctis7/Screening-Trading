@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 def main() -> int:
     from packages.mlops.environnement import (
+        applique,
         commande_regeneration,
         environnement,
         non_verrouillees,
@@ -31,6 +32,8 @@ def main() -> int:
     env = environnement()
     print(f"\n  Verrou : {len(fige)} paquet(s) épinglé(s) dans constraints.txt")
     print(f"  Python courant : {env['python']} · {env['os']} · {env['machine']}")
+    ok_applique, dit = applique()
+    print(f"  {'✓' if ok_applique else '⚠'} {dit}")
     print("  " + "─" * 74)
     for lib in ("numpy", "pandas", "scipy", "scikit-learn", "xgboost", "lightgbm", "torch"):
         cle = lib.lower()

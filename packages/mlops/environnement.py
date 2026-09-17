@@ -109,3 +109,30 @@ def commande_regeneration() -> str:
     """
     return ("pip-compile --extra=api --extra=data --extra=quant --extra=ml "
             "--extra=sentiment --strip-extras --output-file=constraints.txt pyproject.toml")
+
+
+def applique(racine: Path = RACINE) -> tuple[bool, str]:
+    """Le verrou est-il APPLIQUÉ à l'installation locale, ou seulement présent ?
+
+    UN VERROU QU'ON N'APPLIQUE PAS EST PIRE QU'UNE ABSENCE DE VERROU : le fichier
+    existe,
+    `make verrou` liste des versions épinglées, et on se croit protégé. Mesuré le
+    17/09 :
+    `constraints.txt` n'était passé qu'aux trois workflows GitHub — jamais à `make
+    install`,
+    donc jamais sur la machine qui produit réellement le modèle. La CI et le VPS
+    pouvaient
+    diverger sans que rien ne le dise.
+    """
+    mk = racine / "Makefile"
+    try:
+        texte = mk.read_text(encoding="utf-8")
+    except Exception:  # noqa: BLE001
+        return False, "Makefile illisible — application du verrou invérifiable"
+    for ligne in texte.splitlines():
+        depouillee = ligne.strip()
+        if depouillee.startswith("#") or "pip install" not in depouillee:
+            continue
+        if "-c constraints.txt" not in depouillee:
+            return False, f"installation SANS verrou : {depouillee[:60]}"
+    return True, "verrou appliqué à l'installation locale"

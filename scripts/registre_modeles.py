@@ -26,14 +26,22 @@ def _ligne(e) -> str:
     metriques = m.get("metriques") or {}
     auc = metriques.get("auc")
     marque = {"production": "▶", "candidate": "·", "archived": "□", "rejected": "✗"}
-    return (f" {marque.get(e.statut, '?')} {e.statut:11s} {e.version:44s} "
-            f"AUC {auc if auc is not None else 'n/d':>6} "
-            f"· seed {m.get('seed')} · {m.get('materiel') or '?'}")
+    ligne = (f" {marque.get(e.statut, '?')} {e.statut:11s} {e.version:44s} "
+             f"AUC {auc if auc is not None else 'n/d':>6} "
+             f"· seed {m.get('seed')} · {m.get('materiel') or '?'}")
+    # LE MOTIF ÉTAIT STOCKÉ DEPUIS TOUJOURS, jamais montré. « rejected » sans le
+    # pourquoi
+    # ne répond pas à la seule question qu'on pose à un registre.
+    motif = e.dernier_motif()
+    return ligne + (f"\n      → {motif}" if motif else "")
 
 
 def afficher(reg) -> None:
     prod = reg.production()
     print(f"\n  PRODUCTION : {prod.version if prod else '(aucune)'}")
+    pourquoi = reg.pourquoi_pas_de_production()
+    if pourquoi:
+        print(f"    → {pourquoi}")
     if not reg.entrees:
         print("  (registre vide — aucun entraînement n'a encore été tracé)")
         # UN REGISTRE VIDE N'EST PAS LA MÊME CHOSE QU'UN SYSTÈME SANS MODÈLE. S'il y a

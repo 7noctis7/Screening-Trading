@@ -8,8 +8,17 @@ help:             ## liste toutes les cibles avec leur rôle (référence : docs
 	@grep -hE '^[a-z][a-z0-9-]*:.*##' $(MAKEFILE_LIST) \
 	  | sed -E 's/^([a-z0-9-]+):[^#]*## *(.*)$$/\1|\2/' \
 	  | awk -F'|' '{printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'
-install:          ## installe les dépendances (uv)
-	uv venv && uv pip install -e ".[dev,data,quant,api,ml]"
+install:          ## installe les dépendances (uv) SOUS le verrou de constraints.txt
+	@# `-c constraints.txt` n'est pas décoratif : sans lui, la machine qui ENTRAÎNE
+	@# installe ce qui passe, pendant que la CI installe des versions figées. Deux
+	@# environnements, deux modèles, et rien qui le signale. Mesuré le 17/09 : le verrou
+	@# n'était appliqué QUE dans les trois workflows GitHub, jamais en local ni sur le VPS.
+	uv venv && uv pip install -e ".[dev,data,quant,api,ml]" -c constraints.txt
+
+verrou-regen:     ## régénère constraints.txt AVEC les extras d'entraînement (sur la machine qui entraîne)
+	@echo "→ Cette commande doit tourner SUR LA MACHINE QUI ENTRAÎNE (cf. make verrou)."
+	pip-compile --extra=api --extra=data --extra=quant --extra=ml --extra=sentiment \
+	  --strip-extras --output-file=constraints.txt pyproject.toml
 setup:            ## installation locale guidée (venv, détection YAHOO.db, build, cron) — 1 commande
 	bash scripts/setup_local.sh
 sync:             ## RÉCUPÈRE la branche de dev sans jamais créer de conflit (jamais `git pull`)

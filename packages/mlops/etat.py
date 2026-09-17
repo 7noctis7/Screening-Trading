@@ -26,6 +26,9 @@ def etat_modeles() -> dict:
     return {
         "disponible": True,
         "production": prod.version if prod else None,
+        # POURQUOI aucune version ne sert : sans ce champ, le site affiche un
+        # trou là où il y a peut-être une décision parfaitement fondée.
+        "production_motif": reg.pourquoi_pas_de_production() or None,
         "dataset_hash": (m.get("dataset_hash") or "")[:16] or None,
         "git_commit": (m.get("git_commit") or "")[:12] or None,
         "feature_version": m.get("feature_version"),

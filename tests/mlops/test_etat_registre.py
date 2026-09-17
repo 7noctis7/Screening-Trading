@@ -165,3 +165,72 @@ def test_le_statut_porcelain_est_lu_SANS_perdre_sa_premiere_colonne():
 def test_un_renommage_rend_la_DESTINATION():
     from packages.mlops.manifest import _chemin_porcelain
     assert _chemin_porcelain("R  vieux.py -> neuf.py") == "neuf.py"
+
+
+# ─── Le registre doit s'EXPLIQUER, pas seulement classer
+# ───────────────────────────────
+
+def _registre_avec_rejet(tmp_path):
+    from packages.mlops.manifest import Manifest
+    from packages.mlops.registre import Registre
+
+    art = tmp_path / "ml_x.pkl"
+    art.write_bytes(b"a")
+    reg = Registre(tmp_path)
+    m = Manifest.creer(modele="gb", run_id="r", dataset_hash="h",
+                       feature_version="1-feat", seed=7, artefact_sha256="",
+                       metriques={"auc": 0.532}, config={})
+    reg.enregistrer(m, art, "candidat du jour")
+    reg.rejeter(m.version, "DSR challenger 0.000 ≤ seuil 0.000 (pas d'edge OOS)")
+    return reg, m.version
+
+
+def test_le_MOTIF_d_une_decision_est_lisible(tmp_path):
+    """Il était STOCKÉ depuis toujours, jamais montré. « rejected » sans le pourquoi ne
+    répond pas à la seule question qu'on pose à un registre."""
+    reg, version = _registre_avec_rejet(tmp_path)
+    assert "pas d'edge OOS" in reg.entrees[version].dernier_motif()
+
+
+def test_une_PRODUCTION_VIDE_dit_pourquoi(tmp_path):
+    """« PRODUCTION : (aucune) » se lit comme un trou à combler. Ce n'en est pas
+    forcément un : un modèle sans edge DOIT être refusé, et l'absence de production est
+    alors le bon résultat du gate — encore faut-il le dire."""
+    reg, version = _registre_avec_rejet(tmp_path)
+    pourquoi = reg.pourquoi_pas_de_production()
+    assert version in pourquoi and "pas d'edge OOS" in pourquoi
+
+
+def test_un_registre_VIERGE_se_distingue_d_un_candidat_refuse(tmp_path):
+    """Deux silences différents : « rien n'a jamais été soumis » et « ce qui l'a été
+    a été refusé ». Le premier est un trou, le second une décision."""
+    from packages.mlops.registre import Registre
+    assert "n'a encore été soumis" in Registre(tmp_path).pourquoi_pas_de_production()
+
+
+def test_avec_une_production_le_motif_se_TAIT(tmp_path):
+    from packages.mlops.manifest import Manifest
+    from packages.mlops.registre import Registre
+
+    art = tmp_path / "ml_y.pkl"
+    art.write_bytes(b"a")
+    reg = Registre(tmp_path)
+    m = Manifest.creer(modele="gb", run_id="r", dataset_hash="h",
+                       feature_version="1-feat", seed=7, artefact_sha256="",
+                       metriques={}, config={})
+    reg.enregistrer(m, art, "candidat")
+    reg.promouvoir(m.version, "adoption")
+    assert reg.pourquoi_pas_de_production() == ""
+
+
+def test_le_site_expose_ce_motif(tmp_path, monkeypatch):
+    """Sans ce champ, la page affiche un trou là où il y a une décision fondée."""
+    import packages.mlops.registre as R
+    from packages.mlops.etat import etat_modeles
+
+    _registre_avec_rejet(tmp_path)
+    original = R.Registre
+    monkeypatch.setattr(R, "Registre", lambda *a, **k: original(tmp_path))
+    e = etat_modeles()
+    assert e["production"] is None
+    assert e["production_motif"] and "pas d'edge OOS" in e["production_motif"]
