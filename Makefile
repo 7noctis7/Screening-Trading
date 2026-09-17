@@ -13,7 +13,15 @@ install:          ## installe les dépendances (uv) SOUS le verrou de constraint
 	@# installe ce qui passe, pendant que la CI installe des versions figées. Deux
 	@# environnements, deux modèles, et rien qui le signale. Mesuré le 17/09 : le verrou
 	@# n'était appliqué QUE dans les trois workflows GitHub, jamais en local ni sur le VPS.
-	uv venv && uv pip install -e ".[dev,data,quant,api,ml]" -c constraints.txt
+	@# MÊME PIÈGE QUE `verrou-regen`, ET JE NE L'AVAIS CORRIGÉ QUE LÀ-BAS : `uv` n'est
+	@# pas sur le PATH du VPS (son venv a été créé autrement). Une cible d'installation
+	@# qui suppose un outil absent est la pire de toutes — c'est celle qu'on lance quand
+	@# rien ne marche encore. On crée le venv avec le module standard, puis tout passe
+	@# par l'interpréteur de CE venv.
+	@[ -x .venv/bin/python ] || python3 -m venv .venv
+	@.venv/bin/python -m uv --version >/dev/null 2>&1 \
+	  || .venv/bin/python -m pip install --quiet uv
+	.venv/bin/python -m uv pip install -e ".[dev,data,quant,api,ml]" -c constraints.txt
 
 verrou-regen:     ## régénère constraints.txt AVEC les extras d'entraînement (sur la machine qui entraîne)
 	@echo "→ Cette cible doit tourner SUR LA MACHINE QUI ENTRAÎNE (cf. make verrou)."

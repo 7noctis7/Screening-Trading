@@ -64,3 +64,44 @@ def test_la_marque_explique_ce_qu_elle_signifie():
     """Un symbole sans explication déplace la question au lieu d'y répondre."""
     assert "PLUSIEURS tranches" in PAGE
     assert "Ce ne sont pas des doublons" in PAGE
+
+
+# ─── Le comparatif de l'intro accepte PLUSIEURS références
+# ─────────────────────────────
+
+COURBES = (pathlib.Path(__file__).resolve().parents[2] / "apps" / "web" / "components"
+           / "intro" / "IntroCourbes.tsx").read_text(encoding="utf-8")
+
+
+def test_chaque_reference_a_SA_couleur():
+    """Trois courbes de la même teinte ne se comparent pas. La nôtre garde `--accent` :
+    le sujet du graphique est notre performance, les indices sont des repères."""
+    assert "VARS_REF" in COURBES and "REPLIS_REF" in COURBES
+    assert COURBES.count('cl("--accent"') == 1
+
+
+def test_une_reference_SANS_serie_n_est_pas_dessinee():
+    """On ne remplace pas une série manquante par celle d'à côté, et la légende ne
+    mentionne que ce qui est effectivement tracé."""
+    bloc = COURBES.split("export function referencesUtiles")[1].split("\n}")[0]
+    assert "filter(" in bloc and "courbe?.length" in bloc
+
+
+def test_l_ancienne_forme_a_UNE_reference_reste_lue():
+    """Le site statique déployé ne connaît pas encore `references` : sans ce repli, sa
+    courbe de comparaison disparaîtrait jusqu'à la prochaine reconstruction."""
+    bloc = COURBES.split("export function referencesUtiles")[1].split("\n}")[0]
+    assert "p.reference?.length" in bloc
+
+
+def test_l_ecart_est_NOMME_par_reference():
+    """Avec trois courbes, un « ÉCART » anonyme ne désigne plus rien."""
+    assert "vs {" in COURBES
+    assert "refs.map((r) => {" in COURBES
+
+
+def test_le_fondu_apparie_les_references_de_MEME_RANG():
+    """Une référence nouvelle sur cette fenêtre apparaît sans fondu, plutôt que de
+    sortir d'une courbe qui n'est pas la sienne."""
+    bloc = COURBES.split("const rfs = bruts.map(")[1].split("});")[0]
+    assert "avant.length === brut.length" in bloc

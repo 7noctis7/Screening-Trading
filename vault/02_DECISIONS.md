@@ -2,6 +2,43 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0181 — Trois courbes, et jamais une seule inventée (2026-09-17)
+
+**Demande.** Ajouter le CAC 40 à côté du robot et du S&P 500, dans l'intro ET dans le
+comparatif du Dashboard.
+
+**Pourquoi c'est plus qu'un ajout cosmétique.** Comparer à un seul indice laisse croire que
+le choix de l'indice n'a pas d'importance. Un robot qui bat le S&P 500 et perd contre le
+CAC 40 ne raconte pas la même histoire selon celui qu'on affiche. Trois repères rendent ce
+choix visible au lieu de le masquer.
+
+**La règle qui gouverne tout : `_cac_real`.** `_index_series` retombe sur une série
+SYNTHÉTIQUE quand l'indice n'est ni en base ni joignable. Une courbe inventée tracée à côté
+d'une vraie serait le mensonge le plus efficace du site : légende crédible, courbe crédible,
+rien derrière. Le CAC n'apparaît donc NULLE PART tant qu'il n'est pas réel — ni au Dashboard,
+ni à l'intro, ni dans la légende.
+
+**Le payload passe de UNE référence à N**, chacune avec son nom, sa courbe base 100, sa
+croissance et son MOTIF d'absence. `references_noms` publie l'ordre d'affichage : le front en
+tire ses couleurs, il ne les devine pas.
+
+**Les clés `reference` / `reference_croissance` sont conservées**, et portent la première
+référence TRAÇABLE — pas la première déclarée. Le site statique déployé les lit encore ; les
+retirer d'un coup casserait la page en ligne jusqu'à sa prochaine reconstruction. Un
+déploiement ne doit jamais dépendre de la simultanéité de deux artefacts.
+
+**Côté dessin** : une couleur par référence, la nôtre gardant `--accent` (le sujet du
+graphique est notre performance, les indices sont des repères). Le fondu d'une fenêtre à la
+suivante apparie les références de MÊME RANG — une référence nouvelle sur cette fenêtre
+apparaît sans fondu plutôt que de sortir d'une courbe qui n'est pas la sienne. Et l'écart
+chiffré devient NOMMÉ : avec trois courbes, un « ÉCART » anonyme ne désigne plus rien.
+
+**Un test généralisé au passage.** La garde anti-synthétique ne surveillait que `_sp_real`,
+et découpait l'appel à la chaîne « instruments) » — elle est tombée au premier argument
+ajouté. Elle équilibre désormais les parenthèses et exige que CHAQUE drapeau `_*_real`
+apparaisse deux fois : dates ET valeurs. En conditionner une seule poserait des cours vrais
+sur un calendrier inventé, sans qu'aucune erreur ne se produise.
+
 ## ADR-0179 — On annonce une CIBLE, jamais un outil (2026-09-17)
 
 **Deux échecs consécutifs, la même cause.** `make verrou-regen` a rendu

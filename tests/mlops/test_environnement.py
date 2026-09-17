@@ -226,3 +226,40 @@ def test_la_recette_demande_TOUS_les_extras_d_entrainement():
     assert "constraints.txt" in recette
 
 
+
+
+# ─── AUCUNE cible d'installation ne doit dépendre d'un binaire du PATH
+# ─────────────────
+
+def test_aucune_cible_d_installation_ne_suppose_un_binaire_du_PATH():
+    """TROISIÈME OCCURRENCE EN UNE JOURNÉE. `verrou-regen` a nommé `pip-compile`, puis
+    `uv` ; corrigé, il ne dépendait plus du PATH — mais `install` faisait encore
+    `uv venv && uv pip install`, et le VPS n'a pas `uv`. J'avais corrigé UNE cible
+    sur deux.
+
+    Et `install` est la pire de toutes : c'est celle qu'on lance quand rien ne marche
+    encore. Ce test couvre les deux, pour qu'il n'y ait pas de quatrième fois."""
+    for cible in ("install", "verrou-regen"):
+        for ligne in _recette(cible):
+            premier = ligne.lstrip("@").split()[0]
+            assert premier in ("[", "python3", ".venv/bin/python", "$(PYTHON)"), (
+                f"la cible « {cible} » lance « {premier} », un binaire du PATH : "
+                f"{ligne!r}")
+
+
+def test_le_detecteur_ne_se_declenche_PAS_sur_l_amorcage_d_un_OUTIL():
+    """MON PROPRE FAUX POSITIF, vu le soir même. `verrou-regen` amorce `uv` par un
+    `pip install uv` sans contrainte — et c'est normal : le verrou décrit les
+    dépendances du PROJET, pas l'outil qui les résout. Mon détecteur lisait les lignes
+    contenant « pip install » et criait « installation SANS verrou » sur la ligne
+    d'amorçage que je venais d'écrire.
+
+    Un détecteur qui se déclenche sur son propre correctif fait exactement le bruit
+    qu'il devait supprimer."""
+    from packages.mlops.environnement import applique
+
+    ok, motif = applique()
+    assert ok, motif
+    recette = " ".join(_recette("verrou-regen"))
+    assert "pip install --quiet uv" in recette, (
+        "l'amorçage doit exister — c'est lui que le détecteur doit savoir ignorer")

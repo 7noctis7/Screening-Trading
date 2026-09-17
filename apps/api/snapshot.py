@@ -1782,20 +1782,41 @@ def _ticker_section(data: dict, acmap: dict, n: int = 20) -> dict:
     return {"available": bool(out), "stocks": out[:n]}
 
 
-def _intro_section(equity, trade_stats, sp_dates, sp_closes, instruments) -> dict:
+def _serie_datee(dates, closes) -> list[dict] | None:
+    """`[{t, v}]` — ou `None` si les deux listes ne s'alignent pas.
+
+    Un indice dont les cours et les dates ont des longueurs différentes ne se compare à
+    rien : le tracer alignerait des valeurs sur les mauvais jours, et l'écart affiché
+    serait faux sans qu'aucune erreur ne se produise.
+    """
+    if not dates or not closes or len(dates) != len(closes):
+        return None
+    return [{"t": d, "v": v} for d, v in zip(dates, closes, strict=False)]
+
+
+def _intro_section(equity, trade_stats, sp_dates, sp_closes, instruments,
+                   autres_indices: dict | None = None) -> dict:
     """Assemble la section `intro`. Toute absence de donnée est DITE, jamais comblée."""
     from apps.api.intro_payload import construire
-    ref = None
-    if sp_dates and sp_closes and len(sp_dates) == len(sp_closes):
-        ref = [{"t": d, "v": v}
-               for d, v in zip(sp_dates, sp_closes, strict=False)]
+    ref = _serie_datee(sp_dates, sp_closes)
+    # PLUSIEURS RÉFÉRENCES, et seulement les RÉELLES. Un indice retombé sur sa série
+    # synthétique n'entre pas ici : une courbe inventée tracée à côté d'une vraie ferait
+    # une comparaison fausse, et rien à l'écran ne la distinguerait de la bonne.
+    references: dict[str, list[dict]] = {}
+    if ref:
+        references["S&P 500"] = ref
+    for nom, (d, c) in (autres_indices or {}).items():
+        serie = _serie_datee(d, c)
+        if serie:
+            references[nom] = serie
     classes: dict[str, int] = {}
     for m in instruments or []:
         k = (m.get("asset_class") or "equity").strip() or "equity"
         classes[k] = classes.get(k, 0) + 1
     univers = {"total": len(instruments or []), "par_classe": classes}
     try:
-        return construire({"equity": equity}, trade_stats, univers, reference=ref)
+        return construire({"equity": equity}, trade_stats, univers, reference=ref,
+                          references=references or None)
     except Exception as e:  # noqa: BLE001 — l'intro ne doit jamais casser le snapshot
         return {"disponible": False, "motif": f"{type(e).__name__}: {e}"}
 
@@ -1899,8 +1920,16 @@ def build_snapshot(seed: int = 7) -> dict:
         "synthetic", seed=101, drift=0.09, annual_vol=0.16).fetch_ohlcv("S&P 500", "1d", start, end)]
     _ndx_syn = [b.close for b in data_providers.create(
         "synthetic", seed=202, drift=0.13, annual_vol=0.22).fetch_ohlcv("Nasdaq 100", "1d", start, end)]
+    _cac_syn = [b.close for b in data_providers.create(
+        "synthetic", seed=303, drift=0.06,
+        annual_vol=0.18).fetch_ohlcv("CAC 40", "1d", start, end)]
     sp, _sp_dates, _sp_real = _index_series(["^GSPC", "SPX", "SPY"], start, end, _sp_syn)
     ndx, _ndx_dates, _ndx_real = _index_series(["^NDX", "^IXIC", "QQQ"], start, end, _ndx_syn)
+    # CAC 40 — troisième repère, demandé pour que la comparaison ne dépende pas du seul
+    # indice américain. `_cac_real` commande tout : une série retombée sur son repli
+    # synthétique n'est affichée NULLE PART, ni ici ni dans l'intro.
+    cac, _cac_dates, _cac_real = _index_series(["^FCHI", "CAC", "EWQ"],
+                                               start, end, _cac_syn)
 
     # régime macro RÉEL point-in-time : VIX réel + tendance S&P (proxy activité) + FRED (courbe,
     # chômage) si FRED_API_KEY. Repli synthétique UNIQUEMENT si aucune donnée réelle disponible.
@@ -2795,7 +2824,10 @@ def build_snapshot(seed: int = 7) -> dict:
         # affiche notre seule courbe et le dit.
         "intro": _intro_section(_dash_equity, trade_stats,
                                 _sp_dates if _sp_real else [], sp if _sp_real else [],
-                                instruments),
+                                instruments,
+                                autres_indices={"CAC 40": (
+                                    _cac_dates if _cac_real else [],
+                                    cac if _cac_real else [])}),
         "dashboard": {
             "as_of": last_bar.isoformat(),
             "regime": {**PL.regime_payload(regime, expo), "macro_real": _macro_real,
@@ -2823,7 +2855,8 @@ def build_snapshot(seed: int = 7) -> dict:
             # benchmark était tracée sur le calendrier de l'equity (`bench_series`).
             "benchmarks": bench_series(
                 {"S&P 500": (sp, _sp_dates if _sp_real else []),
-                 "Nasdaq 100": (ndx, _ndx_dates if _ndx_real else [])},
+                 "Nasdaq 100": (ndx, _ndx_dates if _ndx_real else []),
+                 "CAC 40": (cac, _cac_dates if _cac_real else [])},
                 _dash_dates, init_cap),
             "dates": _dash_dates,
             "positions": comp["rows"], "totals": comp["totals"],

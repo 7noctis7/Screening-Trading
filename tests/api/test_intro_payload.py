@@ -154,12 +154,32 @@ def test_le_snapshot_n_envoie_jamais_une_reference_synthetique():
     Le reste du dashboard fait déjà ce tri avec `_sp_real` ; l'intro le faisait PAS.
     """
     import pathlib
+    import re
+
     src = (pathlib.Path(__file__).resolve().parents[2]
            / "apps" / "api" / "snapshot.py").read_text(encoding="utf-8")
-    appel = src.split('"intro": _intro_section(', 1)[1].split("instruments)", 1)[0]
-    assert appel.count("_sp_real") == 2, (
-        "les DEUX séries de référence (dates et valeurs) doivent être conditionnées à "
-        "`_sp_real` — en conditionner une seule produirait un désalignement silencieux")
+    # Découpage par ÉQUILIBRE DES PARENTHÈSES. La version d'avant coupait à la chaîne
+    # « instruments) » et s'est cassée à l'ajout d'un argument — un test qui dépend de
+    # la
+    # forme exacte d'un appel tombe à la première évolution légitime.
+    apres = src.split('"intro": _intro_section(', 1)[1]
+    profondeur, fin = 1, 0
+    for i, ch in enumerate(apres):
+        profondeur += (ch == "(") - (ch == ")")
+        if profondeur == 0:
+            fin = i
+            break
+    appel = apres[:fin]
+
+    # CHAQUE indice, pas seulement le S&P : dates ET valeurs conditionnées au même
+    # drapeau de réalité. En conditionner une seule produirait un désalignement
+    # silencieux — des cours vrais posés sur un calendrier inventé.
+    drapeaux = set(re.findall(r"_(\w+)_real", appel))
+    assert drapeaux, "aucune série n'est conditionnée à sa réalité"
+    for d in sorted(drapeaux):
+        assert appel.count(f"_{d}_real") == 2, (
+            f"« _{d}_real » doit apparaître DEUX fois (dates et valeurs), "
+            f"trouvé {appel.count(f'_{d}_real')}")
 
 
 def test_sans_reference_l_intro_reste_disponible_et_le_dit():
@@ -204,3 +224,76 @@ def test_les_bornes_sont_celles_de_la_serie_REELLE_pas_du_calendrier_demande():
     p = periode(_serie(30, 0.001), "10a", "10 ANS", 10, AUJ)
     assert p["debut"] == (AUJ - timedelta(days=29)).isoformat()
     assert p["fin"] == AUJ.isoformat()
+
+
+# ── PLUSIEURS références : comparer à un seul indice cache le choix de l'indice ───────
+
+def _serie(n: int, taux: float, fin: date = AUJ) -> list[dict]:
+    return [{"t": (fin - timedelta(days=n - 1 - i)).isoformat(),
+             "v": 100 * (1 + taux) ** i} for i in range(n)]
+
+
+def test_chaque_reference_a_sa_courbe_et_sa_croissance():
+    """Un robot qui bat le S&P 500 et perd contre le CAC 40 ne raconte pas la même
+    histoire selon celui qu'on affiche. Les deux doivent être calculés."""
+    p = periode(_serie(400, 0.001), "3a", "3 ANS", 3, AUJ,
+                references={"S&P 500": _serie(400, 0.0005),
+                            "CAC 40": _serie(400, 0.0003)})
+    noms = [r["nom"] for r in p["references"]]
+    assert noms == ["S&P 500", "CAC 40"]
+    for r in p["references"]:
+        assert r["courbe"] and len(r["courbe"]) > 1
+        assert r["croissance"] is not None and not r["motif"]
+
+
+def test_une_reference_ABSENTE_est_dite_et_non_comblee():
+    """Une série manquante n'est ni remplacée par celle d'à côté, ni inventée."""
+    p = periode(_serie(400, 0.001), "3a", "3 ANS", 3, AUJ,
+                references={"S&P 500": _serie(400, 0.0005), "CAC 40": []})
+    cac = next(r for r in p["references"] if r["nom"] == "CAC 40")
+    assert cac["courbe"] is None and cac["croissance"] is None
+    assert "aucune série" in cac["motif"]
+
+
+def test_une_reference_TROP_COURTE_sur_la_fenetre_le_dit():
+    p = periode(_serie(400, 0.001), "10a", "10 ANS", 10, AUJ,
+                references={"CAC 40": _serie(1, 0.0)})
+    cac = p["references"][0]
+    assert cac["courbe"] is None and "trop courte" in cac["motif"]
+
+
+def test_les_cles_HISTORIQUES_restent_servies_pour_le_site_deja_deploye():
+    """Le site statique en ligne lit encore `reference` / `reference_croissance`. Les
+    retirer d'un coup casserait la page jusqu'à sa prochaine reconstruction — un
+    déploiement ne doit jamais dépendre de la simultanéité de deux artefacts."""
+    p = periode(_serie(400, 0.001), "3a", "3 ANS", 3, AUJ,
+                references={"S&P 500": _serie(400, 0.0005),
+                            "CAC 40": _serie(400, 0.0003)})
+    assert p["reference"] == p["references"][0]["courbe"]
+    assert p["reference_croissance"] == p["references"][0]["croissance"]
+
+
+def test_les_cles_historiques_prennent_la_PREMIERE_reference_TRACABLE():
+    """Si la première série manque, les clés héritées doivent porter la suivante — sinon
+    le site déployé afficherait « pas de référence » alors qu'il en existe une."""
+    p = periode(_serie(400, 0.001), "3a", "3 ANS", 3, AUJ,
+                references={"S&P 500": [], "CAC 40": _serie(400, 0.0003)})
+    assert p["reference"] is not None
+    assert p["reference"] == p["references"][1]["courbe"]
+
+
+def test_l_appel_a_UNE_seule_reference_continue_de_marcher():
+    """L'ancienne signature reste servie : un appelant non migré ne doit pas casser."""
+    p = periode(_serie(400, 0.001), "3a", "3 ANS", 3, AUJ,
+                reference=_serie(400, 0.0005))
+    assert p["reference"] and len(p["references"]) == 1
+
+
+def test_construire_publie_les_NOMS_des_references():
+    """Le front en tire ses couleurs et sa légende : il ne les devine pas."""
+    from apps.api.intro_payload import construire
+    d = construire({"equity": _serie(400, 0.001)}, {}, {"total": 1},
+                   aujourdhui=AUJ,
+                   references={"S&P 500": _serie(400, 0.0005),
+                               "CAC 40": _serie(400, 0.0003)})
+    assert d["references_noms"] == ["S&P 500", "CAC 40"]

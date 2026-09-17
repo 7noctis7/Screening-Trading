@@ -152,7 +152,15 @@ def applique(racine: Path = RACINE) -> tuple[bool, str]:
         return False, "Makefile illisible — application du verrou invérifiable"
     for ligne in texte.splitlines():
         depouillee = ligne.strip()
-        if depouillee.startswith("#") or "pip install" not in depouillee:
+        if depouillee.startswith(("#", "@#")) or "pip install" not in depouillee:
+            continue
+        # INSTALLER UN OUTIL N'EST PAS INSTALLER LE PROJET. `verrou-regen` amorce `uv`
+        # par un `pip install uv` sans contrainte — et c'est normal : le verrou décrit
+        # les dépendances du projet, pas l'outil qui le résout. Sans cette distinction,
+        # mon propre détecteur a crié « installation SANS verrou » sur la ligne
+        # d'amorçage que je venais d'écrire. Un détecteur qui se déclenche sur son
+        # propre correctif fait exactement le bruit qu'il devait supprimer.
+        if " -e " not in depouillee and ".[" not in depouillee:
             continue
         if "-c constraints.txt" not in depouillee:
             return False, f"installation SANS verrou : {depouillee[:60]}"

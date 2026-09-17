@@ -1,5 +1,37 @@
 # 04 — JOURNAL
 
+## Session 2026-09-17 (37ᵉ) — Le CAC 40 entre en scène, et deux cibles sur trois mentaient
+
+**LES DONNÉES DE L'INTRO SONT SAINES**, mesurées sur le VPS : cinq fenêtres, `disponible`
+partout, les deux séries à 60 points chacune, et des écarts qui parlent — +392 % contre
++257 % sur dix ans. L'absence d'affichage constatée plus tôt venait bien du `switch` de
+`SceneIntro`, corrigé le 16/09.
+
+**TROISIÈME COURBE : le CAC 40**, dans l'intro et dans le comparatif du Dashboard. Comparer
+à un seul indice laisse croire que le choix de l'indice n'a pas d'importance — un robot qui
+bat le S&P et perd contre le CAC ne raconte pas la même histoire selon celui qu'on affiche.
+
+**Et une règle gouverne tout : `_cac_real`.** `_index_series` retombe sur du SYNTHÉTIQUE
+quand l'indice manque. Une courbe inventée à côté d'une vraie serait le mensonge le plus
+efficace du site. Le CAC n'apparaît nulle part tant qu'il n'est pas réel. ADR-0181.
+
+**Deux cibles sur trois nommaient un outil absent.** `verrou-regen` a enfin tourné —
+159 paquets, les quatre bibliothèques d'entraînement épinglées. Mais `make install` faisait
+encore `uv venv && uv pip install`, et le VPS n'a pas `uv` : **j'avais corrigé UNE cible sur
+deux**. Et `install` est la pire, c'est celle qu'on lance quand rien ne marche encore. Un
+test couvre désormais les deux : aucune ligne de recette ne peut commencer par un binaire
+du PATH.
+
+**Et mon propre détecteur criait au loup.** `applique()` lisait toutes les lignes contenant
+« pip install » et signalait « installation SANS verrou » sur la ligne d'amorçage de
+`verrou-regen` — qui installe un OUTIL, pas le projet. Un détecteur qui se déclenche sur son
+propre correctif fait exactement le bruit qu'il devait supprimer.
+
+**Écart de version à surveiller** : `scikit-learn` est épinglé 1.9.1, installé 1.9.0 sur le
+VPS. `make install` le résoudra — et c'est précisément pour ça que cette cible devait marcher.
+
+`make test` : **3 016 passed, 77 skipped**. `next build` vert.
+
 ## Session 2026-09-17 (36ᵉ) — Deux fois le même piège, et la leçon enfin tirée
 
 **J'AI NOMMÉ UN OUTIL ABSENT DEUX FOIS DE SUITE.** `pip-compile` le matin, `uv` le soir. Les
