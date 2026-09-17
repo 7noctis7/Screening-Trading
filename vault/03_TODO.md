@@ -35,6 +35,26 @@
       PASSAGE RÉUSSI sur le VPS le 16/09 : **2 375 titres · 199 symboles · 71 jours**
       (2026-05-19 → 2026-09-16), 1 symbole muet. Reste à VÉRIFIER que le passage
       automatique de `cron_daily.sh` prend le relais demain — un flux RSS ne se rejoue pas.
+- [ ] **P0 — Le journal tient 27 symboles OUVERTS, le courtier en détient 17 (17/09).**
+      Mesuré en confrontant l'onglet « Historique des positions » (61 lots ouverts) aux
+      positions Alpaca réelles : **13 symboles** ouverts au journal dont le courtier ne
+      détient RIEN (HPQ 4 lots, MPC 3, TSM 3, NTR 2, CF, LNC, MCK, NEM, PATH, STT, TGT,
+      TYL, WFC), et **3 positions réelles** absentes du journal (PSX, QRVO, XOM, toutes
+      achetées le 16/09). Le mécanisme est lisible sur THC : quatre achats (09, 10, 14,
+      15/09) et trois ventes (10/09 19:54, 11/09 19:59, 14/09 21:40) chez le courtier,
+      qui n'en détient donc qu'un lot — et le journal a gardé les QUATRE achats ouverts
+      sans apparier une seule vente. Les ventes manquantes tombent toutes sur les
+      passages SECONDAIRES : c'est le résidu de la période à plusieurs planificateurs.
+      Confirmation : **aucun lot orphelin daté du 16 ou du 17/09**, les deux journées à
+      un seul passage. La dérive a cessé, le passif reste.
+      Réparer SUR LE VPS (clés courtier) : `make diag-journal` puis `make reparer-journal`.
+      Tant que ce n'est pas fait, l'expectancy et le turnover portent des lots fantômes.
+- [x] **~~P1 — `make sync` détruisait en silence un fichier non commité~~ — FERMÉE
+      (17/09).** `constraints.txt` régénéré le 16/09 sur le VPS (159 paquets au lieu de
+      81) a disparu au `make sync` suivant : la recette fait `git reset --hard`. Le seul
+      signal était `make verrou` qui « régressait » à 81, deux commandes plus loin.
+      `sync-garde` met désormais de côté (`git stash`) AVANT de réécrire l'arbre, nomme
+      ce qu'elle écarte, et interrompt plutôt que de détruire si le stash échoue.
 - [x] **~~P1 — Le registre se remplira au prochain entraînement~~ — FAIT (17/09).**
       Première entrée : `Gradient Boosting (sklearn)-20260916-223954-4a0ed2d`,
       **AUC 0,532**, statut `rejected` (non promu). Le câblage fonctionne de bout en bout.
