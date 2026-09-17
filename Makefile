@@ -16,9 +16,15 @@ install:          ## installe les dépendances (uv) SOUS le verrou de constraint
 	uv venv && uv pip install -e ".[dev,data,quant,api,ml]" -c constraints.txt
 
 verrou-regen:     ## régénère constraints.txt AVEC les extras d'entraînement (sur la machine qui entraîne)
-	@echo "→ Cette commande doit tourner SUR LA MACHINE QUI ENTRAÎNE (cf. make verrou)."
-	@# `uv`, pas `pip-compile` : ce projet s'installe avec uv et n'a jamais eu pip-tools.
-	uv pip compile --extra api --extra data --extra quant --extra ml --extra sentiment -o constraints.txt pyproject.toml
+	@echo "→ Cette cible doit tourner SUR LA MACHINE QUI ENTRAÎNE (cf. make verrou)."
+	@# TOUT PASSE PAR $(PYTHON), l'interpréteur du projet — jamais par un binaire du PATH.
+	@# Deux tentatives ont échoué en nommant un outil absent de la machine visée :
+	@# `pip-compile` (pip-tools n'est pas une dépendance) puis `uv` (présent sur le poste
+	@# de développement, ABSENT du VPS). `python -m uv` ne dépend que du venv, et la ligne
+	@# ci-dessous l'y installe si besoin — donc la cible marche partout où le projet tourne.
+	$(PYTHON) -m uv --version >/dev/null 2>&1 || $(PYTHON) -m pip install --quiet uv
+	$(PYTHON) -m uv pip compile --extra api --extra data --extra quant --extra ml \
+	  --extra sentiment -o constraints.txt pyproject.toml
 	@echo "→ Verrou régénéré. Réinstaller pour s'y conformer :  make install"
 setup:            ## installation locale guidée (venv, détection YAHOO.db, build, cron) — 1 commande
 	bash scripts/setup_local.sh

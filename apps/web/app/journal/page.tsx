@@ -2,6 +2,7 @@
 // Journal des round-trips RÉELS (paper) — le « proof of work » du RDV 2026-08-06 :
 // chaque aller-retour avec prix de décision, fill, PnL, MFE/MAE. Expectancy GATÉE
 // (UNCALIBRATED sous 20 trades fermés) — on n'affiche jamais une stat inventée.
+import { useState } from "react";
 import { useJournal } from "@/lib/api";
 import { MetricCard } from "@/components/MetricCard";
 import { SortableTable, type Col } from "@/components/SortableTable";
@@ -12,14 +13,42 @@ const pct = (x?: number | null) => (x == null ? "—" : `${x >= 0 ? "+" : ""}${(
 
 export default function Journal() {
   const { data } = useJournal();
+  // « Tout » PAR DÉFAUT, et ce n'est pas un détail d'ergonomie. Masquer les lots encore
+  // ouverts transformerait cette page en palmarès de trades soldés — exactement le biais
+  // que son propre avertissement dénonce deux paragraphes plus haut. Le filtre sert à
+  // LIRE les round-trips proprement, jamais à faire disparaître ce qui manque au tableau.
+  const [vue, setVue] = useState<"tout" | "fermé" | "ouvert">("tout");
   if (!data) return <PageSkeleton />;
-  const rows = (data.rows ?? []).map((r: any) => ({ ...r, status: r.exit_ts ? "fermé" : "ouvert" }));
+  // LES TRANCHES D'UN MÊME LOT NE SONT PAS DES DOUBLONS. Une vente partielle crée une
+  // ligne par tranche (`split_id` + `qty` dans `live_roundtrip`) et laisse le reliquat
+  // ouvert : QQQ acheté le 07/07 à 716,69 $ apparaît trois fois — deux sorties et un
+  // reliquat. Sans marque, ça se lit comme une duplication, et c'est de là que vient
+  // l'essentiel du sentiment de « trop de lignes ».
+  const brut = (data.rows ?? []).map((r: any) => ({ ...r, status: r.exit_ts ? "fermé" : "ouvert" }));
+  const compte = new Map<string, number>();
+  for (const r of brut) {
+    const cle = `${r.symbol}|${r.venue}|${r.entry_ts}|${r.entry_price}`;
+    compte.set(cle, (compte.get(cle) ?? 0) + 1);
+  }
+  const toutes = brut.map((r: any) => ({
+    ...r,
+    fractionne: (compte.get(`${r.symbol}|${r.venue}|${r.entry_ts}|${r.entry_price}`) ?? 1) > 1,
+  }));
+  const nFermes = toutes.filter((r: any) => r.status === "fermé").length;
+  const rows = vue === "fermé" ? toutes.filter((r: any) => r.status === "fermé")
+    : vue === "ouvert" ? toutes.filter((r: any) => r.status === "ouvert")
+    : toutes;
   const st = data.stats ?? {};
   const sl = data.slippage ?? {};
 
   const cols: Col[] = [
     { key: "symbol", label: "Actif", render: (v, r) => (
-        <span className="mono">{v} <span className="text-muted2 text-[10px] font-sans">{r.venue}</span></span>) },
+        <span className="mono">{v} <span className="text-muted2 text-[10px] font-sans">{r.venue}</span>
+          {r.fractionne && (
+            <span className="text-muted2 text-[10px] font-sans ml-1"
+              title="Ce lot d'entrée a été soldé en PLUSIEURS tranches : une ligne par tranche, plus le reliquat s'il reste ouvert. Ce ne sont pas des doublons.">
+              ⧉ fractionné</span>)}
+        </span>) },
     { key: "status", label: "Statut", render: (v) => (
         <span className="text-xs px-1.5 py-0.5 rounded font-sans"
           style={{ background: v === "fermé" ? "color-mix(in srgb, var(--pos) 14%, transparent)" : "var(--surface2)",
@@ -91,7 +120,25 @@ export default function Journal() {
           ) : sl.status && (
             <p className="text-muted2 text-xs">Slippage réel : {sl.status} ({sl.hint ?? ""}).</p>
           )}
-          <section className="card p-4">
+          <section className="card p-4 space-y-3">
+            <div className="flex items-center gap-1 flex-wrap text-xs font-sans">
+              {([["tout", `Tout (${toutes.length})`],
+                 ["fermé", `Round-trips fermés (${nFermes})`],
+                 ["ouvert", `Lots ouverts (${toutes.length - nFermes})`]] as const).map(([k, label]) => (
+                <button key={k} onClick={() => setVue(k)}
+                  aria-pressed={vue === k}
+                  className="px-2.5 py-1 rounded-[8px] border transition-colors"
+                  style={{ background: vue === k ? "var(--surfaceAlt)" : "transparent",
+                           borderColor: vue === k ? "var(--border2)" : "transparent",
+                           color: vue === k ? "var(--fg)" : "var(--muted)" }}>{label}</button>
+              ))}
+              {vue === "fermé" && (
+                <span className="text-muted2 text-[11px] ml-1">
+                  ⚠ vue partielle : les {toutes.length - nFermes} lots encore ouverts — dont
+                  les perdants — sont masqués.
+                </span>
+              )}
+            </div>
             <SortableTable rows={rows} cols={cols} filterKeys={["symbol", "venue", "status", "regime"]}
               csvName="journal_roundtrips.csv" initialSort={{ key: "entry_ts", dir: "desc" }} dense />
           </section>

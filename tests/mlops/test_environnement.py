@@ -116,19 +116,6 @@ def test_le_resume_est_borne():
 
 # ─── La commande de régénération ───────────────────────────────────────────────────────
 
-def test_la_commande_couvre_les_extras_d_entrainement():
-    """Le verrou actuel a été généré SANS `ml` ni `sentiment` — c'est toute l'origine du
-    trou. La commande rendue doit les inclure, sinon on régénère le même défaut.
-
-    L'assertion porte sur le NOM de l'extra, pas sur la ponctuation du résolveur : elle
-    exigeait `--extra=ml` et serait tombée au passage de `pip-compile` à `uv`, qui écrit
-    `--extra ml`. Un test qui fige une syntaxe d'outil ne teste plus l'intention."""
-    c = commande_regeneration()
-    for extra in ("ml", "sentiment", "quant", "data", "api"):
-        assert f"--extra={extra}" in c or f"--extra {extra}" in c, extra
-    assert "constraints.txt" in c
-
-
 def test_le_script_de_rapport_sort_en_erreur_si_des_libs_sont_libres():
     """Fail-loud : un rapport qui sort 0 quoi qu'il arrive ne bloque aucune chaîne."""
     src = (RACINE / "scripts" / "verrou_env.py").read_text(encoding="utf-8")
@@ -169,33 +156,73 @@ def test_le_module_ne_regenere_rien_lui_meme():
 
 # ─── Une consigne qui nomme un outil absent est pire qu'un silence ────────────────────
 
-def test_la_commande_annoncee_est_CELLE_QUE_LE_MAKEFILE_LANCE():
-    """MESURÉ LE 17/09. `make verrou` imprimait « pip-compile … » et `make verrou-regen`
-    lançait la même chose — sauf que `pip-compile` appartient à `pip-tools`, qui n'est
-    nulle part dans les dépendances de ce projet. Résultat sur le VPS :
-    « pip-compile: No such file or directory ».
+def _recette(cible: str) -> list[str]:
+    """Les COMMANDES d'une cible Make, continuations jointes.
 
-    Le pire n'est pas l'échec, c'est le message : il faisait croire à un environnement
-    cassé là où c'était la CONSIGNE qui l'était. Ce test lie les deux, pour que le
-    message et l'outil ne puissent plus diverger."""
+    Une recette s'arrête à la première ligne SANS tabulation — il n'y a pas forcément de
+    ligne vide entre deux cibles. Découper sur « \\n\\n » débordait sur la cible
+    suivante
+    et faisait échouer le test sur `bash scripts/setup_local.sh`, qui appartient à
+    `setup`.
+    """
+    texte = (RACINE / "Makefile").read_text(encoding="utf-8").replace("\\\n", " ")
+    apres = texte.split(f"\n{cible}:", 1)[1].splitlines()[1:]
+    lignes = []
+    for ligne in apres:
+        if not ligne.startswith("\t"):
+            break
+        nu = ligne.strip()
+        if not nu.startswith(("@#", "@echo")):
+            lignes.append(nu)
+    return lignes
+
+
+def test_la_commande_annoncee_EXISTE_forcement_sur_la_machine():
+    """DEUX FOIS DE SUITE, le message a nommé un binaire absent de la machine visée :
+    `pip-compile` le 17/09 au matin (pip-tools n'est pas une dépendance du projet), puis
+    `uv` le soir (présent sur le poste de développement, ABSENT du VPS). Les deux fois,
+    l'utilisateur a lu « No such file or directory » et cherché du côté de son
+    environnement, alors que c'était la CONSIGNE qui était fausse.
+
+    Un nom d'outil est une HYPOTHÈSE sur une machine qu'on ne voit pas. Une cible `make`
+    n'en est pas une : elle vit dans le Makefile que l'utilisateur vient d'exécuter pour
+    lire le message."""
     from packages.mlops.environnement import commande_regeneration
 
     commande = commande_regeneration()
+    assert commande.startswith("make "), (
+        "annoncer un binaire, c'est parier qu'il est installé là-bas ; une cible "
+        f"`make` ne parie rien. Reçu : {commande!r}")
+    cible = commande.split(maxsplit=1)[1].strip()
     makefile = (RACINE / "Makefile").read_text(encoding="utf-8")
-    cible = makefile.split("verrou-regen:")[1].split("\n\n")[0]
-    assert commande in cible, (
-        "la commande annoncée par `make verrou` doit être EXACTEMENT celle que "
-        f"`make verrou-regen` exécute.\n  annoncée : {commande}\n  cible    : {cible}")
+    assert f"\n{cible}:" in makefile, f"la cible « {cible} » manque au Makefile"
 
 
-def test_la_commande_utilise_uv_l_outil_du_projet():
-    """`make install` utilise `uv`. Régénérer le verrou avec un autre résolveur
-    produirait un fichier que l'installateur du projet n'a jamais vu résoudre."""
-    from packages.mlops.environnement import commande_regeneration
+def test_la_recette_passe_par_L_INTERPRETEUR_DU_PROJET():
+    """Le venv est la seule chose dont l'existence est garantie partout où ce projet
+    tourne. Un binaire du PATH ne l'est pas — c'est exactement ce qui a échoué deux
+    fois."""
+    lignes = _recette("verrou-regen")
+    assert lignes, "la cible doit avoir des commandes"
+    for ligne in lignes:
+        assert ligne.startswith("$(PYTHON)"), (
+            f"cette ligne dépend d'un binaire du PATH : {ligne!r}")
 
-    commande = commande_regeneration()
-    assert commande.startswith("uv pip compile")
-    assert "pip-compile" not in commande
-    makefile = (RACINE / "Makefile").read_text(encoding="utf-8")
-    assert "uv venv && uv pip install" in makefile, "l'installateur reste uv"
+
+def test_la_recette_s_installe_son_outil_si_besoin():
+    """Sans cette ligne, la cible rejouerait le même échec sur toute machine où l'outil
+    manque — et il manquait sur celle qui entraîne."""
+    recette = " ".join(_recette("verrou-regen"))
+    assert "pip install" in recette and "uv" in recette
+
+
+def test_la_recette_demande_TOUS_les_extras_d_entrainement():
+    """En oublier un rend le verrou muet sur la bibliothèque qui produit le modèle."""
+    from packages.mlops.environnement import EXTRAS_ENTRAINEMENT
+
+    recette = " ".join(_recette("verrou-regen"))
+    for extra in EXTRAS_ENTRAINEMENT:
+        assert f"--extra {extra}" in recette, extra
+    assert "constraints.txt" in recette
+
 

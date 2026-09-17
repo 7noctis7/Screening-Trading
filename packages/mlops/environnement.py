@@ -101,18 +101,26 @@ def resume(env_du_run: dict, env_courant: dict | None = None) -> str:
     return f"{tete} : {detail}" + ("…" if len(es) > 4 else "")
 
 
-# `uv`, PAS `pip-compile`. Ce projet s'installe avec uv (`make install`), et
-# `pip-compile` appartient à `pip-tools`, absent de ses dépendances. Mesuré le 17/09 :
-# `make verrou-regen` a rendu « pip-compile: No such file or directory ». Une consigne
-# qui
-# nomme un outil absent de la machine est pire qu'une absence de consigne — elle fait
-# croire à un environnement cassé là où c'est la consigne qui l'était.
+# ON N'ANNONCE PLUS UN OUTIL, ON ANNONCE UNE CIBLE. Deux fois de suite, le message a
+# nommé un binaire absent de la machine visée : `pip-compile` (pip-tools n'est pas une
+# dépendance du projet), puis `uv` (installé sur le poste de développement, PAS sur le
+# VPS). Les deux fois, l'utilisateur a lu « No such file or directory » et cherché du
+# côté
+# de son environnement, alors que c'était la CONSIGNE qui était fausse.
 #
-# uv retire les extras par DÉFAUT (d'où l'absence de `--strip-extras`, qui n'existe pas
-# chez lui ; son option est `--no-strip-extras`).
-COMMANDE_REGENERATION = (
-    "uv pip compile --extra api --extra data --extra quant --extra ml "
-    "--extra sentiment -o constraints.txt pyproject.toml")
+# Un nom d'outil est une hypothèse sur une machine qu'on ne voit pas. `make
+# verrou-regen`
+# n'en est pas une : la cible vit dans le Makefile que l'utilisateur vient d'exécuter
+# pour
+# lire ce message. Elle existe donc par construction, et c'est ELLE qui se débrouille
+# avec
+# l'outil — en l'installant dans le venv du projet si besoin.
+COMMANDE_REGENERATION = "make verrou-regen"
+
+# Les extras que la cible doit demander. Ils vivent ici pour qu'un test puisse vérifier
+# que la recette du Makefile ne les perd pas : en oublier un rend le verrou muet sur la
+# bibliothèque qui produit le modèle — le trou même que tout ceci existe pour boucher.
+EXTRAS_ENTRAINEMENT = ("api", "data", "quant", "ml", "sentiment")
 
 
 def commande_regeneration() -> str:

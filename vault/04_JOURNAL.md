@@ -1,5 +1,38 @@
 # 04 — JOURNAL
 
+## Session 2026-09-17 (36ᵉ) — Deux fois le même piège, et la leçon enfin tirée
+
+**J'AI NOMMÉ UN OUTIL ABSENT DEUX FOIS DE SUITE.** `pip-compile` le matin, `uv` le soir. Les
+deux fois « No such file or directory », les deux fois l'utilisateur cherchant du côté de sa
+machine alors que c'était ma consigne qui était fausse.
+
+**Et mon test intermédiaire n'a rien vu**, ce qui est le plus instructif : il vérifiait que le
+message et la recette citent la MÊME commande. Deux textes identiques peuvent être faux
+ensemble — la ressemblance n'est pas l'existence.
+
+**La leçon : on annonce une CIBLE, jamais un outil.** Un nom de binaire est une hypothèse sur
+une machine qu'on ne voit pas ; `make verrou-regen` vit dans le Makefile que l'utilisateur
+vient d'exécuter pour lire le message. Et la recette ne dépend plus du PATH — tout passe par
+`$(PYTHON)`, le venv étant la seule chose garantie partout où ce projet tourne. Elle installe
+son outil si besoin. Éprouvée pour de vrai. ADR-0179.
+
+**Le `constraints.txt` produit ici n'est pas committé** : résolu en Python 3.11 dans ce
+conteneur contre 3.14 sur le VPS. L'épingler verrouillerait un environnement qui n'entraîne
+pas — le défaut même qu'on répare.
+
+**JOURNAL DES ROUND-TRIPS : séparer, pas supprimer.** Question de l'utilisateur : ne garder
+que les trades ouverts ET fermés ? Son intuition sur la confusion est juste, le remède non —
+la page porte son propre avertissement (« les positions perdantes encore ouvertes n'y figurent
+pas, ce qui embellit le tableau »), et les 61 lots ouverts sont la seule preuve VISIBLE de ce
+biais. Les retirer en ferait le palmarès qu'elle dénonce. Trois vues, « Tout » par défaut, et
+la vue « fermés » avertit de ce qu'elle masque. ADR-0180.
+
+**Et la vraie source du bruit était ailleurs** : une vente partielle crée une ligne par
+tranche et laisse le reliquat ouvert — QQQ du 07/07 occupe trois lignes. Rien ne le disait,
+donc ça se lisait comme une duplication. Marque « ⧉ fractionné » ajoutée.
+
+`make test` : **3 002 passed, 77 skipped**.
+
 ## Session 2026-09-17 (35ᵉ) — Deux jours propres, et une consigne qui nommait un outil absent
 
 **LE P0 DES TROIS PLANIFICATEURS EST DÉFINITIVEMENT CLOS.**

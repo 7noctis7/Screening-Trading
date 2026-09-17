@@ -2,6 +2,59 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0179 — On annonce une CIBLE, jamais un outil (2026-09-17)
+
+**Deux échecs consécutifs, la même cause.** `make verrou-regen` a rendu
+`pip-compile: No such file or directory` le matin, puis `uv: No such file or directory` le
+soir. Les deux fois, la consigne nommait un binaire absent de la machine visée — `pip-tools`
+n'est pas une dépendance du projet, et `uv` est installé sur le poste de développement mais
+PAS sur le VPS. Les deux fois, l'utilisateur a lu « No such file or directory » et cherché du
+côté de son environnement, alors que c'était la CONSIGNE qui était fausse.
+
+**Mon test intermédiaire n'a pas suffi, et il fallait le voir.** Il vérifiait que le message
+et la recette du Makefile citent la MÊME commande. Deux textes identiques peuvent être faux
+ensemble : la ressemblance n'est pas l'existence.
+
+**Décision. Un nom d'outil est une hypothèse sur une machine qu'on ne voit pas ; une cible
+`make` n'en est pas une.** `commande_regeneration()` rend désormais `make verrou-regen` —
+une cible qui vit dans le Makefile que l'utilisateur vient d'exécuter pour lire le message,
+donc qui existe par construction. C'est la CIBLE qui se débrouille avec l'outil.
+
+Et la recette ne dépend plus du PATH : tout passe par `$(PYTHON)`, l'interpréteur du venv —
+la seule chose dont l'existence soit garantie partout où ce projet tourne. Elle installe `uv`
+dans ce venv s'il manque, puis l'appelle en `python -m uv`.
+
+**Trois tests remplacent celui qui comparait deux textes** : la commande annoncée doit
+commencer par `make ` et sa cible exister dans le Makefile ; chaque ligne de la recette doit
+commencer par `$(PYTHON)` ; la recette doit installer son outil. Vérifié en exécutant
+réellement `make verrou-regen` : il rend `scikit-learn`, `xgboost`, `lightgbm`, `torch`.
+
+**Le `constraints.txt` produit ici n'est PAS committé** : résolu en Python 3.11 dans ce
+conteneur, alors que le VPS tourne en 3.14. L'épingler reviendrait à verrouiller un
+environnement qui n'entraîne pas — le défaut même qu'on répare.
+
+## ADR-0180 — Le journal sépare les lots ouverts, il ne les supprime pas (2026-09-17)
+
+**La question posée.** « Ce serait préférable de ne garder que l'historique des trades
+ouverts ET fermés, non ? » L'intuition sur la confusion est juste. Le remède, non.
+
+**Cette page porte son propre avertissement** : « Les positions perdantes encore ouvertes n'y
+figurent pas, ce qui embellit le tableau. » Les 61 lots ouverts affichés sont la seule preuve
+VISIBLE de ce biais, face à 62 round-trips fermés. Les retirer ferait de la page un palmarès
+de trades soldés — exactement ce qu'elle dénonce deux paragraphes plus haut. Et les chiffres
+d'en-tête (45 % de réussite, 2,25 $ d'espérance) sont DÉJÀ calculés sur les fermés seuls : le
+tableau est ce qui montre ce qu'ils laissent de côté.
+
+**Décision : séparer, pas supprimer.** Trois vues — Tout (défaut), Round-trips fermés, Lots
+ouverts — avec leurs compteurs. La vue « fermés » AVERTIT tant qu'elle est active de ce
+qu'elle masque, parce que c'est elle qui produit le tableau embelli.
+
+**LA VRAIE SOURCE DU BRUIT ÉTAIT AILLEURS.** Une vente partielle crée une ligne par tranche
+(`split_id` + `qty` dans `live_roundtrip`) et laisse le reliquat ouvert : QQQ acheté le 07/07
+à 716,69 $ occupe trois lignes — deux sorties et un reliquat ; PATH du 03/09, trois aussi.
+Rien à l'écran ne le disait, donc ça se lisait comme une duplication. Les tranches d'un même
+lot d'entrée portent désormais la marque « ⧉ fractionné », avec l'explication au survol.
+
 ## ADR-0178 — Une consigne qui nomme un outil absent est pire qu'un silence (2026-09-17)
 
 **Le symptôme.** `make verrou-regen`, livré le matin même, a rendu sur le VPS :
