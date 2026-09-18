@@ -107,6 +107,32 @@ préférée, l'enregistrement local le secours, la source est publiée par poche
 `depart_certain` passe à faux dès qu'UNE poche part d'une base locale — le capital est
 une somme, un « presque certain » se lirait certain.
 
+**LE CAPITAL INITIAL EST CONNU, ET IL EST EXACT.** L'historique Alpaca porte, tout en
+bas, une ligne `Journal cash between accounts · JNLC · +$100,000.00 · Jun 17, 2026`. Le
+compte a donc été ouvert avec **100 000,00 $ le 17/06**. À 101 026,57 $, la performance
+réelle est **+1 026,57 $, soit +1,03 %** en 93 jours. Le panneau annonçait +1,13 %
+depuis 99 605,37 $ : notre base était le premier point ENREGISTRÉ, inférieur au dépôt,
+donc le chiffre était flatté d'un dixième de point. Mesure, pas déduction.
+
+**LE JOURNAL SE RECONSTRUIT DEPUIS LES SEULS FILLS DU COURTIER.** Plutôt que de réparer
+un registre qu'aucune réparation n'atteint plus, on le rebâtit à partir de la seule
+source qui n'invente rien : l'historique des ordres exécutés. `research`
+`/reconstruction_journal` rejoue les fills en FIFO par symbole — chaque tranche
+consommée produit son propre aller-retour, parce que moyenner trois prix d'entrée
+effacerait la seule information que ce registre existe pour porter. Une vente qui
+déborde les lots disponibles est NOMMÉE (`ventes_orphelines`) : c'est le signe que
+l'historique récupéré est tronqué, et la taire produirait un réalisé faux.
+
+**La porte est l'inventaire réel.** `confronter` compare, symbole par symbole et dans
+les deux sens, les lots ouverts reconstruits à ce que le courtier DÉTIENT. Le script
+(`make reconstruire-journal`) REFUSE d'écrire tant que ça ne colle pas — un registre
+reconstruit qui ne retombe pas sur l'inventaire est faux, et l'écrire quand même serait
+refaire l'erreur qu'on corrige. Simulation par défaut, archive horodatée + export JSON
+de l'ancien registre avant tout remplacement. Les lots portent le préfixe `R-` et
+AUCUN `features_snapshot` : ils viennent du courtier, pas d'une décision, et inventer
+des features rendrait le registre inutilisable pour la calibration ML — la confusion
+exacte que le drapeau `legacy` avait déjà causée.
+
 **LE RAPPROCHEMENT EST RETIRÉ DU SITE, à la demande — et c'est la bonne décision.**
 Le bloc était juste et personne n'en voulait : devant un compte, la question est
 « combien j'ai gagné », pas « l'identité comptable boucle-t-elle ». Un diagnostic n'a pas
