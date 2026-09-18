@@ -35,6 +35,16 @@
       PASSAGE RÉUSSI sur le VPS le 16/09 : **2 375 titres · 199 symboles · 71 jours**
       (2026-05-19 → 2026-09-16), 1 symbole muet. Reste à VÉRIFIER que le passage
       automatique de `cron_daily.sh` prend le relais demain — un flux RSS ne se rejoue pas.
+- [ ] **P1 — Lancer `make deviation-lab` sur le VPS et DÉCIDER (18/09, ADR-0180).**
+      Le motif déviation→reclaim→consolidation est codé (`indicators/deviation_reclaim`)
+      et le banc l'oppose à la primitive `sfp` qui existait déjà, sur les mêmes barres,
+      sous gate placebo + DSR + correction de tests multiples. **Aucun chiffre ne peut
+      être produit hors du VPS** : la base de prix n'y est pas. Trois issues, toutes
+      acceptables : rien ne passe le gate → on n'ajoute rien et on le sait ; seul `sfp`
+      passe → la machine à états ne sert à rien ; les états ajoutés passent → alors
+      `signal_lab` d'abord (recouvrement avec le filtre de production), stratégie
+      ensuite, jamais l'inverse.
+      `make deviation-lab ARGS="--titres 200 --hold 10"`
 - [ ] **P0 — Le journal tient 27 symboles OUVERTS, le courtier en détient 17 (17/09).**
       Mesuré en confrontant l'onglet « Historique des positions » (61 lots ouverts) aux
       positions Alpaca réelles : **13 symboles** ouverts au journal dont le courtier ne

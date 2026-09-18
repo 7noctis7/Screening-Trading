@@ -5501,3 +5501,59 @@ toucherait pas la production. Reste une observation à diagnostiquer, formulée 
 hypothèse et non comme fait : une détention médiane de 0,1 jour sur les décisions du
 système suggère un cycle ouvrir-puis-solder dans la même journée — le plancher de ligne
 (1 000 $) est le premier suspect, à vérifier avant toute correction.
+
+
+## ADR-0180 — Un motif de price action se MESURE avant de se coder en stratégie (2026-09-18)
+
+**Contexte.** Spec reçue : un agent analyste devant détecter
+DEVIATION → RECLAIM → CONSOLIDATION → EXPANSION, lui attribuer un score 0-100, produire
+un plan de trade complet en JSON et trancher `EXECUTE_SPOT_ENTRY`. Question posée :
+« pertinent d'implémenter ? »
+
+**Ce que la lecture du dépôt a montré, et qui change la réponse.** Le motif est déjà
+construit à ~80 %, et le recouvrement n'était pas soupçonné :
+`indicators/liquidite_ict` porte SFP, BOS, CHoCH, OTE et order block en primitives
+point-in-time depuis le 02/09 ; `indicators/market_structure` fournit les pivots
+confirmés, l'échec d'enchère et le POC ; `strategies/institutional_price_action` en fait
+déjà des `Signal`. Trois P2 ouverts décrivent exactement les blocages de cette spec :
+mesurer les modules SHADOW avant tout branchement, l'absence de données 1H/4H, et le
+doublon IPA ↔ liquidite_ict. Ce n'était donc pas un chantier neuf, mais un chantier
+déjà ouvert et explicitement mis en attente de MESURE.
+
+**Décision.** Implémenter la seule partie réellement absente — la machine à états
+persistante (`indicators/deviation_reclaim`) — et la faire passer au banc AVANT toute
+stratégie (`scripts/deviation_reclaim_lab`, `make deviation-lab`). Le banc compare, sur
+EXACTEMENT les mêmes barres, la primitive `sfp` qui existait déjà et les états ajoutés :
+si le motif large n'apporte rien au-dessus du SFP, il ne sert à rien, et c'est une
+réponse.
+
+**Trois éléments de la spec REFUSÉS, et pourquoi.**
+1. *Le score 0-100 et ses poids* (20 % la zone, 15 % le sweep…). Aucune mesure ne les
+   soutient. Un score inventé transforme une opinion en chiffre, ce qui la rend plus
+   difficile à réfuter sans la rendre plus vraie — le dépôt a déjà refusé une règle de
+   régime dont le t était significatif partout et la médiane négative (ADR-0145).
+2. *Le gate `RR_TP1 >= 1.5`*. Cible et résistance sont choisies par la même analyse qui
+   calcule le ratio : un tel ratio ne filtre rien, il mesure sa propre générosité.
+3. *Le timeframe d'exécution 4H*. La base de prix est QUOTIDIENNE — le fournisseur mappe
+   même « 4h » sur « 1h ». Le Weekly se dérive du Daily ; le 4H demanderait une
+   ingestion, un stockage et un audit de contrats. Toute jambe 4H serait UNCALIBRATED.
+
+Le cadrage LLM est écarté du même mouvement : `packages/nlp` a été retiré le 17/09, et un
+`Confidence_Score` produit par de la prose contredit frontalement le mandat
+données-réelles.
+
+**Ce que les tests ont trouvé pendant l'écriture**, et qui justifie l'ordre choisi :
+- en ancrant la zone sur le creux le PLUS RÉCENT, la déviation — une fois confirmée
+  comme pivot — devenait l'ancre et faisait DISPARAÎTRE la zone dont le prix venait de
+  dévier, à l'instant précis où le motif devenait intéressant ;
+- en retenant la dernière barre de l'épisode au lieu de son extrême, un sweep à 95 suivi
+  d'une barre à 97 invalidait sous 97 : un stop plus serré que le creux réellement
+  balayé, donc un reward/risk flatté par une erreur de définition ;
+- borner le seul délai de reclaim laissait passer une cassure de vingt barres suivie
+  d'une clôture au-dessus : c'est la DURÉE DE L'ÉPISODE qu'il faut borner.
+
+**Conséquence assumée.** Sur une marche aléatoire de 400 barres, la machine atteint
+CONSOLIDATION_CONFIRMED dix fois : le motif existe dans le bruit pur. C'est précisément
+pourquoi le verdict appartient au banc — placebo par permutation, DSR, correction de
+tests multiples sur les cinq scoreurs — et pas à la beauté de la définition.
+
