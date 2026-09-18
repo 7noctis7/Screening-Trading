@@ -65,8 +65,6 @@ cloudpickle==3.1.2
     # via
     #   joblib
     #   mlflow-skinny
-coincurve==21.0.0
-    # via ccxt
 colorlog==6.12.0
     # via optuna
 contourpy==1.4.0
@@ -76,6 +74,12 @@ cryptography==49.0.0
     #   ccxt
     #   google-auth
     #   mlflow
+cuda-bindings==13.4.1
+    # via torch
+cuda-pathfinder==1.8.1
+    # via cuda-bindings
+cuda-toolkit==13.0.3.0
+    # via torch
 curl-cffi==0.15.0
     # via yfinance
 cycler==0.12.1
@@ -130,6 +134,8 @@ graphql-core==3.2.12
     #   graphql-relay
 graphql-relay==3.2.0
     # via graphene
+greenlet==3.5.3
+    # via sqlalchemy
 gunicorn==26.2.0
     # via mlflow
 h11==0.16.0
@@ -226,6 +232,49 @@ numpy==2.4.6
     #   transformers
     #   xgboost
     #   yfinance
+nvidia-cublas==13.1.1.3
+    # via
+    #   cuda-toolkit
+    #   nvidia-cudnn-cu13
+    #   nvidia-cusolver
+nvidia-cuda-cupti==13.0.85
+    # via cuda-toolkit
+nvidia-cuda-nvrtc==13.0.88
+    # via
+    #   cuda-toolkit
+    #   nvidia-cublas
+nvidia-cuda-runtime==13.0.96
+    # via cuda-toolkit
+nvidia-cudnn-cu13==9.24.0.43
+    # via torch
+nvidia-cufft==12.0.0.61
+    # via cuda-toolkit
+nvidia-cufile==1.15.1.6
+    # via cuda-toolkit
+nvidia-curand==10.4.0.35
+    # via cuda-toolkit
+nvidia-cusolver==12.0.4.66
+    # via cuda-toolkit
+nvidia-cusparse==12.6.3.3
+    # via
+    #   cuda-toolkit
+    #   nvidia-cusolver
+nvidia-cusparselt-cu13==0.8.1
+    # via torch
+nvidia-nccl-cu13==2.30.7
+    # via
+    #   torch
+    #   xgboost
+nvidia-nvjitlink==13.4.92
+    # via
+    #   cuda-toolkit
+    #   nvidia-cufft
+    #   nvidia-cusolver
+    #   nvidia-cusparse
+nvidia-nvshmem-cu13==3.4.5
+    # via torch
+nvidia-nvtx==13.0.85
+    # via cuda-toolkit
 opentelemetry-api==1.44.0
     # via
     #   mlflow-skinny
@@ -407,14 +456,13 @@ tqdm==4.68.3
     #   transformers
 transformers==5.17.0
     # via quant-trading-system (pyproject.toml)
+triton==3.8.0
+    # via torch
 typer==0.27.2
     # via transformers
 typing-extensions==4.16.0
     # via
-    #   aiohttp
-    #   aiosignal
     #   alembic
-    #   anyio
     #   beautifulsoup4
     #   ccxt
     #   fastapi
@@ -427,7 +475,6 @@ typing-extensions==4.16.0
     #   pydantic
     #   pydantic-core
     #   sqlalchemy
-    #   starlette
     #   torch
     #   typing-inspection
 typing-inspection==0.4.2
@@ -447,7 +494,7 @@ uvloop==0.22.1
     # via uvicorn
 watchfiles==1.2.0
     # via uvicorn
-wcwidth==0.8.4
+wcwidth==0.8.3
     # via prettytable
 websockets==16.0
     # via
