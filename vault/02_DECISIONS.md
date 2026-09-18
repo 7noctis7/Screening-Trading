@@ -2,6 +2,38 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0185 — Un rapprochement est un diagnostic, pas un résultat (2026-09-18)
+
+**Constat.** Le panneau « Mes positions » ouvrait sur l'identité comptable. La première
+ligne lue était donc **« écart NON expliqué +2 669,06 $ »**, alors que la question posée
+était : je suis parti de ~100 k, j'en ai 100 734, ça donne quoi ? Le chiffre qui répond
+— **+1 129,03 $, soit +1,13 % en 88 jours** — n'était affiché NULLE PART : il fallait le
+soustraire soi-même de deux lignes séparées par cinq autres.
+
+Même défaut sur « Journal des round-trips » : trois paragraphes d'avertissement avant les
+cartes, et la question est revenue quand même — 331 trades à +0,23 $ font +74,52 $, alors
+comment le compte gagne-t-il +1 129 $ ?
+
+**Ce qui était juste, et qui le reste.** Aucun chiffre n'était faux, et le résidu n'était
+pas caché. L'erreur est un ORDRE DE LECTURE : un rapprochement sert à diagnostiquer le
+REGISTRE ; il ne remplace pas le résultat, il l'explique.
+
+**Décision.** Le résultat d'abord, sa décomposition ensuite, l'identité en note. Et la
+décomposition se lit désormais des composantes VERS le résultat, le résidu étant une
+ligne nommée parmi les autres :
+
+    réalisé robot + réalisé import + latent + flux + résidu = variation du compte
+    +74,52        + (−1 962,53)    + 347,98 + 0    + 2 669,06 = +1 129,03
+
+C'est la même identité, réarrangée — et lue dans ce sens elle répond d'elle-même à « ça
+ne match pas » : les trades du robot sont UNE ligne sur quatre, et pas la plus grosse.
+Un test vérifie que la somme est exacte, pas approchée.
+
+**Ce qui ne change pas.** Le résidu n'est toujours pas comblé, les fenêtres inégales des
+poches sont toujours signalées, et le périmètre affiché est toujours distingué du compte.
+Rien n'a été retiré : tout a été remis dans l'ordre, et le seul ajout est le chiffre qui
+manquait.
+
 ## ADR-0184 — Le motif ne prédit rien, sur deux marchés — et la colonne qui le cachait (2026-09-18)
 
 **Contexte.** Le banc, une fois ses seuils repris du module (ADR-0183), a tourné sur les

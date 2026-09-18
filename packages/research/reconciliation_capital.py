@@ -82,6 +82,44 @@ def _montant(x: float) -> str:
     return f"{x:+,.2f}".replace(",", " ")
 
 
+def _niveau(x: float) -> str:
+    """Un NIVEAU ne porte pas de signe. `_montant` en met un, et « +100 734,40 $ » de
+    capital se lit comme un gain de cent mille dollars."""
+    return f"{x:,.2f}".replace(",", " ")
+
+
+def _jours(fenetres: list[dict]) -> int | None:
+    """Durée réellement couverte. `None` si une date est illisible — « 0 jour »
+    tromperait, alors qu'une durée absente se voit."""
+    from datetime import date
+
+    def _d(x):
+        try:
+            return date.fromisoformat(str(x)[:10])
+        except (ValueError, TypeError):
+            return None
+
+    debuts = [d for d in (_d(f.get("debut")) for f in fenetres) if d]
+    fins = [d for d in (_d(f.get("fin")) for f in fenetres) if d]
+    return (max(fins) - min(debuts)).days if debuts and fins else None
+
+
+def _resume(initial: float, final: float, variation: float,
+            jours: int | None) -> str:
+    """LA PHRASE QUI MANQUAIT, et elle passe avant tout le reste (18/09).
+
+    Le panneau ouvrait sur l'identité comptable et son résidu — donc sur un écart de
+    +2 669 $ « non expliqué », là où la question posée était : combien ai-je gagné ?
+    Un rapprochement est un OUTIL DE DIAGNOSTIC du registre ; il ne remplace pas le
+    résultat, il l'explique. On dit donc d'abord ce que le compte a fait, puis d'où
+    ça vient.
+    """
+    part = variation / initial if initial else 0.0
+    duree = f" en {jours} jours" if jours else ""
+    return (f"Le compte est passé de {_niveau(initial)} $ à {_niveau(final)} $"
+            f"{duree}, soit {_montant(variation)} $ ({part:+.2%}).")
+
+
 def _phrase(residu: float, boucle: bool, capital_final: float) -> str:
     if boucle:
         return ("Le compte et le registre disent la même chose, à la tolérance de "
@@ -110,11 +148,22 @@ def reconcilier(courbes: dict[str, list[dict]], realise: float, latent: float,
                 **cap}
     attendu = cap["initial"] + realise + latent + flux
     residu = cap["final"] - attendu
+    # `variation` est LA réponse à « combien ai-je gagné ». Les trois termes du registre
+    # plus le résidu la reconstituent EXACTEMENT — c'est la même identité, lue dans
+    # l'autre sens : des composantes VERS le résultat, et non du résultat vers un écart.
+    variation = cap["final"] - cap["initial"]
+    jours = _jours(cap["fenetres"])
     seuil = max(TOLERANCE_ABS, TOLERANCE_REL * abs(cap["final"]))
     boucle = abs(residu) <= seuil
     return {
         "disponible": True, **cap,
         "capital_initial": cap["initial"], "capital_final": cap["final"],
+        "variation": round(variation, 2),
+        "variation_part": (round(variation / cap["initial"], 4)
+                           if cap["initial"] else None),
+        "jours": jours,
+        "explique": round(realise + latent + flux, 2),
+        "resume": _resume(cap["initial"], cap["final"], variation, jours),
         "realise": round(realise, 2), "latent": round(latent, 2),
         "realise_affiche": (None if realise_affiche is None
                             else round(realise_affiche, 2)),

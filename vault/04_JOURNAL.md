@@ -79,6 +79,23 @@ marché — or nos détecteurs filtrent sur le volume. Une donnée gratuite qui 
 mesure est pire que pas de donnée. Noté P2, avec sa condition d'ouverture : ne payer que
 si le banc crypto montre un apport là où les données sont complètes.
 
+**LE SITE DISAIT TOUT SAUF LE RÉSULTAT.** Le panneau « Mes positions » ouvrait sur
+l'identité comptable, donc sur « écart NON expliqué +2 669,06 $ » — quand la question
+était : je pars de ~100 k, j'en ai 100 734, ça donne quoi ? Le chiffre qui répond,
+**+1 129,03 $ soit +1,13 % en 88 jours**, n'était affiché nulle part ; il fallait le
+soustraire soi-même de deux lignes éloignées. Aucun chiffre n'était faux — l'erreur
+était un ORDRE DE LECTURE. Un rapprochement diagnostique le REGISTRE ; il ne remplace
+pas le résultat, il l'explique.
+
+Le panneau donne maintenant le résultat en tête, puis sa décomposition lue des
+composantes VERS le résultat, le résidu étant une ligne nommée parmi les autres :
++74,52 (robot) − 1 962,53 (import) + 347,98 (latent) + 2 669,06 (résidu) = +1 129,03.
+La somme est exacte, et un test l'exige. C'est aussi la réponse à « 331 trades à
++0,23 $ ne font pas +1 129 $ » : les trades du robot sont une ligne sur quatre, et pas
+la plus grosse. Sur la page des round-trips, les trois paragraphes d'avertissement qui
+précédaient les cartes — que personne ne lisait — sont remplacés par un bandeau d'une
+phrase qui chiffre l'écart et renvoie à « Mes positions ». ADR-0185.
+
 **LE JOURNAL A ÉTÉ RÉPARÉ sur le VPS** : `annuler_doublons_ouverts` a retiré son premier
 doublon réel (QQQ ×2, 3,586126 @ 716,86 le 17/09) — le défaut était détecté depuis le
 03/09 et aucun outil ne le retirait. `diag-journal` confirme : « aucun — les lots ouverts

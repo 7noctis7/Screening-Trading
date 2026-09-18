@@ -74,20 +74,31 @@ export default function Journal() {
       <h1 className="text-xl font-semibold tracking-tight">Journal des round-trips
         <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full align-middle"
           style={{ background: "color-mix(in srgb, #22c55e 16%, transparent)", color: "#22c55e" }}>RÉEL · paper</span></h1>
-      <p className="text-muted text-xs">Chaque achat suivi de sa revente, en simulation. Pour chacun : ce que le robot voyait
-        <b>au moment de décider</b>, le prix réellement obtenu, le gain ou la perte, et jusqu'où
-        le trade est monté puis descendu avant d'être soldé. Tout est publié, les pertes comprises.</p>
-      <p className="text-muted text-xs">Cette page montre les aller-retours que le robot a pris et qui ont été
-        <b> réellement ouverts puis clôturés</b> — décision journalisée ou ordre reconstitué depuis le fill réel du
-        courtier, les deux comptent. Ce qu'un tiers a importé dans le registre n'y figure pas, et le chiffre est
-        donné plus bas.</p>
-      <p className="text-muted text-xs">Attention : cette page montre les <b>trades terminés</b>, pas la performance du compte.
-        Les positions perdantes encore ouvertes n'y figurent pas, ce qui embellit le tableau.
-        Pour juger, regardez la <b>courbe du compte</b> chez le courtier — c'est la seule mesure
-        qui n'oublie rien. C'est elle qui tranchera le <b>2026-08-06</b>.
-        Un round-trip clos ici est un trade que le rebalancement a choisi de solder — les positions perdantes restent
-        ouvertes et n'y figurent pas, donc le taux de réussite affiché est <b>biaisé à la hausse</b> par construction
-        et ne se compare pas à celui d'un backtest.</p>
+      {/* CE QUE CETTE PAGE N'EST PAS, dit AVANT les chiffres et en une ligne (18/09).
+          Trois paragraphes d'avertissement précédaient les cartes : personne ne les
+          lisait, et la question « 331 trades à +0,23 $, comment j'arrive à +1 129 $ ? »
+          est revenue. L'essentiel tient en une phrase et un renvoi. */}
+      <section className="card p-3 text-xs space-y-1" style={{ borderColor: "#f59e0b" }}>
+        <p className="text-fg"><b>Ces trades ne sont pas la performance du compte.</b>{" "}
+          {st.perimetre?.affiche?.pnl_realise != null && st.perimetre?.compte?.pnl_realise != null ? (
+            <>Ils pèsent <b className="mono">{usd(st.perimetre.affiche.pnl_realise)}</b> de réalisé,
+              quand le compte en a subi <b className="mono">{usd(st.perimetre.compte.pnl_realise)}</b>{" "}
+              (import historique compris)
+              {st.honnete?.pnl_latent != null && <> et porte <b className="mono">{usd(st.honnete.pnl_latent)}</b> de latent</>}.</>
+          ) : (
+            <>Une page de trades soldés ne peut pas valoir un compte : les positions perdantes
+              encore ouvertes n&apos;y figurent pas.</>
+          )}
+          {" "}Le résultat réel — <b>capital initial → capital actuel</b> — est sur{" "}
+          <a href="/positions" className="underline">Mes positions</a>.</p>
+        <p className="text-muted2">Le rebalancement ferme ce qui a monté et conserve ce qui a baissé :
+          le taux de réussite affiché ici est <b>biaisé à la hausse par construction</b> et ne se
+          compare pas à celui d&apos;un backtest.</p>
+      </section>
+      <p className="text-muted text-xs">Chaque achat suivi de sa revente, en paper. Pour chacun : ce que le robot
+        voyait <b>au moment de décider</b>, le prix obtenu, le gain ou la perte, et jusqu&apos;où le trade est monté
+        puis descendu avant d&apos;être soldé. Les aller-retours du ROBOT, réellement ouverts puis clôturés —
+        décision journalisée ou ordre reconstitué depuis le fill réel. Tout est publié, les pertes comprises.</p>
 
       {!data.available || rows.length === 0 ? (
         <EmptyState title="Journal vide (pour l'instant)"

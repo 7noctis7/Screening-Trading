@@ -114,3 +114,62 @@ def test_une_courbe_NUE_au_lieu_d_un_dict_echoue_en_le_DISANT():
 
     with pytest.raises(TypeError, match="liste de points"):
         capital(_points(100.0, 110.0))
+
+
+def test_la_VARIATION_du_compte_est_publiee_AVANT_tout_rapprochement():
+    """CE QUI MANQUAIT AU PANNEAU (18/09). Il ouvrait sur l'identité et son résidu, donc
+    la première chose lue était « écart NON expliqué +2 669 $ » — alors que la question
+    posée était « je pars de 100 k, j'en ai 100 734, ça donne quoi ? ». Le résultat est
+    un champ à part entière, pas une soustraction laissée au lecteur."""
+    from packages.research.reconciliation_capital import reconcilier
+
+    courbes = {"alpaca": [{"t": "2026-06-22", "v": 99_593.81},
+                          {"t": "2026-09-18", "v": 100_734.30}],
+               "bitmart": [{"t": "2026-06-22", "v": 11.56},
+                           {"t": "2026-08-21", "v": 0.10}]}
+    r = reconcilier(courbes, realise=-1_888.01, latent=347.98, realise_affiche=74.52)
+
+    assert r["capital_initial"] == 99_605.37
+    assert r["capital_final"] == 100_734.40
+    assert r["variation"] == 1_129.03
+    assert r["variation_part"] == 0.0113
+    assert r["jours"] == 88
+    assert "99 605.37" in r["resume"] and "+1 129.03" in r["resume"]
+
+
+def test_les_composantes_RECONSTITUENT_exactement_la_variation():
+    """LA RÉPONSE À « ÇA NE MATCH PAS ». 331 trades à +0,23 $ ne font pas la
+    variation du compte parce que trois autres lignes existent — l'import, le
+    latent, le résidu — et qu'elles sont plus grosses. Lue dans ce sens,
+    l'identité n'a aucun reste."""
+    from packages.research.reconciliation_capital import reconcilier
+
+    courbes = {"a": [{"t": "2026-01-01", "v": 10_000.0},
+                     {"t": "2026-03-01", "v": 11_000.0}]}
+    r = reconcilier(courbes, realise=200.0, latent=50.0,
+                    realise_affiche=30.0, flux=100.0)
+
+    assert r["explique"] == 350.0                      # réalisé + latent + flux
+    assert r["explique"] + r["residu"] == r["variation"] == 1_000.0
+    assert r["realise_affiche"] + r["hors_panneau"] == r["realise"]
+
+
+def test_un_NIVEAU_ne_porte_pas_de_signe_dans_le_resume():
+    """« +100 734,40 $ » de capital se lit comme un gain de cent mille dollars. Le signe
+    appartient aux variations, pas aux niveaux."""
+    from packages.research.reconciliation_capital import reconcilier
+
+    r = reconcilier({"a": [{"t": "2026-01-01", "v": 1_000.0},
+                           {"t": "2026-01-31", "v": 900.0}]}, realise=0.0, latent=0.0)
+    assert r["resume"].startswith("Le compte est passé de 1 000.00 $ à 900.00 $")
+    assert "-100.00" in r["resume"] and "-10.00%" in r["resume"]
+
+
+def test_une_date_illisible_donne_une_duree_ABSENTE_pas_zero():
+    """« en 0 jours » tromperait sur la fenêtre ; une durée absente se voit."""
+    from packages.research.reconciliation_capital import reconcilier
+
+    r = reconcilier({"a": [{"t": None, "v": 100.0}, {"t": "pas-une-date", "v": 110.0}]},
+                    realise=0.0, latent=0.0)
+    assert r["jours"] is None
+    assert "jours" not in r["resume"]
