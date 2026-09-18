@@ -401,21 +401,16 @@ def recommend_universe(body: RecommendationRequest, request: Request) -> dict:
                        preferences=body.preferences)
 
 
-def _reconciliation(real: dict) -> dict:
-    """« Capital réel » se déduit-il du registre ? Calculé là où le capital s'affiche.
+def _realise(_real: dict) -> dict:
+    """Le réalisé du compte, à côté du latent. Indisponible ⇒ on le DIT.
 
-    Indisponible (journal absent, courbe vide) ⇒ `disponible=False` avec le motif. Une
-    réconciliation muette se lirait comme une réconciliation réussie.
+    Un panneau muet se lirait « zéro réalisé », c'est-à-dire « aucun trade soldé » —
+    faux, et dans le sens rassurant.
     """
     try:
-        from apps.api.journal_payload import courbes_capital, reconciliation_compte
+        from apps.api.journal_payload import realise_compte
         from packages.storage import SqliteTradeJournal
-        latent = sum(float(p.get("pnl") or 0.0)
-                     for compte in ("alpaca", "crypto")
-                     for p in (real.get(compte) or {}).get("positions", []) or [])
-        courbes, sources = courbes_capital(real)
-        return reconciliation_compte(SqliteTradeJournal(), courbes, latent,
-                                     sources=sources)
+        return {"disponible": True, **realise_compte(SqliteTradeJournal())}
     except Exception as e:  # noqa: BLE001
         return {"disponible": False, "motif": str(e)[:80]}
 
@@ -426,7 +421,7 @@ def positions() -> dict:
     dash = snap["dashboard"]
     real = snap["live"]["real"]
     return {"real_positions": real.get("positions", []),    # positions RÉELLES (tous comptes)
-            "reconciliation": _reconciliation(real),        # capital réel ↔ registre
+            "realise": _realise(real),                      # encaissé, à côté du latent
             "connected": real.get("connected", False),
             "accounts": {"alpaca": real.get("alpaca", {}), "crypto": real.get("crypto", {})},
             "min_position": dash.get("min_position"),        # plancher de ligne → affiché par le front

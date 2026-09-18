@@ -98,13 +98,12 @@ def test_les_lots_ouverts_sont_PUBLIES_A_PART_jamais_supprimes(reponse):
 
 # ─── Le capital réel se déduit-il du registre ? (18/09) ─────────────────────────────
 
-def test_la_reconciliation_pose_l_identite_sur_le_realise_TOTAL(tmp_path):
-    """La question posée : « réalisé + latent = capital réel ? ». Non — un réalisé et un
-    latent sont des VARIATIONS, le capital réel est un NIVEAU. Et le réalisé à prendre
-    est celui que le COMPTE subit, pas celui que le panneau montre : sinon l'import
-    historique manque à l'identité et l'écart lui est faussement imputé.
-    """
-    from apps.api.journal_payload import reconciliation_compte
+def test_le_REALISE_du_compte_nomme_ses_DEUX_perimetres(tmp_path):
+    """Le panneau des positions affiche le latent ; sans son pendant encaissé, une page
+    de positions laisse croire que tout le chemin parcouru tient dans les lignes encore
+    ouvertes. Et les deux périmètres diffèrent d'un ordre de grandeur — afficher le plus
+    flatteur sans le dire serait le mensonge le plus facile du site."""
+    from apps.api.journal_payload import realise_compte
     from packages.storage import SqliteTradeJournal
 
     j = SqliteTradeJournal(tmp_path / "journal.db")
@@ -115,37 +114,19 @@ def test_la_reconciliation_pose_l_identite_sur_le_realise_TOTAL(tmp_path):
              legacy=True)
     j.append(_lot("P-20260915-Alpaca-THC", ferme=False, symbole="THC"), legacy=False)
 
-    courbes = {"alpaca": [{"t": "2026-06-22", "v": 100_000.0},
-                          {"t": "2026-09-17", "v": 99_200.0}]}
-    r = reconciliation_compte(j, courbes, latent=60.0)
-
-    assert r["realise"] == -860.0            # 120 − 80 − 900 : ce que le compte subit
-    assert r["realise_affiche"] == 40.0      # 120 − 80 : ce que le panneau montre
-    assert r["hors_panneau"] == -900.0       # l'import, nommé plutôt que fondu
-    assert r["attendu"] == 99_200.0          # 100 000 − 860 + 60
-    assert r["residu"] == 0.0 and r["boucle"] is True
+    r = realise_compte(j)
+    assert r["total"] == -860.0          # 120 − 80 − 900 : ce que le COMPTE subit
+    assert r["robot"] == 40.0            # 120 − 80 : décision + reconstitution
+    assert r["hors_robot"] == -900.0     # l'import, nommé plutôt que fondu
+    assert r["n_total"] == 3 and r["n_robot"] == 2, "les lots OUVERTS ne comptent pas"
 
 
-def test_la_courbe_du_COURTIER_prime_sur_notre_enregistrement():
-    """CE QUI FAUSSAIT LE POURCENTAGE (18/09). `equity_history` commence le jour où l'on
-    a commencé à mesurer ; Alpaca, lui, remonte à la création du compte et le snapshot
-    récupère déjà sa courbe. Prendre la nôtre quand la sienne existe, c'est calculer un
-    rendement depuis une base arbitraire — et la nommer « capital initial »."""
-    from apps.api.journal_payload import courbes_capital
+def test_un_registre_VIDE_rend_zero_sans_rien_inventer(tmp_path):
+    """Zéro trade soldé est une réponse ; elle ne doit pas ressembler à une panne, ni
+    une panne ressembler à zéro (l'API distingue les deux avec `disponible`)."""
+    from apps.api.journal_payload import realise_compte
+    from packages.storage import SqliteTradeJournal
 
-    real = {"alpaca": {"history": [{"t": "2026-06-01", "v": 100_000.0},
-                                   {"t": "2026-09-18", "v": 101_026.57}]}}
-    courbes, sources = courbes_capital(real)
-    assert sources["alpaca"] == "courtier"
-    assert courbes["alpaca"][0]["v"] == 100_000.0
-
-
-def test_sans_courbe_courtier_on_retombe_sur_la_notre_EN_LE_DISANT():
-    """Le secours est légitime ; le passer sous silence ne l'est pas."""
-    from apps.api.journal_payload import courbes_capital
-
-    real = {"alpaca": {"history": []}}          # courtier injoignable ou clés absentes
-    courbes, sources = courbes_capital(real)
-    for compte, src in sources.items():
-        assert src == "enregistrement local", compte
-        assert courbes[compte], compte
+    r = realise_compte(SqliteTradeJournal(tmp_path / "vide.db"))
+    assert r == {"total": 0.0, "robot": 0.0, "hors_robot": 0.0,
+                 "n_total": 0, "n_robot": 0}

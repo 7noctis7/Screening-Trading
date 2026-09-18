@@ -107,6 +107,18 @@ préférée, l'enregistrement local le secours, la source est publiée par poche
 `depart_certain` passe à faux dès qu'UNE poche part d'une base locale — le capital est
 une somme, un « presque certain » se lirait certain.
 
+**LE RAPPROCHEMENT EST RETIRÉ DU SITE, à la demande — et c'est la bonne décision.**
+Le bloc était juste et personne n'en voulait : devant un compte, la question est
+« combien j'ai gagné », pas « l'identité comptable boucle-t-elle ». Un diagnostic n'a pas
+sa place au milieu d'un tableau de bord ; il reste ENTIER au terminal (`make
+diag-journal`), là où on le lit quand on le cherche. Supprimés : `Reconciliation.tsx`,
+`packages/research/reconciliation_capital.py`, leurs tests, et la plomberie API
+(`courbes_capital`, `reconciliation_compte`). À la place, une cinquième carte sur
+« Mes positions » : **gain/perte RÉALISÉ**, le strict complément du latent déjà affiché.
+Elle porte le chiffre que le COMPTE a subi, import compris, et nomme en dessous celui du
+robot seul — +74,52 $ contre −1 888,01 $. Afficher le plus flatteur des deux sans le dire
+serait le mensonge le plus facile du site.
+
 **LE SITE DISAIT TOUT SAUF LE RÉSULTAT.** Le panneau « Mes positions » ouvrait sur
 l'identité comptable, donc sur « écart NON expliqué +2 669,06 $ » — quand la question
 était : je pars de ~100 k, j'en ai 100 734, ça donne quoi ? Le chiffre qui répond,

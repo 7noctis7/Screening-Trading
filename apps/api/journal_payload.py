@@ -112,50 +112,25 @@ def construire(journal, prix: dict[str, float], positions: dict[str, float]) -> 
             "slippage": measured_slippage(journal)}
 
 
-def courbes_capital(real: dict) -> tuple[dict, dict]:
-    """Les courbes d'equity, LA MEILLEURE SOURCE D'ABORD — et on dit laquelle.
+def realise_compte(journal) -> dict:
+    """Le gain/perte RÉALISÉ, à côté du latent — et les deux périmètres nommés.
 
-    POURQUOI CE CHOIX EST IMPORTANT (18/09). `equity_history` enregistre un point par
-    jour à chaque build : son premier point est le jour où l'on a COMMENCÉ À MESURER,
-    pas l'ouverture du compte. Un rendement calculé depuis cette base-là répond à
-    « depuis que je regarde », pas à « depuis que j'ai déposé » — et si l'enregistrement
-    a démarré après une baisse, la base est basse et le pourcentage FLATTÉ.
+    CE QUI REMPLACE LE RAPPROCHEMENT (18/09). La page portait une identité comptable
+    complète (capital initial, résidu, fenêtres). Elle était juste et personne n'en
+    voulait : la question posée devant un compte est « combien j'ai gagné », pas
+    « l'identité boucle-t-elle ». Le diagnostic reste entier au terminal
+    (`make diag-journal`), là où on le lit quand on le cherche.
 
-    Alpaca, lui, stocke sa propre courbe depuis la création du compte, et le snapshot la
-    récupère déjà (`portfolio_history`). On la préfère donc, sans appel supplémentaire,
-    et l'enregistrement local ne sert que de SECOURS — nommé comme tel.
-    """
-    from packages.execution.equity_history import series
-    courbes, sources = {}, {}
-    for compte in ("alpaca", "crypto", "bitmart"):
-        courtier = (real.get(compte) or {}).get("history") or []
-        locale = series(compte)
-        if courtier:
-            courbes[compte], sources[compte] = courtier, "courtier"
-        elif locale:
-            courbes[compte], sources[compte] = locale, "enregistrement local"
-    return courbes, sources
-
-
-def reconciliation_compte(journal, courbes: dict, latent: float,
-                          sources: dict | None = None) -> dict:
-    """Le capital réel se déduit-il du registre ? L'identité, remplie terme à terme.
-
-    RÉPOND À UNE QUESTION POSÉE LE 18/09 : « la somme des gains/pertes de l'historique
-    plus le gain/perte en cours doit faire le capital réel, non ? ». Non — un réalisé et
-    un latent sont des VARIATIONS, le capital réel est un NIVEAU. L'identité complète
-    part du capital INITIAL, et `packages.research.reconciliation_capital` la pose.
-
-    DEUX RÉALISÉS, ET C'EST VOULU. Celui du panneau ne couvre que les trades du robot ;
-    le compte subit aussi l'import historique. L'identité se pose donc sur le TOTAL, et
-    l'écart entre les deux est publié — sans lui, un lecteur qui additionne ce qu'il
-    voit à l'écran ne retombe jamais sur son compte, et rien ne lui dit pourquoi.
+    Ce qui reste ici est le strict complément du latent déjà affiché : ce qui est
+    ENCAISSÉ. Les deux périmètres sont rendus parce qu'ils diffèrent d'un ordre de
+    grandeur — le robot a fait +74 $ quand le compte en a subi −1 888 $ — et qu'afficher
+    le plus flatteur des deux sans le dire serait le mensonge le plus facile du site.
     """
     from packages.execution.perimetre_journal import pris_par_le_robot
-    from packages.research.reconciliation_capital import reconcilier
-
     fermes = [t for t in journal.all() if t.exit_ts]
     total = sum(float(t.pnl_net or 0.0) for t in fermes)
     robot = sum(float(t.pnl_net or 0.0) for t in fermes if pris_par_le_robot(t.id))
-    return reconcilier(courbes, total, latent, realise_affiche=robot,
-                       sources=sources)
+    return {"total": round(total, 2), "robot": round(robot, 2),
+            "hors_robot": round(total - robot, 2),
+            "n_total": len(fermes),
+            "n_robot": sum(1 for t in fermes if pris_par_le_robot(t.id))}

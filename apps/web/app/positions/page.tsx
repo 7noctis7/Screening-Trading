@@ -9,7 +9,6 @@ import { usePositions } from "@/lib/api";
 import { TechnicalChart } from "@/components/TechnicalChart";
 import { MetricCard } from "@/components/MetricCard";
 import { PerformanceVsBenchmarks } from "@/components/PerformanceVsBenchmarks";
-import { Reconciliation } from "@/components/Reconciliation";
 import { SortableTable, type Col } from "@/components/SortableTable";
 import { PageSkeleton } from "@/components/ui";
 import { compteCrypto, envVenue, nomVenue } from "@/lib/venue";
@@ -130,6 +129,9 @@ export default function Positions() {
   const vName = nomVenue(acc), vCrypto = compteCrypto(acc);
   const mv = pos.reduce((a: number, r: any) => a + (r.market_value ?? 0), 0);
   const pnl = pos.reduce((a: number, r: any) => a + (r.pnl ?? 0), 0);
+  // Le RÉALISÉ vient du registre, pas d'une somme de lignes ouvertes : il n'y a rien à
+  // recalculer ici, et le recalculer serait une seconde vérité.
+  const rea = data?.realise;
   // Concentration (sur les poids réels, toutes poches confondues rapportées au total)
   const wTot = pos.map((p: any) => (mv > 0 ? (p.market_value ?? 0) / mv : 0));
   const hhi = wTot.reduce((a: number, w: number) => a + w * w, 0);
@@ -254,22 +256,25 @@ export default function Positions() {
         </section>
       ) : (
       <>
-      <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {/* RÉALISÉ À CÔTÉ DU LATENT (18/09). Le latent seul ne dit que ce qui n'est pas
+          encore encaissé ; sans son pendant, une page de positions laisse croire que
+          tout le chemin parcouru tient dans les lignes ouvertes. Le chiffre affiché est
+          celui que le COMPTE a subi, import historique compris — celui du robot seul
+          (+74 $ contre −1 888 $) est nommé en dessous, jamais à sa place. */}
+      <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         <MetricCard label="Capital réel" value={`$${usd(aEq + bEq)}`} />
         <MetricCard label="Valeur positions" value={`$${usd(mv)}`} />
         <MetricCard label="Gain / perte en cours" terme="P&L latent" value={`$${usd(pnl)}`} tone={pnl >= 0 ? "pos" : "neg"}
           explication="Ce qu'on gagnerait ou perdrait en vendant tout maintenant." />
+        <MetricCard label="Gain / perte réalisé" terme="encaissé"
+          value={rea?.disponible ? `$${usd(rea.total)}` : "n/d"}
+          tone={rea?.disponible ? (rea.total >= 0 ? "pos" : "neg") : undefined}
+          explication={rea?.disponible
+            ? `Trades SOLDÉS, tous périmètres : ${rea.n_total} aller-retours. Dont le robot : $${usd(rea.robot)} sur ${rea.n_robot}; import historique : $${usd(rea.hors_robot)}.`
+            : `Registre illisible — ${rea?.motif ?? "motif non renseigné"}. Un zéro se lirait « aucun trade soldé ».`} />
         <MetricCard label="Vraie diversification" terme="N effectif" value={nEff ? nEff.toFixed(1) : "n/d"}
           explication="Nombre de positions RÉELLEMENT indépendantes. Dix lignes très corrélées en valent trois." />
       </section>
-      {/* CE CAPITAL SE DÉDUIT-IL DU REGISTRE ? Question posée le 18/09 : « réalisé +
-          latent = capital réel ? ». Non, et c'est une question de DIMENSION — un réalisé
-          et un latent sont des variations, le capital réel est un niveau. L'identité
-          part du capital INITIAL. On la pose ici en entier, et le résidu est NOMMÉ,
-          jamais bouché : un rapprochement qui tombe juste parce qu'on y a mis un terme
-          d'ajustement ne prouve rien. */}
-      <Reconciliation r={data.reconciliation} />
-
       {/* PERFORMANCE — la question que les cartes ci-dessus ne répondent pas : ce capital,
           ailleurs, aurait donné quoi ? Placée AVANT le détail ligne à ligne, parce qu'un
           écart de réplication ne se juge pas sans savoir si le portefeuille bat le marché. */}
