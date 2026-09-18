@@ -34,10 +34,20 @@ MIN_PRIX = 1e-12
 # LES FRAIS CRYPTO SE PRÉLÈVENT EN NATURE, et l'historique des ORDRES ne les porte pas
 # (ce sont des `CFEE`, des mouvements de compte). Un rejeu d'achats et de ventes
 # surestime donc TOUJOURS une quantité crypto, de la somme des frais retenus en jetons.
-# Mesuré le 18/09 : UNI journal 287,856 contre 287,223 chez le courtier, soit 0,22 %.
-# On ne corrige pas la quantité — ce serait inventer une écriture — on NOMME l'écart et
-# on borne ce qu'on accepte d'appeler ainsi.
-PART_FRAIS_NATURE = 0.01
+#
+# LE DÉNOMINATEUR EST LE VOLUME ACHETÉ, PAS LA POSITION RESTANTE (18/09). Rapporter
+# l'écart à la position en cours ne peut pas marcher : une poche entièrement soldée
+# laisse un résidu quand le courtier détient ZÉRO, et un rapport à zéro est infini.
+# Les frais sont prélevés à CHAQUE transaction — ils se mesurent donc contre ce qui a
+# été brassé. Vérification sur neuf actifs indépendants le 18/09, après rejeu complet :
+#
+#     AAVE 0,221 %   AVAX 0,223 %   BCH 0,220 %   BTC 0,220 %   ETH 0,220 %
+#     LINK 0,220 %   LTC  0,220 %   SOL 0,220 %   UNI 0,220 %
+#
+# Neuf actifs, un seul chiffre : ce n'est pas une tolérance qu'on choisit, c'est le
+# barème du courtier qu'on RETROUVE. La borne est posée à plus du double, assez large
+# pour couvrir un barème qui bougerait, assez serrée pour qu'une vraie erreur ressorte.
+PART_FRAIS_NATURE = 0.005
 
 
 def normaliser(symbole: str) -> str:
@@ -69,10 +79,17 @@ class Rejeu:
     fermes: list[dict] = field(default_factory=list)
     ventes_orphelines: list[dict] = field(default_factory=list)
     ignores: list[dict] = field(default_factory=list)
+    # Quantité CUMULÉE achetée par symbole normalisé. C'est le dénominateur des frais
+    # prélevés en nature : une poche soldée n'a plus de position, elle a eu un volume.
+    achete: dict[str, float] = field(default_factory=dict)
 
     @property
     def realise(self) -> float:
-        return round(sum(float(t["pnl_net"]) for t in self.fermes), 2)
+        """BRUT DE FRAIS, et le nom le dit. L'historique des ORDRES ne porte pas les
+        frais : la crypto est prélevée en nature (`CFEE`), les actions en dollars
+        (`TAF`/`REG`/`CAT`). Appeler « net » une somme qui ne l'est pas serait le
+        genre d'étiquette qui survit des mois et fausse tout ce qui la lit."""
+        return round(sum(float(t["pnl_brut"]) for t in self.fermes), 2)
 
     def quantites_ouvertes(self) -> dict[str, float]:
         """Clés NORMALISÉES : c'est le seul niveau où deux graphies doivent se
@@ -112,7 +129,7 @@ def _vendre(lots: list[Lot], f: dict, fermes: list[dict]) -> float:
             "symbole": lot.symbole, "qty": round(pris, 10),
             "entree_ts": lot.ts, "entree_prix": lot.prix,
             "sortie_ts": f.get("date", ""), "sortie_prix": prix_sortie,
-            "pnl_net": round(brut, 6),
+            "pnl_brut": round(brut, 6),
             "pnl_pct": round((prix_sortie / lot.prix - 1.0), 6) if lot.prix else None,
             "ordre_entree": lot.ordre, "ordre_sortie": str(f.get("id", "")),
         })
@@ -142,6 +159,8 @@ def rejouer(fills: list[dict]) -> Rejeu:
         lots = par_symbole.setdefault(normaliser(sym), [])
         if f["side"] == "buy":
             q = float(f["qty"])
+            cle = normaliser(sym)
+            r.achete[cle] = round(r.achete.get(cle, 0.0) + q, 10)
             lots.append(Lot(sym, q, q, float(f["price"]), str(f.get("date", "")),
                             str(f.get("id", ""))))
         else:
@@ -174,10 +193,11 @@ def confronter(rejeu: Rejeu, positions: dict[str, float],
     NORMALISATION, sans quoi « UNI/USD » et « UNIUSD » se lisent comme deux instruments.
 
     UNE SEULE CATÉGORIE D'ÉCART EST TOLÉRÉE, et elle est nommée : sur un actif CRYPTO,
-    un excédent du journal borné à `PART_FRAIS_NATURE` s'explique par les frais prélevés
-    EN JETONS, que l'historique des ORDRES ne porte pas. Ce n'est pas une marge de
-    confort : le sens est imposé (le journal ne peut qu'être EN EXCÈS, jamais en
-    défaut), la borne est mesurée, et ces écarts sont rendus à part — pas absorbés.
+    un excédent du journal borné à `PART_FRAIS_NATURE` DU VOLUME ACHETÉ s'explique par
+    les frais prélevés EN JETONS, que l'historique des ORDRES ne porte pas. Ce n'est pas
+    une marge de confort : le sens est imposé (le journal ne peut qu'être EN EXCÈS,
+    jamais en défaut), la borne vaut le double du barème RETROUVÉ sur neuf actifs, et
+    ces écarts sont rendus à part — avec leur taux, pour que l'uniformité se VOIE.
     """
     calcule = rejeu.quantites_ouvertes()
     reel = {normaliser(k): float(v) for k, v in (positions or {}).items()}
@@ -187,10 +207,11 @@ def confronter(rejeu: Rejeu, positions: dict[str, float],
         d = a - b
         if abs(d) <= tolerance:
             continue
+        volume = float(rejeu.achete.get(sym, 0.0))
         ligne = {"symbole": sym, "journal": round(a, 8), "courtier": round(b, 8),
-                 "ecart": round(d, 8)}
-        if _crypto(sym) and 0 < d <= PART_FRAIS_NATURE * max(a, b):
-            ligne["part"] = round(d / max(a, b), 6)
+                 "ecart": round(d, 8), "volume_achete": round(volume, 8)}
+        if _crypto(sym) and volume > 0 and 0 < d <= PART_FRAIS_NATURE * volume:
+            ligne["part"] = round(d / volume, 6)
             frais_nature.append(ligne)
         else:
             ecarts.append(ligne)

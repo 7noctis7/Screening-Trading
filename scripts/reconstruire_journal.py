@@ -83,9 +83,14 @@ def _record(lot: dict, n: int, ferme: bool):
         entry_reason=f"fill courtier {lot.get('ordre_entree', '')}"[:120],
         exit_reason=(f"fill courtier {lot.get('ordre_sortie', '')}"[:120]
                      if ferme else ""),
-        pnl_net=lot.get("pnl_net"), pnl_gross=lot.get("pnl_net"),
+        # `pnl_net` PORTE LE BRUT, et `fees_source` le DIT. Les frais n'existent pas
+        # dans le flux d'ordres ; laisser `pnl_net` vide viderait le réalisé du site,
+        # et écrire `fees=0.0` affirmerait qu'il n'y en a pas eu. On publie donc le
+        # brut des deux côtés avec sa provenance marquée, plutôt qu'un faux net.
+        pnl_gross=lot.get("pnl_brut"), pnl_net=lot.get("pnl_brut"),
+        fees=None, fees_source="hors_flux_ordres",
         pnl_pct=lot.get("pnl_pct"),
-        is_win=(None if not ferme else bool(float(lot.get("pnl_net") or 0.0) > 0)),
+        is_win=(None if not ferme else bool(float(lot.get("pnl_brut") or 0.0) > 0)),
     )
 
 
@@ -93,7 +98,10 @@ def _rapport(r, c: dict, verdict: dict) -> None:
     print(f"\n  FILLS DU COURTIER — {len(c['fills'])} ordre(s) exécuté(s)")
     print(f"  REJEU FIFO — {len(r.fermes)} aller-retour(s) fermé(s), "
           f"{len(r.ouverts)} lot(s) ouvert(s)")
-    print(f"    réalisé reconstruit : {r.realise:+,.2f} $".replace(",", " "))
+    print(f"    réalisé reconstruit : {r.realise:+,.2f} $ — BRUT DE FRAIS"
+          .replace(",", " "))
+    print("      les frais n'appartiennent pas à l'historique des ORDRES : crypto")
+    print("      prélevés en nature (`CFEE`), actions en dollars (`TAF`/`REG`/`CAT`).")
     if r.ignores:
         print(f"    {len(r.ignores)} fill(s) illisible(s) écarté(s)")
     if r.ventes_orphelines:
@@ -109,8 +117,15 @@ def _rapport(r, c: dict, verdict: dict) -> None:
         # NOMMÉ, PAS ABSORBÉ. Les `CFEE` d'Alpaca se prélèvent en JETONS et n'entrent
         # pas dans l'historique des ordres : un rejeu d'achats et de ventes surestime
         # donc toujours une quantité crypto. On l'écrit plutôt que de l'arrondir.
-        print(f"    ℹ {f['symbole']:<10} +{f['ecart']:.6f} ({f['part']:.2%}) — "
-              "frais crypto prélevés en nature, hors historique des ordres")
+        print(f"    ℹ {f['symbole']:<10} +{f['ecart']:>12.6f} sur "
+              f"{f['volume_achete']:>12.4f} acheté(s) = {f['part']:.3%}  "
+              "frais prélevés EN NATURE")
+    if verdict.get("frais_nature"):
+        # LE TAUX EST LA PREUVE. Un seul chiffre sur plusieurs actifs indépendants,
+        # c'est le barème du courtier ; des taux dispersés, ce serait autre chose.
+        taux = sorted(f["part"] for f in verdict["frais_nature"])
+        print(f"      → taux implicite de {taux[0]:.3%} à {taux[-1]:.3%} sur "
+              f"{len(taux)} actif(s) : un barème, pas un hasard.")
     if verdict["conforme"]:
         print("    ✓ chaque lot ouvert reconstruit a sa contrepartie chez le courtier.")
     else:

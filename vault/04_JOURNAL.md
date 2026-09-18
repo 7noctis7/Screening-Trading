@@ -107,6 +107,30 @@ préférée, l'enregistrement local le secours, la source est publiée par poche
 `depart_certain` passe à faux dès qu'UNE poche part d'une base locale — le capital est
 une somme, un « presque certain » se lirait certain.
 
+**LE REJEU COMPLET TOMBE JUSTE — et les huit résidus disent tous le même chiffre.**
+774 fills, **533 aller-retours fermés**, 52 lots ouverts, **zéro vente orpheline**, QQQ
+réconcilié. Restaient huit poches crypto entièrement soldées où le journal portait un
+résidu face à un courtier à ZÉRO. Ma règle de frais en nature ne pouvait pas les
+attraper : elle rapportait l'écart à la position RESTANTE, et un rapport à zéro est
+infini — donc bloquant à jamais. Or les frais se prélèvent à CHAQUE transaction : ils se
+mesurent contre le VOLUME BRASSÉ, pas contre ce qui reste.
+
+Rapporté au volume acheté, le résidu vaut **0,220 %** sur AAVE, AVAX, BCH, BTC, ETH,
+LINK, LTC, SOL et UNI. Neuf actifs indépendants, un seul chiffre à trois décimales : ce
+n'est pas une tolérance qu'on choisit, c'est le **barème du courtier qu'on RETROUVE**.
+La borne est posée à 0,5 %, plus du double — assez large pour un barème qui bougerait,
+assez serrée pour qu'une vraie erreur ressorte. Le rapport imprime le taux implicite
+par actif : c'est lui qui fait la preuve, pas la borne.
+
+**Et le réalisé est BRUT, ce qui est maintenant écrit partout.** Le rejeu portait ses
+montants dans un champ nommé `pnl_net` alors que les frais n'appartiennent pas au flux
+d'ordres — crypto en nature, actions en dollars (`TAF`/`REG`/`CAT`). Une étiquette
+fausse de ce genre survit des mois et fausse tout ce qui la lit. La clé s'appelle
+`pnl_brut`, `realise` le dit dans sa docstring, le rapport le dit à l'écran, et les
+enregistrements portent `fees_source="hors_flux_ordres"` — publier le brut des deux
+côtés avec sa provenance marquée vaut mieux qu'un `fees=0.0` qui affirmerait qu'il n'y
+en a pas eu.
+
 **LE PREMIER PASSAGE RÉEL A REFUSÉ D'ÉCRIRE — et il avait raison trois fois.**
 `make reconstruire-journal` a rendu « 100 ordres exécutés » sur un historique qui en
 porte plusieurs centaines, deux ventes QQQ « sans lot », et huit écarts d'inventaire.

@@ -26,6 +26,7 @@ def test_une_vente_consomme_les_lots_du_plus_ANCIEN_au_plus_recent():
                  _f("3", "AAA", "sell", 1, 30.0, "2026-01-03")])
     assert len(r.fermes) == 1
     assert r.fermes[0]["entree_prix"] == 10.0
+    assert "pnl_net" not in r.fermes[0], "le rejeu ne connaît que du BRUT de frais"
     assert r.realise == 20.0
     assert r.quantites_ouvertes() == {"AAA": 1.0}
 
@@ -103,7 +104,24 @@ def test_les_frais_crypto_EN_NATURE_sont_nommes_pas_bloquants():
     v = confronter(r, {"UNIUSD": 287.222958})      # 0,22 % de moins chez le courtier
     assert v["conforme"] is True, "un frais en nature ne doit pas bloquer l'écriture"
     assert v["ecarts"] == []
-    assert len(v["frais_nature"]) == 1 and v["frais_nature"][0]["part"] < 0.01
+    assert len(v["frais_nature"]) == 1
+    assert abs(v["frais_nature"][0]["part"] - 0.0022) < 1e-4
+
+
+def test_une_poche_ENTIEREMENT_SOLDEE_laisse_le_frais_et_reste_conforme():
+    """LE DÉFAUT DU DÉNOMINATEUR (18/09). Rapporter l'écart à la position RESTANTE ne
+    peut pas marcher : huit poches crypto totalement vendues laissaient un résidu face
+    à un courtier à ZÉRO, et tout rapport à zéro est infini — donc bloquant à jamais.
+    Les frais se prélèvent à chaque transaction : ils se mesurent contre le VOLUME."""
+    r = rejouer([_f("1", "LINK/USD", "buy", 1000.0, 11.0, "2026-09-01"),
+                 _f("2", "LINK/USD", "buy", 428.0, 11.5, "2026-09-05"),
+                 _f("3", "LINK/USD", "sell", 1424.86, 12.0, "2026-09-18")])
+    v = confronter(r, {})                          # le courtier ne détient PLUS RIEN
+    assert v["conforme"] is True
+    assert len(v["frais_nature"]) == 1
+    f = v["frais_nature"][0]
+    assert f["courtier"] == 0.0 and f["volume_achete"] == 1428.0
+    assert abs(f["part"] - 0.0022) < 1e-4, "le taux retrouvé est celui du courtier"
 
 
 def test_un_excedent_crypto_TROP_GROS_reste_bloquant():
