@@ -153,20 +153,39 @@ def test_le_CAC_40_est_une_REFERENCE_du_comparatif():
 
 def test_chaque_reference_a_sa_COULEUR_dans_les_deux_themes():
     """Une courbe sans couleur déclarée hérite de celle d'une autre : deux références
-    indiscernables valent moins qu'une seule."""
+    indiscernables valent moins qu'une seule. Et la teinte est un TOKEN de thème, jamais
+    un littéral — codée en dur elle garderait la même valeur en clair et en sombre, où
+    le contraste n'est pas le même."""
     import pathlib
+    import re
 
     racine = pathlib.Path(__file__).resolve().parents[2]
-    css = (racine / "apps" / "web" / "app" / "globals.css").read_text(encoding="utf-8")
+    web = racine / "apps" / "web"
+    css = (web / "app" / "globals.css").read_text(encoding="utf-8")
+    table = (web / "lib" / "couleurs.ts").read_text(encoding="utf-8")
     from packages.portfolio.comparaison_benchmark import REFERENCES
 
-    jetons = {"S&P 500": "--bench-sp", "Nasdaq 100": "--bench-ndx",
-              "Bitcoin": "--bench-btc", "CAC 40": "--bench-cac"}
     for nom in REFERENCES:
-        assert nom in jetons, f"{nom} : référence sans couleur prévue"
-        assert css.count(f"{jetons[nom]}:") >= 2, f"{nom} : manque un thème"
-    for composant in ("PerformanceVsBenchmarks", "EquityChart"):
-        src = (racine / "apps" / "web" / "components"
-               / f"{composant}.tsx").read_text(encoding="utf-8")
-        for nom, jeton in jetons.items():
-            assert f"var({jeton})" in src, f"{composant} : {nom} sans couleur"
+        m = re.search(rf'"?{re.escape(nom)}"?:\s*"var\((--[\w-]+)\)"', table)
+        assert m, f"{nom} : absent de `lib/couleurs`"
+        assert css.count(f"{m.group(1)}:") >= 2, f"{nom} : manque un thème"
+
+
+def test_une_SEULE_table_de_couleurs_pour_le_site():
+    """LE DÉFAUT DU 18/09. Trois endroits nommaient les mêmes séries avec des teintes
+    différentes : les graphes lisaient les tokens, le tableau « Comparé aux grands
+    indices » codait `S&P 500 → ambre` et tout le reste → violet. Le S&P était gris sur
+    la courbe et ambre dans le tableau. Une pastille qui ne correspond pas à sa ligne
+    fait douter du chiffre plutôt que de la couleur."""
+    import pathlib
+    import re
+
+    web = pathlib.Path(__file__).resolve().parents[2] / "apps" / "web"
+    for chemin in ("components/EquityChart.tsx",
+                   "components/PerformanceVsBenchmarks.tsx",
+                   "app/dashboard/page.tsx"):
+        src = (web / chemin).read_text(encoding="utf-8")
+        assert "lib/couleurs" in src, f"{chemin} : n'utilise pas la table commune"
+        ligne = next((x for x in src.splitlines()
+                      if re.search(r'"S&P 500"\s*:\s*"#', x)), None)
+        assert ligne is None, f"{chemin} : teinte codée en dur — {ligne}"
