@@ -82,3 +82,28 @@ def test_la_ventilation_separe_le_realise_par_origine():
     assert v[ROBOT] == {"n": 3, "n_fermes": 2, "pnl_realise": 60.0}
     assert v[IMPORT] == {"n": 1, "n_fermes": 1, "pnl_realise": -900.0}
     assert v["inconnus"] == []
+
+
+def test_un_lot_REJOUE_depuis_le_courtier_est_un_trade_du_ROBOT():
+    """LA RÉGRESSION DU 18/09. `reconstruire_journal` a réécrit le registre depuis les
+    fills réels, avec le préfixe `R-`. Non reconnu, il tombait en INCONNU : le panneau
+    « Historique des positions » affichait **zéro trade** sur 533 aller-retours, et le
+    diagnostic les rangeait sous « import historique dont la provenance n'est plus
+    lisible » — l'exact contraire de la vérité, puisque leur source est le courtier.
+
+    Le raisonnement est celui déjà écrit pour `C-` : le robot a passé l'ordre, c'est la
+    journalisation qui a manqué. `R-` va plus loin — `P-` est ce que le robot DIT avoir
+    fait, `R-` est ce que le courtier a EXÉCUTÉ."""
+    from packages.execution.perimetre_journal import ROBOT, origine, pris_par_le_robot
+
+    assert origine("R-20260618-Alpaca-QQQ-12") == ROBOT
+    assert pris_par_le_robot("R-20260618-Alpaca-BCH/USD-7") is True
+
+
+def test_le_prefixe_R_ne_deteint_pas_sur_un_identifiant_qui_commence_par_R():
+    """La classification lit un PRÉFIXE, pas une initiale. Un identifiant qui
+    commencerait par un R sans tiret n'entre pas au périmètre par accident."""
+    from packages.execution.perimetre_journal import INCONNU, origine
+
+    assert origine("RANDOM-20260618-Alpaca-QQQ") == INCONNU
+    assert origine("R20260618") == INCONNU
