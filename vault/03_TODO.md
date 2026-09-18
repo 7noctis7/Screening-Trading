@@ -35,15 +35,27 @@
       PASSAGE RÉUSSI sur le VPS le 16/09 : **2 375 titres · 199 symboles · 71 jours**
       (2026-05-19 → 2026-09-16), 1 symbole muet. Reste à VÉRIFIER que le passage
       automatique de `cron_daily.sh` prend le relais demain — un flux RSS ne se rejoue pas.
-- [ ] **P1 — Lancer `make deviation-lab` sur le VPS et DÉCIDER (18/09, ADR-0180).**
-      Le motif déviation→reclaim→consolidation est codé (`indicators/deviation_reclaim`)
-      et le banc l'oppose à la primitive `sfp` qui existait déjà, sur les mêmes barres,
-      sous gate placebo + DSR + correction de tests multiples. **Aucun chiffre ne peut
-      être produit hors du VPS** : la base de prix n'y est pas. Trois issues, toutes
-      acceptables : rien ne passe le gate → on n'ajoute rien et on le sait ; seul `sfp`
-      passe → la machine à états ne sert à rien ; les états ajoutés passent → alors
-      `signal_lab` d'abord (recouvrement avec le filtre de production), stratégie
-      ensuite, jamais l'inverse.
+- [ ] **P1 — `make deviation-lab` A TOURNÉ, et son verdict est ANNULÉ (18/09,
+      ADR-0182 puis ADR-0183).** Premier passage réel sur le VPS : 200 titres,
+      **499 585 barres**, horizon 10. Sortie : `reclaim` et `consolidation` **RETENUS**,
+      placebo 0,001997, DSR 1,000. **Trois défauts du BANC annulent ce verdict**, tous
+      dans le même sens — trop permissif :
+      (a) le banc annonçait « gate emprunté à `alpha_incremental` » et portait des seuils
+      PLUS DOUX — DSR > 0,5 au lieu de 0,90, et AUCUNE condition sur l'IC alors que le
+      module exige |IC| ≥ 0,03. Or les deux « RETENUS » ont un IC **NÉGATIF** (−0,0107
+      et −0,0130) : ces barres SOUS-performent. `placebo` teste |IC|, il est bilatéral ;
+      sans condition de sens, « significatif » a été lu « bon ».
+      (b) le DSR ne garde plus rien à ce N — mesuré sur des rendements i.i.d. SANS
+      signal : un scoreur **tiré au hasard** allumé 40 % obtient DSR **1,000** à
+      n = 499 585. Et le n brut est faux : rendements forward qui se recouvrent,
+      200 titres notés le même jour.
+      (c) aucun **témoin « toujours long »** : un Sharpe positif se lisait comme une
+      découverte alors qu'il peut n'être que la dérive du marché.
+      **CORRIGÉ** : quatre portes (placebo · DSR 0,90 · |IC| 0,03 · SENS), n EFFECTIF,
+      témoin noté comme les autres, écarts appariés imprimés en ENTIER (ils étaient
+      tronqués AVANT le t). Sous ces portes, les deux scoreurs sont rejetés sur |IC|.
+      **RESTE À FAIRE : relancer**, et lire la ligne « ← » des écarts appariés — la
+      seule qui dise si sélectionner vaut mieux que ne rien sélectionner.
       `make deviation-lab ARGS="--titres 200 --hold 10"`
 - [ ] **P2 — Intraday 1h/4h pour les ACTIONS / INDICES / ETF : pas de source gratuite
       honnête (18/09).** La crypto est livrée (`make ingest-crypto-intraday` → Binance,

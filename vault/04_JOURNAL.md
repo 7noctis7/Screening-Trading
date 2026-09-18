@@ -1,5 +1,74 @@
 # 04 — JOURNAL
 
+## Session 2026-09-18 (38ᵉ) — L'intraday crypto, et un banc qui se donnait de bonnes notes
+
+**LE MOTIF DE PRICE ACTION A ÉTÉ MESURÉ — puis son verdict annulé, par le même banc.**
+Premier passage réel de `make deviation-lab` sur le VPS : 200 titres, **499 585 barres**,
+horizon 10. Le rapport affichait `reclaim` et `consolidation` **RETENUS**, placebo
+0,001997, DSR 1,000. Trois défauts du banc, tous du même côté — le permissif — annulent
+cette conclusion.
+
+**Le premier est le plus gênant, parce qu'il était écrit noir sur blanc.** Le banc annonce
+« gate emprunté à `alpha_incremental` » et réimplémentait des seuils PLUS DOUX : DSR > 0,5
+quand le module exige 0,90, et AUCUNE condition sur l'IC quand le module exige
+|IC| ≥ 0,03. Or les deux scoreurs retenus ont un IC **NÉGATIF** (−0,0107 et −0,0130) :
+leurs barres sous-performent. `placebo` teste |IC|, donc il est BILATÉRAL — un prédicteur
+significativement mauvais le passe aussi bien qu'un bon. Sans condition de SENS,
+« significatif » s'est lu « bon ». Le banc décernait sa meilleure mention à des barres à
+éviter.
+
+**Le deuxième se mesure, et le chiffre est net.** Sur des rendements i.i.d. où AUCUN
+signal n'existe par construction, un scoreur **tiré au hasard** allumé 40 % du temps
+obtient à n = 499 585 un Sharpe de +0,161 et un **DSR de 1,000** ; être toujours long
+donne +0,259 et 1,000 aussi. La colonne DSR ne portait donc aucune information — et le n
+brut est de toute façon faux : un rendement forward à 10 barres recalculé à chaque barre
+se recouvre, et 200 titres notés le même jour subissent une seule séance, pas 200.
+
+**Le troisième manquait à l'œil nu une fois nommé : il n'y avait pas de témoin.** Aucun
+scoreur « toujours long ». Un Sharpe positif se lisait comme une découverte alors qu'il
+peut n'être que la dérive du marché captée par n'importe quelle barre.
+
+**Corrigé** : le banc n'écrit plus ses seuils, il appelle `alpha_incremental.verdict` et
+ajoute une quatrième porte, le SENS. Témoin « toujours long » noté comme les autres et
+présent dans les écarts appariés. `n` EFFECTIF pour le DSR (dates distinctes ÷ horizon,
+borne grossière et volontairement pessimiste, paramètre additif sur `evaluer`/`comparer`).
+Et les écarts appariés s'impriment **en entier** : ils étaient tronqués à 88 caractères,
+c'est-à-dire coupés avant le t apparié — la section posait sa question et masquait la
+réponse. Sous ces portes, les deux scoreurs sont rejetés sur |IC|. Le motif reste
+UNCALIBRATED, la mesure est à refaire. ADR-0183.
+
+**L'INTRADAY CRYPTO EST LIVRÉ, gratuitement.** `crypto_binance` passe d'un quotidien codé
+en dur à un intervalle paramétré (1d/4h/1h) ; la bougie EN COURS est écartée sur son
+`closeTime`, pas sur une heuristique de date — en quotidien le défaut passait presque
+inaperçu, en 1h il serait permanent. `scripts/ingest_crypto_intraday.py` écrit dans une
+base SIDECAR (`data/crypto_intraday.db`) et jamais dans `crypto.db`, lue par la
+production ; la reprise est incrémentale, sinon chaque passage rejouerait l'historique et
+se ferait rate-limiter. `make deviation-lab-crypto` branche le banc dessus : c'est le seul
+endroit où la jambe d'exécution intraday que la spec demandait devient mesurable.
+
+**Défaut trouvé en chemin, côté actions** : `_TF_MAP` de yfinance renvoyait `"4h" → "1h"`
+et `df_to_bars` étiquetait avec le timeframe DEMANDÉ. Des barres HORAIRES seraient entrées
+en base avec `timeframe="4h"` — une base fausse que rien n'aurait signalée. Le provider
+refuse désormais `4h`, et la validation passe AVANT l'import de yfinance pour que le refus
+soit lisible même sans la dépendance.
+
+**L'intraday ACTIONS reste fermé, et c'est chiffré** : yfinance plafonne le 1h à ~730
+jours, le palier gratuit d'Alpaca sert le flux IEX dont les VOLUMES ne représentent pas le
+marché — or nos détecteurs filtrent sur le volume. Une donnée gratuite qui fausse la
+mesure est pire que pas de donnée. Noté P2, avec sa condition d'ouverture : ne payer que
+si le banc crypto montre un apport là où les données sont complètes.
+
+**LE JOURNAL A ÉTÉ RÉPARÉ sur le VPS** : `annuler_doublons_ouverts` a retiré son premier
+doublon réel (QQQ ×2, 3,586126 @ 716,86 le 17/09) — le défaut était détecté depuis le
+03/09 et aucun outil ne le retirait. `diag-journal` confirme : « aucun — les lots ouverts
+sont tous distincts ». Restent 29 symboles / 88 lots orphelins, irréductibles sans
+inventer un prix, et un résidu de +1 826,57 $ nommé `latent(début)`, jamais bouché.
+
+**Deux renumérotations et un avertissement à traiter.** L'ADR du motif de price action
+portait le numéro 0180, déjà pris — il devient ADR-0182. Et `make sync` signale sur le VPS
+« 1 entrée en attente dans git stash » : c'est le filet de `sync-garde`, à vider
+(`git stash list`) avant qu'il ne s'accumule.
+
 ## Session 2026-09-17 (37ᵉ) — Le CAC 40 entre en scène, et deux cibles sur trois mentaient
 
 **LES DONNÉES DE L'INTRO SONT SAINES**, mesurées sur le VPS : cinq fenêtres, `disponible`

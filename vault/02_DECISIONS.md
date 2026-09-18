@@ -2,6 +2,56 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0183 — Un banc qui écrit lui-même ses seuils finit par les baisser (2026-09-18)
+
+**Contexte.** Premier verdict réel de `make deviation-lab` sur le VPS : 200 titres,
+499 585 barres notées, horizon 10. Sortie : `reclaim` et `consolidation` **RETENUS**,
+placebo p = 0,001997, DSR 1,000. Un verdict favorable, prêt à être câblé.
+
+**Trois défauts, trouvés en relisant le banc avant d'y croire.**
+
+1. **Le gate n'était pas celui qu'il annonçait.** Le banc écrit « gate emprunté à
+   `alpha_incremental` » et réimplémentait des seuils PLUS DOUX : `SEUIL_DSR = 0.5` là
+   où le module exige 0,90, et **aucune condition sur l'IC** là où le module exige
+   |IC| ≥ 0,03. Or les deux scoreurs « RETENUS » ont un IC **NÉGATIF** (−0,0107 et
+   −0,0130). Le banc décernait sa meilleure mention à des barres qui SOUS-PERFORMENT.
+   `placebo` teste |IC| : il est BILATÉRAL, donc un prédicteur significativement
+   mauvais le passe aussi bien qu'un bon. Sans condition de SENS, « significatif » a
+   été lu comme « bon ».
+
+2. **Le DSR ne gardait plus rien à ce N.** Le DSR divise par √n. Mesuré sur des
+   rendements i.i.d. où AUCUN signal n'existe par construction (synthétique, et
+   uniquement pour valider l'arithmétique du garde-fou) : à n = 499 585, un scoreur
+   **tiré au hasard** allumé 40 % du temps obtient Sharpe +0,161 et **DSR 1,000** ;
+   être toujours long donne Sharpe +0,259 et DSR 1,000. La colonne DSR du rapport ne
+   portait aucune information. Et le n brut est de toute façon faux : un rendement
+   forward à 10 barres recalculé à chaque barre se RECOUVRE, et 200 titres notés le
+   même jour subissent la même séance — ce ne sont pas 200 mesures.
+
+3. **Il manquait l'étalon.** Aucun scoreur « toujours long » : un Sharpe positif se
+   lisait donc comme une découverte alors qu'il peut n'être que la dérive du marché
+   captée par n'importe quelle barre. Un signal allumé 40 % du temps qui fait moins
+   bien que ne rien sélectionner n'est pas un signal.
+
+**Décision.** Le banc ne définit plus ses seuils : il appelle `alpha_incremental.verdict`
+(placebo < 0,05 · DSR > 0,90 · |IC| ≥ 0,03) et ajoute une QUATRIÈME porte, le SENS
+(IC > 0), puisque ces scoreurs sont longs. Un témoin « toujours long » est noté comme
+les autres et entre dans les écarts appariés. Le DSR reçoit un `n` EFFECTIF — dates
+distinctes ÷ horizon, borne grossière et volontairement pessimiste. Les écarts appariés
+s'impriment en entier : ils étaient tronqués à 88 caractères, c'est-à-dire coupés
+AVANT le t apparié — la section posait sa question et masquait la réponse.
+
+**Conséquence, et elle est nette : le verdict du 18/09 est ANNULÉ.** Sous les portes du
+module, `reclaim` (|IC| 0,0107) et `consolidation` (|IC| 0,0130) sont REJETÉS — et
+l'auraient été sans rien changer d'autre. Le motif reste UNCALIBRATED ; la mesure est à
+refaire avec le témoin, qui dira ce qu'aucune colonne ne disait : ces barres valent-elles
+mieux que toutes les barres ?
+
+**Ce que ça coûte de l'admettre.** C'est moi qui ai écrit le gate doux, dans le même
+commit que le banc qui s'en sert. Un banc et son juge écrits par la même main, le même
+jour, sans que l'écart avec le module de référence ne saute aux yeux : la leçon n'est pas
+« être plus attentif », c'est que le seuil doit venir du module, jamais du banc.
+
 ## ADR-0181 — Trois courbes, et jamais une seule inventée (2026-09-17)
 
 **Demande.** Ajouter le CAC 40 à côté du robot et du S&P 500, dans l'intro ET dans le
@@ -5502,8 +5552,11 @@ hypothèse et non comme fait : une détention médiane de 0,1 jour sur les déci
 système suggère un cycle ouvrir-puis-solder dans la même journée — le plancher de ligne
 (1 000 $) est le premier suspect, à vérifier avant toute correction.
 
+## ADR-0182 — Un motif de price action se MESURE avant de se coder en stratégie (2026-09-18)
 
-## ADR-0180 — Un motif de price action se MESURE avant de se coder en stratégie (2026-09-18)
+> Renuméroté le 18/09 : cette entrée portait le numéro 0180, déjà pris par « Le journal
+> sépare les lots ouverts ». Deux ADR sous le même numéro, c'est une référence qui ne
+> désigne plus rien.
 
 **Contexte.** Spec reçue : un agent analyste devant détecter
 DEVIATION → RECLAIM → CONSOLIDATION → EXPANSION, lui attribuer un score 0-100, produire
@@ -5572,4 +5625,3 @@ None avec son motif. L'agrégation est aussi le chemin le plus commode pour fair
 du futur : une semaine n'est utilisable qu'à partir du jour qui la CLÔT, la semaine en
 cours n'est jamais publiée, et un test vérifie le point-in-time avec la jambe
 hebdomadaire branchée. Mieux vaut une semaine de retard qu'une semaine d'avance.
-

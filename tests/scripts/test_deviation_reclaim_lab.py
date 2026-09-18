@@ -145,3 +145,67 @@ def test_hold_se_compte_en_BARRES_et_le_dit():
     « j » ferait comparer deux horizons sous le même nom."""
     assert "horizon {hold} barres" in BANC
     assert "hold` se compte en BARRES" in BANC
+
+
+# ── Le gate lui-même : ce qui a failli faire câbler du bruit (18/09) ──────────
+
+def test_le_TEMOIN_toujours_long_est_note_comme_les_autres():
+    """Sans étalon, un Sharpe positif se lit comme une découverte alors qu'il peut
+    n'être que la dérive du marché. Le témoin note TOUTES les barres, donc il capte
+    exactement cette dérive — et tout scoreur qui ne le bat pas ne vaut rien."""
+    from scripts.deviation_reclaim_lab import TEMOIN, _collecter
+
+    ev, sc = _collecter({"X": _serie()}, ["X"], hold=5, pas=1, lag=1, depart=60)
+    assert TEMOIN in sc, "le témoin a disparu des scoreurs"
+    assert set(sc[TEMOIN]) == {1.0}, "le témoin doit être allumé sur CHAQUE barre"
+    assert len(sc[TEMOIN]) == len(ev)
+
+
+def test_le_n_EFFECTIF_divise_par_l_horizon_et_par_les_dates_repetees():
+    """200 titres notés le même jour subissent la même séance : ce n'est pas 200
+    mesures. Et un rendement forward recalculé à chaque barre se recouvre."""
+    from packages.research.alpha_incremental import Evenement
+    from scripts.deviation_reclaim_lab import _n_effectif
+
+    ev = [Evenement(s, f"2026-01-{j:02d}", "E", 0.0)
+          for j in range(1, 21) for s in ("A", "B", "C")]   # 60 obs, 20 dates
+    assert len(ev) == 60
+    assert _n_effectif(ev, hold=5) == 4        # 20 dates / 5 barres d'horizon
+    assert _n_effectif(ev, hold=1) == 20       # jamais plus que les dates
+    assert _n_effectif(ev, hold=999) == 2      # plancher : on ne descend pas sous 2
+
+
+def test_le_DSR_ne_vaut_plus_1_000_sur_du_BRUIT_quand_le_n_est_EFFECTIF():
+    """LE DÉFAUT QUI A FAILLI PASSER. Le DSR divise par √n : à n = 499 585 il vaut
+    1,000 pour n'importe quel Sharpe positif, y compris celui d'un scoreur TIRÉ AU
+    HASARD sur des rendements sans aucun signal. Le garde-fou ne gardait plus rien."""
+    import random as _r
+
+    from packages.research.alpha_incremental import Evenement, evaluer
+
+    rng = _r.Random(0)
+    n = 40_000
+    ev = [Evenement("X", f"j{k // 200}", "E", rng.gauss(0.004, 0.08)) for k in range(n)]
+    hasard = [float(rng.random() < 0.4) for _ in range(n)]
+
+    brut = evaluer("hasard", ev, hasard, hold=10, n_essais=5)
+    effectif = evaluer("hasard", ev, hasard, hold=10, n_essais=5, n_effectif=20)
+    assert abs(brut.ic) < 0.02, "aucun signal n'existe par construction"
+    assert brut.dsr > effectif.dsr, (
+        f"le n effectif doit DURCIR le garde-fou : {brut.dsr} vs {effectif.dsr}")
+
+
+def test_un_IC_NEGATIF_ne_peut_pas_etre_RETENU():
+    """`placebo` teste |IC| : il est BILATÉRAL. Des barres qui sous-performent
+    significativement le passent aussi bien que des barres qui prédisent. Ces
+    scoreurs sont LONGS — un IC négatif dit d'ÉVITER ces barres, pas de les acheter.
+    Le banc les affichait « RETENU »."""
+    from scripts.deviation_reclaim_lab import _verdict
+
+    def _m(ic):
+        return {"n": 5000, "ic": ic, "sharpe": 0.2, "dsr": 1.0, "p_placebo": 0.002,
+                "part_notee": 0.4, "rendement_moyen": 0.0}
+
+    res = {"mesures": {"sous-performe": _m(-0.09), "predit": _m(+0.09)},
+           "n_evenements": 5000, "n_essais": 2}
+    assert _verdict(res) == ["predit"]

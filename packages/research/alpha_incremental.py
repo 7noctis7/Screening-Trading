@@ -131,12 +131,22 @@ def _ic(scores: np.ndarray, rendements: np.ndarray) -> float:
 
 
 def evaluer(nom: str, evenements: list[Evenement], scores: list[float], hold: int = 5,
-            n_essais: int = 1) -> Mesure:
+            n_essais: int = 1, n_effectif: int | None = None) -> Mesure:
     """IC, Sharpe et DSR d'un scoreur. `n_essais` porte la correction de tests multiples.
 
     `n_essais` doit compter TOUTES les variantes essayées — scoreurs, invites, horizons.
     Le laisser à 1 quand on en a comparé six fait passer pour significatif le meilleur de
     six tirages, ce qui est la définition même du surapprentissage par sélection.
+
+    `n_effectif` EST LE NOMBRE D'OBSERVATIONS INDÉPENDANTES, et il n'est presque jamais
+    `len(scores)`. Deux dépendances le réduisent, et elles se cumulent : des rendements
+    forward à `hold` barres calculés à chaque barre se RECOUVRENT (chacun partage
+    hold−1 barres avec le suivant), et des titres notés le même jour bougent ENSEMBLE.
+    Le DSR divise par √n : passer le nombre brut fait croire à une précision qu'on n'a
+    pas. Mesuré sur des rendements i.i.d. SANS aucun signal, un scoreur TIRÉ AU HASARD
+    allumé 40 % du temps obtient DSR = 1,000 à n = 499 585 — le garde-fou ne garde plus
+    rien. Par défaut `len(scores)`, pour ne rien changer aux appelants qui notent un
+    événement par titre et par jour.
     """
     s = np.asarray(scores, dtype=float)
     r = np.asarray([e.rendement for e in evenements], dtype=float)
@@ -151,7 +161,8 @@ def evaluer(nom: str, evenements: list[Evenement], scores: list[float], hold: in
     return Mesure(
         nom=nom, n=int(len(r)), ic=round(_ic(s, r), 4),
         sharpe=round(sr * math.sqrt(par_an), 3),
-        dsr=round(float(deflated_sharpe_ratio(sr, len(strategie), n_trials=n_essais)), 3),
+        dsr=round(float(deflated_sharpe_ratio(
+            sr, max(2, int(n_effectif or len(strategie))), n_trials=n_essais)), 3),
         rendement_moyen=round(float(strategie.mean()), 5),
         part_notee=round(float(avis.mean()), 3),
         incidents=[] if avis.mean() > 0.2 else
@@ -193,18 +204,26 @@ def placebo(evenements: list[Evenement], scores: list[float], tirages: int = PLA
 
 
 def comparer(evenements: list[Evenement], scores_par_scoreur: dict[str, list[float]],
-             hold: int = 5, tirages: int = PLACEBO_TIRAGES) -> dict:
-    """Compare des scoreurs sur les MÊMES événements, avec correction de tests multiples."""
+             hold: int = 5, tirages: int = PLACEBO_TIRAGES,
+             n_effectif: int | None = None) -> dict:
+    """Compare des scoreurs sur les MÊMES événements, avec correction de tests multiples.
+
+    `n_effectif` est transmis tel quel au DSR : cf. `evaluer`. Il est RAPPORTÉ dans le
+    rapport, pour qu'un lecteur voie sur combien d'observations indépendantes le
+    garde-fou a réellement statué.
+    """
     n_essais = max(1, len(scores_par_scoreur))
     mesures: dict[str, Mesure] = {}
     for nom, sc in scores_par_scoreur.items():
         if len(sc) != len(evenements):
             raise ValueError(f"{nom} : {len(sc)} scores pour {len(evenements)} événements — "
                              "les scoreurs DOIVENT noter exactement le même échantillon")
-        m = evaluer(nom, evenements, sc, hold=hold, n_essais=n_essais)
+        m = evaluer(nom, evenements, sc, hold=hold, n_essais=n_essais,
+                    n_effectif=n_effectif)
         m.p_placebo = placebo(evenements, sc, tirages)
         mesures[nom] = m
     return {"n_evenements": len(evenements), "n_essais": n_essais,
+            "n_effectif": int(n_effectif or len(evenements)),
             "mesures": {k: v.en_dict() for k, v in mesures.items()},
             "ecarts": _ecarts(evenements, scores_par_scoreur, hold)}
 

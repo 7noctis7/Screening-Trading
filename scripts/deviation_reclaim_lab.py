@@ -55,13 +55,24 @@ from packages.indicators.deviation_reclaim import (  # noqa: E402
     etat,
     pivots_causaux,
 )
-from packages.research.alpha_incremental import Evenement, comparer  # noqa: E402
+from packages.research.alpha_incremental import (  # noqa: E402
+    Evenement,
+    comparer,
+    verdict,
+)
 
 # Rang des états : « au moins RECLAIM » se lit sur un ordre, pas sur une égalité.
 RANG = {DEVIATION_DETECTED: 1, RECLAIM_CONFIRMED: 2,
         CONSOLIDATION_CONFIRMED: 3, EXPANSION_CONFIRMED: 4}
-SEUIL_P = 0.05
-SEUIL_DSR = 0.5
+# Le nom du témoin sert deux fois : à le reconnaître dans le tableau, et à le retrouver
+# dans les écarts appariés. Il est écrit UNE fois, et court — les colonnes du rapport
+# TRONQUENT, et un étalon qu'on ne reconnaît pas dans le tableau ne sert à rien.
+TEMOIN = "TÉMOIN — toujours long"
+# LES SEUILS SONT CEUX DU MODULE, et ce n'est pas un détail (18/09). Ce banc en portait
+# de plus doux — DSR > 0,5 et AUCUNE condition sur l'IC — tout en annonçant « gate
+# emprunté à alpha_incremental ». Deux scoreurs ont donc été affichés RETENUS avec un
+# IC NÉGATIF : le banc décernait sa meilleure mention à des barres qui SOUS-performent.
+SEUIL_P, SEUIL_DSR, SEUIL_IC = 0.05, 0.90, 0.03
 
 
 def _rendement(barres, i: int, hold: int, lag: int) -> float | None:
@@ -83,10 +94,19 @@ def _sfp_long(barres, i: int) -> bool:
 
 
 def _scores(e: dict, barres, i: int) -> dict[str, float]:
-    """Les avis des scoreurs à cette barre. Binaires : 1 = allumé, 0 = muet."""
+    """Les avis des scoreurs à cette barre. Binaires : 1 = allumé, 0 = muet.
+
+    LE TÉMOIN N'EST PAS UN SCOREUR DE PLUS, c'est l'étalon qui manquait. Sans lui, un
+    Sharpe positif se lit comme une découverte alors qu'il peut n'être que la DÉRIVE du
+    marché captée par n'importe quelle barre. Être long en permanence ne sélectionne
+    rien : tout scoreur qui ne bat pas cette ligne ne vaut pas le câblage, quel que soit
+    son DSR. Il entre aussi dans les écarts APPARIÉS, où la question devient exacte :
+    « ces barres-là valent-elles mieux que toutes les barres ? »
+    """
     rang = RANG.get(e["etat"], 0)
     conso = e.get("consolidation") or {}
     return {
+        TEMOIN: 1.0,
         "sfp_seul (primitive du 02/09)": float(_sfp_long(barres, i)),
         "deviation": float(rang >= 1),
         "reclaim": float(rang >= 2),
@@ -144,31 +164,84 @@ def _collecter(data: dict, syms: list[str], hold: int, pas: int, lag: int,
     return evenements, scores
 
 
-def _afficher(res: dict, hold: int) -> list[str]:
+def _n_effectif(evenements: list[Evenement], hold: int) -> int:
+    """Combien d'observations INDÉPENDANTES, réellement ?
+
+    Deux dépendances, qui se cumulent et qui vont toutes deux dans le sens d'une
+    précision surestimée. Le rendement forward à `hold` barres est recalculé à CHAQUE
+    barre : deux barres voisines partagent hold−1 barres de leur rendement. Et 200
+    titres notés le MÊME jour subissent la même séance — ce ne sont pas 200 mesures,
+    c'est une séance vue 200 fois.
+
+    On prend donc le nombre de DATES distinctes, divisé par l'horizon. C'est une borne
+    grossière, et volontairement pessimiste : mieux vaut un garde-fou trop sévère qu'un
+    garde-fou qui affiche 1,000 sur du bruit.
+    """
+    return max(2, len({e.jour for e in evenements}) // max(1, hold))
+
+
+def _afficher(res: dict, hold: int) -> None:
+    """Le tableau des mesures. Il NOTE, il ne tranche pas — `_verdict` tranche."""
     print(f"\n  {res['n_evenements']} barres notées · horizon {hold} barres · "
-          f"{res['n_essais']} scoreurs (correction de tests multiples appliquée)\n")
-    print(f"  {'scoreur':<32} {'allumé':>8} {'IC':>8} {'Sharpe':>8} {'DSR':>7} "
-          f"{'placebo':>9}  verdict")
-    print("  " + "-" * 92)
-    retenus = []
+          f"{res['n_essais']} scoreurs (correction de tests multiples appliquée)")
+    print(f"  n EFFECTIF retenu pour le DSR : {res.get('n_effectif', 0):,} "
+          "observations indépendantes\n".replace(",", " "))
+    print(f"  {'scoreur':<36} {'allumé':>7} {'IC':>8} {'Sharpe':>8} {'DSR':>7} "
+          f"{'placebo':>9}")
+    print("  " + "-" * 80)
     for nom, m in res["mesures"].items():
-        p = m.get("p_placebo")
-        ok = (p is not None and p < SEUIL_P and (m.get("dsr") or 0) > SEUIL_DSR)
+        print(f"  {nom:<36} {m['part_notee']:>6.1%} {m['ic']:>+8.4f} "
+              f"{m['sharpe']:>+8.3f} {m['dsr']:>7.3f} {m.get('p_placebo'):>9.6f}")
+
+
+def _verdict(res: dict) -> list[str]:
+    """Les TROIS portes du module, plus le SENS. Chaque rejet dit pourquoi.
+
+    Le sens n'est pas une quatrième porte décorative : `placebo` teste |IC|, donc il est
+    BILATÉRAL. Un scoreur dont les barres sous-performent significativement le passe
+    aussi bien qu'un scoreur qui prédit. Ces scoreurs-ci sont LONGS — un IC négatif dit
+    d'éviter ces barres, pas de les acheter.
+    """
+    lignes = verdict(res, seuil_p=SEUIL_P, seuil_dsr=SEUIL_DSR,
+                     seuil_ic=SEUIL_IC)["scoreurs"]
+    retenus = []
+    print("\n  LES QUATRE PORTES — placebo · DSR · |IC| · SENS\n")
+    for ligne in lignes:
+        nom = ligne["scoreur"]
+        ic = res["mesures"][nom]["ic"]
+        motif = ligne["motif"]
+        ok = bool(ligne["retenu"]) and ic > 0 and nom != TEMOIN
+        if ligne["retenu"] and ic < 0:
+            motif = f"IC NÉGATIF ({ic:+.4f}) — ces barres sous-performent"
+        if nom == TEMOIN:
+            motif = "témoin — il n'est pas candidat, il sert d'étalon"
         if ok:
             retenus.append(nom)
-        print(f"  {nom:<32} {m['part_notee']:>7.1%} {m['ic']:>+8.4f} "
-              f"{m['sharpe']:>+8.3f} {m['dsr']:>7.3f} {p:>9.6f}  "
-              f"{'RETENU' if ok else 'rejeté'}")
+        print(f"    {'RETENU' if ok else 'rejeté':<7} {nom:<36} {motif}")
     return retenus
 
 
 def _ecarts(res: dict) -> None:
+    """Les écarts appariés, EN ENTIER — ils étaient tronqués à 88 caractères.
+
+    La section posait « le motif complet apporte-t-il quelque chose ? » et coupait la
+    ligne avant le t apparié, c'est-à-dire avant la réponse. Un rapport qui pose une
+    question et masque son résultat est pire qu'un rapport muet : on croit avoir lu.
+    """
     ecarts = res.get("ecarts") or []
     if not ecarts:
         return
-    print("\n  ÉCARTS APPARIÉS — le motif complet apporte-t-il quelque chose ?\n")
-    for e in ecarts:
-        print(f"    {str(e.get('paire', e))[:88]}")
+    print("\n  ÉCARTS APPARIÉS — même barre, deux avis, une différence testable")
+    print("  (t apparié > +2 : A bat B · < −2 : A perd contre B)\n")
+    print(f"    {'A':<30} {'B':<30} {'A−B':>9} {'t':>7}")
+    print("    " + "-" * 78)
+    for e in sorted(ecarts, key=lambda x: -abs(x.get("t_apparie_a_moins_b") or 0)):
+        marque = " ←" if TEMOIN in (e["a"], e["b"]) else ""
+        print(f"    {e['a'][:30]:<30} {e['b'][:30]:<30} "
+              f"{e['ecart_moyen_a_moins_b']:>+9.5f} "
+              f"{e['t_apparie_a_moins_b']:>+7.2f}{marque}")
+    print("\n    ← : comparaison CONTRE LE TÉMOIN — la seule qui dise si la")
+    print("        sélection vaut mieux que ne rien sélectionner.")
 
 
 def _timeframes(a) -> None:
@@ -232,12 +305,14 @@ def main() -> int:
               "trop peu pour conclure.")
         return 2
 
-    res = comparer(evenements, scores, hold=a.hold, tirages=a.tirages)
-    retenus = _afficher(res, a.hold)
+    res = comparer(evenements, scores, hold=a.hold, tirages=a.tirages,
+                   n_effectif=_n_effectif(evenements, a.hold))
+    _afficher(res, a.hold)
+    retenus = _verdict(res)
     _ecarts(res)
 
-    print(f"\n  VERDICT : {len(retenus)} scoreur(s) passent placebo < {SEUIL_P} ET "
-          f"DSR > {SEUIL_DSR}")
+    print(f"\n  VERDICT : {len(retenus)} scoreur(s) passent les QUATRE portes "
+          f"(placebo < {SEUIL_P} · DSR > {SEUIL_DSR} · |IC| ≥ {SEUIL_IC} · IC > 0)")
     if not retenus:
         print("    → RIEN à câbler. Le motif ne se distingue pas du hasard sur cet")
         print("      échantillon, et c'est une réponse — pas un échec du banc.")
