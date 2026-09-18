@@ -31,6 +31,23 @@ from dataclasses import dataclass, field
 # prix de revient de zéro, donc un réalisé égal au produit de la vente.
 MIN_PRIX = 1e-12
 
+# LES FRAIS CRYPTO SE PRÉLÈVENT EN NATURE, et l'historique des ORDRES ne les porte pas
+# (ce sont des `CFEE`, des mouvements de compte). Un rejeu d'achats et de ventes
+# surestime donc TOUJOURS une quantité crypto, de la somme des frais retenus en jetons.
+# Mesuré le 18/09 : UNI journal 287,856 contre 287,223 chez le courtier, soit 0,22 %.
+# On ne corrige pas la quantité — ce serait inventer une écriture — on NOMME l'écart et
+# on borne ce qu'on accepte d'appeler ainsi.
+PART_FRAIS_NATURE = 0.01
+
+
+def normaliser(symbole: str) -> str:
+    """« UNI/USD » et « UNIUSD » sont le même instrument, et le courtier emploie les
+    DEUX : la barre oblique dans l'historique des ordres, la forme collée dans les
+    positions. Comparer les chaînes brutes faisait donc apparaître une position
+    fantôme d'un côté et une absence de l'autre — pour un seul et même jeton.
+    """
+    return str(symbole or "").upper().replace("/", "")
+
 
 @dataclass
 class Lot:
@@ -58,9 +75,13 @@ class Rejeu:
         return round(sum(float(t["pnl_net"]) for t in self.fermes), 2)
 
     def quantites_ouvertes(self) -> dict[str, float]:
+        """Clés NORMALISÉES : c'est le seul niveau où deux graphies doivent se
+        rejoindre. Le lot, lui, garde la graphie du fill — c'est la vérité du
+        courtier pour cette écriture-là."""
         out: dict[str, float] = {}
         for lot in self.ouverts:
-            out[lot["symbole"]] = round(out.get(lot["symbole"], 0.0) + lot["qty"], 10)
+            k = normaliser(lot["symbole"])
+            out[k] = round(out.get(k, 0.0) + lot["qty"], 10)
         return out
 
 
@@ -118,7 +139,7 @@ def rejouer(fills: list[dict]) -> Rejeu:
                               "prix": f.get("price")})
             continue
         sym = str(f["symbol"])
-        lots = par_symbole.setdefault(sym, [])
+        lots = par_symbole.setdefault(normaliser(sym), [])
         if f["side"] == "buy":
             q = float(f["qty"])
             lots.append(Lot(sym, q, q, float(f["price"]), str(f.get("date", "")),
@@ -138,6 +159,10 @@ def rejouer(fills: list[dict]) -> Rejeu:
     return r
 
 
+def _crypto(symbole: str) -> bool:
+    return normaliser(symbole).endswith(("USD", "USDT", "USDC")) and len(symbole) > 4
+
+
 def confronter(rejeu: Rejeu, positions: dict[str, float],
                tolerance: float = 1e-4) -> dict:
     """LA SEULE VALIDATION QUI COMPTE : les lots ouverts reconstruits égalent-ils ce que
@@ -145,14 +170,29 @@ def confronter(rejeu: Rejeu, positions: dict[str, float],
 
     Un rejeu qui ne retombe pas sur l'inventaire réel est faux, et le publier serait
     refaire l'erreur qu'on corrige. On compare symbole par symbole, dans les deux sens —
-    un symbole présent d'un seul côté est le défaut le plus parlant.
+    un symbole présent d'un seul côté est le défaut le plus parlant — après
+    NORMALISATION, sans quoi « UNI/USD » et « UNIUSD » se lisent comme deux instruments.
+
+    UNE SEULE CATÉGORIE D'ÉCART EST TOLÉRÉE, et elle est nommée : sur un actif CRYPTO,
+    un excédent du journal borné à `PART_FRAIS_NATURE` s'explique par les frais prélevés
+    EN JETONS, que l'historique des ORDRES ne porte pas. Ce n'est pas une marge de
+    confort : le sens est imposé (le journal ne peut qu'être EN EXCÈS, jamais en
+    défaut), la borne est mesurée, et ces écarts sont rendus à part — pas absorbés.
     """
     calcule = rejeu.quantites_ouvertes()
-    ecarts = []
-    for sym in sorted(set(calcule) | set(positions or {})):
-        a, b = calcule.get(sym, 0.0), float((positions or {}).get(sym, 0.0))
-        if abs(a - b) > tolerance:
-            ecarts.append({"symbole": sym, "journal": round(a, 8),
-                           "courtier": round(b, 8), "ecart": round(a - b, 8)})
-    return {"conforme": not ecarts, "ecarts": ecarts,
-            "n_symboles": len(set(calcule) | set(positions or {}))}
+    reel = {normaliser(k): float(v) for k, v in (positions or {}).items()}
+    ecarts, frais_nature = [], []
+    for sym in sorted(set(calcule) | set(reel)):
+        a, b = calcule.get(sym, 0.0), reel.get(sym, 0.0)
+        d = a - b
+        if abs(d) <= tolerance:
+            continue
+        ligne = {"symbole": sym, "journal": round(a, 8), "courtier": round(b, 8),
+                 "ecart": round(d, 8)}
+        if _crypto(sym) and 0 < d <= PART_FRAIS_NATURE * max(a, b):
+            ligne["part"] = round(d / max(a, b), 6)
+            frais_nature.append(ligne)
+        else:
+            ecarts.append(ligne)
+    return {"conforme": not ecarts, "ecarts": ecarts, "frais_nature": frais_nature,
+            "n_symboles": len(set(calcule) | set(reel))}

@@ -83,3 +83,39 @@ def test_la_CONFRONTATION_a_l_inventaire_reel_attrape_l_ecart():
     assert mauvais["conforme"] is False
     assert {e["symbole"] for e in mauvais["ecarts"]} == {"G", "H"}
     assert mauvais["n_symboles"] == 2
+
+
+def test_UNI_slash_USD_et_UNIUSD_sont_le_MEME_instrument():
+    """LE DÉFAUT DU 18/09. Le courtier emploie les DEUX graphies : la barre oblique dans
+    l'historique des ordres, la forme collée dans les positions. Comparer les chaînes
+    brutes faisait apparaître une position fantôme d'un côté et une absence de l'autre,
+    pour un seul et même jeton — +287,86 ici, −287,22 là."""
+    r = rejouer([_f("1", "UNI/USD", "buy", 287.856242, 8.9, "2026-09-18")])
+    assert r.quantites_ouvertes() == {"UNIUSD": 287.856242}
+    assert confronter(r, {"UNIUSD": 287.856242})["conforme"] is True
+
+
+def test_les_frais_crypto_EN_NATURE_sont_nommes_pas_bloquants():
+    """Les `CFEE` se prélèvent EN JETONS et n'apparaissent pas dans l'historique des
+    ORDRES : un rejeu d'achats et de ventes surestime donc TOUJOURS une quantité crypto.
+    On ne corrige pas le chiffre — ce serait inventer une écriture — on le nomme."""
+    r = rejouer([_f("1", "UNI/USD", "buy", 287.856242, 8.9, "2026-09-18")])
+    v = confronter(r, {"UNIUSD": 287.222958})      # 0,22 % de moins chez le courtier
+    assert v["conforme"] is True, "un frais en nature ne doit pas bloquer l'écriture"
+    assert v["ecarts"] == []
+    assert len(v["frais_nature"]) == 1 and v["frais_nature"][0]["part"] < 0.01
+
+
+def test_un_excedent_crypto_TROP_GROS_reste_bloquant():
+    """La borne n'est pas une marge de confort : au-delà, ce n'est plus un frais."""
+    r = rejouer([_f("1", "BCH/USD", "buy", 100.0, 250.0, "2026-09-18")])
+    v = confronter(r, {"BCHUSD": 80.0})
+    assert v["conforme"] is False and v["frais_nature"] == []
+
+
+def test_un_journal_EN_DEFAUT_reste_bloquant_meme_en_crypto():
+    """Le sens est imposé : les frais ne peuvent que RETIRER des jetons au courtier.
+    Un journal qui en porte MOINS que le compte décrit autre chose — et bloque."""
+    r = rejouer([_f("1", "ETH/USD", "buy", 1.0, 2500.0, "2026-09-18")])
+    v = confronter(r, {"ETHUSD": 1.005})
+    assert v["conforme"] is False and v["frais_nature"] == []

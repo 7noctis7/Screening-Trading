@@ -32,6 +32,15 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 
+# `orders()` PLAFONNE À 100 PAR DÉFAUT, et `paginer` rend `res[:limit]` : le défaut
+# n'est pas une taille de page, c'est un TOTAL. Premier passage réel (18/09) : 100 fills
+# rendus sur ~800, donc les achats de juin absents, donc deux ventes QQQ « sans lot » et
+# un écart de 61 parts. Le script accusait l'historique d'être tronqué — il l'était, par
+# son propre appel. Une valeur par défaut commode ailleurs devient un piège ici, où le
+# script REFUSE d'écrire sur la foi de ce qu'il a lu.
+LIMITE_ORDRES = 5000
+
+
 def _courtier() -> dict:
     """Fills et positions RÉELS. `lisible=False` si on ne peut pas savoir — et alors on
     n'écrit rien : l'absence de réponse n'est pas une réponse vide."""
@@ -40,7 +49,8 @@ def _courtier() -> dict:
         b = AlpacaBroker(paper=True)
         pos = {str(p.get("symbol")): float(p.get("qty") or 0.0)
                for p in b.positions_detailed()}
-        return {"lisible": True, "fills": b.orders(), "positions": pos,
+        return {"lisible": True, "fills": b.orders(limit=LIMITE_ORDRES),
+                "positions": pos,
                 "equity": round(float(b.equity()), 2)}
     except Exception as e:  # noqa: BLE001
         return {"lisible": False, "motif": str(e)[:160]}
@@ -95,6 +105,12 @@ def _rapport(r, c: dict, verdict: dict) -> None:
                   f"le {v['ts'][:10]}")
 
     print(f"\n  CONFRONTATION À L'INVENTAIRE RÉEL — {verdict['n_symboles']} symbole(s)")
+    for f in verdict.get("frais_nature") or []:
+        # NOMMÉ, PAS ABSORBÉ. Les `CFEE` d'Alpaca se prélèvent en JETONS et n'entrent
+        # pas dans l'historique des ordres : un rejeu d'achats et de ventes surestime
+        # donc toujours une quantité crypto. On l'écrit plutôt que de l'arrondir.
+        print(f"    ℹ {f['symbole']:<10} +{f['ecart']:.6f} ({f['part']:.2%}) — "
+              "frais crypto prélevés en nature, hors historique des ordres")
     if verdict["conforme"]:
         print("    ✓ chaque lot ouvert reconstruit a sa contrepartie chez le courtier.")
     else:

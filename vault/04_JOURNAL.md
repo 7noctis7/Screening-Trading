@@ -107,6 +107,30 @@ préférée, l'enregistrement local le secours, la source est publiée par poche
 `depart_certain` passe à faux dès qu'UNE poche part d'une base locale — le capital est
 une somme, un « presque certain » se lirait certain.
 
+**LE PREMIER PASSAGE RÉEL A REFUSÉ D'ÉCRIRE — et il avait raison trois fois.**
+`make reconstruire-journal` a rendu « 100 ordres exécutés » sur un historique qui en
+porte plusieurs centaines, deux ventes QQQ « sans lot », et huit écarts d'inventaire.
+Le script accusait l'historique d'être tronqué : **il l'était, par son propre appel.**
+`AlpacaBroker.orders()` plafonne à 100 PAR DÉFAUT — `paginer` rend `res[:limit]`, donc
+le défaut n'est pas une taille de page mais un TOTAL. Les achats de juin manquaient,
+d'où les ventes orphelines et l'écart de 61 parts sur QQQ. Une valeur par défaut commode
+ailleurs devient un piège dans un script qui REFUSE d'écrire sur la foi de ce qu'il lit.
+
+**Deuxième défaut, plus sournois : `UNI/USD` contre `UNIUSD`.** Le courtier emploie les
+DEUX graphies — la barre oblique dans l'historique des ordres, la forme collée dans les
+positions. Comparer les chaînes brutes faisait apparaître une position fantôme d'un côté
+(+287,86) et une absence de l'autre (−287,22), pour un seul et même jeton. La
+normalisation s'applique à la clé de regroupement et à la confrontation ; le lot garde
+la graphie de son fill, qui est la vérité du courtier pour cette écriture-là.
+
+**Troisième : les frais crypto se prélèvent EN NATURE.** Les lignes `CFEE` de l'historique
+retirent des JETONS (`-0.28702301`, `-0.03027904`…) et n'appartiennent pas à l'historique
+des ORDRES. Un rejeu d'achats et de ventes surestime donc TOUJOURS une quantité crypto —
+mesuré à 0,22 % sur UNI. On ne corrige pas le chiffre, ce serait inventer une écriture :
+`confronter` rend ces écarts dans une catégorie SÉPARÉE et nommée. Ce n'est pas une marge
+de confort — le sens est imposé (le journal ne peut qu'être en EXCÈS), la borne est
+mesurée à 1 %, et un journal en DÉFAUT reste bloquant même en crypto.
+
 **LE CAPITAL INITIAL EST CONNU, ET IL EST EXACT.** L'historique Alpaca porte, tout en
 bas, une ligne `Journal cash between accounts · JNLC · +$100,000.00 · Jun 17, 2026`. Le
 compte a donc été ouvert avec **100 000,00 $ le 17/06**. À 101 026,57 $, la performance
