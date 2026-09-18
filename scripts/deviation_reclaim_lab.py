@@ -240,8 +240,50 @@ def _ecarts(res: dict) -> None:
         print(f"    {e['a'][:30]:<30} {e['b'][:30]:<30} "
               f"{e['ecart_moyen_a_moins_b']:>+9.5f} "
               f"{e['t_apparie_a_moins_b']:>+7.2f}{marque}")
-    print("\n    ← : comparaison CONTRE LE TÉMOIN — la seule qui dise si la")
-    print("        sélection vaut mieux que ne rien sélectionner.")
+    print("\n    ← : comparaison contre le témoin. ATTENTION À CE QU'ELLE MESURE :")
+    print("        sur une barre ÉTEINTE le témoin encaisse r et le scoreur 0, donc")
+    print("        l'écart vaut le rendement du marché sur les barres NON retenues.")
+    print("        C'est le TAUX D'INVESTISSEMENT, pas la qualité des barres :")
+    print("        dans un marché qui monte, tout filtre y perd avec un t énorme.")
+    print("        La question posée est traitée par la PRIME DE SÉLECTION ci-dessous.")
+
+
+def _prime_selection(evenements: list[Evenement], scores: dict[str, list[float]],
+                     n_effectif: int) -> None:
+    """Les barres ALLUMÉES valent-elles mieux que TOUTES les barres ?
+
+    C'EST LA QUESTION QUE LE TÉMOIN DEVAIT POSER, et que l'écart apparié ne pose pas.
+    La colonne « Sharpe » note une stratégie qui reste à ZÉRO hors signal : elle vaut
+    donc à peu près √(part allumée) × le Sharpe des barres retenues. Un scoreur allumé
+    1 % du temps y est écrasé sans avoir démérité, et un scoreur allumé 50 % y paraît
+    bon en ne faisant que suivre le marché à mi-temps. Les deux colonnes mélangeaient
+    la SÉLECTIVITÉ et la QUALITÉ, ce qui rend le tableau lisible à l'envers.
+
+    Ici, une seule chose : la moyenne des barres retenues, moins la moyenne de toutes
+    les barres. Le t est calculé sur le n EFFECTIF ramené à la part allumée — pas sur
+    le nombre de barres, qui se recouvrent et partagent leurs séances.
+    """
+    import math
+
+    import numpy as np
+    r = np.asarray([e.rendement for e in evenements], dtype=float)
+    moy_tout = float(r.mean())
+    print("\n  PRIME DE SÉLECTION — les barres ALLUMÉES valent-elles mieux "
+          "que TOUTES ?\n")
+    print(f"    référence : moyenne de TOUTES les barres = {moy_tout:+.5f}\n")
+    print(f"    {'scoreur':<36} {'allumé':>7} {'moy. allumées':>14} "
+          f"{'prime':>10} {'t':>7}")
+    print("    " + "-" * 78)
+    for nom, sc in scores.items():
+        on = np.asarray(sc, dtype=float) > 0
+        n_on = int(on.sum())
+        if n_on < 2:
+            continue
+        moy, ecart = float(r[on].mean()), float(r[on].std())
+        n_eff = max(2, int(n_effectif * n_on / max(1, len(r))))
+        t = ((moy - moy_tout) / (ecart / math.sqrt(n_eff))) if ecart > 0 else 0.0
+        print(f"    {nom:<36} {n_on / len(r):>6.1%} {moy:>+14.5f} "
+              f"{moy - moy_tout:>+10.5f} {t:>+7.2f}")
 
 
 def _timeframes(a) -> None:
@@ -310,6 +352,7 @@ def main() -> int:
     _afficher(res, a.hold)
     retenus = _verdict(res)
     _ecarts(res)
+    _prime_selection(evenements, scores, res.get("n_effectif") or len(evenements))
 
     print(f"\n  VERDICT : {len(retenus)} scoreur(s) passent les QUATRE portes "
           f"(placebo < {SEUIL_P} · DSR > {SEUIL_DSR} · |IC| ≥ {SEUIL_IC} · IC > 0)")

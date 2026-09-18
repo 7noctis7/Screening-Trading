@@ -37,6 +37,27 @@ c'est-à-dire coupés avant le t apparié — la section posait sa question et m
 réponse. Sous ces portes, les deux scoreurs sont rejetés sur |IC|. Le motif reste
 UNCALIBRATED, la mesure est à refaire. ADR-0183.
 
+**PUIS LE BANC A TRANCHÉ, SUR LES DEUX MARCHÉS — et la réponse est non.** Actions 1D
+(200 titres, 499 758 barres) et crypto 4h (98 paires, 1 187 822 barres ingérées chez
+Binance), horizon 10 barres : **0 scoreur sur 5 passe les quatre portes, des deux
+côtés**. IC de +0,0071 à −0,0145, tous sous 0,03 et négatifs dès `reclaim` ; en crypto,
+`consolidation + contraction` sort un Sharpe NÉGATIF. La jambe intraday que la spec
+réclamait a donc été mesurée pour de bon, sur des données complètes et gratuites, et
+elle ne sauve rien. `signal_lab` devient sans objet. ADR-0184.
+
+**Un défaut de LECTURE, trouvé en commentant ce résultat.** La colonne « Sharpe » note
+une stratégie qui reste à zéro hors signal : elle vaut ~√(part allumée) × le Sharpe des
+barres retenues, donc elle mélange sélectivité et qualité. `sfp`, allumé 0,1 % du temps,
+y affiche 0,009 sans avoir démérité. Le même biais pollue l'écart apparié contre le
+témoin : sur une barre éteinte le témoin encaisse r et le scoreur 0, si bien que les t
+de +36 à +48 mesuraient le TAUX D'INVESTISSEMENT, pas la sélection. J'avais introduit ce
+témoin la veille pour répondre à « sélectionner vaut-il mieux que ne rien sélectionner » —
+il posait une autre question. Une section PRIME DE SÉLECTION la pose correctement :
+moyenne des barres retenues moins moyenne de toutes les barres, t sur le n effectif.
+Dé-dilué, le verdict ne bouge pas : à sélectivité égale les barres retenues valent le
+marché en actions et MOINS que le marché en crypto, en se dégradant à chaque étage de
+confirmation (0,101 → 0,087 → 0,080 → −0,024). Attendre la confirmation coûte.
+
 **L'INTRADAY CRYPTO EST LIVRÉ, gratuitement.** `crypto_binance` passe d'un quotidien codé
 en dur à un intervalle paramétré (1d/4h/1h) ; la bougie EN COURS est écartée sur son
 `closeTime`, pas sur une heuristique de date — en quotidien le défaut passait presque

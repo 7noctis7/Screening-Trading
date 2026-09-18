@@ -209,3 +209,33 @@ def test_un_IC_NEGATIF_ne_peut_pas_etre_RETENU():
     res = {"mesures": {"sous-performe": _m(-0.09), "predit": _m(+0.09)},
            "n_evenements": 5000, "n_essais": 2}
     assert _verdict(res) == ["predit"]
+
+
+def test_la_PRIME_de_selection_ne_punit_pas_un_scoreur_RARE(capsys):
+    """LE DÉFAUT DE LECTURE DU 18/09. La colonne « Sharpe » note une stratégie qui reste
+    à ZÉRO hors signal : elle vaut donc ~√(part allumée) × le Sharpe des barres
+    retenues. Un scoreur allumé 1 % du temps y est écrasé sans avoir démérité, et le
+    témoin « toujours long » le bat avec un t énorme qui ne mesure que le taux
+    d'investissement. La prime compare ce qui est comparable : barres retenues contre
+    toutes les barres."""
+    from packages.research.alpha_incremental import Evenement
+    from scripts.deviation_reclaim_lab import _prime_selection
+
+    rng = random.Random(3)
+    n = 1000
+    # 10 % des barres portent une forte prime, les autres du bruit centré. Le bruit
+    # n'est pas décoratif : une série ALLUMÉE sans dispersion rend un t indéfini, et
+    # c'est le piège `_degenere` que `alpha_incremental` documente déjà.
+    rends = [(0.05 if k % 10 == 0 else 0.0) + rng.gauss(0, 0.01) for k in range(n)]
+    ev = [Evenement("X", f"j{k}", "E", r) for k, r in enumerate(rends)]
+    scores = {"juste": [1.0 if k % 10 == 0 else 0.0 for k in range(n)],
+              "faux": [1.0 if k % 10 == 1 else 0.0 for k in range(n)]}
+
+    _prime_selection(ev, scores, n_effectif=n)
+    lignes = capsys.readouterr().out.splitlines()
+    juste = next(x for x in lignes if x.startswith("    juste"))
+    faux = next(x for x in lignes if x.startswith("    faux"))
+    assert float(juste.split()[-2]) > 0.04, f"prime franchement positive : {juste}"
+    assert float(faux.split()[-2]) < 0, f"prime négative attendue : {faux}"
+    assert float(juste.split()[-1]) > 2, "une sélection utile doit sortir du bruit"
+    assert float(faux.split()[-1]) < 0, "une sélection nuisible doit se voir aussi"

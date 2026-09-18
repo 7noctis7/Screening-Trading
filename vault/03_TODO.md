@@ -35,28 +35,24 @@
       PASSAGE RÉUSSI sur le VPS le 16/09 : **2 375 titres · 199 symboles · 71 jours**
       (2026-05-19 → 2026-09-16), 1 symbole muet. Reste à VÉRIFIER que le passage
       automatique de `cron_daily.sh` prend le relais demain — un flux RSS ne se rejoue pas.
-- [ ] **P1 — `make deviation-lab` A TOURNÉ, et son verdict est ANNULÉ (18/09,
-      ADR-0182 puis ADR-0183).** Premier passage réel sur le VPS : 200 titres,
-      **499 585 barres**, horizon 10. Sortie : `reclaim` et `consolidation` **RETENUS**,
-      placebo 0,001997, DSR 1,000. **Trois défauts du BANC annulent ce verdict**, tous
-      dans le même sens — trop permissif :
-      (a) le banc annonçait « gate emprunté à `alpha_incremental` » et portait des seuils
-      PLUS DOUX — DSR > 0,5 au lieu de 0,90, et AUCUNE condition sur l'IC alors que le
-      module exige |IC| ≥ 0,03. Or les deux « RETENUS » ont un IC **NÉGATIF** (−0,0107
-      et −0,0130) : ces barres SOUS-performent. `placebo` teste |IC|, il est bilatéral ;
-      sans condition de sens, « significatif » a été lu « bon ».
-      (b) le DSR ne garde plus rien à ce N — mesuré sur des rendements i.i.d. SANS
-      signal : un scoreur **tiré au hasard** allumé 40 % obtient DSR **1,000** à
-      n = 499 585. Et le n brut est faux : rendements forward qui se recouvrent,
-      200 titres notés le même jour.
-      (c) aucun **témoin « toujours long »** : un Sharpe positif se lisait comme une
-      découverte alors qu'il peut n'être que la dérive du marché.
-      **CORRIGÉ** : quatre portes (placebo · DSR 0,90 · |IC| 0,03 · SENS), n EFFECTIF,
-      témoin noté comme les autres, écarts appariés imprimés en ENTIER (ils étaient
-      tronqués AVANT le t). Sous ces portes, les deux scoreurs sont rejetés sur |IC|.
-      **RESTE À FAIRE : relancer**, et lire la ligne « ← » des écarts appariés — la
-      seule qui dise si sélectionner vaut mieux que ne rien sélectionner.
-      `make deviation-lab ARGS="--titres 200 --hold 10"`
+- [x] **~~P1 — Le motif déviation→reclaim→consolidation~~ — FERMÉ PAR LA MESURE
+      (18/09, ADR-0182/0183/0184).** Mesuré sur DEUX marchés et deux timeframes, avec
+      le gate du module : **0 scoreur sur 5 passe les quatre portes**, des deux côtés.
+      · **Actions 1D** — 200 titres, 499 758 barres, horizon 10 : IC de +0,0071 à
+      −0,0131, tous sous le seuil 0,03, et négatifs dès `reclaim`.
+      · **Crypto 4h** — 98 paires, 1 187 822 barres (Binance), horizon 10 barres =
+      40 h : mêmes ordres de grandeur, IC −0,0120 et −0,0145 sur `reclaim` et
+      `consolidation`, et `consolidation + contraction` en Sharpe **NÉGATIF**.
+      **La jambe intraday que la spec réclamait a donc été mesurée pour de bon** — et
+      elle ne sauve rien. Deux marchés indépendants, même réponse.
+      **Ce que la mesure dit de plus, une fois dé-diluée** : à sélectivité égale, les
+      barres retenues valent le marché en actions (Sharpe ≈ 0,28-0,32 contre 0,339) et
+      MOINS que le marché en crypto, en se dégradant à chaque étage de confirmation
+      (0,101 → 0,087 → 0,080 → −0,024). Attendre la confirmation coûte, ça ne rapporte
+      pas. `signal_lab` est SANS OBJET : on ne mesure pas le recouvrement d'un signal
+      qui n'existe pas.
+      **Ce qui reste** : la machine à états et les deux bancs restent au dépôt — ils ont
+      servi à trancher, et ils reserviront. Aucun câblage en production.
 - [ ] **P2 — Intraday 1h/4h pour les ACTIONS / INDICES / ETF : pas de source gratuite
       honnête (18/09).** La crypto est livrée (`make ingest-crypto-intraday` → Binance,
       sans clé, historique complet de la paire, `data/crypto_intraday.db`). Côté actions,

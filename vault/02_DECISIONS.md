@@ -2,6 +2,43 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0184 — Le motif ne prédit rien, sur deux marchés — et la colonne qui le cachait (2026-09-18)
+
+**Contexte.** Le banc, une fois ses seuils repris du module (ADR-0183), a tourné sur les
+deux sources : actions 1D (200 titres, 499 758 barres) et crypto 4h (98 paires,
+1 187 822 barres ingérées chez Binance). Horizon 10 barres des deux côtés.
+
+**Résultat, et il converge.** **0 scoreur sur 5 passe les quatre portes, dans les deux
+marchés.** Les IC vont de +0,0071 à −0,0145, tous sous le seuil 0,03, et négatifs dès
+`reclaim`. En crypto, `consolidation + contraction` sort même un Sharpe NÉGATIF. La
+jambe d'exécution intraday que la spec réclamait a donc été mesurée pour de bon, sur des
+données complètes et gratuites — et elle ne sauve rien.
+
+**Décision.** Rien n'est câblé. `signal_lab` devient SANS OBJET : mesurer le recouvrement
+d'un signal avec le filtre de production suppose un signal. La machine à états
+(`indicators/deviation_reclaim`) et les deux bancs restent au dépôt — ils ont servi à
+trancher, et la question reviendra sous une autre forme.
+
+**UN DÉFAUT DE LECTURE, trouvé en commentant le résultat.** La colonne « Sharpe » note
+une stratégie qui reste à ZÉRO hors signal : elle vaut donc à peu près √(part allumée) ×
+le Sharpe des barres retenues. Elle mélange SÉLECTIVITÉ et QUALITÉ, et se lit à l'envers
+— un scoreur allumé 1 % du temps y est écrasé sans avoir démérité (`sfp` : 0,009), un
+scoreur allumé 50 % y paraît correct en ne faisant que suivre le marché à mi-temps.
+Le même biais pollue l'écart apparié contre le témoin : sur une barre éteinte le témoin
+encaisse r et le scoreur 0, donc l'écart vaut le rendement du marché sur les barres NON
+retenues. Les t de +36 à +48 mesuraient le TAUX D'INVESTISSEMENT, pas la sélection.
+
+**Correctif.** Une section PRIME DE SÉLECTION : moyenne des barres retenues moins
+moyenne de toutes les barres, avec un t sur le n effectif ramené à la part allumée.
+C'est la question que le témoin devait poser. Un test la verrouille sur un scoreur RARE
+mais juste — celui que l'ancienne lecture punissait le plus.
+
+**Ce que la dé-dilution change au verdict : rien, et c'est important.** À sélectivité
+égale, les barres retenues valent le marché en actions (≈ 0,28-0,32 contre 0,339) et
+MOINS que le marché en crypto, en se dégradant à chaque étage de confirmation
+(0,101 → 0,087 → 0,080 → −0,024). Attendre la confirmation coûte. Le verdict reposait de
+toute façon sur l'IC, que la dilution n'affecte pas.
+
 ## ADR-0183 — Un banc qui écrit lui-même ses seuils finit par les baisser (2026-09-18)
 
 **Contexte.** Premier verdict réel de `make deviation-lab` sur le VPS : 200 titres,
