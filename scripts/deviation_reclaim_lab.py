@@ -43,6 +43,7 @@ from packages.indicators.deviation_reclaim import (  # noqa: E402
     EXPANSION_CONFIRMED,
     PIVOT,
     RECLAIM_CONFIRMED,
+    agreger_hebdo,
     etat,
     pivots_causaux,
 )
@@ -97,11 +98,14 @@ def _collecter(data: dict, syms: list[str], hold: int, pas: int, lag: int,
         if len(barres) < depart + hold + lag + 10:
             continue
         piv = pivots_causaux(barres, PIVOT)
+        # Le Weekly est DÉRIVÉ du Daily — une agrégation, pas une source nouvelle. Il
+        # porte la cible macro ; le 4H de la spec, lui, ne se déduit de rien.
+        hebdo = agreger_hebdo(barres)
         for i in range(depart, len(barres) - hold - lag, pas):
             r = _rendement(barres, i, hold, lag)
             if r is None:
                 continue
-            e = etat(barres, i, pivots=piv)
+            e = etat(barres, i, pivots=piv, hebdo=hebdo)
             evenements.append(Evenement(symbole=sym, jour=str(barres[i].ts)[:10],
                                         titre=e["etat"], rendement=r))
             for nom, v in _scores(e, barres, i).items():
@@ -176,9 +180,11 @@ def main() -> int:
         print("    Prochaine étape : PAS une stratégie. D'abord `signal_lab` pour le")
         print("    recouvrement avec le filtre de production — un signal qui répète")
         print("    l'existant n'ajoute rien, quel que soit son IC.")
-    print("\n  Rappel : aucun timeframe 4H ici. La base est QUOTIDIENNE ; la jambe")
-    print("  d'exécution de la spec reste UNCALIBRATED tant qu'aucune donnée intraday")
-    print("  n'existe (vault/03_TODO.md, P2).\n")
+    print("\n  TIMEFRAMES RÉELLEMENT UTILISÉS. Macro : 1W DÉRIVÉ du 1D (agrégation,")
+    print("  pas une source nouvelle) — il porte la cible macro. Principal : 1D.")
+    print("  Exécution : 1D AUSSI, et c'est le point — la résistance de confirmation")
+    print("  est lue en 1D, pas en 4H. Aucune donnée intraday n'existe dans ce dépôt")
+    print("  (vault/03_TODO.md, P2) ; la jambe 4H de la spec reste UNCALIBRATED.\n")
     return 0
 
 

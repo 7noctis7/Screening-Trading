@@ -51,10 +51,86 @@ ETATS = (SEARCHING, DEVIATION_DETECTED, RECLAIM_CONFIRMED,
          CONSOLIDATION_CONFIRMED, EXPANSION_CONFIRMED)
 
 PIVOT = 5                 # même définition que `market_structure`
+PIVOT_MACRO = 2           # en semaines : 5 en imposerait 10 de confirmation
 TOLERANCE_ZONE = 0.02     # deux creux à moins de 2 % l'un de l'autre forment une zone
 DELAI_RECLAIM = 10        # au-delà, une reprise n'est plus une déviation mais un rebond
 BARRES_CONSOLIDATION = 3  # minimum d'acceptation au-dessus de la zone
 MIN_REACTIONS = 2         # « au moins 2 réactions antérieures » — la zone, pas un creux
+
+
+def _jour(b) -> str:
+    """La date de la barre, en ISO. Illisible ⇒ chaîne vide, et l'appelant le voit."""
+    ts = getattr(b, "ts", None)
+    if ts is None:
+        return ""
+    d = getattr(ts, "date", None)
+    return str(d() if callable(d) else ts)[:10]
+
+
+def _semaine(jour: str) -> tuple[int, int] | None:
+    from datetime import date
+    try:
+        a, m, j = (int(x) for x in jour.split("-")[:3])
+        iso = date(a, m, j).isocalendar()
+        return (iso[0], iso[1])
+    except Exception:  # noqa: BLE001 — date illisible : pas de semaine, et on le dit
+        return None
+
+
+def agreger_hebdo(barres: list) -> list[dict]:
+    """Barres HEBDOMADAIRES dérivées du Daily, avec l'index du jour qui les CLÔT.
+
+    POURQUOI DÉRIVER PLUTÔT QU'INGÉRER. La spec demande un contexte Weekly. Le Weekly
+    se déduit exactement du Daily — c'est une agrégation, pas une source nouvelle. Le
+    4H, lui, ne se déduit de rien : il faudrait l'ingérer, et il n'existe pas ici.
+
+    `index_cloture` est ce qui rend l'usage CAUSAL : une semaine n'est utilisable qu'à
+    partir du jour qui la ferme. Se servir de la semaine EN COURS reviendrait à lire son
+    plus-haut avant qu'il ne soit connu — un look-ahead d'une semaine entière, soit le
+    plus gros qu'on puisse commettre sur du quotidien.
+
+    La dernière semaine est INCOMPLÈTE par construction tant qu'un jour de la semaine
+    suivante n'est pas apparu : elle est donc exclue. Mieux vaut une semaine de retard
+    qu'une semaine d'avance.
+    """
+    out: list[dict] = []
+    courante: dict | None = None
+    cle_courante = None
+    for i, b in enumerate(barres):
+        cle = _semaine(_jour(b))
+        if cle is None:
+            continue
+        if cle != cle_courante:
+            if courante is not None:
+                out.append(courante)
+            cle_courante = cle
+            courante = {"high": float(b.high), "low": float(b.low),
+                        "close": float(b.close), "index_cloture": i}
+        else:
+            courante["high"] = max(courante["high"], float(b.high))
+            courante["low"] = min(courante["low"], float(b.low))
+            courante["close"] = float(b.close)
+            courante["index_cloture"] = i
+    return out                         # la semaine EN COURS n'est jamais publiée
+
+
+def _cible_macro(hebdo: list[dict], i: int, pivot: int, prix: float) -> dict:
+    """Sommet hebdomadaire CONFIRMÉ le plus haut, au-dessus du prix — ou None.
+
+    « Ne définis pas une cible arbitraire uniquement pour améliorer le ratio » : si la
+    structure hebdomadaire ne place aucun sommet au-dessus du prix, la cible vaut None.
+    Un objectif inventé rendrait le reward/risk aussi beau qu'on le souhaite.
+    """
+    dispo = [s for s in hebdo if s["index_cloture"] <= i]
+    if len(dispo) < 2 * pivot + 1:
+        return {"prix": None, "motif": "historique hebdomadaire insuffisant"}
+    hauts = [k for k in range(pivot, len(dispo) - pivot)
+             if dispo[k]["high"] > max(s["high"] for s in
+                                       dispo[k - pivot:k] + dispo[k + 1:k + pivot + 1])]
+    au_dessus = [dispo[k]["high"] for k in hauts if dispo[k]["high"] > prix]
+    if not au_dessus:
+        return {"prix": None, "motif": "aucun sommet hebdomadaire au-dessus du prix"}
+    return {"prix": max(au_dessus), "motif": "sommet hebdomadaire confirmé"}
 
 
 def pivots_causaux(barres: list, pivot: int = PIVOT) -> tuple[list[int], list[int]]:
@@ -225,15 +301,36 @@ def etat(barres: list, i: int, *, pivot: int = PIVOT,
          tolerance: float = TOLERANCE_ZONE, delai: int = DELAI_RECLAIM,
          consolidation_min: int = BARRES_CONSOLIDATION,
          fenetre: int = 120,
-         pivots: tuple[list[int], list[int]] | None = None) -> dict:
+         pivots: tuple[list[int], list[int]] | None = None,
+         hebdo: list[dict] | None = None,
+         pivot_macro: int = PIVOT_MACRO,
+         tf: str = "1D") -> dict:
     """L'état du motif à la barre `i`, en ne lisant que `barres[:i+1]`.
 
     Renvoie toujours un dict : `etat` vaut `SEARCHING` quand rien ne tient, avec son
     motif. Aucun champ n'est deviné — un niveau absent de la structure vaut `None`.
+
+    D'OÙ VIENT CHAQUE NIVEAU, ET POURQUOI C'EST ÉCRIT. La spec place la résistance de
+    confirmation sur l'exécution (4H) et la cible macro sur le Weekly. Le 4H n'existe
+    pas ici : **CR est donc lu sur le timeframe PRINCIPAL** — le Daily quand le banc
+    tourne — et `sources` le dit noir sur blanc. Sans cette étiquette, un lecteur
+    supposerait le 4H, et un niveau dont on croit connaître l'origine est pire qu'un
+    niveau absent.
+
+    `hebdo` (cf. `agreger_hebdo`) fournit la cible macro. Absent ⇒ `macro` vaut None
+    avec son motif, jamais un sommet du timeframe principal déguisé en objectif Weekly.
     """
+    sources = {
+        "zone": tf, "invalidation": tf, "confirmation": tf,
+        "macro": "1W (dérivé du 1D)" if hebdo else None,
+        "execution": tf,
+        "note": f"aucune donnée intraday dans ce dépôt : l'exécution est lue en {tf}, "
+                "pas en 4H (vault/03_TODO.md, P2)",
+    }
     vide = {"etat": SEARCHING, "zone": None, "deviation": None, "reclaim": None,
             "consolidation": None, "invalidation": None, "confirmation": None,
-            "macro": None, "sfp_confirme": False, "motif": ""}
+            "macro": None, "macro_motif": "", "sfp_confirme": False, "motif": "",
+            "sources": sources}
     if i < pivot * 2 + consolidation_min or i >= len(barres):
         return {**vide, "motif": "historique insuffisant"}
     ksz = zone_support(barres, i, pivot, tolerance, pivots)
@@ -251,10 +348,16 @@ def etat(barres: list, i: int, *, pivot: int = PIVOT,
                 "motif": f"pas de clôture au-dessus de la zone en {delai} barres"}
     invalidation = dev["extreme"]
     conso = _consolidation(barres, i, ksz, rec, invalidation, consolidation_min)
-    niveaux = _resistances(barres, i, pivot, float(barres[i].close), pivots)
+    clot = float(barres[i].close)
+    niveaux = _resistances(barres, i, pivot, clot, pivots)
+    # LA CIBLE MACRO VIENT DU WEEKLY, ou n'existe pas. Reprendre le plus haut sommet du
+    # timeframe principal la ferait passer pour un objectif hebdomadaire qu'elle n'est
+    # pas — et c'est exactement le « target arbitraire » que la spec interdit.
+    mt = (_cible_macro(hebdo, i, pivot_macro, clot) if hebdo
+          else {"prix": None, "motif": "aucune série hebdomadaire fournie"})
     base = {**vide, "zone": ksz, "deviation": dev, "reclaim": rec,
             "invalidation": invalidation, "confirmation": niveaux["confirmation"],
-            "macro": niveaux["macro"],
+            "macro": mt["prix"], "macro_motif": mt["motif"],
             "sfp_confirme": rec["index"] == dev["index"]}
     if not conso:
         return {**base, "etat": RECLAIM_CONFIRMED,

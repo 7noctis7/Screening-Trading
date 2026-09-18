@@ -96,8 +96,19 @@ def test_le_banc_applique_la_correction_de_TESTS_MULTIPLES():
     assert "tests multiples" in BANC
 
 
-def test_le_banc_ne_pretend_RIEN_sur_le_4H():
-    """La base est quotidienne. Une sortie qui mentionnerait un timeframe d'exécution
-    4H afficherait un champ que rien ne soutient."""
+def test_le_banc_DIT_sur_quel_timeframe_chaque_niveau_est_lu():
+    """La spec place la résistance de confirmation sur l'exécution (4H). Le 4H n'existe
+    pas ici : elle est lue sur le PRINCIPAL. Une sortie muette là-dessus laisserait
+    supposer le 4H — et un niveau dont on croit connaître l'origine est pire qu'un
+    niveau absent."""
     assert "QUOTIDIENNE" in BANC
-    assert "UNCALIBRATED tant qu'aucune donnée intraday" in BANC
+    assert "Exécution : 1D" in BANC
+    assert "pas en 4H" in BANC
+    assert "UNCALIBRATED" in BANC
+
+
+def test_le_WEEKLY_est_derive_du_daily_et_porte_la_cible_macro():
+    """Le Weekly s'agrège exactement depuis le Daily — aucune source nouvelle. Le 4H,
+    lui, ne se déduit de rien : il faudrait l'ingérer."""
+    assert "agreger_hebdo" in BANC
+    assert "hebdo=hebdo" in BANC

@@ -180,3 +180,81 @@ def test_aucun_score_ni_recommandation_n_est_produit():
     interdits = {"score", "confidence", "confidence_score", "action", "final_action",
                  "rr", "reward_risk"}
     assert not (set(e) & interdits), f"champ d'opinion : {set(e) & interdits}"
+
+
+# ─── 5. Les timeframes : ce qui est lu où, et ce qui n'existe pas ─────────────────
+
+def _date(k: int) -> str:
+    from datetime import date, timedelta
+    return str(date(2026, 1, 5) + timedelta(days=k))
+
+
+def _datee(bs: list[B]) -> list[B]:
+    return [B(b.high, b.low, b.close, b.volume, _date(k)) for k, b in enumerate(bs)]
+
+
+def _avec_sommet_hebdo() -> list[B]:
+    """Deux semaines basses, UNE semaine de sommet, trois basses — donc un pivot
+    hebdomadaire confirmé — puis le motif complet."""
+    b = _plat(14) + [B(140, 135, 138)] * 7 + _plat(21) + _serie()
+    return _datee(b)
+
+
+def test_la_semaine_EN_COURS_n_est_jamais_publiee():
+    """Se servir de la semaine en cours reviendrait à lire son plus-haut avant qu'il ne
+    soit connu : un look-ahead d'une semaine entière, le plus gros possible sur du
+    quotidien. Mieux vaut une semaine de retard qu'une semaine d'avance."""
+    from packages.indicators.deviation_reclaim import agreger_hebdo
+
+    b = _avec_sommet_hebdo()
+    h = agreger_hebdo(b)
+    assert h, "aucune semaine dérivée"
+    assert h[-1]["index_cloture"] < len(b) - 1, "la semaine en cours a été publiée"
+
+
+def test_toute_semaine_utilisee_a_i_est_CLOSE_au_plus_tard_a_i():
+    from packages.indicators.deviation_reclaim import agreger_hebdo
+
+    b = _avec_sommet_hebdo()
+    h = agreger_hebdo(b)
+    for i in range(30, len(b), 5):
+        for s in [x for x in h if x["index_cloture"] <= i]:
+            assert s["index_cloture"] <= i
+
+
+def test_la_cible_macro_vient_du_WEEKLY_et_de_lui_seul():
+    """Reprendre le plus haut sommet du timeframe principal ferait passer un niveau
+    Daily pour un objectif hebdomadaire — le « target arbitraire » que la spec
+    interdit. Sans série hebdomadaire, la cible vaut None, avec son motif."""
+    from packages.indicators.deviation_reclaim import agreger_hebdo
+
+    b = _avec_sommet_hebdo()
+    avec = etat(b, len(b) - 1, hebdo=agreger_hebdo(b))
+    assert avec["macro"] == 140.0
+    assert avec["sources"]["macro"].startswith("1W")
+
+    sans = etat(b, len(b) - 1)
+    assert sans["macro"] is None
+    assert "hebdomadaire" in sans["macro_motif"]
+    assert sans["sources"]["macro"] is None
+
+
+def test_la_resistance_de_confirmation_est_lue_sur_le_PRINCIPAL_pas_en_4H():
+    """LE point de cette adaptation. La spec place CR sur l'exécution (4H) ; le 4H
+    n'existe pas ici. CR est donc lu sur le timeframe principal, et la sortie le DIT —
+    un niveau dont on croit connaître l'origine est pire qu'un niveau absent."""
+    e = etat(_avec_sommet_hebdo(), len(_avec_sommet_hebdo()) - 1)
+    assert e["sources"]["confirmation"] == "1D"
+    assert e["sources"]["execution"] == e["sources"]["confirmation"]
+    assert "4H" in e["sources"]["note"] and "intraday" in e["sources"]["note"]
+
+
+def test_le_point_in_time_TIENT_AUSSI_avec_la_jambe_hebdomadaire():
+    """L'agrégation est le chemin le plus commode pour faire entrer du futur."""
+    from packages.indicators.deviation_reclaim import agreger_hebdo
+
+    b = _datee(_aleatoire(300))
+    for i in range(60, len(b), 11):
+        complet = etat(b, i, hebdo=agreger_hebdo(b))
+        tronque = etat(b[:i + 1], i, hebdo=agreger_hebdo(b[:i + 1]))
+        assert complet == tronque, f"barre {i} : le Weekly lit l'avenir"

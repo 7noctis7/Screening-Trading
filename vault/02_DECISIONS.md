@@ -5557,3 +5557,19 @@ CONSOLIDATION_CONFIRMED dix fois : le motif existe dans le bruit pur. C'est pré
 pourquoi le verdict appartient au banc — placebo par permutation, DSR, correction de
 tests multiples sur les cinq scoreurs — et pas à la beauté de la définition.
 
+**Complément du même jour — chaque niveau DIT d'où il vient.** La spec place la
+résistance de confirmation sur l'exécution (4H) et la cible macro sur le Weekly. Sans
+étiquette, un lecteur supposerait le 4H : **CR est lu sur le timeframe PRINCIPAL** (le
+Daily quand le banc tourne), et la sortie porte désormais un champ `sources` qui
+l'écrit, la note incluse. Un niveau dont on croit connaître l'origine est pire qu'un
+niveau absent.
+
+Le Weekly, lui, est DÉRIVÉ du Daily (`agreger_hebdo`) : c'est une agrégation, pas une
+source nouvelle, et il porte seule la cible macro. Reprendre le plus haut sommet du
+Daily ferait passer un niveau principal pour un objectif hebdomadaire — exactement le
+« target arbitraire » que la spec interdit ; sans série hebdomadaire, la cible vaut
+None avec son motif. L'agrégation est aussi le chemin le plus commode pour faire entrer
+du futur : une semaine n'est utilisable qu'à partir du jour qui la CLÔT, la semaine en
+cours n'est jamais publiée, et un test vérifie le point-in-time avec la jambe
+hebdomadaire branchée. Mieux vaut une semaine de retard qu'une semaine d'avance.
+
