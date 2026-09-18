@@ -1,9 +1,16 @@
 """Le verrou d'environnement — détecter plutôt qu'imposer.
 
-MESURÉ LE 16/09 : `constraints.txt` est généré pour les extras `api`, `data`, `quant`. Il
-épingle numpy, pandas et scipy, et laisse LIBRES scikit-learn, xgboost, lightgbm et torch —
-c'est-à-dire précisément ce qui entraîne. Un modèle sérialisé sous une version et rechargé
-sous une autre peut se charger ET PRÉDIRE DIFFÉREMMENT, sans lever d'erreur.
+MESURÉ LE 16/09 : `constraints.txt` était généré pour les seuls extras `api`, `data`,
+`quant`. Il épinglait numpy, pandas et scipy, et laissait LIBRES scikit-learn, xgboost,
+lightgbm et torch — c'est-à-dire précisément ce qui entraîne. Un modèle sérialisé sous
+une version et rechargé sous une autre peut se charger ET PRÉDIRE DIFFÉREMMENT, sans
+lever d'erreur.
+
+TROU REFERMÉ LE 18/09. `make verrou-regen`, relancé SUR LE VPS avec les extras `ml` et
+`sentiment`, produit 159 paquets épinglés dont les sept qui comptent. Le test qui
+constatait le trou a été RETOURNÉ en invariant : il vérifie désormais qu'il reste
+fermé. Un constat daté qui devient faux doit changer de sens, pas disparaître —
+sinon plus rien ne surveille la régression qu'il décrivait.
 """
 
 import pathlib
@@ -31,12 +38,19 @@ def test_le_verrou_du_depot_est_lisible():
     assert "numpy" in fige and "pandas" in fige
 
 
-def test_les_bibliotheques_d_entrainement_sont_bien_le_trou(tmp_path):
-    """Le constat qui justifie ce module. S'il devient faux — tant mieux — ce test le dira."""
+def test_les_bibliotheques_d_entrainement_RESTENT_epinglees():
+    """L'ancien constat, retourné en invariant (18/09).
+
+    Ce test affirmait que scikit-learn était LIBRE — c'était vrai, et c'était le trou
+    que ce module sert à mesurer. Le verrou régénéré sur la machine qui entraîne l'a
+    refermé ; le test a donc changé de sens plutôt que de disparaître. Il tombe
+    maintenant si quelqu'un régénère `constraints.txt` sans les extras d'entraînement,
+    ce qui rouvrirait exactement le même trou sans qu'aucun autre voyant ne bouge.
+    """
     libres = non_verrouillees()
-    assert "scikit-learn" in libres, (
-        "scikit-learn est maintenant épinglé : mettre à jour le constat de "
-        "docs/AI_ARCHITECTURE_AUDIT.md plutôt que ce test")
+    assert libres == [], (
+        f"{libres} ne sont plus épinglées : le verrou a été régénéré sans les extras "
+        "d'entraînement. Relancer `make verrou-regen` SUR la machine qui entraîne.")
 
 
 def test_non_verrouillees_est_CALCULE_pas_ecrit(tmp_path):

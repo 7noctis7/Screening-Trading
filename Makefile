@@ -1,4 +1,4 @@
-.PHONY: combler-mfe help install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core coeur-multi diag-coeur-qqq index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto diag-creneau diag-pv-latente diag-source-crypto calibrer-seuil ingest-mktcap preset-report calibrate-preset preset-lab alpha-lab screen repro kill-check log-alpha sync-alphas event-study event-study-smid backtest-pead-smid funding-study risk-check sensitivity paper-watch vault-lint certification crypto-cockpit crypto-brief regime-study breakout-study microstructure-poc vault-ask crypto-screen screen-niche list-db live live-sim live-go live-cron-install live-cron-uninstall completer-ouvertures reconcilier-journal annuler-ventes annuler-chronologie annuler-doublons diag-journal diag-surfermeture diag-fusion bench-backend verify-journal reparer-journal banc-swing turnover-audit rdv-paper slippage alerts-test ingest-macro bitmart-check clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull journal-pull journal-push notion-sync contracts supabase-kpis sync sync-garde sync-garde-commits labs regime-atr-lab
+.PHONY: combler-mfe help install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core coeur-multi diag-coeur-qqq index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto diag-creneau diag-pv-latente diag-source-crypto calibrer-seuil ingest-mktcap preset-report calibrate-preset preset-lab alpha-lab screen repro kill-check log-alpha sync-alphas event-study event-study-smid backtest-pead-smid funding-study risk-check sensitivity paper-watch vault-lint certification crypto-cockpit crypto-brief regime-study breakout-study microstructure-poc vault-ask crypto-screen screen-niche list-db live live-sim live-go live-cron-install live-cron-uninstall completer-ouvertures reconcilier-journal annuler-ventes annuler-chronologie annuler-doublons annuler-doublons-ouverts diag-journal diag-surfermeture diag-fusion bench-backend verify-journal reparer-journal banc-swing turnover-audit rdv-paper slippage alerts-test ingest-macro bitmart-check clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull journal-pull journal-push notion-sync contracts supabase-kpis sync sync-garde sync-garde-commits labs regime-atr-lab
 # PYTHON : utilise AUTOMATIQUEMENT le venv s'il existe (.venv/bin/python), sinon python3 système.
 # Évite le piège « No module named numpy » quand le venv n'est pas activé. Surchargeable.
 TICKER ?= AAPL
@@ -308,17 +308,23 @@ live-cron-uninstall: ## désactive le rebalancement paper automatique
 completer-ouvertures: ## reconstitue au journal les ACHATS que le courtier a exécutés (simulation par défaut) — À FAIRE AVANT reconcilier-journal
 	$(PYTHON) scripts/completer_ouvertures.py $(ARGS)
 reparer-journal:     ## LA commande de réparation du journal : chaîne complète, dans l'ordre, fail-closed
-	@echo "→ 1/6 entrées manquantes (refuse d'écrire un prix que le marché n'a pas coté)"
+	@echo "→ 1/7 entrées manquantes (refuse d'écrire un prix que le marché n'a pas coté)"
 	@$(MAKE) --no-print-directory completer-ouvertures ARGS=--appliquer
-	@echo "\n→ 2/6 sorties : fermetures appariées aux fills réels"
+	@echo "\n→ 2/7 sorties : fermetures appariées aux fills réels"
 	@$(MAKE) --no-print-directory reconcilier-journal ARGS=--appliquer
-	@echo "\n→ 3/6 lots ouverts qui sont en fait des ventes"
+	@echo "\n→ 3/7 lots ouverts qui sont en fait des ventes"
 	@$(MAKE) --no-print-directory annuler-ventes ARGS=--appliquer
-	@echo "\n→ 4/6 chronologies impossibles"
+	@echo "\n→ 4/7 chronologies impossibles"
 	@$(MAKE) --no-print-directory annuler-chronologie ARGS=--appliquer
-	@echo "\n→ 5/6 réalisé compté deux fois"
+	@echo "\n→ 5/7 réalisé compté deux fois"
 	@$(MAKE) --no-print-directory annuler-doublons ARGS=--appliquer
-	@echo "\n→ 6/6 vérification : l'écart doit être PETIT (identité comptable)"
+	@# ÉTAPE AJOUTÉE LE 18/09. `diag-journal` détectait les lots OUVERTS en double
+	@# depuis le 03/09 et les imprimait ; aucun script ne les retirait — l'étape 5
+	@# ne traite que les doublons de FERMETURE. Le doublon QQQ du 17/09 a donc
+	@# survécu à trois passages de cette chaîne. Un défaut détecté sans remède reste.
+	@echo "\n→ 6/7 lots OUVERTS enregistrés deux fois"
+	@$(MAKE) --no-print-directory annuler-doublons-ouverts ARGS=--appliquer
+	@echo "\n→ 7/7 vérification : l'écart doit être PETIT (identité comptable)"
 	@$(MAKE) --no-print-directory diag-journal
 reconcilier-journal: ## ferme les lots orphelins du journal avec les fills RÉELS (simulation par défaut)
 	$(PYTHON) scripts/reconcilier_journal.py $(ARGS)
@@ -328,6 +334,8 @@ annuler-chronologie: ## retire les round-trips dont la sortie précède l'entré
 	$(PYTHON) scripts/annuler_chronologie_impossible.py $(ARGS)
 annuler-doublons:    ## retire les lots dont le « réalisé » double une correction nommée (simulation par défaut)
 	$(PYTHON) scripts/annuler_doublons_correction.py $(ARGS)
+annuler-doublons-ouverts: ## retire les lots OUVERTS enregistrés deux fois (simulation par défaut)
+	$(PYTHON) scripts/annuler_doublons_ouverts.py $(ARGS)
 combler-mfe:         ## calcule MFE/MAE sur les trades clos qui n'en ont pas (SIMULATION par défaut)
 	$(PYTHON) scripts/combler_mfe.py $(ARGS)
 diag-journal:        ## RÉCONCILIE le journal des round-trips avec la courbe du compte réel
