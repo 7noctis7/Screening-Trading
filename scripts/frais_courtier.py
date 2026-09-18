@@ -67,8 +67,16 @@ def main() -> int:
         print(f"    {'TOTAL':<6} {f.get('total_usd', 0.0):>12,.2f} $"
               .replace(",", " "))
         if f.get("n_en_nature"):
-            print(f"    + {f['n_en_nature']} prélèvement(s) EN JETONS, sans montant en")
-            print("      dollars : leur trace est dans la valeur du portefeuille.")
+            print(f"\n    {f['n_en_nature']} prélèvement(s) EN JETONS, sans montant en")
+            print("    dollars. Ils ne sont PAS dans le total ci-dessus, et ils")
+            print("    expliquent probablement le résidu — reste à les valoriser.")
+            champs = ", ".join(f.get("champs_en_nature") or [])
+            print(f"      champs disponibles : {champs}")
+            for sym, q in (f.get("qty_par_symbole") or {}).items():
+                print(f"      {sym or '(sans symbole)':<12} {q:>16.8f} jeton(s)")
+            ex = (f.get("en_nature") or [{}])[0].get("brut") or {}
+            if ex:
+                print(f"      exemple : {ex}"[:200])
 
     frais = abs(float(f.get("total_usd") or 0.0)) if f.get("disponible") else 0.0
     attendu = MISE + m["realise_brut"] + m["latent"] - frais

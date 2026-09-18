@@ -307,12 +307,24 @@ class AlpacaBroker:
             else:
                 # Prélèvement EN JETONS : on le NOMME sans lui donner un prix qu'on
                 # aurait choisi. Sa trace en dollars est dans la valeur du portefeuille.
+                # ON GARDE L'ENREGISTREMENT BRUT (18/09). Les prélèvements en jetons
+                # pèsent ~456 $ sur ce compte, et les valoriser demande de savoir si
+                # Alpaca joint un prix. Deviner les champs disponibles serait un aller-
+                # retour de plus ; on les publie, et la mesure tranche du premier coup.
                 en_nature.append(
                     {"type": typ, "symbole": str(self._champ(a, "symbol") or ""),
-                     "qty": float(self._champ(a, "qty") or 0)})
+                     "qty": float(self._champ(a, "qty") or 0),
+                     "date": str(self._champ(a, "date")
+                                 or self._champ(a, "transaction_time") or ""),
+                     "brut": dict(a) if isinstance(a, dict) else vars(a)})
+        champs = sorted({k for e in en_nature for k in (e.get("brut") or {})})
         return {"disponible": True, "n": len(actes), "par_type": par_type,
                 "total_usd": round(sum(par_type.values()), 2),
-                "en_nature": en_nature[:50], "n_en_nature": len(en_nature)}
+                "en_nature": en_nature[:50], "n_en_nature": len(en_nature),
+                "champs_en_nature": champs,
+                "qty_par_symbole": {
+                    s: round(sum(e["qty"] for e in en_nature if e["symbole"] == s), 10)
+                    for s in sorted({e["symbole"] for e in en_nature})}}
 
     def cancel(self, client_id: str) -> bool:
         try:
