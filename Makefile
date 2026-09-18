@@ -1,4 +1,4 @@
-.PHONY: combler-mfe help install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core coeur-multi diag-coeur-qqq index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto diag-creneau diag-pv-latente diag-source-crypto calibrer-seuil ingest-mktcap preset-report calibrate-preset preset-lab alpha-lab screen repro kill-check log-alpha sync-alphas event-study event-study-smid backtest-pead-smid funding-study risk-check sensitivity paper-watch vault-lint certification crypto-cockpit crypto-brief regime-study breakout-study microstructure-poc vault-ask crypto-screen screen-niche list-db live live-sim live-go live-cron-install live-cron-uninstall completer-ouvertures reconcilier-journal annuler-ventes annuler-chronologie annuler-doublons diag-journal diag-surfermeture diag-fusion bench-backend verify-journal reparer-journal banc-swing turnover-audit rdv-paper slippage alerts-test ingest-macro bitmart-check clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull journal-pull journal-push notion-sync contracts supabase-kpis sync sync-garde labs regime-atr-lab
+.PHONY: combler-mfe help install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core coeur-multi diag-coeur-qqq index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto diag-creneau diag-pv-latente diag-source-crypto calibrer-seuil ingest-mktcap preset-report calibrate-preset preset-lab alpha-lab screen repro kill-check log-alpha sync-alphas event-study event-study-smid backtest-pead-smid funding-study risk-check sensitivity paper-watch vault-lint certification crypto-cockpit crypto-brief regime-study breakout-study microstructure-poc vault-ask crypto-screen screen-niche list-db live live-sim live-go live-cron-install live-cron-uninstall completer-ouvertures reconcilier-journal annuler-ventes annuler-chronologie annuler-doublons diag-journal diag-surfermeture diag-fusion bench-backend verify-journal reparer-journal banc-swing turnover-audit rdv-paper slippage alerts-test ingest-macro bitmart-check clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull journal-pull journal-push notion-sync contracts supabase-kpis sync sync-garde sync-garde-commits labs regime-atr-lab
 # PYTHON : utilise AUTOMATIQUEMENT le venv s'il existe (.venv/bin/python), sinon python3 système.
 # Évite le piège « No module named numpy » quand le venv n'est pas activé. Surchargeable.
 TICKER ?= AAPL
@@ -61,10 +61,29 @@ sync:             ## RÉCUPÈRE la branche de dev sans jamais créer de conflit 
 	@$(MAKE) --no-print-directory sync-garde
 	@git fetch origin $(BRANCHE)
 	@git checkout $(BRANCHE) 2>/dev/null || git checkout -b $(BRANCHE) origin/$(BRANCHE)
+	@$(MAKE) --no-print-directory sync-garde-commits
 	@git reset --hard origin/$(BRANCHE)
 	@echo "→ $(BRANCHE) alignée sur origin : $$(git log --oneline -1)"
 	@n=$$(git stash list | wc -l | tr -d ' '); [ "$$n" = 0 ] || \
 	  echo "⚠ $$n entrée(s) en attente dans git stash — « git stash pop » pour les récupérer."
+sync-garde-commits: ## sauvegarde les COMMITS locaux non poussés avant le « reset --hard »
+	@# LE MÊME DÉFAUT, PAR L'AUTRE PORTE (mesuré le 17/09, deux heures après le premier).
+	@# `sync-garde` protège l'arbre de travail ; `reset --hard` détruit AUSSI les commits
+	@# locaux. Scène vécue : le verrou régénéré a été commité, le `git push` a échoué faute
+	@# d'authentification sur le VPS, et le `make up` suivant — qui appelle `sync` — a
+	@# ramené HEAD sur origin. Le commit avait disparu, et rien ne l'avait dit. Un travail
+	@# commité mais non poussé est du travail délibéré : il se sauvegarde, il ne s'efface
+	@# pas. On ne bloque pas pour autant — `sync` reste la commande de secours.
+	@n=$$(git rev-list --count origin/$(BRANCHE)..HEAD 2>/dev/null || echo 0); \
+	 [ "$$n" != 0 ] || exit 0; \
+	 ref="sauvegarde/$$(date -u +%Y%m%d-%H%M%S)"; \
+	 git branch "$$ref" HEAD \
+	   || { echo "✗ sauvegarde IMPOSSIBLE — sync INTERROMPU plutôt que de détruire."; exit 1; }; \
+	 echo "⚠ $$n commit(s) local(aux) NON POUSSÉ(S) qu'un « reset --hard » allait détruire :"; \
+	 git log --oneline origin/$(BRANCHE)..HEAD | sed 's/^/     /'; \
+	 echo "→ sauvegardés sur la branche « $$ref »."; \
+	 echo "  Les rejouer :  git cherry-pick origin/$(BRANCHE)..$$ref"; \
+	 echo "  Les publier :  git push -u origin $$ref"
 sync-garde:       ## met de côté (git stash) ce qu'un « reset --hard » détruirait — appelé par `sync`
 	@# Une cible à part, SANS réseau : elle est éprouvée telle quelle par les tests.
 	@# Tout en shell + git : `sync` doit marcher même quand le venv est cassé.

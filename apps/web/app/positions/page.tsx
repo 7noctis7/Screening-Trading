@@ -9,6 +9,7 @@ import { usePositions } from "@/lib/api";
 import { TechnicalChart } from "@/components/TechnicalChart";
 import { MetricCard } from "@/components/MetricCard";
 import { PerformanceVsBenchmarks } from "@/components/PerformanceVsBenchmarks";
+import { Reconciliation } from "@/components/Reconciliation";
 import { SortableTable, type Col } from "@/components/SortableTable";
 import { PageSkeleton } from "@/components/ui";
 import { compteCrypto, envVenue, nomVenue } from "@/lib/venue";
@@ -261,6 +262,14 @@ export default function Positions() {
         <MetricCard label="Vraie diversification" terme="N effectif" value={nEff ? nEff.toFixed(1) : "n/d"}
           explication="Nombre de positions RÉELLEMENT indépendantes. Dix lignes très corrélées en valent trois." />
       </section>
+      {/* CE CAPITAL SE DÉDUIT-IL DU REGISTRE ? Question posée le 18/09 : « réalisé +
+          latent = capital réel ? ». Non, et c'est une question de DIMENSION — un réalisé
+          et un latent sont des variations, le capital réel est un niveau. L'identité
+          part du capital INITIAL. On la pose ici en entier, et le résidu est NOMMÉ,
+          jamais bouché : un rapprochement qui tombe juste parce qu'on y a mis un terme
+          d'ajustement ne prouve rien. */}
+      <Reconciliation r={data.reconciliation} />
+
       {/* PERFORMANCE — la question que les cartes ci-dessus ne répondent pas : ce capital,
           ailleurs, aurait donné quoi ? Placée AVANT le détail ligne à ligne, parce qu'un
           écart de réplication ne se juge pas sans savoir si le portefeuille bat le marché. */}

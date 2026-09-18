@@ -401,12 +401,33 @@ def recommend_universe(body: RecommendationRequest, request: Request) -> dict:
                        preferences=body.preferences)
 
 
+def _reconciliation(real: dict) -> dict:
+    """« Capital réel » se déduit-il du registre ? Calculé là où le capital s'affiche.
+
+    Indisponible (journal absent, courbe vide) ⇒ `disponible=False` avec le motif. Une
+    réconciliation muette se lirait comme une réconciliation réussie.
+    """
+    try:
+        from apps.api.journal_payload import reconciliation_compte
+        from packages.execution.equity_history import series
+        from packages.storage import SqliteTradeJournal
+        latent = sum(float(p.get("pnl") or 0.0)
+                     for compte in ("alpaca", "crypto")
+                     for p in (real.get(compte) or {}).get("positions", []) or [])
+        courbes = {b: series(b) for b in ("alpaca", "crypto", "bitmart")}
+        return reconciliation_compte(SqliteTradeJournal(),
+                                     {b: c for b, c in courbes.items() if c}, latent)
+    except Exception as e:  # noqa: BLE001
+        return {"disponible": False, "motif": str(e)[:80]}
+
+
 @app.get("/api/positions")
 def positions() -> dict:
     snap = _snap()
     dash = snap["dashboard"]
     real = snap["live"]["real"]
     return {"real_positions": real.get("positions", []),    # positions RÉELLES (tous comptes)
+            "reconciliation": _reconciliation(real),        # capital réel ↔ registre
             "connected": real.get("connected", False),
             "accounts": {"alpaca": real.get("alpaca", {}), "crypto": real.get("crypto", {})},
             "min_position": dash.get("min_position"),        # plancher de ligne → affiché par le front

@@ -94,3 +94,33 @@ def test_les_lots_ouverts_sont_PUBLIES_A_PART_jamais_supprimes(reponse):
     assert [r["symbol"] for r in d["ouverts"]] == ["THC"]
     assert d["stats"]["n_open"] == 1
     assert d["stats"]["honnete"]["n_ouverts"] >= 0   # calculé, jamais absent
+
+
+# ─── Le capital réel se déduit-il du registre ? (18/09) ─────────────────────────────
+
+def test_la_reconciliation_pose_l_identite_sur_le_realise_TOTAL(tmp_path):
+    """La question posée : « réalisé + latent = capital réel ? ». Non — un réalisé et un
+    latent sont des VARIATIONS, le capital réel est un NIVEAU. Et le réalisé à prendre
+    est celui que le COMPTE subit, pas celui que le panneau montre : sinon l'import
+    historique manque à l'identité et l'écart lui est faussement imputé.
+    """
+    from apps.api.journal_payload import reconciliation_compte
+    from packages.storage import SqliteTradeJournal
+
+    j = SqliteTradeJournal(tmp_path / "journal.db")
+    j.append(_lot("P-20260910-Alpaca-VZ", ferme=True, pnl=120.0), legacy=False)
+    j.append(_lot("C-OSCR-4dfb61cb", ferme=True, pnl=-80.0, symbole="OSCR"),
+             legacy=True)
+    j.append(_lot("LEG-ad4ac9fa7f59", ferme=True, pnl=-900.0, symbole="NWL"),
+             legacy=True)
+    j.append(_lot("P-20260915-Alpaca-THC", ferme=False, symbole="THC"), legacy=False)
+
+    courbes = {"alpaca": [{"t": "2026-06-22", "v": 100_000.0},
+                          {"t": "2026-09-17", "v": 99_200.0}]}
+    r = reconciliation_compte(j, courbes, latent=60.0)
+
+    assert r["realise"] == -860.0            # 120 − 80 − 900 : ce que le compte subit
+    assert r["realise_affiche"] == 40.0      # 120 − 80 : ce que le panneau montre
+    assert r["hors_panneau"] == -900.0       # l'import, nommé plutôt que fondu
+    assert r["attendu"] == 99_200.0          # 100 000 − 860 + 60
+    assert r["residu"] == 0.0 and r["boucle"] is True

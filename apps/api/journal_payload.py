@@ -110,3 +110,25 @@ def construire(journal, prix: dict[str, float], positions: dict[str, float]) -> 
     return {"available": True, "rows": closed, "ouverts": ouverts,
             "stats": _stats(tous, rows, closed, ouverts, prix, positions),
             "slippage": measured_slippage(journal)}
+
+
+def reconciliation_compte(journal, courbes: dict, latent: float) -> dict:
+    """Le capital réel se déduit-il du registre ? L'identité, remplie terme à terme.
+
+    RÉPOND À UNE QUESTION POSÉE LE 18/09 : « la somme des gains/pertes de l'historique
+    plus le gain/perte en cours doit faire le capital réel, non ? ». Non — un réalisé et
+    un latent sont des VARIATIONS, le capital réel est un NIVEAU. L'identité complète
+    part du capital INITIAL, et `packages.research.reconciliation_capital` la pose.
+
+    DEUX RÉALISÉS, ET C'EST VOULU. Celui du panneau ne couvre que les trades du robot ;
+    le compte subit aussi l'import historique. L'identité se pose donc sur le TOTAL, et
+    l'écart entre les deux est publié — sans lui, un lecteur qui additionne ce qu'il
+    voit à l'écran ne retombe jamais sur son compte, et rien ne lui dit pourquoi.
+    """
+    from packages.execution.perimetre_journal import pris_par_le_robot
+    from packages.research.reconciliation_capital import reconcilier
+
+    fermes = [t for t in journal.all() if t.exit_ts]
+    total = sum(float(t.pnl_net or 0.0) for t in fermes)
+    robot = sum(float(t.pnl_net or 0.0) for t in fermes if pris_par_le_robot(t.id))
+    return reconcilier(courbes, total, latent, realise_affiche=robot)

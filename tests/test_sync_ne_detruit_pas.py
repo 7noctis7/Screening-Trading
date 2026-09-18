@@ -120,3 +120,73 @@ def test_sur_un_VRAI_depot_le_fichier_non_commite_survit(tmp_path: Path):
     git("reset", "--hard", "-q", "HEAD")
     git("stash", "pop", "-q")
     assert (tmp_path / "constraints.txt").read_text() == "159 paquets\n"
+
+
+# ─── Le même défaut par l'AUTRE porte : les commits locaux ──────────────────────────
+
+def test_les_commits_locaux_sont_sauvegardes_AVANT_le_reset():
+    """DEUX HEURES APRÈS LE PREMIER, LE MÊME DÉFAUT PAR L'AUTRE PORTE (17/09).
+
+    `sync-garde` protège l'arbre de travail. Mais `reset --hard` détruit AUSSI les
+    commits locaux, et c'est ce qui est arrivé : le verrou régénéré a été commité, le
+    `git push` a échoué faute d'authentification sur le VPS, et le `make up` suivant —
+    qui appelle `sync` — a ramené HEAD sur origin. Le commit avait disparu, sans un mot.
+    """
+    lignes = _recette("sync")
+    garde = [i for i, x in enumerate(lignes) if "sync-garde-commits" in x]
+    dur = [i for i, x in enumerate(lignes) if "reset --hard" in x]
+    assert garde and dur, lignes
+    assert min(garde) < min(dur), "la sauvegarde doit précéder le reset --hard"
+
+
+def test_la_sauvegarde_des_commits_compare_bien_a_ORIGIN():
+    """Comparer à autre chose qu'à la branche distante sauvegarderait tout ou rien."""
+    recette = " ".join(_recette("sync-garde-commits"))
+    assert "rev-list" in recette and "origin/$(BRANCHE)..HEAD" in recette
+    assert "git branch" in recette, "un commit se sauvegarde par une référence"
+    assert "INTERROMPU" in recette, "échec de sauvegarde ⇒ on n'efface pas"
+
+
+@pytest.mark.skipif(not shutil.which("make") or not shutil.which("git"),
+                    reason="make ou git absent")
+def test_sur_un_VRAI_depot_le_commit_non_pousse_survit(tmp_path: Path):
+    """La preuve par l'exécution : on commite sans pousser, on lance la cible, on
+    simule le `reset --hard`, et on regarde si le travail est récupérable."""
+    amont, local = tmp_path / "amont", tmp_path / "local"
+    amont.mkdir()
+    local.mkdir()
+    branche = "claude/screening-trading-platform-me9p11"
+
+    def git(ou: Path, *a: str) -> str:
+        r = subprocess.run(["git", "-C", str(ou), *a], capture_output=True,
+                           text=True, check=True)
+        return r.stdout
+
+    git(amont, "init", "-q", "--bare", ".")
+    git(local, "init", "-q", ".")
+    git(local, "config", "user.email", "t@t")
+    git(local, "config", "user.name", "t")
+    shutil.copy(MAKEFILE, local / "Makefile")
+    (local / "f.txt").write_text("publié\n")
+    git(local, "add", "-A")
+    git(local, "commit", "-qm", "base")
+    git(local, "remote", "add", "origin", str(amont))
+    git(local, "branch", "-M", branche)
+    git(local, "push", "-q", "-u", "origin", branche)
+
+    (local / "f.txt").write_text("travail non poussé\n")
+    git(local, "commit", "-qam", "verrou : extras d'entraînement")
+
+    fait = subprocess.run(["make", "sync-garde-commits"], cwd=local,
+                          capture_output=True, text=True)
+    assert fait.returncode == 0, fait.stderr
+    assert "NON POUSSÉ" in fait.stdout, "la cible doit DIRE ce qu'elle sauvegarde"
+
+    git(local, "reset", "--hard", "-q", f"origin/{branche}")   # ce que fait `sync`
+    assert (local / "f.txt").read_text() == "publié\n"         # le reset a bien frappé
+
+    listees = git(local, "branch", "--list", "sauvegarde/*").splitlines()
+    sauvegardes = [x.strip(" *") for x in listees if x.strip()]
+    assert len(sauvegardes) == 1, sauvegardes
+    git(local, "cherry-pick", f"origin/{branche}..{sauvegardes[0]}")
+    assert (local / "f.txt").read_text() == "travail non poussé\n"

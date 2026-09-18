@@ -1,0 +1,116 @@
+"""« Réalisé + latent = capital réel ? » — non, et le site doit le DIRE, pas le cacher.
+
+LA QUESTION POSÉE (18/09). Elle est légitime et sa réponse est non, pour une raison de
+DIMENSION : un réalisé et un latent sont des VARIATIONS, le capital réel est un NIVEAU.
+Leur somme vaut la variation du compte, jamais le compte. L'identité complète part du
+capital INITIAL et comporte un terme qui manque toujours à l'intuition :
+`latent(début)`, le gain non réalisé que portaient DÉJÀ les positions au premier
+point de la courbe.
+
+CE QUE CES TESTS TIENNENT. Que l'identité est posée sur le bon niveau, que le résidu
+n'est jamais comblé, qu'une donnée absente se dit au lieu de passer pour un
+rapprochement réussi, et que le panneau ne se lit pas comme le compte.
+"""
+
+from __future__ import annotations
+
+from packages.research.reconciliation_capital import capital, reconcilier
+
+
+def _points(v0: float, v1: float, t0="2026-06-22", t1="2026-09-17") -> list[dict]:
+    return [{"t": t0, "v": v0}, {"t": t1, "v": v1}]
+
+
+def _courbe(v0: float, v1: float, **kw) -> dict[str, list[dict]]:
+    """Un seul compte — la forme attendue reste `{compte: points}`."""
+    return {"alpaca": _points(v0, v1, **kw)}
+
+
+def test_l_identite_part_du_CAPITAL_INITIAL_pas_de_zero():
+    """Le cœur de la réponse. Sur un compte à 100 000 $ qui a gagné 500 $, « réalisé +
+    latent » vaut 500 et non 100 500 : confondre les deux ferait paraître le compte
+    vidé de 99,5 % dès qu'on essaie de rapprocher les chiffres."""
+    r = reconcilier(_courbe(100_000.0, 100_500.0), realise=300.0, latent=200.0)
+    assert r["attendu"] == 100_500.0
+    assert r["residu"] == 0.0
+    assert r["boucle"] is True
+
+
+def test_le_residu_est_PUBLIE_jamais_comble():
+    """Un rapprochement qui tombe juste parce qu'on y a mis un terme d'ajustement ne
+    prouve rien. Ici l'écart reste entier, et le verdict le dit."""
+    r = reconcilier(_courbe(99_593.81, 100_482.13), realise=-1790.60, latent=853.18)
+    assert r["boucle"] is False
+    attendu = 99_593.81 - 1790.60 + 853.18
+    assert round(r["residu"], 2) == round(100_482.13 - attendu, 2)
+    assert abs(r["residu"]) > r["seuil"]
+    assert "latent(début)" in r["explication"]
+
+
+def test_le_cas_MESURE_du_17_09_est_reproduit():
+    """Les chiffres du terminal (`make diag-journal`) et ceux du site doivent venir du
+    même calcul, sinon on débat de deux mesures au lieu d'une."""
+    r = reconcilier(_courbe(99_593.81, 100_482.13), realise=-1790.60, latent=853.18)
+    assert round(r["residu"], 0) == 1826.0          # ordre de grandeur du diag
+    assert 0.01 < r["residu_part"] < 0.03           # ~1,8 % du capital
+
+
+def test_sans_courbe_on_DIT_qu_on_ne_sait_pas():
+    """Une réconciliation muette se lirait comme une réconciliation réussie — c'est le
+    mode de défaillance que ce dépôt combat partout ailleurs."""
+    r = reconcilier({}, realise=100.0, latent=50.0)
+    assert r["disponible"] is False
+    assert r["motif"]
+    assert "boucle" not in r, "aucun verdict ne doit être rendu sans données"
+
+
+def test_une_courbe_a_UN_POINT_ne_definit_aucune_variation():
+    """Renvoyer zéro se lirait « le compte n'a pas bougé ». On l'écarte, et la fenêtre
+    disparaît du rapprochement plutôt que d'y entrer à faux."""
+    assert capital({"alpaca": [{"t": "2026-09-17", "v": 100.0}]})["fenetres"] == []
+
+
+def test_le_panneau_ne_se_lit_pas_comme_le_COMPTE():
+    """Le panneau montre les trades du robot ; le compte subit aussi l'import
+    historique. Sans ce chiffre, un lecteur qui additionne ce qu'il voit à l'écran ne
+    retombe jamais sur son compte — et rien ne lui dit pourquoi."""
+    r = reconcilier(_courbe(100_000.0, 100_000.0), realise=-1790.60, latent=0.0,
+                    realise_affiche=-10.82)
+    assert r["realise_affiche"] == -10.82
+    assert r["hors_panneau"] == -1779.78            # ce que le panneau NE montre pas
+    assert r["realise"] == -1790.6
+
+
+def test_des_fenetres_DIFFERENTES_sont_signalees():
+    """Additionner deux périodes différentes rend un rapprochement faux sans que rien
+    ne le dise. La poche crypto s'est arrêtée le 21/08, la poche actions non."""
+    r = reconcilier({"alpaca": _points(99_593.81, 100_482.13),
+                     "bitmart": _points(11.56, 0.10, t1="2026-08-21")},
+                    realise=0.0, latent=0.0)
+    assert r["memes_fenetres"] is False
+    assert len(r["fenetres"]) == 2
+
+
+def test_le_formatage_porte_sur_le_NOMBRE_jamais_sur_la_phrase():
+    """L'espace fine ne remplace que le séparateur de MILLIERS. Le dépôt a déjà payé ce
+    défaut une fois (`annotation_churn`) : un `replace(",", " ")` appliqué à la phrase
+    entière effaçait aussi sa ponctuation, et le texte devenait illisible sans que rien
+    n'échoue. On éprouve donc l'unité qui formate, et la phrase qui l'accueille."""
+    from packages.research.reconciliation_capital import _montant
+
+    assert _montant(10_000.0) == "+10 000.00"
+    assert _montant(-1_814.28) == "-1 814.28"
+    assert _montant(12.5) == "+12.50", "sans millier, rien à remplacer"
+
+    r = reconcilier(_courbe(100_000.0, 110_000.0), realise=0.0, latent=0.0)
+    assert "10 000" in r["explication"], "les milliers portent une espace fine"
+    assert r["explication"].endswith("pas comblé ici."), "la phrase est intacte"
+
+
+def test_une_courbe_NUE_au_lieu_d_un_dict_echoue_en_le_DISANT():
+    """`{compte: points}` contre `points` : l'erreur est naturelle. Un `AttributeError`
+    sur `.items()` ne dirait pas quoi corriger — et un silence serait pire."""
+    import pytest
+
+    with pytest.raises(TypeError, match="liste de points"):
+        capital(_points(100.0, 110.0))
