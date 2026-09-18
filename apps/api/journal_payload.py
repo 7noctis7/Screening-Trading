@@ -112,7 +112,33 @@ def construire(journal, prix: dict[str, float], positions: dict[str, float]) -> 
             "slippage": measured_slippage(journal)}
 
 
-def reconciliation_compte(journal, courbes: dict, latent: float) -> dict:
+def courbes_capital(real: dict) -> tuple[dict, dict]:
+    """Les courbes d'equity, LA MEILLEURE SOURCE D'ABORD — et on dit laquelle.
+
+    POURQUOI CE CHOIX EST IMPORTANT (18/09). `equity_history` enregistre un point par
+    jour à chaque build : son premier point est le jour où l'on a COMMENCÉ À MESURER,
+    pas l'ouverture du compte. Un rendement calculé depuis cette base-là répond à
+    « depuis que je regarde », pas à « depuis que j'ai déposé » — et si l'enregistrement
+    a démarré après une baisse, la base est basse et le pourcentage FLATTÉ.
+
+    Alpaca, lui, stocke sa propre courbe depuis la création du compte, et le snapshot la
+    récupère déjà (`portfolio_history`). On la préfère donc, sans appel supplémentaire,
+    et l'enregistrement local ne sert que de SECOURS — nommé comme tel.
+    """
+    from packages.execution.equity_history import series
+    courbes, sources = {}, {}
+    for compte in ("alpaca", "crypto", "bitmart"):
+        courtier = (real.get(compte) or {}).get("history") or []
+        locale = series(compte)
+        if courtier:
+            courbes[compte], sources[compte] = courtier, "courtier"
+        elif locale:
+            courbes[compte], sources[compte] = locale, "enregistrement local"
+    return courbes, sources
+
+
+def reconciliation_compte(journal, courbes: dict, latent: float,
+                          sources: dict | None = None) -> dict:
     """Le capital réel se déduit-il du registre ? L'identité, remplie terme à terme.
 
     RÉPOND À UNE QUESTION POSÉE LE 18/09 : « la somme des gains/pertes de l'historique
@@ -131,4 +157,5 @@ def reconciliation_compte(journal, courbes: dict, latent: float) -> dict:
     fermes = [t for t in journal.all() if t.exit_ts]
     total = sum(float(t.pnl_net or 0.0) for t in fermes)
     robot = sum(float(t.pnl_net or 0.0) for t in fermes if pris_par_le_robot(t.id))
-    return reconcilier(courbes, total, latent, realise_affiche=robot)
+    return reconcilier(courbes, total, latent, realise_affiche=robot,
+                       sources=sources)

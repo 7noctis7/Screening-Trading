@@ -408,15 +408,14 @@ def _reconciliation(real: dict) -> dict:
     réconciliation muette se lirait comme une réconciliation réussie.
     """
     try:
-        from apps.api.journal_payload import reconciliation_compte
-        from packages.execution.equity_history import series
+        from apps.api.journal_payload import courbes_capital, reconciliation_compte
         from packages.storage import SqliteTradeJournal
         latent = sum(float(p.get("pnl") or 0.0)
                      for compte in ("alpaca", "crypto")
                      for p in (real.get(compte) or {}).get("positions", []) or [])
-        courbes = {b: series(b) for b in ("alpaca", "crypto", "bitmart")}
-        return reconciliation_compte(SqliteTradeJournal(),
-                                     {b: c for b, c in courbes.items() if c}, latent)
+        courbes, sources = courbes_capital(real)
+        return reconciliation_compte(SqliteTradeJournal(), courbes, latent,
+                                     sources=sources)
     except Exception as e:  # noqa: BLE001
         return {"disponible": False, "motif": str(e)[:80]}
 

@@ -47,8 +47,18 @@ def _bornes(pts: list[dict]) -> dict | None:
             "points": len(propres)}
 
 
-def capital(courbes: dict[str, list[dict]]) -> dict:
+def capital(courbes: dict[str, list[dict]],
+            sources: dict[str, str] | None = None) -> dict:
     """Capital initial et final, SOMMÉS sur les comptes, avec la fenêtre de chacun.
+
+    `sources` DIT D'OÙ VIENT LE PREMIER POINT, et ce n'est pas un détail (18/09). Notre
+    `equity_history` enregistre un point par jour À CHAQUE BUILD : son premier point est
+    le jour où l'on a COMMENCÉ À ENREGISTRER, pas l'ouverture du compte. Le courtier,
+    lui, remonte à la création. Étiqueter le premier point « capital initial » sans
+    savoir lequel des deux on tient, c'est publier un rendement calculé depuis une base
+    arbitraire — et si l'enregistrement a commencé après une baisse, la base est BASSE
+    et le rendement FLATTÉ. `"courtier"` ou `"enregistrement local"` — et le panneau
+    l'écrit.
 
     Les fenêtres peuvent différer (une poche ouverte plus tard, ou arrêtée). On somme
     quand même — c'est bien le capital total que la page affiche — mais on publie chaque
@@ -64,12 +74,17 @@ def capital(courbes: dict[str, list[dict]]) -> dict:
         b = _bornes(pts)
         if not b:
             continue
-        fenetres.append({"compte": compte, **b})
+        fenetres.append({"compte": compte,
+                         "source": (sources or {}).get(compte, "inconnue"), **b})
         initial += b["initial"]
         final += b["final"]
     return {"fenetres": fenetres, "initial": round(initial, 2),
             "final": round(final, 2),
-            "memes_fenetres": len({(f["debut"], f["fin"]) for f in fenetres}) <= 1}
+            "memes_fenetres": len({(f["debut"], f["fin"]) for f in fenetres}) <= 1,
+            # Faux dès qu'UNE poche part d'un enregistrement local : le rendement porte
+            # alors sur « depuis qu'on mesure », pas « depuis l'ouverture ».
+            "depart_certain": bool(fenetres) and all(
+                f["source"] == "courtier" for f in fenetres)}
 
 
 def _montant(x: float) -> str:
@@ -134,14 +149,15 @@ def _phrase(residu: float, boucle: bool, capital_final: float) -> str:
 
 
 def reconcilier(courbes: dict[str, list[dict]], realise: float, latent: float,
-                *, realise_affiche: float | None = None, flux: float = 0.0) -> dict:
+                *, realise_affiche: float | None = None, flux: float = 0.0,
+                sources: dict[str, str] | None = None) -> dict:
     """L'identité, remplie terme à terme. `disponible=False` si la courbe manque.
 
     `realise` est le réalisé TOTAL subi par le compte (import compris) ;
     `realise_affiche` le sous-ensemble du panneau, rendu pour comparaison.
     `latent` est celui des positions RÉELLES lues chez le courtier, jamais estimé.
     """
-    cap = capital(courbes)
+    cap = capital(courbes, sources)
     if not cap["fenetres"]:
         return {"disponible": False,
                 "motif": "aucune courbe d'equity enregistrée — rien à réconcilier",

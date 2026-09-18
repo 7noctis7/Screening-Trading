@@ -173,3 +173,39 @@ def test_une_date_illisible_donne_une_duree_ABSENTE_pas_zero():
                     realise=0.0, latent=0.0)
     assert r["jours"] is None
     assert "jours" not in r["resume"]
+
+
+def test_la_SOURCE_du_point_de_depart_est_publiee():
+    """LE DÉFAUT DU 18/09, révélé en comparant au courtier. `equity_history` enregistre
+    un point par jour À CHAQUE BUILD : son premier point est le jour où l'on a COMMENCÉ
+    À MESURER, pas l'ouverture du compte. Un rendement calculé depuis cette base répond
+    à « depuis que je regarde », pas « depuis que j'ai déposé » — et si la mesure a
+    démarré après une baisse, la base est BASSE et le pourcentage FLATTÉ."""
+    courbes = {"alpaca": _points(100_000.0, 101_000.0)}
+    certain = reconcilier(courbes, realise=0.0, latent=0.0,
+                          sources={"alpaca": "courtier"})
+    incertain = reconcilier(courbes, realise=0.0, latent=0.0,
+                            sources={"alpaca": "enregistrement local"})
+
+    assert certain["depart_certain"] is True
+    assert certain["fenetres"][0]["source"] == "courtier"
+    assert incertain["depart_certain"] is False
+    assert incertain["fenetres"][0]["source"] == "enregistrement local"
+
+
+def test_sans_source_declaree_le_depart_n_est_PAS_tenu_pour_certain():
+    """Le silence ne vaut pas garantie : une source inconnue se traite comme incertaine,
+    jamais comme le courtier."""
+    r = reconcilier({"alpaca": _points(100.0, 110.0)}, realise=0.0, latent=0.0)
+    assert r["fenetres"][0]["source"] == "inconnue"
+    assert r["depart_certain"] is False
+
+
+def test_UNE_poche_locale_suffit_a_rendre_le_depart_incertain():
+    """Le capital est une SOMME : si une seule poche part d'une base approximative, le
+    total en hérite. Un « presque certain » se lirait comme certain."""
+    r = reconcilier({"alpaca": _points(100_000.0, 101_000.0),
+                     "bitmart": _points(11.56, 0.10, t1="2026-08-21")},
+                    realise=0.0, latent=0.0,
+                    sources={"alpaca": "courtier", "bitmart": "enregistrement local"})
+    assert r["depart_certain"] is False

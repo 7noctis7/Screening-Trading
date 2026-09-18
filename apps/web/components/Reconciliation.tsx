@@ -78,6 +78,22 @@ export function Reconciliation({ r }: { r: any }) {
             aucun chiffre estimé.
           </p>
         )}
+        {/* D'OÙ VIENT LE POINT DE DÉPART (18/09). `equity_history` enregistre un point
+            par jour à chaque build : son premier point est le jour où l'on a COMMENCÉ
+            À MESURER, pas l'ouverture du compte. Un % calculé depuis cette base répond
+            à « depuis que je regarde » — et si la mesure a démarré après une baisse, la
+            base est basse et le chiffre FLATTÉ. Il faut donc le dire. */}
+        {r.depart_certain === false && (
+          <p className="mt-1" style={{ color: "#f59e0b" }}>
+            ⚠ Le point de départ vient de <b>notre enregistrement</b>, pas du courtier
+            {r.fenetres?.some((f: any) => f.source !== "courtier") && (
+              <> ({r.fenetres.filter((f: any) => f.source !== "courtier")
+                .map((f: any) => `${f.compte} : ${f.source}`).join(" · ")})</>
+            )} : ce pourcentage part du jour où l&apos;on a commencé à MESURER, pas de
+            l&apos;ouverture du compte. Comparé au « All » du courtier, il peut différer —
+            et s&apos;il flatte, c&apos;est de là que ça vient.
+          </p>
+        )}
       </div>
 
       {/* ── D'OÙ VIENT CE MONTANT ──────────────────────────────────────── */}

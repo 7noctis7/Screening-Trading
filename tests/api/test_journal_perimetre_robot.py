@@ -124,3 +124,28 @@ def test_la_reconciliation_pose_l_identite_sur_le_realise_TOTAL(tmp_path):
     assert r["hors_panneau"] == -900.0       # l'import, nommé plutôt que fondu
     assert r["attendu"] == 99_200.0          # 100 000 − 860 + 60
     assert r["residu"] == 0.0 and r["boucle"] is True
+
+
+def test_la_courbe_du_COURTIER_prime_sur_notre_enregistrement():
+    """CE QUI FAUSSAIT LE POURCENTAGE (18/09). `equity_history` commence le jour où l'on
+    a commencé à mesurer ; Alpaca, lui, remonte à la création du compte et le snapshot
+    récupère déjà sa courbe. Prendre la nôtre quand la sienne existe, c'est calculer un
+    rendement depuis une base arbitraire — et la nommer « capital initial »."""
+    from apps.api.journal_payload import courbes_capital
+
+    real = {"alpaca": {"history": [{"t": "2026-06-01", "v": 100_000.0},
+                                   {"t": "2026-09-18", "v": 101_026.57}]}}
+    courbes, sources = courbes_capital(real)
+    assert sources["alpaca"] == "courtier"
+    assert courbes["alpaca"][0]["v"] == 100_000.0
+
+
+def test_sans_courbe_courtier_on_retombe_sur_la_notre_EN_LE_DISANT():
+    """Le secours est légitime ; le passer sous silence ne l'est pas."""
+    from apps.api.journal_payload import courbes_capital
+
+    real = {"alpaca": {"history": []}}          # courtier injoignable ou clés absentes
+    courbes, sources = courbes_capital(real)
+    for compte, src in sources.items():
+        assert src == "enregistrement local", compte
+        assert courbes[compte], compte
