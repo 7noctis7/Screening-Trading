@@ -25,8 +25,16 @@ résistance sortent de la même analyse que le ratio, qui mesurerait alors sa pr
 générosité), et il ne conclut rien sur un timeframe 4H — la base de ce dépôt est
 QUOTIDIENNE, et tout chiffre intraday serait inventé.
 
-    python scripts/deviation_reclaim_lab.py                 # 120 titres, hold 5 j
-    python scripts/deviation_reclaim_lab.py --titres 200 --hold 10 --pas 1
+DEUX SOURCES, ET LA CRYPTO EST LA SEULE OÙ LE 4H EXISTE (18/09). `--source actions` lit
+le socle QUOTIDIEN ; `--source crypto --tf 1h|4h` lit `data/crypto_intraday.db`, ingéré
+depuis Binance. Le motif demandait un timeframe d'exécution intraday : c'est ici, et
+seulement ici, qu'il devient mesurable sans payer ni dépendre d'un flux partiel.
+
+`hold` se compte en BARRES, pas en jours. Cinq barres valent cinq jours en quotidien et
+cinq heures en 1h — l'oublier ferait comparer deux horizons sous le même nom.
+
+    python scripts/deviation_reclaim_lab.py                      # actions, quotidien
+    python scripts/deviation_reclaim_lab.py --source crypto --tf 4h --hold 6
 """
 from __future__ import annotations
 
@@ -88,6 +96,28 @@ def _scores(e: dict, barres, i: int) -> dict[str, float]:
     }
 
 
+def _donnees_crypto(tf: str, titres: int) -> tuple[dict, int]:
+    """Barres crypto intraday depuis la base sidecar, ou ({}, 0) si absente.
+
+    Aucune donnée n'est fabriquée ici : si la base n'existe pas ou ne porte pas ce
+    timeframe, le banc s'arrête sur UNCALIBRATED plutôt que de rendre un verdict sur un
+    univers vide.
+    """
+    from packages.storage.bars_repo import SqliteBarsRepository
+    chemin = ROOT / "data" / "crypto_intraday.db"
+    if not chemin.exists():
+        return {}, 0
+    repo = SqliteBarsRepository(chemin)
+    try:
+        cur = repo.conn.execute(
+            "SELECT DISTINCT symbol FROM silver WHERE timeframe=? "
+            "ORDER BY symbol", (tf,))
+        syms = [r[0] for r in cur.fetchall()][:titres or None]
+        return {s: repo.read(s, tf) for s in syms}, len(syms)
+    finally:
+        repo.close()
+
+
 def _collecter(data: dict, syms: list[str], hold: int, pas: int, lag: int,
                depart: int) -> tuple[list[Evenement], dict[str, list[float]]]:
     """Un passage unique : les événements ET tous les avis, sur le même échantillon."""
@@ -98,15 +128,16 @@ def _collecter(data: dict, syms: list[str], hold: int, pas: int, lag: int,
         if len(barres) < depart + hold + lag + 10:
             continue
         piv = pivots_causaux(barres, PIVOT)
-        # Le Weekly est DÉRIVÉ du Daily — une agrégation, pas une source nouvelle. Il
-        # porte la cible macro ; le 4H de la spec, lui, ne se déduit de rien.
+        # Le contexte macro est DÉRIVÉ de la série — une agrégation, pas une source
+        # nouvelle. En quotidien c'est la semaine ; en intraday, `agreger_hebdo` groupe
+        # aussi par semaine ISO, ce qui reste le bon horizon supérieur.
         hebdo = agreger_hebdo(barres)
         for i in range(depart, len(barres) - hold - lag, pas):
             r = _rendement(barres, i, hold, lag)
             if r is None:
                 continue
             e = etat(barres, i, pivots=piv, hebdo=hebdo)
-            evenements.append(Evenement(symbole=sym, jour=str(barres[i].ts)[:10],
+            evenements.append(Evenement(symbole=sym, jour=str(barres[i].ts)[:16],
                                         titre=e["etat"], rendement=r))
             for nom, v in _scores(e, barres, i).items():
                 scores.setdefault(nom, []).append(v)
@@ -114,7 +145,7 @@ def _collecter(data: dict, syms: list[str], hold: int, pas: int, lag: int,
 
 
 def _afficher(res: dict, hold: int) -> list[str]:
-    print(f"\n  {res['n_evenements']} barres notées · horizon {hold} j · "
+    print(f"\n  {res['n_evenements']} barres notées · horizon {hold} barres · "
           f"{res['n_essais']} scoreurs (correction de tests multiples appliquée)\n")
     print(f"  {'scoreur':<32} {'allumé':>8} {'IC':>8} {'Sharpe':>8} {'DSR':>7} "
           f"{'placebo':>9}  verdict")
@@ -140,8 +171,34 @@ def _ecarts(res: dict) -> None:
         print(f"    {str(e.get('paire', e))[:88]}")
 
 
+def _timeframes(a) -> None:
+    """Quels timeframes ont RÉELLEMENT servi — le pied de page suit la source.
+
+    Il annonçait « Principal : 1D · aucune donnée intraday n'existe dans ce dépôt »
+    quelle que soit la source. Vrai sur actions, FAUX dès la première mesure crypto en
+    1h — et c'est la pire espèce d'erreur : un rapport qui décrit autre chose que ce
+    qu'il vient de calculer, sans que rien ne cloche à l'écran.
+    """
+    print("\n  TIMEFRAMES RÉELLEMENT UTILISÉS")
+    if a.source == "crypto":
+        print(f"    principal / exécution : {a.tf} (Binance, gratuit et sans clé)")
+        print("    macro                 : semaine ISO, DÉRIVÉE de la série")
+        print("    → la jambe d'exécution intraday que la spec demandait est ici")
+        print("      RÉELLEMENT mesurée, pas approchée par du quotidien.")
+    else:
+        print("    principal / exécution : 1D — la résistance de confirmation est lue")
+        print("                            en 1D, PAS en 4H")
+        print("    macro                 : 1W dérivé du 1D (une agrégation)")
+        print("    → aucune donnée intraday ACTIONS dans ce dépôt (vault/03_TODO.md) :")
+        print("      la jambe 4H reste UNCALIBRATED sur ce périmètre. En crypto, elle")
+        print("      existe :  make deviation-lab-crypto")
+    print()
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--source", choices=("actions", "crypto"), default="actions")
+    ap.add_argument("--tf", default="1h", help="timeframe crypto : 1h ou 4h")
     ap.add_argument("--titres", type=int, default=120)
     ap.add_argument("--hold", type=int, default=5)
     ap.add_argument("--pas", type=int, default=1)
@@ -151,14 +208,23 @@ def main() -> int:
     a = ap.parse_args()
 
     print(__doc__.split("    python")[0].rstrip())
-    from scripts.sizing_lab import _donnees
-    data, _ac, mode, n_reels, _d, _f = _donnees()
-    if n_reels < 30:
-        print("\n  ⚠ UNCALIBRATED — aucune base de prix réelle branchée. Ce banc ne")
-        print("    décide de rien : lancer sur la machine qui porte les bases.")
-        return 2
+    if a.source == "crypto":
+        data, n_reels = _donnees_crypto(a.tf, a.titres)
+        mode = f"crypto {a.tf} (Binance)"
+        if not n_reels:
+            print(f"\n  ⚠ UNCALIBRATED — aucune barre crypto {a.tf} en base.")
+            print("    Ingérer d'abord :  make ingest-crypto-intraday")
+            return 2
+    else:
+        from scripts.sizing_lab import _donnees
+        data, _ac, mode, n_reels, _d, _f = _donnees()
+        if n_reels < 30:
+            print("\n  ⚠ UNCALIBRATED — aucune base de prix réelle branchée.")
+            print("    Ce banc ne décide de rien : le lancer sur la machine")
+            print("    qui porte les bases.")
+            return 2
     syms = sorted(data)[:a.titres]
-    print(f"\n  {len(syms)} titres · mode {mode} · pas {a.pas} · entrée à J+{a.lag}")
+    print(f"\n  {len(syms)} série(s) · {mode} · pas {a.pas} · entrée à +{a.lag}")
 
     evenements, scores = _collecter(data, syms, a.hold, a.pas, a.lag, a.depart)
     if len(evenements) < 30:
@@ -180,11 +246,7 @@ def main() -> int:
         print("    Prochaine étape : PAS une stratégie. D'abord `signal_lab` pour le")
         print("    recouvrement avec le filtre de production — un signal qui répète")
         print("    l'existant n'ajoute rien, quel que soit son IC.")
-    print("\n  TIMEFRAMES RÉELLEMENT UTILISÉS. Macro : 1W DÉRIVÉ du 1D (agrégation,")
-    print("  pas une source nouvelle) — il porte la cible macro. Principal : 1D.")
-    print("  Exécution : 1D AUSSI, et c'est le point — la résistance de confirmation")
-    print("  est lue en 1D, pas en 4H. Aucune donnée intraday n'existe dans ce dépôt")
-    print("  (vault/03_TODO.md, P2) ; la jambe 4H de la spec reste UNCALIBRATED.\n")
+    _timeframes(a)
     return 0
 
 

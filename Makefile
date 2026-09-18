@@ -1,4 +1,4 @@
-.PHONY: combler-mfe help install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core coeur-multi diag-coeur-qqq index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto diag-creneau diag-pv-latente diag-source-crypto calibrer-seuil ingest-mktcap preset-report calibrate-preset preset-lab alpha-lab screen repro kill-check log-alpha sync-alphas event-study event-study-smid backtest-pead-smid funding-study risk-check sensitivity paper-watch vault-lint certification crypto-cockpit crypto-brief regime-study breakout-study microstructure-poc vault-ask crypto-screen screen-niche list-db live live-sim live-go live-cron-install live-cron-uninstall completer-ouvertures reconcilier-journal annuler-ventes annuler-chronologie annuler-doublons annuler-doublons-ouverts diag-journal diag-surfermeture diag-fusion bench-backend verify-journal reparer-journal banc-swing turnover-audit rdv-paper slippage alerts-test ingest-macro bitmart-check clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull journal-pull journal-push notion-sync contracts supabase-kpis sync sync-garde sync-garde-commits labs regime-atr-lab deviation-lab
+.PHONY: combler-mfe help install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core coeur-multi diag-coeur-qqq index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto diag-creneau diag-pv-latente diag-source-crypto calibrer-seuil ingest-mktcap preset-report calibrate-preset preset-lab alpha-lab screen repro kill-check log-alpha sync-alphas event-study event-study-smid backtest-pead-smid funding-study risk-check sensitivity paper-watch vault-lint certification crypto-cockpit crypto-brief regime-study breakout-study microstructure-poc vault-ask crypto-screen screen-niche list-db live live-sim live-go live-cron-install live-cron-uninstall completer-ouvertures reconcilier-journal annuler-ventes annuler-chronologie annuler-doublons annuler-doublons-ouverts diag-journal diag-surfermeture diag-fusion bench-backend verify-journal reparer-journal banc-swing turnover-audit rdv-paper slippage alerts-test ingest-macro bitmart-check clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull journal-pull journal-push notion-sync contracts supabase-kpis sync sync-garde sync-garde-commits labs regime-atr-lab deviation-lab deviation-lab-crypto ingest-crypto-intraday
 # PYTHON : utilise AUTOMATIQUEMENT le venv s'il existe (.venv/bin/python), sinon python3 système.
 # Évite le piège « No module named numpy » quand le venv n'est pas activé. Surchargeable.
 TICKER ?= AAPL
@@ -115,6 +115,8 @@ regime-atr-lab:   ## éprouve la règle « ATR > 200 % de sa moyenne 30 » AVANT
 	$(PYTHON) scripts/regime_atr_lab.py $(ARGS)
 deviation-lab:    ## le motif déviation→reclaim→consolidation prédit-il ? (gate placebo + DSR)
 	$(PYTHON) scripts/deviation_reclaim_lab.py $(ARGS)
+deviation-lab-crypto: ## le MÊME banc, sur crypto 1h/4h — le seul intraday gratuit et complet
+	$(PYTHON) scripts/deviation_reclaim_lab.py --source crypto --tf $(or $(TF),4h) $(ARGS)
 test:             ## lance la suite de tests
 	$(PYTHON) -m pytest -q
 coverage:         ## couverture de tests réelle (pytest-cov) → terme + rappel des trous
@@ -228,6 +230,8 @@ ledger-sweep:        ## perf RÉALISTE (journal discret) par % QQQ × DD-target 
 	$(PYTHON) scripts/ledger_sweep.py $(ARGS)
 ingest-crypto:       ## ingère les prix des top-N cryptos (yfinance) → data/crypto.db (prix RÉELS)
 	$(PYTHON) scripts/ingest_crypto.py $(ARGS)
+ingest-crypto-intraday: ## OHLCV crypto 1h + 4h (Binance, gratuit, sans clé) → data/crypto_intraday.db
+	$(PYTHON) scripts/ingest_crypto_intraday.py $(ARGS)
 diag-creneau:        ## à quelle heure exécuter : décompose le rendement nuit / séance
 	$(PYTHON) scripts/diag_creneau.py $(ARGS)
 diag-pv-latente:     ## combien de PV latente a été rendue, ligne par ligne (yo-yo chiffré)

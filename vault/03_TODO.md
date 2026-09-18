@@ -45,6 +45,28 @@
       `signal_lab` d'abord (recouvrement avec le filtre de production), stratégie
       ensuite, jamais l'inverse.
       `make deviation-lab ARGS="--titres 200 --hold 10"`
+- [ ] **P2 — Intraday 1h/4h pour les ACTIONS / INDICES / ETF : pas de source gratuite
+      honnête (18/09).** La crypto est livrée (`make ingest-crypto-intraday` → Binance,
+      sans clé, historique complet de la paire, `data/crypto_intraday.db`). Côté actions,
+      les deux sources gratuites déjà branchées dans le dépôt échouent pour des raisons
+      DIFFÉRENTES, et aucune des deux n'est réparable par du code :
+      **yfinance** plafonne le 1h à ~730 jours d'historique (limite du fournisseur) — de
+      quoi faire un banc, pas un entraînement ML sur plusieurs cycles ; et il ne sert PAS
+      le 4h, ce qui n'était pas visible avant : `_TF_MAP` renvoyait `"4h" → "1h"` et
+      `df_to_bars` étiquetait avec le timeframe DEMANDÉ, donc des barres horaires
+      entraient en base avec `timeframe="4h"`. Corrigé : le provider REFUSE désormais
+      `4h` explicitement, l'agrégation 1h→4h est à la charge de l'appelant.
+      **Alpaca palier gratuit** sert le flux IEX, dont les VOLUMES ne représentent pas le
+      marché — or nos détecteurs (`sfp`, `deviation_reclaim`) filtrent sur le volume :
+      la donnée est gratuite mais la mesure qu'on en tirerait serait fausse, ce qui est
+      pire que pas de donnée.
+      **Ce qui reste, donc payant** : Alpaca SIP (~99 $/mois), Polygon, Databento.
+      **À NE PAS refaire** : `bars_repo` est DÉJÀ multi-timeframe (clé (symbol, timeframe,
+      ts)), le schéma n'est pas le blocage — seule la SOURCE l'est.
+      **Décision différée, et la condition est mesurable** : n'ouvrir ce poste que si le
+      banc crypto (`make deviation-lab-crypto`) montre que l'intraday apporte quelque
+      chose LÀ OÙ les données sont complètes. Si l'apport n'existe pas sur Binance, il
+      n'existera pas sur deux ans d'IEX, et on aura économisé l'abonnement.
 - [ ] **P0 — Le journal tient 27 symboles OUVERTS, le courtier en détient 17 (17/09).**
       Mesuré en confrontant l'onglet « Historique des positions » (61 lots ouverts) aux
       positions Alpaca réelles : **13 symboles** ouverts au journal dont le courtier ne

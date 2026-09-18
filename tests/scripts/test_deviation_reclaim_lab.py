@@ -101,10 +101,10 @@ def test_le_banc_DIT_sur_quel_timeframe_chaque_niveau_est_lu():
     pas ici : elle est lue sur le PRINCIPAL. Une sortie muette là-dessus laisserait
     supposer le 4H — et un niveau dont on croit connaître l'origine est pire qu'un
     niveau absent."""
+    actions = BANC.split("def _timeframes")[1].split("\ndef ")[0].split("else:")[1]
+    assert "1D" in actions and "PAS en 4H" in actions
+    assert "UNCALIBRATED" in actions
     assert "QUOTIDIENNE" in BANC
-    assert "Exécution : 1D" in BANC
-    assert "pas en 4H" in BANC
-    assert "UNCALIBRATED" in BANC
 
 
 def test_le_WEEKLY_est_derive_du_daily_et_porte_la_cible_macro():
@@ -112,3 +112,36 @@ def test_le_WEEKLY_est_derive_du_daily_et_porte_la_cible_macro():
     lui, ne se déduit de rien : il faudrait l'ingérer."""
     assert "agreger_hebdo" in BANC
     assert "hebdo=hebdo" in BANC
+
+
+# ─── La source crypto intraday (18/09) ─────────────────────────────────────────────
+
+def test_le_banc_sait_lire_la_base_CRYPTO_intraday():
+    """C'est le seul endroit où le timeframe d'exécution de la spec existe vraiment."""
+    assert "--source" in BANC and '"crypto"' in BANC
+    assert "crypto_intraday.db" in BANC
+    assert "_donnees_crypto" in BANC
+
+
+def test_sans_base_intraday_le_banc_DIT_quoi_lancer():
+    """« UNCALIBRATED » sans la marche à suivre laisse l'utilisateur devant un mur."""
+    assert "make ingest-crypto-intraday" in BANC
+
+
+def test_le_pied_de_page_SUIT_la_source_et_ne_la_decrit_pas_de_memoire():
+    """LE défaut que ce test ferme. Le pied de page annonçait « Principal : 1D · aucune
+    donnée intraday n'existe dans ce dépôt » quelle que soit la source — vrai sur
+    actions, FAUX dès la première mesure crypto en 1h. Un rapport qui décrit autre chose
+    que ce qu'il vient de calculer est la pire espèce d'erreur : rien ne cloche à
+    l'écran."""
+    bloc = BANC.split("def _timeframes")[1].split("\ndef ")[0]
+    assert 'a.source == "crypto"' in bloc, "le pied de page doit brancher sur la source"
+    assert "{a.tf}" in bloc, "il doit nommer le timeframe RÉELLEMENT utilisé"
+    assert "UNCALIBRATED" in bloc, "et rappeler ce qui reste non mesuré côté actions"
+
+
+def test_hold_se_compte_en_BARRES_et_le_dit():
+    """Cinq barres valent cinq jours en quotidien et cinq heures en 1h. L'afficher en
+    « j » ferait comparer deux horizons sous le même nom."""
+    assert "horizon {hold} barres" in BANC
+    assert "hold` se compte en BARRES" in BANC
