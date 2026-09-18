@@ -266,12 +266,15 @@ export default function Positions() {
         <MetricCard label="Valeur positions" value={`$${usd(mv)}`} />
         <MetricCard label="Gain / perte en cours" terme="P&L latent" value={`$${usd(pnl)}`} tone={pnl >= 0 ? "pos" : "neg"}
           explication="Ce qu'on gagnerait ou perdrait en vendant tout maintenant." />
-        <MetricCard label="Gain / perte réalisé" terme="encaissé"
-          value={rea?.disponible ? `$${usd(rea.total)}` : "n/d"}
-          tone={rea?.disponible ? (rea.total >= 0 ? "pos" : "neg") : undefined}
-          explication={rea?.disponible
-            ? `Trades SOLDÉS, tous périmètres : ${rea.n_total} aller-retours. Dont le robot : $${usd(rea.robot)} sur ${rea.n_robot}; import historique : $${usd(rea.hors_robot)}.`
-            : `Registre illisible — ${rea?.motif ?? "motif non renseigné"}. Un zéro se lirait « aucun trade soldé ».`} />
+        <MetricCard label="Gain / perte réalisé"
+          terme={rea?.frais != null ? "net de frais" : "BRUT de frais"}
+          value={rea?.disponible ? `$${usd(rea.frais != null ? rea.net : rea.total)}` : "n/d"}
+          tone={rea?.disponible ? ((rea.frais != null ? rea.net : rea.total) >= 0 ? "pos" : "neg") : undefined}
+          explication={!rea?.disponible
+            ? `Registre illisible — ${rea?.motif ?? "motif non renseigné"}. Un zéro se lirait « aucun trade soldé ».`
+            : rea.frais != null
+              ? `${rea.n_total} aller-retours soldés : $${usd(rea.total)} bruts − $${usd(rea.frais)} de frais RÉELS lus chez le courtier. Les frais ne sont pas dans les ordres (activités séparées) et ne s'attribuent pas au trade : le courtier les publie en agrégats journaliers.`
+              : `${rea.n_total} aller-retours soldés, BRUT de frais — ${rea.frais_motif ?? "aucun relevé"}. Les frais sont des activités séparées chez le courtier ; écrire 0 affirmerait qu'il n'y en a pas eu.`} />
         <MetricCard label="Vraie diversification" terme="N effectif" value={nEff ? nEff.toFixed(1) : "n/d"}
           explication="Nombre de positions RÉELLEMENT indépendantes. Dix lignes très corrélées en valent trois." />
       </section>

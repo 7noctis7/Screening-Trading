@@ -137,3 +137,36 @@ def test_un_journal_EN_DEFAUT_reste_bloquant_meme_en_crypto():
     r = rejouer([_f("1", "ETH/USD", "buy", 1.0, 2500.0, "2026-09-18")])
     v = confronter(r, {"ETHUSD": 1.005})
     assert v["conforme"] is False and v["frais_nature"] == []
+
+
+def test_le_CAC_40_est_une_REFERENCE_du_comparatif():
+    """Comparer à un seul marché laisse croire que le choix de la référence n'importe
+    pas : un robot qui bat le S&P et perd contre le CAC ne raconte pas la même histoire
+    selon celle qu'on affiche. Les alias suivent `snapshot._index_series` :
+    l'indice d'abord, son tracker coté en repli."""
+    from packages.portfolio.comparaison_benchmark import REFERENCES
+
+    assert "CAC 40" in REFERENCES
+    assert REFERENCES["CAC 40"][0] == "^FCHI", "l'INDICE d'abord, le tracker en repli"
+    assert "EWQ" in REFERENCES["CAC 40"]
+
+
+def test_chaque_reference_a_sa_COULEUR_dans_les_deux_themes():
+    """Une courbe sans couleur déclarée hérite de celle d'une autre : deux références
+    indiscernables valent moins qu'une seule."""
+    import pathlib
+
+    racine = pathlib.Path(__file__).resolve().parents[2]
+    css = (racine / "apps" / "web" / "app" / "globals.css").read_text(encoding="utf-8")
+    from packages.portfolio.comparaison_benchmark import REFERENCES
+
+    jetons = {"S&P 500": "--bench-sp", "Nasdaq 100": "--bench-ndx",
+              "Bitcoin": "--bench-btc", "CAC 40": "--bench-cac"}
+    for nom in REFERENCES:
+        assert nom in jetons, f"{nom} : référence sans couleur prévue"
+        assert css.count(f"{jetons[nom]}:") >= 2, f"{nom} : manque un thème"
+    for composant in ("PerformanceVsBenchmarks", "EquityChart"):
+        src = (racine / "apps" / "web" / "components"
+               / f"{composant}.tsx").read_text(encoding="utf-8")
+        for nom, jeton in jetons.items():
+            assert f"var({jeton})" in src, f"{composant} : {nom} sans couleur"

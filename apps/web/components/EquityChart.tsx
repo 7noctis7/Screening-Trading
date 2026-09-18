@@ -19,7 +19,7 @@ const compact = (v: number) => (Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(1)}k
 // Les teintes sont des TOKENS DE THÈME (globals.css), pas des littéraux : codées en dur,
 // elles gardaient la même valeur en clair et en sombre, où le contraste n'est pas le même.
 const BCOL: Record<string, string> = {
-  "S&P 500": "var(--bench-sp)", "Nasdaq 100": "var(--bench-ndx)", "Bitcoin": "var(--bench-btc)",
+  "S&P 500": "var(--bench-sp)", "Nasdaq 100": "var(--bench-ndx)", "Bitcoin": "var(--bench-btc)", "CAC 40": "var(--bench-cac)",
 };
 const col = (n: string) => BCOL[n] ?? "var(--muted)";
 

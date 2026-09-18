@@ -29,6 +29,13 @@ REFERENCES: dict[str, list[str]] = {
     "S&P 500": ["^GSPC", "SPX", "SPY"],
     "Nasdaq 100": ["^NDX", "^IXIC", "QQQ"],
     "Bitcoin": ["BTC-USD", "BTC/USD", "BTCUSD", "BTC/USDC"],
+    # LE CAC 40 N'EST PAS UN INDICE DE PLUS (18/09). Comparer à un seul marché laisse
+    # croire que le choix de la référence n'importe pas : un robot qui bat le S&P et
+    # perd contre le CAC ne raconte pas la même histoire selon celle qu'on affiche.
+    # Mêmes alias que `snapshot._index_series`, et la règle d'ADR-0181 tient ici sans
+    # code supplémentaire — une référence dont l'historique ne couvre pas le début du
+    # portefeuille est ÉCARTÉE et NOMMÉE, jamais reconstruite par report.
+    "CAC 40": ["^FCHI", "CAC", "EWQ"],
 }
 
 

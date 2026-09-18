@@ -34,7 +34,14 @@ def test_une_reference_INTROUVABLE_est_nommee_jamais_simulee(monkeypatch):
 
     r = perf.payload()
     assert list(r["benchmarks"]) == ["S&P 500"]
-    assert r["ecartees"] == ["Bitcoin", "Nasdaq 100"]
+    # LA LISTE SE DÉDUIT DE `REFERENCES`, elle ne se recopie pas (18/09). Énumérer les
+    # écartées en dur faisait échouer ce test à l'ajout du CAC 40 — alors que la
+    # propriété tenait toujours. Un test qui casse quand le comportement est CORRECT
+    # finit par être « réparé » en le relâchant ; celui-ci dit ce qu'il veut dire :
+    # tout ce qui n'a pas été trouvé est NOMMÉ, quel que soit le nombre de références.
+    from packages.portfolio.comparaison_benchmark import REFERENCES
+
+    assert r["ecartees"] == sorted(set(REFERENCES) - {"S&P 500"})
 
 
 def test_le_premier_alias_QUI_COUVRE_le_debut_est_retenu(monkeypatch):

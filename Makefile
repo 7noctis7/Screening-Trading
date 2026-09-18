@@ -316,6 +316,8 @@ live-cron-uninstall: ## désactive le rebalancement paper automatique
 	bash scripts/install_live_cron.sh --uninstall
 completer-ouvertures: ## reconstitue au journal les ACHATS que le courtier a exécutés (simulation par défaut) — À FAIRE AVANT reconcilier-journal
 	$(PYTHON) scripts/completer_ouvertures.py $(ARGS)
+frais-courtier:      ## frais RÉELS lus chez le courtier + l'identité qu'ils referment
+	$(PYTHON) scripts/frais_courtier.py
 reconstruire-journal: ## REBÂTIT le journal depuis les SEULS fills du courtier (simulation par défaut)
 	$(PYTHON) scripts/reconstruire_journal.py $(ARGS)
 reparer-journal:     ## LA commande de réparation du journal : chaîne complète, dans l'ordre, fail-closed

@@ -230,6 +230,45 @@ class AlpacaBroker:
         except Exception:  # noqa: BLE001
             return []
 
+    def frais(self, limit: int = 5000) -> dict:
+        """Frais RÉELLEMENT prélevés, lus dans les ACTIVITÉS du compte. [] si indispo.
+
+        POURQUOI ILS NE SONT PAS DANS `orders` (18/09). Un fill porte une quantité et un
+        prix, pas son coût de transaction : chez Alpaca les frais sont des ACTIVITÉS
+        séparées — `FEE` (TAF/REG/CAT, en dollars) et `CFEE` (crypto). Un registre
+        reconstruit depuis les seuls ordres est donc BRUT de frais, et l'identité
+        `capital = mise + réalisé + latent` y perd exactement leur montant : 810,30 $
+        mesurés ce jour-là sur un compte à 100 973,45 $.
+
+        LES FRAIS CRYPTO SE PRÉLÈVENT EN NATURE, et c'est le piège de lecture. Une
+        `CFEE` retire des JETONS : elle réduit la quantité détenue, donc la valeur du
+        portefeuille, sans passer par le cash. Alpaca publie les deux formes ; on
+        somme les montants en DOLLARS et on compte à part ce qui n'en porte pas,
+        plutôt que de convertir des jetons à un prix qu'on choisirait nous-mêmes.
+        """
+        try:
+            from alpaca.trading.requests import GetAccountActivitiesRequest
+            req = GetAccountActivitiesRequest(activity_types=["FEE", "CFEE"])
+            actes = list(self._client.get_account_activities(req))[:limit]
+        except Exception as e:  # noqa: BLE001
+            return {"disponible": False, "motif": str(e)[:160]}
+        par_type: dict[str, float] = {}
+        en_nature: list[dict] = []
+        for a in actes:
+            typ = str(getattr(a, "activity_type", "") or "").split(".")[-1].upper()
+            montant = getattr(a, "net_amount", None)
+            if montant is not None:
+                par_type[typ] = round(par_type.get(typ, 0.0) + float(montant), 4)
+            else:
+                # Prélèvement EN JETONS : on le NOMME sans lui donner un prix qu'on
+                # aurait choisi. Sa trace en dollars est dans la valeur du portefeuille.
+                en_nature.append({"type": typ, "symbole": str(getattr(a, "symbol", "")),
+                                  "qty": float(getattr(a, "qty", 0) or 0)})
+        return {"disponible": True, "n": len(actes),
+                "par_type": par_type,
+                "total_usd": round(sum(par_type.values()), 2),
+                "en_nature": en_nature, "n_en_nature": len(en_nature)}
+
     def cancel(self, client_id: str) -> bool:
         try:
             o = self._client.get_order_by_client_id(client_id)

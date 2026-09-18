@@ -19,7 +19,7 @@ const pct = (x: number | null) => (x == null ? "—" : `${x >= 0 ? "+" : ""}${(x
 // obligerait à retrouver la correspondance à chaque lecture.
 const COL: Record<string, string> = {
   Portefeuille: "var(--accent)", "S&P 500": "var(--bench-sp)",
-  "Nasdaq 100": "var(--bench-ndx)", Bitcoin: "var(--bench-btc)",
+  "Nasdaq 100": "var(--bench-ndx)", Bitcoin: "var(--bench-btc)", "CAC 40": "var(--bench-cac)",
 };
 
 export function PerformanceVsBenchmarks() {

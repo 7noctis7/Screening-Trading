@@ -126,11 +126,22 @@ def realise_compte(journal) -> dict:
     grandeur — le robot a fait +74 $ quand le compte en a subi −1 888 $ — et qu'afficher
     le plus flatteur des deux sans le dire serait le mensonge le plus facile du site.
     """
+    from packages.execution.frais_store import dernier
     from packages.execution.perimetre_journal import pris_par_le_robot
     fermes = [t for t in journal.all() if t.exit_ts]
     total = sum(float(t.pnl_net or 0.0) for t in fermes)
     robot = sum(float(t.pnl_net or 0.0) for t in fermes if pris_par_le_robot(t.id))
+    # LE RÉALISÉ EST BRUT, ET LES FRAIS SONT À CÔTÉ. Ils ne sont pas attribuables au
+    # trade : le courtier les publie en agrégats journaliers (« TAF fee for proceed of
+    # 389,9 shares (25 trades) »). Les répartir par aller-retour serait une invention ;
+    # les taire ferait perdre 810,30 $ à l'identité du compte, mesurés le 18/09.
+    f = dernier()
     return {"total": round(total, 2), "robot": round(robot, 2),
             "hors_robot": round(total - robot, 2),
             "n_total": len(fermes),
-            "n_robot": sum(1 for t in fermes if pris_par_le_robot(t.id))}
+            "n_robot": sum(1 for t in fermes if pris_par_le_robot(t.id)),
+            "frais": (round(abs(float(f.get("total_usd") or 0.0)), 2)
+                      if f.get("disponible") else None),
+            "frais_motif": None if f.get("disponible") else f.get("motif"),
+            "net": (round(total - abs(float(f.get("total_usd") or 0.0)), 2)
+                    if f.get("disponible") else None)}

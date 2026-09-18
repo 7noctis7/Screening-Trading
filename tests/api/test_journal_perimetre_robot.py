@@ -128,5 +128,12 @@ def test_un_registre_VIDE_rend_zero_sans_rien_inventer(tmp_path):
     from packages.storage import SqliteTradeJournal
 
     r = realise_compte(SqliteTradeJournal(tmp_path / "vide.db"))
-    assert r == {"total": 0.0, "robot": 0.0, "hors_robot": 0.0,
-                 "n_total": 0, "n_robot": 0}
+    assert (r["total"], r["robot"], r["hors_robot"]) == (0.0, 0.0, 0.0)
+    assert (r["n_total"], r["n_robot"]) == (0, 0)
+    # LES FRAIS SONT À CÔTÉ DU RÉALISÉ, ET « INCONNU » N'EST PAS « ZÉRO ». Sans relevé,
+    # `frais` vaut None avec son motif : écrire 0,0 affirmerait qu'aucun frais n'a été
+    # prélevé — ce qui est faux de 810,30 $ sur ce compte, mesurés le 18/09.
+    assert "frais" in r and "net" in r
+    assert (r["frais"] is None) == (r["net"] is None)
+    if r["frais"] is None:
+        assert r["frais_motif"], "une absence se dit, elle ne se devine pas"
