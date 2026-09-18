@@ -64,6 +64,23 @@ doublon réel (QQQ ×2, 3,586126 @ 716,86 le 17/09) — le défaut était détec
 sont tous distincts ». Restent 29 symboles / 88 lots orphelins, irréductibles sans
 inventer un prix, et un résidu de +1 826,57 $ nommé `latent(début)`, jamais bouché.
 
+**DEUX DÉFAUTS TROUVÉS AU PREMIER USAGE RÉEL, et le premier mentait sur son compte.**
+`make ingest-crypto-intraday` a répondu « aucune base crypto dans l'univers — rien à
+ingérer » sur un univers qui en porte **102**. Cause : `_bases_univers` finit par
+`bases[:top]`, donc `--top 0` — que j'avais documenté « 0 = tout l'univers » — rendait
+une liste VIDE. Deux appelants plus anciens se défendaient déjà en passant `10_000` :
+un nombre magique recopié est un piège documenté, pas un piège fermé. Le plafond se
+déclare désormais DANS la fonction (`bases[:top] if top else bases`), et les deux
+`10_000` disparaissent. Ce qui rendait ce défaut coûteux n'est pas la ligne fautive,
+c'est le message : il accusait les DONNÉES d'un défaut de l'APPELANT, donc il envoyait
+chercher au mauvais endroit.
+
+Second défaut, sans conséquence et à fermer quand même : `make deviation-lab-crypto
+ARGS="--tf 4h"` produisait `--tf 4h --tf 4h`, la cible injectant déjà son défaut.
+argparse garde le dernier, donc rien ne cassait — et c'est précisément pourquoi il faut
+le corriger : une ligne de commande qui se contredit sans le dire finira par le faire
+dans l'autre sens. `--tf` n'est plus injecté que si `ARGS` n'en porte pas.
+
 **Deux renumérotations et un avertissement à traiter.** L'ADR du motif de price action
 portait le numéro 0180, déjà pris — il devient ADR-0182. Et `make sync` signale sur le VPS
 « 1 entrée en attente dans git stash » : c'est le filet de `sync-garde`, à vider

@@ -100,3 +100,36 @@ def test_la_base_intraday_ne_peut_PAS_etre_commitee():
     r = subprocess.run(["git", "check-ignore", "data/crypto_intraday.db"],
                        cwd=RACINE, capture_output=True, text=True)
     assert r.returncode == 0, "data/crypto_intraday.db n'est PAS ignoré par git"
+
+
+def test_top_a_ZERO_veut_dire_TOUT_l_univers_pas_une_liste_vide():
+    """LE DÉFAUT DU 18/09, et il mentait sur son compte. `_bases_univers` finissait par
+    `bases[:top]` : avec `--top 0` — documenté « 0 = tout l'univers » — elle rendait une
+    liste VIDE, et l'ingestion imprimait « aucune base crypto dans l'univers ». Un
+    message qui accuse les DONNÉES d'un défaut de l'APPELANT fait chercher au mauvais
+    endroit. Deux autres appelants se défendaient déjà en passant `10_000` : un nombre
+    magique recopié est un piège documenté, pas un piège fermé."""
+    from scripts.ingest_crypto import _bases_univers
+
+    tout, defaut, trois = _bases_univers(0), _bases_univers(), _bases_univers(3)
+    assert tout, "l'univers crypto du dépôt ne peut pas être vide"
+    assert tout == defaut, "`0` et l'absence d'argument doivent dire la même chose"
+    assert len(trois) == 3 and trois == tout[:3], "un plafond réel reste un plafond"
+
+
+def test_le_Makefile_n_injecte_pas_un_SECOND_tf():
+    """`make deviation-lab-crypto ARGS="--tf 4h"` produisait `--tf 4h --tf 4h`.
+    argparse garde le dernier, donc rien ne cassait — et c'est le problème : une ligne
+    de commande qui se contredit sans le dire finit par le faire dans l'autre sens."""
+    import subprocess
+
+    def _ligne(*args):
+        r = subprocess.run(["make", "-n", "deviation-lab-crypto", *args],
+                           cwd=RACINE, capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        return r.stdout.strip().splitlines()[-1]
+
+    assert _ligne('ARGS=--tf 1h').count("--tf") == 1
+    assert "--tf 1h" in _ligne('ARGS=--tf 1h')
+    assert "--tf 4h" in _ligne(), "sans ARGS, le défaut 4h doit rester"
+    assert "--tf 1h" in _ligne("TF=1h"), "TF= doit continuer de choisir le timeframe"

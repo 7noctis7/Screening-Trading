@@ -115,8 +115,11 @@ regime-atr-lab:   ## éprouve la règle « ATR > 200 % de sa moyenne 30 » AVANT
 	$(PYTHON) scripts/regime_atr_lab.py $(ARGS)
 deviation-lab:    ## le motif déviation→reclaim→consolidation prédit-il ? (gate placebo + DSR)
 	$(PYTHON) scripts/deviation_reclaim_lab.py $(ARGS)
-deviation-lab-crypto: ## le MÊME banc, sur crypto 1h/4h — le seul intraday gratuit et complet
-	$(PYTHON) scripts/deviation_reclaim_lab.py --source crypto --tf $(or $(TF),4h) $(ARGS)
+# `--tf` n'est injecté QUE si ARGS n'en porte pas : sinon `ARGS="--tf 4h"` produisait
+# `--tf 4h --tf 4h`. argparse garde le dernier, donc rien ne cassait — et c'est
+# précisément le problème : une ligne de commande qui se contredit sans le dire.
+deviation-lab-crypto: ## le MÊME banc, sur crypto 1h/4h (TF=1h|4h) — le seul intraday gratuit et complet
+	$(PYTHON) scripts/deviation_reclaim_lab.py --source crypto $(if $(findstring --tf,$(ARGS)),,--tf $(or $(TF),4h)) $(ARGS)
 test:             ## lance la suite de tests
 	$(PYTHON) -m pytest -q
 coverage:         ## couverture de tests réelle (pytest-cov) → terme + rappel des trous
