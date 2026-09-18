@@ -166,3 +166,67 @@ def applique(racine: Path = RACINE) -> tuple[bool, str]:
         if "-c constraints.txt" not in depouillee:
             return False, f"installation SANS verrou : {depouillee[:60]}"
     return True, "verrou appliqué à l'installation locale"
+
+
+# ─── Le verrou doit venir de la machine QUI ENTRAÎNE (18/09) ───────────────────────
+
+def _famille(os_complet: str) -> str:
+    """« Linux 7.0.0-28-generic » → « Linux ». Le noyau change, pas la famille."""
+    return str(os_complet or "").split()[0] if os_complet else ""
+
+
+def _mineure(version: str) -> str:
+    """« 3.14.4 » → « 3.14 ». Le correctif ne change rien ; la mineure, si."""
+    bouts = str(version or "").split(".")
+    return ".".join(bouts[:2]) if len(bouts) >= 2 else str(version or "")
+
+
+def machine_de_reference(registre=None) -> dict | None:
+    """L'environnement de la DERNIÈRE machine qui a réellement entraîné, ou None.
+
+    Lu dans le registre des modèles — une trace d'entraînement, pas une constante
+    écrite à la main : une constante se désynchronise en silence, une trace non.
+    Aucun entraînement tracé ⇒ None, et l'appelant DOIT traiter ce cas comme « on ne
+    sait pas », jamais comme « c'est la bonne machine ».
+    """
+    try:
+        from packages.mlops.registre import Registre
+        reg = registre if registre is not None else Registre()
+        entrees = [e for e in reg.entrees.values() if (e.manifest or {}).get("env")]
+        if not entrees:
+            return None
+        derniere = sorted(entrees, key=lambda e: e.version)[-1]
+        env = derniere.manifest["env"]
+        return {"os": env.get("os"), "machine": env.get("machine"),
+                "python": env.get("python"), "version": derniere.version}
+    except Exception:  # noqa: BLE001 — registre absent ou illisible : on ne sait pas
+        return None
+
+
+def machine_compatible(reference: dict | None,
+                       courant: dict | None = None) -> tuple[bool | None, str]:
+    """(verdict, motif). `None` = INDÉTERMINÉ, ce qui n'est pas « compatible ».
+
+    MESURÉ LE 18/09. `make verrou-regen` annonce « à lancer sur la machine qui
+    entraîne » — et ne vérifiait rien. Lancé sur le Mac (Darwin/arm64, Python 3.12), il
+    a produit un verrou de 140 paquets qui a remplacé celui du VPS (Linux/x86_64,
+    Python 3.14, 159 paquets) : plus de roues CUDA, et des épinglages résolus pour une
+    autre version de Python. Le fichier était vert des deux côtés — c'est le pire cas,
+    parce que rien n'invite à regarder.
+    """
+    if not reference:
+        return None, ("aucun entraînement tracé au registre : impossible de "
+                      "vérifier la machine. On ne bloque pas sur une absence.")
+    ici = courant or environnement()
+    ecarts = []
+    if _famille(reference["os"]) != _famille(ici.get("os")):
+        ecarts.append(f"OS {_famille(reference['os'])} ≠ {_famille(ici.get('os'))}")
+    if reference["machine"] != ici.get("machine"):
+        ecarts.append(f"architecture {reference['machine']} ≠ {ici.get('machine')}")
+    if _mineure(reference["python"]) != _mineure(ici.get("python")):
+        ecarts.append(f"Python {_mineure(reference['python'])} ≠ "
+                      f"{_mineure(ici.get('python'))}")
+    if ecarts:
+        return False, " · ".join(ecarts)
+    return True, (f"même machine que le dernier entraînement "
+                  f"({reference['machine']}, {_famille(reference['os'])})")

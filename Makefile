@@ -30,7 +30,12 @@ install:          ## installe les dépendances (uv) SOUS le verrou de constraint
 	.venv/bin/python -m uv pip install -e ".[dev,data,quant,api,ml]" -c constraints.txt
 
 verrou-regen:     ## régénère constraints.txt AVEC les extras d'entraînement (sur la machine qui entraîne)
-	@echo "→ Cette cible doit tourner SUR LA MACHINE QUI ENTRAÎNE (cf. make verrou)."
+	@# ET ON LE VÉRIFIE, DÉSORMAIS. Le 18/09, cette cible lancée depuis le Mac
+	@# (Darwin/arm64, Python 3.12) a produit un verrou de 140 paquets qui a remplacé
+	@# celui du VPS (Linux/x86_64, Python 3.14, 159 paquets). `make verrou` restait VERT
+	@# des deux côtés : rien n'invitait à regarder. Une phrase d'avertissement ne
+	@# s'exécute pas — la garde, si (QUANT_VERROU_FORCE=1 pour passer outre).
+	$(PYTHON) scripts/verrou_regen_garde.py
 	@# TOUT PASSE PAR $(PYTHON), l'interpréteur du projet — jamais par un binaire du PATH.
 	@# Deux tentatives ont échoué en nommant un outil absent de la machine visée :
 	@# `pip-compile` (pip-tools n'est pas une dépendance) puis `uv` (présent sur le poste
