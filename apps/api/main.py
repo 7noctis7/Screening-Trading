@@ -1200,20 +1200,6 @@ def note_file(date: str, symbol: str, ext: str = "html") -> Any:
     return HTMLResponse(fp.read_text(encoding="utf-8"))
 
 
-@app.get("/api/ai/status")
-def ai_status(request: Request) -> dict:
-    """Disponibilité du fournisseur ET du modèle demandé.
-
-    Le voyant doit tester ce que fera le bouton « Générer ». Un statut fondé sur `/models` seul
-    affichait « ● connecté » puis échouait en 404 dès qu'on générait, parce que le modèle
-    demandé n'appartenait pas au fournisseur de l'URL. Le motif accompagne donc le statut."""
-    from packages.llm.client import diagnostic
-    d = diagnostic(_cfg_llm(request))
-    return {"available": bool(d.get("ok")), "motif": d.get("motif", ""),
-            "base": d.get("base", ""), "modele": d.get("modele", ""),
-            "modeles": d.get("modeles", [])}
-
-
 def _cfg_llm(request: Request):
     """Config IA transmise par l'appelant, via en-têtes. Priorité sur l'environnement.
 
@@ -1291,40 +1277,6 @@ def ai_diagnostic(request: Request) -> dict:
     """
     from packages.llm.client import diagnostic
     return diagnostic(_cfg_llm(request))
-
-
-@app.get("/api/ai/commentary")
-def ai_commentary(request: Request) -> dict:
-    """Commentaire IA en langage naturel sur l'état du portefeuille.
-
-    Le fournisseur vient de l'appelant (en-têtes) ou de l'environnement — modèle local par défaut.
-    """
-    from packages.llm.client import complete
-    from packages.llm.guard import guard_numbers
-    s = _snap()
-    d, p = s["dashboard"], s["portfolio"]
-    rm = p.get("analysis", {}).get("risk", {})
-    k = d.get("portfolio", {})
-    top = ", ".join(f"{r['symbol']} ({r.get('score', 0):.2f})" for r in s["screener"]["rows"][:5])
-    reg = d.get("regime", {})
-    facts = (
-        f"Portefeuille (démo): {k.get('value', 0):.0f} $, P&L {k.get('pnl_pct', 0)*100:.1f}%, "
-        f"{k.get('n_positions', 0)} positions, exposition {k.get('exposure_pct', 0)*100:.0f}%.\n"
-        f"Régime: {reg.get('cycle', '?')} / {reg.get('risk_mode', '?')}, VIX {d.get('vix', 0):.0f}.\n"
-        f"Risque: VaR95 {rm.get('var_95', 0)*100:.1f}%, vol {rm.get('vol', 0)*100:.1f}%, "
-        f"Sharpe déflaté {rm.get('dsr', 0)}.\n"
-        f"Top screener: {top}."
-    )
-    system = ("Tu es un analyste quant senior. Réponds DIRECTEMENT en français, 4-6 phrases "
-              "claires et actionnables, sans afficher ton raisonnement. Commente l'état du "
-              "portefeuille (risque, régime, idées). Ton factuel et prudent, pas de conseil personnalisé.")
-    res = complete(facts, system=system, max_tokens=1100, cfg=_cfg_llm(request))
-    text, violations = guard_numbers(res.get("text", ""), facts, policy="reject")
-    if violations:
-        text = "Réponse rejetée : chiffres non sourcés dans le contexte Quant Terminal."
-    return {"available": res.get("available", False), "text": text,
-            "reason": res.get("reason", ""), "grounded": not violations,
-            "violations": violations}
 
 
 class AIChatRequest(BaseModel):

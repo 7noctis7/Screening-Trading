@@ -79,6 +79,34 @@ marché — or nos détecteurs filtrent sur le volume. Une donnée gratuite qui 
 mesure est pire que pas de donnée. Noté P2, avec sa condition d'ouverture : ne payer que
 si le banc crypto montre un apport là où les données sont complètes.
 
+**LE « COMMENTAIRE IA » DE L'ACCUEIL EST RETIRÉ.** Il affichait « aucun fournisseur ne
+répond · HTTP Error 400 » et proposait de brancher Gemini/OpenAI/Anthropic/Mistral. Deux
+raisons de le supprimer plutôt que de le réparer : il ne marchait pour personne sans
+configuration manuelle, et surtout **il commentait le portefeuille de DÉMO** —
+`s["dashboard"]`, pas le compte réel. Un texte d'analyse en langage naturel sur des
+chiffres synthétiques, à côté de panneaux qui n'affichent que du réel, est exactement le
+genre de voisinage qui finit par être lu comme réel.
+
+Retiré : `components/AICommentary.tsx`, son montage dans `app/accueil/page.tsx`, et les
+deux routes devenues sans appelant (`/api/ai/status`, `/api/ai/commentary`). CONSERVÉ :
+le copilote `QuantChat` (monté dans le layout), le panneau `ReglagesIA` qu'il utilise, et
+`/api/ai/diagnostic`, `/chat`, `/metrics`, `/modeles`. Le test qui gardait les cinq routes
+gardait contre un retrait COLLATÉRAL ; il exige désormais que les trois vivantes restent
+ET que les deux mortes aient disparu — sans quoi un garde-fou devient un obstacle au
+ménage.
+
+**LE POINT DE DÉPART DU CAPITAL N'ÉTAIT PAS CELUI DU COMPTE.** Alpaca affiche
+101 026,57 $ ; le panneau annonçait +1,13 % depuis un « capital initial » de 99 605,37 $
+daté du 22/06. Ce 22/06 est le jour où NOUS avons commencé à enregistrer, pas l'ouverture
+du compte : `equity_history` écrit un point par jour à chaque build. Un pourcentage
+calculé depuis cette base répond à « depuis que je regarde », pas à « depuis que j'ai
+déposé » — et si l'enregistrement démarre après une baisse, la base est basse et le
+chiffre FLATTÉ. Or la courbe d'Alpaca remonte à la création du compte et le snapshot la
+récupérait DÉJÀ (`portfolio_history`) : elle était là, inutilisée. Elle devient la source
+préférée, l'enregistrement local le secours, la source est publiée par poche, et
+`depart_certain` passe à faux dès qu'UNE poche part d'une base locale — le capital est
+une somme, un « presque certain » se lirait certain.
+
 **LE SITE DISAIT TOUT SAUF LE RÉSULTAT.** Le panneau « Mes positions » ouvrait sur
 l'identité comptable, donc sur « écart NON expliqué +2 669,06 $ » — quand la question
 était : je pars de ~100 k, j'en ai 100 734, ça donne quoi ? Le chiffre qui répond,

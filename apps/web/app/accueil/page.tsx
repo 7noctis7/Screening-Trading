@@ -1,7 +1,6 @@
 "use client";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { AICommentary } from "@/components/AICommentary";
 import { Reveal } from "@/components/Reveal";
 import { useDashboard } from "@/lib/api";
 import {
@@ -164,7 +163,6 @@ export default function Accueil() {
         </div>
       </section>
 
-      <Reveal><AICommentary /></Reveal>
 
       <Reveal>
         <section className="card p-5">

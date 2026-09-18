@@ -34,13 +34,22 @@ def test_un_registre_indisponible_ne_fait_PAS_tomber_l_etat_IA():
         R.Registre = original
 
 
-def test_la_route_du_registre_survit_au_retrait_de_la_chaine_NLP():
-    """Les routes IA d'origine restent : retirer la chaîne locale ne devait toucher
-    QUE ce qui appelait un fournisseur de LLM."""
+def test_les_routes_IA_ENCORE_UTILISEES_survivent_aux_retraits():
+    """Ce test garde les routes contre un retrait COLLATÉRAL, pas contre un retrait
+    voulu. Il en gardait cinq ; deux sont parties le 18/09 avec le « Commentaire IA »
+    de l'accueil, qui ne servait plus personne et commentait le portefeuille de DÉMO.
+    Les trois qui restent ont chacune un appelant vivant : `diagnostic` (panneau de
+    réglages), `chat` (copilote), `metrics` et `modeles`.
+
+    LA DIFFÉRENCE COMPTE. Une route retirée par accident casse une page en silence ;
+    une route retirée exprès doit disparaître d'ici AUSSI, sinon le test devient un
+    obstacle au ménage plutôt qu'un garde-fou."""
     src = (RACINE / "apps" / "api" / "main.py").read_text(encoding="utf-8")
-    for route in ("/api/ai/status", "/api/ai/diagnostic", "/api/ai/commentary",
-                  "/api/ai/metrics", "/api/ai/modeles"):
-        assert route in src
+    for route in ("/api/ai/diagnostic", "/api/ai/chat", "/api/ai/metrics",
+                  "/api/ai/modeles"):
+        assert route in src, route
+    for partie in ("/api/ai/status", "/api/ai/commentary"):
+        assert partie not in src, f"{partie} n'a plus d'appelant : à retirer"
     assert "packages.nlp" not in src, "plus aucune trace de la chaîne NLP locale"
 
 
