@@ -80,11 +80,25 @@ export default function Journal() {
           est revenue. L'essentiel tient en une phrase et un renvoi. */}
       <section className="card p-3 text-xs space-y-1" style={{ borderColor: "#f59e0b" }}>
         <p className="text-fg"><b>Ces trades ne sont pas la performance du compte.</b>{" "}
-          {st.perimetre?.affiche?.pnl_realise != null && st.perimetre?.compte?.pnl_realise != null ? (
+          {/* QUAND LES DEUX PÉRIMÈTRES COÏNCIDENT, LA PHRASE D'OPPOSITION MENT (19/09).
+              Depuis la reconstruction depuis les fills, tout le registre vient du
+              courtier : la page annonçait « ils pèsent $1 196,63 quand le compte en a
+              subi $1 196,63 », deux fois le même chiffre présentés comme un écart. La
+              formulation doit suivre ce que les chiffres disent, pas l'inverse. */}
+          {st.perimetre?.affiche?.pnl_realise != null && st.perimetre?.compte?.pnl_realise != null
+            && Math.abs(st.perimetre.affiche.pnl_realise - st.perimetre.compte.pnl_realise) > 0.005 ? (
             <>Ils pèsent <b className="mono">{usd(st.perimetre.affiche.pnl_realise)}</b> de réalisé,
               quand le compte en a subi <b className="mono">{usd(st.perimetre.compte.pnl_realise)}</b>{" "}
               (import historique compris)
               {st.honnete?.pnl_latent != null && <> et porte <b className="mono">{usd(st.honnete.pnl_latent)}</b> de latent</>}.</>
+          ) : st.perimetre?.compte?.pnl_realise != null ? (
+            <>Ils pèsent <b className="mono">{usd(st.perimetre.compte.pnl_realise)}</b> de réalisé
+              — tout le registre vient des fills du courtier, donc il n&apos;y a plus d&apos;écart
+              entre ce que montre cette page et ce que le compte a subi.
+              {st.honnete?.pnl_latent != null && <> Les positions encore ouvertes portent{" "}
+                <b className="mono">{usd(st.honnete.pnl_latent)}</b> de latent, qui ne figure pas ici.</>}
+              {" "}Ce réalisé est <b>BRUT de frais</b> : les frais sont des activités séparées
+              chez le courtier, absentes du flux d&apos;ordres.</>
           ) : (
             <>Une page de trades soldés ne peut pas valoir un compte : les positions perdantes
               encore ouvertes n&apos;y figurent pas.</>
@@ -130,6 +144,22 @@ export default function Journal() {
                 {st.honnete.expectancy_toutes_positions != null && ` · ${usd(st.honnete.expectancy_toutes_positions)}/position`}
                 {st.honnete.win_rate_toutes_positions != null && ` · ${(st.honnete.win_rate_toutes_positions * 100).toFixed(0)}% de réussite`}
               </p>
+              {/* COMBIEN DE CES LIGNES SONT DES POUSSIÈRES (19/09). Le rejeu FIFO
+                  produit une tranche par consommation de lot ; une tranche de
+                  0,000001 action pèse autant qu'un aller-retour de 5 000 $ dans le
+                  taux de réussite et l'espérance. On mesure et on publie les DEUX
+                  lectures — filtrer en silence changerait les chiffres sans le dire. */}
+              {(st.poussieres?.n ?? 0) > 0 && (
+                <p className="text-muted2">
+                  <b>{st.poussieres.n}</b> ligne(s) sur {st.poussieres.n_total} engagent moins
+                  de ${st.poussieres.seuil_notionnel} — des tranches résiduelles du
+                  rééquilibrage, pas des trades. Elles pèsent {usd(st.poussieres.realise_petits)} de
+                  réalisé mais comptent autant que les autres dans les moyennes.
+                  {st.poussieres.win_rate_hors != null && (
+                    <> Sans elles : <b className="mono">{(st.poussieres.win_rate_hors * 100).toFixed(0)}%</b> de
+                    réussite et <b className="mono">{usd(st.poussieres.esperance_hors)}</b>/trade
+                    sur {st.poussieres.n_significatifs} aller-retours.</>)}
+                </p>)}
               {st.honnete.lots_sans_prix > 0 && (
                 <p className="text-muted2">{st.honnete.lots_sans_prix} lot(s) sans prix courant : exclus du latent plutôt qu'estimés.</p>
               )}
