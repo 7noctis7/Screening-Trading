@@ -62,6 +62,24 @@ Lancé depuis `make test`, c'est un SOUS-MAKE : la dernière ligne devient
 sur ce qu'il prétend vérifier. Il sélectionne désormais la ligne qui contient le script.
 Un échec qui n'établit rien vaut un test absent.
 
+**LE PREMIER RUN RÉEL A CORRIGÉ MA PRÉDICTION, ET AJOUTÉ UN SIXIÈME GARDE-FOU.**
+J'avais annoncé le portail observé en aperçu. Il ne l'est pas : lancé à 08:54 ET, avant
+l'ouverture, le run a sorti ses 19 lignes par le GARDE DE SÉANCE — un `continue` qui
+tombe AVANT `decider` et `evaluer`. Le rapport disait donc juste (« le run ne va jamais
+jusque-là ») ; c'est moi qui avais tort. Et ce garde-là écartait **19 ordres, 52 596 $**,
+sans que rien ne le compte : même classe de filtre que les cinq autres, oublié parce
+qu'il ne s'appelle pas « kill-switch ». Il est branché à son tour, l'effet chiffré en
+dollars NON ENVOYÉS et le motif porté par la classe d'actif — « chaque jour, les
+actions » et « une fois, un férié » sont deux diagnostics opposés que le récapitulatif
+de fin de run ne distingue pas d'un jour sur l'autre. C'est exactement la question que
+ce récapitulatif POSE (« si ce report revient chaque jour, c'est le planning, pas le
+marché ») sans pouvoir y répondre.
+
+**Deuxième contresens corrigé dans la foulée** : `QUANT_IGNORE_SESSION=1` désarme ce
+garde, et le rapport l'aurait annoncé « ACTIVE, zéro déclenchement — vérifier que son
+seuil est atteignable ». Il n'a pas manqué sa cible, il n'avait pas le droit de tirer.
+`DISABLED` a maintenant sa propre phrase.
+
 **LA DOCUMENTATION L'AFFIRMAIT DÉJÀ.** `docs/AI_CODEBASE_MAP.md` listait parmi les
 propriétés du portail : « chaque garde-fou publie compteur de déclenchements et effet
 moyen ». C'était FAUX depuis le jour où la ligne a été écrite — elle décrivait une

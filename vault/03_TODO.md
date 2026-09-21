@@ -22,6 +22,17 @@
       · tout `JAMAIS OBSERVÉ` → il est désarmé, ou le run ne va jamais jusque-là.
       **Ne rien armer sur un rapport vide** : c'est exactement ce que le rapport refuse
       de laisser croire.
+- [ ] **P1 — Le report hors séance revient-il CHAQUE jour ? (21/09, ADR-0186).** Premier
+      aperçu mesuré : **19 ordres reportés, 52 596 $**, parce que le run tombe à 08:54 ET
+      alors que la séance ouvre à 09:30. Le cron tourne à 19:08 UTC = 15:08 ET, donc DANS
+      la séance — mais personne n'a jamais vérifié que c'est bien le cas tous les jours.
+      Le compteur `garde_de_seance` répond désormais : taux de report par classe d'actif
+      et dollars non envoyés. Si le taux est élevé en mode `live`, ce n'est pas le marché,
+      c'est le PLANNING (`QUANT_LIVE_HOUR=21 make live-cron-install`).
+- [ ] **P2 — `.cache/stages/*.pkl` en mode 664 sur le VPS (21/09).** `safe_pickle`
+      avertit à chaque run : « inscriptible par d'autres utilisateurs ». Sur une machine
+      mono-utilisateur c'est bénin ; l'avertissement, lui, est correct et bruyant. Décider :
+      `chmod 600` à l'écriture, ou umask du service.
 - [ ] **P2 — Le témoin des garde-fous n'est pas exposé sur le site (21/09).** Rapport
       CLI seulement, à dessein : publier des compteurs de garde-fous demande de décider
       ce qui est publiable sur un dépôt PUBLIC. Le fichier est local (`.cache/`,

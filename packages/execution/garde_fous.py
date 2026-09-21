@@ -43,10 +43,11 @@ KILL_TV = "kill_switch_tradingview"
 KILL_DD = "kill_switch_drawdown"
 DISJONCTEUR = "disjoncteur_journalier"
 GARDE_JOUR = "garde_journaliere"
+SEANCE = "garde_de_seance"
 
 # L'ordre d'affichage suit le chemin d'exécution, pas l'alphabet : on lit le rapport
 # comme on lit un run.
-ORDRE: tuple[str, ...] = (KILL_TV, KILL_DD, DISJONCTEUR, GARDE_JOUR, PORTAIL)
+ORDRE: tuple[str, ...] = (KILL_TV, KILL_DD, DISJONCTEUR, GARDE_JOUR, SEANCE, PORTAIL)
 
 
 @dataclass
@@ -223,10 +224,16 @@ def verdicts(agrege: dict) -> list[str]:
             continue
         if d["etats"].get(ERREUR):
             out.append(f"{nom} : ERROR sur {d['etats'][ERREUR]} run(s) — garde-fou en panne.")
+        if d["etats"].get(DESARME) and not d["etats"].get(ACTIVE):
+            out.append(f"{nom} : DÉSARMÉ sur {d['observations']} observation(s) — "
+                       "il a été traversé sans jamais pouvoir agir.")
         # « Jamais déclenché » compte AUSSI les déclenchements retenus par le mode
         # observation : un disjoncteur qui aurait coupé deux fois a atteint son seuil.
-        # L'alerte « seuil inatteignable » serait alors un contresens.
-        if d["observations"] and not (d["declenchements"] + d["aurait_declenche"]):
+        # L'alerte « seuil inatteignable » serait alors un contresens. Et on ne
+        # l'annonce que pour un garde-fou VRAIMENT actif : dire « ACTIVE » d'un
+        # garde-fou désarmé serait le contresens inverse.
+        if (d["etats"].get(ACTIVE) and d["observations"]
+                and not (d["declenchements"] + d["aurait_declenche"])):
             out.append(f"{nom} : ACTIVE, {d['observations']} observation(s), "
                        "ZÉRO déclenchement — vérifier que son seuil est atteignable.")
         if d["declenchements"] and d["effet_usd"] == 0.0:

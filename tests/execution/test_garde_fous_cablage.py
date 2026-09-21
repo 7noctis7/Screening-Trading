@@ -179,3 +179,53 @@ def test_le_portail_de_risque_reste_une_fonction_PURE():
     appels = {n.func.id for n in ast.walk(arbre)
               if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
     assert "open" not in appels and "print" not in appels
+
+
+# --- GARDE DE SÉANCE (21/09) : le sixième filtre, trouvé en lisant un run réel.
+# Le 21/09 à 08:54 ET, 19 lignes ont été reportées pour 52 596 $ avant même d'atteindre
+# le portail — et rien ne le comptait. Un report qui revient chaque jour est un problème
+# de PLANNING ; un report isolé est un jour férié. Sans compteur, les deux se ressemblent.
+
+def _seance(monkeypatch, ouverte: bool):
+    import packages.execution.market_calendar as mc
+    monkeypatch.delenv("QUANT_IGNORE_SESSION", raising=False)
+    monkeypatch.setattr(mc, "is_open", lambda asset_class=None: ouverte)
+    monkeypatch.setattr(mc, "feries_a_jour", lambda: True)
+    monkeypatch.setattr(mc, "raison_fermeture", lambda asset_class=None: "hors séance")
+
+
+def test_un_ordre_reporte_hors_seance_est_compte_avec_son_notionnel(monkeypatch):
+    monkeypatch.setenv("QUANT_MIN_POSITION", "100")
+    _seance(monkeypatch, ouverte=False)
+    rl, b, obs = _run_live(), CourtierFactice(), gf.Collecteur()
+    sent, _, _ = rl._reconcile([_cible("AAA", 0.05)],
+                               [("Alpaca", b, 100_000.0, {})], 1.0, None, False, obs)
+    r = obs.rapport()[gf.SEANCE]
+    assert sent == 0 and not b.ordres                  # rien n'est parti
+    assert r["declenchements"] == 1
+    assert r["effet_usd"] == pytest.approx(5_000.0)    # le montant NON envoyé
+    assert r["motifs"] == {"equity": 1}                # le motif est la classe d'actif
+    assert gf.PORTAIL not in obs.rapport()             # le portail n'est jamais atteint
+
+
+def test_seance_ouverte_compte_une_observation_sans_declenchement(monkeypatch):
+    monkeypatch.setenv("QUANT_MIN_POSITION", "100")
+    _seance(monkeypatch, ouverte=True)
+    rl, b, obs = _run_live(), CourtierFactice(), gf.Collecteur()
+    rl._reconcile([_cible("AAA", 0.05)], [("Alpaca", b, 100_000.0, {})],
+                  1.0, None, False, obs)
+    r = obs.rapport()[gf.SEANCE]
+    assert r["observations"] == 1 and r["declenchements"] == 0
+    assert r["effet_usd"] == 0.0
+    assert gf.PORTAIL in obs.rapport()                 # et le portail, lui, est atteint
+
+
+def test_le_garde_de_seance_ignore_se_declare_DESARME(monkeypatch):
+    """`QUANT_IGNORE_SESSION=1` est une échappatoire explicite : le rapport doit dire
+    DÉSARMÉ, pas afficher un zéro qui se lirait « rien à signaler »."""
+    monkeypatch.setenv("QUANT_IGNORE_SESSION", "1")
+    monkeypatch.setenv("QUANT_MIN_POSITION", "100")
+    rl, b, obs = _run_live(), CourtierFactice(), gf.Collecteur()
+    rl._reconcile([_cible("AAA", 0.05)], [("Alpaca", b, 100_000.0, {})],
+                  1.0, None, False, obs)
+    assert obs.rapport()[gf.SEANCE]["etat"] == gf.DESARME

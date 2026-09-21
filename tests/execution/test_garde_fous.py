@@ -166,6 +166,19 @@ def test_un_seuil_ATTEINT_en_observation_n_est_pas_un_seuil_inatteignable():
     assert any("aurait coupé" in x for x in dis)
 
 
+def test_un_garde_fou_DESARME_n_est_jamais_annonce_ACTIVE():
+    """Dire « ACTIVE, zéro déclenchement » d'un garde-fou désarmé serait le contresens
+    inverse de celui qu'on corrige : il n'a pas manqué sa cible, il n'avait pas le droit
+    de tirer."""
+    c = gf.Collecteur()
+    for _ in range(3):
+        c.observer(gf.SEANCE, etat=gf.DESARME)
+    lignes = [x for x in gf.verdicts(gf.agreger([_run("live", **c.rapport())]))
+              if x.startswith(gf.SEANCE)]
+    assert any("DÉSARMÉ" in x for x in lignes)
+    assert not any("ACTIVE" in x for x in lignes)
+
+
 def test_un_rapport_vide_dit_UNCALIBRATED_pas_zero():
     assert "UNCALIBRATED" in gf.verdicts(gf.agreger([]))[0]
 

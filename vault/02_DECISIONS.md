@@ -60,6 +60,14 @@ mesure. Les compteurs se remplissent au fil des passages réels, et c'est seulem
 ensuite que la question de l'armement du disjoncteur pourra être tranchée — sur des
 jours comptés, pas sur une impression.
 
+**Addendum du même jour, après le premier run réel.** Le garde de SÉANCE est un sixième
+filtre de la même classe, oublié au premier inventaire parce qu'il ne s'appelle pas
+« kill-switch » : il a écarté 19 ordres pour 52 596 $ le 21/09, avant même que le portail
+soit atteint. Il compte désormais, en dollars NON ENVOYÉS, avec la classe d'actif pour
+motif. Corollaire de lecture ajouté : un garde-fou vu seulement DÉSARMÉ n'est plus
+annoncé « ACTIVE, zéro déclenchement » — il n'a pas manqué sa cible, il n'avait pas le
+droit de tirer.
+
 **Ce que ça ne fait pas.** Aucune limite, aucun seuil, aucune décision ne change. Le
 statut au registre de certification est **CANDIDATE**, pas CERTIFIED : les tests passent
 sans réseau, la preuve terrain (des compteurs réels sur ≥20 passages) n'existe pas

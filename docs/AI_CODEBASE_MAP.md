@@ -171,8 +171,10 @@ contraintes doivent être évalués ensemble.
 
 - `rebalance_plan.py` pour convertir cibles/positions en ouvertures, allègements et liquidations ;
 - `live_guards.py` pour kill-switch et lisibilité des comptes brokers ;
-- `garde_fous.py` / `garde_fous_store.py` : le témoin des garde-fous — il observe et
-  compte, il ne décide jamais (états ACTIVE / DISABLED / UNCALIBRATED / ERROR) ;
+- `garde_fous.py` / `garde_fous_store.py` : le témoin des SIX garde-fous du chemin
+  d'ordre (kill-switch TV, kill-switch drawdown, disjoncteur journalier, garde
+  journalière, garde de séance, portail de risque) — il observe et compte, il ne décide
+  jamais (états ACTIVE / DISABLED / UNCALIBRATED / ERROR) ;
 - coûts, impact, Almgren-Chriss, TCA, algos et routage ;
 - `sim_broker.py` et adaptateurs Alpaca, Binance, Bitmart, IBKR ;
 - idempotence, retry, réconciliation, journal de décision et round-trips FIFO.

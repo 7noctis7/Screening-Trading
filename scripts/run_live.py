@@ -225,7 +225,12 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry, obs=None) -> tuple[i
         curn = {}                                             # détenu par clé NORMALISÉE (cumul)
         for k, v in cur.items():
             curn[_nsym(k)] = curn.get(_nsym(k), 0.0) + v
-        from packages.execution.garde_fous import noter_portail
+        from packages.execution.garde_fous import (
+            DESARME,
+            SEANCE,
+            noter,
+            noter_portail,
+        )
         from packages.execution.rebalance_plan import decider
         from packages.risk.order_gate import EtatCompte, Limites, evaluer, ligne_journal
         # PORTAIL DE RISQUE — indépendant de la stratégie, lu depuis l'environnement
@@ -252,13 +257,25 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry, obs=None) -> tuple[i
             # remplissait tout le crypto et AUCUNE action — 28 % de cash restaient à
             # la place du satellite, sans un mot au journal. On REPORTE en le disant.
             _ac = _classe_actif(bsym, (o or {}).get("asset_class") or "")
-            if _verif_seance and not is_open(asset_class=_ac):
+            # GARDE DE SÉANCE — sixième filtre, et il écarte des ordres comme les
+            # autres : le 21/09 il a reporté 19 lignes pour 52 596 $ sans que rien ne
+            # le compte. L'effet se chiffre ici en dollars NON ENVOYÉS, et le motif est
+            # la classe d'actif : « chaque jour, les actions » et « une fois, un férié »
+            # sont deux diagnostics opposés que le récapitulatif de fin de run ne
+            # distingue pas d'un jour sur l'autre.
+            if not _verif_seance:
+                noter(obs, SEANCE, etat=DESARME)
+            elif not is_open(asset_class=_ac):
                 _pq = prochaine_ouverture()
                 print(tag + f"  ⏸  REPORTÉ — {raison_fermeture(asset_class=_ac)}"
                             f" · prochaine ouverture {_pq:%d/%m %H:%M ET}")
                 differes.append({"symbol": bsym, "broker": bname, "asset_class": _ac,
                                  "montant": round(info["val"] - detenu, 2)})
+                noter(obs, SEANCE, declenche=True, motif=_ac,
+                      effet_usd=abs(info["val"] - detenu))
                 continue
+            else:
+                noter(obs, SEANCE, effet_usd=0.0)
             # Décision déléguée (testée) : solder hors bande, ne pas ouvrir sous le
             # plancher.
             intention = decider(info["val"], detenu, band)
