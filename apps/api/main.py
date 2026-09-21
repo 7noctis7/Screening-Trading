@@ -405,9 +405,15 @@ def positions() -> dict:
     snap = _snap()
     dash = snap["dashboard"]
     real = snap["live"]["real"]
+    try:
+        from packages.storage import SqliteTradeJournal
+        realized = SqliteTradeJournal().realized_summary()
+    except Exception as exc:  # noqa: BLE001
+        realized = {"n_closed": 0, "pnl": None, "error": str(exc)[:80]}
     return {"real_positions": real.get("positions", []),    # positions RÉELLES (tous comptes)
             "connected": real.get("connected", False),
             "accounts": {"alpaca": real.get("alpaca", {}), "crypto": real.get("crypto", {})},
+            "realized": realized,                            # journal complet, lots clos
             "min_position": dash.get("min_position"),        # plancher de ligne → affiché par le front
             "alloc_capital": dash.get("alloc_capital", {}),
             "preset_allocation": dash.get("preset_allocation", []),  # cible modèle → écart de réplication

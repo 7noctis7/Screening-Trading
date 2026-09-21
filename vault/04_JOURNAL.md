@@ -38,6 +38,15 @@ compte. La page sert maintenant les 587 lots et affiche leur origine (`historiqu
 ou `robot journalisé`). Enfin, la route a cessé d'appeler le snapshot et le courtier pour
 calculer des diagnostics non affichés : c'était la cause des `curl` bloqués jusqu'à Ctrl-C.
 
+**Trois régressions de restitution corrigées.** L'introduction existait encore mais le
+marqueur `sessionStorage` la supprimait après le premier passage de l'onglet : revenir sur
+la page d'entrée la rejoue désormais. Le CAC 40 était connu des alias de données mais absent
+des deux dictionnaires de références effectivement servis ; il est rétabli uniquement si
+`^FCHI`/son repli est réel et couvre le début de la fenêtre. Enfin Positions ne sommait que
+le latent des lignes ouvertes : le réalisé est maintenant lu du journal complet par une
+agrégation SQLite (`SUM(pnl_net)` des lots clos), imports Alpaca compris. Aucun chiffre
+n'est reconstruit ni inventé.
+
 ## Session 2026-09-15 (19ᵉ) — Trois robots sur un seul compte
 
 **La question de l'utilisateur était la bonne** : « pourquoi a-t-il acheté et vendu si

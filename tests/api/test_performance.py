@@ -34,7 +34,14 @@ def test_une_reference_INTROUVABLE_est_nommee_jamais_simulee(monkeypatch):
 
     r = perf.payload()
     assert list(r["benchmarks"]) == ["S&P 500"]
-    assert r["ecartees"] == ["Bitcoin", "Nasdaq 100"]
+    assert r["ecartees"] == ["Bitcoin", "CAC 40", "Nasdaq 100"]
+
+
+def test_le_cac40_est_servi_quand_son_historique_est_reel(monkeypatch):
+    monkeypatch.setattr("packages.execution.equity_history._load", lambda: HIST)
+    _prix(monkeypatch, {"^FCHI": (["2026-06-20", "2026-06-24"], [7_500.0, 7_650.0])})
+    r = perf.payload()
+    assert r["benchmarks"]["CAC 40"][-1]["v"] == 102_000.0
 
 
 def test_le_premier_alias_QUI_COUVRE_le_debut_est_retenu(monkeypatch):

@@ -28,6 +28,7 @@ from bisect import bisect_right
 REFERENCES: dict[str, list[str]] = {
     "S&P 500": ["^GSPC", "SPX", "SPY"],
     "Nasdaq 100": ["^NDX", "^IXIC", "QQQ"],
+    "CAC 40": ["^FCHI", "PX1", "CAC.PA"],
     "Bitcoin": ["BTC-USD", "BTC/USD", "BTCUSD", "BTC/USDC"],
 }
 

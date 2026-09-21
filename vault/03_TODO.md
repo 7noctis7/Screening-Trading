@@ -17,6 +17,9 @@
       `/api/journal` filtrait `legacy=False`, bon périmètre pour calibrer le ML mais faux
       pour demander « tout mon historique ». Elle sert désormais tous les lots, marque
       leur origine et ne déclenche plus le snapshot ou le réseau courtier.
+- [x] **~~P1 — Trois restitutions visuelles disparues~~ — FERMÉ (21/09).** L'introduction
+      rejoue à chaque visite explicite de `/`; le CAC 40 réel revient dans les courbes du
+      dashboard et de performance ; Positions publie le P&L réalisé de tous les lots clos.
 - [x] **~~P0/P1 — Régime ATR : bascule de modèle~~ — FERMÉE PAR LA MESURE (14/09,
       ADR-0145).** Trois seuils, 820 symboles, t groupé significatif partout — et pourtant
       non. Aux TROIS seuils la journée typique en haute volatilité est moins bonne qu'en

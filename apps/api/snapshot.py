@@ -1901,6 +1901,7 @@ def build_snapshot(seed: int = 7) -> dict:
         "synthetic", seed=202, drift=0.13, annual_vol=0.22).fetch_ohlcv("Nasdaq 100", "1d", start, end)]
     sp, _sp_dates, _sp_real = _index_series(["^GSPC", "SPX", "SPY"], start, end, _sp_syn)
     ndx, _ndx_dates, _ndx_real = _index_series(["^NDX", "^IXIC", "QQQ"], start, end, _ndx_syn)
+    cac, _cac_dates, _cac_real = _index_series(["^FCHI", "PX1", "CAC.PA"], start, end, [])
 
     # régime macro RÉEL point-in-time : VIX réel + tendance S&P (proxy activité) + FRED (courbe,
     # chômage) si FRED_API_KEY. Repli synthétique UNIQUEMENT si aucune donnée réelle disponible.
@@ -2800,7 +2801,8 @@ def build_snapshot(seed: int = 7) -> dict:
             # benchmark était tracée sur le calendrier de l'equity (`bench_series`).
             "benchmarks": bench_series(
                 {"S&P 500": (sp, _sp_dates if _sp_real else []),
-                 "Nasdaq 100": (ndx, _ndx_dates if _ndx_real else [])},
+                 "Nasdaq 100": (ndx, _ndx_dates if _ndx_real else []),
+                 "CAC 40": (cac, _cac_dates if _cac_real else [])},
                 _dash_dates, init_cap),
             "dates": _dash_dates,
             "positions": comp["rows"], "totals": comp["totals"],

@@ -136,6 +136,13 @@ class SqliteTradeJournal:
         return {str(r[0]) for r in self.conn.execute(
             "SELECT id FROM trades WHERE legacy=1").fetchall()}
 
+    def realized_summary(self) -> dict[str, float | int]:
+        """P&L réalisé de tous les lots clos, imports courtier compris."""
+        n, pnl = self.conn.execute(
+            "SELECT COUNT(*), COALESCE(SUM(pnl_net), 0) FROM trades "
+            "WHERE exit_ts IS NOT NULL").fetchone()
+        return {"n_closed": int(n), "pnl": round(float(pnl), 2)}
+
     def supprimer(self, ids: list[str]) -> int:
         """Retire des enregistrements par identifiant. Renvoie le nombre effacé.
 
