@@ -14,6 +14,19 @@ from __future__ import annotations
 
 import os
 
+# Témoin d'observabilité. Import au NIVEAU MODULE, et c'est délibéré : le faire à
+# l'intérieur du `try` de `dd_kill_switch` ferait retomber une simple erreur d'import
+# dans la branche « check indisponible — non appliqué », c'est-à-dire qu'un défaut
+# d'OBSERVATION désarmerait le garde-fou OBSERVÉ. `garde_fous` n'importe que la
+# bibliothèque standard : aucun cycle, aucun coût.
+from packages.execution.garde_fous import (
+    ACTIVE,
+    ERREUR,
+    KILL_DD,
+    UNCALIBRATED,
+    noter,
+)
+
 
 def current_values(alpaca, bitmart) -> tuple[dict | None, dict | None]:
     """Valeurs de marché détenues PAR broker. Lecture en échec → **None** (inconnu),
@@ -90,10 +103,16 @@ def vet_brokers(alpaca, bitmart, dry: bool, cli_equity: float | None):
     return alpaca, bitmart, alp_cap, bit_cap, fatal
 
 
-def dd_kill_switch(total_equity: float, bus, alert_engine) -> float:
+def dd_kill_switch(total_equity: float, bus, alert_engine,
+                   observateur: object | None = None) -> float:
     """Kill-switch sur le DRAWDOWN RÉEL du compte (principe 3). Lit l'historique
     d'equity persisté + le point du jour ; DD depuis le pic ≤ `QUANT_INTRADAY_DD`
-    (défaut −15 %) → 0.0 (exposition coupée). Historique court/indispo → 1.0."""
+    (défaut −15 %) → 0.0 (exposition coupée). Historique court/indispo → 1.0.
+
+    `observateur` ne change RIEN à la décision : il reçoit l'état pour que le rapport
+    des garde-fous distingue les trois 1.0 que cette fonction rend — « rien à couper »,
+    « historique trop court » et « le contrôle a planté ». Ces trois-là se ressemblent
+    à l'écran et n'ont pas du tout le même sens."""
     limit = float(os.environ.get("QUANT_INTRADAY_DD", "-0.15"))
     try:
         from packages.execution.equity_history import _load
@@ -104,7 +123,11 @@ def dd_kill_switch(total_equity: float, bus, alert_engine) -> float:
         if total_equity > 0:
             curve.append(total_equity)
         out = drawdown_breach(curve, dd_limit=limit)
-        if not out.get("available") or not out.get("breach"):
+        if not out.get("available"):
+            noter(observateur, KILL_DD, etat=UNCALIBRATED, motif="historique_insuffisant")
+            return 1.0
+        if not out.get("breach"):
+            noter(observateur, KILL_DD, etat=ACTIVE)
             return 1.0
         msg = (f"drawdown réel {out['drawdown']*100:.1f}% ≤ seuil {limit*100:.0f}% "
                f"(pic {out['peak']}, dernier {out['last']})")
@@ -117,9 +140,11 @@ def dd_kill_switch(total_equity: float, bus, alert_engine) -> float:
             alert_engine.emit(Alert("risk", Severity.CRITICAL,
                                     f"Kill-switch drawdown réel déclenché : {msg}",
                                     dedup_key="risk:dd_kill_switch"))
+        noter(observateur, KILL_DD, etat=ACTIVE, declenche=True, motif="drawdown")
         return 0.0
     except Exception as e:  # noqa: BLE001 — le check ne doit jamais BLOQUER un run sain
         print(f"· kill-switch DD réel : check indisponible ({str(e)[:50]}) — non appliqué.")
+        noter(observateur, KILL_DD, etat=ERREUR, motif="check_indisponible")
         return 1.0
 
 

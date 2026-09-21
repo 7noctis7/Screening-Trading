@@ -52,7 +52,7 @@ FENETRE_RECENTE = 365      # fenêtre de contrôle « la partie récente est-ell
 
 def _bases_univers() -> list[str]:
     from scripts.ingest_crypto import _bases_univers
-    return _bases_univers(10_000)
+    return _bases_univers()
 
 
 def lire_base(db: Path, ticker: str) -> list[tuple[str, float]]:

@@ -73,6 +73,7 @@ async def _log_requests(request: Request, call_next):
     return resp
 
 import threading
+from datetime import UTC
 
 _CACHE: dict | None = None
 _CACHE_TS: float = 0.0
@@ -176,7 +177,23 @@ def _warm() -> None:
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok"}
+    """Vivante, ET capable de servir une page MAINTENANT ? Deux questions distinctes.
+
+    Cette route rendait `{"status": "ok"}`, une constante : le « ✓ API 200 » de `make up`
+    ne distinguait pas une API prête d'une API dont la première requête va déclencher une
+    construction de snapshot de une à trois minutes — pendant laquelle chaque page reste
+    sur ses squelettes et l'utilisateur lit « ça ne se charge pas ».
+
+    NE DÉCLENCHE AUCUNE CONSTRUCTION, et c'est la propriété qui compte : elle lit l'état
+    du cache, elle n'appelle NI `_snap()` NI `build_snapshot()`. Un contrôle de santé qui
+    provoquerait le travail qu'il mesure serait le voyant qui allume l'incendie qu'il
+    signale — un test d'AST l'interdit désormais.
+    """
+    from apps.api.sante import sante
+    pret = _CACHE is not None
+    return sante(pret, _BUILDING,
+                 age_s=round(time.time() - _CACHE_TS, 1) if pret else None,
+                 ttl_s=_TTL_S)
 
 
 @app.get("/api/meta")
@@ -380,8 +397,8 @@ def recommend_universe(body: RecommendationRequest, request: Request) -> dict:
     """
     if not _webhook_authorized(request):
         return {"available": False, "reason": "endpoint local uniquement"}
-    from packages.portfolio.recommendation import recommander
     from packages.portfolio.filtre_resultats import FENETRE_DEFAUT
+    from packages.portfolio.recommendation import recommander
     defaut = FENETRE_DEFAUT if os.environ.get("QUANT_EARNINGS") == "1" else 0
     fenetre = defaut if body.blackout_resultats is None else body.blackout_resultats
     snap = _snap()
@@ -400,6 +417,20 @@ def recommend_universe(body: RecommendationRequest, request: Request) -> dict:
                        preferences=body.preferences)
 
 
+def _realise(_real: dict) -> dict:
+    """Le réalisé du compte, à côté du latent. Indisponible ⇒ on le DIT.
+
+    Un panneau muet se lirait « zéro réalisé », c'est-à-dire « aucun trade soldé » —
+    faux, et dans le sens rassurant.
+    """
+    try:
+        from apps.api.journal_payload import realise_compte
+        from packages.storage import SqliteTradeJournal
+        return {"disponible": True, **realise_compte(SqliteTradeJournal())}
+    except Exception as e:  # noqa: BLE001
+        return {"disponible": False, "motif": str(e)[:80]}
+
+
 @app.get("/api/positions")
 def positions() -> dict:
     snap = _snap()
@@ -411,6 +442,7 @@ def positions() -> dict:
     except Exception as exc:  # noqa: BLE001
         realized = {"n_closed": 0, "pnl": None, "error": str(exc)[:80]}
     return {"real_positions": real.get("positions", []),    # positions RÉELLES (tous comptes)
+            "realise": _realise(real),                      # encaissé, à côté du latent
             "connected": real.get("connected", False),
             "accounts": {"alpaca": real.get("alpaca", {}), "crypto": real.get("crypto", {})},
             "realized": realized,                            # journal complet, lots clos
@@ -446,7 +478,29 @@ def object_360(obj_type: str, obj_id: str) -> dict:
         "reason": "objet inconnu (type non enregistré ou id absent du snapshot)"}
 
 
-def _prix_courants() -> dict:
+def _snap_si_pret() -> dict | None:
+    """Le snapshot s'il est DÉJÀ en cache — JAMAIS construit à la demande.
+
+    Même principe que `/health` : une lecture ne doit pas déclencher le travail qu'elle
+    observe. `/api/journal` ne vit que dans SQLite ; lui faire attendre une construction
+    de snapshot d'une à trois minutes pour enrichir son latent rendrait la page
+    indisponible pour un agrément. Sans cache, les prix manquent et les lots partent en
+    « sans prix » — ce que le payload DIT plutôt que de les valoriser au hasard.
+    """
+    return _CACHE
+
+
+def _positions_reelles(bloquant: bool) -> list[dict]:
+    """Les positions du courtier, à plat. `bloquant=False` n'attend aucune construction."""
+    snap = _snap() if bloquant else _snap_si_pret()
+    if snap is None:
+        return []
+    real = (snap.get("live") or {}).get("real") or {}
+    return [pos for compte in ("alpaca", "crypto")
+            for pos in ((real.get(compte) or {}).get("positions", []) or [])]
+
+
+def _prix_courants(bloquant: bool = True) -> dict:
     """Derniers prix connus, par symbole, depuis les positions RÉELLES du courtier.
 
     Ce sont les seuls prix dont on ait besoin : on ne valorise que ce qu'on détient. En
@@ -455,27 +509,23 @@ def _prix_courants() -> dict:
     hasard.
     """
     try:
-        real = (_snap().get("live") or {}).get("real") or {}
         out: dict[str, float] = {}
-        for compte in ("alpaca", "crypto"):
-            for pos in (real.get(compte) or {}).get("positions", []) or []:
-                px = pos.get("last") or pos.get("price")
-                if pos.get("symbol") and px:
-                    out[pos["symbol"]] = float(px)
+        for pos in _positions_reelles(bloquant):
+            px = pos.get("last") or pos.get("price")
+            if pos.get("symbol") and px:
+                out[pos["symbol"]] = float(px)
         return out
     except Exception:  # noqa: BLE001
         return {}
 
 
-def _qtes_courtier() -> dict:
+def _qtes_courtier(bloquant: bool = True) -> dict:
     """Quantités RÉELLEMENT détenues, par symbole, telles que le courtier les rapporte."""
     try:
-        real = (_snap().get("live") or {}).get("real") or {}
         out: dict[str, float] = {}
-        for compte in ("alpaca", "crypto"):
-            for pos in (real.get(compte) or {}).get("positions", []) or []:
-                if pos.get("symbol"):
-                    out[pos["symbol"]] = float(pos.get("qty") or 0.0)
+        for pos in _positions_reelles(bloquant):
+            if pos.get("symbol"):
+                out[pos["symbol"]] = float(pos.get("qty") or 0.0)
         return out
     except Exception:  # noqa: BLE001
         return {}
@@ -483,41 +533,33 @@ def _qtes_courtier() -> dict:
 
 @app.get("/api/journal")
 def journal_roundtrips() -> dict:
-    """Historique local COMPLET : imports Alpaca et décisions natives du robot.
+    """Le journal, sur ses DEUX périmètres — le robot, et tout l'historique du compte.
 
-    Lecture SQLite seulement : cette route ne contacte jamais un broker et ne construit
-    jamais le snapshot lourd. Elle doit répondre même si Alpaca est lent ou indisponible."""
+    RÉCONCILIATION DU 21/09. Deux implémentations coexistaient : l'une rendait
+    l'historique local COMPLET (imports Alpaca compris) avec un champ d'origine, l'autre
+    le seul périmètre du ROBOT avec latent, frais et matérialité. Elles ne répondaient
+    pas à la même question — « qu'a fait ce compte » et « qu'a fait mon robot » — et
+    choisir entre les deux aurait supprimé une réponse légitime.
+
+    Les deux sont donc publiées : `rows` reste le périmètre ROBOT (tous les taux et
+    espérances de la page s'y rapportent, inchangés), `rows_tous` porte l'historique
+    entier, chaque ligne étiquetée par son ORIGINE. Le total de chaque périmètre est
+    dans `stats.perimetre`.
+
+    Lecture SQLite seulement : cette route ne contacte aucun courtier et ne construit
+    JAMAIS le snapshot lourd — elle doit répondre même si Alpaca est lent ou muet.
+    """
     try:
-        from packages.research.exec_costs import measured_slippage
+        from apps.api.journal_payload import construire
         from packages.storage import SqliteTradeJournal
-        j = SqliteTradeJournal()
-        trades = j.all()
-        legacy_ids = j.legacy_ids()
-        rows = [{
-            "id": t.id, "symbol": t.instrument, "venue": t.venue, "qty": t.qty,
-            "entry_ts": t.entry_ts.isoformat(), "entry_price": t.entry_price,
-            "exit_ts": t.exit_ts.isoformat() if t.exit_ts else None,
-            "exit_price": t.exit_price, "pnl_net": t.pnl_net, "pnl_pct": t.pnl_pct,
-            "mfe": t.mfe, "mae": t.mae, "is_win": t.is_win,
-            "duration_d": round(t.duration_s / 86400, 1) if t.duration_s else None,
-            "regime": t.regime,
-            "decision_price": (t.features_snapshot or {}).get("decision_price"),
-            "origin": "import_courtier" if t.id in legacy_ids else "robot",
-        } for t in trades]
-        closed = [r for r in rows if r["exit_ts"]]
-        wins = [r for r in closed if r["is_win"]]
-        stats = {"n_open": len(rows) - len(closed), "n_closed": len(closed)}
-        if len(closed) >= 20:                     # expectancy gatée (mandat données réelles)
-            stats["win_rate"] = round(len(wins) / len(closed), 3)
-            stats["expectancy"] = round(sum(r["pnl_net"] or 0 for r in closed) / len(closed), 2)
-        else:
-            stats["status"] = f"UNCALIBRATED (expectancy à N≥20 fermés ; actuel {len(closed)})"
-        stats["n_imported"] = len(legacy_ids)
-        stats["n_robot"] = len(rows) - len(legacy_ids)
-        return {"available": True, "rows": rows, "stats": stats,
-                "slippage": measured_slippage(j)}
+        # NON BLOQUANT : le latent est un agrément, la disponibilité de la page est un
+        # contrat. Sans snapshot en cache, les lots partent « sans prix » et le payload
+        # le dit — il ne les valorise pas au hasard, et il ne fait pas attendre.
+        return construire(SqliteTradeJournal(),
+                          _prix_courants(bloquant=False), _qtes_courtier(bloquant=False))
     except Exception as e:  # noqa: BLE001
-        return {"available": False, "reason": str(e)[:80], "rows": [], "stats": {}}
+        return {"available": False, "reason": str(e)[:80], "rows": [],
+                "ouverts": [], "stats": {}}
 
 
 @app.get("/api/trades")
@@ -606,7 +648,7 @@ def events() -> dict:
     global _EVENTS, _EVENTS_TS
     if _EVENTS is None or (time.time() - _EVENTS_TS) > 21600:
         import os
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         from packages.events import earnings_for, upcoming_ipos
         snap = _snap()
@@ -672,13 +714,15 @@ def events() -> dict:
         # est en ce moment écarté des recommandations », et la recommandation ne disait pas
         # « écarté à cause d'une publication mardi ». On publie donc LA MÊME constante, pas
         # une copie : deux nombres qui dériveraient l'un de l'autre seraient pires que rien.
-        from packages.portfolio.filtre_resultats import FENETRE_DEFAUT as _fenetre_blackout
+        from packages.portfolio.filtre_resultats import (
+            FENETRE_DEFAUT as _fenetre_blackout,
+        )
         _EVENTS = {"available": bool(earn or ipos), "earnings": earn, "ipos": ipos,
                    "blackout_jours": _fenetre_blackout,
                    "n_symbols": len(eq), "fmp": bool(os.environ.get("FMP_API_KEY")),
                    "fmp_earnings": any(e.get("source") == "FMP" for e in earn),
                    "fmp_ipos": any(p.get("source") == "FMP" for p in ipos),
-                   "as_of": datetime.now(timezone.utc).isoformat()}
+                   "as_of": datetime.now(UTC).isoformat()}
         _EVENTS_TS = time.time()
     return _EVENTS
 
@@ -1035,7 +1079,10 @@ def _enrich_cross_source(report: dict, f: Any, sym: str) -> None:
     ajusté = « non-GAAP ») au dépôt SEC EDGAR (10-K, GAAP). Construit la table de réconciliation et,
     si un écart > 10 % sur CA OU RN, lève une BLOCKING ALERT (protocole PwC). Best-effort."""
     try:
-        from packages.fundamentals.sec_provider import financial_history, quarterly_history
+        from packages.fundamentals.sec_provider import (
+            financial_history,
+            quarterly_history,
+        )
         # PÉRIODE ALIGNÉE : la source primaire (yfinance) est en TTM → on compare au TTM SEC (somme des
         # 4 derniers trimestres 10-Q), pas au dernier exercice annuel (sinon faux écarts énormes).
         period = "TTM"
@@ -1137,7 +1184,7 @@ def company_report(ticker: str, format: str = "html", theme: str = "dark") -> An
     `format` : html (page autonome), json (données), pdf (weasyprint/reportlab si présent, sinon HTML).
     `theme` : dark (défaut) | light. Sources gratuites réelles (yfinance→FMP→SEC EDGAR), repli
     synthétique hors-ligne. Note mise en cache et REGÉNÉRÉE à chaque nouveau résultat trimestriel."""
-    from fastapi.responses import HTMLResponse, FileResponse
+    from fastapi.responses import FileResponse, HTMLResponse
 
     from packages.reporting import company_report_html, company_report_pdf
     sym = (ticker or "").strip().upper()
@@ -1200,20 +1247,6 @@ def note_file(date: str, symbol: str, ext: str = "html") -> Any:
     return HTMLResponse(fp.read_text(encoding="utf-8"))
 
 
-@app.get("/api/ai/status")
-def ai_status(request: Request) -> dict:
-    """Disponibilité du fournisseur ET du modèle demandé.
-
-    Le voyant doit tester ce que fera le bouton « Générer ». Un statut fondé sur `/models` seul
-    affichait « ● connecté » puis échouait en 404 dès qu'on générait, parce que le modèle
-    demandé n'appartenait pas au fournisseur de l'URL. Le motif accompagne donc le statut."""
-    from packages.llm.client import diagnostic
-    d = diagnostic(_cfg_llm(request))
-    return {"available": bool(d.get("ok")), "motif": d.get("motif", ""),
-            "base": d.get("base", ""), "modele": d.get("modele", ""),
-            "modeles": d.get("modeles", [])}
-
-
 def _cfg_llm(request: Request):
     """Config IA transmise par l'appelant, via en-têtes. Priorité sur l'environnement.
 
@@ -1240,7 +1273,10 @@ def profil(horizon_annees: float = 10.0, perte_max_toleree: float = 0.25,
     (le front les garde dans son navigateur) et ne servent qu'à borner SON propre outil.
     """
     from packages.profile.investor import (
-        Profil, allocation_strategique, budget_perte, risque_retenu,
+        Profil,
+        allocation_strategique,
+        budget_perte,
+        risque_retenu,
     )
     from packages.profile.tilts import force_preuve, incliner, vues_depuis_regime
 
@@ -1290,40 +1326,6 @@ def ai_diagnostic(request: Request) -> dict:
     return diagnostic(_cfg_llm(request))
 
 
-@app.get("/api/ai/commentary")
-def ai_commentary(request: Request) -> dict:
-    """Commentaire IA en langage naturel sur l'état du portefeuille.
-
-    Le fournisseur vient de l'appelant (en-têtes) ou de l'environnement — modèle local par défaut.
-    """
-    from packages.llm.client import complete
-    from packages.llm.guard import guard_numbers
-    s = _snap()
-    d, p = s["dashboard"], s["portfolio"]
-    rm = p.get("analysis", {}).get("risk", {})
-    k = d.get("portfolio", {})
-    top = ", ".join(f"{r['symbol']} ({r.get('score', 0):.2f})" for r in s["screener"]["rows"][:5])
-    reg = d.get("regime", {})
-    facts = (
-        f"Portefeuille (démo): {k.get('value', 0):.0f} $, P&L {k.get('pnl_pct', 0)*100:.1f}%, "
-        f"{k.get('n_positions', 0)} positions, exposition {k.get('exposure_pct', 0)*100:.0f}%.\n"
-        f"Régime: {reg.get('cycle', '?')} / {reg.get('risk_mode', '?')}, VIX {d.get('vix', 0):.0f}.\n"
-        f"Risque: VaR95 {rm.get('var_95', 0)*100:.1f}%, vol {rm.get('vol', 0)*100:.1f}%, "
-        f"Sharpe déflaté {rm.get('dsr', 0)}.\n"
-        f"Top screener: {top}."
-    )
-    system = ("Tu es un analyste quant senior. Réponds DIRECTEMENT en français, 4-6 phrases "
-              "claires et actionnables, sans afficher ton raisonnement. Commente l'état du "
-              "portefeuille (risque, régime, idées). Ton factuel et prudent, pas de conseil personnalisé.")
-    res = complete(facts, system=system, max_tokens=1100, cfg=_cfg_llm(request))
-    text, violations = guard_numbers(res.get("text", ""), facts, policy="reject")
-    if violations:
-        text = "Réponse rejetée : chiffres non sourcés dans le contexte Quant Terminal."
-    return {"available": res.get("available", False), "text": text,
-            "reason": res.get("reason", ""), "grounded": not violations,
-            "violations": violations}
-
-
 class AIChatRequest(BaseModel):
     question: str = Field(min_length=3, max_length=600)
     scope: str = "overview"
@@ -1344,7 +1346,26 @@ def ai_chat(body: AIChatRequest, request: Request) -> dict:
 
 @app.get("/api/ai/metrics")
 def ai_metrics() -> dict:
-    """Observabilité : fréquence effective de rejet du garde IA."""
+    """Observabilité de la garde anti-hallucination : ce qu'on a refusé de dire.
+
+    La chaîne NLP locale y figurait aussi jusqu'au 16/09 ; elle a été retirée avec le
+    reste du classificateur local (ADR-0170).
+    """
     from packages.llm.assistant import assistant_metrics
 
-    return assistant_metrics()
+    charge = dict(assistant_metrics())
+    return charge
+
+
+@app.get("/api/ai/modeles")
+def ai_modeles() -> dict:
+    """Le modèle EN PRODUCTION, ses candidats, ses archives — lus dans le registre.
+
+    Une version écrite en dur dans le front se détache de ce qu'elle désigne : c'est
+    exactement la leçon des chiffres de la landing (ADR-0154). Ici tout vient du registre,
+    y compris le fait qu'un modèle ait été entraîné depuis un arbre git modifié — donc
+    qu'il ne soit PAS reproductible depuis ce commit.
+    """
+    from packages.mlops.etat import etat_modeles
+
+    return etat_modeles()

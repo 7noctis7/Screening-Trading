@@ -90,7 +90,8 @@ def _base100(vals: list[float]) -> list[float]:
 
 
 def periode(courbe: list[dict], cle: str, libelle: str, ans: int | None,
-            aujourdhui: date, reference: list[dict] | None = None) -> dict:
+            aujourdhui: date, reference: list[dict] | None = None,
+            references: dict[str, list[dict]] | None = None) -> dict:
     """Croissance, CAGR et drawdown sur UNE fenêtre. Rien d'inventé si c'est court."""
     if ans is None:
         depuis = None
@@ -119,33 +120,60 @@ def periode(courbe: list[dict], cle: str, libelle: str, ans: int | None,
         "cagr": None if cagr is None else round(cagr, 4),
         "cagr_motif": None if assez else "fenêtre trop courte pour annualiser",
         "max_drawdown": round(_max_drawdown([v for _, v in pts]), 4),
-        **_comparaison(pts, reference, debut[0]),
+        **_comparaison(pts, reference, debut[0], references),
     }
 
 
-def _comparaison(pts: list[tuple[date, float]], reference: list[dict] | None,
-                 depuis: date) -> dict:
-    """Les deux courbes, base 100 au MÊME jour. Sans référence, seulement la nôtre.
+def _une_reference(nom: str, serie: list[dict] | None,
+                   depuis: date) -> dict:
+    """Une référence ramenée en base 100 au MÊME jour que nous. Son ABSENCE est dite.
 
     La référence est tranchée à la date de début EFFECTIVE de notre série, pas à la
     borne théorique : si le backtest commence après l'indice, comparer depuis la borne
     donnerait à l'indice une avance qu'il n'a pas eue face à nous.
     """
+    if not serie:
+        return {"nom": nom, "courbe": None, "croissance": None,
+                "motif": "aucune série fournie"}
+    rp = _tranche(serie, depuis)
+    if len(rp) < 2:
+        return {"nom": nom, "courbe": None, "croissance": None,
+                "motif": "série trop courte sur cette fenêtre"}
+    return {"nom": nom, "courbe": _base100(_reechantillonner(rp, POINTS_COURBE)),
+            "croissance": round(rp[-1][1] / rp[0][1] - 1.0, 4) if rp[0][1] else None,
+            "motif": ""}
+
+
+def _comparaison(pts: list[tuple[date, float]], reference: list[dict] | None,
+                 depuis: date, references: dict[str, list[dict]] | None = None) -> dict:
+    """Notre courbe et CHAQUE référence, toutes en base 100 au même jour.
+
+    PLUSIEURS RÉFÉRENCES, ET C'EST STRUCTURANT : comparer à un seul indice laisse croire
+    que le choix de l'indice n'a pas d'importance. Un robot qui bat le S&P 500 et perd
+    contre le CAC 40 ne raconte pas la même histoire selon celui qu'on affiche.
+
+    Les clés `reference` / `reference_croissance` sont CONSERVÉES pour la PREMIÈRE
+    référence. Le site statique déployé les lit encore ; les retirer d'un coup casserait
+    la page en ligne jusqu'à sa prochaine reconstruction — un déploiement ne doit jamais
+    dépendre de la simultanéité de deux artefacts.
+    """
     nous = _base100(_reechantillonner(pts, POINTS_COURBE))
     out: dict = {"courbe": nous}
-    if not reference:
+
+    toutes = dict(references or {})
+    if reference and not toutes:
+        toutes = {"référence": reference}
+    calculees = [_une_reference(nom, serie, depuis) for nom, serie in toutes.items()]
+    out["references"] = calculees
+
+    premiere = next((r for r in calculees if r["courbe"]), None)
+    if premiere is None:
         out["reference"] = None
-        out["reference_motif"] = "aucune série de référence fournie"
+        out["reference_motif"] = (calculees[0]["motif"] if calculees
+                                  else "aucune série de référence fournie")
         return out
-    rp = _tranche(reference, depuis)
-    if len(rp) < 2:
-        out["reference"] = None
-        out["reference_motif"] = "référence trop courte sur cette fenêtre"
-        return out
-    ref = _base100(_reechantillonner(rp, POINTS_COURBE))
-    out["reference"] = ref
-    out["reference_croissance"] = (round(rp[-1][1] / rp[0][1] - 1.0, 4)
-                                   if rp[0][1] else None)
+    out["reference"] = premiere["courbe"]
+    out["reference_croissance"] = premiere["croissance"]
     return out
 
 
@@ -174,7 +202,8 @@ def trades(stats: dict) -> dict:
 
 def construire(dashboard: dict, trade_stats: dict, univers: dict,
                aujourdhui: date | None = None, reference: list[dict] | None = None,
-               reference_nom: str = "S&P 500") -> dict:
+               reference_nom: str = "S&P 500",
+               references: dict[str, list[dict]] | None = None) -> dict:
     """Section `intro` du snapshot. Tout est dérivé ; rien n'est saisi."""
     jour = aujourdhui or date.today()
     courbe = [p for p in (dashboard.get("equity") or []) if isinstance(p, dict)]
@@ -183,7 +212,13 @@ def construire(dashboard: dict, trade_stats: dict, univers: dict,
         "genere_le": jour.isoformat(),
         "univers": univers,
         "reference_nom": reference_nom,
-        "periodes": [periode(courbe, c, lib, a, jour, reference)
+        # Les NOMS des références réellement fournies, dans l'ordre d'affichage. Le
+        # front
+        # en tire ses couleurs et sa légende : il ne les devine pas, et n'en invente
+        # aucune quand une série manque.
+        "references_noms": list((references or {}).keys()) or ([reference_nom]
+                                                               if reference else []),
+        "periodes": [periode(courbe, c, lib, a, jour, reference, references)
                      for c, lib, a in FENETRES],
         "trades": trades(trade_stats or {}),
         # La nature de la série est écrite ICI, pas laissée à l'interprétation :

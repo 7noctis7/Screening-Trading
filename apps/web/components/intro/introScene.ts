@@ -6,7 +6,7 @@ import {
   BEATS, MAX_DPR, NODE_COUNT, NODE_COUNT_MOBILE, PARTICLE_COUNT, PARTICLE_COUNT_MOBILE,
 } from "./introConfig";
 import {
-  Geo, Noeud, Particule, beatEchelle, beatRejet, beatResultat, beatReveal,
+  Geo, Noeud, Particule, beatEchelle, beatPreuve, beatRejet, beatReveal,
 } from "./introActs";
 import { Palette, clamp01, mulberry, seg } from "./introDraw";
 
@@ -90,11 +90,18 @@ export class SceneIntro {
     this.decor(t, pal);
 
     const b = this.battement(t);
+    // CHAQUE clé de `BEATS` doit être citée. Le `switch` d'origine connaissait encore une
+    // clé `resultat` supprimée depuis, et laissait les SEPT battements ajoutés tomber dans
+    // `default` — l'acte de révélation, un simple trait. Les deux tiers de l'intro se
+    // peignaient donc à vide, sans qu'aucune erreur ne soit levée : un `switch` qui a un
+    // `default` ne se plaint jamais d'une clé qu'il ignore.
     switch (b.cle) {
       case "echelle":
         beatEchelle(ctx, this.g, b.p, pal, this.p, this.n, this.liens, dt); break;
       case "rejet": beatRejet(ctx, this.g, b.p, pal); break;
-      case "resultat": beatResultat(ctx, this.g, b.p, pal); break;
+      case "p_ytd": case "p_3a": case "p_5a": case "p_10a": case "p_tout": case "trades":
+        beatPreuve(ctx, this.g, b.p, pal, this.p, dt); break;
+      case "reveal": beatReveal(ctx, this.g, b.p, pal); break;
       default: beatReveal(ctx, this.g, b.p, pal); break;
     }
   }

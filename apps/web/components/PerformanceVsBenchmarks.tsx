@@ -1,4 +1,5 @@
 "use client";
+import { COULEUR_LIGNE } from "@/lib/couleurs";
 import { useState } from "react";
 import { EquityChart, type Win } from "@/components/EquityChart";
 import { usePerformance } from "@/lib/api";
@@ -17,10 +18,7 @@ const usd = (x: number) => `${Math.round(x).toLocaleString("fr-FR")} $`;
 const pct = (x: number | null) => (x == null ? "—" : `${x >= 0 ? "+" : ""}${(x * 100).toFixed(2)} %`);
 // Mêmes tokens que la courbe : une pastille de tableau d'une autre teinte que sa ligne
 // obligerait à retrouver la correspondance à chaque lecture.
-const COL: Record<string, string> = {
-  Portefeuille: "var(--accent)", "S&P 500": "var(--bench-sp)",
-  "Nasdaq 100": "var(--bench-ndx)", Bitcoin: "var(--bench-btc)",
-};
+const COL = COULEUR_LIGNE;   // cf. `lib/couleurs` : une seule table pour tout le site
 
 export function PerformanceVsBenchmarks() {
   const { data, isLoading } = usePerformance();

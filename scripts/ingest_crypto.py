@@ -23,8 +23,17 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 
-def _bases_univers(top: int) -> list[str]:
-    """Bases crypto uniques de l'univers, plafonnées à `top`, ordre du classement."""
+def _bases_univers(top: int | None = None) -> list[str]:
+    """Bases crypto uniques de l'univers, plafonnées à `top`, ordre du classement.
+
+    `top` À ZÉRO VEUT DIRE « TOUT », ET C'EST ICI QUE ÇA SE DÉCIDE (18/09). La fonction
+    finissait par `bases[:top]`, donc `top=0` rendait une liste VIDE. Deux appelants se
+    défendaient déjà en passant `10_000` — un nombre magique recopié, c'est-à-dire un
+    piège documenté au lieu d'être fermé. Le troisième (`ingest_crypto_intraday`) a
+    passé `0` en croyant dire « tout », et l'ingestion a répondu « aucune base crypto
+    dans l'univers » : un message qui accuse les DONNÉES d'un défaut de l'APPELANT,
+    c'est-à-dire le pire genre de diagnostic. Le plafond se déclare donc ici, une fois.
+    """
     from apps.api.snapshot import _seed_universe
     inst = [m for m in _seed_universe() if m.get("asset_class") == "crypto"]
     bases: list[str] = []
@@ -35,7 +44,7 @@ def _bases_univers(top: int) -> list[str]:
         base = raw[:-4] if raw.endswith("-USD") else (raw[:-5] if raw.endswith("-USDT") else raw)
         if base and base not in bases:
             bases.append(base)
-    return bases[:top]
+    return bases[:top] if top else bases
 
 
 # Bases dont le symbole court Yahoo désigne un AUTRE jeton : `{base}-USD` y ramène la
@@ -194,7 +203,7 @@ def main() -> None:
     ap.add_argument("--days", type=int, default=3650, help="profondeur d'historique (jours)")
     a = ap.parse_args()
 
-    bases = _bases_univers(a.top or 10_000)
+    bases = _bases_univers(a.top)
     if not bases:
         print("Aucune crypto dans l'univers (data/seed/crypto_*.csv)."); return
     print(f"{len(bases)} cryptos à ingérer (yfinance) : {', '.join(bases[:15])}…\n")

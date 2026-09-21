@@ -34,10 +34,20 @@ def test_une_reference_INTROUVABLE_est_nommee_jamais_simulee(monkeypatch):
 
     r = perf.payload()
     assert list(r["benchmarks"]) == ["S&P 500"]
-    assert r["ecartees"] == ["Bitcoin", "CAC 40", "Nasdaq 100"]
+    # LA LISTE SE DÉDUIT DE `REFERENCES`, elle ne se recopie pas (18/09). Énumérer les
+    # écartées en dur faisait échouer ce test à l'ajout du CAC 40 — alors que la
+    # propriété tenait toujours. Un test qui casse quand le comportement est CORRECT
+    # finit par être « réparé » en le relâchant ; celui-ci dit ce qu'il veut dire :
+    # tout ce qui n'a pas été trouvé est NOMMÉ, quel que soit le nombre de références.
+    from packages.portfolio.comparaison_benchmark import REFERENCES
+
+    assert r["ecartees"] == sorted(set(REFERENCES) - {"S&P 500"})
 
 
 def test_le_cac40_est_servi_quand_son_historique_est_reel(monkeypatch):
+    """L'autre moitié de la propriété : une référence ABSENTE est nommée (ci-dessus),
+    une référence PRÉSENTE est servie. Sans ce second test, on pouvait satisfaire le
+    premier en n'affichant jamais rien."""
     monkeypatch.setattr("packages.execution.equity_history._load", lambda: HIST)
     _prix(monkeypatch, {"^FCHI": (["2026-06-20", "2026-06-24"], [7_500.0, 7_650.0])})
     r = perf.payload()

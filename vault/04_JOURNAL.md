@@ -46,6 +46,1153 @@ des deux dictionnaires de références effectivement servis ; il est rétabli un
 le latent des lignes ouvertes : le réalisé est maintenant lu du journal complet par une
 agrégation SQLite (`SUM(pnl_net)` des lots clos), imports Alpaca compris. Aucun chiffre
 n'est reconstruit ni inventé.
+## Session 2026-09-21 (45ᵉ) — L'intro publiait un profit factor sans dire ce qu'il avait rapporté
+
+**LA DONNÉE ÉTAIT PRODUITE, TRANSPORTÉE, ET JETÉE À L'AFFICHAGE.**
+`intro_payload.trades` calcule `pnl_total` — le réalisé des aller-retours clôturés, en
+dollars — et l'expose depuis l'origine. `IntroBeats` ne le lisait pas : le battement
+« trades » montrait PROFIT FACTOR, R:R et espérance, soit trois ratios et aucun montant.
+Un facteur de profit ne dit pas si le robot a gagné dix dollars ou dix mille, et c'est
+pourtant la première chose qu'on veut savoir. Le réalisé est désormais en tête de la
+sous-ligne, marqué **BRUT** — chez ce courtier les frais sont des activités séparées,
+absentes du flux d'ordres, et l'afficher sans le dire en ferait un net qu'il n'est pas.
+Absent → `n/d`, jamais zéro.
+
+**CE QUE LA MÊME RECHERCHE A ÉTABLI, ET QUI N'EST PAS UN DÉFAUT.** Les cinq fenêtres
+(YTD, 3, 5, 10 ans, depuis le début) et la comparaison MULTI-RÉFÉRENCES sont
+entièrement implémentées, des deux côtés : `FENETRES` dans `intro_payload`,
+`_comparaison` qui normalise chaque référence en base 100 au même jour, le CAC 40
+transmis à l'intro (`snapshot.py:2828`) ET au dashboard (`:2859`), et
+`IntroCourbes.referencesUtiles` qui trace ce qui existe avec deux couleurs réservées.
+
+Le verrou est UNE variable : `_cac_real`. Son commentaire est sans ambiguïté — « une
+série retombée sur son repli synthétique n'est affichée NULLE PART, ni ici ni dans
+l'intro ». Si `^FCHI` n'est pas dans la base de prix locale, le CAC disparaît de
+l'intro ET du dashboard, silencieusement et VOLONTAIREMENT : mieux vaut une comparaison
+absente qu'une courbe inventée tracée à côté d'une vraie, que rien à l'écran ne
+distinguerait de la bonne.
+
+**Mesure demandée avant tout correctif** : `curl /api/intro` dit en cinq lignes lequel
+des trois cas s'applique — références absentes en base, fenêtres trop courtes, ou
+données présentes et rendu fautif. Supposer le CAC cassé sans cette lecture aurait été
+la quatrième erreur de diagnostic de la journée.
+
+## Session 2026-09-21 (44ᵉ) — Le premier passage réel : les six ont parlé
+
+**LE CHIFFRE QUI RÉPOND AU P1 DU MATIN.** `garde_de_seance` : **16 observations, ZÉRO
+déclenchement, 0 %**. Le passage quotidien tombe DANS la séance NYSE. Ce n'est plus une
+supposition tirée de l'heure du cron, c'est une mesure.
+
+La force du résultat tient à sa paire : le MÊME compteur affichait ce matin **19
+déclenchements et 52 470 $ reportés**, sur un aperçu lancé à 09:17 ET, treize minutes
+avant l'ouverture. Zéro le soir, dix-neuf le matin — le compteur discrimine, et
+l'horaire de production est juste. Une seule des deux mesures n'aurait rien prouvé.
+
+**LES SIX ONT ÉTÉ OBSERVÉS, AUCUN EN PANNE.** Premier run réel : kill-switch TV,
+kill-switch drawdown, disjoncteur, garde journalière, garde de séance, portail de
+risque — tous `ACTIVE`, aucun `ERROR`, aucun `UNCALIBRATED`. Le portail a évalué **7
+ordres**, n'en a réduit ni refusé aucun, effet mesuré 0,00 $.
+
+**L'ÉCART 16 → 7 EST LE FONCTIONNEMENT NORMAL** : seize lignes ont passé le garde de
+séance, neuf se sont arrêtées sur la bande d'inaction (`✓ écart sous la bande`), sept
+seulement portaient une intention à soumettre au portail. Le rapport rend cette chaîne
+lisible sans lire un log.
+
+**TROISIÈME DÉFAUT DE MON PROPRE RAPPORT, trouvé sur son premier usage réel.** La
+section « ce qu'il faut regarder » répétait **six fois la même phrase**, à un nom près :
+au premier passage, tous les garde-fous sont trivialement à zéro déclenchement. Une
+liste dont toutes les lignes se ressemblent n'est plus lue — et c'est justement la
+section qui doit attirer l'œil. Les constats IDENTIQUES sont désormais regroupés en une
+ligne qui les nomme tous ; ceux qui portent un chiffre propre (`ERROR sur 2 run(s)`,
+`aurait coupé 3 fois`) restent séparés, parce que les fondre perdrait ce chiffre. Ce
+n'est pas un seuil : on ne cache rien, on déduplique.
+
+**Trois fois en une journée, ce rapport m'a montré un défaut dès qu'il a servi** :
+l'alerte « seuil inatteignable » sur un disjoncteur qui avait atteint son seuil,
+`ACTIVE×1` à côté de 19 observations sans dire que les unités diffèrent, et ces six
+lignes jumelles. Aucun n'était visible en écrivant le code ; tous l'étaient à la
+première lecture d'une vraie sortie.
+
+## Session 2026-09-21 (43ᵉ) — Le site marchait, le tunnel visait ::1
+
+**LA CAUSE, ENFIN.** « Aucune page de mon site ne fonctionne » et « ✓ front prêt · ✓ API
+200 · ✓ snapshot prêt » étaient **vrais en même temps**. Entre les deux, le tunnel SSH :
+
+    channel 5: open failed: connect failed: Connection refused
+
+`ssh -L 3000:localhost:3000` résout « localhost » **sur le VPS**, où il peut valoir `::1`.
+Les services n'écoutent que sur IPv4 (`uvicorn --host 127.0.0.1`, lisible dans
+`systemctl status`). SSH tentait donc une adresse où personne ne répond pendant que le
+site servait parfaitement. Corrigé côté utilisateur en un mot : `127.0.0.1` au lieu de
+`localhost`. Le tunnel s'est ouvert sans une seule ligne de refus.
+
+**ET LE DÉPÔT RECOMMANDAIT LA FORME PIÉGÉE.** `scripts/start.sh:155` et `CLAUDE.md`
+écrivaient tous deux `ssh -L 3001:localhost:3001`. L'utilisateur n'a pas mal tapé : il a
+suivi la documentation. Les deux sont corrigés, et un test interdit de réintroduire un
+`-L <port>:localhost:` dans toute commande PROPOSÉE par le dépôt — les commentaires
+restent libres de nommer la forme fautive pour l'expliquer.
+
+**`verifier_service.sh` MESURE au lieu de supposer** : il essaie `curl http://[::1]:3000`
+et ne dit quelque chose QUE si ça refuse — auquel cas il imprime la commande de tunnel
+correcte, avec l'IP de la machine et le symptôme nommé. Sur un VPS en double pile
+correctement configuré, il se tait.
+
+**CE QUE MA LIGNE DE SANTÉ A SERVI, DÈS SON PREMIER USAGE.** `✓ snapshot
+pret_rafraichissement (âge 975 s) — les pages se chargent immédiatement` a PROUVÉ que
+l'API servait. Sans elle, le « ✓ API 200 » muet m'aurait laissé chercher encore dans le
+site. Elle n'a pas trouvé la panne — elle a éliminé un continent.
+
+**DEUX ERREURS DE MA PART, dans la même heure.** J'ai accusé l'OOM (faux : mesuré),
+puis j'ai donné `journalctl` **sans `sudo`** — la sortie « -- No entries -- » portait
+pourtant son propre démenti deux lignes plus haut (« Users in groups adm,
+systemd-journal can see all messages »). J'ai lu le verdict et sauté l'avertissement.
+
+## Session 2026-09-21 (42ᵉ) — « ✓ API 200 » sur un site qui n'affichait rien
+
+**LE SIGNALEMENT.** « Aucune page de mon site ne fonctionne. » Ma première hypothèse —
+l'OOM, `make live` ayant construit deux snapshots pendant que l'API en tenait un — est
+tombée sur les mesures : services `active (running)` depuis 44 min, zéro ligne
+`killed process`, 1,4 Gi libre. **Fausse, et écartée en une commande.**
+
+**CE QUE LA MESURE A RÉVÉLÉ À LA PLACE.** `/health` rendait `{"status": "ok"}` en dur.
+Une constante. Elle ne regarde jamais le snapshot — donc le « ✓ API 200 » de `make up`
+prouve qu'un processus accepte une connexion TCP, et rien d'autre. Les pages étant
+rendues côté client, une API sans snapshot en cache les laisse toutes sur leurs
+squelettes pendant qu'elle en construit un (1 à 3 min). Voyant vert ici, écran qui tourne
+là-bas.
+
+**Le dépôt tenait DÉJÀ ce raisonnement, pour le front.** `verifier_service.sh` s'ouvre
+sur « "quelque chose répond sur le port 3000" n'est pas "le service sert le code
+courant" » — et deux lignes plus bas, il se contentait d'imprimer le code HTTP de l'API.
+La bonne idée était écrite, appliquée à moitié.
+
+**Livré** : `apps/api/sante` (quatre états qui ne se confondent pas, aucune dépendance,
+aucune I/O), `/health` qui les publie **sans jamais déclencher de construction** (test
+d'AST), et `verifier_service.sh` qui annonce désormais « ⚠ snapshot a_construire — la
+PREMIÈRE page demandée déclenchera une construction complète (1 à 3 min) ». Cette
+phrase-là aurait remplacé l'heure de diagnostic.
+
+**Mon propre test d'AST était rouge à sa première exécution** : il lisait la DOCSTRING de
+`health`, qui cite `_snap()` et `build_snapshot()` pour expliquer qu'elle ne les appelle
+pas. Un test qui lit la prose d'une fonction ne contrôle pas ce qu'elle fait — il
+interdit d'en parler. Il lit le corps, docstring retirée.
+
+**CE QUI RESTE OUVERT, ET JE NE LE COMBLE PAS PAR UNE HYPOTHÈSE.** La cause de la panne
+n'est pas établie. Mécanisme plausible : `_warm()` relance une construction complète à
+CHAQUE redémarrage de l'API (pic mesuré 1,4 Go), et deux `make live` ont ajouté deux
+constructions dans deux processus séparés, sur une machine de 3,7 Go **sans swap** —
+contention, pas manque de mémoire. Mais je ne l'ai pas mesuré, et les deux `journalctl`
+de la fenêtre 13:15–13:56 n'ont pas encore été lus. La trace, elle, n'est pas perdue :
+`journalctl` survit au redémarrage, contrairement à ce que j'avais d'abord craint.
+
+## Session 2026-09-21 (41ᵉ) — Le premier vrai rapport, et deux pièges de lecture dans le mien
+
+**LE GARDE DE SÉANCE RÉPOND, DÈS LE PREMIER PASSAGE** : 19 déclenchements, **52 470 $**,
+`equity ×18 · etf ×1`, effet moyen 2 761,58 $. Le run tombait à 09:17 ET, treize minutes
+avant l'ouverture. Ce qui était une phrase en bas d'un récapitulatif — « si ce report
+revient chaque jour, c'est le planning » — est devenu un taux.
+
+**PREMIER PIÈGE, dans ma propre colonne.** `garde_de_seance ACTIVE×1` à côté de `19`
+observations se lit comme une contradiction. Les deux chiffres sont justes et ne comptent
+pas la même chose : les ÉTATS se comptent par RUN, les OBSERVATIONS par décision. Ils
+coïncident pour les garde-fous évalués une fois par passage, et divergent pour ceux qui
+voient chaque ordre. La colonne dit maintenant son unité — j'ai moi-même buté dessus en
+relisant la sortie, ce qui règle la question de savoir si c'était ambigu.
+
+*(Au passage, `ACTIVE×1` sur deux runs est exact : le premier passage tournait sur le code
+d'avant le compteur.)*
+
+**SECOND PIÈGE, et il accusait à tort.** « ACTIVE, 2 observations, ZÉRO déclenchement —
+vérifier que son seuil est atteignable » s'affichait au deuxième passage. Un disjoncteur
+réglé à 3 037 $ qui ne mord pas sur une journée à −336 $ fait EXACTEMENT son travail :
+transformer un échantillon court en soupçon de défaut, c'est la même faute que celle que
+ce rapport existe pour empêcher. La phrase constate désormais, nomme le nombre de runs,
+et dit QUAND s'inquiéter — sans poser de seuil : « attendu sur un échantillon court ; sur
+plusieurs semaines, c'est un seuil à revoir ».
+
+**Ce qui reste à mesurer** : le taux du garde de séance en mode **live**. Le cron tourne à
+15:08 ET, donc DANS la séance — s'il est à 0 %, le planning est bon ; s'il ne l'est pas,
+le planificateur dérive et personne ne l'aurait vu.
+
+## Session 2026-09-21 (40ᵉ) — « DONNÉE INDISPONIBLE » ne disait pas laquelle des trois
+
+**LA QUESTION POSÉE.** Pourquoi les cinq fenêtres de performance du rideau d'entrée
+affichent « DONNÉE INDISPONIBLE » ?
+
+**LA RÉPONSE, ET RIEN N'ÉTAIT CASSÉ.** `/api/intro` est servi par `_snap()`, c'est-à-dire
+par le snapshot COMPLET. Après un `make up`, le changement de code invalide le cache disque
+et l'API le reconstruit pendant une à trois minutes. Le rideau, lui, n'attend les chiffres
+que **2,5 s** (`ATTENTE_DONNEES_MS`) avant de jouer quand même — un rideau qui ne se lève
+jamais serait pire. Les battements de période tombent alors sur `data === undefined` et
+disent leur absence. C'est le comportement voulu, déjà décrit dans l'en-tête de
+`IntroSequence` depuis le 15/09.
+
+**CE QUI ÉTAIT VRAIMENT DÉFAILLANT : le motif.** Il disait « /api/intro n'a rien renvoyé ».
+Exact, et inutilisable — il ne dit pas s'il faut ATTENDRE, RELANCER l'API, ou aller
+chercher un trou dans les données. Or la requête SAIT dans lequel des cas on est : elle
+court encore, ou elle a échoué. Le composant ne recevait que `data`, jamais cet état.
+Trois causes ont maintenant trois phrases, dont celle qui couvre 99 % des cas : « le
+snapshot se reconstruit (1 à 3 min après un `make up`) ». Un message qui dit d'attendre
+sans dire combien fait conclure à une panne au bout de dix secondes.
+
+**UNE CONSTANTE MORTE QUI AFFIRMAIT LE CONTRAIRE DU CODE.**
+`SANS_DONNEES_SAUTE_PERIODES = true` — exportée, jamais lue, et fausse : la décision a été
+INVERSÉE le 16/09 (sauter les battements laissait cinq secondes de noir indiscernables
+d'une panne, deux allers-retours de diagnostic perdus). Elle a survécu à la décision
+qu'elle décrivait. Retirée. C'est la deuxième du genre aujourd'hui, après la ligne de
+`AI_CODEBASE_MAP` qui annonçait des compteurs de garde-fous inexistants : **une
+affirmation non exécutée ne vieillit pas, elle pourrit.**
+
+## Session 2026-09-21 (39ᵉ) — Cinq garde-fous qui décident sans jamais compter
+
+**LE CONSTAT, ET IL TIENT EN UNE LIGNE.** Cinq garde-fous protègent le seul chemin qui
+envoie des ordres — kill-switch TradingView, kill-switch drawdown, disjoncteur
+journalier, garde journalière, portail de risque. Tous les cinq DÉCIDENT et IMPRIMENT ;
+aucun ne COMPTE. La trace vit dans le `stdout` d'un run, donc dans `/tmp/quant_live.log`,
+sur une machine, jusqu'au prochain nettoyage. Personne ne pouvait dire combien d'ordres
+le portail avait réduits, de combien, ni pour quelle règle — autrement qu'en greppant un
+journal à la main.
+
+**CE QUE CETTE ABSENCE BLOQUAIT VRAIMENT.** `coupe_circuit` écrit dans son en-tête qu'on
+armera le disjoncteur « une fois qu'on a vu sur plusieurs semaines les jours où il AURAIT
+coupé ». Rien n'enregistrait ces jours. La condition d'armement était INOBSERVABLE : le
+P1 de dette de câblage réclamait une preuve que le dépôt n'avait aucun moyen de produire.
+Le compteur `aurait_declenche` existe désormais ; c'est lui, et lui seul, qui permettra
+de trancher — sur des jours comptés, pas sur une impression.
+
+**TROIS `1.0` QUI NE DISENT PAS LA MÊME CHOSE.** `dd_kill_switch` rend `1.0` quand il n'y
+a rien à couper, quand l'historique est trop court, et quand le contrôle a PLANTÉ (« check
+indisponible … non appliqué », au milieu d'un run). À l'écran, les trois se ressemblent.
+Au rapport, ils deviennent `ACTIVE`, `UNCALIBRATED` et `ERROR`. Un kill-switch en panne
+silencieuse est précisément ce qu'un kill-switch existe pour empêcher.
+
+**CE QUI EST LIVRÉ.** `packages/execution/garde_fous` (témoin pur, sans I/O),
+`garde_fous_store` (un point par run dans `.cache/`, gitignoré), `make garde-fous` (le
+rapport), et le câblage aux cinq points de décision DÉJÀ existants de `run_live`. Le
+témoin est injecté, jamais global, et OPTIONNEL : tous les appelants qui ne le passent
+pas se comportent exactement comme avant — un test le vérifie.
+
+**LE POINT DE CONCEPTION QUI COMPTE : `order_gate` reste une fonction PURE.** Le témoin
+vit chez l'APPELANT. Une écriture disque dans la dernière barrière créerait un monde où
+enregistrer une statistique peut faire échouer un ordre. Un test AST interdit maintenant
+à ce fichier d'importer `json`, `pathlib` ou `packages.*`, et d'appeler `open` ou `print`.
+Même raisonnement pour l'import du témoin dans `live_guards` : il est au niveau MODULE,
+car le mettre dans le `try` de `dd_kill_switch` ferait retomber une erreur d'import dans
+la branche « non appliqué » — un défaut d'OBSERVATION désarmerait le garde-fou OBSERVÉ.
+
+**L'EFFET SE MESURE SUR CE QUI N'EST PAS PARTI.** Un refus retient tout le montant
+demandé, une réduction retient la différence. J'ai sabordé les deux erreurs pour vérifier
+que la suite les attrape : compter le demandé sur une réduction, et débrancher le témoin
+du chemin d'ordre. Trois tests tombent, dont celui qui mesure 35 000 $ retenus sur
+50 000 $ demandés.
+
+**AUCUN SEUIL INVENTÉ, et c'est délibéré.** Les alertes du rapport sont toutes
+STRUCTURELLES : jamais observé, jamais déclenché, en panne, déclenché sans effet mesuré.
+Poser un « effet moyen négligeable en dessous de X $ » aurait été une calibration sur
+rien. L'effet moyen est affiché ; c'est l'opérateur qui le juge.
+
+**LE RAPPORT DÉMARRE VIDE, ET IL LE DIT.** `make garde-fous` répond aujourd'hui
+`UNCALIBRATED — aucun compte-rendu enregistré`, avec la phrase qui évite le contresens :
+« un rapport vide ne dit PAS que les garde-fous n'ont rien fait, il dit qu'on ne les a pas
+encore regardés ». Aucun rétro-remplissage depuis `/tmp/quant_live.log` : ce fichier est
+éphémère, propre à une machine, de couverture inconnue — en tirer un chiffre serait
+fabriquer une mesure.
+
+**TROUVÉ EN CHEMIN, HORS PÉRIMÈTRE MAIS BLOQUANT.**
+`test_le_Makefile_n_injecte_pas_un_SECOND_tf` lisait la DERNIÈRE ligne de `make -n`.
+Lancé depuis `make test`, c'est un SOUS-MAKE : la dernière ligne devient
+`make[1]: Leaving directory …` et le test échouait sur le format de sortie de make, pas
+sur ce qu'il prétend vérifier. Il sélectionne désormais la ligne qui contient le script.
+Un échec qui n'établit rien vaut un test absent.
+
+**LE PREMIER RUN RÉEL A CORRIGÉ MA PRÉDICTION, ET AJOUTÉ UN SIXIÈME GARDE-FOU.**
+J'avais annoncé le portail observé en aperçu. Il ne l'est pas : lancé à 08:54 ET, avant
+l'ouverture, le run a sorti ses 19 lignes par le GARDE DE SÉANCE — un `continue` qui
+tombe AVANT `decider` et `evaluer`. Le rapport disait donc juste (« le run ne va jamais
+jusque-là ») ; c'est moi qui avais tort. Et ce garde-là écartait **19 ordres, 52 596 $**,
+sans que rien ne le compte : même classe de filtre que les cinq autres, oublié parce
+qu'il ne s'appelle pas « kill-switch ». Il est branché à son tour, l'effet chiffré en
+dollars NON ENVOYÉS et le motif porté par la classe d'actif — « chaque jour, les
+actions » et « une fois, un férié » sont deux diagnostics opposés que le récapitulatif
+de fin de run ne distingue pas d'un jour sur l'autre. C'est exactement la question que
+ce récapitulatif POSE (« si ce report revient chaque jour, c'est le planning, pas le
+marché ») sans pouvoir y répondre.
+
+**Deuxième contresens corrigé dans la foulée** : `QUANT_IGNORE_SESSION=1` désarme ce
+garde, et le rapport l'aurait annoncé « ACTIVE, zéro déclenchement — vérifier que son
+seuil est atteignable ». Il n'a pas manqué sa cible, il n'avait pas le droit de tirer.
+`DISABLED` a maintenant sa propre phrase.
+
+**LA DOCUMENTATION L'AFFIRMAIT DÉJÀ.** `docs/AI_CODEBASE_MAP.md` listait parmi les
+propriétés du portail : « chaque garde-fou publie compteur de déclenchements et effet
+moyen ». C'était FAUX depuis le jour où la ligne a été écrite — elle décrivait une
+intention. Le même document demande deux pages plus loin : « un garde-fou actif
+affiche-t-il zéro déclenchement ou un effet moyen nul ? », une question à laquelle le
+dépôt n'avait aucun moyen de répondre. La ligne dit désormais QUI publie (le témoin, pas
+`order_gate`), COMMENT le lire (`make garde-fous`), et depuis quand.
+
+**Statut au registre de certification : CANDIDATE.** Les tests passent sans réseau ; la
+preuve terrain — des compteurs RÉELS sur au moins vingt passages — n'existe pas encore.
+ADR-0186.
+
+
+## Session 2026-09-18 (38ᵉ) — L'intraday crypto, et un banc qui se donnait de bonnes notes
+
+**LE MOTIF DE PRICE ACTION A ÉTÉ MESURÉ — puis son verdict annulé, par le même banc.**
+Premier passage réel de `make deviation-lab` sur le VPS : 200 titres, **499 585 barres**,
+horizon 10. Le rapport affichait `reclaim` et `consolidation` **RETENUS**, placebo
+0,001997, DSR 1,000. Trois défauts du banc, tous du même côté — le permissif — annulent
+cette conclusion.
+
+**Le premier est le plus gênant, parce qu'il était écrit noir sur blanc.** Le banc annonce
+« gate emprunté à `alpha_incremental` » et réimplémentait des seuils PLUS DOUX : DSR > 0,5
+quand le module exige 0,90, et AUCUNE condition sur l'IC quand le module exige
+|IC| ≥ 0,03. Or les deux scoreurs retenus ont un IC **NÉGATIF** (−0,0107 et −0,0130) :
+leurs barres sous-performent. `placebo` teste |IC|, donc il est BILATÉRAL — un prédicteur
+significativement mauvais le passe aussi bien qu'un bon. Sans condition de SENS,
+« significatif » s'est lu « bon ». Le banc décernait sa meilleure mention à des barres à
+éviter.
+
+**Le deuxième se mesure, et le chiffre est net.** Sur des rendements i.i.d. où AUCUN
+signal n'existe par construction, un scoreur **tiré au hasard** allumé 40 % du temps
+obtient à n = 499 585 un Sharpe de +0,161 et un **DSR de 1,000** ; être toujours long
+donne +0,259 et 1,000 aussi. La colonne DSR ne portait donc aucune information — et le n
+brut est de toute façon faux : un rendement forward à 10 barres recalculé à chaque barre
+se recouvre, et 200 titres notés le même jour subissent une seule séance, pas 200.
+
+**Le troisième manquait à l'œil nu une fois nommé : il n'y avait pas de témoin.** Aucun
+scoreur « toujours long ». Un Sharpe positif se lisait comme une découverte alors qu'il
+peut n'être que la dérive du marché captée par n'importe quelle barre.
+
+**Corrigé** : le banc n'écrit plus ses seuils, il appelle `alpha_incremental.verdict` et
+ajoute une quatrième porte, le SENS. Témoin « toujours long » noté comme les autres et
+présent dans les écarts appariés. `n` EFFECTIF pour le DSR (dates distinctes ÷ horizon,
+borne grossière et volontairement pessimiste, paramètre additif sur `evaluer`/`comparer`).
+Et les écarts appariés s'impriment **en entier** : ils étaient tronqués à 88 caractères,
+c'est-à-dire coupés avant le t apparié — la section posait sa question et masquait la
+réponse. Sous ces portes, les deux scoreurs sont rejetés sur |IC|. Le motif reste
+UNCALIBRATED, la mesure est à refaire. ADR-0183.
+
+**PUIS LE BANC A TRANCHÉ, SUR LES DEUX MARCHÉS — et la réponse est non.** Actions 1D
+(200 titres, 499 758 barres) et crypto 4h (98 paires, 1 187 822 barres ingérées chez
+Binance), horizon 10 barres : **0 scoreur sur 5 passe les quatre portes, des deux
+côtés**. IC de +0,0071 à −0,0145, tous sous 0,03 et négatifs dès `reclaim` ; en crypto,
+`consolidation + contraction` sort un Sharpe NÉGATIF. La jambe intraday que la spec
+réclamait a donc été mesurée pour de bon, sur des données complètes et gratuites, et
+elle ne sauve rien. `signal_lab` devient sans objet. ADR-0184.
+
+**Un défaut de LECTURE, trouvé en commentant ce résultat.** La colonne « Sharpe » note
+une stratégie qui reste à zéro hors signal : elle vaut ~√(part allumée) × le Sharpe des
+barres retenues, donc elle mélange sélectivité et qualité. `sfp`, allumé 0,1 % du temps,
+y affiche 0,009 sans avoir démérité. Le même biais pollue l'écart apparié contre le
+témoin : sur une barre éteinte le témoin encaisse r et le scoreur 0, si bien que les t
+de +36 à +48 mesuraient le TAUX D'INVESTISSEMENT, pas la sélection. J'avais introduit ce
+témoin la veille pour répondre à « sélectionner vaut-il mieux que ne rien sélectionner » —
+il posait une autre question. Une section PRIME DE SÉLECTION la pose correctement :
+moyenne des barres retenues moins moyenne de toutes les barres, t sur le n effectif.
+Dé-dilué, le verdict ne bouge pas : à sélectivité égale les barres retenues valent le
+marché en actions et MOINS que le marché en crypto, en se dégradant à chaque étage de
+confirmation (0,101 → 0,087 → 0,080 → −0,024). Attendre la confirmation coûte.
+
+**L'INTRADAY CRYPTO EST LIVRÉ, gratuitement.** `crypto_binance` passe d'un quotidien codé
+en dur à un intervalle paramétré (1d/4h/1h) ; la bougie EN COURS est écartée sur son
+`closeTime`, pas sur une heuristique de date — en quotidien le défaut passait presque
+inaperçu, en 1h il serait permanent. `scripts/ingest_crypto_intraday.py` écrit dans une
+base SIDECAR (`data/crypto_intraday.db`) et jamais dans `crypto.db`, lue par la
+production ; la reprise est incrémentale, sinon chaque passage rejouerait l'historique et
+se ferait rate-limiter. `make deviation-lab-crypto` branche le banc dessus : c'est le seul
+endroit où la jambe d'exécution intraday que la spec demandait devient mesurable.
+
+**Défaut trouvé en chemin, côté actions** : `_TF_MAP` de yfinance renvoyait `"4h" → "1h"`
+et `df_to_bars` étiquetait avec le timeframe DEMANDÉ. Des barres HORAIRES seraient entrées
+en base avec `timeframe="4h"` — une base fausse que rien n'aurait signalée. Le provider
+refuse désormais `4h`, et la validation passe AVANT l'import de yfinance pour que le refus
+soit lisible même sans la dépendance.
+
+**L'intraday ACTIONS reste fermé, et c'est chiffré** : yfinance plafonne le 1h à ~730
+jours, le palier gratuit d'Alpaca sert le flux IEX dont les VOLUMES ne représentent pas le
+marché — or nos détecteurs filtrent sur le volume. Une donnée gratuite qui fausse la
+mesure est pire que pas de donnée. Noté P2, avec sa condition d'ouverture : ne payer que
+si le banc crypto montre un apport là où les données sont complètes.
+
+**LE « COMMENTAIRE IA » DE L'ACCUEIL EST RETIRÉ.** Il affichait « aucun fournisseur ne
+répond · HTTP Error 400 » et proposait de brancher Gemini/OpenAI/Anthropic/Mistral. Deux
+raisons de le supprimer plutôt que de le réparer : il ne marchait pour personne sans
+configuration manuelle, et surtout **il commentait le portefeuille de DÉMO** —
+`s["dashboard"]`, pas le compte réel. Un texte d'analyse en langage naturel sur des
+chiffres synthétiques, à côté de panneaux qui n'affichent que du réel, est exactement le
+genre de voisinage qui finit par être lu comme réel.
+
+Retiré : `components/AICommentary.tsx`, son montage dans `app/accueil/page.tsx`, et les
+deux routes devenues sans appelant (`/api/ai/status`, `/api/ai/commentary`). CONSERVÉ :
+le copilote `QuantChat` (monté dans le layout), le panneau `ReglagesIA` qu'il utilise, et
+`/api/ai/diagnostic`, `/chat`, `/metrics`, `/modeles`. Le test qui gardait les cinq routes
+gardait contre un retrait COLLATÉRAL ; il exige désormais que les trois vivantes restent
+ET que les deux mortes aient disparu — sans quoi un garde-fou devient un obstacle au
+ménage.
+
+**LE POINT DE DÉPART DU CAPITAL N'ÉTAIT PAS CELUI DU COMPTE.** Alpaca affiche
+101 026,57 $ ; le panneau annonçait +1,13 % depuis un « capital initial » de 99 605,37 $
+daté du 22/06. Ce 22/06 est le jour où NOUS avons commencé à enregistrer, pas l'ouverture
+du compte : `equity_history` écrit un point par jour à chaque build. Un pourcentage
+calculé depuis cette base répond à « depuis que je regarde », pas à « depuis que j'ai
+déposé » — et si l'enregistrement démarre après une baisse, la base est basse et le
+chiffre FLATTÉ. Or la courbe d'Alpaca remonte à la création du compte et le snapshot la
+récupérait DÉJÀ (`portfolio_history`) : elle était là, inutilisée. Elle devient la source
+préférée, l'enregistrement local le secours, la source est publiée par poche, et
+`depart_certain` passe à faux dès qu'UNE poche part d'une base locale — le capital est
+une somme, un « presque certain » se lirait certain.
+
+**LE REJEU COMPLET TOMBE JUSTE — et les huit résidus disent tous le même chiffre.**
+774 fills, **533 aller-retours fermés**, 52 lots ouverts, **zéro vente orpheline**, QQQ
+réconcilié. Restaient huit poches crypto entièrement soldées où le journal portait un
+résidu face à un courtier à ZÉRO. Ma règle de frais en nature ne pouvait pas les
+attraper : elle rapportait l'écart à la position RESTANTE, et un rapport à zéro est
+infini — donc bloquant à jamais. Or les frais se prélèvent à CHAQUE transaction : ils se
+mesurent contre le VOLUME BRASSÉ, pas contre ce qui reste.
+
+Rapporté au volume acheté, le résidu vaut **0,220 %** sur AAVE, AVAX, BCH, BTC, ETH,
+LINK, LTC, SOL et UNI. Neuf actifs indépendants, un seul chiffre à trois décimales : ce
+n'est pas une tolérance qu'on choisit, c'est le **barème du courtier qu'on RETROUVE**.
+La borne est posée à 0,5 %, plus du double — assez large pour un barème qui bougerait,
+assez serrée pour qu'une vraie erreur ressorte. Le rapport imprime le taux implicite
+par actif : c'est lui qui fait la preuve, pas la borne.
+
+**Et le réalisé est BRUT, ce qui est maintenant écrit partout.** Le rejeu portait ses
+montants dans un champ nommé `pnl_net` alors que les frais n'appartiennent pas au flux
+d'ordres — crypto en nature, actions en dollars (`TAF`/`REG`/`CAT`). Une étiquette
+fausse de ce genre survit des mois et fausse tout ce qui la lit. La clé s'appelle
+`pnl_brut`, `realise` le dit dans sa docstring, le rapport le dit à l'écran, et les
+enregistrements portent `fees_source="hors_flux_ordres"` — publier le brut des deux
+côtés avec sa provenance marquée vaut mieux qu'un `fees=0.0` qui affirmerait qu'il n'y
+en a pas eu.
+
+**LE PREMIER PASSAGE RÉEL A REFUSÉ D'ÉCRIRE — et il avait raison trois fois.**
+`make reconstruire-journal` a rendu « 100 ordres exécutés » sur un historique qui en
+porte plusieurs centaines, deux ventes QQQ « sans lot », et huit écarts d'inventaire.
+Le script accusait l'historique d'être tronqué : **il l'était, par son propre appel.**
+`AlpacaBroker.orders()` plafonne à 100 PAR DÉFAUT — `paginer` rend `res[:limit]`, donc
+le défaut n'est pas une taille de page mais un TOTAL. Les achats de juin manquaient,
+d'où les ventes orphelines et l'écart de 61 parts sur QQQ. Une valeur par défaut commode
+ailleurs devient un piège dans un script qui REFUSE d'écrire sur la foi de ce qu'il lit.
+
+**Deuxième défaut, plus sournois : `UNI/USD` contre `UNIUSD`.** Le courtier emploie les
+DEUX graphies — la barre oblique dans l'historique des ordres, la forme collée dans les
+positions. Comparer les chaînes brutes faisait apparaître une position fantôme d'un côté
+(+287,86) et une absence de l'autre (−287,22), pour un seul et même jeton. La
+normalisation s'applique à la clé de regroupement et à la confrontation ; le lot garde
+la graphie de son fill, qui est la vérité du courtier pour cette écriture-là.
+
+**Troisième : les frais crypto se prélèvent EN NATURE.** Les lignes `CFEE` de l'historique
+retirent des JETONS (`-0.28702301`, `-0.03027904`…) et n'appartiennent pas à l'historique
+des ORDRES. Un rejeu d'achats et de ventes surestime donc TOUJOURS une quantité crypto —
+mesuré à 0,22 % sur UNI. On ne corrige pas le chiffre, ce serait inventer une écriture :
+`confronter` rend ces écarts dans une catégorie SÉPARÉE et nommée. Ce n'est pas une marge
+de confort — le sens est imposé (le journal ne peut qu'être en EXCÈS), la borne est
+mesurée à 1 %, et un journal en DÉFAUT reste bloquant même en crypto.
+
+**LE CAPITAL INITIAL EST CONNU, ET IL EST EXACT.** L'historique Alpaca porte, tout en
+bas, une ligne `Journal cash between accounts · JNLC · +$100,000.00 · Jun 17, 2026`. Le
+compte a donc été ouvert avec **100 000,00 $ le 17/06**. À 101 026,57 $, la performance
+réelle est **+1 026,57 $, soit +1,03 %** en 93 jours. Le panneau annonçait +1,13 %
+depuis 99 605,37 $ : notre base était le premier point ENREGISTRÉ, inférieur au dépôt,
+donc le chiffre était flatté d'un dixième de point. Mesure, pas déduction.
+
+**LE JOURNAL SE RECONSTRUIT DEPUIS LES SEULS FILLS DU COURTIER.** Plutôt que de réparer
+un registre qu'aucune réparation n'atteint plus, on le rebâtit à partir de la seule
+source qui n'invente rien : l'historique des ordres exécutés. `research`
+`/reconstruction_journal` rejoue les fills en FIFO par symbole — chaque tranche
+consommée produit son propre aller-retour, parce que moyenner trois prix d'entrée
+effacerait la seule information que ce registre existe pour porter. Une vente qui
+déborde les lots disponibles est NOMMÉE (`ventes_orphelines`) : c'est le signe que
+l'historique récupéré est tronqué, et la taire produirait un réalisé faux.
+
+**La porte est l'inventaire réel.** `confronter` compare, symbole par symbole et dans
+les deux sens, les lots ouverts reconstruits à ce que le courtier DÉTIENT. Le script
+(`make reconstruire-journal`) REFUSE d'écrire tant que ça ne colle pas — un registre
+reconstruit qui ne retombe pas sur l'inventaire est faux, et l'écrire quand même serait
+refaire l'erreur qu'on corrige. Simulation par défaut, archive horodatée + export JSON
+de l'ancien registre avant tout remplacement. Les lots portent le préfixe `R-` et
+AUCUN `features_snapshot` : ils viennent du courtier, pas d'une décision, et inventer
+des features rendrait le registre inutilisable pour la calibration ML — la confusion
+exacte que le drapeau `legacy` avait déjà causée.
+
+**LE RAPPROCHEMENT EST RETIRÉ DU SITE, à la demande — et c'est la bonne décision.**
+Le bloc était juste et personne n'en voulait : devant un compte, la question est
+« combien j'ai gagné », pas « l'identité comptable boucle-t-elle ». Un diagnostic n'a pas
+sa place au milieu d'un tableau de bord ; il reste ENTIER au terminal (`make
+diag-journal`), là où on le lit quand on le cherche. Supprimés : `Reconciliation.tsx`,
+`packages/research/reconciliation_capital.py`, leurs tests, et la plomberie API
+(`courbes_capital`, `reconciliation_compte`). À la place, une cinquième carte sur
+« Mes positions » : **gain/perte RÉALISÉ**, le strict complément du latent déjà affiché.
+Elle porte le chiffre que le COMPTE a subi, import compris, et nomme en dessous celui du
+robot seul — +74,52 $ contre −1 888,01 $. Afficher le plus flatteur des deux sans le dire
+serait le mensonge le plus facile du site.
+
+**LE SITE DISAIT TOUT SAUF LE RÉSULTAT.** Le panneau « Mes positions » ouvrait sur
+l'identité comptable, donc sur « écart NON expliqué +2 669,06 $ » — quand la question
+était : je pars de ~100 k, j'en ai 100 734, ça donne quoi ? Le chiffre qui répond,
+**+1 129,03 $ soit +1,13 % en 88 jours**, n'était affiché nulle part ; il fallait le
+soustraire soi-même de deux lignes éloignées. Aucun chiffre n'était faux — l'erreur
+était un ORDRE DE LECTURE. Un rapprochement diagnostique le REGISTRE ; il ne remplace
+pas le résultat, il l'explique.
+
+Le panneau donne maintenant le résultat en tête, puis sa décomposition lue des
+composantes VERS le résultat, le résidu étant une ligne nommée parmi les autres :
++74,52 (robot) − 1 962,53 (import) + 347,98 (latent) + 2 669,06 (résidu) = +1 129,03.
+La somme est exacte, et un test l'exige. C'est aussi la réponse à « 331 trades à
++0,23 $ ne font pas +1 129 $ » : les trades du robot sont une ligne sur quatre, et pas
+la plus grosse. Sur la page des round-trips, les trois paragraphes d'avertissement qui
+précédaient les cartes — que personne ne lisait — sont remplacés par un bandeau d'une
+phrase qui chiffre l'écart et renvoie à « Mes positions ». ADR-0185.
+
+**LE JOURNAL A ÉTÉ RÉPARÉ sur le VPS** : `annuler_doublons_ouverts` a retiré son premier
+doublon réel (QQQ ×2, 3,586126 @ 716,86 le 17/09) — le défaut était détecté depuis le
+03/09 et aucun outil ne le retirait. `diag-journal` confirme : « aucun — les lots ouverts
+sont tous distincts ». Restent 29 symboles / 88 lots orphelins, irréductibles sans
+inventer un prix, et un résidu de +1 826,57 $ nommé `latent(début)`, jamais bouché.
+
+**DEUX DÉFAUTS TROUVÉS AU PREMIER USAGE RÉEL, et le premier mentait sur son compte.**
+`make ingest-crypto-intraday` a répondu « aucune base crypto dans l'univers — rien à
+ingérer » sur un univers qui en porte **102**. Cause : `_bases_univers` finit par
+`bases[:top]`, donc `--top 0` — que j'avais documenté « 0 = tout l'univers » — rendait
+une liste VIDE. Deux appelants plus anciens se défendaient déjà en passant `10_000` :
+un nombre magique recopié est un piège documenté, pas un piège fermé. Le plafond se
+déclare désormais DANS la fonction (`bases[:top] if top else bases`), et les deux
+`10_000` disparaissent. Ce qui rendait ce défaut coûteux n'est pas la ligne fautive,
+c'est le message : il accusait les DONNÉES d'un défaut de l'APPELANT, donc il envoyait
+chercher au mauvais endroit.
+
+Second défaut, sans conséquence et à fermer quand même : `make deviation-lab-crypto
+ARGS="--tf 4h"` produisait `--tf 4h --tf 4h`, la cible injectant déjà son défaut.
+argparse garde le dernier, donc rien ne cassait — et c'est précisément pourquoi il faut
+le corriger : une ligne de commande qui se contredit sans le dire finira par le faire
+dans l'autre sens. `--tf` n'est plus injecté que si `ARGS` n'en porte pas.
+
+**Deux renumérotations et un avertissement à traiter.** L'ADR du motif de price action
+portait le numéro 0180, déjà pris — il devient ADR-0182. Et `make sync` signale sur le VPS
+« 1 entrée en attente dans git stash » : c'est le filet de `sync-garde`, à vider
+(`git stash list`) avant qu'il ne s'accumule.
+
+## Session 2026-09-17 (37ᵉ) — Le CAC 40 entre en scène, et deux cibles sur trois mentaient
+
+**LES DONNÉES DE L'INTRO SONT SAINES**, mesurées sur le VPS : cinq fenêtres, `disponible`
+partout, les deux séries à 60 points chacune, et des écarts qui parlent — +392 % contre
++257 % sur dix ans. L'absence d'affichage constatée plus tôt venait bien du `switch` de
+`SceneIntro`, corrigé le 16/09.
+
+**TROISIÈME COURBE : le CAC 40**, dans l'intro et dans le comparatif du Dashboard. Comparer
+à un seul indice laisse croire que le choix de l'indice n'a pas d'importance — un robot qui
+bat le S&P et perd contre le CAC ne raconte pas la même histoire selon celui qu'on affiche.
+
+**Et une règle gouverne tout : `_cac_real`.** `_index_series` retombe sur du SYNTHÉTIQUE
+quand l'indice manque. Une courbe inventée à côté d'une vraie serait le mensonge le plus
+efficace du site. Le CAC n'apparaît nulle part tant qu'il n'est pas réel. ADR-0181.
+
+**Deux cibles sur trois nommaient un outil absent.** `verrou-regen` a enfin tourné —
+159 paquets, les quatre bibliothèques d'entraînement épinglées. Mais `make install` faisait
+encore `uv venv && uv pip install`, et le VPS n'a pas `uv` : **j'avais corrigé UNE cible sur
+deux**. Et `install` est la pire, c'est celle qu'on lance quand rien ne marche encore. Un
+test couvre désormais les deux : aucune ligne de recette ne peut commencer par un binaire
+du PATH.
+
+**Et mon propre détecteur criait au loup.** `applique()` lisait toutes les lignes contenant
+« pip install » et signalait « installation SANS verrou » sur la ligne d'amorçage de
+`verrou-regen` — qui installe un OUTIL, pas le projet. Un détecteur qui se déclenche sur son
+propre correctif fait exactement le bruit qu'il devait supprimer.
+
+**Écart de version à surveiller** : `scikit-learn` est épinglé 1.9.1, installé 1.9.0 sur le
+VPS. `make install` le résoudra — et c'est précisément pour ça que cette cible devait marcher.
+
+`make test` : **3 016 passed, 77 skipped**. `next build` vert.
+
+## Session 2026-09-17 (36ᵉ) — Deux fois le même piège, et la leçon enfin tirée
+
+**J'AI NOMMÉ UN OUTIL ABSENT DEUX FOIS DE SUITE.** `pip-compile` le matin, `uv` le soir. Les
+deux fois « No such file or directory », les deux fois l'utilisateur cherchant du côté de sa
+machine alors que c'était ma consigne qui était fausse.
+
+**Et mon test intermédiaire n'a rien vu**, ce qui est le plus instructif : il vérifiait que le
+message et la recette citent la MÊME commande. Deux textes identiques peuvent être faux
+ensemble — la ressemblance n'est pas l'existence.
+
+**La leçon : on annonce une CIBLE, jamais un outil.** Un nom de binaire est une hypothèse sur
+une machine qu'on ne voit pas ; `make verrou-regen` vit dans le Makefile que l'utilisateur
+vient d'exécuter pour lire le message. Et la recette ne dépend plus du PATH — tout passe par
+`$(PYTHON)`, le venv étant la seule chose garantie partout où ce projet tourne. Elle installe
+son outil si besoin. Éprouvée pour de vrai. ADR-0179.
+
+**Le `constraints.txt` produit ici n'est pas committé** : résolu en Python 3.11 dans ce
+conteneur contre 3.14 sur le VPS. L'épingler verrouillerait un environnement qui n'entraîne
+pas — le défaut même qu'on répare.
+
+**JOURNAL DES ROUND-TRIPS : séparer, pas supprimer.** Question de l'utilisateur : ne garder
+que les trades ouverts ET fermés ? Son intuition sur la confusion est juste, le remède non —
+la page porte son propre avertissement (« les positions perdantes encore ouvertes n'y figurent
+pas, ce qui embellit le tableau »), et les 61 lots ouverts sont la seule preuve VISIBLE de ce
+biais. Les retirer en ferait le palmarès qu'elle dénonce. Trois vues, « Tout » par défaut, et
+la vue « fermés » avertit de ce qu'elle masque. ADR-0180.
+
+**Et la vraie source du bruit était ailleurs** : une vente partielle crée une ligne par
+tranche et laisse le reliquat ouvert — QQQ du 07/07 occupe trois lignes. Rien ne le disait,
+donc ça se lisait comme une duplication. Marque « ⧉ fractionné » ajoutée.
+
+`make test` : **3 002 passed, 77 skipped**.
+
+## Session 2026-09-17 (35ᵉ) — Deux jours propres, et une consigne qui nommait un outil absent
+
+**LE P0 DES TROIS PLANIFICATEURS EST DÉFINITIVEMENT CLOS.**
+
+    2026-09-16  1 passage [19:08:35]  8 ordres · 0 A/R
+    2026-09-17  1 passage [19:08:28]  9 ordres · 0 A/R
+
+Deux jours propres d'affilée, à vingt secondes près. La garde journalière tient, et
+l'annotation reste stable : 27/08, 13 jours, 618,57 $, plus 1,56 $ d'intra-passage.
+
+**MA CIBLE `verrou-regen`, LIVRÉE LE MATIN, ÉTAIT EN PANNE.** `pip-compile: No such file or
+directory`. J'avais écrit la commande avec `pip-compile`, de `pip-tools` — un outil que ce
+projet n'a jamais eu. Il s'installe avec **uv**, et `uv pip compile` fait le même travail.
+
+**Ce qui est grave n'est pas l'échec, c'est le message** : « No such file or directory » fait
+chercher du côté de l'environnement, alors que c'était la CONSIGNE qui était fausse. Et
+`make verrou` imprimait cette même commande comme remède — la réparation était en panne
+aussi.
+
+Corrigé par une constante unique qui sert le message ET la recette, avec **un test qui les
+lie** pour qu'ils ne puissent plus diverger. Vérifié en exécutant vraiment la commande : elle
+rend `scikit-learn`, `xgboost`, `lightgbm`, `torch` — exactement les quatre que le verrou ne
+couvrait pas. ADR-0178.
+
+**Un test préexistant est tombé, à raison sur le fond** : il exigeait `--extra=ml`, uv écrit
+`--extra ml`. L'assertion porte désormais sur le NOM de l'extra. Un test qui fige la syntaxe
+d'un outil ne teste plus l'intention. Deuxième fois en deux jours qu'un test par sous-chaîne
+interdit une évolution légitime.
+
+`make test` : **2 995 passed, 77 skipped**.
+
+## Session 2026-09-17 (34ᵉ) — Les deux P1, et un verrou qui ne verrouillait rien
+
+**① LE VERROU N'ÉTAIT APPLIQUÉ NULLE PART OÙ ÇA COMPTE.** Avant d'épingler `scikit-learn`,
+j'ai vérifié où `constraints.txt` était seulement LU : dans les trois workflows GitHub, et
+c'est tout. `make install` installait **sans `-c`**. Le verrou protégeait donc la CI — qui
+n'entraîne pas — et laissait libre la machine qui produit le modèle. Épingler une
+bibliothèque dans un fichier que le VPS n'ouvre jamais aurait été de la décoration.
+`make install` applique désormais le verrou, `make verrou-regen` le régénère en une commande,
+et `make verrou` VÉRIFIE qu'il est appliqué. ADR-0176.
+
+**Un test est tombé, et il avait raison sur le fond.** Il interdisait le texte « pip install »
+dans le module d'analyse ; il est tombé quand ce module a eu besoin de CHERCHER cette chaîne
+dans le Makefile. Chercher un texte et l'exécuter sont opposés — un test par sous-chaîne les
+confond et interdit la mesure en croyant interdire l'action. Réécrit par l'AST.
+
+**② LE REGISTRE SAVAIT POURQUOI, ET NE LE DISAIT PAS.** `PRODUCTION : (aucune)` se lit comme
+un trou à combler. C'est en réalité une décision : le candidat du 16/09 a été rejeté pour
+absence d'edge OOS, et le motif dormait dans son historique depuis le premier jour. Laisser
+l'écran muet invite à « combler le trou » — c'est-à-dire à promouvoir un modèle que la mesure
+vient de refuser. Le motif s'affiche maintenant sous chaque ligne, et deux silences sont
+distingués : « rien n'a jamais été soumis » et « ce qui l'a été a été refusé ». ADR-0177.
+
+**Ce que je n'ai PAS fait, et volontairement** : promouvoir l'artefact en service. Il n'a
+aucun manifeste — ni dataset, ni commit, ni empreinte. L'inscrire reviendrait à FABRIQUER une
+provenance. La production restera vide jusqu'à ce qu'un modèle la mérite.
+
+`make test` : **2 993 passed, 77 skipped**.
+
+## Session 2026-09-17 (33ᵉ) — Le registre parle, et il dit trois choses
+
+**LA CHAÎNE MLOPS FONCTIONNE DE BOUT EN BOUT.** Première entrée jamais écrite :
+`Gradient Boosting (sklearn)-20260916-223954-4a0ed2d` · **AUC 0,532** · seed 7 ·
+`cpu:x86_64` · statut **rejected**. L'entraînement de 22:39:54 a tracé son run tout seul.
+
+**TROIS CHOSES QUE CETTE SEULE LIGNE APPREND :**
+
+1. **Le VPS ENTRAÎNE — j'avais affirmé le contraire.** J'avais conclu le 16/09 que « le VPS
+   n'est pas la machine qui entraîne » parce que `xgboost`, `lightgbm` et `torch` y sont
+   absents. Ils ne sont simplement pas utilisés : le modèle est un Gradient Boosting
+   scikit-learn, et il tourne là. Conséquence : `scikit-learn 1.9.0` est **LIBRE** dans
+   `constraints.txt`, donc une mise à jour silencieuse peut changer le modèle sans que rien
+   ne le dise. La tâche passe de P2 à **P1**, et elle vise le VPS.
+2. **AUC 0,532**, contre 0,504 pour l'artefact en service. Mieux, et toujours très faible.
+3. **Aucune version en PRODUCTION** : le candidat a été rejeté, rien n'a été promu, et
+   l'artefact qui sert reste non tracé. `rollback` n'a toujours rien vers quoi revenir.
+
+**LE MARQUEUR « NON REPRODUCTIBLE » ÉTAIT CONDAMNÉ À ÊTRE PERMANENT.** `cron_daily.sh`
+régénère `config/mobile_universe.csv` et `data/delisted.csv` — deux fichiers SUIVIS — juste
+avant d'entraîner. Le premier run jamais tracé portait donc déjà le marqueur, et tous les
+suivants l'auraient porté. Corrigé : seuls les fichiers hors données régénérées salissent
+l'arbre. ADR-0175.
+
+**Et un défaut dans mon propre correctif, trouvé en le vérifiant.** `git status --porcelain`
+commence par une ESPACE pour un fichier modifié non indexé ; le `.strip()` de l'appel git la
+supprimait et décalait tout d'un caractère. `config/mobile_universe.csv` devenait
+`onfig/mobile_universe.csv` : **le filtre aurait semblé posé tout en ne filtrant rien.**
+
+**Collecte automatique confirmée** : le corpus est passé de 2 375 à 2 591 pendant la nuit
+sans intervention — `cron_daily.sh` collecte bien. Puis 2 658 après le passage manuel du
+matin. 72 jours, 76,3 % de rétro-publiés.
+
+**`make alpha-lexique` : toujours « pas encore », et sa raison est désormais lisible** —
+dates UTILISABLES 2026-09-16 → 2026-09-17, 67 titres au 17/09. Il faut 5 séances après la
+date utilisable, pas après la publication. Rendez-vous le 23/09.
+
+**Churn** : pas encore de ligne au 17/09 (le robot passe à 19:05 UTC). Le 16/09 reste à
+1 passage, 0 aller-retour. L'annotation dit bien « depuis le 27/08 · 618,57 $ » plus
+« 1,56 $ intra-passage ».
+
+`make test` : **2 988 passed, 77 skipped**.
+
+## Session 2026-09-16 (32ᵉ) — Le correctif tient, et mon annotation datait de travers
+
+**LE CORRECTIF DE PLANIFICATION EST VÉRIFIÉ.** `make churn` sur le VPS montre enfin le
+16/09 : **1 passage [19:08:35] · 8 ordres · 0 aller-retour**. Premier jour propre depuis le
+15/09. Trois robots sur un compte, c'est fini.
+
+**MON ANNOTATION DATAIT LA POLLUTION DU 23/06, ET C'ÉTAIT FAUX.** Elle lisait `depuis_cout`,
+le premier aller-retour tout court. Or le 23/06 n'a eu **qu'un seul passage** : son A/R de
+−1,56 $ est de l'intra-passage, pas deux robots qui se défont. Neuf semaines attribuées à
+tort à la double planification — sur une phrase destinée au SITE.
+
+Le plus embarrassant : `passages.py` portait déjà ce raisonnement en commentaire, pour
+distinguer doublon et doublon coûteux. J'ai ajouté un troisième cas sans le voir. Corrigé :
+`depuis_doublon_cout` = intersection des jours à doublon ET à A/R. **−618,57 $ depuis le
+27/08 sur 13 jours** ; les −1,56 $ d'intra-passage sont dits séparément. ADR-0173.
+
+**`make alpha-lexique` a répondu, et sa réponse est « pas encore ».** 199 symboles sur 199
+ont leurs prix — la machine est la bonne. Ce qui manque, c'est du temps : la première
+collecte a eu lieu aujourd'hui, donc `utilisable_le = max(date, vu_le)` vaut le 16/09 pour
+les 2 375 titres. Le corpus couvre quatre mois de PUBLICATIONS et zéro jour d'OBSERVATION.
+C'est le fonctionnement voulu — 84,2 % de rétro-publiés — mais le message affichait des
+dates de publication à côté d'un « trop récent », ce qui se lit comme une contradiction.
+Le diagnostic montre désormais les dates UTILISABLES. Banc mesurable vers le **23/09**.
+ADR-0174.
+
+**Le registre révèle SIX artefacts non tracés**, pas un. `ml_<signature>.pkl` est un cache
+par configuration : six fichiers, six signatures, pas six champions rivaux. Six
+avertissements identiques auraient cessé d'être lus — on nomme le plus récent, seul
+susceptible de servir, et on compte les autres.
+
+`make test` : **2 985 passed, 77 skipped**.
+
+## Session 2026-09-16 (31ᵉ) — Les trois P1, et un diagnostic que j'avais posé de travers
+
+**① LE REGISTRE — je m'étais trompé de cause.** J'avais écrit qu'il fallait « brancher
+`train_model.py` sur le registre ». `_tracer()` existe depuis `afc5eed`, sur le chemin de
+production, et `cron_daily.sh` entraîne chaque nuit : le registre est vide parce que
+**l'entraînement n'a pas tourné depuis le câblage**, livré le jour même. Il n'y avait pas de
+code à écrire là — la mesure a été plus rapide que ma supposition.
+
+**Mais le vrai trou était ailleurs.** `incoherences()` n'inspectait que les entrées DÉJÀ
+inscrites : un artefact posé dans `models/` sans passer par le registre lui restait
+invisible. Or c'est LE cas qui compte — l'artefact à AUC 0,504 servait en production pendant
+que le registre annonçait « vide », les deux affirmations étaient vraies, et rien ne les
+confrontait. `Registre.orphelins()` les signale désormais, et `/api/ai/modeles` comme
+`make registre` les montrent. ADR-0171b.
+
+**② LA COURBE RÉELLE EST ANNOTÉE, PAS CORRIGÉE.** Retrancher les −620,13 $ de churn
+publierait une courbe qui n'a jamais existé : le compte a bien encaissé ces allers-retours.
+Trois états qui ne se confondent pas — *non mesuré*, *mesuré et sain*, *mesuré et pollué* —
+parce que les deux premiers se ressemblent à l'écran, et qu'un silence se lit comme un feu
+vert. Le rapport est déposé par `make churn` dans `.cache/churn.json` (branché au cron
+quotidien) et relu sans réseau par le snapshot, qui n'a pas les clés du courtier. La note
+porte la DATE de la mesure : un cache d'une semaine sous-estimerait le churn survenu depuis.
+ADR-0172.
+
+**③ `make alpha-lexique` EXISTE.** Étude d'événement, comparaison appariée, placebo — sans
+aucun LLM. Et surtout, il DIT pourquoi il ne peut pas conclure : le 16/09, « prix absents ou
+fenêtre trop courte » ne disait pas laquelle des deux causes s'appliquait, sur une machine
+qui avait le corpus et pas les prix. Le nouveau banc compte les symboles sans barres, les
+nomme, et renvoie vers la bonne machine — ou dit qu'il ne manque que du temps.
+
+**Deux de mes propres tests cassés par mes propres reformulations de ligne.** Ils
+vérifiaient une phrase au mot près ; raccourcir une ligne pour la typographie les faisait
+tomber. Recalés sur le SENS. Une assertion sur une formulation exacte est un test de
+traitement de texte, pas de comportement.
+
+`make test` : **2 980 passed, 77 skipped**. Zéro alerte ruff sur les lignes touchées.
+
+## Session 2026-09-16 (30ᵉ) — Chaque fenêtre dit enfin DE QUAND À QUAND
+
+**Demande** : afficher la date de départ et la date d'arrivée pour chaque fenêtre de
+l'intro. Les deux bornes sont dessinées sous le cadre — départ à gauche, sous le début du
+tracé ; arrivée à droite, sous sa fin. Aucune légende nécessaire : la position suffit.
+
+**Ce que ça répare vraiment.** « +142 % sur 10 ans » ne dit pas de quand à quand. Deux
+fenêtres décennales qui ne commencent pas la même année ne se comparent pas, et **rien à
+l'écran ne le signalait**.
+
+**La date est lue À LA MAIN, jamais par `Date`.** `new Date("2016-05-19")` vaut minuit UTC ;
+`toLocaleDateString` dans un fuseau négatif afficherait le 18/05. Une borne de fenêtre de
+performance qui recule d'un jour selon l'endroit d'où on regarde le site, ce n'est pas un
+détail d'affichage : **c'est la période même de la mesure qui change.** On découpe la chaîne
+ISO, et une date qui n'a pas la forme attendue ne s'affiche pas — plutôt qu'une date
+approchée, qui elle ne se verrait pas.
+
+**Les bornes suivent `aRepere`**, donc elles n'apparaissent qu'une fois la courbe POSÉE :
+des dates qui sauteraient pendant que le tracé glisse d'une fenêtre à la suivante se
+liraient comme une erreur d'affichage.
+
+**Le contrat est testé des deux côtés** : côté serveur, chaque fenêtre disponible porte ses
+deux bornes, au format ISO, et ce sont celles de la série RÉELLE — demander dix ans sur une
+série d'un mois n'affiche pas un départ vieux de dix ans. Côté front, la lecture manuelle est
+exigée par un test qui refuse `new Date` et `toLocale` dans cette fonction. 7 tests ajoutés.
+
+`make test` : **2 960 passed, 77 skipped**. `next build` vérifié, `.next` purgé.
+
+## Session 2026-09-16 (29ᵉ) — La marque rejoue le rideau
+
+**Demande** : revoir l'animation « performance du robot contre le S&P 500 » en cliquant
+« Quant Terminal » en haut à gauche. Le rideau entier est rejoué — les cinq fenêtres de
+performance en sont sept battements sur neuf — et `Échap` le passe.
+
+**Deux pièges, et ils étaient tous deux silencieux.**
+
+1. **`fini` est une RÉFÉRENCE**, elle survit au premier passage. Un second rideau se
+   lançait bien, mais `terminer()` ne faisait plus rien à la fin : le rideau serait resté
+   baissé SUR la landing, sans message, et il aurait fallu recharger la page. Le rejeu
+   remet tout à zéro, `fini.current` compris.
+2. **`jouer` reste vrai d'un passage à l'autre.** Une dépendance sur `jouer` seul ne se
+   serait jamais redéclenchée : le clic aurait été sans effet, ce qui ressemble trait pour
+   trait à un bouton mort. D'où le compteur `rejeu`.
+
+**Et un troisième, de conception** : cliquer la marque depuis `/trades` déclenche une
+NAVIGATION — le rideau n'est pas encore monté quand le clic part, donc aucun écouteur ne
+peut l'entendre. La demande est donc un état de MODULE, qui survit à la navigation côté
+client et se fait consommer par le rideau à son montage. L'événement ne sert que l'autre
+cas : on est déjà sur la landing, il n'y a pas de navigation du tout.
+
+Les deux barres (mobile et bureau) portent la marque ; n'en câbler qu'une donnerait un site
+qui se comporte autrement selon la largeur de la fenêtre. Un test l'exige. 8 tests ajoutés,
+`next build` vérifié.
+
+**`make churn` du soir — toujours aucun verdict.** Aucune ligne au 16/09 : la fenêtre du
+robot est 18:30–19:30 UTC et la mesure a été prise au moment où elle s'ouvrait. Le total
+tient (−620,13 $, 15 jours sur 32 à plus d'un passage, dernier doublon le 15/09). **C'est
+demain matin que le correctif se tranche.**
+
+`make test` : **2 953 passed, 77 skipped**.
+
+## Session 2026-09-16 (28ᵉ) — Le port basculait en silence, la page venait d'ailleurs
+
+**« Je n'ai toujours pas l'intro sur localhost:3000 » — et la réponse était dans la sortie**,
+sur une ligne que personne ne lit : `⚠ Port 3000 is in use, trying 3001 instead.` Le serveur
+de développement fraîchement lancé était sur **3001** ; le navigateur parlait au service
+systemd `quant-web` sur **3000**, qui sert un build de PRODUCTION.
+
+**Troisième occurrence du même motif sur ce projet** : le cache `.next` qui ressert l'ancien
+rendu, `make start` qui ramenait la branche sur `main`, et maintenant le port. Toujours la
+même forme — le code est juste, l'écran montre autre chose, **et rien ne le signale**.
+
+**Correctif : `npm run dev` ÉCHOUE désormais si le port est pris** (`predev` +
+`verifier_port.mjs`), et `dev` fixe `-p ${PORT:-3000}` au lieu de laisser Next choisir. Le
+message nomme les trois sorties : qui tient le port, `make up` si c'est le service,
+`PORT=3001 npm run dev` pour développer à côté. Éprouvé dans les deux sens. ADR-0171.
+
+**Et une distinction à ne pas perdre** : sur le VPS, le 3000 est un build de production —
+la politique d'intro y est `"session"`, une fois par onglet, **ce qui est voulu**. C'est le
+comportement du site public. `?intro=1` force la relecture même là ; le mode `"always"` ne
+vaut que pour un vrai `next dev`.
+
+**Ma commande était juste pour le Mac et fausse pour le VPS** : `rm -rf .next && npm run dev`
+suppose qu'aucun service ne tient le port. Sur le VPS, la commande est `make up`.
+
+## Session 2026-09-16 (27ᵉ) — On arrête le LLM local, et l'intro cesse de mentir
+
+**DÉCISION : la chaîne NLP locale est retirée.** Quatre tentatives mesurées, zéro
+classification. `qwen/qwen3.5-9b` rendait un raisonnement sans contenu, puis des timeouts à
+12 s. Et le « second modèle exposé » sur lequel je l'avais renvoyé était un modèle
+d'EMBEDDING : il n'y a jamais eu de repli. ADR-0170.
+
+Retirés : `packages/nlp/` (8 modules), trois scripts, trois cibles `make`, les variables
+`QUANT_NLP_*`, la route `/api/ai/chaine`, et 140 tests. Suite : **3 085 → 2 945, tout vert.**
+
+**LE SEUL TRAVAIL DÉLICAT DE L'OPÉRATION.** `etat_modeles()` — version du modèle ML en
+production, jeu de données, commit — vivait dans `packages/nlp/sante.py`, à côté de l'état
+du fournisseur LLM. Supprimer le paquet aurait emporté la version affichée sur le site par
+`/api/ai/modeles`. Déplacé vers `packages/mlops/etat.py` avec ses tests, avant de couper.
+**Un module rangé au mauvais endroit tombe avec ses voisins.**
+
+**Conservé, et volontairement** : `make news` et le corpus (2 375 titres — aucun LLM
+dedans), `alpha_incremental.py` (étude d'événement et placebo : ils mesurent un scoreur
+QUELCONQUE, le lexique compris), et `packages/llm/` qui sert `/api/ai/commentary`,
+`/api/ai/chat` et les mémos du site. Retirer ce dernier aurait cassé des fonctions qui
+marchent.
+
+**UN FAIT À NE PAS PERDRE** : le dernier `make alpha-nlp` a échoué sur « aucun événement
+exploitable : prix absents ou fenêtre trop courte » — **avant d'appeler le moindre modèle**.
+La mesure d'alpha était bloquée par l'absence de base de prix sur le Mac, pas par le LLM.
+Retirer la chaîne ne débloque rien de ce côté.
+
+**L'intro : le piège est supprimé, pas contourné.** `INTRO_SESSION_POLICY` valait `"session"`
+— une lecture par ONGLET. On recharge, rien ne se passe, et on conclut qu'un correctif n'a
+pas pris. Même famille que le cache `.next` qui ressert l'ancien rendu : le code est juste,
+l'écran montre autre chose, et rien ne le signale. La politique est désormais **`"always"`
+en développement** et `"session"` en production — plus `?intro=1` / `?intro=0` pour forcer.
+`next build` vérifié, `.next` purgé.
+
+`make test` : **2 945 passed, 77 skipped**.
+
+## Session 2026-09-16 (26ᵉ) — Le repli n'existait pas, et j'avais dit le contraire
+
+**`enable_thinking: false` n'a pas suffi.** Le gabarit de `qwen/qwen3.5-9b` l'ignore : 3 cas
+sur 3 rendent toujours un raisonnement et un contenu vide. L'hypothèse était juste sur la
+cause, fausse sur le remède. Correctif : **un seul repli, sans grammaire**, déclenché
+uniquement sur ce symptôme précis, et **le signal porte l'incident** qui dit que la sortie
+n'était pas contrainte. ADR-0169.
+
+**LE SECOND MODÈLE N'EN ÉTAIT PAS UN.** J'avais écrit « ou prends l'autre modèle exposé » en
+supposant un Gemma. Les deux modèles étaient `qwen/qwen3.5-9b` et
+**`text-embedding-nomic-embed-text-v1.5`** — un modèle d'embedding. Il n'y a jamais eu de
+solution de repli, et j'ai envoyé l'utilisateur essayer une porte qui n'existait pas.
+`resoudre_modele` écarte maintenant les modèles d'embedding du choix automatique et DIT
+combien il en a écartés.
+
+**ET LE VRAI DÉFAUT DE LA SOIRÉE.** Lancé avec `--modele google/gemma-…` — un identifiant
+inexistant — `nlp-check` a **averti puis tourné quand même**. Trois classifications
+complètes, servies par LM Studio avec le modèle qu'il avait sous la main, et estampillées
+d'un modèle qui n'existe pas. C'est la fuite de provenance qu'ADR-0166 prétendait avoir
+fermée : la résolution était juste, l'appelant passait outre. `nlp_check` et `alpha_nlp_lab`
+s'arrêtent désormais. **Un avertissement ne protège pas une mesure ; seul un arrêt le fait.**
+
+**Question du soir — « pourquoi je n'ai plus l'animation d'intro sur localhost:3000 ? »** Ce
+n'était pas une panne : `INTRO_SESSION_POLICY = "session"`, l'intro joue une fois par ONGLET
+(`sessionStorage`). Recharger le même onglet ne la rejoue jamais. Mais régler une animation
+qu'il faut un nouvel onglet pour revoir est un piège à soi tout seul — on finit par croire
+qu'un correctif n'a pas pris alors qu'on regarde une page qui n'a pas rejoué. Ajouté :
+**`?intro=1` force la relecture, `?intro=0` la saute.**
+
+**Éprouvé contre un faux fournisseur qui rejoue le cas réel** (2 exposés dont un embedding,
+contenu vide sous grammaire) : **3/3, chaîne opérationnelle, chaque signal portant sa
+provenance de repli**. Et le modèle inexistant fait bien s'arrêter la commande.
+
+`make test` : **3 085 passed, 80 skipped**.
+
+## Session 2026-09-16 (25ᵉ) — Le modèle réfléchissait au lieu de répondre
+
+**LE DIAGNOSTIC EST TOMBÉ, ET SANS AMBIGUÏTÉ.** Les motifs devenus lisibles ont rendu leur
+verdict au premier essai : `qwen/qwen3.5-9b`, **3 cas sur 3** →
+`RAISONNEMENT mais AUCUN contenu`. Latence médiane **4 981 ms**, **0 timeout**, pas de
+troncature. Le modèle ne ramait pas : il réfléchissait dans un canal séparé et laissait vide
+celui que le schéma contraint.
+
+Les deux `TIMEOUT` du premier essai n'étaient donc pas des lenteurs de fond — c'était le
+même phénomène, avec un raisonnement plus long. Une seule cause, trois symptômes différents.
+
+**Correctif : `enable_thinking: false` par défaut** (`chat_template_kwargs` côté LM Studio,
+`think` côté Ollama), par le GABARIT et non par l'invite — un `/no_think` dans le texte
+polluerait la consigne qu'on mesure ensuite. `QUANT_NLP_RAISONNEMENT=1` rallume. ADR-0168.
+
+**Deux filets si le gabarit ignore la clé** : `_json_dans` retire un bloc `<think>…</think>`
+FERMÉ en tête (même opération que les clôtures « ``` ») — un bloc non fermé reste illisible,
+parce que couper au jugé accepterait un JSON tronqué en croyant l'avoir lu. Et le message
+dit désormais que l'extinction est DÉJÀ demandée, donc que le remède restant est côté
+LM Studio.
+
+**Le défaut d'hier s'était déjà reproduit, à un jour d'intervalle.** `banc.eprouver`
+reconstruisait sa config champ par champ — il venait de perdre `max_jetons`, il aurait perdu
+`raisonnement` le lendemain. Passé à `replace()`. La leçon d'ADR-0167 ne valait rien tant
+qu'elle n'était pas appliquée là où le même motif existait.
+
+**Éprouvé contre un faux fournisseur qui rejoue le comportement réel** : raisonnement
+éteint → **3/3, chaîne opérationnelle** ; rallumé → **0/3**, la panne exacte du jour. Ce que
+ça prouve : le code envoie le commutateur et traite les deux cas. Ce que ça ne prouve pas,
+et que seul le Mac dira : si le gabarit de `qwen3.5-9b` honore la clé.
+
+`make test` : **3 078 passed, 80 skipped**. Zéro alerte ruff sur les fichiers touchés.
+
+## Session 2026-09-16 (24ᵉ) — Trois échecs muets, et deux chiffres qui mentaient derrière
+
+**La résolution de modèle a fonctionné du premier coup** : `2 modèle(s) exposé(s)` →
+`qwen/qwen3.5-9b`, avec le motif affiché et le remède nommé. Le nom n'est plus supposé.
+
+**Mais les trois cas d'école ont échoué, et aucun ne disait quoi faire** : deux `TIMEOUT`,
+un `REPONSE_ILLISIBLE`. Trois remèdes possibles, exclusifs, et rien pour choisir. C'est
+l'aveuglement qui était le défaut, pas l'échec.
+
+**Corrigé** : `_poster` rend `(reponse, incident)` et capture le CORPS des erreurs HTTP —
+LM Studio y écrit le motif exact, on le jetait. `pourquoi_illisible` sépare quatre causes :
+tronquée au plafond, modèle « thinking » sans contenu, contenu vide, JSON malformé (avec le
+début de ce qui a été reçu). Éprouvé contre un faux fournisseur qui rejoue les trois pannes :
+les trois motifs sortent justes. ADR-0167.
+
+**ET C'EST EN L'ÉPROUVANT QUE DEUX VRAIS DÉFAUTS SONT SORTIS.**
+
+**Le « 1/3 » valait 0/3.** Un repli rend `NEUTRAL` par convention ; sur le cas KO — dont la
+réponse attendue EST `NEUTRAL` — le comptage marquait ✓ et créditait un point. **Le score
+était le plus faux exactement là où la chaîne était la plus cassée.** Troisième occurrence
+de cette famille sur ce projet. La règle se durcit : une non-mesure ne devient jamais un
+succès.
+
+**Un réglage accepté, affiché, inerte.** `QUANT_NLP_MAX_JETONS=1200` passait la config,
+s'affichait dans le résumé — et n'atteignait pas la requête. `max_jetons` était recopié à la
+main par six appelants ; trois l'avaient laissé au défaut à son ajout. `pilote_pour(cfg)`
+passe la config entière, et un test AST interdit désormais tout appel direct à `choisir()`
+hors de `pilotes.py` : le prochain champ ajouté ne pourra plus se perdre en route.
+
+**Ce qu'il reste à trancher sur le Mac, et c'est une mesure, pas une supposition** : le
+prochain `make nlp-check` nommera lui-même la cause parmi les quatre. Si c'est la troncature
+ou le raisonnement, le remède est dans le message ; sinon `make nlp-check ARGS=--brut`
+montre la réponse telle que le fournisseur l'a rendue.
+
+`make test` : **3 072 passed, 80 skipped**. Zéro nouvelle alerte ruff.
+
+## Session 2026-09-16 (23ᵉ) — Le corpus existe enfin, et un nom de modèle qui mentait
+
+**LE CORPUS N'EST PLUS UNE INTENTION.** Premier `make news` sur le VPS : **2 375 titres ·
+199 symboles · 71 jours**, du 19/05 au 16/09, 0 sans date, 1 symbole muet. Et le chiffre
+qui justifie à lui seul le schéma à deux horodatages : **84,2 % des titres sont
+rétro-publiés** — découverts APRÈS leur date de publication. Se fier à `date` seule aurait
+introduit une fuite sur cinq titres sur six. `utilisable_le = max(date, vu_le)` n'était pas
+une précaution d'école.
+
+**Le seuil des ~200 titres visé pour `make alpha-nlp` est dépassé d'un facteur douze.** Le
+verdict qui conditionne l'étape 6 est désormais mesurable.
+
+**Le registre est VIDE alors qu'un modèle tourne.** `make registre` : « aucun entraînement
+tracé ». L'artefact à AUC 0,504 sert en production sans qu'aucune trace ne dise de quelles
+données ni de quel commit il vient — et `rollback` n'a donc rien vers quoi revenir. Nouvelle
+P1.
+
+**Le VPS n'est pas la machine qui entraîne**, et `make verrou` le dit sans détour :
+`scikit-learn` LIBRE, `xgboost` / `lightgbm` / `torch` **absents**. Régénérer
+`constraints.txt` ici épinglerait un environnement qui n'entraîne rien.
+
+**Churn — une nuance que je n'avais pas vue.** Le total tient (**−620,13 $** sur 594 362 $,
+15 jours sur 32 à plus d'un passage), mais le premier aller-retour date du **23/06**, un
+jour à UN SEUL passage, pour −1,56 $. Autrement dit : la double planification explique
+618,57 $ des 620,13 $, pas la totalité. Le reste est du va-et-vient intra-passage, et c'est
+un autre sujet. Le 16/09 n'avait pas encore tourné à l'heure de la mesure : **le correctif
+n'est pas encore vérifié**, il le sera demain matin.
+
+**Un nom de modèle qui mentait en silence.** `config.py` portait
+`MODELE_DEFAUT = "qwen2.5-…"`, écrit quand le cahier des charges parlait de ce modèle-là.
+L'utilisateur en fait tourner un autre. Le défaut est devenu faux **sans jamais lever** :
+LM Studio sert ce qu'il a chargé et répond 200, le signal repart estampillé d'un modèle qui
+n'a rien produit — et ce nom part dans la mesure d'alpha et dans la clé de cache. Le défaut
+est maintenant VIDE et le fournisseur tranche (ADR-0166), avec canonisation des noms
+approximatifs, refus explicite de choisir quand c'est ambigu, et motif affiché à chaque
+fois.
+
+**Défaut trouvé en chemin** : `sante._verdict` testait `demande.lower() in m.lower()` —
+avec un `demande` vide, `"" in m` est vrai pour TOUT `m`. Le voyant serait passé au vert
+sans désigner personne. Même famille que les zéros qui ressemblent à des absences : **une
+condition qui réussit pour la mauvaise raison est pire qu'une qui échoue.**
+
+`make test` : **3 057 passed, 80 skipped**. Aucune nouvelle alerte ruff sur les fichiers
+touchés.
+
+## Session 2026-09-16 (22ᵉ) — L'audit d'archivage rend zéro fichier, et c'est le résultat
+
+**Mission : archiver l'obsolète sous `old/`. Résultat livré : rien n'a bougé.** Sur les
+**1 279 fichiers suivis**, **959 modules Python**, **955 atteignables** depuis les points
+d'entrée réels. **4 orphelins**, et pas un seul que l'on puisse archiver sans risque :
+`preset_rolling.py` porte encore trois fonctions dont un P1 ouvert aura besoin ;
+`check_db.py`/`index_db.py` forment un îlot fermé mais visent `YAHOO.db`, toujours vivante ;
+`reglage_capitulation.py` est le banc dont `candidats_lab.py:247` cite le verdict. Option A
+retenue par l'utilisateur : **ne rien archiver**. `old/` n'a jamais été créé. ADR-0165.
+
+**Ce que l'audit rapporte vraiment, ce sont les faux positifs.** Ce dépôt charge par
+CONVENTION plus que par import — `load_config_dir()` sur un répertoire entier, plugins
+auto-enregistrés par décorateur, racines Next.js (`page`/`layout`/`error`/…), `.claude/agents/*`
+lu par nom de dossier, et des imports TARDIFS à l'intérieur des fonctions dans
+`apps/api/main.py`. Un analyseur d'imports naïf y archiverait du code qui tourne.
+
+**Et il m'y a pris, deux fois.** Mon analyseur a déclaré `packages/sentiment/finbert.py`
+orphelin : d'abord parce que `from . import finbert` porte un `module` à `None`, puis parce
+que le paquet d'un `__init__.py` était résolu vers son parent. Le fichier est ACTIF. La règle
+qui en sort : ici, « jamais importé » est une hypothèse à vérifier à la main, pas un verdict.
+
+**Discipline de la mission, tenue de bout en bout** : travail sur une branche d'isolement,
+aucun `git reset --hard`, aucun `git clean`, aucune suppression, arrêt obligatoire avant tout
+déplacement. La branche `chore/cleanup-archive-old` étant restée strictement identique à la
+branche de dev (zéro commit, zéro diff), elle a été supprimée en local ; rien n'a été poussé
+hors de `claude/screening-trading-platform-me9p11`.
+
+**Prochain pas inchangé, et il n'attend que le terminal du soir** : `make news` (P0 — chaque
+jour manqué est perdu pour toujours), puis `make registre`, `make verrou`, `make churn` sur le
+VPS ; `make nlp-check` et `make benchmark-nlp` sur le Mac.
+
+## Session 2026-09-16 (21ᵉ) — Chantier IA : l'audit a réordonné la mission
+
+**Le cahier des charges demandait un GPU. L'audit a mesuré pourquoi ce serait prématuré** :
+l'artefact en production affiche **AUC 0,504 · Brier 0,2496 · DSR non calculé**, sur une
+régression logistique qui s'entraîne en secondes. Louer du calcul pour l'accélérer, c'est
+payer pour atteindre le hasard plus vite. ADR-0161.
+
+**Et l'essentiel du cahier des charges décrivait du travail DÉJÀ FAIT** : CV purgée avec
+embargo, CPCV, unicité des labels, triple-barrière, calibration de Brier, dérive PSI, HPO
+Optuna, gate DSR/Brier, MFE/MAE, banc de sorties, quatre routes `/api/ai/*`. Vingt modules
+dans `packages/ml`. L'audit a servi à ne pas reconstruire.
+
+**Quatre trous réels, quatre étapes livrées.**
+1. **Registre** — `governance.ModelRegistry` vivait EN MÉMOIRE, `artifact.py` est un cache
+   TTL. Rien ne gardait le prédécesseur : le rollback n'était pas « non implémenté », il
+   était IMPOSSIBLE.
+2. **Verrou d'environnement** — `constraints.txt` épingle numpy et pandas, et laisse LIBRES
+   scikit-learn, xgboost, lightgbm, torch. Un modèle sérialisé sous 1.5 et rechargé sous 1.7
+   peut se charger ET PRÉDIRE DIFFÉREMMENT. Détecter plutôt qu'imposer : un lockfile que
+   personne ne régénère devient de la cérémonie.
+3. **NLP structuré** — le dépôt parlait déjà à Ollama ET à LM Studio, mais rendait du texte
+   brut. Schéma imposé et revalidé, disjoncteur trois états, quatre bornes (temps,
+   concurrence, mémoire, échecs). `wait_for` avait deux secondes de marge « par prudence » :
+   configurer 12 s en attendait 14 — trouvé par un test.
+4. **Compute + artefacts** — double protection contre la facture, `finally` compris
+   `KeyboardInterrupt`, succès silencieux traité comme échec. ADR-0164.
+
+**Le vrai blocage n'était pas le LLM.** En préparant la mesure d'alpha, découvert que
+`data/news.csv` n'existe pas et que rien ne l'écrit. Le dépôt sait tout faire sauf GARDER le
+texte des dépêches. Un flux RSS ne se rejoue pas : chaque jour sans collecte est perdu
+définitivement. Corpus branché dans la chaîne quotidienne, avec DEUX horodatages — `date` et
+`vu_le`, dont la différence est exactement une fuite. ADR-0162.
+
+**Trois défauts trouvés par les tests en écrivant l'instrument de mesure** (ADR-0163), dont
+un déjà connu du dépôt sous un autre nom : `std() == 0` est faux en virgule flottante, et un
+scoreur strictement constant obtenait un **IC de 0,21**. C'est le canal plat de
+`channel_break`, réapparu ailleurs.
+
+**Mesuré.** 3012 tests passés, 79 ignorés (+233 sur la journée). Huit `make` nouveaux :
+`registre`, `verrou`, `churn`, `news`, `nlp-check`, `alpha-nlp`.
+
+**Prochaine priorité** : `make nlp-check` sur le Mac (LM Studio + Qwen 2.5), puis attendre
+que le corpus atteigne quelques centaines de titres avant `make alpha-nlp`. L'étape 6
+(Lambda) reste CONDITIONNÉE à ce verdict.
+
+## Session 2026-09-16 (20ᵉ) — Le churn chiffré : 620 $, et depuis le 27 août
+
+**La mesure a répondu, et elle a corrigé sa propre question.** `make churn` sur
+l'historique réel : 15 jours sur 32 à plus d'un passage, **−620,13 $** cumulés sur
+**594 362 $** brassés. Mais la date qui compte n'est pas celle du premier doublon
+(07/07) : c'est celle du premier **aller-retour** (**27/08**). Deux passages qui
+aboutissent à la même cible ne se contredisent pas, ils se répètent — le 07/07 et le 24/08
+n'ont rien coûté. Dater la pollution du premier doublon aurait condamné sept semaines de
+mesures correctes. ADR-0159.
+
+**Les deux bouts de l'histoire se rejoignent.** Les allers-retours commencent le 27/08 et
+deviennent quotidiens en septembre. C'est exactement la fenêtre où le retard de GitHub sur
+`paper.yml` est passé de trente minutes à plus de trois heures (ADR-0156, mesuré la veille
+et indépendamment). Cause et effet datent du même moment.
+
+**Ce qu'on ne peut plus dire sans précaution** : sur ~100 000 $ de compte, −620 $ valent
+**−0,62 point de performance cumulée**. Toute lecture de la courbe d'equity RÉELLE après le
+27/08 doit en tenir compte. Les backtests ne passent pas par le courtier et ne sont pas
+touchés ; la comparaison « modèle contre réel », si.
+
+**Trois bugs d'intro trouvés à l'œil, pas par un test.** Le `switch` de `SceneIntro`
+datait des quatre battements d'origine et citait encore une clé supprimée : les sept
+battements ajoutés tombaient tous dans `default`. Pendant les deux tiers de l'intro, la
+toile ne peignait qu'une grille et un trait. Rien ne POUVAIT le signaler — un `switch` avec
+un `default` ne se plaint jamais d'une clé qu'il ignore. Corollaire : une période sans
+donnée rendait `null`, donc cinq secondes de noir indiscernables d'une panne. Deux
+allers-retours de diagnostic y sont passés ; l'absence se DIT désormais, avec son motif.
+
+**Et la preuve défilait trop vite pour être lue** : 2,0 s par fenêtre, dont 1,3 s
+d'animation. 26 s maintenant, fenêtres à 3,4 s, transitions RESSERRÉES — allonger sans
+resserrer aurait seulement fait durer les animations. ADR-0160, avec un plancher testé sur
+les deux durées.
+
+**Mesuré.** 2779 tests passés, 75 ignorés. Build Next.js vert.
+
+**Prochaine priorité** : `data_audit` signale 3 300 majeurs sur `market.db` et 7 critiques
+sur `crypto.db` — personne ne les a regardés depuis que l'audit tourne.
 
 ## Session 2026-09-15 (19ᵉ) — Trois robots sur un seul compte
 

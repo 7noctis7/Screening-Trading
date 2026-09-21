@@ -30,7 +30,7 @@ def test_une_branche_temporaire_reste_surchargeable():
 def test_la_migration_depuis_un_ancien_makefile_reste_compatible():
     """L'ancienne recette invoque cette cible après avoir remplacé le Makefile."""
     texte = MAKEFILE.read_text(encoding="utf-8")
-    assert re.search(r"^sync-garde-commits:\s*$", texte, re.MULTILINE)
+    assert re.search(r"^sync-garde-commits:", texte, re.MULTILINE)
 
 
 def test_up_relit_la_recette_apres_avoir_mis_a_jour_le_makefile():

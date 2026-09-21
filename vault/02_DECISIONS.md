@@ -2,6 +2,911 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0187 — Un contrôle de santé doit répondre à la question qu'on lui pose (2026-09-21)
+
+**L'INCIDENT.** « Aucune page de mon site ne fonctionne. » Les deux services étaient
+`active (running)` depuis 44 minutes, aucun OOM, 1,4 Gi de RAM libre — et `make up` venait
+d'annoncer **« ✓ API 200 »**.
+
+**CE QUE CE 200 PROUVAIT.** Rien d'utile :
+
+```python
+@app.get("/health")
+def health() -> dict:
+    return {"status": "ok"}
+```
+
+Une CONSTANTE. Elle ne touche jamais au snapshot. Or les pages du site sont rendues côté
+client : le HTML arrive tout de suite, les données attendent l'API. Sans snapshot en
+cache, la première requête le CONSTRUIT — une à trois minutes pendant lesquelles chaque
+page reste sur ses squelettes. Vu de l'écran : « ça ne se charge pas ». Vu de `make up` :
+tout est vert. Rien ne reliait les deux, et le voyant le plus rassurant du système était
+celui qui regardait le moins.
+
+**Le même dépôt tenait déjà ce raisonnement — pour le front.** L'en-tête de
+`scripts/verifier_service.sh` s'ouvre sur : « "Quelque chose répond sur le port 3000"
+N'EST PAS "le service sert le code courant" ». Le fichier qui porte cette phrase se
+contentait, deux lignes plus bas, d'imprimer le code HTTP de l'API.
+
+**Décision.** `/health` publie l'état RÉEL du cache, en quatre situations qui ne se
+confondent pas : `pret`, `pret_rafraichissement` (il sert l'ancien pendant le refresh),
+`en_construction` (il ne sert pas encore), `a_construire` (la première requête paiera la
+construction). Plus `sert_immediatement`, qui est la seule chose qu'un opérateur ait
+besoin de lire, et une phrase qui dit ce qu'il VERRA — pas ce que le serveur fait :
+« stale-while-revalidate » est exact et n'aide personne devant un écran qui tourne.
+
+**Trois propriétés portent la décision.**
+
+1. **Le contrôle ne déclenche pas ce qu'il mesure.** `health` lit `_CACHE` et `_BUILDING`,
+   il n'appelle NI `_snap()` NI `build_snapshot()`. Un contrôle de santé qui provoquerait
+   la construction qu'il décrit serait le voyant qui allume l'incendie qu'il signale — et
+   chaque `make up` paierait trois minutes pour afficher une ligne. Un test d'AST
+   l'interdit. *(Sa première version était rouge : elle lisait la DOCSTRING, qui cite ces
+   deux appels pour expliquer qu'elle ne les fait pas. Un test qui lit la prose d'une
+   fonction n'en contrôle pas le comportement, il interdit d'en parler.)*
+2. **Le contrat existant est préservé.** `status: "ok"` reste, les champs sont ajoutés.
+   Un contrôle de santé qui change de forme casse les outils qui s'en servaient.
+3. **« Pas encore prêt » n'est PAS une panne.** Après un changement du code de
+   construction, l'absence de cache est l'état NORMAL. `verifier_service.sh` l'ANNONCE et
+   ne met pas le statut en échec : transformer une information en fausse alerte, c'est
+   garantir qu'on cessera de la lire. Un test le verrouille.
+
+**Ce que ça ne fait pas.** Ça ne rend pas la construction plus rapide, et ça n'explique
+pas la panne du 21/09 — les deux `journalctl` de la fenêtre restent à lire. Ça garantit
+seulement qu'un prochain épisode du même genre se verra depuis le terminal, au lieu
+d'être cherché pendant une heure derrière un voyant vert.
+
+## ADR-0186 — Un garde-fou qui ne compte pas est indiscernable d'un garde-fou absent (2026-09-21)
+
+**Constat.** Cinq garde-fous protègent le seul chemin qui envoie des ordres : kill-switch
+TradingView, kill-switch drawdown, disjoncteur journalier, garde journalière, portail de
+risque. Les cinq DÉCIDENT et IMPRIMENT. Aucun ne COMPTE. Toute la trace vit dans le
+`stdout` d'un run — donc dans `/tmp/quant_live.log`, sur une machine, jusqu'au prochain
+nettoyage. « Combien d'ordres le portail a-t-il réduits ce mois-ci, de combien, pour
+quelle règle ? » n'avait pas de réponse autre qu'un grep à la main, machine par machine.
+
+**Ce que l'absence de compteur rendait impossible, et c'est le vrai coût.**
+`packages/execution/coupe_circuit.py` écrit dans son propre en-tête qu'on armera le
+disjoncteur « une fois qu'on a vu sur plusieurs semaines les jours où il AURAIT coupé ».
+Rien n'enregistrait ces jours. La condition d'armement était donc INOBSERVABLE : elle ne
+pouvait pas être remplie, jamais. Le P1 de dette de câblage (ADR-0118) demandait
+d'armer ce disjoncteur ; il demandait une preuve que le dépôt n'avait aucun moyen de
+produire.
+
+**Trois 1.0 qui ne veulent pas dire la même chose.** `live_guards.dd_kill_switch` rend
+`1.0` quand il n'y a rien à couper, quand l'historique est trop court, ET quand le
+contrôle a planté — ce dernier cas imprimant « check indisponible … non appliqué » au
+milieu d'un run. À l'écran les trois se ressemblent ; à la lecture d'un mois de logs,
+ils sont indiscernables. Un kill-switch en panne silencieuse est exactement le mode de
+défaillance qu'un kill-switch existe pour empêcher.
+
+**Décision.** Un TÉMOIN, pas une règle de plus. `packages/execution/garde_fous` reçoit
+des verdicts DÉJÀ rendus et les additionne ; `garde_fous_store` les persiste une fois
+par run dans `.cache/` ; `make garde-fous` les rend lisibles. Quatre propriétés portent
+la décision :
+
+1. **Le témoin ne décide rien.** Aucune de ses méthodes ne peut refuser, réduire,
+   retarder ni modifier un ordre. Il est injecté (jamais global), optionnel, et les
+   appelants existants qui ne le passent pas se comportent exactement comme avant.
+2. **`risk/order_gate` reste une fonction PURE.** Le témoin vit chez l'APPELANT. Mettre
+   une écriture disque dans la dernière barrière créerait un monde où enregistrer une
+   statistique fait échouer un ordre. Un test AST interdit désormais à ce fichier
+   d'importer `json`, `pathlib` ou `packages.*`, et d'appeler `open` ou `print`.
+3. **ABSENT ≠ ZÉRO.** Jamais observé → le garde-fou ne figure pas au rapport (désarmé,
+   ou run qui ne va pas jusque-là). Observé sans déclenchement → `ACTIVE` à 0, et c'est
+   une ALERTE : un seuil hors d'atteinte ressemble exactement à un marché calme.
+   Observé sans conclure → `UNCALIBRATED`. En panne → `ERROR`, jamais un silence.
+4. **Aucun seuil inventé.** Toutes les alertes du rapport sont STRUCTURELLES (jamais
+   observé, jamais déclenché, panne, déclenché sans effet mesuré). Poser ici un « effet
+   moyen négligeable en dessous de X $ » serait une calibration sur rien : l'effet moyen
+   est AFFICHÉ, l'opérateur le juge.
+
+**L'effet se mesure sur ce qui N'EST PAS parti.** Un refus retient tout le montant
+demandé, une réduction retient la différence. Compter le montant demandé sur une
+réduction gonflerait l'effet du portail d'un facteur dix ; compter zéro sur un refus
+effacerait le garde-fou le jour précis où il sert. Un test de sabotage échoue sur chacune
+des deux erreurs.
+
+**Conséquences.** Le rapport démarre VIDE et dit `UNCALIBRATED` — pas des zéros. Aucun
+rétro-remplissage depuis `/tmp/quant_live.log` : ce fichier est éphémère, propre à une
+machine, et sa couverture est inconnue ; en tirer un chiffre serait fabriquer une
+mesure. Les compteurs se remplissent au fil des passages réels, et c'est seulement
+ensuite que la question de l'armement du disjoncteur pourra être tranchée — sur des
+jours comptés, pas sur une impression.
+
+**Addendum du même jour, après le premier run réel.** Le garde de SÉANCE est un sixième
+filtre de la même classe, oublié au premier inventaire parce qu'il ne s'appelle pas
+« kill-switch » : il a écarté 19 ordres pour 52 596 $ le 21/09, avant même que le portail
+soit atteint. Il compte désormais, en dollars NON ENVOYÉS, avec la classe d'actif pour
+motif. Corollaire de lecture ajouté : un garde-fou vu seulement DÉSARMÉ n'est plus
+annoncé « ACTIVE, zéro déclenchement » — il n'a pas manqué sa cible, il n'avait pas le
+droit de tirer.
+
+**Ce que ça ne fait pas.** Aucune limite, aucun seuil, aucune décision ne change. Le
+statut au registre de certification est **CANDIDATE**, pas CERTIFIED : les tests passent
+sans réseau, la preuve terrain (des compteurs réels sur ≥20 passages) n'existe pas
+encore.
+
+## ADR-0185 — Un rapprochement est un diagnostic, pas un résultat (2026-09-18)
+
+**Constat.** Le panneau « Mes positions » ouvrait sur l'identité comptable. La première
+ligne lue était donc **« écart NON expliqué +2 669,06 $ »**, alors que la question posée
+était : je suis parti de ~100 k, j'en ai 100 734, ça donne quoi ? Le chiffre qui répond
+— **+1 129,03 $, soit +1,13 % en 88 jours** — n'était affiché NULLE PART : il fallait le
+soustraire soi-même de deux lignes séparées par cinq autres.
+
+Même défaut sur « Journal des round-trips » : trois paragraphes d'avertissement avant les
+cartes, et la question est revenue quand même — 331 trades à +0,23 $ font +74,52 $, alors
+comment le compte gagne-t-il +1 129 $ ?
+
+**Ce qui était juste, et qui le reste.** Aucun chiffre n'était faux, et le résidu n'était
+pas caché. L'erreur est un ORDRE DE LECTURE : un rapprochement sert à diagnostiquer le
+REGISTRE ; il ne remplace pas le résultat, il l'explique.
+
+**Décision.** Le résultat d'abord, sa décomposition ensuite, l'identité en note. Et la
+décomposition se lit désormais des composantes VERS le résultat, le résidu étant une
+ligne nommée parmi les autres :
+
+    réalisé robot + réalisé import + latent + flux + résidu = variation du compte
+    +74,52        + (−1 962,53)    + 347,98 + 0    + 2 669,06 = +1 129,03
+
+C'est la même identité, réarrangée — et lue dans ce sens elle répond d'elle-même à « ça
+ne match pas » : les trades du robot sont UNE ligne sur quatre, et pas la plus grosse.
+Un test vérifie que la somme est exacte, pas approchée.
+
+**Ce qui ne change pas.** Le résidu n'est toujours pas comblé, les fenêtres inégales des
+poches sont toujours signalées, et le périmètre affiché est toujours distingué du compte.
+Rien n'a été retiré : tout a été remis dans l'ordre, et le seul ajout est le chiffre qui
+manquait.
+
+## ADR-0184 — Le motif ne prédit rien, sur deux marchés — et la colonne qui le cachait (2026-09-18)
+
+**Contexte.** Le banc, une fois ses seuils repris du module (ADR-0183), a tourné sur les
+deux sources : actions 1D (200 titres, 499 758 barres) et crypto 4h (98 paires,
+1 187 822 barres ingérées chez Binance). Horizon 10 barres des deux côtés.
+
+**Résultat, et il converge.** **0 scoreur sur 5 passe les quatre portes, dans les deux
+marchés.** Les IC vont de +0,0071 à −0,0145, tous sous le seuil 0,03, et négatifs dès
+`reclaim`. En crypto, `consolidation + contraction` sort même un Sharpe NÉGATIF. La
+jambe d'exécution intraday que la spec réclamait a donc été mesurée pour de bon, sur des
+données complètes et gratuites — et elle ne sauve rien.
+
+**Décision.** Rien n'est câblé. `signal_lab` devient SANS OBJET : mesurer le recouvrement
+d'un signal avec le filtre de production suppose un signal. La machine à états
+(`indicators/deviation_reclaim`) et les deux bancs restent au dépôt — ils ont servi à
+trancher, et la question reviendra sous une autre forme.
+
+**UN DÉFAUT DE LECTURE, trouvé en commentant le résultat.** La colonne « Sharpe » note
+une stratégie qui reste à ZÉRO hors signal : elle vaut donc à peu près √(part allumée) ×
+le Sharpe des barres retenues. Elle mélange SÉLECTIVITÉ et QUALITÉ, et se lit à l'envers
+— un scoreur allumé 1 % du temps y est écrasé sans avoir démérité (`sfp` : 0,009), un
+scoreur allumé 50 % y paraît correct en ne faisant que suivre le marché à mi-temps.
+Le même biais pollue l'écart apparié contre le témoin : sur une barre éteinte le témoin
+encaisse r et le scoreur 0, donc l'écart vaut le rendement du marché sur les barres NON
+retenues. Les t de +36 à +48 mesuraient le TAUX D'INVESTISSEMENT, pas la sélection.
+
+**Correctif.** Une section PRIME DE SÉLECTION : moyenne des barres retenues moins
+moyenne de toutes les barres, avec un t sur le n effectif ramené à la part allumée.
+C'est la question que le témoin devait poser. Un test la verrouille sur un scoreur RARE
+mais juste — celui que l'ancienne lecture punissait le plus.
+
+**Ce que la dé-dilution change au verdict : rien, et c'est important.** À sélectivité
+égale, les barres retenues valent le marché en actions (≈ 0,28-0,32 contre 0,339) et
+MOINS que le marché en crypto, en se dégradant à chaque étage de confirmation
+(0,101 → 0,087 → 0,080 → −0,024). Attendre la confirmation coûte. Le verdict reposait de
+toute façon sur l'IC, que la dilution n'affecte pas.
+
+## ADR-0183 — Un banc qui écrit lui-même ses seuils finit par les baisser (2026-09-18)
+
+**Contexte.** Premier verdict réel de `make deviation-lab` sur le VPS : 200 titres,
+499 585 barres notées, horizon 10. Sortie : `reclaim` et `consolidation` **RETENUS**,
+placebo p = 0,001997, DSR 1,000. Un verdict favorable, prêt à être câblé.
+
+**Trois défauts, trouvés en relisant le banc avant d'y croire.**
+
+1. **Le gate n'était pas celui qu'il annonçait.** Le banc écrit « gate emprunté à
+   `alpha_incremental` » et réimplémentait des seuils PLUS DOUX : `SEUIL_DSR = 0.5` là
+   où le module exige 0,90, et **aucune condition sur l'IC** là où le module exige
+   |IC| ≥ 0,03. Or les deux scoreurs « RETENUS » ont un IC **NÉGATIF** (−0,0107 et
+   −0,0130). Le banc décernait sa meilleure mention à des barres qui SOUS-PERFORMENT.
+   `placebo` teste |IC| : il est BILATÉRAL, donc un prédicteur significativement
+   mauvais le passe aussi bien qu'un bon. Sans condition de SENS, « significatif » a
+   été lu comme « bon ».
+
+2. **Le DSR ne gardait plus rien à ce N.** Le DSR divise par √n. Mesuré sur des
+   rendements i.i.d. où AUCUN signal n'existe par construction (synthétique, et
+   uniquement pour valider l'arithmétique du garde-fou) : à n = 499 585, un scoreur
+   **tiré au hasard** allumé 40 % du temps obtient Sharpe +0,161 et **DSR 1,000** ;
+   être toujours long donne Sharpe +0,259 et DSR 1,000. La colonne DSR du rapport ne
+   portait aucune information. Et le n brut est de toute façon faux : un rendement
+   forward à 10 barres recalculé à chaque barre se RECOUVRE, et 200 titres notés le
+   même jour subissent la même séance — ce ne sont pas 200 mesures.
+
+3. **Il manquait l'étalon.** Aucun scoreur « toujours long » : un Sharpe positif se
+   lisait donc comme une découverte alors qu'il peut n'être que la dérive du marché
+   captée par n'importe quelle barre. Un signal allumé 40 % du temps qui fait moins
+   bien que ne rien sélectionner n'est pas un signal.
+
+**Décision.** Le banc ne définit plus ses seuils : il appelle `alpha_incremental.verdict`
+(placebo < 0,05 · DSR > 0,90 · |IC| ≥ 0,03) et ajoute une QUATRIÈME porte, le SENS
+(IC > 0), puisque ces scoreurs sont longs. Un témoin « toujours long » est noté comme
+les autres et entre dans les écarts appariés. Le DSR reçoit un `n` EFFECTIF — dates
+distinctes ÷ horizon, borne grossière et volontairement pessimiste. Les écarts appariés
+s'impriment en entier : ils étaient tronqués à 88 caractères, c'est-à-dire coupés
+AVANT le t apparié — la section posait sa question et masquait la réponse.
+
+**Conséquence, et elle est nette : le verdict du 18/09 est ANNULÉ.** Sous les portes du
+module, `reclaim` (|IC| 0,0107) et `consolidation` (|IC| 0,0130) sont REJETÉS — et
+l'auraient été sans rien changer d'autre. Le motif reste UNCALIBRATED ; la mesure est à
+refaire avec le témoin, qui dira ce qu'aucune colonne ne disait : ces barres valent-elles
+mieux que toutes les barres ?
+
+**Ce que ça coûte de l'admettre.** C'est moi qui ai écrit le gate doux, dans le même
+commit que le banc qui s'en sert. Un banc et son juge écrits par la même main, le même
+jour, sans que l'écart avec le module de référence ne saute aux yeux : la leçon n'est pas
+« être plus attentif », c'est que le seuil doit venir du module, jamais du banc.
+
+## ADR-0181 — Trois courbes, et jamais une seule inventée (2026-09-17)
+
+**Demande.** Ajouter le CAC 40 à côté du robot et du S&P 500, dans l'intro ET dans le
+comparatif du Dashboard.
+
+**Pourquoi c'est plus qu'un ajout cosmétique.** Comparer à un seul indice laisse croire que
+le choix de l'indice n'a pas d'importance. Un robot qui bat le S&P 500 et perd contre le
+CAC 40 ne raconte pas la même histoire selon celui qu'on affiche. Trois repères rendent ce
+choix visible au lieu de le masquer.
+
+**La règle qui gouverne tout : `_cac_real`.** `_index_series` retombe sur une série
+SYNTHÉTIQUE quand l'indice n'est ni en base ni joignable. Une courbe inventée tracée à côté
+d'une vraie serait le mensonge le plus efficace du site : légende crédible, courbe crédible,
+rien derrière. Le CAC n'apparaît donc NULLE PART tant qu'il n'est pas réel — ni au Dashboard,
+ni à l'intro, ni dans la légende.
+
+**Le payload passe de UNE référence à N**, chacune avec son nom, sa courbe base 100, sa
+croissance et son MOTIF d'absence. `references_noms` publie l'ordre d'affichage : le front en
+tire ses couleurs, il ne les devine pas.
+
+**Les clés `reference` / `reference_croissance` sont conservées**, et portent la première
+référence TRAÇABLE — pas la première déclarée. Le site statique déployé les lit encore ; les
+retirer d'un coup casserait la page en ligne jusqu'à sa prochaine reconstruction. Un
+déploiement ne doit jamais dépendre de la simultanéité de deux artefacts.
+
+**Côté dessin** : une couleur par référence, la nôtre gardant `--accent` (le sujet du
+graphique est notre performance, les indices sont des repères). Le fondu d'une fenêtre à la
+suivante apparie les références de MÊME RANG — une référence nouvelle sur cette fenêtre
+apparaît sans fondu plutôt que de sortir d'une courbe qui n'est pas la sienne. Et l'écart
+chiffré devient NOMMÉ : avec trois courbes, un « ÉCART » anonyme ne désigne plus rien.
+
+**Un test généralisé au passage.** La garde anti-synthétique ne surveillait que `_sp_real`,
+et découpait l'appel à la chaîne « instruments) » — elle est tombée au premier argument
+ajouté. Elle équilibre désormais les parenthèses et exige que CHAQUE drapeau `_*_real`
+apparaisse deux fois : dates ET valeurs. En conditionner une seule poserait des cours vrais
+sur un calendrier inventé, sans qu'aucune erreur ne se produise.
+
+## ADR-0179 — On annonce une CIBLE, jamais un outil (2026-09-17)
+
+**Deux échecs consécutifs, la même cause.** `make verrou-regen` a rendu
+`pip-compile: No such file or directory` le matin, puis `uv: No such file or directory` le
+soir. Les deux fois, la consigne nommait un binaire absent de la machine visée — `pip-tools`
+n'est pas une dépendance du projet, et `uv` est installé sur le poste de développement mais
+PAS sur le VPS. Les deux fois, l'utilisateur a lu « No such file or directory » et cherché du
+côté de son environnement, alors que c'était la CONSIGNE qui était fausse.
+
+**Mon test intermédiaire n'a pas suffi, et il fallait le voir.** Il vérifiait que le message
+et la recette du Makefile citent la MÊME commande. Deux textes identiques peuvent être faux
+ensemble : la ressemblance n'est pas l'existence.
+
+**Décision. Un nom d'outil est une hypothèse sur une machine qu'on ne voit pas ; une cible
+`make` n'en est pas une.** `commande_regeneration()` rend désormais `make verrou-regen` —
+une cible qui vit dans le Makefile que l'utilisateur vient d'exécuter pour lire le message,
+donc qui existe par construction. C'est la CIBLE qui se débrouille avec l'outil.
+
+Et la recette ne dépend plus du PATH : tout passe par `$(PYTHON)`, l'interpréteur du venv —
+la seule chose dont l'existence soit garantie partout où ce projet tourne. Elle installe `uv`
+dans ce venv s'il manque, puis l'appelle en `python -m uv`.
+
+**Trois tests remplacent celui qui comparait deux textes** : la commande annoncée doit
+commencer par `make ` et sa cible exister dans le Makefile ; chaque ligne de la recette doit
+commencer par `$(PYTHON)` ; la recette doit installer son outil. Vérifié en exécutant
+réellement `make verrou-regen` : il rend `scikit-learn`, `xgboost`, `lightgbm`, `torch`.
+
+**Le `constraints.txt` produit ici n'est PAS committé** : résolu en Python 3.11 dans ce
+conteneur, alors que le VPS tourne en 3.14. L'épingler reviendrait à verrouiller un
+environnement qui n'entraîne pas — le défaut même qu'on répare.
+
+## ADR-0180 — Le journal sépare les lots ouverts, il ne les supprime pas (2026-09-17)
+
+**La question posée.** « Ce serait préférable de ne garder que l'historique des trades
+ouverts ET fermés, non ? » L'intuition sur la confusion est juste. Le remède, non.
+
+**Cette page porte son propre avertissement** : « Les positions perdantes encore ouvertes n'y
+figurent pas, ce qui embellit le tableau. » Les 61 lots ouverts affichés sont la seule preuve
+VISIBLE de ce biais, face à 62 round-trips fermés. Les retirer ferait de la page un palmarès
+de trades soldés — exactement ce qu'elle dénonce deux paragraphes plus haut. Et les chiffres
+d'en-tête (45 % de réussite, 2,25 $ d'espérance) sont DÉJÀ calculés sur les fermés seuls : le
+tableau est ce qui montre ce qu'ils laissent de côté.
+
+**Décision : séparer, pas supprimer.** Trois vues — Tout (défaut), Round-trips fermés, Lots
+ouverts — avec leurs compteurs. La vue « fermés » AVERTIT tant qu'elle est active de ce
+qu'elle masque, parce que c'est elle qui produit le tableau embelli.
+
+**LA VRAIE SOURCE DU BRUIT ÉTAIT AILLEURS.** Une vente partielle crée une ligne par tranche
+(`split_id` + `qty` dans `live_roundtrip`) et laisse le reliquat ouvert : QQQ acheté le 07/07
+à 716,69 $ occupe trois lignes — deux sorties et un reliquat ; PATH du 03/09, trois aussi.
+Rien à l'écran ne le disait, donc ça se lisait comme une duplication. Les tranches d'un même
+lot d'entrée portent désormais la marque « ⧉ fractionné », avec l'explication au survol.
+
+## ADR-0178 — Une consigne qui nomme un outil absent est pire qu'un silence (2026-09-17)
+
+**Le symptôme.** `make verrou-regen`, livré le matin même, a rendu sur le VPS :
+`make: pip-compile: No such file or directory`. Et `make verrou` imprimait la même commande
+comme remède — donc la commande de réparation était elle-même en panne.
+
+**La cause est une supposition de ma part.** J'ai écrit la cible avec `pip-compile`, qui
+appartient à `pip-tools`. Ce projet s'installe avec **uv** (`make install` → `uv venv && uv
+pip install`) et n'a jamais eu `pip-tools` dans ses dépendances. `uv pip compile` fait
+exactement le même travail, avec les mêmes extras, et retire les extras par défaut — d'où
+l'absence de `--strip-extras`, qui n'existe pas chez lui.
+
+**Ce qui est grave n'est pas l'échec, c'est le message.** « No such file or directory » fait
+chercher du côté de l'environnement, alors que c'est la CONSIGNE qui était fausse. Même
+famille que les pièges déjà consignés : on cherche là où il n'y a rien.
+
+**Décision.** Une constante unique, `COMMANDE_REGENERATION`, sert à la fois le message de
+`make verrou` et la recette de `make verrou-regen` — **un test les lie**, pour que le conseil
+et l'outil ne puissent plus diverger. Vérifié en exécutant réellement la commande : elle rend
+`scikit-learn`, `xgboost`, `lightgbm` et `torch`, c'est-à-dire précisément les quatre
+bibliothèques que le verrou ne couvrait pas.
+
+**Un test préexistant est tombé, et il avait raison sur le fond.** Il exigeait la syntaxe
+`--extra=ml` ; uv écrit `--extra ml`. L'assertion porte désormais sur le NOM de l'extra, pas
+sur la ponctuation du résolveur — un test qui fige la syntaxe d'un outil ne teste plus
+l'intention.
+
+**Et le P0 des trois planificateurs est DÉFINITIVEMENT clos** : 16/09 puis 17/09, un seul
+passage chacun (19:08:35 puis 19:08:28), zéro aller-retour. Deux jours propres d'affilée.
+
+## ADR-0176 — Un verrou qu'on n'applique pas est pire qu'une absence de verrou (2026-09-17)
+
+**Le constat, mesuré avant d'agir.** `constraints.txt` n'était passé qu'aux TROIS workflows
+GitHub — `ci.yml`, `paper.yml`, `pages.yml`. `make install` faisait
+`uv pip install -e ".[dev,data,quant,api,ml]"` **sans `-c`**. Autrement dit : le verrou
+s'appliquait partout SAUF sur la machine qui produit réellement le modèle.
+
+La CI et le VPS pouvaient donc installer deux `scikit-learn` différents, produire deux
+modèles différents, et rien ne l'aurait signalé. Épingler `scikit-learn` dans un fichier que
+la machine d'entraînement n'ouvre jamais aurait été de la décoration.
+
+**Décision.** `make install` passe `-c constraints.txt`. `make verrou-regen` régénère le
+fichier avec les extras d'entraînement, en une commande, sur la machine qui entraîne. Et
+`make verrou` VÉRIFIE que le verrou est appliqué — il listait des versions épinglées, ce qui
+donnait le sentiment d'être protégé sans l'être.
+
+**Un test tombé, et il avait raison sur le fond.** `test_le_module_ne_regenere_rien_lui_meme`
+interdisait le TEXTE « pip install » dans le module d'analyse — il est tombé le jour où ce
+module a eu besoin de CHERCHER cette chaîne dans le Makefile. Chercher un texte et l'exécuter
+sont deux choses opposées ; un test par sous-chaîne les confond, et interdit la mesure en
+croyant interdire l'action. Réécrit par l'AST : aucun import de `subprocess`/`os`/`shutil`/
+`pip`, aucun appel `run`/`system`/`Popen`/`check_call`.
+
+## ADR-0177 — Le registre doit s'expliquer, pas seulement classer (2026-09-17)
+
+**Contexte.** `PRODUCTION : (aucune)` se lit comme un trou à combler. Ce n'en est pas un : le
+seul candidat jamais soumis a été REJETÉ par le gate, et le motif — « DSR ≤ seuil, pas d'edge
+OOS » — était **stocké depuis toujours dans l'historique de l'entrée, et jamais affiché**.
+
+**C'est la bonne décision du gate, et il faut le dire.** Un modèle sans edge DOIT être
+refusé ; l'absence de production est alors un RÉSULTAT, pas une lacune. Laisser l'écran muet
+invite à « combler le trou » — c'est-à-dire à promouvoir un modèle que la mesure vient de
+rejeter.
+
+**Décision.** `Entree.dernier_motif()` rend le pourquoi de la dernière décision, et
+`registre_modeles.py` l'affiche sous chaque ligne. `Registre.pourquoi_pas_de_production()`
+distingue deux silences qui ne se ressemblent que de loin : « rien n'a jamais été soumis »
+(un trou) et « ce qui l'a été a été refusé, voici pourquoi » (une décision). `etat_modeles()`
+expose le champ, donc `/api/ai/modeles` aussi.
+
+**Ce qui n'est PAS fait, et volontairement** : promouvoir l'artefact actuellement en service.
+Il n'a aucun manifeste — ni dataset, ni commit, ni empreinte. L'inscrire reviendrait à
+FABRIQUER une provenance, exactement ce que le mandat données-réelles interdit. La production
+restera vide jusqu'à ce qu'un modèle la mérite par le gate ; entre-temps, `orphelins()` dit
+qu'un artefact sert sans être gouverné.
+
+## ADR-0175 — Le marqueur « non reproductible » ne doit pas être permanent (2026-09-17)
+
+**Le constat, et il est sans appel.** Le tout PREMIER modèle jamais inscrit au registre —
+`Gradient Boosting (sklearn)-20260916-223954-4a0ed2d` — portait déjà « entraîné depuis un
+arbre GIT MODIFIÉ, non reproductible ». Cause : `cron_daily.sh` régénère
+`config/mobile_universe.csv` et `data/delisted.csv`, deux fichiers SUIVIS, quelques minutes
+avant d'entraîner. **Aucun run n'aurait jamais pu être déclaré reproductible.** Un
+avertissement qui s'allume à chaque fois n'avertit plus de rien.
+
+**Décision.** `git_commit()` ne suffixe `-sale` que si des fichiers HORS
+`DONNEES_REGENEREES` sont modifiés. Ce n'est pas un assouplissement : le commit sert à figer
+le CODE ; les données d'entrée changent tous les jours par nature, et c'est `dataset_hash`
+qui les capture. La liste est explicite plutôt que devinée — une heuristique sur les
+extensions laisserait passer du code un jour.
+
+**UN DÉFAUT DANS MON PROPRE CORRECTIF, trouvé en le vérifiant.** `git status --porcelain`
+aligne son statut sur DEUX colonnes : « M fichier » (modifié non indexé) commence par une
+ESPACE. L'appel git faisait un `.strip()` global, qui la supprimait, décalait tout d'un
+caractère et transformait `config/mobile_universe.csv` en `onfig/mobile_universe.csv` — ne
+correspondant plus à aucune exclusion. **Le filtre aurait semblé posé tout en ne filtrant
+rien**, et le marqueur serait resté permanent sans que rien ne le dise. Drapeau `brut=True`,
+et un test sur les quatre formes de ligne porcelain.
+
+## ADR-0173 — La pollution se date au premier DOUBLON coûteux, pas au premier A/R (2026-09-16)
+
+**Mon propre défaut, et il portait une affirmation PUBLIQUE.** L'annotation livrée quelques
+heures plus tôt lisait `depuis_cout` — le premier aller-retour tout court — et affichait
+« depuis le 23/06/2026 ». Or le 23/06 est un jour à **UN SEUL passage** : son A/R de −1,56 $
+est du va-et-vient intra-passage, pas deux robots qui se défont. Dater la double
+planification du 23/06 lui attribuait **neuf semaines qu'elle n'a pas causées**, et
+condamnait à tort toutes les mesures de la période.
+
+Le plus embarrassant : `passages.py` PORTAIT DÉJÀ ce raisonnement en commentaire — « ne
+rendre que la première date ferait dater la pollution de sept semaines trop tôt » — pour
+distinguer doublon et doublon coûteux. J'ai ajouté un troisième cas sans le voir.
+
+**Décision.** `rapport()` rend une troisième population : `depuis_doublon_cout`,
+`jours_a_doublon_cout`, `pnl_doublon` et `pnl_hors_doublon` — l'intersection des jours à
+doublon ET à aller-retour. L'annotation lit celle-là. Le churn intra-passage est dit
+SÉPARÉMENT : le taire ferait croire que tout le va-et-vient vient de la double
+planification, et le corriger un jour laisserait un écart inexpliqué.
+
+**Chiffres réels du 16/09** : −618,57 $ imputables aux doublons depuis le 27/08, sur
+13 jours ; −1,56 $ d'intra-passage depuis le 23/06. Total inchangé : −620,13 $.
+
+**LE CORRECTIF DE PLANIFICATION EST VÉRIFIÉ.** Le 16/09 : `1 passage [19:08:35] · 8 ordres ·
+0 A/R`. Premier jour propre depuis le 15/09. La garde journalière tient.
+
+## ADR-0174 — Une date de publication n'est pas une date utilisable (2026-09-16)
+
+**Le symptôme.** `make alpha-lexique` sur le VPS : « 2 375 titres · 71 jours · 2026-05-19 →
+2026-09-16 », puis « aucun titre n'a 5 jours de bourse APRÈS son entrée ». Les deux phrases
+se contredisent en apparence, et la seconde envoie chercher un bug.
+
+**Elles ne se contredisent pas.** Les dates affichées sont des dates de PUBLICATION. La date
+qui gouverne l'étude d'événement est `utilisable_le = max(date, vu_le)` — et la première
+collecte a eu lieu le 16/09. Les 2 375 titres ont donc TOUS la même date utilisable, celle
+du jour. Le corpus couvre quatre mois de publications et zéro jour d'observation exploitable.
+
+**C'est le fonctionnement voulu**, pas un défaut : 84,2 % des titres sont rétro-publiés, et
+les entrer à leur date de parution serait exactement la fuite que le schéma à deux
+horodatages existe pour empêcher. Ce qui manquait, c'est de le DIRE.
+
+**Décision.** Le diagnostic affiche la fourchette des dates UTILISABLES, combien de titres
+tombent sur la plus récente, et conclut : le banc devient mesurable environ une semaine après
+la PREMIÈRE COLLECTE, pas après la plus ancienne publication. Un diagnostic qui laisse croire
+à une contradiction est pire qu'un silence — il fait chercher là où il n'y a rien.
+
+## ADR-0172 — On annote la courbe réelle, on ne la corrige pas (2026-09-16)
+
+**Contexte.** `make churn` a mesuré **−620,13 $** sur 594 362 $ brassés, sur 14 jours, depuis
+le **27/08**. La courbe d'equity du compte porte donc ce gâchis, et toute comparaison
+« modèle contre réel » postérieure à cette date le compte comme de la performance.
+
+**Décision : ANNOTER.** Retrancher le churn de la série publierait une courbe qui n'a jamais
+existé — le compte a bien encaissé ces allers-retours. Une performance « telle qu'elle aurait
+été sans notre erreur » est une SIMULATION, et elle porterait le nom d'un compte réel. La
+série reste vraie ; c'est la note qui dit ce qu'elle porte.
+
+**TROIS ÉTATS, et ils ne se confondent pas** : *non mesuré* (historique du courtier illisible
+— le cas nominal en CI, sans clés), *mesuré et sain*, *mesuré et pollué*. Les deux premiers se
+ressemblent à l'écran si on n'y prend pas garde, et c'est la confusion la plus coûteuse de ce
+projet : un silence qui se lit comme un feu vert. `applicable` ne suffit donc pas, `mesure`
+l'accompagne.
+
+**Un cache, et pourquoi.** Le rapport se calcule sur l'historique du COURTIER — appel réseau,
+clés que le build public n'a pas. Le faire depuis le snapshot le rendrait lent, faillible et
+impossible en CI. `make churn` le dépose donc dans `.cache/churn.json` une fois par jour
+(branché dans `cron_daily.sh`), et le site le relit sans réseau. L'annotation porte la DATE de
+la mesure : un cache d'une semaine sous-estime le churn survenu depuis, et rien ne le dirait.
+
+**Ce qu'on refuse d'inventer** : sans capital connu, le montant est rendu seul. Convertir
+−620 $ en points de performance exige de savoir sur quoi ; un dénominateur supposé
+fabriquerait un chiffre faux, d'autant plus crédible qu'il serait précis.
+
+## ADR-0171b — Un artefact qui SERT sans être tracé doit se voir (2026-09-16)
+
+**Correction d'un diagnostic que j'avais posé de travers.** J'avais écrit qu'il fallait
+« brancher `train_model.py` sur le registre ». C'est faux : `_tracer()` existe depuis
+`afc5eed`, sur le chemin de production, et `cron_daily.sh` entraîne chaque nuit. Le registre
+est vide parce que **l'entraînement n'a pas encore tourné depuis le câblage**, livré le jour
+même. Il n'y avait pas de code à écrire là.
+
+**Le vrai trou était ailleurs, et il était ouvert.** `incoherences()` n'inspectait que les
+entrées DÉJÀ inscrites. Un artefact posé dans `models/` sans passer par le registre lui
+restait donc invisible — or c'est exactement le cas qui compte. Le 16/09, l'artefact à
+AUC 0,504 servait en production et le registre annonçait « vide » : les deux affirmations
+étaient vraies, et **rien ne les confrontait**.
+
+**Décision.** `Registre.orphelins()` balaie le dossier et signale tout `ml_*.pkl` dont aucune
+entrée ne parle ; `incoherences()` les inclut, donc `/api/ai/modeles` et `make registre` les
+montrent. Un modèle qui sert sans trace ne dit ni de quelles données ni de quel commit il
+vient, et `rollback` n'a rien vers quoi revenir. C'est un constat, pas une panne : il se
+SIGNALE, il ne bloque rien. L'empreinte `.sha256` posée à côté n'est pas comptée comme un
+second artefact — un avertissement permanent cesse d'être lu.
+
+## ADR-0171 — Un basculement de port silencieux vaut une panne, donc il échoue (2026-09-16)
+
+**Le constat.** Après le correctif d'intro, `npm run dev` sur le VPS a écrit
+`⚠ Port 3000 is in use, trying 3001 instead.` — une ligne au milieu du démarrage. Le
+navigateur, lui, restait sur `localhost:3000`, **servi par le service systemd `quant-web`**,
+qui tourne un build de PRODUCTION (`next build` + `next start`). L'intro corrigée vivait sur
+3001 ; la page regardée venait d'ailleurs.
+
+**C'est la troisième fois que ce motif coûte une conversation** : le cache `.next` qui
+ressert l'ancien rendu, `make start` qui ramenait la branche sur `main`, et maintenant le
+port. Toujours la même forme — **le code est juste, l'écran montre autre chose, et rien ne
+le signale**.
+
+**Décision.** `npm run dev` **échoue** si le port est pris, via un `predev`
+(`apps/web/scripts/verifier_port.mjs`), et `dev` fixe explicitement `-p ${PORT:-3000}` au
+lieu de laisser Next choisir. Le message nomme les trois sorties : qui tient le port,
+`make up` si c'est le service, et `PORT=3001 npm run dev` pour développer à côté — avec le
+tunnel qui va avec. Un basculement silencieux coûte plus qu'une erreur : l'erreur s'arrête,
+le basculement fait chercher ailleurs.
+
+**Corollaire sur l'intro, à ne pas confondre.** Sur le VPS, le port 3000 sert un build de
+production : la politique y est `"session"`, donc une lecture par onglet — **c'est voulu**,
+c'est le comportement du site public. `?intro=1` force la relecture même là. Le mode
+`"always"` d'ADR-0170 ne vaut que pour un vrai `next dev`.
+
+## ADR-0170 — La chaîne NLP locale est retirée. Ce qui reste, et pourquoi (2026-09-16)
+
+**Décision de l'utilisateur, après quatre tentatives mesurées.** `qwen/qwen3.5-9b` sous
+LM Studio n'a jamais rendu une seule classification : raisonnement sans contenu, puis
+timeouts à 12 s malgré tous les correctifs. Le second modèle exposé était un modèle
+d'embedding — il n'y a jamais eu de repli. Continuer, c'était payer un cinquième essai sur
+une hypothèse qui n'avait rien produit.
+
+**Retiré** : `packages/nlp/` (8 modules), `scripts/nlp_check.py`, `scripts/benchmark_nlp.py`,
+`scripts/alpha_nlp_lab.py`, les cibles `nlp-check` / `benchmark-nlp` / `alpha-nlp`, les
+variables `QUANT_NLP_*` et `LOCAL_TRADING_MODEL`, la route `/api/ai/chaine`, le bloc `nlp`
+de `/api/ai/metrics`, et 140 tests. ADR-0166 à 0169 décrivent du code qui n'existe plus ;
+ils restent comme trace de ce qui a été mesuré.
+
+**CE QUI A ÉTÉ SAUVÉ AVANT DE COUPER, et c'est le seul travail délicat de l'opération.**
+`etat_modeles()` — la version du modèle ML en production, son jeu de données, son commit —
+vivait dans `packages/nlp/sante.py`, à côté de l'état du fournisseur LLM. Les deux n'ont
+rien à voir : l'un décrit le registre ML, l'autre un serveur local. Supprimer le paquet
+aurait emporté la version affichée par `/api/ai/modeles` sur le site. Déplacé vers
+`packages/mlops/etat.py`, avec ses tests. **Un module rangé au mauvais endroit tombe avec
+ses voisins.**
+
+**CE QUI RESTE, ET QUI NE DÉPENDAIT PAS DU LLM :**
+- `make news` et `packages/sentiment/corpus.py` — 2 375 titres datés, 84 % rétro-publiés.
+  Le corpus était le vrai blocage et il est résolu ; aucune ligne n'y touche à un LLM.
+- `packages/research/alpha_incremental.py` — étude d'événement, comparaison appariée,
+  placebo. Aucun fournisseur requis : il mesure ce qu'un scoreur QUELCONQUE apporte aux
+  rendements réalisés. Le lexique en est un. La question qui a motivé le chantier survit
+  au moyen qu'on avait choisi pour y répondre.
+- `packages/llm/` — CONSERVÉ, et ce n'est pas un oubli. Il sert `/api/ai/commentary`,
+  `/api/ai/chat` et `_enrich_ai_memo`, qui tournent sur le site. Le retirer aurait été
+  élargir la demande jusqu'à casser des fonctions qui marchent.
+
+**Un fait à ne pas perdre dans le bruit** : le dernier `make alpha-nlp` a échoué sur
+« aucun événement exploitable : prix absents ou fenêtre trop courte » — **avant même
+d'appeler un modèle**. La mesure d'alpha était bloquée par l'absence de prix sur la machine,
+pas par le LLM. Le retrait de la chaîne ne débloque donc rien de ce côté, et il ne faut pas
+croire l'inverse.
+
+## ADR-0169 — Trois choses que la mesure a démenties, dont une de mes affirmations (2026-09-16)
+
+**1. `enable_thinking: false` n'a PAS suffi.** Envoyé par ADR-0168, ignoré par le gabarit de
+`qwen/qwen3.5-9b` : 3 cas sur 3 rendent toujours un raisonnement et un contenu vide (4 377 ms
+de médiane contre 4 981 — l'écart est du bruit). L'hypothèse était juste sur la CAUSE et
+fausse sur le REMÈDE.
+
+**Décision — un repli, UN SEUL, et jamais silencieux.** Quand la réponse sous grammaire est
+vide ALORS QU'UN RAISONNEMENT a été produit, le pilote réessaie **une fois sans
+`response_format`**. Sortie structurée et raisonnement se neutralisent ; sans grammaire, le
+même modèle écrit son JSON dans le contenu, précédé du raisonnement que `_json_dans` retire.
+Le repli ne se déclenche que sur ce symptôme précis — sur une panne réseau ou un JSON
+malformé, il ne ferait que doubler l'attente. Et **le signal porte l'incident** : taire qu'une
+sortie n'était pas contrainte la ferait passer pour contrainte dans une mesure qu'on relira.
+
+**2. LE SECOND « MODÈLE » N'EN ÉTAIT PAS UN, et c'est moi qui ai envoyé l'utilisateur dans
+le mur.** J'avais écrit « ou prends l'autre modèle exposé », en supposant un Gemma. Les deux
+modèles exposés étaient `qwen/qwen3.5-9b` et **`text-embedding-nomic-embed-text-v1.5`** — un
+modèle d'embedding, incapable de discuter. Il n'y a jamais eu de solution de repli.
+`resoudre_modele` écarte désormais les modèles d'embedding du choix AUTOMATIQUE (heuristique
+de NOM, assumée comme telle : `/v1/models` ne dit pas le type) et dit combien il en a écartés.
+Une demande explicite reste honorée.
+
+**3. LE REFUS REMPLACE L'AVERTISSEMENT — et c'est le vrai défaut de la soirée.** Lancé avec
+`--modele google/gemma-…`, un identifiant qui n'existe pas, `nlp-check` a **averti puis
+tourné quand même** : trois classifications complètes, que LM Studio a servies avec le modèle
+qu'il avait chargé. Les signaux repartaient estampillés d'un modèle INEXISTANT. C'est
+exactement la fuite de provenance qu'ADR-0166 prétendait avoir fermée : la résolution était
+juste, mais l'appelant passait outre. `nlp_check` et `alpha_nlp_lab` **s'arrêtent** désormais.
+**Un avertissement ne protège pas une mesure ; seul un arrêt le fait.**
+
+## ADR-0168 — Le raisonnement du modèle est éteint par défaut, sur mesure (2026-09-16)
+
+**La mesure, d'abord.** `nlp-check` sur le Mac, `qwen/qwen3.5-9b`, après que les motifs
+soient devenus lisibles (ADR-0167) : **3 cas sur 3** rendent
+`RAISONNEMENT mais AUCUN contenu`. Latence médiane **4 981 ms**, p90 5 290 ms, **0 timeout**,
+`finish_reason` ≠ `length`. Le modèle ne rame pas et n'est pas tronqué : il réfléchit dans un
+canal séparé, s'arrête, et le canal contraint par le schéma ne reçoit **rien**. Toute la
+chaîne part en repli.
+
+**Décision. `enable_thinking: false` est envoyé par défaut** — via `chat_template_kwargs`
+côté LM Studio, `think: false` côté Ollama. Le commutateur passe par le GABARIT et non par
+l'invite : un `/no_think` glissé dans le texte marcherait aussi, mais polluerait la consigne
+que l'on mesure ensuite. `QUANT_NLP_RAISONNEMENT=1` le rétablit pour qui veut comparer.
+
+**Le raisonnement n'est pas refusé par principe, il est refusé sur constat** : sur une
+classification à cinq champs contraints, il ne fait rien gagner de mesurable — et ici il
+coûte la réponse entière. Si un banc montre un jour qu'il améliore l'accord, la variable
+existe pour le rallumer.
+
+**Deux filets, parce qu'un gabarit peut ignorer la clé.** `_json_dans` retire désormais un
+bloc `<think>…</think>` **fermé** en tête de réponse — retirer un bloc délimité n'est pas
+deviner, c'est ce qu'on fait déjà pour les clôtures « ``` ». Un bloc NON fermé reste
+illisible : sans balise de fin on ne sait pas où s'arrête le raisonnement, et couper au jugé
+accepterait un JSON tronqué en croyant l'avoir compris. Et le message de diagnostic dit
+maintenant que la requête demande DÉJÀ l'extinction — si le symptôme persiste, c'est le
+gabarit qui ignore la clé, et le remède est dans LM Studio.
+
+**Le défaut d'ADR-0167 s'était déjà reproduit.** `banc.eprouver` reconstruisait sa config
+champ par champ : il venait de perdre `max_jetons`, il aurait perdu `raisonnement` le
+lendemain. Il passe à `replace(ConfigNLP.depuis_env(), …)`. Un banc qui mesure sous d'autres
+réglages que la production classe des modèles qu'on ne fait pas tourner.
+
+**Éprouvé de bout en bout** contre un faux fournisseur qui rejoue le comportement observé :
+raisonnement éteint → **3/3 et chaîne opérationnelle** ; `QUANT_NLP_RAISONNEMENT=1` →
+**0/3**, la panne exacte du 16/09. Ce qui reste à mesurer sur le Mac : si le gabarit de
+`qwen3.5-9b` honore la clé.
+
+## ADR-0167 — Une panne doit nommer son remède, et un score ne doit jamais flatter (2026-09-16)
+
+**Contexte.** Premier `nlp-check` réel sur le Mac (LM Studio, `qwen/qwen3.5-9b`) : trois
+échecs — deux `TIMEOUT`, un `REPONSE_ILLISIBLE` — et **aucun ne disait quoi changer**. Or
+les remèdes sont exclusifs : lever un plafond de jetons, désactiver un mode « raisonnement »,
+ou corriger l'invite. Un motif indifférencié envoie chercher un défaut de schéma là où il
+suffisait d'un réglage.
+
+**Décision — le pourquoi voyage avec l'échec.** `_poster` rend `(reponse, incident)` et
+capture le **corps** des erreurs HTTP (LM Studio y écrit le motif exact). `pourquoi_illisible`
+distingue quatre causes : réponse **tronquée** au plafond (`finish_reason=length`), modèle
+**« thinking »** qui a produit un raisonnement sans contenu, contenu **vide**, et JSON
+réellement malformé — ce dernier montrant les 160 premiers caractères reçus. Le motif
+remonte jusqu'au rapport, et le plafond devient un réglage (`QUANT_NLP_MAX_JETONS`), le
+remède proposant toujours un plafond **plus haut** que celui en vigueur.
+
+**DEUX VRAIS DÉFAUTS, trouvés en éprouvant le correctif contre un faux fournisseur.**
+
+1. **Le score flattait au moment exact de la panne.** Un repli rend `NEUTRAL` par
+   convention. Sur le cas dont la réponse attendue EST `NEUTRAL`, l'ancien comptage marquait
+   ✓ et créditait un point : le **« 1/3 » affiché valait 0/3**. Le chiffre était le plus
+   faux là où la chaîne était la plus cassée. Un repli ne compte plus jamais comme un accord.
+2. **Un réglage accepté, affiché, et sans le moindre effet.** `max_jetons` était recopié à
+   la main par six appelants ; **trois** l'ont laissé au défaut à son ajout.
+   `QUANT_NLP_MAX_JETONS=1200` passait la config, s'affichait dans le résumé, et n'atteignait
+   jamais la requête. `pilote_pour(cfg)` passe désormais la config ENTIÈRE — il n'y a plus
+   rien à recopier — et un test AST interdit tout appel direct à `choisir()` hors de
+   `pilotes.py`, pour que le prochain champ ajouté ne puisse pas se perdre de la même façon.
+
+**Conséquence.** Un réglage muet est pire qu'un réglage absent : l'absent se voit. Et un
+score qui compte une non-mesure comme une réussite est la troisième occurrence de la même
+famille sur ce projet (zéros qui ressemblent à des absences, capitulations comptées comme
+sorties). La règle se durcit : **toute non-mesure doit être exclue du numérateur ET du
+dénominateur, ou signalée — jamais convertie en succès.**
+
+## ADR-0166 — Aucun identifiant de modèle n'est écrit dans le code (2026-09-16)
+
+**Contexte.** `config.py` portait `MODELE_DEFAUT = "qwen2.5-7b-instruct"` — un nom plausible,
+écrit le jour où le cahier des charges parlait de Qwen 2.5. L'utilisateur fait tourner autre
+chose. Le défaut est alors devenu faux, et **il ne lève pas** : le pilote envoie
+`model: "<nom>"`, LM Studio en chargement à la demande sert ce qu'il a, et rend 200. Le
+signal repart estampillé d'un modèle qui n'a rien produit.
+
+**Pourquoi ce n'est pas cosmétique.** Ce nom est inscrit dans la mesure de `alpha_nlp_lab`,
+celle qui décidera du poids donné au NLP — et dans la clé de cache du moteur. Une mesure
+signée du mauvais modèle ne se refait pas : six mois plus tard, plus personne ne sait qui a
+produit l'alpha qu'on paie. C'est exactement ce que le mandat données-réelles interdit.
+
+**Décision.** Le défaut devient **vide**, et `pilotes.resoudre_modele()` DEMANDE au
+fournisseur ce qu'il expose :
+- un nom demandé et exposé → rendu tel quel ;
+- un nom approximatif qui ne correspond qu'à un seul exposé → **canonisé** vers
+  l'identifiant exact du fournisseur (`qwen3.5` → `qwen3.5-9b-instruct-mlx`) ;
+- un nom ambigu (plusieurs correspondances) → **aucun choix**, le motif nomme les
+  candidats ;
+- un nom absent → rendu tel quel, signalé ABSENT — jamais remplacé en douce ;
+- aucun nom, un seul modèle exposé → celui-là ;
+- aucun nom, plusieurs exposés → le premier, et le motif nomme le remède
+  (`LOCAL_TRADING_MODEL`).
+
+La fonction rend toujours `(modele, motif)`, et **le motif est affiché** : une résolution
+muette redeviendrait une supposition, simplement mieux cachée. Le signal est désormais
+estampillé du modèle porté par le PILOTE, plus du souhait de la config.
+
+**Conséquence, et un défaut trouvé en chemin.** `sante._verdict` testait
+`demande.lower() in m.lower()` : avec un `demande` vide, `"" in m` est vrai pour TOUT `m`,
+donc le voyant serait passé au vert **sans désigner personne**. Le cas vide est maintenant
+traité en premier et nomme le modèle servi. 13 tests ajoutés, dont celui qui interdit le
+retour d'un identifiant en dur.
+
+## ADR-0165 — Un audit d'archivage dont la bonne conclusion est « ne rien archiver » (2026-09-16)
+
+**Contexte.** Mission : repérer les fichiers obsolètes du dépôt et les déplacer sous `old/`,
+jamais les supprimer. Analyse d'atteignabilité sur les **1 279 fichiers suivis** : **959
+modules Python**, dont **955 atteignables** depuis les points d'entrée réels (API, scripts,
+cibles du Makefile, workflows, tests). **4 orphelins**, aucun classé SAFE_TO_ARCHIVE.
+
+**Les quatre candidats, et pourquoi chacun reste :**
+- `packages/backtest/preset_rolling.py` — sélection supplantée, mais le fichier porte encore
+  `frottement`, `appliquer_bande` et `poids_par_symbole`, dont un P1 ouvert aura besoin. Le
+  test qu'il cite en en-tête n'a jamais existé.
+- `scripts/check_db.py` + `scripts/index_db.py` — îlot fermé (ils ne s'appellent que l'un
+  l'autre), mais ils visent `YAHOO.db`, base toujours vivante.
+- `scripts/reglage_capitulation.py` — banc dont le verdict est cité dans
+  `candidats_lab.py:247`. L'archiver, c'est orpheliner la justification d'un seuil en place.
+
+Front : 2 candidats, tous deux vérifiés faux positifs. Hors Python et hors front : tout faux
+positif.
+
+**Décision (utilisateur, option A) : ne rien archiver.** `old/` n'a pas été créé ; aucun
+fichier n'a été déplacé, modifié ni supprimé de toute la mission.
+
+**Conséquence — et c'est elle qui vaut le détour.** Ce qui rend cet audit rentable n'est pas
+le nombre de fichiers déplacés (zéro), c'est la carte des **faux positifs**. Un analyseur
+d'imports naïf archiverait ici du code VIVANT, parce que ce dépôt charge par CONVENTION bien
+plus que par import : `load_config_dir()` avale un répertoire de YAML entier sans en nommer
+un seul ; les plugins s'enregistrent par décorateur (`@indicators.register`,
+`@strategies.register`, `@factor_calcs.register`, `@risk_rules.register`) ; Next.js monte
+`page`/`layout`/`template`/`error`/`loading`/`not-found` sans qu'aucun import n'y mène ;
+`.claude/agents/*` est lu par nom de dossier ; et `apps/api/main.py` importe TARDIVEMENT, à
+l'intérieur des fonctions — une analyse au niveau module s'y tromperait massivement.
+
+Deux fois mon propre analyseur a déclaré `packages/sentiment/finbert.py` orphelin : d'abord
+parce que `from . import finbert` porte un `module` à `None`, puis parce que le paquet d'un
+`__init__.py` était résolu vers son parent. **`finbert.py` est ACTIF.** La règle qui en
+sort : sur ce dépôt, un fichier « jamais importé » est une HYPOTHÈSE à vérifier à la main,
+jamais un verdict.
+
+## ADR-0161 — L'ordre du chantier IA est dicté par ce qui rend la suite MESURABLE (2026-09-16)
+
+**Le cahier des charges demandait Lambda GPU tôt.** L'audit (`docs/AI_ARCHITECTURE_AUDIT.md`)
+a mesuré l'artefact en production : **AUC 0,504 · Brier 0,2496 · DSR non calculé**. Le modèle
+est une régression logistique / XGBoost sur features tabulaires — il s'entraîne en secondes
+sur CPU. Louer un GPU pour l'entraîner plus vite, c'est payer pour atteindre le hasard plus
+rapidement.
+
+**Ordre retenu, validé par l'utilisateur** : registre → verrou d'environnement → NLP
+structuré → MESURE de l'alpha incrémental → abstraction compute locale → Lambda seulement si
+la mesure a démontré quelque chose. Les cinq premières étapes sont à coût nul.
+
+**Conséquence.** L'étape 6 n'est pas reportée par prudence : elle est *conditionnée*. Si le
+NLP ne montre aucun alpha incrémental, son poids est zéro et il n'y a rien à accélérer.
+
+## ADR-0162 — Le vrai blocage n'était pas le LLM, c'était le corpus (2026-09-16)
+
+**Découvert en préparant l'étape 4.** Le dépôt sait lire des flux (`rss.py`), scorer
+(`lexicon.py`), conduire une étude d'événement avec IC et Sharpe déflaté (`news_backtest`) et
+gérer le point-in-time (`pit.py`). Tout est là **sauf le corpus** : `data/news.csv` n'existait
+pas, rien ne l'écrivait, et `.cache/sentiment_history.json` ne garde que des SCORES agrégés —
+irréversibles, donc impossibles à re-scorer avec un autre modèle.
+
+Mesurer si un LLM bat le lexique était donc impossible, et le serait resté : **un flux RSS ne
+se rejoue pas**. C'est la seule tâche du chantier dont le coût augmente avec le retard.
+
+**Décision.** `packages/sentiment/corpus.py`, branché dans `cron_daily.sh` — pas dans un
+script qu'on lance quand on y pense, car une collecte trouée produit un corpus troué.
+
+**Le point de conception qui compte : DEUX horodatages.** `date` (ce que dit l'éditeur) et
+`vu_le` (quand nous l'avons lu). Leur différence EST une fuite : un flux qui rétro-publie un
+article de la semaine dernière nous le fait découvrir aujourd'hui, et se fier à `date` seule
+laisserait une stratégie « savoir » avant d'avoir pu savoir. Le seul instant utilisable est
+`max(date, vu_le)`, calculable uniquement si l'on enregistre les deux AU MOMENT de la
+collecte. Append-only : réécrire permettrait de fabriquer une antériorité.
+
+## ADR-0163 — Comparer deux scoreurs exige le MÊME échantillon (2026-09-16)
+
+**Le piège qui invalide la plupart des comparaisons.** `sentiment_event_study` écarte les
+événements au score nul. Or « score nul » dépend du scoreur : le lexique ignore un titre sans
+mot de son dictionnaire, un LLM le classe NEUTRE, et pas sur les mêmes titres. Les comparer
+ainsi les mesure sur des échantillons différents, et l'écart mélange alors deux choses
+inséparables — pouvoir prédictif et sélection.
+
+**Décision.** `packages/research/alpha_incremental` extrait les événements UNE fois, puis
+chaque scoreur note exactement les mêmes. La comparaison devient APPARIÉE, ce qui élimine la
+variance commune. Trois portes CONJOINTES : placebo par permutation, Sharpe déflaté, |IC|.
+`n_essais` compte tous les scoreurs comparés.
+
+**Trois défauts trouvés par les tests pendant l'écriture**, tous corrigés :
+1. **Le canal plat, encore.** `std() == 0` est faux en virgule flottante : soixante fois 0,3
+   donnent un écart-type de 5e-17, des rangs arbitraires, et un **IC de 0,21 pour un scoreur
+   strictement constant**. Même piège que `channel_break` (CLAUDE.md), même remède : tolérance
+   relative + test exact sur les valeurs distinctes.
+2. **La p-valeur passait sous son propre plancher** (`round(1/501, 6)` < 1/501). Arrondie
+   désormais vers le HAUT — seule direction juste, arrondir une p-valeur vers le bas fait
+   paraître un résultat plus significatif qu'il ne l'est.
+3. **Le signe de l'écart apparié était ininterprétable** (paires ordonnées alphabétiquement).
+   Renommé `ecart_moyen_a_moins_b`.
+
+## ADR-0164 — La double protection contre la facture, et laquelle compte (2026-09-16)
+
+**Protection 1, applicative** : le superviseur arrête dans un `finally`. Sans lui, une
+exception entre « entraînement fini » et « artefacts récupérés » laisserait la machine
+allumée, et l'erreur remontée masquerait la facture qui court. Le `finally` attrape aussi
+`KeyboardInterrupt`, qui n'hérite pas d'`Exception`.
+
+**Protection 2, infrastructure** : `max_runtime_s` honoré par le fournisseur. C'est la SEULE
+qui joue quand c'est le superviseur qui meurt — coupure, processus tué, Mac éteint — et c'est
+précisément le scénario qui laisse un GPU facturer une semaine.
+
+**Décision.** `impose_max_runtime()` est INTERROGÉ, jamais supposé : un backend qui ne sait
+pas imposer de plafond le déclare, et le superviseur AVERTIT au lieu d'interdire (un backend
+local n'a pas de facture). `Travail` exige un plafond — il n'existe pas de valeur « illimité »
+par construction.
+
+**Conséquences.** Un succès silencieux (sortie 0, aucun artefact attendu produit) est traité
+comme un ÉCHEC : c'est le plus coûteux de tous, puisqu'il promeut du vide. Un secret en ligne
+de commande est refusé — il apparaîtrait dans `ps` de toute machine partagée, et un GPU loué
+en est une. La commande est un `argv`, jamais une chaîne shell : une chaîne laisserait un
+manifeste distant injecter « ; rm -rf ».
+
+## ADR-0159 — Le churn a coûté 620 $, et la courbe d'equity est polluée depuis le 27/08 (2026-09-16)
+
+**Mesuré par `make churn` sur l'historique RÉEL du courtier**, 32 jours d'activité :
+
+| | |
+|---|---|
+| Jours avec plus d'un passage | **15 sur 32** |
+| Premier doublon | 2026-07-07 |
+| Premier ALLER-RETOUR | **2026-08-27** |
+| Coût cumulé | **−620,13 $** sur **594 362 $** brassés (−0,104 %) |
+| Pires journées | 08/09 −156,22 $ · 31/08 −126,27 $ · 15/09 −100,93 $ |
+
+**LA MESURE A CORRIGÉ SA PROPRE QUESTION.** Le module rendait « premier doublon » comme
+date de pollution. L'historique dit autre chose : les doublons du 07/07 et du 24/08 ont
+produit **zéro** aller-retour. Deux passages qui aboutissent à la même cible ne se
+contredisent pas — ils se répètent, et ne coûtent rien. Dater la pollution du premier
+doublon aurait condamné sept semaines de mesures correctes. `rapport()` rend donc DEUX
+dates, et c'est `depuis_cout` qui compte.
+
+**CE QUE LA CHRONOLOGIE CONFIRME.** Les allers-retours commencent le 27/08 et deviennent
+quasi quotidiens en septembre (27, 28, 31 août ; 1, 2, 3, 7, 8, 9, 10, 11, 14, 15
+septembre). C'est exactement la fenêtre où le retard de GitHub sur `paper.yml` est passé
+d'environ trente minutes à plus de trois heures (ADR-0156) : le runner cloud a glissé dans
+la fenêtre du VPS. La cause mesurée indépendamment et l'effet mesuré ici datent du même
+moment — ce n'est pas une coïncidence, c'est la même histoire vue des deux bouts.
+
+**CONSÉQUENCE SUR CE QU'ON PEUT AFFIRMER.** Sur un compte d'environ 100 000 $, −620 $
+représentent **−0,62 point de performance cumulée**. Toute lecture de la courbe d'equity
+RÉELLE après le 27/08 doit en tenir compte. Les backtests ne sont pas touchés (ils ne
+passent pas par le courtier), mais la comparaison « modèle contre réel » l'est.
+
+**DÉCISION.** `make churn` entre au catalogue, et `make brief` porte une section
+« Passages du robot (7 j) ». La dérive d'un planificateur se verra désormais le lendemain
+matin, pas six semaines plus tard par ses conséquences.
+
+## ADR-0160 — Une preuve montrée trop vite pour être lue n'est pas une preuve (2026-09-16)
+
+**Constaté à l'écran**, pas déduit : à 18 s, chaque fenêtre de performance de l'intro durait
+2,0 s — dont 0,6 s de déformation depuis la fenêtre précédente et 0,7 s de compteur qui
+monte. Il restait **moins d'une seconde** pour regarder la courbe.
+
+Une intro qui montre une preuve trop vite pour qu'on la lise ne montre pas une preuve :
+elle montre qu'elle en a une. C'est exactement le contraire de l'intention — ces cinq
+fenêtres existent parce que la landing affirmait des chiffres sans dire d'où ils venaient
+(ADR-0154).
+
+**Décision.** 26 s (22 s sur mobile), chaque fenêtre à 3,4 s, les cinq occupant 65 % de la
+séquence. Le temps n'a pas seulement été ajouté : les transitions internes ont été
+RESSERRÉES (morphing 0,30 → 0,22 du battement ; compteur 0,34 → 0,25). Allonger le
+battement sans cela aurait fait durer les animations plus longtemps, pas donné du temps de
+lecture. Le reste a été raccourci plutôt qu'étiré — la révélation du nom perd 0,6 s, elle
+n'a rien à démontrer.
+
+**Conséquence.** `MIN_BATTEMENT_PERIODE_MS = 2 800` et un test qui le vérifie sur les DEUX
+durées, mobile comprise : c'est la variante courte qui retomberait sous le seuil en premier,
+et personne n'y penserait.
+
 ## ADR-0155 — Un seul rebalancement par journée, et c'est le COURTIER qui le dit (2026-09-15)
 
 **Mesuré sur le compte paper du 15/09.** TROIS rebalancements dans la même journée, chacun
@@ -4840,3 +5745,77 @@ toucherait pas la production. Reste une observation à diagnostiquer, formulée 
 hypothèse et non comme fait : une détention médiane de 0,1 jour sur les décisions du
 système suggère un cycle ouvrir-puis-solder dans la même journée — le plancher de ligne
 (1 000 $) est le premier suspect, à vérifier avant toute correction.
+
+## ADR-0182 — Un motif de price action se MESURE avant de se coder en stratégie (2026-09-18)
+
+> Renuméroté le 18/09 : cette entrée portait le numéro 0180, déjà pris par « Le journal
+> sépare les lots ouverts ». Deux ADR sous le même numéro, c'est une référence qui ne
+> désigne plus rien.
+
+**Contexte.** Spec reçue : un agent analyste devant détecter
+DEVIATION → RECLAIM → CONSOLIDATION → EXPANSION, lui attribuer un score 0-100, produire
+un plan de trade complet en JSON et trancher `EXECUTE_SPOT_ENTRY`. Question posée :
+« pertinent d'implémenter ? »
+
+**Ce que la lecture du dépôt a montré, et qui change la réponse.** Le motif est déjà
+construit à ~80 %, et le recouvrement n'était pas soupçonné :
+`indicators/liquidite_ict` porte SFP, BOS, CHoCH, OTE et order block en primitives
+point-in-time depuis le 02/09 ; `indicators/market_structure` fournit les pivots
+confirmés, l'échec d'enchère et le POC ; `strategies/institutional_price_action` en fait
+déjà des `Signal`. Trois P2 ouverts décrivent exactement les blocages de cette spec :
+mesurer les modules SHADOW avant tout branchement, l'absence de données 1H/4H, et le
+doublon IPA ↔ liquidite_ict. Ce n'était donc pas un chantier neuf, mais un chantier
+déjà ouvert et explicitement mis en attente de MESURE.
+
+**Décision.** Implémenter la seule partie réellement absente — la machine à états
+persistante (`indicators/deviation_reclaim`) — et la faire passer au banc AVANT toute
+stratégie (`scripts/deviation_reclaim_lab`, `make deviation-lab`). Le banc compare, sur
+EXACTEMENT les mêmes barres, la primitive `sfp` qui existait déjà et les états ajoutés :
+si le motif large n'apporte rien au-dessus du SFP, il ne sert à rien, et c'est une
+réponse.
+
+**Trois éléments de la spec REFUSÉS, et pourquoi.**
+1. *Le score 0-100 et ses poids* (20 % la zone, 15 % le sweep…). Aucune mesure ne les
+   soutient. Un score inventé transforme une opinion en chiffre, ce qui la rend plus
+   difficile à réfuter sans la rendre plus vraie — le dépôt a déjà refusé une règle de
+   régime dont le t était significatif partout et la médiane négative (ADR-0145).
+2. *Le gate `RR_TP1 >= 1.5`*. Cible et résistance sont choisies par la même analyse qui
+   calcule le ratio : un tel ratio ne filtre rien, il mesure sa propre générosité.
+3. *Le timeframe d'exécution 4H*. La base de prix est QUOTIDIENNE — le fournisseur mappe
+   même « 4h » sur « 1h ». Le Weekly se dérive du Daily ; le 4H demanderait une
+   ingestion, un stockage et un audit de contrats. Toute jambe 4H serait UNCALIBRATED.
+
+Le cadrage LLM est écarté du même mouvement : `packages/nlp` a été retiré le 17/09, et un
+`Confidence_Score` produit par de la prose contredit frontalement le mandat
+données-réelles.
+
+**Ce que les tests ont trouvé pendant l'écriture**, et qui justifie l'ordre choisi :
+- en ancrant la zone sur le creux le PLUS RÉCENT, la déviation — une fois confirmée
+  comme pivot — devenait l'ancre et faisait DISPARAÎTRE la zone dont le prix venait de
+  dévier, à l'instant précis où le motif devenait intéressant ;
+- en retenant la dernière barre de l'épisode au lieu de son extrême, un sweep à 95 suivi
+  d'une barre à 97 invalidait sous 97 : un stop plus serré que le creux réellement
+  balayé, donc un reward/risk flatté par une erreur de définition ;
+- borner le seul délai de reclaim laissait passer une cassure de vingt barres suivie
+  d'une clôture au-dessus : c'est la DURÉE DE L'ÉPISODE qu'il faut borner.
+
+**Conséquence assumée.** Sur une marche aléatoire de 400 barres, la machine atteint
+CONSOLIDATION_CONFIRMED dix fois : le motif existe dans le bruit pur. C'est précisément
+pourquoi le verdict appartient au banc — placebo par permutation, DSR, correction de
+tests multiples sur les cinq scoreurs — et pas à la beauté de la définition.
+
+**Complément du même jour — chaque niveau DIT d'où il vient.** La spec place la
+résistance de confirmation sur l'exécution (4H) et la cible macro sur le Weekly. Sans
+étiquette, un lecteur supposerait le 4H : **CR est lu sur le timeframe PRINCIPAL** (le
+Daily quand le banc tourne), et la sortie porte désormais un champ `sources` qui
+l'écrit, la note incluse. Un niveau dont on croit connaître l'origine est pire qu'un
+niveau absent.
+
+Le Weekly, lui, est DÉRIVÉ du Daily (`agreger_hebdo`) : c'est une agrégation, pas une
+source nouvelle, et il porte seule la cible macro. Reprendre le plus haut sommet du
+Daily ferait passer un niveau principal pour un objectif hebdomadaire — exactement le
+« target arbitraire » que la spec interdit ; sans série hebdomadaire, la cible vaut
+None avec son motif. L'agrégation est aussi le chemin le plus commode pour faire entrer
+du futur : une semaine n'est utilisable qu'à partir du jour qui la CLÔT, la semaine en
+cours n'est jamais publiée, et un test vérifie le point-in-time avec la jambe
+hebdomadaire branchée. Mieux vaut une semaine de retard qu'une semaine d'avance.

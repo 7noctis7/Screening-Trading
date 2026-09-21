@@ -68,6 +68,16 @@ reconstruit chaque jour ouvré par GitHub Actions (`.github/workflows/pages.yml`
   lignes d'amorçage. `start.sh` suit désormais la branche COURANTE et se contente d'AVERTIR du
   retard sur `main`. **Symptôme à reconnaître : la ligne `✓ <sha> → <autre sha>` de `make start`
   où le second sha n'est pas celui que `make sync` vient d'afficher.**
+- **`next dev` bascule EN SILENCE sur 3001 si 3000 est pris** (16/09). Une ligne au milieu du
+  démarrage, que personne ne lit — et le navigateur continue de parler au processus qui tient
+  3000 : le service `quant-web` (build de PRODUCTION) ou un `next-server` orphelin. On croit
+  qu'un correctif front n'a pas pris ; on regarde une autre page. `npm run dev` ÉCHOUE
+  désormais dans ce cas (`predev` → `apps/web/scripts/verifier_port.mjs`). Sur le VPS, la
+  commande est **`make up`**, pas `npm run dev`. Pour développer à côté du service :
+  `PORT=3001 npm run dev` + `ssh -L 3001:127.0.0.1:3001 …` — **127.0.0.1 et jamais
+  `localhost`** : il est résolu SUR le VPS, où il peut valoir `::1` que les services
+  n'écoutent pas ; SSH répond alors « channel N: open failed: connect failed:
+  Connection refused » en boucle pendant que le site fonctionne (21/09).
 - **Le cache `.next` resert l'ANCIEN rendu après un `make sync`** (03/09). Symptôme trompeur : le code
   contient le correctif, le navigateur affiche la version d'avant, et **rien ne le signale** — on croit
   lire le résultat de son correctif, on lit celui d'avant. Constaté sur deux correctifs le même jour

@@ -6,12 +6,20 @@ injectant un DataFrame factice (pas besoin de yfinance pour tester la normalisat
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from packages.core.models import Bar
 from packages.data.registry import data_providers
 
-_TF_MAP = {"1d": "1d", "1h": "1h", "4h": "1h", "5m": "5m", "1m": "1m"}
+# CE QUE YFINANCE SERT RÉELLEMENT. Le « 4h » n'y est pas : la table mappait donc
+# `"4h" → "1h"` et rendait des barres HORAIRES portant `timeframe="4h"` (cf.
+# `df_to_bars(df, symbol, timeframe)`, qui étiquette avec le timeframe DEMANDÉ). Le
+# mensonge était silencieux, et c'est le pire endroit pour en avoir un : une barre mal
+# étiquetée contamine tout ce qui la lit ensuite, indicateurs et modèles compris.
+#
+# Une intention correcte — « donne-moi du 4h, j'agrégerai » — ne rattrape rien tant que
+# personne n'agrège. Le fournisseur refuse donc ce qu'il ne sert pas, et l'agrégation
+# reste la responsabilité de l'appelant (cf. `deviation_reclaim.agreger_hebdo` pour le
+# principe). En crypto, Binance sert nativement le 4h — `packages/data/crypto_binance`.
+_TF_MAP = {"1d": "1d", "1h": "1h", "5m": "5m", "1m": "1m"}
 
 
 def df_to_bars(df, symbol: str, timeframe: str) -> list[Bar]:
@@ -33,8 +41,17 @@ class YFinanceProvider:
         return True
 
     def fetch_ohlcv(self, symbol, timeframe, start, end=None) -> list[Bar]:
+        # LA VALIDATION D'ABORD, l'import ENSUITE. Demander un timeframe non servi
+        # sur une machine sans yfinance rendait un `ModuleNotFoundError` — un message
+        # qui parle d'autre chose que du vrai problème, et envoie chercher au mauvais
+        # endroit. Ce que l'appelant a mal demandé se dit avant toute dépendance.
+        if timeframe not in _TF_MAP:
+            raise ValueError(
+                f"yfinance ne sert pas {timeframe!r} (servis : {sorted(_TF_MAP)}). "
+                "Agréger depuis un timeframe servi, ou utiliser une source qui le "
+                "sert nativement — Binance pour la crypto.")
         import yfinance as yf  # import local → core/tests restent sans dépendance
-        interval = _TF_MAP.get(timeframe, "1d")
+        interval = _TF_MAP[timeframe]
         df = yf.download(symbol, start=start, end=end, interval=interval,
                          auto_adjust=True, progress=False)
         if df is None or df.empty:

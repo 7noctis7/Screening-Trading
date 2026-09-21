@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -20,6 +21,8 @@ sys.path.insert(0, str(ROOT))
 # en mémoire : posé après, il ne fait plus rien ET ne lève rien, ce qui donnerait un
 # script se croyant accéléré alors qu'il tourne sur processeur. Sur Mac, cudf est
 # absent : la fonction rend False sans bruit et pandas reste pandas.
+from datetime import UTC
+
 from packages.common.device import activer_cudf, banniere  # noqa: E402
 
 activer_cudf()
@@ -110,6 +113,53 @@ def _decider_promotion(abri: Path | None, candidat: Path) -> tuple[bool, str]:
     return should_promote(candidat_metrics, champion_metrics)
 
 
+def _tracer(models: Path, artefact: Path, ml: dict, mode: str,
+            promu: bool, raison: str) -> str:
+    """Inscrit le run au registre MLOps. Ne décide RIEN — la décision vient d'arriver.
+
+    POURQUOI ICI ET PAS AILLEURS. Un registre qu'on branche « plus tard » n'est jamais
+    branché : il devient de la cérémonie, on cesse de l'alimenter, et six mois après il
+    décrit un état qui n'existe plus. Il est donc appelé sur le CHEMIN de production, au
+    moment exact où l'information est disponible et nulle part ailleurs.
+
+    Non bloquant : un défaut de traçabilité ne doit pas faire échouer un entraînement
+    réussi — mais il se DIT, sinon la traçabilité s'éteint en silence.
+    """
+    from packages.mlops.empreinte import empreinte, sha256_fichier
+    from packages.mlops.manifest import Manifest, materiel_courant
+    from packages.mlops.registre import Registre
+
+    # L'empreinte du dataset se déduit de ce que le run a réellement vu. `_ml_section` ne
+    # rend pas les données brutes : on hache sa DESCRIPTION (univers, fenêtre, mode,
+    # features). C'est plus faible qu'un hash des barres — et c'est dit dans le manifeste.
+    dataset_hash = empreinte({"mode": mode, "n_train": ml.get("n_train"),
+                              "horizon": ml.get("horizon_days"),
+                              "validation": ml.get("validation"),
+                              "features": sorted(r["feature"] for r in
+                                                 ml.get("feature_importance") or [])})
+    m = Manifest.creer(
+        modele=ml.get("model") or "swing_ml",
+        run_id=os.environ.get("QUANT_EXPERIMENT", "EXP-AUTO"),
+        dataset_hash=dataset_hash,
+        feature_version=str(len(ml.get("feature_importance") or [])) + "-feat",
+        seed=int(os.environ.get("QUANT_SEED", "7")),
+        artefact_sha256=sha256_fichier(artefact),
+        metriques={"auc": ml.get("auc"), "edge_ok": bool(ml.get("edge_ok")),
+                   "validation": ml.get("validation")},
+        config={"n_train": ml.get("n_train"), "n_splits": ml.get("n_splits"),
+                "horizon_days": ml.get("horizon_days"), "data_mode": mode},
+        materiel=materiel_courant())
+    reg = Registre(models)
+    reg.enregistrer(m, artefact, raison)
+    if promu:
+        ok, dit = reg.promouvoir(m.version, raison)
+    else:
+        ok, dit = reg.rejeter(m.version, raison)
+    repro, pourquoi = m.reproductible()
+    return (f"{m.version} · {dit}" + ("" if ok else " ⚠")
+            + ("" if repro else f" · NON reproductible : {pourquoi}"))
+
+
 def _retirer_candidat(models: Path) -> None:
     """Supprime le candidat refusé et son empreinte avant de restaurer le champion."""
     for f in _artefacts(models):
@@ -122,14 +172,20 @@ def main() -> None:
     _restaurer(models / ABRI)      # un run tué en plein vol a pu laisser l'abri
     abri = _mettre_de_cote(models)     # champion écarté, pas supprimé
 
-    from datetime import timezone
 
-    from apps.api.snapshot import (_HISTORY_DAYS, _load_prices, _ml_section, _sector_of,
-                                   _seed_universe, datetime, timedelta)
+    from apps.api.snapshot import (
+        _HISTORY_DAYS,
+        _load_prices,
+        _ml_section,
+        _sector_of,
+        _seed_universe,
+        datetime,
+        timedelta,
+    )
     instruments = _seed_universe()
     sector_of = {m["symbol"]: _sector_of(m) for m in instruments}
     names = {m["symbol"]: m.get("name", m["symbol"]) for m in instruments}
-    end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    end = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
     print("Chargement des prix…")
     data, mode, _real = _load_prices(instruments, sector_of, end - timedelta(days=_HISTORY_DAYS), end, 7)
     print(f"Mode : {mode} · univers {len(data)}")
@@ -157,7 +213,13 @@ def main() -> None:
         arts = list(models.glob("ml_*.pkl"))
         print(f"⚠️ Candidat refusé — {raison} · champion restauré ({rendus} fichier(s)).")
     statut = "candidat promu" if promu else "champion conservé"
+    # TRAÇABILITÉ — avant l'affichage, pour que l'échec éventuel se voie dans le même bloc.
+    try:
+        trace = _tracer(models, arts[0], ml, mode, promu, raison) if arts else "(sans artefact)"
+    except Exception as e:  # noqa: BLE001 — jamais bloquant, jamais muet
+        trace = f"⚠ registre non écrit ({type(e).__name__}: {e})"
     print(f"✅ Modèle entraîné · AUC OOS {ml.get('auc')} · {statut}")
+    print(f"   Registre : {trace}")
     print(f"   Artefact actif : {arts[0] if arts else '(non écrit)'}")
     print("   L'API chargera cet artefact (plus de réentraînement par requête).")
 

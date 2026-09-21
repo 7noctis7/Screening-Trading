@@ -1,4 +1,5 @@
 "use client";
+import { couleurLigne } from "@/lib/couleurs";
 import { memo, useMemo, useState } from "react";
 import { Area, CartesianGrid, ComposedChart, Line, ReferenceArea, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { lttb } from "@/lib/metrics";
@@ -18,10 +19,7 @@ const compact = (v: number) => (Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(1)}k
 // le pire des deux mondes, l'utilisateur croit l'avoir affichée. Repli explicite.
 // Les teintes sont des TOKENS DE THÈME (globals.css), pas des littéraux : codées en dur,
 // elles gardaient la même valeur en clair et en sombre, où le contraste n'est pas le même.
-const BCOL: Record<string, string> = {
-  "S&P 500": "var(--bench-sp)", "Nasdaq 100": "var(--bench-ndx)", "Bitcoin": "var(--bench-btc)",
-};
-const col = (n: string) => BCOL[n] ?? "var(--muted)";
+const col = couleurLigne;   // cf. `lib/couleurs` : une seule table pour tout le site
 
 // Périodes en JOURS CALENDAIRES, pas en nombre de points : le portefeuille n'est valorisé
 // que les jours de passage du cron, donc « 30 points » ne fait pas un mois.

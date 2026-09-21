@@ -96,6 +96,49 @@ fi
 
 if [ "$statut" -eq 0 ]; then
   echo "✓ front prêt   → http://localhost:$PORT   (build $bati, servi par quant-web)"
-  printf "✓ API %s\n" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/health)"
+  # « 200 » dit qu'un PROCESSUS répond. Il ne dit pas que l'API peut SERVIR une page :
+  # sans snapshot en cache, la première requête en construit un (1 à 3 min) pendant
+  # lesquelles toutes les pages restent sur leurs squelettes. Vert ici, écran qui tourne
+  # là-bas — c'est exactement le décalage qui a coûté une heure de diagnostic le 21/09,
+  # et c'est le même raisonnement que l'en-tête de ce fichier tient pour le front.
+  # La route est à coût constant (elle ne touche pas au snapshot) : l'interroger est sûr.
+  sante="$(curl -s --max-time 5 http://127.0.0.1:8000/health || true)"
+  printf "✓ API %s\n" "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:8000/health || echo 000)"
+  QT_SANTE="$sante" python3 - <<'PYSANTE' || true
+import json
+import os
+
+try:
+    d = json.loads(os.environ.get("QT_SANTE") or "{}")
+except Exception:
+    d = {}
+msg = d.get("message")
+if not msg:
+    print("  ? état du snapshot ILLISIBLE — API d'une version antérieure, ou réponse "
+          "inattendue. Ne pas conclure que tout va bien.")
+else:
+    age = d.get("age_s")
+    suffixe = f" (âge {age:.0f} s)" if isinstance(age, (int, float)) else ""
+    marque = "✓" if d.get("sert_immediatement") else "⚠"
+    print(f"  {marque} snapshot {d.get('snapshot')}{suffixe} — {msg}")
+PYSANTE
+  # LE PIÈGE DU TUNNEL, mesuré et non supposé (21/09).
+  #
+  # Les services n'écoutent que sur IPv4 (`--host 127.0.0.1`). Or `ssh -L 3000:localhost:3000`
+  # résout « localhost » SUR LE VPS, où il peut valoir `::1`. SSH tente alors une adresse que
+  # personne n'écoute et répond, en boucle :
+  #
+  #     channel 5: open failed: connect failed: Connection refused
+  #
+  # …pendant que le site, lui, fonctionne parfaitement. Vu du navigateur c'est « aucune page
+  # ne se charge » ; vu d'ici, tout est vert. Les deux sont vrais, et rien ne les reliait.
+  # On ne DEVINE pas la pile écoutée : on essaie `[::1]`, et on ne parle que si ça refuse.
+  if ! curl -s -o /dev/null --max-time 2 "http://[::1]:$PORT/" 2>/dev/null; then
+    ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+    echo "  ↪ écoute IPv4 seulement (rien sur [::1]:$PORT). Depuis une autre machine, le"
+    echo "    tunnel doit viser 127.0.0.1 — « localhost » y résout ::1 et SSH répondra"
+    echo "    « channel N: open failed: connect failed: Connection refused » :"
+    echo "       ssh -L $PORT:127.0.0.1:$PORT -L 8000:127.0.0.1:8000 $(id -un)@${ip:-<vps>}"
+  fi
 fi
 exit "$statut"

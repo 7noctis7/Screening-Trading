@@ -2,6 +2,7 @@
 // Journal des round-trips RÉELS (paper) — le « proof of work » du RDV 2026-08-06 :
 // chaque aller-retour avec prix de décision, fill, PnL, MFE/MAE. Expectancy GATÉE
 // (UNCALIBRATED sous 20 trades fermés) — on n'affiche jamais une stat inventée.
+import { useState } from "react";
 import { useJournal } from "@/lib/api";
 import { MetricCard } from "@/components/MetricCard";
 import { SortableTable, type Col } from "@/components/SortableTable";
@@ -12,21 +13,60 @@ const pct = (x?: number | null) => (x == null ? "—" : `${x >= 0 ? "+" : ""}${(
 
 export default function Journal() {
   const { data } = useJournal();
+  // LES DEUX PÉRIMÈTRES, ET C'EST L'UTILISATEUR QUI CHOISIT (réconciliation du 21/09).
+  //
+  // Deux questions coexistaient sans jamais se croiser : « qu'a fait mon ROBOT » et
+  // « qu'a fait ce COMPTE ». Chacune avait son implémentation, et chacune effaçait
+  // l'autre. Elles ne se départagent pas — elles s'affichent, et l'écart entre les deux
+  // est précisément ce qu'il faut regarder : il vaut l'import historique.
+  //
+  // Le périmètre ROBOT reste le défaut, parce que tous les taux et espérances de cette
+  // page s'y rapportent. Basculer sur le compte entier AJOUTE la colonne « Origine » :
+  // sans elle, les deux populations se mélangeraient sans qu'on puisse les distinguer.
+  const [tout, setTout] = useState(false);
   if (!data) return <PageSkeleton />;
-  const rows = (data.rows ?? []).map((r: any) => ({ ...r, status: r.exit_ts ? "fermé" : "ouvert" }));
+  // CE QUE CETTE TABLE CONTIENT, ET C'EST UNE DÉFINITION, PAS UN FILTRE. Les
+  // aller-retours que le ROBOT a pris et qui ont été réellement OUVERTS PUIS CLÔTURÉS.
+  // `/api/journal` les sélectionne sur l'ORIGINE de l'enregistrement, et NON PLUS sur le
+  // drapeau `legacy` : un ordre du robot journalisé après coup depuis le fill réel
+  // porte `legacy=1` et reste un trade du robot. Le tri par `legacy` affichait
+  // +139,75 $ sur 62 trades quand le robot avait fait −23,15 $ sur 112.
+  //
+  // Les lots ENCORE OUVERTS ne sont pas dans la table — ce ne sont pas des trades,
+  // ce sont des positions. Ils ne disparaissent pas pour autant : leur nombre et leur
+  // latent sont affichés en tête, parce que les masquer SANS LE DIRE ferait de cette
+  // page le palmarès de trades soldés que son propre avertissement dénonce.
+  //
+  // LES TRANCHES D'UN MÊME LOT NE SONT PAS DES DOUBLONS. Une vente partielle crée une
+  // ligne par tranche (`split_id` + `qty` dans `live_roundtrip`) : QQQ acheté le 07/07
+  // à 716,69 $ apparaît plusieurs fois, une par sortie. Sans marque, ça se lit comme
+  // une duplication, et c'est de là que vient l'essentiel du sentiment de « trop de
+  // lignes ».
+  const brut = ((tout ? data.rows_tous : data.rows) ?? []) as any[];
+  const compte = new Map<string, number>();
+  for (const r of brut) {
+    const cle = `${r.symbol}|${r.venue}|${r.entry_ts}|${r.entry_price}`;
+    compte.set(cle, (compte.get(cle) ?? 0) + 1);
+  }
+  const rows = brut.map((r: any) => ({
+    ...r,
+    fractionne: (compte.get(`${r.symbol}|${r.venue}|${r.entry_ts}|${r.entry_price}`) ?? 1) > 1,
+  }));
+  const ouverts = ((tout ? data.ouverts_tous : data.ouverts) ?? []) as any[];
   const st = data.stats ?? {};
   const sl = data.slippage ?? {};
 
+  const origine: Col = { key: "origine", label: "Origine", render: (v) => (
+    <span className="text-xs text-muted font-sans">
+      {v === "import" ? "historique Alpaca" : v === "robot" ? "robot journalisé" : (v ?? "—")}
+    </span>) };
   const cols: Col[] = [
     { key: "symbol", label: "Actif", render: (v, r) => (
-        <span className="mono">{v} <span className="text-muted2 text-[10px] font-sans">{r.venue}</span></span>) },
-    { key: "status", label: "Statut", render: (v) => (
-        <span className="text-xs px-1.5 py-0.5 rounded font-sans"
-          style={{ background: v === "fermé" ? "color-mix(in srgb, var(--pos) 14%, transparent)" : "var(--surface2)",
-                   color: v === "fermé" ? "var(--pos)" : "var(--muted)" }}>{v}</span>) },
-    { key: "origin", label: "Origine", render: (v) => (
-        <span className="text-xs text-muted font-sans">
-          {v === "import_courtier" ? "historique Alpaca" : "robot journalisé"}
+        <span className="mono">{v} <span className="text-muted2 text-[10px] font-sans">{r.venue}</span>
+          {r.fractionne && (
+            <span className="text-muted2 text-[10px] font-sans ml-1"
+              title="Ce lot d'entrée a été soldé en PLUSIEURS tranches : une ligne par tranche, plus le reliquat s'il reste ouvert. Ce ne sont pas des doublons.">
+              ⧉ fractionné</span>)}
         </span>) },
     { key: "entry_ts", label: "Entrée", render: (v, r) => (
         <span className="mono text-xs">{v?.slice(0, 10)} · {usd(r.entry_price)}</span>) },
@@ -50,17 +90,45 @@ export default function Journal() {
       <h1 className="text-xl font-semibold tracking-tight">Journal des round-trips
         <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full align-middle"
           style={{ background: "color-mix(in srgb, #22c55e 16%, transparent)", color: "#22c55e" }}>RÉEL · paper</span></h1>
-      <p className="text-muted text-xs">Historique local complet depuis le début du compte paper :
-        opérations importées d'Alpaca et décisions nativement journalisées par le robot. Les anciennes
-        opérations n'ont pas toujours les features observées au moment de décider ; elles restent affichées,
-        explicitement marquées <b>historique Alpaca</b>.</p>
-      <p className="text-muted text-xs">Attention : cette page montre les <b>trades terminés</b>, pas la performance du compte.
-        Les positions perdantes encore ouvertes n'y figurent pas, ce qui embellit le tableau.
-        Pour juger, regardez la <b>courbe du compte</b> chez le courtier — c'est la seule mesure
-        qui n'oublie rien. C'est elle qui tranchera le <b>2026-08-06</b>.
-        Un round-trip clos ici est un trade que le rebalancement a choisi de solder — les positions perdantes restent
-        ouvertes et n'y figurent pas, donc le taux de réussite affiché est <b>biaisé à la hausse</b> par construction
-        et ne se compare pas à celui d'un backtest.</p>
+      {/* CE QUE CETTE PAGE N'EST PAS, dit AVANT les chiffres et en une ligne (18/09).
+          Trois paragraphes d'avertissement précédaient les cartes : personne ne les
+          lisait, et la question « 331 trades à +0,23 $, comment j'arrive à +1 129 $ ? »
+          est revenue. L'essentiel tient en une phrase et un renvoi. */}
+      <section className="card p-3 text-xs space-y-1" style={{ borderColor: "#f59e0b" }}>
+        <p className="text-fg"><b>Ces trades ne sont pas la performance du compte.</b>{" "}
+          {/* QUAND LES DEUX PÉRIMÈTRES COÏNCIDENT, LA PHRASE D'OPPOSITION MENT (19/09).
+              Depuis la reconstruction depuis les fills, tout le registre vient du
+              courtier : la page annonçait « ils pèsent $1 196,63 quand le compte en a
+              subi $1 196,63 », deux fois le même chiffre présentés comme un écart. La
+              formulation doit suivre ce que les chiffres disent, pas l'inverse. */}
+          {st.perimetre?.affiche?.pnl_realise != null && st.perimetre?.compte?.pnl_realise != null
+            && Math.abs(st.perimetre.affiche.pnl_realise - st.perimetre.compte.pnl_realise) > 0.005 ? (
+            <>Ils pèsent <b className="mono">{usd(st.perimetre.affiche.pnl_realise)}</b> de réalisé,
+              quand le compte en a subi <b className="mono">{usd(st.perimetre.compte.pnl_realise)}</b>{" "}
+              (import historique compris)
+              {st.honnete?.pnl_latent != null && <> et porte <b className="mono">{usd(st.honnete.pnl_latent)}</b> de latent</>}.</>
+          ) : st.perimetre?.compte?.pnl_realise != null ? (
+            <>Ils pèsent <b className="mono">{usd(st.perimetre.compte.pnl_realise)}</b> de réalisé
+              — tout le registre vient des fills du courtier, donc il n&apos;y a plus d&apos;écart
+              entre ce que montre cette page et ce que le compte a subi.
+              {st.honnete?.pnl_latent != null && <> Les positions encore ouvertes portent{" "}
+                <b className="mono">{usd(st.honnete.pnl_latent)}</b> de latent, qui ne figure pas ici.</>}
+              {" "}Ce réalisé est <b>BRUT de frais</b> : les frais sont des activités séparées
+              chez le courtier, absentes du flux d&apos;ordres.</>
+          ) : (
+            <>Une page de trades soldés ne peut pas valoir un compte : les positions perdantes
+              encore ouvertes n&apos;y figurent pas.</>
+          )}
+          {" "}Le résultat réel — <b>capital initial → capital actuel</b> — est sur{" "}
+          <a href="/positions" className="underline">Mes positions</a>.</p>
+        <p className="text-muted2">Le rebalancement ferme ce qui a monté et conserve ce qui a baissé :
+          le taux de réussite affiché ici est <b>biaisé à la hausse par construction</b> et ne se
+          compare pas à celui d&apos;un backtest.</p>
+      </section>
+      <p className="text-muted text-xs">Chaque achat suivi de sa revente, en paper. Pour chacun : ce que le robot
+        voyait <b>au moment de décider</b>, le prix obtenu, le gain ou la perte, et jusqu&apos;où le trade est monté
+        puis descendu avant d&apos;être soldé. Les aller-retours du ROBOT, réellement ouverts puis clôturés —
+        décision journalisée ou ordre reconstitué depuis le fill réel. Tout est publié, les pertes comprises.</p>
 
       {!data.available || rows.length === 0 ? (
         <EmptyState title="Journal vide (pour l'instant)"
@@ -76,9 +144,64 @@ export default function Journal() {
             <MetricCard label="Expectancy / trade" value={st.expectancy != null ? usd(st.expectancy) : "UNCALIBRATED"} />
           </section>
           {st.status && <p className="text-muted2 text-xs">⚠️ {st.status} — les stats agrégées n'apparaissent qu'avec un échantillon suffisant (jamais de chiffre inventé).</p>}
-          <p className="text-muted2 text-xs">
-            Couverture : {st.n_imported ?? 0} lots importés du courtier · {st.n_robot ?? 0} lots journalisés nativement.
-          </p>
+          {st.honnete && (st.honnete.n_ouverts ?? 0) > 0 && (
+            <section className="card p-3 text-xs space-y-1">
+              <p className="text-muted"><b>Ce que la table ne montre pas.</b> Elle porte
+                les aller-retours CLÔTURÉS. {st.honnete.n_ouverts} lot(s) restent ouverts
+                et pèsent <b className="mono" style={{ color: (st.honnete.pnl_latent ?? 0) >= 0 ? "var(--pos)" : "#ef4444" }}>
+                {usd(st.honnete.pnl_latent)}</b> de latent. Le rééquilibrage ferme ce qui a monté et
+                conserve ce qui a baissé : lire les deux colonnes, pas la première seule.</p>
+              <p className="text-muted2 mono">
+                fermés : {st.honnete.n_fermes} · réalisé {usd(st.honnete.pnl_realise)}
+                {st.honnete.expectancy_ferme != null && ` · ${usd(st.honnete.expectancy_ferme)}/trade`}
+                {st.honnete.win_rate_ferme != null && ` · ${(st.honnete.win_rate_ferme * 100).toFixed(0)}% de réussite`}
+                {"  —  "}
+                toutes positions : {(st.honnete.n_fermes ?? 0) + (st.honnete.n_ouverts ?? 0)} · {usd(st.honnete.pnl_total)}
+                {st.honnete.expectancy_toutes_positions != null && ` · ${usd(st.honnete.expectancy_toutes_positions)}/position`}
+                {st.honnete.win_rate_toutes_positions != null && ` · ${(st.honnete.win_rate_toutes_positions * 100).toFixed(0)}% de réussite`}
+              </p>
+              {/* COMBIEN DE CES LIGNES SONT DES POUSSIÈRES (19/09). Le rejeu FIFO
+                  produit une tranche par consommation de lot ; une tranche de
+                  0,000001 action pèse autant qu'un aller-retour de 5 000 $ dans le
+                  taux de réussite et l'espérance. On mesure et on publie les DEUX
+                  lectures — filtrer en silence changerait les chiffres sans le dire. */}
+              {(st.poussieres?.n ?? 0) > 0 && (
+                <p className="text-muted2">
+                  <b>{st.poussieres.n}</b> ligne(s) sur {st.poussieres.n_total} engagent moins
+                  de ${st.poussieres.seuil_notionnel} — des tranches résiduelles du
+                  rééquilibrage, pas des trades. Elles pèsent {usd(st.poussieres.realise_petits)} de
+                  réalisé mais comptent autant que les autres dans les moyennes.
+                  {st.poussieres.win_rate_hors != null && (
+                    <> Sans elles : <b className="mono">{(st.poussieres.win_rate_hors * 100).toFixed(0)}%</b> de
+                    réussite et <b className="mono">{usd(st.poussieres.esperance_hors)}</b>/trade
+                    sur {st.poussieres.n_significatifs} aller-retours.</>)}
+                </p>)}
+              {st.honnete.lots_sans_prix > 0 && (
+                <p className="text-muted2">{st.honnete.lots_sans_prix} lot(s) sans prix courant : exclus du latent plutôt qu'estimés.</p>
+              )}
+              {st.honnete.avertissement && <p style={{ color: "#f59e0b" }}>⚠ {st.honnete.avertissement}</p>}
+            </section>
+          )}
+          {st.perimetre?.avertissement && (
+            <section className="card p-3 text-xs space-y-1">
+              <p className="text-muted"><b>Périmètre affiché ≠ compte.</b> {st.perimetre.avertissement}</p>
+              <p className="text-muted2 mono">
+                affiché : {st.perimetre.affiche?.n ?? 0} lots · réalisé {usd(st.perimetre.affiche?.pnl_realise ?? 0)}
+                {st.perimetre.affiche?.win_rate != null && ` · ${(st.perimetre.affiche.win_rate * 100).toFixed(0)}% de réussite`}
+                {"  —  "}
+                compte : {st.perimetre.compte?.n ?? 0} lots · réalisé {usd(st.perimetre.compte?.pnl_realise ?? 0)}
+                {st.perimetre.compte?.win_rate != null && ` · ${(st.perimetre.compte.win_rate * 100).toFixed(0)}% de réussite`}
+              </p>
+              {st.origines && (
+                <p className="text-muted2 mono">
+                  origine des lots — robot : {st.origines.robot?.n ?? 0} ({usd(st.origines.robot?.pnl_realise ?? 0)})
+                  {" · "}import historique : {st.origines["import"]?.n ?? 0} ({usd(st.origines["import"]?.pnl_realise ?? 0)})
+                  {(st.origines.inconnu?.n ?? 0) > 0 &&
+                    ` · NON RECONNUS : ${st.origines.inconnu.n} (${(st.origines.inconnus ?? []).join(", ")})`}
+                </p>
+              )}
+            </section>
+          )}
           {sl.available ? (
             <section className="card p-3 text-xs text-muted flex flex-wrap gap-x-6 gap-y-1">
               <span title="Écart entre le prix connu à la DÉCISION et le fill réel — sert à calibrer le sabotage-gate avec du vécu.">
@@ -87,8 +210,33 @@ export default function Journal() {
           ) : sl.status && (
             <p className="text-muted2 text-xs">Slippage réel : {sl.status} ({sl.hint ?? ""}).</p>
           )}
-          <section className="card p-4">
-            <SortableTable rows={rows} cols={cols} filterKeys={["symbol", "venue", "status", "origin", "regime"]}
+          <section className="card p-4 space-y-3">
+            <div className="flex items-baseline gap-2 flex-wrap text-xs font-sans">
+              <span className="text-fg">{rows.length} aller-retour(s) clôturé(s)</span>
+              <span className="inline-flex rounded-full border border-border overflow-hidden">
+                {([[false, "Robot"], [true, "Tout le compte"]] as const).map(([v, lab]) => (
+                  <button key={lab} onClick={() => setTout(v)}
+                    className="px-2.5 py-0.5 text-[11px] transition-colors"
+                    style={{ background: tout === v ? "color-mix(in srgb, var(--accent) 16%, transparent)" : "transparent",
+                             color: tout === v ? "var(--fg)" : "var(--muted)" }}>{lab}</button>
+                ))}
+              </span>
+              <span className="text-muted2 text-[11px]">
+                · « Tout le compte » ajoute l&apos;historique importé d&apos;Alpaca, chaque
+                ligne marquée par son origine. Les statistiques ci-dessus portent
+                toujours sur le périmètre du ROBOT.
+              </span>
+              {ouverts.length > 0 && (
+                <span className="text-muted2 text-[11px]">
+                  · {ouverts.length} lot(s) encore ouvert(s) ne figurent pas ici : une
+                  position n'est pas un trade tant qu'elle n'est pas refermée. Leur
+                  latent est chiffré ci-dessus.
+                </span>
+              )}
+            </div>
+            <SortableTable rows={rows} cols={tout ? [...cols, origine] : cols}
+              filterKeys={tout ? ["symbol", "venue", "regime", "origine"]
+                               : ["symbol", "venue", "regime"]}
               csvName="journal_roundtrips.csv" initialSort={{ key: "entry_ts", dir: "desc" }} dense />
           </section>
         </>
