@@ -116,10 +116,6 @@ export const PHASES = Object.fromEntries(
   BEATS.map((b) => [b.cle, b.fin]),
 ) as Record<BeatCle, number>;
 
-/** Repli quand `/api/intro` est indisponible : on n'affiche RIEN plutôt qu'un chiffre
- *  inventé. Les battements `periode` se sautent d'eux-mêmes, l'intro raccourcit. */
-export const SANS_DONNEES_SAUTE_PERIODES = true;
-
 /** Les quatre portes, avec leur verdict RÉEL. Une seule passe. */
 export const GATES = [
   { cle: "PLACEBO", metrique: "p 0,039", passe: true },

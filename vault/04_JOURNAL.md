@@ -1,5 +1,63 @@
 # 04 — JOURNAL
 
+## Session 2026-09-21 (41ᵉ) — Le premier vrai rapport, et deux pièges de lecture dans le mien
+
+**LE GARDE DE SÉANCE RÉPOND, DÈS LE PREMIER PASSAGE** : 19 déclenchements, **52 470 $**,
+`equity ×18 · etf ×1`, effet moyen 2 761,58 $. Le run tombait à 09:17 ET, treize minutes
+avant l'ouverture. Ce qui était une phrase en bas d'un récapitulatif — « si ce report
+revient chaque jour, c'est le planning » — est devenu un taux.
+
+**PREMIER PIÈGE, dans ma propre colonne.** `garde_de_seance ACTIVE×1` à côté de `19`
+observations se lit comme une contradiction. Les deux chiffres sont justes et ne comptent
+pas la même chose : les ÉTATS se comptent par RUN, les OBSERVATIONS par décision. Ils
+coïncident pour les garde-fous évalués une fois par passage, et divergent pour ceux qui
+voient chaque ordre. La colonne dit maintenant son unité — j'ai moi-même buté dessus en
+relisant la sortie, ce qui règle la question de savoir si c'était ambigu.
+
+*(Au passage, `ACTIVE×1` sur deux runs est exact : le premier passage tournait sur le code
+d'avant le compteur.)*
+
+**SECOND PIÈGE, et il accusait à tort.** « ACTIVE, 2 observations, ZÉRO déclenchement —
+vérifier que son seuil est atteignable » s'affichait au deuxième passage. Un disjoncteur
+réglé à 3 037 $ qui ne mord pas sur une journée à −336 $ fait EXACTEMENT son travail :
+transformer un échantillon court en soupçon de défaut, c'est la même faute que celle que
+ce rapport existe pour empêcher. La phrase constate désormais, nomme le nombre de runs,
+et dit QUAND s'inquiéter — sans poser de seuil : « attendu sur un échantillon court ; sur
+plusieurs semaines, c'est un seuil à revoir ».
+
+**Ce qui reste à mesurer** : le taux du garde de séance en mode **live**. Le cron tourne à
+15:08 ET, donc DANS la séance — s'il est à 0 %, le planning est bon ; s'il ne l'est pas,
+le planificateur dérive et personne ne l'aurait vu.
+
+## Session 2026-09-21 (40ᵉ) — « DONNÉE INDISPONIBLE » ne disait pas laquelle des trois
+
+**LA QUESTION POSÉE.** Pourquoi les cinq fenêtres de performance du rideau d'entrée
+affichent « DONNÉE INDISPONIBLE » ?
+
+**LA RÉPONSE, ET RIEN N'ÉTAIT CASSÉ.** `/api/intro` est servi par `_snap()`, c'est-à-dire
+par le snapshot COMPLET. Après un `make up`, le changement de code invalide le cache disque
+et l'API le reconstruit pendant une à trois minutes. Le rideau, lui, n'attend les chiffres
+que **2,5 s** (`ATTENTE_DONNEES_MS`) avant de jouer quand même — un rideau qui ne se lève
+jamais serait pire. Les battements de période tombent alors sur `data === undefined` et
+disent leur absence. C'est le comportement voulu, déjà décrit dans l'en-tête de
+`IntroSequence` depuis le 15/09.
+
+**CE QUI ÉTAIT VRAIMENT DÉFAILLANT : le motif.** Il disait « /api/intro n'a rien renvoyé ».
+Exact, et inutilisable — il ne dit pas s'il faut ATTENDRE, RELANCER l'API, ou aller
+chercher un trou dans les données. Or la requête SAIT dans lequel des cas on est : elle
+court encore, ou elle a échoué. Le composant ne recevait que `data`, jamais cet état.
+Trois causes ont maintenant trois phrases, dont celle qui couvre 99 % des cas : « le
+snapshot se reconstruit (1 à 3 min après un `make up`) ». Un message qui dit d'attendre
+sans dire combien fait conclure à une panne au bout de dix secondes.
+
+**UNE CONSTANTE MORTE QUI AFFIRMAIT LE CONTRAIRE DU CODE.**
+`SANS_DONNEES_SAUTE_PERIODES = true` — exportée, jamais lue, et fausse : la décision a été
+INVERSÉE le 16/09 (sauter les battements laissait cinq secondes de noir indiscernables
+d'une panne, deux allers-retours de diagnostic perdus). Elle a survécu à la décision
+qu'elle décrivait. Retirée. C'est la deuxième du genre aujourd'hui, après la ligne de
+`AI_CODEBASE_MAP` qui annonçait des compteurs de garde-fous inexistants : **une
+affirmation non exécutée ne vieillit pas, elle pourrit.**
+
 ## Session 2026-09-21 (39ᵉ) — Cinq garde-fous qui décident sans jamais compter
 
 **LE CONSTAT, ET IL TIENT EN UNE LIGNE.** Cinq garde-fous protègent le seul chemin qui

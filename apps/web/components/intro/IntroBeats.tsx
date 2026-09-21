@@ -4,6 +4,23 @@ import { BEATS, CHIFFRES_FIXES } from "./introConfig";
 import { clamp01, easeOut } from "./introCourbeDraw";
 import { IntroCourbes, Periode } from "./IntroCourbes";
 
+/** POURQUOI la donnée manque, quand `/api/intro` n'a rien renvoyé DU TOUT.
+ *
+ *  « /api/intro n'a rien renvoyé » était exact et inutilisable : ça n'aide pas à savoir
+ *  s'il faut attendre, relancer l'API, ou aller chercher un trou dans les données. Or la
+ *  requête, elle, SAIT dans lequel des deux cas on est.
+ *
+ *  Le cas « attente » est de loin le plus fréquent et le moins inquiétant : `/api/intro`
+ *  est servi par le snapshot complet, et après un `make up` l'API le reconstruit pendant
+ *  une à trois minutes pendant que le rideau, lui, ne patiente que 2,5 s. */
+const SANS_REPONSE: Record<string, string> = {
+  attente: "/api/intro n'a pas encore répondu — le snapshot se reconstruit "
+         + "(1 à 3 min après un « make up »). Rejouez l'intro dans une minute.",
+  erreur: "/api/intro injoignable — l'API ne répond pas (curl .../health).",
+};
+const sansReponse = (etat?: string) =>
+  SANS_REPONSE[etat ?? ""] ?? "/api/intro n'a rien renvoyé";
+
 /** Libellés de repli : quand la période manque, on nomme quand même la fenêtre — sinon
  *  « donnée indisponible » ne dit pas DE QUOI. */
 const LIBELLES: Record<string, string> = {
@@ -49,8 +66,10 @@ const compte = (p: number) => easeOut(clamp01((p - DEBUT_COMPTE) / (FIN_COMPTE -
  * Aucun chiffre de performance n'est écrit ici : ils viennent de `/api/intro`, régénéré à
  * chaque construction du snapshot. Absent → « n/d », jamais une valeur de remplacement.
  */
-export function IntroBeats({ i, p, sortie, data }: {
+export function IntroBeats({ i, p, sortie, data, etat }: {
   i: number; p: number; sortie: boolean; data?: IntroData;
+  /** État de la requête quand `data` est absente : « attente » ou « erreur ». */
+  etat?: "attente" | "erreur";
 }) {
   const b = BEATS[i];
   if (!b || b.genre === "reveal") return null;
@@ -71,7 +90,7 @@ export function IntroBeats({ i, p, sortie, data }: {
     if (!t?.disponible) {
       return <Absent on={on} sur={b.sur}
                      motif={t?.motif || (data ? "aucun trade clôturé"
-                                              : "/api/intro n'a rien renvoyé")} />;
+                                              : sansReponse(etat))} />;
     }
     return (
       <Bloc on={on} sur={b.sur}
@@ -91,7 +110,7 @@ export function IntroBeats({ i, p, sortie, data }: {
   if (!d?.disponible) {
     return <Absent on={on} sur={LIBELLES[b.fenetre ?? ""] ?? "FENÊTRE"}
                    motif={d?.motif || (data ? "période absente du payload"
-                                             : "/api/intro n'a rien renvoyé")} />;
+                                             : sansReponse(etat))} />;
   }
   return (
     <div className={s.beatWrap} data-courbes={on ? "1" : "0"}>

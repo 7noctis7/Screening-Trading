@@ -29,6 +29,14 @@
       Le compteur `garde_de_seance` répond désormais : taux de report par classe d'actif
       et dollars non envoyés. Si le taux est élevé en mode `live`, ce n'est pas le marché,
       c'est le PLANNING (`QUANT_LIVE_HOUR=21 make live-cron-install`).
+- [ ] **P2 — `/api/intro` attend le snapshot COMPLET (21/09).** La route rend
+      `_snap().get("intro")` : après un `make up`, elle ne répond qu'au bout d'une à trois
+      minutes, pendant que le rideau n'attend que 2,5 s. Le motif le DIT désormais, ce qui
+      suffit à ne plus se tromper de diagnostic. Deux vraies pistes si ça devient gênant :
+      servir la section `intro` du DERNIER snapshot connu pendant la reconstruction, ou
+      allonger `ATTENTE_DONNEES_MS`. La première est la bonne — la seconde ne fait que
+      déplacer le seuil. **Ne pas la traiter sans mesurer d'abord** combien de temps
+      `/api/intro` met réellement à répondre après un `make up`.
 - [ ] **P2 — `.cache/stages/*.pkl` en mode 664 sur le VPS (21/09).** `safe_pickle`
       avertit à chaque run : « inscriptible par d'autres utilisateurs ». Sur une machine
       mono-utilisateur c'est bénin ; l'avertissement, lui, est correct et bruyant. Décider :

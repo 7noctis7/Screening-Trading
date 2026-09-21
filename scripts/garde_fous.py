@@ -72,7 +72,11 @@ def _afficher(a: dict, mode: str) -> None:
           + (f", du {a['depuis'][:10]} au {a['jusqu_a'][:10]}" if a["depuis"] else ""))
     if not n:
         return
-    print(f"\n  {'garde-fou':<{_LARGEUR}} {'états':<22} {'obs.':>6} {'décl.':>6} "
+    # « états » se compte en RUNS, « obs. » en décisions. Les deux coïncident pour un
+    # garde-fou évalué une fois par run, et divergent pour ceux qui voient chaque ordre :
+    # `ACTIVE×1` à côté de `19` observations se lit comme une contradiction si la colonne
+    # ne dit pas son unité. (Constaté sur le premier vrai rapport, 21/09.)
+    print(f"\n  {'garde-fou':<{_LARGEUR}} {'états (par run)':<22} {'obs.':>6} {'décl.':>6} "
           f"{'taux':>8} {'effet $':>12}")
     for nom in ORDRE:
         g = a["gardes"].get(nom)

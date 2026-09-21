@@ -234,8 +234,14 @@ def verdicts(agrege: dict) -> list[str]:
         # garde-fou désarmé serait le contresens inverse.
         if (d["etats"].get(ACTIVE) and d["observations"]
                 and not (d["declenchements"] + d["aurait_declenche"])):
-            out.append(f"{nom} : ACTIVE, {d['observations']} observation(s), "
-                       "ZÉRO déclenchement — vérifier que son seuil est atteignable.")
+            # ON CONSTATE, ON N'ACCUSE PAS. « Vérifier que son seuil est atteignable »
+            # après deux passages faisait d'un échantillon court un soupçon de défaut :
+            # un disjoncteur à 3 037 $ qui ne mord pas sur une journée à −336 $ fait
+            # exactement son travail. La phrase dit maintenant QUAND s'inquiéter, sans
+            # poser de seuil — le nombre de runs est affiché, l'opérateur tranche.
+            out.append(f"{nom} : ACTIVE, {d['observations']} observation(s) sur "
+                       f"{agrege['n_runs']} run(s), ZÉRO déclenchement — attendu sur un "
+                       "échantillon court ; sur plusieurs semaines, c'est un seuil à revoir.")
         if d["declenchements"] and d["effet_usd"] == 0.0:
             out.append(f"{nom} : {d['declenchements']} déclenchement(s) pour un effet "
                        "mesuré NUL — il se déclenche sans rien retenir.")

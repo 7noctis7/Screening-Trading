@@ -46,7 +46,7 @@ export function IntroSequence({ onFini }: { onFini?: () => void }) {
   const { jouer, reduit, rejeu } = useIntroGate();
   // Les chiffres viennent du snapshot, pas du code. Absents → les battements de
   // période se sautent d'eux-mêmes : l'intro raccourcit, elle n'invente pas.
-  const { data: intro } = useIntro();
+  const { data: intro, isError: introKo } = useIntro();
   const [monte, setMonte] = useState(false);
   const [sortie, setSortie] = useState(false);
   const [reveal, setReveal] = useState(false);
@@ -195,7 +195,8 @@ export function IntroSequence({ onFini }: { onFini?: () => void }) {
       )}
       {!reduit && pret && (
         <div className={s.decor} aria-hidden="true">
-          <IntroBeats i={beat.i} p={beat.p} sortie={sortie} data={intro} />
+          <IntroBeats i={beat.i} p={beat.p} sortie={sortie} data={intro}
+                      etat={intro !== undefined ? undefined : introKo ? "erreur" : "attente"} />
         </div>
       )}
       {!reduit && (
