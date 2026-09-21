@@ -22,7 +22,13 @@
       · tout `JAMAIS OBSERVÉ` → il est désarmé, ou le run ne va jamais jusque-là.
       **Ne rien armer sur un rapport vide** : c'est exactement ce que le rapport refuse
       de laisser croire.
-- [ ] **P1 — Le report hors séance revient-il CHAQUE jour ? (21/09, ADR-0186).** Premier
+- [x] **~~P1 — Le report hors séance revient-il CHAQUE jour ?~~ — MESURÉ, NON (21/09).**
+      Premier passage réel observé : `garde_de_seance` = **16 observations, 0
+      déclenchement, 0 %**. Le cron tombe DANS la séance. La paire de mesures fait la
+      preuve : le même compteur affichait **19 déclenchements / 52 470 $** sur un aperçu
+      lancé à 09:17 ET le matin. Le compteur discrimine, l'horaire est bon. Rien à
+      changer au planning. *Texte d'origine ci-dessous.*
+- [ ] **~~P1 (clos ci-dessus) — Le report hors séance revient-il CHAQUE jour ? (21/09, ADR-0186).~~** Premier
       aperçu mesuré : **19 ordres reportés, 52 596 $**, parce que le run tombe à 08:54 ET
       alors que la séance ouvre à 09:30. Le cron tourne à 19:08 UTC = 15:08 ET, donc DANS
       la séance — mais personne n'a jamais vérifié que c'est bien le cas tous les jours.

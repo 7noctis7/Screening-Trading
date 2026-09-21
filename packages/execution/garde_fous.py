@@ -204,6 +204,21 @@ def agreger(runs: list[dict], mode: str | None = "live") -> dict:
             "gardes": gardes}
 
 
+def _grouper(noms: list[str], phrase: str) -> str:
+    """Une phrase, les garde-fous qu'elle concerne. Pas six copies de la même ligne.
+
+    CONSTATÉ SUR LE PREMIER RUN RÉEL (21/09). Au premier passage, les SIX garde-fous
+    sont trivialement à zéro déclenchement : la section « ce qu'il faut regarder »
+    affichait six fois la même phrase, à un nom près. Une liste dont toutes les lignes
+    se ressemblent n'est plus lue — et c'est la section qui doit attirer l'œil.
+
+    Ce n'est pas un seuil : on ne cache rien et on ne décide de rien. On DÉDUPLIQUE.
+    """
+    if len(noms) == 1:
+        return f"{noms[0]} : {phrase}"
+    return f"{len(noms)} garde-fous ({', '.join(noms)}) : {phrase}"
+
+
 def verdicts(agrege: dict) -> list[str]:
     """Ce qu'un opérateur doit REGARDER — sans seuil inventé.
 
@@ -211,22 +226,29 @@ def verdicts(agrege: dict) -> list[str]:
     (jamais observé, jamais déclenché, panne, déclenché sans effet). Fixer ici un
     « effet moyen négligeable en dessous de X $ » reviendrait à calibrer sur rien —
     l'effet moyen est donc AFFICHÉ, et c'est l'opérateur qui le juge.
+
+    Les constats IDENTIQUES sont regroupés en une ligne ; ceux qui portent un chiffre
+    propre à un garde-fou (panne, jours où il aurait coupé) restent séparés, parce que
+    les fondre ferait perdre ce chiffre.
     """
-    out: list[str] = []
     g = agrege.get("gardes") or {}
     if not agrege.get("n_runs"):
         return ["UNCALIBRATED — aucun run enregistré pour ce mode. "
                 "Les compteurs se remplissent au premier passage réel du robot."]
+    jamais: list[str] = []
+    muets: list[str] = []
+    individuels: list[str] = []
     for nom in ORDRE:
         d = g.get(nom)
         if not d:
-            out.append(f"{nom} : JAMAIS OBSERVÉ — désarmé, ou le run ne va jamais jusque-là.")
+            jamais.append(nom)
             continue
         if d["etats"].get(ERREUR):
-            out.append(f"{nom} : ERROR sur {d['etats'][ERREUR]} run(s) — garde-fou en panne.")
+            individuels.append(f"{nom} : ERROR sur {d['etats'][ERREUR]} run(s) — "
+                               "garde-fou en panne.")
         if d["etats"].get(DESARME) and not d["etats"].get(ACTIVE):
-            out.append(f"{nom} : DÉSARMÉ sur {d['observations']} observation(s) — "
-                       "il a été traversé sans jamais pouvoir agir.")
+            individuels.append(f"{nom} : DÉSARMÉ sur {d['observations']} observation(s) — "
+                               "il a été traversé sans jamais pouvoir agir.")
         # « Jamais déclenché » compte AUSSI les déclenchements retenus par le mode
         # observation : un disjoncteur qui aurait coupé deux fois a atteint son seuil.
         # L'alerte « seuil inatteignable » serait alors un contresens. Et on ne
@@ -234,18 +256,26 @@ def verdicts(agrege: dict) -> list[str]:
         # garde-fou désarmé serait le contresens inverse.
         if (d["etats"].get(ACTIVE) and d["observations"]
                 and not (d["declenchements"] + d["aurait_declenche"])):
-            # ON CONSTATE, ON N'ACCUSE PAS. « Vérifier que son seuil est atteignable »
-            # après deux passages faisait d'un échantillon court un soupçon de défaut :
-            # un disjoncteur à 3 037 $ qui ne mord pas sur une journée à −336 $ fait
-            # exactement son travail. La phrase dit maintenant QUAND s'inquiéter, sans
-            # poser de seuil — le nombre de runs est affiché, l'opérateur tranche.
-            out.append(f"{nom} : ACTIVE, {d['observations']} observation(s) sur "
-                       f"{agrege['n_runs']} run(s), ZÉRO déclenchement — attendu sur un "
-                       "échantillon court ; sur plusieurs semaines, c'est un seuil à revoir.")
+            muets.append(nom)
         if d["declenchements"] and d["effet_usd"] == 0.0:
-            out.append(f"{nom} : {d['declenchements']} déclenchement(s) pour un effet "
-                       "mesuré NUL — il se déclenche sans rien retenir.")
+            individuels.append(f"{nom} : {d['declenchements']} déclenchement(s) pour un "
+                               "effet mesuré NUL — il se déclenche sans rien retenir.")
         if d["aurait_declenche"]:
-            out.append(f"{nom} : aurait coupé {d['aurait_declenche']} fois "
-                       "(observation) — matière à décider de son armement.")
-    return out
+            individuels.append(f"{nom} : aurait coupé {d['aurait_declenche']} fois "
+                               "(observation) — matière à décider de son armement.")
+    out: list[str] = []
+    if jamais:
+        out.append(_grouper(jamais, "JAMAIS OBSERVÉ — désarmé, ou le run ne va jamais "
+                                    "jusque-là."))
+    if muets:
+        # ON CONSTATE, ON N'ACCUSE PAS. « Vérifier que son seuil est atteignable » après
+        # deux passages faisait d'un échantillon court un soupçon de défaut : un
+        # disjoncteur à 3 037 $ qui ne mord pas sur une journée à −336 $ fait exactement
+        # son travail. La phrase dit QUAND s'inquiéter, sans poser de seuil — le nombre
+        # de runs est affiché, l'opérateur tranche.
+        out.append(_grouper(muets, f"ACTIVE, ZÉRO déclenchement sur "
+                                   f"{agrege['n_runs']} run(s) — attendu sur un "
+                                   "échantillon court ; sur plusieurs semaines, c'est un "
+                                   "seuil à revoir. Le détail par garde-fou est au "
+                                   "tableau ci-dessus."))
+    return out + individuels

@@ -179,6 +179,36 @@ def test_un_garde_fou_DESARME_n_est_jamais_annonce_ACTIVE():
     assert not any("ACTIVE" in x for x in lignes)
 
 
+def test_six_constats_IDENTIQUES_font_une_ligne_pas_six():
+    """CONSTATÉ SUR LE PREMIER RUN RÉEL (21/09). Au premier passage, les six garde-fous
+    sont trivialement à zéro déclenchement : la section affichait six fois la même
+    phrase à un nom près. Une liste dont toutes les lignes se ressemblent n'est plus
+    lue — et c'est justement la section qui doit attirer l'œil."""
+    c = gf.Collecteur()
+    for nom in gf.ORDRE:
+        c.observer(nom, etat=gf.ACTIVE)
+    lignes = gf.verdicts(gf.agreger([_run("live", **c.rapport())]))
+    assert len(lignes) == 1, lignes
+    for nom in gf.ORDRE:
+        assert nom in lignes[0]          # aucun n'est perdu par le regroupement
+    assert "6 garde-fous" in lignes[0]
+
+
+def test_un_constat_QUI_PORTE_UN_CHIFFRE_reste_separe():
+    """Fondre « ERROR sur 2 run(s) » et « aurait coupé 3 fois » dans une ligne commune
+    perdrait le chiffre, qui est toute l'information."""
+    c = gf.Collecteur()
+    c.observer(gf.KILL_DD, etat=gf.ERREUR, motif="check_indisponible")
+    c.observer(gf.DISJONCTEUR, etat=gf.ACTIVE, aurait=True, motif="perte_du_jour")
+    for nom in (gf.KILL_TV, gf.GARDE_JOUR):
+        c.observer(nom, etat=gf.ACTIVE)
+    lignes = gf.verdicts(gf.agreger([_run("live", **c.rapport())]))
+    assert any("ERROR sur 1 run(s)" in x for x in lignes)
+    assert any("aurait coupé 1 fois" in x for x in lignes)
+    # et les deux garde-fous muets, eux, sont bien regroupés
+    assert any("2 garde-fous" in x and "ZÉRO déclenchement" in x for x in lignes)
+
+
 def test_un_rapport_vide_dit_UNCALIBRATED_pas_zero():
     assert "UNCALIBRATED" in gf.verdicts(gf.agreger([]))[0]
 

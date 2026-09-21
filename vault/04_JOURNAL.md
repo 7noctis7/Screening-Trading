@@ -1,5 +1,41 @@
 # 04 — JOURNAL
 
+## Session 2026-09-21 (44ᵉ) — Le premier passage réel : les six ont parlé
+
+**LE CHIFFRE QUI RÉPOND AU P1 DU MATIN.** `garde_de_seance` : **16 observations, ZÉRO
+déclenchement, 0 %**. Le passage quotidien tombe DANS la séance NYSE. Ce n'est plus une
+supposition tirée de l'heure du cron, c'est une mesure.
+
+La force du résultat tient à sa paire : le MÊME compteur affichait ce matin **19
+déclenchements et 52 470 $ reportés**, sur un aperçu lancé à 09:17 ET, treize minutes
+avant l'ouverture. Zéro le soir, dix-neuf le matin — le compteur discrimine, et
+l'horaire de production est juste. Une seule des deux mesures n'aurait rien prouvé.
+
+**LES SIX ONT ÉTÉ OBSERVÉS, AUCUN EN PANNE.** Premier run réel : kill-switch TV,
+kill-switch drawdown, disjoncteur, garde journalière, garde de séance, portail de
+risque — tous `ACTIVE`, aucun `ERROR`, aucun `UNCALIBRATED`. Le portail a évalué **7
+ordres**, n'en a réduit ni refusé aucun, effet mesuré 0,00 $.
+
+**L'ÉCART 16 → 7 EST LE FONCTIONNEMENT NORMAL** : seize lignes ont passé le garde de
+séance, neuf se sont arrêtées sur la bande d'inaction (`✓ écart sous la bande`), sept
+seulement portaient une intention à soumettre au portail. Le rapport rend cette chaîne
+lisible sans lire un log.
+
+**TROISIÈME DÉFAUT DE MON PROPRE RAPPORT, trouvé sur son premier usage réel.** La
+section « ce qu'il faut regarder » répétait **six fois la même phrase**, à un nom près :
+au premier passage, tous les garde-fous sont trivialement à zéro déclenchement. Une
+liste dont toutes les lignes se ressemblent n'est plus lue — et c'est justement la
+section qui doit attirer l'œil. Les constats IDENTIQUES sont désormais regroupés en une
+ligne qui les nomme tous ; ceux qui portent un chiffre propre (`ERROR sur 2 run(s)`,
+`aurait coupé 3 fois`) restent séparés, parce que les fondre perdrait ce chiffre. Ce
+n'est pas un seuil : on ne cache rien, on déduplique.
+
+**Trois fois en une journée, ce rapport m'a montré un défaut dès qu'il a servi** :
+l'alerte « seuil inatteignable » sur un disjoncteur qui avait atteint son seuil,
+`ACTIVE×1` à côté de 19 observations sans dire que les unités diffèrent, et ces six
+lignes jumelles. Aucun n'était visible en écrivant le code ; tous l'étaient à la
+première lecture d'une vraie sortie.
+
 ## Session 2026-09-21 (43ᵉ) — Le site marchait, le tunnel visait ::1
 
 **LA CAUSE, ENFIN.** « Aucune page de mon site ne fonctionne » et « ✓ front prêt · ✓ API
