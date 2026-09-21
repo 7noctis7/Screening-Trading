@@ -19,7 +19,7 @@ sont `live-go` et `cron` (rebalancement paper), et elles forcent Alpaca en paper
 |---|---|
 | `make install` | installe les dépendances (uv) |
 | `make setup` | installation guidée : venv, détection de la base de prix, build, cron — 1 commande |
-| `make sync` | **récupère la branche de dev sans jamais créer de conflit** (jamais `git pull`) |
+| `make sync` | **récupère `origin/main` sans jamais créer de conflit** (jamais `git pull`) ; dérogation temporaire : `make sync BRANCHE=ma-branche` |
 | `make test` | suite de tests — **à lancer avant tout commit** |
 | `make coverage` | couverture réelle (pytest-cov) + rappel des trous |
 | `make lint` | ruff + mypy |

@@ -7,6 +7,10 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+- [x] **~~P0 — `make up` déployait une branche éphémère figée~~ — FERMÉ (21/09).**
+      La valeur par défaut pointait encore vers `claude/screening-trading-platform-me9p11`
+      (build 58ab486) : « à jour » signifiait seulement à jour de cette branche ancienne.
+      Le déploiement suit désormais `origin/main`; `BRANCHE=x` reste une dérogation explicite.
 - [x] **~~P0/P1 — Régime ATR : bascule de modèle~~ — FERMÉE PAR LA MESURE (14/09,
       ADR-0145).** Trois seuils, 820 symboles, t groupé significatif partout — et pourtant
       non. Aux TROIS seuils la journée typique en haute volatilité est moins bonne qu'en

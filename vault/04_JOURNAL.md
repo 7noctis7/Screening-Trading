@@ -1,5 +1,20 @@
 # 04 — JOURNAL
 
+## Session 2026-09-21 — Le VPS était à jour sur la mauvaise branche
+
+**Symptôme.** `make up` annonçait un succès cohérent (HEAD et build web tous deux à
+`58ab486`), mais le site ne contenait ni les livraisons récentes ni les opérations du jour.
+Ce n'était ni le tunnel IPv4 ni le cache du navigateur : la sortie nommait elle-même la
+cause, `claude/screening-trading-platform-me9p11`, branche éphémère restée valeur par
+défaut du Makefile. Le contrôle de build ne pouvait pas la détecter puisqu'il compare le
+front au HEAD local — deux versions également anciennes.
+
+**Correction.** `make sync` et donc `make up` suivent maintenant `origin/main` par défaut.
+Une branche de recette reste possible uniquement par dérogation visible (`BRANCHE=x`).
+Un test source interdit le retour d'une branche de travail comme défaut. Sur un VPS encore
+bloqué sur l'ancien Makefile, le bootstrap est nécessaire une seule fois :
+`make up BRANCHE=main`; les appels suivants à `make up` utilisent le nouveau défaut.
+
 ## Session 2026-09-15 (19ᵉ) — Trois robots sur un seul compte
 
 **La question de l'utilisateur était la bonne** : « pourquoi a-t-il acheté et vendu si
