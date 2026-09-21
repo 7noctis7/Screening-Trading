@@ -61,7 +61,9 @@ def test_legacy_column_queryable():
     j.append(_record(rid="LEG1", features={}), legacy=True)
     assert len(j.all()) == 2
     assert [r.id for r in j.all(legacy=False)] == ["LIVE1"]   # calibration : WHERE legacy=0
+    assert j.legacy_ids() == {"LEG1"}
     assert [r.id for r in j.all(legacy=True)] == ["LEG1"]
+    assert j.realized_summary() == {"n_closed": 2, "pnl": 200.0}
 
 
 def test_warns_on_empty_features_live(caplog):

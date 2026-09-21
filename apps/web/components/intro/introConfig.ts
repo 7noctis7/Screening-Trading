@@ -28,7 +28,10 @@ export const ENABLE_INTRO = true;
  *   "always"  — à chaque chargement (pour la régler)
  *   "never"   — jamais
  */
-export const INTRO_SESSION_POLICY: "session" | "day" | "always" | "never" = "session";
+// L'accueil est une destination explicite, pas une modale injectée dans les pages de travail :
+// y revenir signifie demander à revoir le rideau. `session` le faisait disparaître après le
+// premier passage de l'onglet et donnait l'impression d'une régression après déploiement.
+export const INTRO_SESSION_POLICY: "session" | "day" | "always" | "never" = "always";
 
 export const INTRO_BRAND = "Quant Terminal";
 export const INTRO_BASELINE = "0 € · OPEN SOURCE · PAPER PAR DÉFAUT";

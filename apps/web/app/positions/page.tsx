@@ -129,6 +129,7 @@ export default function Positions() {
   const vName = nomVenue(acc), vCrypto = compteCrypto(acc);
   const mv = pos.reduce((a: number, r: any) => a + (r.market_value ?? 0), 0);
   const pnl = pos.reduce((a: number, r: any) => a + (r.pnl ?? 0), 0);
+  const realized = data?.realized ?? {};
   // Concentration (sur les poids réels, toutes poches confondues rapportées au total)
   const wTot = pos.map((p: any) => (mv > 0 ? (p.market_value ?? 0) / mv : 0));
   const hhi = wTot.reduce((a: number, w: number) => a + w * w, 0);
@@ -253,11 +254,15 @@ export default function Positions() {
         </section>
       ) : (
       <>
-      <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <section className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <MetricCard label="Capital réel" value={`$${usd(aEq + bEq)}`} />
         <MetricCard label="Valeur positions" value={`$${usd(mv)}`} />
         <MetricCard label="Gain / perte en cours" terme="P&L latent" value={`$${usd(pnl)}`} tone={pnl >= 0 ? "pos" : "neg"}
           explication="Ce qu'on gagnerait ou perdrait en vendant tout maintenant." />
+        <MetricCard label="Gain / perte réalisé" terme="P&L réalisé"
+          value={realized.pnl == null ? "n/d" : `$${usd(realized.pnl)}`}
+          tone={realized.pnl == null ? undefined : realized.pnl >= 0 ? "pos" : "neg"}
+          explication={`Somme nette des ${realized.n_closed ?? 0} lots clôturés du journal complet, imports Alpaca compris.`} />
         <MetricCard label="Vraie diversification" terme="N effectif" value={nEff ? nEff.toFixed(1) : "n/d"}
           explication="Nombre de positions RÉELLEMENT indépendantes. Dix lignes très corrélées en valent trois." />
       </section>

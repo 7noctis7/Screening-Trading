@@ -24,6 +24,10 @@ export default function Journal() {
         <span className="text-xs px-1.5 py-0.5 rounded font-sans"
           style={{ background: v === "fermé" ? "color-mix(in srgb, var(--pos) 14%, transparent)" : "var(--surface2)",
                    color: v === "fermé" ? "var(--pos)" : "var(--muted)" }}>{v}</span>) },
+    { key: "origin", label: "Origine", render: (v) => (
+        <span className="text-xs text-muted font-sans">
+          {v === "import_courtier" ? "historique Alpaca" : "robot journalisé"}
+        </span>) },
     { key: "entry_ts", label: "Entrée", render: (v, r) => (
         <span className="mono text-xs">{v?.slice(0, 10)} · {usd(r.entry_price)}</span>) },
     { key: "exit_ts", label: "Sortie", render: (v, r) => v ? (
@@ -46,9 +50,10 @@ export default function Journal() {
       <h1 className="text-xl font-semibold tracking-tight">Journal des round-trips
         <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full align-middle"
           style={{ background: "color-mix(in srgb, #22c55e 16%, transparent)", color: "#22c55e" }}>RÉEL · paper</span></h1>
-      <p className="text-muted text-xs">Chaque achat suivi de sa revente, en simulation. Pour chacun : ce que le robot voyait
-        <b>au moment de décider</b>, le prix réellement obtenu, le gain ou la perte, et jusqu'où
-        le trade est monté puis descendu avant d'être soldé. Tout est publié, les pertes comprises.</p>
+      <p className="text-muted text-xs">Historique local complet depuis le début du compte paper :
+        opérations importées d'Alpaca et décisions nativement journalisées par le robot. Les anciennes
+        opérations n'ont pas toujours les features observées au moment de décider ; elles restent affichées,
+        explicitement marquées <b>historique Alpaca</b>.</p>
       <p className="text-muted text-xs">Attention : cette page montre les <b>trades terminés</b>, pas la performance du compte.
         Les positions perdantes encore ouvertes n'y figurent pas, ce qui embellit le tableau.
         Pour juger, regardez la <b>courbe du compte</b> chez le courtier — c'est la seule mesure
@@ -71,18 +76,9 @@ export default function Journal() {
             <MetricCard label="Expectancy / trade" value={st.expectancy != null ? usd(st.expectancy) : "UNCALIBRATED"} />
           </section>
           {st.status && <p className="text-muted2 text-xs">⚠️ {st.status} — les stats agrégées n'apparaissent qu'avec un échantillon suffisant (jamais de chiffre inventé).</p>}
-          {st.perimetre?.avertissement && (
-            <section className="card p-3 text-xs space-y-1">
-              <p className="text-muted"><b>Périmètre affiché ≠ compte.</b> {st.perimetre.avertissement}</p>
-              <p className="text-muted2 mono">
-                affiché : {st.perimetre.affiche?.n ?? 0} lots · réalisé {usd(st.perimetre.affiche?.pnl_realise ?? 0)}
-                {st.perimetre.affiche?.win_rate != null && ` · ${(st.perimetre.affiche.win_rate * 100).toFixed(0)}% de réussite`}
-                {"  —  "}
-                compte : {st.perimetre.compte?.n ?? 0} lots · réalisé {usd(st.perimetre.compte?.pnl_realise ?? 0)}
-                {st.perimetre.compte?.win_rate != null && ` · ${(st.perimetre.compte.win_rate * 100).toFixed(0)}% de réussite`}
-              </p>
-            </section>
-          )}
+          <p className="text-muted2 text-xs">
+            Couverture : {st.n_imported ?? 0} lots importés du courtier · {st.n_robot ?? 0} lots journalisés nativement.
+          </p>
           {sl.available ? (
             <section className="card p-3 text-xs text-muted flex flex-wrap gap-x-6 gap-y-1">
               <span title="Écart entre le prix connu à la DÉCISION et le fill réel — sert à calibrer le sabotage-gate avec du vécu.">
@@ -92,7 +88,7 @@ export default function Journal() {
             <p className="text-muted2 text-xs">Slippage réel : {sl.status} ({sl.hint ?? ""}).</p>
           )}
           <section className="card p-4">
-            <SortableTable rows={rows} cols={cols} filterKeys={["symbol", "venue", "status", "regime"]}
+            <SortableTable rows={rows} cols={cols} filterKeys={["symbol", "venue", "status", "origin", "regime"]}
               csvName="journal_roundtrips.csv" initialSort={{ key: "entry_ts", dir: "desc" }} dense />
           </section>
         </>
