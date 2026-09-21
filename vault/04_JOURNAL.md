@@ -1,5 +1,39 @@
 # 04 — JOURNAL
 
+## Session 2026-09-21 (43ᵉ) — Le site marchait, le tunnel visait ::1
+
+**LA CAUSE, ENFIN.** « Aucune page de mon site ne fonctionne » et « ✓ front prêt · ✓ API
+200 · ✓ snapshot prêt » étaient **vrais en même temps**. Entre les deux, le tunnel SSH :
+
+    channel 5: open failed: connect failed: Connection refused
+
+`ssh -L 3000:localhost:3000` résout « localhost » **sur le VPS**, où il peut valoir `::1`.
+Les services n'écoutent que sur IPv4 (`uvicorn --host 127.0.0.1`, lisible dans
+`systemctl status`). SSH tentait donc une adresse où personne ne répond pendant que le
+site servait parfaitement. Corrigé côté utilisateur en un mot : `127.0.0.1` au lieu de
+`localhost`. Le tunnel s'est ouvert sans une seule ligne de refus.
+
+**ET LE DÉPÔT RECOMMANDAIT LA FORME PIÉGÉE.** `scripts/start.sh:155` et `CLAUDE.md`
+écrivaient tous deux `ssh -L 3001:localhost:3001`. L'utilisateur n'a pas mal tapé : il a
+suivi la documentation. Les deux sont corrigés, et un test interdit de réintroduire un
+`-L <port>:localhost:` dans toute commande PROPOSÉE par le dépôt — les commentaires
+restent libres de nommer la forme fautive pour l'expliquer.
+
+**`verifier_service.sh` MESURE au lieu de supposer** : il essaie `curl http://[::1]:3000`
+et ne dit quelque chose QUE si ça refuse — auquel cas il imprime la commande de tunnel
+correcte, avec l'IP de la machine et le symptôme nommé. Sur un VPS en double pile
+correctement configuré, il se tait.
+
+**CE QUE MA LIGNE DE SANTÉ A SERVI, DÈS SON PREMIER USAGE.** `✓ snapshot
+pret_rafraichissement (âge 975 s) — les pages se chargent immédiatement` a PROUVÉ que
+l'API servait. Sans elle, le « ✓ API 200 » muet m'aurait laissé chercher encore dans le
+site. Elle n'a pas trouvé la panne — elle a éliminé un continent.
+
+**DEUX ERREURS DE MA PART, dans la même heure.** J'ai accusé l'OOM (faux : mesuré),
+puis j'ai donné `journalctl` **sans `sudo`** — la sortie « -- No entries -- » portait
+pourtant son propre démenti deux lignes plus haut (« Users in groups adm,
+systemd-journal can see all messages »). J'ai lu le verdict et sauté l'avertissement.
+
 ## Session 2026-09-21 (42ᵉ) — « ✓ API 200 » sur un site qui n'affichait rien
 
 **LE SIGNALEMENT.** « Aucune page de mon site ne fonctionne. » Ma première hypothèse —

@@ -74,7 +74,10 @@ reconstruit chaque jour ouvré par GitHub Actions (`.github/workflows/pages.yml`
   qu'un correctif front n'a pas pris ; on regarde une autre page. `npm run dev` ÉCHOUE
   désormais dans ce cas (`predev` → `apps/web/scripts/verifier_port.mjs`). Sur le VPS, la
   commande est **`make up`**, pas `npm run dev`. Pour développer à côté du service :
-  `PORT=3001 npm run dev` + `ssh -L 3001:localhost:3001 …`.
+  `PORT=3001 npm run dev` + `ssh -L 3001:127.0.0.1:3001 …` — **127.0.0.1 et jamais
+  `localhost`** : il est résolu SUR le VPS, où il peut valoir `::1` que les services
+  n'écoutent pas ; SSH répond alors « channel N: open failed: connect failed:
+  Connection refused » en boucle pendant que le site fonctionne (21/09).
 - **Le cache `.next` resert l'ANCIEN rendu après un `make sync`** (03/09). Symptôme trompeur : le code
   contient le correctif, le navigateur affiche la version d'avant, et **rien ne le signale** — on croit
   lire le résultat de son correctif, on lit celui d'avant. Constaté sur deux correctifs le même jour

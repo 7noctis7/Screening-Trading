@@ -29,7 +29,17 @@
       Le compteur `garde_de_seance` répond désormais : taux de report par classe d'actif
       et dollars non envoyés. Si le taux est élevé en mode `live`, ce n'est pas le marché,
       c'est le PLANNING (`QUANT_LIVE_HOUR=21 make live-cron-install`).
-- [ ] **P1 — LIRE les deux `journalctl` de la panne du 21/09 (13:15 → 13:56).** Le site
+- [x] **~~P1 — LIRE les deux `journalctl` de la panne du 21/09~~ — SANS OBJET (21/09).**
+      La panne n'était pas côté VPS : le tunnel SSH visait `localhost`, résolu en `::1`
+      sur la machine, que les services n'écoutent pas. Le site servait pendant tout
+      l'épisode. *(Et le `journalctl` rendait « -- No entries -- » faute de `sudo` : la
+      sortie portait l'explication deux lignes plus haut.)*
+- [ ] **P2 — Les services n'écoutent qu'en IPv4 (21/09).** `uvicorn --host 127.0.0.1` et
+      le front idem. C'est un choix sûr, pas un défaut — mais il rend tout tunnel visant
+      `localhost` silencieusement inopérant sur une machine à double pile. Décider : soit
+      on documente définitivement `127.0.0.1` (fait), soit on écoute aussi `[::1]`.
+      Ne rien changer sans raison : élargir une écoute est une décision de sécurité.
+- [ ] **~~P1 (clos ci-dessus) — LIRE les deux `journalctl` de la panne du 21/09.~~** Le site
       n'affichait plus rien pendant ~35 min ; les services tournaient, pas d'OOM, 1,4 Gi
       libre. **La cause n'est pas établie** et la trace existe encore :
       `journalctl -u quant-api --since "13:15" --until "13:56" --no-pager | tail -50`

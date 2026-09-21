@@ -153,7 +153,7 @@ if ! _port_reservable 3000; then
   echo "⚠ Port 3000 repris ENTRE la vérification initiale et le lancement du site."
   _diagnostic_port 3000
   echo "  Le site va démarrer sur 3001. L'API l'autorise, mais votre tunnel doit suivre :"
-  echo "      ssh -L 3001:localhost:3001 -L 8000:localhost:8000 ubuntu@<vps>"
+  echo "      ssh -L 3001:127.0.0.1:3001 -L 8000:127.0.0.1:8000 ubuntu@<vps>"
 fi
 
 echo "  Ouvre http://localhost:3000  (laisse ~1-3 min au 1er build de l'API)"
