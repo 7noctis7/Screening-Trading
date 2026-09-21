@@ -7,6 +7,16 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+- [x] **~~P0 — `make up` déployait une branche éphémère figée~~ — FERMÉ (21/09).**
+      La valeur par défaut pointait encore vers `claude/screening-trading-platform-me9p11`
+      (build 58ab486) : « à jour » signifiait seulement à jour de cette branche ancienne.
+      Le déploiement suit désormais `origin/main`; `BRANCHE=x` reste une dérogation explicite.
+      Migration ancienne→nouvelle réparée : cible de compatibilité `sync-garde-commits`
+      conservée et seconde moitié de `up` relue après le remplacement du Makefile.
+- [x] **~~P0 — Le journal masquait 585 lots importés~~ — FERMÉ (21/09).** La route
+      `/api/journal` filtrait `legacy=False`, bon périmètre pour calibrer le ML mais faux
+      pour demander « tout mon historique ». Elle sert désormais tous les lots, marque
+      leur origine et ne déclenche plus le snapshot ou le réseau courtier.
 - [x] **~~P0/P1 — Régime ATR : bascule de modèle~~ — FERMÉE PAR LA MESURE (14/09,
       ADR-0145).** Trois seuils, 820 symboles, t groupé significatif partout — et pourtant
       non. Aux TROIS seuils la journée typique en haute volatilité est moins bonne qu'en

@@ -1,8 +1,12 @@
-.PHONY: combler-mfe help install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core coeur-multi diag-coeur-qqq index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto diag-creneau diag-pv-latente diag-source-crypto calibrer-seuil ingest-mktcap preset-report calibrate-preset preset-lab alpha-lab screen repro kill-check log-alpha sync-alphas event-study event-study-smid backtest-pead-smid funding-study risk-check sensitivity paper-watch vault-lint certification crypto-cockpit crypto-brief regime-study breakout-study microstructure-poc vault-ask crypto-screen screen-niche list-db live live-sim live-go live-cron-install live-cron-uninstall completer-ouvertures reconcilier-journal annuler-ventes annuler-chronologie annuler-doublons diag-journal diag-surfermeture diag-fusion bench-backend verify-journal reparer-journal banc-swing turnover-audit rdv-paper slippage alerts-test ingest-macro bitmart-check clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull journal-pull journal-push notion-sync contracts supabase-kpis sync labs regime-atr-lab
+.PHONY: combler-mfe help install setup test lint demos start stop api api-dev api-lan web preview interactive ingest daily cron cron-install cron-uninstall tearsheet train backtest-ml backtest-weighting backtest-earnings backtest-breakout backtest-sentiment backtest-preset backtest-megacap index-core coeur-multi diag-coeur-qqq index-core-stress index-core-regime crypto-core ledger-sweep ingest-crypto diag-creneau diag-pv-latente diag-source-crypto calibrer-seuil ingest-mktcap preset-report calibrate-preset preset-lab alpha-lab screen repro kill-check log-alpha sync-alphas event-study event-study-smid backtest-pead-smid funding-study risk-check sensitivity paper-watch vault-lint certification crypto-cockpit crypto-brief regime-study breakout-study microstructure-poc vault-ask crypto-screen screen-niche list-db live live-sim live-go live-cron-install live-cron-uninstall completer-ouvertures reconcilier-journal annuler-ventes annuler-chronologie annuler-doublons diag-journal diag-surfermeture diag-fusion bench-backend verify-journal reparer-journal banc-swing turnover-audit rdv-paper slippage alerts-test ingest-macro bitmart-check clean mcp-tv mcp-selftest mcp-overlays vault-sync audit ingest-delisted reports watchlist site site-lite analytics brief vault-search hf-push hf-pull journal-pull journal-push notion-sync contracts supabase-kpis sync sync-garde-commits up up-apres-sync labs regime-atr-lab
 # PYTHON : utilise AUTOMATIQUEMENT le venv s'il existe (.venv/bin/python), sinon python3 système.
 # Évite le piège « No module named numpy » quand le venv n'est pas activé. Surchargeable.
 TICKER ?= AAPL
-BRANCHE ?= claude/screening-trading-platform-me9p11
+# La branche éphémère ci-dessous était restée la valeur par défaut pendant des mois :
+# `make up` annonçait donc honnêtement « à jour »... sur un déploiement ancien. Le VPS
+# déploie la branche publiée ; une autre branche reste possible explicitement avec
+# `make up BRANCHE=ma-branche`, mais ne doit jamais devenir le défaut persistant.
+BRANCHE ?= main
 PYTHON ?= $(shell [ -x .venv/bin/python ] && echo .venv/bin/python || echo python3)
 help:             ## liste toutes les cibles avec leur rôle (référence : docs/COMMANDES.md)
 	@grep -hE '^[a-z][a-z0-9-]*:.*##' $(MAKEFILE_LIST) \
@@ -12,18 +16,23 @@ install:          ## installe les dépendances (uv)
 	uv venv && uv pip install -e ".[dev,data,quant,api,ml]"
 setup:            ## installation locale guidée (venv, détection YAHOO.db, build, cron) — 1 commande
 	bash scripts/setup_local.sh
-sync:             ## RÉCUPÈRE la branche de dev sans jamais créer de conflit (jamais `git pull`)
-	@# La branche de dev est RÉÉCRITE à chaque déploiement (`reset --hard origin/main`
-	@# puis `push --force`). Un `git pull` la voit donc divergée, tente une FUSION, et
-	@# laisse des marqueurs `<<<<<<<` dans les sources — d'où des `SyntaxError` sur du
-	@# code pourtant valide à l'origine. `fetch` + `reset --hard` est la seule opération
-	@# correcte ici : la branche n'a jamais de commit local à préserver.
+sync:             ## RÉCUPÈRE la branche publiée (main par défaut) sans conflit (`BRANCHE=x` pour déroger)
+	@# Le répertoire du VPS est un checkout de DÉPLOIEMENT : aucun commit local n'y est
+	@# conservé. `fetch` + `reset --hard` évite les fusions accidentelles et garantit que
+	@# le build correspond exactement à origin/$(BRANCHE).
 	@git merge --abort 2>/dev/null || true
 	@git rebase --abort 2>/dev/null || true
 	@git fetch origin $(BRANCHE)
 	@git checkout $(BRANCHE) 2>/dev/null || git checkout -b $(BRANCHE) origin/$(BRANCHE)
 	@git reset --hard origin/$(BRANCHE)
 	@echo "→ $(BRANCHE) alignée sur origin : $$(git log --oneline -1)"
+
+# COMPATIBILITÉ DE MISE À JOUR. Une ancienne recette `sync` appelle cette cible APRÈS
+# avoir remplacé son propre Makefile. La retirer casse précisément la migration qui doit
+# apporter le nouveau Makefile (`No rule to make target 'sync-garde-commits'`, 21/09).
+# Elle reste volontairement sans effet : `reset --hard origin/$(BRANCHE)` est la garde.
+sync-garde-commits:
+	@:
 labs:             ## les cinq bancs de mesure (candidats, sorties, taille, signaux, régime ATR)
 	$(PYTHON) scripts/candidats_lab.py
 	$(PYTHON) scripts/sortie_lab.py
@@ -62,6 +71,11 @@ ic-screening:     ## MESURE l'IC hors échantillon du score de sélection (long,
 
 up:               ## TOUT EN UNE : sync + relance des services + attente que le front réponde
 	@$(MAKE) --no-print-directory sync
+	@$(MAKE) --no-print-directory up-apres-sync
+
+# Sous-cible relue dans le Makefile NOUVELLEMENT récupéré. Ne pas remettre ces commandes
+# directement sous `up` : le make parent a analysé l'ancienne recette avant le `git reset`.
+up-apres-sync:
 	@bash scripts/verifier_service.sh --unite
 	@echo "→ Arrêt des services, puis des orphelins qui tiendraient encore les ports…"
 	@sudo systemctl stop quant-api quant-web 2>/dev/null || true
