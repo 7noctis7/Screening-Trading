@@ -60,6 +60,7 @@ Le /full-review vérifie ce registre ; tout composant en prod non-CERTIFIED = fi
 | `live_journal` + `live_roundtrip` | exécution/infra | **CANDIDATE** | 2026-07-06 | 13 tests (features à la décision, FIFO, scission, MFE/MAE, jamais de prix inventé) | ≥1 round-trip réel vérifié vs relevé broker · 20 j |
 | Gate DSR/PBO (`psr.py`/`pbo.py`) | research | **CANDIDATE** | 2026-07-06 | suite research 99 tests ; N=essais distincts ; 8 négatifs publiés (le gate rejette VRAIMENT) | revue quant-critic dédiée + doc plateau de paramètres |
 | `run_live.py` (chemin prod) | script | **CANDIDATE** | 2026-07-06 | dry-run par défaut, anti-levier, kill-switch TV, alertes branchées, journal 2 sens | drill kill-switch loggé en réel · 20 j sans intervention |
+| `garde_fous` + `garde_fous_store` (témoin) | exécution/infra | **CANDIDATE** | 2026-09-21 | 30 tests sans réseau (compteurs provoqués, sabotage, témoin cassé, absent≠zéro, pureté d'`order_gate`) | compteurs RÉELS accumulés sur ≥20 passages du robot — tant qu'ils sont vides le rapport dit UNCALIBRATED |
 
 > Promotion CANDIDATE → CERTIFIED : mécanique, à l'issue des 20 j paper (≈ RDV 2026-08-06),
 > preuves = logs launchd/cloud + relevés broker. Aucun statut accordé sans la preuve terrain.

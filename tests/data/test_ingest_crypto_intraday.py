@@ -127,7 +127,13 @@ def test_le_Makefile_n_injecte_pas_un_SECOND_tf():
         r = subprocess.run(["make", "-n", "deviation-lab-crypto", *args],
                            cwd=RACINE, capture_output=True, text=True)
         assert r.returncode == 0, r.stderr
-        return r.stdout.strip().splitlines()[-1]
+        # PAS « la dernière ligne » : lancée depuis `make test`, la commande est un
+        # SOUS-MAKE et la dernière ligne devient « make[1]: Leaving directory … ».
+        # Le test échouait alors sur le format de sortie de make, pas sur ce qu'il
+        # prétend vérifier — un échec qui n'établit rien vaut un test absent.
+        lignes = [x for x in r.stdout.splitlines() if "deviation_reclaim_lab" in x]
+        assert lignes, r.stdout
+        return lignes[-1]
 
     assert _ligne('ARGS=--tf 1h').count("--tf") == 1
     assert "--tf 1h" in _ligne('ARGS=--tf 1h')

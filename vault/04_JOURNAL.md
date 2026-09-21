@@ -1,5 +1,80 @@
 # 04 — JOURNAL
 
+## Session 2026-09-21 (39ᵉ) — Cinq garde-fous qui décident sans jamais compter
+
+**LE CONSTAT, ET IL TIENT EN UNE LIGNE.** Cinq garde-fous protègent le seul chemin qui
+envoie des ordres — kill-switch TradingView, kill-switch drawdown, disjoncteur
+journalier, garde journalière, portail de risque. Tous les cinq DÉCIDENT et IMPRIMENT ;
+aucun ne COMPTE. La trace vit dans le `stdout` d'un run, donc dans `/tmp/quant_live.log`,
+sur une machine, jusqu'au prochain nettoyage. Personne ne pouvait dire combien d'ordres
+le portail avait réduits, de combien, ni pour quelle règle — autrement qu'en greppant un
+journal à la main.
+
+**CE QUE CETTE ABSENCE BLOQUAIT VRAIMENT.** `coupe_circuit` écrit dans son en-tête qu'on
+armera le disjoncteur « une fois qu'on a vu sur plusieurs semaines les jours où il AURAIT
+coupé ». Rien n'enregistrait ces jours. La condition d'armement était INOBSERVABLE : le
+P1 de dette de câblage réclamait une preuve que le dépôt n'avait aucun moyen de produire.
+Le compteur `aurait_declenche` existe désormais ; c'est lui, et lui seul, qui permettra
+de trancher — sur des jours comptés, pas sur une impression.
+
+**TROIS `1.0` QUI NE DISENT PAS LA MÊME CHOSE.** `dd_kill_switch` rend `1.0` quand il n'y
+a rien à couper, quand l'historique est trop court, et quand le contrôle a PLANTÉ (« check
+indisponible … non appliqué », au milieu d'un run). À l'écran, les trois se ressemblent.
+Au rapport, ils deviennent `ACTIVE`, `UNCALIBRATED` et `ERROR`. Un kill-switch en panne
+silencieuse est précisément ce qu'un kill-switch existe pour empêcher.
+
+**CE QUI EST LIVRÉ.** `packages/execution/garde_fous` (témoin pur, sans I/O),
+`garde_fous_store` (un point par run dans `.cache/`, gitignoré), `make garde-fous` (le
+rapport), et le câblage aux cinq points de décision DÉJÀ existants de `run_live`. Le
+témoin est injecté, jamais global, et OPTIONNEL : tous les appelants qui ne le passent
+pas se comportent exactement comme avant — un test le vérifie.
+
+**LE POINT DE CONCEPTION QUI COMPTE : `order_gate` reste une fonction PURE.** Le témoin
+vit chez l'APPELANT. Une écriture disque dans la dernière barrière créerait un monde où
+enregistrer une statistique peut faire échouer un ordre. Un test AST interdit maintenant
+à ce fichier d'importer `json`, `pathlib` ou `packages.*`, et d'appeler `open` ou `print`.
+Même raisonnement pour l'import du témoin dans `live_guards` : il est au niveau MODULE,
+car le mettre dans le `try` de `dd_kill_switch` ferait retomber une erreur d'import dans
+la branche « non appliqué » — un défaut d'OBSERVATION désarmerait le garde-fou OBSERVÉ.
+
+**L'EFFET SE MESURE SUR CE QUI N'EST PAS PARTI.** Un refus retient tout le montant
+demandé, une réduction retient la différence. J'ai sabordé les deux erreurs pour vérifier
+que la suite les attrape : compter le demandé sur une réduction, et débrancher le témoin
+du chemin d'ordre. Trois tests tombent, dont celui qui mesure 35 000 $ retenus sur
+50 000 $ demandés.
+
+**AUCUN SEUIL INVENTÉ, et c'est délibéré.** Les alertes du rapport sont toutes
+STRUCTURELLES : jamais observé, jamais déclenché, en panne, déclenché sans effet mesuré.
+Poser un « effet moyen négligeable en dessous de X $ » aurait été une calibration sur
+rien. L'effet moyen est affiché ; c'est l'opérateur qui le juge.
+
+**LE RAPPORT DÉMARRE VIDE, ET IL LE DIT.** `make garde-fous` répond aujourd'hui
+`UNCALIBRATED — aucun compte-rendu enregistré`, avec la phrase qui évite le contresens :
+« un rapport vide ne dit PAS que les garde-fous n'ont rien fait, il dit qu'on ne les a pas
+encore regardés ». Aucun rétro-remplissage depuis `/tmp/quant_live.log` : ce fichier est
+éphémère, propre à une machine, de couverture inconnue — en tirer un chiffre serait
+fabriquer une mesure.
+
+**TROUVÉ EN CHEMIN, HORS PÉRIMÈTRE MAIS BLOQUANT.**
+`test_le_Makefile_n_injecte_pas_un_SECOND_tf` lisait la DERNIÈRE ligne de `make -n`.
+Lancé depuis `make test`, c'est un SOUS-MAKE : la dernière ligne devient
+`make[1]: Leaving directory …` et le test échouait sur le format de sortie de make, pas
+sur ce qu'il prétend vérifier. Il sélectionne désormais la ligne qui contient le script.
+Un échec qui n'établit rien vaut un test absent.
+
+**LA DOCUMENTATION L'AFFIRMAIT DÉJÀ.** `docs/AI_CODEBASE_MAP.md` listait parmi les
+propriétés du portail : « chaque garde-fou publie compteur de déclenchements et effet
+moyen ». C'était FAUX depuis le jour où la ligne a été écrite — elle décrivait une
+intention. Le même document demande deux pages plus loin : « un garde-fou actif
+affiche-t-il zéro déclenchement ou un effet moyen nul ? », une question à laquelle le
+dépôt n'avait aucun moyen de répondre. La ligne dit désormais QUI publie (le témoin, pas
+`order_gate`), COMMENT le lire (`make garde-fous`), et depuis quand.
+
+**Statut au registre de certification : CANDIDATE.** Les tests passent sans réseau ; la
+preuve terrain — des compteurs RÉELS sur au moins vingt passages — n'existe pas encore.
+ADR-0186.
+
+
 ## Session 2026-09-18 (38ᵉ) — L'intraday crypto, et un banc qui se donnait de bonnes notes
 
 **LE MOTIF DE PRICE ACTION A ÉTÉ MESURÉ — puis son verdict annulé, par le même banc.**

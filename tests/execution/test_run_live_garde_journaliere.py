@@ -105,7 +105,10 @@ def test_desarmement_respecte(monkeypatch):
 def test_le_garde_est_appele_avant_reconcile():
     """Le refus doit sortir AVANT `_reconcile` : refuser après l'envoi ne refuse rien."""
     src = (RACINE / "scripts" / "run_live.py").read_text(encoding="utf-8")
-    i_garde = src.index("_deja_rebalance_aujourdhui(brokers)")
+    # On cherche l'APPEL, pas une signature d'arguments figée : le témoin des garde-fous
+    # (21/09) a ajouté un paramètre et ce test tombait sur la chaîne, pas sur l'ordre
+    # qu'il prétend vérifier.
+    i_garde = src.index("_deja_rebalance_aujourdhui(brokers")
     i_rec = src.index("sent, opened, sold = _reconcile(")
     assert i_garde < i_rec
 
@@ -113,6 +116,6 @@ def test_le_garde_est_appele_avant_reconcile():
 def test_le_garde_ne_sarme_pas_en_dry_run():
     """Un aperçu n'envoie rien : le bloquer n'aurait aucun sens et cacherait la cible."""
     src = (RACINE / "scripts" / "run_live.py").read_text(encoding="utf-8")
-    ligne = next(l for l in src.splitlines() if "_deja_rebalance_aujourdhui(brokers)" in l
+    ligne = next(l for l in src.splitlines() if "_deja_rebalance_aujourdhui(brokers" in l
                  and "def " not in l)
     assert "not dry" in ligne and "a.forcer" in ligne

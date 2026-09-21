@@ -7,6 +7,25 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+- [ ] **P1 — LIRE les compteurs de garde-fous, puis trancher l'armement du disjoncteur
+      (21/09, ADR-0186).** `make garde-fous` existe et répond aujourd'hui `UNCALIBRATED` :
+      le fichier `.cache/garde_fous.json` est vide tant que le robot n'est pas repassé.
+      Commande, après une vingtaine de passages : `make sync && make garde-fous`.
+      Ce qu'il faudra y lire, dans cet ordre :
+      · `disjoncteur_journalier` → `aurait_declenche` : LA mesure qui manquait pour
+        décider de `QUANT_DISJONCTEUR=1` (cf. P1 dette de câblage, ADR-0118). Zéro jour
+        sur vingt passages ne veut PAS dire « inutile » — ça veut dire « pas encore
+        éprouvé » ;
+      · `portail_de_risque` → taux et effet en dollars, par RÈGLE. Un taux nul sur
+        plusieurs semaines pose la question d'un plafond hors d'atteinte ;
+      · tout `ERROR` → un garde-fou est tombé et le run a continué sans lui ;
+      · tout `JAMAIS OBSERVÉ` → il est désarmé, ou le run ne va jamais jusque-là.
+      **Ne rien armer sur un rapport vide** : c'est exactement ce que le rapport refuse
+      de laisser croire.
+- [ ] **P2 — Le témoin des garde-fous n'est pas exposé sur le site (21/09).** Rapport
+      CLI seulement, à dessein : publier des compteurs de garde-fous demande de décider
+      ce qui est publiable sur un dépôt PUBLIC. Le fichier est local (`.cache/`,
+      gitignoré) et ne contient ni symbole, ni position, ni clé — un test le vérifie.
 - [x] **~~P0/P1 — Régime ATR : bascule de modèle~~ — FERMÉE PAR LA MESURE (14/09,
       ADR-0145).** Trois seuils, 820 symboles, t groupé significatif partout — et pourtant
       non. Aux TROIS seuils la journée typique en haute volatilité est moins bonne qu'en
@@ -75,7 +94,19 @@
       banc crypto (`make deviation-lab-crypto`) montre que l'intraday apporte quelque
       chose LÀ OÙ les données sont complètes. Si l'apport n'existe pas sur Binance, il
       n'existera pas sur deux ans d'IEX, et on aura économisé l'abonnement.
-- [ ] **P0 — Le journal tient 27 symboles OUVERTS, le courtier en détient 17 (17/09).**
+- [x] **~~P0 — Le journal tient 27 symboles OUVERTS, le courtier en détient 17~~ —
+      FERMÉE PAR LA RECONSTRUCTION (18/09, cf. journal 38ᵉ session).** Le registre n'a
+      pas été réparé, il a été REJOUÉ depuis les 774 fills réels du courtier : 533
+      aller-retours fermés, 52 lots ouverts, ZÉRO vente orpheline, et un contrôle
+      fail-closed qui refuse d'écrire tant que les lots ouverts ne correspondent pas,
+      symbole par symbole, à l'inventaire réel. Les 13 symboles fantômes et les 3
+      positions manquantes n'existent plus : ils venaient de la période à plusieurs
+      planificateurs, et le rejeu ne connaît que ce que le courtier a exécuté.
+      **Ce qui reste ouvert, et qui est d'une autre nature** : le réalisé est BRUT de
+      frais (les `CFEE` crypto sont prélevées en JETONS, hors du flux d'ordres), d'où
+      un résidu de −456,29 $ dans l'identité du capital. Suivi par `make frais-courtier`.
+      *Texte d'origine conservé ci-dessous pour la trace.*
+- [ ] **~~P0 (clos ci-dessus) — Le journal tient 27 symboles OUVERTS, le courtier en détient 17 (17/09).~~**
       Mesuré en confrontant l'onglet « Historique des positions » (61 lots ouverts) aux
       positions Alpaca réelles : **13 symboles** ouverts au journal dont le courtier ne
       détient RIEN (HPQ 4 lots, MPC 3, TSM 3, NTR 2, CF, LNC, MCK, NEM, PATH, STT, TGT,

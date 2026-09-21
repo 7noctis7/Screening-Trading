@@ -2,6 +2,69 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0186 — Un garde-fou qui ne compte pas est indiscernable d'un garde-fou absent (2026-09-21)
+
+**Constat.** Cinq garde-fous protègent le seul chemin qui envoie des ordres : kill-switch
+TradingView, kill-switch drawdown, disjoncteur journalier, garde journalière, portail de
+risque. Les cinq DÉCIDENT et IMPRIMENT. Aucun ne COMPTE. Toute la trace vit dans le
+`stdout` d'un run — donc dans `/tmp/quant_live.log`, sur une machine, jusqu'au prochain
+nettoyage. « Combien d'ordres le portail a-t-il réduits ce mois-ci, de combien, pour
+quelle règle ? » n'avait pas de réponse autre qu'un grep à la main, machine par machine.
+
+**Ce que l'absence de compteur rendait impossible, et c'est le vrai coût.**
+`packages/execution/coupe_circuit.py` écrit dans son propre en-tête qu'on armera le
+disjoncteur « une fois qu'on a vu sur plusieurs semaines les jours où il AURAIT coupé ».
+Rien n'enregistrait ces jours. La condition d'armement était donc INOBSERVABLE : elle ne
+pouvait pas être remplie, jamais. Le P1 de dette de câblage (ADR-0118) demandait
+d'armer ce disjoncteur ; il demandait une preuve que le dépôt n'avait aucun moyen de
+produire.
+
+**Trois 1.0 qui ne veulent pas dire la même chose.** `live_guards.dd_kill_switch` rend
+`1.0` quand il n'y a rien à couper, quand l'historique est trop court, ET quand le
+contrôle a planté — ce dernier cas imprimant « check indisponible … non appliqué » au
+milieu d'un run. À l'écran les trois se ressemblent ; à la lecture d'un mois de logs,
+ils sont indiscernables. Un kill-switch en panne silencieuse est exactement le mode de
+défaillance qu'un kill-switch existe pour empêcher.
+
+**Décision.** Un TÉMOIN, pas une règle de plus. `packages/execution/garde_fous` reçoit
+des verdicts DÉJÀ rendus et les additionne ; `garde_fous_store` les persiste une fois
+par run dans `.cache/` ; `make garde-fous` les rend lisibles. Quatre propriétés portent
+la décision :
+
+1. **Le témoin ne décide rien.** Aucune de ses méthodes ne peut refuser, réduire,
+   retarder ni modifier un ordre. Il est injecté (jamais global), optionnel, et les
+   appelants existants qui ne le passent pas se comportent exactement comme avant.
+2. **`risk/order_gate` reste une fonction PURE.** Le témoin vit chez l'APPELANT. Mettre
+   une écriture disque dans la dernière barrière créerait un monde où enregistrer une
+   statistique fait échouer un ordre. Un test AST interdit désormais à ce fichier
+   d'importer `json`, `pathlib` ou `packages.*`, et d'appeler `open` ou `print`.
+3. **ABSENT ≠ ZÉRO.** Jamais observé → le garde-fou ne figure pas au rapport (désarmé,
+   ou run qui ne va pas jusque-là). Observé sans déclenchement → `ACTIVE` à 0, et c'est
+   une ALERTE : un seuil hors d'atteinte ressemble exactement à un marché calme.
+   Observé sans conclure → `UNCALIBRATED`. En panne → `ERROR`, jamais un silence.
+4. **Aucun seuil inventé.** Toutes les alertes du rapport sont STRUCTURELLES (jamais
+   observé, jamais déclenché, panne, déclenché sans effet mesuré). Poser ici un « effet
+   moyen négligeable en dessous de X $ » serait une calibration sur rien : l'effet moyen
+   est AFFICHÉ, l'opérateur le juge.
+
+**L'effet se mesure sur ce qui N'EST PAS parti.** Un refus retient tout le montant
+demandé, une réduction retient la différence. Compter le montant demandé sur une
+réduction gonflerait l'effet du portail d'un facteur dix ; compter zéro sur un refus
+effacerait le garde-fou le jour précis où il sert. Un test de sabotage échoue sur chacune
+des deux erreurs.
+
+**Conséquences.** Le rapport démarre VIDE et dit `UNCALIBRATED` — pas des zéros. Aucun
+rétro-remplissage depuis `/tmp/quant_live.log` : ce fichier est éphémère, propre à une
+machine, et sa couverture est inconnue ; en tirer un chiffre serait fabriquer une
+mesure. Les compteurs se remplissent au fil des passages réels, et c'est seulement
+ensuite que la question de l'armement du disjoncteur pourra être tranchée — sur des
+jours comptés, pas sur une impression.
+
+**Ce que ça ne fait pas.** Aucune limite, aucun seuil, aucune décision ne change. Le
+statut au registre de certification est **CANDIDATE**, pas CERTIFIED : les tests passent
+sans réseau, la preuve terrain (des compteurs réels sur ≥20 passages) n'existe pas
+encore.
+
 ## ADR-0185 — Un rapprochement est un diagnostic, pas un résultat (2026-09-18)
 
 **Constat.** Le panneau « Mes positions » ouvrait sur l'identité comptable. La première

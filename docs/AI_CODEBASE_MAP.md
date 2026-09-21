@@ -161,12 +161,18 @@ contraintes doivent être évalués ensemble.
 1. il ne peut que réduire ou refuser une intention, jamais augmenter le risque ;
 2. un désengagement ne doit jamais être bloqué ;
 3. les limites viennent uniquement de l'environnement ;
-4. chaque garde-fou publie compteur de déclenchements et effet moyen.
+4. chaque garde-fou publie compteur de déclenchements et effet moyen — par le TÉMOIN
+   `packages/execution/garde_fous`, jamais par `order_gate` lui-même, qui reste une
+   fonction pure : une écriture disque dans la dernière barrière créerait un monde où
+   enregistrer une statistique fait échouer un ordre. Lecture : `make garde-fous`
+   (ADR-0186). Jusqu'au 21/09 cette ligne décrivait une intention, pas le code.
 
 `packages/execution` contient :
 
 - `rebalance_plan.py` pour convertir cibles/positions en ouvertures, allègements et liquidations ;
 - `live_guards.py` pour kill-switch et lisibilité des comptes brokers ;
+- `garde_fous.py` / `garde_fous_store.py` : le témoin des garde-fous — il observe et
+  compte, il ne décide jamais (états ACTIVE / DISABLED / UNCALIBRATED / ERROR) ;
 - coûts, impact, Almgren-Chriss, TCA, algos et routage ;
 - `sim_broker.py` et adaptateurs Alpaca, Binance, Bitmart, IBKR ;
 - idempotence, retry, réconciliation, journal de décision et round-trips FIFO.
