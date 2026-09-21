@@ -96,6 +96,31 @@ fi
 
 if [ "$statut" -eq 0 ]; then
   echo "✓ front prêt   → http://localhost:$PORT   (build $bati, servi par quant-web)"
-  printf "✓ API %s\n" "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/health)"
+  # « 200 » dit qu'un PROCESSUS répond. Il ne dit pas que l'API peut SERVIR une page :
+  # sans snapshot en cache, la première requête en construit un (1 à 3 min) pendant
+  # lesquelles toutes les pages restent sur leurs squelettes. Vert ici, écran qui tourne
+  # là-bas — c'est exactement le décalage qui a coûté une heure de diagnostic le 21/09,
+  # et c'est le même raisonnement que l'en-tête de ce fichier tient pour le front.
+  # La route est à coût constant (elle ne touche pas au snapshot) : l'interroger est sûr.
+  sante="$(curl -s --max-time 5 http://127.0.0.1:8000/health || true)"
+  printf "✓ API %s\n" "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:8000/health || echo 000)"
+  QT_SANTE="$sante" python3 - <<'PYSANTE' || true
+import json
+import os
+
+try:
+    d = json.loads(os.environ.get("QT_SANTE") or "{}")
+except Exception:
+    d = {}
+msg = d.get("message")
+if not msg:
+    print("  ? état du snapshot ILLISIBLE — API d'une version antérieure, ou réponse "
+          "inattendue. Ne pas conclure que tout va bien.")
+else:
+    age = d.get("age_s")
+    suffixe = f" (âge {age:.0f} s)" if isinstance(age, (int, float)) else ""
+    marque = "✓" if d.get("sert_immediatement") else "⚠"
+    print(f"  {marque} snapshot {d.get('snapshot')}{suffixe} — {msg}")
+PYSANTE
 fi
 exit "$statut"

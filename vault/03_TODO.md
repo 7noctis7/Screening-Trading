@@ -29,6 +29,20 @@
       Le compteur `garde_de_seance` répond désormais : taux de report par classe d'actif
       et dollars non envoyés. Si le taux est élevé en mode `live`, ce n'est pas le marché,
       c'est le PLANNING (`QUANT_LIVE_HOUR=21 make live-cron-install`).
+- [ ] **P1 — LIRE les deux `journalctl` de la panne du 21/09 (13:15 → 13:56).** Le site
+      n'affichait plus rien pendant ~35 min ; les services tournaient, pas d'OOM, 1,4 Gi
+      libre. **La cause n'est pas établie** et la trace existe encore :
+      `journalctl -u quant-api --since "13:15" --until "13:56" --no-pager | tail -50`
+      (idem `quant-web`). Chercher `snapshot rebuilt` et sa durée. Hypothèse NON
+      VÉRIFIÉE : contention — `_warm()` relance une construction complète à chaque
+      redémarrage de l'API (pic 1,4 Go), et deux `make live` en ont ajouté deux autres
+      dans des processus séparés, sur 3,7 Go **sans swap**. Ne pas conclure sans le log.
+- [ ] **P2 — `_warm()` reconstruit à CHAQUE redémarrage, même cache valide (21/09).**
+      Le snapshot disque est servi instantanément, puis un rafraîchissement complet part
+      en fond — systématiquement. Sur cette machine c'est 1 à 3 min à 1,4 Go après chaque
+      `make up`. À confronter au TTL de 15 min : si le cache disque a moins de 15 min,
+      cette reconstruction ne sert à rien. **Mesurer l'âge réel au démarrage avant de
+      toucher quoi que ce soit** — `/health` publie désormais cet âge.
 - [ ] **P2 — `/api/intro` attend le snapshot COMPLET (21/09).** La route rend
       `_snap().get("intro")` : après un `make up`, elle ne répond qu'au bout d'une à trois
       minutes, pendant que le rideau n'attend que 2,5 s. Le motif le DIT désormais, ce qui

@@ -177,7 +177,23 @@ def _warm() -> None:
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok"}
+    """Vivante, ET capable de servir une page MAINTENANT ? Deux questions distinctes.
+
+    Cette route rendait `{"status": "ok"}`, une constante : le « ✓ API 200 » de `make up`
+    ne distinguait pas une API prête d'une API dont la première requête va déclencher une
+    construction de snapshot de une à trois minutes — pendant laquelle chaque page reste
+    sur ses squelettes et l'utilisateur lit « ça ne se charge pas ».
+
+    NE DÉCLENCHE AUCUNE CONSTRUCTION, et c'est la propriété qui compte : elle lit l'état
+    du cache, elle n'appelle NI `_snap()` NI `build_snapshot()`. Un contrôle de santé qui
+    provoquerait le travail qu'il mesure serait le voyant qui allume l'incendie qu'il
+    signale — un test d'AST l'interdit désormais.
+    """
+    from apps.api.sante import sante
+    pret = _CACHE is not None
+    return sante(pret, _BUILDING,
+                 age_s=round(time.time() - _CACHE_TS, 1) if pret else None,
+                 ttl_s=_TTL_S)
 
 
 @app.get("/api/meta")

@@ -1,5 +1,43 @@
 # 04 — JOURNAL
 
+## Session 2026-09-21 (42ᵉ) — « ✓ API 200 » sur un site qui n'affichait rien
+
+**LE SIGNALEMENT.** « Aucune page de mon site ne fonctionne. » Ma première hypothèse —
+l'OOM, `make live` ayant construit deux snapshots pendant que l'API en tenait un — est
+tombée sur les mesures : services `active (running)` depuis 44 min, zéro ligne
+`killed process`, 1,4 Gi libre. **Fausse, et écartée en une commande.**
+
+**CE QUE LA MESURE A RÉVÉLÉ À LA PLACE.** `/health` rendait `{"status": "ok"}` en dur.
+Une constante. Elle ne regarde jamais le snapshot — donc le « ✓ API 200 » de `make up`
+prouve qu'un processus accepte une connexion TCP, et rien d'autre. Les pages étant
+rendues côté client, une API sans snapshot en cache les laisse toutes sur leurs
+squelettes pendant qu'elle en construit un (1 à 3 min). Voyant vert ici, écran qui tourne
+là-bas.
+
+**Le dépôt tenait DÉJÀ ce raisonnement, pour le front.** `verifier_service.sh` s'ouvre
+sur « "quelque chose répond sur le port 3000" n'est pas "le service sert le code
+courant" » — et deux lignes plus bas, il se contentait d'imprimer le code HTTP de l'API.
+La bonne idée était écrite, appliquée à moitié.
+
+**Livré** : `apps/api/sante` (quatre états qui ne se confondent pas, aucune dépendance,
+aucune I/O), `/health` qui les publie **sans jamais déclencher de construction** (test
+d'AST), et `verifier_service.sh` qui annonce désormais « ⚠ snapshot a_construire — la
+PREMIÈRE page demandée déclenchera une construction complète (1 à 3 min) ». Cette
+phrase-là aurait remplacé l'heure de diagnostic.
+
+**Mon propre test d'AST était rouge à sa première exécution** : il lisait la DOCSTRING de
+`health`, qui cite `_snap()` et `build_snapshot()` pour expliquer qu'elle ne les appelle
+pas. Un test qui lit la prose d'une fonction ne contrôle pas ce qu'elle fait — il
+interdit d'en parler. Il lit le corps, docstring retirée.
+
+**CE QUI RESTE OUVERT, ET JE NE LE COMBLE PAS PAR UNE HYPOTHÈSE.** La cause de la panne
+n'est pas établie. Mécanisme plausible : `_warm()` relance une construction complète à
+CHAQUE redémarrage de l'API (pic mesuré 1,4 Go), et deux `make live` ont ajouté deux
+constructions dans deux processus séparés, sur une machine de 3,7 Go **sans swap** —
+contention, pas manque de mémoire. Mais je ne l'ai pas mesuré, et les deux `journalctl`
+de la fenêtre 13:15–13:56 n'ont pas encore été lus. La trace, elle, n'est pas perdue :
+`journalctl` survit au redémarrage, contrairement à ce que j'avais d'abord craint.
+
 ## Session 2026-09-21 (41ᵉ) — Le premier vrai rapport, et deux pièges de lecture dans le mien
 
 **LE GARDE DE SÉANCE RÉPOND, DÈS LE PREMIER PASSAGE** : 19 déclenchements, **52 470 $**,

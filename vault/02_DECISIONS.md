@@ -2,6 +2,60 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0187 — Un contrôle de santé doit répondre à la question qu'on lui pose (2026-09-21)
+
+**L'INCIDENT.** « Aucune page de mon site ne fonctionne. » Les deux services étaient
+`active (running)` depuis 44 minutes, aucun OOM, 1,4 Gi de RAM libre — et `make up` venait
+d'annoncer **« ✓ API 200 »**.
+
+**CE QUE CE 200 PROUVAIT.** Rien d'utile :
+
+```python
+@app.get("/health")
+def health() -> dict:
+    return {"status": "ok"}
+```
+
+Une CONSTANTE. Elle ne touche jamais au snapshot. Or les pages du site sont rendues côté
+client : le HTML arrive tout de suite, les données attendent l'API. Sans snapshot en
+cache, la première requête le CONSTRUIT — une à trois minutes pendant lesquelles chaque
+page reste sur ses squelettes. Vu de l'écran : « ça ne se charge pas ». Vu de `make up` :
+tout est vert. Rien ne reliait les deux, et le voyant le plus rassurant du système était
+celui qui regardait le moins.
+
+**Le même dépôt tenait déjà ce raisonnement — pour le front.** L'en-tête de
+`scripts/verifier_service.sh` s'ouvre sur : « "Quelque chose répond sur le port 3000"
+N'EST PAS "le service sert le code courant" ». Le fichier qui porte cette phrase se
+contentait, deux lignes plus bas, d'imprimer le code HTTP de l'API.
+
+**Décision.** `/health` publie l'état RÉEL du cache, en quatre situations qui ne se
+confondent pas : `pret`, `pret_rafraichissement` (il sert l'ancien pendant le refresh),
+`en_construction` (il ne sert pas encore), `a_construire` (la première requête paiera la
+construction). Plus `sert_immediatement`, qui est la seule chose qu'un opérateur ait
+besoin de lire, et une phrase qui dit ce qu'il VERRA — pas ce que le serveur fait :
+« stale-while-revalidate » est exact et n'aide personne devant un écran qui tourne.
+
+**Trois propriétés portent la décision.**
+
+1. **Le contrôle ne déclenche pas ce qu'il mesure.** `health` lit `_CACHE` et `_BUILDING`,
+   il n'appelle NI `_snap()` NI `build_snapshot()`. Un contrôle de santé qui provoquerait
+   la construction qu'il décrit serait le voyant qui allume l'incendie qu'il signale — et
+   chaque `make up` paierait trois minutes pour afficher une ligne. Un test d'AST
+   l'interdit. *(Sa première version était rouge : elle lisait la DOCSTRING, qui cite ces
+   deux appels pour expliquer qu'elle ne les fait pas. Un test qui lit la prose d'une
+   fonction n'en contrôle pas le comportement, il interdit d'en parler.)*
+2. **Le contrat existant est préservé.** `status: "ok"` reste, les champs sont ajoutés.
+   Un contrôle de santé qui change de forme casse les outils qui s'en servaient.
+3. **« Pas encore prêt » n'est PAS une panne.** Après un changement du code de
+   construction, l'absence de cache est l'état NORMAL. `verifier_service.sh` l'ANNONCE et
+   ne met pas le statut en échec : transformer une information en fausse alerte, c'est
+   garantir qu'on cessera de la lire. Un test le verrouille.
+
+**Ce que ça ne fait pas.** Ça ne rend pas la construction plus rapide, et ça n'explique
+pas la panne du 21/09 — les deux `journalctl` de la fenêtre restent à lire. Ça garantit
+seulement qu'un prochain épisode du même genre se verra depuis le terminal, au lieu
+d'être cherché pendant une heure derrière un voyant vert.
+
 ## ADR-0186 — Un garde-fou qui ne compte pas est indiscernable d'un garde-fou absent (2026-09-21)
 
 **Constat.** Cinq garde-fous protègent le seul chemin qui envoie des ordres : kill-switch
