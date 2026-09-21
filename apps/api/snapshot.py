@@ -1782,20 +1782,41 @@ def _ticker_section(data: dict, acmap: dict, n: int = 20) -> dict:
     return {"available": bool(out), "stocks": out[:n]}
 
 
-def _intro_section(equity, trade_stats, sp_dates, sp_closes, instruments) -> dict:
+def _serie_datee(dates, closes) -> list[dict] | None:
+    """`[{t, v}]` — ou `None` si les deux listes ne s'alignent pas.
+
+    Un indice dont les cours et les dates ont des longueurs différentes ne se compare à
+    rien : le tracer alignerait des valeurs sur les mauvais jours, et l'écart affiché
+    serait faux sans qu'aucune erreur ne se produise.
+    """
+    if not dates or not closes or len(dates) != len(closes):
+        return None
+    return [{"t": d, "v": v} for d, v in zip(dates, closes, strict=False)]
+
+
+def _intro_section(equity, trade_stats, sp_dates, sp_closes, instruments,
+                   autres_indices: dict | None = None) -> dict:
     """Assemble la section `intro`. Toute absence de donnée est DITE, jamais comblée."""
     from apps.api.intro_payload import construire
-    ref = None
-    if sp_dates and sp_closes and len(sp_dates) == len(sp_closes):
-        ref = [{"t": d, "v": v}
-               for d, v in zip(sp_dates, sp_closes, strict=False)]
+    ref = _serie_datee(sp_dates, sp_closes)
+    # PLUSIEURS RÉFÉRENCES, et seulement les RÉELLES. Un indice retombé sur sa série
+    # synthétique n'entre pas ici : une courbe inventée tracée à côté d'une vraie ferait
+    # une comparaison fausse, et rien à l'écran ne la distinguerait de la bonne.
+    references: dict[str, list[dict]] = {}
+    if ref:
+        references["S&P 500"] = ref
+    for nom, (d, c) in (autres_indices or {}).items():
+        serie = _serie_datee(d, c)
+        if serie:
+            references[nom] = serie
     classes: dict[str, int] = {}
     for m in instruments or []:
         k = (m.get("asset_class") or "equity").strip() or "equity"
         classes[k] = classes.get(k, 0) + 1
     univers = {"total": len(instruments or []), "par_classe": classes}
     try:
-        return construire({"equity": equity}, trade_stats, univers, reference=ref)
+        return construire({"equity": equity}, trade_stats, univers, reference=ref,
+                          references=references or None)
     except Exception as e:  # noqa: BLE001 — l'intro ne doit jamais casser le snapshot
         return {"disponible": False, "motif": f"{type(e).__name__}: {e}"}
 
@@ -1901,6 +1922,13 @@ def build_snapshot(seed: int = 7) -> dict:
         "synthetic", seed=202, drift=0.13, annual_vol=0.22).fetch_ohlcv("Nasdaq 100", "1d", start, end)]
     sp, _sp_dates, _sp_real = _index_series(["^GSPC", "SPX", "SPY"], start, end, _sp_syn)
     ndx, _ndx_dates, _ndx_real = _index_series(["^NDX", "^IXIC", "QQQ"], start, end, _ndx_syn)
+    # CAC 40 — troisième repère, pour que la comparaison ne dépende pas du seul indice
+    # américain. `_cac_real` commande tout : une série qui n'est pas RÉELLE n'est affichée
+    # NULLE PART, ni au dashboard ni dans l'intro. AUCUN repli synthétique n'est fourni
+    # (liste vide) — mieux vaut une comparaison absente qu'une courbe inventée tracée à
+    # côté d'une vraie, que rien à l'écran ne distinguerait de la bonne.
+    # Les symboles sont de VRAIS tickers de l'indice : `CAC` ne désignait rien et `EWQ`
+    # est un ETF France, c'est-à-dire un proxy, pas le CAC 40.
     cac, _cac_dates, _cac_real = _index_series(["^FCHI", "PX1", "CAC.PA"], start, end, [])
 
     # régime macro RÉEL point-in-time : VIX réel + tendance S&P (proxy activité) + FRED (courbe,
@@ -2532,6 +2560,23 @@ def build_snapshot(seed: int = 7) -> dict:
     # Repli "modèle" (backtest du sleeve) UNIQUEMENT si le compte n'est pas connecté.
     from packages.execution.equity_history import series as _eq_series
 
+    def _note_churn(capital: float | None) -> dict:
+        """L'annotation de churn, LUE SUR DISQUE et jamais calculée ici.
+
+        Le rapport vient de l'historique du courtier — un appel réseau, avec des clés
+        que
+        le build public n'a pas. `make churn` le mesure une fois par jour et le dépose ;
+        on se contente de le relire. Cache absent ⇒ « NON MESURÉ », ce qui ne se confond
+        pas avec « aucun churn » : c'est toute la valeur de l'annotation.
+        """
+        try:
+            from packages.execution.annotation_churn import annotation, lire_cache
+            rap, quand = lire_cache()
+            return annotation(rap, capital, quand)
+        except Exception as e:  # noqa: BLE001 — une note ne fait pas tomber une courbe
+            return {"applicable": False, "mesure": False,
+                    "motif": f"annotation indisponible ({type(e).__name__}: {e})"}
+
     def _broker_perf(bd: dict, broker_key: str, model_curve: list | None) -> dict:
         if bd.get("ok"):                                   # compte connecté → on veut du RÉEL
             rc = bd.get("history") or []                   # Alpaca portfolio history (réel)
@@ -2540,7 +2585,8 @@ def build_snapshot(seed: int = 7) -> dict:
             if len(rc) >= 10:
                 return {**_curve_stats([p["v"] for p in rc], compte_reel=True,
                                        dates=[str(p.get("t", ""))[:10] for p in rc]),
-                        "curve": rc, "source": "réel"}
+                        "curve": rc, "source": "réel",
+                        "churn": _note_churn(float(rc[-1].get("v") or 0.0))}
             return {"available": False, "source": "réel-court",
                     "note": "Compte récent : historique réel en cours de constitution "
                             "(quelques jours de suivi nécessaires)."}
@@ -2605,7 +2651,12 @@ def build_snapshot(seed: int = 7) -> dict:
         if len(_comb) >= 2:
             _real_portfolio = {"available": True,
                                "stats": _curve_stats(_comb, compte_reel=True, dates=_rdates),
-                               "curve": [{"t": d, "v": round(v, 2)} for d, v in zip(_rdates, _comb)]}
+                               "curve": [{"t": d, "v": round(v, 2)}
+                                         for d, v in zip(_rdates, _comb, strict=False)],
+                               # La courbe reste CELLE DU COMPTE ; c'est la note qui dit
+                               # ce qu'elle porte. Corriger la série publierait une
+                               # performance qui n'a jamais eu lieu.
+                               "churn": _note_churn(_comb[-1])}
     # BLACK-LITTERMAN : prior équipondéré + vues = conviction z-scorée → poids postérieurs
     try:
         import numpy as _np2
@@ -2773,7 +2824,10 @@ def build_snapshot(seed: int = 7) -> dict:
         # affiche notre seule courbe et le dit.
         "intro": _intro_section(_dash_equity, trade_stats,
                                 _sp_dates if _sp_real else [], sp if _sp_real else [],
-                                instruments),
+                                instruments,
+                                autres_indices={"CAC 40": (
+                                    _cac_dates if _cac_real else [],
+                                    cac if _cac_real else [])}),
         "dashboard": {
             "as_of": last_bar.isoformat(),
             "regime": {**PL.regime_payload(regime, expo), "macro_real": _macro_real,

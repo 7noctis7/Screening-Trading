@@ -1,4 +1,4 @@
-// Les quatre battements. Un battement = une fonction pure : contexte, géométrie,
+// Les actes de l'intro. Un acte = une fonction pure : contexte, géométrie,
 // progression LOCALE (0→1), palette. Aucun ne connaît le temps global ni les autres.
 //
 // LA TYPOGRAPHIE N'EST PAS ICI. Les grands chiffres sont rendus par le DOM (`IntroBeats`) :
@@ -99,39 +99,6 @@ export function beatRejet(ctx: CanvasRenderingContext2D, g: Geo, p: number, pal:
   }
 }
 
-/** BATTEMENT 3 — RÉSULTAT. Deux barres de drawdown. Celle du marché part la première. */
-export function beatResultat(ctx: CanvasRenderingContext2D, g: Geo, p: number, pal: Palette) {
-  const { w, h, petit } = g;
-  const lw = petit ? w * 0.74 : w * 0.46;
-  const x0 = w / 2 - lw / 2;
-  const y = h * 0.64;
-
-  // Le marché d'abord, plus bas, plus long : on VOIT l'écart avant de lire le chiffre.
-  const marche = easeOut(clamp01((p - 0.08) * 2.2));
-  const nous = easeOut(clamp01((p - 0.30) * 2.2));
-
-  etiquette(ctx, "MARCHÉ ÉQUIPONDÉRÉ", x0, y - 8, pal.muted, marche * 0.6);
-  barre(ctx, x0, y, lw, marche * (23 / 23), pal.neg, marche * 0.75, 3);
-  etiquette(ctx, "−23 %", x0 + lw + 10, y + 4, pal.neg, clamp01((marche - 0.7) * 4) * 0.85);
-
-  etiquette(ctx, "QUANT TERMINAL", x0, y + 26, pal.muted, nous * 0.6);
-  barre(ctx, x0, y + 34, lw, nous * (9 / 23), pal.accent2, nous * 0.95, 3);
-  etiquette(ctx, "−9 %", x0 + lw * (9 / 23) + 10, y + 38, pal.accent2,
-            clamp01((nous - 0.7) * 4) * 0.95);
-
-  // Le repère du plafond : sans lui, deux barres ne comparent rien.
-  ctx.save();
-  ctx.globalAlpha = clamp01((p - 0.5) * 3) * 0.28;
-  ctx.strokeStyle = pal.muted;
-  ctx.lineWidth = 1;
-  ctx.setLineDash([2, 4]);
-  ctx.beginPath();
-  ctx.moveTo(x0 + lw * (9 / 23), y - 14);
-  ctx.lineTo(x0 + lw * (9 / 23), y + 48);
-  ctx.stroke();
-  ctx.restore();
-}
-
 /** BATTEMENT 4 — RÉVÉLATION. Le canvas s'efface : la place revient au nom. */
 export function beatReveal(ctx: CanvasRenderingContext2D, g: Geo, p: number, pal: Palette) {
   const { w, h } = g;
@@ -150,6 +117,40 @@ export function beatReveal(ctx: CanvasRenderingContext2D, g: Geo, p: number, pal
     ctx.moveTo(w / 2 - demi, h / 2);
     ctx.lineTo(w / 2 + demi, h / 2);
     ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** BATTEMENTS DE PREUVE — les cinq fenêtres et le bilan des trades.
+ *
+ * ILS N'AVAIENT AUCUN ACTE. Le `switch` de `SceneIntro.peindre` datait des quatre
+ * battements d'origine et connaissait encore une clé `resultat` disparue : les sept
+ * battements ajoutés depuis tombaient tous dans `default`, c'est-à-dire dans l'acte de
+ * RÉVÉLATION — un trait horizontal. Pendant les deux tiers de l'intro, la toile ne
+ * peignait donc qu'une grille pâle et une ligne, et rien ne le signalait.
+ *
+ * Ce que peint cet acte est DÉLIBÉRÉMENT discret : les courbes et les chiffres sont rendus
+ * par le DOM, juste au-dessus. La toile n'a pas à rivaliser avec eux — elle doit seulement
+ * ne pas être morte. Un flux qui continue derrière la preuve, et c'est tout.
+ */
+export function beatPreuve(ctx: CanvasRenderingContext2D, g: Geo, p: number, pal: Palette,
+                           parts: Particule[], dt: number) {
+  const { w, h } = g;
+  // Entrée et sortie en fondu : le flux ne doit jamais claquer d'un battement à l'autre.
+  const a = clamp01(p * 6) * (1 - clamp01((p - 0.9) * 10)) * 0.22;
+  if (a <= 0.004) return;
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.fillStyle = pal.accent2;
+  for (const q of parts) {
+    q.x += q.vx * dt * 0.45;              // moitié moins vif : c'est un fond, pas un sujet
+    if (q.x > w) q.x -= w;
+    q.ph += dt * 0.9;
+    // Les particules s'écartent du centre, là où le DOM pose les chiffres et les courbes.
+    const y = q.y + Math.sin(q.ph) * q.amp * 0.22;
+    const ecart = Math.abs(y - h * 0.5) / (h * 0.5);
+    if (ecart < 0.34) continue;
+    ctx.fillRect(q.x, y, 1.4, 1.4);
   }
   ctx.restore();
 }

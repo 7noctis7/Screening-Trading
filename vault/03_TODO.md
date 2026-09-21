@@ -20,6 +20,82 @@
 - [x] **~~P1 — Trois restitutions visuelles disparues~~ — FERMÉ (21/09).** L'introduction
       rejoue à chaque visite explicite de `/`; le CAC 40 réel revient dans les courbes du
       dashboard et de performance ; Positions publie le P&L réalisé de tous les lots clos.
+- [ ] **P1 — LIRE les compteurs de garde-fous, puis trancher l'armement du disjoncteur
+      (21/09, ADR-0186).** `make garde-fous` existe et répond aujourd'hui `UNCALIBRATED` :
+      le fichier `.cache/garde_fous.json` est vide tant que le robot n'est pas repassé.
+      Commande, après une vingtaine de passages : `make sync && make garde-fous`.
+      Ce qu'il faudra y lire, dans cet ordre :
+      · `disjoncteur_journalier` → `aurait_declenche` : LA mesure qui manquait pour
+        décider de `QUANT_DISJONCTEUR=1` (cf. P1 dette de câblage, ADR-0118). Zéro jour
+        sur vingt passages ne veut PAS dire « inutile » — ça veut dire « pas encore
+        éprouvé » ;
+      · `portail_de_risque` → taux et effet en dollars, par RÈGLE. Un taux nul sur
+        plusieurs semaines pose la question d'un plafond hors d'atteinte ;
+      · tout `ERROR` → un garde-fou est tombé et le run a continué sans lui ;
+      · tout `JAMAIS OBSERVÉ` → il est désarmé, ou le run ne va jamais jusque-là.
+      **Ne rien armer sur un rapport vide** : c'est exactement ce que le rapport refuse
+      de laisser croire.
+- [x] **~~P1 — Le report hors séance revient-il CHAQUE jour ?~~ — MESURÉ, NON (21/09).**
+      Premier passage réel observé : `garde_de_seance` = **16 observations, 0
+      déclenchement, 0 %**. Le cron tombe DANS la séance. La paire de mesures fait la
+      preuve : le même compteur affichait **19 déclenchements / 52 470 $** sur un aperçu
+      lancé à 09:17 ET le matin. Le compteur discrimine, l'horaire est bon. Rien à
+      changer au planning. *Texte d'origine ci-dessous.*
+- [ ] **~~P1 (clos ci-dessus) — Le report hors séance revient-il CHAQUE jour ? (21/09, ADR-0186).~~** Premier
+      aperçu mesuré : **19 ordres reportés, 52 596 $**, parce que le run tombe à 08:54 ET
+      alors que la séance ouvre à 09:30. Le cron tourne à 19:08 UTC = 15:08 ET, donc DANS
+      la séance — mais personne n'a jamais vérifié que c'est bien le cas tous les jours.
+      Le compteur `garde_de_seance` répond désormais : taux de report par classe d'actif
+      et dollars non envoyés. Si le taux est élevé en mode `live`, ce n'est pas le marché,
+      c'est le PLANNING (`QUANT_LIVE_HOUR=21 make live-cron-install`).
+- [x] **~~P1 — LIRE les deux `journalctl` de la panne du 21/09~~ — SANS OBJET (21/09).**
+      La panne n'était pas côté VPS : le tunnel SSH visait `localhost`, résolu en `::1`
+      sur la machine, que les services n'écoutent pas. Le site servait pendant tout
+      l'épisode. *(Et le `journalctl` rendait « -- No entries -- » faute de `sudo` : la
+      sortie portait l'explication deux lignes plus haut.)*
+- [ ] **P2 — Les services n'écoutent qu'en IPv4 (21/09).** `uvicorn --host 127.0.0.1` et
+      le front idem. C'est un choix sûr, pas un défaut — mais il rend tout tunnel visant
+      `localhost` silencieusement inopérant sur une machine à double pile. Décider : soit
+      on documente définitivement `127.0.0.1` (fait), soit on écoute aussi `[::1]`.
+      Ne rien changer sans raison : élargir une écoute est une décision de sécurité.
+- [ ] **~~P1 (clos ci-dessus) — LIRE les deux `journalctl` de la panne du 21/09.~~** Le site
+      n'affichait plus rien pendant ~35 min ; les services tournaient, pas d'OOM, 1,4 Gi
+      libre. **La cause n'est pas établie** et la trace existe encore :
+      `journalctl -u quant-api --since "13:15" --until "13:56" --no-pager | tail -50`
+      (idem `quant-web`). Chercher `snapshot rebuilt` et sa durée. Hypothèse NON
+      VÉRIFIÉE : contention — `_warm()` relance une construction complète à chaque
+      redémarrage de l'API (pic 1,4 Go), et deux `make live` en ont ajouté deux autres
+      dans des processus séparés, sur 3,7 Go **sans swap**. Ne pas conclure sans le log.
+- [ ] **P2 — `_warm()` reconstruit à CHAQUE redémarrage, même cache valide (21/09).**
+      Le snapshot disque est servi instantanément, puis un rafraîchissement complet part
+      en fond — systématiquement. Sur cette machine c'est 1 à 3 min à 1,4 Go après chaque
+      `make up`. À confronter au TTL de 15 min : si le cache disque a moins de 15 min,
+      cette reconstruction ne sert à rien. **Mesurer l'âge réel au démarrage avant de
+      toucher quoi que ce soit** — `/health` publie désormais cet âge.
+- [ ] **P1 — Le CAC 40 est-il RÉEL en base ? (21/09).** Absent de l'intro et du
+      dashboard. Le code est entièrement branché des deux côtés — `FENETRES` (5 fenêtres),
+      `_comparaison` (multi-références), `snapshot.py:2828` et `:2859`,
+      `IntroCourbes.referencesUtiles`. Tout dépend de `_cac_real`
+      (`_index_series(["^FCHI", "CAC", "EWQ"], …)`) : une série retombée sur son repli
+      synthétique n'est affichée NULLE PART, par décision explicite. **Mesurer d'abord** :
+      `curl -s localhost:8000/api/intro` → lire `references_noms`. Si le CAC n'y est pas,
+      le remède est l'INGESTION de `^FCHI`, pas le code d'affichage.
+- [ ] **P2 — `/api/intro` attend le snapshot COMPLET (21/09).** La route rend
+      `_snap().get("intro")` : après un `make up`, elle ne répond qu'au bout d'une à trois
+      minutes, pendant que le rideau n'attend que 2,5 s. Le motif le DIT désormais, ce qui
+      suffit à ne plus se tromper de diagnostic. Deux vraies pistes si ça devient gênant :
+      servir la section `intro` du DERNIER snapshot connu pendant la reconstruction, ou
+      allonger `ATTENTE_DONNEES_MS`. La première est la bonne — la seconde ne fait que
+      déplacer le seuil. **Ne pas la traiter sans mesurer d'abord** combien de temps
+      `/api/intro` met réellement à répondre après un `make up`.
+- [ ] **P2 — `.cache/stages/*.pkl` en mode 664 sur le VPS (21/09).** `safe_pickle`
+      avertit à chaque run : « inscriptible par d'autres utilisateurs ». Sur une machine
+      mono-utilisateur c'est bénin ; l'avertissement, lui, est correct et bruyant. Décider :
+      `chmod 600` à l'écriture, ou umask du service.
+- [ ] **P2 — Le témoin des garde-fous n'est pas exposé sur le site (21/09).** Rapport
+      CLI seulement, à dessein : publier des compteurs de garde-fous demande de décider
+      ce qui est publiable sur un dépôt PUBLIC. Le fichier est local (`.cache/`,
+      gitignoré) et ne contient ni symbole, ni position, ni clé — un test le vérifie.
 - [x] **~~P0/P1 — Régime ATR : bascule de modèle~~ — FERMÉE PAR LA MESURE (14/09,
       ADR-0145).** Trois seuils, 820 symboles, t groupé significatif partout — et pourtant
       non. Aux TROIS seuils la journée typique en haute volatilité est moins bonne qu'en
@@ -34,14 +110,170 @@
       ADR-0155/0156).** Actions + launchd du Mac + crontab du VPS, chacun défaisant le
       précédent. −60,79 $ le 15/09. Garde journalière branchée (le COURTIER décide),
       planification `paper.yml` retirée, Mac désinstallé. Test : `schedule:` interdit.
-- [ ] **P1 — Chiffrer le coût CUMULÉ du churn (15/09).** Actions + VPS coexistaient depuis
-      des semaines : le doublon ne date pas du 15/09, seul le Mac est intermittent. Relire
-      l'historique d'ordres Alpaca, compter les allers-retours intra-journaliers sur une
-      même ligne, et dire À PARTIR DE QUELLE DATE la courbe d'equity est biaisée. Tant que
-      ce n'est pas mesuré, `vault/10_BACKTEST_RESULTS.md` compare du paper pollué.
-- [ ] **P1 — Rien ne surveille la DÉRIVE d'un planificateur (15/09, ADR-0156).** Le retard
-      de GitHub est passé de 30 min à 201 min de médiane sans qu'aucune alerte ne le dise.
-      La garde journalière traite la CONSÉQUENCE ; la dérive elle-même reste invisible.
+- [x] **~~P0 — Trois planificateurs~~ — DÉFINITIVEMENT CLOS (17/09).** Deux jours
+      propres d'affilée : 16/09 (1 passage 19:08:35, 0 A/R) et 17/09 (1 passage 19:08:28,
+      0 A/R). La garde journalière tient à vingt secondes près.
+- [x] **~~P1 — Chiffrer le coût CUMULÉ du churn~~ — MESURÉ (16/09, ADR-0159).**
+      `make churn` : 15 jours sur 32 à plus d'un passage, **−620,13 $** sur **594 362 $**
+      brassés. La date de pollution est le **27/08** (premier aller-retour), pas le 07/07
+      (premier doublon) — deux passages qui aboutissent à la même cible ne coûtent rien.
+- [x] **~~P1 — Rien ne surveille la DÉRIVE d'un planificateur~~ — FERMÉE (16/09).**
+      `make brief` porte une section « Passages du robot (7 j) » avec les commandes à
+      lancer. Un doublon se voit le lendemain matin.
+- [ ] **P0 — Lancer `make news` chaque jour, sans exception (16/09, ADR-0162).** PREMIER
+      PASSAGE RÉUSSI sur le VPS le 16/09 : **2 375 titres · 199 symboles · 71 jours**
+      (2026-05-19 → 2026-09-16), 1 symbole muet. Reste à VÉRIFIER que le passage
+      automatique de `cron_daily.sh` prend le relais demain — un flux RSS ne se rejoue pas.
+- [x] **~~P1 — Le motif déviation→reclaim→consolidation~~ — FERMÉ PAR LA MESURE
+      (18/09, ADR-0182/0183/0184).** Mesuré sur DEUX marchés et deux timeframes, avec
+      le gate du module : **0 scoreur sur 5 passe les quatre portes**, des deux côtés.
+      · **Actions 1D** — 200 titres, 499 758 barres, horizon 10 : IC de +0,0071 à
+      −0,0131, tous sous le seuil 0,03, et négatifs dès `reclaim`.
+      · **Crypto 4h** — 98 paires, 1 187 822 barres (Binance), horizon 10 barres =
+      40 h : mêmes ordres de grandeur, IC −0,0120 et −0,0145 sur `reclaim` et
+      `consolidation`, et `consolidation + contraction` en Sharpe **NÉGATIF**.
+      **La jambe intraday que la spec réclamait a donc été mesurée pour de bon** — et
+      elle ne sauve rien. Deux marchés indépendants, même réponse.
+      **Ce que la mesure dit de plus, une fois dé-diluée** : à sélectivité égale, les
+      barres retenues valent le marché en actions (Sharpe ≈ 0,28-0,32 contre 0,339) et
+      MOINS que le marché en crypto, en se dégradant à chaque étage de confirmation
+      (0,101 → 0,087 → 0,080 → −0,024). Attendre la confirmation coûte, ça ne rapporte
+      pas. `signal_lab` est SANS OBJET : on ne mesure pas le recouvrement d'un signal
+      qui n'existe pas.
+      **Ce qui reste** : la machine à états et les deux bancs restent au dépôt — ils ont
+      servi à trancher, et ils reserviront. Aucun câblage en production.
+- [ ] **P2 — Intraday 1h/4h pour les ACTIONS / INDICES / ETF : pas de source gratuite
+      honnête (18/09).** La crypto est livrée (`make ingest-crypto-intraday` → Binance,
+      sans clé, historique complet de la paire, `data/crypto_intraday.db`). Côté actions,
+      les deux sources gratuites déjà branchées dans le dépôt échouent pour des raisons
+      DIFFÉRENTES, et aucune des deux n'est réparable par du code :
+      **yfinance** plafonne le 1h à ~730 jours d'historique (limite du fournisseur) — de
+      quoi faire un banc, pas un entraînement ML sur plusieurs cycles ; et il ne sert PAS
+      le 4h, ce qui n'était pas visible avant : `_TF_MAP` renvoyait `"4h" → "1h"` et
+      `df_to_bars` étiquetait avec le timeframe DEMANDÉ, donc des barres horaires
+      entraient en base avec `timeframe="4h"`. Corrigé : le provider REFUSE désormais
+      `4h` explicitement, l'agrégation 1h→4h est à la charge de l'appelant.
+      **Alpaca palier gratuit** sert le flux IEX, dont les VOLUMES ne représentent pas le
+      marché — or nos détecteurs (`sfp`, `deviation_reclaim`) filtrent sur le volume :
+      la donnée est gratuite mais la mesure qu'on en tirerait serait fausse, ce qui est
+      pire que pas de donnée.
+      **Ce qui reste, donc payant** : Alpaca SIP (~99 $/mois), Polygon, Databento.
+      **À NE PAS refaire** : `bars_repo` est DÉJÀ multi-timeframe (clé (symbol, timeframe,
+      ts)), le schéma n'est pas le blocage — seule la SOURCE l'est.
+      **Décision différée, et la condition est mesurable** : n'ouvrir ce poste que si le
+      banc crypto (`make deviation-lab-crypto`) montre que l'intraday apporte quelque
+      chose LÀ OÙ les données sont complètes. Si l'apport n'existe pas sur Binance, il
+      n'existera pas sur deux ans d'IEX, et on aura économisé l'abonnement.
+- [x] **~~P0 — Le journal tient 27 symboles OUVERTS, le courtier en détient 17~~ —
+      FERMÉE PAR LA RECONSTRUCTION (18/09, cf. journal 38ᵉ session).** Le registre n'a
+      pas été réparé, il a été REJOUÉ depuis les 774 fills réels du courtier : 533
+      aller-retours fermés, 52 lots ouverts, ZÉRO vente orpheline, et un contrôle
+      fail-closed qui refuse d'écrire tant que les lots ouverts ne correspondent pas,
+      symbole par symbole, à l'inventaire réel. Les 13 symboles fantômes et les 3
+      positions manquantes n'existent plus : ils venaient de la période à plusieurs
+      planificateurs, et le rejeu ne connaît que ce que le courtier a exécuté.
+      **Ce qui reste ouvert, et qui est d'une autre nature** : le réalisé est BRUT de
+      frais (les `CFEE` crypto sont prélevées en JETONS, hors du flux d'ordres), d'où
+      un résidu de −456,29 $ dans l'identité du capital. Suivi par `make frais-courtier`.
+      *Texte d'origine conservé ci-dessous pour la trace.*
+- [ ] **~~P0 (clos ci-dessus) — Le journal tient 27 symboles OUVERTS, le courtier en détient 17 (17/09).~~**
+      Mesuré en confrontant l'onglet « Historique des positions » (61 lots ouverts) aux
+      positions Alpaca réelles : **13 symboles** ouverts au journal dont le courtier ne
+      détient RIEN (HPQ 4 lots, MPC 3, TSM 3, NTR 2, CF, LNC, MCK, NEM, PATH, STT, TGT,
+      TYL, WFC), et **3 positions réelles** absentes du journal (PSX, QRVO, XOM, toutes
+      achetées le 16/09). Le mécanisme est lisible sur THC : quatre achats (09, 10, 14,
+      15/09) et trois ventes (10/09 19:54, 11/09 19:59, 14/09 21:40) chez le courtier,
+      qui n'en détient donc qu'un lot — et le journal a gardé les QUATRE achats ouverts
+      sans apparier une seule vente. Les ventes manquantes tombent toutes sur les
+      passages SECONDAIRES : c'est le résidu de la période à plusieurs planificateurs.
+      Confirmation : **aucun lot orphelin daté du 16 ou du 17/09**, les deux journées à
+      un seul passage. La dérive a cessé, le passif reste.
+      **RÉPARÉ EN PARTIE (17/09 21:13, `make reparer-journal`).** 85 ouvertures
+      reconstituées, 182 écritures de correction postées au prix et à la date des
+      fills réels, 9 doublons de fermeture retirés (+376,17 $ de « réalisé » qui
+      était compté deux fois). Orphelins 53 → 27, achats non couverts 48 → 8, lots
+      ouverts 61 → 22, round-trips fermés 62 → 112.
+      **Ce que le panneau affiche a changé de signe** : réalisé +139,75 $ sur 62
+      trades (espérance +2,25 $) devient **−23,15 $ sur 112 trades (−0,21 $)**. Le
+      premier chiffre était un sous-ensemble favorable — les pertes n'étaient pas
+      appariées. Le second est le chiffre honnête.
+      RESTE À FAIRE :
+      - 27 lots ouverts sur des titres que le courtier ne détient plus (AVAX 378,
+        NWL 1151, SOL 68, MAS 86, LTC +99, T +89, OSCR +87) — aucune vente du
+        courtier n'en rend compte, les fermer inventerait un prix ;
+      - 8 symboles dont les ACHATS ne sont pas couverts (LINK, OSCR, T, VZ, QQQ,
+        OKTA, RRC, MPC). Les deux écarts NÉGATIFS (VZ −36,48 · QQQ −7,93) sont
+        couverts par ces achats manquants (66,89 · 20,14) : c'est un trou, pas une
+        sur-fermeture. La chaîne n'est pas un point fixe après un passage —
+        `completer-ouvertures` tourne AVANT la réconciliation, donc un second
+        passage complet peut encore en fermer ;
+      - NWL (1,74×) et MAS (1,91×) portent deux fois leur achat, tout en `legacy=1`,
+        préfixe `LEG` unique : le chemin d'IMPORT crée deux identités. Non traité.
+      - **TRANCHÉ (17/09)** : le panneau montre les trades du ROBOT réellement ouverts
+        PUIS clôturés. Le périmètre se lit sur l'ORIGINE du lot (`P-` décision, `C-`
+        fill reconstitué), plus sur `legacy` — qui répond à la question de la
+        calibration ML, pas à celle du panneau. `packages/execution/perimetre_journal`.
+- [x] **~~P1 — La réparation recréait un fill déjà journalisé~~ — FERMÉE (17/09).**
+      Second passage de `make reparer-journal` : `diag-journal` a vu « QQQ ×2,
+      3,586126 @ 716,86 le 17/09 ». La couverture était jugée sur la quantité AGRÉGÉE
+      d'un symbole, puis le reste calculé en consommant les fills les plus anciens —
+      ce qui suppose que ce que le journal connaît forme un PRÉFIXE CHRONOLOGIQUE des
+      achats. Faux : l'achat du 17/09 était journalisé, 20 unités plus anciennes ne
+      l'étaient pas. `deja_journalises` apparie d'abord les fills reconnus exactement.
+- [ ] **P2 — `sync-garde` protège le travail NON COMMITÉ, pas un commit local.**
+      `git reset --hard origin/<branche>` détruit aussi les commits locaux non poussés,
+      et le garde-fou du 17/09 ne couvre que l'arbre de travail. Sur une machine restée
+      en arrière qui vient de commiter, `make sync` perd le commit en silence — même
+      classe de défaut, autre porte. Piste : avertir (ou poser une branche de secours)
+      quand `git log origin/<branche>..HEAD` n'est pas vide.
+- [x] **~~P1 — `make sync` détruisait en silence un fichier non commité~~ — FERMÉE
+      (17/09).** `constraints.txt` régénéré le 16/09 sur le VPS (159 paquets au lieu de
+      81) a disparu au `make sync` suivant : la recette fait `git reset --hard`. Le seul
+      signal était `make verrou` qui « régressait » à 81, deux commandes plus loin.
+      `sync-garde` met désormais de côté (`git stash`) AVANT de réécrire l'arbre, nomme
+      ce qu'elle écarte, et interrompt plutôt que de détruire si le stash échoue.
+- [x] **~~P1 — Le registre se remplira au prochain entraînement~~ — FAIT (17/09).**
+      Première entrée : `Gradient Boosting (sklearn)-20260916-223954-4a0ed2d`,
+      **AUC 0,532**, statut `rejected` (non promu). Le câblage fonctionne de bout en bout.
+- [x] **~~P1 — AUCUNE version en PRODUCTION au registre~~ — TRANCHÉE (17/09, ADR-0177).**
+      Ce n'est pas un trou : le candidat a été refusé pour absence d'edge OOS, et le motif
+      dormait dans l'historique sans être affiché. Il s'affiche désormais, et « jamais
+      soumis » se distingue de « refusé ». L'artefact en service n'est PAS promu : sans
+      manifeste, l'inscrire fabriquerait une provenance. La production restera vide
+      jusqu'à ce qu'un modèle la mérite — c'est le gate qui fonctionne, pas une lacune.
+- [x] **~~P1 — Éprouver la chaîne NLP sur le Mac~~ — ABANDONNÉE (16/09, ADR-0170).**
+      Quatre tentatives, zéro classification. La chaîne locale est RETIRÉE du dépôt.
+- [ ] **P1 — Mesurer l'alpha du LEXIQUE sur le corpus (16/09, ADR-0170).** `make
+      alpha-lexique` LIVRÉ et LANCÉ (16/09) : 199/199 symboles ont leurs prix, mais la
+      première collecte datant du 16/09, `utilisable_le` vaut le 16/09 pour les 2 375
+      titres — zéro jour d'observation. **Relancer vers le 23/09** (ADR-0174).
+- [ ] **P1 — L'AUC du modèle de production est 0,504 (16/09, ADR-0161).** Indiscernable du
+      hasard, Brier à 0,0004 du seuil de rejet, DSR jamais calculé. Aucune accélération de
+      calcul ne corrige une absence de signal — c'est le vrai sujet ML du projet.
+- [ ] **P1 — Régénérer `constraints.txt` SUR LE VPS (17/09).** J'avais conclu le 16/09
+      que « le VPS n'est pas la machine qui entraîne » parce que `xgboost`/`lightgbm`/
+      `torch` y sont absents. **C'EST FAUX** : le registre du 17/09 montre un run
+      `Gradient Boosting (sklearn)` du 16/09 à 22:39:54, `cpu:x86_64`, sur le VPS. Les
+      trois bibliothèques absentes ne sont simplement pas utilisées. Celle qui compte est
+      `scikit-learn 1.9.0`, **LIBRE** — donc une mise à jour silencieuse peut changer le
+      modèle sans que rien ne le dise. Passe en P1 :
+      **DÉFAUT PLUS GRAVE TROUVÉ EN CHEMIN (ADR-0176)** : `constraints.txt` n'était
+      appliqué QUE dans les trois workflows GitHub — `make install` n'en tenait aucun
+      compte. Le verrou protégeait la CI, qui n'entraîne pas. Corrigé — ainsi que la
+      cible elle-même, qui nommait `pip-compile` au lieu d'`uv` (ADR-0178). **Reste à
+      lancer SUR LE VPS** : `make verrou-regen && make install`, puis `make verrou` doit
+      passer au vert sur ses DEUX lignes.
+- [ ] **P2 — Étape 6 (LambdaBackend) — CONDITIONNÉE (16/09, ADR-0161/0164).** L'interface,
+      le superviseur et la double protection existent et sont testés sur `BackendLocal`.
+      N'écrire le backend distant que si une mesure d'alpha a démontré quelque chose à
+      accélérer. La chaîne NLP locale, elle, est retirée (ADR-0170).
+- [x] **~~P1 — La courbe d'equity RÉELLE est biaisée depuis le 27/08~~ — TRANCHÉE
+      (16/09, ADR-0172).** ANNOTÉE, pas corrigée : retrancher le churn publierait une
+      courbe qui n'a jamais existé. `make churn` dépose le rapport, le site le relit sans
+      réseau, et « non mesuré » ne se confond pas avec « aucun churn ».
+- [ ] **P2 — 3 300 anomalies MAJEURES sur `market.db`, 7 CRITIQUES sur `crypto.db`
+      (16/09).** Le brief les affiche à chaque lancement et personne ne les a ouvertes.
+      Un compteur qu'on ne regarde plus ne protège de rien : `make audit` puis trancher.
 - [ ] **P2 — 91 symboles sur 929 ne rendent aucune donnée (15/09, ADR-0157).** Désormais
       comptés et nommés par `ingest_prices`. Trancher périmés / vivants : `make audit-univers`.
 - [ ] **P2 — L'historique des futures a été réécrit chaque jour jusqu'au 15/09

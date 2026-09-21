@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { rejouerIntro } from "@/components/intro/useIntroGate";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
@@ -160,7 +161,10 @@ export function Nav() {
 
       {/* ---- Barre MOBILE : compacte (marque + thème + menu) ---- */}
       <div className="md:hidden max-w-6xl mx-auto px-4 h-14 flex items-center gap-2">
-        <Link href="/" className="min-w-0">{Brand}</Link>
+        {/* La marque REJOUE le rideau, y compris depuis une autre page : le rejeu est
+            mis en attente au niveau du module et consommé par le rideau à son montage. */}
+        <Link href="/" className="min-w-0" onClick={rejouerIntro}
+          title="Rejouer la présentation — performance du robot contre le S&P 500 (Échap pour passer)">{Brand}</Link>
         <span className="ml-auto" />
         <ThemeToggle />
         <button onClick={() => setOpen(true)} aria-label="Ouvrir le menu" aria-expanded={open}
@@ -174,7 +178,8 @@ export function Nav() {
 
       {/* ---- Barre DESKTOP : navigation condensée (Accueil + 3 menus groupés) ---- */}
       <div className="hidden md:flex max-w-6xl mx-auto px-6 py-3 gap-1.5 items-center">
-        <Link href="/" className="mr-2">{Brand}</Link>
+        <Link href="/" className="mr-2" onClick={rejouerIntro}
+          title="Rejouer la présentation — performance du robot contre le S&P 500 (Échap pour passer)">{Brand}</Link>
         <Link href="/accueil"
           className={`px-3 py-1.5 rounded-[10px] text-sm transition-all duration-150 border ${
             isActive("/accueil", path) ? "bg-surfaceAlt text-fg border-border2 shadow"

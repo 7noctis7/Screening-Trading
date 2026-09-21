@@ -230,6 +230,102 @@ class AlpacaBroker:
         except Exception:  # noqa: BLE001
             return []
 
+    @staticmethod
+    def _champ(a, nom: str):
+        """Un enregistrement d'activité, qu'il arrive en dict OU en objet.
+
+        La route REST rend du JSON brut aujourd'hui ; une version du SDK qui le
+        parserait en modèles ferait échouer un `.get()` — et l'échec serait SILENCIEUX,
+        puisque `frais` rendrait alors zéro dollar au lieu de lever. Un zéro de frais
+        se lit « aucun frais prélevé », ce qui est faux de 810,30 $ sur ce compte.
+        """
+        return a.get(nom) if isinstance(a, dict) else getattr(a, nom, None)
+
+    def _activites(self, page_token: str | None) -> list[dict]:
+        """Une page d'activités, PAR LA ROUTE REST et non par une classe du SDK.
+
+        POURQUOI (18/09). `GetAccountActivitiesRequest` n'existe pas dans
+        `alpaca.trading.requests` de la version installée — l'import échouait, et les
+        frais restaient introuvables. Le nom des classes du SDK bouge d'une version à
+        l'autre ; l'URL `/account/activities`, elle, est le contrat public d'Alpaca.
+        On s'appuie donc sur ce qui ne bouge pas, et le client REST du SDK ne sert plus
+        qu'à porter l'authentification.
+        """
+        params = {"activity_types": "FEE,CFEE", "page_size": 100}
+        if page_token:
+            params["page_token"] = page_token
+        rep = self._client.get("/account/activities", params)
+        return list(rep) if isinstance(rep, list) else list(rep.get("activities", []))
+
+    def frais(self, pages_max: int = 60) -> dict:
+        """Frais RÉELLEMENT prélevés, lus dans les ACTIVITÉS du compte.
+
+        POURQUOI ILS NE SONT PAS DANS `orders` (18/09). Un fill porte une quantité et un
+        prix, pas son coût de transaction : chez Alpaca les frais sont des ACTIVITÉS
+        séparées — `FEE` (TAF/REG/CAT, en dollars) et `CFEE` (crypto). Un registre
+        reconstruit depuis les seuls ordres est donc BRUT de frais, et l'identité
+        `capital = mise + réalisé + latent` y perd exactement leur montant : 810,30 $
+        mesurés ce jour-là sur un compte à 100 973,45 $.
+
+        LES FRAIS CRYPTO SE PRÉLÈVENT EN NATURE, et c'est le piège de lecture. Une
+        `CFEE` retire des JETONS : elle réduit la quantité détenue, donc la valeur du
+        portefeuille, sans passer par le cash. On somme les montants en DOLLARS et on
+        compte à part ce qui n'en porte pas, plutôt que de convertir des jetons à un
+        prix qu'on choisirait nous-mêmes.
+
+        LA PAGINATION EST BORNÉE ET SON ARRÊT EST VÉRIFIÉ : une page vide, un jeton qui
+        ne change pas, ou le plafond. Une boucle qui redemande la même page est le
+        défaut que `paginer` a déjà coûté à ce dépôt.
+        """
+        actes: list[dict] = []
+        jeton, vus = None, set()
+        try:
+            for _ in range(max(1, pages_max)):
+                page = self._activites(jeton)
+                if not page:
+                    break
+                actes.extend(page)
+                suivant = str(self._champ(page[-1], "id") or "")
+                if not suivant or suivant in vus:
+                    break
+                vus.add(suivant)
+                jeton = suivant
+        except Exception as e:  # noqa: BLE001
+            if not actes:
+                return {"disponible": False, "motif": f"{type(e).__name__}: {e}"[:200]}
+        par_type: dict[str, float] = {}
+        en_nature: list[dict] = []
+        for a in actes:
+            typ = str(self._champ(a, "activity_type") or "").upper()
+            montant = self._champ(a, "net_amount")
+            try:
+                val = float(montant) if montant not in (None, "") else None
+            except (TypeError, ValueError):
+                val = None
+            if val is not None:
+                par_type[typ] = round(par_type.get(typ, 0.0) + val, 4)
+            else:
+                # Prélèvement EN JETONS : on le NOMME sans lui donner un prix qu'on
+                # aurait choisi. Sa trace en dollars est dans la valeur du portefeuille.
+                # ON GARDE L'ENREGISTREMENT BRUT (18/09). Les prélèvements en jetons
+                # pèsent ~456 $ sur ce compte, et les valoriser demande de savoir si
+                # Alpaca joint un prix. Deviner les champs disponibles serait un aller-
+                # retour de plus ; on les publie, et la mesure tranche du premier coup.
+                en_nature.append(
+                    {"type": typ, "symbole": str(self._champ(a, "symbol") or ""),
+                     "qty": float(self._champ(a, "qty") or 0),
+                     "date": str(self._champ(a, "date")
+                                 or self._champ(a, "transaction_time") or ""),
+                     "brut": dict(a) if isinstance(a, dict) else vars(a)})
+        champs = sorted({k for e in en_nature for k in (e.get("brut") or {})})
+        return {"disponible": True, "n": len(actes), "par_type": par_type,
+                "total_usd": round(sum(par_type.values()), 2),
+                "en_nature": en_nature[:50], "n_en_nature": len(en_nature),
+                "champs_en_nature": champs,
+                "qty_par_symbole": {
+                    s: round(sum(e["qty"] for e in en_nature if e["symbole"] == s), 10)
+                    for s in sorted({e["symbole"] for e in en_nature})}}
+
     def cancel(self, client_id: str) -> bool:
         try:
             o = self._client.get_order_by_client_id(client_id)

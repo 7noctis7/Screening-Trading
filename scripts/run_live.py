@@ -51,8 +51,10 @@ def _setup_alerts(dry: bool):
     return bus, attach_to_bus(bus)
 
 
-def _kill_switch(bus):
-    """Alertes TradingView → veto / réduction d'exposition. Retourne le facteur `reduce` ∈ [0,1]."""
+def _kill_switch(bus, obs=None):
+    """Alertes TradingView → veto / réduction d'exposition. Retourne le facteur `reduce` ∈ [0,1].
+
+    `obs` ne fait qu'ASSISTER : il compte ce qui vient d'être décidé, il ne décide pas."""
     from packages.mcp_tradingview.alerts import (
         AGE_MAX_DEFAUT,
         fetch_tv_technical_alerts,
@@ -77,6 +79,11 @@ def _kill_switch(bus):
                         {"drawdown": "veto TV: " + (", ".join(risk["reasons"]) or "—")})
     elif reduce < 1.0:
         print(f"⚠️  Alertes TV : exposition réduite ×{reduce:.2f} ({', '.join(risk['reasons']) or '—'})")
+    # MOTIF EN CODE COURT, jamais le texte des alertes : le compte-rendu est un fichier
+    # de compteurs, il n'a pas à transporter du contenu de marché.
+    from packages.execution.garde_fous import KILL_TV, noter
+    noter(obs, KILL_TV, declenche=(reduce < 1.0),
+          motif=("veto" if risk.get("veto") else "reduction") if reduce < 1.0 else None)
     return reduce
 
 
@@ -188,7 +195,7 @@ def ordre_de_traitement(tgt: dict, detenu: dict) -> list:
     return sorted(tgt.items(), key=cle)
 
 
-def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, list]:
+def _reconcile(targets, brokers, reduce, alert_engine, dry, obs=None) -> tuple[int, list, list]:
     """Réconciliation idempotente + ANTI-LEVIER. Retourne (nb ordres, ouvertures, ventes).
 
     On n'échange que le DELTA (cible − détenu). `opened` = achats RÉELLEMENT envoyés (à
@@ -218,6 +225,12 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, 
         curn = {}                                             # détenu par clé NORMALISÉE (cumul)
         for k, v in cur.items():
             curn[_nsym(k)] = curn.get(_nsym(k), 0.0) + v
+        from packages.execution.garde_fous import (
+            DESARME,
+            SEANCE,
+            noter,
+            noter_portail,
+        )
         from packages.execution.rebalance_plan import decider
         from packages.risk.order_gate import EtatCompte, Limites, evaluer, ligne_journal
         # PORTAIL DE RISQUE — indépendant de la stratégie, lu depuis l'environnement
@@ -244,13 +257,25 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, 
             # remplissait tout le crypto et AUCUNE action — 28 % de cash restaient à
             # la place du satellite, sans un mot au journal. On REPORTE en le disant.
             _ac = _classe_actif(bsym, (o or {}).get("asset_class") or "")
-            if _verif_seance and not is_open(asset_class=_ac):
+            # GARDE DE SÉANCE — sixième filtre, et il écarte des ordres comme les
+            # autres : le 21/09 il a reporté 19 lignes pour 52 596 $ sans que rien ne
+            # le compte. L'effet se chiffre ici en dollars NON ENVOYÉS, et le motif est
+            # la classe d'actif : « chaque jour, les actions » et « une fois, un férié »
+            # sont deux diagnostics opposés que le récapitulatif de fin de run ne
+            # distingue pas d'un jour sur l'autre.
+            if not _verif_seance:
+                noter(obs, SEANCE, etat=DESARME)
+            elif not is_open(asset_class=_ac):
                 _pq = prochaine_ouverture()
                 print(tag + f"  ⏸  REPORTÉ — {raison_fermeture(asset_class=_ac)}"
                             f" · prochaine ouverture {_pq:%d/%m %H:%M ET}")
                 differes.append({"symbol": bsym, "broker": bname, "asset_class": _ac,
                                  "montant": round(info["val"] - detenu, 2)})
+                noter(obs, SEANCE, declenche=True, motif=_ac,
+                      effet_usd=abs(info["val"] - detenu))
                 continue
+            else:
+                noter(obs, SEANCE, effet_usd=0.0)
             # Décision déléguée (testée) : solder hors bande, ne pas ouvrir sous le
             # plancher.
             intention = decider(info["val"], detenu, band)
@@ -268,6 +293,9 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry) -> tuple[int, list, 
                                detenu_ligne=detenu, panier=(_ac == "etf"))
             _v = evaluer(intention.action, intention.montant, _etat, _lim,
                          liquidation=intention.liquidation)
+            # TÉMOIN. Il compte le verdict APRÈS qu'il a été rendu et ne peut pas le
+            # modifier : `order_gate` reste une fonction pure, sans état ni écriture.
+            noter_portail(obs, _v, intention.montant)
             if not _v.autorise:
                 print(tag + f"  ⛔ REFUSÉ par le portail [{_v.regle}] {_v.motif}")
                 if alert_engine:
@@ -641,7 +669,7 @@ def _prepare_brokers(dry: bool, cli_equity: float | None, alert_engine):
     return alpaca, bitmart, alp_cap, bit_cap, cur_alp, cur_bit, fatal
 
 
-def _deja_rebalance_aujourdhui(brokers: tuple) -> bool:
+def _deja_rebalance_aujourdhui(brokers: tuple, obs=None) -> bool:
     """Le COURTIER dit s'il a déjà tradé aujourd'hui — pas l'horloge, pas un fichier.
 
     La question est posée au seul endroit que le VPS, le Mac, GitHub Actions et la main
@@ -649,6 +677,13 @@ def _deja_rebalance_aujourdhui(brokers: tuple) -> bool:
     machine qui le porte, et c'est justement la mauvaise granularité — cf.
     `packages/execution/garde_journaliere`.
     """
+    from packages.execution.garde_fous import (
+        ACTIVE,
+        DESARME,
+        GARDE_JOUR,
+        UNCALIBRATED,
+        noter,
+    )
     from packages.execution.garde_journaliere import evaluer, message
     fills: list[dict] = []
     for bname, br, _cap, _cur in brokers:
@@ -661,13 +696,18 @@ def _deja_rebalance_aujourdhui(brokers: tuple) -> bool:
             # déclenche sur sa propre panne gèlerait le robot une journée sans motif.
             print(f"· garde journalière : historique {bname} illisible ({str(e)[:60]}) "
                   "— contrôle non concluant, le passage continue.")
+            # NON CONCLUANT ≠ RIEN À SIGNALER. Le passage continue (c'est le bon choix),
+            # mais le rapport doit dire que ce jour-là le garde-fou n'a rien pu garder.
+            noter(obs, GARDE_JOUR, etat=UNCALIBRATED, motif="historique_illisible")
             return False
     d = evaluer(fills)
     if not d["deja_rebalance"]:
         if d["desarme"]:
             print("· garde journalière : DÉSARMÉE (QUANT_REBAL_MULTI=1).")
+        noter(obs, GARDE_JOUR, etat=DESARME if d["desarme"] else ACTIVE)
         return False
     print(message(d))
+    noter(obs, GARDE_JOUR, etat=ACTIVE, declenche=True, motif="deja_rebalance")
     return True
 
 
@@ -680,28 +720,34 @@ def main() -> None:
     targets = snap["live"]["target_orders"]                # poids cibles (% du portefeuille)
     _diag_preset(snap, targets)
 
+    from packages.execution.garde_fous import Collecteur
     from packages.execution.live_guards import dd_kill_switch, fail_loud
     bus, alert_engine = _setup_alerts(dry)
-    reduce = _kill_switch(bus)
+    # TÉMOIN DES GARDE-FOUS. Injecté, jamais global : un état partagé entre deux runs
+    # mélangerait leurs compteurs, et un test ne pourrait plus en isoler un seul.
+    obs = Collecteur()
+    reduce = _kill_switch(bus, obs)
     alpaca, bitmart, alp_cap, bit_cap, cur_alp, cur_bit, fatal = \
         _prepare_brokers(dry, a.equity, alert_engine)
     if not dry:                                                # kill-switch DRAWDOWN RÉEL (pas que TV)
-        reduce = min(reduce, dd_kill_switch(alp_cap + bit_cap, bus, alert_engine))
+        reduce = min(reduce, dd_kill_switch(alp_cap + bit_cap, bus, alert_engine, obs))
     # DISJONCTEUR JOURNALIER — second horizon : la perte du JOUR, pas le drawdown.
     # Désarmé par défaut (`QUANT_DISJONCTEUR=1` pour agir) : il OBSERVE d'abord, parce
     # que son déclenchement ferme les positions et qu'il n'a jamais tourné en réel.
-    reduce = min(reduce, _disjoncteur(alp_cap + bit_cap))
+    reduce = min(reduce, _disjoncteur(alp_cap + bit_cap, obs))
     if reduce <= 0.0:                                          # kill-switch total : on n'envoie rien
-        for o in targets:
-            print(f"  {o['side'].upper():4s} {o.get('broker_symbol', o['symbol']):14s} "
-                  f"{o['broker']:8s} {o['weight_pct']*100:6.1f}%  bloqué (kill-switch)")
-        print("\n⛔ Kill-switch : aucun ordre (exposition gelée).")
+        _exposition_gelee(targets, obs, dry)
         return
 
     brokers = (("Alpaca", alpaca, alp_cap, cur_alp), ("Bitmart", bitmart, bit_cap, cur_bit))
-    if not dry and not a.forcer and _deja_rebalance_aujourdhui(brokers):
+    if not dry and not a.forcer and _deja_rebalance_aujourdhui(brokers, obs):
+        _record_garde_fous(obs, dry)
         return                                     # doublon : on sort AVANT tout envoi
-    sent, opened, sold = _reconcile(targets, brokers, reduce, alert_engine, dry)
+    sent, opened, sold = _reconcile(targets, brokers, reduce, alert_engine, dry, obs)
+    # AVANT la journalisation, et c'est voulu : plus aucun garde-fou ne parle après
+    # `_reconcile`, tandis qu'un échec de `_journal_opens` emporterait sinon le
+    # compte-rendu du run avec lui — sans une ligne pour le dire.
+    _record_garde_fous(obs, dry)
     print(f"\nTerminé : {sent} ordre(s) de réconciliation envoyé(s) (paper, sans levier)." if not dry else
           "\nAperçu (dry-run). Réconciliation réelle : python3 scripts/run_live.py --live --yes")
 
@@ -714,31 +760,81 @@ def main() -> None:
         fail_loud(fatal, alert_engine, code=4)
 
 
-def _disjoncteur(equity: float) -> float:
+def _disjoncteur(equity: float, obs=None) -> float:
     """Facteur d'exposition dicté par la perte du JOUR. 1.0 = rien à signaler.
 
     Renvoie un FACTEUR et non un booléen pour se composer avec les autres kill-switches
     par un simple `min` — un garde-fou qui aurait sa propre voie d'application finirait
     par diverger de celle des autres.
     """
+    from packages.execution.garde_fous import (
+        ACTIVE,
+        DISJONCTEUR,
+        ERREUR,
+        UNCALIBRATED,
+        noter,
+    )
     try:
         from packages.execution.coupe_circuit import evaluer
         d = evaluer(equity)
     except Exception as e:  # noqa: BLE001 — un garde-fou muet ne bloque jamais un run
         print(f"· disjoncteur : évaluation indisponible ({str(e)[:60]}).")
+        noter(obs, DISJONCTEUR, etat=ERREUR, motif="evaluation_indisponible")
         return 1.0
     if not d.get("disponible"):
+        noter(obs, DISJONCTEUR, etat=UNCALIBRATED, motif="equity_veille_inconnue")
         return 1.0
     if not d["verrouille"]:
         print(f"· disjoncteur : perte du jour {-d['variation_jour']:,.0f} $ "
               f"sous le seuil ({d['limite']:,.0f} $).".replace(",", " "))
+        noter(obs, DISJONCTEUR, etat=ACTIVE)
         return 1.0
     if d["agit"]:
         print(f"\n⛔ DISJONCTEUR ARMÉ — {d['motif']}. Aucune entrée aujourd'hui.")
+        noter(obs, DISJONCTEUR, etat=ACTIVE, declenche=True, motif="perte_du_jour")
         return 0.0
     print(f"\n⚠️  DISJONCTEUR (observation) — {d['motif']}.")
     print("   Il AURAIT coupé. Rien n'est appliqué : QUANT_DISJONCTEUR=1 pour l'armer.")
+    # LA LIGNE QUI DÉBLOQUE SON ARMEMENT. `coupe_circuit` demande de voir « sur
+    # plusieurs semaines les jours où il AURAIT coupé » : sans ce compteur, cette
+    # condition ne pouvait pas être remplie — personne n'enregistrait ces jours.
+    noter(obs, DISJONCTEUR, etat=ACTIVE, aurait=True, motif="perte_du_jour")
     return 1.0
+
+
+def _exposition_gelee(targets: list, obs, dry: bool) -> None:
+    """Kill-switch total : on affiche ce qui NE partira pas, et on enregistre quand même.
+
+    Le run coupé est le plus instructif de tous : ne compter les garde-fous que les jours
+    où ils laissent passer reviendrait à ne les mesurer que quand ils ne servent à rien.
+    """
+    for o in targets:
+        print(f"  {o['side'].upper():4s} {o.get('broker_symbol', o['symbol']):14s} "
+              f"{o['broker']:8s} {o['weight_pct']*100:6.1f}%  bloqué (kill-switch)")
+    print("\n⛔ Kill-switch : aucun ordre (exposition gelée).")
+    _record_garde_fous(obs, dry)
+
+
+def _record_garde_fous(obs, dry: bool) -> None:
+    """Persiste le compte-rendu des garde-fous de CE run. Best-effort — jamais silencieux.
+
+    Appelé à CHAQUE sortie de `main` postérieure aux garde-fous, y compris celles qui
+    n'envoient aucun ordre : un run coupé par un kill-switch est précisément celui qu'on
+    veut retrouver dans le rapport. Ne l'enregistrer qu'au passage nominal reviendrait à
+    ne compter les garde-fous que les jours où ils ne servent à rien. Un rapport vide
+    (sortie avant toute évaluation) n'écrit rien — une ligne à zéro serait un run
+    fantôme.
+    """
+    try:
+        from packages.execution.garde_fous_store import record
+        rapport = obs.rapport() if obs else {}
+        if not rapport:
+            return
+        if not record(rapport, mode="dry" if dry else "live"):
+            print("⚠️  garde-fous : compte-rendu du run NON enregistré (écriture .cache "
+                  "impossible) — `make garde-fous` sous-comptera ce passage.")
+    except Exception as e:  # noqa: BLE001 — observer ne coûte jamais un run
+        print(f"⚠️  garde-fous : compte-rendu non enregistré ({str(e)[:60]}).")
 
 
 def _record_equity(alp_cap: float, bit_cap: float) -> None:

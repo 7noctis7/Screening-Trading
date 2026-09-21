@@ -13,11 +13,17 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 VAULT = ROOT / "vault"
+# Le brief lit désormais l'historique du courtier (`packages.execution`). Lancé depuis
+# n'importe quel répertoire, il ne trouverait pas le dépôt sur `sys.path` — et la section
+# échouait sur « No module named 'packages' », c'est-à-dire qu'elle ANNONÇAIT une mesure
+# indisponible pour une raison qui n'avait rien à voir avec la donnée.
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 
 def _git(*args: str) -> str:
@@ -83,8 +89,52 @@ def _data_audit() -> str:
     return "(pas de base locale auditée)"
 
 
+def _passages_du_robot(jours: int = 7) -> str:
+    """Combien de passages par jour sur le compte RÉEL — la dérive vue de face.
+
+    LE DÉFAUT QU'ELLE COUVRE. Le retard de GitHub sur `paper.yml` est passé d'environ
+    trente minutes en août à plus de trois heures en septembre, faisant glisser le runner
+    cloud dans la fenêtre du VPS. Personne ne l'a vu : on a découvert la collision par ses
+    CONSÉQUENCES, six semaines plus tard, en lisant un relevé d'ordres. Le garde journalier
+    empêche désormais le second passage ; il ne dit pas qu'un planificateur insiste.
+
+    Une ligne par jour ici, et un doublon se voit le lendemain matin.
+    """
+    try:
+        from packages.execution.historique_courtier import ordres_reels
+        from packages.execution.passages import rapport
+    except Exception as e:  # noqa: BLE001
+        return f"(passages non mesurés : {type(e).__name__} — {e})"
+    ordres, motif = ordres_reels()
+    if motif:
+        return f"(historique courtier indisponible : {motif})"
+    from datetime import timedelta
+    borne = (datetime.now(UTC) - timedelta(days=jours)).date().isoformat()
+    rap = rapport([o for o in ordres if str(o.get("date") or "")[:10] >= borne])
+    if not rap["jours"]:
+        return f"(aucun ordre sur {jours} jours)"
+    lignes = []
+    for j in rap["jours"]:
+        n = j["n_passages"]
+        marque = "⚠" if n > 1 else "·"
+        ar = j["allers_retours"]
+        cout = f" · {ar['n_lignes']} A/R {ar['pnl']:+.2f} $" if ar["n_lignes"] else ""
+        lignes.append(f"{marque} {j['jour']}  {n} passage(s)  "
+                      f"{' '.join(j['heures'])}{cout}")
+    if rap["depuis"]:
+        # « depuis » est relatif à la FENÊTRE de 7 jours : l'écrire sans le dire ferait
+        # lire une date de début absolue qui n'en est pas une.
+        lignes.append(f"⚠ DOUBLON sur cette fenêtre dès le {rap['depuis']} — un "
+                      "planificateur de trop. Vérifier : crontab -l · "
+                      "systemctl list-timers · launchd (Mac) · Actions")
+        if rap["depuis_cout"]:
+            lignes.append(f"  allers-retours depuis le {rap['depuis_cout']} : "
+                          f"{rap['pnl_churn']:+.2f} $ — historique complet : make churn")
+    return "\n".join(lignes)
+
+
 def build() -> str:
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    today = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
     changes = _recent_vault_changes("24 hours ago")
     parts = [f"# 🗞️ Brief — {today}", ""]
     parts += ["## 🎯 Priorités (P0/P1)"]
@@ -93,6 +143,7 @@ def build() -> str:
     parts += ["", "## 📓 Dernière entrée de journal", _latest_journal()]
     parts += ["", "## 🔄 Notes du vault modifiées (24 h)"]
     parts += ([f"- {c}" for c in changes] or ["(aucune)"])
+    parts += ["", "## 🤖 Passages du robot (7 j)", "```", _passages_du_robot(), "```"]
     parts += ["", "## 🩺 Audit données", "```", _data_audit(), "```"]
     return "\n".join(parts) + "\n"
 

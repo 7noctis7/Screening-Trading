@@ -8,6 +8,7 @@ import { RegimeBanner } from "@/components/RegimeBanner";
 import { VixPlaybook } from "@/components/VixPlaybook";
 import { SentimentBanner } from "@/components/SentimentBanner";
 import { EquityChart } from "@/components/EquityChart";
+import { couleurLigne } from "@/lib/couleurs";
 import { PerformancePanel } from "@/components/PerformancePanel";
 import { PositionsAlertsTable } from "@/components/PositionsAlertsTable";
 import { HonestyStrip, TradeStatsRow } from "@/components/DashboardStrips";
@@ -166,9 +167,13 @@ export default function Dashboard() {
             <th className="text-right font-normal" title="Sortino : même idée, mais ne compte que les baisses.">Gain / baisses</th>
             <th className="text-right font-normal" title="La pire chute depuis un sommet sur la fenêtre.">Pire baisse</th></tr></thead>
           <tbody className="mono">
-            {([["Portefeuille simulé (stratégie)", m, "#22d3ee", "backtest"],
-               ...(d.real_portfolio?.available ? [["Portefeuille RÉEL (vos comptes)", d.real_portfolio.stats, "#22c55e", "real"]] : []),
-               ...Object.entries(chartBench ?? {}).map(([n, arr]) => [n, statsFrom(arr as any), n === "S&P 500" ? "#f59e0b" : "#a855f7", ""])] as any[])
+            {/* LES TEINTES VIENNENT DE `couleurLigne`, plus d'un littéral (18/09).
+                Ce tableau codait `S&P 500 → ambre` et tout le reste → violet : le S&P
+                était gris sur la courbe et ambre ici, le CAC jaune là et violet ici.
+                Une pastille qui ne correspond pas à sa ligne fait douter du chiffre. */}
+            {([["Portefeuille simulé (stratégie)", m, couleurLigne("Portefeuille simulé (stratégie)"), "backtest"],
+               ...(d.real_portfolio?.available ? [["Portefeuille RÉEL (vos comptes)", d.real_portfolio.stats, couleurLigne("Portefeuille RÉEL (vos comptes)"), "real"]] : []),
+               ...Object.entries(chartBench ?? {}).map(([n, arr]) => [n, statsFrom(arr as any), couleurLigne(n), ""])] as any[])
               .filter((row) => row[1]).map(([name, st, col, kind]: any) => {
                 const click = kind === "backtest" ? () => setShowLedger(v => !v) : kind === "real" ? () => setShowReal(v => !v) : undefined;
                 const open = kind === "backtest" ? showLedger : kind === "real" ? showReal : false;
@@ -408,7 +413,10 @@ export default function Dashboard() {
 
       {/* Comparaison comptes RÉELS (Alpaca / Crypto) vs indices */}
       {d.account_compare?.available ? (() => {
-        const ac = d.account_compare; const col: Record<string, string> = { "Alpaca (réel)": "#22d3ee", "Crypto (réel)": "#a855f7", "S&P 500": "#f59e0b", "Nasdaq 100": "#8b5cf6" };
+        // SECONDE TABLE CODÉE EN DUR, trouvée par le test qui gardait la première
+        // (18/09) : mêmes séries, encore d'autres teintes. Elle lit `couleurLigne`.
+        const ac = d.account_compare;
+        const col: Record<string, string> = new Proxy({}, { get: (_, n: string) => couleurLigne(n) });
         const names = Object.keys(ac.series ?? {});
         const main = names[0]; const benchNames = names.slice(1);
         const benchmarks = Object.fromEntries(benchNames.map((n) => [n, ac.series[n]]));

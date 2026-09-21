@@ -71,6 +71,7 @@ logs/
 /.cache/
 
 /models/
+/artifacts/       # magasin d'artefacts local (modèles, checkpoints) — jamais dans git
 
 # Coffre Obsidian — notes AUTO-générées (journal/attribution/post-mortems/assets) : artefacts runtime
 vault/03_Journal/

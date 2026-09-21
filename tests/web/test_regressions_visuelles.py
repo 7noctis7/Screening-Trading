@@ -1,5 +1,6 @@
 """Contrats source des trois éléments visuels réclamés sur le terminal."""
 
+import re
 from pathlib import Path
 
 
@@ -8,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_l_intro_rejoue_quand_on_revient_a_l_accueil():
     config = (ROOT / "apps/web/components/intro/introConfig.ts").read_text()
-    assert 'INTRO_SESSION_POLICY: "session" | "day" | "always" | "never" = "always"' in config
+    assert re.search(r'INTRO_SESSION_POLICY\s*:[^=]*=\s*"always"', config)
 
 
 def test_le_dashboard_publie_le_cac40_reel():

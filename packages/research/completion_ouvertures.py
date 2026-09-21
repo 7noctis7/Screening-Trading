@@ -92,6 +92,53 @@ def quantites_journalisees(records) -> dict[str, float]:
     return out
 
 
+def _signature(sym: str, date, qty, prix) -> tuple:
+    """(symbole, jour, quantité, prix) — la même notion de doublon que `diag-journal`.
+
+    Les arrondis sont ceux d'un fill : 6 décimales de quantité (le crypto en porte 9,
+    mais les deux derniers chiffres ne survivent pas à un aller-retour SQLite) et 4 de
+    prix. Plus serré, on raterait le doublon ; plus lâche, on confondrait deux achats
+    voisins du même jour.
+    """
+    return (symbole_canonique(sym), str(date)[:10], round(float(qty or 0.0), 6),
+            round(float(prix or 0.0), 4))
+
+
+def deja_journalises(records) -> dict[tuple, int]:
+    """Multiensemble des fills que le journal porte DÉJÀ, par signature.
+
+    POURQUOI CE COMPTAGE EXISTE (mesuré le 17/09, second passage de la chaîne). La
+    couverture était jugée par symbole, sur la QUANTITÉ AGRÉGÉE, puis le reste calculé
+    en consommant les fills les plus anciens. Cela suppose que ce que le journal connaît
+    d'un symbole forme un PRÉFIXE CHRONOLOGIQUE de ses achats. Rien ne le garantit : le
+    robot avait journalisé l'achat QQQ du 17/09 (`P-`) et manquait 20 unités plus
+    anciennes, si bien que le « reste » recalculé contenait ce fill du 17/09 — déjà
+    présent. L'outil l'a recréé sous un `C-`, et `diag-journal` a vu « QQQ ×2,
+    3,586126 @ 716,86 le 17/09 ».
+
+    Un doublon de lot ouvert n'est pas cosmétique : il fournit un lot de PLUS à apparier
+    en FIFO, donc du réalisé sans contrepartie réelle — exactement ce que cette chaîne
+    répare. On apparie donc d'abord ce qui se reconnaît EXACTEMENT, et on ne laisse le
+    raisonnement agrégé traiter que le reste.
+    """
+    vus: dict[tuple, int] = {}
+    for r in records:
+        cle = _signature(r.instrument, r.entry_ts, r.qty, r.entry_price)
+        vus[cle] = vus.get(cle, 0) + 1
+    return vus
+
+
+def _deja_present(fill: dict, sym: str, vus: dict[tuple, int] | None) -> bool:
+    """Vrai si ce fill est DÉJÀ au journal — et le consomme alors du multiensemble."""
+    if not vus:
+        return False
+    cle = _signature(sym, fill.get("date"), fill.get("qty"), fill.get("price"))
+    if vus.get(cle, 0) <= 0:
+        return False
+    vus[cle] -= 1
+    return True
+
+
 def _reste_fifo(fills: list[dict], deja: float) -> list[dict]:
     """Fills restants après consommation FIFO de `deja` unités (dernier fill scindé)."""
     reste, a_consommer = [], max(0.0, deja)
@@ -109,13 +156,23 @@ def _reste_fifo(fills: list[dict], deja: float) -> list[dict]:
 
 def ouvertures_manquantes(
         ordres: list[dict], journalise: dict[str, float],
+        signatures: dict[tuple, int] | None = None,
         tolerance: float = TOLERANCE) -> tuple[list[dict], list[dict]]:
     """(lots à créer, écarts NÉGATIFS signalés). Aucune écriture — c'est un PLAN.
 
     UN LOT PAR FILL non couvert, chacun à sa propre date et à son propre prix. Fusionner
     les fills restants fabriquerait un lot au prix des uns et à la date des autres, que
-    le FIFO fermerait en premier contre des ventes réelles (cf. l'en-tête du module)."""
+    le FIFO fermerait en premier contre des ventes réelles (cf. l'en-tête du module).
+
+    `signatures` (cf. `deja_journalises`) apparie d'abord les fills que le journal porte
+    DÉJÀ, exactement. Sans lui, le raisonnement agrégé recrée un fill déjà journalisé
+    dès que la couverture d'un symbole n'est pas un préfixe chronologique de ses
+    achats — et
+    un lot ouvert en double produit du réalisé sans contrepartie réelle. Omis, le
+    comportement reste l'ancien : ce paramètre ne peut qu'ÉVITER une écriture.
+    """
     a_creer, en_trop = [], []
+    vus = dict(signatures or {})
     for sym, fills in sorted(achats_par_symbole(ordres).items()):
         achete = sum(f["qty"] for f in fills)
         connu = journalise.get(sym, 0.0)
@@ -125,7 +182,15 @@ def ouvertures_manquantes(
             continue
         if ecart <= tolerance * max(1.0, achete):
             continue
-        for f in _reste_fifo(fills, connu):
+        # Les fills reconnus un à un sortent du calcul AVEC leur quantité : les laisser
+        # peser sur `connu` ferait consommer deux fois la même couverture.
+        restants, apparies = [], 0.0
+        for f in fills:
+            if _deja_present(f, sym, vus):
+                apparies += f["qty"]
+            else:
+                restants.append(f)
+        for f in _reste_fifo(restants, max(0.0, connu - apparies)):
             if f["qty"] <= 0 or f["price"] <= 0:
                 continue
             a_creer.append({"symbole": sym, "qty": round(f["qty"], 10),
