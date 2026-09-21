@@ -31,6 +31,14 @@ data/journal.db          # journal de trades persistant — local-only (fills r�
 # Archives des lignes retirées du journal : elles portent les fills RÉELS du courtier
 # (symbole, quantité, prix, date, identifiant). Dépôt PUBLIC — jamais versionnées.
 data/lots-annules-*.json
+# Sauvegardes/audits du registre : mêmes fills réels (prix, quantités, identifiants),
+# générés par les outils de réparation. Leur présence dans `git status` sur le VPS
+# incite à les ajouter par erreur ; le dépôt est public, ils restent local-only.
+data/doublons-correction-*.json
+data/doublons-ouverts-*.json
+data/journal-avant-reconstruction-*.json
+# Corpus de news réel/local ; seul le schéma factice `.example` est publiable.
+data/news.csv
 # Tampon du commit ayant produit le cache .next (cf. scripts/start.sh) — purement local.
 apps/web/.quant-build-commit
 *.sqlite

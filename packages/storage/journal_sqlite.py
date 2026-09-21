@@ -131,6 +131,11 @@ class SqliteTradeJournal:
         cur = self.conn.execute(q, params)
         return [self._from_row(r) for r in cur.fetchall()]
 
+    def legacy_ids(self) -> set[str]:
+        """Identifiants importés du courtier, sans features capturées à la décision."""
+        return {str(r[0]) for r in self.conn.execute(
+            "SELECT id FROM trades WHERE legacy=1").fetchall()}
+
     def supprimer(self, ids: list[str]) -> int:
         """Retire des enregistrements par identifiant. Renvoie le nombre effacé.
 
