@@ -1,5 +1,36 @@
 # 04 — JOURNAL
 
+## Session 2026-09-21 (45ᵉ) — L'intro publiait un profit factor sans dire ce qu'il avait rapporté
+
+**LA DONNÉE ÉTAIT PRODUITE, TRANSPORTÉE, ET JETÉE À L'AFFICHAGE.**
+`intro_payload.trades` calcule `pnl_total` — le réalisé des aller-retours clôturés, en
+dollars — et l'expose depuis l'origine. `IntroBeats` ne le lisait pas : le battement
+« trades » montrait PROFIT FACTOR, R:R et espérance, soit trois ratios et aucun montant.
+Un facteur de profit ne dit pas si le robot a gagné dix dollars ou dix mille, et c'est
+pourtant la première chose qu'on veut savoir. Le réalisé est désormais en tête de la
+sous-ligne, marqué **BRUT** — chez ce courtier les frais sont des activités séparées,
+absentes du flux d'ordres, et l'afficher sans le dire en ferait un net qu'il n'est pas.
+Absent → `n/d`, jamais zéro.
+
+**CE QUE LA MÊME RECHERCHE A ÉTABLI, ET QUI N'EST PAS UN DÉFAUT.** Les cinq fenêtres
+(YTD, 3, 5, 10 ans, depuis le début) et la comparaison MULTI-RÉFÉRENCES sont
+entièrement implémentées, des deux côtés : `FENETRES` dans `intro_payload`,
+`_comparaison` qui normalise chaque référence en base 100 au même jour, le CAC 40
+transmis à l'intro (`snapshot.py:2828`) ET au dashboard (`:2859`), et
+`IntroCourbes.referencesUtiles` qui trace ce qui existe avec deux couleurs réservées.
+
+Le verrou est UNE variable : `_cac_real`. Son commentaire est sans ambiguïté — « une
+série retombée sur son repli synthétique n'est affichée NULLE PART, ni ici ni dans
+l'intro ». Si `^FCHI` n'est pas dans la base de prix locale, le CAC disparaît de
+l'intro ET du dashboard, silencieusement et VOLONTAIREMENT : mieux vaut une comparaison
+absente qu'une courbe inventée tracée à côté d'une vraie, que rien à l'écran ne
+distinguerait de la bonne.
+
+**Mesure demandée avant tout correctif** : `curl /api/intro` dit en cinq lignes lequel
+des trois cas s'applique — références absentes en base, fenêtres trop courtes, ou
+données présentes et rendu fautif. Supposer le CAC cassé sans cette lecture aurait été
+la quatrième erreur de diagnostic de la journée.
+
 ## Session 2026-09-21 (44ᵉ) — Le premier passage réel : les six ont parlé
 
 **LE CHIFFRE QUI RÉPOND AU P1 DU MATIN.** `garde_de_seance` : **16 observations, ZÉRO

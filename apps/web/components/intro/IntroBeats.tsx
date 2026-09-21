@@ -36,6 +36,10 @@ export type IntroData = {
     disponible?: boolean; motif?: string; n?: number; profit_factor?: number | null;
     ratio_gain_perte?: number | null; esperance_par_trade?: number;
     esperance_pct?: number | null; taux_reussite?: number | null;
+    /** Réalisé des aller-retours CLÔTURÉS, en dollars. Publié par l'API depuis le
+     *  début (`intro_payload.trades`) et ignoré par ce composant jusqu'au 21/09 :
+     *  l'intro montrait un profit factor sans jamais dire combien il avait rapporté. */
+    pnl_total?: number | null;
   };
   avertissement?: string;
 };
@@ -44,6 +48,11 @@ const pct = (v: number | null | undefined, d = 1) =>
   v == null ? "n/d" : `${v >= 0 ? "+" : ""}${(v * 100).toFixed(d)} %`;
 const num = (v: number | null | undefined, d = 2) =>
   v == null ? "n/d" : v.toFixed(d);
+/** Le réalisé en dollars, signé. « n/d » quand il manque — jamais zéro, qui se lirait
+ *  « le robot n'a rien gagné » là où il faut lire « on ne sait pas ». */
+const usd = (v: number | null | undefined) =>
+  v == null ? "n/d" : `${v >= 0 ? "+" : "−"}$${Math.abs(v).toLocaleString("fr-FR",
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 /** Le chiffre monte de zéro à sa valeur sur le premier tiers du battement.
  *
@@ -92,12 +101,17 @@ export function IntroBeats({ i, p, sortie, data, etat }: {
                      motif={t?.motif || (data ? "aucun trade clôturé"
                                               : sansReponse(etat))} />;
     }
+    // LE RÉALISÉ EN TÊTE DE LA SOUS-LIGNE. « Profit factor 1,34 » ne dit pas si le
+    // robot a gagné dix dollars ou dix mille ; c'est pourtant la première chose qu'on
+    // veut savoir. Il est marqué BRUT parce qu'il l'est : chez ce courtier les frais
+    // sont des activités séparées, absentes du flux d'ordres.
     return (
       <Bloc on={on} sur={b.sur}
             chiffre={t.profit_factor == null ? "n/d" : num(t.profit_factor * k)}
             unite="PROFIT FACTOR"
-            sous={`R:R ${num(t.ratio_gain_perte)} · espérance ${pct(t.esperance_pct, 2)} `
-                  + `par trade · ${t.n} trades clôturés`} />
+            sous={`${usd(t.pnl_total)} réalisé BRUT · R:R ${num(t.ratio_gain_perte)} · `
+                  + `espérance ${pct(t.esperance_pct, 2)} par trade · `
+                  + `${t.n} trades clôturés`} />
     );
   }
 

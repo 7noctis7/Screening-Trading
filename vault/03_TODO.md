@@ -59,6 +59,14 @@
       `make up`. À confronter au TTL de 15 min : si le cache disque a moins de 15 min,
       cette reconstruction ne sert à rien. **Mesurer l'âge réel au démarrage avant de
       toucher quoi que ce soit** — `/health` publie désormais cet âge.
+- [ ] **P1 — Le CAC 40 est-il RÉEL en base ? (21/09).** Absent de l'intro et du
+      dashboard. Le code est entièrement branché des deux côtés — `FENETRES` (5 fenêtres),
+      `_comparaison` (multi-références), `snapshot.py:2828` et `:2859`,
+      `IntroCourbes.referencesUtiles`. Tout dépend de `_cac_real`
+      (`_index_series(["^FCHI", "CAC", "EWQ"], …)`) : une série retombée sur son repli
+      synthétique n'est affichée NULLE PART, par décision explicite. **Mesurer d'abord** :
+      `curl -s localhost:8000/api/intro` → lire `references_noms`. Si le CAC n'y est pas,
+      le remède est l'INGESTION de `^FCHI`, pas le code d'affichage.
 - [ ] **P2 — `/api/intro` attend le snapshot COMPLET (21/09).** La route rend
       `_snap().get("intro")` : après un `make up`, elle ne répond qu'au bout d'une à trois
       minutes, pendant que le rideau n'attend que 2,5 s. Le motif le DIT désormais, ce qui
