@@ -460,6 +460,24 @@ def _positions_repli(brokers: tuple) -> dict:
     return pos
 
 
+def _garder_les_decisions(opens: list, jour: str) -> None:
+    """Dépose sur disque ce que le robot savait en envoyant — pour le rattrapage d'après.
+
+    Écrit pour TOUTES les ouvertures, y compris celles qui viennent d'être journalisées :
+    un lot peut être réécrit plus tard (correction, reconstruction), et la décision, elle,
+    n'existe qu'ici et qu'aujourd'hui. Le coût est nul, la perte serait définitive.
+
+    Un échec d'écriture est ANNONCÉ. Un magasin muet ferait croire à une mémoire alimentée
+    alors qu'elle est vide, et le manque ne se découvrirait qu'au moment d'entraîner."""
+    try:
+        from packages.execution.decisions_store import enregistrer
+        if not enregistrer(opens, jour):
+            print("  ⚠ décisions du jour NON enregistrées (.cache en écriture ?) — "
+                  "un rattrapage ultérieur écrira des lots SANS features.")
+    except Exception as e:  # noqa: BLE001 — conserver un contexte ne casse jamais un run
+        print(f"  ⚠ décisions du jour non enregistrées ({str(e)[:60]}).")
+
+
 def _dire_les_ouvertures(n: int, skipped: int, opens: list) -> None:
     """Combien d'ouvertures écrites, et LESQUELLES manquent.
 
@@ -562,6 +580,7 @@ def _journal_opens(snap: dict, opened: list, alpaca, bitmart) -> None:
                             if _decision_px(op["symbol"]) else {})},
             "regime": regime_lbl,
         } for op in opened]
+        _garder_les_decisions(opens, jour)
         n = journal_opens(SqliteTradeJournal(), opens)
         _dire_les_ouvertures(n, len(opened) - n, opens)
     except Exception as e:  # noqa: BLE001

@@ -93,13 +93,49 @@ def _record(lot: dict):
     crypto = (lot.get("venue") or "").lower() == "bitmart"
     graine = f"{lot['symbole']}|{lot['date']}|{lot['qty']:.10f}|{lot['prix']:.10f}"
     empreinte = hashlib.sha1(graine.encode()).hexdigest()[:8]  # noqa: S324 — clé, pas sécurité
+    # LE CONTEXTE DE DÉCISION, S'IL A ÉTÉ CONSERVÉ. Le courtier ne connaît ni le rang du
+    # titre, ni le régime, ni le prix de décision : un lot rattrapé depuis ses seuls
+    # ordres est aveugle, donc hors de l'échantillon de calibration ML. Le run qui a
+    # ENVOYÉ l'ordre, lui, le savait — `decisions_store` l'a déposé sur disque. Absent :
+    # on écrit un lot sans features et `main` le DIT, plutôt que d'en inventer.
+    from packages.execution.decisions_store import retrouver
+    d = retrouver(lot["symbole"], lot.get("venue") or "Alpaca",
+                  str(lot["date"])[:10]) or {}
+    origine = f" · contexte de décision du {d['jour']}" if d.get("jour") else ""
     return TradeRecord(
         id=f"C-{lot['symbole']}-{empreinte}", instrument=lot["symbole"],
         asset_class=AssetClass.CRYPTO if crypto else AssetClass.EQUITY,
         venue=lot.get("venue") or "Alpaca", side=Side.LONG, qty=float(lot["qty"]),
         entry_ts=ts, entry_price=float(lot["prix"]), avg_price=float(lot["prix"]),
-        entry_reason=f"{MOTIF}: fill non couvert du {str(lot['date'])[:10]}",
-        features_snapshot={})
+        entry_reason=f"{MOTIF}: fill non couvert du {str(lot['date'])[:10]}{origine}",
+        regime=d.get("regime"),
+        features_snapshot=d.get("features") or {})
+
+
+def _ecrire(journal, a_creer: list[dict]) -> None:
+    """Écrit les ouvertures reconstituées, et DIT combien ont retrouvé leur contexte.
+
+    `legacy` RÉPOND À SA PROPRE QUESTION : « ce lot porte-t-il les features de la
+    décision ? ». Un lot rattrapé qui les a retrouvées vaut donc `legacy=0` et rentre
+    dans l'échantillon de calibration. C'est exactement la séparation posée par
+    l'ADR-0188 : le PRÉFIXE dit d'où vient l'ÉCRITURE, `legacy` dit ce que
+    l'enregistrement PORTE — les deux ne se déduisent pas l'un de l'autre.
+    """
+    n, avec = 0, 0
+    for lot in a_creer:
+        rec = _record(lot)
+        if rec is None:
+            continue                                  # date illisible → on n'écrit pas
+        journal.append(rec, legacy=not rec.features_snapshot)
+        n, avec = n + 1, avec + (1 if rec.features_snapshot else 0)
+    print(f"  {n} ouverture(s) reconstituée(s) · {avec} AVEC le contexte de décision "
+          "retrouvé (legacy=0, entrent dans la calibration)"
+          + (f" · {n - avec} sans (legacy=1)." if n - avec else "."))
+    if n - avec:
+        print("    Pour celles-là, la décision n'a pas été conservée : le run qui a "
+              "envoyé l'ordre")
+        print("    est antérieur à `decisions_store`, ou son écriture a échoué — "
+              "auquel cas il l'a dit.")
 
 
 def _cours_de_reference():
@@ -199,15 +235,7 @@ def main() -> None:
         dest = src.with_suffix(f".avant-completion-{datetime.now():%Y%m%d-%H%M%S}.db")
         shutil.copy2(src, dest)
         print(f"\n  Sauvegarde : {dest.name}")
-    n = 0
-    for lot in a_creer:
-        rec = _record(lot)
-        if rec is None:
-            continue                                  # date illisible → on n'écrit pas
-        journal.append(rec, legacy=True)
-        n += 1
-    print(f"  {n} ouverture(s) reconstituée(s) "
-          "(legacy=1, hors statistiques affichées).")
+    _ecrire(journal, a_creer)
     print("  Enchaîner : python scripts/reconcilier_journal.py --appliquer, "
           "puis make diag-journal.")
 
