@@ -2,6 +2,112 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0189 — Une lecture du courtier doit attendre que le courtier ait fini (2026-09-22)
+
+**CONTEXTE.** Le 22/09, six achats envoyés et exécutés ont produit DEUX ouvertures au
+journal, toutes deux tronquées :
+
+    TTEK   94,6140 acheté ·  0       journalisé
+    PFG    47,2035 acheté ·  0       journalisé
+    DUOL   20,6883 acheté ·  0       journalisé
+    PSX    19,7285 acheté ·  0       journalisé
+    HIMS   84,8592 acheté · 69,0000  journalisé
+    NEM    42,4149 acheté · 23,0000  journalisé
+
+22 695,70 $ de prix de revient absent du registre pour une séance. Les mêmes fills étaient
+lisibles quarante minutes plus tard : **ce n'est pas une donnée manquante, c'est une
+lecture trop tôt.** `_journal_opens` interroge le courtier dans la seconde qui suit
+l'envoi, or `AlpacaBroker.orders` lit `status=CLOSED` — un ordre au marché tout juste
+soumis n'y figure pas — et la position, prévue comme repli, n'est pas rafraîchie non plus.
+
+**CE QUE ÇA COÛTAIT, AU-DELÀ DE LA COMPTABILITÉ.** Un achat sans prix de revient est une
+VENTE FUTURE SANS CONTREPARTIE : CRM, acheté le 21/09 et jamais journalisé, a été vendu le
+22/09 sans produire d'aller-retour. Et comme seuls les lots issus d'une décision
+journalisée portent les `features_snapshot`, chaque ouverture perdue est un point de moins
+pour la calibration ML — l'échantillon était tombé à QUATRE lots. La même course explique
+la ligne « vente(s) sans prix broker » présente à chaque run.
+
+**DÉCISION.** Une attente BORNÉE que les ordres envoyés deviennent lisibles chez le
+courtier, entre l'exécution et la journalisation (`packages/execution/attente_fills.py`).
+L'identité de chaque ordre voyage avec l'ouverture et la vente ; `close_position` rend un
+booléen, donc pas d'identité, donc rien à attendre.
+
+**QUATRE PROPRIÉTÉS PORTENT LA DÉCISION.**
+
+1. **Hors du chemin d'ordre.** Rien n'est envoyé, réduit ni décidé. Le diff de
+   `_reconcile` n'ajoute qu'une variable locale et un champ par dictionnaire. L'attente
+   s'exécute APRÈS `_record_garde_fous`, donc un échec ne peut pas emporter le
+   compte-rendu des garde-fous.
+2. **La première lecture est immédiate.** Quand tout est déjà lisible — un run tardif, un
+   marché calme — l'attente ne coûte rien. On ne dort qu'après avoir constaté un manque
+   ET qu'il reste du temps.
+3. **Le délai est une borne dure.** Au bout de `QUANT_ATTENTE_FILLS_S` (90 s, pas de 3 s),
+   on journalise ce qui est lisible et on NOMME le reste avec la commande de rattrapage.
+   Un run n'est jamais retenu. `0` désarme l'attente et rend l'ancien comportement : une
+   porte de sortie explicite plutôt qu'un correctif dans l'urgence.
+4. **ABSENT n'est pas ZÉRO.** Un courtier muet et un courtier qui n'a rien de nouveau
+   rendent le même ensemble vide. Les confondre ferait passer une panne de lecture pour
+   « les ordres ne sont pas encore prêts », et le rapport accuserait l'exécution à la
+   place du réseau. L'état de la lecture est donc rendu séparément et compté.
+
+**CONSÉQUENCES.** L'horloge et la lecture sont injectées : les 24 tests s'exécutent en
+0,5 s sans réseau et sans dormir. Le premier jet en prenait 87 — le test du courtier en
+panne attendait réellement 90 s ; c'est ce symptôme qui a produit le réglage par
+environnement, utile en exploitation autant qu'en test.
+
+**CE QUE ÇA NE RÈGLE PAS, ET C'EST ASSUMÉ.** Un ordre qui ne se clôture pas dans le délai
+reste non journalisé. Il est désormais NOMMÉ et `make completer-ouvertures` le rattrape,
+mais la fuite n'est pas fermée : la fermer demanderait de persister les features de
+décision à l'envoi, pour qu'une journalisation différée puisse les rattacher. Tranche
+distincte, inscrite au TODO.
+
+## ADR-0188 — Le périmètre d'un lot se lit sur son origine, jamais sur `legacy` (2026-09-22)
+
+**CONTEXTE.** Le 22/09, cinq ventes exécutées chez le courtier n'ont produit qu'UN
+aller-retour au journal. Les deux runs précédents en avaient produit ZÉRO.
+
+**LA CAUSE.** `live_roundtrip.open_lots` sélectionnait les lots à fermer par
+`journal.all(legacy=False)`. Or `legacy` ne répond pas à « ce lot est-il au robot ? » mais
+à « porte-t-il les features de la décision ? » — la question de la calibration ML. Les
+lots rejoués depuis l'historique des ordres du courtier (`reconstruire_journal`, préfixe
+`R-`) n'ont pas de features, valent donc `legacy=1`, **et c'est exact**. Ils étaient
+simplement invisibles à l'appariement des ventes.
+
+Mesuré sur le journal du VPS : NWS (`R-…-10016`, 99,57), HPQ (`R-…-10012`, 146,11) et TRV
+(trois lots, 13,06) avaient bien leurs lots ouverts. Seule BBY, achetée la veille par le
+robot donc `P-`, s'est fermée.
+
+**CE N'ÉTAIT PAS UNE DÉCOUVERTE.** `perimetre_journal` nomme cette confusion depuis le
+17/09, où elle faisait afficher au panneau **+139,75 $ sur 62 trades** quand le robot avait
+fait **−23,15 $ sur 112**. Et `reconcilier_journal`, l'outil de réparation hors ligne,
+conserve le périmètre du lot depuis toujours. Seul le chemin LIVE était resté sur l'ancien
+axe — et la reconstruction du 18/09 ayant réécrit tout le journal en `R-`, le registre des
+aller-retours s'est trouvé gelé pendant quatre jours sans qu'une ligne le signale.
+
+**DÉCISION.** `open_lots` lit le périmètre sur l'ORIGINE de l'identifiant (`P-`/`C-`/`R-`,
+via `perimetre_journal`), plus jamais sur `legacy`.
+
+**TROIS CONSÉQUENCES EXPLICITES.**
+
+1. **Le drapeau `legacy` du lot est CONSERVÉ à la fermeture.** `append` fait un UPSERT où
+   `legacy` figure dans les colonnes mises à jour : écrire `legacy=False` en fermant un lot
+   rejoué ferait entrer dans l'échantillon de calibration ML des enregistrements sans
+   features. La scission d'une vente partielle écrit deux lignes ; les deux héritent.
+2. **`LEG-` et les préfixes inconnus restent ÉCARTÉS.** Leur prix d'entrée n'est
+   rattachable à aucun fill lisible — deux symboles y portaient jusqu'à 1,9 × leur achat.
+   Les apparier à une vente RÉELLE attribuerait un prix d'entrée inventé à une sortie
+   vraie, donc publierait un réalisé fabriqué.
+3. **Mais plus en silence.** Les ventes qu'aucun lot ne solde remontent par `orphelines` et
+   `run_live` les nomme, symbole par symbole, avec la quantité non soldée et la commande de
+   diagnostic. C'est le silence — la ligne « 1 lot(s) fermé(s) » qui ne parlait pas des
+   quatre autres — qui a laissé le défaut vivre quatre jours.
+
+**LEÇON DE MÉTHODE, PAYÉE DEUX FOIS CE JOUR-LÀ.** J'ai posé cette cause avant de la
+mesurer, puis je me suis « corrigé » à partir de la base du **Mac**, qui n'est pas celle du
+site : `data/journal.db` est un chemin relatif et rien ne synchronise les deux. Le Mac
+n'avait aucun lot `R-`, d'où une réfutation qui portait sur une autre base. **Une commande
+de diagnostic doit nommer la MACHINE au même titre que la commande.**
+
 ## ADR-0187 — Un contrôle de santé doit répondre à la question qu'on lui pose (2026-09-21)
 
 **L'INCIDENT.** « Aucune page de mon site ne fonctionne. » Les deux services étaient

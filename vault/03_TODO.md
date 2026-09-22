@@ -7,6 +7,48 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+- [x] **~~P0 — Les ventes ne fermaient plus aucun lot depuis le 18/09~~ — FERMÉ (22/09,
+      #394, ADR-0188).** `live_roundtrip.open_lots` lisait `all(legacy=False)` : les lots
+      rejoués du courtier (`R-`, sans features donc `legacy=1`) étaient invisibles à
+      l'appariement. Cinq ventes le 22/09, UN aller-retour. Le périmètre se lit désormais
+      sur l'ORIGINE (`P-`/`C-`/`R-`), le drapeau `legacy` survit à la fermeture, et les
+      ventes sans lot sont NOMMÉES.
+- [x] **~~P0 — 22 695,70 $ de prix de revient absent du journal en une séance~~ — FERMÉ
+      (22/09, #395, ADR-0189).** `_journal_opens` lisait le courtier dans la seconde
+      suivant l'envoi : 4 achats sur 6 perdus, 2 tronqués. Attente BORNÉE que les ordres
+      deviennent lisibles, hors du chemin d'ordre. `QUANT_ATTENTE_FILLS_S` la règle,
+      `0` la désarme.
+- [ ] **P1 — Fermer la fuite d'ouvertures pour de bon : persister les features de
+      DÉCISION à l'envoi (22/09, ADR-0189).** L'attente bornée couvre le cas normal ; un
+      ordre qui ne se clôture pas dans les 90 s reste non journalisé. Il est nommé et
+      `make completer-ouvertures` le rattrape — mais ce rattrapage écrit `legacy=1`,
+      **sans features**, parce qu'il n'a que les fills. Écrire `{jour, place, symbole,
+      features, régime, poids cible}` dans un magasin durable au moment de l'envoi
+      permettrait à une journalisation différée de les rattacher et d'écrire `legacy=0`.
+      **Pourquoi c'est P1 et pas cosmétique** : l'échantillon de calibration ML est
+      tombé à **4 lots** (cf. ci-dessous) ; chaque ouverture qui arrive sans features est
+      un point définitivement perdu pour le ML.
+- [ ] **P1 — L'échantillon de calibration ML est reparti de zéro (22/09).** `make
+      diag-journal` affiche `dont legacy=0 (calib. ML) : 4 lots`. La reconstruction du
+      18/09 a remplacé les `P-` et leurs `features_snapshot` par des `R-` qui n'en ont
+      pas. **Les features ne sont pas perdues** : elles sont dans l'archive
+      `data/journal.avant-*.db` du 18/09 sur le VPS. Deux options à trancher — les
+      réinjecter sur les lots `R-` correspondants (appariement par fill), ou repartir de
+      zéro en acceptant ~3 mois de reconstitution. Ne rien entraîner d'ici là.
+- [ ] **P2 — Quatre écarts de quantité que la réconciliation ne sait pas fermer (22/09).**
+      Après réparation complète (couverture 125/125, excédent 0) il reste :
+      `T` journal 77,83 vs courtier 126,92 · `QQQ` 31,25 vs 68,26 · `TEN` 80,12 vs 100,15
+      (le courtier détient plus que le journal) et `UNI` 0,63 vs 0 (l'inverse, lot du
+      18/09). `reconcilier-journal` rend 0 écriture : tout l'appariable l'est. Demande une
+      mesure dédiée, symbole par symbole.
+- [ ] **P2 — Trancher le saut d'equity du 17/09 (+4 191,13 $) (22/09).** `diag-journal` le
+      signale comme candidat VERSEMENT/RETRAIT alors que la réconciliation suppose
+      flux = 0. Un versement de ce montant creuserait l'écart au lieu de le combler, donc
+      c'est probablement une vraie séance — à confirmer sur le relevé Alpaca.
+- [ ] **P2 — Relire l'écart comptable marché FERMÉ (22/09).** Il valait −125,29 $ puis
+      −453,50 $ à deux lectures consécutives : `build_snapshot` réécrit le point d'equity
+      du jour entre les deux, et le marché était ouvert. Le chiffre n'est stable qu'après
+      la clôture.
 - [x] **~~P0 — `make up` déployait une branche éphémère figée~~ — FERMÉ (21/09).**
       La valeur par défaut pointait encore vers `claude/screening-trading-platform-me9p11`
       (build 58ab486) : « à jour » signifiait seulement à jour de cette branche ancienne.
