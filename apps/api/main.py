@@ -219,6 +219,75 @@ def dashboard() -> dict:
     return d
 
 
+_PF_CACHE: dict | None = None
+_PF_TS: float = 0.0
+
+
+def _compte_courtier(nom: str, configure: bool, fabrique) -> dict:
+    """DEUX appels et pas un de plus : `equity` et `positions_detailed`.
+
+    Le snapshot en fait cinq par courtier (ordres, ordres ouverts, historique d'equity,
+    OHLCV crypto) — utiles pour les pages Trades et Crypto, inutiles pour savoir où en
+        est le portefeuille MAINTENANT. C'est ce qui rend cette route assez légère
+    pour être
+    appelée toutes les 30 s alors que le snapshot demande 30 à 60 s.
+
+    Un courtier qui lève rend `ok=False` AVEC son motif : l'agrégation en fera un total
+    marqué incomplet, jamais un compte à zéro."""
+    d = {"nom": nom, "configure": configure, "ok": False,
+         "equity": None, "positions": [], "error": None}
+    if not configure:
+        d["error"] = "clés absentes (.env)"
+        return d
+    try:
+        b = fabrique()
+        d["equity"] = round(float(b.equity()), 2)
+        d["positions"] = b.positions_detailed()
+        d["ok"] = True
+    except Exception as e:  # noqa: BLE001 — un courtier muet ne prive pas l'autre
+        d["error"] = str(e)[:160]
+    return d
+
+
+def _lire_courtiers() -> list[dict]:
+    """Lecture directe des deux places. Aucun snapshot, aucune base de prix."""
+    import os
+
+    from packages.execution.venues import venue_crypto
+
+    def _alpaca():
+        from packages.execution.alpaca_broker import AlpacaBroker
+        return AlpacaBroker(paper=True)
+    vc = venue_crypto()
+    cles_alp = bool(os.environ.get("ALPACA_API_KEY")
+                    and os.environ.get("ALPACA_API_SECRET"))
+    return [_compte_courtier("Alpaca", cles_alp, _alpaca),
+            _compte_courtier(vc.nom, vc.configuree(), lambda: vc.broker(dry_run=False))]
+
+
+@app.get("/api/portefeuille")
+def portefeuille() -> dict:
+    """Le portefeuille RÉEL, lu chez le courtier — SANS jamais construire le snapshot.
+
+    C'est tout l'intérêt de la route, et c'est un invariant testé : `_snap()` déclenche
+        une construction de 30 à 60 s, ce qui interdirait tout rafraîchissement
+    court. Ici la
+    fraîcheur est bornée par `FRAICHEUR_S` (20 s), partagée entre tous les onglets pour
+    que dix pages ouvertes ne fassent pas dix fois les appels courtier.
+
+        `age_s` est rendu comme dans `/api/dashboard` : un ÂGE relatif, jamais un
+    horodatage
+    absolu — le navigateur n'a pas à croire sa propre horloge, qui dérive.
+    """
+    global _PF_CACHE, _PF_TS
+    from apps.api.portefeuille import FRAICHEUR_S, agreger, message
+    age = time.time() - _PF_TS
+    if _PF_CACHE is None or age > FRAICHEUR_S:
+        _PF_CACHE, _PF_TS, age = agreger(_lire_courtiers()), time.time(), 0.0
+    return {**_PF_CACHE, "age_s": max(0.0, round(age, 1)),
+            "fraicheur_s": FRAICHEUR_S, "resume": message(_PF_CACHE)}
+
+
 @app.get("/api/intro")
 def intro() -> dict:
     """Chiffres du rideau d'entrée — dérivés du snapshot, jamais saisis.

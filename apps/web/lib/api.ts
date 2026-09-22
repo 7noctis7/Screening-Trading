@@ -146,6 +146,11 @@ export const useTicker = () => q("ticker", "/api/ticker", 600000);
 export const useFailures = () => q("failures", "/api/failures", 600000);
 export const usePortfolio = () => q("portfolio", "/api/portfolio");
 export const usePositions = () => q("positions", "/api/positions");
+// PORTEFEUILLE LU CHEZ LE COURTIER, pas dans le snapshot. Les 15 min du bandeau « LIVE »
+// sont la période de reconstruction du snapshot, qui recalcule aussi tout le screening —
+// or celui-ci lit des barres QUOTIDIENNES et ne bougerait pas d'un chiffre. Cette route
+// ne fait que deux appels courtier : elle peut donc suivre le rythme de la séance.
+export const usePortefeuille = () => q("portefeuille", "/api/portefeuille", 30000);
 export const usePerformance = () => q("performance", "/api/performance", 60000);
 export const useTrades = () => q("trades", "/api/trades");
 export const useJournal = () => q("journal", "/api/journal", 60000);

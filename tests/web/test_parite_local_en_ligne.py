@@ -25,7 +25,9 @@ API_TS = RACINE / "apps" / "web" / "lib" / "api.ts"
 DUMP = RACINE / "scripts" / "dump_static.py"
 
 # Écrits hors du tableau `routes` de `dump_static`, vérifiés séparément ici.
-HORS_TABLE = {"overlays", "notes"}
+# `portefeuille` en fait partie À DESSEIN : il est écrit en CONSTANTE, jamais appelé —
+# cf. `test_le_portefeuille_live_n_est_JAMAIS_appele_par_le_build_statique`.
+HORS_TABLE = {"overlays", "notes", "portefeuille"}
 
 
 def _routes_appelees() -> set[str]:
@@ -63,6 +65,30 @@ def test_le_front_et_le_build_partagent_bien_des_routes():
     assert len(appelees) >= 15, f"{len(appelees)} routes lues — regex cassée ?"
     assert len(publiees) >= 15, f"{len(publiees)} fichiers lus — regex cassée ?"
     assert len(appelees & publiees) >= 15, "les deux ensembles ne se recoupent plus"
+
+
+def test_le_portefeuille_live_n_est_JAMAIS_appele_par_le_build_statique():
+    """Deux raisons, la seconde rédhibitoire.
+
+    Un portefeuille figé au build et servi sous un voyant « COURTIER · il y a 12s » serait
+    un mensonge : cette route n'a de sens que lue en direct. Et surtout, le site statique
+    est PUBLIÉ — appeler la route sur une machine qui a les clés graverait les positions
+    réelles du compte dans des pages publiques. Le dépôt est public et ces positions sont
+    local-only ; ce garde-fou ne doit pas dépendre de l'absence de clés sur le runner.
+    """
+    # ON NE JUGE QUE LE CODE. Un commentaire a le DROIT de nommer la règle qu'il
+    # explique — c'est même souhaitable, et c'est ce que fait `dump_static`. Sans ce
+    # filtre, la première version de ce test tombait sur sa propre justification
+    # (même précédent que `test_la_fermeture_de_production_ne_retranche_PAS_le_slippage`).
+    src = "\n".join(l for l in DUMP.read_text(encoding="utf-8").splitlines()
+                    if not l.lstrip().startswith("#"))
+    assert "M.portefeuille" not in src, (
+        "`dump_static` appelle la route portefeuille : les positions réelles seraient "
+        "gravées dans un site PUBLIC.")
+    assert '_write("portefeuille"' in src, "le build doit écrire un payload neutre"
+    bloc = src[src.index('_write("portefeuille"'):]
+    assert '"disponible": False' in bloc[:900], (
+        "le payload statique doit se déclarer INDISPONIBLE, pas publier un total figé")
 
 
 def test_les_fichiers_publies_mais_jamais_appeles_sont_CONNUS():
