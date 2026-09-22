@@ -216,6 +216,20 @@ def dashboard() -> dict:
     # depuis la réponse — aucune synchronisation requise.
     d["snapshot_age_s"] = max(0.0, round(time.time() - _CACHE_TS, 1))
     d["snapshot_ttl_s"] = _TTL_S
+    # « PÉRIMÉ » ET « EN TRAIN D'ÊTRE REFAIT » NE SONT PAS LA MÊME CHOSE. Sans ce champ,
+    # le bandeau affichait DIFFÉRÉ pendant les deux minutes où le serveur reconstruisait
+    # justement — un mot alarmant sur une situation normale. Or l'alarme a un coût : à
+    # force de crier au loup sur le cas ordinaire, elle cesse d'être lue le jour où la
+    # reconstruction ÉCHOUE vraiment. Mesuré le 22/09 : trois quarts d'heure de DIFFÉRÉ
+    # sans un seul `snapshot rebuild failed` au journal.
+    #
+    # La reconstruction n'étant déclenchée QUE par une requête, « périmé ET aucun
+    # rebuild en cours » devient un état qui ne devrait pas exister — donc un signal.
+
+    # Vocabulaire repris de `apps.api.sante`, pour que /health et le bandeau ne
+    # décrivent pas le même serveur avec deux mots différents.
+    from apps.api.sante import etat
+    d["snapshot_etat"] = etat(cache_present=True, construction=_BUILDING)
     return d
 
 
