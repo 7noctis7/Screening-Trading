@@ -2,6 +2,112 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0191 — Deux rythmes de donnée ne se servent pas sous un même mot « LIVE » (2026-09-22)
+
+**CONTEXTE.** Le bandeau du site annonçait « LIVE · il y a 15min ». Ces quinze minutes ne
+sont pas un retard de la donnée : c'est la période de reconstruction du snapshot
+(`_TTL_S = 900`). La question posée était « comment avoir les données à jour ? » ; la
+réponse commençait par mesurer ce que « 15 min » désigne.
+
+**CE QUE LA MESURE A MONTRÉ.** Le snapshot agrège deux natures qui n'ont pas du tout le
+même rythme :
+
+  · le SCREENING lit des barres QUOTIDIENNES, et sa fenêtre s'arrête à minuit
+    (`snapshot.py` : `end = now().replace(hour=0, …)`). Le reconstruire toutes les deux
+    minutes relirait exactement les mêmes chiffres ;
+  · le PORTEFEUILLE vient du courtier (`positions_detailed`) et bouge à chaque seconde
+    de séance.
+
+Raccourcir le TTL aurait donc payé un recalcul complet du premier — 30 à 60 s de CPU et
+cinq appels courtier par place — pour rafraîchir le second. C'est déplacer le curseur
+d'un compromis, pas le supprimer.
+
+**DÉCISION.** Une route dédiée, `/api/portefeuille` : DEUX appels par place (`equity`,
+`positions_detailed`), un cache partagé de 20 s, et **aucune construction de snapshot**.
+Le composant `PortefeuilleLive` l'affiche en tête de la page Positions, rafraîchi toutes
+les 30 s, en DISANT que le reste de la page décrit la cible du modèle, à rythme
+quotidien. C'est leur confusion sous un même mot « LIVE » qui était le vrai défaut.
+
+**QUATRE PROPRIÉTÉS PORTENT LA DÉCISION.**
+
+1. **L'invariant est testé sur la source.** `_snap()` coûte 30 à 60 s : le rebrancher ici
+   rendrait la route inutilisable pour son propre rythme. Un test lit le corps de
+   `portefeuille`, `_lire_courtiers` et `_compte_courtier` et tombe si `_snap` ou
+   `build_snapshot` y réapparaît. Un autre interdit les appels lourds (`orders`,
+   `portfolio_history`, `ohlcv`).
+2. **ABSENT N'EST PAS ZÉRO.** Un courtier injoignable ne vaut pas 0 $ : le total est
+   marqué INCOMPLET et le manquant est NOMMÉ. Un total qui rétrécit en silence parce
+   qu'un courtier ne répond plus ressemble trait pour trait à une perte — c'est le
+   chiffre le plus dangereux du site. Un compte NON CONFIGURÉ, lui, est hors périmètre
+   et ne rend rien incomplet.
+3. **L'âge affiché est celui de la DONNÉE.** Âge serveur + temps écoulé depuis la
+   réponse, jamais l'instant de la requête — le défaut déjà corrigé sur `LiveBadge`, qui
+   affichait « il y a 1s » sur des positions vendues un quart d'heure plus tôt. Et un âge
+   RELATIF, jamais un horodatage absolu : le navigateur n'a pas à croire son horloge.
+4. **Une position que le courtier ne chiffre pas ne disparaît pas.** Elle est listée,
+   exclue du total, et citée. Rien n'est estimé : aucun repli sur un prix de la veille.
+
+**LE SITE STATIQUE, ET UN GARDE-FOU QUI NE DÉPEND PAS DE LA CHANCE.** `dump_static` écrit
+une CONSTANTE indisponible et n'appelle JAMAIS la route. Un portefeuille figé au build et
+servi sous un voyant « il y a 12s » serait un mensonge ; surtout, le site est PUBLIÉ —
+appeler la route sur une machine ayant les clés graverait les positions réelles du compte
+dans des pages publiques. Le dépôt est public et ces positions sont local-only : le
+garde-fou ne doit pas reposer sur l'absence de clés sur le runner. Le test de parité
+local/en-ligne du dépôt a d'ailleurs attrapé l'omission avant qu'elle ne parte.
+
+**UNE LEÇON SUR LES TESTS DE SOURCE.** La première version du garde-fou anti-fuite est
+tombée sur son PROPRE commentaire, qui cite la chose qu'il interdit. Le dépôt avait déjà
+réglé ce cas (`test_la_fermeture_de_production_ne_retranche_PAS_le_slippage`) : on ne
+juge que le CODE ; un commentaire a le droit de nommer la règle qu'il explique.
+
+## ADR-0190 — Ce que le robot savait en envoyant doit survivre au processus (2026-09-22)
+
+**CONTEXTE.** L'attente bornée (ADR-0189) couvre le cas normal, mais un ordre qui ne se
+clôture pas dans le délai reste non journalisé pendant le run. `completer_ouvertures` le
+rattrape ensuite depuis les SEULS ordres du courtier — qui ne connaît ni le rang du titre,
+ni le régime, ni le prix de décision.
+
+Le lot rattrapé arrivait donc SANS features, `legacy=1`, hors de l'échantillon de
+calibration ML. Mesuré le 22/09 : cet échantillon était tombé à QUATRE lots.
+
+**CE QUI MANQUAIT N'ÉTAIT PAS LA DONNÉE.** Le contexte de décision existait — en mémoire,
+dans le snapshot du run qui a envoyé l'ordre. Il ne manquait que d'être écrit avant que le
+processus ne meure.
+
+**DÉCISION.** `packages/execution/decisions_store` dépose sur disque ce que le robot
+savait en envoyant. `run_live` écrit pour TOUTES les ouvertures du jour, journalisées ou
+non — un lot peut être réécrit plus tard, la décision n'existe qu'aujourd'hui.
+`completer_ouvertures` rattache ensuite la décision au fill.
+
+**`legacy` RÉPOND ENFIN À SA PROPRE QUESTION.** Un lot rattrapé qui a retrouvé ses
+features vaut `legacy=0` et entre dans la calibration, bien qu'il porte le préfixe `C-`.
+C'est exactement la séparation posée par l'ADR-0188 : le PRÉFIXE dit d'où vient
+l'ÉCRITURE, `legacy` dit ce que l'enregistrement PORTE. Les deux ne se déduisent pas l'un
+de l'autre, et c'est leur confusion qui a coûté un panneau entier le 17/09 puis quatre
+jours d'aller-retours gelés le 22/09.
+
+**TROIS BORNES, ET ELLES DISENT TOUTES NON À UNE INVENTION.**
+
+1. **Fenêtre de 3 jours.** Un ordre reporté hors séance, ou une crypto en `GTC`, se
+   remplit après coup — et c'est bien cette décision-là qui l'a produit. Au-delà, le lien
+   devient une supposition, et une supposition n'a rien à faire dans un jeu
+   d'entraînement.
+2. **Jamais une décision POSTÉRIEURE au fill.** Rattacher la décision de demain au fill
+   d'hier serait du look-ahead pur. Un test l'épingle.
+3. **Décision absente → lot aveugle, et le rapport le DIT avec son motif.** Mieux vaut un
+   lot sans features qu'un lot aux features inventées : ce sont les features qui
+   entraînent le modèle.
+
+**CONSÉQUENCES.** Rétention 60 jours ; un re-run du même jour écrase sa propre trace au
+lieu de l'empiler ; les NaN n'entrent pas (un JSON qui en contient n'est plus du JSON —
+piège déjà payé par l'export statique). Un échec d'écriture est ANNONCÉ par le run : un
+magasin muet ferait croire à une mémoire alimentée alors qu'elle est vide, et le manque
+ne se découvrirait qu'au moment d'entraîner, des semaines plus tard.
+
+**CE QUE ÇA NE RÈGLE PAS.** Les lots déjà rattrapés restent `legacy=1` : leurs décisions
+sont antérieures au magasin. Les features de l'historique d'avant le 18/09 sont dans
+l'archive `data/journal.avant-*.db` — tranche distincte, inscrite au TODO.
+
 ## ADR-0189 — Une lecture du courtier doit attendre que le courtier ait fini (2026-09-22)
 
 **CONTEXTE.** Le 22/09, six achats envoyés et exécutés ont produit DEUX ouvertures au

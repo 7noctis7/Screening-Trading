@@ -52,6 +52,8 @@ graph TD
     EX -. apres envoi, hors chemin d ordre .-> ATT[execution/attente_fills: attente BORNEE que le courtier ait cloture]
     ATT --> JO[live_journal: ouvertures legacy=0 + features de DECISION]
     ATT --> JS[live_roundtrip: ventes appariees aux lots du ROBOT - origine, jamais legacy]
+    JO -. ce que le robot SAVAIT, pour le rattrapage d apres .-> DEC[(execution/decisions_store - .cache, 60j)]
+    DEC --> COMP
   end
   subgraph RECO[Analyse d'un portefeuille IMPORTE - read-only, aucun ordre]
     IMP[snapshot importe: manuel ou CSV] --> UA[portfolio/user_analysis: alias, crypto.db, intersection SANS remplissage]
@@ -109,7 +111,9 @@ graph TD
     ML -. boucle .-> K
   end
   subgraph APP[Interface]
-    API[API FastAPI + snapshot] --> WEB[Front Next.js + export statique Pages]
+    API[API FastAPI + snapshot - TTL 15 min, rythme QUOTIDIEN du screening] --> WEB[Front Next.js + export statique Pages]
+    PFL[/api/portefeuille: 2 appels courtier, AUCUN snapshot - rythme de la SEANCE/] --> WEB
+    PFL -. jamais appelee par dump_static: le site est PUBLIC .-> WEB
   end
   EXT --> D
   A4 --> EX
@@ -183,7 +187,7 @@ croire qu'ils y sont. Ils y entreront un par un, après la porte de
 | Risque (engine + règles) | `packages/risk` | ✅ engine+veto+kill-switch (S1) |
 | Analyse portefeuille importé | `packages/portfolio/{user_analysis,recommendation,conviction,indicateurs,filtre_resultats}` | ✅ read-only, aucun ordre · sélection = screening du jour, poids = moteurs de risque · profil déclaré BORNE l'exposition · « Conviction » ouvert seulement si l'IC MESURÉ tient hors échantillon (ADR-0075) · séries arrêtées et résultats imminents écartés avant tout calcul |
 | Portefeuille | `packages/portfolio` | ✅ HRP/ERC/min-var, VaR/CVaR/EVT, PSR/DSR, stress (S11) · **intégrité des séries** (un NaN est un incident, jamais une valeur) · **fragilité** : marge de payoff, PF privé des 5 meilleurs, significativité corrigée de la dépendance, $ contre R (ADR-0051) |
-| Exécution (paper) | `packages/execution` | ✅ SimBroker+AlpacaBroker+Bitmart gated · journal décision + round-trip FIFO (ADR-0028/0031) · périmètre d'appariement lu sur l'ORIGINE du lot, jamais sur `legacy` (ADR-0188) · attente bornée des fills avant journalisation (`attente_fills`, ADR-0189) — hors chemin d'ordre · LiveEngine = simulateur · témoin des garde-fous (`garde_fous`, ADR-0186) — observe, ne décide pas |
+| Exécution (paper) | `packages/execution` | ✅ SimBroker+AlpacaBroker+Bitmart gated · journal décision + round-trip FIFO (ADR-0028/0031) · périmètre d'appariement lu sur l'ORIGINE du lot, jamais sur `legacy` (ADR-0188) · attente bornée des fills avant journalisation (`attente_fills`, ADR-0189) — hors chemin d'ordre · contexte de décision conservé pour le rattrapage (`decisions_store`, ADR-0190) · LiveEngine = simulateur · témoin des garde-fous (`garde_fous`, ADR-0186) — observe, ne décide pas |
 | ML | `packages/ml` | ✅ triple-barrier, CV purgée/embargo, calibration, conformal, champion/challenger (S9) |
 | Alertes | `packages/alerts` | ✅ engine+sinks+throttle+wiring — BRANCHÉ sur `run_live.py` (BLOC 1c) |
 | Reporting | `packages/reporting` | ✅ analytics, tearsheet, notes sociétés, miroir Obsidian (S13) |

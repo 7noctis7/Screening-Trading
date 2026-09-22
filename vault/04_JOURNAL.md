@@ -77,8 +77,38 @@ commentaire dans un bloc collable ; le `make up` est parti avant le merge et a d
 correctifs sont depuis en production — mais **une consigne d'ordre ne se met pas en
 commentaire.**
 
-**Validation.** #394 et #395 mergées (`2b84e41`, `557e03f`), VPS déployé et vérifié par le
-hash de build. Suite : **3250 passed, 80 skipped**. 33 tests de non-régression ajoutés.
+**DEUX TRANCHES DE PLUS, LA MÊME NUIT.**
+
+*Fermer la fuite d'ouvertures (#397, ADR-0190).* L'attente bornée couvre le cas normal ;
+au-delà du délai, le rattrapage écrivait un lot aveugle parce qu'il ne dispose que des
+ordres du courtier. Le contexte de décision existait pourtant, en mémoire dans le snapshot
+du run — il ne manquait que d'être écrit avant la mort du processus. `decisions_store` le
+dépose, `completer_ouvertures` le rattache, et `legacy` répond enfin à sa propre question :
+un lot `C-` qui porte ses features vaut `legacy=0` et entre dans la calibration.
+
+*Séparer deux rythmes (#398, ADR-0191).* « Comment avoir les données à jour et pas à
+15 min de retard ? » La mesure a répondu avant moi : ces 15 min sont la période de
+reconstruction du snapshot, lequel mélange un screening sur barres QUOTIDIENNES — fenêtre
+arrêtée à minuit — et un portefeuille qui bouge à chaque seconde. Raccourcir le TTL aurait
+payé un recalcul complet du premier pour rafraîchir le second. `/api/portefeuille` lit le
+courtier directement (deux appels, aucun snapshot) et le bloc `PortefeuilleLive` l'affiche
+à 30 s, en disant que le reste de la page a un autre rythme.
+
+Au passage, le test de parité local/en-ligne du dépôt a attrapé une omission qui cachait
+pire : la route aurait rendu 404 en statique, et surtout, appelée par `dump_static` sur une
+machine ayant les clés, elle aurait gravé les positions réelles dans un site PUBLIC. Le
+build écrit désormais une constante indisponible, et le garde-fou ne repose plus sur
+l'absence de clés sur le runner.
+
+**Validation.** Cinq PR mergées (`2b84e41`, `557e03f`, `f9ad4c3`, `deccfe6`, `9d1eb46`),
+VPS déployé et vérifié par le hash de build à chaque étape. Suite : **3297 passed,
+80 skipped**. 78 tests de non-régression ajoutés sur la séance.
+
+**UNE LEÇON D'OUTILLAGE, payée deux fois.** Un test de SOURCE qui interdit un appel tombe
+sur son propre commentaire quand celui-ci cite la chose interdite. Le dépôt avait déjà
+réglé ce cas pour le slippage : on ne juge que le CODE. Et un test qui attend une condition
+réelle DORT réellement — 87 s pour neuf tests, jusqu'à ce que le délai devienne réglable
+par l'environnement, ce qui s'est avéré utile en exploitation autant qu'en test.
 
 ## Session 2026-09-21 — Le VPS était à jour sur la mauvaise branche
 
