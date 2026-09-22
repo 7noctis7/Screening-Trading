@@ -18,16 +18,13 @@
       suivant l'envoi : 4 achats sur 6 perdus, 2 tronqués. Attente BORNÉE que les ordres
       deviennent lisibles, hors du chemin d'ordre. `QUANT_ATTENTE_FILLS_S` la règle,
       `0` la désarme.
-- [ ] **P1 — Fermer la fuite d'ouvertures pour de bon : persister les features de
-      DÉCISION à l'envoi (22/09, ADR-0189).** L'attente bornée couvre le cas normal ; un
-      ordre qui ne se clôture pas dans les 90 s reste non journalisé. Il est nommé et
-      `make completer-ouvertures` le rattrape — mais ce rattrapage écrit `legacy=1`,
-      **sans features**, parce qu'il n'a que les fills. Écrire `{jour, place, symbole,
-      features, régime, poids cible}` dans un magasin durable au moment de l'envoi
-      permettrait à une journalisation différée de les rattacher et d'écrire `legacy=0`.
-      **Pourquoi c'est P1 et pas cosmétique** : l'échantillon de calibration ML est
-      tombé à **4 lots** (cf. ci-dessous) ; chaque ouverture qui arrive sans features est
-      un point définitivement perdu pour le ML.
+- [x] **~~P1 — Fermer la fuite d'ouvertures : persister les features de DÉCISION~~ —
+      FERMÉ (22/09, #397, ADR-0190).** `decisions_store` dépose ce que le robot savait en
+      envoyant ; `completer_ouvertures` le rattache au fill et écrit `legacy = pas de
+      features`. Fenêtre de 3 jours, jamais une décision postérieure au fill. Décision
+      absente → lot aveugle comme avant, et le rapport le dit avec son motif.
+      **Reste vrai** : les lots déjà rattrapés restent `legacy=1` (décisions antérieures
+      au magasin) — c'est l'entrée ci-dessous qui les concerne.
 - [ ] **P1 — L'échantillon de calibration ML est reparti de zéro (22/09).** `make
       diag-journal` affiche `dont legacy=0 (calib. ML) : 4 lots`. La reconstruction du
       18/09 a remplacé les `P-` et leurs `features_snapshot` par des `R-` qui n'en ont
@@ -35,6 +32,19 @@
       `data/journal.avant-*.db` du 18/09 sur le VPS. Deux options à trancher — les
       réinjecter sur les lots `R-` correspondants (appariement par fill), ou repartir de
       zéro en acceptant ~3 mois de reconstitution. Ne rien entraîner d'ici là.
+- [x] **~~P1 — « LIVE · il y a 15min » : comment avoir des données à jour ?~~ — RÉPONDU
+      ET FERMÉ (22/09, #398, ADR-0191).** Ce n'était pas un retard de la donnée mais la
+      période de reconstruction du snapshot, lequel mélange un screening sur barres
+      QUOTIDIENNES (fenêtre arrêtée à minuit) et un portefeuille qui bouge à chaque
+      seconde. Raccourcir le TTL aurait payé un recalcul complet du premier pour
+      rafraîchir le second. `/api/portefeuille` lit le courtier directement (deux appels,
+      aucun snapshot, cache partagé 20 s) ; `PortefeuilleLive` l'affiche à 30 s sur la
+      page Positions. **Ne pas** « optimiser » en y rebranchant `_snap()` : un test de
+      source l'interdit, et ce serait annuler tout le bénéfice.
+- [ ] **P2 — Le badge `LiveBadge` décrit toujours le snapshot, et c'est exact (22/09).**
+      Il reste donc à 15 min et passe en DIFFÉRÉ au-delà — comportement voulu. À revoir
+      seulement si la coexistence des deux voyants (bandeau global « LIVE » du snapshot,
+      bloc « COURTIER » de la page Positions) prête à confusion à l'usage.
 - [ ] **P2 — Quatre écarts de quantité que la réconciliation ne sait pas fermer (22/09).**
       Après réparation complète (couverture 125/125, excédent 0) il reste :
       `T` journal 77,83 vs courtier 126,92 · `QQQ` 31,25 vs 68,26 · `TEN` 80,12 vs 100,15
