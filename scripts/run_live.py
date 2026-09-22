@@ -572,12 +572,36 @@ def _journal_sells(snap: dict, sold: list, alpaca, bitmart) -> None:
             else:                                     # repli : ancien comportement
                 s["exit_price"] = _exit_price(br, s["broker_symbol"])
         series = (snap.get("dashboard") or {}).get("chart_series") or {}
-        n = close_sells(SqliteTradeJournal(), sold, series)
+        orphelines: list[dict] = []
+        n = close_sells(SqliteTradeJournal(), sold, series, orphelines=orphelines)
         skipped = sum(1 for s in sold if not s.get("exit_price"))
         print(f"Journal : {n} lot(s) fermé(s) (round-trip, PnL/MFE/MAE)"
               + (f" · {skipped} vente(s) sans prix broker (lots laissés ouverts)." if skipped else "."))
+        _dire_les_orphelines(orphelines)
     except Exception as e:  # noqa: BLE001
         print(f"Journal : round-trip ignoré ({str(e)[:60]}).")
+
+
+def _dire_les_orphelines(orphelines: list[dict]) -> None:
+    """Ventes exécutées chez le courtier qu'AUCUN lot du journal n'a soldées.
+
+    Ce bloc existe parce que son absence a coûté quatre aller-retours le 22/09 : les
+    ventes partaient, le journal n'en fermait qu'une, et la ligne « 1 lot(s) fermé(s) »
+    ne disait rien des quatre autres. Un appariement qui échoue doit être aussi bruyant
+    qu'un ordre refusé — sinon le registre diverge du compte sans qu'aucune sortie ne le
+    signale, et l'écart ne se découvre qu'en comparant à la main des mois plus tard."""
+    if not orphelines:
+        return
+    print(f"  ⚠ {len(orphelines)} vente(s) SANS LOT au journal — le compte a vendu, le "
+          "registre n'a rien à fermer :")
+    for o in orphelines[:10]:
+        reste = float(o["qty_demandee"]) - float(o["qty_fermee"])
+        print(f"      {o['symbol']:<10} {reste:12.6f} unité(s) non soldée(s) "
+              f"sur {o['qty_demandee']:.6f} vendue(s)")
+    print("      Origines possibles : lot d'import (`LEG-`, écarté à dessein), position "
+          "antérieure au journal,")
+    print("      ou lot déjà fermé. `python scripts/diag_journal_compte.py --symbole "
+          "<TICKER>` tranche.")
 
 
 def _sync_obsidian() -> None:
