@@ -106,6 +106,24 @@ def main() -> int:
             _write(name, {"available": False, "error": str(e)})
             print(f"  ⚠ data/{name}.json ({e})")
     _write("overlays", {})                       # overlays dynamiques neutralisés en statique
+    # PORTEFEUILLE LIVE : une CONSTANTE, et surtout PAS `M.portefeuille()`. Deux raisons,
+    # la seconde étant rédhibitoire.
+    #   · Un portefeuille figé au moment du build et servi sous un voyant « COURTIER ·
+    #     il y a 12s » serait un mensonge : cette route n'a de sens que lue en direct.
+    #   · Le site statique est PUBLIÉ. Appeler la route sur une machine qui a les clés
+    #     graverait les positions réelles du compte dans des pages publiques. Le dépôt
+    #     est public et les positions courtier sont local-only (CLAUDE.md) : on ne fait
+    #     pas dépendre ce garde-fou de l'absence de clés sur le runner.
+    # Le front reçoit la même forme qu'une panne de courtier et l'affiche telle quelle.
+    _write("portefeuille", {
+        "disponible": False, "complet": False,
+        "equity_total": None, "valeur_positions": None, "latent_total": None,
+        "n_positions": 0, "positions": [], "sans_valeur": [], "comptes": [],
+        "incidents": ["site statique : aucune connexion courtier (données local-only)"],
+        "age_s": None, "fraicheur_s": None,
+        "resume": ("Portefeuille indisponible — site statique : aucune connexion "
+                   "courtier (les positions réelles restent local-only)."),
+    })
 
     # 2) notes d'analyse HTML par société (univers mobile), + listing data/notes.json
     from packages.reporting import company_report_html

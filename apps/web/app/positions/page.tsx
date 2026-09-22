@@ -4,6 +4,7 @@
 // confrontées à la cible du preset (poids modèle). L'écart dit ce que le prochain rebalancement
 // corrigera. 100 % données réelles côté « réel » ; la cible est le modèle (étiquetée comme telle).
 import { StepBanner } from "@/components/Pipeline";
+import { PortefeuilleLive } from "@/components/PortefeuilleLive";
 import { useMemo, useState } from "react";
 import { usePositions } from "@/lib/api";
 import { TechnicalChart } from "@/components/TechnicalChart";
@@ -222,6 +223,11 @@ export default function Positions() {
         d'écart, on ne touche à rien : bouger pour si peu coûterait plus que ça ne rapporte. Aucun
         chiffre inventé — « n/d » quand un compte est déconnecté.</p>
       <StepBanner active="portfolio" />
+
+      {/* LU CHEZ LE COURTIER, pas dans le snapshot : le tableau ci-dessous décrit la
+          CIBLE du modèle (rythme quotidien), ce bloc décrit le COMPTE (rythme de la
+          séance). Mélanger les deux sous un même « LIVE » était le vrai défaut. */}
+      <PortefeuilleLive />
 
       {toutBloque && (
         // Le rebalancement ne peut RIEN ouvrir. Sans ce bandeau, la liste ressemble à des
