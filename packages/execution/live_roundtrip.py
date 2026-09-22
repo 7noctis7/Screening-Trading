@@ -1,8 +1,8 @@
 """Round-trip du journal paper (P0-4 Phase 2) — appariement des VENTES aux lots ouverts.
 
 Séparation stricte des sources (anti-invention, garde-fou CLAUDE.md) :
-- **lots ouverts** = `data/journal.db` (`legacy=0`, `exit_ts` NULL), écrits en Phase 1
-  avec les features figées à la DÉCISION — jamais retouchées ici ;
+- **lots ouverts** = `data/journal.db`, `exit_ts` NULL, d'ORIGINE robot (`P-`/`C-`/`R-`,
+  cf. `perimetre_journal`) — features d'entrée jamais retouchées ici ;
 - **faits de VENTE** = montant $ réellement envoyé par la réconciliation + prix broker
   au moment de l'exécution (vérité terrain). Pas de prix exploitable → lot laissé
   OUVERT, jamais estimé ;
@@ -28,7 +28,31 @@ _EPS = 1e-6
 
 def open_lots(journal, instrument: str | None = None,
               venue: str | None = None) -> list[TradeRecord]:
-    """Lots encore ouverts (`legacy=0`, sans exit), FIFO (entry_ts croissant).
+    """Lots du ROBOT encore ouverts (sans exit), FIFO (entry_ts croissant).
+
+    LE PÉRIMÈTRE SE LIT SUR L'ORIGINE, PAS SUR `legacy`, ET C'EST UN CORRECTIF (22/09).
+    Cette fonction lisait `all(legacy=False)`. Or `legacy` répond à une AUTRE question —
+    « ce lot porte-t-il les features de la décision ? », celle de la calibration ML.
+    `perimetre_journal` avait déjà nommé cette confusion le 17/09 et corrigé le panneau
+    du site ; l'appariement des ventes, lui, était resté sur l'ancien axe.
+
+    Conséquence mesurée le 22/09 sur le compte réel : les lots rejoués depuis
+    l'historique des ordres du courtier (`reconstruire_journal`, préfixe `R-`) sont
+    écrits `legacy=1` — ils n'ont pas de features, et c'est exact. Ils étaient donc
+    INVISIBLES ici. Ce jour-là le robot a envoyé 5 ventes ; une seule a produit un
+    aller-retour — la seule dont le lot venait d'une décision journalisée (`P-`). Les
+    quatre autres ventes ont bien été exécutées chez le courtier, n'ont rien fermé au
+    journal, et leurs lots sont restés OUVERTS : du réalisé perdu d'un côté, des
+    positions fantômes de l'autre. C'est exactement le désordre que
+    `reconstruire_journal` avait été écrit pour solder le 18/09, re-fabriqué par l'outil
+    qui consomme sa sortie.
+
+    CE QUI RESTE EXCLU, ET POURQUOI. `LEG-` (import historique) et les préfixes inconnus.
+    Leur prix d'entrée n'est rattachable à aucun fill lisible — deux symboles y portent
+    jusqu'à 1,9 fois leur achat. Les apparier à une vente RÉELLE attribuerait un prix
+    d'entrée inventé à une sortie vraie, donc publierait un réalisé fabriqué. Ils ne
+    sont pas écartés en silence pour autant : `close_sells` nomme les ventes restées
+    sans lot.
 
     APPARIEMENT PAR SYMBOLE CANONIQUE, et c'est un CORRECTIF (03/09). La comparaison
     était `t.instrument == instrument`, exacte au caractère près. Or les lots crypto
@@ -41,8 +65,10 @@ def open_lots(journal, instrument: str | None = None,
     l'incident du 27/08 (liquidation crypto bloquée par le calendrier NYSE parce
     qu'`AAVEUSD` n'était pas reconnu comme crypto). Même cause, autre symptôme.
     """
+    from packages.execution.perimetre_journal import pris_par_le_robot
     from packages.research.biais_fermeture import symbole_canonique
-    lots = [t for t in journal.all(legacy=False) if t.exit_ts is None]
+    lots = [t for t in journal.all()
+            if t.exit_ts is None and pris_par_le_robot(t.id)]
     if instrument is not None:
         cible = symbole_canonique(instrument)
         lots = [t for t in lots if symbole_canonique(t.instrument) == cible]
@@ -109,49 +135,81 @@ def _close_record(lot: TradeRecord, qty: float, price: float, ts: datetime,
         mfe=fe, mae=ae)
 
 
+def _quantite_vendue(s: dict) -> float:
+    """Unités à fermer pour cette vente, ou 0.0 si la vente n'est pas exploitable.
+
+    `qty_reelle` (le fill RÉEL cité par un ordre du courtier) prime STRICTEMENT sur
+    `notional / exit_price` (le delta PLANIFIÉ par le rebalancement). Mesuré le 05/09
+    sur le compte réel (OSCR) : le delta planifié dépassait le fill réel de ~85 unités,
+    et l'écart se fermait au journal comme s'il avait été vendu — du « réalisé » sans
+    contrepartie. `notional` reste le repli pour les ventes sans ordre citable
+    (ex. liquidation totale via `close_position`).
+    """
+    prix = float(s.get("exit_price") or 0.0)
+    if prix <= 0:
+        return 0.0
+    qty_reelle = float(s.get("qty_reelle") or 0.0)
+    if qty_reelle > _EPS:
+        return qty_reelle
+    notional = float(s.get("notional") or 0.0)
+    return notional / prix if notional > 0 else 0.0
+
+
 def close_sells(journal, sells: list[dict], series_by_sym: dict | None = None,
-                *, ts: datetime | None = None) -> int:
-    """Apparie les ventes aux lots ouverts (FIFO). Retourne le nb de fermetures.
+                *, ts: datetime | None = None,
+                orphelines: list[dict] | None = None) -> int:
+    """Apparie les ventes aux lots ouverts du ROBOT (FIFO). Rend le nb de fermetures.
 
     `sells` : dicts {symbol, venue, exit_price, notional, qty_reelle?}. Sans
     `exit_price` > 0 la vente est IGNORÉE (lot ouvert — on n'invente jamais un prix).
-    Vente excédant les ouverts : l'excédent est ignoré (position antérieure au
-    journal Phase 1).
 
-    QUANTITÉ FERMÉE : `qty_reelle` (le fill RÉEL cité par un ordre du courtier), quand
-    fourni, prime STRICTEMENT sur `notional / exit_price` (le delta PLANIFIÉ par le
-    rebalancement). Mesuré le 05/09 sur le compte réel (OSCR) : le delta planifié
-    dépassait le fill réel de ~85 unités, et l'écart se fermait au journal comme s'il
-    avait été vendu — du « réalisé » sans contrepartie. `notional` reste le repli pour
-    les ventes sans ordre citable (ex. liquidation totale via `close_position`)."""
+    `orphelines`, s'il est fourni, REÇOIT LES VENTES QUI N'ONT RIEN FERMÉ, en tout ou en
+    partie : `{"symbol", "venue", "qty_demandee", "qty_fermee"}`. Sans cette liste, un
+    appariement qui échoue est indiscernable d'un appariement qui n'avait rien à faire —
+    et c'est précisément ce silence qui a laissé quatre ventes réelles sans aller-retour
+    le 22/09 sans qu'aucune ligne ne sorte. L'excédent d'une vente sur les lots ouverts
+    (position antérieure au journal) y figure donc aussi : au retour, l'appelant a de
+    quoi dire CE QU'IL N'A PAS SU FERMER.
+
+    LE DRAPEAU `legacy` DU LOT EST CONSERVÉ. Il dit « ce lot porte-t-il les features de
+    la décision ? » ; le réécrire à 0 en fermant un lot rejoué (`R-`, sans features)
+    ferait entrer dans l'échantillon de calibration ML des enregistrements qui n'en ont
+    pas — et `append` fait un UPSERT où `legacy` est dans les colonnes mises à jour.
+    """
     ts = ts or datetime.now(timezone.utc)
+    anciens_legacy = set(journal.legacy_ids()) if hasattr(journal, "legacy_ids") else set()
     closed = 0
     for s in sells:
-        price = float(s.get("exit_price") or 0.0)
-        if price <= 0:
+        demande = _quantite_vendue(s)
+        if demande <= _EPS:
             continue
-        qty_reelle = float(s.get("qty_reelle") or 0.0)
-        if qty_reelle > _EPS:
-            remaining = qty_reelle                    # fill RÉEL, prioritaire
-        elif float(s.get("notional") or 0.0) > 0:
-            remaining = float(s["notional"]) / price       # repli : delta planifié
-        else:
-            continue
+        price = float(s["exit_price"])
         series = (series_by_sym or {}).get(s["symbol"])
+        remaining = demande
         for lot in open_lots(journal, instrument=s["symbol"], venue=s.get("venue")):
             if remaining <= _EPS:
                 break
-            take = min(lot.qty, remaining)
-            if take >= lot.qty * (1 - _EPS):                   # fermeture TOTALE du lot
-                journal.append(_close_record(lot, lot.qty, price, ts, series),
-                               legacy=False)
-            else:                                              # PARTIELLE → scission
-                n = 1 + sum(1 for t in journal.all(legacy=False)
-                            if t.id.startswith(lot.id + "-X"))
-                journal.append(_close_record(lot, take, price, ts, series,
-                                             split_id=f"{lot.id}-X{n}"), legacy=False)
-                journal.append(dataclasses.replace(lot, qty=round(lot.qty - take, 10)),
-                               legacy=False)         # lot restant (même id, UPSERT)
+            remaining -= _fermer(journal, lot, remaining, price, ts, series,
+                                 legacy=lot.id in anciens_legacy)
             closed += 1
-            remaining -= take
+        if remaining > _EPS and orphelines is not None:
+            orphelines.append({"symbol": s["symbol"], "venue": s.get("venue"),
+                               "qty_demandee": round(demande, 6),
+                               "qty_fermee": round(demande - remaining, 6)})
     return closed
+
+
+def _fermer(journal, lot: TradeRecord, remaining: float, price: float,
+            ts: datetime, series: list[dict] | None, *, legacy: bool) -> float:
+    """Ferme tout ou partie de `lot` et rend la quantité effectivement fermée."""
+    take = min(lot.qty, remaining)
+    if take >= lot.qty * (1 - _EPS):                       # fermeture TOTALE du lot
+        journal.append(_close_record(lot, lot.qty, price, ts, series), legacy=legacy)
+        return lot.qty
+    n = 1 + sum(1 for t in journal.all()                   # PARTIELLE → scission
+                if t.id.startswith(lot.id + "-X"))
+    journal.append(_close_record(lot, take, price, ts, series,
+                                 split_id=f"{lot.id}-X{n}"), legacy=legacy)
+    journal.append(dataclasses.replace(lot, qty=round(lot.qty - take, 10)),
+                   legacy=legacy)                          # lot restant (même id, UPSERT)
+    return take

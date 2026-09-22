@@ -31,13 +31,13 @@ def _lot(id: str, sym: str = "AAPL", qty: float = 10.0, price: float = 100.0,
 
 def test_full_close_sets_exit_and_pnl(tmp_path):
     j = _journal(tmp_path)
-    j.append(_lot("L1"), legacy=False)
+    j.append(_lot("P-L1"), legacy=False)
     ts = datetime(2026, 7, 5, tzinfo=timezone.utc)
     n = close_sells(j, [{"symbol": "AAPL", "venue": "Alpaca",
                          "exit_price": 110.0, "notional": 1100.0}], ts=ts)
     assert n == 1
     assert open_lots(j) == []
-    t = [x for x in j.all(legacy=False) if x.id == "L1"][0]
+    t = [x for x in j.all(legacy=False) if x.id == "P-L1"][0]
     assert t.exit_price == 110.0 and t.exit_ts is not None
     assert abs(t.pnl_gross - 100.0) < 1e-6        # (110-100) × 10, avant frais
     # La commission estimée du barème (réglementaire SEC/TAF à la vente) creuse
@@ -51,31 +51,31 @@ def test_full_close_sets_exit_and_pnl(tmp_path):
 
 def test_partial_close_splits_lot(tmp_path):
     j = _journal(tmp_path)
-    j.append(_lot("L1", qty=10.0), legacy=False)
+    j.append(_lot("P-L1", qty=10.0), legacy=False)
     n = close_sells(j, [{"symbol": "AAPL", "venue": "Alpaca",
                          "exit_price": 100.0, "notional": 400.0}])   # vend 4 sur 10
     assert n == 1
     lots = open_lots(j)
-    assert len(lots) == 1 and lots[0].id == "L1" and abs(lots[0].qty - 6.0) < 1e-9
+    assert len(lots) == 1 and lots[0].id == "P-L1" and abs(lots[0].qty - 6.0) < 1e-9
     closed = [t for t in j.all(legacy=False) if t.exit_ts is not None]
-    assert len(closed) == 1 and closed[0].id == "L1-X1" and abs(closed[0].qty - 4.0) < 1e-9
+    assert len(closed) == 1 and closed[0].id == "P-L1-X1" and abs(closed[0].qty - 4.0) < 1e-9
 
 
 def test_fifo_oldest_lot_closes_first(tmp_path):
     j = _journal(tmp_path)
     t0 = datetime(2026, 6, 1, tzinfo=timezone.utc)
-    j.append(_lot("OLD", qty=5.0, ts=t0), legacy=False)
-    j.append(_lot("NEW", qty=5.0, ts=t0 + timedelta(days=10)), legacy=False)
+    j.append(_lot("P-OLD", qty=5.0, ts=t0), legacy=False)
+    j.append(_lot("P-NEW", qty=5.0, ts=t0 + timedelta(days=10)), legacy=False)
     close_sells(j, [{"symbol": "AAPL", "venue": "Alpaca",
                      "exit_price": 100.0, "notional": 600.0}])       # 6 → OLD entier + 1 de NEW
     ids_open = [t.id for t in open_lots(j)]
-    assert ids_open == ["NEW"]                     # OLD fermé en premier
+    assert ids_open == ["P-NEW"]                     # OLD fermé en premier
     assert abs(open_lots(j)[0].qty - 4.0) < 1e-9   # NEW réduit de 1
 
 
 def test_no_exit_price_writes_nothing(tmp_path):
     j = _journal(tmp_path)
-    j.append(_lot("L1"), legacy=False)
+    j.append(_lot("P-L1"), legacy=False)
     n = close_sells(j, [{"symbol": "AAPL", "venue": "Alpaca",
                          "exit_price": 0.0, "notional": 500.0}])
     assert n == 0
@@ -95,7 +95,7 @@ def test_mfe_mae_from_series_and_absent(tmp_path):
     assert mfe_mae([], e, x, 100.0) == (None, None)
 
     j = _journal(tmp_path)
-    j.append(_lot("L1", ts=e), legacy=False)
+    j.append(_lot("P-L1", ts=e), legacy=False)
     close_sells(j, [{"symbol": "AAPL", "venue": "Alpaca",
                      "exit_price": 108.0, "notional": 1080.0}],
                 {"AAPL": series}, ts=x)
@@ -105,7 +105,7 @@ def test_mfe_mae_from_series_and_absent(tmp_path):
 
 def test_sell_exceeding_lots_ignores_excess(tmp_path):
     j = _journal(tmp_path)
-    j.append(_lot("L1", qty=2.0), legacy=False)
+    j.append(_lot("P-L1", qty=2.0), legacy=False)
     n = close_sells(j, [{"symbol": "AAPL", "venue": "Alpaca",
                          "exit_price": 100.0, "notional": 10_000.0}])  # 100 > 2 détenues
     assert n == 1 and open_lots(j) == []           # ferme ce qui existe, ignore l'excédent
@@ -120,7 +120,7 @@ def test_qty_reelle_prime_sur_le_delta_planifie(tmp_path):
     """Le fill RÉEL (14) doit fermer 14, pas les 99 du delta planifié — sinon on
     invente ~85 unités de « réalisé », exactement le cas OSCR mesuré le 05/09."""
     j = _journal(tmp_path)
-    j.append(_lot("L1", qty=100.0), legacy=False)
+    j.append(_lot("P-L1", qty=100.0), legacy=False)
     n = close_sells(j, [{"symbol": "AAPL", "venue": "Alpaca", "exit_price": 100.0,
                          "notional": 9900.0,
                          "qty_reelle": 14.0}])   # planifié 99, fait 14
@@ -134,7 +134,7 @@ def test_qty_reelle_prime_sur_le_delta_planifie(tmp_path):
 def test_sans_qty_reelle_le_comportement_est_inchange(tmp_path):
     """Repli : sans fill citable, `notional / prix` reste le seul calcul disponible."""
     j = _journal(tmp_path)
-    j.append(_lot("L1", qty=10.0), legacy=False)
+    j.append(_lot("P-L1", qty=10.0), legacy=False)
     n = close_sells(j, [{"symbol": "AAPL", "venue": "Alpaca",
                          "exit_price": 100.0, "notional": 400.0}])   # aucun qty_reelle
     assert n == 1
@@ -144,7 +144,7 @@ def test_sans_qty_reelle_le_comportement_est_inchange(tmp_path):
 def test_qty_reelle_nulle_ou_negative_retombe_sur_le_notional(tmp_path):
     """`qty_reelle=0` (champ absent côté prod) ne doit pas bloquer la fermeture."""
     j = _journal(tmp_path)
-    j.append(_lot("L1", qty=10.0), legacy=False)
+    j.append(_lot("P-L1", qty=10.0), legacy=False)
     n = close_sells(j, [{"symbol": "AAPL", "venue": "Alpaca", "exit_price": 100.0,
                          "notional": 1000.0, "qty_reelle": 0.0}])
     assert n == 1 and open_lots(j) == []
