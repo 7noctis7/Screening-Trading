@@ -29,13 +29,20 @@ _BLOC_CODE = re.compile(r"```.*?```", re.DOTALL)
 # endroit, et laissait derrière elle un `[[` orphelin.
 _CODE_INLINE = re.compile(r"(`+)(?:.|\n)+?\1")
 _MDLINK = re.compile(r"\]\(([^)]+\.md)[^)]*\)")      # [txt](chemin.md)
-_ADR = re.compile(r"^#+\s*ADR-(\d{3,4})", re.MULTILINE)
+# LE SUFFIXE FAIT PARTIE DE L'IDENTIFIANT. Le motif ne capturait que les chiffres :
+# `ADR-0171b`, numéroté ainsi À DESSEIN pour s'adosser à `ADR-0171`, rendait donc
+# « 0171 » comme son voisin, et le contrôle criait au doublon. Un garde-fou qui accuse
+# à tort finit par se faire ignorer — et celui-ci est un gate DUR : il bloquait
+# `make vault-lint`, donc la clôture de session, pour une décision parfaitement bien
+# nommée. `[a-z]*` et non `[a-z]?` : « 0171bis » doit se lire en entier, pas se faire
+# couper au premier caractère.
+_ADR = re.compile(r"^#+\s*ADR-(\d{3,4}[a-z]*)", re.MULTILINE)
 # HORODATAGE. Une décision et une séance de travail sont des faits PASSÉS : leur date
 # ne peut pas être dans le futur. Douze ADR ont pourtant été datés du lendemain
 # (09/09), et rien ne l'a signalé — la traçabilité du vault repose entièrement sur
 # ces dates. Contrôle volontairement ÉTROIT : seuls les en-têtes, jamais le corps,
 # où « rejuger au 2026-12-01 » est un rendez-vous légitime, pas une erreur.
-_ADR_DATE = re.compile(r"^#+\s*ADR-(\d{3,4})\b.*\((\d{4}-\d{2}-\d{2})\)\s*$",
+_ADR_DATE = re.compile(r"^#+\s*ADR-(\d{3,4}[a-z]*)\b.*\((\d{4}-\d{2}-\d{2})\)\s*$",
                        re.MULTILINE)
 _SESSION_DATE = re.compile(r"^#+\s*Session\s+(\d{4}-\d{2}-\d{2})", re.MULTILINE)
 

@@ -1,5 +1,85 @@
 # 04 — JOURNAL
 
+## Session 2026-09-22 — Deux défauts qui vidaient le journal par les deux bouts
+
+**LA QUESTION.** « J'ai l'impression que les trades d'aujourd'hui ne sont pas complets
+dans les historiques. » Alpaca montrait 11 ordres exécutés le 22/09 — 6 achats, 5 ventes.
+Le site affichait **un seul** nouvel aller-retour.
+
+**PREMIER DÉFAUT — les ventes ne trouvaient plus leur lot.** `live_roundtrip.open_lots`
+sélectionnait les lots à fermer par `all(legacy=False)`. Or `legacy` ne répond pas à
+« ce lot est-il au robot ? » mais à « porte-t-il les features de la décision ? ». Les lots
+rejoués depuis l'historique des ordres du courtier (`reconstruire_journal`, préfixe `R-`)
+n'ont pas de features, valent donc `legacy=1`, et étaient **invisibles** à l'appariement.
+
+Mesuré sur le journal du VPS : NWS, HPQ et TRV avaient bien leurs lots ouverts, tous
+`legacy=1`. Seule BBY — achetée la veille par le robot, donc `P-` — s'est fermée. La
+reconstruction du 18/09 ayant réécrit TOUT le journal en `R-`, le registre des
+aller-retours était **gelé depuis quatre jours** sans qu'une ligne le signale.
+
+Le dépôt avait déjà nommé cette confusion le 17/09 (`perimetre_journal`) et l'outil de
+réparation hors ligne (`reconcilier_journal`) conserve le périmètre du lot depuis
+toujours. Seul le chemin LIVE était resté sur l'ancien axe. **Corrigé (#394)** : le
+périmètre se lit sur l'ORIGINE de l'identifiant, le drapeau `legacy` du lot est conservé
+à la fermeture, et les ventes qu'aucun lot ne solde sont NOMMÉES au lieu d'être tues.
+
+**DEUXIÈME DÉFAUT — les achats n'étaient jamais écrits.** `make completer-ouvertures` a
+trouvé 7 fills absents du registre :
+
+    TTEK   94,6140 acheté ·  0       journalisé      HIMS  84,8592 acheté · 69,0000
+    PFG    47,2035 acheté ·  0       journalisé      NEM   42,4149 acheté · 23,0000
+    DUOL   20,6883 acheté ·  0       journalisé      CRM   11,8248 acheté ·  0 (21/09)
+    PSX    19,7285 acheté ·  0       journalisé
+
+**22 695,70 $ de prix de revient absent pour une seule séance** — quatre achats perdus,
+deux tronqués. Les mêmes fills étaient lisibles quarante minutes plus tard : lecture trop
+tôt, pas donnée manquante. `_journal_opens` interroge le courtier dans la seconde qui suit
+l'envoi ; `orders` lit `status=CLOSED` et la position n'est pas encore rafraîchie.
+
+Cela explique CRM de bout en bout : acheté le 21/09, jamais journalisé, vendu le 22/09
+sans contrepartie possible. **Corrigé (#395)** : attente BORNÉE que les ordres envoyés
+deviennent lisibles, entre l'exécution et la journalisation — jamais dans le chemin
+d'ordre. `QUANT_ATTENTE_FILLS_S` la règle, `0` la désarme.
+
+**DEUX ERREURS DE DIAGNOSTIC, DE MOI.** J'ai posé la cause n°1 avant de la mesurer sur la
+base du VPS. Puis je me suis « corrigé » à partir de la base du **Mac** — qui n'est pas
+celle du site : `data/journal.db` est un chemin relatif, rien ne synchronise les deux
+(`hf_journal pull/push` n'est appelé que par `.github/workflows/paper.yml`). Le Mac n'avait
+aucun lot `R-`, d'où une réfutation qui portait sur autre chose. La mesure sur le VPS m'a
+finalement donné raison la première fois. **Règle qui en sort : nommer la MACHINE dans
+toute commande de diagnostic, au même titre que la commande.**
+
+**RÉPARATION DU REGISTRE, mesurée avant/après** (`completer-ouvertures` puis
+`reconcilier-journal`, dans cet ordre — les entrées d'abord, les sorties ensuite) :
+
+    couverture des achats      56/125 · 69 incomplets   →   125/125 · 0 incomplet
+    excédent sur les achats    1 264,28 unités          →   0,0000
+    lots hors périmètre        167 lots · -1 942,02 $   →   0
+    double comptage            NWL 1,74× · MAS 1,91×    →   aucun > 1,5×
+    écart comptable            -924,71 $                →   -453,50 $
+
+Le chiffre honnête du robot est donc **+818,67 $ sur 578 aller-retours, 47 % de réussite,
++1,42 $ par trade**. Le site affichait +1 293,62 $ : la différence n'est pas une perte,
+c'est la disparition du sous-ensemble favorable.
+
+**CONSTAT NON DEMANDÉ, ET IL COMPTE.** `dont legacy=0 (calib. ML) : 4 lots`. La
+reconstruction du 18/09 a remplacé les `P-` et leurs `features_snapshot` par des `R-` qui
+n'en ont pas : **l'échantillon de calibration ML est reparti de zéro**. Il ne se
+reconstitue qu'au rythme des ouvertures journalisées — 2 sur 6 le 22/09, dont 2 tronquées.
+Le défaut n°2 n'était donc pas qu'un problème de comptabilité : il étranglait la
+calibration à la source. Les features ne sont pas perdues, elles sont dans l'archive
+`data/journal.avant-*.db` du 18/09.
+
+**ORDRE DE DÉPLOIEMENT APPRIS À LA DURE.** J'ai donné « après le squash-merge » en
+commentaire dans un bloc collable ; le `make up` est parti avant le merge et a déployé
+`acf799e` (des notes de vault), puis `completer-ouvertures --appliquer` a écrit 7 lots
+`C-` en `legacy=1` sous un code qui ne savait pas encore les voir. Sans dégât — les deux
+correctifs sont depuis en production — mais **une consigne d'ordre ne se met pas en
+commentaire.**
+
+**Validation.** #394 et #395 mergées (`2b84e41`, `557e03f`), VPS déployé et vérifié par le
+hash de build. Suite : **3250 passed, 80 skipped**. 33 tests de non-régression ajoutés.
+
 ## Session 2026-09-21 — Le VPS était à jour sur la mauvaise branche
 
 **Symptôme.** `make up` annonçait un succès cohérent (HEAD et build web tous deux à

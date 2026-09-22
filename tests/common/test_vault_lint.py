@@ -44,6 +44,28 @@ def test_detects_duplicate_adr(tmp_path):
     assert r["duplicate_adrs"] == ["0001"] and not r["ok"]
 
 
+def test_un_suffixe_de_lettre_fait_partie_de_l_identifiant(tmp_path):
+    """LE faux positif du 22/09. `ADR-0171b` est numéroté ainsi À DESSEIN pour s'adosser
+    à `ADR-0171` ; le motif ne capturait que les chiffres, les deux rendaient « 0171 »,
+    et le gate DUR bloquait `make vault-lint` — donc la clôture de session — pour une
+    décision parfaitement bien nommée. Un garde-fou qui accuse à tort finit ignoré."""
+    v = _vault(tmp_path)
+    (v / "02_DECISIONS.md").write_text(
+        "## ADR-0171 — a\n## ADR-0171b — adossé au précédent\n"
+        "## ADR-0171bis — suffixe long", encoding="utf-8")
+    r = lint_vault(v)
+    assert r["duplicate_adrs"] == [] and r["ok"]
+
+
+def test_un_VRAI_doublon_reste_detecte_malgre_les_suffixes(tmp_path):
+    """Le correctif ne doit pas ouvrir la porte qu'il ferme."""
+    v = _vault(tmp_path)
+    (v / "02_DECISIONS.md").write_text(
+        "## ADR-0171b — a\n## ADR-0171b — doublon vrai", encoding="utf-8")
+    r = lint_vault(v)
+    assert r["duplicate_adrs"] == ["0171b"] and not r["ok"]
+
+
 def test_clean_vault_ok(tmp_path):
     v = _vault(tmp_path)
     (v / "00_INDEX.md").write_text("[[08_Alphas/x]]", encoding="utf-8")
