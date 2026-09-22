@@ -343,12 +343,19 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry, obs=None) -> tuple[i
                     _npos += 1
                 print(tag + {"acheter": "  ▲ achat", "alleger": "  ▼ vente",
                              "solder": "  ▼ SOLDE (quantité)"}[intention.action])
+                # L'IDENTITÉ DE L'ORDRE VOYAGE AVEC LUI. Sans elle, la journalisation
+                # ne peut que demander au courtier « qu'as-tu exécuté aujourd'hui ? » —
+                # une question à laquelle il répond dès qu'il a fini, pas dès qu'on la
+                # pose. `close_position` rend un booléen : pas d'identité, donc None.
+                _oid = str(getattr(_res, "id", "") or "") or None
                 if delta > 0 and o is not None:               # ACHAT/ADD → ouverture à journaliser
                     opened.append({"symbol": o["symbol"], "venue": bname, "broker_symbol": bsym,
-                                   "asset_class": o.get("asset_class"), "weight_pct": o.get("weight_pct")})
+                                   "asset_class": o.get("asset_class"), "weight_pct": o.get("weight_pct"),
+                                   "order_id": _oid})
                 elif delta < 0:                               # VENTE/REDUCE → round-trip à fermer
                     sold.append({"symbol": (o or {}).get("symbol", bsym), "venue": bname,
-                                 "broker_symbol": bsym, "notional": abs(delta)})
+                                 "broker_symbol": bsym, "notional": abs(delta),
+                                 "order_id": _oid})
             except Exception as e:  # noqa: BLE001
                 # `str(e)[:40]` tronquait le message : un rejet de courtier (« invalid
                 # time_in_force », « market closed »…) devenait illisible, et c'est
@@ -453,6 +460,62 @@ def _positions_repli(brokers: tuple) -> dict:
     return pos
 
 
+def _dire_les_ouvertures(n: int, skipped: int, opens: list) -> None:
+    """Combien d'ouvertures écrites, et LESQUELLES manquent.
+
+    Le 22/09 cette ligne disait « 4 sans achat exécuté LISIBLE ce jour » — un nombre,
+    sans un nom. On ne pouvait ni vérifier, ni rattraper, ni même savoir si c'étaient
+    les mêmes titres d'un jour sur l'autre. Un défaut qu'on ne peut pas nommer ne se
+    corrige pas : il se subit.
+    """
+    tete = f"Journal : {n} ouverture(s) enregistrée(s) (legacy=0, features de décision)"
+    if not skipped:
+        print(tete + "."); return
+    muets = sorted({o["symbol"] for o in opens if not o.get("fill")})
+    print(tete + f" · {skipped} SANS achat exécuté lisible"
+          + (f" : {', '.join(muets[:10])}" if muets else "")
+          + " — ni fill, ni position ; rien n'est inventé.")
+    print("    Rattrapage (le fill devient lisible après coup) : "
+          "make completer-ouvertures")
+
+
+def _ids_lisibles(brokers: tuple) -> set:
+    """Identifiants des ordres que le courtier rend comme EXÉCUTÉS, à cet instant.
+
+    `limit=100` et non 500 : on ne cherche que les ordres du jour, les plus récents, et
+    cette lecture est répétée toutes les trois secondes pendant l'attente."""
+    ids = set()
+    for _bn, br in brokers:
+        if br is None or not hasattr(br, "orders"):
+            continue
+        ids |= {str(o.get("id")) for o in (br.orders(limit=100) or []) if o.get("id")}
+    return ids
+
+
+def _attendre_les_fills(opened: list, sold: list, alpaca, bitmart) -> None:
+    """Laisse au courtier le temps de CLÔTURER ce qu'on vient de lui envoyer.
+
+    Placée entre l'exécution et la journalisation, jamais dans le chemin d'ordre : rien
+    n'est envoyé, réduit ni décidé ici. Best-effort strict — une attente qui échoue
+    journalise comme avant, elle ne peut pas coûter un run."""
+    from packages.execution.attente_fills import DELAI_S, attendre, message
+    brokers = (("Alpaca", alpaca), ("Bitmart", bitmart))
+    noms = {o["order_id"]: o.get("broker_symbol") or o.get("symbol")
+            for o in (list(opened) + list(sold)) if o.get("order_id")}
+    # DÉLAI RÉGLABLE, ET `0` LE DÉSARME. Le module reste pur — c'est le script qui lit
+    # l'environnement. `QUANT_ATTENTE_FILLS_S=0` rend l'ancien comportement (journaliser
+    # tout de suite) sans toucher au code, et les tests s'en servent pour ne pas dormir.
+    try:
+        delai = max(0.0, float(os.environ.get("QUANT_ATTENTE_FILLS_S", DELAI_S)))
+    except ValueError:
+        delai = DELAI_S
+    try:
+        print(message(attendre(lambda: _ids_lisibles(brokers), set(noms),
+                               delai_s=delai), noms))
+    except Exception as e:  # noqa: BLE001
+        print(f"Attente des fills : ignorée ({str(e)[:60]}).")
+
+
 def _journal_opens(snap: dict, opened: list, alpaca, bitmart) -> None:
     """Journalise les ouvertures (`legacy=0`) : features de DÉCISION (snap) + faits de fill (broker).
 
@@ -500,10 +563,7 @@ def _journal_opens(snap: dict, opened: list, alpaca, bitmart) -> None:
             "regime": regime_lbl,
         } for op in opened]
         n = journal_opens(SqliteTradeJournal(), opens)
-        skipped = len(opened) - n
-        print(f"Journal : {n} ouverture(s) enregistrée(s) (legacy=0, features de décision)"
-              + (f" · {skipped} sans achat exécuté LISIBLE ce jour"
-                 " (ni fill, ni position — rien n'est inventé)." if skipped else "."))
+        _dire_les_ouvertures(n, len(opened) - n, opens)
     except Exception as e:  # noqa: BLE001
         print(f"Journal : journalisation ignorée ({str(e)[:60]}).")
 
@@ -776,6 +836,7 @@ def main() -> None:
           "\nAperçu (dry-run). Réconciliation réelle : python3 scripts/run_live.py --live --yes")
 
     if not dry:
+        _attendre_les_fills(opened, sold, alpaca, bitmart)
         _journal_opens(snap, opened, alpaca, bitmart)
         _journal_sells(snap, sold, alpaca, bitmart)
         _record_equity(alp_cap, bit_cap)
