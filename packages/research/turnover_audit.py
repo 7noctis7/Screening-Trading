@@ -138,7 +138,12 @@ def _agreger(clos: list) -> list[dict]:
 
 
 def auditer(trades: list, *, seulement: str | None = None) -> AuditTurnover:
-    """`trades` : `TradeRecord` (legacy=False). Les lots encore ouverts sont ignorés.
+    """`trades` : `TradeRecord` du PÉRIMÈTRE ROBOT. Les lots ouverts sont ignorés.
+
+    LE PÉRIMÈTRE N'EST PAS `legacy=False`, et cette docstring le disait à tort jusqu'au
+    23/09. `legacy` répond à « ce lot porte-t-il les features de la décision ? » ; la
+    rotation, elle, se mesure sur tout ce que le robot a fait, features ou non. C'est
+    l'appelant qui filtre sur l'ORIGINE de l'identifiant (`perimetre_journal`).
 
     `seulement="systeme"` ne garde que les positions fermées par une DÉCISION du
     système ; `"administratif"` que celles reconstruites après coup par le script de

@@ -1,0 +1,243 @@
+skill:
+  id: guardrail_telemetry
+  version: "1.0.0"
+  title: "Télémétrie des garde-fous — un filtre qui ne se compte pas n'existe pas"
+  domain: operations
+  maturity: production
+  calibration_status: CALIBRATED
+  risk_tier: high
+  usage_status: PAPER_ONLY
+
+  purpose:
+    problem: >
+      Six filtres décidaient sur le chemin des ordres — kill switch TradingView, kill
+      switch drawdown, disjoncteur journalier, garde journalière, garde de séance,
+      portail de risque — et AUCUN n'était compté. Le 21/09, la garde de séance a
+      reporté 19 ordres pour 52 596 $ sans qu'une seule ligne ne l'enregistre. Un
+      garde-fou muet est indiscernable d'un garde-fou absent, et c'est le jour où il
+      tombe en panne qu'on s'en aperçoit.
+    objective: >
+      Faire publier à chaque filtre son état, ses observations, ses déclenchements et son
+      effet en dollars NON ENVOYÉS — puis rendre ces compteurs lisibles d'un run à l'autre.
+    non_goals:
+      - "Décider quoi que ce soit : le témoin observe, il ne peut pas modifier un verdict."
+      - "Remplacer les logs : un log se lit après coup, un compteur se compare dans le temps."
+      - "Agréger les dry-runs avec les runs réels — ce sont deux populations distinctes."
+    users: ["make garde-fous", "revue de risque", "décision d'armement du disjoncteur"]
+
+  economic_thesis:
+    hypothesis: >
+      Thèse d'observabilité, falsifiable : « un garde-fou dont l'effet n'est pas mesuré
+      dérive sans qu'on le sache — seuil devenu inatteignable, ou déclenchement devenu
+      permanent ». La mesure du 21/09 l'a vérifiée dans les deux sens : `garde_de_seance`
+      à 19 déclenchements / 52 470 $ le matin, puis 16 observations / 0 déclenchement le
+      soir. Le même compteur discrimine ; sans lui, les deux situations se ressemblaient.
+    expected_counterparty: "Sans objet."
+    structural_inefficiency_or_risk_premium: "Sans objet — c'est un instrument, pas une stratégie."
+    expected_decay: "Sans objet."
+    falsification_conditions:
+      - "Un garde-fou dont l'état et l'effet resteraient constants sur des régimes opposés : le compteur ne discriminerait rien."
+      - "Coût d'instrumentation dégradant le run sans jamais révéler d'écart sur un an."
+
+  assumptions:
+    market: ["Aucune."]
+    statistical: ["Aucune — comptage pur."]
+    operational:
+      - "Le témoin est INJECTÉ, jamais global : un état partagé entre deux runs mélangerait leurs compteurs et aucun test ne pourrait en isoler un."
+      - "`noter` ne lève JAMAIS : un témoin qui casse un run serait pire que pas de témoin."
+    data_availability: ["`.cache/garde_fous.json`, un point INCRÉMENTAL par run"]
+
+  inputs:
+    - name: observations
+      type: "appels `noter(obs, nom, etat=, declenche=, aurait=, effet_usd=, motif=)`"
+      point_in_time: true
+      nullable: false
+      source_contract: "scripts/run_live.py — au point de décision de chaque filtre"
+      validation_rules:
+        - "`nom` doit appartenir à `ORDRE` : un filtre inconnu est compté à part et NOMMÉ, jamais ignoré"
+
+  outputs:
+    - name: rapport
+      type: "dict {garde: {etat, observations, declenchements, aurait_declenche, effet_usd, motifs}}"
+      semantics: >
+        QUATRE ÉTATS qui ne se confondent pas : ACTIVE, DISABLED, UNCALIBRATED, ERROR.
+        « Jamais observé » ne doit pas ressembler à « observé, jamais déclenché » — c'est
+        toute la différence entre un garde-fou désarmé et un garde-fou inutile.
+      consumers: ["make garde-fous", "vault/03_TODO.md"]
+    - name: effet_usd
+      type: float
+      unit: USD
+      semantics: >
+        Ce qui n'est PAS parti. Un refus retient le montant entier ; une réduction
+        retient la différence. Mesurer l'effet sur ce qui est passé n'aurait aucun sens.
+      consumers: ["revue de risque"]
+
+  mathematical_specification:
+    notation:
+      n_obs: "nombre de décisions rendues par le filtre"
+      n_dec: "nombre de déclenchements"
+    equations:
+      - "taux = n_dec / n_obs, défini seulement si n_obs > 0 — sinon UNCALIBRATED, jamais 0 %"
+      - "effet_refus = montant_demandé ; effet_reduction = montant_demandé − montant_autorisé"
+    estimators: ["aucun"]
+    hyperparameters: ["aucun — le comptage n'a pas de paramètre à calibrer"]
+    invariants:
+      - "ERROR est COLLANT : une fois un filtre en erreur sur un run, aucun état ultérieur ne le repasse en ACTIVE. Un garde-fou tombé puis silencieux ne doit pas paraître sain."
+      - "n_dec <= n_obs."
+      - "Les états comptent des RUNS, les observations comptent des DÉCISIONS — deux unités différentes, jamais additionnées."
+    computational_complexity: "O(1) par observation"
+    numerical_stability: ["aucun calcul flottant hors somme d'effets"]
+
+  temporal_semantics:
+    observation_time: "au point de décision de chaque filtre"
+    availability_time: "fin de run, à l'écriture du point"
+    decision_time: "le témoin ne décide pas"
+    execution_time: "sans objet"
+    label_horizon: "sans objet"
+    confirmation_delay: "0"
+    embargo_required: "sans objet"
+    anti_lookahead_rules:
+      - "Le témoin est appelé APRÈS que le verdict a été rendu : il ne peut structurellement pas l'influencer."
+      - "`order_gate.evaluer` reste une fonction PURE — un test AST interdit json, pathlib, open, print et packages.* dans ce module."
+
+  algorithm:
+    overview: "Collecteur injecté, un point incrémental par run, agrégation à la lecture."
+    steps:
+      - "Chaque filtre appelle `noter` au moment de décider."
+      - "`_record_garde_fous` écrit le point AVANT la journalisation — un échec de journal n'emporte pas le compte-rendu."
+      - "`agreger` somme les runs (dry-runs EXCLUS par défaut) ; `verdicts` déduplique."
+    edge_cases:
+      - "Filtre jamais atteint (un kill switch total sort avant) → UNCALIBRATED, pas 0 %."
+      - "Six filtres rendant la même phrase → regroupés en une ligne, sinon le rapport devient illisible et cesse d'être lu."
+    fallback_behavior:
+      - "Écriture impossible → l'appelant l'ANNONCE. Un point perdu en silence fausse toutes les moyennes ultérieures."
+
+  implementation:
+    modules:
+      - "packages/execution/garde_fous.py"
+      - "packages/execution/garde_fous_store.py"
+    entrypoints: ["packages.execution.garde_fous.Collecteur", "packages.execution.garde_fous.agreger"]
+    tests:
+      - "tests/execution/test_garde_fous.py"
+      - "tests/execution/test_garde_fous_cablage.py"
+      - "tests/execution/test_garde_fous_rapport.py"
+    make_targets: ["make garde-fous"]
+
+  validation:
+    baselines: ["aucune télémétrie (l'état d'avant le 21/09) : l'écart est qu'on ne savait RIEN"]
+    train_validation_test_protocol: "sans objet"
+    cross_validation: "sans objet"
+    leakage_tests: ["pureté d'`order_gate` vérifiée par AST"]
+    statistical_tests: ["aucun — comptage"]
+    multiple_testing_controls: ["sans objet"]
+    robustness_tests: ["run interrompu", "fichier de cache corrompu", "filtre levant une exception"]
+    placebo_tests: ["run sans aucun ordre : tous les filtres doivent être UNCALIBRATED, aucun à 0 %"]
+    regime_tests: ["run en séance vs hors séance — les compteurs DOIVENT différer, c'est la preuve qu'ils discriminent"]
+    acceptance_criteria:
+      - "Les six filtres publient leur état à chaque run réel."
+      - "ERROR collant vérifié par test."
+      - "Un run en séance et un run hors séance rendent des compteurs différents."
+    rejection_criteria:
+      - "Un filtre décidant sans être compté → REJET : c'est le défaut d'origine."
+      - "Un `0 %` publié là où aucune observation n'a eu lieu → REJET, c'est le mensonge que ce Skill existe pour empêcher."
+      - "Le témoin modifiant un verdict → REJET immédiat."
+
+  transaction_costs_and_capacity:
+    costs_included: ["sans objet"]
+    impact_model: "sans objet"
+    borrow_and_financing: "sans objet"
+    capacity_method: "sans objet"
+    calibration_source: >
+      CALIBRATED : le comptage n'a pas de paramètre. Les SEUILS des garde-fous, eux, sont
+      calibrés ailleurs (`pretrade_gate`, PARTIALLY_CALIBRATED) — ne pas confondre.
+    limitations: ["mesure l'effet en dollars NON ENVOYÉS, pas le coût d'opportunité de ce qui n'est pas parti"]
+
+  risk_controls:
+    preconditions: ["collecteur injecté par run"]
+    hard_limits: ["le témoin ne peut modifier aucun verdict"]
+    soft_limits: []
+    vetoes: ["aucun — il observe"]
+    degradation_modes: ["écriture impossible → annoncée, run poursuivi"]
+    kill_switch_conditions: ["sans objet"]
+    safe_default: "UNCALIBRATED. Ne jamais publier un taux sur zéro observation."
+
+  guardrail_telemetry:
+    enabled_state_metric: "garde_fous.<nom>.etat"
+    trigger_counter: "garde_fous.<nom>.declenchements"
+    affected_items_counter: "garde_fous.<nom>.observations"
+    rejection_counter: "garde_fous.<nom>.refus"
+    average_effect_metric: "garde_fous.<nom>.effet_usd_moyen"
+    maximum_effect_metric: "garde_fous.<nom>.effet_usd_max"
+    last_trigger_timestamp: "garde_fous.<nom>.dernier_ts"
+    warning_conditions:
+      - "enabled_and_never_triggered"
+      - "triggered_with_zero_effect"
+      - "error_sticky — un filtre en ERROR : le run a continué SANS lui"
+
+  tests:
+    unit: ["quatre états", "ERROR collant", "effet d'un refus vs d'une réduction"]
+    property_based: ["n_dec <= n_obs", "le témoin ne modifie aucun verdict", "agréger des runs est associatif"]
+    integration: ["run_live complet → six filtres comptés → rapport"]
+    regression: ["golden sur un cache réel"]
+    adversarial: ["cache corrompu", "filtre levant", "run tué en cours", "nom de filtre inconnu"]
+    performance: ["négligeable — O(1) par décision"]
+    deterministic_replay: ["même séquence d'observations → même rapport"]
+
+  observability:
+    metrics: ["par filtre : état, observations, déclenchements, effet"]
+    logs: ["incident si `noter` échoue"]
+    traces: []
+    dashboards: ["make garde-fous"]
+    alerts: ["error_sticky", "enabled_and_never_triggered sur plusieurs semaines"]
+
+  security:
+    data_classification: "interne — montants du compte, local-only"
+    secrets_required: []
+    permissions: []
+    threat_scenarios: ["le cache `.cache/garde_fous.json` publié par erreur dans le site statique"]
+    mitigations: ["`.cache/` gitignoré ; même garde-fou que pour les positions réelles"]
+    audit_events: ["un point par run, horodaté"]
+
+  failure_modes:
+    - failure: "Un nouveau filtre ajouté sans appel à `noter`"
+      detection: "test de câblage comptant les filtres du chemin d'ordre"
+      consequence: "retour au défaut d'origine, sur le filtre le plus récent — donc le moins éprouvé"
+      mitigation: "test de câblage bloquant"
+      recovery: "instrumenter, republier"
+    - failure: "Dry-runs agrégés avec les runs réels"
+      detection: "test sur `agreger(mode='live')`"
+      consequence: "compteurs gonflés par des aperçus qui n'ont envoyé aucun ordre"
+      mitigation: "exclusion par défaut"
+      recovery: "réagrégation"
+    - failure: "`0 %` publié sur zéro observation"
+      detection: "test placebo (run sans ordre)"
+      consequence: "un garde-fou jamais atteint paraît inutile et finit désarmé"
+      mitigation: "UNCALIBRATED distinct de 0 %"
+      recovery: "correction du rapport"
+
+  red_team_review:
+    strongest_objections:
+      - "La télémétrie dit ce qui s'est passé, pas ce qui AURAIT dû se passer. Un seuil mal réglé produit des compteurs parfaitement cohérents — d'où `aurait_declenche`, qui est la seule mesure contrefactuelle disponible et reste partielle."
+      - "Compter rassure. Le risque est qu'on lise les compteurs comme une preuve de protection alors qu'ils ne prouvent qu'une activité."
+      - "L'effet en dollars non envoyés ignore le coût d'opportunité : un garde-fou qui retient 52 000 $ un jour de hausse a COÛTÉ, et ce chiffre-là n'est pas mesuré."
+    regime_breaks: ["en régime calme, tous les compteurs restent à zéro et le dispositif paraît inutile — c'est précisément quand il faut ne pas le désarmer"]
+    hidden_dependencies: ["injection du collecteur à chaque run", "écriture du cache"]
+    ways_the_backtest_can_lie:
+      - "Lire des compteurs agrégés sur dry-runs."
+      - "Conclure d'un taux nul qu'un garde-fou est inutile alors qu'il n'a jamais été atteint."
+      - "Comparer deux périodes sans le nombre de runs."
+    operational_hazards: ["cache local non sauvegardé : l'historique des compteurs disparaît avec la machine"]
+    reasons_not_to_deploy:
+      - "Aucune — il est en production et son retrait ramènerait le défaut d'origine."
+      - "MAIS il ne doit jamais servir d'argument pour armer un garde-fou : `aurait_declenche` sur vingt runs n'est pas une calibration."
+
+  documentation:
+    references: ["ADR-0186", "vault/07_RISK_POLICY.md"]
+    known_limitations:
+      - "Aucun coût d'opportunité mesuré."
+      - "`aurait_declenche` est une contrefactuelle partielle."
+      - "Historique local uniquement."
+    runbook: "make sync && make garde-fous"
+    owner: "risque / exécution"
+    review_frequency: "à chaque revue de risque, et avant tout armement de garde-fou"
+    adr: ["ADR-0186"]
