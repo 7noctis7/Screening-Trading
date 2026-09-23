@@ -1,0 +1,242 @@
+skill:
+  id: pretrade_gate
+  version: "1.0.0"
+  title: "Portail de risque pré-trade — dernière barrière avant le courtier"
+  domain: risk
+  maturity: production
+  calibration_status: PARTIALLY_CALIBRATED
+  risk_tier: critical
+  usage_status: PAPER_ONLY
+
+  purpose:
+    problem: >
+      Jusqu'au 21/09, les limites du projet (`packages/risk`) n'existaient que dans les
+      démos : le chemin de production n'avait AUCUN veto par ordre. Une stratégie pouvait
+      concentrer le compte sur une ligne sans qu'aucun composant ne s'y oppose.
+    objective: >
+      Évaluer chaque ordre AVANT envoi, et rendre un verdict qui peut le refuser ou le
+      RÉDUIRE — jamais l'augmenter.
+    non_goals:
+      - "Décider quoi acheter : le portail ne choisit rien, il borne."
+      - "Remplacer les kill switches, qui opèrent au niveau du COMPTE et non de l'ordre."
+      - "Bloquer un désengagement : refuser une réduction de risque augmenterait le risque."
+    users: ["scripts/run_live.py", "revue de risque"]
+
+  economic_thesis:
+    hypothesis: >
+      Thèse de survie, pas de rendement : la ruine vient plus souvent d'une concentration
+      non bornée que d'un mauvais signal. Un plafond par ligne et par exposition brute
+      coûte un peu d'espérance et supprime une classe entière de pertes terminales.
+    expected_counterparty: "Sans objet — ce n'est pas une stratégie."
+    structural_inefficiency_or_risk_premium: >
+      Aucune. Le portail COÛTE de l'espérance : c'est une prime d'assurance payée
+      volontairement, et elle doit être chiffrée plutôt que supposée négligeable.
+    expected_decay: "Sans objet."
+    falsification_conditions:
+      - "Effet cumulé mesuré en dollars non envoyés indiscernable de zéro sur plusieurs mois : le portail serait décoratif et ses seuils hors d'atteinte."
+      - "Refus systématique d'ordres que le rebalancement aurait de toute façon écartés : aucun apport propre."
+
+  assumptions:
+    market: ["Univers long seul, sans levier."]
+    statistical: ["Aucune."]
+    operational:
+      - "Les limites viennent de l'ENVIRONNEMENT, jamais d'une configuration client ou front."
+      - "`evaluer` est une fonction PURE : ni E/S, ni état, ni écriture. Un test AST l'impose."
+    data_availability: ["equity et positions du courtier, lues avant l'envoi"]
+
+  inputs:
+    - name: etat_compte
+      type: "EtatCompte {equity, exposition_brute, n_positions, detenu_ligne, panier}"
+      unit: "USD et compteurs"
+      point_in_time: true
+      nullable: false
+      source_contract: "lecture courtier au début du run"
+      freshness_limit: "le run en cours ; une equity périmée fausse tous les plafonds"
+      validation_rules: ["equity > 0 sinon refus de tout ordre"]
+    - name: limites
+      type: "Limites (depuis_env)"
+      point_in_time: true
+      nullable: false
+      source_contract: "QUANT_RISK_MAX_WEIGHT, _MAX_POSITIONS, _MAX_ORDER_PCT, _MAX_GROSS"
+      validation_rules: ["aucune limite ne peut être relevée par le code appelant"]
+
+  outputs:
+    - name: verdict
+      type: "{autorise: bool, reduit: bool, montant: float, regle: str, motif: str}"
+      semantics: >
+        `montant` est INFÉRIEUR OU ÉGAL au montant demandé, jamais supérieur. `regle`
+        nomme la limite active : sans elle, un refus est illisible et finit par être
+        contourné plutôt que compris.
+      consumers: ["run_live", "garde_fous (témoin)", "journal structuré"]
+
+  mathematical_specification:
+    notation:
+      E: "equity"
+      w_max: "poids maximal par ligne"
+      G_max: "exposition brute maximale"
+    equations:
+      - "montant_autorise = min(montant_demande, w_max·E − detenu_ligne, G_max·E − exposition_brute)"
+      - "autorise ⟺ montant_autorise > 0 ∨ liquidation"
+    estimators: ["aucun"]
+    hyperparameters:
+      - "Seuils lus dans l'environnement (`.env.example` les documente). PARTIALLY_CALIBRATED : ils viennent d'un profil d'investisseur, non d'une étude de capacité sur CE compte."
+    invariants:
+      - "INVARIANT CARDINAL : montant_rendu <= montant_demandé. Un portail qui augmente une exposition est un bug de sécurité, pas une fonctionnalité."
+      - "Une liquidation traverse toujours : bloquer un désengagement augmenterait le risque."
+      - "Aucune configuration client ne peut relever une limite."
+    computational_complexity: "O(1) par ordre"
+    numerical_stability: ["equity nulle ou négative → refus, jamais division"]
+
+  temporal_semantics:
+    observation_time: "lecture du compte au début du run"
+    availability_time: "immédiate"
+    decision_time: "avant chaque envoi d'ordre"
+    execution_time: "immédiatement après le verdict"
+    label_horizon: "sans objet"
+    confirmation_delay: "0"
+    embargo_required: "sans objet"
+    anti_lookahead_rules:
+      - "L'exposition tient compte des ordres DÉJÀ envoyés dans la boucle courante — sinon chaque ordre est jugé contre l'état initial et la somme dépasse la limite."
+
+  algorithm:
+    overview: "Évaluation pure par ordre, verdict structuré, témoin compté PAR L'APPELANT."
+    steps:
+      - "Lire les limites depuis l'environnement."
+      - "Calculer le montant autorisé par la plus contraignante des règles."
+      - "Rendre le verdict nommé ; l'appelant journalise et compte."
+    edge_cases:
+      - "Liquidation → autorisée sans condition."
+      - "Panier indiciel → plafond de ligne distinct (un ETF ne porte pas le risque d'un titre unique)."
+      - "Montant réduit à zéro → refus, avec la règle nommée."
+    fallback_behavior:
+      - "Limite illisible → valeur la plus RESTRICTIVE, jamais la plus permissive."
+
+  implementation:
+    modules: ["packages/risk/order_gate.py", "packages/risk/limits.py"]
+    entrypoints: ["packages.risk.order_gate.evaluer"]
+    tests: ["tests/risk/", "tests/execution/test_run_live_seance.py"]
+    make_targets: ["make risk-check"]
+
+  validation:
+    baselines: ["aucun portail (l'état d'avant le 21/09) : l'écart EST la mesure de son effet"]
+    train_validation_test_protocol: "sans objet — règle déterministe, pas un modèle"
+    cross_validation: "sans objet"
+    leakage_tests: ["pureté : test AST interdisant json, pathlib, open, print, packages.* dans le module"]
+    statistical_tests: ["distribution des montants refusés et réduits, par règle"]
+    multiple_testing_controls: ["sans objet"]
+    robustness_tests: ["limites extrêmes (0, très grand), equity nulle, position déjà au plafond"]
+    placebo_tests: ["ordres aléatoires : le taux de refus doit croître avec la taille"]
+    regime_tests: ["marché calme vs choc : l'effet en dollars doit varier"]
+    acceptance_criteria:
+      - "Invariant montant_rendu <= montant_demandé vérifié par test de propriété sur entrées aléatoires."
+      - "Liquidation jamais bloquée."
+      - "Pureté de `evaluer` vérifiée par AST."
+    rejection_criteria:
+      - "Un seul cas où le portail augmente un montant → REJET immédiat, c'est une faille."
+      - "Effet cumulé nul sur plusieurs mois → seuils hors d'atteinte, à recalibrer ou à retirer (`enabled_and_never_triggered`)."
+
+  transaction_costs_and_capacity:
+    costs_included: ["aucun coût propre ; le portail RÉDUIT le turnover, donc les coûts"]
+    impact_model: "sans objet"
+    borrow_and_financing: "sans objet"
+    capacity_method: "les plafonds SONT une contrainte de capacité, non mesurée sur ce compte"
+    calibration_source: >
+      Profil d'investisseur (`packages/profile`), pas une étude de capacité. D'où
+      PARTIALLY_CALIBRATED — et le dire vaut mieux que l'appeler calibré.
+    limitations:
+      - "Les seuils n'ont pas été dérivés de la liquidité réelle de l'univers."
+
+  risk_controls:
+    preconditions: ["equity > 0", "limites lues depuis l'environnement"]
+    hard_limits: ["poids par ligne", "nombre de positions", "part d'ordre", "exposition brute"]
+    soft_limits: []
+    vetoes: ["refus d'ordre avec règle nommée"]
+    degradation_modes: ["limite illisible → la plus restrictive"]
+    kill_switch_conditions: ["hors périmètre : les kill switches agissent au niveau du COMPTE, en amont"]
+    safe_default: "refuser. En cas de doute, un ordre non envoyé est toujours récupérable ; un ordre envoyé ne l'est pas."
+
+  guardrail_telemetry:
+    enabled_state_metric: "garde_fous.portail_de_risque.etat"
+    trigger_counter: "garde_fous.portail_de_risque.declenchements"
+    affected_items_counter: "garde_fous.portail_de_risque.observations"
+    rejection_counter: "garde_fous.portail_de_risque.refus"
+    average_effect_metric: "garde_fous.portail_de_risque.effet_usd_moyen"
+    maximum_effect_metric: "garde_fous.portail_de_risque.effet_usd_max"
+    last_trigger_timestamp: "garde_fous.portail_de_risque.dernier_ts"
+    warning_conditions:
+      - "enabled_and_never_triggered — actif depuis des semaines sans un seul refus : seuil probablement inatteignable"
+      - "triggered_with_zero_effect — refuse des ordres que le rebalancement écartait déjà"
+
+  tests:
+    unit: ["chaque règle isolément", "liquidation", "panier vs titre", "equity nulle"]
+    property_based:
+      - "Pour toute entrée aléatoire : montant_rendu <= montant_demandé."
+      - "Une liquidation est toujours autorisée."
+      - "Relever une limite côté appelant ne change pas le verdict."
+    integration: ["run_live → portail → courtier factice → témoin compté"]
+    regression: ["golden sur un jeu d'ordres réels"]
+    adversarial: ["equity négative", "limite à zéro", "montant infini", "NaN"]
+    performance: ["10^5 évaluations sous 1 s"]
+    deterministic_replay: ["fonction pure — rejeu identique par construction"]
+
+  observability:
+    metrics: ["refus par règle", "effet en dollars", "taux de réduction"]
+    logs: ["ligne de journal par ordre évalué, avec la règle"]
+    traces: []
+    dashboards: ["récapitulatif de fin de run"]
+    alerts: ["refus massif", "aucun refus sur une longue période"]
+
+  security:
+    data_classification: "interne"
+    secrets_required: []
+    permissions: []
+    threat_scenarios:
+      - "Un appelant construit ses propres `Limites` plus permissives que l'environnement."
+      - "Une configuration front tente de relever un plafond."
+    mitigations:
+      - "`Limites.depuis_env()` est la seule source ; aucune API n'expose de setter."
+      - "Test de propriété : un appelant ne peut pas obtenir plus que ce qu'il demande."
+    audit_events: ["chaque verdict journalisé avec sa règle et son montant"]
+
+  failure_modes:
+    - failure: "Exposition non mise à jour dans la boucle"
+      detection: "test d'intégration sur une série d'ordres"
+      consequence: "chaque ordre jugé contre l'état initial, la somme dépasse la limite"
+      mitigation: "`_expo` incrémenté après chaque envoi"
+      recovery: "recalcul et réduction au run suivant"
+    - failure: "Seuils jamais atteints"
+      detection: "`enabled_and_never_triggered`"
+      consequence: "fausse sécurité — un portail qui ne refuse jamais ne protège de rien"
+      mitigation: "télémétrie lue à chaque revue"
+      recovery: "recalibration sur la capacité réelle"
+    - failure: "Equity périmée"
+      detection: "`freshness_limit`"
+      consequence: "plafonds calculés sur un capital qui n'est plus celui du compte"
+      mitigation: "lecture au début du run, jamais de valeur mémorisée"
+      recovery: "relecture"
+
+  red_team_review:
+    strongest_objections:
+      - "Les seuils viennent d'un profil d'investisseur, pas d'une étude de capacité sur cet univers. Ils sont donc PLAUSIBLES, pas mesurés — et un seuil plausible qui ne se déclenche jamais est indiscernable d'un seuil absent."
+      - "Le portail borne par LIGNE et en brut, mais ne connaît ni la corrélation ni le secteur : dix lignes du même secteur passent toutes les limites."
+      - "Il s'applique à l'ordre, pas au portefeuille résultant : une suite d'ordres individuellement conformes peut produire un portefeuille qui ne l'est pas."
+    regime_breaks: ["un choc de corrélation rend la limite par ligne illusoire — c'est `correlation_shock` qui traite ce cas, pas le portail"]
+    hidden_dependencies: ["fraîcheur de l'equity", "variables d'environnement correctement chargées"]
+    ways_the_backtest_can_lie:
+      - "Backtester sans le portail puis déployer avec : la performance mesurée n'est pas celle qui sera obtenue."
+      - "Compter un ordre refusé comme non envoyé sans compter le coût d'opportunité."
+    operational_hazards: ["une variable d'environnement absente au démarrage du service"]
+    reasons_not_to_deploy:
+      - "Aucune — il est en production et le retirer augmenterait le risque."
+      - "MAIS ses seuils doivent être recalibrés sur la capacité réelle avant tout passage en réel, et la télémétrie doit montrer qu'ils se déclenchent."
+
+  documentation:
+    references: ["vault/07_RISK_POLICY.md", "ADR-0186 (télémétrie des garde-fous)"]
+    known_limitations:
+      - "Seuils non dérivés de la liquidité de l'univers."
+      - "Aucune notion de corrélation ni de secteur."
+      - "Borne l'ordre, pas le portefeuille résultant."
+    runbook: "make risk-check ; lire `make garde-fous` pour l'effet réel"
+    owner: "risque"
+    review_frequency: "mensuelle, et avant toute activation d'un broker réel"
+    adr: ["ADR-0186"]

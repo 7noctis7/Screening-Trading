@@ -1,0 +1,251 @@
+# Contrat commun des Skills — Quant Terminal
+#
+# POURQUOI UN SCHÉMA PLUTÔT QU'UNE CONVENTION. Une convention se contourne en silence :
+# un champ oublié ne se voit qu'à la relecture, et personne ne relit un fichier écrit il
+# y a trois mois. Un schéma se VALIDE (`make skills-lint`), donc un contrat incomplet
+# devient une erreur, pas une négligence.
+#
+# CE QUE CE SCHÉMA N'EST PAS. Il ne décrit pas du code exécutable. Un `.skill.yaml` est
+# un CONTRAT : la thèse, les hypothèses, la sémantique temporelle, les critères de rejet
+# et la revue adverse d'un composant. Le code vit dans `packages/`. Les deux sont reliés
+# par `implementation.modules` — et un test vérifie que ces modules existent, sans quoi le
+# contrat décrirait un composant imaginaire.
+#
+# VERSIONNAGE (semver, sur le CONTRAT et non sur le code) :
+#   patch  — reformulation, références, précisions sans effet sur les critères
+#   minor  — ajout d'un champ, d'un test, d'un critère de rejet plus strict
+#   major  — changement de sémantique d'une entrée/sortie, ou ASSOUPLISSEMENT d'un
+#            critère de rejet. Un desserrage de garde-fou est toujours un major : il
+#            doit se voir dans le numéro.
+
+$schema: "https://json-schema.org/draft/2020-12/schema"
+$id: "quant-terminal/skill/1.0.0"
+type: object
+required: [skill]
+additionalProperties: false
+
+properties:
+  skill:
+    type: object
+    additionalProperties: true
+    # OBLIGATOIRES, ET LA LISTE EST COURTE À DESSEIN. Un schéma qui exige trente champs
+    # produit vingt-cinq champs remplis par politesse. On exige ce sans quoi le contrat
+    # ne veut rien dire ; le reste est fortement recommandé et vérifié par la checklist.
+    required:
+      - id
+      - version
+      - title
+      - domain
+      - maturity
+      - calibration_status
+      - risk_tier
+      - purpose
+      - economic_thesis
+      - inputs
+      - outputs
+      - temporal_semantics
+      - validation
+      - risk_controls
+      - failure_modes
+      - red_team_review
+      - documentation
+
+    properties:
+      id:      {type: string, pattern: "^[a-z][a-z0-9_]{2,63}$"}
+      version: {type: string, pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+$"}
+      title:   {type: string, minLength: 3}
+      domain:
+        enum: [data, research, signal, ml, portfolio, risk, execution, ui,
+               security, operations]
+      maturity:
+        enum: [experimental, validated, production_candidate, production]
+      # STATUT DE CALIBRATION — jamais déduit, toujours écrit. `UNCALIBRATED` n'est pas
+      # un aveu d'échec : c'est le seul énoncé honnête quand la donnée n'existe pas.
+      calibration_status:
+        enum: [UNCALIBRATED, PARTIALLY_CALIBRATED, CALIBRATED]
+      risk_tier:
+        enum: [low, medium, high, critical]
+      # STATUT D'USAGE. `PAPER_ONLY` est le DÉFAUT, et le schéma l'impose : l'absence du
+      # champ vaut paper. Aucun contrat ne peut autoriser le réel par omission.
+      usage_status:
+        enum: [HYPOTHESIS, UNCALIBRATED, RESEARCH_ONLY, PAPER_ONLY, REJECTED,
+               VALIDATED_OOS, PRODUCTION_CANDIDATE]
+        default: PAPER_ONLY
+
+      purpose:
+        type: object
+        required: [problem, objective, non_goals]
+        properties:
+          problem:   {type: string}
+          objective: {type: string}
+          non_goals: {type: array, items: {type: string}, minItems: 1}
+          users:     {type: array, items: {type: string}}
+
+      # THÈSE ÉCONOMIQUE FALSIFIABLE. `falsification_conditions` est exigé non vide :
+      # une thèse qu'aucune observation ne peut réfuter n'est pas une thèse.
+      economic_thesis:
+        type: object
+        required: [hypothesis, falsification_conditions]
+        properties:
+          hypothesis: {type: string}
+          expected_counterparty: {type: string}
+          structural_inefficiency_or_risk_premium: {type: string}
+          expected_decay: {type: string}
+          falsification_conditions:
+            type: array
+            items: {type: string}
+            minItems: 1
+
+      inputs:
+        type: array
+        minItems: 1
+        items:
+          type: object
+          required: [name, type, point_in_time]
+          properties:
+            name: {type: string}
+            type: {type: string}
+            unit: {type: string}
+            frequency: {type: string}
+            # POINT-IN-TIME EXIGÉ SUR CHAQUE ENTRÉE. Un `false` est permis, mais il doit
+            # être ÉCRIT : c'est la seule façon qu'une entrée révisable ne se glisse pas
+            # dans une feature sans que personne ne l'ait décidé.
+            point_in_time: {type: boolean}
+            nullable: {type: boolean}
+            source_contract: {type: string}
+            freshness_limit: {type: string}
+            validation_rules: {type: array, items: {type: string}}
+
+      outputs:
+        type: array
+        minItems: 1
+        items:
+          type: object
+          required: [name, type, semantics]
+          properties:
+            name: {type: string}
+            type: {type: string}
+            unit: {type: string}
+            semantics: {type: string}
+            confidence_or_uncertainty: {type: string}
+            consumers: {type: array, items: {type: string}}
+
+      # SÉMANTIQUE TEMPORELLE — le cœur anti-fuite. `availability_time` et
+      # `anti_lookahead_rules` sont obligatoires : c'est là que se logent les erreurs
+      # qui ne se voient jamais dans un backtest vert.
+      temporal_semantics:
+        type: object
+        required: [observation_time, availability_time, decision_time,
+                   anti_lookahead_rules]
+        properties:
+          observation_time:  {type: string}
+          availability_time: {type: string}
+          decision_time:     {type: string}
+          execution_time:    {type: string}
+          label_horizon:     {type: string}
+          confirmation_delay: {type: string}
+          embargo_required:  {type: string}
+          anti_lookahead_rules:
+            type: array
+            items: {type: string}
+            minItems: 1
+
+      validation:
+        type: object
+        required: [baselines, acceptance_criteria, rejection_criteria]
+        properties:
+          # BASELINE EXIGÉE. Un signal qui ne bat pas « acheter et garder » ou « hasard »
+          # n'a rien démontré, quelle que soit sa sophistication.
+          baselines: {type: array, items: {type: string}, minItems: 1}
+          train_validation_test_protocol: {type: string}
+          cross_validation: {type: string}
+          leakage_tests: {type: array, items: {type: string}}
+          statistical_tests: {type: array, items: {type: string}}
+          multiple_testing_controls: {type: array, items: {type: string}}
+          robustness_tests: {type: array, items: {type: string}}
+          placebo_tests: {type: array, items: {type: string}}
+          regime_tests: {type: array, items: {type: string}}
+          acceptance_criteria: {type: array, items: {type: string}, minItems: 1}
+          # CRITÈRES DE REJET EXIGÉS. Sans eux, aucun résultat ne peut être négatif, et
+          # un dispositif qui ne peut pas échouer ne mesure rien.
+          rejection_criteria: {type: array, items: {type: string}, minItems: 1}
+
+      risk_controls:
+        type: object
+        required: [safe_default]
+        properties:
+          preconditions: {type: array, items: {type: string}}
+          hard_limits: {type: array, items: {type: string}}
+          soft_limits: {type: array, items: {type: string}}
+          vetoes: {type: array, items: {type: string}}
+          degradation_modes: {type: array, items: {type: string}}
+          kill_switch_conditions: {type: array, items: {type: string}}
+          # COMPORTEMENT PAR DÉFAUT EN CAS DE DOUTE. Toujours le moins risqué, et écrit.
+          safe_default: {type: string}
+
+      # TÉLÉMÉTRIE DES GARDE-FOUS — obligatoire dès qu'un Skill peut refuser, réduire ou
+      # filtrer. Le dépôt a déjà payé ce silence : six garde-fous décidaient sans qu'un
+      # seul compteur existe (ADR-0186).
+      guardrail_telemetry:
+        type: object
+        properties:
+          enabled_state_metric: {type: string}
+          trigger_counter: {type: string}
+          affected_items_counter: {type: string}
+          rejection_counter: {type: string}
+          average_effect_metric: {type: string}
+          maximum_effect_metric: {type: string}
+          last_trigger_timestamp: {type: string}
+          warning_conditions: {type: array, items: {type: string}}
+
+      # LIEN AU CODE. Vérifié par un test : un module cité qui n'existe pas fait échouer
+      # `make skills-lint`. Sans ça, un contrat peut décrire un composant imaginaire.
+      implementation:
+        type: object
+        properties:
+          modules: {type: array, items: {type: string}}
+          entrypoints: {type: array, items: {type: string}}
+          tests: {type: array, items: {type: string}}
+          make_targets: {type: array, items: {type: string}}
+
+      failure_modes:
+        type: array
+        minItems: 1
+        items:
+          type: object
+          required: [failure, detection, consequence, mitigation]
+          properties:
+            failure: {type: string}
+            detection: {type: string}
+            consequence: {type: string}
+            mitigation: {type: string}
+            recovery: {type: string}
+
+      red_team_review:
+        type: object
+        required: [strongest_objections, ways_the_backtest_can_lie,
+                   reasons_not_to_deploy]
+        properties:
+          strongest_objections: {type: array, items: {type: string}, minItems: 1}
+          regime_breaks: {type: array, items: {type: string}}
+          hidden_dependencies: {type: array, items: {type: string}}
+          ways_the_backtest_can_lie:
+            type: array
+            items: {type: string}
+            minItems: 1
+          operational_hazards: {type: array, items: {type: string}}
+          reasons_not_to_deploy:
+            type: array
+            items: {type: string}
+            minItems: 1
+
+      documentation:
+        type: object
+        required: [known_limitations, owner]
+        properties:
+          references: {type: array, items: {type: string}}
+          known_limitations: {type: array, items: {type: string}, minItems: 1}
+          runbook: {type: string}
+          owner: {type: string}
+          review_frequency: {type: string}
+          adr: {type: array, items: {type: string}}

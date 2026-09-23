@@ -1,0 +1,266 @@
+skill:
+  id: pivot_detection
+  version: "1.0.0"
+  title: "Pivots hauts et bas — le seul primitif observable de la structure de marché"
+  domain: signal
+  maturity: experimental
+  calibration_status: UNCALIBRATED
+  risk_tier: medium
+  usage_status: RESEARCH_ONLY
+
+  purpose:
+    problem: >
+      Toute la grammaire SMC (BOS, CHoCH, Protected High, Inducement) se définit par
+      rapport à des pivots. Sans définition déterministe du pivot, chacune de ces notions
+      reste discrétionnaire — donc intestable, donc invérifiable.
+    objective: >
+      Rendre, pour chaque barre, s'il s'agit d'un pivot haut ou bas, ET la date à laquelle
+      ce fait devient OBSERVABLE — qui n'est jamais la date du pivot lui-même.
+    non_goals:
+      - "Produire un signal de trading : un pivot n'est pas une décision."
+      - "Prétendre que les pivots capturent une intention d'acteur institutionnel."
+      - "Lisser ou interpoler : un pivot est un fait sur des barres, ou il n'est pas."
+    users: ["bos_choch", "fair_value_gap", "recherche"]
+
+  economic_thesis:
+    hypothesis: >
+      Les extrêmes locaux concentrent des ordres stop, donc de la liquidité exploitable.
+      Un acteur devant écouler une taille importante a intérêt à déclencher cette
+      liquidité avant de se positionner.
+    expected_counterparty: >
+      Les porteurs de stops placés juste au-delà de l'extrême — particuliers et systèmes
+      de suivi de tendance à stops visibles.
+    structural_inefficiency_or_risk_premium: >
+      Inefficience de MICROSTRUCTURE, pas prime de risque : elle vient de la
+      concentration prévisible des ordres, pas d'un risque rémunéré.
+    expected_decay: >
+      Forte. Une concentration d'ordres prévisible attire l'arbitrage. Toute mesure doit
+      être refaite PAR SOUS-PÉRIODE ; un effet stable sur dix ans serait suspect.
+    falsification_conditions:
+      - "Rendement conditionnel au franchissement d'un pivot indiscernable du hasard après coûts, sur ≥ 3 sous-périodes."
+      - "Effet présent seulement sur la période d'où les seuils ont été tirés."
+      - "Taux de détection insensible au paramètre de fenêtre — signe que le pivot ne mesure rien de spécifique."
+
+  assumptions:
+    market: ["Barres OHLC ordonnées, calendrier de séance connu."]
+    statistical: ["Aucune hypothèse de loi — la détection est géométrique."]
+    operational: ["Une barre révisée a posteriori invalide les pivots qui en dépendent."]
+    data_availability:
+      - "DISPONIBLE : OHLC quotidien actions/ETF, OHLC 1m-4h crypto."
+      - "ABSENT : tick et carnet actions — la version quotidienne ne peut pas distinguer un balayage d'un vrai franchissement intrabarre."
+
+  inputs:
+    - name: ohlc
+      type: "np.ndarray structuré (t, o, h, l, c)"
+      unit: "prix dans la devise de cotation"
+      frequency: "1d actions · 1m-4h crypto"
+      point_in_time: true
+      nullable: false
+      source_contract: "packages/data — barres validées par `make contracts`"
+      validation_rules:
+        - "h >= max(o, c) et l <= min(o, c), sinon la barre est REFUSÉE et nommée"
+        - "timestamps strictement croissants, aucun doublon"
+    - name: k
+      type: int
+      unit: "barres de chaque côté"
+      point_in_time: true
+      nullable: false
+      source_contract: "paramètre de recherche"
+      validation_rules: ["k >= 1", "2k + 1 <= len(ohlc)"]
+
+  outputs:
+    - name: pivots
+      type: "list[{index, type ∈ {HAUT, BAS}, prix, t_evenement, t_observable}]"
+      semantics: >
+        `t_evenement` est la barre du pivot ; `t_observable` est `t_evenement + k` barres.
+        LA DISTINCTION EST TOUT : un pivot n'existe qu'après k barres de confirmation.
+      confidence_or_uncertainty: "aucune — détection déterministe, pas probabiliste"
+      consumers: ["bos_choch", "études d'événements"]
+    - name: statut
+      type: "str ∈ {MESURE, UNCALIBRATED}"
+      semantics: "UNCALIBRATED si moins de 2k+1 barres ou si des barres sont refusées."
+      consumers: ["rapport"]
+
+  mathematical_specification:
+    notation:
+      h_i: "plus haut de la barre i"
+      l_i: "plus bas de la barre i"
+      k: "demi-fenêtre"
+    equations:
+      - "PivotHaut(i) ⟺ h_i > h_j pour tout j ∈ [i-k, i+k], j ≠ i"
+      - "PivotBas(i)  ⟺ l_i < l_j pour tout j ∈ [i-k, i+k], j ≠ i"
+      - "t_observable(i) = t_{i+k}"
+    estimators: ["aucun — appartenance déterministe"]
+    hyperparameters:
+      - "k : AUCUNE valeur par défaut fournie. Proposer k=5 « parce que c'est courant » serait une calibration inventée. k doit être balayé et sa sensibilité publiée."
+    invariants:
+      - "Strictement supérieur, jamais >= : deux plus hauts égaux ne produisent AUCUN pivot. Les départager arbitrairement fabriquerait des pivots que le marché n'a pas faits."
+      - "t_observable(i) - t_evenement(i) == k barres, exactement."
+      - "Aucun pivot dans les k premières ni les k dernières barres."
+    computational_complexity: "O(n·k) naïf, O(n) en fenêtre glissante avec deque monotone"
+    numerical_stability: ["comparaisons de prix uniquement, aucune division"]
+
+  temporal_semantics:
+    observation_time: "clôture de la barre i"
+    availability_time: >
+      Clôture de la barre i+k. UN PIVOT N'EST PAS CONNU LE JOUR OÙ IL SE PRODUIT — c'est
+      la première façon dont un backtest SMC ment, et elle est silencieuse.
+    decision_time: "i+k au plus tôt"
+    execution_time: "barre i+k+1"
+    label_horizon: "défini par le consommateur, jamais ici"
+    confirmation_delay: "k barres"
+    embargo_required: "≥ k barres dans toute CV utilisant ces pivots comme features"
+    anti_lookahead_rules:
+      - "Une feature « est un pivot » datée à i est une FUITE. Elle doit être datée à i+k."
+      - "Test bloquant : tronquer la série après i+k-1 ne doit révéler aucun pivot en i."
+      - "Le dernier pivot d'une série est TOUJOURS provisoire ; il doit être marqué tel."
+
+  algorithm:
+    overview: "Fenêtre glissante de largeur 2k+1, extremum strict au centre."
+    steps:
+      - "Valider les barres ; toute violation OHLC → REFUS nommé, pas correction."
+      - "Pour i ∈ [k, n-k-1] : tester la stricte supériorité/infériorité."
+      - "Émettre le pivot avec t_evenement = t_i et t_observable = t_{i+k}."
+      - "Marquer provisoire tout pivot dont i+k dépasse la dernière barre."
+    edge_cases:
+      - "Égalité exacte → aucun pivot. Assumé : mieux vaut en rater un que d'en inventer."
+      - "Série < 2k+1 → UNCALIBRATED, liste vide."
+      - "Trou de séance → la fenêtre compte des BARRES, jamais des jours calendaires."
+    fallback_behavior:
+      - "Barres invalides → UNCALIBRATED avec la liste des barres refusées. Jamais de correction silencieuse."
+
+  implementation:
+    modules: ["packages/indicators/pivots.py"]
+    entrypoints: ["packages.indicators.pivots.detecter"]
+    tests: ["tests/indicators/test_pivots.py", "tests/indicators/test_pivots_causalite.py"]
+    make_targets: []
+
+  validation:
+    baselines:
+      - "Pivots aléatoires de même densité — un pivot vrai doit faire MIEUX, sinon il ne mesure que la densité."
+      - "Extremum de fenêtre sans confirmation (le piège du lookahead) — écart attendu ; s'il est nul, le test est faux."
+    train_validation_test_protocol: "balayage de k sur le train uniquement ; k figé avant tout test"
+    cross_validation: "CPCV existante, embargo >= k"
+    leakage_tests:
+      - "Troncature : aucun pivot révélé avant i+k."
+      - "Invariance du passé : modifier les barres futures ne change aucun pivot déjà observable."
+    statistical_tests: ["taux de détection par régime, avec intervalle de confiance"]
+    multiple_testing_controls: ["k balayé = autant d'essais ; à inscrire au registre et à soumettre au DSR/SPA"]
+    robustness_tests: ["k ∈ {2,3,5,8,13} : le taux de détection doit varier RÉGULIÈREMENT, un saut signalerait un artefact"]
+    placebo_tests: ["séries permutées par blocs : le taux de détection doit être conservé, l'effet économique doit disparaître"]
+    regime_tests: ["2020, 2022, 2024 séparément — jamais agrégés"]
+    acceptance_criteria:
+      - "Test de troncature vert."
+      - "Aucun pivot sur égalité exacte."
+      - "Complexité O(n) vérifiée sur 10^6 barres."
+    rejection_criteria:
+      - "Un seul pivot révélé avant `t_observable` → REJET, le Skill fabriquerait une fuite dans tout ce qui en dépend."
+      - "Taux de détection insensible à k → le pivot ne mesure rien de spécifique."
+      - "Effet économique présent uniquement sur la période de calibration."
+
+  transaction_costs_and_capacity:
+    costs_included: ["aucun — ce Skill ne génère pas de position"]
+    impact_model: "sans objet"
+    borrow_and_financing: "sans objet"
+    capacity_method: "sans objet"
+    calibration_source: >
+      UNCALIBRATED. Aucun k n'a été mesuré sur les données de ce dépôt. Le proposer
+      serait inventer une calibration.
+    limitations:
+      - "Sur barres quotidiennes, un pivot ne distingue pas un balayage intrabarre d'un franchissement durable. C'est la limite principale, et elle est de DONNÉE."
+
+  risk_controls:
+    preconditions: ["barres valides", "2k+1 <= n"]
+    hard_limits: ["aucune sortie datée avant `t_observable`"]
+    soft_limits: ["alerte si le taux de détection dépasse 20 % des barres — k probablement trop petit"]
+    vetoes: ["un consommateur qui lit `t_evenement` au lieu de `t_observable` est refusé par un test d'intégration"]
+    degradation_modes: ["barres manquantes → pivots concernés non émis et NOMMÉS"]
+    kill_switch_conditions: ["sans objet"]
+    safe_default: "liste vide + UNCALIBRATED. Aucun pivot vaut mieux qu'un pivot inventé."
+
+  guardrail_telemetry:
+    enabled_state_metric: "pivots.actif"
+    trigger_counter: "pivots.detectes"
+    affected_items_counter: "pivots.barres_analysees"
+    rejection_counter: "pivots.barres_refusees"
+    average_effect_metric: "pivots.taux_detection"
+    maximum_effect_metric: "pivots.taux_detection_max_par_regime"
+    last_trigger_timestamp: "pivots.dernier_pivot_ts"
+    warning_conditions:
+      - "enabled_and_never_triggered — aucun pivot sur une longue série : k trop grand ou données plates"
+      - "triggered_with_zero_effect — des pivots détectés qu'aucun consommateur n'utilise"
+
+  tests:
+    unit: ["pivot au centre", "égalité → aucun", "bords sans pivot", "série trop courte"]
+    property_based:
+      - "Invariance du passé sous modification du futur."
+      - "t_observable - t_evenement == k pour tout pivot."
+      - "Aucun pivot dans les k premières ni k dernières barres."
+    integration: ["pivots → bos_choch → étude d'événement, avec les dates propagées"]
+    regression: ["golden sur 500 barres réelles, pivots figés"]
+    adversarial: ["barres plates", "h < l", "timestamps désordonnés", "trou de séance", "une seule barre"]
+    performance: ["10^6 barres sous 1 s"]
+    deterministic_replay: ["aucune source d'aléa — deux appels rendent le même résultat"]
+
+  observability:
+    metrics: ["n_pivots", "taux_detection", "k", "n_barres_refusees", "statut"]
+    logs: ["barres refusées et motif"]
+    traces: []
+    dashboards: ["page Marché — zones détectées"]
+    alerts: ["taux de détection hors norme", "UNCALIBRATED persistant"]
+
+  security:
+    data_classification: "interne"
+    secrets_required: []
+    permissions: []
+    threat_scenarios: ["un consommateur date une feature à `t_evenement` et fuit l'avenir"]
+    mitigations: ["la sortie ne porte PAS de champ `date` ambigu : les deux dates sont nommées"]
+    audit_events: ["k et hash des barres inscrits dans tout rapport"]
+
+  failure_modes:
+    - failure: "Consommateur utilisant `t_evenement` comme date de disponibilité"
+      detection: "test d'intégration sur les dates propagées"
+      consequence: "fuite de k barres dans tout backtest en aval — invisible et flatteuse"
+      mitigation: "deux champs nommés, aucun champ `date` générique"
+      recovery: "rejouer les backtests concernés"
+    - failure: "Barres révisées après coup par le fournisseur"
+      detection: "hash des barres comparé entre exécutions"
+      consequence: "pivots historiques qui changent — backtest non reproductible"
+      mitigation: "hash inscrit dans le rapport"
+      recovery: "réindexation, résultats republiés"
+    - failure: "k choisi après avoir vu les résultats"
+      detection: "registre des essais"
+      consequence: "surajustement pur, invisible dans les métriques"
+      mitigation: "k inscrit au registre AVANT mesure, soumis au DSR/SPA"
+      recovery: "refaire le balayage sur données fraîches"
+
+  red_team_review:
+    strongest_objections:
+      - "La grammaire SMC est populaire parce qu'elle est SOUPLE : chaque praticien ajuste k et les tolérances jusqu'à ce que le graphe raconte une histoire. La formaliser ne la rend pas vraie — elle la rend seulement RÉFUTABLE, ce qui est un progrès mais pas un alpha."
+      - "Sur barres quotidiennes, l'objet même que la thèse invoque (la chasse aux stops) se produit INTRABARRE. On mesure donc la trace d'un phénomène qu'on ne voit pas."
+      - "Les pivots sont fortement corrélés entre valeurs de k : balayer k n'explore pas un espace, il rejoue presque la même mesure — d'où l'obligation de passer par DSR/SPA."
+    regime_breaks: ["marchés en tendance forte : peu de pivots, échantillon qui s'effondre quand la thèse importerait le plus"]
+    hidden_dependencies: ["qualité OHLC", "calendrier de séance", "absence de révision des barres"]
+    ways_the_backtest_can_lie:
+      - "Dater le pivot à `t_evenement` — la fuite la plus simple et la plus courante."
+      - "Choisir k après coup."
+      - "Ne publier que le régime où ça marche."
+      - "Compter le dernier pivot, provisoire, comme confirmé."
+    operational_hazards: ["explosion du nombre de pivots si k est petit sur données intraday"]
+    reasons_not_to_deploy:
+      - "UNCALIBRATED : aucun k mesuré sur ces données."
+      - "La donnée qui rendrait la thèse testable (tick, carnet) n'existe pas côté actions."
+      - "Sans étude d'événement sur ≥ 3 régimes, tout chiffre serait du récit."
+
+  documentation:
+    references:
+      - "Bulkowski, Encyclopedia of Chart Patterns — définitions, pas validations"
+      - "López de Prado (2018), Advances in Financial ML — étiquetage et fuites"
+    known_limitations:
+      - "Aucun k calibré."
+      - "Barres quotidiennes inadaptées à la thèse microstructurelle."
+      - "Le dernier pivot est toujours provisoire."
+    runbook: "recherche uniquement ; aucune exposition au portefeuille"
+    owner: "recherche quantitative"
+    review_frequency: "à chaque balayage de k, avec inscription au registre"
+    adr: ["à créer : « un pivot n'est pas connu le jour où il se produit »"]

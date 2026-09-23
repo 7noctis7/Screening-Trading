@@ -1,0 +1,293 @@
+skill:
+  id: order_flow_imbalance
+  version: "1.0.0"
+  title: "Déséquilibre de flux d'ordres — spécifié, non calculable : la donnée manque"
+  domain: signal
+  maturity: experimental
+  calibration_status: UNCALIBRATED
+  risk_tier: medium
+  usage_status: RESEARCH_ONLY
+
+  purpose:
+    problem: >
+      Le cahier des charges demande OFI, queue imbalance, spread effectif et réalisé,
+      sélection adverse, toxicité du flux. Aucune de ces quantités n'est calculable dans
+      ce dépôt : il n'existe ni carnet d'ordres, ni tick, ni quotes horodatées côté
+      actions. Les proposer comme si elles l'étaient serait la faute exacte que la
+      règle 6.4 interdit.
+    objective: >
+      Écrire le contrat MAINTENANT — pendant qu'on sait pourquoi on le veut — et nommer
+      précisément la donnée qui le débloquerait, son coût et son volume. Un contrat
+      bloqué qui dit ce qui manque vaut mieux qu'un signal approximé sur des barres.
+    non_goals:
+      - "Approximer l'OFI par le volume signé de barres quotidiennes : la corrélation avec le vrai OFI est inconnue, donc l'approximation serait une invention."
+      - "Utiliser la règle de Lee-Ready sur des données sans quotes — elle exige justement les quotes."
+      - "Produire un chiffre, quel qu'il soit, tant que la donnée n'existe pas."
+    users: ["recherche (bloquée)", "modèle de coûts d'exécution (à terme)"]
+
+  economic_thesis:
+    hypothesis: >
+      Le déséquilibre entre pression acheteuse et vendeuse au meilleur niveau du carnet
+      prédit le mouvement de prix à très court horizon, parce qu'il reflète la pression
+      d'exécution avant qu'elle ne se traduise en transactions.
+    expected_counterparty: >
+      Les apporteurs de liquidité mal positionnés dans la file, et les preneurs de
+      liquidité pressés qui traversent le spread.
+    structural_inefficiency_or_risk_premium: >
+      Rémunération d'un risque de SÉLECTION ADVERSE, pas une inefficience gratuite :
+      l'apporteur de liquidité est payé pour le risque d'être pris à contre-pied.
+    expected_decay: >
+      Très forte. C'est le terrain le plus concurrentiel du marché. Un effet mesuré à
+      l'horizon de la seconde n'a aucune raison de survivre à une latence de plusieurs
+      centaines de millisecondes.
+    falsification_conditions:
+      - "Corrélation OFI → rendement à l'horizon suivant indiscernable de zéro une fois le spread payé."
+      - "Effet disparaissant dès qu'on impose la latence réelle du chemin d'exécution."
+      - "Effet non reproductible sur une seconde place de cotation."
+
+  assumptions:
+    market: ["Carnet à priorité prix-temps.", "Horodatage à la milliseconde au moins."]
+    statistical: ["Aucune loi supposée ; la mesure est comptable."]
+    operational: ["Horloges synchronisées entre le flux de marché et le journal d'ordres — sans quoi le signe du déséquilibre peut s'inverser."]
+    data_availability:
+      - "ABSENT — et c'est l'objet même de ce contrat. Voir `donnees_requises` ci-dessous."
+
+  donnees_requises:
+    - besoin: "Quotes L1 horodatées (meilleur bid/ask, tailles)"
+      pourquoi: "sans elles, aucun déséquilibre n'est définissable"
+      granularite: "événementielle, horodatage ≤ 1 ms"
+      volume_estime: "~10^7 événements/jour pour 200 symboles US — ordre de grandeur, NON mesuré"
+      sources_possibles: ["Alpaca market data (offre payante)", "Databento", "Polygon"]
+      cout: "NON MESURÉ — à chiffrer avant tout engagement, pas après"
+    - besoin: "Carnet L2 (5 à 10 niveaux)"
+      pourquoi: "queue imbalance, résilience, profondeur"
+      granularite: "événementielle"
+      volume_estime: "un ordre de grandeur au-dessus du L1"
+      sources_possibles: ["Databento MBP-10", "flux natif de la place"]
+      cout: "NON MESURÉ"
+    - besoin: "Transactions horodatées avec côté agresseur"
+      pourquoi: "toxicité du flux, sélection adverse ; sinon il faut inférer le côté (Lee-Ready), ce qui ajoute une erreur non quantifiée"
+      granularite: "tick"
+      volume_estime: "~10^6/jour pour 200 symboles"
+      sources_possibles: ["idem ci-dessus"]
+      cout: "NON MESURÉ"
+
+  inputs:
+    - name: quotes
+      type: "flux événementiel {ts, bid, bid_size, ask, ask_size}"
+      unit: "prix et tailles"
+      frequency: "événementielle"
+      point_in_time: true
+      nullable: false
+      source_contract: "INEXISTANT dans ce dépôt — bloquant assumé"
+      freshness_limit: "≤ 1 s, au-delà la mesure n'a plus de sens"
+      validation_rules:
+        - "bid < ask sinon marché croisé : l'événement est ÉCARTÉ et compté, jamais corrigé"
+        - "ts strictement croissant par symbole"
+        - "tailles >= 0"
+
+  outputs:
+    - name: ofi
+      type: "float"
+      unit: "unités de taille nettes par intervalle"
+      semantics: >
+        Somme des variations de taille au meilleur niveau, signée selon le sens qui les
+        provoque. POSITIF = pression acheteuse. Ce n'est PAS une prévision de rendement :
+        c'est une mesure de flux, que seule une étude peut relier à un rendement.
+      confidence_or_uncertainty: "à définir une fois la donnée disponible — pas avant"
+      consumers: ["recherche", "modèle de coût d'exécution"]
+    - name: statut
+      type: "str ∈ {UNCALIBRATED}"
+      semantics: >
+        UNCALIBRATED de façon PERMANENTE tant que la donnée manque. Ce n'est pas un état
+        transitoire à corriger par du code : c'est un fait sur les données.
+      consumers: ["rapport", "gate"]
+
+  mathematical_specification:
+    notation:
+      P_b, q_b: "meilleur bid et sa taille"
+      P_a, q_a: "meilleur ask et sa taille"
+      e_n: "contribution de l'événement n"
+    equations:
+      - "e_n = 1{P_b^n >= P_b^{n-1}}·q_b^n − 1{P_b^n <= P_b^{n-1}}·q_b^{n-1} − 1{P_a^n <= P_a^{n-1}}·q_a^n + 1{P_a^n >= P_a^{n-1}}·q_a^{n-1}"
+      - "OFI(Δt) = somme des e_n sur l'intervalle"
+      - "spread_effectif = 2·|prix_exec − mid| / mid"
+      - "spread_realise = 2·côté·(prix_exec − mid_{t+τ}) / mid   # τ typiquement 5 min"
+    estimators: ["aucun — quantités comptables, pas estimées"]
+    hyperparameters:
+      - "Δt : AUCUN défaut. Le proposer sans donnée serait inventer une calibration."
+      - "τ du spread réalisé : idem."
+    invariants:
+      - "OFI change de signe si l'on échange les rôles bid/ask."
+      - "OFI d'un intervalle vide vaut 0 — et 0 signifie ici ABSENCE DE FLUX, pas absence de mesure. Les deux doivent être distingués par le statut, jamais par la valeur."
+    computational_complexity: "O(n) événements"
+    numerical_stability: ["tailles entières quand la place les publie ainsi ; aucun flottant intermédiaire"]
+
+  temporal_semantics:
+    observation_time: "horodatage de l'événement chez la place"
+    availability_time: >
+      Horodatage de RÉCEPTION, jamais celui de la place. L'écart entre les deux est la
+      latence, et l'ignorer fabrique un alpha qui n'existe que dans le backtest.
+    decision_time: "réception + temps de calcul"
+    execution_time: "décision + latence d'aller-retour"
+    label_horizon: "à définir par l'étude, jamais ici"
+    confirmation_delay: "0"
+    embargo_required: "sans objet à cet horizon"
+    anti_lookahead_rules:
+      - "Deux horodatages distincts, JAMAIS confondus : place et réception."
+      - "Aucune agrégation sur un intervalle dont la borne droite dépasse la décision."
+      - "Le backtest doit imposer la latence MESURÉE du chemin réel, pas une latence supposée."
+
+  algorithm:
+    overview: "Parcours événementiel, accumulation de e_n sur des intervalles alignés."
+    steps:
+      - "REFUSER de s'exécuter tant que `quotes` n'existe pas — et le dire."
+      - "Écarter et COMPTER les marchés croisés."
+      - "Accumuler e_n ; agréger par Δt."
+    edge_cases:
+      - "Marché croisé : événement écarté, compteur incrémenté. Un croisement fréquent invalide toute la mesure."
+      - "Intervalle sans événement : OFI = 0 AVEC un drapeau `sans_flux` — ne jamais laisser un 0 se lire comme une mesure."
+    fallback_behavior:
+      - "Donnée absente → UNCALIBRATED, aucune valeur. Aucune approximation par barres : la corrélation avec le vrai OFI est inconnue, donc l'approximation serait une invention."
+
+  implementation:
+    modules: []
+    entrypoints: []
+    tests: []
+    make_targets: []
+
+  validation:
+    baselines:
+      - "Rendement passé sur le même intervalle — si l'OFI ne le bat pas, il ne mesure que le momentum."
+      - "Volume signé par la règle du tick, moins précis et sans quotes."
+    train_validation_test_protocol: "impossible tant que la donnée manque — et c'est la conclusion, pas un manquement"
+    cross_validation: "à définir avec la donnée"
+    leakage_tests:
+      - "Horodatage de réception obligatoire — test bloquant dès que la donnée arrivera."
+      - "Latence imposée : l'effet doit survivre à la latence réelle, sinon il n'existe pas."
+    statistical_tests: ["corrélation OFI → rendement à l'horizon suivant, IC bootstrap"]
+    multiple_testing_controls: ["Δt × τ × horizon = espace d'essais ; registre + DSR + SPA"]
+    robustness_tests: ["Δt ∈ {100 ms, 1 s, 10 s}", "reproduction sur une seconde place"]
+    placebo_tests: ["OFI décalé d'un intervalle : l'effet doit disparaître"]
+    regime_tests: ["ouverture, milieu de séance, clôture — la microstructure y diffère radicalement"]
+    acceptance_criteria:
+      - "Effet survivant au spread payé ET à la latence mesurée."
+      - "Reproductible sur une seconde place."
+      - "Monotone en amplitude d'OFI."
+    rejection_criteria:
+      - "Effet nul après spread → REJET. C'est l'issue la plus probable pour un acteur sans colocation, et ce serait un RÉSULTAT."
+      - "Effet ne survivant pas à la latence réelle → REJET."
+      - "Taux de marchés croisés > 1 % → la donnée n'est pas exploitable, et c'est la donnée qu'il faut changer, pas le seuil."
+
+  transaction_costs_and_capacity:
+    costs_included: ["spread — dominant à cet horizon", "commissions", "frais de données"]
+    impact_model: "à cet horizon, l'impact EST le signal : les deux ne se séparent pas"
+    borrow_and_financing: "sans objet en intraday long/short neutre"
+    capacity_method: "NON ESTIMÉE — dépend de la profondeur, indisponible"
+    calibration_source: >
+      UNCALIBRATED. Aucun paramètre ne peut être calibré sans les données listées dans
+      `donnees_requises`.
+    limitations:
+      - "Un acteur sans colocation subit une latence qui peut à elle seule annuler l'effet. C'est l'objection principale, et elle précède toute mesure."
+
+  risk_controls:
+    preconditions: ["flux de quotes disponible et horodaté à la réception"]
+    hard_limits: ["aucune sortie ne peut alimenter l'exécution tant que le statut est UNCALIBRATED"]
+    soft_limits: []
+    vetoes: ["refus d'exécution du module en l'absence de donnée — pas un avertissement, un refus"]
+    degradation_modes: ["flux interrompu → aucune valeur, jamais la dernière connue"]
+    kill_switch_conditions: ["taux de marchés croisés > 1 % → arrêt de la mesure"]
+    safe_default: >
+      UNCALIBRATED, aucune valeur. Un 0 se lit comme une mesure ; l'absence doit se lire
+      comme une absence.
+
+  guardrail_telemetry:
+    enabled_state_metric: "ofi.actif"
+    trigger_counter: "ofi.intervalles_mesures"
+    affected_items_counter: "ofi.evenements_traites"
+    rejection_counter: "ofi.evenements_ecartes_marche_croise"
+    average_effect_metric: "ofi.valeur_absolue_mediane"
+    maximum_effect_metric: "ofi.valeur_absolue_max"
+    last_trigger_timestamp: "ofi.dernier_intervalle_ts"
+    warning_conditions:
+      - "enabled_and_never_triggered — module actif sans aucune donnée : l'état attendu aujourd'hui, et il doit rester VISIBLE"
+      - "triggered_with_zero_effect — des intervalles mesurés à OFI nul en permanence : flux muet ou parseur cassé"
+
+  tests:
+    unit: ["e_n sur séquences de carnet connues", "signe inversé par échange bid/ask", "marché croisé écarté"]
+    property_based: ["antisymétrie", "additivité sur intervalles disjoints", "OFI d'un flux vide = 0 AVEC drapeau"]
+    integration: ["impossible tant que la donnée manque — test marqué `skip` avec MOTIF explicite, jamais supprimé"]
+    regression: ["golden sur séquence synthétique de carnet"]
+    adversarial: ["marché croisé", "tailles nulles", "horodatages non monotones", "flux interrompu", "horloges désynchronisées"]
+    performance: ["10^7 événements sous 30 s"]
+    deterministic_replay: ["rejeu du flux brut → OFI identique au bit près"]
+
+  observability:
+    metrics: ["ofi", "n_evenements", "taux_marches_croises", "latence_reception", "statut"]
+    logs: ["événements écartés et motif", "interruptions de flux"]
+    traces: ["latence place → réception → décision"]
+    dashboards: ["aucun tant que UNCALIBRATED — afficher une case vide vaut mieux qu'un chiffre faux"]
+    alerts: ["taux de croisement > 1 %", "flux interrompu", "latence anormale"]
+
+  security:
+    data_classification: "confidentiel — données de marché sous licence, redistribution interdite"
+    secrets_required: ["clé du fournisseur de données"]
+    permissions: ["lecture seule"]
+    threat_scenarios:
+      - "Redistribution accidentelle de données sous licence via le site PUBLIC."
+      - "Clé du fournisseur exposée dans une réponse d'API ou une trace."
+    mitigations:
+      - "Aucune donnée tick dans `apps/web/public` ni dans l'export statique — même garde-fou que pour les positions réelles."
+      - "Clé en variable d'environnement, jamais versionnée."
+    audit_events: ["volume consommé par jour", "accès au flux"]
+
+  failure_modes:
+    - failure: "Approximation de l'OFI par du volume de barres"
+      detection: "revue de code ; ce contrat l'interdit explicitement"
+      consequence: "signal dont la corrélation au vrai OFI est INCONNUE, présenté comme de la microstructure"
+      mitigation: "non_goals explicite ; aucun module publié"
+      recovery: "retrait du signal"
+    - failure: "Horodatage de place utilisé comme date de disponibilité"
+      detection: "test bloquant sur les deux horodatages"
+      consequence: "alpha qui n'existe que dans le backtest"
+      mitigation: "deux champs distincts, jamais fusionnés"
+      recovery: "recalcul avec latence réelle"
+    - failure: "Coût des données engagé avant chiffrage"
+      detection: "`cout: NON MESURÉ` dans ce contrat"
+      consequence: "abonnement pour un signal peut-être nul après spread"
+      mitigation: "chiffrer AVANT ; commencer par un échantillon court sur quelques symboles"
+      recovery: "résiliation"
+
+  red_team_review:
+    strongest_objections:
+      - "C'est le terrain le plus concurrentiel du marché, disputé par des acteurs colocalisés. Un participant en latence ordinaire n'a aucune raison structurelle d'y gagner, et le contrat doit le dire avant d'engager le moindre euro de données."
+      - "Le coût des données est certain ; l'alpha est hypothétique. L'ordre des deux est le vrai risque de ce chantier."
+      - "Même si l'OFI prédit, l'effet est probablement entièrement consommé par le spread pour qui ne fait pas le marché."
+    regime_breaks: ["ouverture et clôture obéissent à une dynamique différente ; un modèle unique les mélangerait"]
+    hidden_dependencies: ["synchronisation d'horloges", "qualité du flux", "règles de la place", "licences"]
+    ways_the_backtest_can_lie:
+      - "Exécuter au mid alors qu'il faut traverser le spread."
+      - "Ignorer la latence."
+      - "Supposer une position en file d'attente favorable."
+      - "Mesurer sur les symboles les plus liquides puis extrapoler à l'univers."
+    operational_hazards: ["volumétrie (10^7 événements/jour)", "coût de stockage", "reprise après interruption de flux"]
+    reasons_not_to_deploy:
+      - "LA DONNÉE N'EXISTE PAS dans ce dépôt. Tout le reste est théorique."
+      - "Le rapport coût de données / alpha attendu est défavorable pour un acteur non colocalisé — à démontrer faux avant d'investir."
+      - "Aucun module n'est écrit, et c'est délibéré : écrire du code qui ne peut pas s'exécuter créerait l'illusion d'une capacité."
+
+  documentation:
+    references:
+      - "Cont, Kukanov & Stoikov (2014), The Price Impact of Order Book Events"
+      - "Lee & Ready (1991), Inferring Trade Direction from Intraday Data"
+      - "Easley, López de Prado & O'Hara (2012), Flow Toxicity and Liquidity"
+    known_limitations:
+      - "Aucune donnée disponible — statut UNCALIBRATED permanent en l'état."
+      - "Coût des sources NON MESURÉ."
+      - "Latence du chemin d'exécution NON MESURÉE."
+    runbook: >
+      Avant tout développement : chiffrer une source sur un échantillon court (5 symboles,
+      1 mois), mesurer la latence réelle, puis décider. Dans cet ordre, jamais l'inverse.
+    owner: "recherche quantitative"
+    review_frequency: "à chaque évolution de l'offre de données"
+    adr: ["à créer : « pourquoi la microstructure reste hors périmètre, et à quelle condition elle y entrerait »"]

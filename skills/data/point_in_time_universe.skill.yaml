@@ -1,0 +1,272 @@
+skill:
+  id: point_in_time_universe
+  version: "1.0.0"
+  title: "Univers d'investissement tel qu'il était connu à la date de décision"
+  domain: data
+  maturity: experimental
+  calibration_status: PARTIALLY_CALIBRATED
+  risk_tier: critical
+  usage_status: RESEARCH_ONLY
+
+  purpose:
+    problem: >
+      Le dépôt écarte déjà les titres périmés (`_stale` dans `snapshot.py`, seuil relatif
+      de 10 jours) et documente le survivorship bias en neuf endroits. Mais l'univers est
+      reconstruit AUJOURD'HUI puis appliqué au PASSÉ : un backtest de juin 2024 travaille
+      sur la liste de septembre 2026. Les titres radiés, renommés ou sortis de l'univers
+      n'y figurent pas — et ce sont précisément les perdants. Aucun composant ne porte
+      aujourd'hui le nom de cette question : la mesure donne 4 fichiers touchant
+      `utilisable_le`/`connu_a`, aucun contrat central.
+    objective: >
+      Rendre, pour toute date t, l'ensemble des symboles qu'on aurait RÉELLEMENT pu
+      traiter ce jour-là, avec la raison de chaque inclusion et de chaque exclusion.
+    non_goals:
+      - "Reconstruire l'historique des indices — aucune donnée de composition n'est disponible."
+      - "Deviner une date de radiation absente : un titre sans date sort en INCONNU, jamais en « présent »."
+      - "Corriger a posteriori les backtests déjà publiés : ils seront refaits, pas rafistolés."
+    users: ["backtester", "screener", "études d'événements", "ML"]
+
+  economic_thesis:
+    hypothesis: >
+      Thèse méthodologique et falsifiable : « un univers reconstruit a posteriori
+      surestime la performance, parce que les titres disparus étaient en moyenne des
+      perdants ». Falsifiable en rejouant une stratégie sur univers PIT et sur univers
+      actuel : si l'écart est nul, le biais n'existe pas dans cet univers et le Skill est
+      un coût sans bénéfice.
+    expected_counterparty: "Sans objet."
+    structural_inefficiency_or_risk_premium: "Sans objet — c'est un contrôle, pas un signal."
+    expected_decay: "Sans objet ; le biais CROÎT avec la profondeur d'historique."
+    falsification_conditions:
+      - "Écart de Sharpe entre univers PIT et univers actuel statistiquement indiscernable de zéro sur ≥ 3 stratégies et ≥ 5 ans."
+      - "Taux de titres disparus sur la fenêtre < 1 % : le biais serait négligeable et le coût du Skill injustifié."
+
+  assumptions:
+    market: ["Univers actions/ETF US, forex, crypto, commodités — le périmètre existant."]
+    statistical: ["Aucune."]
+    operational: ["`data/delisted.csv` est alimenté et daté ; un fichier vide rend le Skill inopérant et DOIT le dire."]
+    data_availability:
+      - "Première et dernière barre observée par symbole (base de prix locale)."
+      - "Dates de radiation quand elles existent (`data/delisted.csv`)."
+      - "ABSENT : historique de composition des indices. Conséquence assumée et écrite ci-dessous."
+
+  inputs:
+    - name: date_decision
+      type: "datetime (UTC, tz-aware)"
+      point_in_time: true
+      nullable: false
+      source_contract: "horloge du backtester, jamais `datetime.now()` dans le calcul"
+      validation_rules: ["tz-aware obligatoire ; un naïf est refusé, pas interprété"]
+    - name: base_prix
+      type: "chemin SQLite/Parquet"
+      frequency: "1d"
+      point_in_time: true
+      nullable: false
+      source_contract: "packages/data — première/dernière barre par symbole"
+      validation_rules: ["au moins 30 symboles, sinon UNCALIBRATED"]
+    - name: radiations
+      type: "CSV {symbole, date_radiation, motif}"
+      point_in_time: true
+      nullable: true
+      source_contract: "data/delisted.csv"
+      validation_rules:
+        - "fichier absent ou vide → statut PARTIEL, jamais silence"
+        - "date de radiation antérieure à la première barre → incohérence NOMMÉE"
+
+  outputs:
+    - name: symboles
+      type: "frozenset[str]"
+      semantics: "Négociables à `date_decision` au vu des seules informations d'alors."
+      consumers: ["backtest", "screening", "ml", "event_study"]
+    - name: exclusions
+      type: "list[{symbole, motif, date}]"
+      semantics: >
+        Pourquoi chaque titre ne figure PAS. Motifs : PAS_ENCORE_COTE, RADIE,
+        SANS_BARRE_RECENTE, INCONNU. Un filtre qui écarte en silence fabrique le seul
+        mode de défaillance qu'on ne sait pas mesurer.
+      consumers: ["rapport", "audit"]
+    - name: statut
+      type: "str ∈ {COMPLET, PARTIEL, UNCALIBRATED}"
+      semantics: "PARTIEL dès qu'une source manque. Jamais un univers présenté comme complet quand il ne l'est pas."
+      consumers: ["gate", "rapport de backtest"]
+
+  mathematical_specification:
+    notation:
+      t: "date de décision"
+      p_s: "date de la première barre du symbole s"
+      d_s: "date de radiation de s, si connue"
+      r_s: "date de la dernière barre de s antérieure ou égale à t"
+      K: "fenêtre de fraîcheur en jours de bourse"
+    equations:
+      - "s ∈ U(t)  ⟺  p_s <= t  ∧  (d_s est inconnue ∨ d_s > t)  ∧  (t - r_s) <= K"
+    estimators: ["aucun — appartenance déterministe"]
+    hyperparameters:
+      - "K = 10 jours de bourse, repris de la règle `_stale` déjà en production (`snapshot.py`). Valeur HÉRITÉE, non recalibrée : à mesurer, d'où PARTIALLY_CALIBRATED."
+    invariants:
+      - "Monotonie de l'information : U(t) ne dépend d'aucune donnée postérieure à t."
+      - "U(t) calculé aujourd'hui == U(t) calculé demain, à base de prix inchangée."
+      - "|U(t)| + |exclusions(t)| == |symboles connus à t| — rien ne se perd entre les deux."
+    computational_complexity: "O(S) par date après indexation ; O(S log S) pour l'index initial"
+    numerical_stability: ["aucune arithmétique flottante dans la décision d'appartenance"]
+
+  temporal_semantics:
+    observation_time: "clôture de chaque séance"
+    availability_time: "t + 0 pour les prix ; la radiation n'est utilisable qu'à sa date de PUBLICATION, pas à sa date d'effet"
+    decision_time: "t, avant toute génération de signal"
+    execution_time: "séance suivante"
+    label_horizon: "sans objet"
+    confirmation_delay: "0 pour les prix ; INCONNU pour les radiations — nommé, pas supposé nul"
+    embargo_required: "sans objet"
+    anti_lookahead_rules:
+      - "Aucun appel à `datetime.now()` dans le calcul d'appartenance."
+      - "`d_s > t` strictement : un titre radié LE JOUR t n'est plus négociable à t."
+      - "Test : tronquer la base après t ne doit pas changer U(t) — c'est LA propriété."
+      - "Un symbole renommé (FB→META) est traité comme deux entités distinctes, jamais fusionné rétroactivement."
+
+  algorithm:
+    overview: "Index (première barre, dernière barre, radiation) par symbole, puis appartenance déterministe par date."
+    steps:
+      - "Construire l'index une fois ; le mémoriser avec le hash de la base."
+      - "Charger les radiations ; incohérences NOMMÉES, jamais corrigées en silence."
+      - "Pour t : appliquer les trois conditions, accumuler les exclusions motivées."
+      - "Rendre statut = PARTIEL si `radiations` absent, UNCALIBRATED si < 30 symboles."
+    edge_cases:
+      - "Symbole avec une seule barre → inclus ce jour-là uniquement."
+      - "Radiation sans date → INCONNU : exclu ET signalé, jamais inclus par défaut."
+      - "t antérieur à toute barre → univers vide + statut explicite (pas une exception)."
+    fallback_behavior:
+      - "Base illisible → UNCALIBRATED et univers vide. Un univers vide arrête un backtest ; un univers inventé le fait mentir."
+
+  implementation:
+    modules: ["packages/data/univers_pit.py"]
+    entrypoints: ["packages.data.univers_pit.univers_a"]
+    tests: ["tests/data/test_univers_pit.py", "tests/data/test_univers_pit_causalite.py"]
+    make_targets: ["make univers-pit"]
+
+  validation:
+    baselines:
+      - "Univers ACTUEL appliqué au passé (le comportement d'aujourd'hui) : l'écart de performance EST la mesure du biais."
+      - "Univers figé au premier jour de la fenêtre."
+    train_validation_test_protocol: "sans objet — composant de données, pas un modèle"
+    cross_validation: "sans objet"
+    leakage_tests:
+      - "Troncature : U(t) identique que la base s'arrête à t ou à t+5 ans. Test bloquant."
+      - "Aucun import de `datetime.now` dans le module — vérifié par AST."
+    statistical_tests: ["part des titres disparus par année, avec intervalle de confiance"]
+    multiple_testing_controls: ["sans objet"]
+    robustness_tests: ["sensibilité à K ∈ {5, 10, 20} jours : l'univers ne doit pas varier de plus de 2 %"]
+    placebo_tests: ["dates aléatoires : |U(t)| doit varier continûment, aucun saut inexpliqué"]
+    regime_tests: ["2020 (radiations massives), 2022, 2024"]
+    acceptance_criteria:
+      - "Test de troncature vert."
+      - "Conservation |U| + |exclusions| == |connus| exacte."
+      - "Écart de Sharpe PIT vs actuel MESURÉ et publié sur ≥ 3 stratégies, quel que soit son signe."
+    rejection_criteria:
+      - "Test de troncature rouge → le Skill est REJETÉ, il fabriquerait une fausse sécurité."
+      - "Fichier de radiations vide sans que le statut passe PARTIEL → défaut bloquant."
+      - "Écart mesuré indiscernable de zéro sur 5 ans ET taux de disparition < 1 % → le Skill n'a pas d'objet dans cet univers ; le dire plutôt que le garder."
+
+  transaction_costs_and_capacity:
+    costs_included: ["aucun — ce Skill ne produit pas de performance"]
+    impact_model: "sans objet"
+    borrow_and_financing: "sans objet"
+    capacity_method: "sans objet"
+    calibration_source: >
+      K hérité de la règle `_stale` en production. Les dates de radiation viennent de
+      `data/delisted.csv`, dont la complétude n'est PAS mesurée — d'où
+      PARTIALLY_CALIBRATED plutôt que CALIBRATED.
+    limitations:
+      - "Sans historique de composition d'indice, un titre présent dans la base mais hors indice à t sera inclus à tort. Limite ÉCRITE, non contournée."
+
+  risk_controls:
+    preconditions: ["base lisible", ">= 30 symboles", "date tz-aware"]
+    hard_limits: ["aucune date postérieure à t ne peut entrer dans le calcul"]
+    soft_limits: ["alerte si le taux d'exclusion dépasse 30 % un jour donné"]
+    vetoes: ["un backtest lancé avec statut UNCALIBRATED est REFUSÉ, pas averti"]
+    degradation_modes: ["radiations absentes → PARTIEL, biais résiduel chiffré dans le rapport"]
+    kill_switch_conditions: ["sans objet — aucun ordre"]
+    safe_default: "univers VIDE + statut explicite. Un backtest qui s'arrête vaut mieux qu'un backtest qui ment."
+
+  guardrail_telemetry:
+    enabled_state_metric: "univers_pit.actif"
+    trigger_counter: "univers_pit.jours_avec_exclusion"
+    affected_items_counter: "univers_pit.symboles_exclus"
+    rejection_counter: "univers_pit.backtests_refuses"
+    average_effect_metric: "univers_pit.taux_exclusion_moyen"
+    maximum_effect_metric: "univers_pit.taux_exclusion_max"
+    last_trigger_timestamp: "univers_pit.derniere_exclusion_ts"
+    warning_conditions:
+      - "enabled_and_never_triggered — jamais une seule exclusion sur des années : le fichier de radiations est vide ou l'index est faux"
+      - "triggered_with_zero_effect — des exclusions qui ne changent jamais l'univers traité"
+
+  tests:
+    unit: ["appartenance aux trois bornes", "radiation le jour même", "symbole à une barre", "date naïve refusée"]
+    property_based:
+      - "Monotonie de l'information : tronquer le futur ne change pas U(t)."
+      - "Conservation : |U| + |exclusions| == |connus|."
+      - "Idempotence : deux appels identiques rendent le même frozenset."
+    integration: ["univers PIT → screener → backtest → rapport, avec le statut propagé"]
+    regression: ["golden : U(2024-06-03) figé, comparé à chaque exécution"]
+    adversarial: ["delisted.csv vide", "dates incohérentes", "symbole renommé", "base tronquée", "date antérieure à tout"]
+    performance: ["2 500 dates × 3 000 symboles sous 2 s après indexation"]
+    deterministic_replay: ["hash de la base inscrit dans la sortie"]
+
+  observability:
+    metrics: ["taille_univers", "taux_exclusion", "statut", "n_inconnus"]
+    logs: ["exclusions par motif", "incohérences de radiation"]
+    traces: []
+    dashboards: ["bandeau « données » du rapport de backtest"]
+    alerts: ["statut PARTIEL sur un backtest publié", "taux d'exclusion > 30 %"]
+
+  security:
+    data_classification: "interne — aucune donnée nominative"
+    secrets_required: []
+    permissions: []
+    threat_scenarios: ["un appelant passe une date issue de `now()` et obtient l'univers d'aujourd'hui pour une date passée"]
+    mitigations: ["date tz-aware obligatoire ; test AST interdisant `datetime.now` dans le module"]
+    audit_events: ["hash de la base + statut inscrits dans chaque rapport de backtest"]
+
+  failure_modes:
+    - failure: "`delisted.csv` vide et personne ne le remarque"
+      detection: "warning_condition enabled_and_never_triggered"
+      consequence: "survivorship bias intact, avec l'apparence d'un contrôle en place — pire que pas de contrôle du tout"
+      mitigation: "statut PARTIEL propagé jusqu'au rapport"
+      recovery: "réalimenter la source, recalculer, republier"
+    - failure: "Symbole renommé compté deux fois"
+      detection: "test adversarial dédié"
+      consequence: "double comptage de l'exposition"
+      mitigation: "entités distinctes, jamais fusionnées rétroactivement"
+      recovery: "table de correspondance datée"
+    - failure: "K hérité inadapté à la crypto (cotation 24/7)"
+      detection: "sensibilité à K par classe d'actifs"
+      consequence: "exclusion à tort de cryptos actives"
+      mitigation: "K par classe d'actifs, mesuré avant d'être fixé"
+      recovery: "recalibration"
+
+  red_team_review:
+    strongest_objections:
+      - "Sans historique de composition d'indice, ce Skill ne corrige qu'une PARTIE du biais tout en donnant le sentiment de l'avoir traité — c'est le risque le plus sérieux, et il est nommé dans les limites."
+      - "La base locale ne contient que les symboles qu'on a un jour décidé d'ingérer : le biais de sélection est en AMONT, hors de portée de ce Skill."
+      - "K = 10 jours est hérité, pas mesuré. Le reprendre sans le recalibrer, c'est propager une décision dont personne ne se souvient."
+    regime_breaks: ["vagues de radiations (2008, 2020) où l'univers se contracte brutalement"]
+    hidden_dependencies: ["complétude de `delisted.csv`", "cohérence des tickers dans le temps"]
+    ways_the_backtest_can_lie:
+      - "Univers actuel appliqué au passé (le défaut d'aujourd'hui)."
+      - "Titres jamais ingérés parce qu'ils avaient déjà disparu à l'ingestion."
+      - "Statut PARTIEL ignoré au moment de publier un résultat."
+    operational_hazards: ["coût d'indexation", "tentation d'élargir K pour garder plus de titres"]
+    reasons_not_to_deploy:
+      - "Si `delisted.csv` reste vide, ce Skill donne une fausse assurance : mieux vaut PAS de Skill qu'un Skill qui rassure à tort."
+      - "Tant que l'écart PIT vs actuel n'est pas MESURÉ, on ignore s'il corrige 90 % du biais ou 5 %."
+
+  documentation:
+    references:
+      - "Bailey & López de Prado (2014), The Deflated Sharpe Ratio"
+      - "Elton, Gruber & Blake (1996), Survivorship Bias and Mutual Fund Performance"
+    known_limitations:
+      - "Aucun historique de composition d'indice."
+      - "K hérité de `snapshot.py`, non recalibré."
+      - "Biais de sélection à l'ingestion, hors périmètre."
+    runbook: "make univers-pit ARGS='--date 2024-06-03' ; comparer à l'univers actuel et publier l'écart"
+    owner: "data engineering"
+    review_frequency: "à chaque modification de la base de prix ou de la liste des radiations"
+    adr: ["à créer : « l'univers d'hier n'est pas la liste d'aujourd'hui »"]

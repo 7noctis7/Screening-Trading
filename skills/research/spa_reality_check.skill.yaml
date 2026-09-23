@@ -1,0 +1,314 @@
+skill:
+  id: spa_reality_check
+  version: "1.0.0"
+  title: "Test de capacité prédictive supérieure (White Reality Check / Hansen SPA)"
+  domain: research
+  maturity: experimental
+  calibration_status: UNCALIBRATED
+  risk_tier: high
+  usage_status: RESEARCH_ONLY
+
+  purpose:
+    problem: >
+      Le gate de promotion (`packages/research/gate.py`) évalue un candidat à la fois :
+      placebo, DSR, PBO, edge net. Aucun de ces contrôles ne répond à la question posée
+      quand on a cherché : « parmi les N configurations essayées, la MEILLEURE bat-elle
+      le hasard, sachant qu'on a pris le maximum de N tirages ? » Le DSR corrige le
+      Sharpe pour le nombre d'essais, mais suppose une structure de dépendance que des
+      stratégies fortement corrélées entre elles violent.
+    objective: >
+      Rendre un p-value valide pour le MEILLEUR d'un ensemble de candidats, en tenant
+      compte de la corrélation entre eux, par bootstrap stationnaire.
+    non_goals:
+      - "Remplacer le DSR ou le PBO : ce test les COMPLÈTE, il ne les arbitre pas."
+      - "Décider seul d'une promotion. Le verdict reste dans `gate.promotion_verdict`."
+      - "Évaluer un candidat unique — sans concurrents, SPA dégénère en test ordinaire."
+    users: ["chercheur quantitatif", "revue adverse avant inscription au registre"]
+
+  economic_thesis:
+    hypothesis: >
+      Ce Skill ne porte AUCUNE thèse de marché : il ne prédit rien. Sa thèse est
+      méthodologique et elle est falsifiable — « le meilleur de N essais corrélés a un
+      Sharpe maximal dont la loi sous H0 n'est pas celle d'un essai isolé ; ignorer cela
+      fait promouvoir du bruit ». La falsification est expérimentale : appliqué à des
+      séries de rendements PUREMENT aléatoires, le test doit rejeter H0 à un taux proche
+      de son niveau nominal.
+    expected_counterparty: >
+      Sans objet. La « contrepartie » d'un faux positif méthodologique, c'est le capital
+      du compte lui-même.
+    structural_inefficiency_or_risk_premium: "Sans objet."
+    expected_decay: "Sans objet — un test statistique ne se décote pas."
+    falsification_conditions:
+      - "Taux de rejet empirique sous H0 simulé s'écartant du niveau nominal de plus de 2 écarts-types de Monte-Carlo."
+      - "Verdict systématiquement identique au DSR sur le registre réel : le test n'apporterait alors aucune information incrémentale et devrait être retiré."
+      - "Sensibilité du p-value au paramètre de bloc du bootstrap supérieure à l'écart entre accepter et rejeter."
+
+  assumptions:
+    market: ["Aucune — le test opère sur des séries de rendements déjà calculées."]
+    statistical:
+      - "Rendements stationnaires au sens faible sur la fenêtre étudiée."
+      - "Dépendance à courte portée compatible avec un bootstrap stationnaire (Politis-Romano)."
+      - "Les N candidats sont comparés sur EXACTEMENT la même fenêtre et le même univers."
+    operational:
+      - "Les rendements viennent du backtester causal, nets de coûts, jamais de chiffres saisis."
+    data_availability:
+      - "Une matrice T×N de rendements de stratégies, alignée sur un calendrier commun."
+      - "Le nombre d'essais RÉELLEMENT conduits, lu depuis `packages/research/ledger.py` — jamais choisi a posteriori."
+
+  inputs:
+    - name: rendements_candidats
+      type: "np.ndarray[float64] (T, N)"
+      unit: "rendement simple par période, NET de coûts"
+      frequency: "identique pour tous les candidats"
+      point_in_time: true
+      nullable: false
+      source_contract: "packages/backtest — série nette du backtester causal"
+      validation_rules:
+        - "T >= 100 sinon UNCALIBRATED (le bootstrap n'a pas de quoi travailler)"
+        - "aucun NaN ni inf : une colonne trouée fausse la loi du maximum"
+        - "N >= 2 sinon refus explicite (voir non_goals)"
+    - name: rendement_reference
+      type: "np.ndarray[float64] (T,)"
+      unit: "rendement simple par période"
+      frequency: "identique"
+      point_in_time: true
+      nullable: true
+      source_contract: "baseline : buy-and-hold, équipondéré, ou zéro"
+      validation_rules: ["si absent, la référence vaut zéro et cela DOIT être dit dans la sortie"]
+    - name: n_essais_registre
+      type: int
+      point_in_time: true
+      nullable: false
+      source_contract: "packages/research/ledger.py — COMPTÉ, jamais choisi"
+      validation_rules:
+        - "n_essais_registre >= N : le registre ne peut pas connaître moins d'essais que de colonnes fournies"
+
+  outputs:
+    - name: p_value_spa
+      type: float
+      unit: "probabilité"
+      semantics: >
+        Probabilité d'observer une performance au moins aussi bonne que la meilleure
+        observée, sous l'hypothèse qu'AUCUN candidat ne bat la référence.
+      confidence_or_uncertainty: "erreur de Monte-Carlo rendue avec le p-value (1/sqrt(B))"
+      consumers: ["packages/research/gate.py", "vault/10_BACKTEST_RESULTS.md"]
+    - name: statut
+      type: "str ∈ {MESURE, UNCALIBRATED}"
+      semantics: "UNCALIBRATED si T, N ou B insuffisants. Jamais un p-value par défaut."
+      consumers: ["gate", "rapport"]
+    - name: meilleur_candidat
+      type: "str | None"
+      semantics: "Identifiant du candidat maximisant la statistique — pour traçabilité, PAS une recommandation."
+      consumers: ["registre"]
+
+  mathematical_specification:
+    notation:
+      T: "nombre de périodes"
+      N: "nombre de candidats"
+      d_k: "surperformance moyenne du candidat k sur la référence"
+      B: "nombre de rééchantillonnages bootstrap"
+      L: "longueur moyenne de bloc du bootstrap stationnaire"
+    equations:
+      - "d_k = (1/T) * sum_t (r_{k,t} - r_{ref,t})"
+      - "V_N = max_k ( sqrt(T) * d_k / omega_k )      # statistique de test"
+      - "omega_k^2 = estimateur HAC de la variance de long terme de (r_k - r_ref)"
+      - "p = (1/B) * sum_b 1{ V_N^{*,b} >= V_N }      # recentrage de Hansen sur les candidats non compétitifs"
+    estimators:
+      - "omega_k : Newey-West, largeur de bande floor(4*(T/100)^(2/9))"
+      - "bootstrap stationnaire de Politis-Romano, L calibrée sur l'autocorrélation empirique"
+    hyperparameters:
+      - "B : 2000 par défaut. JUSTIFICATION : erreur de Monte-Carlo ≈ 1/sqrt(2000) ≈ 2,2 %, soit un ordre de grandeur sous le seuil de 5 %. Pas un chiffre rond choisi pour faire sérieux."
+      - "L : estimée, jamais fixée en dur. Une valeur imposée serait une calibration inventée."
+    invariants:
+      - "0 <= p <= 1"
+      - "Permuter les colonnes ne change pas p (le test porte sur le MAXIMUM, pas sur l'ordre)"
+      - "Ajouter un candidat strictement dominé ne peut pas DIMINUER p (recentrage de Hansen)"
+    computational_complexity: "O(B * T * N)"
+    numerical_stability:
+      - "omega_k proche de zéro (candidat quasi déterministe) → statistique non définie : le candidat est ÉCARTÉ et nommé, jamais régularisé en silence."
+
+  temporal_semantics:
+    observation_time: "fin de chaque période du backtest"
+    availability_time: >
+      Après la clôture complète de la fenêtre d'évaluation. Ce test est POST-HOC par
+      construction : il ne produit aucune valeur utilisable dans une décision de trading.
+    decision_time: "décision de PROMOTION d'un candidat, jamais décision d'ordre"
+    execution_time: "sans objet — aucun ordre ne découle de ce Skill"
+    label_horizon: "sans objet"
+    confirmation_delay: "sans objet"
+    embargo_required: >
+      Aucun embargo propre. MAIS les rendements fournis doivent provenir d'une CV purgée
+      avec embargo : ce test ne répare pas une fuite en amont, il la propage.
+    anti_lookahead_rules:
+      - "Le test ne doit JAMAIS être branché sur une feature ni sur un signal : sortie réservée au registre et au gate."
+      - "`n_essais_registre` est lu, pas passé en argument par l'appelant."
+      - "Un test qui vérifie qu'aucun module de `packages/strategies` ni `packages/execution` n'importe ce module."
+
+  algorithm:
+    overview: "Bootstrap stationnaire de la loi du maximum de surperformance normalisée, avec recentrage de Hansen."
+    steps:
+      - "Valider les entrées ; T < 100 ou N < 2 → statut UNCALIBRATED, aucun p-value."
+      - "Calculer d_k et omega_k (Newey-West) pour chaque candidat."
+      - "Écarter et NOMMER les candidats à omega_k ~ 0."
+      - "Estimer L sur l'autocorrélation empirique des surperformances."
+      - "Pour b = 1..B : rééchantillonner par blocs, recentrer selon Hansen, calculer V_N^{*,b}."
+      - "p = proportion des V_N^{*,b} >= V_N ; rendre p, son erreur de Monte-Carlo et le candidat argmax."
+    edge_cases:
+      - "Tous les candidats identiques → p ≈ 1, et c'est correct : rien n'a été démontré."
+      - "Une seule période valide après nettoyage → UNCALIBRATED."
+      - "Référence absente → référence nulle, MENTIONNÉE dans la sortie."
+    fallback_behavior:
+      - "Toute anomalie rend statut=UNCALIBRATED avec son motif. JAMAIS un p-value par défaut : un 0,5 silencieux serait lu comme une mesure."
+
+  implementation:
+    modules: ["packages/research/spa.py"]
+    entrypoints: ["packages.research.spa.tester_spa"]
+    tests:
+      - "tests/research/test_spa.py"
+      - "tests/research/test_spa_niveau_nominal.py"
+    make_targets: ["make spa"]
+
+  validation:
+    baselines:
+      - "DSR seul, sur le même registre : le SPA doit apporter une information incrémentale, sinon il est retiré."
+      - "Test t naïf sur le meilleur candidat : doit être BEAUCOUP plus permissif — si ce n'est pas le cas, l'implémentation est fausse."
+    train_validation_test_protocol: >
+      Sans objet pour le test lui-même. Les rendements soumis doivent provenir du
+      protocole de `packages/research/protocole_oos.py`.
+    cross_validation: "en amont, purgée + embargo (CPCV existante)"
+    leakage_tests:
+      - "Aucun import de ce module hors `research/` et `scripts/` — vérifié par AST."
+    statistical_tests:
+      - "Niveau nominal sous H0 SYNTHÉTIQUE : rendements i.i.d. gaussiens, taux de rejet attendu ≈ alpha."
+      - "Puissance sous H1 synthétique : un candidat à alpha vrai doit être détecté à un taux croissant avec T."
+    multiple_testing_controls: ["c'est l'objet même du Skill ; complémentaire de `fdr.py` (Benjamini-Hochberg) qui contrôle une AUTRE quantité (FDR, pas FWER)"]
+    robustness_tests:
+      - "Sensibilité à L : p ne doit pas franchir le seuil de décision quand L varie de moitié au double."
+      - "Sensibilité à B : stable à l'erreur de Monte-Carlo près entre B=2000 et B=10000."
+    placebo_tests:
+      - "Colonnes permutées dans le temps (sign-flip) : p doit remonter vers l'uniformité."
+    regime_tests:
+      - "Fenêtres 2020 (choc), 2022 (hausse des taux), 2023-2024 : le verdict doit être rendu PAR régime, jamais agrégé en un seul chiffre."
+    acceptance_criteria:
+      - "Niveau nominal respecté à ±2 erreurs-types de Monte-Carlo sur 1000 réplications synthétiques."
+      - "Invariant de permutation vérifié exactement."
+      - "Le module ne dépend d'aucun paquet d'exécution ni de stratégie."
+    rejection_criteria:
+      - "Niveau nominal hors intervalle → le Skill est REJETÉ, pas ajusté jusqu'à ce qu'il passe."
+      - "Verdict identique au DSR sur ≥ 95 % du registre réel → aucun apport, retrait du gate."
+      - "p franchissant le seuil de décision sous une simple variation de L → instable, RESEARCH_ONLY définitif."
+
+  transaction_costs_and_capacity:
+    costs_included: ["aucun — le test consomme des rendements DÉJÀ nets"]
+    impact_model: "sans objet"
+    borrow_and_financing: "sans objet"
+    capacity_method: "sans objet"
+    calibration_source: >
+      UNCALIBRATED : aucun paramètre empirique de marché. B et L sont soit justifiés
+      mathématiquement, soit estimés sur les données fournies.
+    limitations:
+      - "Un test appliqué à des rendements BRUTS rendrait un verdict flatteur et faux. Un contrôle refuse une matrice dont les coûts ne sont pas déclarés."
+
+  risk_controls:
+    preconditions:
+      - "T >= 100, N >= 2, aucun NaN, coûts déclarés inclus"
+    hard_limits:
+      - "Aucune sortie ne peut être consommée par `packages/execution` ni `packages/strategies`"
+    soft_limits: []
+    vetoes:
+      - "p > seuil → le gate REFUSE la promotion ; il ne peut jamais l'accorder seul"
+    degradation_modes:
+      - "Données insuffisantes → UNCALIBRATED, le gate IGNORE ce contrôle (comportement existant : un contrôle non mesuré ne bloque pas, mais ne passe pas non plus)"
+    kill_switch_conditions: ["sans objet — aucun ordre"]
+    safe_default: >
+      UNCALIBRATED. En l'absence de mesure, le Skill ne rend aucun verdict — il ne rend
+      SURTOUT pas « passé ».
+
+  guardrail_telemetry:
+    enabled_state_metric: "spa.actif"
+    trigger_counter: "spa.verdicts_refus"
+    affected_items_counter: "spa.candidats_evalues"
+    rejection_counter: "spa.promotions_refusees"
+    average_effect_metric: "spa.p_value_mediane"
+    maximum_effect_metric: "spa.p_value_max"
+    last_trigger_timestamp: "spa.dernier_refus_ts"
+    warning_conditions:
+      - "enabled_and_never_triggered — actif depuis N promotions sans jamais refuser : seuil probablement inatteignable"
+      - "triggered_with_zero_effect — refuse des candidats que le DSR refusait déjà : aucun apport propre"
+      - "uncalibrated_streak — UNCALIBRATED sur toutes les promotions : le registre ne fournit pas de matrice exploitable"
+
+  tests:
+    unit: ["d_k et omega_k sur séries connues", "bornes de p", "UNCALIBRATED sous les seuils"]
+    property_based: ["invariance par permutation des colonnes", "monotonie à l'ajout d'un dominé", "0 <= p <= 1 pour toute entrée valide"]
+    integration: ["registre → matrice → SPA → gate → verdict"]
+    regression: ["golden dataset synthétique, p reproductible à graine fixée"]
+    adversarial: ["colonnes quasi déterministes", "T juste sous le seuil", "une colonne constante", "candidats parfaitement corrélés"]
+    performance: ["B=2000, T=2500, N=50 sous 5 s en vectorisé"]
+    deterministic_replay: ["graine explicite ; deux exécutions identiques rendent le même p au bit près"]
+
+  observability:
+    metrics: ["p_value", "erreur_mc", "n_candidats_ecartes", "L_estimee", "statut"]
+    logs: ["candidats écartés et motif", "statut UNCALIBRATED et cause"]
+    traces: []
+    dashboards: ["section « promotion » du rapport de backtest"]
+    alerts: ["UNCALIBRATED répété", "instabilité en L"]
+
+  security:
+    data_classification: "interne — rendements de stratégie, aucune donnée nominative"
+    secrets_required: []
+    permissions: []
+    threat_scenarios:
+      - "Un appelant passe `n_essais` au lieu de le lire au registre, et sous-déclare la recherche conduite."
+    mitigations:
+      - "`n_essais` est LU depuis le registre dans la fonction, pas reçu en argument."
+    audit_events: ["chaque verdict inscrit au registre avec le hash de la matrice d'entrée"]
+
+  failure_modes:
+    - failure: "Rendements bruts passés au lieu de nets"
+      detection: "contrôle de déclaration des coûts en précondition"
+      consequence: "verdict flatteur, promotion d'une stratégie non rentable après frais"
+      mitigation: "refus si les coûts ne sont pas déclarés"
+      recovery: "recalcul depuis le backtester causal"
+    - failure: "Bootstrap mal calibré (L trop court) sur des rendements autocorrélés"
+      detection: "test de sensibilité à L en validation"
+      consequence: "p sous-estimé, faux positif"
+      mitigation: "L estimée sur l'autocorrélation ; test de robustesse bloquant"
+      recovery: "réestimation, verdict recalculé"
+    - failure: "Candidats issus de fenêtres différentes"
+      detection: "contrôle d'alignement du calendrier"
+      consequence: "comparaison de choses non comparables"
+      mitigation: "refus explicite"
+      recovery: "réalignement en amont"
+
+  red_team_review:
+    strongest_objections:
+      - "Le DSR fait déjà une correction de multiple testing. Si le SPA rend le même verdict, il n'a coûté que de la complexité — d'où un critère de REJET explicite là-dessus."
+      - "Le bootstrap stationnaire suppose une dépendance à courte portée. Sur des rendements à mémoire longue, il sous-estime la variance et donc le p-value."
+      - "N est rarement le vrai nombre d'essais : la recherche abandonnée avant d'être enregistrée n'est comptée nulle part. Le registre atténue, il ne résout pas."
+    regime_breaks:
+      - "Un changement de régime dans la fenêtre viole la stationnarité et invalide le bootstrap ; d'où l'exigence de verdict PAR régime."
+    hidden_dependencies:
+      - "Qualité du registre des essais ; purge et embargo en amont ; déclaration honnête des coûts."
+    ways_the_backtest_can_lie:
+      - "Choisir la fenêtre après avoir vu les résultats."
+      - "N'inscrire au registre que les essais prometteurs — le p-value devient alors optimiste et rien ne le signale."
+      - "Relancer le test jusqu'à ce qu'une graine donne p < 0,05."
+    operational_hazards:
+      - "Coût CPU sur grands N ; tentation de réduire B jusqu'à ce que le résultat arrange."
+    reasons_not_to_deploy:
+      - "Aucun déploiement possible : RESEARCH_ONLY par construction, ce Skill ne touche jamais un ordre."
+      - "Tant que le registre n'enregistre pas les essais ABANDONNÉS, le test mesure un plancher du nombre d'essais, pas le nombre réel."
+
+  documentation:
+    references:
+      - "White (2000), A Reality Check for Data Snooping"
+      - "Hansen (2005), A Test for Superior Predictive Ability"
+      - "Politis & Romano (1994), The Stationary Bootstrap"
+    known_limitations:
+      - "Suppose une dépendance à courte portée."
+      - "Le nombre d'essais est un plancher tant que les abandons ne sont pas tous inscrits."
+      - "Aucune calibration empirique de marché : statut UNCALIBRATED assumé."
+    runbook: "make spa ARGS='--registre <chemin>' ; verdict inscrit au registre, jamais appliqué automatiquement"
+    owner: "recherche quantitative"
+    review_frequency: "à chaque modification du gate de promotion"
+    adr: ["à créer : « le meilleur de N essais corrélés n'est pas un essai »"]

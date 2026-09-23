@@ -1,0 +1,261 @@
+skill:
+  id: bos_choch
+  version: "1.0.0"
+  title: "Rupture de structure (BOS) et changement de caractère (CHoCH)"
+  domain: signal
+  maturity: experimental
+  calibration_status: UNCALIBRATED
+  risk_tier: medium
+  usage_status: RESEARCH_ONLY
+
+  purpose:
+    problem: >
+      BOS et CHoCH sont les deux notions les plus utilisées du vocabulaire SMC, et les
+      moins définies : selon l'auteur, la rupture se juge en clôture ou en mèche, sur le
+      dernier pivot ou sur le dernier pivot PROTÉGÉ, avec ou sans tolérance. Tant que ce
+      choix n'est pas figé, deux backtests du même concept donnent deux résultats et
+      aucun n'est réfutable.
+    objective: >
+      Figer UNE définition, en clôture et sur pivot confirmé, et mesurer si elle apporte
+      quoi que ce soit au-delà d'un simple breakout normalisé par la volatilité.
+    non_goals:
+      - "Prétendre lire une intention d'acteur institutionnel dans une rupture de plus haut."
+      - "Fournir un signal d'entrée : BOS est un ÉTAT de structure, pas une décision."
+      - "Réconcilier les définitions concurrentes — on en choisit une et on l'assume."
+    users: ["recherche", "études d'événements", "détection de régime"]
+
+  economic_thesis:
+    hypothesis: >
+      La rupture d'un extrême confirmé déclenche des stops et des ordres de suivi,
+      produisant une continuation à court terme au-delà de ce qu'expliquerait le
+      momentum simple. CHoCH — première rupture en sens inverse après une séquence
+      ordonnée — marquerait un changement de régime plus tôt qu'un filtre de tendance.
+    expected_counterparty: >
+      Porteurs de stops et systèmes de suivi de tendance lents.
+    structural_inefficiency_or_risk_premium: >
+      Inefficience de microstructure. AUCUNE prime de risque identifiée : si l'effet
+      existe, rien ne garantit qu'il rémunère un risque plutôt qu'il ne reflète un coût.
+    expected_decay: "Forte. À remesurer par sous-période, systématiquement."
+    falsification_conditions:
+      - "Contribution incrémentale nulle face à un breakout normalisé par ATR — LE test qui compte."
+      - "Rendement post-BOS indiscernable du hasard après coûts sur ≥ 3 sous-périodes."
+      - "CHoCH ne devançant pas un filtre de tendance simple dans la détection de retournement."
+
+  assumptions:
+    market: ["Pivots confirmés disponibles (cf. `pivot_detection`)."]
+    statistical: ["Aucune loi supposée."]
+    operational: ["La définition retenue est FIGÉE avant mesure et inscrite au registre."]
+    data_availability:
+      - "DISPONIBLE : OHLC quotidien et crypto intraday."
+      - "ABSENT : tick — impossible de distinguer une rupture franche d'un balayage suivi d'un retour dans la même barre."
+
+  inputs:
+    - name: pivots
+      type: "sortie de `pivot_detection`"
+      point_in_time: true
+      nullable: false
+      source_contract: "skills/market_structure/pivot_detection.skill.yaml"
+      validation_rules: ["chaque pivot doit porter `t_observable`, jamais seulement `t_evenement`"]
+    - name: closes
+      type: "np.ndarray[float64]"
+      unit: "prix"
+      frequency: "identique aux pivots"
+      point_in_time: true
+      nullable: false
+      source_contract: "packages/data"
+      validation_rules: ["aucun NaN"]
+    - name: tolerance_atr
+      type: float
+      unit: "multiples d'ATR"
+      point_in_time: true
+      nullable: false
+      source_contract: "paramètre de recherche"
+      validation_rules:
+        - ">= 0 ; une tolérance nulle rend la règle hypersensible au bruit de cotation"
+
+  outputs:
+    - name: evenements
+      type: "list[{type ∈ {BOS_HAUT, BOS_BAS, CHOCH_HAUT, CHOCH_BAS}, t_observable, pivot_ref, ecart_atr}]"
+      semantics: >
+        `t_observable` est la clôture qui rompt, JAMAIS la date du pivot rompu.
+        `ecart_atr` chiffre l'ampleur de la rupture — sans quoi une rupture d'un centime
+        et une rupture de 3 % pèseraient pareil.
+      consumers: ["études d'événements", "détection de régime"]
+    - name: statut
+      type: "str ∈ {MESURE, UNCALIBRATED}"
+      semantics: "UNCALIBRATED sans pivots confirmés ou sans ATR calculable."
+      consumers: ["rapport"]
+
+  mathematical_specification:
+    notation:
+      P_h: "dernier pivot HAUT confirmé avant t"
+      c_t: "clôture en t"
+      A_t: "ATR calculé sur les données disponibles en t"
+      τ: "tolerance_atr"
+    equations:
+      - "BOS_HAUT(t) ⟺ c_t > P_h.prix + τ·A_t  ∧  t >= P_h.t_observable"
+      - "CHOCH_HAUT(t) ⟺ BOS_HAUT(t) ∧ le dernier événement de structure était BOS_BAS"
+      - "ecart_atr = (c_t - P_h.prix) / A_t"
+    estimators: ["ATR : moyenne mobile exponentielle du True Range, strictement causale"]
+    hyperparameters:
+      - "τ : AUCUN défaut. Le choisir sans mesure serait inventer une calibration. À balayer, inscrire au registre, soumettre au DSR/SPA."
+      - "fenêtre ATR : héritée de `packages/indicators`, à citer explicitement dans tout rapport."
+    invariants:
+      - "`t >= P_h.t_observable` STRICTEMENT : rompre un pivot pas encore confirmé est la fuite canonique de ce concept."
+      - "Un CHoCH est toujours aussi un BOS ; l'inverse est faux."
+      - "Aucun événement ne peut précéder le premier pivot confirmé de la série."
+    computational_complexity: "O(n)"
+    numerical_stability: ["A_t proche de zéro (série figée) → événement NON émis et nommé, jamais divisé"]
+
+  temporal_semantics:
+    observation_time: "clôture de la barre qui rompt"
+    availability_time: "même clôture — la rupture est observable dès qu'elle est constatée"
+    decision_time: "même clôture"
+    execution_time: "ouverture suivante, au plus tôt"
+    label_horizon: "défini par l'étude d'événement, jamais ici"
+    confirmation_delay: "0 pour la rupture — MAIS k barres héritées du pivot rompu"
+    embargo_required: ">= k barres (hérité de `pivot_detection`)"
+    anti_lookahead_rules:
+      - "Le pivot rompu doit être CONFIRMÉ à la date de rupture, pas seulement survenu."
+      - "ATR calculé sur les seules barres antérieures ou égales à t."
+      - "Test bloquant : tronquer après t ne change aucun événement daté <= t."
+
+  algorithm:
+    overview: "Parcours causal, mémoire du dernier pivot confirmé de chaque côté et du dernier événement."
+    steps:
+      - "Pour chaque barre t : intégrer les pivots dont `t_observable <= t`."
+      - "Tester la rupture en clôture avec tolérance ATR."
+      - "Qualifier BOS ou CHoCH selon le dernier événement mémorisé."
+      - "Émettre avec `ecart_atr` ; mettre à jour la mémoire."
+    edge_cases:
+      - "Aucun pivot confirmé encore → aucun événement, statut explicite."
+      - "Rupture exactement égale au seuil → NON émise (strictement supérieur)."
+      - "Deux pivots au même prix → le plus RÉCENT confirmé fait foi."
+    fallback_behavior:
+      - "ATR indisponible → UNCALIBRATED. Aucune tolérance de repli en prix absolu : elle ne serait pas comparable entre actifs."
+
+  implementation:
+    modules: ["packages/indicators/structure.py"]
+    entrypoints: ["packages.indicators.structure.evenements"]
+    tests: ["tests/indicators/test_structure.py", "tests/indicators/test_structure_causalite.py"]
+    make_targets: []
+
+  validation:
+    baselines:
+      - "BREAKOUT NORMALISÉ PAR ATR sur fenêtre fixe — LA baseline qui décide. Si BOS ne la bat pas, tout le vocabulaire SMC n'ajoute rien ici."
+      - "Croisement de moyennes mobiles."
+      - "Événements aléatoires de même densité."
+    train_validation_test_protocol: "τ balayé sur le train ; figé avant tout test ; holdout gelé"
+    cross_validation: "CPCV, embargo >= k"
+    leakage_tests: ["troncature", "pivot non confirmé refusé", "ATR causal"]
+    statistical_tests: ["étude d'événement : rendement cumulé anormal, IC bootstrap"]
+    multiple_testing_controls: ["τ × k × fenêtre ATR = espace d'essais ; registre + DSR + SPA obligatoires"]
+    robustness_tests: ["τ ∈ {0, 0.1, 0.25, 0.5} ; le signe de l'effet ne doit pas s'inverser"]
+    placebo_tests: ["dates d'événement décalées de ±5 barres : l'effet doit disparaître"]
+    regime_tests: ["tendance / range / choc, séparément"]
+    acceptance_criteria:
+      - "Contribution incrémentale positive face au breakout ATR, après coûts, sur ≥ 3 sous-périodes."
+      - "Tests de fuite verts."
+      - "Effet monotone en `ecart_atr` — sinon ce n'est pas la rupture qui agit."
+    rejection_criteria:
+      - "Aucune contribution face au breakout ATR → REJET. Le concept n'apporte rien et ne doit pas entrer au registre comme s'il apportait quelque chose."
+      - "Effet présent seulement à une valeur de τ → surajustement."
+      - "Un seul événement daté avant la confirmation du pivot → REJET immédiat."
+
+  transaction_costs_and_capacity:
+    costs_included: ["à inclure par l'étude d'événement en aval : spread, commissions, slippage"]
+    impact_model: "le modèle existant (`packages/execution/costs.py`, `almgren_chriss.py`)"
+    borrow_and_financing: "sans objet en long seul"
+    capacity_method: "non estimée — aucune position n'est encore définie"
+    calibration_source: "UNCALIBRATED"
+    limitations:
+      - "Les ruptures se concentrent sur les mêmes titres aux mêmes moments : la capacité réelle est bien inférieure à ce qu'un test par titre suggère."
+
+  risk_controls:
+    preconditions: ["pivots confirmés", "ATR calculable", "τ inscrit au registre"]
+    hard_limits: ["aucun événement avant confirmation du pivot"]
+    soft_limits: ["alerte si > 10 % des barres produisent un événement — τ trop petit"]
+    vetoes: ["aucune sortie ne peut alimenter `packages/execution` tant que le statut est RESEARCH_ONLY"]
+    degradation_modes: ["ATR absent → aucun événement, nommé"]
+    kill_switch_conditions: ["sans objet"]
+    safe_default: "aucun événement + statut explicite"
+
+  guardrail_telemetry:
+    enabled_state_metric: "structure.actif"
+    trigger_counter: "structure.evenements"
+    affected_items_counter: "structure.barres_analysees"
+    rejection_counter: "structure.evenements_refuses_pivot_non_confirme"
+    average_effect_metric: "structure.ecart_atr_median"
+    maximum_effect_metric: "structure.ecart_atr_max"
+    last_trigger_timestamp: "structure.dernier_evenement_ts"
+    warning_conditions:
+      - "enabled_and_never_triggered — τ probablement hors d'atteinte"
+      - "triggered_with_zero_effect — des événements dont l'écart ATR est nul : c'est du bruit de cotation"
+
+  tests:
+    unit: ["BOS simple", "CHoCH après BOS inverse", "égalité au seuil non émise", "ATR nul"]
+    property_based: ["tout CHoCH est un BOS", "aucun événement avant le premier pivot confirmé", "invariance du passé"]
+    integration: ["pivots → structure → étude d'événement → coûts"]
+    regression: ["golden sur série réelle"]
+    adversarial: ["série plate", "gap d'ouverture au-delà du seuil", "pivots à prix identiques", "trou de séance"]
+    performance: ["10^6 barres sous 2 s"]
+    deterministic_replay: ["aucun aléa"]
+
+  observability:
+    metrics: ["n_evenements", "part_choch", "ecart_atr_median", "tau", "statut"]
+    logs: ["événements refusés pour pivot non confirmé"]
+    traces: []
+    dashboards: ["page Marché — structure détectée"]
+    alerts: ["densité d'événements hors norme"]
+
+  security:
+    data_classification: "interne"
+    secrets_required: []
+    permissions: []
+    threat_scenarios: ["un consommateur relâche la contrainte de confirmation pour « avoir plus de signal »"]
+    mitigations: ["contrainte dans le code, pas en paramètre ; test de propriété dédié"]
+    audit_events: ["τ, k et fenêtre ATR inscrits dans tout rapport"]
+
+  failure_modes:
+    - failure: "Pivot non confirmé accepté comme référence"
+      detection: "test de propriété"
+      consequence: "fuite de k barres, effet fabriqué de toutes pièces"
+      mitigation: "contrainte codée en dur, non paramétrable"
+      recovery: "rejouer les études concernées"
+    - failure: "τ ajusté après lecture des résultats"
+      detection: "registre des essais"
+      consequence: "surajustement invisible"
+      mitigation: "τ inscrit avant mesure ; DSR/SPA sur l'ensemble des essais"
+      recovery: "nouveau balayage sur données fraîches"
+    - failure: "Gap d'ouverture franchissant le seuil sans échange au prix"
+      detection: "test adversarial dédié"
+      consequence: "rupture comptée à un prix jamais traité"
+      mitigation: "l'exécution est datée à l'ouverture suivante, jamais à la clôture qui rompt"
+      recovery: "recalcul avec exécution décalée"
+
+  red_team_review:
+    strongest_objections:
+      - "La baseline « breakout normalisé par ATR » capture probablement 90 % de l'effet. Si c'est le cas, BOS/CHoCH est du vocabulaire, pas de l'information — et le critère de rejet l'acte."
+      - "La définition retenue (clôture, pivot confirmé, tolérance ATR) est UN choix parmi une dizaine. Un autre choix donnerait un autre résultat, et rien ne dit que le nôtre est le bon."
+      - "CHoCH dépend de la MÉMOIRE du dernier événement : une erreur de définition se propage sur toute la série, et les tests par barre ne la verraient pas."
+    regime_breaks: ["en range serré, les ruptures s'enchaînent et s'annulent ; l'échantillon explose sans que l'information augmente"]
+    hidden_dependencies: ["k de `pivot_detection`", "fenêtre ATR", "calendrier de séance", "qualité des gaps"]
+    ways_the_backtest_can_lie:
+      - "Dater la rupture au pivot au lieu de la clôture qui rompt."
+      - "Utiliser un pivot non confirmé."
+      - "Exécuter à la clôture qui rompt plutôt qu'à l'ouverture suivante."
+      - "Ne montrer que le régime en tendance."
+      - "Compter chaque rupture d'un range comme un événement indépendant alors qu'elles sont une seule histoire."
+    operational_hazards: ["densité d'événements très variable selon le régime : le coût de calcul et le turnover explosent quand la thèse vaut le moins"]
+    reasons_not_to_deploy:
+      - "UNCALIBRATED : ni τ ni k mesurés."
+      - "Baseline non encore battue — et c'est le seul résultat qui compte."
+      - "La donnée qui rendrait la thèse testable (tick) n'existe pas côté actions."
+
+  documentation:
+    references: ["López de Prado (2018) — étiquetage, fuites, multiple testing"]
+    known_limitations: ["définition unique choisie parmi plusieurs", "aucune calibration", "barres quotidiennes inadaptées à la thèse"]
+    runbook: "recherche uniquement"
+    owner: "recherche quantitative"
+    review_frequency: "à chaque balayage de τ"
+    adr: ["à créer : « la définition figée de BOS/CHoCH et pourquoi celle-là »"]
