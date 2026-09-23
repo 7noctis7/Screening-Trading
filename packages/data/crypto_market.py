@@ -17,11 +17,24 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from packages.data.crypto_tendances import (
+    _num,
+    parse_trending,
+    parse_trending_autres,
+    parse_volume,
+)
+
 _CG = "https://api.coingecko.com/api/v3"
 _GLOBAL = _CG + "/global"
 _MARKETS = (_CG + "/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100"
             "&page=1&sparkline=true&price_change_percentage=24h")
 _CATEGORIES = _CG + "/coins/categories"
+# CE QUI S'ÉCHANGE LE PLUS — une AUTRE question que « ce qui est recherché ». Les deux
+# listes se ressemblent sans dire la même chose : l'une mesure l'attention, l'autre
+# l'engagement de capital. Les mélanger sous un même titre serait le défaut qu'on a
+# corrigé sur le bandeau « LIVE » (ADR-0191).
+_VOLUME = (_CG + "/coins/markets?vs_currency=usd&order=volume_desc&per_page=20"
+           "&page=1&sparkline=false&price_change_percentage=24h")
 _TRENDING = _CG + "/search/trending"
 _LLAMA_CHAINS = "https://api.llama.fi/v2/chains"
 _STABLES = "https://stablecoins.llama.fi/stablecoins?includePrices=true"
@@ -81,13 +94,6 @@ def _get_json(url: str, timeout: float = 10.0, retries: int | None = None) -> An
     return _cache_read(url)                                # repli : dernière donnée OK
 
 
-def _num(x: Any) -> float | None:
-    try:
-        return float(x)
-    except (TypeError, ValueError):
-        return None
-
-
 def parse_global(data: Any) -> dict:
     """/global → cap totale, dominance BTC/ETH, variation cap 24 h."""
     d = (data or {}).get("data") or {}
@@ -130,18 +136,6 @@ def parse_categories(data: Any, n: int = 10) -> list[dict]:
                         "mcap": _num(c.get("market_cap"))})
     out.sort(key=lambda x: x["chg24h"], reverse=True)
     return out[:n]
-
-
-def parse_trending(data: Any) -> list[dict]:
-    """/search/trending → [{id, name, sym, rank}]."""
-    out = []
-    for c in ((data or {}).get("coins") or []):
-        it = c.get("item") or {}
-        if it.get("name"):
-            out.append({"id": it.get("id"), "name": it["name"],
-                        "sym": str(it.get("symbol") or "").upper(),
-                        "rank": it.get("market_cap_rank")})
-    return out
 
 
 def parse_chains(data: Any, n: int = 8) -> dict:
@@ -312,12 +306,18 @@ def cockpit() -> dict:
     """Assemble le cockpit (build-time). Chaque section best-effort (None/[] si KO)."""
     markets = parse_markets(_get_json(_MARKETS))
     mv = movers(markets)
+    # UN SEUL appel à /search/trending pour ses trois listes : deux fetches donneraient
+    # deux instantanés différents, et les coins pourraient ne plus correspondre aux
+    # catégories affichées juste en dessous.
+    tr = _get_json(_TRENDING)
     ck = {
         "global": parse_global(_get_json(_GLOBAL)),
         "top": [m for m in markets if m["sym"] in ("BTC", "ETH", "SOL")],
         "gainers": mv["gainers"], "losers": mv["losers"],
         "categories": parse_categories(_get_json(_CATEGORIES)),
-        "trending": parse_trending(_get_json(_TRENDING)),
+        "trending": parse_trending(tr, markets),
+        "trending_autres": parse_trending_autres(tr),
+        "volume_top": parse_volume(_get_json(_VOLUME)),
         "defi": parse_chains(_get_json(_LLAMA_CHAINS)),
         "stablecoins": parse_stablecoins(_get_json(_STABLES)),
         "fng": parse_fng(_get_json(_FNG)),

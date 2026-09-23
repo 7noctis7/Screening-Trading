@@ -7,6 +7,24 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+- [x] **~~P1 — L'audit de rotation rendait une moyenne qui ne décrivait pas le compte~~ —
+      FERMÉ (23/09, ADR-0192).** 542 positions à +1,59 % de moyenne face à +818,67 $
+      réalisés : `sum(pnls)/len(pnls)` pesait une ligne de 40 $ comme une de 12 000 $, et
+      le notionnel s'obtenait en additionnant des QUANTITÉS. Pondération par
+      `qty × entry_price`, `None` (jamais 0.0) si le poids est inconnu, ligne d'alerte
+      au-delà de 3 points d'écart entre les deux moyennes.
+- [ ] **P1 — Le chiffre pondéré lui-même n'est pas encore MESURÉ (23/09).** Le correctif
+      est livré et testé, mais il n'a pas tourné sur la base réelle. À faire sur le VPS :
+      `make turnover-audit`, puis comparer les deux moyennes côte à côte. Leur écart dira
+      si l'explication par la poussière de rebalancement tient — ou si elle est fausse.
+      Tant que ce n'est pas lancé, l'hypothèse n'est pas un résultat.
+- [x] **~~P2 — Crypto : « avoir le top 20 » sur la carte des recherches~~ — FERMÉ (23/09,
+      ADR-0193).** Le top 20 était IMPOSSIBLE : `/search/trending` rend 15 coins (mesuré
+      23/09 : coins 15, nfts 7, categories 6), et rien ne tronquait. Le même appel rendait
+      deux listes JETÉES à chaque build. Livré : variation 24 h par ligne (trois sources,
+      `None` si inconnue), carte « Les thèmes que le public cherche », carte DISTINCTE
+      « Ce qui s'échange le plus » (top 20 par volume, endpoint séparé). Attention ≠
+      capital engagé : c'est leur divergence qui informe.
 - [x] **~~P0 — Les ventes ne fermaient plus aucun lot depuis le 18/09~~ — FERMÉ (22/09,
       #394, ADR-0188).** `live_roundtrip.open_lots` lisait `all(legacy=False)` : les lots
       rejoués du courtier (`R-`, sans features donc `legacy=1`) étaient invisibles à

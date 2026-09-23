@@ -2,6 +2,96 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0193 — L'attention et le capital engagé sont deux mesures, pas une carte (2026-09-23)
+
+**CONTEXTE.** Demande : « avoir le top 20 » sur la carte « Ce que tout le monde cherche ».
+La carte en affichait 15.
+
+**CE QUE LA MESURE A MONTRÉ — le top 20 était IMPOSSIBLE.** Ni le parseur ni le front ne
+tronquaient : `parse_trending` n'avait aucune limite, le composant non plus. Les 15 lignes
+sont exactement ce que rend `/search/trending`. Mesuré le 23/09 sur l'API réelle :
+`coins` 15, `nfts` 7, `categories` 6. Aucun paramètre de l'endpoint ne les augmente.
+
+Trois constats sont sortis de cette mesure :
+
+  · la carte affirmait depuis l'origine que « quand une crypto arrive ici, le mouvement a
+    souvent déjà eu lieu » — **sans jamais montrer le mouvement**. Une carte qui énonce
+    une thèse sans donner de quoi la réfuter n'est pas un thermomètre, c'est un slogan ;
+  · le MÊME appel rendait trois listes et **deux étaient jetées** à chaque build :
+    `categories` et `nfts` étaient téléchargées puis perdues ;
+  · « ce qui est le plus recherché » et « ce qui s'échange le plus » sont deux questions
+    différentes. La première mesure de l'**attention**, la seconde du **capital engagé**.
+
+**DÉCISION.** Trois cartes distinctes, pas une carte élargie.
+
+1. **La variation 24 h à côté de chaque ligne tendance**, pour rendre la thèse falsifiable.
+2. **« Les thèmes que le public cherche »** — les catégories et les NFT du même appel. Un
+   THÈME recherché (IA, RWA, memecoins) bouge moins vite qu'un ticker de rang 900 et se
+   prête mieux à une lecture de régime.
+3. **« Ce qui s'échange le plus »** — top 20 par volume 24 h, endpoint distinct
+   (`/coins/markets?order=volume_desc&per_page=20`). Les deux listes se recoupent parfois
+   et divergent souvent : **c'est leur divergence qui informe**, les fondre la détruirait.
+
+**TROIS PROPRIÉTÉS PORTENT LA DÉCISION.**
+
+1. **Une variation inconnue vaut `None`, jamais 0.** Trois sources dans cet ordre : le
+   bloc `data` que l'endpoint joint parfois, sinon la jointure sur le top 100, sinon
+   « n/d ». La moitié des lignes tendance sont des rangs au-delà du 500ᵉ : absentes du
+   top 100 et sans bloc `data`. Écrire 0 % y serait une invention — et c'est précisément
+   sur ces lignes que le chiffre importerait le plus.
+2. **UN SEUL appel à `/search/trending` pour ses trois listes.** Deux fetches donneraient
+   deux instantanés, et les coins pourraient ne plus correspondre aux catégories affichées
+   juste en dessous — un décalage invisible à l'écran, donc jamais remarqué.
+3. **La rotation (volume / capitalisation) est rendue, pas qualifiée.** Au-delà de 1,
+   l'actif change de mains plus vite que sa valeur totale en une journée. Aucun seuil n'a
+   été mesuré sur ces données : le chiffre est publié sans verdict. `UNCALIBRATED` se dit,
+   il ne se déguise pas en interprétation.
+
+**DÉCOUPAGE.** `crypto_market.py` franchissait les 400 lignes : les cinq parseurs
+d'attention et de volume vivent désormais dans `packages/data/crypto_tendances.py` (124
+lignes), ré-exportés pour ne rien casser. Côté front, `Card`, `Reveal` et le formatage
+défensif sortent de `page.tsx` (664 → 508 lignes) vers `components/crypto/`, et les deux
+nouvelles cartes dans `AttentionEtVolume.tsx`.
+
+---
+
+## ADR-0192 — Une moyenne non pondérée ne décrit pas un compte (2026-09-23)
+
+**CONTEXTE.** L'audit de rotation, une fois son périmètre corrigé (ADR-0188, troisième
+occurrence du même défaut), a rendu sa première mesure honnête : **542 positions système
+sur 93,2 jours**, soit 40,7 par semaine, durée de détention médiane **1,0 jour**, taux de
+réussite 50 %, rendement moyen **+1,59 %**, t = +4,70, profit factor 2,18.
+
+**L'ARITHMÉTIQUE NE SE RECOUPAIT PAS.** 542 positions à +1,59 % sur des lignes d'environ
+5 000 $ donnent ≈ 43 000 $. Le compte, lui, a réalisé **+818,67 $**. Deux ordres de
+grandeur d'écart : l'un des deux chiffres décrivait autre chose que le compte.
+
+**LA CAUSE.** `rendement_moyen_pct = sum(pnls) / len(pnls)` — une moyenne **non pondérée**.
+Chaque ligne y pèse pareil, qu'elle porte 12 000 $ ou 40 $. Le rebalancement produit
+beaucoup de petites lignes résiduelles ; leurs rendements en pourcentage, souvent bruyants,
+dominaient une moyenne qu'on lisait comme si elle décrivait le capital.
+
+Un défaut proche existait dans le calcul du notionnel : `poids = sum(qtes)` additionne des
+**quantités**, pas de l'argent. 100 titres à 3 $ et 3 titres à 100 $ n'ont pas le même
+poids dans un compte, et la somme des quantités dit le contraire.
+
+**DÉCISION.** Le rendement est pondéré par le **notionnel** (`qty × entry_price`), et
+l'écart entre les deux moyennes est DIAGNOSTIQUÉ : au-delà de 3 points, l'audit imprime
+une ligne d'alerte qui nomme l'écart. La moyenne non pondérée reste affichée à côté — ce
+n'est pas un chiffre faux, c'est un chiffre qui répond à une autre question (« comment se
+comporte une décision typique ? » plutôt que « qu'a fait le compte ? »).
+
+`_pondere` rend **`None`**, pas 0.0, quand aucun notionnel n'est disponible : un compte
+dont on ne sait pas mesurer le poids n'a pas fait 0 %.
+
+**CE QUE LA MESURE A AUSSI RÉVÉLÉ — la rotation est STRUCTURELLE.** Sur ces 542 positions,
+**aucune** fermeture ne vient d'un TP ou d'un SL : toutes sont des rebalancements. La
+capture du mouvement est de **−76 %**. La question du yo-yo est donc tranchée : ce n'est
+pas du rattrapage, c'est le mode de fonctionnement de la sélection. La piste indiquée est
+une **hystérésis sur la sélection**, pas un ré-entraînement.
+
+---
+
 ## ADR-0191 — Deux rythmes de donnée ne se servent pas sous un même mot « LIVE » (2026-09-22)
 
 **CONTEXTE.** Le bandeau du site annonçait « LIVE · il y a 15min ». Ces quinze minutes ne

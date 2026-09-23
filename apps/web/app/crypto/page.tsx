@@ -1,13 +1,16 @@
 "use client";
 // Cockpit crypto — vue marché agrégée, gratuite (sans clé). Chaque section est pédagogique :
 // une donnée, sa source, son explication. Aucun chiffre inventé : "n/d" si la source tombe.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useCryptoCockpit } from "@/lib/api";
 import { PageSkeleton, EmptyState } from "@/components/ui";
 import { InfoTip } from "@/components/InfoTip";
 import { ShareBar } from "@/components/crypto/ShareBar";
 import { MountWhenVisible } from "@/components/MountWhenVisible";
+import { Card } from "@/components/crypto/Card";
+import { usd, pct, tone, cgCoin, cgCat, EXT } from "@/components/crypto/format";
+import { ThemesRecherches, VolumeTop } from "@/components/crypto/AttentionEtVolume";
 
 // Jauge de sentiment live (au-dessus du graphe) — client-only.
 const LiveGauge = dynamic(() => import("@/components/crypto/LiveGauge"), { ssr: false });
@@ -17,11 +20,6 @@ const LiveChart = dynamic(() => import("@/components/crypto/LiveChart"), { ssr: 
 const DepthLadder = dynamic(() => import("@/components/crypto/DepthLadder"), { ssr: false });
 // Bloc « Analyse experte · Œil de Hasheur » LIVE (client-direct, auto-refresh visible-only).
 const ExpertLive = dynamic(() => import("@/components/crypto/ExpertLive"), { ssr: false });
-
-// Liens vers les fiches OFFICIELLES (infos complètes, fiables, gratuites) — nouvel onglet.
-const cgCoin = (id?: string) => (id ? `https://www.coingecko.com/en/coins/${id}` : null);
-const cgCat = (id?: string) => (id ? `https://www.coingecko.com/en/categories/${id}` : null);
-const EXT = { target: "_blank", rel: "noopener noreferrer" } as const;
 
 // Glossaire pédagogique (définitions factuelles, pas de chiffre inventé).
 const GLOSSARY: Record<string, string> = {
@@ -58,58 +56,6 @@ const SENTI: Record<string, { c: string; bg: string; label: string }> = {
   BEARISH: { c: "#f43f5e", bg: "color-mix(in srgb, #f43f5e 15%, transparent)", label: "🔴 BEARISH" },
   NEUTRE: { c: "var(--warn)", bg: "color-mix(in srgb, var(--warn) 15%, transparent)", label: "🟡 NEUTRE" },
 };
-
-// Formatage défensif — jamais NaN/undefined à l'écran : "n/d" tant que la donnée manque.
-const usd = (x: any) =>
-  typeof x === "number"
-    ? x >= 1e12 ? `$${(x / 1e12).toFixed(2)} T`
-      : x >= 1e9 ? `$${(x / 1e9).toFixed(1)} Md`
-      : x >= 1e6 ? `$${(x / 1e6).toFixed(1)} M`
-      : `$${x.toLocaleString("fr-FR", { maximumFractionDigits: 2 })}`
-    : "n/d";
-const pct = (x: any, d = 1) => (typeof x === "number" ? `${x >= 0 ? "+" : ""}${x.toFixed(d)}%` : "n/d");
-const tone = (x: any) => (typeof x !== "number" ? undefined : x >= 0 ? "var(--pos)" : "#f43f5e");
-
-// Révélation au scroll (lazy, IntersectionObserver) — neutralisée si prefers-reduced-motion.
-function Reveal({ children }: { children: React.ReactNode }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [shown, setShown] = useState(false);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { setShown(true); return; }
-    const io = new IntersectionObserver(
-      (es) => es.forEach((e) => e.isIntersecting && (setShown(true), io.disconnect())),
-      { threshold: 0.12 },
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, []);
-  return (
-    <div ref={ref} style={{
-      opacity: shown ? 1 : 0,
-      transform: shown ? "none" : "translateY(20px)",
-      transition: "opacity .6s cubic-bezier(.16,1,.3,1), transform .6s cubic-bezier(.16,1,.3,1)",
-    }}>{children}</div>
-  );
-}
-
-function Card({ title, source, hint, children }: {
-  title: string; source: string; hint: string; children: React.ReactNode;
-}) {
-  return (
-    <Reveal>
-      <section className="card p-4">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <h2 className="text-sm uppercase tracking-wide text-muted">{title}</h2>
-          <span className="text-[11px] text-muted2">{source}</span>
-        </div>
-        <p className="text-muted2 text-xs mt-1">{hint}</p>
-        <div className="mt-3">{children}</div>
-      </section>
-    </Reveal>
-  );
-}
 
 // ---- Aperçu : sentiment marché synthétique (déterministe, dérivé du cockpit) ----
 function Overview({ ck }: { ck: any }) {
@@ -222,10 +168,15 @@ function Trending({ ck }: { ck: any }) {
       <div className="flex flex-wrap gap-2">
         {tr.map((t, i) => {
           const href = cgCoin(t.id);
+          // LA VARIATION REND LA THÈSE DE LA CARTE VÉRIFIABLE. Le chapeau affirme que
+          // « le mouvement a souvent déjà eu lieu » ; sans chiffre à côté, c'est un
+          // slogan. « n/d » est une réponse honnête : la moitié de ces lignes sont des
+          // rangs au-delà du 500ᵉ, hors du top 100 et sans variation publiée.
           const body = (
             <>
               <span className="text-muted2">#{t.rank ?? "—"}</span> <b>{t.sym}</b>{" "}
-              <span className="text-muted">{t.name}</span>
+              <span className="text-muted">{t.name}</span>{" "}
+              <span style={{ color: tone(t.chg24h) }}>{pct(t.chg24h)}</span>
             </>
           );
           return href ? (
@@ -546,6 +497,8 @@ export default function Crypto() {
           <Narratives ck={data} />
           <Movers ck={data} onSelect={setSel} />
           <Trending ck={data} />
+          <ThemesRecherches ck={data} />
+          <VolumeTop ck={data} />
           <Stablecoins ck={data} />
         </>
       )}

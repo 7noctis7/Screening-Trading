@@ -1,5 +1,40 @@
 # 04 — JOURNAL
 
+## Session 2026-09-23 — Le top 20 demandé n'existait pas, et la moyenne ne décrivait pas le compte
+
+**FAIT.**
+
+**1. Rotation — une moyenne qui ne parlait pas du compte** (ADR-0192). L'audit corrigé
+rendait 542 positions à +1,59 % de moyenne ; le compte avait réalisé +818,67 $. Deux
+ordres de grandeur d'écart. Cause : `sum(pnls)/len(pnls)`, non pondérée — une ligne de
+40 $ y pesait autant qu'une de 12 000 $. Le notionnel se calculait d'ailleurs sur une
+somme de QUANTITÉS. Corrigé : pondération par `qty × entry_price`, `None` (jamais 0.0)
+quand le poids est inconnu, et une ligne d'alerte dès que les deux moyennes s'écartent
+de plus de 3 points. La moyenne non pondérée reste affichée : elle répond à une autre
+question, pas à une question fausse.
+
+**2. Crypto — le top 20 demandé était impossible** (ADR-0193). Mesuré avant de coder :
+ni le parseur ni le front ne tronquaient, `/search/trending` rend 15 coins, point. Mais
+le MÊME appel rendait aussi 7 NFT et 6 catégories, **téléchargés puis jetés à chaque
+build**. Et la carte affirmait depuis l'origine que « le mouvement a souvent déjà eu
+lieu » sans jamais montrer le mouvement. Livré : la variation 24 h à côté de chaque
+ligne (trois sources, `None` si inconnue — jamais un 0 % inventé) ; une carte « Les
+thèmes que le public cherche » ; une carte DISTINCTE « Ce qui s'échange le plus » (top
+20 par volume, endpoint séparé). Attention et capital engagé sont deux mesures : leur
+divergence est l'information, les fondre la détruirait.
+
+**3. Découpage.** `crypto_market.py` franchissait 400 lignes → `crypto_tendances.py`
+(124 lignes) ; `page.tsx` 664 → 508, avec `Card`, `Reveal` et le formatage défensif
+sortis dans `components/crypto/`.
+
+**BLOQUÉ.** Le chiffre pondéré lui-même n'est pas encore MESURÉ : il demande de relancer
+`make turnover-audit` sur la base du VPS. Tant qu'il n'a pas tourné, l'explication par la
+poussière de rebalancement est une hypothèse, pas un résultat.
+
+**SUITE.** Relancer `make turnover-audit` sur le VPS et comparer les deux moyennes côte à
+côte — leur écart dira si l'hypothèse tient. Puis la question de fond restée ouverte :
+l'hystérésis sur la sélection (aucune fermeture sur TP/SL, capture −76 %).
+
 ## Session 2026-09-22 — Deux défauts qui vidaient le journal par les deux bouts
 
 **LA QUESTION.** « J'ai l'impression que les trades d'aujourd'hui ne sont pas complets
