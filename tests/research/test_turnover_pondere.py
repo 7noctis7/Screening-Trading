@@ -13,7 +13,9 @@ Ce que ces tests épinglent :
   1. le poids est un MONTANT, jamais une quantité ;
   2. sans notionnel lisible, on rend None — jamais 0, qui se lirait comme une mesure ;
   3. les deux moyennes sont publiées, car leur ÉCART est le diagnostic ;
-  4. un écart de nature est signalé ; une nuance ne l'est pas.
+  4. leur rapport est une MESURE, toujours publiée — aucun seuil inventé ne
+     décide de ce qui est dit, et une pondérée nulle ne fait pas taire le
+     diagnostic : zéro est l'écart maximal, pas son absence.
 """
 from __future__ import annotations
 
@@ -82,18 +84,44 @@ def test_le_rapport_publie_LES_DEUX_moyennes():
     assert "NON pondéré" in txt and "PONDÉRÉ par le montant engagé" in txt
 
 
-def test_un_ecart_de_NATURE_est_signale():
+def test_les_deux_moyennes_et_leur_rapport_sont_TOUJOURS_publies():
+    """Le rapport entre deux moyennes est une MESURE, pas un verdict conditionnel."""
     txt = rapport(auditer([_lot("P-miette", 1.0, 3.0, 0.40),
                            _lot("P-ligne", 10.0, 500.0, 0.002)]))
-    assert "PETITES lignes" in txt and "comparable au réalisé du compte" in txt
+    assert "PONDÉRÉ est comparable au réalisé du compte" in txt
+    assert "rapport" in txt
 
 
-def test_une_simple_NUANCE_ne_declenche_aucune_alerte():
-    """Le signal ne doit se déclencher que sur une divergence de nature — sinon il
-    devient du bruit et cesse d'être lu."""
-    txt = rapport(auditer([_lot("P-a", 10.0, 100.0, 0.05),
-                           _lot("P-b", 10.0, 120.0, 0.04)]))
-    assert "PETITES lignes" not in txt
+def test_aucun_seuil_invente_ne_decide_de_ce_qui_est_dit():
+    """Un seuil non mesuré sur la base réelle ne doit gouverner aucune affirmation.
+
+    La première version ne parlait qu'au-delà d'un facteur 3 entre les deux moyennes,
+    et affirmait alors que « la performance vient des PETITES lignes ». Ce 3 sortait de
+    nulle part. Le dépôt exige qu'un seuil vienne de la base ou s'écrive UNCALIBRATED :
+    les deux chiffres se publient donc toujours, et l'écart n'est pas qualifié.
+    """
+    nuance = rapport(auditer([_lot("P-a", 10.0, 100.0, 0.05),
+                              _lot("P-b", 10.0, 120.0, 0.04)]))
+    nature = rapport(auditer([_lot("P-miette", 1.0, 3.0, 0.40),
+                              _lot("P-ligne", 10.0, 500.0, 0.002)]))
+    for txt in (nuance, nature):
+        assert "UNCALIBRATED" in txt
+        assert "PETITES lignes" not in txt, "un verdict inventé est réapparu"
+
+
+def test_une_ponderee_NULLE_ne_fait_pas_taire_le_diagnostic():
+    """Zéro n'est pas « pas d'écart » : c'est l'écart maximal, et il faut le DIRE.
+
+    Un garde-fou anti-division rendait une liste vide quand la pondérée valait 0,00 %.
+    Une miette à +40 % compensée par une grosse ligne à peine négative produit
+    exactement ce cas — le plus parlant des deux, et le seul qui restait muet.
+    """
+    a = auditer([_lot("P-miette", 1.0, 3.0, 0.40),
+                 _lot("P-ligne", 10.0, 500.0, -0.00024)])
+    assert abs(a.rendement_pondere_pct) < 1e-9, a.rendement_pondere_pct
+    txt = rapport(a)
+    assert "écart maximal, pas absence d'écart" in txt
+    assert "UNCALIBRATED" in txt
 
 
 def test_les_deux_moyennes_coincident_quand_les_lignes_sont_egales():

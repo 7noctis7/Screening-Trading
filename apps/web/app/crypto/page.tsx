@@ -5,12 +5,14 @@ import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useCryptoCockpit } from "@/lib/api";
 import { PageSkeleton, EmptyState } from "@/components/ui";
-import { InfoTip } from "@/components/InfoTip";
 import { ShareBar } from "@/components/crypto/ShareBar";
 import { MountWhenVisible } from "@/components/MountWhenVisible";
 import { Card } from "@/components/crypto/Card";
 import { usd, pct, tone, cgCoin, cgCat, EXT } from "@/components/crypto/format";
 import { ThemesRecherches, VolumeTop } from "@/components/crypto/AttentionEtVolume";
+import { Label } from "@/components/crypto/glossaire";
+import { Stablecoins, Altseason, Halving } from "@/components/crypto/SanteMarche";
+import { CoinModal } from "@/components/crypto/FicheCrypto";
 
 // Jauge de sentiment live (au-dessus du graphe) — client-only.
 const LiveGauge = dynamic(() => import("@/components/crypto/LiveGauge"), { ssr: false });
@@ -20,36 +22,6 @@ const LiveChart = dynamic(() => import("@/components/crypto/LiveChart"), { ssr: 
 const DepthLadder = dynamic(() => import("@/components/crypto/DepthLadder"), { ssr: false });
 // Bloc « Analyse experte · Œil de Hasheur » LIVE (client-direct, auto-refresh visible-only).
 const ExpertLive = dynamic(() => import("@/components/crypto/ExpertLive"), { ssr: false });
-
-// Glossaire pédagogique (définitions factuelles, pas de chiffre inventé).
-const GLOSSARY: Record<string, string> = {
-  "Capitalisation totale":
-    "Ce que vaut le marché crypto tout entier : pour chaque crypto, son prix multiplié par le nombre d'unités en circulation, le tout additionné.",
-  "Variation cap 24 h":
-    "De combien cette valeur totale a bougé en 24 heures. Positif = le marché monte dans son ensemble.",
-  "Dominance BTC":
-    "La part du Bitcoin dans le total. Quand elle monte, les investisseurs se replient sur la crypto la plus établie ; quand elle baisse, ils prennent plus de risques ailleurs.",
-  "Dominance ETH":
-    "La part d'Ethereum dans le total. C'est le réseau de référence pour les applications décentralisées.",
-  "Fear & Greed":
-    "Un indice d'humeur de 0 à 100 (alternative.me). 0 = peur panique, souvent près d'un creux ; 100 = euphorie, souvent près d'un sommet. Il se lit à l'envers de ce qu'on croit.",
-  "TVL DeFi totale":
-    "L'argent déposé dans les services financiers décentralisés. C'est la mesure de leur usage réel, pas de leur promesse.",
-  breadth:
-    "Combien de cryptos montent, comparé à combien descendent. Une hausse portée par beaucoup d'actifs est plus solide qu'une hausse portée par deux ou trois.",
-  peg:
-    "Une crypto dite « stable » vaut en principe toujours 1,00 $. Cet écart mesure sa dérive : s'il dure, c'est un signe de tension ou de perte de confiance.",
-};
-
-function Label({ text }: { text: string }) {
-  const def = GLOSSARY[text];
-  return (
-    <span className="inline-flex items-center gap-1">
-      {text}
-      {def && <InfoTip label={text}>{def}</InfoTip>}
-    </span>
-  );
-}
 
 const SENTI: Record<string, { c: string; bg: string; label: string }> = {
   BULLISH: { c: "var(--pos)", bg: "color-mix(in srgb, var(--pos) 15%, transparent)", label: "🟢 BULLISH" },
@@ -223,171 +195,6 @@ function Movers({ ck, onSelect }: { ck: any; onSelect: (m: any) => void }) {
         <Col title="📉 Perdants" rows={lose} up={false} />
       </div>
     </Card>
-  );
-}
-
-// ---- Stablecoins : taille + écart au peg (santé de la liquidité) ----
-function Stablecoins({ ck }: { ck: any }) {
-  const st = (ck.stablecoins ?? []) as any[];
-  if (!st.length) return null;
-  return (
-    <Card title="Les cryptos calées sur le dollar" source="DefiLlama · stablecoins"
-      hint="Ces cryptos valent en principe 1,00 $ en permanence : c'est l'argent qui attend sur le côté, prêt à être investi. Plus il y en a, plus il y a de munitions. Et si l'une d'elles s'écarte durablement de 1,00 $, c'est un signe de tension ou de perte de confiance.">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm mono">
-          <thead className="text-muted2 text-[11px]">
-            <tr>
-              <th className="text-left font-normal">stablecoin</th>
-              <th className="text-right font-normal">capitalisation</th>
-              <th className="text-right font-normal">prix</th>
-              <th className="text-right font-normal">
-                <span className="inline-flex items-center gap-1">écart au <InfoTip label="peg">{GLOSSARY.peg}</InfoTip></span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {st.map((s) => {
-              const isYield = s.kind === "yield";
-              const off = !isYield && typeof s.peg_dev === "number" && Math.abs(s.peg_dev) > 0.005;
-              return (
-                <tr key={s.sym} className="border-t border-border">
-                  <td className="py-1.5 font-sans">
-                    {s.sym}
-                    {isYield && (
-                      <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded align-middle"
-                        style={{ background: "var(--surface2)", color: "var(--muted2)" }}
-                        title="Cette crypto verse un rendement : sa valeur s'éloigne de 1 $ volontairement, en grandissant. Ce n'est pas un décrochage.">
-                        rendement
-                      </span>
-                    )}
-                  </td>
-                  <td className="text-right">{usd(s.mcap)}</td>
-                  <td className="text-right">{typeof s.price === "number" ? `$${s.price.toFixed(4)}` : "n/d"}</td>
-                  <td className="text-right" style={{ color: off ? "#f43f5e" : "var(--muted2)" }}>
-                    {isYield ? "—" : typeof s.peg_dev === "number" ? `${(s.peg_dev * 100).toFixed(2)}%` : "n/d"}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </Card>
-  );
-}
-
-// ---- Jauge altseason (part du top 50 battant BTC sur 7 j) ----
-function Altseason({ ck }: { ck: any }) {
-  const a = ck.altseason;
-  if (!a?.available) return null;
-  const col = a.label === "Altseason" ? "var(--pos)" : a.label === "Bitcoin" ? "#f59e0b" : "var(--muted)";
-  return (
-    <Card title="Bitcoin ou le reste du marché ?" source="calculé depuis CoinGecko · sur 7 jours"
-      hint="Sur les 50 plus grosses cryptos, combien font mieux que le Bitcoin sur la semaine. Au-dessus de 75 %, l'argent part vers les autres cryptos ; en dessous de 25 %, le Bitcoin domine.">
-      <div className="flex items-center gap-3 flex-wrap">
-        <span className="text-sm font-semibold px-2.5 py-1 rounded-full"
-          style={{ color: col, background: "color-mix(in srgb, " + col + " 15%, transparent)" }}>
-          {a.label}
-        </span>
-        <span className="text-2xl mono font-semibold" style={{ color: col }}>
-          {a.pct}%<span className="text-muted2 text-sm"> battent BTC</span>
-        </span>
-      </div>
-      <div className="mt-3 h-2 rounded-full overflow-hidden" style={{ background: "var(--surface2)" }}>
-        <div className="h-full rounded-full" style={{ width: `${a.pct}%`, background: col }} />
-      </div>
-      <div className="text-muted2 text-[11px] mt-1.5">
-        sur {a.n} actifs · BTC {pct((a.btc_ret7d ?? 0) * 100)} sur 7 j
-      </div>
-    </Card>
-  );
-}
-
-// ---- Compte à rebours du halving BTC ----
-function Halving({ ck }: { ck: any }) {
-  const h = ck.halving;
-  if (!h?.available) return null;
-  const eta = new Date(Date.now() + h.days_left * 86400_000);
-  return (
-    <Card title={`Halving Bitcoin — le ${h.number}ᵉ`} source="blockchain.info · hauteur de bloc réelle"
-      hint="Environ tous les quatre ans, la quantité de nouveaux bitcoins créés est divisée par deux : l'offre se raréfie d'un coup. La date est estimée à partir du rythme de création actuel.">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div><div className="text-muted text-xs">Dans</div><div className="text-lg mono">≈ {h.days_left} j</div></div>
-        <div><div className="text-muted text-xs">Blocs restants</div><div className="text-lg mono">{h.blocks_left.toLocaleString("fr-FR")}</div></div>
-        <div><div className="text-muted text-xs">Bloc du halving</div><div className="text-lg mono">{h.halving_block.toLocaleString("fr-FR")}</div></div>
-        <div><div className="text-muted text-xs">Date estimée</div><div className="text-lg mono">{eta.toLocaleDateString("fr-FR", { month: "short", year: "numeric" })}</div></div>
-      </div>
-      <div className="mt-3 h-2 rounded-full overflow-hidden" style={{ background: "var(--surface2)" }}>
-        <div className="h-full rounded-full" style={{ width: `${(h.progress * 100).toFixed(1)}%`, background: "var(--accent)" }} />
-      </div>
-      <div className="text-muted2 text-[11px] mt-1.5">{(h.progress * 100).toFixed(1)} % du cycle parcouru · hauteur {h.height.toLocaleString("fr-FR")}</div>
-    </Card>
-  );
-}
-
-// ---- Mini-graphe 7 j (SVG inline, depuis le sparkline déjà récupéré) ----
-function Sparkline({ data, up }: { data: number[]; up: boolean }) {
-  if (!data || data.length < 2) return null;
-  const w = 320, h = 64;
-  const min = Math.min(...data), max = Math.max(...data), rng = max - min || 1;
-  const pts = data.map((v, i) =>
-    `${(i / (data.length - 1)) * w},${h - ((v - min) / rng) * h}`).join(" ");
-  const col = up ? "var(--pos)" : "#f43f5e";
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="w-full" style={{ height: 64 }} preserveAspectRatio="none">
-      <polyline points={pts} fill="none" stroke={col} strokeWidth="2"
-        vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-// ---- Mini-fiche intégrée (clic sur une crypto → détail sans quitter le site) ----
-function CoinModal({ coin, onClose }: { coin: any; onClose: () => void }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-  if (!coin) return null;
-  const sp = (coin.spark7d ?? []) as number[];
-  const ret7 = sp.length >= 2 ? sp[sp.length - 1] / sp[0] - 1 : null;
-  const href = cgCoin(coin.id);
-  return (
-    <div className="fixed inset-0 z-[70] grid place-items-center p-4" onClick={onClose}
-      style={{ background: "rgba(0,0,0,.55)" }}>
-      <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true"
-        className="card p-5 w-full max-w-md" style={{ background: "var(--surface)" }}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-lg font-semibold">{coin.name ?? coin.sym}</div>
-            <div className="text-muted2 text-xs mono">{coin.sym}</div>
-          </div>
-          <button onClick={onClose} aria-label="Fermer"
-            className="text-muted2 hover:text-fg text-xl leading-none">×</button>
-        </div>
-        <div className="grid grid-cols-3 gap-3 mt-3">
-          <div><div className="text-muted text-[11px]">Prix</div><div className="mono">{usd(coin.price)}</div></div>
-          <div><div className="text-muted text-[11px]">24 h</div><div className="mono" style={{ color: tone(coin.chg24h) }}>{pct(coin.chg24h)}</div></div>
-          <div><div className="text-muted text-[11px]">7 j</div><div className="mono" style={{ color: tone(ret7 == null ? null : ret7 * 100) }}>{ret7 == null ? "n/d" : pct(ret7 * 100)}</div></div>
-        </div>
-        {coin.mcap != null && (
-          <div className="mt-2 text-[11px] text-muted2">Capitalisation : {usd(coin.mcap)}</div>
-        )}
-        {sp.length >= 2 ? (
-          <div className="mt-3"><div className="text-muted text-[11px] mb-1">Prix 7 jours</div>
-            <Sparkline data={sp} up={(ret7 ?? 0) >= 0} /></div>
-        ) : (
-          <div className="mt-3 text-muted2 text-xs">Pas de série 7 j pour cet actif.</div>
-        )}
-        {href && (
-          <a href={href} {...EXT}
-            className="mt-4 inline-block text-sm px-3 py-1.5 rounded-lg border border-border hover:border-border2 hover:text-accent transition-colors">
-            Fiche complète sur CoinGecko →
-          </a>
-        )}
-        <div className="mt-3 text-[10px] text-muted2">Contexte de marché — pas un conseil financier.</div>
-      </div>
-    </div>
   );
 }
 

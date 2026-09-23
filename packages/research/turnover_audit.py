@@ -236,30 +236,40 @@ def auditer(trades: list, *, seulement: str | None = None) -> AuditTurnover:
     )
 
 
-# Au-delà de ce facteur entre les deux moyennes, l'écart cesse d'être un détail de
-# pondération : il dit que la mesure ne décrit pas le capital. Valeur volontairement
-# LARGE — on ne signale pas une nuance, on signale une divergence de nature.
-_ECART_ALERTE = 3.0
-
-
 def _lignes_ecart(a: AuditTurnover) -> list[str]:
-    """L'écart entre moyenne simple et moyenne pondérée EST un diagnostic.
+    """Publie les deux moyennes et leur rapport. NE QUALIFIE PAS l'écart.
 
-    Quand il est grand, la performance est portée par les petites lignes : le compte,
-    lui, ne les voit presque pas. Le taire laisserait lire un chiffre flatteur comme
-    s'il décrivait le portefeuille.
+    Une première version ne parlait qu'au-delà d'un facteur 3 entre les deux chiffres.
+    Ce 3 n'a jamais été mesuré sur la base réelle : c'était un seuil inventé qui
+    décidait d'une affirmation lue par l'utilisateur (« la performance vient des
+    petites lignes »). Le mandat du dépôt l'interdit — un seuil vient de la base ou
+    il s'écrit UNCALIBRATED.
+
+    Le rapport entre deux moyennes, lui, EST une mesure. Il est donc toujours rendu,
+    et l'interprétation est laissée au lecteur avec sa limite écrite.
+
+    Le cas `pondérée = 0` était en outre ESCAMOTÉ : un garde-fou anti-division rendait
+    une liste vide, donc aucun diagnostic. Or une pondérée nulle face à une simple non
+    nulle est l'écart MAXIMAL, pas son absence — exactement le cas qu'il fallait dire.
     """
     simple, pondere = a.rendement_moyen_pct, a.rendement_pondere_pct
-    if simple is None or pondere is None or abs(pondere) < 1e-9:
+    if simple is None or pondere is None:
         return []
-    if abs(simple) < abs(pondere) * _ECART_ALERTE:
-        return []
-    return ["  ⚠ La moyenne simple vaut "
-            f"{abs(simple / pondere):.0f}× la pondérée : la performance vient des "
-            "PETITES lignes.",
-            "    Une fraction d'action soldée à +40 % y pèse autant qu'une ligne de "
+    if abs(pondere) < 1e-9:
+        rapport_ = ("n/d — la pondérée est NULLE alors que la simple ne l'est pas : "
+                    "écart maximal, pas absence d'écart."
+                    if abs(simple) >= 1e-9 else "1× — les deux moyennes coïncident.")
+    else:
+        rapport_ = f"{abs(simple / pondere):.1f}×"
+    return [f"  Moyenne simple {simple:+.2f} % · PONDÉRÉE par le notionnel "
+            f"{pondere:+.2f} % · rapport {rapport_}",
+            "    Seul le chiffre PONDÉRÉ est comparable au réalisé du compte : dans la "
+            "moyenne simple,",
+            "    une fraction d'action soldée à +40 % pèse autant qu'une ligne de "
             "5 000 $ à +0,2 %.",
-            "    Seul le chiffre PONDÉRÉ est comparable au réalisé du compte."]
+            "    UNCALIBRATED — aucun seuil de divergence n'a été mesuré sur la base "
+            "réelle. Les deux",
+            "    chiffres et leur rapport sont publiés ; l'écart n'est pas qualifié."]
 
 
 def _lignes_comptage(a: AuditTurnover) -> list[str]:
