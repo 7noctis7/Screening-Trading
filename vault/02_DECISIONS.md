@@ -2,6 +2,47 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0196 — « Quel miroir marche ? » se mesure, ne se documente pas (2026-09-24)
+
+**CONTEXTE.** Telegram couvre 2 des 4 comptes suivis (`eliz883`, `walshwealth1122`).
+Pour `astekz`, `trendspider` et `micro2macr0`, il n'existe aucune source branchée. Le
+palier gratuit de l'API X ne permet pas de LIRE ; la seule voie automatique sans frais
+passe par un tiers qui republie X en RSS.
+
+**LE PROBLÈME N'EST PAS TECHNIQUE, IL EST TEMPOREL.** Ces instances meurent en
+permanence — elles dépendent du bon vouloir de X. Écrire « utilisez tel miroir » dans
+une documentation revient à la DATER : la réponse est juste le jour où on l'écrit et
+fausse trois semaines plus tard, sans que rien ne le signale. Et je ne peux pas la
+mesurer moi-même : la politique réseau du conteneur refuse ces hôtes.
+
+**DÉCISION.** `make x-miroirs` sonde plusieurs candidats × les comptes voulus, DEPUIS LA
+MACHINE QUI A LE RÉSEAU, et rend la ligne `QUANT_X_RSS=` à coller. Le script ne sait
+rien : il essaie et il rapporte. Les candidats sont un point de départ à faire vieillir,
+remplaçable entièrement par `--miroirs` sans toucher au code.
+
+**LE VERDICT REPOSE SUR LE NOMBRE D'ÉLÉMENTS, JAMAIS SUR LE CODE HTTP.** Une instance
+éteinte répond très souvent `200`. Juger sur le code conclurait « vivant » sur une source
+qui ne rend rien, et l'utilisateur configurerait un miroir inutile en croyant l'avoir
+mesuré.
+
+**UN TEST A CORRIGÉ UNE AFFIRMATION QUE J'AVAIS FAITE À TORT.** J'avais écrit que la page
+d'excuse d'une instance morte serait rattrapée comme « réponse non-XML ». C'est faux :
+`<html><body>indisponible</body></html>` est du XML **parfaitement valide**, se parse sans
+erreur et rend zéro `<item>` — donc « flux vide », indiscernable d'un compte qui n'a rien
+publié. La distinction vient de la RACINE du document : hors `rss`/`feed`/`rdf`, ce n'est
+pas un flux, et c'est dit comme tel. Un XML cassé garde son motif propre.
+
+**CE QUE LE SONDEUR NE CHANGE PAS.** `sources/rss.py` ne connaît toujours AUCUN
+fournisseur, et un test le vérifie sur son code. Le sondeur a le droit d'en nommer — c'est
+son objet ; la source, non — en coder un la daterait, ce que ce sondeur existe justement
+pour éviter.
+
+**CE QUI RESTE VRAI SI TOUT ÉCHOUE.** Aucun miroir vivant n'est une possibilité réelle, et
+le script le dit au lieu de rendre une liste vide : restent Telegram, quand le compte y
+double ses messages, et l'export navigateur, qui ne dépend de personne.
+
+---
+
 ## ADR-0195 — Le graphique EST le message : les visuels rejoignent l'onglet (2026-09-24)
 
 **CONTEXTE.** Première ingestion réelle de l'onglet X, 34 publications des deux canaux

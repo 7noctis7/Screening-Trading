@@ -15,6 +15,12 @@
 - [x] **~~P1 — L'onglet X n'a JAMAIS vu de donnée réelle~~ — FERMÉ (24/09).** Première
       ingestion : **34 publications** des deux canaux Telegram, dont 6 `TRADE_SIGNAL`.
       Les filtres tournent sur du vrai contenu. Images ajoutées dans la foulée (ADR-0195).
+- [ ] **P1 — 2 des 4 comptes suivis n'ont AUCUNE source (24/09).** Telegram couvre
+      `eliz883` et `walshwealth1122` ; `astekz`, `trendspider` et `micro2macr0` n'ont
+      rien. Outil livré : `make x-miroirs` sonde les miroirs RSS depuis le VPS et rend la
+      ligne à coller. **À LANCER** — je ne peux pas le faire d'ici (le proxy refuse ces
+      hôtes), donc on ne sait pas encore si un miroir vivant existe pour ces comptes. Si
+      aucun ne répond, l'export navigateur reste la seule voie.
 - [ ] **P2 — L'ingestion est MANUELLE (24/09).** `make x-ingest ARGS="--source telegram"`
       se lance à la main. Un flux qu'on doit penser à rafraîchir cesse d'être rafraîchi.
       À trancher : cron sur le VPS, ou étape du rafraîchissement quotidien existant.
