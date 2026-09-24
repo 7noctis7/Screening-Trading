@@ -203,3 +203,28 @@ def test_un_compte_DONNE_explicitement_suffit_a_trier(monkeypatch):
     src = sources.create("rss", flux="https://rss.exemple/feeds/x.xml",
                          compte="trendspider")
     assert src.lire() == []
+
+
+# ── Entités HTML ────────────────────────────────────────────────────────────────────
+# Mesuré sur le VPS le 24/09 : l'API servait `?format=jpg&amp;name=orig`. La description
+# est du HTML, où `&` s'écrit `&amp;` — même dans l'adresse d'une image. Relayée telle
+# quelle, l'adresse porte un paramètre `amp;name` : X la refuse, la carte la masque.
+# Forme reproduite : description ÉCHAPPÉE (pas de CDATA), comme la sert RSSHub.
+ECHAPPE = """<?xml version="1.0"?><rss><channel>
+<item><title>t</title><link>https://x.com/astekz/status/9</link>
+<description>S&amp;amp;P tient &lt;img width="1200"
+ src="https://pbs.twimg.com/media/HTAM8?format=jpg&amp;amp;name=orig"&gt;</description>
+<pubDate>Wed, 24 Sep 2026 10:00:00 GMT</pubDate></item>
+</channel></rss>"""
+
+
+def test_l_adresse_d_une_image_n_emporte_PAS_d_entite_HTML(monkeypatch):
+    _brancher(monkeypatch, ECHAPPE)
+    (p,) = sources.create("rss", flux="https://miroir.test/astekz/rss").lire()
+    assert p.images == ("https://pbs.twimg.com/media/HTAM8?format=jpg&name=orig",)
+
+
+def test_le_texte_n_affiche_PAS_d_entite_HTML(monkeypatch):
+    _brancher(monkeypatch, ECHAPPE)
+    (p,) = sources.create("rss", flux="https://miroir.test/astekz/rss").lire()
+    assert p.texte == "S&P tient"

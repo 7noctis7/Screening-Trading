@@ -2,6 +2,36 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0201 — Cinquante publications par compte, et pas une de plus (2026-09-24)
+
+**CONTEXTE.** Demande explicite de l'utilisateur : « conserver que les 50 tweets les plus
+récents à chaque fois ». Première ingestion RSSHub du 24/09 : 66 publications X pour
+quatre comptes, stock 103.
+
+**DÉCISION.** Après chaque ingestion, `StorePublications.garder_recentes(n)` supprime
+tout ce qui dépasse les `n` plus récentes **de chaque compte**. `n = 50` par défaut,
+`QUANT_SOCIAL_GARDER` ou `--garder` pour le changer, `0` pour tout garder.
+
+**PAR COMPTE, PAS AU TOTAL.** Interprétation retenue et annoncée à l'utilisateur : un
+plafond global laisserait le compte le plus bavard évincer les autres — trendspider
+publie bien plus qu'astekz, qui disparaîtrait de l'onglet sans que rien ne le dise.
+
+**LA RÉCENCE SE JUGE SUR DES DATES.** `ts` est stocké en ISO ; l'ordre alphabétique de
+« 10:30+02:00 » contre « 09:00+00:00 » n'est pas celui du temps. Un `ORDER BY ts` en
+SQL aurait supprimé le mauvais message dès que deux sources écrivent deux fuseaux. Le
+tri se fait en Python, sur des `datetime`.
+
+**« NOUVELLES » SE COMPTE APRÈS LE PLAFOND.** Un message plus ancien que les 50 plus
+récents, relu à chaque passage, rentrerait puis ressortirait aussitôt : compté avant le
+plafond, il s'annoncerait « nouveau » chaque nuit sans jamais rester.
+
+**CE QUE CETTE DÉCISION COÛTE, ÉCRIT.** ADR-0197 justifiait l'ingestion quotidienne par
+« un message qui sort de la fenêtre est perdu définitivement ». Le plafond fait
+exactement cela, délibérément. Ce n'est plus un risque subi, c'est un choix de
+l'utilisateur — et la sortie le dit (`Retirées : N`) au lieu de le faire en silence.
+
+---
+
 ## ADR-0200 — Un retweet n'est pas un message du compte qui le reprend (2026-09-24)
 
 **CONTEXTE.** Premier sondage réel des miroirs (`make x-miroirs`, VPS, 24/09) :

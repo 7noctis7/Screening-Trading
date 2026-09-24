@@ -79,6 +79,18 @@ reste. `make rsshub` le lance en boucle locale, refuse un secret lisible par d'a
 ne met jamais le jeton sur la ligne de commande — trois gardes, trois tests qui échouent
 quand on les retire. Aucune ligne dans la chaîne sociale : la source RSS le lit déjà.
 
+**9. Les quatre comptes X sont lus** (ADR-0199) — RSSHub auto-hébergé, après que twiiit a
+changé de comportement en une heure. 66 publications à la première ingestion.
+
+**10. Les images X étaient TOUTES invisibles, et rien ne le disait.** Diagnostic par étapes
+sur le VPS plutôt que supposition : flux ✓, base ✓, API → `?format=jpg&amp;name=orig`.
+L'adresse sortait du HTML de la description sans être décodée. Le composant masquait
+l'image cassée — conçu pour les CDN Telegram qui expirent — et laissait le compteur
+« 1 image » : le défaut s'était donc DÉGUISÉ en comportement prévu.
+
+**11. Deux décisions de l'utilisateur** : 50 publications gardées PAR COMPTE (ADR-0201),
+et plus aucun message Telegram dans l'onglet.
+
 **BLOQUÉ.** Rien.
 
 **SUITE.** (a) **Instruire les 35 fermetures reconstruites** — réelles ou artefact ? C'est
