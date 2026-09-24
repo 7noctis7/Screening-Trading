@@ -19,8 +19,9 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+from collections import defaultdict
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from packages.social.modele import Classification, Direction, Publication
@@ -98,6 +99,37 @@ class StorePublications:
 
     def compter(self) -> int:
         return int(self.conn.execute("SELECT COUNT(*) FROM publication").fetchone()[0])
+
+    def ids(self) -> set[str]:
+        return {r[0] for r in self.conn.execute("SELECT id FROM publication")}
+
+    def garder_recentes(self, n: int) -> int:
+        """Ne garde que les `n` publications les plus récentes DE CHAQUE COMPTE.
+
+        PAR COMPTE, pas au total : un plafond global laisserait le compte le plus
+        bavard évincer les autres — trendspider publie dix fois plus qu'astekz, et
+        astekz disparaîtrait de l'onglet sans que rien ne le dise.
+
+        LE TRI SE FAIT SUR DES DATES, PAS SUR DU TEXTE. `ts` est stocké en ISO, et
+        l'ordre alphabétique de « …T10:00+02:00 » contre « …T09:00+00:00 » n'est pas
+        l'ordre du temps. Un `ORDER BY ts` en SQL aurait supprimé le mauvais message
+        dès que deux sources n'écrivent pas le même fuseau.
+
+        `n <= 0` : on ne supprime rien. Rend le nombre de publications retirées.
+        """
+        if n <= 0:
+            return 0
+        par_compte: dict[str, list[tuple[datetime, str]]] = defaultdict(list)
+        lignes = self.conn.execute("SELECT id, compte, ts FROM publication")
+        for id_, compte, ts in lignes:
+            d = datetime.fromisoformat(ts)
+            par_compte[compte].append((d if d.tzinfo else d.replace(tzinfo=UTC), id_))
+        trop = [id_ for pubs in par_compte.values()
+                for _, id_ in sorted(pubs, reverse=True)[n:]]
+        self.conn.executemany("DELETE FROM publication WHERE id = ?",
+                              [(i,) for i in trop])
+        self.conn.commit()
+        return len(trop)
 
     def close(self) -> None:
         self.conn.close()

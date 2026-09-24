@@ -15,12 +15,30 @@
 - [x] **~~P1 — L'onglet X n'a JAMAIS vu de donnée réelle~~ — FERMÉ (24/09).** Première
       ingestion : **34 publications** des deux canaux Telegram, dont 6 `TRADE_SIGNAL`.
       Les filtres tournent sur du vrai contenu. Images ajoutées dans la foulée (ADR-0195).
-- [ ] **P1 — `astekz` n'a toujours AUCUNE source (24/09, ADR-0199/0200).** Sondage réel
-      du 24/09 : **twiiit.com lit `trendspider` (20) et `micro2macr0` (12)** — à coller
-      dans `.env` APRÈS le déploiement du tri des retweets (ADR-0200) ; `astekz` répond
-      **HTTP 403** partout. Voie restante : `make rsshub` (Docker ABSENT du VPS —
-      `sudo apt install docker.io` d'abord), avec le cookie d'un compte X SECONDAIRE.
-      Si astekz est un compte PROTÉGÉ, seul un compte qui le suit pourra le lire.
+- [x] **~~P1 — Les comptes X suivis n'ont AUCUNE source~~ — FERMÉ (24/09, ADR-0199).**
+      Mesuré sur le VPS : twiiit ne lit ni astekz (403) ni eliz883 (page illisible), et
+      a changé de comportement en une heure — inutilisable. **RSSHub auto-hébergé lit
+      les QUATRE** : astekz 18, eliz883 17, trendspider 19, micro2macr0 12. Première
+      ingestion : **66 nouvelles, stock 103**, aucun rejet. eliz883 basculé de Telegram
+      vers X à la demande de l'utilisateur (Telegram ne garde que walshwealth1122).
+- [x] **~~P1 — Les images des tweets ne s'affichent pas~~ — FERMÉ (24/09).** Diagnostic
+      en quatre étapes sur le VPS : RSSHub envoie les images (✓), la base les a
+      (trendspider 18/19, astekz 8/18…) (✓), mais **l'API servait
+      `?format=jpg&amp;name=orig`**. La description RSS est du HTML, où `&` s'écrit
+      `&amp;` — y compris dans l'adresse d'une image, que `rss.py` relayait sans la
+      décoder. X refusait le paramètre `amp;name`, la carte masquait l'image cassée :
+      TOUTES les images X étaient invisibles, sans un message. Corrigé (`html.unescape`
+      sur l'adresse ET sur le texte — « S&amp;P » s'affichait aussi), test qui échoue sur
+      l'ancien code. Les lignes déjà stockées se réparent à la réingestion suivante
+      (`INSERT OR REPLACE` sur le même lien).
+- [x] **~~Telegram retiré de l'onglet~~ — DÉCISION UTILISATEUR (24/09).** « Je ne veux
+      voir que les messages des comptes Twitter. » `QUANT_TG_CANAUX` retiré de `.env`
+      sur le VPS, publications `https://t.me/…` supprimées de la base. Le code Telegram
+      reste (source auto-enregistrée) : il se tait tant qu'aucun canal n'est configuré.
+      walshwealth1122, sans compte X, disparaît donc de l'onglet.
+- [ ] **P2 — Les posts « Subscribers Only » d'eliz883 (24/09).** Le compte connecté est
+      abonné à eliz883 : RSSHub, avec son cookie, DEVRAIT les recevoir. Non vérifié.
+      Rappel : si X suspend ce compte, l'abonnement payant part avec.
 - [x] **~~P2 — L'ingestion est MANUELLE~~ — FERMÉ (24/09, ADR-0197).** Les trois sources
       réseau rejoignent `scripts/cron_daily.sh`, chacune sous garde de configuration,
       chacune avec un échec NOMMÉ (jamais `|| true`). Le retard ne se rattrape pas : la

@@ -34,6 +34,7 @@ import urllib.error
 import urllib.request
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
+from html import unescape
 from xml.etree import ElementTree
 
 from packages.social import extraction
@@ -183,14 +184,19 @@ def _images(item, brut: str) -> tuple[str, ...]:
         est_media = n.tag.endswith("content") and _IMAGE.match(n.get("type") or "")
         if est_media and n.get("url"):
             urls.append(n.get("url"))
-    urls += _IMG_HTML.findall(brut)
+    # `brut` est du HTML : un `&` y est écrit `&amp;`, y compris DANS l'adresse d'une
+    # image. Le relayer tel quel envoyait au navigateur `?format=jpg&amp;name=orig` —
+    # un paramètre `amp;name` que X refuse, donc une image cassée, masquée par la carte.
+    # Mesuré sur le VPS le 24/09 : toutes les images RSSHub étaient ainsi invisibles.
+    # `<enclosure>` et `<media:content>`, eux, sont des attributs XML déjà décodés.
+    urls += [unescape(u) for u in _IMG_HTML.findall(brut)]
     return tuple(dict.fromkeys(urls))
 
 
 def _publication(item, compte: str) -> Publication | None:
     lien = _texte(item, "link")
     brut = _texte(item, "description") or _texte(item, "title")
-    texte = _BALISES.sub("", brut).strip()
+    texte = unescape(_BALISES.sub("", brut)).strip()   # « S&amp;P » → « S&P »
     ts = _quand(item)
     images = _images(item, brut)
     if not lien or ts is None or (not texte and not images):

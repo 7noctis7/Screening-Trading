@@ -21,6 +21,7 @@ Les lignes illisibles sont COMPTÉES et rapportées, jamais devinées ni tues.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -49,12 +50,7 @@ def _etat(db: str) -> int:
     return 0
 
 
-def main() -> int:
-    # `.env` est la SEULE configuration que l'utilisateur écrit. Sans ce chargement, le
-    # script marchait depuis un shell où les variables avaient été exportées à la main,
-    # et nulle part ailleurs — en particulier pas sous cron, dont l'env est nu.
-    load_env()
-    disponibles = charger_plugins()
+def _arguments(disponibles: list[str]) -> argparse.Namespace:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--source", default="fichier", choices=disponibles)
     ap.add_argument("--chemin", default=None, help="source « fichier » : le JSONL")
@@ -66,12 +62,38 @@ def main() -> int:
                     help="source « discord » : « id[:compte] », par virgules")
     ap.add_argument("--db", default=None)
     ap.add_argument("--etat", action="store_true", help="n'écrit rien")
+    ap.add_argument("--garder", type=int,
+                    default=int(os.environ.get("QUANT_SOCIAL_GARDER") or 50),
+                    help="publications gardées PAR COMPTE (0 = tout garder)")
     ap.add_argument("--si-configuree", action="store_true",
                     help="sort en silence (code 0) si la source n'a rien à lire — "
                          "ce que la chaîne quotidienne utilise pour ne pas remplir "
                          "son journal d'échecs attendus")
-    a = ap.parse_args()
+    return ap.parse_args()
 
+
+def _ecrire(db: str, lues: list, garder: int) -> tuple[int, int, int, int]:
+    """Écrit, applique le plafond, et rend (lues, nouvelles, retirées, stock)."""
+    store = StorePublications(db)
+    try:
+        avant = store.ids()
+        ecrites = store.ecrire(lues)
+        retirees = store.garder_recentes(garder)
+        # Compter les nouvelles APRÈS le plafond : un message plus ancien que les
+        # `garder` plus récents rentrerait puis ressortirait aussitôt, et « Nouvelles »
+        # l'annoncerait à chaque passage alors qu'il n'est jamais resté.
+        nouvelles = len(store.ids() - avant)
+        return ecrites, nouvelles, retirees, store.compter()
+    finally:
+        store.close()
+
+
+def main() -> int:
+    # `.env` est la SEULE configuration que l'utilisateur écrit. Sans ce chargement, le
+    # script marchait depuis un shell où les variables avaient été exportées à la main,
+    # et nulle part ailleurs — en particulier pas sous cron, dont l'env est nu.
+    load_env()
+    a = _arguments(charger_plugins())
     db = a.db or chemin_db()
     if a.etat:
         return _etat(db)
@@ -92,18 +114,14 @@ def main() -> int:
         print("Le flux reste NON CONNECTÉ — l'onglet le dira, il n'inventera rien.")
         return 0
 
-    store = StorePublications(db)
-    try:
-        avant = store.compter()
-        ecrites = store.ecrire(lues)
-        apres = store.compter()
-    finally:
-        store.close()
-
+    ecrites, nouvelles, retirees, stock = _ecrire(db, lues, a.garder)
     print(f"Lues      : {ecrites}")
-    print(f"Nouvelles : {apres - avant}   "
+    print(f"Nouvelles : {nouvelles}   "
           "(le reste existait déjà — écriture idempotente)")
-    print(f"Stock     : {apres}")
+    if retirees:
+        print(f"Retirées  : {retirees}   (au-delà des {a.garder} plus récentes "
+              "par compte)")
+    print(f"Stock     : {stock}")
     if rejets:
         print(f"\n{len(rejets)} ligne(s) IGNORÉE(S), jamais devinée(s) :")
         for r in rejets[:10]:
