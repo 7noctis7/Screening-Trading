@@ -128,3 +128,25 @@ def test_les_deux_moyennes_coincident_quand_les_lignes_sont_egales():
     """Garde-fou du test lui-même : sans dispersion des montants, rien ne diverge."""
     a = auditer([_lot("P-a", 10.0, 100.0, 0.10), _lot("P-b", 10.0, 100.0, -0.02)])
     assert abs(a.rendement_moyen_pct - a.rendement_pondere_pct) < 1e-9
+
+
+def test_le_MEME_nombre_s_ecrit_PAREIL_a_deux_endroits_du_rapport():
+    """Le 24/09, la 1re sortie réelle annonçait « +0,02 % » deux lignes sous
+    « +1,59 % » — la même quantité, écrite cent fois trop petit.
+
+    Ces champs sont des FRACTIONS (0,0159) ; le bloc d'écart les rendait bruts quand
+    tout le reste du rapport les convertit. Le rapport entre les deux, lui, restait
+    juste — les unités s'annulent —, si bien que rien dans la sortie ne départageait
+    les deux versions du même nombre. Le lecteur n'avait aucune raison de croire
+    l'une plutôt que l'autre.
+
+    Ce test ne vérifie pas un format : il vérifie qu'UNE quantité n'a qu'UNE écriture.
+    """
+    a = auditer([_lot("P-miette", 1.0, 3.0, 0.40), _lot("P-ligne", 10.0, 500.0, 0.002)])
+    txt = rapport(a)
+    simple = f"{a.rendement_moyen_pct * 100:+.2f} %"
+    pondere = f"{a.rendement_pondere_pct * 100:+.2f} %"
+    assert f"Rendement moyen par position (NON pondéré) : {simple}" in txt
+    assert f"Moyenne simple {simple} · PONDÉRÉE par le notionnel {pondere}" in txt
+    # et la version cent fois trop petite n'est nulle part
+    assert f"{a.rendement_moyen_pct:+.2f} %" not in txt
