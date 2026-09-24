@@ -142,6 +142,10 @@ export const useIntro = () => q("intro", "/api/intro", 3_600_000);
 export const useScreener = () => q("screener", "/api/screener");
 export const useScreen = () => q("screen", "/api/screen", 60000);
 export const useCryptoCockpit = () => q("crypto_cockpit", "/api/crypto_cockpit", 600000);
+// Flux X : la charge est rendue ENTIÈRE et filtrée dans le navigateur. Refaire un
+// aller-retour à chaque lettre tapée rendrait la recherche poussive, et le site publié
+// en statique n'a de toute façon aucun serveur pour filtrer.
+export const useSocialX = () => q("social_x", "/api/social/x/posts?limit=1000", 300000);
 export const useTicker = () => q("ticker", "/api/ticker", 600000);
 export const useFailures = () => q("failures", "/api/failures", 600000);
 export const usePortfolio = () => q("portfolio", "/api/portfolio");

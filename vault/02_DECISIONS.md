@@ -2,6 +2,85 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0194 — Un flux non branché se DIT, il ne se simule pas (2026-09-24)
+
+**CONTEXTE.** Demande : « ajouter des filtres à l'onglet X du site ». MESURÉ AVANT DE
+CODER — **l'onglet X n'existait pas**. Ni route `/api/social/*`, ni table de
+publications, ni ingestion, ni les classifications `TRADE_SIGNAL`/`MOVE_STOP` citées
+(0 occurrence dans le dépôt). La seule trace de X était `packages/intelligence/
+watchlist.py`, une liste CURATÉE DE COMPTES — pas leurs publications — où `trendspider`,
+`eliz883` et `Micro2Macr0` figurent au niveau C, et où **`astekz` n'apparaît nulle part**.
+
+La couche `packages/intelligence` (classify, sources, corroboration, relevance) existait
+mais n'était **câblée nulle part** : zéro import depuis `apps/` ou `scripts/`.
+
+**DÉCISION.** Construire la chaîne entière — modèle, store, filtres, extraction, source
+en plugin, route, onglet — plutôt que des filtres au-dessus de rien.
+
+**LA DÉCISION STRUCTURANTE : NE RIEN INVENTER.** L'API X est payante. Faire dépendre
+l'onglet d'un abonnement l'aurait rendu intestable ; le peupler d'exemples l'aurait rendu
+MENSONGER. La source est donc un **plugin** (`packages/social/sources/`, un fichier
+auto-enregistré) dont la première implémentation lit un JSONL — aucun secret requis. Tant
+qu'aucune source n'a tourné, l'onglet affiche « flux non connecté » **avec son motif**.
+Brancher l'API officielle plus tard sera UN fichier de plus, sans toucher au reste.
+
+**« AUCUN RÉSULTAT » VEUT DIRE TROIS CHOSES, ET LES CONFONDRE EST LE VRAI DÉFAUT.**
+Le flux n'est pas branché · il est branché mais vide · les critères ne laissent rien
+passer. Ces trois cas appellent trois actions différentes de l'utilisateur, et un écran
+qui affiche la même phrase pour les trois le laisse conclure au hasard — en général
+« c'est cassé », alors qu'il vient de cocher deux filtres exclusifs. La charge rend donc
+`disponible`, `total_stock` et `filtres_actifs` SÉPARÉMENT, et `total_stock` vaut `None`
+— jamais `0` — quand on ne sait pas.
+
+**TROIS SÉMANTIQUES DE FILTRAGE, toutes contre-intuitives une fois codées naïvement.**
+
+1. **Une sélection vide veut dire TOUS, jamais AUCUN.** C'est le défaut qui décide de ce
+   qu'on voit en arrivant. Lu à l'envers, il donne une page blanche au premier
+   chargement, indiscernable d'un flux en panne.
+2. **La recherche ignore la casse ET LES ACCENTS.** Le contenu est bilingue :
+   « resistance » tapé au clavier doit trouver « résistance » écrit dans le message.
+   Sinon l'absence de résultat ne dit pas « rien à ce sujet » mais « pas orthographié
+   comme vous » — et rien à l'écran ne fait la différence.
+3. **Plusieurs mots = ET, pas une phrase exacte.** « BTC LONG » cherche les deux, où
+   qu'ils soient. Un jeton seul se comporte identiquement.
+
+La recherche balaie texte, ticker, symbole, classification, direction **et niveaux
+extraits** — « 65000 » retrouve le message dont le TP1 vaut 65000.
+
+**POURQUOI LE FILTRAGE EXISTE DEUX FOIS.** Le site est publié en STATIQUE : là-bas aucun
+serveur ne filtre, et un aller-retour par lettre tapée serait poussif. Le navigateur
+reçoit donc la liste et filtre en mémoire. La contrepartie — deux implémentations qui
+divergent en silence — est traitée par une sémantique ÉCRITE des deux côtés, le module
+Python faisant foi, et testée sur les mêmes exemples.
+
+**AUCUN MODÈLE GÉNÉRATIF DANS L'EXTRACTION.** Un classifieur qui invente une étiquette
+plausible est pire qu'un `UNKNOWN` : l'étiquette fausse se filtre, s'affiche et se croit,
+sans laisser trace de son erreur. Des règles explicites se lisent, se testent, se
+corrigent. Règle de prudence partout : **au moindre doute, `UNKNOWN` ou `None`** — deux
+actifs cités donnent AUCUN ticker, les deux sens cités donnent AUCUNE direction. Et **une
+donnée lue bat toujours une donnée déduite** : une étiquette présente dans la source
+l'emporte sur l'extraction.
+
+**UN DÉFAUT TROUVÉ PAR L'ESSAI À BLANC.** « Longtemps que je regarde BTC » était classé
+LONG. Les lookarounds de la frontière de mot ne portaient que sur la PREMIÈRE alternative
+de l'alternance, faute de groupe non capturant. Un message d'observation héritait donc
+d'une direction d'achat que personne n'avait écrite. Corrigé, et épinglé en régression.
+
+**UN TEST EXISTANT A ATTRAPÉ LE PIÈGE DU SITE STATIQUE.**
+`test_aucune_route_appelee_n_est_absente_du_build` a refusé le travail tant que
+`dump_static` n'écrivait pas `data/social_x_posts.json` : un fichier manquant n'aurait pas
+donné une page vide mais une page BLOQUÉE sur son squelette (404 sans charge rendue) —
+panne muette, invisible en local. Au passage, sa détection ne lisait que la table
+`routes` et obligeait à inscrire tout le reste dans une liste blanche : elle CONSTATE
+désormais les appels `_write("nom", …)`, au lieu de faire confiance à une déclaration.
+
+**CE QUI N'EST PAS FAIT, ET POURQUOI.** Aucune publication n'a été ingérée : le stock est
+vide, et l'onglet le dit. Les filtres sont donc testés sur 44 cas mais **jamais vus sur
+des données réelles**. Brancher une source est la prochaine étape, et elle appartient à
+l'utilisateur — elle suppose de décider d'où viennent les publications.
+
+---
+
 ## ADR-0193 — L'attention et le capital engagé sont deux mesures, pas une carte (2026-09-23)
 
 **CONTEXTE.** Demande : « avoir le top 20 » sur la carte « Ce que tout le monde cherche ».

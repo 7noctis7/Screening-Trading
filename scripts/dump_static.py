@@ -106,6 +106,24 @@ def main() -> int:
             _write(name, {"available": False, "error": str(e)})
             print(f"  ⚠ data/{name}.json ({e})")
     _write("overlays", {})                       # overlays dynamiques neutralisés en statique
+    # ONGLET X. Le nom du fichier n'est pas libre : `_staticUrl` transforme
+    # « /api/social/x/posts?limit=1000 » en « data/social_x_posts.json ». Un fichier
+    # manquant ne donnerait pas une page vide mais une page BLOQUÉE sur son squelette,
+    # le `fetch` échouant en 404 sans jamais rendre de charge — panne muette, et le
+    # piège exact que l'export NaN-safe avait déjà tendu une fois.
+    #
+    # Le runner CI n'a pas `data/social_x.db` (local-only, jamais versionné) : la route
+    # répond alors « flux non connecté » avec son motif, et l'onglet le DIT. C'est le
+    # comportement voulu — un écran honnête plutôt qu'un jeu de faux messages.
+    try:
+        _write("social_x_posts", M.social_x_posts(limit=1000))
+        print("  ✓ data/social_x_posts.json")
+    except Exception as e:  # noqa: BLE001
+        _write("social_x_posts", {"disponible": False, "raison": str(e),
+                                  "total_stock": None, "n": 0, "publications": [],
+                                  "comptes": [], "symboles": [],
+                                  "classifications": [], "directions": []})
+        print(f"  ⚠ data/social_x_posts.json ({e})")
     # PORTEFEUILLE LIVE : une CONSTANTE, et surtout PAS `M.portefeuille()`. Deux raisons,
     # la seconde étant rédhibitoire.
     #   · Un portefeuille figé au moment du build et servi sous un voyant « COURTIER ·

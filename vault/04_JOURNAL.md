@@ -1,5 +1,44 @@
 # 04 — JOURNAL
 
+## Session 2026-09-24 — L'onglet qu'on me demandait d'améliorer n'existait pas
+
+**FAIT.**
+
+**1. #401 mergée et déployée** (main = `5475618`). Moyenne pondérée + cartes crypto +
+les trois corrections de revue (seuil inventé supprimé, zéro qui faisait taire le
+diagnostic, `page.tsx` 664 → 315). Branche de dev resynchronisée.
+
+**2. Onglet X — la mesure a changé la réponse** (ADR-0194). Demande : « ajouter des
+filtres à l'onglet X ». Mesuré avant de coder : **l'onglet n'existait pas**. Pas de
+route `/api/social/*`, pas de table de publications, pas d'ingestion, et 0 occurrence
+des classifications `TRADE_SIGNAL`/`MOVE_STOP` citées. Seule trace : `watchlist.py`,
+une liste de COMPTES (pas de publications) où `astekz` n'apparaît même pas.
+
+Décision de l'utilisateur : construire la chaîne entière. Livré — `packages/social/`
+(modèle, store SQLite, filtres, extraction déterministe, sources en plugin),
+`/api/social/x/posts`, l'onglet `/x` avec sa barre de filtres, `make x-ingest`.
+**44 tests.**
+
+**3. Le principe qui a gouverné tout le reste : ne rien inventer.** L'API X est payante
+et je n'ai aucune clé. La source est donc un plugin dont la première implémentation lit
+un JSONL sans secret, et l'onglet affiche « flux non connecté » avec son motif tant que
+rien n'a été ingéré. Un écran honnête plutôt qu'un écran de faux messages.
+
+**4. Deux défauts trouvés en route.** (a) « Longtemps » était classé LONG — les
+lookarounds ne portaient que sur la première alternative, faute de groupe non capturant.
+(b) `test_aucune_route_appelee_n_est_absente_du_build` a refusé le travail tant que
+`dump_static` n'écrivait pas `data/social_x_posts.json` : sans lui l'onglet serait resté
+BLOQUÉ sur son squelette en ligne. Sa détection ne lisait que la table `routes` et
+poussait à remplir une liste blanche ; elle constate désormais les `_write` réels.
+
+**BLOQUÉ.** Le stock est vide : les filtres sont testés sur 44 cas mais **jamais vus sur
+des données réelles**. Brancher une source suppose de décider d'où viennent les
+publications — c'est une décision de l'utilisateur, pas une supposition à coder.
+
+**SUITE.** (a) Ce soir sur le VPS : `make up && make turnover-audit` — le chiffre pondéré
+n'a toujours pas tourné sur la base réelle. (b) Alimenter `data/x_posts.jsonl` puis
+`make x-ingest` pour voir l'onglet X sur du vrai contenu.
+
 ## Session 2026-09-23 — Le top 20 demandé n'existait pas, et la moyenne ne décrivait pas le compte
 
 **FAIT.**

@@ -7,6 +7,23 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+- [x] **~~P2 — Onglet X : filtres et recherche~~ — LIVRÉ (24/09, ADR-0194).** L'onglet
+      n'existait pas : chaîne entière construite (`packages/social/`, `/api/social/x/posts`,
+      `/x`, `make x-ingest`). 44 tests. Filtres compte / mot-clé / classification /
+      direction / actif, combinables ; recherche insensible à la casse ET aux accents,
+      partielle, portant aussi sur les niveaux extraits.
+- [ ] **P1 — L'onglet X n'a JAMAIS vu de donnée réelle (24/09).** Le stock est vide, la
+      source « fichier » attend `data/x_posts.jsonl`. Tant que rien n'est ingéré, les
+      filtres sont validés sur 44 cas synthétiques et sur rien d'autre — et l'onglet
+      affiche « flux non connecté », ce qui est le comportement voulu, pas un succès.
+      À faire : décider d'où viennent les publications (API X payante ? export d'un
+      client tiers ? copier-coller ?), alimenter le JSONL, lancer `make x-ingest`, PUIS
+      juger les filtres sur du vrai contenu.
+- [ ] **P2 — `packages/intelligence` reste câblée nulle part (constaté le 24/09).** Zéro
+      import depuis `apps/` ou `scripts/`. Sa taxonomie (FAIT / OPINION / RUMEUR) est
+      ORTHOGONALE à celle de l'onglet X (intention déclarée) : les deux peuvent coexister,
+      mais l'articulation n'est pas décidée. Un composant construit et non branché ne
+      protège de rien.
 - [x] **~~P1 — L'audit de rotation rendait une moyenne qui ne décrivait pas le compte~~ —
       FERMÉ (23/09, ADR-0192).** 542 positions à +1,59 % de moyenne face à +818,67 $
       réalisés : `sum(pnls)/len(pnls)` pesait une ligne de 40 $ comme une de 12 000 $, et

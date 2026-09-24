@@ -24,7 +24,9 @@ RACINE = Path(__file__).resolve().parents[2]
 API_TS = RACINE / "apps" / "web" / "lib" / "api.ts"
 DUMP = RACINE / "scripts" / "dump_static.py"
 
-# Écrits hors du tableau `routes` de `dump_static`, vérifiés séparément ici.
+# Filet de dernier recours : ce qui n'est NI dans la table NI écrit par un `_write`
+# littéral. Y ajouter un nom revient à affirmer sans preuve — à n'utiliser que pour
+# un fichier produit autrement (boucle, nom calculé), et à justifier ici même.
 # `portefeuille` en fait partie À DESSEIN : il est écrit en CONSTANTE, jamais appelé —
 # cf. `test_le_portefeuille_live_n_est_JAMAIS_appele_par_le_build_statique`.
 HORS_TABLE = {"overlays", "notes", "portefeuille"}
@@ -41,11 +43,19 @@ def _routes_appelees() -> set[str]:
 
 
 def _fichiers_publies() -> set[str]:
-    """Noms écrits par le build statique (table `routes` + écritures explicites)."""
+    """Noms écrits par le build statique : table `routes` ET appels `_write` directs.
+
+    Ne lire que la table obligeait à inscrire dans `HORS_TABLE` tout fichier écrit
+    ailleurs — c'est-à-dire à DÉCLARER qu'il est publié au lieu de le CONSTATER. Une
+    liste blanche se remplit vite et ne vérifie plus rien : il suffit d'y ajouter un nom
+    pour que le test se taise, même si l'écriture n'a jamais été branchée. Les appels
+    `_write("nom", …)` sont, eux, la publication elle-même.
+    """
     src = DUMP.read_text(encoding="utf-8")
     debut = src.index("routes = {")
     bloc = src[debut:src.index("}", debut)]
-    return set(re.findall(r'"([a-z_0-9]+)":', bloc)) | HORS_TABLE
+    ecritures = set(re.findall(r'_write\(\s*"([a-z_0-9]+)"', src))
+    return set(re.findall(r'"([a-z_0-9]+)":', bloc)) | ecritures | HORS_TABLE
 
 
 def test_aucune_route_appelee_n_est_absente_du_build():
