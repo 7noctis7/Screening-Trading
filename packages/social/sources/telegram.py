@@ -26,6 +26,7 @@ republie les mêmes messages à chaque appel, et numéroter ferait mentir l'idem
 from __future__ import annotations
 
 import os
+import re
 import urllib.error
 import urllib.request
 from datetime import UTC, datetime
@@ -39,6 +40,11 @@ from packages.social.sources import sources
 DELAI_S = 20.0
 AGENT = "Mozilla/5.0 (compatible; QuantTerminal/1.0)"
 BASE = "https://t.me/s/"
+
+# Telegram place les visuels en fond CSS, pas en <img> : `background-image:url('…')`
+# sur le bloc photo ou sur la vignette vidéo. Les chercher ailleurs ne rendrait rien,
+# et un message réduit à son graphique paraîtrait vide.
+_FOND = re.compile(r"background-image\s*:\s*url\((['\"]?)(.+?)\1\)")
 
 
 class _Aperçu(HTMLParser):
@@ -78,10 +84,15 @@ class _Aperçu(HTMLParser):
         classe = a.get("class", "") or ""
         if a.get("data-post") and "tgme_widget_message " in f"{classe} ":
             self._clore()
-            self._courant = {"post": a["data-post"], "ts": None, "texte": []}
+            self._courant = {"post": a["data-post"], "ts": None, "texte": [],
+                             "images": []}
             return
         if self._courant is None:
             return
+        if ("photo_wrap" in classe or "video_thumb" in classe) and a.get("style"):
+            fond = _FOND.search(a["style"])
+            if fond:
+                self._courant["images"].append(fond.group(2))
         if "tgme_widget_message_date" in classe:
             # Cibler la date DU MESSAGE : un en-tête de transfert peut porter un autre
             # `<time>`, et prendre le premier venu daterait le message de sa source.
@@ -183,11 +194,18 @@ def _quand(brut: str | None) -> datetime | None:
 def _publication(m: dict, compte: str) -> Publication | None:
     texte = unescape("".join(m["texte"])).strip()
     ts = _quand(m["ts"])
-    if not texte or ts is None:
+    images = m.get("images") or []
+    # UN GRAPHIQUE SEUL EST UN MESSAGE. Écarter les publications sans texte perdrait
+    # exactement celles dont tout le contenu est l'image — le cas le plus fréquent chez
+    # un compte de signaux. Le texte devient alors une mention, pas une invention.
+    if ts is None or (not texte and not images):
         return None
+    if not texte:
+        texte = f"[{len(images)} image(s) sans texte]"
     lien = f"https://t.me/{m['post']}"
     tick, sym = extraction.ticker(texte)
     return Publication(
         id=lien, compte=compte, ts=ts, texte=texte,
         classification=extraction.classification(texte), ticker=tick, symbole=sym,
-        direction=extraction.direction(texte), url=lien)
+        direction=extraction.direction(texte), url=lien,
+        images=tuple(dict.fromkeys(m.get("images") or ())))

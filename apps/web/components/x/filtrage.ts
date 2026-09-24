@@ -17,6 +17,7 @@ export type Publication = {
   id: string; compte: string; ts: string; texte: string;
   classification: string; ticker: string | null; symbole: string | null;
   direction: string | null; extraits: Record<string, number>; url: string | null;
+  images?: string[];
 };
 
 export type Criteres = {

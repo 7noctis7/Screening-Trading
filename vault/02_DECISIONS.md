@@ -2,6 +2,61 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0195 — Le graphique EST le message : les visuels rejoignent l'onglet (2026-09-24)
+
+**CONTEXTE.** Première ingestion réelle de l'onglet X, 34 publications des deux canaux
+Telegram. L'une d'elles s'affichait ainsi :
+
+> `> danlevr *[Attachment] Doge Long — Entry: 0.08705, SL: 0.08343, Tp1: 0.09...*`
+> `TP1 hit, +2R from entry so far`
+
+Le message renvoie à une pièce jointe qu'on ne voit pas. Sur un compte de signaux, le
+graphique porte souvent TOUT le contenu : sans lui, la carte affiche la mention d'une
+information plutôt que l'information.
+
+**DÉCISION.** `Publication.images` porte les **adresses** des visuels, extraites par les
+quatre sources et affichées dans la carte.
+
+**RIEN N'EST TÉLÉCHARGÉ NI RÉHÉBERGÉ.** Le navigateur du lecteur va chercher les visuels
+là où le message les a publiés. Deux raisons, dont une seule est technique : recopier des
+images de tiers sur un site PUBLIC engagerait autre chose que de la technique, et ferait
+grossir un dépôt qui ne doit rien stocker de tel. La contrepartie est assumée et dite :
+une adresse peut expirer (Telegram fait tourner ses CDN), et le lecteur contacte
+telegram/twitter comme s'il visitait le message. Un test lit le CODE des quatre sources
+et refuse `open(` sur un fichier, `write_bytes`, `urlretrieve` ou `b64encode`.
+
+**CHAQUE SOURCE RANGE SES VISUELS AILLEURS**, et n'en lire qu'un emplacement perdrait
+silencieusement des messages :
+
+  · **Telegram** ne met aucune `<img>` — le visuel est un `background-image` CSS sur le
+    bloc photo ou la vignette vidéo ;
+  · **RSS** en connaît trois selon le générateur : `<enclosure>`, `<media:content>`, ou
+    une `<img>` dans la description. Les trois sont lues ;
+  · **Discord** les place en pièces jointes ET en embeds — un PDF joint n'est pas un
+    visuel et reste écarté ;
+  · le **JSONL** accepte une clé `images`, que les deux exports navigateur remplissent.
+
+**UN MESSAGE SANS TEXTE N'EST PLUS ÉCARTÉ S'IL PORTE UNE IMAGE.** La règle précédente —
+« pas de texte, pas de publication » — perdait exactement les messages dont le graphique
+est le contenu, c'est-à-dire le cas le plus fréquent chez un compte de signaux. Le texte
+devient alors `[N image(s) sans texte]` : une MENTION de ce qui manque, pas une
+invention de ce qu'il contient.
+
+**LA MIGRATION EST LE VRAI RISQUE, ET ELLE EST TESTÉE.** `CREATE TABLE IF NOT EXISTS` ne
+touche pas une table qui existe déjà : sur la base du VPS, déjà remplie de 34
+publications, le DDL serait passé sans rien faire et la colonne aurait manqué. La panne
+serait survenue à la PREMIÈRE écriture suivante, sur la machine de l'utilisateur, pas
+ici. `_migrer()` ajoute la colonne si elle manque, et un test construit une base à
+l'ANCIEN schéma avant de l'ouvrir.
+
+**UNE MESURE AU PASSAGE.** Sur ces 34 publications réelles, **6 portent l'étiquette
+`TRADE_SIGNAL`** — le reste est de l'analyse, de la promotion ou du commentaire. Le
+compteur « 6 sur 34 » qui semblait anormal était exact : c'était un filtre actif, et il
+disait vrai. Premier chiffre réel de ce flux, et il vaut d'être retenu : un compte de
+signaux publie surtout autre chose que des signaux.
+
+---
+
 ## ADR-0194 — Un flux non branché se DIT, il ne se simule pas (2026-09-24)
 
 **CONTEXTE.** Demande : « ajouter des filtres à l'onglet X du site ». MESURÉ AVANT DE

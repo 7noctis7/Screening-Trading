@@ -40,9 +40,32 @@ const STATUT: Record<string, string> = {
   OPINION: "var(--muted2)",
 };
 
+// Les visuels sont chargés DEPUIS LEUR SOURCE, jamais recopiés chez nous. Deux
+// conséquences assumées : une adresse peut expirer (Telegram fait tourner ses CDN), et
+// le navigateur du lecteur contacte telegram/twitter comme s'il visitait le message.
+// `onError` masque l'image morte plutôt que de laisser une icône cassée — mais le
+// compteur, lui, reste : « 2 images » sur une carte qui n'en montre qu'une le DIT.
+function Visuels({ urls }: { urls: string[] }) {
+  if (urls.length === 0) return null;
+  return (
+    <div className="mt-2.5 flex flex-wrap gap-2">
+      {urls.map((u, i) => (
+        <a key={u + i} href={u} target="_blank" rel="noopener noreferrer"
+          title="ouvrir l'image en grand">
+          <img src={u} alt={`visuel ${i + 1} du message`} loading="lazy"
+            onError={(e) => { (e.currentTarget.style.display = "none"); }}
+            className="rounded-lg border border-border object-cover"
+            style={{ maxHeight: 220, maxWidth: "100%" }} />
+        </a>
+      ))}
+    </div>
+  );
+}
+
 function Carte({ p }: { p: Publication & { verdict?: any } }) {
   const niveaux = Object.entries(p.extraits ?? {});
   const v = p.verdict;
+  const images = p.images ?? [];
   return (
     <article className="card p-3.5">
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -50,6 +73,7 @@ function Carte({ p }: { p: Publication & { verdict?: any } }) {
         <span className="text-[11px] text-muted2">{quand(p.ts)}</span>
       </div>
       <p className="text-sm mt-2 whitespace-pre-wrap">{p.texte}</p>
+      <Visuels urls={images} />
       <div className="flex flex-wrap items-center gap-2 mt-2.5 text-[11px]">
         <span className="px-2 py-0.5 rounded-md border border-border"
           style={{ color: TON[p.classification] ?? "var(--muted)" }}>
@@ -67,6 +91,9 @@ function Carte({ p }: { p: Publication & { verdict?: any } }) {
         {niveaux.map(([k, v]) => (
           <span key={k} className="text-muted2 mono">{k} {v}</span>
         ))}
+        {images.length > 0 && (
+          <span className="text-muted2">{images.length} image{images.length > 1 ? "s" : ""}</span>
+        )}
         {p.url && (
           <a href={p.url} target="_blank" rel="noopener noreferrer"
             className="text-muted2 hover:text-accent transition-colors">voir la source →</a>

@@ -1,5 +1,36 @@
 # 04 — JOURNAL
 
+## Session 2026-09-24 (2ᵉ) — La première ingestion réelle, et ce qu'elle a montré
+
+**FAIT.**
+
+**1. PR #402 mergée et déployée** (`main` = `f97674f`). L'utilisateur a lancé la chaîne
+sur le VPS : **34 publications ingérées** depuis `crypto_eliz883` et `walshwealth1122`.
+Première donnée réelle de l'onglet — jusque-là, 107 tests et rien d'autre.
+
+**2. Un compteur qui semblait faux disait vrai.** « 6 sur 34 » avec l'air de n'avoir
+aucun filtre : mesuré par la route, `stock: 34 | servies: 34 | tronque: False`. C'était
+un filtre `TRADE_SIGNAL` actif. Le chiffre est en lui-même intéressant : **sur 34
+messages, 6 annoncent une position.** Le reste est analyse, promotion ou commentaire.
+
+**3. Les images** (ADR-0195). Un message s'affichait `[Attachment] Doge Long` — la
+mention d'une information, pas l'information. Les quatre sources relèvent désormais les
+ADRESSES des visuels (Telegram en fond CSS, RSS en trois emplacements, Discord en pièces
+jointes et embeds, le JSONL par sa clé) et la carte les affiche. Rien n'est téléchargé ni
+réhébergé ; un test lit le code et le refuse. Un message sans texte mais avec image n'est
+plus écarté — c'est le cas le plus fréquent chez un compte de signaux.
+
+**4. La migration était le vrai risque.** La base du VPS existait déjà avec ses 34
+publications : `CREATE TABLE IF NOT EXISTS` l'aurait laissée sans la colonne neuve, et la
+panne serait tombée à la première écriture, chez l'utilisateur. `_migrer()` la traite, et
+un test construit une base à l'ancien schéma pour le prouver.
+
+**BLOQUÉ.** Rien. Le flux tourne pour de vrai.
+
+**SUITE.** (a) Lancer `make turnover-audit` — le chiffre pondéré n'a toujours pas été
+relevé. (b) Savoir à quel compte X correspond `walshwealth1122`, rangé sous son nom de
+canal. (c) Automatiser l'ingestion (cron) plutôt que de la lancer à la main.
+
 ## Session 2026-09-24 — L'onglet qu'on me demandait d'améliorer n'existait pas
 
 **FAIT.**

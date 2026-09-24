@@ -55,6 +55,12 @@ class Publication:
 
     `extraits` porte les niveaux cités par le message (entrée, TP, SL…) TELS QUELS.
     Ce sont des nombres écrits par un inconnu sur internet, pas des paramètres d'ordre.
+
+    `images` porte les ADRESSES des visuels joints, jamais les visuels eux-mêmes. Rien
+    n'est téléchargé ni réhébergé : le navigateur du lecteur va les chercher là où le
+    message les a publiés. Un graphique posté en image EST souvent tout le message —
+    « [Pièce jointe] Doge Long » sans l'image ne dit rien — mais une adresse peut
+    expirer, et une image absente reste préférable à une image recopiée sans droit.
     """
 
     id: str
@@ -67,6 +73,7 @@ class Publication:
     direction: Direction | None = None
     extraits: dict[str, float] = field(default_factory=dict)
     url: str | None = None
+    images: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.id or not self.compte:

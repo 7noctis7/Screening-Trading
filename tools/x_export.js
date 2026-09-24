@@ -27,6 +27,15 @@
   // message d'origine — le nom affiché en tête, lui, est celui de qui a reposté.
   const LIEN = /^\/([A-Za-z0-9_]{1,15})\/status\/(\d+)/;
 
+  // LE GRAPHIQUE EST SOUVENT TOUT LE MESSAGE. « [Pièce jointe] Doge Long » sans l'image
+  // ne dit rien. On relève les adresses des visuels — jamais les visuels eux-mêmes :
+  // rien n'est téléchargé ni réhébergé, le lecteur les charge depuis leur source.
+  const visuels = (article) => [...article.querySelectorAll("img")]
+    .map((i) => i.getAttribute("src") || "")
+    .filter((s) => s.includes("pbs.twimg.com/media/") || s.includes("video_thumb"))
+    .map((s) => s.replace(/&name=[^&]*/, "&name=large"))
+    .filter((s, i, tout) => tout.indexOf(s) === i);
+
   const lire = (article) => {
     const t = article.querySelector("time[datetime]");
     const a = [...article.querySelectorAll('a[href*="/status/"]')]
@@ -34,13 +43,15 @@
       .map((h) => (h || "").match(LIEN))
       .find(Boolean);
     const corps = article.querySelector(TEXTE);
-    if (!a || !t || !corps) return null;
+    const images = visuels(article);
+    if (!a || !t || (!corps && images.length === 0)) return null;
     return {
       id: `https://x.com/${a[1]}/status/${a[2]}`,
       compte: a[1],
       ts: t.getAttribute("datetime"),
-      texte: corps.innerText.trim(),
+      texte: corps ? corps.innerText.trim() : `[${images.length} image(s) sans texte]`,
       url: `https://x.com/${a[1]}/status/${a[2]}`,
+      images,
     };
   };
 

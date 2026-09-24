@@ -57,7 +57,8 @@ def _serialiser(p: Publication) -> dict:
             "classification": str(p.classification), "ticker": p.ticker,
             "symbole": p.symbole,
             "direction": None if p.direction is None else str(p.direction),
-            "extraits": p.extraits, "url": p.url, "verdict": verdict(p)}
+            "extraits": p.extraits, "url": p.url, "images": list(p.images),
+            "verdict": verdict(p)}
 
 
 def publications(f: Filtre, limite: int = LIMITE_DEFAUT, db: str | None = None) -> dict:

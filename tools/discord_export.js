@@ -34,19 +34,29 @@
     return n ? n.innerText.trim() : "";
   };
 
+  // Même raison que pour X : sur un salon de signaux, l'image PORTE le message. On
+  // relève les adresses, jamais les fichiers — rien n'est téléchargé ni réhébergé.
+  const visuels = (li) => [...li.querySelectorAll("img, a[data-role='img']")]
+    .map((n) => n.getAttribute("src") || n.getAttribute("href") || "")
+    .filter((s) => s.includes("cdn.discordapp.com") || s.includes("media.discordapp.net"))
+    .map((s) => s.split("?")[0])
+    .filter((s, i, tout) => tout.indexOf(s) === i);
+
   const lire = (li) => {
     const m = (li.id || "").match(LIGNE);
     const t = li.querySelector("time[datetime]");
     const corps = li.querySelector('[id^="message-content-"]');
-    if (!m || !t || !corps) return null;
-    const texte = corps.innerText.trim();
-    if (!texte) return null;                       // image seule, autocollant : pas un propos
+    if (!m || !t) return null;
+    const images = visuels(li);
+    const texte = corps ? corps.innerText.trim() : "";
+    if (!texte && images.length === 0) return null;   // ni propos ni visuel
     return {
       id: `discord:${m[1]}/${m[2]}`,
       compte: auteur(li) || `salon-${m[1]}`,
       ts: t.getAttribute("datetime"),
-      texte,
+      texte: texte || `[${images.length} image(s) sans texte]`,
       url: `https://discord.com/channels/@me/${m[1]}/${m[2]}`,
+      images,
     };
   };
 

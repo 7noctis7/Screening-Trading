@@ -12,22 +12,15 @@
       `/x`, `make x-ingest`). 44 tests. Filtres compte / mot-clé / classification /
       direction / actif, combinables ; recherche insensible à la casse ET aux accents,
       partielle, portant aussi sur les niveaux extraits.
-- [ ] **P1 — L'onglet X n'a JAMAIS vu de donnée réelle (24/09).** Le stock est vide, la
-      source « fichier » attend `data/x_posts.jsonl`. Tant que rien n'est ingéré, les
-      filtres sont validés sur 100 cas synthétiques et sur rien d'autre — et l'onglet
-      affiche « flux non connecté », ce qui est le comportement voulu, pas un succès.
-      À faire : décider d'où viennent les publications (API X payante ? export d'un
-      client tiers ? copier-coller ?), alimenter le JSONL, lancer `make x-ingest`, PUIS
-      juger les filtres sur du vrai contenu. **Deux sources sont prêtes** : `fichier`
-      (JSONL, sans clé) et `rss` (miroirs gratuits, `QUANT_X_RSS`). Le palier libre de
-      l'API X ne permet PAS de lire — inutile d'y compter. **CINQ sources livrées** :
-      `telegram` (aperçu PUBLIC t.me/s/, sans clé — la plus solide, à essayer en
-      PREMIER : `QUANT_TG_CANAUX=crypto_eliz883:eliz883,walshwealth1122`), `fichier`
-      (JSONL), `rss` (miroirs, fragiles), et l'export navigateur `make x-export`.
-      Plus `discord` (API BOT officielle — INUTILISABLE sur les salons visés : vérifié
-      le 24/09, ce ne sont pas des salons d'annonces, donc ni invitation possible ni
-      suivi ; reste `make x-export ARGS=--discord`). Aucune n'a encore tourné pour de vrai : le proxy de ce conteneur
-      refuse t.me, x.com et discord.com. Première ingestion réelle sur le Mac ou le VPS.
+- [x] **~~P1 — L'onglet X n'a JAMAIS vu de donnée réelle~~ — FERMÉ (24/09).** Première
+      ingestion : **34 publications** des deux canaux Telegram, dont 6 `TRADE_SIGNAL`.
+      Les filtres tournent sur du vrai contenu. Images ajoutées dans la foulée (ADR-0195).
+- [ ] **P2 — L'ingestion est MANUELLE (24/09).** `make x-ingest ARGS="--source telegram"`
+      se lance à la main. Un flux qu'on doit penser à rafraîchir cesse d'être rafraîchi.
+      À trancher : cron sur le VPS, ou étape du rafraîchissement quotidien existant.
+- [ ] **P2 — `walshwealth1122` n'a pas de correspondance de compte (24/09).** Il apparaît
+      sous son nom de canal, ce qui rend le filtre par compte moins lisible. Une ligne de
+      `QUANT_TG_CANAUX` suffira dès que le compte X correspondant sera connu.
 - [x] **~~P2 — `packages/intelligence` câblée nulle part~~ — FERMÉ (24/09, revue de #402).**
       Elle l'est désormais par `packages/social/qualification.py` : chaque publication de
       l'onglet X passe par `pipeline.qualifier()`, comme l'impose AGENTS.md §9. Les deux
