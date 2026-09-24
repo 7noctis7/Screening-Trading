@@ -34,6 +34,26 @@ python scripts/cout_churn.py >/dev/null \
 # Le champion précédent est conservé par le script lui-même (cf. `_mettre_de_cote`).
 python scripts/train_model.py \
   || echo "⚠️  train_model.py EN ÉCHEC — modèle non ré-entraîné, champion précédent conservé"
+# FLUX SOCIAL (onglet /x) — même raison que le corpus de news, et PLUS TRANCHANTE.
+# L'aperçu public `t.me/s/<canal>` ne rend qu'une vingtaine de messages, et un miroir RSS
+# guère plus. Sur un canal actif, une semaine sans ingestion est une semaine PERDUE
+# DÉFINITIVEMENT : les messages sortent de la fenêtre et aucune relance ne les rattrape.
+# C'est ce qui fait passer cette tâche de « à lancer quand on y pense » à « quotidienne ».
+#
+# Chaque source ne tourne que si elle est CONFIGURÉE — sans quoi le log se remplirait
+# chaque jour d'un échec attendu, et un vrai échec s'y noierait.
+if [ -n "${QUANT_TG_CANAUX:-}" ]; then
+  python scripts/social_x_ingest.py --source telegram \
+    || echo "⚠️  ingestion Telegram EN ÉCHEC — l'onglet /x se fige sur l'existant"
+fi
+if [ -n "${QUANT_X_RSS:-}" ]; then
+  python scripts/social_x_ingest.py --source rss \
+    || echo "⚠️  ingestion RSS EN ÉCHEC — miroir mort ? relancer make x-miroirs"
+fi
+if [ -n "${DISCORD_BOT_TOKEN:-}" ] && [ -n "${QUANT_DISCORD_SALONS:-}" ]; then
+  python scripts/social_x_ingest.py --source discord \
+    || echo "⚠️  ingestion Discord EN ÉCHEC — jeton révoqué ou bot retiré du serveur ?"
+fi
 python apps/web/preview/build_interactive.py        # régénère le terminal autonome
 python scripts/mcp_populate_overlays.py --offline || true   # cônes VaR/EVT + blackouts → charts (best-effort)
 python -m packages.reporting.obsidian || true               # coffre Obsidian : journal + attribution + post-mortems

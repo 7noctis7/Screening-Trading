@@ -198,6 +198,7 @@ croire qu'ils y sont. Ils y entreront un par un, après la porte de
 | Événements | `packages/events` | ✅ earnings (blackout) + IPOs |
 | LLM | `packages/llm` | ✅ garde anti-hallucination + routeur local Ollama |
 | MCP TradingView | `packages/mcp_tradingview` | ✅ overlays risque + alertes → kill-switch `run_live` |
+| Flux social | `packages/social` | ✅ 4 sources auto-enregistrées (JSONL, RSS, aperçu Telegram public, bot Discord) → SQLite → `/api/social/x/posts` → onglet `/x` · filtres compte/mot-clé/classification/direction/actif · extraction par RÈGLES (aucun LLM) · chaque publication part avec le verdict de `intelligence.pipeline.qualifier()` (AGENTS.md §9) · ingestion QUOTIDIENNE, un jour sans passage est perdu (ADR-0197) |
 | Certification | `packages/testing` | 🟡 protocole posé (`15_CERTIFICATION.md`) — registre à peupler (P1-8) |
 
 > **Test de validation de l'archi** : *« ajouter un exchange / une stratégie /

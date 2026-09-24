@@ -261,8 +261,14 @@ def _lignes_ecart(a: AuditTurnover) -> list[str]:
                     if abs(simple) >= 1e-9 else "1× — les deux moyennes coïncident.")
     else:
         rapport_ = f"{abs(simple / pondere):.1f}×"
-    return [f"  Moyenne simple {simple:+.2f} % · PONDÉRÉE par le notionnel "
-            f"{pondere:+.2f} % · rapport {rapport_}",
+    # LE ×100 N'EST PAS COSMÉTIQUE. Ces champs sont des FRACTIONS (0,0159), et tout le
+    # reste du rapport les convertit avant de les afficher. Sans cette conversion, la
+    # ligne annonçait « +0,02 % » deux lignes sous « +1,59 % » — le MÊME nombre, écrit
+    # cent fois trop petit, juste à côté de sa version juste. Le lecteur n'a aucune
+    # raison de croire l'une plutôt que l'autre, et le rapport — juste, lui, car les
+    # unités s'annulent — ne le départage pas. Trouvé sur la 1re sortie réelle, 24/09.
+    return [f"  Moyenne simple {simple * 100:+.2f} % · PONDÉRÉE par le notionnel "
+            f"{pondere * 100:+.2f} % · rapport {rapport_}",
             "    Seul le chiffre PONDÉRÉ est comparable au réalisé du compte : dans la "
             "moyenne simple,",
             "    une fraction d'action soldée à +40 % pèse autant qu'une ligne de "
