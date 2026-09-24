@@ -24,17 +24,20 @@ RACINE = Path(__file__).resolve().parents[2]
 SCRIPT = RACINE / "scripts" / "rsshub.sh"
 
 
-def _lancer(tmp_path: Path, secret: Path, *args: str) -> tuple[int, str, str]:
+def _lancer(tmp_path: Path, secret: Path, *args: str,
+            entree: str | None = None) -> tuple[int, str, str]:
     faux = tmp_path / "bin"
     faux.mkdir(exist_ok=True)
     journal = tmp_path / "appels"
     docker = faux / "docker"
     docker.write_text(f'#!/bin/sh\necho "docker $*" >> "{journal}"\n')
     docker.chmod(0o755)
-    env = {**os.environ, "PATH": f"{faux}:{os.environ['PATH']}",
-           "QUANT_RSSHUB_ENV": str(secret)}
+    # HERMÉTIQUE : un hôte qui exporte QUANT_RSSHUB_PORT=1300 ferait publier
+    # 127.0.0.1:1300 — comportement JUSTE du script, mais test rouge. Relevé en revue.
+    env = {k: v for k, v in os.environ.items() if not k.startswith("QUANT_RSSHUB_")}
+    env |= {"PATH": f"{faux}:{os.environ['PATH']}", "QUANT_RSSHUB_ENV": str(secret)}
     r = subprocess.run(["bash", str(SCRIPT), *args], env=env, capture_output=True,
-                       text=True, timeout=30)
+                       text=True, timeout=30, input=entree)
     appels = journal.read_text() if journal.exists() else ""
     return r.returncode, r.stdout + r.stderr, appels
 
@@ -72,8 +75,11 @@ def test_un_secret_LISIBLE_par_d_autres_fait_REFUSER_le_demarrage(tmp_path, droi
 def test_un_secret_ABSENT_dit_comment_le_creer_sans_rien_lancer(tmp_path):
     code, sortie, appels = _lancer(tmp_path, tmp_path / "nulle-part.env")
     assert code != 0
-    assert "chmod 600" in sortie and "SECONDAIRE" in sortie
+    assert "ARGS=jeton" in sortie and "SECONDAIRE" in sortie
     assert "docker run" not in appels
+    # la version d'avant proposait `printf 'TWITTER_AUTH_TOKEN=%s' '<cookie>' > …` :
+    # le cookie finissait dans l'historique du shell, à demeure
+    assert "printf" not in sortie and "TWITTER_AUTH_TOKEN=" not in sortie
 
 
 def test_un_jeton_VIDE_n_est_pas_une_configuration(tmp_path):
@@ -91,3 +97,43 @@ def test_le_risque_de_compte_est_ECRIT_dans_le_script():
 
 def test_le_script_est_executable():
     assert SCRIPT.stat().st_mode & stat.S_IXUSR
+
+
+# ── Saisie du jeton ─────────────────────────────────────────────────────────────────
+# La première version faisait taper le cookie sur la ligne de commande : historique du
+# shell à demeure, et fichier créé en 0644 juste avant le `chmod`. Relevé en revue.
+
+
+def test_le_jeton_est_enregistre_en_0600_depuis_une_saisie(tmp_path):
+    secret = tmp_path / "sous" / "rsshub.env"
+    code, _, _ = _lancer(tmp_path, secret, "jeton", entree="abc123\n")
+    assert code == 0
+    assert secret.read_text() == "TWITTER_AUTH_TOKEN=abc123\n"
+    assert stat.S_IMODE(secret.stat().st_mode) == 0o600
+
+
+def test_le_jeton_n_est_JAMAIS_reaffiche(tmp_path):
+    _, sortie, _ = _lancer(tmp_path, tmp_path / "s.env", "jeton", entree="s3cr3t\n")
+    assert "s3cr3t" not in sortie
+
+
+def test_un_ancien_fichier_LISIBLE_est_remplace_pas_reutilise(tmp_path):
+    """`>` sur un fichier existant garde ses anciens droits : 0644 le resterait."""
+    secret = _secret(tmp_path, 0o644, "TWITTER_AUTH_TOKEN=vieux\n")
+    _lancer(tmp_path, secret, "jeton", entree="neuf\n")
+    assert stat.S_IMODE(secret.stat().st_mode) == 0o600
+    assert "neuf" in secret.read_text()
+
+
+def test_une_saisie_VIDE_n_ecrit_rien(tmp_path):
+    secret = tmp_path / "s.env"
+    code, _, _ = _lancer(tmp_path, secret, "jeton", entree="\n")
+    assert code != 0 and not secret.exists()
+
+
+def test_le_jeton_enregistre_permet_le_demarrage(tmp_path):
+    """Bout en bout : ce que `jeton` écrit est ce que le démarrage accepte."""
+    secret = tmp_path / "s.env"
+    _lancer(tmp_path, secret, "jeton", entree="abc\n")
+    code, _, appels = _lancer(tmp_path, secret)
+    assert code == 0 and "docker run" in appels

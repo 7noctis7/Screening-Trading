@@ -26,6 +26,15 @@ des tests qui exécutent le vrai script avec un faux `docker` :
 - **le secret hors du dépôt**, en chmod 600 : le script REFUSE de démarrer sinon ;
 - **passé par fichier**, jamais en `-e CLE=valeur`, que `ps` affiche à tout utilisateur.
 
+**LA REVUE DE #407 A TROUVÉ LA QUATRIÈME FUITE, ET ELLE ÉTAIT DANS MON MODE D'EMPLOI.**
+Le message d'aide proposait `printf 'TWITTER_AUTH_TOKEN=%s' '<cookie>' > fichier` puis
+`chmod 600`. Le cookie finissait dans l'historique du shell, à demeure ; et la
+redirection créait le fichier en 0644 (umask usuel) pendant l'instant qui précédait le
+`chmod`. Les trois gardes protégeaient le secret une fois en place — pas le chemin pour
+l'y mettre. Désormais `make rsshub ARGS=jeton` : saisie masquée, jamais d'argument,
+fichier supprimé puis NÉ en 0600 sous `umask 077` (un `>` sur un fichier existant garde
+ses anciens droits). Le test qui vérifie le mode tombe si l'on retire l'un ou l'autre.
+
 **`includeRts=0`.** Sans lui, le signal d'un tiers retweeté par astekz serait rangé comme
 un signal d'astekz. AGENTS.md §9 : une reprise n'est pas une source.
 

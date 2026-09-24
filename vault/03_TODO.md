@@ -18,9 +18,9 @@
 - [ ] **P1 — 3 des 4 comptes X suivis n'ont toujours AUCUNE source — outillé (24/09,
       ADR-0199).** Deux voies, dans l'ordre : (1) `make x-miroirs`, sans compte ni
       installation — jamais encore lancé avec succès ; (2) `make rsshub`, RSSHub
-      auto-hébergé sur le VPS, lu par la source RSS existante. Demande un cookie
-      `auth_token` d'un compte X **SECONDAIRE** dans `~/.config/quant/rsshub.env`
-      (chmod 600). Reste à FAIRE sur le VPS, pas à coder.
+      auto-hébergé sur le VPS, lu par la source RSS existante. Demande le cookie
+      `auth_token` d'un compte X **SECONDAIRE**, saisi par `make rsshub ARGS=jeton`
+      (masqué, 0600, hors dépôt). Reste à FAIRE sur le VPS, pas à coder.
 - [x] **~~P2 — L'ingestion est MANUELLE~~ — FERMÉ (24/09, ADR-0197).** Les trois sources
       réseau rejoignent `scripts/cron_daily.sh`, chacune sous garde de configuration,
       chacune avec un échec NOMMÉ (jamais `|| true`). Le retard ne se rattrape pas : la

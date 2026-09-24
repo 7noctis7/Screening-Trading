@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # RSSHUB AUTO-HÉBERGÉ — la voie GRATUITE et DURABLE pour lire les comptes X.
 #
+#   make rsshub ARGS=jeton      # enregistre le cookie — saisie MASQUÉE, une seule fois
 #   make rsshub                 # démarre (ou met à jour) le conteneur
-#   make rsshub ARGS=statut     # répond-il, et avec quel compte ?
+#   make rsshub ARGS=statut     # répond-il ?
 #   make rsshub ARGS=arret
 #
 # POURQUOI CETTE VOIE. L'API X gratuite ne sait pas LIRE (la lecture est payante,
@@ -34,10 +35,8 @@ SECRET="${QUANT_RSSHUB_ENV:-$HOME/.config/quant/rsshub.env}"
 
 _secret_sain() {
   if [ ! -f "$SECRET" ]; then
-    echo "✗ $SECRET absent. Le créer (compte X SECONDAIRE) :"
-    echo "    mkdir -p \"$(dirname "$SECRET")\""
-    echo "    printf 'TWITTER_AUTH_TOKEN=%s\\n' '<cookie auth_token>' > \"$SECRET\""
-    echo "    chmod 600 \"$SECRET\""
+    echo "✗ $SECRET absent. L'enregistrer (cookie d'un compte X SECONDAIRE) :"
+    echo "    make rsshub ARGS=jeton"
     return 1
   fi
   # `stat -c` (GNU) puis `stat -f` (BSD/macOS) : le script tourne sur les deux.
@@ -50,6 +49,21 @@ _secret_sain() {
   fi
   grep -q '^TWITTER_AUTH_TOKEN=.\+' "$SECRET" \
     || { echo "✗ TWITTER_AUTH_TOKEN vide dans $SECRET."; return 1; }
+}
+
+_jeton() {
+  # LA PREMIÈRE VERSION FAISAIT TAPER LE COOKIE SUR LA LIGNE DE COMMANDE (`printf … >`).
+  # Deux fuites d'un coup : l'historique du shell le gardait À DEMEURE, et la redirection
+  # créait le fichier en 0644 (umask usuel 022) pendant l'instant qui précédait le
+  # `chmod` — une session X complète, lisible par tout utilisateur du VPS. Relevé en
+  # revue de #407. D'où : saisie masquée, jamais d'argument, fichier NÉ en 0600.
+  local jeton
+  read -rsp "auth_token du compte X SECONDAIRE (saisie masquée) : " jeton; echo
+  [ -n "$jeton" ] || { echo "✗ saisie vide — rien écrit."; return 1; }
+  mkdir -p "$(dirname "$SECRET")"
+  # `rm` d'abord : `>` sur un fichier existant garde ses ANCIENS droits, peut-être 0644.
+  ( umask 077; rm -f "$SECRET"; printf 'TWITTER_AUTH_TOKEN=%s\n' "$jeton" > "$SECRET" )
+  echo "✓ enregistré dans $SECRET (0600). Démarrer : make rsshub"
 }
 
 _demarrer() {
@@ -76,7 +90,8 @@ _statut() {
 
 case "${1:-demarrer}" in
   demarrer|"") _demarrer ;;
+  jeton) _jeton ;;
   statut) _statut ;;
   arret) docker rm -f "$NOM" >/dev/null 2>&1 && echo "✓ arrêté." || echo "(déjà arrêté)" ;;
-  *) echo "usage : $0 [demarrer|statut|arret]"; exit 2 ;;
+  *) echo "usage : $0 [jeton|demarrer|statut|arret]"; exit 2 ;;
 esac
