@@ -76,7 +76,17 @@ huit tests d'alors ne vérifiaient jamais la date. (c) Une date manquante était
 trois sources l'écartent et le disent. (d) La recherche portait sur une liste tronquée en
 silence : la troncature est affichée.
 
-**BLOQUÉ.** Le stock est vide : les filtres sont testés sur 95 cas mais **jamais vus sur
+**10. Les salons Discord ne sont pas des salons d'annonces.** Les deux voies propres
+tombent : le bot ne peut pas entrer, rien ne peut se suivre. Aucun moyen légitime par
+l'API — dit plutôt que bricolé. Reste `tools/discord_export.js`, même raisonnement que
+pour X : déjà membre, déjà connecté, on recopie ce qui est affiché. Test qui refuse le
+code s'il contient `fetch`, `WebSocket`, `setInterval`, `localStorage` ou `token` — c'est
+ce qui sépare un presse-papier d'un self-bot. Deux pièges propres à Discord traités : la
+liste est virtualisée (l'export capture ce qu'on a fait défiler), et l'auteur n'est rendu
+que sur le premier message d'un groupe (reporté, sinon les suivants perdraient leur
+compte).
+
+**BLOQUÉ.** Le stock est vide : les filtres sont testés sur 100 cas mais **jamais vus sur
 des données réelles**. Brancher une source suppose de décider d'où viennent les
 publications — c'est une décision de l'utilisateur, pas une supposition à coder.
 

@@ -372,8 +372,8 @@ turnover-audit:      ## coût réel du rebalancement quotidien (frais, durée, c
 	$(PYTHON) scripts/turnover_audit.py $(ARGS)
 x-ingest:            ## ingère les publications X (JSONL) → onglet /x ; `ARGS=--etat` pour voir le stock
 	$(PYTHON) scripts/social_x_ingest.py $(ARGS)
-x-export:            ## marque-page d'export X depuis le navigateur (sans clé, sans miroir)
-	$(PYTHON) scripts/x_bookmarklet.py
+x-export:            ## marque-page d'export navigateur ; `ARGS=--discord` pour les salons
+	$(PYTHON) scripts/x_bookmarklet.py $(ARGS)
 rdv-paper:           ## verdict GO/NO-GO mécanique du RDV 2026-08-06 (paper réel vs backtest)
 	$(PYTHON) scripts/rdv_paper.py
 bitmart-check:       ## diagnostic Bitmart LECTURE SEULE (verrous + connexion, zéro ordre) — BLOC 2

@@ -167,6 +167,25 @@ Discord, activement détectée et sanctionnée par le BANNISSEMENT. Non impléme
 pas implémenter : le compte perdu serait celui de l'utilisateur. Un test vérifie que
 l'en-tête déclare bien `Bot <jeton>`.
 
+**VÉRIFIÉ LE 24/09 : LES SALONS VISÉS NE SONT PAS DES SALONS D'ANNONCES.** Les deux voies
+propres tombent donc — le bot ne peut pas entrer, et rien ne peut se suivre. Il n'existe
+AUCUN moyen légitime de faire lire ce serveur par l'API. Le dire plutôt que de bricoler
+est la réponse : la source `discord` reste livrée pour le jour où un admin ajoutera le
+bot, et elle ne sert à rien d'ici là.
+
+**CE QUI RESTE EST LE MÊME RAISONNEMENT QUE POUR X.** L'utilisateur est déjà membre, déjà
+connecté, déjà en train de lire la page. `tools/discord_export.js` recopie ce qui est
+AFFICHÉ. La frontière est identique et elle est tenue par un test : aucun `fetch`, aucun
+`WebSocket`, aucun `setInterval`, aucun accès au `localStorage` ni au jeton. **C'est
+exactement ce qui sépare un presse-papier d'un self-bot** — Discord sanctionne
+l'automatisation d'un COMPTE, pas la lecture d'une page qu'on a sous les yeux.
+
+Deux différences avec l'export X, toutes deux dictées par le produit. La liste de messages
+est VIRTUALISÉE : Discord ne rend que la zone visible, donc l'export capture ce qui a été
+fait défiler — remonter et réexporter complète le fichier, et les identifiants stables
+empêchent tout doublon. Et l'auteur n'est rendu que sur le PREMIER message d'un groupe :
+sans report explicite, les suivants partiraient sans compte et le filtre les perdrait.
+
 **UN TEST A ATTRAPÉ UNE VRAIE FUITE DE SECRET.** Le premier jet relayait `{e}` dans les
 rejets. Or une `URLError` porte le message que la pile réseau lui a donné et une
 `HTTPError` porte l'URL — le jeton s'y retrouve. Le test qui vérifie son absence sur 401,

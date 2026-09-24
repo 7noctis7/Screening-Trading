@@ -23,6 +23,7 @@ from packages.social.sources import charger_plugins, sources
 
 RACINE = Path(__file__).resolve().parents[2]
 JS = RACINE / "tools" / "x_export.js"
+JS_DISCORD = RACINE / "tools" / "discord_export.js"
 
 
 def _champs_emis() -> set[str]:
@@ -88,3 +89,51 @@ def test_le_marque_page_est_le_script_LUI_MEME_pas_une_copie():
     lien = bookmarklet(source)
     assert lien.startswith("javascript:")
     assert unquote(lien[len("javascript:"):]) == source
+
+
+# ---- Discord : même contrat, mêmes refus -----------------------------------------
+
+def test_l_export_discord_est_ACCEPTE_par_le_meme_ingesteur(tmp_path):
+    """Un seul format d'entrée pour les deux exports — sinon deux chemins."""
+    ligne = {"id": "discord:1234/5678", "compte": "eliz883",
+             "ts": "2026-09-24T10:00:00.000Z",
+             "texte": "BTCUSDT long, entrée 64000",
+             "url": "https://discord.com/channels/@me/1234/5678"}
+    f = tmp_path / "x.jsonl"
+    f.write_text(json.dumps(ligne, ensure_ascii=False) + "\n")
+
+    charger_plugins()
+    src = sources.create("fichier", chemin=str(f))
+    pubs = src.lire()
+    assert src.rejets == [], src.rejets
+    assert len(pubs) == 1 and pubs[0].compte == "eliz883"
+    assert pubs[0].direction is Direction.LONG
+
+
+def test_l_export_discord_ne_FAIT_PAS_DEFILER_et_n_appelle_aucune_API():
+    """Le presse-papier reste un presse-papier : c'est ce qui le sépare d'un self-bot,
+    la seule chose que Discord sanctionne par le bannissement."""
+    code = JS_DISCORD.read_text(encoding="utf-8")
+    for interdit in ("scrollTo", "scrollBy", "scrollIntoView", "setInterval",
+                     "setTimeout", "fetch(", "XMLHttpRequest", "WebSocket",
+                     "localStorage", "token"):
+        assert interdit not in code, f"{interdit} : ce script doit rester passif"
+
+
+def test_l_export_discord_AVERTIT_au_lieu_de_rendre_zero():
+    code = JS_DISCORD.read_text(encoding="utf-8")
+    assert "lignes.length === 0" in code and "alert(" in code
+
+
+def test_l_identifiant_discord_porte_le_SALON_et_le_MESSAGE():
+    """Le rang change au défilement ; l'identifiant de ligne, non."""
+    code = JS_DISCORD.read_text(encoding="utf-8")
+    assert "id: `discord:${m[1]}/${m[2]}`" in code
+
+
+def test_les_DEUX_marque_pages_sont_leurs_scripts_eux_memes():
+    from scripts.x_bookmarklet import SCRIPTS, bookmarklet
+
+    for chemin in SCRIPTS.values():
+        source = chemin.read_text(encoding="utf-8")
+        assert unquote(bookmarklet(source)[len("javascript:"):]) == source, chemin

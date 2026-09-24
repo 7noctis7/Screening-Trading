@@ -14,7 +14,7 @@
       partielle, portant aussi sur les niveaux extraits.
 - [ ] **P1 — L'onglet X n'a JAMAIS vu de donnée réelle (24/09).** Le stock est vide, la
       source « fichier » attend `data/x_posts.jsonl`. Tant que rien n'est ingéré, les
-      filtres sont validés sur 95 cas synthétiques et sur rien d'autre — et l'onglet
+      filtres sont validés sur 100 cas synthétiques et sur rien d'autre — et l'onglet
       affiche « flux non connecté », ce qui est le comportement voulu, pas un succès.
       À faire : décider d'où viennent les publications (API X payante ? export d'un
       client tiers ? copier-coller ?), alimenter le JSONL, lancer `make x-ingest`, PUIS
@@ -24,9 +24,9 @@
       `telegram` (aperçu PUBLIC t.me/s/, sans clé — la plus solide, à essayer en
       PREMIER : `QUANT_TG_CANAUX=crypto_eliz883:eliz883,walshwealth1122`), `fichier`
       (JSONL), `rss` (miroirs, fragiles), et l'export navigateur `make x-export`.
-      Plus `discord` (API BOT officielle — le bot doit être INVITÉ par un admin, ou le
-      salon suivi depuis son propre serveur ; le self-bot fait bannir et n'est pas
-      implémenté). Aucune n'a encore tourné pour de vrai : le proxy de ce conteneur
+      Plus `discord` (API BOT officielle — INUTILISABLE sur les salons visés : vérifié
+      le 24/09, ce ne sont pas des salons d'annonces, donc ni invitation possible ni
+      suivi ; reste `make x-export ARGS=--discord`). Aucune n'a encore tourné pour de vrai : le proxy de ce conteneur
       refuse t.me, x.com et discord.com. Première ingestion réelle sur le Mac ou le VPS.
 - [x] **~~P2 — `packages/intelligence` câblée nulle part~~ — FERMÉ (24/09, revue de #402).**
       Elle l'est désormais par `packages/social/qualification.py` : chaque publication de
