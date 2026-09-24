@@ -74,6 +74,30 @@ panne muette, invisible en local. Au passage, sa détection ne lisait que la tab
 `routes` et obligeait à inscrire tout le reste dans une liste blanche : elle CONSTATE
 désormais les appels `_write("nom", …)`, au lieu de faire confiance à une déclaration.
 
+**LA VOIE GRATUITE — ET CE QU'ELLE COÛTE VRAIMENT.** Question posée : une alternative
+gratuite à l'API X. Le palier libre de X ne permet PAS de lire — il sert à publier ; la
+lecture commence à 100 $/mois. Les voies sans frais passent donc par un TIERS qui expose
+du RSS (instance Nitter survivante, xcancel, RSSHub, RSS.app). Ces miroirs meurent
+régulièrement : ils dépendent du bon vouloir de X.
+
+D'où la forme de `sources/rss.py` : il ne connaît AUCUN fournisseur, il lit une liste
+d'URL donnée en configuration (`QUANT_X_RSS`). Quand un miroir tombe, on change une URL,
+pas une ligne de code — écrire « nitter.net » dans le module reviendrait à le dater. Un
+test le vérifie sur le CODE, hors docstring.
+
+**LE PIÈGE PROPRE AUX FLUX GRATUITS : un miroir MORT et un compte SILENCIEUX rendent la
+même chose.** Erreur réseau, page d'excuse ou XML sans élément — les trois ressemblent à
+« rien de neuf ». Confondus, ils laissent l'onglet se vider en silence pendant des
+semaines. `lire()` les NOMME dans `rejets`. Second garde-fou lié à la même fragilité :
+l'identifiant vient du LIEN canonique, jamais du rang, car un flux republie les mêmes
+éléments dans un ordre changeant — numéroter recréerait des publications à chaque passage
+et ferait mentir l'idempotence.
+
+**PLUS SOLIDE QUE LE RSS, ET NON CODÉ : Telegram.** Beaucoup de comptes trading doublent
+leurs messages sur un canal public. L'API bot est gratuite, officielle, stable, et sans
+zone grise. Ce sera UN fichier de plus dans `sources/` le jour où c'est décidé — la
+décision revient à l'utilisateur, elle suppose de savoir si ces comptes ont un canal.
+
 **CE QUI N'EST PAS FAIT, ET POURQUOI.** Aucune publication n'a été ingérée : le stock est
 vide, et l'onglet le dit. Les filtres sont donc testés sur 44 cas mais **jamais vus sur
 des données réelles**. Brancher une source est la prochaine étape, et elle appartient à

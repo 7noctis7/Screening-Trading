@@ -31,7 +31,16 @@ lookarounds ne portaient que sur la première alternative, faute de groupe non c
 BLOQUÉ sur son squelette en ligne. Sa détection ne lisait que la table `routes` et
 poussait à remplir une liste blanche ; elle constate désormais les `_write` réels.
 
-**BLOQUÉ.** Le stock est vide : les filtres sont testés sur 44 cas mais **jamais vus sur
+**5. Alternative gratuite à l'API X — mesurée, pas supposée.** Le palier libre de X ne
+permet pas de LIRE (il sert à publier ; la lecture commence à 100 $/mois). Je n'ai pas pu
+tester les miroirs depuis ce conteneur : sa politique réseau refuse `xcancel.com`,
+`nitter.poast.org`, `x.com` (403 au proxy). Livré quand même la source qui couvre toutes
+ces voies d'un coup : `sources/rss.py`, générique, sans AUCUN fournisseur codé en dur —
+on change d'URL quand un miroir meurt. 8 tests, dont le miroir mort NOMMÉ plutôt que
+confondu avec un compte silencieux. Recommandation faite : Telegram d'abord, seule voie
+gratuite à la fois stable, officielle et sans zone grise.
+
+**BLOQUÉ.** Le stock est vide : les filtres sont testés sur 52 cas mais **jamais vus sur
 des données réelles**. Brancher une source suppose de décider d'où viennent les
 publications — c'est une décision de l'utilisateur, pas une supposition à coder.
 

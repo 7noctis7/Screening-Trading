@@ -14,11 +14,14 @@
       partielle, portant aussi sur les niveaux extraits.
 - [ ] **P1 — L'onglet X n'a JAMAIS vu de donnée réelle (24/09).** Le stock est vide, la
       source « fichier » attend `data/x_posts.jsonl`. Tant que rien n'est ingéré, les
-      filtres sont validés sur 44 cas synthétiques et sur rien d'autre — et l'onglet
+      filtres sont validés sur 52 cas synthétiques et sur rien d'autre — et l'onglet
       affiche « flux non connecté », ce qui est le comportement voulu, pas un succès.
       À faire : décider d'où viennent les publications (API X payante ? export d'un
       client tiers ? copier-coller ?), alimenter le JSONL, lancer `make x-ingest`, PUIS
-      juger les filtres sur du vrai contenu.
+      juger les filtres sur du vrai contenu. **Deux sources sont prêtes** : `fichier`
+      (JSONL, sans clé) et `rss` (miroirs gratuits, `QUANT_X_RSS`). Le palier libre de
+      l'API X ne permet PAS de lire — inutile d'y compter. Piste la plus solide et NON
+      codée : Telegram (API bot gratuite et officielle), si ces comptes ont un canal.
 - [ ] **P2 — `packages/intelligence` reste câblée nulle part (constaté le 24/09).** Zéro
       import depuis `apps/` ou `scripts/`. Sa taxonomie (FAIT / OPINION / RUMEUR) est
       ORTHOGONALE à celle de l'onglet X (intention déclarée) : les deux peuvent coexister,
