@@ -57,7 +57,15 @@ risque — la voie la plus solide des trois. Avec la syntaxe `canal:compte`, par
 `crypto_eliz883` est le compte X `eliz883` et que le filtre cherche les pseudos X.
 8 tests. Un canal sans aperçu est NOMMÉ, jamais confondu avec un canal muet.
 
-**BLOQUÉ.** Le stock est vide : les filtres sont testés sur 66 cas mais **jamais vus sur
+**8. Discord — deux voies propres, une refusée.** Avoir rejoint un serveur ne suffit pas :
+un bot ne voit que les serveurs où un admin l'a invité. Soit l'admin ajoute le bot, soit
+le salon est de type ANNONCES et se SUIT vers son propre serveur (contournement légitime,
+aucune permission à demander). Le self-bot par jeton utilisateur fait BANNIR le compte :
+non implémenté, et un test vérifie que l'en-tête déclare `Bot`. **Un test a attrapé une
+vraie fuite** : je relayais `{e}`, et `URLError`/`HTTPError` portent le jeton. Corrigé —
+tout rejet passe par `_sans_secret`. 14 tests.
+
+**BLOQUÉ.** Le stock est vide : les filtres sont testés sur 80 cas mais **jamais vus sur
 des données réelles**. Brancher une source suppose de décider d'où viennent les
 publications — c'est une décision de l'utilisateur, pas une supposition à coder.
 

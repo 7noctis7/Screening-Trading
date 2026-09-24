@@ -152,6 +152,36 @@ Le marque-page est GÉNÉRÉ depuis le script (`make x-export`), jamais recopié
 version figée dans la documentation divergerait au premier correctif sans que personne
 ne s'en aperçoive avant de constater un export cassé. Un test vérifie l'aller-retour.
 
+**DISCORD : DEUX VOIES PROPRES, ET UNE QUI FAIT BANNIR.** Question posée : récupérer les
+messages de salons Discord rejoints. Discord n'expose AUCUNE page publique comparable à
+`t.me/s/<canal>` : lire un salon demande un bot, et un bot ne voit que les serveurs où un
+administrateur l'a INVITÉ. **Avoir rejoint un serveur ne suffit pas.**
+
+  1. Le serveur vous appartient, ou son admin accepte d'y ajouter votre bot.
+  2. Le salon est de type ANNONCES : il se SUIT depuis votre propre serveur, où vous êtes
+     admin et où vit votre bot. C'est le contournement légitime quand on n'est qu'un
+     membre parmi d'autres, et il ne demande la permission de personne.
+
+La troisième voie — le jeton de son compte utilisateur, « self-bot » — est interdite par
+Discord, activement détectée et sanctionnée par le BANNISSEMENT. Non implémentée, et à ne
+pas implémenter : le compte perdu serait celui de l'utilisateur. Un test vérifie que
+l'en-tête déclare bien `Bot <jeton>`.
+
+**UN TEST A ATTRAPÉ UNE VRAIE FUITE DE SECRET.** Le premier jet relayait `{e}` dans les
+rejets. Or une `URLError` porte le message que la pile réseau lui a donné et une
+`HTTPError` porte l'URL — le jeton s'y retrouve. Le test qui vérifie son absence sur 401,
+403, 404, 429, 500 ET sur une panne réseau a échoué, comme prévu. C'est la fuite la plus
+banale qui soit : on croit rapporter une panne, on recopie un secret dans un log, une
+réponse d'API ou une capture d'écran. **Le dépôt est PUBLIC, et gitleaks garde les
+fichiers, pas les messages d'exécution.** Tout rejet passe désormais par `_sans_secret`.
+
+**TROIS REFUS QUI NE SE RESSEMBLENT PAS.** Discord les distingue par code HTTP : 401 le
+jeton est faux ou révoqué, 403 le bot n'est pas dans ce serveur ou ne peut pas lire
+l'historique, 404 le salon est invisible. Les fondre en « aucun message » enverrait
+chercher un problème de flux là où il y a un problème de permission. Et un jeton ABSENT
+le dit sans tenter le moindre appel : la cause est locale, le message doit envoyer au bon
+endroit. Quatrième occurrence du principe dans cette ADR.
+
 **CE QUI N'EST PAS FAIT, ET POURQUOI.** Aucune publication n'a été ingérée : le stock est
 vide, et l'onglet le dit. Les filtres sont donc testés sur 44 cas mais **jamais vus sur
 des données réelles**. Brancher une source est la prochaine étape, et elle appartient à
