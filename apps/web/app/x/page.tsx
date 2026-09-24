@@ -121,8 +121,9 @@ export default function OngletX() {
       <header>
         <h1 className="text-lg font-semibold">Ce que disent les comptes suivis</h1>
         <p className="text-xs text-muted2 mt-1">
-          Des propos publiés sur X, classés par intention DÉCLARÉE. Un message étiqueté
-          « TRADE_SIGNAL » annonce une position — il ne dit pas qu&apos;elle est bonne,
+          Des propos publiés par les comptes suivis — sur X, Telegram ou Discord selon
+          la source ingérée — classés par intention DÉCLARÉE. Un message étiqueté
+          « TRADE_SIGNAL » annonce une position : il ne dit pas qu&apos;elle est bonne,
           et rien de cette page n&apos;alimente une décision automatique.
         </p>
       </header>

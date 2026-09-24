@@ -23,7 +23,7 @@ const LINKS: [string, string][] = [
   ["/investors", "Investisseurs"],
   ["/ml", "Signaux automatiques"],
   ["/sentiment", "Actualité & sentiment"],
-  ["/x", "Comptes X suivis"],
+  ["/x", "Comptes suivis"],          // X, Telegram, Discord — pas seulement X
   ["/conviction", "Convictions"],
   ["/echecs", "Ce qui n'a pas marché"],
   ["/methode", "Notre méthode"],
