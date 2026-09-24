@@ -142,6 +142,11 @@ class SourceTelegram:
         self.cibles = _cibles(canaux or os.environ.get("QUANT_TG_CANAUX") or "")
         self.rejets: list[str] = []
 
+    @property
+    def configuree(self) -> bool:
+        """Aucun canal visé = rien à faire. C'est ICI que ça se sait, pas ailleurs."""
+        return bool(self.cibles)
+
     def lire(self) -> list[Publication]:
         self.rejets = []
         publications: list[Publication] = []

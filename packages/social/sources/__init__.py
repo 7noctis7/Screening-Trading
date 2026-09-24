@@ -27,6 +27,25 @@ class SourcePublications(Protocol):
     def lire(self) -> list[Publication]: ...
 
 
+def est_configuree(source: object) -> bool:
+    """Une source sait seule si elle a de quoi travailler. Le shell ne le sait pas.
+
+    Les gardes avaient d'abord été écrites dans `cron_daily.sh`, sous la forme
+    `[ -n "${QUANT_TG_CANAUX:-}" ]`. C'était FAUX sans que rien ne le dise : `.env`
+    n'est lu qu'en Python (`packages/common/env.py`), donc sous cron ces variables sont
+    vides, la garde échoue, et les trois sources sont sautées EN SILENCE — chaque nuit,
+    indéfiniment. Une garde censée éviter un log bruyant serait devenue la raison pour
+    laquelle la tâche ne tourne jamais, sans une ligne pour le signaler.
+
+    La question « ai-je de quoi lire ? » n'a donc qu'UN endroit où se poser : la source.
+
+    Défaut à `True` : un plugin tiers qui ne déclare rien est réputé configuré. Le
+    supposer non configuré le rendrait muet, et l'auteur du plugin n'aurait aucun
+    moyen de comprendre pourquoi sa source ne tourne pas.
+    """
+    return bool(getattr(source, "configuree", True))
+
+
 sources: Registry[SourcePublications] = Registry("source_social")
 
 

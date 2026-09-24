@@ -47,8 +47,11 @@
       `qty × entry_price`, `None` (jamais 0.0) si le poids est inconnu, ligne d'alerte
       au-delà de 3 points d'écart entre les deux moyennes.
 - [ ] **P2 — Le cron social n'a pas encore tourné sur le VPS (24/09).** Le code est
-      mergé ; l'effet demande le déploiement PUIS un rechargement du cron. Tant que ce
-      n'est pas fait, l'ingestion reste manuelle en pratique.
+      mergé ; l'effet vient au prochain passage APRÈS déploiement — rien à recharger, la
+      crontab pointe le chemin du script. **Vérifier dans `/tmp/quant_daily.log` que les
+      trois lignes d'ingestion apparaissent** : c'est le seul moyen de distinguer « ça
+      tourne » de « ça se saute en silence », le défaut que la garde shell aurait créé.
+      Tant que ce n'est pas vu, l'ingestion reste manuelle en pratique.
 - [x] **~~P1 — Le chiffre pondéré lui-même n'est pas encore MESURÉ~~ — MESURÉ (24/09).**
       Lancé sur le compte réel : **+1,59 % simple contre +0,09 % pondéré** sur
       **867 604 $** engagés, rapport **17,7×**, t = +4,70, PF 2,18, détention médiane

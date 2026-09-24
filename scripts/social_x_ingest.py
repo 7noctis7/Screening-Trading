@@ -26,7 +26,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from packages.social.sources import charger_plugins, sources  # noqa: E402
+from packages.common.env import load_env  # noqa: E402
+from packages.social.sources import (  # noqa: E402
+    charger_plugins,
+    est_configuree,
+    sources,
+)
 from packages.social.store import StorePublications, chemin_db  # noqa: E402
 
 
@@ -45,6 +50,10 @@ def _etat(db: str) -> int:
 
 
 def main() -> int:
+    # `.env` est la SEULE configuration que l'utilisateur écrit. Sans ce chargement, le
+    # script marchait depuis un shell où les variables avaient été exportées à la main,
+    # et nulle part ailleurs — en particulier pas sous cron, dont l'env est nu.
+    load_env()
     disponibles = charger_plugins()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--source", default="fichier", choices=disponibles)
@@ -57,6 +66,10 @@ def main() -> int:
                     help="source « discord » : « id[:compte] », par virgules")
     ap.add_argument("--db", default=None)
     ap.add_argument("--etat", action="store_true", help="n'écrit rien")
+    ap.add_argument("--si-configuree", action="store_true",
+                    help="sort en silence (code 0) si la source n'a rien à lire — "
+                         "ce que la chaîne quotidienne utilise pour ne pas remplir "
+                         "son journal d'échecs attendus")
     a = ap.parse_args()
 
     db = a.db or chemin_db()
@@ -69,6 +82,8 @@ def main() -> int:
                "telegram": {"canaux": a.canaux}, "discord": {"salons": a.salons}}
     kwargs = {k: v for k, v in options.get(a.source, {}).items() if v}
     src = sources.create(a.source, **kwargs)
+    if a.si_configuree and not est_configuree(src):
+        return 0
     lues = src.lire()
     rejets = list(getattr(src, "rejets", []))
 

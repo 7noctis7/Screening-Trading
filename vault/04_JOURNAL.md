@@ -32,6 +32,16 @@ Ces champs sont des fractions ; le reste du rapport les convertit, pas ce bloc. 
 donc le faux, le juste, et un troisième chiffre correct qui ne départageait pas. Corrigé,
 et épinglé par un test qui échoue sur le code d'avant.
 
+**4bis. Et la garde que j'avais mise était au mauvais étage** (ADR-0197, correction).
+Je l'avais écrite en bash : `[ -n "${QUANT_TG_CANAUX:-}" ]`. **Faux, et muet.** `.env`
+n'est lu qu'en Python ; sous cron, l'environnement est nu, la garde échoue, et les trois
+sources auraient été sautées **chaque nuit, en silence**. Une garde censée éviter un log
+bruyant serait devenue la raison pour laquelle la tâche ne tourne jamais. Trouvé en
+préparant la commande de déploiement — pas par un test, ce qui en dit long. La question
+se pose désormais dans la SOURCE (`configuree`), le script prend `--si-configuree` et
+charge `.env` lui-même, et le shell n'a plus de garde. Un test refuse le retour de
+l'ancienne forme.
+
 **4. L'ingestion sociale devient quotidienne** (ADR-0197). Un flux qu'on doit penser à
 rafraîchir cesse de l'être, et ici le retard ne se rattrape PAS : la fenêtre publique de
 Telegram et des miroirs RSS ne rend qu'une vingtaine de messages. Les trois sources réseau
@@ -40,8 +50,8 @@ rejoignent `scripts/cron_daily.sh`, chacune sous garde de configuration, chacune
 
 **BLOQUÉ.** Rien.
 
-**SUITE.** (a) Déployer, puis recharger le cron sur le VPS — le correctif ne tourne pas
-tant que ce n'est pas fait. (b) Le « un seul motif de sortie » mérite d'être instruit :
+**SUITE.** (a) Déployer sur le VPS. Rien à recharger : la crontab pointe le CHEMIN du
+script, donc le prochain passage lit la nouvelle version. (b) Le « un seul motif de sortie » mérite d'être instruit :
 des TP/SL qui ne déclenchent jamais sont soit trop larges, soit court-circuités par le
 rebalancement quotidien. (c) Réinjecter les features ML depuis l'archive du 18/09 —
 toujours P1, toujours bloquant pour l'entraînement.

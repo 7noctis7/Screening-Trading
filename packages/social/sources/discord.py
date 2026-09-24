@@ -74,6 +74,13 @@ class SourceDiscord:
         self._jeton = jeton or os.environ.get("DISCORD_BOT_TOKEN") or ""
         self.rejets: list[str] = []
 
+    @property
+    def configuree(self) -> bool:
+        """Les DEUX sont nécessaires : un jeton sans salon n'a rien à lire, et un
+        salon sans jeton ne rendra que des 401. Un seul des deux n'est pas une
+        configuration — c'en est une à moitié, ce qui est pire que rien."""
+        return bool(self._jeton and self.cibles)
+
     def _sans_secret(self, texte: str) -> str:
         """Le dernier filet AVANT d'écrire quoi que ce soit.
 

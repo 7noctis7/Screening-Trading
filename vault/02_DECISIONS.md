@@ -52,8 +52,26 @@ avait rendu une panne indétectable.
 **ET L'INGESTION NE FAIT PAS TOMBER LA CHAÎNE.** Le script est en `set -e` : un canal
 mort arrêterait rapports, watchlist et miroirs pour une cause sans rapport avec eux.
 
-**CONSÉQUENCE.** Le correctif ne prend effet qu'après déploiement ET rechargement du cron
-sur le VPS. Un test lit le script et refuse une régression sur les quatre points.
+**CORRECTION LE MÊME JOUR — LA GARDE ÉTAIT AU MAUVAIS ÉTAGE.** Elle était écrite en
+bash : `[ -n "${QUANT_TG_CANAUX:-}" ]`. C'était **faux, et muet**. `.env` n'est lu qu'en
+Python (`packages/common/env.py`) ; sous cron, dont l'environnement est nu, ces variables
+sont vides. La garde aurait donc échoué à chaque fois et sauté les trois sources **en
+silence, chaque nuit, indéfiniment** — une garde censée éviter un log bruyant serait
+devenue la raison pour laquelle la tâche ne tourne jamais, sans une ligne pour le dire.
+C'est le pire genre de défaut : il ne se manifeste pas, il *ressemble* à de la propreté.
+
+La question « ai-je de quoi lire ? » n'a qu'un endroit légitime : **la source**, qui a
+résolu sa propre configuration. Chaque source expose `configuree` ; le script d'ingestion
+prend `--si-configuree` et sort en silence avec le code 0 ; le shell n'a plus de garde du
+tout. `scripts/social_x_ingest.py` appelle en outre `load_env()` — sans quoi il ne
+marchait que depuis un shell où les variables avaient été exportées à la main.
+
+Une source tierce qui ne déclare rien est réputée **configurée** : la supposer muette la
+rendrait silencieuse sans que l'auteur du plugin puisse comprendre pourquoi.
+
+**CONSÉQUENCE.** Le correctif prend effet au prochain passage du cron APRÈS déploiement :
+la crontab pointe le chemin du script, donc rien n'est à recharger. Des tests lisent le
+script et refusent le retour de la garde shell, ainsi que la disparition de `--si-configuree`.
 
 ---
 
