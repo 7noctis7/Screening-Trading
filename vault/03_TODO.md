@@ -47,11 +47,26 @@
       `qty × entry_price`, `None` (jamais 0.0) si le poids est inconnu, ligne d'alerte
       au-delà de 3 points d'écart entre les deux moyennes.
 - [ ] **P2 — Le cron social n'a pas encore tourné sur le VPS (24/09).** Le code est
-      mergé ; l'effet vient au prochain passage APRÈS déploiement — rien à recharger, la
-      crontab pointe le chemin du script. **Vérifier dans `/tmp/quant_daily.log` que les
-      trois lignes d'ingestion apparaissent** : c'est le seul moyen de distinguer « ça
-      tourne » de « ça se saute en silence », le défaut que la garde shell aurait créé.
-      Tant que ce n'est pas vu, l'ingestion reste manuelle en pratique.
+      mergé et déployé (`2f18e7d`) ; rien à recharger, la crontab pointe le chemin du
+      script. **Vérifier dans `/tmp/quant_daily.log` que les trois lignes d'ingestion
+      apparaissent** : c'est le seul moyen de distinguer « ça tourne » de « ça se saute
+      en silence ». **Question PRÉALABLE encore ouverte : la chaîne quotidienne
+      tourne-t-elle sur ce VPS ?** (`ls -l /tmp/quant_daily.log` · `crontab -l | grep -c
+      cron_daily`). Le précédent du 17/09 — `cron_daily.sh` n'avait JAMAIS tourné ici —
+      interdit de le supposer.
+- [x] **~~P2 — `QUANT_TG_CANAUX` n'était PAS dans `.env`~~ — FERMÉ (24/09).** Mesuré sur
+      le VPS : la variable n'existait que dans un shell où elle avait été exportée à la
+      main, parti avec la session. L'ingestion des 37 publications avait donc marché
+      **une fois, par accident de contexte**. Le correctif du jour (`load_env()` +
+      `configuree`) n'aurait rien changé seul : la source se serait déclarée non
+      configurée, en silence — exactement le comportement voulu, et exactement ce qui
+      rendait le diagnostic nécessaire. Ligne ajoutée à `.env`, vérifiée : `Lues : 34`,
+      `Stock : 37`.
+- [ ] **P2 — L'aperçu public Telegram a DÉJÀ perdu 3 messages (24/09).** Mesuré :
+      `t.me/s/<canal>` ne rend plus que **34** messages quand la base en contient **37**.
+      Les 3 manquants ne sont là que parce qu'ils ont été ingérés plus tôt. Ce n'est pas
+      un défaut à corriger — c'est la confirmation CHIFFRÉE de ce qui justifie
+      l'ingestion quotidienne (ADR-0197), et le rappel qu'un rattrapage n'existe pas.
 - [ ] **P1 — 6 % du capital engagé annule les DEUX TIERS du gain (24/09).** Les 35
       fermetures RECONSTRUITES (date et prix retrouvés après coup par le script de
       réparation) pèsent **−0,80 % sur 59 221 $ = −474 $**, face aux **+712 $** des
