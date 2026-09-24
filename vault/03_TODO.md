@@ -15,17 +15,17 @@
 - [x] **~~P1 — L'onglet X n'a JAMAIS vu de donnée réelle~~ — FERMÉ (24/09).** Première
       ingestion : **34 publications** des deux canaux Telegram, dont 6 `TRADE_SIGNAL`.
       Les filtres tournent sur du vrai contenu. Images ajoutées dans la foulée (ADR-0195).
-- [ ] **P1 — 2 des 4 comptes suivis n'ont AUCUNE source (24/09).** Telegram couvre
-      `eliz883` et `walshwealth1122` ; `astekz`, `trendspider` et `micro2macr0` n'ont
-      rien. Outil livré : `make x-miroirs` sonde les miroirs RSS depuis le VPS et rend la
-      ligne à coller. **À LANCER** — je ne peux pas le faire d'ici (le proxy refuse ces
-      hôtes), donc on ne sait pas encore si un miroir vivant existe pour ces comptes. Si
-      aucun ne répond, l'export navigateur reste la seule voie.
+- [ ] **P1 — 3 des 4 comptes X suivis n'ont toujours AUCUNE source — outillé (24/09,
+      ADR-0199).** Deux voies, dans l'ordre : (1) `make x-miroirs`, sans compte ni
+      installation — jamais encore lancé avec succès ; (2) `make rsshub`, RSSHub
+      auto-hébergé sur le VPS, lu par la source RSS existante. Demande un cookie
+      `auth_token` d'un compte X **SECONDAIRE** dans `~/.config/quant/rsshub.env`
+      (chmod 600). Reste à FAIRE sur le VPS, pas à coder.
 - [x] **~~P2 — L'ingestion est MANUELLE~~ — FERMÉ (24/09, ADR-0197).** Les trois sources
       réseau rejoignent `scripts/cron_daily.sh`, chacune sous garde de configuration,
       chacune avec un échec NOMMÉ (jamais `|| true`). Le retard ne se rattrape pas : la
       fenêtre publique de Telegram et des miroirs RSS ne rend qu'une vingtaine de
-      messages. **Effet après déploiement + rechargement du cron sur le VPS.**
+      messages. Déployé ; la chaîne quotidienne tourne sur le VPS (mesuré le 24/09).
 - [x] **~~P2 — `walshwealth1122` n'a pas de correspondance de compte~~ — FERMÉ (24/09).**
       Ce n'est pas une lacune : l'utilisateur a confirmé que ce canal **n'a pas de
       compte X**. Il apparaît sous son nom de canal parce que c'est son seul nom. Rien

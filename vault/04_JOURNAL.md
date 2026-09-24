@@ -69,6 +69,16 @@ Telegram et des miroirs RSS ne rend qu'une vingtaine de messages. Les trois sour
 rejoignent `scripts/cron_daily.sh`, chacune sous garde de configuration, chacune avec un
 échec NOMMÉ plutôt qu'avalé par un `|| true`.
 
+**7. La chaîne quotidienne tourne bien sur le VPS** — mesuré, pas supposé :
+`/tmp/quant_daily.log` au 23/09 23:00, `maj quotidienne — OK`, une entrée en crontab.
+Ce soir elle inclura Telegram, `QUANT_TG_CANAUX` étant enfin dans `.env`.
+
+**8. Les comptes X : RSSHub auto-hébergé** (ADR-0199). Lu sur les sources de RSSHub : la
+voie identifiant/mot de passe est morte depuis octobre 2025, seul le cookie `auth_token`
+reste. `make rsshub` le lance en boucle locale, refuse un secret lisible par d'autres, et
+ne met jamais le jeton sur la ligne de commande — trois gardes, trois tests qui échouent
+quand on les retire. Aucune ligne dans la chaîne sociale : la source RSS le lit déjà.
+
 **BLOQUÉ.** Rien.
 
 **SUITE.** (a) **Instruire les 35 fermetures reconstruites** — réelles ou artefact ? C'est
