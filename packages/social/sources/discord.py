@@ -145,15 +145,34 @@ def _quand(brut: str | None) -> datetime | None:
     return d if d.tzinfo else d.replace(tzinfo=UTC)
 
 
+def _images(m: dict) -> tuple[str, ...]:
+    """Pièces jointes d'abord, puis les visuels des embeds. Ordre conservé."""
+    urls: list[str] = []
+    for a in m.get("attachments") or []:
+        if str(a.get("content_type") or "").startswith("image/") and a.get("url"):
+            urls.append(str(a["url"]))
+    for e in m.get("embeds") or []:
+        for cle in ("image", "thumbnail"):
+            bloc = e.get(cle) or {}
+            if bloc.get("url"):
+                urls.append(str(bloc["url"]))
+    return tuple(dict.fromkeys(urls))
+
+
 def _publication(m: dict, salon: str, compte: str) -> Publication | None:
     """Un message sans texte (image seule, autocollant) n'est pas une publication."""
     texte = str(m.get("content") or "").strip()
     ts = _quand(m.get("timestamp"))
-    if not texte or not m.get("id") or ts is None:
+    images = _images(m)
+    # UN GRAPHIQUE SEUL EST UN MESSAGE : sur un salon de signaux, l'image porte souvent
+    # tout le contenu. L'écarter perdrait précisément ce qu'on vient chercher.
+    if not m.get("id") or ts is None or (not texte and not images):
         return None
+    if not texte:
+        texte = f"[{len(images)} image(s) sans texte]"
     ident = f"discord:{salon}/{m['id']}"
     tick, sym = extraction.ticker(texte)
     return Publication(
         id=ident, compte=compte, ts=ts, texte=texte,
         classification=extraction.classification(texte), ticker=tick, symbole=sym,
-        direction=extraction.direction(texte), url=None)
+        direction=extraction.direction(texte), url=None, images=images)

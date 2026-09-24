@@ -64,7 +64,8 @@ def _depuis_json(d: dict) -> Publication:
         direction=(Direction(d["direction"]) if d.get("direction")
                    else extraction.direction(texte)),
         extraits={str(k): float(v) for k, v in (d.get("extraits") or {}).items()},
-        url=d.get("url"))
+        url=d.get("url"),
+        images=tuple(str(u) for u in (d.get("images") or ()) if u))
 
 
 def _horodatage(d: dict) -> datetime:

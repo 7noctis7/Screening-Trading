@@ -50,22 +50,39 @@ class StorePublications:
             Path(chemin).parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(chemin)
         self.conn.executescript(_DDL)
+        self._migrer()
         self.conn.commit()
+
+    def _migrer(self) -> None:
+        """Ajoute les colonnes apparues APRÈS la première base.
+
+        `CREATE TABLE IF NOT EXISTS` ne touche pas une table qui existe déjà : sur une
+        base déjà remplie, le DDL passe sans rien faire et la colonne neuve manque. Le
+        symptôme serait une erreur SQL à la première écriture, longtemps après le
+        déploiement — sur la machine de l'utilisateur, pas ici.
+        """
+        connues = {r[1] for r in self.conn.execute("PRAGMA table_info(publication)")}
+        for nom, typ in (("images", "TEXT"),):
+            if nom not in connues:
+                self.conn.execute(f"ALTER TABLE publication ADD COLUMN {nom} {typ}")
 
     def ecrire(self, publications: Iterable[Publication]) -> int:
         rows = [(p.id, p.compte, p.ts.isoformat(), p.texte, str(p.classification),
                  p.ticker, p.symbole, None if p.direction is None else str(p.direction),
-                 json.dumps(p.extraits, sort_keys=True), p.url)
+                 json.dumps(p.extraits, sort_keys=True), p.url,
+                 json.dumps(list(p.images)))
                 for p in publications]
         self.conn.executemany(
-            "INSERT OR REPLACE INTO publication VALUES (?,?,?,?,?,?,?,?,?,?)", rows)
+            "INSERT OR REPLACE INTO publication (id,compte,ts,texte,classification,"
+            "ticker,symbole,direction,extraits,url,images) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?)", rows)
         self.conn.commit()
         return len(rows)
 
     def toutes(self) -> list[Publication]:
         cur = self.conn.execute(
             "SELECT id,compte,ts,texte,classification,ticker,symbole,direction,"
-            "extraits,url FROM publication ORDER BY ts DESC")
+            "extraits,url,images FROM publication ORDER BY ts DESC")
         return [_depuis_ligne(r) for r in cur.fetchall()]
 
     def comptes(self) -> list[str]:
@@ -91,4 +108,5 @@ def _depuis_ligne(r: tuple) -> Publication:
         id=r[0], compte=r[1], ts=datetime.fromisoformat(r[2]), texte=r[3],
         classification=Classification(r[4]), ticker=r[5], symbole=r[6],
         direction=None if r[7] is None else Direction(r[7]),
-        extraits=json.loads(r[8]), url=r[9])
+        extraits=json.loads(r[8]), url=r[9],
+        images=tuple(json.loads(r[10]) if r[10] else ()))

@@ -43,6 +43,11 @@ from packages.social.sources import sources
 DELAI_S = 15.0
 AGENT = "Mozilla/5.0 (compatible; QuantTerminal/1.0)"
 _BALISES = re.compile(r"<[^>]+>")
+# Un flux joint ses visuels de trois façons selon le générateur : <enclosure>,
+# <media:content>, ou une <img> dans la description. N'en lire qu'une perdrait les
+# messages dont le graphique EST le contenu, sans que rien ne le signale.
+_IMG_HTML = re.compile(r"<img[^>]+src=['\"]([^'\"]+)", re.I)
+_IMAGE = re.compile(r"^image/", re.I)
 _COMPTE_URL = re.compile(r"(?:^|/)@?([A-Za-z0-9_]{1,15})(?:/|$)")
 
 
@@ -117,15 +122,32 @@ def _quand(item) -> datetime | None:
     return d if d.tzinfo else d.replace(tzinfo=UTC)
 
 
+def _images(item, brut: str) -> tuple[str, ...]:
+    """Les trois emplacements possibles, dédoublonnés en gardant l'ordre de lecture."""
+    urls: list[str] = []
+    for n in item.findall("enclosure"):
+        if _IMAGE.match(n.get("type") or "") and n.get("url"):
+            urls.append(n.get("url"))
+    for n in item.iter():
+        est_media = n.tag.endswith("content") and _IMAGE.match(n.get("type") or "")
+        if est_media and n.get("url"):
+            urls.append(n.get("url"))
+    urls += _IMG_HTML.findall(brut)
+    return tuple(dict.fromkeys(urls))
+
+
 def _publication(item, compte: str) -> Publication | None:
     lien = _texte(item, "link")
     brut = _texte(item, "description") or _texte(item, "title")
     texte = _BALISES.sub("", brut).strip()
     ts = _quand(item)
-    if not lien or not texte or ts is None:
+    images = _images(item, brut)
+    if not lien or ts is None or (not texte and not images):
         return None
+    if not texte:
+        texte = f"[{len(images)} image(s) sans texte]"
     tick, sym = extraction.ticker(texte)
     return Publication(
         id=lien, compte=compte.lstrip("@"), ts=ts, texte=texte,
         classification=extraction.classification(texte), ticker=tick, symbole=sym,
-        direction=extraction.direction(texte), url=lien)
+        direction=extraction.direction(texte), url=lien, images=images)
