@@ -25,6 +25,15 @@ publications : `CREATE TABLE IF NOT EXISTS` l'aurait laissée sans la colonne ne
 panne serait tombée à la première écriture, chez l'utilisateur. `_migrer()` la traite, et
 un test construit une base à l'ancien schéma pour le prouver.
 
+**5. Les comptes X restent sans source** (ADR-0196). Telegram ne couvre que 2 des 4.
+Pour les autres, la seule voie gratuite automatique passe par un miroir RSS — et « lequel
+marche ? » ne se documente pas, ça se MESURE : ces instances meurent en permanence, et je
+ne peux pas les sonder d'ici (proxy). `make x-miroirs` le fait depuis le VPS et rend la
+ligne `QUANT_X_RSS=` à coller. Le verdict repose sur le NOMBRE D'ÉLÉMENTS, jamais sur le
+code HTTP — une instance éteinte répond 200. Un test m'a corrigé au passage : j'avais
+affirmé qu'une page d'excuse serait vue comme non-XML, or elle est du XML valide ; c'est
+la RACINE du document qui tranche.
+
 **BLOQUÉ.** Rien. Le flux tourne pour de vrai.
 
 **SUITE.** (a) Lancer `make turnover-audit` — le chiffre pondéré n'a toujours pas été
