@@ -93,10 +93,38 @@ l'identifiant vient du LIEN canonique, jamais du rang, car un flux republie les 
 éléments dans un ordre changeant — numéroter recréerait des publications à chaque passage
 et ferait mentir l'idempotence.
 
-**PLUS SOLIDE QUE LE RSS, ET NON CODÉ : Telegram.** Beaucoup de comptes trading doublent
-leurs messages sur un canal public. L'API bot est gratuite, officielle, stable, et sans
-zone grise. Ce sera UN fichier de plus dans `sources/` le jour où c'est décidé — la
-décision revient à l'utilisateur, elle suppose de savoir si ces comptes ont un canal.
+**TELEGRAM ÉCARTÉ, ET POURQUOI C'EST UNE INFORMATION.** C'était la voie recommandée :
+gratuite, officielle, stable, sans zone grise. Vérification faite le 24/09, **les quatre
+comptes suivis n'ont pas de canal Telegram**. La meilleure option n'existait donc pas
+pour ce cas précis — ce qui laisse deux voies, et une seule qui ne dépende de personne.
+
+**TROISIÈME VOIE : L'EXPORT DEPUIS LE NAVIGATEUR (`tools/x_export.js`).** L'utilisateur
+est déjà connecté à X et regarde déjà la page. Un script qui recopie ce qui est AFFICHÉ
+ne demande ni clé, ni miroir, ni abonnement, et ne peut pas « mourir » comme une instance
+tierce. C'est la seule voie gratuite dont la disponibilité ne dépende d'aucun tiers.
+
+Ce qu'il NE fait pas est aussi délibéré que ce qu'il fait : aucun défilement automatique,
+aucun `setInterval`, aucun appel d'API interne. **Lire l'écran est un presse-papier ;
+parcourir X tout seul est un robot.** Un test refuse le code si `scrollTo`, `setTimeout`,
+`fetch(` ou `XMLHttpRequest` y apparaissent — la frontière est tenue par la suite, pas
+par la bonne volonté.
+
+**ÉCHOUER FORT PLUTÔT QUE RENDRE ZÉRO.** X change son balisage sans prévenir. Un script
+prudent rendrait « 0 publication » le jour où les sélecteurs ne correspondent plus — et
+ce zéro serait indiscernable d'une page vide. Il AVERTIT en nommant la cause probable.
+C'est le même principe que le miroir RSS mort nommé plutôt qu'avalé, et que les trois
+vides distingués par la route : **une absence doit dire de quoi elle est l'absence.**
+
+**LE CONTRAT ENTRE DEUX LANGAGES, TESTÉ.** Le navigateur écrit le JSONL, Python le lit,
+et aucun compilateur ne relie les deux : renommer un champ d'un côté produirait un
+fichier d'apparence normale que l'ingestion rejetterait ligne par ligne. Un test fait
+passer la sortie déclarée du script par le vrai ingesteur — en particulier l'horodatage
+`2026-09-24T10:00:00.000Z` (millisecondes ET `Z`), le format le plus banal du web et
+celui qui fait tomber `fromisoformat` quand on ne l'a pas essayé.
+
+Le marque-page est GÉNÉRÉ depuis le script (`make x-export`), jamais recopié : une
+version figée dans la documentation divergerait au premier correctif sans que personne
+ne s'en aperçoive avant de constater un export cassé. Un test vérifie l'aller-retour.
 
 **CE QUI N'EST PAS FAIT, ET POURQUOI.** Aucune publication n'a été ingérée : le stock est
 vide, et l'onglet le dit. Les filtres sont donc testés sur 44 cas mais **jamais vus sur

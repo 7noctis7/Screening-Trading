@@ -40,7 +40,16 @@ on change d'URL quand un miroir meurt. 8 tests, dont le miroir mort NOMMÉ plut�
 confondu avec un compte silencieux. Recommandation faite : Telegram d'abord, seule voie
 gratuite à la fois stable, officielle et sans zone grise.
 
-**BLOQUÉ.** Le stock est vide : les filtres sont testés sur 52 cas mais **jamais vus sur
+**6. Telegram écarté — et une troisième voie.** Vérifié : les quatre comptes suivis n'ont
+pas de canal Telegram. La voie que je recommandais n'existait pas pour ce cas. Livré
+`tools/x_export.js` : un export depuis le navigateur où l'utilisateur est DÉJÀ connecté,
+qui recopie ce qui est affiché. Ni clé, ni miroir, ni abonnement, et rien qui puisse
+mourir. Volontairement passif — aucun défilement, aucun `setInterval`, aucun appel d'API
+interne — et un test refuse le code si ces appels y apparaissent. Marque-page généré
+depuis le script (`make x-export`), jamais recopié. 6 tests, dont le contrat JS↔Python
+passé par le vrai ingesteur.
+
+**BLOQUÉ.** Le stock est vide : les filtres sont testés sur 58 cas mais **jamais vus sur
 des données réelles**. Brancher une source suppose de décider d'où viennent les
 publications — c'est une décision de l'utilisateur, pas une supposition à coder.
 
