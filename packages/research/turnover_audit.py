@@ -73,10 +73,22 @@ class AuditTurnover:
     capture_mediane: float | None      # médiane de pnl_pct / mfe, positions mfe > 0
     n_capture_mesurable: int
     motifs_de_sortie: frozenset[str]
-    rendement_moyen_pct: float | None  # moyenne PAR POSITION, pas par tranche
+    rendement_moyen_pct: float | None  # moyenne PAR POSITION, NON pondérée
     profit_factor: float | None
     rendement_tstat: float | None      # t-stat vs 0, sur les positions (ADR-0072)
     rendement_significatif: bool
+    # MOYENNE PONDÉRÉE PAR LE MONTANT ENGAGÉ — et l'écart avec la moyenne simple est un
+    # DIAGNOSTIC, pas une redondance. Mesuré le 23/09 sur le compte réel : +1,59 % non
+    # pondéré sur 542 positions, quand le compte n'avait réalisé que 818,67 $. La
+    # moyenne simple était dominée par la poussière de rebalancement — des fractions
+    # d'action soldées à fort pourcentage sur quelques dollars. Publier l'une sans
+    # l'autre laissait lire une performance que le capital n'a jamais vue.
+    #
+    # Défaut à None : les appelants historiques construisent cet objet de façon
+    # POSITIONNELLE, et un champ obligatoire de plus les casserait tous pour une
+    # information qui, quand elle manque, doit justement se lire comme absente.
+    rendement_pondere_pct: float | None = None
+    notionnel_total: float | None = None
 
 
 def _jours(a: datetime, b: datetime) -> float:
@@ -113,6 +125,22 @@ def _tstat_vs_zero(xs: list[float]) -> tuple[float | None, bool]:
     return round(t, 2), abs(t) >= 2.0
 
 
+def _pondere(pos: list[dict]) -> float | None:
+    """Rendement moyen PONDÉRÉ PAR LE MONTANT ENGAGÉ, ou None si aucun notionnel connu.
+
+    None et non 0.0 : un notionnel absent n'est pas un notionnel nul, et un zéro se lit
+    comme une mesure. Les positions sans montant lisible sont écartées du calcul plutôt
+    que comptées à poids nul — les compter à zéro reviendrait à les inclure avec un avis
+    silencieux qu'elles ne pèsent rien.
+    """
+    utiles = [(p["pnl_pct"], p["notionnel"]) for p in pos
+              if p.get("pnl_pct") is not None and (p.get("notionnel") or 0.0) > 0]
+    total = sum(n for _, n in utiles)
+    if total <= 0:
+        return None
+    return round(sum(r * n for r, n in utiles) / total, 4)
+
+
 def _agreger(clos: list) -> list[dict]:
     """Tranches → positions. Rendement pondéré par la quantité, durée la plus longue."""
     par_lot: dict[str, list] = {}
@@ -122,6 +150,12 @@ def _agreger(clos: list) -> list[dict]:
     for tranches in par_lot.values():
         qtes = [abs(t.qty or 0.0) for t in tranches]
         poids = sum(qtes) or float(len(tranches))
+        # LE POIDS D'UNE POSITION EST SON MONTANT, PAS SA QUANTITÉ. `poids` compte des
+        # UNITÉS : 1 000 actions à 3 $ y pèseraient deux cents fois plus que 5 actions à
+        # 500 $, alors qu'elles engagent six fois moins de capital. Le notionnel à
+        # l'ENTRÉE est la seule pondération comparable entre titres.
+        notionnel = sum(q * float(t.entry_price or 0.0)
+                        for t, q in zip(tranches, qtes, strict=False))
         pnls = [(t.pnl_pct, q) for t, q in zip(tranches, qtes, strict=False)
                 if t.pnl_pct is not None]
         total_q = sum(q or 1.0 for _, q in pnls) or 1.0
@@ -129,7 +163,8 @@ def _agreger(clos: list) -> list[dict]:
         mfes = [t.mfe for t in tranches if t.mfe is not None]
         durees = [t.duration_s for t in tranches if t.duration_s is not None]
         positions.append({
-            "pnl_pct": pnl, "poids": poids, "tranches": tranches,
+            "pnl_pct": pnl, "poids": poids, "notionnel": notionnel,
+            "tranches": tranches,
             "mfe": max(mfes) if mfes else None,
             "duree_j": (max(durees) / 86400.0) if durees else None,
             "admin": any((t.exit_reason or "").startswith(_ADMIN) for t in tranches),
@@ -193,9 +228,48 @@ def auditer(trades: list, *, seulement: str | None = None) -> AuditTurnover:
         motifs_de_sortie=frozenset((t.exit_reason or "").strip() for t in clos
                                    if (t.exit_reason or "").strip()),
         rendement_moyen_pct=round(sum(pnls) / len(pnls), 4) if pnls else None,
+        rendement_pondere_pct=_pondere(pos),
+        notionnel_total=(round(sum(p["notionnel"] for p in pos), 2)
+                         if pos else None),
         profit_factor=round(gains_ / pertes_, 2) if pertes_ > 1e-9 else None,
         rendement_tstat=tstat, rendement_significatif=signif,
     )
+
+
+def _lignes_ecart(a: AuditTurnover) -> list[str]:
+    """Publie les deux moyennes et leur rapport. NE QUALIFIE PAS l'écart.
+
+    Une première version ne parlait qu'au-delà d'un facteur 3 entre les deux chiffres.
+    Ce 3 n'a jamais été mesuré sur la base réelle : c'était un seuil inventé qui
+    décidait d'une affirmation lue par l'utilisateur (« la performance vient des
+    petites lignes »). Le mandat du dépôt l'interdit — un seuil vient de la base ou
+    il s'écrit UNCALIBRATED.
+
+    Le rapport entre deux moyennes, lui, EST une mesure. Il est donc toujours rendu,
+    et l'interprétation est laissée au lecteur avec sa limite écrite.
+
+    Le cas `pondérée = 0` était en outre ESCAMOTÉ : un garde-fou anti-division rendait
+    une liste vide, donc aucun diagnostic. Or une pondérée nulle face à une simple non
+    nulle est l'écart MAXIMAL, pas son absence — exactement le cas qu'il fallait dire.
+    """
+    simple, pondere = a.rendement_moyen_pct, a.rendement_pondere_pct
+    if simple is None or pondere is None:
+        return []
+    if abs(pondere) < 1e-9:
+        rapport_ = ("n/d — la pondérée est NULLE alors que la simple ne l'est pas : "
+                    "écart maximal, pas absence d'écart."
+                    if abs(simple) >= 1e-9 else "1× — les deux moyennes coïncident.")
+    else:
+        rapport_ = f"{abs(simple / pondere):.1f}×"
+    return [f"  Moyenne simple {simple:+.2f} % · PONDÉRÉE par le notionnel "
+            f"{pondere:+.2f} % · rapport {rapport_}",
+            "    Seul le chiffre PONDÉRÉ est comparable au réalisé du compte : dans la "
+            "moyenne simple,",
+            "    une fraction d'action soldée à +40 % pèse autant qu'une ligne de "
+            "5 000 $ à +0,2 %.",
+            "    UNCALIBRATED — aucun seuil de divergence n'a été mesuré sur la base "
+            "réelle. Les deux",
+            "    chiffres et leur rapport sont publiés ; l'écart n'est pas qualifié."]
 
 
 def _lignes_comptage(a: AuditTurnover) -> list[str]:
@@ -237,8 +311,14 @@ def rapport(a: AuditTurnover) -> str:
         L.append(f"Taux de gain : {a.taux_gain * 100:.0f} % "
                  "(biaisé à la hausse : les perdants encore OUVERTS n'y sont pas).")
     if a.rendement_moyen_pct is not None:
-        L.append("Rendement moyen par position : "
+        L.append("Rendement moyen par position (NON pondéré) : "
                  f"{a.rendement_moyen_pct * 100:+.2f} %.")
+    if a.rendement_pondere_pct is not None:
+        L.append("Rendement moyen PONDÉRÉ par le montant engagé : "
+                 f"{a.rendement_pondere_pct * 100:+.2f} %"
+                 + (f" (sur {a.notionnel_total:,.0f} $ engagés)."
+                    .replace(",", " ") if a.notionnel_total else "."))
+        L += _lignes_ecart(a)
     if a.rendement_tstat is not None:
         etat = ("significatif" if a.rendement_significatif
                 else "NON significatif (bruit ?)")
