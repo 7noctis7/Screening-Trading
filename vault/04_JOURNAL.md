@@ -1,38 +1,59 @@
 # 04 — JOURNAL
 
-## Session 2026-09-24 (3ᵉ) — Le chiffre pondéré, enfin mesuré
+## Session 2026-09-24 (3ᵉ) — Le chiffre pondéré mesuré, et ce qu'il a exhumé
 
 **FAIT.**
 
 **1. `make turnover-audit` a tourné sur le compte réel.** L'hypothèse du 23/09 est
-devenue un résultat, et elle TIENT :
+devenue un résultat, et elle TIENT. Chiffres du passage de RÉFÉRENCE, après correctif
+d'unités (`main` = `2f18e7d`, 587 positions closes sur 94,2 jours) :
 
-| | valeur |
-|---|---|
-| Moyenne simple (par position) | **+1,59 %** |
-| Moyenne **pondérée par le notionnel** | **+0,09 %** |
-| Notionnel engagé | 867 604 $ |
-| Rapport entre les deux | **17,7×** |
-| t-stat / profit factor | +4,70 · 2,18 |
-| Détention médiane | 1,0 jour · 40,7 clôtures/semaine |
+| bloc | pondéré | notionnel | soit |
+|---|---|---|---|
+| **Décisions du système** (le seul qui mesure la stratégie) | **+0,08 %** | 889 640 $ | **+712 $** |
+| Fermetures reconstruites | **−0,80 %** | 59 221 $ | **−474 $** |
+| Toutes positions closes | +0,02 % | 948 862 $ | +190 $ |
 
-**La réconciliation ferme le dossier :** 0,09 % × 867 604 $ = **781 $**, contre
-**+818,67 $** réellement réalisés. Les +1,59 % décrivaient une population de LOTS, pas le
-capital. La poussière de rebalancement dominait la moyenne — c'est mesuré, plus supposé.
+Côté système : simple +1,54 % contre pondérée +0,08 %, rapport **19,2×**, t = +4,65,
+PF 2,15, détention médiane 1,0 jour, 41,0 clôtures/semaine. Les +1,54 % décrivent une
+population de LOTS, pas le capital : la poussière de rebalancement domine la moyenne
+simple. C'est mesuré, plus supposé.
 
-**2. Un seul motif de sortie côté système.** L'audit ne relève **aucune sortie déclenchée
-par un TP ou un SL** : toute clôture vient du rebalancement. Capture de −76 % sur le
-sous-ensemble reconstruit. C'est le vrai résultat de la session, et il n'était pas la
-question posée.
+> Un premier passage le même jour, AVANT correctif d'unités et sur deux jours de moins,
+> donnait 542 positions, +1,59 % / +0,09 % sur 867 604 $ (781 $ contre +818,67 $
+> réalisés — la réconciliation tenait déjà). Conservé pour mémoire ; **la référence est
+> le tableau ci-dessus**, deux jeux de chiffres datés du même jour induiraient en erreur.
 
-**3. Un défaut d'unité, trouvé par la sortie elle-même** (ADR-0198). Mon bloc d'écart
+**2. LE RÉSULTAT DE LA SESSION : 6 % du capital engagé annule les deux tiers du gain.**
+Les 35 fermetures RECONSTRUITES (date et prix retrouvés après coup par le script de
+réparation) pèsent **−474 $** face aux **+712 $** des décisions du système. Taux de gain
+**31 %** contre 50 % côté système. Cohérence interne vérifiée : 712 − 474 = 238 $ contre
+190 $ annoncé sur le total, l'écart de 48 $ tient dans l'arrondi à deux décimales
+(±47 $ par bloc).
+
+**L'audit NE PEUT PAS trancher entre les deux lectures**, et il ne faut donc pas choisir :
+soit ces pertes sont RÉELLES et la mesure du système les exclut — auquel cas le +0,08 %
+flatte la stratégie ; soit les prix retrouvés après coup sont FAUX, et ces −474 $ sont un
+artefact de la réconciliation. Dans les deux cas c'est un P1.
+
+**3. Un seul motif de sortie côté système.** L'audit ne relève **aucune sortie déclenchée
+par un TP ou un SL** : toute clôture vient du rebalancement. Confirmé sur données réelles
+ce qui n'était qu'un constat de code depuis le 04/09.
+
+**NE RIEN BÂTIR SUR DEUX DE CES CHIFFRES.** (a) La **capture** : −5 % côté système sur
+**5 positions**, −76 % sur le bloc reconstruit sur **10**. À ces effectifs, ces nombres ne
+portent rien — les citer sans leur effectif serait les faire mentir. (b) Les **frais** :
+10,40 $ cumulés, mais **64 fermetures renseignées sur 597**, et toutes ESTIMÉES depuis un
+barème, jamais observées. Aucune conclusion de coût ne tient là-dessus.
+
+**4. Un défaut d'unité, trouvé par la sortie elle-même** (ADR-0198). Mon bloc d'écart
 affichait `+0,02 %` deux lignes sous `+1,59 %` — la même quantité, cent fois trop petite.
 Ces champs sont des fractions ; le reste du rapport les convertit, pas ce bloc. Le
 *rapport* entre les deux, lui, restait juste (les unités s'annulent) : la sortie contenait
 donc le faux, le juste, et un troisième chiffre correct qui ne départageait pas. Corrigé,
 et épinglé par un test qui échoue sur le code d'avant.
 
-**4bis. Et la garde que j'avais mise était au mauvais étage** (ADR-0197, correction).
+**6. Et la garde que j'avais mise était au mauvais étage** (ADR-0197, correction).
 Je l'avais écrite en bash : `[ -n "${QUANT_TG_CANAUX:-}" ]`. **Faux, et muet.** `.env`
 n'est lu qu'en Python ; sous cron, l'environnement est nu, la garde échoue, et les trois
 sources auraient été sautées **chaque nuit, en silence**. Une garde censée éviter un log
@@ -42,7 +63,7 @@ se pose désormais dans la SOURCE (`configuree`), le script prend `--si-configur
 charge `.env` lui-même, et le shell n'a plus de garde. Un test refuse le retour de
 l'ancienne forme.
 
-**4. L'ingestion sociale devient quotidienne** (ADR-0197). Un flux qu'on doit penser à
+**5. L'ingestion sociale devient quotidienne** (ADR-0197). Un flux qu'on doit penser à
 rafraîchir cesse de l'être, et ici le retard ne se rattrape PAS : la fenêtre publique de
 Telegram et des miroirs RSS ne rend qu'une vingtaine de messages. Les trois sources réseau
 rejoignent `scripts/cron_daily.sh`, chacune sous garde de configuration, chacune avec un
@@ -50,10 +71,12 @@ rejoignent `scripts/cron_daily.sh`, chacune sous garde de configuration, chacune
 
 **BLOQUÉ.** Rien.
 
-**SUITE.** (a) Déployer sur le VPS. Rien à recharger : la crontab pointe le CHEMIN du
-script, donc le prochain passage lit la nouvelle version. (b) Le « un seul motif de sortie » mérite d'être instruit :
+**SUITE.** (a) **Instruire les 35 fermetures reconstruites** — réelles ou artefact ? C'est
+la question la plus chère ouverte par cette session. (b) Déployé sur le VPS (`2f18e7d`) ;
+rien à recharger, la crontab pointe le CHEMIN du script, donc le prochain passage lit la
+nouvelle version. (c) Le « un seul motif de sortie » mérite d'être instruit :
 des TP/SL qui ne déclenchent jamais sont soit trop larges, soit court-circuités par le
-rebalancement quotidien. (c) Réinjecter les features ML depuis l'archive du 18/09 —
+rebalancement quotidien. (d) Réinjecter les features ML depuis l'archive du 18/09 —
 toujours P1, toujours bloquant pour l'entraînement.
 
 

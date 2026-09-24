@@ -52,12 +52,31 @@
       trois lignes d'ingestion apparaissent** : c'est le seul moyen de distinguer « ça
       tourne » de « ça se saute en silence », le défaut que la garde shell aurait créé.
       Tant que ce n'est pas vu, l'ingestion reste manuelle en pratique.
+- [ ] **P1 — 6 % du capital engagé annule les DEUX TIERS du gain (24/09).** Les 35
+      fermetures RECONSTRUITES (date et prix retrouvés après coup par le script de
+      réparation) pèsent **−0,80 % sur 59 221 $ = −474 $**, face aux **+712 $** des
+      décisions du système (+0,08 % sur 889 640 $). Taux de gain **31 %** contre 50 %
+      côté système. **L'audit ne peut PAS trancher** : soit ces pertes sont RÉELLES et la
+      mesure du système les exclut (le +0,08 % flatte alors la stratégie), soit les prix
+      retrouvés après coup sont FAUX (59 221 $ de prix inventés au journal). Ne pas
+      choisir par raisonnement — MESURER : confronter ces 35 lots aux relevés du courtier.
 - [x] **~~P1 — Le chiffre pondéré lui-même n'est pas encore MESURÉ~~ — MESURÉ (24/09).**
-      Lancé sur le compte réel : **+1,59 % simple contre +0,09 % pondéré** sur
-      **867 604 $** engagés, rapport **17,7×**, t = +4,70, PF 2,18, détention médiane
-      1,0 jour, 40,7 clôtures/semaine. **Réconciliation : 0,09 % × 867 604 $ = 781 $**
-      contre **+818,67 $** réalisés. L'explication par la poussière de rebalancement
-      TIENT — ce n'est plus une hypothèse.
+      Passage de référence, après correctif d'unités (`main` = `2f18e7d`, 587 positions
+      sur 94,2 jours). Décisions du système : **+1,54 % simple contre +0,08 % pondéré**
+      sur **889 640 $**, rapport **19,2×**, t = +4,65, PF 2,15, détention médiane 1,0 jour,
+      41,0 clôtures/semaine. L'explication par la poussière de rebalancement TIENT — ce
+      n'est plus une hypothèse. (Un premier passage le même jour, avant correctif et sur
+      deux jours de moins, donnait +1,59 % / +0,09 % sur 867 604 $, soit 781 $ contre
+      +818,67 $ réalisés : la réconciliation tenait déjà.)
+- [ ] **P2 — Les frais ne sont MESURÉS sur presque rien (24/09).** 10,40 $ cumulés, mais
+      **64 fermetures renseignées sur 597**, et toutes ESTIMÉES depuis un barème, jamais
+      observées. Aucune conclusion de coût ne tient là-dessus — et un audit de rotation
+      sans coût réel ne peut pas arbitrer « rebalancer plus » contre « rebalancer moins ».
+- [ ] **P2 — La capture est calculée sur des effectifs qui ne portent rien (24/09).**
+      −5 % côté système sur **5 positions**, −76 % sur le bloc reconstruit sur **10**. Le
+      rapport affiche l'effectif — bien — mais le chiffre est cité ailleurs sans lui. À
+      trancher : relever le seuil de détention (≥ 3 jours écarte presque tout à 1,0 jour
+      de médiane), ou dire UNCALIBRATED tant que l'effectif est sous un seuil MESURÉ.
 - [x] **~~P2 — Crypto : « avoir le top 20 » sur la carte des recherches~~ — FERMÉ (23/09,
       ADR-0193).** Le top 20 était IMPOSSIBLE : `/search/trending` rend 15 coins (mesuré
       23/09 : coins 15, nfts 7, categories 6), et rien ne tronquait. Le même appel rendait
@@ -867,15 +886,17 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       continu (`cron_live.sh`), le Mac/MacBook restent des postes de LECTURE — jamais un
       second exécuteur live — et un `journal-push` régulier depuis le VPS reste manuel.
 - [ ] **P1 — Rebalancement journalier vs. tenir jusqu'au TP/SL : MESURÉ le 24/09, décision ouverte.**
-      **Le chiffre est là** (cf. l'entrée « chiffre pondéré » ci-dessus) : 542 positions,
-      +0,09 % pondéré sur 867 604 $ engagés, détention médiane **1,0 jour**, 40,7
-      clôtures/semaine, capture **−76 %** sur le sous-ensemble mesurable, et l'audit
-      CONFIRME sur données réelles ce qui n'était qu'un constat de code — **aucune sortie
-      n'est déclenchée par un TP ou un SL**. Ce qui reste à trancher est la DÉCISION, pas
-      la mesure : bande de tolérance élargie sur le rebalancement existant (probable), ou
-      moteur TP/SL parallèle (qui créerait un conflit d'arbitrage avec le risk-parity).
-      Ne rien coder avant d'avoir instruit la capture négative — elle peut venir du
-      rebalancement comme d'une fenêtre `mfe` trop courte pour une détention d'un jour.
+      **Le chiffre est là** (cf. l'entrée « chiffre pondéré » ci-dessus) : 552 décisions
+      du système, +0,08 % pondéré sur 889 640 $ engagés, détention médiane **1,0 jour**,
+      41,0 clôtures/semaine, et l'audit CONFIRME sur données réelles ce qui n'était qu'un
+      constat de code — **aucune sortie n'est déclenchée par un TP ou un SL**. Ce qui
+      reste à trancher est la DÉCISION, pas la mesure : bande de tolérance élargie sur le
+      rebalancement existant (probable), ou moteur TP/SL parallèle (qui créerait un
+      conflit d'arbitrage avec le risk-parity). **Ne rien coder tant que deux entrées
+      ci-dessus ne sont pas closes** : les frais ne sont mesurés que sur 64 fermetures sur
+      597 (donc aucun arbitrage de coût n'est possible), et la capture repose sur 5
+      positions côté système — elle peut venir du rebalancement comme d'une fenêtre `mfe`
+      trop courte pour une détention d'un jour, et rien ne le dit à cet effectif.
       Contexte d'origine (04/09) :
       Question de l'utilisateur : le rebalancement quotidien vers les poids cibles coupe-t-il
       des positions gagnantes avant leur potentiel ? Constat de code (pas de mesure) :
