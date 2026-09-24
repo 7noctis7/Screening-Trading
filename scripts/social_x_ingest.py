@@ -2,7 +2,8 @@
 """Ingère des publications X dans le store, depuis une source enregistrée.
 
     make x-ingest                      # source « fichier », data/x_posts.jsonl
-    make x-ingest ARGS="--source rss"  # flux RSS listés dans QUANT_X_RSS
+    make x-ingest ARGS="--source rss"       # flux RSS listés dans QUANT_X_RSS
+    make x-ingest ARGS="--source telegram"  # canaux listés dans QUANT_TG_CANAUX
     make x-ingest ARGS="--source fichier --chemin /tmp/export.jsonl"
     make x-ingest ARGS="--etat"        # ce que le store contient, sans rien écrire
 
@@ -49,6 +50,8 @@ def main() -> int:
     ap.add_argument("--chemin", default=None, help="source « fichier » : le JSONL")
     ap.add_argument("--flux", default=None,
                     help="source « rss » : URL séparées par des virgules")
+    ap.add_argument("--canaux", default=None,
+                    help="source « telegram » : « canal[:compte] », par virgules")
     ap.add_argument("--db", default=None)
     ap.add_argument("--etat", action="store_true", help="n'écrit rien")
     a = ap.parse_args()
@@ -59,7 +62,8 @@ def main() -> int:
 
     # Chaque plugin a ses propres options : les lui passer TOUTES ferait tomber la
     # commande sur un TypeError au lieu de l'ignorer. On ne transmet que la sienne.
-    options = {"fichier": {"chemin": a.chemin}, "rss": {"flux": a.flux}}
+    options = {"fichier": {"chemin": a.chemin}, "rss": {"flux": a.flux},
+               "telegram": {"canaux": a.canaux}}
     kwargs = {k: v for k, v in options.get(a.source, {}).items() if v}
     src = sources.create(a.source, **kwargs)
     lues = src.lire()

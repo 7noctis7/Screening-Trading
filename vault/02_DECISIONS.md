@@ -93,10 +93,36 @@ l'identifiant vient du LIEN canonique, jamais du rang, car un flux republie les 
 éléments dans un ordre changeant — numéroter recréerait des publications à chaque passage
 et ferait mentir l'idempotence.
 
-**TELEGRAM ÉCARTÉ, ET POURQUOI C'EST UNE INFORMATION.** C'était la voie recommandée :
-gratuite, officielle, stable, sans zone grise. Vérification faite le 24/09, **les quatre
-comptes suivis n'ont pas de canal Telegram**. La meilleure option n'existait donc pas
-pour ce cas précis — ce qui laisse deux voies, et une seule qui ne dépende de personne.
+**TELEGRAM : ÉCARTÉ PUIS RETROUVÉ — ET J'AVAIS CONCLU TROP VITE.** J'ai écrit que les
+comptes n'y étaient pas, sur la foi d'une réponse. L'utilisateur a trouvé deux canaux :
+`crypto_eliz883` et `walshwealth1122`. La leçon n'est pas neuve dans ce dépôt : j'avais
+affirmé une absence que je n'avais pas mesurée. Une absence constatée par autrui n'est
+pas une mesure, et la mienne était impossible ici — la politique réseau du conteneur
+refuse t.me comme elle refuse x.com (403 au proxy).
+
+**LA VOIE TELEGRAM NE PASSE PAS PAR L'API BOT.** Un bot ne lit un canal que s'il en est
+administrateur — impossible sur le canal d'un tiers. Mais Telegram publie lui-même un
+aperçu HTML de tout canal public : `https://t.me/s/<canal>`, sans authentification,
+sans jeton, sans compte. C'est la page que voit n'importe quel visiteur. **C'est la plus
+solide des trois voies** : le RSS dépend d'un miroir tiers qui peut mourir, l'export
+navigateur demande un clic, celle-ci ne dépend que de Telegram.
+
+**LE CANAL N'EST PAS LE COMPTE.** `crypto_eliz883` sur Telegram est le compte X
+`eliz883` ; `walshwealth1122` ne ressemble à rien de connu. Laisser le nom du canal dans
+la colonne « compte » casserait le filtre — l'utilisateur y cherche les pseudos X qu'il
+connaît, pas des noms de canaux. La configuration accepte donc `canal:compte`.
+
+**UN CANAL SANS APERÇU N'EST PAS UN CANAL VIDE.** Privé, supprimé, renommé, ou aperçu
+désactivé : les quatre rendent `200 OK` avec zéro message, indiscernable de « rien publié
+cette semaine ». C'est ainsi qu'un flux se tarit pendant des mois sans que personne ne
+s'en aperçoive. Chaque cas est NOMMÉ dans `rejets` — troisième occurrence du même
+principe dans cette ADR, après le miroir RSS mort et les trois vides de la route.
+
+**MESURE IMPOSSIBLE ICI, ET DITE.** Je n'ai pas pu vérifier ces deux canaux : le proxy
+refuse t.me. Le module est donc écrit sur la structure connue de `t.me/s/` et testé sur
+fixture ; la première ingestion réelle se fera sur le Mac ou le VPS. La commande le dit
+d'ailleurs correctement — elle a rapporté `URLError — Tunnel connection failed: 403`
+plutôt que « 0 publication », ce qui est exactement le comportement recherché.
 
 **TROISIÈME VOIE : L'EXPORT DEPUIS LE NAVIGATEUR (`tools/x_export.js`).** L'utilisateur
 est déjà connecté à X et regarde déjà la page. Un script qui recopie ce qui est AFFICHÉ

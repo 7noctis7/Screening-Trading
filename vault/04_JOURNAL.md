@@ -49,7 +49,15 @@ interne — et un test refuse le code si ces appels y apparaissent. Marque-page 
 depuis le script (`make x-export`), jamais recopié. 6 tests, dont le contrat JS↔Python
 passé par le vrai ingesteur.
 
-**BLOQUÉ.** Le stock est vide : les filtres sont testés sur 58 cas mais **jamais vus sur
+**7. J'avais conclu trop vite sur Telegram.** J'ai écrit que les comptes n'y étaient pas,
+sur la foi d'une réponse — sans pouvoir mesurer (le proxy du conteneur refuse t.me comme
+x.com). L'utilisateur a trouvé `crypto_eliz883` et `walshwealth1122`. Livré
+`sources/telegram.py`, qui lit l'aperçu PUBLIC `t.me/s/<canal>` : ni clé, ni compte, ni
+risque — la voie la plus solide des trois. Avec la syntaxe `canal:compte`, parce que
+`crypto_eliz883` est le compte X `eliz883` et que le filtre cherche les pseudos X.
+8 tests. Un canal sans aperçu est NOMMÉ, jamais confondu avec un canal muet.
+
+**BLOQUÉ.** Le stock est vide : les filtres sont testés sur 66 cas mais **jamais vus sur
 des données réelles**. Brancher une source suppose de décider d'où viennent les
 publications — c'est une décision de l'utilisateur, pas une supposition à coder.
 

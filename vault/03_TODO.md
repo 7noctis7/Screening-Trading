@@ -14,16 +14,18 @@
       partielle, portant aussi sur les niveaux extraits.
 - [ ] **P1 — L'onglet X n'a JAMAIS vu de donnée réelle (24/09).** Le stock est vide, la
       source « fichier » attend `data/x_posts.jsonl`. Tant que rien n'est ingéré, les
-      filtres sont validés sur 58 cas synthétiques et sur rien d'autre — et l'onglet
+      filtres sont validés sur 66 cas synthétiques et sur rien d'autre — et l'onglet
       affiche « flux non connecté », ce qui est le comportement voulu, pas un succès.
       À faire : décider d'où viennent les publications (API X payante ? export d'un
       client tiers ? copier-coller ?), alimenter le JSONL, lancer `make x-ingest`, PUIS
       juger les filtres sur du vrai contenu. **Deux sources sont prêtes** : `fichier`
       (JSONL, sans clé) et `rss` (miroirs gratuits, `QUANT_X_RSS`). Le palier libre de
-      l'API X ne permet PAS de lire — inutile d'y compter. **Telegram écarté** (24/09) :
-      les quatre comptes n'y sont pas. **Troisième voie livrée** : `make x-export`, un
-      marque-page qui exporte depuis le navigateur où l'utilisateur est déjà connecté —
-      la seule qui ne dépende d'aucun tiers. C'est celle à essayer en premier.
+      l'API X ne permet PAS de lire — inutile d'y compter. **QUATRE sources livrées** :
+      `telegram` (aperçu PUBLIC t.me/s/, sans clé — la plus solide, à essayer en
+      PREMIER : `QUANT_TG_CANAUX=crypto_eliz883:eliz883,walshwealth1122`), `fichier`
+      (JSONL), `rss` (miroirs, fragiles), et l'export navigateur `make x-export`.
+      Aucune n'a encore tourné pour de vrai : le proxy de ce conteneur refuse t.me et
+      x.com. La première ingestion réelle se fera sur le Mac ou le VPS.
 - [ ] **P2 — `packages/intelligence` reste câblée nulle part (constaté le 24/09).** Zéro
       import depuis `apps/` ou `scripts/`. Sa taxonomie (FAIT / OPINION / RUMEUR) est
       ORTHOGONALE à celle de l'onglet X (intention déclarée) : les deux peuvent coexister,
