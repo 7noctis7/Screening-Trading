@@ -1452,3 +1452,26 @@ def ai_modeles() -> dict:
     from packages.mlops.etat import etat_modeles
 
     return etat_modeles()
+
+
+@app.get("/api/social/x/posts")
+def social_x_posts(accounts: str = "", account: str = "", q: str = "",
+                   classification: str = "", direction: str = "",
+                   symbol: str = "", ticker: str = "",
+                   limit: int = 200) -> dict:
+    """Publications X filtrées. Tous les critères sont facultatifs et se combinent.
+
+    `?accounts=astekz,trendspider&q=BTC&direction=LONG`. `account` au singulier est
+    accepté et fusionné : une URL écrite de mémoire ne doit pas rendre une page vide
+    sans rien dire.
+
+    Un paramètre absent ne filtre RIEN — jamais l'inverse. C'est ce défaut qui décide
+    de ce qu'on voit en arrivant sur la page, et le lire à l'envers donnerait un écran
+    vide indiscernable d'un flux en panne.
+    """
+    from apps.api.social_x import construire_filtre, publications
+
+    tous = ",".join(x for x in (accounts, account) if x.strip())
+    f = construire_filtre(accounts=tous, q=q, classification=classification,
+                          direction=direction, symbol=symbol, ticker=ticker)
+    return publications(f, limite=max(1, min(int(limit), 1000)))

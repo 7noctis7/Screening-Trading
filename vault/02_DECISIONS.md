@@ -2,6 +2,257 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0194 — Un flux non branché se DIT, il ne se simule pas (2026-09-24)
+
+**CONTEXTE.** Demande : « ajouter des filtres à l'onglet X du site ». MESURÉ AVANT DE
+CODER — **l'onglet X n'existait pas**. Ni route `/api/social/*`, ni table de
+publications, ni ingestion, ni les classifications `TRADE_SIGNAL`/`MOVE_STOP` citées
+(0 occurrence dans le dépôt). La seule trace de X était `packages/intelligence/
+watchlist.py`, une liste CURATÉE DE COMPTES — pas leurs publications — où `trendspider`,
+`eliz883` et `Micro2Macr0` figurent au niveau C, et où **`astekz` n'apparaît nulle part**.
+
+La couche `packages/intelligence` (classify, sources, corroboration, relevance) existait
+mais n'était **câblée nulle part** : zéro import depuis `apps/` ou `scripts/`.
+
+**DÉCISION.** Construire la chaîne entière — modèle, store, filtres, extraction, source
+en plugin, route, onglet — plutôt que des filtres au-dessus de rien.
+
+**LA DÉCISION STRUCTURANTE : NE RIEN INVENTER.** L'API X est payante. Faire dépendre
+l'onglet d'un abonnement l'aurait rendu intestable ; le peupler d'exemples l'aurait rendu
+MENSONGER. La source est donc un **plugin** (`packages/social/sources/`, un fichier
+auto-enregistré) dont la première implémentation lit un JSONL — aucun secret requis. Tant
+qu'aucune source n'a tourné, l'onglet affiche « flux non connecté » **avec son motif**.
+Brancher l'API officielle plus tard sera UN fichier de plus, sans toucher au reste.
+
+**« AUCUN RÉSULTAT » VEUT DIRE TROIS CHOSES, ET LES CONFONDRE EST LE VRAI DÉFAUT.**
+Le flux n'est pas branché · il est branché mais vide · les critères ne laissent rien
+passer. Ces trois cas appellent trois actions différentes de l'utilisateur, et un écran
+qui affiche la même phrase pour les trois le laisse conclure au hasard — en général
+« c'est cassé », alors qu'il vient de cocher deux filtres exclusifs. La charge rend donc
+`disponible`, `total_stock` et `filtres_actifs` SÉPARÉMENT, et `total_stock` vaut `None`
+— jamais `0` — quand on ne sait pas.
+
+**TROIS SÉMANTIQUES DE FILTRAGE, toutes contre-intuitives une fois codées naïvement.**
+
+1. **Une sélection vide veut dire TOUS, jamais AUCUN.** C'est le défaut qui décide de ce
+   qu'on voit en arrivant. Lu à l'envers, il donne une page blanche au premier
+   chargement, indiscernable d'un flux en panne.
+2. **La recherche ignore la casse ET LES ACCENTS.** Le contenu est bilingue :
+   « resistance » tapé au clavier doit trouver « résistance » écrit dans le message.
+   Sinon l'absence de résultat ne dit pas « rien à ce sujet » mais « pas orthographié
+   comme vous » — et rien à l'écran ne fait la différence.
+3. **Plusieurs mots = ET, pas une phrase exacte.** « BTC LONG » cherche les deux, où
+   qu'ils soient. Un jeton seul se comporte identiquement.
+
+La recherche balaie texte, ticker, symbole, classification, direction **et niveaux
+extraits** — « 65000 » retrouve le message dont le TP1 vaut 65000.
+
+**POURQUOI LE FILTRAGE EXISTE DEUX FOIS.** Le site est publié en STATIQUE : là-bas aucun
+serveur ne filtre, et un aller-retour par lettre tapée serait poussif. Le navigateur
+reçoit donc la liste et filtre en mémoire. La contrepartie — deux implémentations qui
+divergent en silence — est traitée par une sémantique ÉCRITE des deux côtés, le module
+Python faisant foi, et testée sur les mêmes exemples.
+
+**AUCUN MODÈLE GÉNÉRATIF DANS L'EXTRACTION.** Un classifieur qui invente une étiquette
+plausible est pire qu'un `UNKNOWN` : l'étiquette fausse se filtre, s'affiche et se croit,
+sans laisser trace de son erreur. Des règles explicites se lisent, se testent, se
+corrigent. Règle de prudence partout : **au moindre doute, `UNKNOWN` ou `None`** — deux
+actifs cités donnent AUCUN ticker, les deux sens cités donnent AUCUNE direction. Et **une
+donnée lue bat toujours une donnée déduite** : une étiquette présente dans la source
+l'emporte sur l'extraction.
+
+**UN DÉFAUT TROUVÉ PAR L'ESSAI À BLANC.** « Longtemps que je regarde BTC » était classé
+LONG. Les lookarounds de la frontière de mot ne portaient que sur la PREMIÈRE alternative
+de l'alternance, faute de groupe non capturant. Un message d'observation héritait donc
+d'une direction d'achat que personne n'avait écrite. Corrigé, et épinglé en régression.
+
+**UN TEST EXISTANT A ATTRAPÉ LE PIÈGE DU SITE STATIQUE.**
+`test_aucune_route_appelee_n_est_absente_du_build` a refusé le travail tant que
+`dump_static` n'écrivait pas `data/social_x_posts.json` : un fichier manquant n'aurait pas
+donné une page vide mais une page BLOQUÉE sur son squelette (404 sans charge rendue) —
+panne muette, invisible en local. Au passage, sa détection ne lisait que la table
+`routes` et obligeait à inscrire tout le reste dans une liste blanche : elle CONSTATE
+désormais les appels `_write("nom", …)`, au lieu de faire confiance à une déclaration.
+
+**LA VOIE GRATUITE — ET CE QU'ELLE COÛTE VRAIMENT.** Question posée : une alternative
+gratuite à l'API X. Le palier libre de X ne permet PAS de lire — il sert à publier ; la
+lecture commence à 100 $/mois. Les voies sans frais passent donc par un TIERS qui expose
+du RSS (instance Nitter survivante, xcancel, RSSHub, RSS.app). Ces miroirs meurent
+régulièrement : ils dépendent du bon vouloir de X.
+
+D'où la forme de `sources/rss.py` : il ne connaît AUCUN fournisseur, il lit une liste
+d'URL donnée en configuration (`QUANT_X_RSS`). Quand un miroir tombe, on change une URL,
+pas une ligne de code — écrire « nitter.net » dans le module reviendrait à le dater. Un
+test le vérifie sur le CODE, hors docstring.
+
+**LE PIÈGE PROPRE AUX FLUX GRATUITS : un miroir MORT et un compte SILENCIEUX rendent la
+même chose.** Erreur réseau, page d'excuse ou XML sans élément — les trois ressemblent à
+« rien de neuf ». Confondus, ils laissent l'onglet se vider en silence pendant des
+semaines. `lire()` les NOMME dans `rejets`. Second garde-fou lié à la même fragilité :
+l'identifiant vient du LIEN canonique, jamais du rang, car un flux republie les mêmes
+éléments dans un ordre changeant — numéroter recréerait des publications à chaque passage
+et ferait mentir l'idempotence.
+
+**TELEGRAM : ÉCARTÉ PUIS RETROUVÉ — ET J'AVAIS CONCLU TROP VITE.** J'ai écrit que les
+comptes n'y étaient pas, sur la foi d'une réponse. L'utilisateur a trouvé deux canaux :
+`crypto_eliz883` et `walshwealth1122`. La leçon n'est pas neuve dans ce dépôt : j'avais
+affirmé une absence que je n'avais pas mesurée. Une absence constatée par autrui n'est
+pas une mesure, et la mienne était impossible ici — la politique réseau du conteneur
+refuse t.me comme elle refuse x.com (403 au proxy).
+
+**LA VOIE TELEGRAM NE PASSE PAS PAR L'API BOT.** Un bot ne lit un canal que s'il en est
+administrateur — impossible sur le canal d'un tiers. Mais Telegram publie lui-même un
+aperçu HTML de tout canal public : `https://t.me/s/<canal>`, sans authentification,
+sans jeton, sans compte. C'est la page que voit n'importe quel visiteur. **C'est la plus
+solide des trois voies** : le RSS dépend d'un miroir tiers qui peut mourir, l'export
+navigateur demande un clic, celle-ci ne dépend que de Telegram.
+
+**LE CANAL N'EST PAS LE COMPTE.** `crypto_eliz883` sur Telegram est le compte X
+`eliz883` ; `walshwealth1122` ne ressemble à rien de connu. Laisser le nom du canal dans
+la colonne « compte » casserait le filtre — l'utilisateur y cherche les pseudos X qu'il
+connaît, pas des noms de canaux. La configuration accepte donc `canal:compte`.
+
+**UN CANAL SANS APERÇU N'EST PAS UN CANAL VIDE.** Privé, supprimé, renommé, ou aperçu
+désactivé : les quatre rendent `200 OK` avec zéro message, indiscernable de « rien publié
+cette semaine ». C'est ainsi qu'un flux se tarit pendant des mois sans que personne ne
+s'en aperçoive. Chaque cas est NOMMÉ dans `rejets` — troisième occurrence du même
+principe dans cette ADR, après le miroir RSS mort et les trois vides de la route.
+
+**MESURE IMPOSSIBLE ICI, ET DITE.** Je n'ai pas pu vérifier ces deux canaux : le proxy
+refuse t.me. Le module est donc écrit sur la structure connue de `t.me/s/` et testé sur
+fixture ; la première ingestion réelle se fera sur le Mac ou le VPS. La commande le dit
+d'ailleurs correctement — elle a rapporté `URLError — Tunnel connection failed: 403`
+plutôt que « 0 publication », ce qui est exactement le comportement recherché.
+
+**TROISIÈME VOIE : L'EXPORT DEPUIS LE NAVIGATEUR (`tools/x_export.js`).** L'utilisateur
+est déjà connecté à X et regarde déjà la page. Un script qui recopie ce qui est AFFICHÉ
+ne demande ni clé, ni miroir, ni abonnement, et ne peut pas « mourir » comme une instance
+tierce. C'est la seule voie gratuite dont la disponibilité ne dépende d'aucun tiers.
+
+Ce qu'il NE fait pas est aussi délibéré que ce qu'il fait : aucun défilement automatique,
+aucun `setInterval`, aucun appel d'API interne. **Lire l'écran est un presse-papier ;
+parcourir X tout seul est un robot.** Un test refuse le code si `scrollTo`, `setTimeout`,
+`fetch(` ou `XMLHttpRequest` y apparaissent — la frontière est tenue par la suite, pas
+par la bonne volonté.
+
+**ÉCHOUER FORT PLUTÔT QUE RENDRE ZÉRO.** X change son balisage sans prévenir. Un script
+prudent rendrait « 0 publication » le jour où les sélecteurs ne correspondent plus — et
+ce zéro serait indiscernable d'une page vide. Il AVERTIT en nommant la cause probable.
+C'est le même principe que le miroir RSS mort nommé plutôt qu'avalé, et que les trois
+vides distingués par la route : **une absence doit dire de quoi elle est l'absence.**
+
+**LE CONTRAT ENTRE DEUX LANGAGES, TESTÉ.** Le navigateur écrit le JSONL, Python le lit,
+et aucun compilateur ne relie les deux : renommer un champ d'un côté produirait un
+fichier d'apparence normale que l'ingestion rejetterait ligne par ligne. Un test fait
+passer la sortie déclarée du script par le vrai ingesteur — en particulier l'horodatage
+`2026-09-24T10:00:00.000Z` (millisecondes ET `Z`), le format le plus banal du web et
+celui qui fait tomber `fromisoformat` quand on ne l'a pas essayé.
+
+Le marque-page est GÉNÉRÉ depuis le script (`make x-export`), jamais recopié : une
+version figée dans la documentation divergerait au premier correctif sans que personne
+ne s'en aperçoive avant de constater un export cassé. Un test vérifie l'aller-retour.
+
+**DISCORD : DEUX VOIES PROPRES, ET UNE QUI FAIT BANNIR.** Question posée : récupérer les
+messages de salons Discord rejoints. Discord n'expose AUCUNE page publique comparable à
+`t.me/s/<canal>` : lire un salon demande un bot, et un bot ne voit que les serveurs où un
+administrateur l'a INVITÉ. **Avoir rejoint un serveur ne suffit pas.**
+
+  1. Le serveur vous appartient, ou son admin accepte d'y ajouter votre bot.
+  2. Le salon est de type ANNONCES : il se SUIT depuis votre propre serveur, où vous êtes
+     admin et où vit votre bot. C'est le contournement légitime quand on n'est qu'un
+     membre parmi d'autres, et il ne demande la permission de personne.
+
+La troisième voie — le jeton de son compte utilisateur, « self-bot » — est interdite par
+Discord, activement détectée et sanctionnée par le BANNISSEMENT. Non implémentée, et à ne
+pas implémenter : le compte perdu serait celui de l'utilisateur. Un test vérifie que
+l'en-tête déclare bien `Bot <jeton>`.
+
+**VÉRIFIÉ LE 24/09 : LES SALONS VISÉS NE SONT PAS DES SALONS D'ANNONCES.** Les deux voies
+propres tombent donc — le bot ne peut pas entrer, et rien ne peut se suivre. Il n'existe
+AUCUN moyen légitime de faire lire ce serveur par l'API. Le dire plutôt que de bricoler
+est la réponse : la source `discord` reste livrée pour le jour où un admin ajoutera le
+bot, et elle ne sert à rien d'ici là.
+
+**CE QUI RESTE EST LE MÊME RAISONNEMENT QUE POUR X.** L'utilisateur est déjà membre, déjà
+connecté, déjà en train de lire la page. `tools/discord_export.js` recopie ce qui est
+AFFICHÉ. La frontière est identique et elle est tenue par un test : aucun `fetch`, aucun
+`WebSocket`, aucun `setInterval`, aucun accès au `localStorage` ni au jeton. **C'est
+exactement ce qui sépare un presse-papier d'un self-bot** — Discord sanctionne
+l'automatisation d'un COMPTE, pas la lecture d'une page qu'on a sous les yeux.
+
+Deux différences avec l'export X, toutes deux dictées par le produit. La liste de messages
+est VIRTUALISÉE : Discord ne rend que la zone visible, donc l'export capture ce qui a été
+fait défiler — remonter et réexporter complète le fichier, et les identifiants stables
+empêchent tout doublon. Et l'auteur n'est rendu que sur le PREMIER message d'un groupe :
+sans report explicite, les suivants partiraient sans compte et le filtre les perdrait.
+
+**UN TEST A ATTRAPÉ UNE VRAIE FUITE DE SECRET.** Le premier jet relayait `{e}` dans les
+rejets. Or une `URLError` porte le message que la pile réseau lui a donné et une
+`HTTPError` porte l'URL — le jeton s'y retrouve. Le test qui vérifie son absence sur 401,
+403, 404, 429, 500 ET sur une panne réseau a échoué, comme prévu. C'est la fuite la plus
+banale qui soit : on croit rapporter une panne, on recopie un secret dans un log, une
+réponse d'API ou une capture d'écran. **Le dépôt est PUBLIC, et gitleaks garde les
+fichiers, pas les messages d'exécution.** Tout rejet passe désormais par `_sans_secret`.
+
+**TROIS REFUS QUI NE SE RESSEMBLENT PAS.** Discord les distingue par code HTTP : 401 le
+jeton est faux ou révoqué, 403 le bot n'est pas dans ce serveur ou ne peut pas lire
+l'historique, 404 le salon est invisible. Les fondre en « aucun message » enverrait
+chercher un problème de flux là où il y a un problème de permission. Et un jeton ABSENT
+le dit sans tenter le moindre appel : la cause est locale, le message doit envoyer au bon
+endroit. Quatrième occurrence du principe dans cette ADR.
+
+**CE QUE LA REVUE A TROUVÉ, ET QUI ÉTAIT JUSTE — QUATRE FOIS.**
+
+**1. Le qualifieur du dépôt était contourné.** AGENTS.md §9 : « Point d'entrée unique :
+`packages.intelligence.pipeline.qualifier()` · règles encodées, à ne pas contourner ».
+L'onglet créait une SECONDE voie d'intelligence X, affichant des propos sans plafond
+d'authenticité, sans déduplication d'origine et sans exigence de corroboration. Le
+contournement était involontaire ; il n'en était pas moins un contournement, et c'est
+précisément le mécanisme que la règle ferme. `packages/social/qualification.py` traduit
+désormais chaque publication en `Information` et transmet ; le verdict est calculé dans
+`_serialiser`, la fonction par laquelle TOUT sort — le placer chez l'appelant le rendrait
+oubliable au prochain point d'entrée.
+
+Trois correspondances, et aucune n'est neutre. `verifie` vaut **toujours** `False` —
+AGENTS.md dit qu'aucun des 66 comptes n'est authentifié. Le niveau de la watchlist est
+une **hypothèse** : le type s'appelle `Candidat`, son champ `niveau_attendu`, et sa
+documentation dit « à valider avant tout usage » ; mesuré le 24/09, **32 des 66 comptes
+portent une réserve non levée** — dont les quatre comptes suivis ici. Prendre le niveau
+attendu pour un niveau validé aurait promu la moitié de la liste sur la foi d'une note de
+travail : les comptes avec réserve restent en `E_FAIBLE`. Enfin l'impact suit le caractère
+ACTIONNABLE (signal, fermeture, déplacement de stop → `fort`), et comme l'exigence de
+corroboration croît avec l'impact, ce classement ne peut que **durcir** l'exigence sur ce
+qui est actionnable. Un contrôle refuse, il n'autorise pas.
+
+**2. L'analyseur Telegram perdait TOUS les horodatages.** Il clôturait l'enregistrement à
+la fermeture du bloc TEXTE, alors que `<time>` est un frère qui vient APRÈS, dans le pied
+du message. Chaque publication héritait donc de l'heure d'ingestion : chronologie fausse,
+et `INSERT OR REPLACE` la redatait à chaque passage. Vérifié sur ma propre fixture :
+`ts = None` pour tous les messages. **Mes huit tests d'alors vérifiaient le texte, le
+compte et l'identifiant — jamais la date.** Un test qui n'interroge pas le champ fautif ne
+protège de rien.
+
+**3. Une date manquante était INVENTÉE.** `datetime.now()` en secours paraît prudent — il
+évite un plantage — mais il date le message de MAINTENANT : il passe en tête de liste, à
+l'endroit le plus lu, et la fausse date se rafraîchit à chaque ingestion. Un vieux billet
+devenait éternellement la dernière nouvelle. Les trois sources réseau **écartent**
+désormais l'élément et le DISENT. Un test lit le CODE et refuse tout retour de `now(` dans
+un horodatage.
+
+**4. La recherche portait sur une liste TRONQUÉE, en silence.** Le front demandait 1000
+publications et filtrait ce sous-ensemble : au-delà, une recherche pouvait répondre
+« aucun résultat » alors qu'une publication plus ancienne correspondait. Le compteur
+ignorait `total_stock` et `tronque`. La troncature est maintenant AFFICHÉE — « la
+recherche porte sur les N plus récentes, sur M au total ». Cinquième occurrence du même
+principe dans cette ADR : une absence doit dire de quoi elle est l'absence.
+
+**CE QUI N'EST PAS FAIT, ET POURQUOI.** Aucune publication n'a été ingérée : le stock est
+vide, et l'onglet le dit. Les filtres sont donc testés sur 44 cas mais **jamais vus sur
+des données réelles**. Brancher une source est la prochaine étape, et elle appartient à
+l'utilisateur — elle suppose de décider d'où viennent les publications.
+
+---
+
 ## ADR-0193 — L'attention et le capital engagé sont deux mesures, pas une carte (2026-09-23)
 
 **CONTEXTE.** Demande : « avoir le top 20 » sur la carte « Ce que tout le monde cherche ».

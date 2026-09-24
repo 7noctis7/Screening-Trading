@@ -1,5 +1,99 @@
 # 04 — JOURNAL
 
+## Session 2026-09-24 — L'onglet qu'on me demandait d'améliorer n'existait pas
+
+**FAIT.**
+
+**1. #401 mergée et déployée** (main = `5475618`). Moyenne pondérée + cartes crypto +
+les trois corrections de revue (seuil inventé supprimé, zéro qui faisait taire le
+diagnostic, `page.tsx` 664 → 315). Branche de dev resynchronisée.
+
+**2. Onglet X — la mesure a changé la réponse** (ADR-0194). Demande : « ajouter des
+filtres à l'onglet X ». Mesuré avant de coder : **l'onglet n'existait pas**. Pas de
+route `/api/social/*`, pas de table de publications, pas d'ingestion, et 0 occurrence
+des classifications `TRADE_SIGNAL`/`MOVE_STOP` citées. Seule trace : `watchlist.py`,
+une liste de COMPTES (pas de publications) où `astekz` n'apparaît même pas.
+
+Décision de l'utilisateur : construire la chaîne entière. Livré — `packages/social/`
+(modèle, store SQLite, filtres, extraction déterministe, sources en plugin),
+`/api/social/x/posts`, l'onglet `/x` avec sa barre de filtres, `make x-ingest`.
+**44 tests.**
+
+**3. Le principe qui a gouverné tout le reste : ne rien inventer.** L'API X est payante
+et je n'ai aucune clé. La source est donc un plugin dont la première implémentation lit
+un JSONL sans secret, et l'onglet affiche « flux non connecté » avec son motif tant que
+rien n'a été ingéré. Un écran honnête plutôt qu'un écran de faux messages.
+
+**4. Deux défauts trouvés en route.** (a) « Longtemps » était classé LONG — les
+lookarounds ne portaient que sur la première alternative, faute de groupe non capturant.
+(b) `test_aucune_route_appelee_n_est_absente_du_build` a refusé le travail tant que
+`dump_static` n'écrivait pas `data/social_x_posts.json` : sans lui l'onglet serait resté
+BLOQUÉ sur son squelette en ligne. Sa détection ne lisait que la table `routes` et
+poussait à remplir une liste blanche ; elle constate désormais les `_write` réels.
+
+**5. Alternative gratuite à l'API X — mesurée, pas supposée.** Le palier libre de X ne
+permet pas de LIRE (il sert à publier ; la lecture commence à 100 $/mois). Je n'ai pas pu
+tester les miroirs depuis ce conteneur : sa politique réseau refuse `xcancel.com`,
+`nitter.poast.org`, `x.com` (403 au proxy). Livré quand même la source qui couvre toutes
+ces voies d'un coup : `sources/rss.py`, générique, sans AUCUN fournisseur codé en dur —
+on change d'URL quand un miroir meurt. 8 tests, dont le miroir mort NOMMÉ plutôt que
+confondu avec un compte silencieux. Recommandation faite : Telegram d'abord, seule voie
+gratuite à la fois stable, officielle et sans zone grise.
+
+**6. Telegram écarté — et une troisième voie.** Vérifié : les quatre comptes suivis n'ont
+pas de canal Telegram. La voie que je recommandais n'existait pas pour ce cas. Livré
+`tools/x_export.js` : un export depuis le navigateur où l'utilisateur est DÉJÀ connecté,
+qui recopie ce qui est affiché. Ni clé, ni miroir, ni abonnement, et rien qui puisse
+mourir. Volontairement passif — aucun défilement, aucun `setInterval`, aucun appel d'API
+interne — et un test refuse le code si ces appels y apparaissent. Marque-page généré
+depuis le script (`make x-export`), jamais recopié. 6 tests, dont le contrat JS↔Python
+passé par le vrai ingesteur.
+
+**7. J'avais conclu trop vite sur Telegram.** J'ai écrit que les comptes n'y étaient pas,
+sur la foi d'une réponse — sans pouvoir mesurer (le proxy du conteneur refuse t.me comme
+x.com). L'utilisateur a trouvé `crypto_eliz883` et `walshwealth1122`. Livré
+`sources/telegram.py`, qui lit l'aperçu PUBLIC `t.me/s/<canal>` : ni clé, ni compte, ni
+risque — la voie la plus solide des trois. Avec la syntaxe `canal:compte`, parce que
+`crypto_eliz883` est le compte X `eliz883` et que le filtre cherche les pseudos X.
+8 tests. Un canal sans aperçu est NOMMÉ, jamais confondu avec un canal muet.
+
+**8. Discord — deux voies propres, une refusée.** Avoir rejoint un serveur ne suffit pas :
+un bot ne voit que les serveurs où un admin l'a invité. Soit l'admin ajoute le bot, soit
+le salon est de type ANNONCES et se SUIT vers son propre serveur (contournement légitime,
+aucune permission à demander). Le self-bot par jeton utilisateur fait BANNIR le compte :
+non implémenté, et un test vérifie que l'en-tête déclare `Bot`. **Un test a attrapé une
+vraie fuite** : je relayais `{e}`, et `URLError`/`HTTPError` portent le jeton. Corrigé —
+tout rejet passe par `_sans_secret`. 14 tests.
+
+**9. La revue a trouvé quatre choses, toutes fondées.** (a) Le qualifieur du dépôt était
+CONTOURNÉ — AGENTS.md §9 impose un point d'entrée unique, et mon onglet créait une seconde
+voie d'intelligence X. Branché, avec `verifie=False` toujours, les niveaux de watchlist
+ASSORTIS D'UNE RÉSERVE ramenés à E (32 des 66 comptes, dont les quatre suivis), et un
+impact qui DURCIT l'exigence sur les messages actionnables. (b) L'analyseur Telegram
+perdait tous les horodatages — `<time>` est un frère qui vient APRÈS le bloc texte ; mes
+huit tests d'alors ne vérifiaient jamais la date. (c) Une date manquante était inventée à
+`now()`, ce qui plaçait le message en tête et le rajeunissait à chaque ingestion : les
+trois sources l'écartent et le disent. (d) La recherche portait sur une liste tronquée en
+silence : la troncature est affichée.
+
+**10. Les salons Discord ne sont pas des salons d'annonces.** Les deux voies propres
+tombent : le bot ne peut pas entrer, rien ne peut se suivre. Aucun moyen légitime par
+l'API — dit plutôt que bricolé. Reste `tools/discord_export.js`, même raisonnement que
+pour X : déjà membre, déjà connecté, on recopie ce qui est affiché. Test qui refuse le
+code s'il contient `fetch`, `WebSocket`, `setInterval`, `localStorage` ou `token` — c'est
+ce qui sépare un presse-papier d'un self-bot. Deux pièges propres à Discord traités : la
+liste est virtualisée (l'export capture ce qu'on a fait défiler), et l'auteur n'est rendu
+que sur le premier message d'un groupe (reporté, sinon les suivants perdraient leur
+compte).
+
+**BLOQUÉ.** Le stock est vide : les filtres sont testés sur 100 cas mais **jamais vus sur
+des données réelles**. Brancher une source suppose de décider d'où viennent les
+publications — c'est une décision de l'utilisateur, pas une supposition à coder.
+
+**SUITE.** (a) Ce soir sur le VPS : `make up && make turnover-audit` — le chiffre pondéré
+n'a toujours pas tourné sur la base réelle. (b) Alimenter `data/x_posts.jsonl` puis
+`make x-ingest` pour voir l'onglet X sur du vrai contenu.
+
 ## Session 2026-09-23 — Le top 20 demandé n'existait pas, et la moyenne ne décrivait pas le compte
 
 **FAIT.**

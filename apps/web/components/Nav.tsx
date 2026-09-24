@@ -23,6 +23,7 @@ const LINKS: [string, string][] = [
   ["/investors", "Investisseurs"],
   ["/ml", "Signaux automatiques"],
   ["/sentiment", "Actualité & sentiment"],
+  ["/x", "Comptes suivis"],          // X, Telegram, Discord — pas seulement X
   ["/conviction", "Convictions"],
   ["/echecs", "Ce qui n'a pas marché"],
   ["/methode", "Notre méthode"],
@@ -51,8 +52,11 @@ const GROUPS: [string, string[]][] = [
   // page qu'on ne peut atteindre qu'en connaissant son adresse n'existe pas pour
   // l'utilisateur. Elle appartient à « Marché » : actualité du marché, du secteur, et
   // des titres RÉELLEMENT détenus.
+  // `/x` entre ICI et pas ailleurs : la leçon ci-dessus vaut pour toute page neuve.
+  // Une page absente de tout menu n'existe pas pour l'utilisateur, si bien codée
+  // soit-elle.
   ["Marché", ["/screener", "/universe", "/macro", "/themes", "/sentiment", "/events",
-              "/crypto"]],
+              "/crypto", "/x"]],
   ["Méthode & preuves", ["/methode", "/glossaire", "/echecs", "/journal", "/profil"]],
   ["Portefeuille", ["/dashboard", "/analyse-portefeuille", "/positions", "/risk"]],
 ];

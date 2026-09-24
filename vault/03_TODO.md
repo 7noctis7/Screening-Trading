@@ -7,6 +7,37 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+- [x] **~~P2 — Onglet X : filtres et recherche~~ — LIVRÉ (24/09, ADR-0194).** L'onglet
+      n'existait pas : chaîne entière construite (`packages/social/`, `/api/social/x/posts`,
+      `/x`, `make x-ingest`). 44 tests. Filtres compte / mot-clé / classification /
+      direction / actif, combinables ; recherche insensible à la casse ET aux accents,
+      partielle, portant aussi sur les niveaux extraits.
+- [ ] **P1 — L'onglet X n'a JAMAIS vu de donnée réelle (24/09).** Le stock est vide, la
+      source « fichier » attend `data/x_posts.jsonl`. Tant que rien n'est ingéré, les
+      filtres sont validés sur 100 cas synthétiques et sur rien d'autre — et l'onglet
+      affiche « flux non connecté », ce qui est le comportement voulu, pas un succès.
+      À faire : décider d'où viennent les publications (API X payante ? export d'un
+      client tiers ? copier-coller ?), alimenter le JSONL, lancer `make x-ingest`, PUIS
+      juger les filtres sur du vrai contenu. **Deux sources sont prêtes** : `fichier`
+      (JSONL, sans clé) et `rss` (miroirs gratuits, `QUANT_X_RSS`). Le palier libre de
+      l'API X ne permet PAS de lire — inutile d'y compter. **CINQ sources livrées** :
+      `telegram` (aperçu PUBLIC t.me/s/, sans clé — la plus solide, à essayer en
+      PREMIER : `QUANT_TG_CANAUX=crypto_eliz883:eliz883,walshwealth1122`), `fichier`
+      (JSONL), `rss` (miroirs, fragiles), et l'export navigateur `make x-export`.
+      Plus `discord` (API BOT officielle — INUTILISABLE sur les salons visés : vérifié
+      le 24/09, ce ne sont pas des salons d'annonces, donc ni invitation possible ni
+      suivi ; reste `make x-export ARGS=--discord`). Aucune n'a encore tourné pour de vrai : le proxy de ce conteneur
+      refuse t.me, x.com et discord.com. Première ingestion réelle sur le Mac ou le VPS.
+- [x] **~~P2 — `packages/intelligence` câblée nulle part~~ — FERMÉ (24/09, revue de #402).**
+      Elle l'est désormais par `packages/social/qualification.py` : chaque publication de
+      l'onglet X passe par `pipeline.qualifier()`, comme l'impose AGENTS.md §9. Les deux
+      taxonomies coexistent — intention DÉCLARÉE d'un côté, nature de l'énoncé de l'autre.
+- [ ] **P2 — 32 des 66 comptes de la watchlist portent une réserve non levée (24/09).**
+      `Candidat.a_resoudre` documente ce qui empêche de s'en servir ; tant qu'elle n'est
+      pas levée, le compte est traité en `E_FAIBLE`. Les QUATRE comptes suivis dans
+      l'onglet X en font partie (« expertise et authenticité à établir ») : leurs propos
+      sont donc crédités au minimum. Lever une réserve demande une vérification RÉELLE,
+      pas une décision d'écriture.
 - [x] **~~P1 — L'audit de rotation rendait une moyenne qui ne décrivait pas le compte~~ —
       FERMÉ (23/09, ADR-0192).** 542 positions à +1,59 % de moyenne face à +818,67 $
       réalisés : `sum(pnls)/len(pnls)` pesait une ligne de 40 $ comme une de 12 000 $, et
