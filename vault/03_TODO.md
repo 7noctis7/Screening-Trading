@@ -21,12 +21,15 @@
       ligne à coller. **À LANCER** — je ne peux pas le faire d'ici (le proxy refuse ces
       hôtes), donc on ne sait pas encore si un miroir vivant existe pour ces comptes. Si
       aucun ne répond, l'export navigateur reste la seule voie.
-- [ ] **P2 — L'ingestion est MANUELLE (24/09).** `make x-ingest ARGS="--source telegram"`
-      se lance à la main. Un flux qu'on doit penser à rafraîchir cesse d'être rafraîchi.
-      À trancher : cron sur le VPS, ou étape du rafraîchissement quotidien existant.
-- [ ] **P2 — `walshwealth1122` n'a pas de correspondance de compte (24/09).** Il apparaît
-      sous son nom de canal, ce qui rend le filtre par compte moins lisible. Une ligne de
-      `QUANT_TG_CANAUX` suffira dès que le compte X correspondant sera connu.
+- [x] **~~P2 — L'ingestion est MANUELLE~~ — FERMÉ (24/09, ADR-0197).** Les trois sources
+      réseau rejoignent `scripts/cron_daily.sh`, chacune sous garde de configuration,
+      chacune avec un échec NOMMÉ (jamais `|| true`). Le retard ne se rattrape pas : la
+      fenêtre publique de Telegram et des miroirs RSS ne rend qu'une vingtaine de
+      messages. **Effet après déploiement + rechargement du cron sur le VPS.**
+- [x] **~~P2 — `walshwealth1122` n'a pas de correspondance de compte~~ — FERMÉ (24/09).**
+      Ce n'est pas une lacune : l'utilisateur a confirmé que ce canal **n'a pas de
+      compte X**. Il apparaît sous son nom de canal parce que c'est son seul nom. Rien
+      à mapper.
 - [x] **~~P2 — `packages/intelligence` câblée nulle part~~ — FERMÉ (24/09, revue de #402).**
       Elle l'est désormais par `packages/social/qualification.py` : chaque publication de
       l'onglet X passe par `pipeline.qualifier()`, comme l'impose AGENTS.md §9. Les deux
@@ -43,11 +46,15 @@
       le notionnel s'obtenait en additionnant des QUANTITÉS. Pondération par
       `qty × entry_price`, `None` (jamais 0.0) si le poids est inconnu, ligne d'alerte
       au-delà de 3 points d'écart entre les deux moyennes.
-- [ ] **P1 — Le chiffre pondéré lui-même n'est pas encore MESURÉ (23/09).** Le correctif
-      est livré et testé, mais il n'a pas tourné sur la base réelle. À faire sur le VPS :
-      `make turnover-audit`, puis comparer les deux moyennes côte à côte. Leur écart dira
-      si l'explication par la poussière de rebalancement tient — ou si elle est fausse.
-      Tant que ce n'est pas lancé, l'hypothèse n'est pas un résultat.
+- [ ] **P2 — Le cron social n'a pas encore tourné sur le VPS (24/09).** Le code est
+      mergé ; l'effet demande le déploiement PUIS un rechargement du cron. Tant que ce
+      n'est pas fait, l'ingestion reste manuelle en pratique.
+- [x] **~~P1 — Le chiffre pondéré lui-même n'est pas encore MESURÉ~~ — MESURÉ (24/09).**
+      Lancé sur le compte réel : **+1,59 % simple contre +0,09 % pondéré** sur
+      **867 604 $** engagés, rapport **17,7×**, t = +4,70, PF 2,18, détention médiane
+      1,0 jour, 40,7 clôtures/semaine. **Réconciliation : 0,09 % × 867 604 $ = 781 $**
+      contre **+818,67 $** réalisés. L'explication par la poussière de rebalancement
+      TIENT — ce n'est plus une hypothèse.
 - [x] **~~P2 — Crypto : « avoir le top 20 » sur la carte des recherches~~ — FERMÉ (23/09,
       ADR-0193).** Le top 20 était IMPOSSIBLE : `/search/trending` rend 15 coins (mesuré
       23/09 : coins 15, nfts 7, categories 6), et rien ne tronquait. Le même appel rendait
@@ -856,7 +863,17 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       deux machines écrivent sans se resynchroniser. Discipline à tenir : le VPS écrit en
       continu (`cron_live.sh`), le Mac/MacBook restent des postes de LECTURE — jamais un
       second exécuteur live — et un `journal-push` régulier depuis le VPS reste manuel.
-- [ ] **P1 — Rebalancement journalier vs. tenir jusqu'au TP/SL : outillé le 04/09, PAS mesuré.**
+- [ ] **P1 — Rebalancement journalier vs. tenir jusqu'au TP/SL : MESURÉ le 24/09, décision ouverte.**
+      **Le chiffre est là** (cf. l'entrée « chiffre pondéré » ci-dessus) : 542 positions,
+      +0,09 % pondéré sur 867 604 $ engagés, détention médiane **1,0 jour**, 40,7
+      clôtures/semaine, capture **−76 %** sur le sous-ensemble mesurable, et l'audit
+      CONFIRME sur données réelles ce qui n'était qu'un constat de code — **aucune sortie
+      n'est déclenchée par un TP ou un SL**. Ce qui reste à trancher est la DÉCISION, pas
+      la mesure : bande de tolérance élargie sur le rebalancement existant (probable), ou
+      moteur TP/SL parallèle (qui créerait un conflit d'arbitrage avec le risk-parity).
+      Ne rien coder avant d'avoir instruit la capture négative — elle peut venir du
+      rebalancement comme d'une fenêtre `mfe` trop courte pour une détention d'un jour.
+      Contexte d'origine (04/09) :
       Question de l'utilisateur : le rebalancement quotidien vers les poids cibles coupe-t-il
       des positions gagnantes avant leur potentiel ? Constat de code (pas de mesure) :
       `run_live.py` n'a AUCUNE sortie déclenchée par un TP/SL — une seule cause de clôture
@@ -865,11 +882,8 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       synthétiques) — frais/slippage cumulés, durée de détention médiane, taux de gain, et une
       « capture » (`pnl_pct / mfe`) qui dit si une ligne sort loin de son meilleur point observé
       PENDANT sa détention (limite explicite : ne dit rien de l'après-sortie, `mfe`/`mae` sont
-      bornés à la fenêtre [entrée, sortie]). **UNCALIBRATED sur cette session** : `data/journal.db`
-      est vide ici (conteneur cloud fraîchement cloné) — la vraie histoire vit sur le Mac mini /
-      le VPS. À faire : lancer `make turnover-audit` là où le journal réel existe, coller le
-      résultat, PUIS décider (bande de tolérance élargie sur le rebalancement existant, probable,
-      plutôt qu'un moteur TP/SL parallèle qui créerait un conflit d'arbitrage avec le risk-parity).
+      bornés à la fenêtre [entrée, sortie]). (Le « UNCALIBRATED » de l'époque tenait au
+      journal vide du conteneur cloud ; il est levé depuis le passage du 24/09 sur le VPS.)
 - [ ] **P1 — Trois occurrences restantes du même moule, IDENTIFIÉES PAR LECTURE, pas mesurées.**
       (a) `eqw` (indice équipondéré, `apps/api/snapshot.py`) : `zip(*norm)` empile la PREMIÈRE
       barre de chaque titre — 2015 pour un ancien, 2023 pour une IPO récente. Il alimente

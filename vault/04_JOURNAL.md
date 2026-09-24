@@ -1,5 +1,52 @@
 # 04 — JOURNAL
 
+## Session 2026-09-24 (3ᵉ) — Le chiffre pondéré, enfin mesuré
+
+**FAIT.**
+
+**1. `make turnover-audit` a tourné sur le compte réel.** L'hypothèse du 23/09 est
+devenue un résultat, et elle TIENT :
+
+| | valeur |
+|---|---|
+| Moyenne simple (par position) | **+1,59 %** |
+| Moyenne **pondérée par le notionnel** | **+0,09 %** |
+| Notionnel engagé | 867 604 $ |
+| Rapport entre les deux | **17,7×** |
+| t-stat / profit factor | +4,70 · 2,18 |
+| Détention médiane | 1,0 jour · 40,7 clôtures/semaine |
+
+**La réconciliation ferme le dossier :** 0,09 % × 867 604 $ = **781 $**, contre
+**+818,67 $** réellement réalisés. Les +1,59 % décrivaient une population de LOTS, pas le
+capital. La poussière de rebalancement dominait la moyenne — c'est mesuré, plus supposé.
+
+**2. Un seul motif de sortie côté système.** L'audit ne relève **aucune sortie déclenchée
+par un TP ou un SL** : toute clôture vient du rebalancement. Capture de −76 % sur le
+sous-ensemble reconstruit. C'est le vrai résultat de la session, et il n'était pas la
+question posée.
+
+**3. Un défaut d'unité, trouvé par la sortie elle-même** (ADR-0198). Mon bloc d'écart
+affichait `+0,02 %` deux lignes sous `+1,59 %` — la même quantité, cent fois trop petite.
+Ces champs sont des fractions ; le reste du rapport les convertit, pas ce bloc. Le
+*rapport* entre les deux, lui, restait juste (les unités s'annulent) : la sortie contenait
+donc le faux, le juste, et un troisième chiffre correct qui ne départageait pas. Corrigé,
+et épinglé par un test qui échoue sur le code d'avant.
+
+**4. L'ingestion sociale devient quotidienne** (ADR-0197). Un flux qu'on doit penser à
+rafraîchir cesse de l'être, et ici le retard ne se rattrape PAS : la fenêtre publique de
+Telegram et des miroirs RSS ne rend qu'une vingtaine de messages. Les trois sources réseau
+rejoignent `scripts/cron_daily.sh`, chacune sous garde de configuration, chacune avec un
+échec NOMMÉ plutôt qu'avalé par un `|| true`.
+
+**BLOQUÉ.** Rien.
+
+**SUITE.** (a) Déployer, puis recharger le cron sur le VPS — le correctif ne tourne pas
+tant que ce n'est pas fait. (b) Le « un seul motif de sortie » mérite d'être instruit :
+des TP/SL qui ne déclenchent jamais sont soit trop larges, soit court-circuités par le
+rebalancement quotidien. (c) Réinjecter les features ML depuis l'archive du 18/09 —
+toujours P1, toujours bloquant pour l'entraînement.
+
+
 ## Session 2026-09-24 (2ᵉ) — La première ingestion réelle, et ce qu'elle a montré
 
 **FAIT.**

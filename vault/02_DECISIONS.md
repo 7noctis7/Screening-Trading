@@ -2,6 +2,61 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0198 — Une quantité n'a qu'UNE écriture dans un même rapport (2026-09-24)
+
+**CONTEXTE.** La première sortie réelle de `make turnover-audit` annonçait
+`+0,02 %` deux lignes sous `+1,59 %`. Les deux désignaient la MÊME chose : la moyenne
+non pondérée des 542 positions.
+
+**LA CAUSE.** `rendement_moyen_pct` et `rendement_pondere_pct` sont des **fractions**
+(`0.0159`). Tout le rapport les convertit à l'affichage ; le bloc d'écart, ajouté
+ensuite, les rendait brutes.
+
+**CE QUI REND CE DÉFAUT PARTICULIER.** Le *rapport* entre les deux moyennes, lui, restait
+JUSTE — les unités s'annulent dans une division. La sortie contenait donc un nombre faux,
+sa version juste, et un troisième chiffre correct qui ne départageait pas les deux. Le
+lecteur n'avait aucune raison de croire l'un plutôt que l'autre : un défaut d'unité ne se
+voit pas, il se lit comme une mesure.
+
+**DÉCISION.** Le test ajouté ne fige pas un format d'affichage. Il épingle qu'une
+quantité s'écrit PAREIL partout où le rapport la mentionne, et que sa version cent fois
+trop petite n'y figure nulle part. Il échoue sur le code d'avant — vérifié.
+
+**CONSÉQUENCE.** Une valeur stockée en fraction et affichée en pourcentage demande la
+conversion à CHAQUE point de sortie. Le prochain bloc ajouté à ce rapport tombera sur ce
+test s'il l'oublie.
+
+---
+
+## ADR-0197 — L'ingestion sociale est quotidienne parce qu'elle ne se rattrape pas (2026-09-24)
+
+**CONTEXTE.** `make x-ingest` se lançait à la main. La question n'était pas le confort :
+c'était de savoir si le retard coûte quelque chose.
+
+**IL COÛTE, ET DÉFINITIVEMENT.** L'aperçu public `t.me/s/<canal>` ne rend qu'une
+vingtaine de messages, un miroir RSS guère plus. Sur un canal actif, les messages plus
+anciens SORTENT de la fenêtre et aucune relance ne les rattrape : une semaine sans
+passage est une semaine perdue pour toujours. C'est le même raisonnement que le dépôt
+s'était déjà écrit pour le corpus de news, en plus tranchant — d'où la même place, dans
+`scripts/cron_daily.sh`, plutôt qu'un script qu'on lance quand on y pense.
+
+**DÉCISION.** Les trois sources réseau (Telegram, RSS, Discord) rejoignent la chaîne
+quotidienne, **chacune sous garde de configuration**. Sans cette garde, le log se
+remplirait chaque jour d'un échec attendu — et un vrai échec s'y noierait.
+
+**UN ÉCHEC EST NOMMÉ, JAMAIS AVALÉ.** Pas de `|| true` : chaque appel est suivi d'un
+`|| echo` qui dit la CONSÉQUENCE (« l'onglet /x se fige sur l'existant », « miroir
+mort ? »). La leçon vient de `train_model.py`, dans ce même fichier, où le `|| true` seul
+avait rendu une panne indétectable.
+
+**ET L'INGESTION NE FAIT PAS TOMBER LA CHAÎNE.** Le script est en `set -e` : un canal
+mort arrêterait rapports, watchlist et miroirs pour une cause sans rapport avec eux.
+
+**CONSÉQUENCE.** Le correctif ne prend effet qu'après déploiement ET rechargement du cron
+sur le VPS. Un test lit le script et refuse une régression sur les quatre points.
+
+---
+
 ## ADR-0196 — « Quel miroir marche ? » se mesure, ne se documente pas (2026-09-24)
 
 **CONTEXTE.** Telegram couvre 2 des 4 comptes suivis (`eliz883`, `walshwealth1122`).
