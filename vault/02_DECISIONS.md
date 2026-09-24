@@ -182,6 +182,51 @@ chercher un problème de flux là où il y a un problème de permission. Et un j
 le dit sans tenter le moindre appel : la cause est locale, le message doit envoyer au bon
 endroit. Quatrième occurrence du principe dans cette ADR.
 
+**CE QUE LA REVUE A TROUVÉ, ET QUI ÉTAIT JUSTE — QUATRE FOIS.**
+
+**1. Le qualifieur du dépôt était contourné.** AGENTS.md §9 : « Point d'entrée unique :
+`packages.intelligence.pipeline.qualifier()` · règles encodées, à ne pas contourner ».
+L'onglet créait une SECONDE voie d'intelligence X, affichant des propos sans plafond
+d'authenticité, sans déduplication d'origine et sans exigence de corroboration. Le
+contournement était involontaire ; il n'en était pas moins un contournement, et c'est
+précisément le mécanisme que la règle ferme. `packages/social/qualification.py` traduit
+désormais chaque publication en `Information` et transmet ; le verdict est calculé dans
+`_serialiser`, la fonction par laquelle TOUT sort — le placer chez l'appelant le rendrait
+oubliable au prochain point d'entrée.
+
+Trois correspondances, et aucune n'est neutre. `verifie` vaut **toujours** `False` —
+AGENTS.md dit qu'aucun des 66 comptes n'est authentifié. Le niveau de la watchlist est
+une **hypothèse** : le type s'appelle `Candidat`, son champ `niveau_attendu`, et sa
+documentation dit « à valider avant tout usage » ; mesuré le 24/09, **32 des 66 comptes
+portent une réserve non levée** — dont les quatre comptes suivis ici. Prendre le niveau
+attendu pour un niveau validé aurait promu la moitié de la liste sur la foi d'une note de
+travail : les comptes avec réserve restent en `E_FAIBLE`. Enfin l'impact suit le caractère
+ACTIONNABLE (signal, fermeture, déplacement de stop → `fort`), et comme l'exigence de
+corroboration croît avec l'impact, ce classement ne peut que **durcir** l'exigence sur ce
+qui est actionnable. Un contrôle refuse, il n'autorise pas.
+
+**2. L'analyseur Telegram perdait TOUS les horodatages.** Il clôturait l'enregistrement à
+la fermeture du bloc TEXTE, alors que `<time>` est un frère qui vient APRÈS, dans le pied
+du message. Chaque publication héritait donc de l'heure d'ingestion : chronologie fausse,
+et `INSERT OR REPLACE` la redatait à chaque passage. Vérifié sur ma propre fixture :
+`ts = None` pour tous les messages. **Mes huit tests d'alors vérifiaient le texte, le
+compte et l'identifiant — jamais la date.** Un test qui n'interroge pas le champ fautif ne
+protège de rien.
+
+**3. Une date manquante était INVENTÉE.** `datetime.now()` en secours paraît prudent — il
+évite un plantage — mais il date le message de MAINTENANT : il passe en tête de liste, à
+l'endroit le plus lu, et la fausse date se rafraîchit à chaque ingestion. Un vieux billet
+devenait éternellement la dernière nouvelle. Les trois sources réseau **écartent**
+désormais l'élément et le DISENT. Un test lit le CODE et refuse tout retour de `now(` dans
+un horodatage.
+
+**4. La recherche portait sur une liste TRONQUÉE, en silence.** Le front demandait 1000
+publications et filtrait ce sous-ensemble : au-delà, une recherche pouvait répondre
+« aucun résultat » alors qu'une publication plus ancienne correspondait. Le compteur
+ignorait `total_stock` et `tronque`. La troncature est maintenant AFFICHÉE — « la
+recherche porte sur les N plus récentes, sur M au total ». Cinquième occurrence du même
+principe dans cette ADR : une absence doit dire de quoi elle est l'absence.
+
 **CE QUI N'EST PAS FAIT, ET POURQUOI.** Aucune publication n'a été ingérée : le stock est
 vide, et l'onglet le dit. Les filtres sont donc testés sur 44 cas mais **jamais vus sur
 des données réelles**. Brancher une source est la prochaine étape, et elle appartient à

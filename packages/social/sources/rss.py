@@ -79,7 +79,13 @@ class SourceRSS:
                 f"{url} : flux sans élément (miroir éteint ou compte vide)")
             return []
         compte = self.compte or _compte_depuis(url)
-        return [p for p in (_publication(i, compte) for i in items) if p is not None]
+        gardes = [p for p in (_publication(i, compte) for i in items) if p is not None]
+        ecartes = len(items) - len(gardes)
+        if ecartes:
+            self.rejets.append(
+                f"{url} : {ecartes} élément(s) écarté(s) — sans lien, sans texte, ou "
+                "sans pubDate lisible. Une date inventée les mettrait en tête.")
+        return gardes
 
 
 def _texte(item, balise: str) -> str:
@@ -94,14 +100,20 @@ def _compte_depuis(url: str) -> str:
     return trouve[-1] if trouve else "inconnu"
 
 
-def _quand(item) -> datetime:
+def _quand(item) -> datetime | None:
+    """`None` plutôt que `datetime.now()`. INVENTER UNE DATE EST PIRE QUE REFUSER.
+
+    Un élément sans `pubDate` daté de maintenant s'affiche comme le plus récent — donc
+    en tête, à l'endroit le plus lu — et `INSERT OR REPLACE` le rajeunit à chaque
+    ingestion. Un vieux billet deviendrait ainsi éternellement la dernière nouvelle.
+    """
     brut = _texte(item, "pubDate")
     if not brut:
-        return datetime.now(UTC)
+        return None
     try:
         d = parsedate_to_datetime(brut)
     except (TypeError, ValueError):
-        return datetime.now(UTC)
+        return None
     return d if d.tzinfo else d.replace(tzinfo=UTC)
 
 
@@ -109,10 +121,11 @@ def _publication(item, compte: str) -> Publication | None:
     lien = _texte(item, "link")
     brut = _texte(item, "description") or _texte(item, "title")
     texte = _BALISES.sub("", brut).strip()
-    if not lien or not texte:
+    ts = _quand(item)
+    if not lien or not texte or ts is None:
         return None
     tick, sym = extraction.ticker(texte)
     return Publication(
-        id=lien, compte=compte.lstrip("@"), ts=_quand(item), texte=texte,
+        id=lien, compte=compte.lstrip("@"), ts=ts, texte=texte,
         classification=extraction.classification(texte), ticker=tick, symbole=sym,
         direction=extraction.direction(texte), url=lien)

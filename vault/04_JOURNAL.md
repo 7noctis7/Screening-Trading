@@ -65,7 +65,18 @@ non implémenté, et un test vérifie que l'en-tête déclare `Bot`. **Un test a
 vraie fuite** : je relayais `{e}`, et `URLError`/`HTTPError` portent le jeton. Corrigé —
 tout rejet passe par `_sans_secret`. 14 tests.
 
-**BLOQUÉ.** Le stock est vide : les filtres sont testés sur 80 cas mais **jamais vus sur
+**9. La revue a trouvé quatre choses, toutes fondées.** (a) Le qualifieur du dépôt était
+CONTOURNÉ — AGENTS.md §9 impose un point d'entrée unique, et mon onglet créait une seconde
+voie d'intelligence X. Branché, avec `verifie=False` toujours, les niveaux de watchlist
+ASSORTIS D'UNE RÉSERVE ramenés à E (32 des 66 comptes, dont les quatre suivis), et un
+impact qui DURCIT l'exigence sur les messages actionnables. (b) L'analyseur Telegram
+perdait tous les horodatages — `<time>` est un frère qui vient APRÈS le bloc texte ; mes
+huit tests d'alors ne vérifiaient jamais la date. (c) Une date manquante était inventée à
+`now()`, ce qui plaçait le message en tête et le rajeunissait à chaque ingestion : les
+trois sources l'écartent et le disent. (d) La recherche portait sur une liste tronquée en
+silence : la troncature est affichée.
+
+**BLOQUÉ.** Le stock est vide : les filtres sont testés sur 95 cas mais **jamais vus sur
 des données réelles**. Brancher une source suppose de décider d'où viennent les
 publications — c'est une décision de l'utilisateur, pas une supposition à coder.
 

@@ -17,6 +17,7 @@ from typing import Any
 
 from packages.social.filtres import Filtre, appliquer
 from packages.social.modele import Classification, Direction, Publication
+from packages.social.qualification import verdict
 from packages.social.store import StorePublications, chemin_db
 
 LIMITE_DEFAUT = 200
@@ -44,11 +45,19 @@ def construire_filtre(accounts: str = "", q: str = "", classification: str = "",
 
 
 def _serialiser(p: Publication) -> dict:
+    """Chaque publication part AVEC son verdict. Jamais l'une sans l'autre.
+
+    AGENTS.md §9 impose un point d'entrée unique, `intelligence.pipeline.qualifier()`.
+    Sérialiser sans lui rouvrirait la seconde voie que cette règle ferme : des propos
+    affichés sans plafond d'authenticité ni exigence de corroboration. Le verdict est
+    donc calculé ICI, dans la fonction par laquelle tout sort, et non dans l'appelant —
+    un appelant s'oublie.
+    """
     return {"id": p.id, "compte": p.compte, "ts": p.ts.isoformat(), "texte": p.texte,
             "classification": str(p.classification), "ticker": p.ticker,
             "symbole": p.symbole,
             "direction": None if p.direction is None else str(p.direction),
-            "extraits": p.extraits, "url": p.url}
+            "extraits": p.extraits, "url": p.url, "verdict": verdict(p)}
 
 
 def publications(f: Filtre, limite: int = LIMITE_DEFAUT, db: str | None = None) -> dict:

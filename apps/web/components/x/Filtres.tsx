@@ -47,11 +47,11 @@ function Select({ label, valeur, options, onChange }: {
 }
 
 export function Filtres({ c, setC, comptes, symboles, classifications, directions,
-                          n, total }: {
+                          n, total, charge }: {
   c: Criteres; setC: (c: Criteres) => void;
   comptes: string[]; symboles: string[];
   classifications: string[]; directions: string[];
-  n: number; total: number;
+  n: number; total: number; charge: number;
 }) {
   const un = (v: string[]) => (v.length === 1 ? v[0] : "");
   return (
@@ -61,6 +61,7 @@ export function Filtres({ c, setC, comptes, symboles, classifications, direction
         {/* LE COMPTEUR EST LA RÉPONSE À « pourquoi je ne vois rien ». */}
         <span className="text-[11px] text-muted2 tabular-nums">
           {n} sur {total} publication{total > 1 ? "s" : ""}
+          {charge < total ? ` · ${charge} chargées` : ""}
         </span>
       </div>
 

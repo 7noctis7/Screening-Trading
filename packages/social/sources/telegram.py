@@ -47,6 +47,16 @@ class _Aperçu(HTMLParser):
     Un analyseur plutôt qu'une expression régulière : le texte d'un message contient des
     balises (`<br>`, liens, emoji) et une regex sur du HTML imbriqué finit toujours par
     couper au mauvais endroit.
+
+    L'ENREGISTREMENT SE FERME AU BLOC MESSAGE, PAS AU BLOC TEXTE. Première version : on
+    empilait le message dès que `tgme_widget_message_text` se refermait. Or dans le
+    balisage réel, `<time>` est un FRÈRE qui vient APRÈS ce bloc, dans le pied. Chaque
+    publication partait donc sans horodatage et héritait de l'heure d'ingestion — la
+    chronologie était fausse, et `INSERT OR REPLACE` redatait le même message à chaque
+    passage. Le défaut était invisible : mes huit tests vérifiaient le texte, le compte,
+    l'identifiant, jamais la date.
+
+    On vide donc le tampon à l'ouverture du message SUIVANT et à la fin du document.
     """
 
     def __init__(self) -> None:
@@ -54,33 +64,51 @@ class _Aperçu(HTMLParser):
         self.messages: list[dict] = []
         self._courant: dict | None = None
         self._profondeur = 0
+        self._dans_date = False
+
+    def _clore(self) -> None:
+        if self._courant is not None:
+            self.messages.append(self._courant)
+        self._courant = None
+        self._profondeur = 0
+        self._dans_date = False
 
     def handle_starttag(self, tag: str, attrs: list) -> None:
         a = dict(attrs)
         classe = a.get("class", "") or ""
-        if "tgme_widget_message " in f"{classe} " and a.get("data-post"):
+        if a.get("data-post") and "tgme_widget_message " in f"{classe} ":
+            self._clore()
             self._courant = {"post": a["data-post"], "ts": None, "texte": []}
+            return
         if self._courant is None:
             return
+        if "tgme_widget_message_date" in classe:
+            # Cibler la date DU MESSAGE : un en-tête de transfert peut porter un autre
+            # `<time>`, et prendre le premier venu daterait le message de sa source.
+            self._dans_date = True
+        prendre = self._dans_date or not self._courant["ts"]
+        if tag == "time" and a.get("datetime") and prendre:
+            self._courant["ts"] = a["datetime"]
         if "tgme_widget_message_text" in classe:
             self._profondeur = 1
         elif self._profondeur:
             self._profondeur += 1
-        if tag == "time" and a.get("datetime") and not self._courant["ts"]:
-            self._courant["ts"] = a["datetime"]
         if tag == "br" and self._profondeur:
             self._courant["texte"].append("\n")
 
     def handle_endtag(self, tag: str) -> None:
+        if tag == "a" and self._dans_date:
+            self._dans_date = False
         if self._profondeur:
             self._profondeur -= 1
-            if self._profondeur == 0 and self._courant is not None:
-                self.messages.append(self._courant)
-                self._courant = None
 
     def handle_data(self, data: str) -> None:
         if self._profondeur and self._courant is not None:
             self._courant["texte"].append(data)
+
+    def close(self) -> None:
+        super().close()
+        self._clore()
 
 
 def _cibles(brut: str) -> list[tuple[str, str]]:
@@ -119,33 +147,47 @@ class SourceTelegram:
             html = r.read().decode("utf-8", "replace")
         lecteur = _Aperçu()
         lecteur.feed(html)
+        lecteur.close()
         if not lecteur.messages:
             # NOMMER le cas : privé, supprimé, renommé ou aperçu désactivé rendent tous
             # une page valide sans message — indiscernable de « rien publié ».
             self.rejets.append(
                 f"{canal} : aucun message (canal privé, supprimé, ou aperçu désactivé)")
             return []
-        return [p for p in (_publication(m, compte) for m in lecteur.messages)
-                if p is not None]
+        gardees = [p for p in (_publication(m, compte) for m in lecteur.messages)
+                   if p is not None]
+        ecartes = len(lecteur.messages) - len(gardees)
+        if ecartes:
+            self.rejets.append(
+                f"{canal} : {ecartes} message(s) écarté(s) — sans texte ou sans date "
+                "lisible. Une date inventée les placerait en tête de liste.")
+        return gardees
 
 
-def _quand(brut: str | None) -> datetime:
+def _quand(brut: str | None) -> datetime | None:
+    """`None` plutôt que `datetime.now()`. INVENTER UNE DATE EST PIRE QUE REFUSER.
+
+    Une date fabriquée place le message en tête de liste — donc à l'endroit le plus lu —
+    et `INSERT OR REPLACE` la rafraîchit à chaque ingestion : le même message rajeunit
+    indéfiniment. C'est une donnée de marché inventée, ce que le dépôt interdit.
+    """
     if not brut:
-        return datetime.now(UTC)
+        return None
     try:
         d = datetime.fromisoformat(brut.replace("Z", "+00:00"))
     except ValueError:
-        return datetime.now(UTC)
+        return None
     return d if d.tzinfo else d.replace(tzinfo=UTC)
 
 
 def _publication(m: dict, compte: str) -> Publication | None:
     texte = unescape("".join(m["texte"])).strip()
-    if not texte:
+    ts = _quand(m["ts"])
+    if not texte or ts is None:
         return None
     lien = f"https://t.me/{m['post']}"
     tick, sym = extraction.ticker(texte)
     return Publication(
-        id=lien, compte=compte, ts=_quand(m["ts"]), texte=texte,
+        id=lien, compte=compte, ts=ts, texte=texte,
         classification=extraction.classification(texte), ticker=tick, symbole=sym,
         direction=extraction.direction(texte), url=lien)

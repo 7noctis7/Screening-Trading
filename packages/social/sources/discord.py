@@ -119,28 +119,41 @@ class SourceDiscord:
         if not charge:
             self._rejeter(f"salon {salon} : aucun message (salon vide ou purgé)")
             return []
-        return [p for p in (_publication(m, salon, compte) for m in charge)
-                if p is not None]
+        gardes = [p for p in (_publication(m, salon, compte) for m in charge)
+                  if p is not None]
+        ecartes = len(charge) - len(gardes)
+        if ecartes:
+            self._rejeter(
+                f"salon {salon} : {ecartes} message(s) écarté(s) — sans texte ou sans "
+                "horodatage lisible.")
+        return gardes
 
 
-def _quand(brut: str | None) -> datetime:
+def _quand(brut: str | None) -> datetime | None:
+    """`None` plutôt que `datetime.now()`. INVENTER UNE DATE EST PIRE QUE REFUSER.
+
+    Discord horodate toujours ; un message sans `timestamp` lisible signale une charge
+    inattendue, pas un message d'aujourd'hui. Le dater de maintenant le placerait en
+    tête de liste et le rajeunirait à chaque ingestion.
+    """
     if not brut:
-        return datetime.now(UTC)
+        return None
     try:
         d = datetime.fromisoformat(str(brut).replace("Z", "+00:00"))
     except ValueError:
-        return datetime.now(UTC)
+        return None
     return d if d.tzinfo else d.replace(tzinfo=UTC)
 
 
 def _publication(m: dict, salon: str, compte: str) -> Publication | None:
     """Un message sans texte (image seule, autocollant) n'est pas une publication."""
     texte = str(m.get("content") or "").strip()
-    if not texte or not m.get("id"):
+    ts = _quand(m.get("timestamp"))
+    if not texte or not m.get("id") or ts is None:
         return None
     ident = f"discord:{salon}/{m['id']}"
     tick, sym = extraction.ticker(texte)
     return Publication(
-        id=ident, compte=compte, ts=_quand(m.get("timestamp")), texte=texte,
+        id=ident, compte=compte, ts=ts, texte=texte,
         classification=extraction.classification(texte), ticker=tick, symbole=sym,
         direction=extraction.direction(texte), url=None)

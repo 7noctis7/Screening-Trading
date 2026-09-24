@@ -31,8 +31,18 @@ const quand = (iso: string) => {
                                  minute: "2-digit" });
 };
 
-function Carte({ p }: { p: Publication }) {
+// Aucun statut n'est vert. C'est délibéré : rien de ce flux n'est « bon à prendre ».
+// Le vert dirait « exploitable », et le pipeline ne délivre ce statut qu'à une source
+// primaire authentifiée — or aucun des comptes suivis ne l'est.
+const STATUT: Record<string, string> = {
+  FACT: "var(--muted)", CONFIRMED: "var(--muted)", PROBABLE: "var(--warn)",
+  UNCONFIRMED: "var(--warn)", RUMOR: "#f43f5e", SPECULATION: "#f43f5e",
+  OPINION: "var(--muted2)",
+};
+
+function Carte({ p }: { p: Publication & { verdict?: any } }) {
   const niveaux = Object.entries(p.extraits ?? {});
+  const v = p.verdict;
   return (
     <article className="card p-3.5">
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -59,9 +69,21 @@ function Carte({ p }: { p: Publication }) {
         ))}
         {p.url && (
           <a href={p.url} target="_blank" rel="noopener noreferrer"
-            className="text-muted2 hover:text-accent transition-colors">voir sur X →</a>
+            className="text-muted2 hover:text-accent transition-colors">voir la source →</a>
         )}
       </div>
+      {/* LE VERDICT DU DÉPÔT, pas le mien. Il vient de `intelligence.pipeline.qualifier`,
+          point d'entrée unique imposé par AGENTS.md §9. L'afficher à côté du propos est
+          tout l'objet de la règle : un dire étiqueté reste un dire. */}
+      {v && (
+        <div className="flex flex-wrap items-center gap-2 mt-2 text-[10px] text-muted2"
+          title={(v.motifs ?? []).join(" · ")}>
+          <span style={{ color: STATUT[v.statut] ?? "var(--muted2)" }}>{v.statut}</span>
+          <span>source niveau {v.niveau_source}</span>
+          <span>confiance {Number(v.confiance).toFixed(2)}</span>
+          {!v.exploitable && <span>· non exploitable comme donnée</span>}
+        </div>
+      )}
     </article>
   );
 }
@@ -89,6 +111,11 @@ export default function OngletX() {
   }
 
   const vues = appliquer(toutes, c);
+  // LE TOTAL EST CELUI DU STOCK, PAS DE CE QU'ON A REÇU. La route plafonne la charge ;
+  // afficher « 12 sur 1000 » quand le stock en contient 4000 ferait croire que la
+  // recherche a tout vu. `total_stock` dit la vérité, `tronque` dit qu'il manque.
+  const stock: number = data.total_stock ?? toutes.length;
+  const tronque: boolean = Boolean(data.tronque);
   return (
     <main className="max-w-3xl mx-auto p-4 md:p-6 space-y-3">
       <header>
@@ -103,14 +130,26 @@ export default function OngletX() {
       <Filtres c={c} setC={setC}
         comptes={data.comptes ?? []} symboles={data.symboles ?? []}
         classifications={data.classifications ?? []} directions={data.directions ?? []}
-        n={vues.length} total={toutes.length} />
+        n={vues.length} total={stock} charge={toutes.length} />
+
+      {/* LA TRONCATURE SE DIT. Sans ce bandeau, « aucun résultat » sur une recherche
+          qui ne porte que sur les 1000 plus récentes se lit « ce sujet n'existe pas »,
+          alors qu'une publication plus ancienne correspond peut-être. */}
+      {tronque && (
+        <p className="text-[11px] text-muted2 px-1">
+          ⚠ La recherche porte sur les <b>{toutes.length}</b> publications les plus
+          récentes, sur <b>{stock}</b> au total. Une correspondance plus ancienne
+          n&apos;apparaîtrait pas ici.
+        </p>
+      )}
 
       {/* VIDE N° 2 — le flux va bien, ce sont les critères qui vident l'écran. */}
       {vues.length === 0 ? (
         <div className="card p-6 text-center space-y-2">
           <p className="text-sm">Aucune publication ne correspond à ces critères.</p>
           <p className="text-xs text-muted2">
-            Le flux contient {toutes.length} publication{toutes.length > 1 ? "s" : ""} :
+            Le flux contient {stock} publication{stock > 1 ? "s" : ""}
+            {tronque ? ` (recherche portant sur les ${toutes.length} plus récentes)` : ""} :
             ce sont les filtres qui ne laissent rien passer.
           </p>
           {actif(c) && (
