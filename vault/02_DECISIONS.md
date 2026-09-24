@@ -24,6 +24,15 @@ n'est pas lu.
 (« Trend Spider ») : on ne sait pas, donc on garde. Écarter sur un doute viderait des
 flux honnêtes en silence — le défaut que tout ce module s'efforce d'éviter.
 
+**LA REVUE DE #408 A TROUVÉ DEUX FAÇONS DONT CE TRI VIDAIT UN FLUX HONNÊTE.** (1) Le
+`@` était optionnel : un nom affiché d'un seul mot (« MacroAlf ») passait pour un
+pseudonyme, et TOUS les messages de micro2macr0 étaient écartés. Seul `@handle` est
+désormais comparé. (2) Le compte du flux est DEVINÉ depuis l'URL, et une URL opaque
+(`…/feeds/AbC.xml`) rend « feeds » : trier dessus écartait tout. Le tri n'a donc lieu
+que si le compte est donné, ou CONFIRMÉ par le flux — au moins un élément signé de sa
+main. Sinon on garde tout, et le rejet le dit. Même leçon qu'ADR-0197 : une garde qui
+se trompe de base n'assainit rien, elle éteint.
+
 ---
 
 ## ADR-0199 — Les comptes X se lisent par un RSSHub AUTO-HÉBERGÉ, jamais exposé (2026-09-24)

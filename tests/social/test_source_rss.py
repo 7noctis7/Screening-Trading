@@ -171,3 +171,35 @@ def test_un_flux_SANS_auteur_declare_garde_tout(monkeypatch):
     """Sans `dc:creator`, on ne sait pas : écarter sur un doute serait muet."""
     _brancher(monkeypatch, RSS)
     assert len(sources.create("rss", flux="https://miroir.test/astekz/rss").lire()) == 2
+
+
+def test_un_nom_affiche_d_UN_SEUL_MOT_n_est_pas_un_pseudonyme(monkeypatch):
+    """« MacroAlf » sans @ passait pour un pseudonyme : TOUT micro2macr0 était écarté.
+
+    Relevé en revue de #408. Seul « @handle » est comparé.
+    """
+    flux = (AVEC_REPRISE.replace("@trendspider</dc", "TrendSpider</dc")
+            .replace("@inconnu42", "MacroAlf"))
+    _brancher(monkeypatch, flux)
+    pubs = sources.create("rss", flux="https://miroir.test/trendspider/rss").lire()
+    assert len(pubs) == 2
+
+
+def test_une_URL_OPAQUE_ne_fait_pas_vider_le_flux(monkeypatch):
+    """`…/feeds/AbC.xml` fait deviner « feeds » : trier dessus écartait TOUT.
+
+    Aucun élément n'est signé « @feeds », donc le compte n'est pas confirmé : on garde
+    tout, et on le dit. Relevé en revue de #408.
+    """
+    _brancher(monkeypatch, AVEC_REPRISE)
+    src = sources.create("rss", flux="https://rss.exemple/feeds/AbCdEf123.xml")
+    assert len(src.lire()) == 2
+    assert any("NON triées" in r for r in src.rejets)
+
+
+def test_un_compte_DONNE_explicitement_suffit_a_trier(monkeypatch):
+    """Le compte passé au constructeur est su, pas deviné : le tri s'applique."""
+    _brancher(monkeypatch, AVEC_REPRISE.replace("@trendspider</dc", "@autre</dc"))
+    src = sources.create("rss", flux="https://rss.exemple/feeds/x.xml",
+                         compte="trendspider")
+    assert src.lire() == []

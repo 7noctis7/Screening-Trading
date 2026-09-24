@@ -50,10 +50,12 @@ _IMG_HTML = re.compile(r"<img[^>]+src=['\"]([^'\"]+)", re.I)
 _IMAGE = re.compile(r"^image/", re.I)
 _COMPTE_URL = re.compile(r"(?:^|/)@?([A-Za-z0-9_]{1,15})(?:/|$)")
 # Dublin Core : le champ STANDARD de l'auteur d'un élément, que les générateurs de flux
-# X renseignent. Seule une forme de pseudonyme est comparée : un nom affiché (« Trend
-# Spider ») ne dit rien de fiable, et le comparer écarterait tout un flux honnête.
+# X renseignent. Seul un pseudonyme EXPLICITE (« @handle ») est comparé. Le « @ » n'est
+# pas décoratif : sans lui, un nom affiché d'un seul mot (« MacroAlf » pour micro2macr0)
+# passait pour un pseudonyme, et TOUS les messages du compte étaient écartés comme
+# des reprises. Relevé en revue de #408.
 _DC_AUTEUR = "{http://purl.org/dc/elements/1.1/}creator"
-_PSEUDO = re.compile(r"^@?([A-Za-z0-9_]{1,15})$")
+_PSEUDO = re.compile(r"^@([A-Za-z0-9_]{1,15})$")
 
 
 @sources.register("rss")
@@ -93,12 +95,9 @@ class SourceRSS:
                 f"{url} : flux sans élément (miroir éteint ou compte vide)")
             return []
         compte = self.compte or _compte_depuis(url)
-        propres = [i for i in items if not _reprise(i, compte)]
-        if len(propres) < len(items):
-            self.rejets.append(
-                f"{url} : {len(items) - len(propres)} reprise(s) d'autres comptes "
-                f"écartée(s) — un retweet n'est pas un message de {compte} "
-                "(AGENTS.md §9).")
+        propres, note = _sans_reprises(items, compte, sur=self.compte is not None)
+        if note:
+            self.rejets.append(f"{url} : {note}")
         lues = (_publication(i, compte) for i in propres)
         gardes = [p for p in lues if p is not None]
         ecartes = len(propres) - len(gardes)
@@ -109,21 +108,40 @@ class SourceRSS:
         return gardes
 
 
-def _reprise(item, compte: str) -> bool:
-    """Un élément dont l'AUTEUR déclaré n'est pas le compte du flux est une reprise.
+def _auteur(item) -> str | None:
+    """Le pseudonyme EXPLICITE de l'auteur déclaré, en minuscules — sinon `None`."""
+    n = item.find(_DC_AUTEUR)
+    m = _PSEUDO.match((n.text or "").strip()) if n is not None else None
+    return m.group(1).lower() if m else None
+
+
+def _sans_reprises(items: list, compte: str, sur: bool) -> tuple[list, str | None]:
+    """Écarte les éléments dont l'AUTEUR déclaré n'est pas le compte du flux.
 
     Vérifié sur le gabarit de Nitter (moteur de twiiit, xcancel…) : pour un retweet,
     l'élément porte le texte et le lien du tweet D'ORIGINE, et `dc:creator` nomme son
     auteur. Sans ce tri, le signal d'un inconnu retweeté par trendspider entrait dans
-    la base comme un signal DE trendspider — et chaque reprise se comptait comme une
-    source de plus, ce qu'AGENTS.md §9 interdit.
+    la base comme un signal DE trendspider (AGENTS.md §9).
 
-    Sans `dc:creator`, ou avec un nom affiché plutôt qu'un pseudonyme, on ne sait pas :
-    l'élément est gardé. Écarter sur un doute viderait des flux honnêtes en silence.
+    MAIS LE COMPTE DU FLUX EST SOUVENT DEVINÉ, pas su : `_compte_depuis` lit l'URL, et
+    une URL opaque (`…/feeds/AbCdEf123.xml`) rend « feeds ». Trier sur un compte deviné
+    écarterait alors TOUT le flux (relevé en revue de #408). Le tri n'a donc lieu que si
+    le compte est donné explicitement, ou CONFIRMÉ par le flux lui-même — au moins un
+    élément signé de sa main. Sinon on garde tout, et on le DIT.
     """
-    n = item.find(_DC_AUTEUR)
-    m = _PSEUDO.match((n.text or "").strip()) if n is not None else None
-    return bool(m) and m.group(1).lower() != compte.lstrip("@").lower()
+    auteurs = [_auteur(i) for i in items]
+    cible = compte.lstrip("@").lower()
+    if not sur and cible not in auteurs:
+        if any(auteurs):
+            return items, (f"compte « {compte} » deviné de l'URL et jamais signataire "
+                           "dans le flux — reprises NON triées, faute de savoir.")
+        return items, None
+    propres = [i for i, a in zip(items, auteurs, strict=True) if a in (None, cible)]
+    n = len(items) - len(propres)
+    if not n:
+        return propres, None
+    return propres, (f"{n} reprise(s) d'autres comptes écartée(s) — un retweet "
+                     f"n'est pas un message de {compte} (AGENTS.md §9).")
 
 
 def _texte(item, balise: str) -> str:
