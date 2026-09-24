@@ -61,6 +61,10 @@ class SourceRSS:
         self.compte = compte
         self.rejets: list[str] = []
 
+    @property
+    def configuree(self) -> bool:
+        return bool(self.flux)
+
     def lire(self) -> list[Publication]:
         self.rejets = []
         publications: list[Publication] = []

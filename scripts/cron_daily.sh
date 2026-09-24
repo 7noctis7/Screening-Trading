@@ -41,19 +41,18 @@ python scripts/train_model.py \
 # C'est ce qui fait passer cette tâche de « à lancer quand on y pense » à « quotidienne ».
 #
 # Chaque source ne tourne que si elle est CONFIGURÉE — sans quoi le log se remplirait
-# chaque jour d'un échec attendu, et un vrai échec s'y noierait.
-if [ -n "${QUANT_TG_CANAUX:-}" ]; then
-  python scripts/social_x_ingest.py --source telegram \
-    || echo "⚠️  ingestion Telegram EN ÉCHEC — l'onglet /x se fige sur l'existant"
-fi
-if [ -n "${QUANT_X_RSS:-}" ]; then
-  python scripts/social_x_ingest.py --source rss \
-    || echo "⚠️  ingestion RSS EN ÉCHEC — miroir mort ? relancer make x-miroirs"
-fi
-if [ -n "${DISCORD_BOT_TOKEN:-}" ] && [ -n "${QUANT_DISCORD_SALONS:-}" ]; then
-  python scripts/social_x_ingest.py --source discord \
-    || echo "⚠️  ingestion Discord EN ÉCHEC — jeton révoqué ou bot retiré du serveur ?"
-fi
+# chaque jour d'un échec attendu, et un vrai échec s'y noierait. Mais la question se
+# pose EN PYTHON (`--si-configuree`), et surtout PAS ici : `.env` n'est lu que par
+# `packages/common/env.py`, donc un `[ -n "${QUANT_TG_CANAUX:-}" ]` serait toujours
+# faux sous cron — dont l'environnement est nu — et sauterait les trois sources EN
+# SILENCE, chaque nuit. Une garde écrite au mauvais étage ne protège de rien : elle
+# éteint la tâche qu'elle était censée rendre propre, sans une ligne pour le dire.
+python scripts/social_x_ingest.py --source telegram --si-configuree \
+  || echo "⚠️  ingestion Telegram EN ÉCHEC — l'onglet /x se fige sur l'existant"
+python scripts/social_x_ingest.py --source rss --si-configuree \
+  || echo "⚠️  ingestion RSS EN ÉCHEC — miroir mort ? relancer make x-miroirs"
+python scripts/social_x_ingest.py --source discord --si-configuree \
+  || echo "⚠️  ingestion Discord EN ÉCHEC — jeton révoqué ou bot retiré du serveur ?"
 python apps/web/preview/build_interactive.py        # régénère le terminal autonome
 python scripts/mcp_populate_overlays.py --offline || true   # cônes VaR/EVT + blackouts → charts (best-effort)
 python -m packages.reporting.obsidian || true               # coffre Obsidian : journal + attribution + post-mortems

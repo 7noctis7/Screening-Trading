@@ -34,6 +34,10 @@ class SourceFichier:
         self.chemin = Path(str(chemin or os.environ.get("QUANT_X_JSONL") or DEFAUT))
         self.rejets: list[str] = []
 
+    @property
+    def configuree(self) -> bool:
+        return self.chemin.exists()
+
     def lire(self) -> list[Publication]:
         self.rejets = []
         if not self.chemin.exists():

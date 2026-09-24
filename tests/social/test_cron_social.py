@@ -11,7 +11,8 @@ tests vérifient que le flux social l'a rejoint, et aux mêmes conditions.
 Ce qu'ils épinglent :
   1. l'ingestion est dans la chaîne QUOTIDIENNE, pas dans un script qu'on oublie ;
   2. chaque source ne tourne que si elle est CONFIGURÉE — sinon le log se remplirait
-     d'échecs attendus, et un vrai échec s'y noierait ;
+     d'échecs attendus, et un vrai échec s'y noierait — et cette question se pose LÀ
+     OÙ `.env` est lu, c'est-à-dire en Python, jamais dans le shell ;
   3. un échec est VISIBLE, jamais avalé par un `|| true` — c'est la leçon que ce fichier
      s'est déjà écrite à lui-même à propos de `train_model.py` ;
   4. l'ingestion ne peut pas faire TOMBER la chaîne : les rapports et la watchlist qui
@@ -29,6 +30,18 @@ def _texte() -> str:
     return CRON.read_text(encoding="utf-8")
 
 
+def _code() -> str:
+    """Le script SANS ses commentaires.
+
+    Les deux tests de garde ci-dessous cherchent ce que le script FAIT. La prose qui
+    explique pourquoi la garde n'est plus en shell cite forcément la forme qu'elle
+    avait — et sans cette séparation, l'explication d'un défaut déclencherait le test
+    qui interdit ce défaut.
+    """
+    lignes = _texte().splitlines()
+    return "\n".join(x for x in lignes if not x.lstrip().startswith("#"))
+
+
 def test_l_ingestion_sociale_est_dans_la_chaine_QUOTIDIENNE():
     assert "social_x_ingest.py" in _texte(), (
         "un flux qu'on doit penser à rafraîchir cesse d'être rafraîchi")
@@ -42,9 +55,25 @@ def test_les_TROIS_sources_reseau_sont_branchees():
 
 def test_chaque_source_ne_tourne_QUE_si_elle_est_configuree():
     """Sans garde, le log se remplirait chaque jour d'un échec attendu."""
-    code = _texte()
-    for variable in ("QUANT_TG_CANAUX", "QUANT_X_RSS", "DISCORD_BOT_TOKEN"):
-        assert f'-n "${{{variable}:-}}"' in code, variable
+    assert _code().count("--si-configuree") == 3
+
+
+def test_la_garde_n_est_PAS_ecrite_dans_le_SHELL():
+    """La première version testait les variables en bash. Elle était FAUSSE, et muette.
+
+    `.env` n'est lu qu'en Python (`packages/common/env.py`). Sous cron — dont
+    l'environnement est nu — `[ -n "${QUANT_TG_CANAUX:-}" ]` est toujours faux : les
+    trois sources auraient été sautées chaque nuit, sans une ligne dans le log. Une
+    garde placée au mauvais étage n'assainit pas la tâche, elle l'éteint.
+
+    Ce test épingle l'étage, pas la syntaxe : la question « ai-je de quoi lire ? » se
+    pose là où la configuration est LUE.
+    """
+    code = _code()
+    for variable in ("QUANT_TG_CANAUX", "QUANT_X_RSS", "QUANT_DISCORD_SALONS",
+                     "DISCORD_BOT_TOKEN"):
+        assert f'"${{{variable}:-}}"' not in code, (
+            f"{variable} testée en shell : vide sous cron, donc source sautée")
 
 
 def test_un_echec_d_ingestion_est_VISIBLE_jamais_avale():
