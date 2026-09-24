@@ -2,6 +2,30 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0200 — Un retweet n'est pas un message du compte qui le reprend (2026-09-24)
+
+**CONTEXTE.** Premier sondage réel des miroirs (`make x-miroirs`, VPS, 24/09) :
+**twiiit.com** lit `trendspider` (20 éléments) et `micro2macr0` (12) ; `astekz` répond
+HTTP 403 ; xcancel 451, openrss 503, les trois Nitter publics morts.
+
+**LE DÉFAUT, TROUVÉ AVANT QU'IL N'ÉCRIVE DANS LA BASE.** Gabarit RSS de Nitter lu à la
+source (`src/views/rss.nimf`) : pour un retweet, l'élément porte le texte et le lien du
+tweet D'ORIGINE, et `dc:creator` nomme son auteur. `rss.py` déduisait le compte de l'URL
+du flux et ignorait ce champ : le « BTC long » d'un inconnu retweeté par trendspider
+serait entré comme un signal DE trendspider — et, l'écriture étant idempotente, y
+serait resté. AGENTS.md §9 : une reprise n'est pas une source.
+
+**DÉCISION.** Un élément dont `dc:creator` est un PSEUDONYME différent du compte du flux
+est écarté, compté et nommé dans les rejets. Le champ est du Dublin Core, standard :
+`rss.py` ne connaît toujours aucun fournisseur, et le préfixe « RT by » propre à Nitter
+n'est pas lu.
+
+**CE QUI N'EST PAS ÉCARTÉ, ET POURQUOI.** Pas de `dc:creator`, ou un nom affiché
+(« Trend Spider ») : on ne sait pas, donc on garde. Écarter sur un doute viderait des
+flux honnêtes en silence — le défaut que tout ce module s'efforce d'éviter.
+
+---
+
 ## ADR-0199 — Les comptes X se lisent par un RSSHub AUTO-HÉBERGÉ, jamais exposé (2026-09-24)
 
 **CONTEXTE.** Trois des quatre comptes suivis (`astekz`, `trendspider`, `micro2macr0`)

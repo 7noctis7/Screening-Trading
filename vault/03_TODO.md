@@ -15,12 +15,12 @@
 - [x] **~~P1 — L'onglet X n'a JAMAIS vu de donnée réelle~~ — FERMÉ (24/09).** Première
       ingestion : **34 publications** des deux canaux Telegram, dont 6 `TRADE_SIGNAL`.
       Les filtres tournent sur du vrai contenu. Images ajoutées dans la foulée (ADR-0195).
-- [ ] **P1 — 3 des 4 comptes X suivis n'ont toujours AUCUNE source — outillé (24/09,
-      ADR-0199).** Deux voies, dans l'ordre : (1) `make x-miroirs`, sans compte ni
-      installation — jamais encore lancé avec succès ; (2) `make rsshub`, RSSHub
-      auto-hébergé sur le VPS, lu par la source RSS existante. Demande le cookie
-      `auth_token` d'un compte X **SECONDAIRE**, saisi par `make rsshub ARGS=jeton`
-      (masqué, 0600, hors dépôt). Reste à FAIRE sur le VPS, pas à coder.
+- [ ] **P1 — `astekz` n'a toujours AUCUNE source (24/09, ADR-0199/0200).** Sondage réel
+      du 24/09 : **twiiit.com lit `trendspider` (20) et `micro2macr0` (12)** — à coller
+      dans `.env` APRÈS le déploiement du tri des retweets (ADR-0200) ; `astekz` répond
+      **HTTP 403** partout. Voie restante : `make rsshub` (Docker ABSENT du VPS —
+      `sudo apt install docker.io` d'abord), avec le cookie d'un compte X SECONDAIRE.
+      Si astekz est un compte PROTÉGÉ, seul un compte qui le suit pourra le lire.
 - [x] **~~P2 — L'ingestion est MANUELLE~~ — FERMÉ (24/09, ADR-0197).** Les trois sources
       réseau rejoignent `scripts/cron_daily.sh`, chacune sous garde de configuration,
       chacune avec un échec NOMMÉ (jamais `|| true`). Le retard ne se rattrape pas : la

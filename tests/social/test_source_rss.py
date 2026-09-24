@@ -118,3 +118,56 @@ def test_aucun_fournisseur_n_est_code_EN_DUR():
     corps = corps.split('"""')[-1]        # hors docstring de module
     for fournisseur in ("nitter.net", "xcancel.com", "rsshub.app", "rss.app"):
         assert fournisseur not in corps, f"{fournisseur} codé en dur"
+
+
+# ── Reprises (retweets) ─────────────────────────────────────────────────────────────
+# Forme relevée sur le gabarit de Nitter (src/views/rss.nimf), moteur de twiiit : pour
+# un retweet, l'élément porte le texte et le lien du tweet D'ORIGINE, le titre préfixé
+# « RT by @compte: », et `dc:creator` nomme l'auteur d'origine.
+AVEC_REPRISE = """<?xml version="1.0"?>
+<rss xmlns:dc="http://purl.org/dc/elements/1.1/"><channel>
+<item><title>propre</title><dc:creator>@trendspider</dc:creator>
+<link>https://x.com/trendspider/status/1</link>
+<description>SPY breakout above 580</description>
+<pubDate>Wed, 24 Sep 2026 10:00:00 GMT</pubDate></item>
+<item><title>RT by @trendspider: BTC long now</title><dc:creator>@inconnu42</dc:creator>
+<link>https://x.com/inconnu42/status/2</link>
+<description>BTCUSDT long, TP1 70000</description>
+<pubDate>Wed, 24 Sep 2026 09:00:00 GMT</pubDate></item>
+</channel></rss>"""
+
+
+def test_un_RETWEET_n_est_pas_range_sous_le_compte_qui_le_reprend(monkeypatch):
+    """Le signal d'un inconnu entrait comme un signal DE trendspider."""
+    _brancher(monkeypatch, AVEC_REPRISE)
+    src = sources.create("rss", flux="https://miroir.test/trendspider/rss")
+    pubs = src.lire()
+    assert [p.url for p in pubs] == ["https://x.com/trendspider/status/1"]
+
+
+def test_une_reprise_ecartee_est_COMPTEE_et_NOMMEE(monkeypatch):
+    _brancher(monkeypatch, AVEC_REPRISE)
+    src = sources.create("rss", flux="https://miroir.test/trendspider/rss")
+    src.lire()
+    assert any("1 reprise(s)" in r and "trendspider" in r for r in src.rejets)
+
+
+def test_l_auteur_se_compare_SANS_la_casse(monkeypatch):
+    """« @TrendSpider » est le même compte que « trendspider » dans l'URL."""
+    _brancher(monkeypatch, AVEC_REPRISE.replace("@trendspider</dc", "@TrendSpider</dc"))
+    pubs = sources.create("rss", flux="https://miroir.test/trendspider/rss").lire()
+    assert len(pubs) == 1
+
+
+def test_un_NOM_AFFICHE_ne_fait_rien_ecarter(monkeypatch):
+    """« Trend Spider » n'est pas un pseudonyme : le comparer viderait un flux."""
+    flux = AVEC_REPRISE.replace("@inconnu42", "Un Nom Affiché")
+    _brancher(monkeypatch, flux)
+    pubs = sources.create("rss", flux="https://miroir.test/trendspider/rss").lire()
+    assert len(pubs) == 2
+
+
+def test_un_flux_SANS_auteur_declare_garde_tout(monkeypatch):
+    """Sans `dc:creator`, on ne sait pas : écarter sur un doute serait muet."""
+    _brancher(monkeypatch, RSS)
+    assert len(sources.create("rss", flux="https://miroir.test/astekz/rss").lire()) == 2

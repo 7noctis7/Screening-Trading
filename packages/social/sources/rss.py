@@ -49,6 +49,11 @@ _BALISES = re.compile(r"<[^>]+>")
 _IMG_HTML = re.compile(r"<img[^>]+src=['\"]([^'\"]+)", re.I)
 _IMAGE = re.compile(r"^image/", re.I)
 _COMPTE_URL = re.compile(r"(?:^|/)@?([A-Za-z0-9_]{1,15})(?:/|$)")
+# Dublin Core : le champ STANDARD de l'auteur d'un élément, que les générateurs de flux
+# X renseignent. Seule une forme de pseudonyme est comparée : un nom affiché (« Trend
+# Spider ») ne dit rien de fiable, et le comparer écarterait tout un flux honnête.
+_DC_AUTEUR = "{http://purl.org/dc/elements/1.1/}creator"
+_PSEUDO = re.compile(r"^@?([A-Za-z0-9_]{1,15})$")
 
 
 @sources.register("rss")
@@ -88,13 +93,37 @@ class SourceRSS:
                 f"{url} : flux sans élément (miroir éteint ou compte vide)")
             return []
         compte = self.compte or _compte_depuis(url)
-        gardes = [p for p in (_publication(i, compte) for i in items) if p is not None]
-        ecartes = len(items) - len(gardes)
+        propres = [i for i in items if not _reprise(i, compte)]
+        if len(propres) < len(items):
+            self.rejets.append(
+                f"{url} : {len(items) - len(propres)} reprise(s) d'autres comptes "
+                f"écartée(s) — un retweet n'est pas un message de {compte} "
+                "(AGENTS.md §9).")
+        lues = (_publication(i, compte) for i in propres)
+        gardes = [p for p in lues if p is not None]
+        ecartes = len(propres) - len(gardes)
         if ecartes:
             self.rejets.append(
                 f"{url} : {ecartes} élément(s) écarté(s) — sans lien, sans texte, ou "
                 "sans pubDate lisible. Une date inventée les mettrait en tête.")
         return gardes
+
+
+def _reprise(item, compte: str) -> bool:
+    """Un élément dont l'AUTEUR déclaré n'est pas le compte du flux est une reprise.
+
+    Vérifié sur le gabarit de Nitter (moteur de twiiit, xcancel…) : pour un retweet,
+    l'élément porte le texte et le lien du tweet D'ORIGINE, et `dc:creator` nomme son
+    auteur. Sans ce tri, le signal d'un inconnu retweeté par trendspider entrait dans
+    la base comme un signal DE trendspider — et chaque reprise se comptait comme une
+    source de plus, ce qu'AGENTS.md §9 interdit.
+
+    Sans `dc:creator`, ou avec un nom affiché plutôt qu'un pseudonyme, on ne sait pas :
+    l'élément est gardé. Écarter sur un doute viderait des flux honnêtes en silence.
+    """
+    n = item.find(_DC_AUTEUR)
+    m = _PSEUDO.match((n.text or "").strip()) if n is not None else None
+    return bool(m) and m.group(1).lower() != compte.lstrip("@").lower()
 
 
 def _texte(item, balise: str) -> str:
