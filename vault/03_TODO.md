@@ -15,17 +15,17 @@
 - [x] **~~P1 — L'onglet X n'a JAMAIS vu de donnée réelle~~ — FERMÉ (24/09).** Première
       ingestion : **34 publications** des deux canaux Telegram, dont 6 `TRADE_SIGNAL`.
       Les filtres tournent sur du vrai contenu. Images ajoutées dans la foulée (ADR-0195).
-- [ ] **P1 — 2 des 4 comptes suivis n'ont AUCUNE source (24/09).** Telegram couvre
-      `eliz883` et `walshwealth1122` ; `astekz`, `trendspider` et `micro2macr0` n'ont
-      rien. Outil livré : `make x-miroirs` sonde les miroirs RSS depuis le VPS et rend la
-      ligne à coller. **À LANCER** — je ne peux pas le faire d'ici (le proxy refuse ces
-      hôtes), donc on ne sait pas encore si un miroir vivant existe pour ces comptes. Si
-      aucun ne répond, l'export navigateur reste la seule voie.
+- [ ] **P1 — 3 des 4 comptes X suivis n'ont toujours AUCUNE source — outillé (24/09,
+      ADR-0199).** Deux voies, dans l'ordre : (1) `make x-miroirs`, sans compte ni
+      installation — jamais encore lancé avec succès ; (2) `make rsshub`, RSSHub
+      auto-hébergé sur le VPS, lu par la source RSS existante. Demande le cookie
+      `auth_token` d'un compte X **SECONDAIRE**, saisi par `make rsshub ARGS=jeton`
+      (masqué, 0600, hors dépôt). Reste à FAIRE sur le VPS, pas à coder.
 - [x] **~~P2 — L'ingestion est MANUELLE~~ — FERMÉ (24/09, ADR-0197).** Les trois sources
       réseau rejoignent `scripts/cron_daily.sh`, chacune sous garde de configuration,
       chacune avec un échec NOMMÉ (jamais `|| true`). Le retard ne se rattrape pas : la
       fenêtre publique de Telegram et des miroirs RSS ne rend qu'une vingtaine de
-      messages. **Effet après déploiement + rechargement du cron sur le VPS.**
+      messages. Déployé ; la chaîne quotidienne tourne sur le VPS (mesuré le 24/09).
 - [x] **~~P2 — `walshwealth1122` n'a pas de correspondance de compte~~ — FERMÉ (24/09).**
       Ce n'est pas une lacune : l'utilisateur a confirmé que ce canal **n'a pas de
       compte X**. Il apparaît sous son nom de canal parce que c'est son seul nom. Rien
@@ -47,17 +47,51 @@
       `qty × entry_price`, `None` (jamais 0.0) si le poids est inconnu, ligne d'alerte
       au-delà de 3 points d'écart entre les deux moyennes.
 - [ ] **P2 — Le cron social n'a pas encore tourné sur le VPS (24/09).** Le code est
-      mergé ; l'effet vient au prochain passage APRÈS déploiement — rien à recharger, la
-      crontab pointe le chemin du script. **Vérifier dans `/tmp/quant_daily.log` que les
-      trois lignes d'ingestion apparaissent** : c'est le seul moyen de distinguer « ça
-      tourne » de « ça se saute en silence », le défaut que la garde shell aurait créé.
-      Tant que ce n'est pas vu, l'ingestion reste manuelle en pratique.
+      mergé et déployé (`2f18e7d`) ; rien à recharger, la crontab pointe le chemin du
+      script. **Vérifier dans `/tmp/quant_daily.log` que les trois lignes d'ingestion
+      apparaissent** : c'est le seul moyen de distinguer « ça tourne » de « ça se saute
+      en silence ». **Question PRÉALABLE encore ouverte : la chaîne quotidienne
+      tourne-t-elle sur ce VPS ?** (`ls -l /tmp/quant_daily.log` · `crontab -l | grep -c
+      cron_daily`). Le précédent du 17/09 — `cron_daily.sh` n'avait JAMAIS tourné ici —
+      interdit de le supposer.
+- [x] **~~P2 — `QUANT_TG_CANAUX` n'était PAS dans `.env`~~ — FERMÉ (24/09).** Mesuré sur
+      le VPS : la variable n'existait que dans un shell où elle avait été exportée à la
+      main, parti avec la session. L'ingestion des 37 publications avait donc marché
+      **une fois, par accident de contexte**. Le correctif du jour (`load_env()` +
+      `configuree`) n'aurait rien changé seul : la source se serait déclarée non
+      configurée, en silence — exactement le comportement voulu, et exactement ce qui
+      rendait le diagnostic nécessaire. Ligne ajoutée à `.env`, vérifiée : `Lues : 34`,
+      `Stock : 37`.
+- [ ] **P2 — L'aperçu public Telegram a DÉJÀ perdu 3 messages (24/09).** Mesuré :
+      `t.me/s/<canal>` ne rend plus que **34** messages quand la base en contient **37**.
+      Les 3 manquants ne sont là que parce qu'ils ont été ingérés plus tôt. Ce n'est pas
+      un défaut à corriger — c'est la confirmation CHIFFRÉE de ce qui justifie
+      l'ingestion quotidienne (ADR-0197), et le rappel qu'un rattrapage n'existe pas.
+- [ ] **P1 — 6 % du capital engagé annule les DEUX TIERS du gain (24/09).** Les 35
+      fermetures RECONSTRUITES (date et prix retrouvés après coup par le script de
+      réparation) pèsent **−0,80 % sur 59 221 $ = −474 $**, face aux **+712 $** des
+      décisions du système (+0,08 % sur 889 640 $). Taux de gain **31 %** contre 50 %
+      côté système. **L'audit ne peut PAS trancher** : soit ces pertes sont RÉELLES et la
+      mesure du système les exclut (le +0,08 % flatte alors la stratégie), soit les prix
+      retrouvés après coup sont FAUX (59 221 $ de prix inventés au journal). Ne pas
+      choisir par raisonnement — MESURER : confronter ces 35 lots aux relevés du courtier.
 - [x] **~~P1 — Le chiffre pondéré lui-même n'est pas encore MESURÉ~~ — MESURÉ (24/09).**
-      Lancé sur le compte réel : **+1,59 % simple contre +0,09 % pondéré** sur
-      **867 604 $** engagés, rapport **17,7×**, t = +4,70, PF 2,18, détention médiane
-      1,0 jour, 40,7 clôtures/semaine. **Réconciliation : 0,09 % × 867 604 $ = 781 $**
-      contre **+818,67 $** réalisés. L'explication par la poussière de rebalancement
-      TIENT — ce n'est plus une hypothèse.
+      Passage de référence, après correctif d'unités (`main` = `2f18e7d`, 587 positions
+      sur 94,2 jours). Décisions du système : **+1,54 % simple contre +0,08 % pondéré**
+      sur **889 640 $**, rapport **19,2×**, t = +4,65, PF 2,15, détention médiane 1,0 jour,
+      41,0 clôtures/semaine. L'explication par la poussière de rebalancement TIENT — ce
+      n'est plus une hypothèse. (Un premier passage le même jour, avant correctif et sur
+      deux jours de moins, donnait +1,59 % / +0,09 % sur 867 604 $, soit 781 $ contre
+      +818,67 $ réalisés : la réconciliation tenait déjà.)
+- [ ] **P2 — Les frais ne sont MESURÉS sur presque rien (24/09).** 10,40 $ cumulés, mais
+      **64 fermetures renseignées sur 597**, et toutes ESTIMÉES depuis un barème, jamais
+      observées. Aucune conclusion de coût ne tient là-dessus — et un audit de rotation
+      sans coût réel ne peut pas arbitrer « rebalancer plus » contre « rebalancer moins ».
+- [ ] **P2 — La capture est calculée sur des effectifs qui ne portent rien (24/09).**
+      −5 % côté système sur **5 positions**, −76 % sur le bloc reconstruit sur **10**. Le
+      rapport affiche l'effectif — bien — mais le chiffre est cité ailleurs sans lui. À
+      trancher : relever le seuil de détention (≥ 3 jours écarte presque tout à 1,0 jour
+      de médiane), ou dire UNCALIBRATED tant que l'effectif est sous un seuil MESURÉ.
 - [x] **~~P2 — Crypto : « avoir le top 20 » sur la carte des recherches~~ — FERMÉ (23/09,
       ADR-0193).** Le top 20 était IMPOSSIBLE : `/search/trending` rend 15 coins (mesuré
       23/09 : coins 15, nfts 7, categories 6), et rien ne tronquait. Le même appel rendait
@@ -867,15 +901,17 @@ Détail et raisonnement : `vault/22_AUDIT_DUALMARKET.md`.
       continu (`cron_live.sh`), le Mac/MacBook restent des postes de LECTURE — jamais un
       second exécuteur live — et un `journal-push` régulier depuis le VPS reste manuel.
 - [ ] **P1 — Rebalancement journalier vs. tenir jusqu'au TP/SL : MESURÉ le 24/09, décision ouverte.**
-      **Le chiffre est là** (cf. l'entrée « chiffre pondéré » ci-dessus) : 542 positions,
-      +0,09 % pondéré sur 867 604 $ engagés, détention médiane **1,0 jour**, 40,7
-      clôtures/semaine, capture **−76 %** sur le sous-ensemble mesurable, et l'audit
-      CONFIRME sur données réelles ce qui n'était qu'un constat de code — **aucune sortie
-      n'est déclenchée par un TP ou un SL**. Ce qui reste à trancher est la DÉCISION, pas
-      la mesure : bande de tolérance élargie sur le rebalancement existant (probable), ou
-      moteur TP/SL parallèle (qui créerait un conflit d'arbitrage avec le risk-parity).
-      Ne rien coder avant d'avoir instruit la capture négative — elle peut venir du
-      rebalancement comme d'une fenêtre `mfe` trop courte pour une détention d'un jour.
+      **Le chiffre est là** (cf. l'entrée « chiffre pondéré » ci-dessus) : 552 décisions
+      du système, +0,08 % pondéré sur 889 640 $ engagés, détention médiane **1,0 jour**,
+      41,0 clôtures/semaine, et l'audit CONFIRME sur données réelles ce qui n'était qu'un
+      constat de code — **aucune sortie n'est déclenchée par un TP ou un SL**. Ce qui
+      reste à trancher est la DÉCISION, pas la mesure : bande de tolérance élargie sur le
+      rebalancement existant (probable), ou moteur TP/SL parallèle (qui créerait un
+      conflit d'arbitrage avec le risk-parity). **Ne rien coder tant que deux entrées
+      ci-dessus ne sont pas closes** : les frais ne sont mesurés que sur 64 fermetures sur
+      597 (donc aucun arbitrage de coût n'est possible), et la capture repose sur 5
+      positions côté système — elle peut venir du rebalancement comme d'une fenêtre `mfe`
+      trop courte pour une détention d'un jour, et rien ne le dit à cet effectif.
       Contexte d'origine (04/09) :
       Question de l'utilisateur : le rebalancement quotidien vers les poids cibles coupe-t-il
       des positions gagnantes avant leur potentiel ? Constat de code (pas de mesure) :

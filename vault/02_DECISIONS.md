@@ -2,6 +2,53 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0199 — Les comptes X se lisent par un RSSHub AUTO-HÉBERGÉ, jamais exposé (2026-09-24)
+
+**CONTEXTE.** Trois des quatre comptes suivis (`astekz`, `trendspider`, `micro2macr0`)
+n'ont toujours aucune source. L'utilisateur demande une voie gratuite ET efficace.
+
+**CE QUI A ÉTÉ MESURÉ, PAS SUPPOSÉ** (sources de RSSHub lues le 24/09, `lib/routes/twitter`) :
+l'API X gratuite ne lit pas — la lecture est « Pay-Per-Use » ; la voie identifiant/mot de
+passe de RSSHub est MORTE depuis octobre 2025 (attestation du client mobile) ; la route
+`/twitter/user/:id` n'exige PAS de navigateur ; l'authentification recommandée est
+`TWITTER_AUTH_TOKEN`, le cookie `auth_token` d'une session x.com. Et notre `sources/rss.py`
+lit déjà ces URL avec le bon nom de compte — vérifié sur la fonction, pas sur la doc.
+
+**DÉCISION.** Un RSSHub dans un conteneur sur le VPS, lancé par `make rsshub`. **Aucune
+ligne de code dans la chaîne sociale** : la source RSS existante, le cron et `.env` font
+le reste. `rss.py` ne connaît toujours aucun fournisseur.
+
+**LE COOKIE EST UNE SESSION COMPLÈTE, PAS UNE CLÉ.** D'où trois gardes, épinglées par
+des tests qui exécutent le vrai script avec un faux `docker` :
+- **boucle locale uniquement.** Le `docker-compose.yml` officiel publie `1200:1200`, soit
+  sur toutes les interfaces — et Docker contourne ufw. Sur le VPS, c'eût été offrir à
+  Internet un relais vers le compte ;
+- **le secret hors du dépôt**, en chmod 600 : le script REFUSE de démarrer sinon ;
+- **passé par fichier**, jamais en `-e CLE=valeur`, que `ps` affiche à tout utilisateur.
+
+**LA REVUE DE #407 A TROUVÉ LA QUATRIÈME FUITE, ET ELLE ÉTAIT DANS MON MODE D'EMPLOI.**
+Le message d'aide proposait `printf 'TWITTER_AUTH_TOKEN=%s' '<cookie>' > fichier` puis
+`chmod 600`. Le cookie finissait dans l'historique du shell, à demeure ; et la
+redirection créait le fichier en 0644 (umask usuel) pendant l'instant qui précédait le
+`chmod`. Les trois gardes protégeaient le secret une fois en place — pas le chemin pour
+l'y mettre. Désormais `make rsshub ARGS=jeton` : saisie masquée, jamais d'argument,
+fichier supprimé puis NÉ en 0600 sous `umask 077` (un `>` sur un fichier existant garde
+ses anciens droits). Le test qui vérifie le mode tombe si l'on retire l'un ou l'autre.
+
+**`includeRts=0`.** Sans lui, le signal d'un tiers retweeté par astekz serait rangé comme
+un signal d'astekz. AGENTS.md §9 : une reprise n'est pas une source.
+
+**LE RISQUE QUI RESTE, ET QU'AUCUN CODE N'ANNULE.** Les conditions d'X interdisent la
+lecture automatisée. Le compte dont le cookie sert peut être limité ou suspendu :
+**compte SECONDAIRE, jamais le principal**. C'est écrit dans le script, et un test vérifie
+que ça le reste. Le choix d'accepter ce risque appartient à l'utilisateur.
+
+**CE QUI PASSE EN PREMIER.** `make x-miroirs`, qui ne demande AUCUN compte : si un miroir
+public répond aujourd'hui pour les trois comptes, il n'y a rien à installer. RSSHub est la
+voie durable pour le jour — probable — où ce n'est pas le cas.
+
+---
+
 ## ADR-0198 — Une quantité n'a qu'UNE écriture dans un même rapport (2026-09-24)
 
 **CONTEXTE.** La première sortie réelle de `make turnover-audit` annonçait
