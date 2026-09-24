@@ -85,3 +85,21 @@ def test_un_message_trop_ancien_n_est_pas_NOUVEAU_a_chaque_passage(tmp_path):
     second = _ingerer(tmp_path, jsonl, garder=2)
     assert "Nouvelles : 0" in second, second
     assert "Stock     : 2" in second
+
+
+def test_la_ligne_Retirees_s_ecrit_MEME_A_ZERO(tmp_path):
+    """Sinon « garde active, rien à retirer » et « garde désactivée » sont identiques
+    dans le journal du cron. Relevé en revue de #409."""
+    import json
+    jsonl = tmp_path / "x.jsonl"
+    jsonl.write_text(json.dumps({"id": "1", "compte": "astekz", "texte": "m",
+                                 "ts": T0.isoformat()}))
+    assert "Retirées  : 0" in _ingerer(tmp_path, jsonl, garder=50)
+
+
+def test_une_retention_DESACTIVEE_le_dit(tmp_path):
+    import json
+    jsonl = tmp_path / "x.jsonl"
+    jsonl.write_text(json.dumps({"id": "1", "compte": "astekz", "texte": "m",
+                                 "ts": T0.isoformat()}))
+    assert "DÉSACTIVÉE" in _ingerer(tmp_path, jsonl, garder=0)

@@ -118,9 +118,14 @@ def main() -> int:
     print(f"Lues      : {ecrites}")
     print(f"Nouvelles : {nouvelles}   "
           "(le reste existait déjà — écriture idempotente)")
-    if retirees:
+    # TOUJOURS une ligne, même à zéro : sans elle, un plafond actif qui n'a rien eu à
+    # retirer et un plafond désactivé s'écrivaient pareil dans le journal du cron — on
+    # ne pouvait plus voir une garde qui ne tourne jamais. Relevé en revue de #409.
+    if a.garder > 0:
         print(f"Retirées  : {retirees}   (au-delà des {a.garder} plus récentes "
               "par compte)")
+    else:
+        print("Retirées  : —   (rétention DÉSACTIVÉE, --garder 0 : tout est gardé)")
     print(f"Stock     : {stock}")
     if rejets:
         print(f"\n{len(rejets)} ligne(s) IGNORÉE(S), jamais devinée(s) :")
