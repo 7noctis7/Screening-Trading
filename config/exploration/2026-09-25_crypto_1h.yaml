@@ -1,0 +1,12 @@
+# Grille PRÉ-ENREGISTRÉE — crypto intraday (Binance 1h, `make ingest-crypto-intraday`).
+# Un axe horaire exprime les SEPT rythmes demandés : heure, 4 h, jour, 3 jours, semaine,
+# mois, trimestre (marché 24/7 : 24 barres par jour).
+nom: crypto-1h-2026-09-25
+timeframe: 1h
+fin_in_sample: "2023-12-31"
+univers: [btc, crypto]
+selections: [tout, mom_12_1, mom_6_1, basse_vol, tendance_mm200]
+ponderations: [egal, inv_vol, erc]
+overlays: [aucun, vol_cible_15, regime_mm200]
+pas: {heure: 1, 4h: 4, jour: 24, 3jours: 72, semaine: 168, mois: 720, trimestre: 2160}
+top_k: 5

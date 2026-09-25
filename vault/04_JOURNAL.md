@@ -1,5 +1,20 @@
 # 04 — JOURNAL
 
+## Session 2026-09-25 (5ᵉ) — Option (c) : un banc qui classe sans fabriquer de gagnant
+
+L'utilisateur veut voir le classement de nombreux scénarios avant de choisir : rythmes de
+l'heure au trimestre, pondérations, indicateurs, univers. Livré : `make explorer` (ADR-0205).
+La grille quotidienne compte 870 scénarios et la grille crypto 1h en compte 315. La
+période cachée n'est jamais transmise au moteur, et le registre refuse sa seconde lecture.
+Les tests ont été écrits d'abord : causalité de chaque règle, exécution à J+1, frais,
+empreinte, lecture unique, déflation sur du bruit pur et intégrité de la période cachée
+(un krach après la borne ne change aucun rendement en échantillon).
+
+Un test de bout en bout en synthétique a trouvé un défaut avant le premier passage
+réel : `btc`, à un seul actif, était développé en quinze sélections identiques, ce qui
+gonflait N avec des doublons. Il est maintenant mono-actif comme QQQ. Prochaine étape :
+passage sur le VPS, puis lecture unique de la période cachée pour 1 à 3 scénarios.
+
 ## Session 2026-09-25 (4ᵉ) — Sur données réelles : ce que la règle tradée aurait fait
 
 Passage sur le VPS (le Mac n'avait pas accès SSH à GitHub : fetch HTTPS). Mesures

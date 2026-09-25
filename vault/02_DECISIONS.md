@@ -2,6 +2,35 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0205 — Chercher un rendement sans se mentir : grille figée, déflation, période lue une fois (2026-09-25)
+
+**CONTEXTE.** La règle tradée est indiscernable de QQQ + cash (ADR-0202, 10_BACKTEST_RESULTS).
+L'utilisateur choisit l'option (c) et demande à comparer de nombreux scénarios : rythmes de
+l'heure au trimestre, allocations, indicateurs, univers. Classer des centaines de règles
+sur un même historique puis garder la première est exactement ce qui a produit les
+chiffres flatteurs d'avant.
+
+**DÉCISIONS.** `make explorer` (`packages/research/explo_{regles,moteur,grille,donnees}.py`).
+(1) La grille est un YAML dans `config/exploration/`, figé par un sha256 avant tout calcul.
+Modifier la grille change son empreinte, et donc compte comme un nouvel essai.
+(2) Les règles sont causales par construction : tranche `A[:, :t+1]` avant tout calcul, et
+fenêtres en jours de bourse converties en barres. Exécution au close t+1 ; frais aller
+simple sur le turnover contre les poids dérivés.
+(3) Tous les scénarios partagent un seul axe de dates, sans quoi la PBO (CSCV) ne compare
+rien. Chaque scénario compte dans N du DSR : le ledger lit désormais `n_essais`.
+(4) Le moteur ne reçoit pas les barres postérieures à `fin_in_sample`. `--holdout` en lit
+1 à 3 ; la lecture est inscrite AVANT le calcul, et une seconde est refusée.
+(5) La sortie donne le Sharpe médian PAR DIMENSION (rythme, sélection, overlay…). Une
+médiane sur des dizaines de scénarios ne se gagne pas à la chance, contrairement à la
+première place.
+
+**LIMITES DÉCLARÉES.** 2023-2026 est cachée pour la grille, mais a déjà été vue par le
+chercheur (rejeu, QQQ). Le moteur de classement n'a ni bande, ni plancher, ni portail : il
+compare des règles entre elles, il ne prédit pas la production. L'horaire n'existe qu'en
+crypto (Binance) : aucune conclusion horaire sur les actions.
+
+---
+
 ## ADR-0204 — P2 de l'audit : garde-fous qui agissent, validation qui tient sur du bruit (2026-09-25)
 
 **CONTEXTE.** P2 de l'audit QML autorisés. Tous corrigibles sans données réelles.

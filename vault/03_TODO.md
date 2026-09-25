@@ -24,6 +24,14 @@
       (b) garder le satellite en paper comme banc de recherche, capital réel en passif ;
       (c) chercher une vraie source de rendement — pré-enregistrée, jugée hors échantillon.
       Ne rien engager en réel avant d'avoir tranché. Cf. 10_BACKTEST_RESULTS du 25/09.
+      **Option (c) retenue (25/09, ADR-0205)** → banc pré-enregistré livré, voir ci-dessous.
+- [ ] **P0 — Lancer le banc d'exploration sur le VPS puis juger 1 à 3 scénarios (25/09,
+      ADR-0205).** `make explorer` (grille quotidienne, 870 scénarios, en échantillon
+      jusqu'au 31/12/2022) ; crypto horaire : `make ingest-crypto-intraday` puis
+      `make explorer GRILLE=config/exploration/2026-09-25_crypto_1h.yaml` (315 scénarios).
+      Lire la PBO et les médianes PAR DIMENSION avant le classement. Puis UNE lecture :
+      `make explorer ARGS='--holdout "id1" "id2"'`. Seconde lecture refusée par le
+      registre. Consigner dans 10_BACKTEST_RESULTS, y compris un échec.
 - [ ] **P1 — CE SOIR, sur le Mac/VPS (données réelles)** : `make sync BRANCHE=claude/laughing-keller-299ati` (le code n'est PAS
       encore sur main) → `make test` →
       `make contracts` → `make preset-replay` → `make backtest-preset` → `make ic-screening`
