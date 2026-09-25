@@ -76,6 +76,13 @@ def _expo_vol_cible(equity: list, vol_cible: float, fenetre: int) -> float:
     return min(1.0, vol_cible / vol)
 
 
+def _au_pire(stop: float, bar) -> float:
+    """Prix d'un stop touché : le stop, ou l'OUVERTURE si elle est déjà dessous (gap, QML-015).
+    Sans ouverture connue (> 0), l'hypothèse historique (fill au stop) est conservée."""
+    ouverture = float(getattr(bar, "open", 0.0) or 0.0)
+    return min(stop, ouverture) if ouverture > 0 else stop
+
+
 def _sortie(bar, ot: dict, atr_t: float, sma_longue: float, trail_atr: float,
             *, verrouille: bool = False) -> tuple[float | None, str | None]:
     """(prix, motif) de sortie pour cette barre, ou (None, None) pour tenir la position.
@@ -87,14 +94,15 @@ def _sortie(bar, ot: dict, atr_t: float, sma_longue: float, trail_atr: float,
     """
     stop_dur = ot["stop"]
     if stop_dur is not None and bar.low <= stop_dur:
-        return stop_dur, "stop_hit"
+        # GAP sous le stop (QML-015) : l'ordre stop n'a pu partir qu'à l'OUVERTURE.
+        return _au_pire(stop_dur, bar), "stop_hit"
     if verrouille:
         return None, None                       # détention minimale : on tient
     eff_stop = stop_dur                          # stop suiveur = protection des gains
     if trail_atr > 0 and not _isnan(atr_t):
         eff_stop = max(eff_stop, ot["hh"] - trail_atr * atr_t)
     if eff_stop is not None and bar.low <= eff_stop:
-        return eff_stop, "trailing_stop"
+        return _au_pire(eff_stop, bar), "trailing_stop"
     if ot["target"] is not None and bar.high >= ot["target"]:
         return ot["target"], "target_hit"
     if not _isnan(sma_longue) and bar.close < sma_longue:

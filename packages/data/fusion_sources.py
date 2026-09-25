@@ -101,3 +101,33 @@ def desaccords(par_source: dict[str, dict[str, float]],
             out.append({"jour": j, "valeurs": valeurs,
                         "ecart_relatif": (hi - lo) / abs(hi) if hi else 0.0})
     return out
+
+
+# Un facteur d'ajustement est CONSTANT sur le recouvrement : au-delà de cette dispersion
+# relative du rapport des cours, le désaccord n'est pas un ajustement et l'on ne touche à rien.
+DISPERSION_MAX_FACTEUR = 1e-3
+ECART_MIN_FACTEUR = 5e-3          # sous 0,5 %, les deux bases sont dans le même référentiel
+
+
+def rebaser_base_longue(longue: list[Bar], maj: list[Bar]) -> tuple[list[Bar], float | None]:
+    """Remet la base longue dans le référentiel d'ajustement de la maj (QML-016).
+
+    `YAHOO.db` est ajustée à la date de son export ; `market.db` est ré-ajustée à chaque
+    split/dividende. Après une opération postérieure à l'export, les deux bases diffèrent
+    d'un facteur CONSTANT sur leurs dates communes — et la jonction fabrique un faux
+    rendement (−90 % pour un split 10:1). Si le rapport maj/longue est constant et
+    s'écarte de 1, toute la base longue est multipliée par ce facteur : aucun rendement
+    interne ne change, la jonction redevient continue. Sinon : (longue, None), inchangée."""
+    from dataclasses import replace
+    from statistics import median
+    ref = {jour(b.ts): b.close for b in maj if b.close}
+    rapports = [ref[jour(b.ts)] / b.close for b in longue if b.close and jour(b.ts) in ref]
+    if not rapports:
+        return longue, None
+    f = median(rapports)
+    if abs(f - 1.0) < ECART_MIN_FACTEUR or f <= 0:
+        return longue, None
+    if max(abs(r / f - 1.0) for r in rapports) > DISPERSION_MAX_FACTEUR:
+        return longue, None
+    return [replace(b, open=b.open * f, high=b.high * f, low=b.low * f, close=b.close * f)
+            for b in longue], f

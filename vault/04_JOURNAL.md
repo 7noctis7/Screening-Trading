@@ -1,5 +1,18 @@
 # 04 — JOURNAL
 
+## Session 2026-09-25 (3ᵉ) — Les P2 : des garde-fous qui agissent, une validation qui tient sur du bruit
+
+Sept correctifs (ADR-0204), chacun précédé d'un test qui échouait. Deux points méritent
+d'être relus. **L'edge ML** : j'ai d'abord remplacé le plancher 0,52 par une borne basse
+sur les plis — puis MESURÉ sur dix marches aléatoires : 4 faux positifs sur 10 (contre 5).
+Correctif rejeté ; seule une distribution nulle de permutation peut établir un edge, et
+tant qu'elle n'est pas produite, l'onglet dit UNCALIBRATED. **Une erreur de l'audit** :
+QML-015 affirmait que le snapshot entrait au close du signal ; il passait déjà
+`next_open_fills=True` — découvert par un argument dupliqué que Python a refusé.
+
+Effet sur la production dès le prochain passage : le blackout peut désormais écarter un
+titre après un choc de ±12 % sur deux séances ; la poche crypto change de paires.
+
 ## Session 2026-09-25 (2ᵉ) — Les P1 de l'audit : ce qui part au courtier ne ment plus
 
 Autorisation P1 reçue. Trois choix de politique posés d'abord (gel partout, budget crypto

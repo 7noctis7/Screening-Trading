@@ -55,6 +55,28 @@ def _jour(barre) -> str:
     return (d().isoformat() if callable(d) else str(ts)[:10])
 
 
+def _grille_des_vivants(par_sym: dict, couverture: float, min_noms: int) -> list[str]:
+    """Dates cotées par ≥ `couverture` des titres VIVANTS ce jour-là (QML-012).
+
+    VIVANT = introduit (première barre ≤ j) et pas encore radié (dernière barre ≥ j). La
+    couverture se mesurait sur TOUS les titres de l'échantillon : une introduction future
+    abaissait la couverture du passé et effaçait des années de grille (2015 → 2019 mesuré
+    le 25/09, mêmes rendements passés). Mesurée parmi les vivants, la grille des dates ≤ T
+    ne dépend plus de ce qui arrive après T. Au moins `min_noms` vivants par date."""
+    from bisect import bisect_left, bisect_right
+    from collections import Counter
+    compte = Counter(j for serie in par_sym.values() for j in serie)
+    debuts = sorted(min(serie) for serie in par_sym.values())
+    fins = sorted(max(serie) for serie in par_sym.values())
+    c = max(0.0, min(1.0, couverture))
+    garde = []
+    for j, n in compte.items():
+        vivants = bisect_right(debuts, j) - bisect_left(fins, j)
+        if vivants >= min_noms and n >= max(1, int(round(c * vivants))):
+            garde.append(j)
+    return sorted(garde)
+
+
 def aligner_par_date(data: dict, syms: list[str], couverture: float = COUVERTURE_DEFAUT,
                      min_noms: int = MIN_NOMS) -> tuple[list[str], list[str], "object", dict]:
     """Aligne les séries PAR DATE. Renvoie (noms, dates, matrice n×T, diagnostic).
@@ -91,10 +113,7 @@ def aligner_par_date(data: dict, syms: list[str], couverture: float = COUVERTURE
     if len(par_sym) < min_noms:
         return [], [], np.empty((0, 0)), {"available": False, "n_eligibles": len(par_sym)}
 
-    from collections import Counter
-    compte = Counter(j for serie in par_sym.values() for j in serie)
-    seuil = max(1, int(round(max(0.0, min(1.0, couverture)) * len(par_sym))))
-    dates = sorted(j for j, n in compte.items() if n >= seuil)
+    dates = _grille_des_vivants(par_sym, couverture, min_noms)
     if not dates:
         return [], [], np.empty((0, 0)), {"available": False, "n_eligibles": len(par_sym)}
 

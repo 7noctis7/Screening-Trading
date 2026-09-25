@@ -39,6 +39,7 @@ from packages.backtest.preset_core import (
     _gross_pas,
     _poids_pas,
     couts_univers,
+    deriver,
     panel_backtest,
     univers_backtest,
 )
@@ -85,6 +86,7 @@ def _boucle(A, mkt, rets, universe, rt, cpt: Compteurs, *, L, start, step, lookb
             per_year, exec_lag, band, aligner_dates) -> dict:
     """Déroule les pas de rebalancement et renvoie séries + diagnostics de covariance."""
     prev_w = np.zeros(len(universe))
+    tenu = np.zeros(len(universe))           # poids DÉTENUS (dérivés), base du turnover
     port: list[float] = []
     gross_hist: list[float] = []
     cov_diags: list[dict] = []               # M1 : exploitabilité de la covariance
@@ -108,18 +110,18 @@ def _boucle(A, mkt, rets, universe, rt, cpt: Compteurs, *, L, start, step, lookb
         if band > 0 and prev_w.sum() > 0:                       # bande de non-trading
             # « au moins un nom bloqué » est vrai à presque chaque pas et n'apprend rien : on
             # mesure la PART des noms que la bande ramène à leur poids précédent.
-            dans = np.abs(w - prev_w) < band
+            dans = np.abs(w - tenu) < band              # contre le DÉTENU (QML-013)
             cpt.note("bande", bool(dans.any()), 1.0 - float(dans.mean()))
-            w = np.where(dans, prev_w, w)
+            w = np.where(dans, tenu, w)
         entry = min(t + exec_lag, L - 1)                        # M-1 : exécution à t+exec_lag
         fwd = _fwd(A, entry, min(entry + step, L - 1), aligner_dates)
-        ret_step = float((w * fwd).sum()) - float((np.abs(w - prev_w) * rt).sum())
+        ret_step = float((w * fwd).sum()) - float((np.abs(w - tenu) * rt).sum())
         port.append(ret_step)
         eq_strat *= (1.0 + ret_step)             # maj equity (taper au pas suivant)
         peak_strat = max(peak_strat, eq_strat)
-        turn += float(np.abs(w - prev_w).sum())
+        turn += float(np.abs(w - tenu).sum())
         gross_hist.append(float(w.sum()))
-        prev_w = w
+        prev_w, tenu = w, deriver(w, fwd)
     return {"port": port, "gross_hist": gross_hist, "cov_diags": cov_diags,
             "n_degraded": n_degraded, "turn": turn}
 

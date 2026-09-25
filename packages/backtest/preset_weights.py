@@ -48,11 +48,19 @@ def _concentrate(w: np.ndarray, min_weight: float) -> np.ndarray:
 
 
 def _erc_blackout(A, cov, t, blackout_move, min_names):
-    """ERC + blackout appliqué SEULEMENT s'il laisse un portefeuille diversifié, puis renormalisé."""
+    """ERC + blackout post-choc, puis renormalisé.
+
+    Le blackout s'applique tant qu'il laisse au moins la MOITIÉ du panel (QML-010). L'ancien
+    seuil était `min_names` ; or le panel de production en compte exactement `min_names`
+    (`aligner_sans_trous`) : un seul titre écarté faisait tomber sous le seuil, et le
+    garde-fou ne pouvait JAMAIS agir. Au-delà de la moitié du panel en choc, c'est un
+    mouvement de marché, pas un choc de titre : on garde l'ERC plutôt que de vider le
+    portefeuille par un filtre d'entrée. `min_names` reste dans la signature (appelants)."""
+    _ = min_names
     w = np.asarray(equal_risk_contribution(cov), float)
     last2 = A[:, t] / A[:, t - 2] - 1
     w_bl = np.where(np.abs(last2) > blackout_move, 0.0, w)
-    if int((w_bl > 0).sum()) >= min_names:
+    if int((w_bl > 0).sum()) >= max(1, int(np.ceil(0.5 * len(w)))):
         w = w_bl
     s1 = w.sum()
     return w / s1 if s1 > 0 else w

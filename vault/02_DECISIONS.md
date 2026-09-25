@@ -2,6 +2,31 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0204 — P2 de l'audit : garde-fous qui agissent, validation qui tient sur du bruit (2026-09-25)
+
+**CONTEXTE.** P2 de l'audit QML autorisés. Tous corrigibles sans données réelles.
+
+**DÉCISIONS.** (QML-010) le blackout post-choc s'applique tant qu'il laisse la MOITIÉ du
+panel — le seuil `min_names` égalait la taille du panel et le rendait inerte en production.
+(QML-014) poche crypto classée par dollar-volume médian 60 j. (QML-011) un edge ML ne
+s'affirme que contre une distribution NULLE de permutation ; sans elle : UNCALIBRATED. Une
+borne basse sur la dispersion des plis a été ESSAYÉE et REJETÉE : 4 faux positifs sur 10
+sur bruit pur (plancher seul : 5 sur 10). Platt jugé hors de son échantillon d'ajustement ;
+CV purgée sur jours calendaires. (QML-012) couverture de la grille mesurée parmi les titres
+VIVANTS à la date : la fenêtre passée ne dépend plus des cotations futures. (QML-013) coût
+aller simple par jambe (fin du double comptage) ET turnover contre les poids DÉRIVÉS
+(fin de la sous-estimation) — corrigés ensemble pour ne pas choisir celui qui arrange.
+(QML-015) gap sous le stop exécuté à l'ouverture. (QML-016) base longue remise dans le
+référentiel d'ajustement de la maj quand un facteur CONSTANT les sépare.
+
+**RESTE.** Axe positionnel de `fast_swing` (legacy, réécriture) ; `snapshot.py` à 3 050
+lignes et `run_live.py` à 1 030 (règle des 400) — découpage à planifier.
+
+**CORRECTION DE L'AUDIT.** QML-015 affirmait une entrée au close du signal dans le snapshot :
+faux, l'appel passait déjà `next_open_fills=True`.
+
+---
+
 ## ADR-0203 — Un garde-fou ne vend jamais ; la crypto a un budget ; l'indice des portes pèse en rendements (2026-09-25)
 
 **CONTEXTE.** P1 de l'audit QML du 25/09, autorisés. Trois choix de POLITIQUE posés à

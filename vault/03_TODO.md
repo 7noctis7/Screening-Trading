@@ -25,9 +25,13 @@
       qu'aucun labo ne lit plus, puis passer le preset par `research/protocole_oos`.
 - [ ] **P1 — QML-009(a)** : la porte de régime lit encore l'indice de SON panier ; brancher
       un indice exogène (SPY/QQQ) — à passer au labo avant la production.
-- [ ] **P1 — Non traités (hors P1)** : QML-010 blackout inerte · 011 seuil ML 0,52 sur bruit
-      · 012 fenêtre dépendante des cotations futures · 013 coûts · 014 proxy liquidité
-      crypto · 015 swing legacy · 016 couture d'ajustement YAHOO.db/market.db (P2/P3).
+- [x] **~~P2 de l'audit QML~~ — CORRIGÉS (25/09, ADR-0204)** : 010 · 011 · 012 · 013 · 014 ·
+      015 (gap) · 016. 3594 tests verts.
+- [ ] **P2 — Edge ML : produire la distribution NULLE** (AUC de labels permutés par date,
+      ≥ 20 tirages) hors ligne dans `make train` et la servir à `edge_detecte` ; tant
+      qu'elle manque, l'onglet ML affiche UNCALIBRATED — c'est voulu.
+- [ ] **P3 — `fast_swing` aligné par position DEPUIS LE DÉBUT** des séries (legacy) ;
+      `snapshot.py` 3 050 lignes, `run_live.py` 1 030 : découpage à planifier.
 - [x] **~~P2 — Onglet X : filtres et recherche~~ — LIVRÉ (24/09, ADR-0194).** L'onglet
       n'existait pas : chaîne entière construite (`packages/social/`, `/api/social/x/posts`,
       `/x`, `make x-ingest`). 44 tests. Filtres compte / mot-clé / classification /

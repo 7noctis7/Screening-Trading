@@ -643,6 +643,7 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
     from packages.indicators.trend import SMA
     from packages.indicators.volatility import ATR
     from packages.ml.cv import PurgedKFold
+    from packages.ml.validation_edge import bornes_label
 
     H = 21  # horizon ~1 mois (profil moyen-long terme)
 
@@ -684,7 +685,8 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
             if f is None:
                 continue
             X.append(f); y.append(1.0 if c[t + H] > c[t] else 0.0)
-            T0.append(t); T1.append(t + H)     # le label couvre [t, t+H] → purge des chevauchements
+            _b0, _b1 = bornes_label(bars, t, H)   # jours CALENDAIRES (QML-011), pas positions
+            T0.append(_b0); T1.append(_b1)
         fl = feats(c, sma, rsi, atr, rets_c, ncl - 1)
         if fl is not None:
             last[s] = fl
@@ -746,19 +748,15 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
             brier_score,
             reliability_curve,
         )
+        from packages.ml.validation_edge import calibration_hors_echantillon
+        _ = PlattCalibrator, brier_score, reliability_curve
         cut = int(len(X) * 0.8)
         if cut > 100 and len(X) - cut > 50:
-            mcal, _ = _ml_model()
+            mcal, _m = _ml_model()
             mcal.fit(X[:cut], y[:cut])
             p_te = np.asarray(mcal.predict_proba(X[cut:]), float)
-            cal = PlattCalibrator().fit(p_te, y[cut:])
-            p_cal = cal.transform(p_te)
-            calibration = {
-                "available": True,
-                "brier_raw": brier_score(y[cut:], p_te),
-                "brier_calibrated": brier_score(y[cut:], p_cal),
-                "reliability": reliability_curve(y[cut:], p_cal, bins=8),
-            }
+            # QML-011 : Platt ajusté sur une moitié du test, jugé sur l'autre.
+            calibration = calibration_hors_echantillon(p_te, y[cut:])
     except Exception:  # noqa: BLE001
         pass
 
@@ -858,9 +856,14 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
 
     # GARDE-FOU edge : un AUC OOS ≤ 0.52 = pas d'edge prédictif exploitable (le score reste
     # affiché mais ne doit PAS piloter de sizing agressif). Discipline anti-surapprentissage.
-    edge_ok = bool(cv_auc is not None and cv_auc >= 0.52)
-    edge_msg = ("Edge OOS détecté (AUC ≥ 0.52) — utilisable avec prudence." if edge_ok
-                else "Pas d'edge OOS prouvé (AUC ≤ 0.52) : score indicatif, ne pas surpondérer.")
+    # QML-011 : plancher 0,52 ET borne basse des plis > 0,5 — le plancher seul passait
+    # 3 fois sur 10 sur une marche aléatoire pure.
+    from packages.ml.validation_edge import edge_detecte
+    _edge = edge_detecte(aucs)
+    edge_ok = _edge["edge"]
+    edge_msg = ("Edge OOS détecté (test de permutation) — utilisable avec prudence." if edge_ok
+                else "Edge NON établi (UNCALIBRATED : sans test de permutation, une AUC de CV "
+                     "ne se distingue pas du hasard) — score indicatif, ne pas surpondérer.")
     # Le champion doit porter les nombres qui ont motivé son adoption : sans cela,
     # `should_promote` ne peut comparer qu'un challenger à du vide. DSR reste
     # explicitement non calibré : ce classifieur produit des labels binaires, pas une
@@ -883,6 +886,7 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
         "available": True, "model": model_name, "horizon_days": H,
         "validation": f"CV purgée + embargo (k={n_splits})", "served_from": _served,
         "edge_ok": edge_ok, "edge_message": edge_msg, "auc_floor": 0.52,
+        "edge_detail": _edge,                      # borne basse des plis (QML-011)
         "n_train": int(len(X)), "n_splits": len(aucs), "auc": cv_auc,
         "artifact_metrics": _artifact_metrics,
         "artifact_persisted": _artifact_persisted,
@@ -1382,6 +1386,7 @@ def _load_prices(instruments, sector_of, start, end, seed):
     (data, mode, real_syms) — `real_syms` = symboles à données RÉELLES (les autres sont synthétiques
     et NE doivent PAS apparaître en production/allocation/graphes : prix factices)."""
     data, real_syms = {}, set()
+    _rebases: dict[str, float] = {}        # symbole → facteur de rebasage (QML-016)
     # symbole → jour → source qui l'a fourni
     _lignage: dict[str, dict[str, str]] = {}
     db = _price_db_path()
@@ -1438,12 +1443,22 @@ def _load_prices(instruments, sector_of, start, end, seed):
         # appliquaient des priorités OPPOSÉES sur les mêmes bases (0,71 %/an d'écart sur
         # le cœur QQQ). Le lignage enregistre quelle source a fourni chaque jour.
         _noms = _noms_sources(provs, prov_db, prov_crypto)
-        for _nom, prov in zip(_noms, provs, strict=False):
+        _gots = []
+        for prov in provs:
             got = []
             for alias in _yahoo_aliases(s, ac_m):
                 got = prov.fetch_ohlcv(alias, "1d", start, end)
                 if len(got) >= 50:
                     break
+            _gots.append(got)
+        # QML-016 : base longue remise dans le référentiel d'ajustement de la maj quand un
+        # split/dividende postérieur à son export les sépare d'un facteur constant.
+        if len(_gots) == 2 and _noms[:2] == ["base longue", "maj quotidienne"]:
+            from packages.data.fusion_sources import rebaser_base_longue
+            _gots[0], _f = rebaser_base_longue(_gots[0], _gots[1])
+            if _f is not None:
+                _rebases[s] = round(_f, 6)
+        for _nom, got in zip(_noms, _gots, strict=False):
             for _b in got:
                 _cle = _b.ts.isoformat()[:10]
                 if _cle not in merged:
@@ -1457,6 +1472,11 @@ def _load_prices(instruments, sector_of, start, end, seed):
             data[s] = data_providers.create(
                 "synthetic", seed=seed, drift=drift, annual_vol=vol).fetch_ohlcv(s, "1d", start, end)
     real_syms -= _series_perimees(data, real_syms)
+    if _rebases:                           # dit, jamais silencieux
+        import logging
+        logging.getLogger("snapshot.prix").warning(
+            "base longue rebasée (ajustement postérieur à l'export) : %s",
+            ", ".join(f"{k}×{v:g}" for k, v in sorted(_rebases.items())[:20]))
     n_real = len(real_syms)
     _src = db.name if db else ("market.db" if prov_updates else "crypto.db" if prov_crypto else "?")
     _src += " + maj market.db" if (db and prov_updates) else ""
