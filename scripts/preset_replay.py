@@ -78,7 +78,7 @@ def main() -> int:
     ap.add_argument("--sans-coeur", action="store_true", help="satellite seul, sans QQQ")
     a = ap.parse_args()
     from packages.backtest.preset_backtest import preset_backtest
-    from packages.backtest.preset_rejeu import rejouer
+    from packages.backtest.preset_rejeu import _prix_par_jour, references, rejouer
 
     data, acmap, mode = _donnees()
     if len(data) < 30 and os.environ.get("QUANT_ALLOW_SYNTHETIC") != "1":
@@ -99,8 +99,14 @@ def main() -> int:
           f"({res['n_decisions_vides']} sans poids) · {res['n_ordres']} ordres · "
           f"frais {res['frais']:,.0f} $\n")
     print(_ligne("REJEU — règle de production", res["stats"]))
+    # Références sur les MÊMES dates (QQQ acheté-conservé, équipondéré des titres cotés) :
+    # les seules comparaisons qui ne mélangent ni périodes ni univers.
+    refs = references(_prix_par_jour(data), res["dates"])
+    for nom, ref in refs.items():
+        print(_ligne(f"référence — {nom} (mêmes dates)", ref["stats"]))
+    res["references"] = {k: v["stats"] for k, v in refs.items()}
     if ancien.get("available"):
-        print(_ligne("preset_backtest (≠ production)", ancien["preset"]))
+        print(_ligne("preset_backtest (≠ production, autre fenêtre)", ancien["preset"]))
     print("\nÉcarts connus du rejeu :")
     for e in res["ecarts_connus"]:
         print(f"  · {e}")

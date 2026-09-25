@@ -237,3 +237,33 @@ def rejouer(data: dict, *, pas: int = PAS_DEFAUT, debut: str | None = None,
             "pas": pas, "coeur": coeur or {},
             "regle": "preset_latest_weights_explique (production), rejouée date par date",
             "mesure_la_production": True, "ecarts_connus": list(ECARTS_CONNUS)}
+
+
+def _stats_courbe(courbe: list[float]) -> dict:
+    from packages.backtest.conviction_backtest import _stats
+    rend = [courbe[k + 1] / courbe[k] - 1.0 for k in range(len(courbe) - 1) if courbe[k] > 0]
+    return _stats(rend, 252.0)
+
+
+def references(prix: dict, dates: list[str]) -> dict:
+    """Références calculées sur les MÊMES `dates` que le rejeu (base 1,0).
+
+    `QQQ` : acheté-conservé (absent si QQQ n'est pas dans `prix`). `équipondéré` : moyenne
+    quotidienne des rendements des titres cotés la veille ET le jour même — rééquilibrage
+    quotidien, sans frais : une borne haute de ce qu'un panier naïf aurait fait."""
+    out: dict = {}
+    if "QQQ" in prix:
+        px = prix["QQQ"]
+        base = next((px[d] for d in dates if d in px), None)
+        if base:
+            dernier, courbe = base, []
+            for d in dates:
+                dernier = px.get(d, dernier)
+                courbe.append(dernier / base)
+            out["QQQ"] = {"courbe": courbe, "stats": _stats_courbe(courbe)}
+    courbe = [1.0]
+    for d0, d1 in zip(dates[:-1], dates[1:], strict=True):
+        r = [p[d1] / p[d0] - 1.0 for p in prix.values() if p.get(d0) and p.get(d1)]
+        courbe.append(courbe[-1] * (1.0 + (sum(r) / len(r) if r else 0.0)))
+    out["équipondéré"] = {"courbe": courbe, "stats": _stats_courbe(courbe)}
+    return out

@@ -19,6 +19,32 @@
 
 ---
 
+## 2026-09-25 — Première mesure de la règle TRADÉE (rejeu, VPS, données réelles)
+
+`make preset-replay` sur le VPS (`115dcd4`), market.db seule (819 séries réelles, 624
+négociables), 2016-09-28 → 2026-09-24, décision tous les 5 jours, exécution au close
+suivant, bande/plancher/portail de `run_live`, frais par classe. Branche MOMENTUM de la
+sélection (la sélection qualité de production n'est pas rejouable : UNCALIBRATED).
+
+| Configuration | CAGR | Sharpe | maxDD | Ordres | Frais (10 ans, 100 k$) |
+|---|---|---|---|---|---|
+| Satellite + cœur QQQ 50 % (production) | 17,9 % | 1,09 | −25,7 % | 3 393 | 7 898 $ |
+| Satellite seul | 15,1 % | 1,04 | −26,0 % | 4 078 | 14 320 $ |
+| `preset_backtest` (autre règle, autre fenêtre) | 9,7 % | 0,86 | −19,3 % | — | — |
+
+**Ce qui n'est PAS établi.** Aucun alpha : pas de référence sur les mêmes dates au moment de
+la mesure (ajoutées ensuite : QQQ acheté-conservé et équipondéré des titres cotés — à
+relancer), univers de SURVIVANTS (listes actuelles, délistés absents du VPS), paramètres
+réglés sur tout l'historique (QML-005), DSR non recalculé avec le nombre réel d'essais.
+Le satellite seul fait presque le Sharpe du mélange : le cœur QQQ réduit surtout les frais.
+
+**IC du screening (même soir, par date) : −0,068, t = −1,98, 74 fenêtres, seconde moitié
+−0,110.** Le score de sélection ne prédit pas le mois suivant ; l'ancienne mesure
+positionnelle (+0,041 sur le Mac, autre base) était un artefact d'alignement. Ne PAS
+inverser le signe (choix a posteriori). « Conviction » reste fermé.
+
+---
+
 ## 2026-09-03 — Cœur multi-actifs (QQQ + obligations longues + or) — **REJETÉ par la règle**
 
 **Protocole.** Part de cœur figée à 50 %, identique à la production : SEULE la composition

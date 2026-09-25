@@ -1,5 +1,17 @@
 # 04 — JOURNAL
 
+## Session 2026-09-25 (4ᵉ) — Sur données réelles : ce que la règle tradée aurait fait
+
+Passage sur le VPS (le Mac n'avait pas accès SSH à GitHub : fetch HTTPS). Mesures
+consignées dans `10_BACKTEST_RESULTS`. Deux défauts trouvés PAR les données réelles et
+corrigés le soir même : (1) l'aperçu `make live` annonçait des refus du portail que le
+passage réel ne ferait pas (les ventes ne libéraient rien en dry-run) ; (2) MON budget
+crypto (QML-023) se réservait à GBP/USD, AUD/USD, NZD/USD — du forex nommé « /USD » —
+rognant QQQ de 7 905 $ pour une poche vide. Leçon : un budget se réserve APRÈS le filtre de
+négociabilité, jamais avant.
+
+Ajouté ensuite : références QQQ et équipondéré sur les MÊMES dates que le rejeu.
+
 ## Session 2026-09-25 (3ᵉ) — Les P2 : des garde-fous qui agissent, une validation qui tient sur du bruit
 
 Sept correctifs (ADR-0204), chacun précédé d'un test qui échouait. Deux points méritent
