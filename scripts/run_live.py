@@ -361,7 +361,15 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry, obs=None) -> tuple[i
                 print("  " + ligne_journal(bsym, intention.action, _v.montant, _v))
             side = Side.LONG if intention.action == "acheter" else Side.SHORT
             if dry or broker is None:
-                print(tag + f"  {'aperçu' if dry else 'broker absent'} ({intention.action})"); continue
+                print(tag + f"  {'aperçu' if dry else 'broker absent'} ({intention.action})")
+                if dry:            # l'aperçu SIMULE l'effet de l'ordre, comme le réel le
+                    #  compterait : sans cela une vente ne libère rien et l'achat
+                    #  suivant s'affiche refusé à tort (constaté le 25/09).
+                    _expo += (intention.montant if intention.action == "acheter"
+                              else -intention.montant)
+                    if intention.action == "acheter" and detenu <= 0:
+                        _npos += 1
+                continue
             try:
                 if intention.liquidation and hasattr(broker, "close_position"):
                     # Sortie totale EN QUANTITÉ : aucun résidu, donc aucune
