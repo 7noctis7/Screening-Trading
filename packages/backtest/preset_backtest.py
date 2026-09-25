@@ -43,6 +43,7 @@ from packages.backtest.preset_core import (
     univers_backtest,
 )
 from packages.backtest.preset_curves import preset_equity_daily, preset_trade_log
+from packages.backtest.preset_rejeu import NE_MESURE_PAS_LA_PRODUCTION
 from packages.backtest.preset_weights import (
     _concentrate,
     _weights_at,
@@ -150,7 +151,9 @@ def _sortie(res: dict, cpt: Compteurs, universe, A, L, start, step, *, cov_denoi
            # en redériver les rendements perd assez de précision pour fausser une erreur-type.
            # Le test de différence de Sharpe (packages/research/sharpe_diff) en a besoin bruts.
            "rendements": [float(x) for x in port],
-           "curves": {"preset": _cum(port)}}
+           "curves": {"preset": _cum(port)},
+           # QML-001 : cette règle n'est PAS celle qui trade — seul le rejeu la mesure.
+           **NE_MESURE_PAS_LA_PRODUCTION}
     # bench équipondéré sur le MÊME univers (apples-to-apples : isole l'apport de la construction
     # risk-parity + DD-target + blackout + band vs un simple équipondéré plein-investi)
     #

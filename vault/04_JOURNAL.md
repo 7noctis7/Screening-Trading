@@ -1,5 +1,38 @@
 # 04 — JOURNAL
 
+## Session 2026-09-25 — Audit QML, et le seul P0 : on mesurait un autre portefeuille
+
+**AUDIT (lecture seule, puis P0 autorisé).** Cartographie complète du chemin d'ordres
+(`cron_live.sh → run_live → build_snapshot → preset_latest_weights_explique → _reconcile`).
+Le chemin est CAUSAL : les poids n'utilisent que la dernière barre, et les tests par
+troncature de `preset_backtest`/`preset_equity_daily` passent. Suite : 3513 verts avant
+correctif.
+
+**LE P0 (QML-001).** Trois « presets » : les métriques (`preset_backtest`), la courbe du
+tableau de bord (`preset_equity_daily`/`preset_ledger`) et la production diffèrent par
+l'univers, les portes, le lag, la fréquence, la bande, le blackout et le plafond. Aucun
+chiffre publié — ni le Sharpe 1,33 / DSR 98 % du blend, ni `make backtest-preset` — ne
+décrivait ce qui trade. Un symptôme le montrait depuis des semaines : 41 clôtures/semaine
+en paper contre 1,5× de turnover par an au backtest.
+
+**CORRIGÉ (ADR-0202).** `preset_rejeu` rappelle la fonction de production elle-même à
+chaque date, sur les données de cette date, et exécute à J+1 avec `decider` et
+`order_gate`. 9 tests, dont un qui échouait sur l'ancien code (les sorties n'avouaient pas
+ne pas mesurer la production). Contrôle sur bruit pur sans dérive : Sharpe −0,59 à +0,24
+sur 4 graines — pas d'alpha fabriqué. Suite : 3525 verts. **Aucun chiffre réel mesuré :
+le conteneur d'audit n'a pas les bases.** À lancer sur le VPS : `make preset-replay`.
+
+**TROUVÉ AU PASSAGE, NON CORRIGÉ (P1, autorisation requise)** : voir la ligne P1 du TODO.
+Deux méritent d'être lus avant toute autre chose : QML-006 (l'idempotence « fermée » ne
+couvre pas `submit_notional`, le seul appel réel) et QML-022 (une panne réseau des
+fondamentaux fait sélectionner l'univers de production sur des fondamentaux SYNTHÉTIQUES,
+sans que le diagnostic le dise — démontré).
+
+**CE QUI N'A PAS ÉTÉ DÉMONTRÉ.** La CV purgée du ML tourne sur un axe positionnel ; sur
+5 graines, l'effet sur l'AUC reste dans le bruit (0,510 contre 0,517). Mais le seuil
+« edge ≥ 0,52 » passe 3 fois sur 10 sur du bruit pur : l'étiquette « edge détecté » ne
+porte rien.
+
 ## Session 2026-09-24 (3ᵉ) — Le chiffre pondéré mesuré, et ce qu'il a exhumé
 
 **FAIT.**

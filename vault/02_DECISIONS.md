@@ -2,6 +2,43 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0202 — La production se mesure par REJEU de sa propre fonction (2026-09-25)
+
+**CONTEXTE.** Audit QML du 25/09, finding P0 **QML-001** : trois implémentations du
+« preset » coexistaient et aucune n'était celle qui trade. `preset_backtest` (métriques :
+univers momentum figé en 2015, 30 noms, pas de 21 j, bande de 3 points, blackout toujours
+appliqué), `preset_equity_daily`/`preset_ledger` (tableau de bord : sans portes, fill au
+close du signal) et `preset_latest_weights_explique` (production : 12 noms re-sélectionnés
+à chaque passage, portes, plafond adaptatif, bande de 0,5 % du capital, plancher, portail).
+Le paper tourne à une détention médiane d'un jour, le backtest à 1,5× de turnover par an.
+
+**DÉCISION.** `packages/backtest/preset_rejeu.py` rejoue **la fonction de production
+elle-même**, date par date, sur les données tronquées à chaque date, puis exécute au close
+suivant avec `rebalance_plan.decider` et `risk.order_gate.evaluer` — les briques de
+`run_live`, ventes d'abord. Rien de la décision n'est réimplémenté : c'est la seule
+propriété qui empêche une quatrième divergence. `make preset-replay` le lance sur données
+réelles, l'imprime à côté de `preset_backtest` et le consigne au ledger.
+
+**LES TROIS SORTIES HISTORIQUES LE DISENT.** Elles portent `mesure_la_production: False`
+et renvoient au rejeu. Elles ne sont ni supprimées ni modifiées dans leurs chiffres : le
+correctif ne décide pas à la place de l'utilisateur laquelle doit disparaître.
+
+**CE QUE LE REJEU NE MESURE PAS, écrit dans sa sortie.** (1) La sélection par QUALITÉ :
+le score fondamental n'existe qu'au présent, le rejeu passe `quality={}` (branche
+momentum). Tant que la production sélectionne par qualité, cette branche reste
+**UNCALIBRATED**. (2) Exécution au close suivant, prudente face aux ~15 h ET réelles.
+(3) Poche crypto et renormalisation commune (QML-023). (4) Univers actuel (QML-002).
+
+**DÉCISION RESTANT À L'UTILISATEUR.** Aligner la production sur la règle mesurable
+(momentum), ou garder la qualité en l'assumant non validée. Le rejeu ne tranche pas.
+
+**CONTRÔLES.** Équivalence exacte avec la production à chaque date, troncature (l'avenir
+ne réécrit pas le passé), exécution après décision, bande/plancher/portail de `run_live`,
+frais. Sur bruit pur sans dérive, Sharpe −0,59 à +0,24 sur 4 graines (≈ 0 moins les
+frais) : le rejeu ne fabrique pas d'alpha.
+
+---
+
 ## ADR-0201 — Cinquante publications par compte, et pas une de plus (2026-09-24)
 
 **CONTEXTE.** Demande explicite de l'utilisateur : « conserver que les 50 tweets les plus

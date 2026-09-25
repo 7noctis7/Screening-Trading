@@ -10,6 +10,7 @@ import numpy as np
 
 from packages.backtest.preset_curves import _grille, _jours
 from packages.backtest.preset_livre import Livre
+from packages.backtest.preset_rejeu import NE_MESURE_PAS_LA_PRODUCTION
 from packages.backtest.preset_weights import _weights_at
 
 
@@ -187,7 +188,8 @@ def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict |
         avgc[core_sym] = livre.qcost
     _latent_fifo(livre.trades, cur, avgc)
     trades = sorted(livre.trades, key=lambda x: x["date"], reverse=True)[:max_trades]
-    return {"available": True, "trades": trades, "open_positions": open_pos,
+    return {"available": True, **NE_MESURE_PAS_LA_PRODUCTION,   # QML-001 : ≠ règle tradée
+            "trades": trades, "open_positions": open_pos,
             "equity": [round(x, 2) for x in eq_curve], "dates": out_dates,
             "summary": _resume(livre, open_pos, init_cap, n_all, universe, core_sym,
                                core_on, dts, L, start)}

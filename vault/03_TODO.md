@@ -7,6 +7,24 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+- [ ] **P0 — QML-001 : la règle tradée n'avait AUCUN backtest — PARTIELLEMENT RÉSOLU (25/09,
+      ADR-0202).** Livré : `packages/backtest/preset_rejeu.py` + `make preset-replay` (rejeu
+      date par date de `preset_latest_weights_explique`, exécution J+1, bande/plancher/portail
+      de `run_live`) ; `preset_backtest`, `preset_equity_daily` et `preset_ledger` portent
+      `mesure_la_production: False`. **RESTE À TOI :** (1) lancer `make preset-replay` sur le
+      VPS (données réelles — aucune dans le conteneur d'audit) et consigner le chiffre ;
+      (2) **trancher** : production par momentum (mesurable) ou par qualité (UNCALIBRATED) ;
+      (3) décider si le tableau de bord doit afficher la courbe du rejeu à la place.
+- [ ] **P1 — Findings de l'audit QML du 25/09, NON corrigés (autorisation P0 seulement).**
+      Rapport complet dans le journal du 25/09. QML-002 univers survivant · QML-003 fill au
+      close du signal dans courbe/ledger · QML-004 QQQ apparié par position
+      (`blend_equity_multi`, `_serie_coeur`) · QML-005 essais sous-comptés, aucun holdout ·
+      QML-006 `submit_notional` sans client id sous `retry` ×3 (**la fermeture de P0-SI-LIVE #4
+      ne couvre pas le chemin réel — bloquant avant tout live**) · QML-007 kill-switch non
+      monotone (gel sur rupture DD, ventes sur simple alerte TV) · QML-008 IC du screening sur
+      index positionnel · QML-009 `mkt` (déjà listé) · QML-022 fondamentaux SYNTHÉTIQUES
+      possibles dans la sélection de production · QML-023 QQQ réel 31-42 % au lieu de 50 %,
+      `QUANT_CRYPTO_PCT` jamais lu · QML-024 equity_history à deux écrivains.
 - [x] **~~P2 — Onglet X : filtres et recherche~~ — LIVRÉ (24/09, ADR-0194).** L'onglet
       n'existait pas : chaîne entière construite (`packages/social/`, `/api/social/x/posts`,
       `/x`, `make x-ingest`). 44 tests. Filtres compte / mot-clé / classification /

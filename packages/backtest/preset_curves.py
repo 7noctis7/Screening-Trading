@@ -12,6 +12,7 @@ import numpy as np
 
 from packages.backtest.panel import aligner_sans_trous
 from packages.backtest.preset_config import _price_universe
+from packages.backtest.preset_rejeu import NE_MESURE_PAS_LA_PRODUCTION
 from packages.backtest.preset_weights import _weights_at
 from packages.execution.costs import CostModel
 
@@ -121,7 +122,8 @@ def preset_equity_daily(data: dict, quality: dict | None = None,
         out_dates.append(dts[t + 1])
     if len(eq) < 30:
         return {"available": False}
-    return {"available": True, "equity": [round(x, 2) for x in eq], "dates": out_dates}
+    return {"available": True, "equity": [round(x, 2) for x in eq], "dates": out_dates,
+            **NE_MESURE_PAS_LA_PRODUCTION}          # QML-001 : ≠ règle tradée
 
 
 def _motif(prev_i: float, w_i: float, d: float) -> str:
