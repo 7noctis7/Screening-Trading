@@ -30,6 +30,15 @@ def part_crypto() -> float:
     return max(0.0, min(1.0, v))
 
 
+def negociables(crypto: dict) -> dict:
+    """Poids crypto des seules paires que le courtier paper sait trader (`routing.route`).
+
+    Une paire écartée au routage ne doit pas consommer de budget : sinon 15 % du compte
+    restent en cash pour une poche vide, et le cœur actions est rogné pour rien."""
+    from packages.execution.routing import route
+    return {s: w for s, w in (crypto or {}).items() if route(s, "crypto")["tradeable"]}
+
+
 def repartir(actions: dict, crypto: dict, part: float) -> tuple[dict, dict]:
     """(poids actions, poids crypto) en fraction du COMPTE, somme ≤ 1.
 

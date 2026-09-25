@@ -2482,7 +2482,9 @@ def build_snapshot(seed: int = 7) -> dict:
     # cœur dans le reste. Avant, leur somme était renormalisée par `run_live` et la part crypto
     # sortait du rapport de deux cibles de volatilité (25 à 56 % mesurés).
     from packages.portfolio.budget_poches import part_crypto, repartir
-    _preset_weights, _crypto_weights = repartir(_preset_weights, _crypto_weights, part_crypto())
+    from packages.portfolio.budget_poches import negociables
+    _preset_weights, _crypto_weights = repartir(_preset_weights, negociables(_crypto_weights),
+                                                part_crypto())
     _live = _live_with_rebalance(comp["rows"], acmap, portfolio_kpis, w_by_name,
                                  target_weights=_preset_weights, crypto_weights=_crypto_weights)
     _alp_cap = (_live["real"]["alpaca"]["equity"] or 0.0) or init_cap

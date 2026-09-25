@@ -29,9 +29,14 @@ def crypto_weights(data: dict, asset_classes: dict | None = None, dd_target: flo
     """Poids actuels de la poche crypto (somme ≤ 1). Univers = paires crypto les plus liquides
     (proxy : dollar-volume médian récent). blackout/plafond plus larges (crypto = plus volatil)."""
     ac = asset_classes or {}
-    syms = [s for s, b in data.items()
-            if (ac.get(s) == "crypto" or "/USD" in s.upper() or s.upper().endswith(("USDT", "USDC")))
-            and b and len(b) > lookback]
+    # La CLASSE déclarée prime sur le nom : « /USD » désigne aussi GBP/USD, AUD/USD… du
+    # forex (constaté sur le VPS le 25/09). Le nom ne sert qu'aux symboles sans classe connue.
+    def _est_crypto(s):
+        if s in ac:
+            return ac[s] == "crypto"
+        su = s.upper()
+        return "/USD" in su or su.endswith(("USDT", "USDC"))
+    syms = [s for s, b in data.items() if _est_crypto(s) and b and len(b) > lookback]
     if len(syms) < 2:
         return {}
     # tri par DOLLAR-VOLUME médian récent (QML-014). L'ancien « proxy » valait l'écart-type
