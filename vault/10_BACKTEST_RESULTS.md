@@ -19,6 +19,45 @@
 
 ---
 
+## 2026-09-25 — Banc d'exploration, grille quotidienne [8fa32ef0], EN ÉCHANTILLON (VPS, réel)
+
+870 scénarios. Données : 624 séries réelles. Période : 2016-10-26 → 2022-12-30 (251 barres
+par an). La période cachée (2023 → 2026) n'a PAS été lue.
+
+**Verdict en échantillon : aucun scénario ne franchit la déflation.** Le meilleur DSR est
+de 0,89, sous le seuil de 0,95. La PBO vaut 0,57 : le champion en échantillon finit plus
+souvent qu'à son tour sous la médiane hors échantillon, donc le classement brut ressemble
+à du bruit.
+
+| Scénario | CAGR | Sharpe | maxDD | DSR |
+|---|---|---|---|---|
+| n°1 crypto·tout·égal·régime MM200·trimestre | 158,6 % | 1,57 | −77,7 % | 0,88 |
+| n°2 crypto·tendance MM200·ERC·vol cible 15·mois | 33,6 % | 1,56 | −21,0 % | 0,89 |
+| BTC acheté-conservé (rang 299) | 67,2 % | 1,06 | −83,0 % | 0,47 |
+| QQQ acheté-conservé (rang 583) | 14,1 % | 0,67 | −35,6 % | 0,15 |
+
+Sharpe médian par dimension :
+
+| Dimension | Résultat |
+|---|---|
+| Univers | crypto 1,25 · actions US 1,07 · multi-actifs 0,76 · QQQ 0,68 · ETF 0,51 |
+| Sélection | tendance MM200 1,06 ≈ momentum 6-1 1,04 > basse vol 0,84 > momentum 12-1 0,78 ≈ tout 0,77 |
+| Protection | régime MM200 0,99 > aucune 0,87 > vol cible 15 0,79 |
+| Rythme | jour 0,98 ≈ semaine 0,96 ≈ 3 jours 0,95 > mois 0,85 > trimestre 0,75 |
+
+**Lecture.**
+
+1. Le classement mesure surtout l'UNIVERS, pas la règle : les 25 premiers sont crypto.
+2. Les univers crypto et actions US sont les listes ACTUELLES. Les radiés en sont absents
+   (QML-002) : LUNA, FTT et les autres cryptos mortes ne peuvent pas peser. Leur avance
+   sur QQQ est donc en partie un biais du survivant, et n'est pas mesurée.
+3. Les écarts entre sélections, protections et rythmes (≈ 0,1 à 0,3 de Sharpe médian)
+   sont du même ordre que l'IC d'un ΔSharpe sur 6 ans (±0,6, cf. rejeu).
+4. Le momentum ETF quotidien est le pire : rotation de 41 par an pour un Sharpe de 0,1.
+
+À faire avant `--holdout` : classer DANS chaque univers contre son propre
+équipondéré-conservé.
+
 ## 2026-09-25 — Première mesure de la règle TRADÉE (rejeu, VPS, données réelles)
 
 `make preset-replay` sur le VPS (`115dcd4`), market.db seule (819 séries réelles, 624
