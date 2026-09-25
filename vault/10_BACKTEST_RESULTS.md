@@ -40,9 +40,15 @@ sélection (la sélection qualité de production n'est pas rejouable : UNCALIBRA
 | QQQ acheté-conservé | 20,2 % | 0,93 | −35,6 % |
 | Équipondéré des titres cotés | 19,9 % | 0,99 | −38,4 % |
 
-Le satellite rend ~5 pts/an de MOINS que QQQ ou l'équipondéré, avec un drawdown plus
-faible et un Sharpe à peine supérieur (+0,05 à +0,11) — écart vraisemblablement dans le bruit
-(ΔSharpe apparié ajouté ensuite au banc, à relancer). Lecture cohérente avec le manifeste :
+| QQQ à MÊME volatilité (dilué en cash, ex post) | 13,3 % | 0,93 | −23,9 % |
+
+**Test apparié (Jobson-Korkie/Memmel, `2ebe356`) :** ΔSharpe vs QQQ **+0,11 [−0,51 ; +0,72],
+p = 0,73** ; vs équipondéré **+0,04 [−0,58 ; +0,67], p = 0,89**. **INDISCERNABLE.** À
+volatilité égale, le satellite fait +1,8 pt/an de CAGR que QQQ + cash, avec un drawdown
+légèrement PIRE (−26,0 % contre −23,9 %) — et cela avec le cash rémunéré à ZÉRO dans les
+deux cas : en réalité le cash de l'alternative passive rapporterait le taux court, ce qui
+l'avantage. Tous les biais connus (survivants, réglage sur tout l'historique) jouent EN
+FAVEUR du satellite. Lecture cohérente avec le manifeste :
 de la GESTION DU RISQUE (exposition partielle), pas d'alpha démontré.
 
 **Ce qui n'est PAS établi.** Aucun alpha, univers de SURVIVANTS (listes actuelles, délistés absents du VPS), paramètres

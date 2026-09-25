@@ -17,6 +17,13 @@
       (3) décider si le tableau de bord doit afficher la courbe du rejeu à la place.
 - [x] **~~P1 — Findings de l'audit QML du 25/09~~ — CORRIGÉS (25/09, ADR-0203)** : 002,
       003, 004, 006, 007, 008, 009(b), 022, 023, 024. 57 tests ajoutés.
+- [ ] **P0 — DÉCISION UTILISATEUR : que faire du satellite ? (25/09)** Mesuré sur le VPS :
+      la règle tradée est INDISCERNABLE de QQQ + cash à même volatilité (ΔSharpe +0,11,
+      IC [−0,51 ; +0,72], p = 0,73), pour ~14 000 $ de frais sur 10 ans et une rotation
+      quotidienne. Options : (a) remplacer par QQQ + monétaire à exposition cible ;
+      (b) garder le satellite en paper comme banc de recherche, capital réel en passif ;
+      (c) chercher une vraie source de rendement — pré-enregistrée, jugée hors échantillon.
+      Ne rien engager en réel avant d'avoir tranché. Cf. 10_BACKTEST_RESULTS du 25/09.
 - [ ] **P1 — CE SOIR, sur le Mac/VPS (données réelles)** : `make sync BRANCHE=claude/laughing-keller-299ati` (le code n'est PAS
       encore sur main) → `make test` →
       `make contracts` → `make preset-replay` → `make backtest-preset` → `make ic-screening`
