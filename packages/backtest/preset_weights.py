@@ -77,6 +77,21 @@ def _eligibles(data: dict, lookback: int) -> list:
     return [s for s, b in data.items() if b and len(b) > max(lookback, MIN_BARRES_REGIME)]
 
 
+def qualite_de_production(fundamentals: dict) -> dict:
+    """Scores qualité utilisables par la PRODUCTION : réels, jamais synthétiques (QML-022).
+
+    `_fundamentals_section` retombe sur des fondamentaux INVENTÉS quand le réseau ou les
+    quotas lâchent. Ils servent d'affichage de démonstration ; ils ne choisissent pas un
+    univers qui part au courtier. Toute source qui ne se déclare pas réelle rend `{}`, ce
+    qui envoie la sélection sur le repli momentum — dit comme tel dans le diagnostic."""
+    if not (fundamentals or {}).get("available"):
+        return {}
+    if not str(fundamentals.get("source") or "").lower().startswith("réel"):
+        return {}
+    return {r["symbol"]: r.get("combined_score") for r in fundamentals.get("rows") or []
+            if r.get("combined_score") is not None}
+
+
 def _selection(data: dict, quality: dict, lookback: int, top_k: int, d: Diag):
     """Univers de production.
 
@@ -91,8 +106,14 @@ def _selection(data: dict, quality: dict, lookback: int, top_k: int, d: Diag):
         d.stop(f"{len(syms)} titres éligibles (< 5) — historique insuffisant")
         return None
     q = {s: quality.get(s) for s in syms if quality.get(s) is not None}
-    if len(q) >= 5:
-        d.note("score qualité", f"{len(q)} titres scorés → top-{top_k} par qualité")
+    # COUVERTURE MINIMALE = `top_k` (QML-022). À cinq titres scorés, l'univers se réduisait
+    # à ceux que l'API avait bien voulu servir ce jour-là — une sélection par disponibilité.
+    if len(q) >= max(5, top_k):
+        # UNCALIBRATED : le score qualité n'existe qu'au présent, aucun backtest ne peut le
+        # rejouer sans fuite. La branche mesurée par `make preset-replay` est le momentum
+        # (ADR-0202) — on ne laisse pas croire que celle-ci l'est aussi.
+        d.note("score qualité", f"{len(q)} titres scorés → top-{top_k} par qualité "
+                                "(UNCALIBRATED : règle non backtestable, cf. ADR-0202)")
         return sorted(q, key=lambda s: q[s], reverse=True)[:top_k]
     # REPLI PAR MOMENTUM, plus jamais par l'ordre du dictionnaire.
     #
@@ -112,7 +133,7 @@ def _selection(data: dict, quality: dict, lookback: int, top_k: int, d: Diag):
     # de la fenêtre : en production, « aujourd'hui » EST le dernier point connu, donc
     # aucune fuite — alors que garder le point de départ revenait à figer l'univers
     # sur le momentum de 2015.
-    d.note("score qualité", f"⚠️  {len(q)} scoré(s) (< 5) → repli MOMENTUM "
+    d.note("score qualité", f"⚠️  {len(q)} scoré(s) (< {max(5, top_k)}) → repli MOMENTUM "
                             f"(prix seuls, aligné par date)")
     return _price_universe(data, syms, lookback, top_k, au_dernier_point=True)
 

@@ -72,13 +72,15 @@ def _kill_switch(bus, obs=None):
     reduce = 0.0 if risk.get("veto") else float(risk.get("reduce", 1.0))
     if risk.get("veto"):
         print(f"⛔ KILL-SWITCH ACTIF (alertes TV critiques) : {', '.join(risk['reasons']) or '—'}")
-        print("   → exposition forcée à 0, aucun ordre ne sera envoyé.")
+        print("   → achats BLOQUÉS ; aucune vente forcée (seuls les allègements de "
+              "la stratégie partent).")
         if bus:
             from packages.common.event_bus import Topic
             bus.publish(Topic.KILL_SWITCH,
                         {"drawdown": "veto TV: " + (", ".join(risk["reasons"]) or "—")})
     elif reduce < 1.0:
-        print(f"⚠️  Alertes TV : exposition réduite ×{reduce:.2f} ({', '.join(risk['reasons']) or '—'})")
+        print(f"⚠️  Alertes TV : achats plafonnés à ×{reduce:.2f} de la cible, aucune vente "
+              f"forcée ({', '.join(risk['reasons']) or '—'})")
     # MOTIF EN CODE COURT, jamais le texte des alertes : le compte-rendu est un fichier
     # de compteurs, il n'a pas à transporter du contenu de marché.
     from packages.execution.garde_fous import KILL_TV, noter
@@ -143,13 +145,44 @@ def _broker_targets(targets, bname: str, cap: float, reduce: float, cur: dict) -
     tgs = [o for o in targets if (o.get("capital") == "bitmart") == (bname == "Bitmart")]
     sw = sum(o["weight_pct"] for o in tgs)
     scale = min(1.0, 1.0 / sw) if sw > 1.0 else 1.0
+    detenu: dict[str, float] = {}
+    for k, v in cur.items():
+        detenu[_nsym(k)] = detenu.get(_nsym(k), 0.0) + v
     tgt: dict[str, dict] = {}
     for o in tgs:
         bsym = o.get("broker_symbol", o["symbol"])
-        tgt[_nsym(bsym)] = {"o": o, "val": o["weight_pct"] * cap * reduce * scale, "sym": bsym}
+        pleine = o["weight_pct"] * cap * scale
+        tgt[_nsym(bsym)] = {"o": o, "val": cible_sous_garde(pleine, detenu.get(_nsym(bsym), 0.0),
+                                                            reduce), "sym": bsym}
     for bsym in cur:                                      # détenu hors-cible → liquidation (cible 0)
         tgt.setdefault(_nsym(bsym), {"o": None, "val": 0.0, "sym": bsym})
     return tgt, max(0.005 * cap, 5.0)                     # bande : 0,5 % du capital, min 5 $
+
+
+def id_client(run_id: str, bsym: str, action: str) -> str:
+    """Identifiant client d'UN ordre de CE passage — le même à chaque retry (QML-006).
+
+    Le passage entre dans l'identifiant : un second rebalancement le même jour (`--forcer`)
+    est un autre ordre, pas un doublon à refuser. 48 caractères au plus (Alpaca en accepte
+    128, Bitmart et Binance moins)."""
+    import hashlib
+    brut = f"{run_id}|{_nsym(bsym)}|{action}"
+    return f"qt-{hashlib.sha1(brut.encode()).hexdigest()[:24]}-{_nsym(bsym)[:16]}"[:48]
+
+
+def _envoyer(broker, bsym: str, side, montant: float, cid: str):
+    """`submit_notional` AVEC l'identifiant quand l'adaptateur le déclare.
+
+    Les trois courtiers réels le déclarent ; les faux courtiers des tests et l'adaptateur
+    IBKR (démo) non — on ne casse pas un contrat pour ceux qui ne le connaissent pas."""
+    import inspect
+    try:
+        accepte = "client_id" in inspect.signature(broker.submit_notional).parameters
+    except (TypeError, ValueError):
+        accepte = False
+    if accepte:
+        return broker.submit_notional(bsym, side, montant, client_id=cid)
+    return broker.submit_notional(bsym, side, montant)
 
 
 def _log_rejet(bsym: str, bname: str, intention, issue: str) -> None:
@@ -162,6 +195,22 @@ def _log_rejet(bsym: str, bname: str, intention, issue: str) -> None:
                    "montant": intention.montant, "issue": issue})
     except Exception:  # noqa: BLE001
         pass
+
+
+def cible_sous_garde(pleine: float, detenu: float, reduce: float) -> float:
+    """Cible d'UNE ligne sous garde-fou : les achats plafonnés, jamais une vente (QML-007).
+
+    `reduce` ∈ [0, 1] vient des kill-switches (TV, drawdown réel, disjoncteur). Il ne fait
+    que BORNER les achats à `pleine × reduce`. Il ne descend jamais la cible sous le détenu :
+    un garde-fou qui vend serait un moteur de liquidation, et l'ancien code en était un
+    seulement pour les alertes les MOINS graves (`0 < reduce < 1`), tandis que la rupture de
+    drawdown gelait tout. Les allègements décidés par la STRATÉGIE (`pleine < detenu`) passent
+    inchangés : ils réduisent le risque.
+    """
+    r = max(0.0, min(1.0, float(reduce)))
+    if r >= 1.0:
+        return pleine
+    return max(pleine * r, min(pleine, detenu))
 
 
 def ordre_de_traitement(tgt: dict, detenu: dict) -> list:
@@ -217,6 +266,8 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry, obs=None) -> tuple[i
     # les tests qui isolent le PORTAIL DE RISQUE du calendrier. Jamais le défaut : un
     # ordre qui ne peut pas se remplir doit être dit, pas envoyé dans le vide.
     _verif_seance = os.environ.get("QUANT_IGNORE_SESSION", "") != "1"
+    import uuid
+    run_id = uuid.uuid4().hex                       # identité du PASSAGE (QML-006)
     sent, opened, sold, differes, rejetes = 0, [], [], [], []
     if _verif_seance and not feries_a_jour():
         print("  ⚠️  fériés NYSE périmés — voir packages/execution/market_calendar")
@@ -317,8 +368,11 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry, obs=None) -> tuple[i
                     # poussière future.
                     _res = retry(lambda: broker.close_position(bsym), attempts=3)
                 else:
+                    # Le MÊME identifiant à chaque tentative : un envoi accepté puis perdu
+                    # en route n'est plus renvoyé, il est retrouvé (QML-006).
+                    _cid = id_client(run_id, bsym, intention.action)
                     _res = retry(
-                        lambda: broker.submit_notional(bsym, side, intention.montant),
+                        lambda: _envoyer(broker, bsym, side, intention.montant, _cid),
                         attempts=3)
                 # UN ORDRE ENVOYÉ N'EST PAS UN ORDRE EXÉCUTÉ. `sent += 1` dès l'absence
                 # d'exception comptait comme réussi un ordre qu'Alpaca venait de
@@ -833,14 +887,16 @@ def main() -> None:
     alpaca, bitmart, alp_cap, bit_cap, cur_alp, cur_bit, fatal = \
         _prepare_brokers(dry, a.equity, alert_engine)
     if not dry:                                                # kill-switch DRAWDOWN RÉEL (pas que TV)
-        reduce = min(reduce, dd_kill_switch(alp_cap + bit_cap, bus, alert_engine, obs))
+        _rel = releve_equity(alp_cap, bit_cap)                 # même périmètre (QML-024)
+        reduce = min(reduce, dd_kill_switch(sum(_rel.values()), bus, alert_engine, obs,
+                                            cles=set(_rel)))
     # DISJONCTEUR JOURNALIER — second horizon : la perte du JOUR, pas le drawdown.
     # Désarmé par défaut (`QUANT_DISJONCTEUR=1` pour agir) : il OBSERVE d'abord, parce
     # que son déclenchement ferme les positions et qu'il n'a jamais tourné en réel.
-    reduce = min(reduce, _disjoncteur(alp_cap + bit_cap, obs))
-    if reduce <= 0.0:                                          # kill-switch total : on n'envoie rien
-        _exposition_gelee(targets, obs, dry)
-        return
+    _rel = releve_equity(alp_cap, bit_cap)
+    reduce = min(reduce, _disjoncteur(sum(_rel.values()), obs, cles=set(_rel)))
+    if reduce <= 0.0:                                          # kill-switch total : AUCUN achat
+        _exposition_gelee(targets, obs, dry)      # (les allègements de stratégie passent)
 
     brokers = (("Alpaca", alpaca, alp_cap, cur_alp), ("Bitmart", bitmart, bit_cap, cur_bit))
     if not dry and not a.forcer and _deja_rebalance_aujourdhui(brokers, obs):
@@ -864,7 +920,7 @@ def main() -> None:
         fail_loud(fatal, alert_engine, code=4)
 
 
-def _disjoncteur(equity: float, obs=None) -> float:
+def _disjoncteur(equity: float, obs=None, cles: set | None = None) -> float:
     """Facteur d'exposition dicté par la perte du JOUR. 1.0 = rien à signaler.
 
     Renvoie un FACTEUR et non un booléen pour se composer avec les autres kill-switches
@@ -880,7 +936,7 @@ def _disjoncteur(equity: float, obs=None) -> float:
     )
     try:
         from packages.execution.coupe_circuit import evaluer
-        d = evaluer(equity)
+        d = evaluer(equity, cles=cles) if cles else evaluer(equity)
     except Exception as e:  # noqa: BLE001 — un garde-fou muet ne bloque jamais un run
         print(f"· disjoncteur : évaluation indisponible ({str(e)[:60]}).")
         noter(obs, DISJONCTEUR, etat=ERREUR, motif="evaluation_indisponible")
@@ -907,16 +963,19 @@ def _disjoncteur(equity: float, obs=None) -> float:
 
 
 def _exposition_gelee(targets: list, obs, dry: bool) -> None:
-    """Kill-switch total : on affiche ce qui NE partira pas, et on enregistre quand même.
+    """Kill-switch total : on annonce ce qui ne sera PAS acheté (QML-007).
 
-    Le run coupé est le plus instructif de tous : ne compter les garde-fous que les jours
-    où ils laissent passer reviendrait à ne les mesurer que quand ils ne servent à rien.
+    Ce n'est plus une sortie : la réconciliation suit, avec des cibles bornées au détenu
+    (`cible_sous_garde`). Aucun achat ne part ; les allègements de la stratégie, eux,
+    partent. Le compte-rendu des garde-fous est enregistré une fois, en fin de passage.
+    `obs` et `dry` restent dans la signature pour les appelants existants.
     """
+    _ = obs, dry
     for o in targets:
         print(f"  {o['side'].upper():4s} {o.get('broker_symbol', o['symbol']):14s} "
-              f"{o['broker']:8s} {o['weight_pct']*100:6.1f}%  bloqué (kill-switch)")
-    print("\n⛔ Kill-switch : aucun ordre (exposition gelée).")
-    _record_garde_fous(obs, dry)
+              f"{o['broker']:8s} {o['weight_pct']*100:6.1f}%  achat bloqué (kill-switch)")
+    print("\n⛔ Kill-switch : aucun achat. Les allègements de stratégie partent ; "
+          "aucune vente n'est forcée.")
 
 
 def _record_garde_fous(obs, dry: bool) -> None:
@@ -941,6 +1000,20 @@ def _record_garde_fous(obs, dry: bool) -> None:
         print(f"⚠️  garde-fous : compte-rendu non enregistré ({str(e)[:60]}).")
 
 
+def releve_equity(alp_cap: float, bit_cap: float) -> dict:
+    """Relevé d'equity du passage, sous LA clé de la place crypto (QML-024).
+
+    `run_live` écrivait « bitmart » quand le snapshot écrivait la place active (« binance ») :
+    deux périmètres dans une même série. Une place en bac à sable, ou vide, n'y figure pas —
+    son solde n'est pas de l'argent du compte."""
+    from packages.execution.venues import venue_crypto
+    v = venue_crypto()
+    out = {"alpaca": alp_cap}
+    if bit_cap > 0 and not v.en_testnet():
+        out[v.cle] = bit_cap
+    return out
+
+
 def _record_equity(alp_cap: float, bit_cap: float) -> None:
     """Enregistre l'equity RÉELLE du jour → alimente la courbe paper de `make rdv-paper`.
 
@@ -950,8 +1023,9 @@ def _record_equity(alp_cap: float, bit_cap: float) -> None:
     si le Mac restait éteint. Best-effort strict."""
     try:
         from packages.execution.equity_history import record
-        record({"alpaca": alp_cap, "bitmart": bit_cap})
-        print(f"Equity : point du jour enregistré (Alpaca {alp_cap:,.0f} $ · Bitmart {bit_cap:,.0f} $).")
+        record(releve_equity(alp_cap, bit_cap))
+        print(f"Equity : point du jour enregistré (Alpaca {alp_cap:,.0f} $ · crypto "
+              f"{bit_cap:,.0f} $).")
     except Exception as e:  # noqa: BLE001
         print(f"Equity : enregistrement ignoré ({str(e)[:50]}).")
 

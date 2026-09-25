@@ -122,9 +122,13 @@ class BinanceBroker:
             order.status = OrderStatus.REJECTED
         return self._remember(order)
 
-    def submit_notional(self, symbol: str, side: Side, cost_usdt: float) -> Order:
-        """Ordre marché par MONTANT ($) — pratique pour répliquer une allocation cible."""
-        order = Order(symbol, side, 0.0, None)
+    def submit_notional(self, symbol: str, side: Side, cost_usdt: float,
+                        client_id: str | None = None) -> Order:
+        """Ordre marché par MONTANT ($) — pratique pour répliquer une allocation cible.
+
+        `client_id` (QML-006) : sans lui, `submit()` ne pouvait ni dédupliquer localement ni
+        passer `newClientOrderId`, et `run_live` n'emprunte QUE ce chemin."""
+        order = Order(symbol, side, 0.0, None, client_id=client_id)
         if not self._live():
             order.status = OrderStatus.SUBMITTED
             return order

@@ -104,10 +104,11 @@ def vet_brokers(alpaca, bitmart, dry: bool, cli_equity: float | None):
 
 
 def dd_kill_switch(total_equity: float, bus, alert_engine,
-                   observateur: object | None = None) -> float:
+                   observateur: object | None = None, cles: set | None = None) -> float:
     """Kill-switch sur le DRAWDOWN RÉEL du compte (principe 3). Lit l'historique
     d'equity persisté + le point du jour ; DD depuis le pic ≤ `QUANT_INTRADAY_DD`
-    (défaut −15 %) → 0.0 (exposition coupée). Historique court/indispo → 1.0.
+    (défaut −15 %) → 0.0 = AUCUN ACHAT (rien n'est vendu d'office : `run_live.cible_sous_garde`,
+    QML-007). Historique court/indispo → 1.0.
 
     `observateur` ne change RIEN à la décision : il reçoit l'état pour que le rapport
     des garde-fous distingue les trois 1.0 que cette fonction rend — « rien à couper »,
@@ -117,8 +118,12 @@ def dd_kill_switch(total_equity: float, bus, alert_engine,
     try:
         from packages.execution.equity_history import _load
         from packages.portfolio.stress import drawdown_breach
-        curve = [sum(v for k, v in h.items() if k != "date" and isinstance(v, (int, float)))
-                 for h in _load()]
+        # `cles` = le périmètre de `total_equity` (QML-024). Sans lui, on somme tout ce que
+        # l'historique contient — y compris un solde testnet ou une place absente du jour.
+        from packages.execution.equity_history import courbe_comparable
+        curve = (courbe_comparable(_load(), set(cles)) if cles else
+                 [sum(v for k, v in h.items() if k != "date" and isinstance(v, (int, float)))
+                  for h in _load()])
         curve = [x for x in curve if x > 0]
         if total_equity > 0:
             curve.append(total_equity)
@@ -131,7 +136,8 @@ def dd_kill_switch(total_equity: float, bus, alert_engine,
             return 1.0
         msg = (f"drawdown réel {out['drawdown']*100:.1f}% ≤ seuil {limit*100:.0f}% "
                f"(pic {out['peak']}, dernier {out['last']})")
-        print(f"⛔ KILL-SWITCH DRAWDOWN RÉEL : {msg} → exposition forcée à 0.")
+        print(f"⛔ KILL-SWITCH DRAWDOWN RÉEL : {msg} → achats BLOQUÉS "
+              "(aucune vente forcée, cf. QML-007).")
         if bus:
             from packages.common.event_bus import Topic
             bus.publish(Topic.KILL_SWITCH, {"drawdown": out["drawdown"]})

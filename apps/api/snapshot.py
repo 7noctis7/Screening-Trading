@@ -512,8 +512,13 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
     # enregistre l'equity réelle du jour (construit l'historique réel par broker)
     try:
         from packages.execution.equity_history import record as _eq_record
-        if a_d["ok"] or b_d["ok"]:
-            _eq_record({"alpaca": a_d["equity"], _VC.cle: b_d["equity"]})
+        # QML-024 : Alpaca illisible → rien (`record` le refuse) ; crypto seulement si elle
+        # a répondu ET n'est pas un bac à sable. Même périmètre que `run_live.releve_equity`.
+        if a_d["ok"]:
+            _eq_record({"alpaca": a_d["equity"],
+                        **({_VC.cle: b_d["equity"]}
+                           if b_d["ok"] and b_d["equity"] > 0 and not _VC.en_testnet()
+                           else {})})
     except Exception:  # noqa: BLE001
         pass
     if target_weights or crypto_weights:          # allocation PRESET (2 poches : actions + crypto)
@@ -2247,7 +2252,9 @@ def build_snapshot(seed: int = 7) -> dict:
     # --- PRESET « best practice » : qualité + risk-parity + DD-target + blackout + no-trade band ---
     # Backtest point-in-time, comparé au swing actuel et à l'équipondéré.
     from packages.backtest.preset_backtest import preset_backtest
-    _quality = {r["symbol"]: r.get("combined_score") for r in fundamentals_sec.get("rows", [])}
+    # QML-022 : jamais de fondamentaux SYNTHÉTIQUES dans l'univers qui part au courtier.
+    from packages.backtest.preset_weights import qualite_de_production
+    _quality = qualite_de_production(fundamentals_sec)
     # UNIVERS NÉGOCIABLE : production restreinte aux instruments (1) négociables par les brokers
     # (actions US + ETF via Alpaca, crypto via Bitmart) ET (2) à DONNÉES RÉELLES uniquement — les
     # symboles en repli synthétique (prix factices, ex. RZLV absent de YAHOO.db) sont EXCLUS de
@@ -2431,6 +2438,11 @@ def build_snapshot(seed: int = 7) -> dict:
     # Exécution réelle (lit les comptes brokers) — calculée TÔT pour dimensionner chaque poche
     # sur le capital de SON compte (actions ← Alpaca, crypto ← Bitmart).
     _replication = {"available": False}
+    # BUDGET DÉCLARÉ des deux poches (QML-023) : crypto ≤ QUANT_CRYPTO_PCT du compte, actions +
+    # cœur dans le reste. Avant, leur somme était renormalisée par `run_live` et la part crypto
+    # sortait du rapport de deux cibles de volatilité (25 à 56 % mesurés).
+    from packages.portfolio.budget_poches import part_crypto, repartir
+    _preset_weights, _crypto_weights = repartir(_preset_weights, _crypto_weights, part_crypto())
     _live = _live_with_rebalance(comp["rows"], acmap, portfolio_kpis, w_by_name,
                                  target_weights=_preset_weights, crypto_weights=_crypto_weights)
     _alp_cap = (_live["real"]["alpaca"]["equity"] or 0.0) or init_cap
@@ -2473,7 +2485,9 @@ def build_snapshot(seed: int = 7) -> dict:
                                   # visible au lieu de le laisser deviner sur le graphe.
                                   **_extension(data.get(s))})
     _alloc_rows(_preset_weights, _alp_cap, "equity")     # actions/ETF → capital Alpaca
-    _alloc_rows(_crypto_weights, _bit_cap, "crypto")     # crypto → capital Bitmart
+    # Ère paper (ADR-0029) : la crypto part sur le capital ALPACA, en fraction du compte
+    # (QML-023). La valoriser sur Bitmart affichait 0 $ pour des ordres bien réels.
+    _alloc_rows(_crypto_weights, _alp_cap, "crypto")
     # Séries OHLC pour les graphiques cliquables (Positions/Trades/Réel) — bornées (~500 barres)
     # MARQUEURS achat/vente du PRESET (par symbole) → fléchés sur le graphe technique des pages
     # Trades & Positions, exactement aux dates des rebalancements (corrige l'absence de signaux).

@@ -63,10 +63,15 @@ class BitmartBroker:
         except Exception:  # noqa: BLE001
             return 0.0
 
-    def submit_notional(self, symbol: str, side: Side, cost_usdt: float) -> Order:
-        """Ordre marché par MONTANT ($ USDT) — la quantité est dérivée du prix puis arrondie."""
-        order = Order(symbol, side, 0.0, None)
-        s = "buy" if side is Side.LONG else "sell"
+    def submit_notional(self, symbol: str, side: Side, cost_usdt: float,
+                        client_id: str | None = None) -> Order:
+        """Ordre marché par MONTANT ($ USDT) — la quantité est dérivée du prix puis arrondie.
+
+        Passe par `submit()` (QML-006) : c'est lui qui porte l'idempotence (mémo locale +
+        `clientOrderId`) et le PRIX exigé par ccxt pour un achat marché. L'envoi direct
+        d'avant n'avait ni l'un ni l'autre — un achat y était rejeté en silence, un retry
+        après timeout y était renvoyé."""
+        order = Order(symbol, side, 0.0, None, client_id=client_id)
         if not self._live():
             order.status = OrderStatus.SUBMITTED          # simulation : rien n'est envoyé
             return order
@@ -79,12 +84,7 @@ class BitmartBroker:
         if qty <= 0 or cost_usdt < self._min_cost(symbol):
             order.status = OrderStatus.REJECTED           # sous le minimum du marché
             return order
-        try:
-            res = self._client().create_order(symbol, "market", s, qty)
-            order.status, order.filled_qty = _map_fill(res, qty)
-        except Exception:  # noqa: BLE001
-            order.status = OrderStatus.REJECTED
-        return order
+        return self.submit(order)
 
     def _remember(self, order: Order) -> Order:
         """Mémorise le résultat RÉEL et définitif d'un submit live (rejoué tel quel sur retry)."""

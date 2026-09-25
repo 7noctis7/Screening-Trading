@@ -21,8 +21,25 @@ def _load() -> list[dict]:
         return []
 
 
+def courbe_comparable(hist: list[dict], cles: set[str]) -> list[float]:
+    """Totaux des SEULES clés `cles`, sur les points qui les portent toutes (QML-024).
+
+    Un point qui n'a pas tout le périmètre est écarté, jamais compté pour zéro : sinon un
+    courtier muet un jour ressemble à une perte, et un solde de bac à sable à un sommet."""
+    out = []
+    for h in hist:
+        if all(isinstance(h.get(k), (int, float)) and h[k] > 0 for k in cles):
+            out.append(float(sum(h[k] for k in cles)))
+    return out
+
+
 def record(equities: dict[str, float], today: str | None = None) -> None:
-    """Enregistre l'equity réelle du jour par broker (un seul point par date)."""
+    """Enregistre l'equity réelle du jour par broker (un seul point par date).
+
+    Sans equity Alpaca lisible, RIEN n'est écrit (QML-024) : le compte principal manquant, le
+    point ne mesurerait qu'une fraction du portefeuille et passerait pour une chute."""
+    if not (equities.get("alpaca") or 0) > 0:
+        return
     today = today or datetime.now(timezone.utc).date().isoformat()
     hist = [h for h in _load() if h.get("date") != today]
     hist.append({"date": today, **{k: round(float(v), 2) for k, v in equities.items()}})
