@@ -32,9 +32,20 @@ sélection (la sélection qualité de production n'est pas rejouable : UNCALIBRA
 | Satellite seul | 15,1 % | 1,04 | −26,0 % | 4 078 | 14 320 $ |
 | `preset_backtest` (autre règle, autre fenêtre) | 9,7 % | 0,86 | −19,3 % | — | — |
 
-**Ce qui n'est PAS établi.** Aucun alpha : pas de référence sur les mêmes dates au moment de
-la mesure (ajoutées ensuite : QQQ acheté-conservé et équipondéré des titres cotés — à
-relancer), univers de SURVIVANTS (listes actuelles, délistés absents du VPS), paramètres
+**Références sur les MÊMES dates (2e passage, `ee81704`, satellite seul) :**
+
+| | CAGR | Sharpe | maxDD |
+|---|---|---|---|
+| Satellite (rejeu) | 15,1 % | 1,04 | −26,0 % |
+| QQQ acheté-conservé | 20,2 % | 0,93 | −35,6 % |
+| Équipondéré des titres cotés | 19,9 % | 0,99 | −38,4 % |
+
+Le satellite rend ~5 pts/an de MOINS que QQQ ou l'équipondéré, avec un drawdown plus
+faible et un Sharpe à peine supérieur (+0,05 à +0,11) — écart vraisemblablement dans le bruit
+(ΔSharpe apparié ajouté ensuite au banc, à relancer). Lecture cohérente avec le manifeste :
+de la GESTION DU RISQUE (exposition partielle), pas d'alpha démontré.
+
+**Ce qui n'est PAS établi.** Aucun alpha, univers de SURVIVANTS (listes actuelles, délistés absents du VPS), paramètres
 réglés sur tout l'historique (QML-005), DSR non recalculé avec le nombre réel d'essais.
 Le satellite seul fait presque le Sharpe du mélange : le cœur QQQ réduit surtout les frais.
 

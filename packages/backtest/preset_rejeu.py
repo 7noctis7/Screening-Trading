@@ -267,3 +267,25 @@ def references(prix: dict, dates: list[str]) -> dict:
         courbe.append(courbe[-1] * (1.0 + (sum(r) / len(r) if r else 0.0)))
     out["équipondéré"] = {"courbe": courbe, "stats": _stats_courbe(courbe)}
     return out
+
+
+def _rendements(courbe: list[float]) -> list[float]:
+    return [courbe[k + 1] / courbe[k] - 1.0 for k in range(len(courbe) - 1) if courbe[k] > 0]
+
+
+def meme_volatilite(courbe_ref: list[float], courbe_cible: list[float]) -> list[float]:
+    """`courbe_ref` diluée en cash (ou levée) jusqu'à la volatilité de `courbe_cible`.
+
+    Référence juste pour une stratégie partiellement investie : à volatilité égale, seul
+    le Sharpe distingue deux portefeuilles. Exposition CONSTANTE fixée ex post sur tout
+    l'échantillon — c'est un étalon de comparaison, pas une stratégie tradable."""
+    import numpy as np
+    rr, rc = np.asarray(_rendements(courbe_ref)), np.asarray(_rendements(courbe_cible))
+    k = float(rc.std() / rr.std()) if rr.std() > 0 else 0.0
+    return [1.0] + list(np.cumprod(1.0 + k * rr))
+
+
+def comparer_sharpe(courbe_ref: list[float], courbe_cible: list[float]) -> dict:
+    """ΔSharpe cible − référence, APPARIÉ par date (Jobson-Korkie/Memmel)."""
+    from packages.research.sharpe_diff import comparer
+    return comparer(_rendements(courbe_ref), _rendements(courbe_cible), periodes_par_an=252.0)

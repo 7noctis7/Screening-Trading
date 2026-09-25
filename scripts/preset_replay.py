@@ -72,6 +72,31 @@ def _consigner(res: dict, pas: int) -> None:
                    "source": "make preset-replay (réel)"})
 
 
+def _comparer(res: dict, refs: dict) -> None:
+    """QQQ à MÊME volatilité, puis ΔSharpe apparié rejeu − référence (Jobson-Korkie).
+
+    Sans test, un écart de 0,05 de Sharpe sur dix ans se lit comme une supériorité ; avec
+    lui, on sait s'il se distingue du bruit d'échantillonnage."""
+    from packages.backtest.conviction_backtest import _stats
+    from packages.backtest.preset_rejeu import comparer_sharpe, meme_volatilite
+    eq0 = res["equity"][0]
+    rejeu = [v / eq0 for v in res["equity"]]
+    if "QQQ" in refs:
+        dilue = meme_volatilite(refs["QQQ"]["courbe"], rejeu)
+        st = _stats([dilue[k + 1] / dilue[k] - 1 for k in range(len(dilue) - 1)], 252.0)
+        print(_ligne("référence — QQQ à même volatilité", st))
+        res["references"]["QQQ_meme_vol"] = st
+    print("\nΔSharpe rejeu − référence (apparié par date, IC 95 %) :")
+    res["comparaisons"] = {}
+    for nom, ref in refs.items():
+        c = comparer_sharpe(ref["courbe"], rejeu)
+        res["comparaisons"][nom] = c
+        if c.get("disponible"):
+            lo, hi = c["ic95"]
+            print(f"  vs {nom:12s} Δ {c['delta']:+.2f}  [{lo:+.2f} ; {hi:+.2f}]  "
+                  f"p = {c['p']:.3f}  → {c['verdict']}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--pas", type=int, default=5, help="jours de cotation entre décisions")
@@ -105,6 +130,7 @@ def main() -> int:
     for nom, ref in refs.items():
         print(_ligne(f"référence — {nom} (mêmes dates)", ref["stats"]))
     res["references"] = {k: v["stats"] for k, v in refs.items()}
+    _comparer(res, refs)
     if ancien.get("available"):
         print(_ligne("preset_backtest (≠ production, autre fenêtre)", ancien["preset"]))
     print("\nÉcarts connus du rejeu :")

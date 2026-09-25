@@ -31,3 +31,27 @@ def test_equipondere_ne_compte_que_les_titres_cotes():
 def test_sans_qqq_la_reference_est_absente():
     from packages.backtest.preset_rejeu import references
     assert "QQQ" not in references({"A": {"d1": 1.0, "d2": 1.0}}, ["d1", "d2"])
+
+
+def test_qqq_a_meme_volatilite_que_le_rejeu():
+    """QQQ dilué en cash jusqu'à la volatilité du rejeu : même Sharpe que QQQ (sans taux
+    sans risque), mais CAGR et drawdown comparables à une stratégie partiellement investie."""
+    import numpy as np
+
+    from packages.backtest.preset_rejeu import meme_volatilite
+    rng = np.random.default_rng(0)
+    qqq = list(np.cumprod(1 + rng.normal(0.0006, 0.02, 500)))
+    strat = list(np.cumprod(1 + rng.normal(0.0004, 0.01, 500)))
+    dilue = meme_volatilite(qqq, strat)
+    r = np.diff(dilue) / np.asarray(dilue[:-1])
+    rs = np.diff(strat) / np.asarray(strat[:-1])
+    assert r.std() == pytest.approx(rs.std(), rel=1e-6)
+
+
+def test_comparaison_des_sharpe_appariee():
+    from packages.backtest.preset_rejeu import comparer_sharpe
+    import numpy as np
+    rng = np.random.default_rng(1)
+    base = list(np.cumprod(1 + rng.normal(0.0005, 0.01, 400)))
+    c = comparer_sharpe(base, base)
+    assert c["verdict"] == "indiscernable"
