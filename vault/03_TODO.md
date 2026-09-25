@@ -15,16 +15,19 @@
       VPS (données réelles — aucune dans le conteneur d'audit) et consigner le chiffre ;
       (2) **trancher** : production par momentum (mesurable) ou par qualité (UNCALIBRATED) ;
       (3) décider si le tableau de bord doit afficher la courbe du rejeu à la place.
-- [ ] **P1 — Findings de l'audit QML du 25/09, NON corrigés (autorisation P0 seulement).**
-      Rapport complet dans le journal du 25/09. QML-002 univers survivant · QML-003 fill au
-      close du signal dans courbe/ledger · QML-004 QQQ apparié par position
-      (`blend_equity_multi`, `_serie_coeur`) · QML-005 essais sous-comptés, aucun holdout ·
-      QML-006 `submit_notional` sans client id sous `retry` ×3 (**la fermeture de P0-SI-LIVE #4
-      ne couvre pas le chemin réel — bloquant avant tout live**) · QML-007 kill-switch non
-      monotone (gel sur rupture DD, ventes sur simple alerte TV) · QML-008 IC du screening sur
-      index positionnel · QML-009 `mkt` (déjà listé) · QML-022 fondamentaux SYNTHÉTIQUES
-      possibles dans la sélection de production · QML-023 QQQ réel 31-42 % au lieu de 50 %,
-      `QUANT_CRYPTO_PCT` jamais lu · QML-024 equity_history à deux écrivains.
+- [x] **~~P1 — Findings de l'audit QML du 25/09~~ — CORRIGÉS (25/09, ADR-0203)** : 002,
+      003, 004, 006, 007, 008, 009(b), 022, 023, 024. 57 tests ajoutés.
+- [ ] **P1 — CE SOIR, sur le Mac/VPS (données réelles)** : `make sync BRANCHE=claude/laughing-keller-299ati` (le code n'est PAS
+      encore sur main) → `make test` →
+      `make contracts` → `make preset-replay` → `make backtest-preset` → `make ic-screening`
+      → `make live` (aperçu) → `make start`. Consigner les chiffres (10_BACKTEST_RESULTS).
+- [ ] **P1 — QML-005 reste PARTIEL** : décider d'une période VAULT (ex. 24 derniers mois)
+      qu'aucun labo ne lit plus, puis passer le preset par `research/protocole_oos`.
+- [ ] **P1 — QML-009(a)** : la porte de régime lit encore l'indice de SON panier ; brancher
+      un indice exogène (SPY/QQQ) — à passer au labo avant la production.
+- [ ] **P1 — Non traités (hors P1)** : QML-010 blackout inerte · 011 seuil ML 0,52 sur bruit
+      · 012 fenêtre dépendante des cotations futures · 013 coûts · 014 proxy liquidité
+      crypto · 015 swing legacy · 016 couture d'ajustement YAHOO.db/market.db (P2/P3).
 - [x] **~~P2 — Onglet X : filtres et recherche~~ — LIVRÉ (24/09, ADR-0194).** L'onglet
       n'existait pas : chaîne entière construite (`packages/social/`, `/api/social/x/posts`,
       `/x`, `make x-ingest`). 44 tests. Filtres compte / mot-clé / classification /

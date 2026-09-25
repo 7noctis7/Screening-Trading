@@ -2,6 +2,32 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0203 — Un garde-fou ne vend jamais ; la crypto a un budget ; l'indice des portes pèse en rendements (2026-09-25)
+
+**CONTEXTE.** P1 de l'audit QML du 25/09, autorisés. Trois choix de POLITIQUE posés à
+l'utilisateur avant d'écrire une ligne ; le reste est de la correction pure.
+
+**DÉCISIONS DE L'UTILISATEUR.** (1) *Gel partout* (QML-007) : un kill-switch plafonne les
+achats à `cible × reduce` et ne crée jamais de vente (`run_live.cible_sous_garde`) ;
+`reduce = 0` n'achète rien, les allègements de stratégie partent. Avant, une rupture de
+drawdown gelait tout pendant qu'une simple alerte TV vendait. (2) *Budget crypto déclaré*
+(QML-023) : `QUANT_CRYPTO_PCT`, 15 % par défaut (`portfolio/budget_poches`) ; une poche
+sous-investie garde sa part en cash. (3) *Sélection qualité conservée*, étiquetée
+UNCALIBRATED ; jamais de fondamentaux synthétiques (QML-022).
+
+**CORRECTIONS.** Idempotence par identifiant client sur `submit_notional`, le seul appel
+réel (QML-006) · historique d'equity à périmètre unique (QML-024) · courbe du tableau de
+bord et ledger exécutés à J+1 (QML-003) · cœur QQQ apparié par date (QML-004) · délistés
+réinjectés dans les backtests alignés par date (QML-002) · `mkt` = indice équipondéré en
+rendements (QML-009, partie b) · IC du screening par date (QML-008) · DSR déflaté par le
+ledger, « walk-forward » retiré des libellés (QML-005, partiel).
+
+**CONSÉQUENCE À ASSUMER.** Tous les chiffres publiés bougent au prochain build : c'est
+l'effet voulu. Aucun n'a été mesuré ici (pas de base dans le conteneur) — et aucune
+conclusion ne se tire avant `make preset-replay` sur données réelles.
+
+---
+
 ## ADR-0202 — La production se mesure par REJEU de sa propre fonction (2026-09-25)
 
 **CONTEXTE.** Audit QML du 25/09, finding P0 **QML-001** : trois implémentations du

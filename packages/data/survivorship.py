@@ -131,3 +131,19 @@ def survivorship_audit(universe_symbols: list[str], delisted: list[dict] | None 
                  "avec les titres sortis de l'univers. Sinon, lire les backtests longs comme "
                  "optimistes."),
     }
+
+
+def separer_perimees(data: dict, jours: int = 10) -> tuple[dict, dict]:
+    """(fraîches, périmées) selon la dernière barre, relativement à la plus fraîche (QML-002).
+
+    La PRODUCTION ne doit pas trader un titre dont la cotation s'est arrêtée : elle garde les
+    fraîches. Les BACKTESTS, eux, doivent voir les périmées — les écarter avant la mesure
+    fabrique un univers de survivants. Aucune série n'est modifiée : elles sont seulement
+    triées, et l'appelant décide à qui il remet chaque moitié."""
+    from datetime import timedelta
+    derniers = {s: b[-1].ts for s, b in data.items() if b}
+    if not derniers:
+        return dict(data), {}
+    seuil = max(derniers.values()) - timedelta(days=jours)
+    perimees = {s: data[s] for s, ts in derniers.items() if ts < seuil}
+    return {s: b for s, b in data.items() if s not in perimees}, perimees

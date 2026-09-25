@@ -68,8 +68,29 @@ def blend_equity(preset_eq: list[float], index_closes: list[float], core_pct: fl
     return [round(v, 2) for v in eq], len(eq)
 
 
-def blend_equity_multi(preset_eq: list[float], cores: list[tuple[list[float], float]],
-                       init_cap: float | None = None) -> tuple[list[float] | None, int]:
+def _rendements_coeur(serie, pr, dates, cdates):
+    """Rendements du cœur sur les pas du preset — PAR DATE si les deux calendriers sont
+    connus (QML-004), sinon par la queue (ancien comportement, conservé pour les scripts
+    qui n'ont pas les dates). Là où le cœur n'existe pas encore : rendement du preset."""
+    core_ret = pr.copy()
+    if dates is not None and cdates is not None:
+        from packages.backtest.panel import valeurs_sur_axe
+        v = valeurs_sur_axe(list(serie), list(cdates), list(dates))
+        for k in range(min(len(pr), len(v) - 1)):
+            if v[k] and v[k + 1]:
+                core_ret[k] = v[k + 1] / v[k] - 1.0
+        return core_ret
+    c = np.asarray(serie, dtype=float)
+    cr = c[1:] / c[:-1] - 1 if c.size > 1 else np.zeros(0)
+    k = min(cr.size, pr.size)
+    if k > 0:
+        core_ret[-k:] = cr[-k:]
+    return core_ret
+
+
+def blend_equity_multi(preset_eq: list[float], cores: list[tuple],
+                       init_cap: float | None = None,
+                       dates: list | None = None) -> tuple[list[float] | None, int]:
     """Mélange MULTI-CŒUR : equity = Σ wᵢ·cœurᵢ + (1-Σwᵢ)·preset, rééq. quotidien. ANCRÉ sur la
     fenêtre COMPLÈTE du preset : chaque cœur ne s'applique que là où ses données existent (sinon
     100 % preset). Plus de troncature de l'historique si un cœur est plus court que le preset."""
@@ -77,17 +98,12 @@ def blend_equity_multi(preset_eq: list[float], cores: list[tuple[list[float], fl
     if p.size < 31:
         return None, 0
     pr = p[1:] / p[:-1] - 1
-    cw = [max(0.0, float(w)) for _, w in cores]
+    cw = [max(0.0, float(c[1])) for c in cores]
     pw = max(0.0, 1.0 - sum(cw))
     br = pw * pr
-    for (series, w), wclamp in zip(cores, cw):
-        c = np.asarray(series, dtype=float)
-        cr = c[1:] / c[:-1] - 1 if c.size > 1 else np.zeros(0)
-        core_ret = pr.copy()                            # défaut = preset là où le cœur n'existe pas
-        k = min(cr.size, pr.size)
-        if k > 0:
-            core_ret[-k:] = cr[-k:]
-        br = br + wclamp * core_ret
+    for coeur, wclamp in zip(cores, cw, strict=True):
+        cdates = coeur[2] if len(coeur) > 2 else None      # (série, poids[, dates])
+        br = br + wclamp * _rendements_coeur(coeur[0], pr, dates, cdates)
     cap = float(init_cap) if init_cap is not None else float(p[0])
     eq = [cap]
     for rr in br:

@@ -143,6 +143,24 @@ def apparier_deux_series(a: list[float], dates_a: list[str],
     return ([par_a[d] for d in communes], [par_b[d] for d in communes], communes)
 
 
+def valeurs_sur_axe(valeurs: list, dates_src: list, axe: list) -> list:
+    """Valeurs d'une série datée, reportées sur un autre AXE de dates — le passé seulement.
+
+    À la date `d` de l'axe : la dernière valeur observée à une date ≤ `d` ; `None` avant la
+    première. Les dates sont comparées au JOUR (`str(d)[:10]`) : un indice horodaté à 16 h et
+    une barre à minuit désignent la même séance. C'est la règle d'`apparier_deux_series`,
+    sans exiger que les deux calendriers se recoupent exactement (QML-004)."""
+    from bisect import bisect_right
+    paires = sorted((str(d)[:10], v) for d, v in zip(dates_src, valeurs, strict=False)
+                    if v is not None)
+    jours = [j for j, _ in paires]
+    out = []
+    for d in axe:
+        k = bisect_right(jours, str(d)[:10]) - 1
+        out.append(paires[k][1] if k >= 0 else None)
+    return out
+
+
 def dernier_connu(A, t: int) -> "object":
     """Dernier prix CONNU de chaque titre à la date `t` (report en avant du passé seulement).
 

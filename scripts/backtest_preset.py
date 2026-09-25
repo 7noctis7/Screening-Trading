@@ -41,7 +41,10 @@ def main() -> None:
     vm = (a.get("risk") or {}).get("vol_managed") or {}
 
     print("\n" + "=" * 74)
-    print("PRESET « best practice » — backtest walk-forward (point-in-time, net de coûts)")
+    # QML-005 : ce n'est PAS un walk-forward — les paramètres ont été réglés sur tout
+    # l'historique, et la règle mesurée n'est pas celle qui trade (make preset-replay).
+    print("PRESET « best practice » — backtest historique (paramètres fixés sur tout "
+          "l'historique, ≠ production : cf. make preset-replay)")
     print("=" * 74)
     if pb.get("available"):
         print(f"Univers qualité top {pb['top_k']} · pas {pb['step_days']} j · DD-cible "

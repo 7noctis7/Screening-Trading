@@ -1840,12 +1840,18 @@ def build_snapshot(seed: int = 7) -> dict:
     # NETTOYAGE UNIVERS : écarte les titres PÉRIMÉS (delisted/renommés, ex. FB→META) dont
     # la dernière barre est trop ancienne → plus de 404 ni de cibles fantômes. Seuil RELATIF
     # (vs la barre la plus fraîche) → ne vide jamais l'univers, même hors-ligne.
+    # QML-002 : les périmées sont MISES DE CÔTÉ, pas jetées. La production ne les voit pas ;
+    # les backtests qui alignent par date (`preset_backtest`, momentum sectoriel) les
+    # retrouvent — sans elles, ils ne mesuraient que des survivants.
+    _perimes: dict = {}
+    _perimes_ac: dict = {}
+    _perimes_sect: dict = {}
     if contient_des_prix_reels(data_mode) and data:
-        _fresh = max(b[-1].ts for b in data.values() if b)
-        _cut = _fresh - timedelta(days=10)
-        _stale = [s for s, b in data.items() if b and b[-1].ts < _cut]
-        for s in _stale:
-            data.pop(s, None)
+        from packages.data.survivorship import separer_perimees
+        data, _perimes = separer_perimees(data, jours=10)
+        _perimes_ac = {s: acmap.get(s, "equity") for s in _perimes}
+        _perimes_sect = {s: sector_of.get(s, "") for s in _perimes}
+        for s in _perimes:
             real_syms.discard(s)
     # INTÉGRITÉ DES DONNÉES : si une base réelle est branchée, on RETIRE TOUT symbole en repli
     # synthétique de l'univers de travail → screener, ML, thèmes, conviction, preset, graphes…
@@ -2266,8 +2272,14 @@ def build_snapshot(seed: int = 7) -> dict:
         # pas assez de réel → on retombe sur le négociable (la bannière « données factices » prévient)
         _tradeable_data = {s: b for s, b in data.items() if is_tradeable(s, acmap.get(s, "equity"))} or data
     _ro = _os_hist.environ.get("QUANT_RISK_OVERLAY") == "1"   # opt-in overlay risque
-    preset_bt = preset_backtest(_tradeable_data, _quality, asset_classes=acmap, swing_equity=equity,
+    # BACKTEST = négociable + délistés négociables (QML-002). Alignement par date : un titre
+    # radié y garde ses dates, et sort au dernier cours connu (`dernier_connu`).
+    _bt_ac = {**_perimes_ac, **acmap}
+    _bt_data = {**{s: b for s, b in _perimes.items() if is_tradeable(s, _bt_ac.get(s, "equity"))},
+                **_tradeable_data}
+    preset_bt = preset_backtest(_bt_data, _quality, asset_classes=_bt_ac, swing_equity=equity,
                                 dd_target=_dd, band=0.03, risk_overlay=_ro)
+    preset_bt["n_delistes_injectes"] = len(_bt_data) - len(_tradeable_data)
     recommended["preset_backtest"] = preset_bt          # rattaché à l'allocation recommandée affichée
     # JOURNAL DES TRADES DU PRESET (rebalancements) → page Trades (remplace le swing legacy)
     from packages.backtest.preset_backtest import preset_trade_log
@@ -2325,6 +2337,8 @@ def build_snapshot(seed: int = 7) -> dict:
         _index_closes_dates(["QQQ", "^NDX", "^IXIC"], start, end, ndx)
         if _qqq_pct > 0 else ([], [], False))
     _mc_curve, _mc_top, _mc_w, _mc_real, _mc_weighting = [], [], {}, False, "—"
+    # Calendrier de CHAQUE cœur, pour l'apparier au preset par date (QML-004).
+    _core_dates: dict = {"qqq": list(_qqq_dates)}
     if _mc_pct > 0:
         from packages.backtest.megacap import megacap_equity_daily
         # PANIER RÉGLABLE (QUANT_MEGACAP_TOP, défaut 10). Le classement reste
@@ -2336,15 +2350,18 @@ def build_snapshot(seed: int = 7) -> dict:
                                    top_n=_mc_top_n, market_caps=_mktcaps or None)
         if _mc.get("available"):
             _mc_curve, _mc_top = _mc["equity"], _mc.get("current_top", [])
+            _core_dates["megacap"] = _mc.get("dates")
             _mc_w, _mc_real, _mc_weighting = _mc.get("current_weights", {}), True, _mc.get("weighting", "—")
     # cœur MOMENTUM SECTORIEL — TOUJOURS calculé (pour le sweep `make index-core`), activé en prod
     # seulement si présent dans la spec (QUANT_CORE_SPEC="sector_mom:0.25").
     _sm_curve, _sm_holds, _sm_secs = [], [], []
     try:
         from packages.backtest.sector_momentum import sector_momentum_equity_daily
-        _sm = sector_momentum_equity_daily(_tradeable_data, sector_of, asset_classes=acmap, init_cap=init_cap)
+        _sm = sector_momentum_equity_daily(          # délistés inclus (QML-002)
+            _bt_data, {**_perimes_sect, **sector_of}, asset_classes=_bt_ac, init_cap=init_cap)
         if _sm.get("available"):
             _sm_curve = _sm["equity"]
+            _core_dates["sector_mom"] = _sm.get("dates")
             _sm_holds, _sm_secs = _sm.get("current_holdings", []), _sm.get("current_sectors", [])
     except Exception:  # noqa: BLE001
         pass
@@ -2365,7 +2382,9 @@ def build_snapshot(seed: int = 7) -> dict:
         _cores.append((_sm_curve, _sm_pct, "sector_mom"))
     _total_core = sum(w for _, w, _ in _cores)
     if _pe.get("available") and _cores and 0 < _total_core <= 1.0:
-        _blended, _m = blend_equity_multi(_pe["equity"], [(c, w) for c, w, _ in _cores], init_cap=init_cap)
+        _blended, _m = blend_equity_multi(
+            _pe["equity"], [(c, w, _core_dates.get(k)) for c, w, k in _cores],
+            init_cap=init_cap, dates=_pe.get("dates"))                  # PAR DATE (QML-004)
         if _blended:
             _base_stats = _curve_stats(_pe["equity"][-_m:])
             _pe["equity"], _pe["dates"] = _blended, _pe["dates"][-_m:]
@@ -2413,6 +2432,7 @@ def build_snapshot(seed: int = 7) -> dict:
         _preset_ledger = preset_ledger(_tradeable_data, _quality, asset_classes=acmap, dd_target=_dd,
                                        band=0.03, init_cap=init_cap, max_trades=6000,
                                        core_closes=list(_qqq_closes) if _qqq_pct > 0 else None,
+                                       core_dates=list(_qqq_dates) if _qqq_pct > 0 else None,
                                        core_pct=_qqq_pct, core_sym="QQQ")
     except Exception:  # noqa: BLE001
         _preset_ledger = {"available": False}

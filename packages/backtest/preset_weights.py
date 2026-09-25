@@ -28,6 +28,7 @@ from packages.backtest.preset_helpers import (
 from packages.backtest.preset_helpers import (
     regime_detail as _regime_detail_fn,
 )
+from packages.backtest.preset_helpers import indice_marche
 from packages.backtest.preset_helpers import (
     regime_mult as _regime_mult_fn,
 )
@@ -213,7 +214,7 @@ def preset_latest_weights_explique(
     if mom_tilt:
         w = _mom_tilt_fn(A, t, w)
     w = _cap_weights_fn(w, _adaptive_cap_fn(cov, max_weight, corr_tighten))
-    gross = _exposition(A, cov, w, np.asarray(A.mean(axis=0)), t, d, k_dd=k_dd,
+    gross = _exposition(A, cov, w, indice_marche(A), t, d, k_dd=k_dd,   # QML-009
                         dd_target=dd_target, regime_gate=regime_gate,
                         breadth_gate=breadth_gate)
     w = _concentrate(w * gross, min_weight)

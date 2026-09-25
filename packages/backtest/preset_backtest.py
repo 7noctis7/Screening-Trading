@@ -43,6 +43,7 @@ from packages.backtest.preset_core import (
     univers_backtest,
 )
 from packages.backtest.preset_curves import preset_equity_daily, preset_trade_log
+from packages.backtest.preset_helpers import indice_marche
 from packages.backtest.preset_rejeu import NE_MESURE_PAS_LA_PRODUCTION
 from packages.backtest.preset_weights import (
     _concentrate,
@@ -123,6 +124,21 @@ def _boucle(A, mkt, rets, universe, rt, cpt: Compteurs, *, L, start, step, lookb
             "n_degraded": n_degraded, "turn": turn}
 
 
+ESSAIS_MINIMUM = 15
+
+
+def essais_du_programme(minimum: int = ESSAIS_MINIMUM) -> int:
+    """Nombre d'essais qui DÉFLATE le DSR : celui du ledger, jamais moins que `minimum`
+    (QML-005). L'ancien `n_trials=15` en dur ignorait tout ce que les labos avaient essayé
+    sur le même historique. Ledger illisible → le plancher, pas une exception."""
+    try:
+        from packages.research import ledger
+        n, _ = ledger.deflation_params(min_trials=minimum)
+        return max(int(n), minimum)
+    except Exception:  # noqa: BLE001
+        return minimum
+
+
 def _cum(series: list) -> list:
     e = np.cumprod(1 + np.asarray(series, dtype=float))
     return [1.0] + [round(float(x), 4) for x in e]
@@ -133,6 +149,7 @@ def _sortie(res: dict, cpt: Compteurs, universe, A, L, start, step, *, cov_denoi
             aligner_dates) -> dict:
     """Assemble le résultat : preset, bench équipondéré (même univers) et swing éventuel."""
     port, turn = res["port"], res["turn"]
+    n_essais = essais_du_programme()
     out = {"available": True, "step_days": step, "top_k": len(universe),
            # L'univers RETENU, pas seulement son cardinal : sans les noms, impossible de savoir
            # si un titre donné (un délisté, par exemple) a réellement été sélectionné.
@@ -143,7 +160,8 @@ def _sortie(res: dict, cpt: Compteurs, universe, A, L, start, step, *, cov_denoi
            # Effet MOYEN appliqué (1,0 = aucun). Un garde-fou à 0,999 s'est déclenché sans rien
            # déplacer : c'est ce qu'il fallait pouvoir lire à côté du compte de déclenchements.
            "ampleur": cpt.moyennes(),
-           "preset": _stats(port, per_year),
+           "preset": _stats(port, per_year, n_trials=n_essais),
+           "n_essais": n_essais,
            "turnover_annual": round(turn / len(port) * per_year, 2),
            "dd_target": dd_target, "band": band, "target_vol": round(tgt_vol, 4),
            "avg_gross": round(float(np.mean(res["gross_hist"])) if res["gross_hist"] else 0.0, 4),
@@ -190,7 +208,7 @@ def _preparer(data: dict, quality: dict, lookback: int, step: int, top_k: int,
     syms, L, M, panel_diag = p
     universe = univers_backtest(syms, M, quality, lookback, top_k, legacy_quality_universe)
     A = np.asarray([M[s] for s in universe])                    # n × L
-    mkt = np.nanmean(A, axis=0) if aligner_dates else A.mean(axis=0)  # indice marché (régime + DD)
+    mkt = indice_marche(A)       # indice équipondéré en rendements (QML-009), pas des cours
     return universe, A, mkt, L, panel_diag
 
 

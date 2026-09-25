@@ -222,7 +222,7 @@ backtest-breakout:   ## backtest cassures Donchian + measure rule (Bulkowski)
 	$(PYTHON) scripts/backtest_breakout.py
 backtest-sentiment:  ## event-study : le signal sentiment a-t-il un edge ? (data/news.csv requis)
 	$(PYTHON) scripts/backtest_sentiment.py
-backtest-preset:     ## backtest walk-forward du preset best-practice + overlay vol gérée (tes données)
+backtest-preset:     ## backtest HISTORIQUE du preset (≠ production, pas un walk-forward) + overlay vol gérée
 	$(PYTHON) scripts/backtest_preset.py
 preset-replay:       ## REJEU de la règle de PRODUCTION date par date (QML-001) — seule mesure du tradé
 	$(PYTHON) scripts/preset_replay.py

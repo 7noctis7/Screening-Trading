@@ -107,16 +107,19 @@ def preset_equity_daily(data: dict, quality: dict | None = None,
     rt = _couts_aller_retour(universe, asset_classes)
     w = np.zeros(len(universe))
     eq, out_dates = [init_cap], [dts[start]]
+    a_executer = None                     # poids décidés au close t, exécutés au close t+1
     for t in range(start, L - 1):
         reb_cost = 0.0
-        if (t - start) % step == 0:                       # rebalancement
+        if a_executer is not None:        # QML-003 : exécution au close SUIVANT la décision
+            reb_cost = float((np.abs(a_executer - w) * rt).sum())   # #P0-3 : coût du turnover
+            w, a_executer = a_executer, None
+        if (t - start) % step == 0:                       # décision
             nw = _weights_at(A, rets, t, lookback, blackout_move, max_weight,
                              min_names, tgt_vol)
             if nw is not None:
                 if band > 0 and w.sum() > 0:
                     nw = np.where(np.abs(nw - w) < band, w, nw)
-                reb_cost = float((np.abs(nw - w) * rt).sum())  # #P0-3 : coût du turnover ce jour-là
-                w = nw
+                a_executer = nw
         r_d = _rendement_du_jour(A, w, t) - reb_cost      # quotidien NET de coûts
         eq.append(eq[-1] * (1 + r_d))
         out_dates.append(dts[t + 1])
@@ -168,7 +171,7 @@ def preset_trade_log(data: dict, quality: dict | None = None, asset_classes: dic
         for i, sym in enumerate(universe):
             d = float(w[i] - prev[i])
             if abs(d) > 0.005:                      # variation matérielle (>0.5 %)
-                trades.append({"date": _dts[t], "symbol": sym,
+                trades.append({"date": _dts[t + 1], "symbol": sym,   # exécuté à t+1 (QML-003)
                                "side": "BUY" if d > 0 else "SELL",
                                "from": round(float(prev[i]), 4), "to": round(float(w[i]), 4),
                                "notional": round(abs(d) * init_cap, 2),

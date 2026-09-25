@@ -1,5 +1,20 @@
 # 04 — JOURNAL
 
+## Session 2026-09-25 (2ᵉ) — Les P1 de l'audit : ce qui part au courtier ne ment plus
+
+Autorisation P1 reçue. Trois choix de politique posés d'abord (gel partout, budget crypto
+15 %, sélection qualité conservée mais étiquetée), puis dix correctifs, chacun précédé d'un
+test qui échouait sur l'ancien code (ADR-0203).
+
+**Ce qui change dans le compte paper dès le prochain passage :** plus aucune vente forcée
+par un garde-fou ; crypto ≤ 15 % et QQQ réellement à 50 % × 85 % ; ordres idempotents sous
+retry ; aucun univers choisi sur des fondamentaux inventés ; porte de régime sur un indice
+équipondéré en rendements (elle peut s'ouvrir ou se fermer AUTREMENT qu'hier).
+
+**Ce qui change dans les chiffres publiés :** courbe du tableau de bord et ledger à J+1,
+QQQ apparié par date, délistés dans `preset_backtest`, DSR déflaté par le ledger. Rien n'a
+été mesuré sur données réelles — le conteneur n'a pas les bases.
+
 ## Session 2026-09-25 — Audit QML, et le seul P0 : on mesurait un autre portefeuille
 
 **AUDIT (lecture seule, puis P0 autorisé).** Cartographie complète du chemin d'ordres

@@ -111,3 +111,23 @@ def regime_detail(mkt: np.ndarray, t: int) -> str:
     recul = t - peak_i
     return (f"DD {dd:+.1%} (pic il y a {recul} barres) · "
             f"niveau {mkt[t]:.2f} vs MM200 {ma:.2f} · pente 20j {slope:+.1%}")
+
+
+def indice_marche(A: np.ndarray) -> np.ndarray:
+    """Indice ÉQUIPONDÉRÉ chaîné sur les rendements quotidiens — base 1,0 (QML-009).
+
+    Remplace `A.mean(axis=0)`, moyenne de COURS BRUTS où un titre à 500 $ pesait 25 fois un
+    titre à 20 $. Chaque jour, le rendement de l'indice est la moyenne des rendements des
+    titres cotés la veille ET le jour même (un titre pas encore introduit ou déjà radié ne
+    compte pas). Les portes (`regime_mult`) ne lisent que des rapports — pic, MM200, pente —
+    donc la base est sans effet ; seule compte la PONDÉRATION, désormais égale."""
+    A = np.asarray(A, dtype=float)
+    if A.ndim != 2 or A.shape[1] == 0:
+        return np.ones(0)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        r = A[:, 1:] / A[:, :-1] - 1.0
+    r = np.where(np.isfinite(r), r, np.nan)
+    cotes = np.isfinite(r).sum(axis=0)
+    somme = np.nansum(r, axis=0)
+    moyenne = np.divide(somme, cotes, out=np.zeros_like(somme), where=cotes > 0)
+    return np.concatenate([[1.0], np.cumprod(1.0 + moyenne)])
