@@ -52,3 +52,13 @@ def test_sans_recouvrement_rien_ne_bouge():
     from packages.data.fusion_sources import rebaser_base_longue
     longue = _barres([100.0, 101.0])
     assert rebaser_base_longue(longue, _barres([50.0], debut=10))[1] is None
+
+
+def test_un_seul_jour_commun_ne_prouve_pas_un_facteur():
+    """Une seule date commune rend le contrôle de dispersion vide (un rapport est toujours
+    constant avec lui-même) : une maj isolée erronée rééchelonnerait tout l'historique."""
+    from packages.data.fusion_sources import rebaser_base_longue
+    longue = _barres([100.0, 101.0, 102.0])
+    maj = _barres([51.0], debut=2)                                     # une barre fausse
+    rebasee, facteur = rebaser_base_longue(longue, maj)
+    assert facteur is None and rebasee is longue

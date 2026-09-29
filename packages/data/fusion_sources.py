@@ -107,6 +107,9 @@ def desaccords(par_source: dict[str, dict[str, float]],
 # relative du rapport des cours, le désaccord n'est pas un ajustement et l'on ne touche à rien.
 DISPERSION_MAX_FACTEUR = 1e-3
 ECART_MIN_FACTEUR = 5e-3          # sous 0,5 %, les deux bases sont dans le même référentiel
+# Un seul jour commun rend le contrôle de dispersion vide : il en faut plusieurs pour qu'un
+# rapport constant soit un FAIT et non une barre isolée, peut-être fausse.
+RECOUVREMENT_MIN = 3
 
 
 def rebaser_base_longue(longue: list[Bar], maj: list[Bar]) -> tuple[list[Bar], float | None]:
@@ -122,7 +125,7 @@ def rebaser_base_longue(longue: list[Bar], maj: list[Bar]) -> tuple[list[Bar], f
     from statistics import median
     ref = {jour(b.ts): b.close for b in maj if b.close}
     rapports = [ref[jour(b.ts)] / b.close for b in longue if b.close and jour(b.ts) in ref]
-    if not rapports:
+    if len(rapports) < RECOUVREMENT_MIN:
         return longue, None
     f = median(rapports)
     if abs(f - 1.0) < ECART_MIN_FACTEUR or f <= 0:
