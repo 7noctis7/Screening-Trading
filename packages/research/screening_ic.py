@@ -103,12 +103,55 @@ def _hors_echantillon(dates: list[int], ics: list[float]) -> dict:
             "robuste": bool(ratio is not None and ratio >= 0.5 and fin_serie > 0)}
 
 
+def _datees(panel: dict) -> bool:
+    return bool(panel) and all(b and getattr(b[0], "ts", None) is not None
+                               for b in panel.values())
+
+
+def panel_a_la_date(panel: dict, jour: str) -> dict:
+    """Ce que le moteur peut noter le jour `jour` : les titres qui COTENT ce jour-là, leur
+    historique coupé à ce jour (QML-008). Un titre pas encore introduit, ou arrêté, n'a pas de
+    note — il n'a pas de prix."""
+    from packages.backtest.panel import _jour
+    from packages.backtest.preset_rejeu import tronquer
+    return {s: b for s, b in tronquer(panel, jour).items() if _jour(b[-1]) == jour}
+
+
+def _ic_date(panel, moteur, closes, debut_j, fin_j, fundamentals):
+    scores, futurs = [], []
+    for r in moteur.screen(panel_a_la_date(panel, debut_j), fundamentals=fundamentals):
+        c0, c1 = closes[r.symbol].get(debut_j), closes[r.symbol].get(fin_j)
+        if r.passed and c0 and c1:
+            scores.append(float(r.score))
+            futurs.append(c1 / c0 - 1.0)
+    return information_coefficient(scores, futurs)
+
+
+def _mesures_par_date(panel, moteur, horizon, pas, debut, fundamentals):
+    """(index de grille, IC) — la coupe transversale est faite À UNE DATE, pour tous."""
+    from packages.backtest.panel import _jour
+    from packages.backtest.preset_rejeu import calendrier
+    grille = calendrier(panel)
+    closes = {s: {_jour(b): float(b.close) for b in bars} for s, bars in panel.items()}
+    return [(k, _ic_date(panel, moteur, closes, grille[k], grille[k + horizon], fundamentals))
+            for k in range(debut, len(grille) - horizon, max(1, pas))]
+
+
 def mesurer(panel: dict, moteur, horizon: int = HORIZON_DEFAUT, pas: int | None = None,
             debut: int = DEBUT_MIN, fundamentals=None) -> dict:
-    """IC walk-forward du score de screening. `pas=None` → pas = horizon (sans chevauchement)."""
+    """IC walk-forward du score de screening. `pas=None` → pas = horizon (sans chevauchement).
+
+    Barres DATÉES → grille de dates commune (QML-008) : `t` n'est plus une position dans
+    chaque série, mais une date, la même pour tous les titres. Barres sans date (séries
+    construites de même longueur) → ancien chemin positionnel, exact dans ce cas-là."""
     pas = horizon if pas is None else pas
-    grille = _grille(panel, horizon, pas, debut)
-    mesures = [(t, ic_a_la_date(panel, moteur, t, horizon, fundamentals)) for t in grille]
+    if _datees(panel):
+        mesures = _mesures_par_date(panel, moteur, horizon, pas, debut, fundamentals)
+        axe = "dates"
+    else:
+        mesures = [(t, ic_a_la_date(panel, moteur, t, horizon, fundamentals))
+                   for t in _grille(panel, horizon, pas, debut)]
+        axe = "positions"
     retenues = [(t, ic) for t, ic in mesures if ic is not None]
     if len(retenues) < N_DATES_MIN:
         return {"available": False, "status": "UNCALIBRATED",
@@ -120,4 +163,4 @@ def mesurer(panel: dict, moteur, horizon: int = HORIZON_DEFAUT, pas: int | None 
     return {"available": True, "status": "MESURÉ", "horizon": horizon, "pas": pas,
             "chevauchement": pas < horizon, "n_dates": len(ics),
             "n_actifs_median": None, **_stats(ics), **_hors_echantillon(dates, ics),
-            "horizons_testes": 1}
+            "horizons_testes": 1, "axe": axe}

@@ -39,8 +39,8 @@ def monte_carlo(returns, horizon: int = 252, n_sims: int = 2000,
 def drawdown_breach(equity, dd_limit: float = -0.15) -> dict:
     """Décision kill-switch intraday : drawdown courant depuis le pic vs `dd_limit`.
 
-    `breach=True` → on aplatit les positions (la stratégie daily ne verrait le krach
-    qu'au prochain run ; ce check en cron ferme le gap 24/7). Calcul pur, sans ordre.
+    `breach=True` → `run_live` BLOQUE les achats ; il n'aplatit rien (QML-007 : un garde-fou
+    ne vend jamais, décision du 25/09). Calcul pur, sans ordre.
     """
     e = np.asarray(equity, float)
     e = e[np.isfinite(e)]

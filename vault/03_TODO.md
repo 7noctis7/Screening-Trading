@@ -7,6 +7,46 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+- [ ] **P0 — QML-001 : la règle tradée n'avait AUCUN backtest — PARTIELLEMENT RÉSOLU (25/09,
+      ADR-0202).** Livré : `packages/backtest/preset_rejeu.py` + `make preset-replay` (rejeu
+      date par date de `preset_latest_weights_explique`, exécution J+1, bande/plancher/portail
+      de `run_live`) ; `preset_backtest`, `preset_equity_daily` et `preset_ledger` portent
+      `mesure_la_production: False`. **RESTE À TOI :** (1) lancer `make preset-replay` sur le
+      VPS (données réelles — aucune dans le conteneur d'audit) et consigner le chiffre ;
+      (2) **trancher** : production par momentum (mesurable) ou par qualité (UNCALIBRATED) ;
+      (3) décider si le tableau de bord doit afficher la courbe du rejeu à la place.
+- [x] **~~P1 — Findings de l'audit QML du 25/09~~ — CORRIGÉS (25/09, ADR-0203)** : 002,
+      003, 004, 006, 007, 008, 009(b), 022, 023, 024. 57 tests ajoutés.
+- [ ] **P0 — DÉCISION UTILISATEUR : que faire du satellite ? (25/09)** Mesuré sur le VPS :
+      la règle tradée est INDISCERNABLE de QQQ + cash à même volatilité (ΔSharpe +0,11,
+      IC [−0,51 ; +0,72], p = 0,73), pour ~14 000 $ de frais sur 10 ans et une rotation
+      quotidienne. Options : (a) remplacer par QQQ + monétaire à exposition cible ;
+      (b) garder le satellite en paper comme banc de recherche, capital réel en passif ;
+      (c) chercher une vraie source de rendement — pré-enregistrée, jugée hors échantillon.
+      Ne rien engager en réel avant d'avoir tranché. Cf. 10_BACKTEST_RESULTS du 25/09.
+      **Option (c) retenue (25/09, ADR-0205)** → banc pré-enregistré livré, voir ci-dessous.
+- [ ] **P0 — Lancer le banc d'exploration sur le VPS puis juger 1 à 3 scénarios (25/09,
+      ADR-0205).** `make explorer` (grille quotidienne, 870 scénarios, en échantillon
+      jusqu'au 31/12/2022) ; crypto horaire : `make ingest-crypto-intraday` puis
+      `make explorer GRILLE=config/exploration/2026-09-25_crypto_1h.yaml` (315 scénarios).
+      Lire la PBO et les médianes PAR DIMENSION avant le classement. Puis UNE lecture :
+      `make explorer ARGS='--holdout "id1" "id2"'`. Seconde lecture refusée par le
+      registre. Consigner dans 10_BACKTEST_RESULTS, y compris un échec.
+- [ ] **P1 — CE SOIR, sur le Mac/VPS (données réelles)** : `make sync BRANCHE=claude/laughing-keller-299ati` (le code n'est PAS
+      encore sur main) → `make test` →
+      `make contracts` → `make preset-replay` → `make backtest-preset` → `make ic-screening`
+      → `make live` (aperçu) → `make start`. Consigner les chiffres (10_BACKTEST_RESULTS).
+- [ ] **P1 — QML-005 reste PARTIEL** : décider d'une période VAULT (ex. 24 derniers mois)
+      qu'aucun labo ne lit plus, puis passer le preset par `research/protocole_oos`.
+- [ ] **P1 — QML-009(a)** : la porte de régime lit encore l'indice de SON panier ; brancher
+      un indice exogène (SPY/QQQ) — à passer au labo avant la production.
+- [x] **~~P2 de l'audit QML~~ — CORRIGÉS (25/09, ADR-0204)** : 010 · 011 · 012 · 013 · 014 ·
+      015 (gap) · 016. 3594 tests verts.
+- [ ] **P2 — Edge ML : produire la distribution NULLE** (AUC de labels permutés par date,
+      ≥ 20 tirages) hors ligne dans `make train` et la servir à `edge_detecte` ; tant
+      qu'elle manque, l'onglet ML affiche UNCALIBRATED — c'est voulu.
+- [ ] **P3 — `fast_swing` aligné par position DEPUIS LE DÉBUT** des séries (legacy) ;
+      `snapshot.py` 3 050 lignes, `run_live.py` 1 030 : découpage à planifier.
 - [x] **~~P2 — Onglet X : filtres et recherche~~ — LIVRÉ (24/09, ADR-0194).** L'onglet
       n'existait pas : chaîne entière construite (`packages/social/`, `/api/social/x/posts`,
       `/x`, `make x-ingest`). 44 tests. Filtres compte / mot-clé / classification /

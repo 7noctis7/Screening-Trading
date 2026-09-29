@@ -19,6 +19,88 @@
 
 ---
 
+## 2026-09-25 — Banc d'exploration, grille quotidienne [8fa32ef0], EN ÉCHANTILLON (VPS, réel)
+
+870 scénarios. Données : 624 séries réelles. Période : 2016-10-26 → 2022-12-30 (251 barres
+par an). La période cachée (2023 → 2026) n'a PAS été lue.
+
+**Verdict en échantillon : aucun scénario ne franchit la déflation.** Le meilleur DSR est
+de 0,89, sous le seuil de 0,95. La PBO vaut 0,57 : le champion en échantillon finit plus
+souvent qu'à son tour sous la médiane hors échantillon, donc le classement brut ressemble
+à du bruit.
+
+| Scénario | CAGR | Sharpe | maxDD | DSR |
+|---|---|---|---|---|
+| n°1 crypto·tout·égal·régime MM200·trimestre | 158,6 % | 1,57 | −77,7 % | 0,88 |
+| n°2 crypto·tendance MM200·ERC·vol cible 15·mois | 33,6 % | 1,56 | −21,0 % | 0,89 |
+| BTC acheté-conservé (rang 299) | 67,2 % | 1,06 | −83,0 % | 0,47 |
+| QQQ acheté-conservé (rang 583) | 14,1 % | 0,67 | −35,6 % | 0,15 |
+
+Sharpe médian par dimension :
+
+| Dimension | Résultat |
+|---|---|
+| Univers | crypto 1,25 · actions US 1,07 · multi-actifs 0,76 · QQQ 0,68 · ETF 0,51 |
+| Sélection | tendance MM200 1,06 ≈ momentum 6-1 1,04 > basse vol 0,84 > momentum 12-1 0,78 ≈ tout 0,77 |
+| Protection | régime MM200 0,99 > aucune 0,87 > vol cible 15 0,79 |
+| Rythme | jour 0,98 ≈ semaine 0,96 ≈ 3 jours 0,95 > mois 0,85 > trimestre 0,75 |
+
+**Lecture.**
+
+1. Le classement mesure surtout l'UNIVERS, pas la règle : les 25 premiers sont crypto.
+2. Les univers crypto et actions US sont les listes ACTUELLES. Les radiés en sont absents
+   (QML-002) : LUNA, FTT et les autres cryptos mortes ne peuvent pas peser. Leur avance
+   sur QQQ est donc en partie un biais du survivant, et n'est pas mesurée.
+3. Les écarts entre sélections, protections et rythmes (≈ 0,1 à 0,3 de Sharpe médian)
+   sont du même ordre que l'IC d'un ΔSharpe sur 6 ans (±0,6, cf. rejeu).
+4. Le momentum ETF quotidien est le pire : rotation de 41 par an pour un Sharpe de 0,1.
+
+À faire avant `--holdout` : classer DANS chaque univers contre son propre
+équipondéré-conservé.
+
+## 2026-09-25 — Première mesure de la règle TRADÉE (rejeu, VPS, données réelles)
+
+`make preset-replay` sur le VPS (`115dcd4`), market.db seule (819 séries réelles, 624
+négociables), 2016-09-28 → 2026-09-24, décision tous les 5 jours, exécution au close
+suivant, bande/plancher/portail de `run_live`, frais par classe. Branche MOMENTUM de la
+sélection (la sélection qualité de production n'est pas rejouable : UNCALIBRATED).
+
+| Configuration | CAGR | Sharpe | maxDD | Ordres | Frais (10 ans, 100 k$) |
+|---|---|---|---|---|---|
+| Satellite + cœur QQQ 50 % (production) | 17,9 % | 1,09 | −25,7 % | 3 393 | 7 898 $ |
+| Satellite seul | 15,1 % | 1,04 | −26,0 % | 4 078 | 14 320 $ |
+| `preset_backtest` (autre règle, autre fenêtre) | 9,7 % | 0,86 | −19,3 % | — | — |
+
+**Références sur les MÊMES dates (2e passage, `ee81704`, satellite seul) :**
+
+| | CAGR | Sharpe | maxDD |
+|---|---|---|---|
+| Satellite (rejeu) | 15,1 % | 1,04 | −26,0 % |
+| QQQ acheté-conservé | 20,2 % | 0,93 | −35,6 % |
+| Équipondéré des titres cotés | 19,9 % | 0,99 | −38,4 % |
+
+| QQQ à MÊME volatilité (dilué en cash, ex post) | 13,3 % | 0,93 | −23,9 % |
+
+**Test apparié (Jobson-Korkie/Memmel, `2ebe356`) :** ΔSharpe vs QQQ **+0,11 [−0,51 ; +0,72],
+p = 0,73** ; vs équipondéré **+0,04 [−0,58 ; +0,67], p = 0,89**. **INDISCERNABLE.** À
+volatilité égale, le satellite fait +1,8 pt/an de CAGR que QQQ + cash, avec un drawdown
+légèrement PIRE (−26,0 % contre −23,9 %) — et cela avec le cash rémunéré à ZÉRO dans les
+deux cas : en réalité le cash de l'alternative passive rapporterait le taux court, ce qui
+l'avantage. Tous les biais connus (survivants, réglage sur tout l'historique) jouent EN
+FAVEUR du satellite. Lecture cohérente avec le manifeste :
+de la GESTION DU RISQUE (exposition partielle), pas d'alpha démontré.
+
+**Ce qui n'est PAS établi.** Aucun alpha, univers de SURVIVANTS (listes actuelles, délistés absents du VPS), paramètres
+réglés sur tout l'historique (QML-005), DSR non recalculé avec le nombre réel d'essais.
+Le satellite seul fait presque le Sharpe du mélange : le cœur QQQ réduit surtout les frais.
+
+**IC du screening (même soir, par date) : −0,068, t = −1,98, 74 fenêtres, seconde moitié
+−0,110.** Le score de sélection ne prédit pas le mois suivant ; l'ancienne mesure
+positionnelle (+0,041 sur le Mac, autre base) était un artefact d'alignement. Ne PAS
+inverser le signe (choix a posteriori). « Conviction » reste fermé.
+
+---
+
 ## 2026-09-03 — Cœur multi-actifs (QQQ + obligations longues + or) — **REJETÉ par la règle**
 
 **Protocole.** Part de cœur figée à 50 %, identique à la production : SEULE la composition

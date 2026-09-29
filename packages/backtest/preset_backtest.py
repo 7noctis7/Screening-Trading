@@ -39,10 +39,13 @@ from packages.backtest.preset_core import (
     _gross_pas,
     _poids_pas,
     couts_univers,
+    deriver,
     panel_backtest,
     univers_backtest,
 )
 from packages.backtest.preset_curves import preset_equity_daily, preset_trade_log
+from packages.backtest.preset_helpers import indice_marche
+from packages.backtest.preset_rejeu import NE_MESURE_PAS_LA_PRODUCTION
 from packages.backtest.preset_weights import (
     _concentrate,
     _weights_at,
@@ -83,6 +86,7 @@ def _boucle(A, mkt, rets, universe, rt, cpt: Compteurs, *, L, start, step, lookb
             per_year, exec_lag, band, aligner_dates) -> dict:
     """Déroule les pas de rebalancement et renvoie séries + diagnostics de covariance."""
     prev_w = np.zeros(len(universe))
+    tenu = np.zeros(len(universe))           # poids DÉTENUS (dérivés), base du turnover
     port: list[float] = []
     gross_hist: list[float] = []
     cov_diags: list[dict] = []               # M1 : exploitabilité de la covariance
@@ -106,20 +110,35 @@ def _boucle(A, mkt, rets, universe, rt, cpt: Compteurs, *, L, start, step, lookb
         if band > 0 and prev_w.sum() > 0:                       # bande de non-trading
             # « au moins un nom bloqué » est vrai à presque chaque pas et n'apprend rien : on
             # mesure la PART des noms que la bande ramène à leur poids précédent.
-            dans = np.abs(w - prev_w) < band
+            dans = np.abs(w - tenu) < band              # contre le DÉTENU (QML-013)
             cpt.note("bande", bool(dans.any()), 1.0 - float(dans.mean()))
-            w = np.where(dans, prev_w, w)
+            w = np.where(dans, tenu, w)
         entry = min(t + exec_lag, L - 1)                        # M-1 : exécution à t+exec_lag
         fwd = _fwd(A, entry, min(entry + step, L - 1), aligner_dates)
-        ret_step = float((w * fwd).sum()) - float((np.abs(w - prev_w) * rt).sum())
+        ret_step = float((w * fwd).sum()) - float((np.abs(w - tenu) * rt).sum())
         port.append(ret_step)
         eq_strat *= (1.0 + ret_step)             # maj equity (taper au pas suivant)
         peak_strat = max(peak_strat, eq_strat)
-        turn += float(np.abs(w - prev_w).sum())
+        turn += float(np.abs(w - tenu).sum())
         gross_hist.append(float(w.sum()))
-        prev_w = w
+        prev_w, tenu = w, deriver(w, fwd)
     return {"port": port, "gross_hist": gross_hist, "cov_diags": cov_diags,
             "n_degraded": n_degraded, "turn": turn}
+
+
+ESSAIS_MINIMUM = 15
+
+
+def essais_du_programme(minimum: int = ESSAIS_MINIMUM) -> int:
+    """Nombre d'essais qui DÉFLATE le DSR : celui du ledger, jamais moins que `minimum`
+    (QML-005). L'ancien `n_trials=15` en dur ignorait tout ce que les labos avaient essayé
+    sur le même historique. Ledger illisible → le plancher, pas une exception."""
+    try:
+        from packages.research import ledger
+        n, _ = ledger.deflation_params(min_trials=minimum)
+        return max(int(n), minimum)
+    except Exception:  # noqa: BLE001
+        return minimum
 
 
 def _cum(series: list) -> list:
@@ -132,6 +151,7 @@ def _sortie(res: dict, cpt: Compteurs, universe, A, L, start, step, *, cov_denoi
             aligner_dates) -> dict:
     """Assemble le résultat : preset, bench équipondéré (même univers) et swing éventuel."""
     port, turn = res["port"], res["turn"]
+    n_essais = essais_du_programme()
     out = {"available": True, "step_days": step, "top_k": len(universe),
            # L'univers RETENU, pas seulement son cardinal : sans les noms, impossible de savoir
            # si un titre donné (un délisté, par exemple) a réellement été sélectionné.
@@ -142,7 +162,8 @@ def _sortie(res: dict, cpt: Compteurs, universe, A, L, start, step, *, cov_denoi
            # Effet MOYEN appliqué (1,0 = aucun). Un garde-fou à 0,999 s'est déclenché sans rien
            # déplacer : c'est ce qu'il fallait pouvoir lire à côté du compte de déclenchements.
            "ampleur": cpt.moyennes(),
-           "preset": _stats(port, per_year),
+           "preset": _stats(port, per_year, n_trials=n_essais),
+           "n_essais": n_essais,
            "turnover_annual": round(turn / len(port) * per_year, 2),
            "dd_target": dd_target, "band": band, "target_vol": round(tgt_vol, 4),
            "avg_gross": round(float(np.mean(res["gross_hist"])) if res["gross_hist"] else 0.0, 4),
@@ -150,7 +171,9 @@ def _sortie(res: dict, cpt: Compteurs, universe, A, L, start, step, *, cov_denoi
            # en redériver les rendements perd assez de précision pour fausser une erreur-type.
            # Le test de différence de Sharpe (packages/research/sharpe_diff) en a besoin bruts.
            "rendements": [float(x) for x in port],
-           "curves": {"preset": _cum(port)}}
+           "curves": {"preset": _cum(port)},
+           # QML-001 : cette règle n'est PAS celle qui trade — seul le rejeu la mesure.
+           **NE_MESURE_PAS_LA_PRODUCTION}
     # bench équipondéré sur le MÊME univers (apples-to-apples : isole l'apport de la construction
     # risk-parity + DD-target + blackout + band vs un simple équipondéré plein-investi)
     #
@@ -187,7 +210,7 @@ def _preparer(data: dict, quality: dict, lookback: int, step: int, top_k: int,
     syms, L, M, panel_diag = p
     universe = univers_backtest(syms, M, quality, lookback, top_k, legacy_quality_universe)
     A = np.asarray([M[s] for s in universe])                    # n × L
-    mkt = np.nanmean(A, axis=0) if aligner_dates else A.mean(axis=0)  # indice marché (régime + DD)
+    mkt = indice_marche(A)       # indice équipondéré en rendements (QML-009), pas des cours
     return universe, A, mkt, L, panel_diag
 
 

@@ -512,8 +512,13 @@ def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
     # enregistre l'equity réelle du jour (construit l'historique réel par broker)
     try:
         from packages.execution.equity_history import record as _eq_record
-        if a_d["ok"] or b_d["ok"]:
-            _eq_record({"alpaca": a_d["equity"], _VC.cle: b_d["equity"]})
+        # QML-024 : Alpaca illisible → rien (`record` le refuse) ; crypto seulement si elle
+        # a répondu ET n'est pas un bac à sable. Même périmètre que `run_live.releve_equity`.
+        if a_d["ok"]:
+            _eq_record({"alpaca": a_d["equity"],
+                        **({_VC.cle: b_d["equity"]}
+                           if b_d["ok"] and b_d["equity"] > 0 and not _VC.en_testnet()
+                           else {})})
     except Exception:  # noqa: BLE001
         pass
     if target_weights or crypto_weights:          # allocation PRESET (2 poches : actions + crypto)
@@ -638,6 +643,7 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
     from packages.indicators.trend import SMA
     from packages.indicators.volatility import ATR
     from packages.ml.cv import PurgedKFold
+    from packages.ml.validation_edge import bornes_label
 
     H = 21  # horizon ~1 mois (profil moyen-long terme)
 
@@ -679,7 +685,8 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
             if f is None:
                 continue
             X.append(f); y.append(1.0 if c[t + H] > c[t] else 0.0)
-            T0.append(t); T1.append(t + H)     # le label couvre [t, t+H] → purge des chevauchements
+            _b0, _b1 = bornes_label(bars, t, H)   # jours CALENDAIRES (QML-011), pas positions
+            T0.append(_b0); T1.append(_b1)
         fl = feats(c, sma, rsi, atr, rets_c, ncl - 1)
         if fl is not None:
             last[s] = fl
@@ -741,19 +748,15 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
             brier_score,
             reliability_curve,
         )
+        from packages.ml.validation_edge import calibration_hors_echantillon
+        _ = PlattCalibrator, brier_score, reliability_curve
         cut = int(len(X) * 0.8)
         if cut > 100 and len(X) - cut > 50:
-            mcal, _ = _ml_model()
+            mcal, _m = _ml_model()
             mcal.fit(X[:cut], y[:cut])
             p_te = np.asarray(mcal.predict_proba(X[cut:]), float)
-            cal = PlattCalibrator().fit(p_te, y[cut:])
-            p_cal = cal.transform(p_te)
-            calibration = {
-                "available": True,
-                "brier_raw": brier_score(y[cut:], p_te),
-                "brier_calibrated": brier_score(y[cut:], p_cal),
-                "reliability": reliability_curve(y[cut:], p_cal, bins=8),
-            }
+            # QML-011 : Platt ajusté sur une moitié du test, jugé sur l'autre.
+            calibration = calibration_hors_echantillon(p_te, y[cut:])
     except Exception:  # noqa: BLE001
         pass
 
@@ -853,9 +856,14 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
 
     # GARDE-FOU edge : un AUC OOS ≤ 0.52 = pas d'edge prédictif exploitable (le score reste
     # affiché mais ne doit PAS piloter de sizing agressif). Discipline anti-surapprentissage.
-    edge_ok = bool(cv_auc is not None and cv_auc >= 0.52)
-    edge_msg = ("Edge OOS détecté (AUC ≥ 0.52) — utilisable avec prudence." if edge_ok
-                else "Pas d'edge OOS prouvé (AUC ≤ 0.52) : score indicatif, ne pas surpondérer.")
+    # QML-011 : plancher 0,52 ET borne basse des plis > 0,5 — le plancher seul passait
+    # 3 fois sur 10 sur une marche aléatoire pure.
+    from packages.ml.validation_edge import edge_detecte
+    _edge = edge_detecte(aucs)
+    edge_ok = _edge["edge"]
+    edge_msg = ("Edge OOS détecté (test de permutation) — utilisable avec prudence." if edge_ok
+                else "Edge NON établi (UNCALIBRATED : sans test de permutation, une AUC de CV "
+                     "ne se distingue pas du hasard) — score indicatif, ne pas surpondérer.")
     # Le champion doit porter les nombres qui ont motivé son adoption : sans cela,
     # `should_promote` ne peut comparer qu'un challenger à du vide. DSR reste
     # explicitement non calibré : ce classifieur produit des labels binaires, pas une
@@ -878,6 +886,7 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
         "available": True, "model": model_name, "horizon_days": H,
         "validation": f"CV purgée + embargo (k={n_splits})", "served_from": _served,
         "edge_ok": edge_ok, "edge_message": edge_msg, "auc_floor": 0.52,
+        "edge_detail": _edge,                      # borne basse des plis (QML-011)
         "n_train": int(len(X)), "n_splits": len(aucs), "auc": cv_auc,
         "artifact_metrics": _artifact_metrics,
         "artifact_persisted": _artifact_persisted,
@@ -1377,6 +1386,7 @@ def _load_prices(instruments, sector_of, start, end, seed):
     (data, mode, real_syms) — `real_syms` = symboles à données RÉELLES (les autres sont synthétiques
     et NE doivent PAS apparaître en production/allocation/graphes : prix factices)."""
     data, real_syms = {}, set()
+    _rebases: dict[str, float] = {}        # symbole → facteur de rebasage (QML-016)
     # symbole → jour → source qui l'a fourni
     _lignage: dict[str, dict[str, str]] = {}
     db = _price_db_path()
@@ -1433,12 +1443,22 @@ def _load_prices(instruments, sector_of, start, end, seed):
         # appliquaient des priorités OPPOSÉES sur les mêmes bases (0,71 %/an d'écart sur
         # le cœur QQQ). Le lignage enregistre quelle source a fourni chaque jour.
         _noms = _noms_sources(provs, prov_db, prov_crypto)
-        for _nom, prov in zip(_noms, provs, strict=False):
+        _gots = []
+        for prov in provs:
             got = []
             for alias in _yahoo_aliases(s, ac_m):
                 got = prov.fetch_ohlcv(alias, "1d", start, end)
                 if len(got) >= 50:
                     break
+            _gots.append(got)
+        # QML-016 : base longue remise dans le référentiel d'ajustement de la maj quand un
+        # split/dividende postérieur à son export les sépare d'un facteur constant.
+        if len(_gots) == 2 and _noms[:2] == ["base longue", "maj quotidienne"]:
+            from packages.data.fusion_sources import rebaser_base_longue
+            _gots[0], _f = rebaser_base_longue(_gots[0], _gots[1])
+            if _f is not None:
+                _rebases[s] = round(_f, 6)
+        for _nom, got in zip(_noms, _gots, strict=False):
             for _b in got:
                 _cle = _b.ts.isoformat()[:10]
                 if _cle not in merged:
@@ -1452,6 +1472,11 @@ def _load_prices(instruments, sector_of, start, end, seed):
             data[s] = data_providers.create(
                 "synthetic", seed=seed, drift=drift, annual_vol=vol).fetch_ohlcv(s, "1d", start, end)
     real_syms -= _series_perimees(data, real_syms)
+    if _rebases:                           # dit, jamais silencieux
+        import logging
+        logging.getLogger("snapshot.prix").warning(
+            "base longue rebasée (ajustement postérieur à l'export) : %s",
+            ", ".join(f"{k}×{v:g}" for k, v in sorted(_rebases.items())[:20]))
     n_real = len(real_syms)
     _src = db.name if db else ("market.db" if prov_updates else "crypto.db" if prov_crypto else "?")
     _src += " + maj market.db" if (db and prov_updates) else ""
@@ -1835,12 +1860,18 @@ def build_snapshot(seed: int = 7) -> dict:
     # NETTOYAGE UNIVERS : écarte les titres PÉRIMÉS (delisted/renommés, ex. FB→META) dont
     # la dernière barre est trop ancienne → plus de 404 ni de cibles fantômes. Seuil RELATIF
     # (vs la barre la plus fraîche) → ne vide jamais l'univers, même hors-ligne.
+    # QML-002 : les périmées sont MISES DE CÔTÉ, pas jetées. La production ne les voit pas ;
+    # les backtests qui alignent par date (`preset_backtest`, momentum sectoriel) les
+    # retrouvent — sans elles, ils ne mesuraient que des survivants.
+    _perimes: dict = {}
+    _perimes_ac: dict = {}
+    _perimes_sect: dict = {}
     if contient_des_prix_reels(data_mode) and data:
-        _fresh = max(b[-1].ts for b in data.values() if b)
-        _cut = _fresh - timedelta(days=10)
-        _stale = [s for s, b in data.items() if b and b[-1].ts < _cut]
-        for s in _stale:
-            data.pop(s, None)
+        from packages.data.survivorship import separer_perimees
+        data, _perimes = separer_perimees(data, jours=10)
+        _perimes_ac = {s: acmap.get(s, "equity") for s in _perimes}
+        _perimes_sect = {s: sector_of.get(s, "") for s in _perimes}
+        for s in _perimes:
             real_syms.discard(s)
     # INTÉGRITÉ DES DONNÉES : si une base réelle est branchée, on RETIRE TOUT symbole en repli
     # synthétique de l'univers de travail → screener, ML, thèmes, conviction, preset, graphes…
@@ -2247,7 +2278,9 @@ def build_snapshot(seed: int = 7) -> dict:
     # --- PRESET « best practice » : qualité + risk-parity + DD-target + blackout + no-trade band ---
     # Backtest point-in-time, comparé au swing actuel et à l'équipondéré.
     from packages.backtest.preset_backtest import preset_backtest
-    _quality = {r["symbol"]: r.get("combined_score") for r in fundamentals_sec.get("rows", [])}
+    # QML-022 : jamais de fondamentaux SYNTHÉTIQUES dans l'univers qui part au courtier.
+    from packages.backtest.preset_weights import qualite_de_production
+    _quality = qualite_de_production(fundamentals_sec)
     # UNIVERS NÉGOCIABLE : production restreinte aux instruments (1) négociables par les brokers
     # (actions US + ETF via Alpaca, crypto via Bitmart) ET (2) à DONNÉES RÉELLES uniquement — les
     # symboles en repli synthétique (prix factices, ex. RZLV absent de YAHOO.db) sont EXCLUS de
@@ -2259,8 +2292,14 @@ def build_snapshot(seed: int = 7) -> dict:
         # pas assez de réel → on retombe sur le négociable (la bannière « données factices » prévient)
         _tradeable_data = {s: b for s, b in data.items() if is_tradeable(s, acmap.get(s, "equity"))} or data
     _ro = _os_hist.environ.get("QUANT_RISK_OVERLAY") == "1"   # opt-in overlay risque
-    preset_bt = preset_backtest(_tradeable_data, _quality, asset_classes=acmap, swing_equity=equity,
+    # BACKTEST = négociable + délistés négociables (QML-002). Alignement par date : un titre
+    # radié y garde ses dates, et sort au dernier cours connu (`dernier_connu`).
+    _bt_ac = {**_perimes_ac, **acmap}
+    _bt_data = {**{s: b for s, b in _perimes.items() if is_tradeable(s, _bt_ac.get(s, "equity"))},
+                **_tradeable_data}
+    preset_bt = preset_backtest(_bt_data, _quality, asset_classes=_bt_ac, swing_equity=equity,
                                 dd_target=_dd, band=0.03, risk_overlay=_ro)
+    preset_bt["n_delistes_injectes"] = len(_bt_data) - len(_tradeable_data)
     recommended["preset_backtest"] = preset_bt          # rattaché à l'allocation recommandée affichée
     # JOURNAL DES TRADES DU PRESET (rebalancements) → page Trades (remplace le swing legacy)
     from packages.backtest.preset_backtest import preset_trade_log
@@ -2318,6 +2357,8 @@ def build_snapshot(seed: int = 7) -> dict:
         _index_closes_dates(["QQQ", "^NDX", "^IXIC"], start, end, ndx)
         if _qqq_pct > 0 else ([], [], False))
     _mc_curve, _mc_top, _mc_w, _mc_real, _mc_weighting = [], [], {}, False, "—"
+    # Calendrier de CHAQUE cœur, pour l'apparier au preset par date (QML-004).
+    _core_dates: dict = {"qqq": list(_qqq_dates)}
     if _mc_pct > 0:
         from packages.backtest.megacap import megacap_equity_daily
         # PANIER RÉGLABLE (QUANT_MEGACAP_TOP, défaut 10). Le classement reste
@@ -2329,15 +2370,18 @@ def build_snapshot(seed: int = 7) -> dict:
                                    top_n=_mc_top_n, market_caps=_mktcaps or None)
         if _mc.get("available"):
             _mc_curve, _mc_top = _mc["equity"], _mc.get("current_top", [])
+            _core_dates["megacap"] = _mc.get("dates")
             _mc_w, _mc_real, _mc_weighting = _mc.get("current_weights", {}), True, _mc.get("weighting", "—")
     # cœur MOMENTUM SECTORIEL — TOUJOURS calculé (pour le sweep `make index-core`), activé en prod
     # seulement si présent dans la spec (QUANT_CORE_SPEC="sector_mom:0.25").
     _sm_curve, _sm_holds, _sm_secs = [], [], []
     try:
         from packages.backtest.sector_momentum import sector_momentum_equity_daily
-        _sm = sector_momentum_equity_daily(_tradeable_data, sector_of, asset_classes=acmap, init_cap=init_cap)
+        _sm = sector_momentum_equity_daily(          # délistés inclus (QML-002)
+            _bt_data, {**_perimes_sect, **sector_of}, asset_classes=_bt_ac, init_cap=init_cap)
         if _sm.get("available"):
             _sm_curve = _sm["equity"]
+            _core_dates["sector_mom"] = _sm.get("dates")
             _sm_holds, _sm_secs = _sm.get("current_holdings", []), _sm.get("current_sectors", [])
     except Exception:  # noqa: BLE001
         pass
@@ -2358,7 +2402,9 @@ def build_snapshot(seed: int = 7) -> dict:
         _cores.append((_sm_curve, _sm_pct, "sector_mom"))
     _total_core = sum(w for _, w, _ in _cores)
     if _pe.get("available") and _cores and 0 < _total_core <= 1.0:
-        _blended, _m = blend_equity_multi(_pe["equity"], [(c, w) for c, w, _ in _cores], init_cap=init_cap)
+        _blended, _m = blend_equity_multi(
+            _pe["equity"], [(c, w, _core_dates.get(k)) for c, w, k in _cores],
+            init_cap=init_cap, dates=_pe.get("dates"))                  # PAR DATE (QML-004)
         if _blended:
             _base_stats = _curve_stats(_pe["equity"][-_m:])
             _pe["equity"], _pe["dates"] = _blended, _pe["dates"][-_m:]
@@ -2406,6 +2452,7 @@ def build_snapshot(seed: int = 7) -> dict:
         _preset_ledger = preset_ledger(_tradeable_data, _quality, asset_classes=acmap, dd_target=_dd,
                                        band=0.03, init_cap=init_cap, max_trades=6000,
                                        core_closes=list(_qqq_closes) if _qqq_pct > 0 else None,
+                                       core_dates=list(_qqq_dates) if _qqq_pct > 0 else None,
                                        core_pct=_qqq_pct, core_sym="QQQ")
     except Exception:  # noqa: BLE001
         _preset_ledger = {"available": False}
@@ -2431,6 +2478,13 @@ def build_snapshot(seed: int = 7) -> dict:
     # Exécution réelle (lit les comptes brokers) — calculée TÔT pour dimensionner chaque poche
     # sur le capital de SON compte (actions ← Alpaca, crypto ← Bitmart).
     _replication = {"available": False}
+    # BUDGET DÉCLARÉ des deux poches (QML-023) : crypto ≤ QUANT_CRYPTO_PCT du compte, actions +
+    # cœur dans le reste. Avant, leur somme était renormalisée par `run_live` et la part crypto
+    # sortait du rapport de deux cibles de volatilité (25 à 56 % mesurés).
+    from packages.portfolio.budget_poches import part_crypto, repartir
+    from packages.portfolio.budget_poches import negociables
+    _preset_weights, _crypto_weights = repartir(_preset_weights, negociables(_crypto_weights),
+                                                part_crypto())
     _live = _live_with_rebalance(comp["rows"], acmap, portfolio_kpis, w_by_name,
                                  target_weights=_preset_weights, crypto_weights=_crypto_weights)
     _alp_cap = (_live["real"]["alpaca"]["equity"] or 0.0) or init_cap
@@ -2473,7 +2527,9 @@ def build_snapshot(seed: int = 7) -> dict:
                                   # visible au lieu de le laisser deviner sur le graphe.
                                   **_extension(data.get(s))})
     _alloc_rows(_preset_weights, _alp_cap, "equity")     # actions/ETF → capital Alpaca
-    _alloc_rows(_crypto_weights, _bit_cap, "crypto")     # crypto → capital Bitmart
+    # Ère paper (ADR-0029) : la crypto part sur le capital ALPACA, en fraction du compte
+    # (QML-023). La valoriser sur Bitmart affichait 0 $ pour des ordres bien réels.
+    _alloc_rows(_crypto_weights, _alp_cap, "crypto")
     # Séries OHLC pour les graphiques cliquables (Positions/Trades/Réel) — bornées (~500 barres)
     # MARQUEURS achat/vente du PRESET (par symbole) → fléchés sur le graphe technique des pages
     # Trades & Positions, exactement aux dates des rebalancements (corrige l'absence de signaux).

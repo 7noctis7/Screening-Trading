@@ -1,0 +1,15 @@
+# Grille PRÉ-ENREGISTRÉE — figée le 2026-09-25, AVANT tout résultat.
+# Toute modification change l'empreinte sha256 → nouvel essai, compté dans le DSR.
+# La période après `fin_in_sample` n'est lue qu'UNE fois (--holdout, 1 à 3 scénarios).
+# Honnêteté : 2023-2026 a déjà été VU par le chercheur (rejeu de production, QQQ) ; elle
+# reste cachée pour CETTE grille, pas vierge pour l'humain. Le verdict en tient compte.
+nom: quotidien-2026-09-25
+timeframe: 1d
+fin_in_sample: "2022-12-31"
+univers: [qqq, btc, actions_us, etf, multi_actifs, crypto]
+selections: [tout, mom_12_1, mom_6_1, basse_vol, tendance_mm200]
+ponderations: [egal, inv_vol, erc]
+overlays: [aucun, vol_cible_15, regime_mm200]
+# en barres de l'axe commun (jours de bourse)
+pas: {jour: 1, 3jours: 3, semaine: 5, mois: 21, trimestre: 63}
+top_k: 10

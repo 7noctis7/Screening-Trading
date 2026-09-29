@@ -14,6 +14,14 @@ from packages.backtest.panel import fenetre_commune
 from packages.backtest.preset_backtest import _weights_at
 
 
+def liquidite(barres: list, fenetre: int = 60) -> float:
+    """Dollar-volume MÉDIAN (close × volume) des `fenetre` dernières barres ; 0 si inconnu.
+    La médiane résiste aux journées de volume aberrant (listing, incident d'exchange)."""
+    dv = [float(b.close) * float(getattr(b, "volume", 0.0) or 0.0) for b in barres[-fenetre:]]
+    dv = [x for x in dv if np.isfinite(x) and x > 0]
+    return float(np.median(dv)) if dv else 0.0
+
+
 def crypto_weights(data: dict, asset_classes: dict | None = None, dd_target: float = 0.35,
                    lookback: int = 120, top_k: int = 12, k_dd: float = 2.5,
                    blackout_move: float = 0.20, max_weight: float = 0.20,
@@ -21,16 +29,19 @@ def crypto_weights(data: dict, asset_classes: dict | None = None, dd_target: flo
     """Poids actuels de la poche crypto (somme ≤ 1). Univers = paires crypto les plus liquides
     (proxy : dollar-volume médian récent). blackout/plafond plus larges (crypto = plus volatil)."""
     ac = asset_classes or {}
-    syms = [s for s, b in data.items()
-            if (ac.get(s) == "crypto" or "/USD" in s.upper() or s.upper().endswith(("USDT", "USDC")))
-            and b and len(b) > lookback]
+    # La CLASSE déclarée prime sur le nom : « /USD » désigne aussi GBP/USD, AUD/USD… du
+    # forex (constaté sur le VPS le 25/09). Le nom ne sert qu'aux symboles sans classe connue.
+    def _est_crypto(s):
+        if s in ac:
+            return ac[s] == "crypto"
+        su = s.upper()
+        return "/USD" in su or su.endswith(("USDT", "USDC"))
+    syms = [s for s, b in data.items() if _est_crypto(s) and b and len(b) > lookback]
     if len(syms) < 2:
         return {}
-    # tri par liquidité approchée (prix moyen × dispersion récente — proxy d'activité)
-    def _liq(s):
-        c = np.asarray([x.close for x in data[s]][-60:], float)
-        return float(np.mean(c)) * float(np.std(c) / (np.mean(c) + 1e-9))
-    universe = sorted(syms, key=_liq, reverse=True)[:top_k]
+    # tri par DOLLAR-VOLUME médian récent (QML-014). L'ancien « proxy » valait l'écart-type
+    # du PRIX en dollars : une paire chère et morte passait devant une paire échangée.
+    universe = sorted(syms, key=lambda s: liquidite(data[s]), reverse=True)[:top_k]
     # La crypto compte beaucoup de cotations récentes : sans fenêtre commune, un seul jeton
     # listé il y a trois mois ramenait toute la poche à trois mois d'historique.
     universe, L, _panel = fenetre_commune(data, universe, min_noms=2)

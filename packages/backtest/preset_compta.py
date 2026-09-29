@@ -10,10 +10,12 @@ import numpy as np
 
 from packages.backtest.preset_curves import _grille, _jours
 from packages.backtest.preset_livre import Livre
+from packages.backtest.preset_rejeu import NE_MESURE_PAS_LA_PRODUCTION
 from packages.backtest.preset_weights import _weights_at
 
 
-def _serie_coeur(core_closes: list | None, core_pct: float, L: int):
+def _serie_coeur(core_closes: list | None, core_pct: float, L: int,
+                 dates: list | None = None, core_dates: list | None = None):
     """CŒUR indiciel (ex. QQQ à 50 %) aligné sur la fenêtre du preset.
 
     Robuste : si le cœur est un peu plus court, on cale sa queue et on remplit le début à plat
@@ -23,6 +25,15 @@ def _serie_coeur(core_closes: list | None, core_pct: float, L: int):
     if not (bool(core_closes) and cp > 0 and len(core_closes) >= 250):
         return None, cp
     cc = list(core_closes)
+    if dates is not None and core_dates is not None:
+        # PAR DATE (QML-004) : `cc[-L:]` supposait les deux calendriers identiques. Avant la
+        # première cotation, le cœur est tenu à plat (aucun rendement inventé).
+        from packages.backtest.panel import valeurs_sur_axe
+        v = valeurs_sur_axe(cc, list(core_dates), list(dates)[:L])
+        premier = next((x for x in v if x is not None), None)
+        if premier is None:
+            return None, cp
+        return np.asarray([premier if x is None else x for x in v], float), cp
     arr = (np.asarray(cc[-L:], float) if len(cc) >= L
            else np.asarray([cc[0]] * (L - len(cc)) + cc, float))
     return arr, cp
@@ -126,20 +137,23 @@ def _derouler(livre: Livre, A, rets, universe: list, idx: dict, dts: list, L: in
     sat = 1.0 - cp if core_on else 1.0        # part allouée au satellite preset
     w = np.zeros(len(universe))
     eq_curve, out_dates = [float(init_cap)], [dts[start]]
+    a_executer = None             # décidé au close t, exécuté au close t+1 (QML-003)
     for t in range(start, L - 1):
-        if (t - start) % step == 0:           # rééquilibrage (entre deux, on TIENT les parts)
+        if a_executer is not None:            # exécution au cours du LENDEMAIN de la décision
+            px = A[:, t]
+            cpx = float(core_arr[t]) if core_on else None
+            equity = livre.equity(px, idx, universe, cpx)
+            if core_on:
+                livre.rebalance_coeur(core_sym, dts[t], cpx, cp * equity, equity)
+            livre.rebalance_satellite(universe, dts[t], px, a_executer, sat, equity)
+            w, a_executer = a_executer, None
+        if (t - start) % step == 0:           # décision (entre deux, on TIENT les parts)
             nw = _weights_at(A, rets, t, lookback, blackout_move, max_weight,
                              min_names, tgt_vol)
             if nw is not None:
                 if band > 0 and w.sum() > 0:
                     nw = np.where(np.abs(nw - w) < band, w, nw)
-                px = A[:, t]
-                cpx = float(core_arr[t]) if core_on else None
-                equity = livre.equity(px, idx, universe, cpx)
-                if core_on:
-                    livre.rebalance_coeur(core_sym, dts[t], cpx, cp * equity, equity)
-                livre.rebalance_satellite(universe, dts[t], px, nw, sat, equity)
-                w = nw
+                a_executer = nw
         px1 = A[:, t + 1]                     # valorisation quotidienne (mark-to-market)
         val = sum(livre.shares[s] * px1[idx[s]] for s in universe)
         eq_curve.append(livre.cash + val
@@ -154,6 +168,7 @@ def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict |
                   blackout_move: float = 0.12, max_weight: float = 0.10, min_names: int = 12,
                   init_cap: float = 10000.0, max_trades: int = 500,
                   core_closes: list | None = None, core_pct: float = 0.0,
+                  core_dates: list | None = None,
                   core_sym: str = "QQQ") -> dict:
     """Journal de trades RÉEL du portefeuille de production (backtest discret parts/cash sur prix
     réels) qui JUSTIFIE la performance affichée : chaque achat/vente avec date, actif, sens, qté,
@@ -171,7 +186,7 @@ def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict |
     tgt_vol = max(0.0, abs(dd_target)) / k_dd
     start = max(lookback, 50)
     livre = Livre(init_cap, universe, asset_classes or {})
-    core_arr, cp = _serie_coeur(core_closes, core_pct, L)
+    core_arr, cp = _serie_coeur(core_closes, core_pct, L, dates=dts, core_dates=core_dates)
     core_on = core_arr is not None
     eq_curve, out_dates = _derouler(livre, A, rets, universe, idx, dts, L, start, step,
                                     band, lookback, blackout_move, max_weight, min_names,
@@ -187,7 +202,8 @@ def preset_ledger(data: dict, quality: dict | None = None, asset_classes: dict |
         avgc[core_sym] = livre.qcost
     _latent_fifo(livre.trades, cur, avgc)
     trades = sorted(livre.trades, key=lambda x: x["date"], reverse=True)[:max_trades]
-    return {"available": True, "trades": trades, "open_positions": open_pos,
+    return {"available": True, **NE_MESURE_PAS_LA_PRODUCTION,   # QML-001 : ≠ règle tradée
+            "trades": trades, "open_positions": open_pos,
             "equity": [round(x, 2) for x in eq_curve], "dates": out_dates,
             "summary": _resume(livre, open_pos, init_cap, n_all, universe, core_sym,
                                core_on, dts, L, start)}

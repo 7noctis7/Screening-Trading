@@ -71,17 +71,20 @@ def deflation_params(path: str | Path = DEFAULT_PATH,
     est falsifiable.
 
     `N` (nombre d'essais) reste compté sur TOUS les facteurs distincts : la déflation
-    par le multiple testing ne dépend pas, elle, de la périodicité.
+    par le multiple testing ne dépend pas, elle, de la périodicité. Un enregistrement
+    portant `n_essais` (balayage du banc d'exploration) compte pour autant d'essais.
     """
     recs = read_records(path)
     by_facteur: dict[str, float] = {}
-    distinct: set[str] = set()
+    distinct: dict[str, int] = {}
     ignores = 0
     for r in recs:
         f = r.get("facteur")
         if not f:
             continue
-        distinct.add(f)
+        # Un balayage consigne UN enregistrement pour `n_essais` scénarios : chacun compte.
+        ne = r.get("n_essais")
+        distinct[f] = max(distinct.get(f, 1), int(ne) if isinstance(ne, int) and ne > 0 else 1)
         sp = r.get("sharpe_period")
         if isinstance(sp, (int, float)):
             by_facteur[f] = float(sp)
@@ -91,7 +94,7 @@ def deflation_params(path: str | Path = DEFAULT_PATH,
             by_facteur[f] = float(sh) / float(ppy) ** 0.5
         elif isinstance(sh, (int, float)):
             ignores += 1                      # périodicité inconnue → EXCLU, jamais deviné
-    n = max(min_trials, len(distinct) or len(recs))
+    n = max(min_trials, sum(distinct.values()) or len(recs))
     sharpes = list(by_facteur.values())
     if len(sharpes) < 2:
         return n, None

@@ -55,6 +55,28 @@ def _jour(barre) -> str:
     return (d().isoformat() if callable(d) else str(ts)[:10])
 
 
+def _grille_des_vivants(par_sym: dict, couverture: float, min_noms: int) -> list[str]:
+    """Dates cotées par ≥ `couverture` des titres VIVANTS ce jour-là (QML-012).
+
+    VIVANT = introduit (première barre ≤ j) et pas encore radié (dernière barre ≥ j). La
+    couverture se mesurait sur TOUS les titres de l'échantillon : une introduction future
+    abaissait la couverture du passé et effaçait des années de grille (2015 → 2019 mesuré
+    le 25/09, mêmes rendements passés). Mesurée parmi les vivants, la grille des dates ≤ T
+    ne dépend plus de ce qui arrive après T. Au moins `min_noms` vivants par date."""
+    from bisect import bisect_left, bisect_right
+    from collections import Counter
+    compte = Counter(j for serie in par_sym.values() for j in serie)
+    debuts = sorted(min(serie) for serie in par_sym.values())
+    fins = sorted(max(serie) for serie in par_sym.values())
+    c = max(0.0, min(1.0, couverture))
+    garde = []
+    for j, n in compte.items():
+        vivants = bisect_right(debuts, j) - bisect_left(fins, j)
+        if vivants >= min_noms and n >= max(1, int(round(c * vivants))):
+            garde.append(j)
+    return sorted(garde)
+
+
 def aligner_par_date(data: dict, syms: list[str], couverture: float = COUVERTURE_DEFAUT,
                      min_noms: int = MIN_NOMS) -> tuple[list[str], list[str], "object", dict]:
     """Aligne les séries PAR DATE. Renvoie (noms, dates, matrice n×T, diagnostic).
@@ -91,10 +113,7 @@ def aligner_par_date(data: dict, syms: list[str], couverture: float = COUVERTURE
     if len(par_sym) < min_noms:
         return [], [], np.empty((0, 0)), {"available": False, "n_eligibles": len(par_sym)}
 
-    from collections import Counter
-    compte = Counter(j for serie in par_sym.values() for j in serie)
-    seuil = max(1, int(round(max(0.0, min(1.0, couverture)) * len(par_sym))))
-    dates = sorted(j for j, n in compte.items() if n >= seuil)
+    dates = _grille_des_vivants(par_sym, couverture, min_noms)
     if not dates:
         return [], [], np.empty((0, 0)), {"available": False, "n_eligibles": len(par_sym)}
 
@@ -141,6 +160,24 @@ def apparier_deux_series(a: list[float], dates_a: list[str],
     par_b = dict(zip(dates_b, b, strict=False))
     communes = sorted(set(par_a) & set(par_b))
     return ([par_a[d] for d in communes], [par_b[d] for d in communes], communes)
+
+
+def valeurs_sur_axe(valeurs: list, dates_src: list, axe: list) -> list:
+    """Valeurs d'une série datée, reportées sur un autre AXE de dates — le passé seulement.
+
+    À la date `d` de l'axe : la dernière valeur observée à une date ≤ `d` ; `None` avant la
+    première. Les dates sont comparées au JOUR (`str(d)[:10]`) : un indice horodaté à 16 h et
+    une barre à minuit désignent la même séance. C'est la règle d'`apparier_deux_series`,
+    sans exiger que les deux calendriers se recoupent exactement (QML-004)."""
+    from bisect import bisect_right
+    paires = sorted((str(d)[:10], v) for d, v in zip(dates_src, valeurs, strict=False)
+                    if v is not None)
+    jours = [j for j, _ in paires]
+    out = []
+    for d in axe:
+        k = bisect_right(jours, str(d)[:10]) - 1
+        out.append(paires[k][1] if k >= 0 else None)
+    return out
 
 
 def dernier_connu(A, t: int) -> "object":

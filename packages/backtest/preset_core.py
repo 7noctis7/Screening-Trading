@@ -169,6 +169,20 @@ def _fwd(A, entry: int, nxt: int, aligner_dates: bool):
 
 
 def couts_univers(universe: list, asset_classes: dict) -> np.ndarray:
-    """Barème aller-retour par classe d'actifs."""
+    """Coût ALLER SIMPLE par classe d'actifs, appliqué à chaque jambe de |Δw| (QML-013).
+
+    L'aller-retour était facturé à chaque jambe : un achat et une vente payaient chacun un
+    aller-retour. Convention alignée sur le rejeu de production et le ledger."""
     return np.asarray([CostModel.for_asset_class(asset_classes.get(s, "equity")).round_trip_bps
-                       / 1e4 for s in universe])
+                       / 2e4 for s in universe])
+
+
+def deriver(w: np.ndarray, fwd: np.ndarray) -> np.ndarray:
+    """Poids DÉTENUS en fin de pas : la cible a dérivé avec les prix, le cash non (QML-013).
+
+    Le turnover du pas suivant se mesure contre eux, pas contre la cible d'avant — sinon
+    un titre qui a pris 30 % paraît encore à son poids cible et son allègement est gratuit."""
+    w = np.asarray(w, float)
+    fwd = np.nan_to_num(np.asarray(fwd, float), nan=0.0)
+    valeur = 1.0 - float(w.sum()) + float((w * (1.0 + fwd)).sum())
+    return w * (1.0 + fwd) / valeur if valeur > 0 else w

@@ -101,17 +101,33 @@ class AlpacaBroker:
         order.status = order_status_from_alpaca(res)
         return order
 
-    def submit_notional(self, symbol: str, side: Side, notional: float):
+    def submit_notional(self, symbol: str, side: Side, notional: float,
+                        client_id: str | None = None):
         """Ordre marché par MONTANT $ (Alpaca gère le fractionnement) — pratique pour répliquer
-        une allocation cible en %. Reste en paper si paper=True."""
+        une allocation cible en %. Reste en paper si paper=True.
+
+        IDEMPOTENT PAR `client_id` (QML-006). `run_live` appelle cette méthode sous `retry` :
+        sans identifiant, un envoi accepté puis perdu en route (timeout) repartait une seconde
+        fois — un ordre doublé. Avec lui, Alpaca refuse le doublon, et une exception n'est
+        rendue qu'après avoir demandé au courtier s'il détient déjà l'ordre : s'il l'a, c'est
+        CET ordre qu'on rend, pas une erreur."""
         from alpaca.trading.requests import MarketOrderRequest
         from alpaca.trading.enums import OrderSide, TimeInForce
         tif = TimeInForce.GTC if _is_crypto_symbol(symbol) else TimeInForce.DAY
         req = MarketOrderRequest(
             symbol=symbol, notional=round(notional, 2),
             side=OrderSide.BUY if side is Side.LONG else OrderSide.SELL,
-            time_in_force=tif)
-        return self._client.submit_order(req)
+            time_in_force=tif, client_order_id=client_id)
+        try:
+            return self._client.submit_order(req)
+        except Exception:
+            if not client_id:
+                raise
+            try:
+                return self._client.get_order_by_client_id(client_id)
+            except Exception:  # noqa: BLE001 — l'ordre n'existe pas : l'erreur d'origine vaut
+                pass
+            raise
 
     def positions(self) -> list[Position]:
         return [position_from_alpaca(p) for p in self._client.get_all_positions()]

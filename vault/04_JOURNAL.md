@@ -1,5 +1,93 @@
 # 04 — JOURNAL
 
+## Session 2026-09-25 (5ᵉ) — Option (c) : un banc qui classe sans fabriquer de gagnant
+
+L'utilisateur veut voir le classement de nombreux scénarios avant de choisir : rythmes de
+l'heure au trimestre, pondérations, indicateurs, univers. Livré : `make explorer` (ADR-0205).
+La grille quotidienne compte 870 scénarios et la grille crypto 1h en compte 315. La
+période cachée n'est jamais transmise au moteur, et le registre refuse sa seconde lecture.
+Les tests ont été écrits d'abord : causalité de chaque règle, exécution à J+1, frais,
+empreinte, lecture unique, déflation sur du bruit pur et intégrité de la période cachée
+(un krach après la borne ne change aucun rendement en échantillon).
+
+Un test de bout en bout en synthétique a trouvé un défaut avant le premier passage
+réel : `btc`, à un seul actif, était développé en quinze sélections identiques, ce qui
+gonflait N avec des doublons. Il est maintenant mono-actif comme QQQ. Prochaine étape :
+passage sur le VPS, puis lecture unique de la période cachée pour 1 à 3 scénarios.
+
+## Session 2026-09-25 (4ᵉ) — Sur données réelles : ce que la règle tradée aurait fait
+
+Passage sur le VPS (le Mac n'avait pas accès SSH à GitHub : fetch HTTPS). Mesures
+consignées dans `10_BACKTEST_RESULTS`. Deux défauts trouvés PAR les données réelles et
+corrigés le soir même : (1) l'aperçu `make live` annonçait des refus du portail que le
+passage réel ne ferait pas (les ventes ne libéraient rien en dry-run) ; (2) MON budget
+crypto (QML-023) se réservait à GBP/USD, AUD/USD, NZD/USD — du forex nommé « /USD » —
+rognant QQQ de 7 905 $ pour une poche vide. Leçon : un budget se réserve APRÈS le filtre de
+négociabilité, jamais avant.
+
+Ajouté ensuite : références QQQ et équipondéré sur les MÊMES dates que le rejeu.
+
+## Session 2026-09-25 (3ᵉ) — Les P2 : des garde-fous qui agissent, une validation qui tient sur du bruit
+
+Sept correctifs (ADR-0204), chacun précédé d'un test qui échouait. Deux points méritent
+d'être relus. **L'edge ML** : j'ai d'abord remplacé le plancher 0,52 par une borne basse
+sur les plis — puis MESURÉ sur dix marches aléatoires : 4 faux positifs sur 10 (contre 5).
+Correctif rejeté ; seule une distribution nulle de permutation peut établir un edge, et
+tant qu'elle n'est pas produite, l'onglet dit UNCALIBRATED. **Une erreur de l'audit** :
+QML-015 affirmait que le snapshot entrait au close du signal ; il passait déjà
+`next_open_fills=True` — découvert par un argument dupliqué que Python a refusé.
+
+Effet sur la production dès le prochain passage : le blackout peut désormais écarter un
+titre après un choc de ±12 % sur deux séances ; la poche crypto change de paires.
+
+## Session 2026-09-25 (2ᵉ) — Les P1 de l'audit : ce qui part au courtier ne ment plus
+
+Autorisation P1 reçue. Trois choix de politique posés d'abord (gel partout, budget crypto
+15 %, sélection qualité conservée mais étiquetée), puis dix correctifs, chacun précédé d'un
+test qui échouait sur l'ancien code (ADR-0203).
+
+**Ce qui change dans le compte paper dès le prochain passage :** plus aucune vente forcée
+par un garde-fou ; crypto ≤ 15 % et QQQ réellement à 50 % × 85 % ; ordres idempotents sous
+retry ; aucun univers choisi sur des fondamentaux inventés ; porte de régime sur un indice
+équipondéré en rendements (elle peut s'ouvrir ou se fermer AUTREMENT qu'hier).
+
+**Ce qui change dans les chiffres publiés :** courbe du tableau de bord et ledger à J+1,
+QQQ apparié par date, délistés dans `preset_backtest`, DSR déflaté par le ledger. Rien n'a
+été mesuré sur données réelles — le conteneur n'a pas les bases.
+
+## Session 2026-09-25 — Audit QML, et le seul P0 : on mesurait un autre portefeuille
+
+**AUDIT (lecture seule, puis P0 autorisé).** Cartographie complète du chemin d'ordres
+(`cron_live.sh → run_live → build_snapshot → preset_latest_weights_explique → _reconcile`).
+Le chemin est CAUSAL : les poids n'utilisent que la dernière barre, et les tests par
+troncature de `preset_backtest`/`preset_equity_daily` passent. Suite : 3513 verts avant
+correctif.
+
+**LE P0 (QML-001).** Trois « presets » : les métriques (`preset_backtest`), la courbe du
+tableau de bord (`preset_equity_daily`/`preset_ledger`) et la production diffèrent par
+l'univers, les portes, le lag, la fréquence, la bande, le blackout et le plafond. Aucun
+chiffre publié — ni le Sharpe 1,33 / DSR 98 % du blend, ni `make backtest-preset` — ne
+décrivait ce qui trade. Un symptôme le montrait depuis des semaines : 41 clôtures/semaine
+en paper contre 1,5× de turnover par an au backtest.
+
+**CORRIGÉ (ADR-0202).** `preset_rejeu` rappelle la fonction de production elle-même à
+chaque date, sur les données de cette date, et exécute à J+1 avec `decider` et
+`order_gate`. 9 tests, dont un qui échouait sur l'ancien code (les sorties n'avouaient pas
+ne pas mesurer la production). Contrôle sur bruit pur sans dérive : Sharpe −0,59 à +0,24
+sur 4 graines — pas d'alpha fabriqué. Suite : 3525 verts. **Aucun chiffre réel mesuré :
+le conteneur d'audit n'a pas les bases.** À lancer sur le VPS : `make preset-replay`.
+
+**TROUVÉ AU PASSAGE, NON CORRIGÉ (P1, autorisation requise)** : voir la ligne P1 du TODO.
+Deux méritent d'être lus avant toute autre chose : QML-006 (l'idempotence « fermée » ne
+couvre pas `submit_notional`, le seul appel réel) et QML-022 (une panne réseau des
+fondamentaux fait sélectionner l'univers de production sur des fondamentaux SYNTHÉTIQUES,
+sans que le diagnostic le dise — démontré).
+
+**CE QUI N'A PAS ÉTÉ DÉMONTRÉ.** La CV purgée du ML tourne sur un axe positionnel ; sur
+5 graines, l'effet sur l'AUC reste dans le bruit (0,510 contre 0,517). Mais le seuil
+« edge ≥ 0,52 » passe 3 fois sur 10 sur du bruit pur : l'étiquette « edge détecté » ne
+porte rien.
+
 ## Session 2026-09-24 (3ᵉ) — Le chiffre pondéré mesuré, et ce qu'il a exhumé
 
 **FAIT.**

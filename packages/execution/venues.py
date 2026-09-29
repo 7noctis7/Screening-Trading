@@ -35,6 +35,11 @@ class Venue:
         """Les clés sont-elles présentes ? Une place sans clés n'est jamais instanciée."""
         return all(os.environ.get(k) for k in self.env)
 
+    def en_testnet(self) -> bool:
+        """Bac à sable actif ? Son solde est de la fausse monnaie : il n'entre dans aucun
+        historique d'equity (QML-024). Même défaut que `BinanceBroker` : testnet si absent."""
+        return bool(self.testnet_env) and os.environ.get(self.testnet_env, "1") == "1"
+
     def broker(self, dry_run: bool = True):
         """Instancie le courtier. Lève si la dépendance manque — l'appelant décide quoi en faire."""
         mod, _, cls = self._fabrique.partition(":")

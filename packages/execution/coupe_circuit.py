@@ -11,9 +11,10 @@ réconcilie pas avec le compte (ADR-0117 : lots fantômes, chemin d'import dispa
 s'appuyer dessus ferait déclencher un coupe-circuit sur un chiffre faux. L'equity du
 courtier, elle, est la réalité : `equity_veille − equity_du_jour`.
 
-POURQUOI IL DÉMARRE DÉSARMÉ. Au déclenchement, le disjoncteur demande de FERMER LES
-POSITIONS. C'est le geste le plus destructeur du système, et il serait décidé par un
-composant qui n'a jamais tourné sur des données réelles. On l'observe donc d'abord :
+POURQUOI IL DÉMARRE DÉSARMÉ. `risk/disjoncteur` prévoit de FERMER LES POSITIONS au
+déclenchement ; `run_live` ne le fait pas — armé, il BLOQUE les achats, sans rien vendre
+(QML-007, décision du 25/09 : un garde-fou ne vend jamais). Même bloquer tous les achats
+reste un geste lourd, décidé par un composant qui n'a jamais tourné sur données réelles. On l'observe donc d'abord :
 il calcule, il publie, il n'agit pas. `QUANT_DISJONCTEUR=1` l'arme, une fois qu'on a
 vu sur plusieurs semaines les jours où il AURAIT coupé. Armer un coupe-circuit sans
 cette vérification, c'est remplacer un risque de marché par un risque d'automatisme.
@@ -72,7 +73,7 @@ def _sauver(d) -> None:
         pass
 
 
-def variation_du_jour(equity: float, historique=None) -> float | None:
+def variation_du_jour(equity: float, historique=None, cles: set | None = None) -> float | None:
     """`equity − dernière equity d'un jour ANTÉRIEUR`, ou None si l'historique manque.
 
     Un point du JOUR MÊME est ignoré : il a pu être écrit par un passage précédent du
@@ -83,16 +84,19 @@ def variation_du_jour(equity: float, historique=None) -> float | None:
     hist = historique if historique is not None else _load()
     aujourdhui = datetime.now(UTC).date().isoformat()
     passes = [h for h in hist if h.get("date") and h["date"] < aujourdhui]
+    if cles:                     # même périmètre que `equity` (QML-024)
+        passes = [h for h in passes if all((h.get(k) or 0) > 0 for k in cles)]
     if not passes:
         return None
     veille = passes[-1]
-    total = sum(float(v) for k, v in veille.items() if k != "date")
+    total = sum(float(v) for k, v in veille.items()
+                if k != "date" and (not cles or k in cles))
     return float(equity) - total if total > 0 else None
 
 
-def evaluer(equity: float, historique=None) -> dict:
+def evaluer(equity: float, historique=None, cles: set | None = None) -> dict:
     """Observe la journée et renvoie la décision. `agit` dit si elle est APPLIQUÉE."""
-    delta = variation_du_jour(equity, historique)
+    delta = variation_du_jour(equity, historique, cles)
     if delta is None:
         return {"disponible": False, "agit": False,
                 "motif": "pas d'equity antérieure : rien à comparer"}

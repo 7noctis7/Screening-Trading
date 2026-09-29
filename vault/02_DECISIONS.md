@@ -2,6 +2,123 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0205 — Chercher un rendement sans se mentir : grille figée, déflation, période lue une fois (2026-09-25)
+
+**CONTEXTE.** La règle tradée est indiscernable de QQQ + cash (ADR-0202, 10_BACKTEST_RESULTS).
+L'utilisateur choisit l'option (c) et demande à comparer de nombreux scénarios : rythmes de
+l'heure au trimestre, allocations, indicateurs, univers. Classer des centaines de règles
+sur un même historique puis garder la première est exactement ce qui a produit les
+chiffres flatteurs d'avant.
+
+**DÉCISIONS.** `make explorer` (`packages/research/explo_{regles,moteur,grille,donnees}.py`).
+(1) La grille est un YAML dans `config/exploration/`, figé par un sha256 avant tout calcul.
+Modifier la grille change son empreinte, et donc compte comme un nouvel essai.
+(2) Les règles sont causales par construction : tranche `A[:, :t+1]` avant tout calcul, et
+fenêtres en jours de bourse converties en barres. Exécution au close t+1 ; frais aller
+simple sur le turnover contre les poids dérivés.
+(3) Tous les scénarios partagent un seul axe de dates, sans quoi la PBO (CSCV) ne compare
+rien. Chaque scénario compte dans N du DSR : le ledger lit désormais `n_essais`.
+(4) Le moteur ne reçoit pas les barres postérieures à `fin_in_sample`. `--holdout` en lit
+1 à 3 ; la lecture est inscrite AVANT le calcul, et une seconde est refusée.
+(5) La sortie donne le Sharpe médian PAR DIMENSION (rythme, sélection, overlay…). Une
+médiane sur des dizaines de scénarios ne se gagne pas à la chance, contrairement à la
+première place.
+
+**LIMITES DÉCLARÉES.** 2023-2026 est cachée pour la grille, mais a déjà été vue par le
+chercheur (rejeu, QQQ). Le moteur de classement n'a ni bande, ni plancher, ni portail : il
+compare des règles entre elles, il ne prédit pas la production. L'horaire n'existe qu'en
+crypto (Binance) : aucune conclusion horaire sur les actions.
+
+---
+
+## ADR-0204 — P2 de l'audit : garde-fous qui agissent, validation qui tient sur du bruit (2026-09-25)
+
+**CONTEXTE.** P2 de l'audit QML autorisés. Tous corrigibles sans données réelles.
+
+**DÉCISIONS.** (QML-010) le blackout post-choc s'applique tant qu'il laisse la MOITIÉ du
+panel — le seuil `min_names` égalait la taille du panel et le rendait inerte en production.
+(QML-014) poche crypto classée par dollar-volume médian 60 j. (QML-011) un edge ML ne
+s'affirme que contre une distribution NULLE de permutation ; sans elle : UNCALIBRATED. Une
+borne basse sur la dispersion des plis a été ESSAYÉE et REJETÉE : 4 faux positifs sur 10
+sur bruit pur (plancher seul : 5 sur 10). Platt jugé hors de son échantillon d'ajustement ;
+CV purgée sur jours calendaires. (QML-012) couverture de la grille mesurée parmi les titres
+VIVANTS à la date : la fenêtre passée ne dépend plus des cotations futures. (QML-013) coût
+aller simple par jambe (fin du double comptage) ET turnover contre les poids DÉRIVÉS
+(fin de la sous-estimation) — corrigés ensemble pour ne pas choisir celui qui arrange.
+(QML-015) gap sous le stop exécuté à l'ouverture. (QML-016) base longue remise dans le
+référentiel d'ajustement de la maj quand un facteur CONSTANT les sépare.
+
+**RESTE.** Axe positionnel de `fast_swing` (legacy, réécriture) ; `snapshot.py` à 3 050
+lignes et `run_live.py` à 1 030 (règle des 400) — découpage à planifier.
+
+**CORRECTION DE L'AUDIT.** QML-015 affirmait une entrée au close du signal dans le snapshot :
+faux, l'appel passait déjà `next_open_fills=True`.
+
+---
+
+## ADR-0203 — Un garde-fou ne vend jamais ; la crypto a un budget ; l'indice des portes pèse en rendements (2026-09-25)
+
+**CONTEXTE.** P1 de l'audit QML du 25/09, autorisés. Trois choix de POLITIQUE posés à
+l'utilisateur avant d'écrire une ligne ; le reste est de la correction pure.
+
+**DÉCISIONS DE L'UTILISATEUR.** (1) *Gel partout* (QML-007) : un kill-switch plafonne les
+achats à `cible × reduce` et ne crée jamais de vente (`run_live.cible_sous_garde`) ;
+`reduce = 0` n'achète rien, les allègements de stratégie partent. Avant, une rupture de
+drawdown gelait tout pendant qu'une simple alerte TV vendait. (2) *Budget crypto déclaré*
+(QML-023) : `QUANT_CRYPTO_PCT`, 15 % par défaut (`portfolio/budget_poches`) ; une poche
+sous-investie garde sa part en cash. (3) *Sélection qualité conservée*, étiquetée
+UNCALIBRATED ; jamais de fondamentaux synthétiques (QML-022).
+
+**CORRECTIONS.** Idempotence par identifiant client sur `submit_notional`, le seul appel
+réel (QML-006) · historique d'equity à périmètre unique (QML-024) · courbe du tableau de
+bord et ledger exécutés à J+1 (QML-003) · cœur QQQ apparié par date (QML-004) · délistés
+réinjectés dans les backtests alignés par date (QML-002) · `mkt` = indice équipondéré en
+rendements (QML-009, partie b) · IC du screening par date (QML-008) · DSR déflaté par le
+ledger, « walk-forward » retiré des libellés (QML-005, partiel).
+
+**CONSÉQUENCE À ASSUMER.** Tous les chiffres publiés bougent au prochain build : c'est
+l'effet voulu. Aucun n'a été mesuré ici (pas de base dans le conteneur) — et aucune
+conclusion ne se tire avant `make preset-replay` sur données réelles.
+
+---
+
+## ADR-0202 — La production se mesure par REJEU de sa propre fonction (2026-09-25)
+
+**CONTEXTE.** Audit QML du 25/09, finding P0 **QML-001** : trois implémentations du
+« preset » coexistaient et aucune n'était celle qui trade. `preset_backtest` (métriques :
+univers momentum figé en 2015, 30 noms, pas de 21 j, bande de 3 points, blackout toujours
+appliqué), `preset_equity_daily`/`preset_ledger` (tableau de bord : sans portes, fill au
+close du signal) et `preset_latest_weights_explique` (production : 12 noms re-sélectionnés
+à chaque passage, portes, plafond adaptatif, bande de 0,5 % du capital, plancher, portail).
+Le paper tourne à une détention médiane d'un jour, le backtest à 1,5× de turnover par an.
+
+**DÉCISION.** `packages/backtest/preset_rejeu.py` rejoue **la fonction de production
+elle-même**, date par date, sur les données tronquées à chaque date, puis exécute au close
+suivant avec `rebalance_plan.decider` et `risk.order_gate.evaluer` — les briques de
+`run_live`, ventes d'abord. Rien de la décision n'est réimplémenté : c'est la seule
+propriété qui empêche une quatrième divergence. `make preset-replay` le lance sur données
+réelles, l'imprime à côté de `preset_backtest` et le consigne au ledger.
+
+**LES TROIS SORTIES HISTORIQUES LE DISENT.** Elles portent `mesure_la_production: False`
+et renvoient au rejeu. Elles ne sont ni supprimées ni modifiées dans leurs chiffres : le
+correctif ne décide pas à la place de l'utilisateur laquelle doit disparaître.
+
+**CE QUE LE REJEU NE MESURE PAS, écrit dans sa sortie.** (1) La sélection par QUALITÉ :
+le score fondamental n'existe qu'au présent, le rejeu passe `quality={}` (branche
+momentum). Tant que la production sélectionne par qualité, cette branche reste
+**UNCALIBRATED**. (2) Exécution au close suivant, prudente face aux ~15 h ET réelles.
+(3) Poche crypto et renormalisation commune (QML-023). (4) Univers actuel (QML-002).
+
+**DÉCISION RESTANT À L'UTILISATEUR.** Aligner la production sur la règle mesurable
+(momentum), ou garder la qualité en l'assumant non validée. Le rejeu ne tranche pas.
+
+**CONTRÔLES.** Équivalence exacte avec la production à chaque date, troncature (l'avenir
+ne réécrit pas le passé), exécution après décision, bande/plancher/portail de `run_live`,
+frais. Sur bruit pur sans dérive, Sharpe −0,59 à +0,24 sur 4 graines (≈ 0 moins les
+frais) : le rejeu ne fabrique pas d'alpha.
+
+---
+
 ## ADR-0201 — Cinquante publications par compte, et pas une de plus (2026-09-24)
 
 **CONTEXTE.** Demande explicite de l'utilisateur : « conserver que les 50 tweets les plus
