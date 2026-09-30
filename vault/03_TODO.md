@@ -35,6 +35,10 @@
       --aleatoire 8 --export-report docs/SIMULATION_RESULTS_crypto.md"`
       La graine 20260930 est fixée d'avance. Lire la PBO et le DSR AVANT le classement.
       Consigner dans 10_BACKTEST_RESULTS.
+- [ ] **P1 — SMCLXTP-A bat-il le setup de production ? `make satellite-smc` sur le VPS (30/09).**
+      Même cœur QQQ, mêmes dates, mêmes frais ; seul le satellite change (équipondéré des
+      titres où SMCLXTP-A est acheteur). Règle écrite AVANT : MEILLEUR seulement si ΔSharpe
+      apparié > 0 avec p < 0,05 ET maxDD pas pire ; sinon production conservée.
 - [x] **FAIT 30/09 (VPS)** — 12 actifs : Sharpe médian 0,69, CAGR médian 20 % contre 42 % en B&H ;
       bat le B&H en CAGR sur 2/12 (PL, ABCL), maxDD plus faible sur 12/12. Cf. 10_BACKTEST_RESULTS.
 - [x] ~~P1 — Backtest SMCLXTP-A sur les 12 actifs, depuis le VPS : `make smclxtp-backtest`
