@@ -1,7 +1,7 @@
 """make satellite-smc — SMCLXTP-A bat-il le setup de production (cœur QQQ + preset) ?
 
 Rejoue les décisions de production date par date, puis remplace SEULEMENT le satellite
-par SMCLXTP-A (équipondéré des titres où il est acheteur) : même cœur QQQ, mêmes dates,
+par SMCLXTP-A (les 12 titres acheteurs au plus fort momentum 12-1, équipondérés) : même cœur QQQ, mêmes dates,
 même exécution, même bande, mêmes frais (`packages/backtest/satellite_smc.py`).
 
 Règle écrite AVANT la mesure : SMCLXTP-A n'est MEILLEUR que si ΔSharpe apparié > 0 avec
@@ -29,8 +29,10 @@ def _imprimer(res: dict, coeur: dict) -> None:
     from scripts.preset_replay import _ligne
     st, d = res["stats"], res["delta"]
     print(f"\n{res['dates'][0]} → {res['dates'][-1]} · cœur {coeur or 'aucun'} · "
-          f"SMCLXTP-A acheteur sur {res['titres_long_moyen']:.0f} titres en moyenne "
-          f"({res['decisions_sans_long']} décisions sans aucun)\n")
+          f"SMCLXTP-A : {res['titres_long_moyen']:.1f} titres retenus en moyenne "
+          f"({res['decisions_sans_long']} décisions sans aucun) · satellite investi en "
+          f"moyenne : production {res['exposition_satellite']['production']:.0%}, "
+          f"SMCLXTP-A {res['exposition_satellite']['smclxtp']:.0%} du capital\n")
     for k, nom in (("production", "PRODUCTION (cœur + preset)"),
                    ("smclxtp", "cœur + SMCLXTP-A")):
         print(_ligne(nom, st[k]) + f"  frais {res['frais'][k]:,.0f} $ · "

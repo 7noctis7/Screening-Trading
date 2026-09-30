@@ -38,7 +38,9 @@
 - [ ] **P1 — Méta-filtre v2 (ADR-0210) : brancher `ml/stationnaires` dans `ml/meta_smc`
       comme NOUVEL essai pré-enregistré, relancer `make meta-smc` sur le VPS. Ensuite, un
       fichier par signal primaire : FVG, order blocks, sweep/SFP, divergences RSI/MACD, POC.
-- [ ] **P1 — SMCLXTP-A bat-il le setup de production ? `make satellite-smc` sur le VPS (30/09).**
+- [ ] **P1 — RELANCER `make satellite-smc` (1ᵉʳ passage INVALIDE : satellite de ~320 lignes
+      sous la bande, jamais construit). Version corrigée : 12 titres, garde-fou d'exposition.**
+- [x] ~~ **P1 — SMCLXTP-A bat-il le setup de production ? `make satellite-smc` sur le VPS (30/09).**~~
       Même cœur QQQ, mêmes dates, mêmes frais ; seul le satellite change (équipondéré des
       titres où SMCLXTP-A est acheteur). Règle écrite AVANT : MEILLEUR seulement si ΔSharpe
       apparié > 0 avec p < 0,05 ET maxDD pas pire ; sinon production conservée.
@@ -65,7 +67,10 @@
       n'est pas mesurée.
       (b) Mesurer sur le VPS les tranches `-X` BitMart antérieures au 30/09 : leurs frais
       d'entrée sont comptés deux fois. Les réécrire seulement après ce chiffrage.
-- [ ] **P1 — Mesurer la bande d'inaction sur le VPS (30/09, ADR-0206).** Commencer par
+- [x] **FAIT 30/09 (VPS) — bande adaptative (aversion 5) NON ADOPTÉE** : +11 % d'ordres,
+      +197 $ de frais pour Sharpe 1,12 vs 1,10 (bruit). Critère « moins de frais » non tenu.
+      Deux autres aversions possibles au plus ; pas prioritaire.
+- [x] ~~P1 — Mesurer la bande d'inaction sur le VPS (30/09, ADR-0206).~~ Commencer par
       **Bande fixe mesurée 30/09 : 57 % des écarts (3032/5292) sans ordre, effet moyen 464 $
       (0,20 % du capital) ; rejeu Sharpe 1,10 vs QQQ 0,93 (p = 0,17, indiscernable).** RESTE :
       `make preset-replay` (bande fixe) : lire la part des écarts laissés sans ordre, qui

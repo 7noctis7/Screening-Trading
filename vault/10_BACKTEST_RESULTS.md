@@ -19,6 +19,32 @@
 
 ---
 
+## 2026-09-30 (nuit, VPS) — grid_runner sur données réelles 2015+ ; satellite SMCLXTP-A INVALIDE
+
+**Grille multi-horizons, 12 actions tirées (graine 20260930), daily depuis 2015** — 2016 essais.
+Buy & hold médian : Sharpe 0,52, maxDD −53 %, +14 %/an à 1 an, +11,7 % à 5 ans, **+12,6 %/an à
+10 ans** (premier horizon 10 ans mesuré). Meilleures règles par bloc : Sharpe 0,31 à 0,49,
+toutes SOUS le B&H ; à 10 ans, la meilleure fait +6,4 %/an et ne bat le B&H sur aucune
+fenêtre (0 %). DSR ≤ 0,45, PBO jusqu'à 1,00. **Sur des actions prises au hasard, aucune
+règle de timing ne bat l'achat-conservation, à aucun horizon.**
+
+**Crypto Binance, 8 paires tirées, daily depuis 2018** — 1344 essais. B&H médian
+désastreux (Sharpe 0,29, maxDD −95 %, −20 %/an à 5 ans : paires mortes, biais du survivant
+inversé). Les règles battent le B&H sur 60 à 90 % des fenêtres en PERDANT moins
+(`ma_crossover · signal · jour` Sharpe 0,60, −10,7 %/an à 1 an) ; DSR ≤ 0,21. Aucune n'est
+rentable de façon robuste : la protection vient de l'exposition réduite, pas d'un edge.
+
+**Satellite SMCLXTP-A (`make satellite-smc`, 1ᵉʳ passage) : INVALIDE.** Résultat affiché :
+production 18,0 % / Sharpe 1,10 / −25,7 % contre 10,3 % / 0,92 / −18,9 %, p = 0,16. Mais le
+satellite équipondérait ~320 titres : 1/320 de 50 % = 0,16 % du capital par ligne, sous
+la bande de 0,5 % → 233 ordres en dix ans, 152 $ de frais : le satellite n'a presque
+jamais été construit, on a comparé la production à « 50 % QQQ + cash ». Défaut de
+conception du test, pas un résultat. Corrigé : 12 titres (le `top_k` de production)
+classés par momentum 12-1 parmi les acheteurs SMCLXTP-A, exposition du satellite mesurée,
+verdict INVALIDE si le satellite est investi à moins de 25 % de sa cible. À relancer.
+
+---
+
 ## 2026-09-30 (soir, VPS) — SMCLXTP-A 12 actifs, méta-filtre, sorties, rejeu de production
 
 Données réelles du VPS (Yahoo pour SMCLXTP-A ; base mixte 624 séries pour le reste).
@@ -57,6 +83,12 @@ atr ΔSharpe −0,04 [−0,15 ; +0,08] · structure +0,04 [−0,06 ; +0,13] · s
 Sharpe 1,10, maxDD −25,7 % ; QQQ 20,1 % / 0,93 / −35,6 % ; ΔSharpe vs QQQ +0,17
 [−0,08 ; +0,42], p = 0,17 (indiscernable). Bande fixe : 57 % des écarts (3032/5292) laissés
 sans ordre, effet moyen 464 $ (0,20 % du capital). Bande adaptative : pas encore mesurée.
+
+**Bande adaptative (aversion 5)**, même rejeu : CAGR 18,4 %, Sharpe 1,12, maxDD −25,7 % ;
+50 % des écarts sans ordre (2669/5293), effet moyen 433 $ ; **3768 ordres et 8 173 $ de frais**
+contre 3386 et 7 976 $ en bande fixe (+11 % d'ordres, +197 $). ΔSharpe vs QQQ +0,19
+[−0,05 ; +0,44], p = 0,12. Critère écrit avant (TODO 30/09) : « moins de frais, même
+ΔSharpe ». Les frais augmentent → **NON ADOPTÉE** ; le +0,02 de Sharpe est dans le bruit.
 
 ---
 
