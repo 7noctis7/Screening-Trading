@@ -19,6 +19,43 @@
 
 ---
 
+## 2026-09-30 — SMCLXTP-A (LONG → TP), 4 actifs sur 12, données RÉELLES (FMP), depuis 2020
+
+**Source.** Connecteur FMP : EOD ajusté des dividendes pour les actions, EOD pour la
+crypto. Chaque fichier a été lu en entier et contrôlé : aucune barre OHLC incohérente,
+aucun trou en crypto. Les 8 autres actifs (ASTS, CLSK, PL, RKLB, ABCL, QQQ, CRWD, CRWV)
+sont refusés par l'abonnement FMP, et Yahoo et Binance sont bloqués par la politique
+réseau du conteneur : ils restent à mesurer sur le VPS (`make smclxtp-backtest`).
+
+**Règles** (`backtest/signal_long_tp.py`, écrites avant les chiffres) :
+- signal au close → ordre à l'ouverture suivante ;
+- une position à la fois, pas de stop ;
+- frais de 5 pb par jambe sur les actions, 25 pb sur la crypto ;
+- 10 000 $ réinvestis ;
+- indicateur causal, réglages du Pine (50/50, pivots manqués) ;
+- une position encore ouverte en fin de période est exclue des stats de trades.
+
+| Actif | Trades | Win | Durée moy. | PF | MaxDD | Sharpe | Sortino | CAGR | PnL moy./trade | B&H CAGR | B&H MaxDD | B&H Sharpe |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| PLTR (dès 30/09/2020) | 7 | 71 % | 146 j | 3,53 | −73,7 % | 0,62 | 1,00 | 21,1 % | +2 882 $ · +61,3 % | 64,4 % | −84,6 % | 1,05 |
+| NVDA | 7 | 86 % | 218 j | 32,3 | −54,2 % | 1,25 | 1,97 | 50,4 % | +20 270 $ · +55,1 % | 71,6 % | −66,3 % | 1,31 |
+| BTCUSD | 13 | 46 % | 103 j | 2,07 | −61,2 % | 0,76 | 1,10 | 28,1 % | +2 812 $ · +27,7 % | 43,9 % | −76,7 % | 0,91 |
+| ETHUSD | 12 | 50 % | 102 j | 1,52 | −61,5 % | 0,62 | 0,87 | 20,0 % | +1 247 $ · +15,6 % | 56,6 % | −79,4 % | 0,96 |
+
+**Verdict.**
+- Sur les 4 actifs, le CAGR ET le Sharpe sont INFÉRIEURS au buy & hold.
+- Le maxDD est réduit de 11 à 18 points, mais reste entre −54 et −74 % : l'indicateur
+  n'a pas de stop.
+- 7 à 13 trades par actif, ce n'est pas significatif : un win rate de 6/7 a un IC 95 %
+  d'environ [42 %, 100 %].
+- Le méta-labelling ne compte que 54 événements (< 200) : UNCALIBRATED, le filtre n'est
+  pas entraînable.
+
+**Biais à garder en tête :**
+- la liste d'actifs a été choisie après coup, parmi les grands gagnants 2023-2025 ;
+- le PnL moyen en dollars est gonflé par le réinvestissement ; le pourcentage est la
+  mesure comparable.
+
 ## 2026-09-25 — Banc d'exploration, grille quotidienne [8fa32ef0], EN ÉCHANTILLON (VPS, réel)
 
 870 scénarios. Données : 624 séries réelles. Période : 2016-10-26 → 2022-12-30 (251 barres

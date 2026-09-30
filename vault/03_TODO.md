@@ -25,6 +25,9 @@
       (c) chercher une vraie source de rendement — pré-enregistrée, jugée hors échantillon.
       Ne rien engager en réel avant d'avoir tranché. Cf. 10_BACKTEST_RESULTS du 25/09.
       **Option (c) retenue (25/09, ADR-0205)** → banc pré-enregistré livré, voir ci-dessous.
+- [ ] **P1 — Backtest SMCLXTP-A sur les 12 actifs, depuis le VPS : `make smclxtp-backtest`
+      (30/09).** Seuls 4 actifs sur 12 ont été mesurés ici (FMP). Consigner le tableau
+      complet dans 10_BACKTEST_RESULTS, avec le buy & hold à côté.
 - [ ] **P1 — Mesurer le méta-filtre de SMCLXTP-A sur le VPS : `make meta-smc` (30/09,
       ADR-0209).** Lire le p de permutation AVANT l'AUC. Le filtre n'est utilisable que
       s'il bat la distribution nulle ET améliore la moitié chronologique qui n'a pas fixé

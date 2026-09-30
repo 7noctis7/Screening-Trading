@@ -1,5 +1,18 @@
 # 04 — JOURNAL
 
+## Session 2026-09-30 (5ᵉ) — SMCLXTP-A face au buy & hold : moins de drawdown, beaucoup moins de rendement
+
+Backtest demandé sur 12 actifs depuis 2020. Le conteneur n'a ni données ni accès à Yahoo
+ou Binance. Le connecteur FMP en a servi 4 (NVDA, PLTR, BTC, ETH), les 8 autres étant hors
+de l'abonnement. Sur ces 4, l'indicateur fait moins bien que le buy & hold, en CAGR comme
+en Sharpe. Il réduit le drawdown de 11 à 18 points, sans le ramener sous −54 %. Le
+méta-filtre reste UNCALIBRATED (54 événements). Le script est prêt pour les 12 actifs sur
+le VPS.
+
+La revue Codex de #411 a relevé trois défauts réels, corrigés avant la fusion : l'écart
+était attribuable à un fill étranger, le compteur de la bande incluait le plancher, et la
+bande ne publiait pas son effet moyen.
+
 ## Session 2026-09-30 (4ᵉ) — SMCLXTP-A : la traduction regardait 50 barres dans l'avenir
 
 L'utilisateur a fourni la traduction Python de son indicateur Pine. Avant de l'enregistrer,
