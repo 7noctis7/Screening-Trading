@@ -19,6 +19,47 @@
 
 ---
 
+## 2026-09-30 (soir, VPS) — SMCLXTP-A 12 actifs, méta-filtre, sorties, rejeu de production
+
+Données réelles du VPS (Yahoo pour SMCLXTP-A ; base mixte 624 séries pour le reste).
+
+**SMCLXTP-A (LONG → TP), daily depuis 2020, 12 actifs** — `make smclxtp-backtest`
+
+| Actif | Trades | Win | PF | maxDD | Sharpe | CAGR | B&H CAGR | B&H maxDD |
+|---|---|---|---|---|---|---|---|---|
+| PLTR | 7 | 71 % | 3,53 | −73,7 % | 0,63 | 21,3 % | 64,7 % | −84,6 % |
+| BTC-USD | 13 | 46 % | 2,06 | −61,0 % | 0,77 | 28,2 % | 44,0 % | −76,6 % |
+| NVDA | 7 | 86 % | 32,32 | −54,2 % | 1,25 | 50,6 % | 71,9 % | −66,3 % |
+| ASTS | 11 | 36 % | 0,57 | −88,6 % | 0,15 | −9,4 % | 31,3 % | −91,1 % |
+| CLSK | 10 | 40 % | 1,19 | −95,2 % | 0,52 | 12,2 % | 13,9 % | −95,6 % |
+| PL | 5 | 80 % | 12,95 | −62,1 % | 0,86 | 41,5 % | 10,0 % | −85,7 % |
+| RKLB | 7 | 57 % | 2,84 | −72,2 % | 0,76 | 32,8 % | 40,8 % | −83,0 % |
+| ABCL | 8 | 25 % | 0,22 | −77,9 % | 0,32 | 4,3 % | −21,2 % | −96,7 % |
+| QQQ | 9 | 78 % | 11,97 | −22,8 % | 1,00 | 15,9 % | 20,8 % | −35,1 % |
+| CRWD | 8 | 38 % | 3,16 | −63,2 % | 0,96 | 36,7 % | 57,7 % | −67,7 % |
+| CRWV | 2 | 50 % | 1,10 | −38,2 % | 0,27 | 1,6 % | 67,6 % | −66,9 % |
+| ETH-USD | 12 | 50 % | 1,51 | −61,1 % | 0,61 | 19,3 % | 56,5 % | −79,4 % |
+
+Médianes : Sharpe 0,69 · CAGR 20,3 % contre **42,4 %** en B&H. maxDD plus faible sur 12/12,
+CAGR supérieur au B&H sur 2/12 seulement (PL, ABCL). 5 à 13 trades par actif : aucun
+chiffre par actif n'est significatif. **Pas un remplaçant du buy & hold.**
+
+**Méta-filtre SMCLXTP-A (lightgbm), 624 séries** — `make meta-smc` : 10 476 événements LONG,
+gain brut 45,8 %, AUC hors échantillon **0,5004**, p de permutation **0,47**. Filtré +0,39 %
+contre +0,56 % sans filtre. **REJETÉ : aucun edge.** L'UNCALIBRATED du 30/09 (54 événements)
+est levé : c'est désormais une mesure, et elle est nulle.
+
+**Sorties suiveuses sur la production** — `make preset-sorties` (règle écrite avant) :
+atr ΔSharpe −0,04 [−0,15 ; +0,08] · structure +0,04 [−0,06 ; +0,13] · structure_prise +0,00
+[−0,09 ; +0,10] ; gain de maxDD 1,0 / 1,6 / 1,8 pt (< 3 pts exigés). **3/3 REJETÉS.**
+
+**Rejeu de production (bande fixe)** — `make preset-replay`, 2016-10 → 2026-09 : CAGR 18,0 %,
+Sharpe 1,10, maxDD −25,7 % ; QQQ 20,1 % / 0,93 / −35,6 % ; ΔSharpe vs QQQ +0,17
+[−0,08 ; +0,42], p = 0,17 (indiscernable). Bande fixe : 57 % des écarts (3032/5292) laissés
+sans ordre, effet moyen 464 $ (0,20 % du capital). Bande adaptative : pas encore mesurée.
+
+---
+
 ## 2026-09-30 — grid_runner : menus court / moyen / long × timeframes daily/weekly/monthly [900737b716db], 4 actifs réels (FMP)
 
 `make grid-runner ARGS="--fmp … --debut 2020-01-01"` → rapport complet `docs/SIMULATION_RESULTS.md`.

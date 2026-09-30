@@ -1,5 +1,14 @@
 # 04 — JOURNAL
 
+## Session 2026-09-30 (8ᵉ) — Le soir, sur le VPS : trois pistes fermées proprement
+
+L'utilisateur a lancé `make up` (build 4d4ea21) puis les quatre mesures de #411.
+SMCLXTP-A sur les 12 actifs protège du drawdown mais rend la moitié du buy & hold
+(CAGR médian 20 % contre 42 %). Le méta-filtre, mesuré enfin sur 10 476 événements, a une
+AUC de 0,50 : aucun edge, il ne sera pas branché. Les trois sorties suiveuses échouent à
+la règle écrite avant la mesure. Le rejeu de production reste indiscernable de QQQ en
+Sharpe (p = 0,17). Reste : bande adaptative, et les grilles de la branche non fusionnée.
+
 ## Session 2026-09-30 (7ᵉ) — grid_runner : trois horizons, trois timeframes, le même verdict
 
 Livré `packages/backtest/grid_runner.py` (`make grid-runner`) : menus pré-enregistrés

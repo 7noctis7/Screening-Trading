@@ -35,14 +35,20 @@
       --aleatoire 8 --export-report docs/SIMULATION_RESULTS_crypto.md"`
       La graine 20260930 est fixée d'avance. Lire la PBO et le DSR AVANT le classement.
       Consigner dans 10_BACKTEST_RESULTS.
-- [ ] **P1 — Backtest SMCLXTP-A sur les 12 actifs, depuis le VPS : `make smclxtp-backtest`
+- [x] **FAIT 30/09 (VPS)** — 12 actifs : Sharpe médian 0,69, CAGR médian 20 % contre 42 % en B&H ;
+      bat le B&H en CAGR sur 2/12 (PL, ABCL), maxDD plus faible sur 12/12. Cf. 10_BACKTEST_RESULTS.
+- [x] ~~P1 — Backtest SMCLXTP-A sur les 12 actifs, depuis le VPS : `make smclxtp-backtest`
       (30/09).** Seuls 4 actifs sur 12 ont été mesurés ici (FMP). Consigner le tableau
       complet dans 10_BACKTEST_RESULTS, avec le buy & hold à côté.
-- [ ] **P1 — Mesurer le méta-filtre de SMCLXTP-A sur le VPS : `make meta-smc` (30/09,
+- [x] **FAIT 30/09 (VPS) — REJETÉ** : 10 476 événements, AUC 0,5004, p = 0,47 ; le filtre
+      garde +0,39 % contre +0,56 % sans filtre. Aucun edge. `ml.meta_smc` reste SHADOW, non branché.
+- [x] ~~P1 — Mesurer le méta-filtre de SMCLXTP-A sur le VPS : `make meta-smc` (30/09,
       ADR-0209).** Lire le p de permutation AVANT l'AUC. Le filtre n'est utilisable que
       s'il bat la distribution nulle ET améliore la moitié chronologique qui n'a pas fixé
       son seuil. Nouveau module SHADOW : `ml.meta_smc` (inventaire mis à jour).
-- [ ] **P1 — Mesurer les sorties sur le VPS : `make preset-sorties` (30/09, ADR-0208).**
+- [x] **FAIT 30/09 (VPS) — 3/3 REJETÉS** (atr ΔSharpe −0,04 ; structure +0,04 ; structure_prise
+      +0,00 ; tous indiscernables, gain de maxDD ≤ 1,8 pt < 3 pts). Aucune sortie ajoutée.
+- [x] ~~P1 — Mesurer les sorties sur le VPS : `make preset-sorties` (30/09, ADR-0208).**
       Trois essais pré-enregistrés (atr, structure, structure_prise). Le verdict
       (ADOPTABLE ou REJETÉ) s'imprime selon la règle écrite AVANT la mesure. Consigner
       dans 10_BACKTEST_RESULTS, y compris un rejet. Nouveau module SHADOW :
@@ -53,6 +59,8 @@
       (b) Mesurer sur le VPS les tranches `-X` BitMart antérieures au 30/09 : leurs frais
       d'entrée sont comptés deux fois. Les réécrire seulement après ce chiffrage.
 - [ ] **P1 — Mesurer la bande d'inaction sur le VPS (30/09, ADR-0206).** Commencer par
+      **Bande fixe mesurée 30/09 : 57 % des écarts (3032/5292) sans ordre, effet moyen 464 $
+      (0,20 % du capital) ; rejeu Sharpe 1,10 vs QQQ 0,93 (p = 0,17, indiscernable).** RESTE :
       `make preset-replay` (bande fixe) : lire la part des écarts laissés sans ordre, qui
       remplace le « 99 % » non vérifié. Puis
       `.venv/bin/python scripts/preset_replay.py --bande adaptative --aversion 5`, et au plus
