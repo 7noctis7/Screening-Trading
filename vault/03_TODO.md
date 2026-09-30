@@ -35,6 +35,9 @@
       --aleatoire 8 --export-report docs/SIMULATION_RESULTS_crypto.md"`
       La graine 20260930 est fixée d'avance. Lire la PBO et le DSR AVANT le classement.
       Consigner dans 10_BACKTEST_RESULTS.
+- [ ] **P1 — Méta-filtre v2 (ADR-0210) : brancher `ml/stationnaires` dans `ml/meta_smc`
+      comme NOUVEL essai pré-enregistré, relancer `make meta-smc` sur le VPS. Ensuite, un
+      fichier par signal primaire : FVG, order blocks, sweep/SFP, divergences RSI/MACD, POC.
 - [ ] **P1 — SMCLXTP-A bat-il le setup de production ? `make satellite-smc` sur le VPS (30/09).**
       Même cœur QQQ, mêmes dates, mêmes frais ; seul le satellite change (équipondéré des
       titres où SMCLXTP-A est acheteur). Règle écrite AVANT : MEILLEUR seulement si ΔSharpe

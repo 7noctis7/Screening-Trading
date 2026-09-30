@@ -1,5 +1,14 @@
 # 04 — JOURNAL
 
+## Session 2026-09-30 (9ᵉ) — Deux questions posées proprement avant d'y répondre
+
+`make satellite-smc` : SMCLXTP-A à la place du satellite preset, même cœur QQQ, mêmes
+dates, mêmes frais, règle de décision écrite avant la mesure — à lancer sur le VPS.
+Puis la feuille de route AT + ML : ADR-0210 fige le flux (signal AT → méta-filtre qui ne
+peut que retirer → risque inchangé) et `ml/stationnaires.py` livre 9 variables
+stationnaires, causales et invariantes d'échelle, vérifiées par ADF sur données réelles.
+Le méta-filtre précédent avait une AUC de 0,50 : on reconstruit par les entrées.
+
 ## Session 2026-09-30 (8ᵉ) — Le soir, sur le VPS : trois pistes fermées proprement
 
 L'utilisateur a lancé `make up` (build 4d4ea21) puis les quatre mesures de #411.

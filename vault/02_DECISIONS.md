@@ -2,6 +2,32 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0210 — Flux AT primaire → méta-filtre ML → risque ; variables stationnaires d'abord (2026-09-30)
+
+**Contexte.** Feuille de route « AT + ML hybride » : signaux primaires d'analyse technique
+(structure SMC, FVG/OB/SFP, cassures de canaux, divergences, POC), puis un méta-modèle qui
+estime la probabilité qu'un signal soit gagnant (triple barrière en ATR), puis le risque.
+Le premier méta-filtre mesuré sur données réelles (SMCLXTP-A, 10 476 événements) a une AUC
+de 0,50 (p = 0,47) : ses variables ne portaient pas d'information. La chaîne ne vaut
+que par ses entrées.
+
+**Décision.**
+1. Flux figé : `indicators/*` (signal primaire, un fichier par signal) → `ml/stationnaires`
+   (variables) → méta-modèle (`ml/labeling.triple_barrier`, `ml/cv` purgé + embargo,
+   p de permutation, seuil calibré HORS échantillon) → le filtre peut seulement
+   RETIRER un signal → portail de risque `risk/order_gate` inchangé. Aucun module ML ni
+   LLM dans la boucle d'ordres ou le risque pré-trade.
+2. `ml/stationnaires.py` : 9 variables (RSI z, écarts SMA20/SMA200 en ATR, histogramme
+   MACD / ATR, rendement 5 barres / ATR, pente de volatilité z, largeur de Bollinger z,
+   volume z, position dans le range 20), registre de plugins. Contrats testés : causal
+   (troncature), invariant d'échelle, NaN au préchauffage, ADF < −2,86. Vérifié sur 4
+   séries réelles : ADF de −4,6 à −20,2, contre +0,8 à −2,1 pour les prix bruts.
+3. Le seuil de probabilité (« > 0,65 ») n'est pas fixé d'avance : il est calibré hors
+   échantillon, et sans edge contre la distribution nulle le filtre reste UNCALIBRATED.
+
+**Conséquences.** Aucun changement de production. Prochain essai pré-enregistré :
+méta-filtre SMCLXTP-A avec ces variables (un nouvel essai au registre).
+
 ## ADR-0209 — SMCLXTP-A : la traduction corrigée de son look-ahead ; le méta-filtre doit battre le hasard (2026-09-30)
 
 **CONTEXTE.** L'utilisateur a fourni une traduction Python de son indicateur Pine
