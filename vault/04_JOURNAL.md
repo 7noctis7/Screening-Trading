@@ -1,5 +1,15 @@
 # 04 — JOURNAL
 
+## Session 2026-09-30 — Bande d'inaction : le problème annoncé n'était pas celui de la production
+
+Une feuille de route externe désignait la bande de 3 % comme priorité. Vérification faite,
+elle ne vit que dans les backtests hérités : la production applique 0,5 % du capital et
+rééquilibre plutôt trop que pas assez (4 082 ordres pour 503 décisions dans le rejeu réel).
+Livré (ADR-0206) : une bande adaptative (coût × volatilité, en racine cubique) et le
+compteur de la part des écarts bloqués, tous deux dans le rejeu seulement. La production
+reste inchangée tant que le VPS n'a pas mesuré. Le point n°5 de la même feuille de route
+(fusion à un seul jour commun) était déjà corrigé dans #410.
+
 ## Session 2026-09-25 (5ᵉ) — Option (c) : un banc qui classe sans fabriquer de gagnant
 
 L'utilisateur veut voir le classement de nombreux scénarios avant de choisir : rythmes de

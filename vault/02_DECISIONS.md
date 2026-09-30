@@ -2,6 +2,31 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0206 — Bande d'inaction : mesurer avant de régler ; la bande adaptative reste hors production (2026-09-30)
+
+**CONTEXTE.** Une feuille de route externe affirmait : « la bande de 3 % en poids bloque
+~99 % des rebalancements alors qu'une ligne médiane pèse ~3,3 % ». Vérifié dans le code :
+la bande de 3 points de poids n'existe que dans les backtests historiques
+(`preset_backtest`, `preset_curves`, `preset_compta`), déjà déclarés comme ne mesurant pas
+la production (ADR-0202). La PRODUCTION (`run_live._broker_targets`) applique
+max(0,5 % du capital, 5 $). Le rejeu réel (VPS, 25/09) y compte 4 082 ordres pour
+503 décisions : la production souffre plutôt d'un excès de rotation que d'un excès
+d'inaction. Le chiffre de 99 % n'est consigné nulle part : il est NON VÉRIFIÉ.
+
+**DÉCISIONS.**
+(1) `packages/execution/bande_adaptative.py` fixe une demi-largeur
+h* = (3·c·s²/γ)^(1/3), avec s = w(1−w)σ. Elle minimise l'écart de suivi (γh²/6) plus la
+négociation (c·s²/h). La loi en racine cubique est celle de Davis-Norman et Leland.
+Plancher 0,1 %, plafond 5 %, minimum 5 $. La volatilité est causale (cours ≤ date).
+(2) Le rejeu prend `--bande fixe|adaptative --aversion γ` et publie la part des écarts
+laissés sans ordre (compteur, plancher exclu). Chaque aversion est un facteur distinct au
+ledger, donc compte comme un essai.
+(3) γ n'est PAS calibré. Aucune valeur par défaut : le script refuse sans `--aversion`.
+`run_live` est inchangé. Pour changer la production, il faudra un rejeu réel où la bande
+adaptative réduit les frais SANS dégrader le ΔSharpe apparié, puis une décision explicite.
+
+---
+
 ## ADR-0205 — Chercher un rendement sans se mentir : grille figée, déflation, période lue une fois (2026-09-25)
 
 **CONTEXTE.** La règle tradée est indiscernable de QQQ + cash (ADR-0202, 10_BACKTEST_RESULTS).

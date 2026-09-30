@@ -25,6 +25,12 @@
       (c) chercher une vraie source de rendement — pré-enregistrée, jugée hors échantillon.
       Ne rien engager en réel avant d'avoir tranché. Cf. 10_BACKTEST_RESULTS du 25/09.
       **Option (c) retenue (25/09, ADR-0205)** → banc pré-enregistré livré, voir ci-dessous.
+- [ ] **P1 — Mesurer la bande d'inaction sur le VPS (30/09, ADR-0206).** Commencer par
+      `make preset-replay` (bande fixe) : lire la part des écarts laissés sans ordre, qui
+      remplace le « 99 % » non vérifié. Puis
+      `.venv/bin/python scripts/preset_replay.py --bande adaptative --aversion 5`, et au plus
+      deux autres aversions (chacune est un essai). Critère : moins de frais, même ΔSharpe
+      apparié. Ne toucher `run_live` qu'après décision.
 - [ ] **P0 — Lancer le banc d'exploration sur le VPS puis juger 1 à 3 scénarios (25/09,
       ADR-0205).** `make explorer` (grille quotidienne, 870 scénarios, en échantillon
       jusqu'au 31/12/2022) ; crypto horaire : `make ingest-crypto-intraday` puis
