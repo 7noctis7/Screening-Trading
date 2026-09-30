@@ -31,7 +31,14 @@ class TradeJournal:
             return
         fields = ["id", "instrument", "side", "strategy", "regime", "entry_ts",
                   "entry_price", "exit_ts", "exit_price", "qty", "pnl_net",
-                  "pnl_pct", "r_multiple", "is_win", "entry_reason", "exit_reason"]
+                  "pnl_pct", "r_multiple", "is_win", "entry_reason", "exit_reason",
+                  "order_id", "fill_id", "qty_filled",
+                  "ts_arrival", "ts_send", "ts_fill",
+                  "P_arrival", "P_fill",
+                  "P_mid_arrival", "P_mid_fill", "P_mid_fill_h",
+                  "P_bid_fill", "P_ask_fill",
+                  "fee_comm", "fee_funding",
+                  "impact_horizon", "bench_quality", "tca_variant"]
         with Path(path).open("w", newline="", encoding="utf-8") as f:
             w = csv.DictWriter(f, fieldnames=fields)
             w.writeheader()
@@ -45,4 +52,22 @@ class TradeJournal:
                     "qty": round(t.qty, 6), "pnl_net": round(t.pnl_net or 0, 2),
                     "pnl_pct": round(t.pnl_pct or 0, 4), "r_multiple": round(t.r_multiple or 0, 2),
                     "is_win": t.is_win, "entry_reason": t.entry_reason,
-                    "exit_reason": t.exit_reason})
+                    "exit_reason": t.exit_reason,
+                    "order_id": t.order_id or "",
+                    "fill_id": t.fill_id or "",
+                    "qty_filled": "" if t.qty_filled is None else t.qty_filled,
+                    "ts_arrival": t.ts_arrival.isoformat() if t.ts_arrival else "",
+                    "ts_send": t.ts_send.isoformat() if t.ts_send else "",
+                    "ts_fill": t.ts_fill.isoformat() if t.ts_fill else "",
+                    "P_arrival": "" if t.P_arrival is None else t.P_arrival,
+                    "P_fill": "" if t.P_fill is None else t.P_fill,
+                    "P_mid_arrival": "" if t.P_mid_arrival is None else t.P_mid_arrival,
+                    "P_mid_fill": "" if t.P_mid_fill is None else t.P_mid_fill,
+                    "P_mid_fill_h": "" if t.P_mid_fill_h is None else t.P_mid_fill_h,
+                    "P_bid_fill": "" if t.P_bid_fill is None else t.P_bid_fill,
+                    "P_ask_fill": "" if t.P_ask_fill is None else t.P_ask_fill,
+                    "fee_comm": "" if t.fee_comm is None else t.fee_comm,
+                    "fee_funding": "" if t.fee_funding is None else t.fee_funding,
+                    "impact_horizon": t.impact_horizon or "",
+                    "bench_quality": t.bench_quality or "",
+                    "tca_variant": t.tca_variant or "",})

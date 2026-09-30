@@ -436,6 +436,42 @@ def _vix_playbook(v: float) -> dict:
             "action": "Pic de peur : on coupe le levier (défensif). On prépare des achats sur les actions solides quand le VIX montre des signes de fatigue ; toute spéculation directe sur le VIX se solde vite."}
 
 
+def _rank_score_map(screener: dict | None, screen: dict | None,
+                    ml_scores: dict | None = None) -> dict[str, float]:
+    """Scores decision-time par symbole — jamais inventés.
+
+    Priorité (dernier gagne) : ml → screen.rows → screener.rows. Seuls les floats
+    finis sont retenus ; absence = pas de clé (pas de None silencieux)."""
+    out: dict[str, float] = {}
+    for sym, sc in (ml_scores or {}).items():
+        if isinstance(sc, bool) or not isinstance(sc, (int, float)) or sc != sc:
+            continue
+        if sym:
+            out[sym] = float(sc)
+    for row in (screen or {}).get("rows", []) or []:
+        sym, sc = row.get("symbol"), row.get("score")
+        if not sym or isinstance(sc, bool) or not isinstance(sc, (int, float)) or sc != sc:
+            continue
+        out[sym] = float(sc)
+    for row in (screener or {}).get("rows", []) or []:
+        sym, sc = row.get("symbol"), row.get("score")
+        if not sym or isinstance(sc, bool) or not isinstance(sc, (int, float)) or sc != sc:
+            continue
+        out[sym] = float(sc)
+    return out
+
+
+def _attach_rank_scores(orders: list | None, scores: dict[str, float]) -> None:
+    """Attache `rank_score` float sur chaque ordre quand dispo ; omet la clé sinon."""
+    for o in orders or []:
+        sym = o.get("symbol")
+        sc = scores.get(sym) if sym else None
+        if isinstance(sc, (int, float)) and not isinstance(sc, bool) and sc == sc:
+            o["rank_score"] = round(float(sc), 6)
+        else:
+            o.pop("rank_score", None)  # jamais None écrit
+
+
 def _live_section(positions: list, acmap: dict, kpis: dict | None = None,
                   target_weights: dict | None = None, crypto_weights: dict | None = None) -> dict:
     """Portefeuille RÉEL : statut de connexion aux brokers (Alpaca actions, Bitmart crypto).
@@ -2530,6 +2566,43 @@ def build_snapshot(seed: int = 7) -> dict:
     # Ère paper (ADR-0029) : la crypto part sur le capital ALPACA, en fraction du compte
     # (QML-023). La valoriser sur Bitmart affichait 0 $ pour des ordres bien réels.
     _alloc_rows(_crypto_weights, _alp_cap, "crypto")
+    # rank_score decision-time sur target_orders + preset_alloc (journal legacy=0).
+    # Sources : screener / screen / ml — jamais inventé ; clé omise si absent.
+    _rscores = _rank_score_map(screener, screen_sec, ml_scores)
+    _attach_rank_scores(_live.get("target_orders"), _rscores)
+    _attach_rank_scores(_preset_alloc, _rscores)
+    # Arch A2 — sleeve swing paper : live.swing_orders (flag OFF → [] ; preset inchangé).
+    # Barres = cache `data` (Bar .high/.low/.close) ; candidats screener/screen/preset.
+    from packages.execution.swing_sleeve import (
+        attach_swing_orders as _attach_swing_orders,
+        swing_bars_by_sym as _swing_bars_by_sym,
+        swing_max_names as _swing_max_names,
+        swing_paper_enabled as _swing_paper_enabled,
+    )
+    _swing_cand: list[str] = []
+    if _swing_paper_enabled():
+        _seen_sw: set[str] = set()
+        for _row_src in (
+            (screener or {}).get("rows", []) or [],
+            (screen_sec or {}).get("rows", []) or [],
+        ):
+            for _r in _row_src:
+                _s = (_r or {}).get("symbol") if isinstance(_r, dict) else None
+                if _s and _s not in _seen_sw:
+                    _seen_sw.add(_s); _swing_cand.append(_s)
+        for _s in (_preset_weights or {}):
+            if _s and _s not in _seen_sw:
+                _seen_sw.add(_s); _swing_cand.append(_s)
+        # plafond scan : éviter detecter sur tout l'univers ; max_names borne le résultat
+        _swing_cand = _swing_cand[: max(_swing_max_names() * 20, 50)]
+    _attach_swing_orders(
+        _live,
+        bars_by_sym=_swing_bars_by_sym(_swing_cand, data),
+        equity_nav=float(_alp_cap or 0.0),
+        ts_decision=now.isoformat(),
+        rank_scores=_rscores,
+        asset_class_by_sym=acmap,
+    )
     # Séries OHLC pour les graphiques cliquables (Positions/Trades/Réel) — bornées (~500 barres)
     # MARQUEURS achat/vente du PRESET (par symbole) → fléchés sur le graphe technique des pages
     # Trades & Positions, exactement aux dates des rebalancements (corrige l'absence de signaux).
