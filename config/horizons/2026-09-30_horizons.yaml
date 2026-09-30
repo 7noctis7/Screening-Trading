@@ -1,0 +1,26 @@
+# Grille PRÉ-ENREGISTRÉE le 30/09/2026 — figée AVANT tout résultat (scripts/simuler_horizons.py).
+# Toute modification change son empreinte sha256 : c'est un nouvel essai, compté au registre.
+#
+# Question posée par l'utilisateur : selon l'horizon de détention (court 1 an, moyen 1-5 ans,
+# long 5-10 ans), quelle stratégie / quels indicateurs, quelle fréquence de décision et quel
+# critère de sortie donnent la meilleure performance ?
+#
+# Une stratégie est réduite à son ÉTAT désiré (long / à plat). La fréquence dit QUAND cet
+# état est relu et exécuté (ouverture suivante). Les sorties TP et suiveur sont des ordres
+# posés, qui agissent en séance tous les jours. Aucune donnée synthétique : données réelles
+# uniquement (FMP ici, bases du VPS ailleurs).
+nom: horizons-2026-09-30
+strategies: [smclxtp, ma_crossover, rsi_reversion, swing, tendance_mm200, momentum_12_1]
+sorties: [signal, tp_3atr, suiveur_3atr, tendance_mm200]
+frequences: [jour, semaine, mois, trimestre, annee]
+horizons_annees: [1, 3, 5, 10]          # court, moyen (1-5 ans), long (5-10 ans)
+pas_fenetres_jours: 21                  # une fenêtre qui démarre chaque mois
+atr: 14
+k_tp: 3.0
+k_suiveur: 3.0
+# Écarté, et dit : une sortie sur « changement de score ML ». Aucun modèle n'est calibré
+# (méta-filtre SMCLXTP-A UNCALIBRATED, 54 événements < 200) ; simuler un score inventé
+# serait fabriquer un résultat.
+exclus:
+  score_ml: "UNCALIBRATED — aucun modèle calibré"
+  institutional_price_action: "UNCALIBRATED — aucun réglage connu"

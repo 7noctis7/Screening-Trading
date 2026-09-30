@@ -1,5 +1,48 @@
 # 04 — JOURNAL
 
+## Session 2026-09-30 (9ᵉ) — Deux questions posées proprement avant d'y répondre
+
+`make satellite-smc` : SMCLXTP-A à la place du satellite preset, même cœur QQQ, mêmes
+dates, mêmes frais, règle de décision écrite avant la mesure — à lancer sur le VPS.
+Puis la feuille de route AT + ML : ADR-0210 fige le flux (signal AT → méta-filtre qui ne
+peut que retirer → risque inchangé) et `ml/stationnaires.py` livre 9 variables
+stationnaires, causales et invariantes d'échelle, vérifiées par ADF sur données réelles.
+Le méta-filtre précédent avait une AUC de 0,50 : on reconstruit par les entrées.
+
+## Session 2026-09-30 (8ᵉ) — Le soir, sur le VPS : trois pistes fermées proprement
+
+L'utilisateur a lancé `make up` (build 4d4ea21) puis les quatre mesures de #411.
+SMCLXTP-A sur les 12 actifs protège du drawdown mais rend la moitié du buy & hold
+(CAGR médian 20 % contre 42 %). Le méta-filtre, mesuré enfin sur 10 476 événements, a une
+AUC de 0,50 : aucun edge, il ne sera pas branché. Les trois sorties suiveuses échouent à
+la règle écrite avant la mesure. Le rejeu de production reste indiscernable de QQQ en
+Sharpe (p = 0,17). Reste : bande adaptative, et les grilles de la branche non fusionnée.
+
+## Session 2026-09-30 (7ᵉ) — grid_runner : trois horizons, trois timeframes, le même verdict
+
+Livré `packages/backtest/grid_runner.py` (`make grid-runner`) : menus pré-enregistrés
+par horizon, rééchantillonnage hebdo/mensuel causal (barre datée de sa DERNIÈRE séance),
+Sharpe, DSR, maxDD, Calmar, win rate, PF et turnover annualisé, PBO par actif, rapport
+`docs/SIMULATION_RESULTS.md`. Deux défauts vus au premier passage réel et corrigés
+avant publication : (1) les fréquences plus fines que la barre dupliquaient des scénarios
+et gonflaient le nombre d'essais (960 → 672) ; (2) des configurations sans AUCUN trade
+(MM200 sur barres mensuelles) se classaient avec un Sharpe 0. Le DSR est maintenant
+déflaté par tous les blocs, plus le registre. Verdict : aucun DSR ≥ 0,95, B&H devant en
+rendement, filtres de tendance devant en drawdown ; 10 ans UNCALIBRATED.
+
+## Session 2026-09-30 (6ᵉ) — Quel horizon, quelle fréquence, quelle sortie ? Une grille déposée avant de compter
+
+L'utilisateur demandait la meilleure approche selon l'horizon (1 an, 1 à 5 ans, 5 à
+10 ans), la fréquence de décision et le critère de sortie. J'ai déposé la grille dans git
+AVANT tout calcul (`cdd6cd8`), puis compté 480 essais sur les 4 actifs réels disponibles.
+
+Trois résultats se recoupent avec des mesures antérieures faites sur d'autres données :
+décider souvent l'emporte, le filtre de tendance MM200 et le momentum dominent, et les
+prises de profit comme les stops suiveurs coûtent. Mais aucun scénario ne survit à la
+déflation (DSR ≤ 0,43), la PBO atteint 0,69 sur la crypto, et le buy & hold reste devant
+à 1 et 3 ans. La sortie sur « changement de score ML » n'a pas été simulée : aucun modèle
+n'est calibré.
+
 ## Session 2026-09-30 (5ᵉ) — SMCLXTP-A face au buy & hold : moins de drawdown, beaucoup moins de rendement
 
 Backtest demandé sur 12 actifs depuis 2020. Le conteneur n'a ni données ni accès à Yahoo

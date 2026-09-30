@@ -1,0 +1,32 @@
+# Grille PRÉ-ENREGISTRÉE le 30/09/2026 (packages/backtest/grid_runner.py) — figée AVANT tout
+# résultat. Un menu par horizon, comme demandé ; toute modification = nouvel essai.
+nom: multi-horizons-2026-09-30
+atr: 14
+k_tp: 3.0
+k_suiveur: 3.0
+pas_fenetres_jours: 21
+menus:
+  court:                       # < 1 an : momentum, tendance courte, structure
+    horizons_annees: [1]
+    frequences: [jour, semaine]
+    sorties: [signal, suiveur_3atr, tp_3atr, tendance_mm200]
+    strategies: [smclxtp, ma_crossover, swing, rsi_reversion, momentum_12_1, tendance_mm200]
+  moyen:                       # 1-5 ans : position, momentum 6-12 m
+    horizons_annees: [3, 5]
+    frequences: [mois, trimestre]
+    sorties: [signal, tp_3atr, tendance_mm200]
+    strategies: [momentum_12_1, tendance_mm200, smclxtp, ma_crossover]
+  long:                        # 5-10 ans : buy & hold amélioré (filtre de tendance)
+    horizons_annees: [5, 10]
+    frequences: [trimestre, annee]
+    sorties: [signal, tendance_mm200]
+    strategies: [tendance_mm200, momentum_12_1]
+# Demandé mais NON testable honnêtement aujourd'hui — écrit dans le rapport, jamais simulé :
+non_testables:
+  score_ml_xgboost_lightgbm: "UNCALIBRATED — méta-filtre SMCLXTP-A : 54 événements < 200"
+  fondamentaux_pe_pb_roe_cfy: "UNCALIBRATED — aucune base fondamentale point-in-time"
+  deep_value_compounders_roe: "UNCALIBRATED — idem (fondamentaux au présent = look-ahead)"
+  regimes_macro_hmm: "UNCALIBRATED — aucun modèle HMM dans le dépôt"
+  fvg_order_blocks_institutional: "UNCALIBRATED — institutional_price_action sans réglages"
+  hrp_risk_parity_multi_facteurs: "portefeuille, pas actif isolé : make explorer (870 scénarios VPS)"
+  bande_adaptative_k_sigma: "portefeuille : make preset-replay --bande adaptative"
