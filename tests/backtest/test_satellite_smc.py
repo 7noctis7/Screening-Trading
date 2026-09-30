@@ -66,3 +66,35 @@ def test_comparaison_memes_dates_meme_coeur():
     assert set(res["stats"]) == {"production", "smclxtp"}
     assert res["verdict"] in ("PRODUCTION CONSERVÉE",
                               "SMCLXTP-A MEILLEUR (décision explicite requise)")
+
+
+def test_top_k_par_momentum():
+    """Seuls les `top_k` titres acheteurs au plus fort momentum 12-1 sont retenus."""
+    from packages.backtest.satellite_smc import poids_smc
+    j = [f"2020-{m:02d}-{d:02d}" for m in range(1, 13) for d in range(1, 29)][:300]
+    oui = np.ones(300, bool)
+    etats = {s: (j, oui, np.linspace(100, 100 * f, 300))
+             for s, f in (("A", 1.1), ("B", 3.0), ("C", 2.0), ("D", 0.5))}
+    etats["E"] = (j, np.zeros(300, bool), np.linspace(100, 900, 300))   # pas acheteur
+    assert poids_smc(etats, j[-1], top_k=2) == {"B": 0.5, "C": 0.5}
+
+
+def test_satellite_non_construit_invalide():
+    """Le défaut du premier passage : un satellite presque vide ne juge rien."""
+    from packages.backtest.satellite_smc import verdict
+    meilleur = {"disponible": True, "verdict": "meilleur"}
+    assert verdict(meilleur, -0.1, -0.3, remplissage=0.05).startswith("INVALIDE")
+
+
+def test_exposition_hors_coeur_mesuree():
+    from packages.backtest.preset_rejeu import avec_coeur, calendrier
+    from packages.backtest.satellite_smc import comparer_satellites
+    data = _univers()
+    cal = calendrier(data)
+    brutes = [(j, {"A": 0.5, "B": 0.5}) for j in cal[260::5]]
+    coeur = {"QQQ": 0.5}
+    res = comparer_satellites(data, (cal, brutes, [(j, avec_coeur(w, coeur))
+                                                   for j, w in brutes]),
+                              coeur=coeur, classes={})
+    assert 0.3 < res["exposition_satellite"]["production"] <= 0.55
+    assert 0.0 < res["remplissage"] <= 1.1

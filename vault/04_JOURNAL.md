@@ -1,5 +1,14 @@
 # 04 — JOURNAL
 
+## Session 2026-09-30 (10ᵉ) — Un « production conservée » qui ne mesurait rien
+
+Les grilles 2015+ tranchent : sur 12 actions au hasard, aucune règle de timing ne bat le
+buy & hold, à aucun horizon (10 ans : +6,4 %/an au mieux contre +12,6 %). Le test
+satellite affichait « production conservée », mais ses 233 ordres en dix ans ont trahi
+un défaut de conception : 320 lignes de 0,16 % chacune, toutes sous la bande d'inaction.
+Le verdict était juste par hasard et faux dans sa démonstration ; il est déclaré INVALIDE,
+le test est corrigé et gardé par une mesure d'exposition.
+
 ## Session 2026-09-30 (9ᵉ) — Deux questions posées proprement avant d'y répondre
 
 `make satellite-smc` : SMCLXTP-A à la place du satellite preset, même cœur QQQ, mêmes

@@ -246,7 +246,7 @@ def _resume_bande(regle: dict, compte: _Compte) -> dict:
 def simuler(cibles: list, prix: dict, jours: list[str], *, capital: float = CAPITAL_DEFAUT,
             classes: dict | None = None, frais: bool = True, lag: int = 1,
             bande: str = "fixe", aversion: float | None = None,
-            sorties=None) -> dict:
+            sorties=None, hors: frozenset = frozenset()) -> dict:
     """Déroule les cibles datées : chaque cible décidée le jour `d` s'exécute `lag` jours
     de cotation PLUS TARD, au cours de clôture de ce jour-là. Equity marquée chaque jour.
 
@@ -262,7 +262,7 @@ def simuler(cibles: list, prix: dict, jours: list[str], *, capital: float = CAPI
     if not a_executer:
         return {"available": False, "raison": "aucune exécution dans le calendrier"}
     premier = min(a_executer)
-    dates, equity = [], []
+    dates, equity, expo = [], [], []
     for jour in jours[jours.index(premier):]:
         if sorties is not None:
             sorties.declencher(compte, jour, classes or {}, frais)
@@ -276,10 +276,13 @@ def simuler(cibles: list, prix: dict, jours: list[str], *, capital: float = CAPI
             sorties.suivre(compte, jour)
         dates.append(jour)
         equity.append(compte.equity())
+        expo.append(sum(v for s, v in compte.lignes.items() if s not in hors) / equity[-1]
+                    if equity[-1] > 0 else 0.0)
     eq = compte.equity()
     return {"available": True, "dates": dates, "equity": equity,
             "frais": round(compte.frais, 6), "n_ordres": compte.n_ordres,
             "n_executions": len(a_executer), "bande": _resume_bande(regle, compte),
+            "exposition_moyenne": sum(expo) / len(expo),     # hors symboles de `hors`
             "poids_final": {s: v / eq for s, v in compte.lignes.items()} if eq > 0 else {}}
 
 
