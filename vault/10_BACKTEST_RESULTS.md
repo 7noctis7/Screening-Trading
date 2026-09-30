@@ -19,6 +19,33 @@
 
 ---
 
+## 2026-09-30 — grid_runner : menus court / moyen / long × timeframes daily/weekly/monthly [900737b716db], 4 actifs réels (FMP)
+
+`make grid-runner ARGS="--fmp … --debut 2020-01-01"` → rapport complet `docs/SIMULATION_RESULTS.md`.
+Menus pré-enregistrés (`c2e2451`) ; 672 essais consignés au registre (DSR déflaté par
+TOUS les essais du programme, registre compris). Les fréquences plus fines que la barre
+(décider « chaque jour » sur une barre mensuelle) sont des doublons mécaniques : non
+rejouées. Les configurations sans aucun trade (MM200 mensuelle = 16 ans d'historique)
+sont exclues du classement et comptées dans le rapport.
+
+| Bloc | Meilleure config (Sharpe médian) | Sharpe | DSR | maxDD | B&H Sharpe / maxDD | Bat B&H (fenêtres) | PBO max |
+|---|---|---|---|---|---|---|---|
+| court · daily | momentum_12_1 · signal · jour | 1,09 | 0,22 | −52 % | 1,01 / −78 % | 32 % (1 an) | 0,67 |
+| moyen · daily | momentum_12_1 · signal · trimestre | 0,98 | 0,52 | −55 % | 1,01 / −78 % | 19 % (3 ans) · 42 % (5 ans) | 0,90 |
+| long · daily | momentum_12_1 · signal · trimestre | 0,98 | 0,87 | −55 % | 1,01 / −78 % | 42 % (5 ans) | 0,78 |
+| moyen · weekly | momentum_12_1 · signal · trimestre | 1,05 | 0,82 | −49 % | 0,99 / −76 % | 20 % (3 ans) · 42 % (5 ans) | 0,53 |
+| moyen · monthly | momentum_12_1 · signal · trimestre | 0,95 | 0,31 | −49 % | 0,86 / −75 % | 19 % (3 ans) · 42 % (5 ans) | 0,41 |
+
+**Lecture.** Aucune configuration n'atteint DSR 0,95. Le buy & hold garde le rendement
+(médiane 1 an +62 %, 5 ans +47 %/an) ; les filtres momentum / MM200 achètent 20 à 25 points
+de drawdown en moins au prix d'une partie du rendement. `smclxtp · signal · mois` bat le
+B&H sur 63 % des fenêtres de 3 ans, mais la PBO du bloc va jusqu'à 0,90 : c'est du bruit.
+**10 ans : UNCALIBRATED** (aucune fenêtre complète depuis 2020). Score ML, fondamentaux,
+HMM, FVG/OB : UNCALIBRATED (voir le rapport). **Aucun changement de production.**
+À refaire sur le VPS (2015+, 12 titres tirés, graine 20260930).
+
+---
+
 ## 2026-09-30 — Horizons × stratégies × sorties × fréquences, grille PRÉ-ENREGISTRÉE [73dd06226a20], 4 actifs réels (FMP)
 
 **Protocole.**

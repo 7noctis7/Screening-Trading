@@ -30,6 +30,9 @@
       `make simuler-horizons ARGS="--vps-quotidien --debut 2015-01-01 --aleatoire 12"`
       `make simuler-horizons ARGS="--vps-crypto 4h --debut 2020-01-01 --aleatoire 8"`
       `make comparer-strategies ARGS="--vps-quotidien --aleatoire 12"`
+      `make grid-runner ARGS="--debut 2015-01-01 --aleatoire 12"` (→ docs/SIMULATION_RESULTS.md ;
+      10 ans enfin mesurable) puis `make grid-runner ARGS="--vps-crypto 1d --debut 2018-01-01
+      --aleatoire 8 --export-report docs/SIMULATION_RESULTS_crypto.md"`
       La graine 20260930 est fixée d'avance. Lire la PBO et le DSR AVANT le classement.
       Consigner dans 10_BACKTEST_RESULTS.
 - [ ] **P1 — Backtest SMCLXTP-A sur les 12 actifs, depuis le VPS : `make smclxtp-backtest`

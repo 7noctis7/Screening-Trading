@@ -1,5 +1,17 @@
 # 04 — JOURNAL
 
+## Session 2026-09-30 (7ᵉ) — grid_runner : trois horizons, trois timeframes, le même verdict
+
+Livré `packages/backtest/grid_runner.py` (`make grid-runner`) : menus pré-enregistrés
+par horizon, rééchantillonnage hebdo/mensuel causal (barre datée de sa DERNIÈRE séance),
+Sharpe, DSR, maxDD, Calmar, win rate, PF et turnover annualisé, PBO par actif, rapport
+`docs/SIMULATION_RESULTS.md`. Deux défauts vus au premier passage réel et corrigés
+avant publication : (1) les fréquences plus fines que la barre dupliquaient des scénarios
+et gonflaient le nombre d'essais (960 → 672) ; (2) des configurations sans AUCUN trade
+(MM200 sur barres mensuelles) se classaient avec un Sharpe 0. Le DSR est maintenant
+déflaté par tous les blocs, plus le registre. Verdict : aucun DSR ≥ 0,95, B&H devant en
+rendement, filtres de tendance devant en drawdown ; 10 ans UNCALIBRATED.
+
 ## Session 2026-09-30 (6ᵉ) — Quel horizon, quelle fréquence, quelle sortie ? Une grille déposée avant de compter
 
 L'utilisateur demandait la meilleure approche selon l'horizon (1 an, 1 à 5 ans, 5 à

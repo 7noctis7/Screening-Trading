@@ -124,5 +124,18 @@ def _ligne(nom: str, sortie: str, f: str, k: dict, r: dict, g: dict, pas: int) -
             **{m: k[m] for m in ("trades", "win_rate", "duree_moyenne_jours", "profit_factor",
                                  "sharpe", "sortino", "cagr", "max_drawdown",
                                  "pnl_moyen_pct", "exposition")},
+            **risque_et_rotation(k, r),
             "horizons": {H: fenetres(r["equity"], r["clotures"], r["dates"], H, pas)
                          for H in g["horizons_annees"]}}
+
+
+def risque_et_rotation(k: dict, r: dict) -> dict:
+    """Calmar (CAGR / |maxDD|) et turnover annualisé : notionnel négocié (entrée + sortie
+    des trades clôturés) rapporté à l'equity moyenne, par an."""
+    from datetime import datetime
+    dd, eq = k.get("max_drawdown") or 0.0, np.asarray(r["equity"], float)
+    calmar = k["cagr"] / abs(dd) if dd < 0 and np.isfinite(k["cagr"]) else float("nan")
+    d0, d1 = (datetime.fromisoformat(r["dates"][i]) for i in (0, -1))
+    annees = max((d1 - d0).days / 365.25, 1e-9)
+    negocie = sum(t.capital + (t.capital + t.pnl) for t in r["trades"])
+    return {"calmar": calmar, "turnover_annuel": negocie / float(eq.mean()) / annees}
