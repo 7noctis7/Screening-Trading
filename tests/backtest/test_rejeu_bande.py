@@ -95,3 +95,29 @@ def test_rejouer_de_bout_en_bout_en_bande_adaptative():
     assert res["bande"]["mode"] == "adaptative" and res["bande"]["ecarts_examines"] > 0
     with pytest.raises(ValueError):
         rejouer(data, pas=20, bande="adaptative")
+
+
+def test_le_plancher_ne_compte_pas_dans_la_bande():
+    """Un solde imposé par le plancher de ligne ne consulte pas la bande : il n'entre
+    pas au dénominateur (sinon la part bloquée paraît plus faible qu'elle n'est)."""
+    from packages.backtest.preset_rejeu import simuler
+    jours = _jours(10)
+    px = {"A": {j: 100.0 for j in jours}, "B": {j: 50.0 for j in jours}}
+    res = simuler([(jours[1], {"A": 0.05, "B": 0.05}), (jours[4], {"A": 0.05, "B": 0.005})],
+                  px, jours, capital=100_000.0, frais=False)
+    b = res["bande"]
+    assert res["n_ordres"] == 3                            # 2 achats + le solde de B
+    assert (b["ecarts_examines"], b["ecarts_bloques"]) == (2, 0)
+
+
+def test_la_bande_publie_son_effet_moyen():
+    """AGENTS.md, règle 4 : tout garde-fou publie son compteur ET son effet moyen."""
+    from packages.backtest.preset_rejeu import simuler
+    jours = _jours(10)
+    px = {"A": {j: 100.0 for j in jours}}
+    res = simuler([(jours[1], {"A": 0.05}), (jours[4], {"A": 0.052})], px, jours,
+                  capital=100_000.0, frais=False)
+    b = res["bande"]
+    assert b["ecarts_bloques"] == 1                        # 200 $ < bande de 500 $
+    assert b["montant_moyen_bloque"] == pytest.approx(200.0)
+    assert b["ecart_poids_moyen_bloque"] == pytest.approx(0.002)

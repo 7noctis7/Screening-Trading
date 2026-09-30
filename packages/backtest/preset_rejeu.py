@@ -123,6 +123,7 @@ class _Compte:
     def __init__(self, capital: float) -> None:
         self.cash, self.lignes, self.frais, self.n_ordres = float(capital), {}, 0.0, 0
         self.ecarts_examines = self.ecarts_bloques = 0
+        self.montant_bloque = self.poids_bloque = 0.0
         self._marque: dict[str, float] = {}
 
     def marquer(self, cours: _Cours, jour: str) -> None:
@@ -174,12 +175,20 @@ def _bande(regle: dict, cible_val: float, eq: float, cours: _Cours, sym: str, jo
                          _cout(classe, True), aversion=regle["aversion"])
 
 
-def _compter(compte: _Compte, intention, cible_val: float, detenu: float) -> None:
-    """Part des écarts à la cible que la bande laisse sans ordre (plancher exclu)."""
-    if abs(cible_val - detenu) > 1e-9:
-        compte.ecarts_examines += 1
-        if intention.motif == MOTIF_BANDE:
-            compte.ecarts_bloques += 1
+def _compter(compte: _Compte, intention, cible_val: float, detenu: float,
+             eq: float) -> None:
+    """Compteur ET effet moyen de la bande (AGENTS.md, règle 4), sur les seuls écarts où
+    `decider` la CONSULTE : un solde ou une zone morte du plancher ne la regarde pas, et
+    les compter gonflerait le dénominateur."""
+    ecart = abs(cible_val - detenu)
+    consultee = intention.motif == MOTIF_BANDE or intention.action in ("acheter", "alleger")
+    if not consultee or ecart <= 1e-9:
+        return
+    compte.ecarts_examines += 1
+    if intention.motif == MOTIF_BANDE:
+        compte.ecarts_bloques += 1
+        compte.montant_bloque += ecart
+        compte.poids_bloque += ecart / eq if eq > 0 else 0.0
 
 
 def _executer(compte: _Compte, cible: dict, cours: _Cours, jour: str,
@@ -198,7 +207,7 @@ def _executer(compte: _Compte, cible: dict, cours: _Cours, jour: str,
         bande = _bande(regle or {}, vals[sym], eq, cours, sym, jour,
                        classes.get(sym, "equity"))
         intention = decider(vals[sym], detenu, bande)
-        _compter(compte, intention, vals[sym], detenu)
+        _compter(compte, intention, vals[sym], detenu, eq)
         if not intention.agit:
             continue
         expo = sum(abs(v) for v in compte.lignes.values())
@@ -227,9 +236,11 @@ def regle_bande(bande: str, aversion: float | None) -> dict:
 
 
 def _resume_bande(regle: dict, compte: _Compte) -> dict:
-    n = compte.ecarts_examines
-    return {**regle, "ecarts_examines": n, "ecarts_bloques": compte.ecarts_bloques,
-            "part_bloquee": compte.ecarts_bloques / n if n else 0.0}
+    n, k = compte.ecarts_examines, compte.ecarts_bloques
+    return {**regle, "ecarts_examines": n, "ecarts_bloques": k,
+            "part_bloquee": k / n if n else 0.0,
+            "montant_moyen_bloque": compte.montant_bloque / k if k else 0.0,
+            "ecart_poids_moyen_bloque": compte.poids_bloque / k if k else 0.0}
 
 
 def simuler(cibles: list, prix: dict, jours: list[str], *, capital: float = CAPITAL_DEFAUT,

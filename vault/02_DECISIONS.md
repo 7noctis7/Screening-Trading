@@ -108,6 +108,10 @@ position de repli mêle d'autres jours : il ne mesure rien, donc la valeur est N
 (3) `live_roundtrip._part` répartit frais et écart au prorata de la quantité. Un coût
 inconnu reste inconnu.
 
+**COMPLÉMENT (revue de #411).** L'écart n'est écrit que si le VWAP du jour est
+EXACTEMENT l'ordre envoyé (`order_id`) : un achat manuel ou un autre passage du même jour
+sur le même titre y serait mêlé.
+
 **LIMITES.**
 - Le prix de décision est le dernier close de la série du snapshot. Pour une action
   traitée vers 15 h ET, l'écart inclut la dérive intraday : c'est l'implementation
@@ -137,6 +141,9 @@ Plancher 0,1 %, plafond 5 %, minimum 5 $. La volatilité est causale (cours ≤ 
 laissés sans ordre (compteur, plancher exclu). Chaque aversion est un facteur distinct au
 ledger, donc compte comme un essai.
 (3) γ n'est PAS calibré. Aucune valeur par défaut : le script refuse sans `--aversion`.
+(4) Complément (revue de #411) : le compteur ne retient que les écarts où `decider`
+CONSULTE la bande (un solde du plancher ne la regarde pas). La bande publie aussi son
+EFFET MOYEN, en dollars et en part du capital (AGENTS.md, règle 4).
 `run_live` est inchangé. Pour changer la production, il faudra un rejeu réel où la bande
 adaptative réduit les frais SANS dégrader le ΔSharpe apparié, puis une décision explicite.
 

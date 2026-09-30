@@ -27,21 +27,21 @@ from packages.storage import SqliteTradeJournal
 TS = datetime(2026, 9, 30, 15, tzinfo=UTC)
 
 
-def _ouvrir(fill, feats=None, sym="QQQ", classe="equity"):
+def _ouvrir(fill, feats=None, sym="QQQ", classe="equity", order_id="A1"):
     return build_open(sym, venue="Alpaca", asset_class=classe, fill=fill,
                       features=feats if feats is not None else {"decision_price": 100.0},
-                      ts=TS)
+                      ts=TS, order_id=order_id)
 
 
 # ------------------------------------------------------------------ 1. écart décision → fill
 
 def test_achat_plus_cher_que_la_decision_est_un_ecart_defavorable():
-    tr = _ouvrir({"avg_price": 101.0, "qty": 3.0, "origine": "ordre"})
+    tr = _ouvrir({"avg_price": 101.0, "qty": 3.0, "origine": "ordre", "ids": ["A1"]})
     assert tr.slippage == pytest.approx(3.0)            # (101 − 100) × 3, positif = coût
 
 
 def test_achat_moins_cher_est_un_ecart_favorable():
-    tr = _ouvrir({"avg_price": 99.5, "qty": 2.0, "origine": "ordre"})
+    tr = _ouvrir({"avg_price": 99.5, "qty": 2.0, "origine": "ordre", "ids": ["A1"]})
     assert tr.slippage == pytest.approx(-1.0)
 
 
@@ -54,7 +54,8 @@ def test_une_position_de_repli_ne_mesure_rien():
 
 @pytest.mark.parametrize("feats", [{}, {"decision_price": 0.0}, {"decision_price": -5.0}])
 def test_sans_prix_de_decision_rien_n_est_invente(feats):
-    tr = _ouvrir({"avg_price": 101.0, "qty": 3.0, "origine": "ordre"}, feats=feats)
+    tr = _ouvrir({"avg_price": 101.0, "qty": 3.0, "origine": "ordre", "ids": ["A1"]},
+                 feats=feats)
     assert tr.slippage is None
 
 
@@ -62,10 +63,24 @@ def test_fill_sans_origine_reste_inconnu():
     assert _ouvrir({"avg_price": 101.0, "qty": 3.0}).slippage is None
 
 
-def test_les_fills_du_jour_portent_leur_origine():
-    ordres = [{"symbol": "QQQ", "side": "buy", "qty": 2, "price": 100.0,
-               "date": "2026-09-30T15:00:00Z"}]
-    assert agreger_achats(ordres, "2026-09-30")["QQQ"]["origine"] == "ordre"
+def test_les_fills_du_jour_portent_leur_origine_et_leurs_ordres():
+    ordres = [{"id": "A1", "symbol": "QQQ", "side": "buy", "qty": 2, "price": 100.0,
+               "date": "2026-09-30T15:00:00Z"},
+              {"id": "M2", "symbol": "QQQ", "side": "buy", "qty": 1, "price": 103.0,
+               "date": "2026-09-30T16:00:00Z"}]
+    fill = agreger_achats(ordres, "2026-09-30")["QQQ"]
+    assert fill["origine"] == "ordre" and fill["ids"] == ["A1", "M2"]
+
+
+@pytest.mark.parametrize("ids, order_id", [
+    (["A1", "M2"], "A1"),        # le VWAP mêle l'ordre du robot et un achat manuel
+    (["M2"], "A1"),              # le seul fill du jour n'est pas l'ordre envoyé
+    ([""], "A1"),                # ordre du courtier sans identifiant : invérifiable
+    (["A1"], None),              # identité de l'ordre envoyé inconnue
+])
+def test_l_ecart_n_est_attribue_qu_au_fill_de_l_ordre_envoye(ids, order_id):
+    fill = {"avg_price": 101.0, "qty": 3.0, "origine": "ordre", "ids": ids}
+    assert _ouvrir(fill, order_id=order_id).slippage is None
 
 
 def test_le_repli_position_porte_son_origine():

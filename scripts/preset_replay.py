@@ -126,7 +126,8 @@ def _imprimer_rejeu(res: dict) -> None:
     b = res["bande"]
     regle = b["mode"] + (f" (aversion {b['aversion']})" if b["aversion"] else "")
     print(f"  bande {regle} : {b['ecarts_bloques']} écart(s) sur {b['ecarts_examines']} "
-          f"laissés sans ordre ({b['part_bloquee']:.0%})")
+          f"laissés sans ordre ({b['part_bloquee']:.0%}) · effet moyen "
+          f"{b['montant_moyen_bloque']:,.0f} $ ({b['ecart_poids_moyen_bloque']:.2%} du capital)")
 
 
 def _ecrire(res: dict, mode: str) -> None:

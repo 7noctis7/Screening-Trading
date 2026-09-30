@@ -62,7 +62,7 @@ def test_fills_prioritaires_sur_la_position():
     brokers = (("Alpaca", br), ("Bitmart", None))
     fills = run_live._fills_achats(brokers, "2026-09-03")
     repli = run_live._positions_repli(brokers)
-    assert fills[("Alpaca", "PATH")] == {"qty": 40.0, "avg_price": 15.0, "origine": "ordre"}
+    assert fills[("Alpaca", "PATH")] == {"qty": 40.0, "avg_price": 15.0, "origine": "ordre", "ids": [""]}
     assert repli[("Alpaca", "PATH")]["qty"] == 1000.0   # le repli suit, il ne prime pas
 
 
@@ -74,7 +74,7 @@ def test_fill_trouve_meme_sans_position_rafraichie():
         [],
     )
     fills = run_live._fills_achats((("Bitmart", br),), "2026-09-03")
-    assert fills == {("Bitmart", "SOL"): {"qty": 3.0, "avg_price": 200.0, "origine": "ordre"}}
+    assert fills == {("Bitmart", "SOL"): {"qty": 3.0, "avg_price": 200.0, "origine": "ordre", "ids": [""]}}
 
 
 def test_courtier_muet_ne_supprime_pas_l_autre():
@@ -86,7 +86,7 @@ def test_courtier_muet_ne_supprime_pas_l_autre():
         [],
     )
     fills = run_live._fills_achats((("Bitmart", muet), ("Alpaca", ok)), "2026-09-03")
-    assert fills == {("Alpaca", "QQQ"): {"qty": 2.0, "avg_price": 500.0, "origine": "ordre"}}
+    assert fills == {("Alpaca", "QQQ"): {"qty": 2.0, "avg_price": 500.0, "origine": "ordre", "ids": [""]}}
 
 
 def test_repli_canonique_comme_les_fills():
