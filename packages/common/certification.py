@@ -1,7 +1,7 @@
 """Cohérence entre le STATUT déclaré d'un module et sa place RÉELLE dans le système.
 
 POURQUOI CE CONTRÔLE EXISTE. `vault/15_CERTIFICATION.md` pose la règle : « un composant
-non certifié en prod = finding P0 ». Dix modules déclarent un `STATUT` SHADOW et
+non certifié en prod = finding P0 ». Huit modules déclarent un `STATUT` SHADOW et
 « Aucun appelant en production » — une affirmation vraie le jour où elle a été
 écrite et que RIEN ne revérifie. Un import ajouté six semaines plus tard fait entrer en
 production un module qui continue de jurer qu'il n'y est pas, et personne ne le voit.
