@@ -25,6 +25,11 @@
       (c) chercher une vraie source de rendement — pré-enregistrée, jugée hors échantillon.
       Ne rien engager en réel avant d'avoir tranché. Cf. 10_BACKTEST_RESULTS du 25/09.
       **Option (c) retenue (25/09, ADR-0205)** → banc pré-enregistré livré, voir ci-dessous.
+- [ ] **P1 — Mesurer les sorties sur le VPS : `make preset-sorties` (30/09, ADR-0208).**
+      Trois essais pré-enregistrés (atr, structure, structure_prise). Le verdict
+      (ADOPTABLE ou REJETÉ) s'imprime selon la règle écrite AVANT la mesure. Consigner
+      dans 10_BACKTEST_RESULTS, y compris un rejet. Nouveau module SHADOW :
+      `strategies.sorties_suiveuses` (inventaire de certification mis à jour).
 - [ ] **P2 — Coûts du journal : ce qui reste après ADR-0207 (30/09).**
       (a) Enregistrer un prix de référence pour les VENTES, sans quoi la jambe de sortie
       n'est pas mesurée.

@@ -2,6 +2,46 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0208 — Sorties entre deux rééquilibrages : construites, pré-enregistrées, pas adoptées (2026-09-30)
+
+**CONTEXTE.** Une feuille de route demande des stops suiveurs (ATR, structure) et des
+prises de gains à la place de la sortie exclusive par rééquilibrage. Vérifié : le
+portefeuille qui trade n'a AUCUNE sortie entre deux décisions. Mais le dépôt a déjà
+mesuré un suiveur ATR sur la stratégie swing et l'a RETIRÉ (ADR-0052) : Sharpe 0,53 sans,
+0,38 avec. Il tronquait la queue droite, là où vivait l'avantage. L'a priori est donc
+défavorable. Il reste à mesurer, pas à supposer.
+
+**DÉCISIONS.**
+(1) `packages/strategies/sorties_suiveuses.py`, en SHADOW.
+- Règles :
+  - Chandelier : plus haut de CLÔTURE − 3·ATR(14) de Wilder ;
+  - structure : un creux confirmé suivi d'un sommet confirmé, stop posé 0,5 ATR sous ce
+    creux (au-delà de la poche de liquidité balayée), risque initial ≤ 4 ATR ;
+  - prise partielle d'un tiers à la liquidité opposée, jamais sous 2 R.
+- Invariants : le stop ne recule jamais ; l'état au close d ne lit que les barres ≤ d ;
+  gap → ouverture ; stop et cible dans la même barre → le stop.
+(2) `packages/backtest/rejeu_sorties.py` :
+- mêmes décisions de production simulées sans puis avec sorties ;
+- exécution en séance avant le marquage ;
+- carence de 10 séances (pas de rachat par le rééquilibrage suivant) ;
+- cœur QQQ jamais géré.
+(3) RÈGLE PRÉ-ENREGISTRÉE (`make preset-sorties`). Trois modes seulement : atr,
+structure, structure+prise. Réglages conventionnels, jamais retouchés après lecture.
+Un mode est ADOPTABLE si et seulement si :
+- ΔSharpe apparié (avec − sans) ≥ 0 ;
+- ET le maxDD s'améliore d'au moins 3 points.
+Sinon il est REJETÉ. Adoptable ≠ adopté : `run_live` ne change que sur décision explicite.
+
+**LIMITES.**
+- En barres quotidiennes, l'ordre intra-séance est inconnu : on retient le stop,
+  hypothèse défavorable.
+- Un pivot n'est confirmé que 5 séances après lui : le stop structurel est en retard par
+  construction.
+- La carence et les réglages sont conventionnels.
+- La poche crypto n'est pas rejouée.
+
+---
+
 ## ADR-0207 — Journal : l'écart décision → fill est écrit ; une vente partielle ne duplique plus les frais (2026-09-30)
 
 **CONTEXTE.** Une feuille de route signalait des colonnes frais/slippage « à 0,00 $ ».

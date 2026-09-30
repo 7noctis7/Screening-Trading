@@ -1,5 +1,18 @@
 # 04 — JOURNAL
 
+## Session 2026-09-30 (3ᵉ) — Stops suiveurs : construits pour être MESURÉS, pas pour être crus
+
+Troisième feuille de route : des stops ATR et structurels à la place de la sortie par
+rééquilibrage. Deux découvertes avant d'écrire une ligne. `moteur_sortie` existait déjà,
+en shadow. L'ADR-0052 avait déjà RETIRÉ un suiveur ATR de la stratégie swing, parce qu'il
+coupait la queue droite. Livré (ADR-0208) : les règles de sortie, leur branchement dans le
+rejeu (mêmes décisions, avec ou sans sorties) et un banc à trois essais pré-enregistrés,
+dont la règle de verdict est fixée avant toute mesure. La production est inchangée.
+
+Un test de la règle de décision a trouvé le piège flottant déjà noté dans CLAUDE.md :
+−0,27 − (−0,30) vaut 0,0299… en binaire, donc « au moins 3 points » rejetait exactement
+3 points. Corrigé par une tolérance.
+
 ## Session 2026-09-30 (2ᵉ) — Les frais « à 0,00 $ » étaient exacts ; le slippage, lui, n'était jamais écrit
 
 Deuxième feuille de route du jour. Son premier point ciblait des frais à 0,00 $ dans le

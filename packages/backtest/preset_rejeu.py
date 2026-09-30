@@ -147,6 +147,17 @@ class _Compte:
             self.lignes.pop(sym)
             self._marque.pop(sym, None)
 
+    def vendre_au_prix(self, sym: str, prix: float, part: float, cout: float) -> float:
+        """Vend `part` de la ligne au prix `prix` (un stop, une prise) : la ligne est
+        d'abord re-marquée de son dernier cours à `prix`. Rend le montant vendu."""
+        if sym not in self.lignes or prix <= 0:
+            return 0.0
+        if self._marque.get(sym):
+            self.lignes[sym] *= prix / self._marque[sym]
+        montant = self.lignes[sym] * min(max(part, 0.0), 1.0)
+        self.ecrire(sym, -montant, prix, cout)
+        return montant
+
 
 def _cout(classe: str, frais: bool) -> float:
     from packages.execution.costs import CostModel
@@ -223,9 +234,13 @@ def _resume_bande(regle: dict, compte: _Compte) -> dict:
 
 def simuler(cibles: list, prix: dict, jours: list[str], *, capital: float = CAPITAL_DEFAUT,
             classes: dict | None = None, frais: bool = True, lag: int = 1,
-            bande: str = "fixe", aversion: float | None = None) -> dict:
+            bande: str = "fixe", aversion: float | None = None,
+            sorties=None) -> dict:
     """Déroule les cibles datées : chaque cible décidée le jour `d` s'exécute `lag` jours
-    de cotation PLUS TARD, au cours de clôture de ce jour-là. Equity marquée chaque jour."""
+    de cotation PLUS TARD, au cours de clôture de ce jour-là. Equity marquée chaque jour.
+
+    `sorties` (optionnel, `rejeu_sorties.Surveillance`) : stops et prises exécutés en
+    séance AVANT le marquage, cibles filtrées pendant la carence, états suivis au close."""
     regle = regle_bande(bande, aversion)
     cours, compte = _Cours(prix), _Compte(capital)
     a_executer: dict[str, dict] = {}
@@ -238,9 +253,16 @@ def simuler(cibles: list, prix: dict, jours: list[str], *, capital: float = CAPI
     premier = min(a_executer)
     dates, equity = [], []
     for jour in jours[jours.index(premier):]:
+        if sorties is not None:
+            sorties.declencher(compte, jour, classes or {}, frais)
         compte.marquer(cours, jour)
         if jour in a_executer:
-            _executer(compte, a_executer[jour], cours, jour, classes or {}, frais, regle)
+            cible = a_executer[jour]
+            if sorties is not None:
+                cible = sorties.filtrer(cible, jour)
+            _executer(compte, cible, cours, jour, classes or {}, frais, regle)
+        if sorties is not None:
+            sorties.suivre(compte, jour)
         dates.append(jour)
         equity.append(compte.equity())
     eq = compte.equity()
@@ -255,6 +277,20 @@ def _prix_par_jour(data: dict) -> dict:
             for s, barres in data.items()}
 
 
+def cibles_rejouees(data: dict, *, pas: int = PAS_DEFAUT, debut: str | None = None,
+                    params: dict | None = None,
+                    coeur: dict | None = None) -> tuple[list, list, list] | None:
+    """(calendrier, décisions brutes, cibles avec cœur) — la partie COÛTEUSE du rejeu,
+    isolée pour qu'une comparaison (avec/sans sorties) ne la paie qu'une fois."""
+    cal = calendrier(data)
+    i0 = bisect_right(cal, debut) - 1 if debut else DEBUT_DEFAUT
+    jours = cal[max(0, i0)::max(1, pas)]
+    if len(jours) < 3:
+        return None
+    brutes = decisions(data, jours, params)
+    return cal, brutes, [(j, avec_coeur(w, coeur)) for j, w in brutes]
+
+
 def rejouer(data: dict, *, pas: int = PAS_DEFAUT, debut: str | None = None,
             params: dict | None = None, coeur: dict | None = None,
             classes: dict | None = None, capital: float = CAPITAL_DEFAUT,
@@ -264,13 +300,10 @@ def rejouer(data: dict, *, pas: int = PAS_DEFAUT, debut: str | None = None,
     from packages.backtest.conviction_backtest import _stats
 
     regle_bande(bande, aversion)                     # refuse AVANT les minutes de rejeu
-    cal = calendrier(data)
-    i0 = bisect_right(cal, debut) - 1 if debut else DEBUT_DEFAUT
-    jours = cal[max(0, i0)::max(1, pas)]
-    if len(jours) < 3:
+    prep = cibles_rejouees(data, pas=pas, debut=debut, params=params, coeur=coeur)
+    if prep is None:
         return {"available": False, "raison": "historique trop court pour rejouer"}
-    brutes = decisions(data, jours, params)
-    cibles = [(j, avec_coeur(w, coeur)) for j, w in brutes]
+    cal, brutes, cibles = prep
     res = simuler(cibles, _prix_par_jour(data), cal, capital=capital,
                   classes=classes, frais=frais, bande=bande, aversion=aversion)
     if not res["available"]:
