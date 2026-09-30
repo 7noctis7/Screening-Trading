@@ -58,6 +58,12 @@ Sharpe 1,10, maxDD −25,7 % ; QQQ 20,1 % / 0,93 / −35,6 % ; ΔSharpe vs QQQ +
 [−0,08 ; +0,42], p = 0,17 (indiscernable). Bande fixe : 57 % des écarts (3032/5292) laissés
 sans ordre, effet moyen 464 $ (0,20 % du capital). Bande adaptative : pas encore mesurée.
 
+**Bande adaptative (aversion 5)**, même rejeu : CAGR 18,4 %, Sharpe 1,12, maxDD −25,7 % ;
+50 % des écarts sans ordre (2669/5293), effet moyen 433 $ ; **3768 ordres et 8 173 $ de frais**
+contre 3386 et 7 976 $ en bande fixe (+11 % d'ordres, +197 $). ΔSharpe vs QQQ +0,19
+[−0,05 ; +0,44], p = 0,12. Critère écrit avant (TODO 30/09) : « moins de frais, même
+ΔSharpe ». Les frais augmentent → **NON ADOPTÉE** ; le +0,02 de Sharpe est dans le bruit.
+
 ---
 
 ## 2026-09-30 — grid_runner : menus court / moyen / long × timeframes daily/weekly/monthly [900737b716db], 4 actifs réels (FMP)

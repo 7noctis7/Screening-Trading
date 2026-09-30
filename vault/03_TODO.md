@@ -65,7 +65,10 @@
       n'est pas mesurée.
       (b) Mesurer sur le VPS les tranches `-X` BitMart antérieures au 30/09 : leurs frais
       d'entrée sont comptés deux fois. Les réécrire seulement après ce chiffrage.
-- [ ] **P1 — Mesurer la bande d'inaction sur le VPS (30/09, ADR-0206).** Commencer par
+- [x] **FAIT 30/09 (VPS) — bande adaptative (aversion 5) NON ADOPTÉE** : +11 % d'ordres,
+      +197 $ de frais pour Sharpe 1,12 vs 1,10 (bruit). Critère « moins de frais » non tenu.
+      Deux autres aversions possibles au plus ; pas prioritaire.
+- [x] ~~P1 — Mesurer la bande d'inaction sur le VPS (30/09, ADR-0206).~~ Commencer par
       **Bande fixe mesurée 30/09 : 57 % des écarts (3032/5292) sans ordre, effet moyen 464 $
       (0,20 % du capital) ; rejeu Sharpe 1,10 vs QQQ 0,93 (p = 0,17, indiscernable).** RESTE :
       `make preset-replay` (bande fixe) : lire la part des écarts laissés sans ordre, qui
