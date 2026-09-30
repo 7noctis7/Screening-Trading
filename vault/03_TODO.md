@@ -25,6 +25,10 @@
       (c) chercher une vraie source de rendement — pré-enregistrée, jugée hors échantillon.
       Ne rien engager en réel avant d'avoir tranché. Cf. 10_BACKTEST_RESULTS du 25/09.
       **Option (c) retenue (25/09, ADR-0205)** → banc pré-enregistré livré, voir ci-dessous.
+- [ ] **P1 — Mesurer le méta-filtre de SMCLXTP-A sur le VPS : `make meta-smc` (30/09,
+      ADR-0209).** Lire le p de permutation AVANT l'AUC. Le filtre n'est utilisable que
+      s'il bat la distribution nulle ET améliore la moitié chronologique qui n'a pas fixé
+      son seuil. Nouveau module SHADOW : `ml.meta_smc` (inventaire mis à jour).
 - [ ] **P1 — Mesurer les sorties sur le VPS : `make preset-sorties` (30/09, ADR-0208).**
       Trois essais pré-enregistrés (atr, structure, structure_prise). Le verdict
       (ADOPTABLE ou REJETÉ) s'imprime selon la règle écrite AVANT la mesure. Consigner

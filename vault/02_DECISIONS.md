@@ -2,6 +2,49 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0209 — SMCLXTP-A : la traduction corrigée de son look-ahead ; le méta-filtre doit battre le hasard (2026-09-30)
+
+**CONTEXTE.** L'utilisateur a fourni une traduction Python de son indicateur Pine
+SMCLXTP-A (zones SMC + pivots LuxAlgo, LONG et TP). Il demande son intégration au
+registre et un méta-labelling avec filtre ML (« exécuter si p > 0,65 »).
+
+**DÉFAUTS DE LA TRADUCTION** (chacun couvert par un test) :
+(1) LOOK-AHEAD de L barres. Un swing était daté à la barre du pivot, confirmé par une
+fenêtre centrée [i−L, i+L] : les zones d'une barre lisaient les L barres suivantes. Sur
+5 marches aléatoires synthétiques avec L = 50, 27 % des dates voyaient leurs zones changer
+quand on ajoutait l'avenir. C'est une démonstration du mécanisme, pas une mesure réelle.
+Pine (`ta.pivothigh(L, L)`) date le pivot à sa CONFIRMATION.
+(2) `== max(fenêtre)` déclarait un pivot à chaque barre d'une série plate.
+(3) L'état initial « creux » était fictif : le premier creux devenait un TP manqué.
+(4) Sémantique, conservée mais signalée : un creux « manqué » émet son LONG au moment où
+un 2ᵉ sommet est confirmé, donc après un sommet.
+
+**DÉCISIONS.**
+- `packages/indicators/smc_lux_tp.py` : calcul causal en numpy. L'interface
+  `SMCLuxTPIndicator.calculate(df)` est conservée. Le registre expose `smc_zone_ratio`,
+  `smclxtp_long` et `smclxtp_tp`.
+- `packages/ml/meta_smc.py`, en SHADOW. La chaîne :
+  - événements = les `long_signal` ;
+  - triple barrière en ATR (+2 / −1, H = 20, frais 10 pb) ;
+  - 7 features sans unité de prix ;
+  - PurgedKFold avec embargo ≥ 1,5·H jours ;
+  - AUC contre une distribution NULLE par permutation ;
+  - seuil ajusté sur la 1re moitié chronologique des probabilités hors échantillon,
+    jugé sur la 2de.
+- `MetaFiltre.autorise` LÈVE une erreur tant que le filtre n'est pas calibré : aucun
+  « 0,65 » n'est posé par principe.
+- `make meta-smc` est un essai au ledger par passage.
+
+**LIMITES.**
+- La parité backtest/paper/live tient à l'implémentation unique ; les alertes
+  TradingView ne sont pas branchées.
+- `ob_search_bars` et `ob_mitigation_mode` restent sans effet, comme dans la traduction.
+- La triple barrière ne lit que les clôtures.
+- Univers = listes actuelles (biais du survivant).
+- Un seul modèle pour tous les titres.
+
+---
+
 ## ADR-0208 — Sorties entre deux rééquilibrages : construites, pré-enregistrées, pas adoptées (2026-09-30)
 
 **CONTEXTE.** Une feuille de route demande des stops suiveurs (ATR, structure) et des

@@ -1,5 +1,21 @@
 # 04 — JOURNAL
 
+## Session 2026-09-30 (4ᵉ) — SMCLXTP-A : la traduction regardait 50 barres dans l'avenir
+
+L'utilisateur a fourni la traduction Python de son indicateur Pine. Avant de l'enregistrer,
+je l'ai soumise au test de troncature que passent tous les indicateurs du dépôt. Elle
+échouait : les swings étaient datés à la barre du pivot, alors qu'ils ne sont confirmés
+que L barres plus tard. Sur des marches aléatoires, 27 % des dates changeaient de zones
+quand on leur ajoutait l'avenir.
+
+Mon premier test de preuve est passé à côté : il ne testait qu'UNE date, et le défaut ne
+se voit que si un pivot tombe dans les L barres qui la précèdent. Le balayage de toutes
+les dates l'a montré.
+
+Livré (ADR-0209) : l'indicateur corrigé au registre, et un méta-labelling qui n'accorde
+un seuil qu'après avoir battu la distribution nulle. Sur du bruit, le filtre refuse de
+répondre, au lieu de laisser tout passer.
+
 ## Session 2026-09-30 (3ᵉ) — Stops suiveurs : construits pour être MESURÉS, pas pour être crus
 
 Troisième feuille de route : des stops ATR et structurels à la place de la sortie par
