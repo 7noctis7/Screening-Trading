@@ -10,10 +10,10 @@ import pytest
 from packages.risk.ddm import STATUT, MachineDDM, ReglesDDM, taille_position
 
 
-def test_le_module_demarre_en_SHADOW():
-    """Règle d'architecture : tout producteur non calibré a un poids capital NUL."""
-    assert STATUT == "SHADOW_UNCALIBRATED"
-    assert MachineDDM().etat()["statut"] == "SHADOW_UNCALIBRATED"
+def test_le_module_est_CANDIDATE_apres_cablage_sleeve():
+    """Câblé via swing_sleeve → run_live paper : plus SHADOW. Pas de calibration live."""
+    assert STATUT == "CANDIDATE_UNCALIBRATED"
+    assert MachineDDM().etat()["statut"] == "CANDIDATE_UNCALIBRATED"
 
 
 def test_descente_sur_4_pertes_consecutives():

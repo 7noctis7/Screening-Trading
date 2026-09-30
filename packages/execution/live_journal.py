@@ -161,21 +161,28 @@ def ecart_decision(fill: dict | None, features: dict, prix: float, qty: float,
                    order_id: str | None = None) -> float | None:
     """Écart décision → fill de l'ACHAT, en devise : (fill − décision) × quantité.
 
-    Convention unique `fills.shortfall_bps` : positif = défavorable. Descriptif : déjà
-    dans le prix de fill, jamais retranché du P&L. `None` (jamais 0) :
+    Convention unique via `fills` + `Fill.shortfall_amount` : positif = défavorable.
+    Descriptif : déjà dans le prix de fill, jamais retranché du P&L. `None` (jamais 0) :
       · sans prix de décision ;
       · si le « fill » est une POSITION de repli (prix moyen d'autres jours) ;
       · si le VWAP du jour n'est pas EXACTEMENT l'ordre envoyé (`order_id`) : un achat
         manuel ou un autre passage du même jour sur le même titre y serait mêlé, et
         l'écart serait attribué à une décision qui n'en est pas la cause."""
-    from packages.core.models import Side
+    from packages.core.models import Fill, Side
     from packages.execution.fills import shortfall_bps
     f = fill or {}
     if f.get("origine") != "ordre" or not order_id or f.get("ids") != [str(order_id)]:
         return None
     ref = features.get("decision_price")
-    bps = shortfall_bps(ref, prix, Side.LONG) if isinstance(ref, (int, float)) else None
-    return None if bps is None else round(bps / 1e4 * float(ref) * qty, 6)
+    if not isinstance(ref, (int, float)):
+        return None
+    bps = shortfall_bps(ref, prix, Side.LONG)
+    if bps is None:
+        return None
+    # Devise via Fill.shortfall_amount (formule unique dans models/fills — pas ici).
+    amt = Fill(instrument="_", side=Side.LONG, qty=qty, fill_price=prix,
+               reference_price=float(ref), shortfall_bps=bps).shortfall_amount
+    return None if amt is None else round(amt, 6)
 
 
 def _classe_de_frais(symbole: str, hint: str | None) -> str:

@@ -32,7 +32,9 @@ des bancs (`scripts/candidats_lab.py`, `make labs`) et de la porte de certificat
 (`vault/15_CERTIFICATION.md`). Une géométrie qui se code proprement n'est pas une
 géométrie qui gagne.
 
-STATUT : SHADOW. Aucun appelant en production.
+STATUT : CANDIDATE_UNCALIBRATED. Joignable depuis la production paper via
+`packages.execution.swing_sleeve` → `scripts/run_live` / `apps/api/snapshot`
+(QUANT_SWING_PAPER défaut OFF). Sleeve paper isolé ; pas d'enable live.
 """
 
 from __future__ import annotations
@@ -43,7 +45,7 @@ from packages.indicators.liquidite_ict import choch, continuation_ote, sfp
 from packages.risk.ddm import MachineDDM, taille_position
 from packages.risk.garde_swing import exposition_autorisee, regime_marche
 
-STATUT = "SHADOW_UNCALIBRATED"
+STATUT = "CANDIDATE_UNCALIBRATED"
 
 HURST_PERSISTANT = 0.55
 K_ATR_STOP = 2.0

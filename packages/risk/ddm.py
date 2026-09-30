@@ -19,7 +19,10 @@ selon le drawdown de l'equity ; le DDM réagit en DISCRET au compte de trades. L
 sont composables et mesurent des choses différentes — on ne remplace pas l'un par
 l'autre sans mesure.
 
-STATUT : SHADOW. Aucun appelant en production. Le brancher est une décision explicite.
+STATUT : CANDIDATE_UNCALIBRATED. Joignable depuis la production paper via
+`swing_sleeve` → `moteur_swing.RiskManager` → `scripts/run_live` /
+`apps/api/snapshot` (QUANT_SWING_PAPER). Dimensionnement paper ; pas de
+calibration live.
 
 Note sur « −4R cumulés » : au niveau DD1, R vaut 0,5 % de l'equity, donc −4R vaut −2 %
 et non −4 %. Le seuil se resserre à chaque descente — c'est le propre d'un désengagement
@@ -30,7 +33,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-STATUT = "SHADOW_UNCALIBRATED"
+STATUT = "CANDIDATE_UNCALIBRATED"
 
 
 @dataclass(frozen=True)
