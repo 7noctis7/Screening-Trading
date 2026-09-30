@@ -1,5 +1,67 @@
 # 04 — JOURNAL
 
+## Session 2026-09-30 (5ᵉ) — SMCLXTP-A face au buy & hold : moins de drawdown, beaucoup moins de rendement
+
+Backtest demandé sur 12 actifs depuis 2020. Le conteneur n'a ni données ni accès à Yahoo
+ou Binance. Le connecteur FMP en a servi 4 (NVDA, PLTR, BTC, ETH), les 8 autres étant hors
+de l'abonnement. Sur ces 4, l'indicateur fait moins bien que le buy & hold, en CAGR comme
+en Sharpe. Il réduit le drawdown de 11 à 18 points, sans le ramener sous −54 %. Le
+méta-filtre reste UNCALIBRATED (54 événements). Le script est prêt pour les 12 actifs sur
+le VPS.
+
+La revue Codex de #411 a relevé trois défauts réels, corrigés avant la fusion : l'écart
+était attribuable à un fill étranger, le compteur de la bande incluait le plancher, et la
+bande ne publiait pas son effet moyen.
+
+## Session 2026-09-30 (4ᵉ) — SMCLXTP-A : la traduction regardait 50 barres dans l'avenir
+
+L'utilisateur a fourni la traduction Python de son indicateur Pine. Avant de l'enregistrer,
+je l'ai soumise au test de troncature que passent tous les indicateurs du dépôt. Elle
+échouait : les swings étaient datés à la barre du pivot, alors qu'ils ne sont confirmés
+que L barres plus tard. Sur des marches aléatoires, 27 % des dates changeaient de zones
+quand on leur ajoutait l'avenir.
+
+Mon premier test de preuve est passé à côté : il ne testait qu'UNE date, et le défaut ne
+se voit que si un pivot tombe dans les L barres qui la précèdent. Le balayage de toutes
+les dates l'a montré.
+
+Livré (ADR-0209) : l'indicateur corrigé au registre, et un méta-labelling qui n'accorde
+un seuil qu'après avoir battu la distribution nulle. Sur du bruit, le filtre refuse de
+répondre, au lieu de laisser tout passer.
+
+## Session 2026-09-30 (3ᵉ) — Stops suiveurs : construits pour être MESURÉS, pas pour être crus
+
+Troisième feuille de route : des stops ATR et structurels à la place de la sortie par
+rééquilibrage. Deux découvertes avant d'écrire une ligne. `moteur_sortie` existait déjà,
+en shadow. L'ADR-0052 avait déjà RETIRÉ un suiveur ATR de la stratégie swing, parce qu'il
+coupait la queue droite. Livré (ADR-0208) : les règles de sortie, leur branchement dans le
+rejeu (mêmes décisions, avec ou sans sorties) et un banc à trois essais pré-enregistrés,
+dont la règle de verdict est fixée avant toute mesure. La production est inchangée.
+
+Un test de la règle de décision a trouvé le piège flottant déjà noté dans CLAUDE.md :
+−0,27 − (−0,30) vaut 0,0299… en binaire, donc « au moins 3 points » rejetait exactement
+3 points. Corrigé par une tolérance.
+
+## Session 2026-09-30 (2ᵉ) — Les frais « à 0,00 $ » étaient exacts ; le slippage, lui, n'était jamais écrit
+
+Deuxième feuille de route du jour. Son premier point ciblait des frais à 0,00 $ dans le
+journal. Vérifié : c'est la commission réelle d'un achat Alpaca, estimée et marquée comme
+telle. La vraie dette était ailleurs : la colonne `slippage` restait vide alors que le prix
+de décision est enregistré. En la comblant, j'ai trouvé un défaut que personne n'avait
+signalé : une vente partielle comptait deux fois la commission d'entrée. Les deux sont
+corrigés (ADR-0207), chaque fois avec un test écrit d'abord qui échouait (3,6 $ de frais
+sur la tranche au lieu de 2,1 $).
+
+## Session 2026-09-30 — Bande d'inaction : le problème annoncé n'était pas celui de la production
+
+Une feuille de route externe désignait la bande de 3 % comme priorité. Vérification faite,
+elle ne vit que dans les backtests hérités : la production applique 0,5 % du capital et
+rééquilibre plutôt trop que pas assez (4 082 ordres pour 503 décisions dans le rejeu réel).
+Livré (ADR-0206) : une bande adaptative (coût × volatilité, en racine cubique) et le
+compteur de la part des écarts bloqués, tous deux dans le rejeu seulement. La production
+reste inchangée tant que le VPS n'a pas mesuré. Le point n°5 de la même feuille de route
+(fusion à un seul jour commun) était déjà corrigé dans #410.
+
 ## Session 2026-09-25 (5ᵉ) — Option (c) : un banc qui classe sans fabriquer de gagnant
 
 L'utilisateur veut voir le classement de nombreux scénarios avant de choisir : rythmes de

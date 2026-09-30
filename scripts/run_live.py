@@ -518,7 +518,8 @@ def _positions_repli(brokers: tuple) -> dict:
             continue
         for p in detail:
             pos[(bn, normaliser(p["symbol"]))] = {"avg_price": p.get("avg_price"),
-                                                  "qty": p.get("qty")}
+                                                  "qty": p.get("qty"),
+                                                  "origine": "position"}
     return pos
 
 
@@ -641,6 +642,7 @@ def _journal_opens(snap: dict, opened: list, alpaca, bitmart) -> None:
                          **({"decision_price": _decision_px(op["symbol"])}
                             if _decision_px(op["symbol"]) else {})},
             "regime": regime_lbl,
+            "order_id": op.get("order_id"),          # l'écart ne se mesure que sur SON fill
         } for op in opened]
         _garder_les_decisions(opens, jour)
         n = journal_opens(SqliteTradeJournal(), opens)

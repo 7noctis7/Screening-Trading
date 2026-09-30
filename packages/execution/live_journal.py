@@ -102,12 +102,36 @@ def agreger_achats(ordres: list[dict], jour: str) -> dict[str, dict]:
         if q <= 0 or px <= 0:
             continue
         cle = normaliser(o.get("symbol", ""))
-        acc = par_sym.setdefault(cle, {"qty": 0.0, "notional": 0.0})
+        acc = par_sym.setdefault(cle, {"qty": 0.0, "notional": 0.0, "ids": []})
         acc["qty"] += q
         acc["notional"] += q * px
+        acc["ids"].append(str(o.get("id") or ""))        # "" = ordre sans identité
     return {k: {"qty": round(v["qty"], 10),
-                "avg_price": v["notional"] / v["qty"]}      # VWAP du jour, pas le PRU
+                "avg_price": v["notional"] / v["qty"],      # VWAP du jour, pas le PRU
+                "origine": "ordre",                         # un FILL du jour (cf. ecart)
+                "ids": v["ids"]}                            # les ordres que ce VWAP mêle
             for k, v in par_sym.items() if v["qty"] > 0}
+
+
+def ecart_decision(fill: dict | None, features: dict, prix: float, qty: float,
+                   order_id: str | None = None) -> float | None:
+    """Écart décision → fill de l'ACHAT, en devise : (fill − décision) × quantité.
+
+    Convention unique `fills.shortfall_bps` : positif = défavorable. Descriptif : déjà
+    dans le prix de fill, jamais retranché du P&L. `None` (jamais 0) :
+      · sans prix de décision ;
+      · si le « fill » est une POSITION de repli (prix moyen d'autres jours) ;
+      · si le VWAP du jour n'est pas EXACTEMENT l'ordre envoyé (`order_id`) : un achat
+        manuel ou un autre passage du même jour sur le même titre y serait mêlé, et
+        l'écart serait attribué à une décision qui n'en est pas la cause."""
+    from packages.core.models import Side
+    from packages.execution.fills import shortfall_bps
+    f = fill or {}
+    if f.get("origine") != "ordre" or not order_id or f.get("ids") != [str(order_id)]:
+        return None
+    ref = features.get("decision_price")
+    bps = shortfall_bps(ref, prix, Side.LONG) if isinstance(ref, (int, float)) else None
+    return None if bps is None else round(bps / 1e4 * float(ref) * qty, 6)
 
 
 def _classe_de_frais(symbole: str, hint: str | None) -> str:
@@ -117,7 +141,8 @@ def _classe_de_frais(symbole: str, hint: str | None) -> str:
 
 def build_open(symbol: str, *, venue: str, asset_class: str | None, fill: dict | None,
                features: dict | None, regime: str | None = None,
-               strategy: str = "preset", ts: datetime | None = None) -> TradeRecord | None:
+               strategy: str = "preset", ts: datetime | None = None,
+               order_id: str | None = None) -> TradeRecord | None:
     """TradeRecord d'ouverture (`legacy=0`), ou None si le fill est inexploitable (prix/qté ≤ 0).
 
     `id` DÉTERMINISTE par (jour, broker, symbole) → l'UPSERT du journal rend le re-run du même jour
@@ -138,10 +163,11 @@ def build_open(symbol: str, *, venue: str, asset_class: str | None, fill: dict |
         # les réponses que lit `run_live` ; écrire 0.0 serait un mensonge et `None` un
         # silence. On écrit le barème documenté ET `fees_source="estimated"`, pour
         # qu'aucun lecteur ne confonde plus tard cette estimation avec un fait.
-        # Le SLIPPAGE reste `None` : il n'est pas estimable sans prix de référence, et
-        # il est de toute façon déjà contenu dans le prix de fill.
+        # L'ÉCART décision → fill est écrit quand il est mesurable (fill du jour + prix de
+        # décision), sinon None. Il est DESCRIPTIF : déjà contenu dans le prix de fill.
         fees=broker_charge(_classe_de_frais(symbol, asset_class), price * qty, side="BUY"),
         fees_source="estimated",
+        slippage=ecart_decision(fill, feats, price, qty, order_id),
         features_snapshot=feats)
 
 
@@ -152,7 +178,7 @@ def journal_opens(journal, opens: list[dict], *, ts: datetime | None = None) -> 
     for o in opens:
         tr = build_open(o["symbol"], venue=o["venue"], asset_class=o.get("asset_class"),
                         fill=o.get("fill"), features=o.get("features"),
-                        regime=o.get("regime"), ts=ts)
+                        regime=o.get("regime"), ts=ts, order_id=o.get("order_id"))
         if tr is not None:
             journal.append(tr, legacy=False)
             n += 1

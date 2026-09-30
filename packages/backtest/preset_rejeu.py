@@ -42,6 +42,8 @@ DEBUT_DEFAUT = 252        # la production exige > 200 barres (MM200) + la fenêt
 CAPITAL_DEFAUT = 100_000.0
 BANDE_RELATIVE = 0.005    # run_live._broker_targets : max(0,5 % du capital, 5 $)
 BANDE_MIN = 5.0
+MOTIF_BANDE = "écart sous la bande d'inaction"      # `rebalance_plan.decider`
+MODES_BANDE = ("fixe", "adaptative")
 
 # Porté par les TROIS sorties historiques (métriques, courbe du tableau de bord, ledger) :
 # elles décrivent une règle voisine de celle qui trade, et doivent le dire elles-mêmes.
@@ -110,12 +112,18 @@ class _Cours:
         i = bisect_right(jours, jour)
         return self._prix[sym][jours[i - 1]] if i else None
 
+    def vol(self, sym: str, jour: str) -> float:
+        from packages.execution.bande_adaptative import vol_annuelle
+        return vol_annuelle(self._prix.get(sym) or {}, self._jours.get(sym) or [], jour)
+
 
 class _Compte:
     """Cash + valeur par ligne, marquée au cours du jour. Aucun levier possible."""
 
     def __init__(self, capital: float) -> None:
         self.cash, self.lignes, self.frais, self.n_ordres = float(capital), {}, 0.0, 0
+        self.ecarts_examines = self.ecarts_bloques = 0
+        self.montant_bloque = self.poids_bloque = 0.0
         self._marque: dict[str, float] = {}
 
     def marquer(self, cours: _Cours, jour: str) -> None:
@@ -140,27 +148,66 @@ class _Compte:
             self.lignes.pop(sym)
             self._marque.pop(sym, None)
 
+    def vendre_au_prix(self, sym: str, prix: float, part: float, cout: float) -> float:
+        """Vend `part` de la ligne au prix `prix` (un stop, une prise) : la ligne est
+        d'abord re-marquée de son dernier cours à `prix`. Rend le montant vendu."""
+        if sym not in self.lignes or prix <= 0:
+            return 0.0
+        if self._marque.get(sym):
+            self.lignes[sym] *= prix / self._marque[sym]
+        montant = self.lignes[sym] * min(max(part, 0.0), 1.0)
+        self.ecrire(sym, -montant, prix, cout)
+        return montant
+
 
 def _cout(classe: str, frais: bool) -> float:
     from packages.execution.costs import CostModel
     return CostModel.for_asset_class(classe).round_trip_bps / 2e4 if frais else 0.0
 
 
+def _bande(regle: dict, cible_val: float, eq: float, cours: _Cours, sym: str, jour: str,
+           classe: str) -> float:
+    """Bande de production (0,5 % du capital) ou bande adaptative (coût × volatilité)."""
+    if regle.get("mode", "fixe") == "fixe":
+        return max(BANDE_RELATIVE * eq, BANDE_MIN)
+    from packages.execution.bande_adaptative import bande_monnaie
+    return bande_monnaie(cible_val / eq if eq > 0 else 0.0, eq, cours.vol(sym, jour),
+                         _cout(classe, True), aversion=regle["aversion"])
+
+
+def _compter(compte: _Compte, intention, cible_val: float, detenu: float,
+             eq: float) -> None:
+    """Compteur ET effet moyen de la bande (AGENTS.md, règle 4), sur les seuls écarts où
+    `decider` la CONSULTE : un solde ou une zone morte du plancher ne la regarde pas, et
+    les compter gonflerait le dénominateur."""
+    ecart = abs(cible_val - detenu)
+    consultee = intention.motif == MOTIF_BANDE or intention.action in ("acheter", "alleger")
+    if not consultee or ecart <= 1e-9:
+        return
+    compte.ecarts_examines += 1
+    if intention.motif == MOTIF_BANDE:
+        compte.ecarts_bloques += 1
+        compte.montant_bloque += ecart
+        compte.poids_bloque += ecart / eq if eq > 0 else 0.0
+
+
 def _executer(compte: _Compte, cible: dict, cours: _Cours, jour: str,
-              classes: dict, frais: bool) -> None:
+              classes: dict, frais: bool, regle: dict | None = None) -> None:
     """Un passage de `run_live._reconcile` : ventes d'abord, `decider`, puis portail."""
     from packages.execution.rebalance_plan import decider
     from packages.risk.order_gate import EtatCompte, evaluer
 
     eq = compte.equity()
-    bande = max(BANDE_RELATIVE * eq, BANDE_MIN)
     vals = {s: cible.get(s, 0.0) * eq for s in set(cible) | set(compte.lignes)}
     ordre = sorted(vals, key=lambda s: (vals[s] >= compte.lignes.get(s, 0.0), s))
     for sym in ordre:
         px, detenu = cours(sym, jour), compte.lignes.get(sym, 0.0)
         if not px:
             continue
+        bande = _bande(regle or {}, vals[sym], eq, cours, sym, jour,
+                       classes.get(sym, "equity"))
         intention = decider(vals[sym], detenu, bande)
+        _compter(compte, intention, vals[sym], detenu, eq)
         if not intention.agit:
             continue
         expo = sum(abs(v) for v in compte.lignes.values())
@@ -179,10 +226,33 @@ def _executer(compte: _Compte, cible: dict, cours: _Cours, jour: str,
         compte.ecrire(sym, montant, px, _cout(classes.get(sym, "equity"), frais))
 
 
+def regle_bande(bande: str, aversion: float | None) -> dict:
+    """Valide le mode de bande : `fixe` (production) ou `adaptative` (aversion requise)."""
+    if bande not in MODES_BANDE:
+        raise ValueError(f"bande inconnue : {bande} (attendu : {', '.join(MODES_BANDE)})")
+    if bande == "adaptative" and not (aversion and aversion > 0):
+        raise ValueError("bande adaptative : une aversion > 0 est requise (UNCALIBRATED)")
+    return {"mode": bande, "aversion": aversion if bande == "adaptative" else None}
+
+
+def _resume_bande(regle: dict, compte: _Compte) -> dict:
+    n, k = compte.ecarts_examines, compte.ecarts_bloques
+    return {**regle, "ecarts_examines": n, "ecarts_bloques": k,
+            "part_bloquee": k / n if n else 0.0,
+            "montant_moyen_bloque": compte.montant_bloque / k if k else 0.0,
+            "ecart_poids_moyen_bloque": compte.poids_bloque / k if k else 0.0}
+
+
 def simuler(cibles: list, prix: dict, jours: list[str], *, capital: float = CAPITAL_DEFAUT,
-            classes: dict | None = None, frais: bool = True, lag: int = 1) -> dict:
+            classes: dict | None = None, frais: bool = True, lag: int = 1,
+            bande: str = "fixe", aversion: float | None = None,
+            sorties=None) -> dict:
     """Déroule les cibles datées : chaque cible décidée le jour `d` s'exécute `lag` jours
-    de cotation PLUS TARD, au cours de clôture de ce jour-là. Equity marquée chaque jour."""
+    de cotation PLUS TARD, au cours de clôture de ce jour-là. Equity marquée chaque jour.
+
+    `sorties` (optionnel, `rejeu_sorties.Surveillance`) : stops et prises exécutés en
+    séance AVANT le marquage, cibles filtrées pendant la carence, états suivis au close."""
+    regle = regle_bande(bande, aversion)
     cours, compte = _Cours(prix), _Compte(capital)
     a_executer: dict[str, dict] = {}
     for d, cible in cibles:
@@ -194,15 +264,22 @@ def simuler(cibles: list, prix: dict, jours: list[str], *, capital: float = CAPI
     premier = min(a_executer)
     dates, equity = [], []
     for jour in jours[jours.index(premier):]:
+        if sorties is not None:
+            sorties.declencher(compte, jour, classes or {}, frais)
         compte.marquer(cours, jour)
         if jour in a_executer:
-            _executer(compte, a_executer[jour], cours, jour, classes or {}, frais)
+            cible = a_executer[jour]
+            if sorties is not None:
+                cible = sorties.filtrer(cible, jour)
+            _executer(compte, cible, cours, jour, classes or {}, frais, regle)
+        if sorties is not None:
+            sorties.suivre(compte, jour)
         dates.append(jour)
         equity.append(compte.equity())
     eq = compte.equity()
     return {"available": True, "dates": dates, "equity": equity,
             "frais": round(compte.frais, 6), "n_ordres": compte.n_ordres,
-            "n_executions": len(a_executer),
+            "n_executions": len(a_executer), "bande": _resume_bande(regle, compte),
             "poids_final": {s: v / eq for s, v in compte.lignes.items()} if eq > 0 else {}}
 
 
@@ -211,22 +288,35 @@ def _prix_par_jour(data: dict) -> dict:
             for s, barres in data.items()}
 
 
-def rejouer(data: dict, *, pas: int = PAS_DEFAUT, debut: str | None = None,
-            params: dict | None = None, coeur: dict | None = None,
-            classes: dict | None = None, capital: float = CAPITAL_DEFAUT,
-            frais: bool = True) -> dict:
-    """Rejeu complet : décisions de PRODUCTION tous les `pas` jours, exécution à J+1."""
-    from packages.backtest.conviction_backtest import _stats
-
+def cibles_rejouees(data: dict, *, pas: int = PAS_DEFAUT, debut: str | None = None,
+                    params: dict | None = None,
+                    coeur: dict | None = None) -> tuple[list, list, list] | None:
+    """(calendrier, décisions brutes, cibles avec cœur) — la partie COÛTEUSE du rejeu,
+    isolée pour qu'une comparaison (avec/sans sorties) ne la paie qu'une fois."""
     cal = calendrier(data)
     i0 = bisect_right(cal, debut) - 1 if debut else DEBUT_DEFAUT
     jours = cal[max(0, i0)::max(1, pas)]
     if len(jours) < 3:
-        return {"available": False, "raison": "historique trop court pour rejouer"}
+        return None
     brutes = decisions(data, jours, params)
-    cibles = [(j, avec_coeur(w, coeur)) for j, w in brutes]
+    return cal, brutes, [(j, avec_coeur(w, coeur)) for j, w in brutes]
+
+
+def rejouer(data: dict, *, pas: int = PAS_DEFAUT, debut: str | None = None,
+            params: dict | None = None, coeur: dict | None = None,
+            classes: dict | None = None, capital: float = CAPITAL_DEFAUT,
+            frais: bool = True, bande: str = "fixe",
+            aversion: float | None = None) -> dict:
+    """Rejeu complet : décisions de PRODUCTION tous les `pas` jours, exécution à J+1."""
+    from packages.backtest.conviction_backtest import _stats
+
+    regle_bande(bande, aversion)                     # refuse AVANT les minutes de rejeu
+    prep = cibles_rejouees(data, pas=pas, debut=debut, params=params, coeur=coeur)
+    if prep is None:
+        return {"available": False, "raison": "historique trop court pour rejouer"}
+    cal, brutes, cibles = prep
     res = simuler(cibles, _prix_par_jour(data), cal, capital=capital,
-                  classes=classes, frais=frais)
+                  classes=classes, frais=frais, bande=bande, aversion=aversion)
     if not res["available"]:
         return res
     eq = res["equity"]

@@ -63,10 +63,15 @@ def _ligne(nom: str, st: dict) -> str:
 def _consigner(res: dict, pas: int) -> None:
     from packages.research.ledger import append_record
     st = res.get("stats") or {}
+    b = res.get("bande") or {}
+    # Une bande adaptative est un AUTRE essai (sa propre aversion) : facteur distinct.
+    facteur = ("preset_production_rejeu" if b.get("mode", "fixe") == "fixe" else
+               f"preset_production_rejeu:bande_adaptative:{b.get('aversion')}")
     append_record({"date": datetime.now(UTC).date().isoformat(),
-                   "facteur": "preset_production_rejeu", "statut": "mesure",
+                   "facteur": facteur, "statut": "mesure",
                    "these": "Rejeu date par date de la règle de production (QML-001).",
-                   "params": {"pas": pas, "coeur": res.get("coeur")},
+                   "params": {"pas": pas, "coeur": res.get("coeur"), "bande": b.get("mode"),
+                              "aversion": b.get("aversion")},
                    "sharpe": st.get("sharpe"), "periods_per_year": 252,
                    "n_obs": len(res.get("equity") or []),
                    "source": "make preset-replay (réel)"})
@@ -97,11 +102,46 @@ def _comparer(res: dict, refs: dict) -> None:
                   f"p = {c['p']:.3f}  → {c['verdict']}")
 
 
-def main() -> int:
+def _arguments() -> argparse.Namespace | None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--pas", type=int, default=5, help="jours de cotation entre décisions")
     ap.add_argument("--sans-coeur", action="store_true", help="satellite seul, sans QQQ")
+    ap.add_argument("--bande", choices=("fixe", "adaptative"), default="fixe",
+                    help="fixe = production (0,5 %% du capital) ; adaptative = coût × vol")
+    ap.add_argument("--aversion", type=float, default=None,
+                    help="aversion à l'écart de suivi (bande adaptative, UNCALIBRATED)")
     a = ap.parse_args()
+    if a.bande == "adaptative" and not (a.aversion and a.aversion > 0):
+        print("⛔ --bande adaptative exige --aversion > 0 (aucune valeur par défaut : "
+              "le réglage n'est pas calibré).")
+        return None
+    return a
+
+
+def _imprimer_rejeu(res: dict) -> None:
+    print(f"\n{res['dates'][0]} → {res['dates'][-1]} · {res['n_decisions']} décisions "
+          f"({res['n_decisions_vides']} sans poids) · {res['n_ordres']} ordres · "
+          f"frais {res['frais']:,.0f} $\n")
+    print(_ligne("REJEU — règle de production", res["stats"]))
+    b = res["bande"]
+    regle = b["mode"] + (f" (aversion {b['aversion']})" if b["aversion"] else "")
+    print(f"  bande {regle} : {b['ecarts_bloques']} écart(s) sur {b['ecarts_examines']} "
+          f"laissés sans ordre ({b['part_bloquee']:.0%}) · effet moyen "
+          f"{b['montant_moyen_bloque']:,.0f} $ ({b['ecart_poids_moyen_bloque']:.2%} du capital)")
+
+
+def _ecrire(res: dict, mode: str) -> None:
+    SORTIE.parent.mkdir(parents=True, exist_ok=True)
+    SORTIE.write_text(json.dumps({**res, "mode_donnees": mode,
+                                  "mesure_le": datetime.now(UTC).isoformat(timespec="seconds")},
+                                 ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"\n→ {SORTIE.relative_to(ROOT)} · consigné au registre des hypothèses.")
+
+
+def main() -> int:
+    a = _arguments()
+    if a is None:
+        return 2
     from packages.backtest.preset_backtest import preset_backtest
     from packages.backtest.preset_rejeu import _prix_par_jour, references, rejouer
 
@@ -115,15 +155,13 @@ def main() -> int:
     coeur = {} if a.sans_coeur else _coeur(data)
     print(f"Rejeu de la production : {len(data)} séries ({mode}), pas {a.pas} j, "
           f"cœur {coeur or 'aucun'} — patience, chaque date rappelle la production.")
-    res = rejouer(data, pas=a.pas, params=params, coeur=coeur or None, classes=acmap)
+    res = rejouer(data, pas=a.pas, params=params, coeur=coeur or None, classes=acmap,
+                  bande=a.bande, aversion=a.aversion)
     if not res.get("available"):
         print(f"Indisponible : {res.get('raison')}")
         return 1
     ancien = preset_backtest(data, asset_classes=acmap, dd_target=dd, band=0.03)
-    print(f"\n{res['dates'][0]} → {res['dates'][-1]} · {res['n_decisions']} décisions "
-          f"({res['n_decisions_vides']} sans poids) · {res['n_ordres']} ordres · "
-          f"frais {res['frais']:,.0f} $\n")
-    print(_ligne("REJEU — règle de production", res["stats"]))
+    _imprimer_rejeu(res)
     # Références sur les MÊMES dates (QQQ acheté-conservé, équipondéré des titres cotés) :
     # les seules comparaisons qui ne mélangent ni périodes ni univers.
     refs = references(_prix_par_jour(data), res["dates"])
@@ -137,13 +175,8 @@ def main() -> int:
     for e in res["ecarts_connus"]:
         print(f"  · {e}")
     _consigner(res, a.pas)
-    SORTIE.parent.mkdir(parents=True, exist_ok=True)
-    SORTIE.write_text(json.dumps({**res, "mode_donnees": mode,
-                                  "mesure_le": datetime.now(UTC).isoformat(timespec="seconds")},
-                                 ensure_ascii=False, indent=1), encoding="utf-8")
-    print(f"\n→ {SORTIE.relative_to(ROOT)} · consigné au registre des hypothèses.")
+    _ecrire(res, mode)
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

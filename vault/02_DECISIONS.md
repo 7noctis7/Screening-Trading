@@ -2,6 +2,153 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0209 — SMCLXTP-A : la traduction corrigée de son look-ahead ; le méta-filtre doit battre le hasard (2026-09-30)
+
+**CONTEXTE.** L'utilisateur a fourni une traduction Python de son indicateur Pine
+SMCLXTP-A (zones SMC + pivots LuxAlgo, LONG et TP). Il demande son intégration au
+registre et un méta-labelling avec filtre ML (« exécuter si p > 0,65 »).
+
+**DÉFAUTS DE LA TRADUCTION** (chacun couvert par un test) :
+(1) LOOK-AHEAD de L barres. Un swing était daté à la barre du pivot, confirmé par une
+fenêtre centrée [i−L, i+L] : les zones d'une barre lisaient les L barres suivantes. Sur
+5 marches aléatoires synthétiques avec L = 50, 27 % des dates voyaient leurs zones changer
+quand on ajoutait l'avenir. C'est une démonstration du mécanisme, pas une mesure réelle.
+Pine (`ta.pivothigh(L, L)`) date le pivot à sa CONFIRMATION.
+(2) `== max(fenêtre)` déclarait un pivot à chaque barre d'une série plate.
+(3) L'état initial « creux » était fictif : le premier creux devenait un TP manqué.
+(4) Sémantique, conservée mais signalée : un creux « manqué » émet son LONG au moment où
+un 2ᵉ sommet est confirmé, donc après un sommet.
+
+**DÉCISIONS.**
+- `packages/indicators/smc_lux_tp.py` : calcul causal en numpy. L'interface
+  `SMCLuxTPIndicator.calculate(df)` est conservée. Le registre expose `smc_zone_ratio`,
+  `smclxtp_long` et `smclxtp_tp`.
+- `packages/ml/meta_smc.py`, en SHADOW. La chaîne :
+  - événements = les `long_signal` ;
+  - triple barrière en ATR (+2 / −1, H = 20, frais 10 pb) ;
+  - 7 features sans unité de prix ;
+  - PurgedKFold avec embargo ≥ 1,5·H jours ;
+  - AUC contre une distribution NULLE par permutation ;
+  - seuil ajusté sur la 1re moitié chronologique des probabilités hors échantillon,
+    jugé sur la 2de.
+- `MetaFiltre.autorise` LÈVE une erreur tant que le filtre n'est pas calibré : aucun
+  « 0,65 » n'est posé par principe.
+- `make meta-smc` est un essai au ledger par passage.
+
+**LIMITES.**
+- La parité backtest/paper/live tient à l'implémentation unique ; les alertes
+  TradingView ne sont pas branchées.
+- `ob_search_bars` et `ob_mitigation_mode` restent sans effet, comme dans la traduction.
+- La triple barrière ne lit que les clôtures.
+- Univers = listes actuelles (biais du survivant).
+- Un seul modèle pour tous les titres.
+
+---
+
+## ADR-0208 — Sorties entre deux rééquilibrages : construites, pré-enregistrées, pas adoptées (2026-09-30)
+
+**CONTEXTE.** Une feuille de route demande des stops suiveurs (ATR, structure) et des
+prises de gains à la place de la sortie exclusive par rééquilibrage. Vérifié : le
+portefeuille qui trade n'a AUCUNE sortie entre deux décisions. Mais le dépôt a déjà
+mesuré un suiveur ATR sur la stratégie swing et l'a RETIRÉ (ADR-0052) : Sharpe 0,53 sans,
+0,38 avec. Il tronquait la queue droite, là où vivait l'avantage. L'a priori est donc
+défavorable. Il reste à mesurer, pas à supposer.
+
+**DÉCISIONS.**
+(1) `packages/strategies/sorties_suiveuses.py`, en SHADOW.
+- Règles :
+  - Chandelier : plus haut de CLÔTURE − 3·ATR(14) de Wilder ;
+  - structure : un creux confirmé suivi d'un sommet confirmé, stop posé 0,5 ATR sous ce
+    creux (au-delà de la poche de liquidité balayée), risque initial ≤ 4 ATR ;
+  - prise partielle d'un tiers à la liquidité opposée, jamais sous 2 R.
+- Invariants : le stop ne recule jamais ; l'état au close d ne lit que les barres ≤ d ;
+  gap → ouverture ; stop et cible dans la même barre → le stop.
+(2) `packages/backtest/rejeu_sorties.py` :
+- mêmes décisions de production simulées sans puis avec sorties ;
+- exécution en séance avant le marquage ;
+- carence de 10 séances (pas de rachat par le rééquilibrage suivant) ;
+- cœur QQQ jamais géré.
+(3) RÈGLE PRÉ-ENREGISTRÉE (`make preset-sorties`). Trois modes seulement : atr,
+structure, structure+prise. Réglages conventionnels, jamais retouchés après lecture.
+Un mode est ADOPTABLE si et seulement si :
+- ΔSharpe apparié (avec − sans) ≥ 0 ;
+- ET le maxDD s'améliore d'au moins 3 points.
+Sinon il est REJETÉ. Adoptable ≠ adopté : `run_live` ne change que sur décision explicite.
+
+**LIMITES.**
+- En barres quotidiennes, l'ordre intra-séance est inconnu : on retient le stop,
+  hypothèse défavorable.
+- Un pivot n'est confirmé que 5 séances après lui : le stop structurel est en retard par
+  construction.
+- La carence et les réglages sont conventionnels.
+- La poche crypto n'est pas rejouée.
+
+---
+
+## ADR-0207 — Journal : l'écart décision → fill est écrit ; une vente partielle ne duplique plus les frais (2026-09-30)
+
+**CONTEXTE.** Une feuille de route signalait des colonnes frais/slippage « à 0,00 $ ».
+Vérifié dans le code :
+- les frais sont ESTIMÉS au barème et marqués comme tels (`fees_source="estimated"`) ;
+- le 0,00 $ est exact pour un achat Alpaca : aucune commission, et les frais SEC/TAF ne
+  s'appliquent qu'à la vente ;
+- la colonne `slippage`, en revanche, n'était JAMAIS remplie, alors que le prix de
+  décision est figé dans `features_snapshot` à chaque ouverture ;
+- en lisant `_fermer`, un défaut réel est apparu : une vente partielle recopiait les
+  frais d'entrée ENTIERS sur la tranche vendue ET sur le lot restant. La commission
+  d'entrée était donc comptée deux fois (invisible à 0 $ chez Alpaca, réelle à 25 pb
+  chez BitMart).
+
+**DÉCISIONS.**
+(1) `live_journal.ecart_decision` écrit l'écart en devise, (fill − décision) × quantité,
+positif = défavorable, via la convention unique `fills.shortfall_bps`. Il est descriptif :
+jamais retranché du P&L.
+(2) Les fills sont étiquetés `origine` (`ordre` ou `position`). Le prix moyen d'une
+position de repli mêle d'autres jours : il ne mesure rien, donc la valeur est None.
+(3) `live_roundtrip._part` répartit frais et écart au prorata de la quantité. Un coût
+inconnu reste inconnu.
+
+**COMPLÉMENT (revue de #411).** L'écart n'est écrit que si le VWAP du jour est
+EXACTEMENT l'ordre envoyé (`order_id`) : un achat manuel ou un autre passage du même jour
+sur le même titre y serait mêlé.
+
+**LIMITES.**
+- Le prix de décision est le dernier close de la série du snapshot. Pour une action
+  traitée vers 15 h ET, l'écart inclut la dérive intraday : c'est l'implementation
+  shortfall au sens de Perold, pas un slippage de microstructure pur.
+- Aucune référence n'est enregistrée pour les ventes : la jambe de sortie n'est pas mesurée.
+- Les lignes historiques ne sont pas réécrites.
+
+---
+
+## ADR-0206 — Bande d'inaction : mesurer avant de régler ; la bande adaptative reste hors production (2026-09-30)
+
+**CONTEXTE.** Une feuille de route externe affirmait : « la bande de 3 % en poids bloque
+~99 % des rebalancements alors qu'une ligne médiane pèse ~3,3 % ». Vérifié dans le code :
+la bande de 3 points de poids n'existe que dans les backtests historiques
+(`preset_backtest`, `preset_curves`, `preset_compta`), déjà déclarés comme ne mesurant pas
+la production (ADR-0202). La PRODUCTION (`run_live._broker_targets`) applique
+max(0,5 % du capital, 5 $). Le rejeu réel (VPS, 25/09) y compte 4 082 ordres pour
+503 décisions : la production souffre plutôt d'un excès de rotation que d'un excès
+d'inaction. Le chiffre de 99 % n'est consigné nulle part : il est NON VÉRIFIÉ.
+
+**DÉCISIONS.**
+(1) `packages/execution/bande_adaptative.py` fixe une demi-largeur
+h* = (3·c·s²/γ)^(1/3), avec s = w(1−w)σ. Elle minimise l'écart de suivi (γh²/6) plus la
+négociation (c·s²/h). La loi en racine cubique est celle de Davis-Norman et Leland.
+Plancher 0,1 %, plafond 5 %, minimum 5 $. La volatilité est causale (cours ≤ date).
+(2) Le rejeu prend `--bande fixe|adaptative --aversion γ` et publie la part des écarts
+laissés sans ordre (compteur, plancher exclu). Chaque aversion est un facteur distinct au
+ledger, donc compte comme un essai.
+(3) γ n'est PAS calibré. Aucune valeur par défaut : le script refuse sans `--aversion`.
+(4) Complément (revue de #411) : le compteur ne retient que les écarts où `decider`
+CONSULTE la bande (un solde du plancher ne la regarde pas). La bande publie aussi son
+EFFET MOYEN, en dollars et en part du capital (AGENTS.md, règle 4).
+`run_live` est inchangé. Pour changer la production, il faudra un rejeu réel où la bande
+adaptative réduit les frais SANS dégrader le ΔSharpe apparié, puis une décision explicite.
+
+---
+
 ## ADR-0205 — Chercher un rendement sans se mentir : grille figée, déflation, période lue une fois (2026-09-25)
 
 **CONTEXTE.** La règle tradée est indiscernable de QQQ + cash (ADR-0202, 10_BACKTEST_RESULTS).
