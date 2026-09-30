@@ -5,8 +5,9 @@ import pytest
 from packages.execution.frictions import STATUT, Frictions, signal_inhibe
 
 
-def test_le_module_demarre_en_SHADOW():
-    assert STATUT == "SHADOW_UNCALIBRATED"
+def test_le_module_est_CANDIDATE_apres_cablage_tca():
+    """Câblé via tca → snapshot : plus SHADOW. Inhibition toujours hors ordres."""
+    assert STATUT == "CANDIDATE_UNCALIBRATED"
 
 
 def test_le_glissement_est_TOUJOURS_defavorable():
