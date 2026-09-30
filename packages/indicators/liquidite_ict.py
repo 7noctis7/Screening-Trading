@@ -41,7 +41,9 @@ CE QUI EST RÉELLEMENT NOUVEAU ICI : la zone OTE (retracement 61,8-78,6 %), le C
 distingué du BOS par le contexte de tendance, les niveaux BSL/SSL publics avec leur
 filtre de volume, et leur composition en scénario complet (`continuation_ote`).
 
-STATUT : SHADOW. Aucun appelant en production.
+STATUT : CANDIDATE_UNCALIBRATED. Joignable depuis la production paper via
+`swing_sleeve` → `moteur_swing` → `scripts/run_live` / `apps/api/snapshot`
+(QUANT_SWING_PAPER). Géométrie PIT seule ; pas de calibration live.
 """
 
 from __future__ import annotations
@@ -54,7 +56,7 @@ from packages.indicators.market_structure import (
     volume_exceptionnel,
 )
 
-STATUT = "SHADOW_UNCALIBRATED"
+STATUT = "CANDIDATE_UNCALIBRATED"
 
 FENETRE_LIQUIDITE = 50         # profondeur de recherche des sommets/creux majeurs
 MULTIPLE_VOLUME_SFP = 1.5      # volume de la bougie de capture / moyenne 20

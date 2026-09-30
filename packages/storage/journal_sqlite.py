@@ -64,6 +64,13 @@ _COLS = [
     "id", "instrument", "asset_class", "venue", "side", "qty", "entry_ts",
     "entry_price", "avg_price", "exit_ts", "exit_price", "fees", "slippage",
     "fees_source",
+    "order_id", "fill_id", "qty_filled",
+    "ts_arrival", "ts_send", "ts_fill",
+    "P_arrival", "P_fill",
+    "P_mid_arrival", "P_mid_fill", "P_mid_fill_h",
+    "P_bid_fill", "P_ask_fill",
+    "fee_comm", "fee_funding",
+    "impact_horizon", "bench_quality", "tca_variant",
     "entry_reason", "exit_reason", "regime", "strategy", "features_snapshot",
     "pnl_gross", "pnl_net", "pnl_pct", "r_multiple", "is_win", "duration_s",
     "mfe", "mae", "legacy", "ingested_at",
@@ -95,7 +102,27 @@ class SqliteTradeJournal:
         exactement le sens voulu (« jamais renseigné »).
         """
         connues = {r[1] for r in self.conn.execute("PRAGMA table_info(trades)")}
-        for nom, typ in (("fees_source", "TEXT"),):
+        for nom, typ in (
+            ("fees_source", "TEXT"),
+            ("order_id", "TEXT"),
+            ("fill_id", "TEXT"),
+            ("qty_filled", "REAL"),
+            ("ts_arrival", "TEXT"),
+            ("ts_send", "TEXT"),
+            ("ts_fill", "TEXT"),
+            ("P_arrival", "REAL"),
+            ("P_fill", "REAL"),
+            ("P_mid_arrival", "REAL"),
+            ("P_mid_fill", "REAL"),
+            ("P_mid_fill_h", "REAL"),
+            ("P_bid_fill", "REAL"),
+            ("P_ask_fill", "REAL"),
+            ("fee_comm", "REAL"),
+            ("fee_funding", "REAL"),
+            ("impact_horizon", "TEXT"),
+            ("bench_quality", "TEXT"),
+            ("tca_variant", "TEXT"),
+        ):
             if nom not in connues:
                 self.conn.execute(f"ALTER TABLE trades ADD COLUMN {nom} {typ}")
         self.conn.commit()
@@ -176,7 +203,14 @@ class SqliteTradeJournal:
             return
         fields = ["id", "instrument", "side", "strategy", "regime", "entry_ts",
                   "entry_price", "exit_ts", "exit_price", "qty", "pnl_net",
-                  "pnl_pct", "r_multiple", "is_win", "entry_reason", "exit_reason"]
+                  "pnl_pct", "r_multiple", "is_win", "entry_reason", "exit_reason",
+                  "order_id", "fill_id", "qty_filled",
+                  "ts_arrival", "ts_send", "ts_fill",
+                  "P_arrival", "P_fill",
+                  "P_mid_arrival", "P_mid_fill", "P_mid_fill_h",
+                  "P_bid_fill", "P_ask_fill",
+                  "fee_comm", "fee_funding",
+                  "impact_horizon", "bench_quality", "tca_variant"]
         with Path(path).open("w", newline="", encoding="utf-8") as f:
             w = csv.DictWriter(f, fieldnames=fields)
             w.writeheader()
@@ -190,7 +224,25 @@ class SqliteTradeJournal:
                     "qty": round(t.qty, 6), "pnl_net": round(t.pnl_net or 0, 2),
                     "pnl_pct": round(t.pnl_pct or 0, 4), "r_multiple": round(t.r_multiple or 0, 2),
                     "is_win": t.is_win, "entry_reason": t.entry_reason,
-                    "exit_reason": t.exit_reason})
+                    "exit_reason": t.exit_reason,
+                    "order_id": t.order_id or "",
+                    "fill_id": t.fill_id or "",
+                    "qty_filled": "" if t.qty_filled is None else t.qty_filled,
+                    "ts_arrival": t.ts_arrival.isoformat() if t.ts_arrival else "",
+                    "ts_send": t.ts_send.isoformat() if t.ts_send else "",
+                    "ts_fill": t.ts_fill.isoformat() if t.ts_fill else "",
+                    "P_arrival": "" if t.P_arrival is None else t.P_arrival,
+                    "P_fill": "" if t.P_fill is None else t.P_fill,
+                    "P_mid_arrival": "" if t.P_mid_arrival is None else t.P_mid_arrival,
+                    "P_mid_fill": "" if t.P_mid_fill is None else t.P_mid_fill,
+                    "P_mid_fill_h": "" if t.P_mid_fill_h is None else t.P_mid_fill_h,
+                    "P_bid_fill": "" if t.P_bid_fill is None else t.P_bid_fill,
+                    "P_ask_fill": "" if t.P_ask_fill is None else t.P_ask_fill,
+                    "fee_comm": "" if t.fee_comm is None else t.fee_comm,
+                    "fee_funding": "" if t.fee_funding is None else t.fee_funding,
+                    "impact_horizon": t.impact_horizon or "",
+                    "bench_quality": t.bench_quality or "",
+                    "tca_variant": t.tca_variant or "",})
 
     def close(self) -> None:
         self.conn.close()
@@ -202,6 +254,13 @@ class SqliteTradeJournal:
             t.id, t.instrument, t.asset_class.value, t.venue, t.side.value, t.qty,
             _iso(t.entry_ts), t.entry_price, t.avg_price, _iso(t.exit_ts), t.exit_price,
             t.fees, t.slippage, t.fees_source,
+            t.order_id, t.fill_id, t.qty_filled,
+            _iso(t.ts_arrival), _iso(t.ts_send), _iso(t.ts_fill),
+            t.P_arrival, t.P_fill,
+            t.P_mid_arrival, t.P_mid_fill, t.P_mid_fill_h,
+            t.P_bid_fill, t.P_ask_fill,
+            t.fee_comm, t.fee_funding,
+            t.impact_horizon, t.bench_quality, t.tca_variant,
             t.entry_reason, t.exit_reason, t.regime, t.strategy,
             json.dumps(t.features_snapshot, sort_keys=True), t.pnl_gross, t.pnl_net,
             t.pnl_pct, t.r_multiple,
@@ -222,6 +281,18 @@ class SqliteTradeJournal:
             exit_ts=datetime.fromisoformat(d["exit_ts"]) if d["exit_ts"] else None,
             exit_price=d["exit_price"], fees=d["fees"], slippage=d["slippage"],
             fees_source=d.get("fees_source"),
+            order_id=d.get("order_id"), fill_id=d.get("fill_id"),
+            qty_filled=d.get("qty_filled"),
+            ts_arrival=datetime.fromisoformat(d["ts_arrival"]) if d.get("ts_arrival") else None,
+            ts_send=datetime.fromisoformat(d["ts_send"]) if d.get("ts_send") else None,
+            ts_fill=datetime.fromisoformat(d["ts_fill"]) if d.get("ts_fill") else None,
+            P_arrival=d.get("P_arrival"), P_fill=d.get("P_fill"),
+            P_mid_arrival=d.get("P_mid_arrival"), P_mid_fill=d.get("P_mid_fill"),
+            P_mid_fill_h=d.get("P_mid_fill_h"),
+            P_bid_fill=d.get("P_bid_fill"), P_ask_fill=d.get("P_ask_fill"),
+            fee_comm=d.get("fee_comm"), fee_funding=d.get("fee_funding"),
+            impact_horizon=d.get("impact_horizon"),
+            bench_quality=d.get("bench_quality"), tca_variant=d.get("tca_variant"),
             entry_reason=d["entry_reason"], exit_reason=d["exit_reason"],
             regime=d["regime"], strategy=d["strategy"],
             features_snapshot=json.loads(d["features_snapshot"] or "{}"),
