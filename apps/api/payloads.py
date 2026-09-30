@@ -82,11 +82,14 @@ def composition_payload(positions: list[Position], marks: dict[str, float],
 
 
 def metrics_payload(equity_curve: list[float], rets: list[float] | None = None) -> dict:
-    """KPIs d'une courbe. Un point non fini TRONQUE la courbe au lieu de tout polluer.
+    """KPIs d'une courbe. Ratios via `perf_summary` (SOURCE UNIQUE DE VÉRITÉ).
 
-    `M.summary` propage un NaN dans chaque ratio. Publier `sharpe: nan` est pire
-    qu'une métrique absente : le front l'affiche « — » et personne ne sait qu'une
-    donnée manquait. On calcule sur le préfixe valide, et on le DIT (`integrite`).
+    Un point non fini TRONQUE la courbe au lieu de tout polluer. Publier `sharpe: nan`
+    est pire qu'une métrique absente : le front l'affiche « — » et personne ne sait
+    qu'une donnée manquait. On calcule sur le préfixe valide, et on le DIT (`integrite`).
+
+    `cagr` / `n` (fenêtre en rendements) / Sharpe / Sortino / MaxDD viennent de
+    `perf_summary` — le dashboard héros doit les lire ici, sans recalcul TS.
     """
     propre, diag = _INT.prefixe_fini(equity_curve)
     if diag["tronquee"]:
@@ -94,8 +97,17 @@ def metrics_payload(equity_curve: list[float], rets: list[float] | None = None) 
     # `rets or []` testerait la vérité de l'objet : sur un ndarray, Python lève
     # « truth value ambiguous ». Seule la comparaison à `None` est sûre ici.
     s = M.summary(propre, [] if rets is None else list(rets))
-    return {**{k: round(v, 4) for k, v in s.items()},
-            "integrite": _INT.verdict(diag)}
+    out = {**{k: round(v, 4) for k, v in s.items()},
+           "integrite": _INT.verdict(diag)}
+    ps = M.perf_summary(M.returns_from_equity(propre))
+    if ps.get("available"):
+        # `n` = nb de rendements (fenêtre affichable), pas le nb de trades (souvent 0).
+        for k in ("n", "total_return", "cagr", "vol", "sharpe", "sortino",
+                  "calmar", "max_drawdown"):
+            if k in ps and ps[k] is not None:
+                v = ps[k]
+                out[k] = int(v) if k == "n" else float(v)
+    return out
 
 
 def benchmark_comparison(portfolio_equity: list[float],

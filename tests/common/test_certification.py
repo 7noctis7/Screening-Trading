@@ -63,10 +63,8 @@ def test_le_depot_REEL_declare_bien_ses_modules_SHADOW():
     """Verrou d'inventaire : la liste est connue et suivie au TODO. Si elle change sans
     qu'on le veuille — un STATUT ajouté ou retiré à la légère — ce test le dit."""
     attendus = {
-        "packages.execution.frictions", "packages.indicators.liquidite_ict",
         "packages.ml.caracteristiques_swing",
-        "packages.risk.ddm", "packages.risk.garde_swing",
-        "packages.strategies.moteur_sortie", "packages.strategies.moteur_swing",
+        "packages.strategies.moteur_sortie",
         "packages.strategies.sorties_suiveuses",       # ADR-0208, banc make preset-sorties
         "packages.ml.meta_smc",                         # ADR-0209, banc make meta-smc
     }

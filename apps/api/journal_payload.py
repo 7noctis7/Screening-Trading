@@ -28,6 +28,11 @@ from __future__ import annotations
 MIN_FERMES = 20      # même seuil que `biais_fermeture` : sous 20, on ne publie rien
 
 
+def _iso_opt(v) -> str | None:
+    """datetime → ISO, None → None (nullable TCA : NULL ≠ 0 inventé)."""
+    return v.isoformat() if v is not None else None
+
+
 def _ligne(t) -> dict:
     return {
         "id": t.id, "symbol": t.instrument, "venue": t.venue, "qty": t.qty,
@@ -38,6 +43,25 @@ def _ligne(t) -> dict:
         "duration_d": round(t.duration_s / 86400, 1) if t.duration_s else None,
         "regime": t.regime,
         "decision_price": (t.features_snapshot or {}).get("decision_price"),
+        # TCA v1 (nullable, non-breaking — contrat §4 / §2)
+        "order_id": t.order_id,
+        "fill_id": t.fill_id,
+        "qty_filled": t.qty_filled,
+        "ts_arrival": _iso_opt(t.ts_arrival),
+        "ts_send": _iso_opt(t.ts_send),
+        "ts_fill": _iso_opt(t.ts_fill),
+        "P_arrival": t.P_arrival,
+        "P_fill": t.P_fill,
+        "P_mid_arrival": t.P_mid_arrival,
+        "P_mid_fill": t.P_mid_fill,
+        "P_mid_fill_h": t.P_mid_fill_h,
+        "P_bid_fill": t.P_bid_fill,
+        "P_ask_fill": t.P_ask_fill,
+        "fee_comm": t.fee_comm,
+        "fee_funding": t.fee_funding,
+        "impact_horizon": t.impact_horizon,
+        "bench_quality": t.bench_quality,
+        "tca_variant": t.tca_variant,
     }
 
 

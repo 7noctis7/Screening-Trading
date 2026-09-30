@@ -23,14 +23,16 @@ mesurée à 0,70 pourrait valoir 0,50 comme 0,85. La fenêtre courte réagit vit
 régimes ; elle se paie en bruit. On renvoie donc le nombre de points utilisés, pour que
 le lecteur sache sur quoi la décision repose.
 
-STATUT : SHADOW. Aucun appelant en production.
+STATUT : CANDIDATE_UNCALIBRATED. Joignable depuis la production paper via
+`swing_sleeve` → `moteur_swing` → `scripts/run_live` / `apps/api/snapshot`
+(QUANT_SWING_PAPER). Gardes paper ; pas de calibration live.
 """
 
 from __future__ import annotations
 
 import math
 
-STATUT = "SHADOW_UNCALIBRATED"
+STATUT = "CANDIDATE_UNCALIBRATED"
 
 FENETRE_CORRELATION = 30
 SEUIL_CORRELATION = 0.70
