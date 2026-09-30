@@ -29,19 +29,63 @@ def _asset_class(sym: str, hint: str | None) -> AssetClass:
     return AssetClass.CRYPTO if "/" in (sym or "") else AssetClass.EQUITY
 
 
-def feature_map(snap: dict) -> dict[str, dict]:
-    """Extrait, du snapshot de DÉCISION, les features PAR SYMBOLE (score + contributions factorielles).
+def _finite_float(v) -> float | None:
+    """Float fini utilisable en features_snapshot ; None si absent / non numérique / NaN."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return None
+    f = float(v)
+    return f if f == f else None  # NaN → None
 
-    Source unique = `snap["screener"]["rows"]` (déjà calculé à la décision). Le poids cible et le
-    contexte de régime sont ajoutés côté appelant (propres à l'ordre / au run)."""
+
+def feature_map(snap: dict) -> dict[str, dict]:
+    """Extrait, du snapshot de DÉCISION, les features PAR SYMBOLE (score + contributions).
+
+    Union des sources (anti look-ahead : tout est déjà figé dans le snap) :
+      1. `screener.rows` — ranking pur (score + factors)
+      2. `screen.rows` — screener à filtres (score comble les trous)
+      3. `live.target_orders[].rank_score` — score attaché decision-time sur l'ordre cible
+         (souvent le seul hit : les ouvertures paper viennent du preset, pas du screener)
+
+    `rank_score` n'est écrit QUE si la valeur est un float fini (jamais de clé None qui
+    disparaîtrait ensuite silencieusement dans `build_open`)."""
     out: dict[str, dict] = {}
-    for row in (snap.get("screener") or {}).get("rows", []):
+
+    def _ensure(sym: str) -> dict:
+        return out.setdefault(sym, {})
+
+    for row in (snap.get("screener") or {}).get("rows", []) or []:
         sym = row.get("symbol")
         if not sym:
             continue
-        feats = {"rank_score": row.get("score")}
-        feats.update(row.get("factors") or {})
-        out[sym] = feats
+        bucket = _ensure(sym)
+        sc = _finite_float(row.get("score"))
+        if sc is not None and "rank_score" not in bucket:
+            bucket["rank_score"] = sc
+        for k, v in (row.get("factors") or {}).items():
+            fv = _finite_float(v)
+            if fv is not None and k not in bucket:
+                bucket[k] = fv
+
+    for row in (snap.get("screen") or {}).get("rows", []) or []:
+        sym = row.get("symbol")
+        if not sym:
+            continue
+        bucket = _ensure(sym)
+        sc = _finite_float(row.get("score"))
+        if sc is not None and "rank_score" not in bucket:
+            bucket["rank_score"] = sc
+
+    for o in ((snap.get("live") or {}).get("target_orders") or []):
+        sym = o.get("symbol")
+        if not sym:
+            continue
+        sc = _finite_float(o.get("rank_score"))
+        if sc is None:
+            continue
+        bucket = _ensure(sym)
+        # gap-fill : preset symbols absents du screener
+        if "rank_score" not in bucket:
+            bucket["rank_score"] = sc
     return out
 
 
@@ -142,7 +186,11 @@ def _classe_de_frais(symbole: str, hint: str | None) -> str:
 def build_open(symbol: str, *, venue: str, asset_class: str | None, fill: dict | None,
                features: dict | None, regime: str | None = None,
                strategy: str = "preset", ts: datetime | None = None,
-               order_id: str | None = None) -> TradeRecord | None:
+               order_id: str | None = None,
+               ts_arrival: datetime | None = None,
+               P_arrival: float | None = None,
+               fill_id: str | None = None,
+               impact_horizon: str | None = "1bar") -> TradeRecord | None:
     """TradeRecord d'ouverture (`legacy=0`), ou None si le fill est inexploitable (prix/qté ≤ 0).
 
     `id` DÉTERMINISTE par (jour, broker, symbole) → l'UPSERT du journal rend le re-run du même jour
@@ -152,23 +200,39 @@ def build_open(symbol: str, *, venue: str, asset_class: str | None, fill: dict |
     qty = float((fill or {}).get("qty") or 0.0)
     if price <= 0 or qty <= 0:
         return None
-    feats = {k: round(float(v), 6) for k, v in (features or {}).items()
-             if isinstance(v, (int, float)) and not isinstance(v, bool) and v == v}
+    # features_snapshot = floats finis (JSON/ML-safe), SAUF exceptions str documentées :
+    # `ts_decision` (ISO TCA) et `setup_id` (sleeve swing) — même famille ; le reste float-only.
+    feats: dict = {}
+    for k, v in (features or {}).items():
+        if k in ("ts_decision", "setup_id") and isinstance(v, str) and v.strip():
+            feats[k] = v.strip()
+            continue
+        if isinstance(v, (int, float)) and not isinstance(v, bool) and v == v:
+            feats[k] = round(float(v), 6)
+    fee = broker_charge(_classe_de_frais(symbol, asset_class), price * qty, side="BUY")
+    # P_arrival : kwargs dédiés, sinon decision_price figé dans features (chemin run_live).
+    p_arr = P_arrival
+    if p_arr is None:
+        dp = feats.get("decision_price")
+        p_arr = float(dp) if isinstance(dp, (int, float)) else None
+    # Sans mid/bid/ask paper : bench_quality=missing ; NULL ≠ 0 inventé.
     return TradeRecord(
         id=f"P-{ts.strftime('%Y%m%d')}-{venue}-{symbol}",
         instrument=symbol, asset_class=_asset_class(symbol, asset_class),
         venue=venue, side=Side.LONG, qty=qty, entry_ts=ts, entry_price=price, avg_price=price,
         entry_reason="reconciliation paper (open/add)", regime=regime, strategy=strategy,
-        # COMMISSION ESTIMÉE, et marquée comme telle. Le courtier ne la publie pas dans
-        # les réponses que lit `run_live` ; écrire 0.0 serait un mensonge et `None` un
-        # silence. On écrit le barème documenté ET `fees_source="estimated"`, pour
-        # qu'aucun lecteur ne confonde plus tard cette estimation avec un fait.
-        # L'ÉCART décision → fill est écrit quand il est mesurable (fill du jour + prix de
-        # décision), sinon None. Il est DESCRIPTIF : déjà contenu dans le prix de fill.
-        fees=broker_charge(_classe_de_frais(symbol, asset_class), price * qty, side="BUY"),
-        fees_source="estimated",
+        fees=fee, fees_source="estimated",
         slippage=ecart_decision(fill, feats, price, qty, order_id),
-        features_snapshot=feats)
+        features_snapshot=feats,
+        order_id=order_id, fill_id=fill_id, qty_filled=qty,
+        ts_arrival=ts_arrival, ts_send=None, ts_fill=ts,
+        P_arrival=p_arr, P_fill=price,
+        P_mid_arrival=None, P_mid_fill=None, P_mid_fill_h=None,
+        P_bid_fill=None, P_ask_fill=None,
+        fee_comm=fee, fee_funding=None,
+        impact_horizon=impact_horizon,
+        bench_quality="missing",
+        tca_variant="arrival_plus_fees")
 
 
 def journal_opens(journal, opens: list[dict], *, ts: datetime | None = None) -> int:
@@ -178,7 +242,12 @@ def journal_opens(journal, opens: list[dict], *, ts: datetime | None = None) -> 
     for o in opens:
         tr = build_open(o["symbol"], venue=o["venue"], asset_class=o.get("asset_class"),
                         fill=o.get("fill"), features=o.get("features"),
-                        regime=o.get("regime"), ts=ts, order_id=o.get("order_id"))
+                        regime=o.get("regime"),
+                        strategy=o.get("strategy") or "preset",
+                        ts=ts, order_id=o.get("order_id"),
+                        ts_arrival=o.get("ts_arrival"), P_arrival=o.get("P_arrival"),
+                        fill_id=o.get("fill_id"),
+                        impact_horizon=o.get("impact_horizon", "1bar"))
         if tr is not None:
             journal.append(tr, legacy=False)
             n += 1

@@ -136,12 +136,18 @@ def _nsym(s: str) -> str:
     return (s or "").replace("/", "").replace("-", "").upper()
 
 
-def _broker_targets(targets, bname: str, cap: float, reduce: float, cur: dict) -> tuple[dict, float]:
+def _broker_targets(targets, bname: str, cap: float, reduce: float, cur: dict, *,
+                    proteger=None, liquider_hors_cible: bool = True) -> tuple[dict, float]:
     """Carte cible {clé normalisée: {o, val, sym}} d'UN broker + bande d'inaction.
 
     ANTI-LEVIER : Σ cibles plafonnée à 100 % du capital du broker. Le détenu hors-cible
-    est ajouté avec val=0 (liquidation). `sym` = symbole à ENVOYER au broker (format
-    cible « BTC/USD » si connue, sinon le format position)."""
+    est ajouté avec val=0 (liquidation) sauf si `proteger` (HOLD = val=détenu) —
+    Capital A : le preset ne doit pas solder les holdings sleeve. Si
+    `liquider_hors_cible=False` (pass sleeve) : aucun hors-cible ajouté.
+    `sym` = symbole à ENVOYER au broker (format cible « BTC/USD » si connue, sinon
+    le format position).
+    Protection multi-jour via journal = PR4 (pas ici — A3 = snap courant).
+    """
     tgs = [o for o in targets if (o.get("capital") == "bitmart") == (bname == "Bitmart")]
     sw = sum(o["weight_pct"] for o in tgs)
     scale = min(1.0, 1.0 / sw) if sw > 1.0 else 1.0
@@ -154,8 +160,16 @@ def _broker_targets(targets, bname: str, cap: float, reduce: float, cur: dict) -
         pleine = o["weight_pct"] * cap * scale
         tgt[_nsym(bsym)] = {"o": o, "val": cible_sous_garde(pleine, detenu.get(_nsym(bsym), 0.0),
                                                             reduce), "sym": bsym}
-    for bsym in cur:                                      # détenu hors-cible → liquidation (cible 0)
-        tgt.setdefault(_nsym(bsym), {"o": None, "val": 0.0, "sym": bsym})
+    if liquider_hors_cible:
+        prot = {_nsym(s) for s in (proteger or ())}
+        for bsym in cur:                                  # détenu hors-cible
+            nkey = _nsym(bsym)
+            if nkey in tgt:
+                continue
+            if nkey in prot:                              # HOLD sleeve — ne pas liquider
+                tgt[nkey] = {"o": None, "val": detenu.get(nkey, 0.0), "sym": bsym}
+            else:
+                tgt[nkey] = {"o": None, "val": 0.0, "sym": bsym}
     return tgt, max(0.005 * cap, 5.0)                     # bande : 0,5 % du capital, min 5 $
 
 
@@ -243,8 +257,39 @@ def ordre_de_traitement(tgt: dict, detenu: dict) -> list:
 
     return sorted(tgt.items(), key=cle)
 
+def sleeve_geometry_missing(o: dict | None) -> list[str]:
+    """Clés manquantes TA#8 pour un ordre sleeve swing. [] = OK ou guard inactive.
 
-def _reconcile(targets, brokers, reduce, alert_engine, dry, obs=None) -> tuple[int, list, list]:
+    Guard active ssi `strategy=="swing"` ou `sleeve=="swing"`. Preset / strategy
+    absente → [] (aucune géométrie exigée). Phase 1 : pas de gate `accept` (PR5).
+    """
+    if not o:
+        return []
+    if o.get("strategy") != "swing" and o.get("sleeve") != "swing":
+        return []
+    miss: list[str] = []
+
+    def _fin(v) -> bool:
+        return isinstance(v, (int, float)) and not isinstance(v, bool) and v == v
+
+    def _str(v) -> bool:
+        return isinstance(v, str) and bool(v.strip())
+
+    if not _fin(o.get("entry")):
+        miss.append("entry")
+    if not _fin(o.get("stop")):
+        miss.append("stop")
+    if not (_fin(o.get("target")) or _fin(o.get("rr"))):
+        miss.append("target|rr")
+    if not _str(o.get("setup_id")):
+        miss.append("setup_id")
+    if not _str(o.get("ts_decision")):
+        miss.append("ts_decision")
+    return miss
+
+
+def _reconcile(targets, brokers, reduce, alert_engine, dry, obs=None, *,
+               proteger=None, liquider_hors_cible: bool = True) -> tuple[int, list, list]:
     """Réconciliation idempotente + ANTI-LEVIER. Retourne (nb ordres, ouvertures, ventes).
 
     On n'échange que le DELTA (cible − détenu). `opened` = achats RÉELLEMENT envoyés (à
@@ -272,7 +317,9 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry, obs=None) -> tuple[i
     if _verif_seance and not feries_a_jour():
         print("  ⚠️  fériés NYSE périmés — voir packages/execution/market_calendar")
     for bname, broker, cap, cur in brokers:
-        tgt, band = _broker_targets(targets, bname, cap, reduce, cur)
+        tgt, band = _broker_targets(targets, bname, cap, reduce, cur,
+                                    proteger=proteger,
+                                    liquider_hors_cible=liquider_hors_cible)
         curn = {}                                             # détenu par clé NORMALISÉE (cumul)
         for k, v in cur.items():
             curn[_nsym(k)] = curn.get(_nsym(k), 0.0) + v
@@ -359,6 +406,20 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry, obs=None) -> tuple[i
                 intention = replace(intention, montant=_v.montant)
             if not dry:
                 print("  " + ligne_journal(bsym, intention.action, _v.montant, _v))
+            # Guard géométrie sleeve (TA#8) — inactif pour preset / strategy absente.
+            _miss = sleeve_geometry_missing(o)
+            if _miss:
+                print(tag + f"  ⛔ reject_missing_geometry ({','.join(_miss)})")
+                try:
+                    import logging
+                    logging.getLogger("live.execution").warning(
+                        "reject_missing_geometry",
+                        extra={"symbole": bsym, "broker": bname,
+                               "manquants": list(_miss),
+                               "strategy": (o or {}).get("strategy")})
+                except Exception:  # noqa: BLE001
+                    pass
+                continue
             side = Side.LONG if intention.action == "acheter" else Side.SHORT
             if dry or broker is None:
                 print(tag + f"  {'aperçu' if dry else 'broker absent'} ({intention.action})")
@@ -411,9 +472,21 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry, obs=None) -> tuple[i
                 # pose. `close_position` rend un booléen : pas d'identité, donc None.
                 _oid = str(getattr(_res, "id", "") or "") or None
                 if delta > 0 and o is not None:               # ACHAT/ADD → ouverture à journaliser
-                    opened.append({"symbol": o["symbol"], "venue": bname, "broker_symbol": bsym,
-                                   "asset_class": o.get("asset_class"), "weight_pct": o.get("weight_pct"),
-                                   "order_id": _oid})
+                    _op = {"symbol": o["symbol"], "venue": bname, "broker_symbol": bsym,
+                           "asset_class": o.get("asset_class"), "weight_pct": o.get("weight_pct"),
+                           "order_id": _oid}
+                    # rank_score / expectancy* / géométrie : uniquement si déjà figés
+                    # sur la cible (snapshot) — jamais inventés ici.
+                    for _k in ("rank_score", "expectancy_R", "rr", "p_calibrated", "risk_$",
+                               "entry", "stop", "target"):
+                        _v = o.get(_k)
+                        if isinstance(_v, (int, float)) and not isinstance(_v, bool) and _v == _v:
+                            _op[_k] = float(_v)
+                    for _k in ("strategy", "setup_id", "ts_decision"):
+                        _v = o.get(_k)
+                        if isinstance(_v, str) and _v.strip():
+                            _op[_k] = _v.strip()
+                    opened.append(_op)
                 elif delta < 0:                               # VENTE/REDUCE → round-trip à fermer
                     sold.append({"symbol": (o or {}).get("symbol", bsym), "venue": bname,
                                  "broker_symbol": bsym, "notional": abs(delta),
@@ -622,6 +695,19 @@ def _journal_opens(snap: dict, opened: list, alpaca, bitmart) -> None:
         def _decision_px(sym):                        # dernier close CONNU à la décision
             bars = _series.get(sym) or []
             return float(bars[-1]["c"]) if bars else None
+
+        # ts_arrival = instant de DÉCISION (features figées), pas le fill.
+        # Meilleur PIT dispo : meta.generated_at du snapshot. Pas de mid/quotes inventés.
+        _ts_arrival = None
+        _raw_gen = (snap.get("meta") or {}).get("generated_at")
+        if isinstance(_raw_gen, datetime):
+            _ts_arrival = _raw_gen
+        elif isinstance(_raw_gen, str) and _raw_gen:
+            try:
+                _ts_arrival = datetime.fromisoformat(_raw_gen.replace("Z", "+00:00"))
+            except ValueError:
+                _ts_arrival = None
+
         brokers = (("Alpaca", alpaca), ("Bitmart", bitmart))
         jour = datetime.now(UTC).date().isoformat()
         fills = _fills_achats(brokers, jour)
@@ -630,20 +716,78 @@ def _journal_opens(snap: dict, opened: list, alpaca, bitmart) -> None:
         def _fill(op):          # le fill du jour d'abord, la position ensuite
             cle = (op["venue"], normaliser(op["broker_symbol"]))
             return fills.get(cle) or repli.get(cle)
-        opens = [{
-            "symbol": op["symbol"], "venue": op["venue"], "asset_class": op.get("asset_class"),
-            "fill": _fill(op),
-            "features": {**feats_by_sym.get(op["symbol"], {}), **regime_ctx,
-                         "target_weight": op.get("weight_pct"),
-                         # prix de DÉCISION (close du snapshot) → slippage réel
-                         # mesurable
-                         # au fill (exec_costs.py). None si série absente (jamais
-                         # inventé).
-                         **({"decision_price": _decision_px(op["symbol"])}
-                            if _decision_px(op["symbol"]) else {})},
-            "regime": regime_lbl,
-            "order_id": op.get("order_id"),          # l'écart ne se mesure que sur SON fill
-        } for op in opened]
+        def _merge_feats(op: dict) -> dict:
+            """Features decision-time pour le journal — clés TCA figées, jamais inventées.
+
+            Clés : rank_score, decision_price, target_weight, regime_expo, notionnel,
+            ts_decision (ISO), expectancy_R / rr / p_calibrated / risk_$ / gain_attendu
+            seulement si evaluate_setup (ou équivalent) les a fournis sur l'ordre.
+            gain_attendu = expectancy_R * risk_$ ; JAMAIS REALIZED_PNL ni ASSUMED_EDGE.
+            """
+            feats = {**feats_by_sym.get(op["symbol"], {}), **regime_ctx}
+            # rank_score : feature_map OU cible ouverte (preset attaché au snap)
+            if "rank_score" not in feats:
+                rs = op.get("rank_score")
+                if isinstance(rs, (int, float)) and not isinstance(rs, bool) and rs == rs:
+                    feats["rank_score"] = float(rs)
+            tw = op.get("weight_pct")
+            if isinstance(tw, (int, float)) and not isinstance(tw, bool) and tw == tw:
+                feats["target_weight"] = float(tw)
+            dpx = _decision_px(op["symbol"])
+            if dpx is not None:
+                feats["decision_price"] = float(dpx)
+            # notionnel (orthographe FR) : qty fill × decision_price (prix de décision).
+            # Pas de proxy |weight|×equity ici (non documenté) ; pas de PnL réalisé.
+            fill = _fill(op)
+            qty = float((fill or {}).get("qty") or 0.0)
+            if dpx is not None and qty > 0:
+                feats["notionnel"] = round(qty * float(dpx), 6)
+            # ts_decision ISO — features_snapshot accepte cette seule string (TCA).
+            # TradeRecord.ts_arrival reste la colonne dédiée (même instant).
+            if _ts_arrival is not None:
+                feats["ts_decision"] = _ts_arrival.isoformat()
+            # evaluate_setup / sleeve géom : uniquement si déjà sur l'ordre — jamais inventé.
+            # expectancy_R / p_calibrated / gain_attendu : HOLD (pas inventés ici).
+            for k in ("expectancy_R", "rr", "p_calibrated", "risk_$",
+                      "entry", "stop", "target"):
+                v = op.get(k)
+                if isinstance(v, (int, float)) and not isinstance(v, bool) and v == v:
+                    feats[k] = float(v)
+            # setup_id : exception str (même famille que ts_decision) — copie si non vide.
+            _sid = op.get("setup_id")
+            if isinstance(_sid, str) and _sid.strip():
+                feats["setup_id"] = _sid.strip()
+            # ts_decision depuis op seulement si feats ne l'a pas déjà (snap ISO prioritaire).
+            if "ts_decision" not in feats:
+                _td = op.get("ts_decision")
+                if isinstance(_td, str) and _td.strip():
+                    feats["ts_decision"] = _td.strip()
+            er, risk = feats.get("expectancy_R"), feats.get("risk_$")
+            if (isinstance(er, (int, float)) and isinstance(risk, (int, float))
+                    and er == er and risk == risk):
+                feats["gain_attendu"] = round(float(er) * float(risk), 6)
+            # sinon : gain_attendu absent (null) — jamais de proxy
+            return feats
+
+        opens = []
+        n_miss_rank_score = 0
+        for op in opened:
+            feats = _merge_feats(op)
+            if "rank_score" not in feats:
+                n_miss_rank_score += 1
+            opens.append({
+                "symbol": op["symbol"], "venue": op["venue"],
+                "asset_class": op.get("asset_class"),
+                "fill": _fill(op),
+                "features": feats,
+                "regime": regime_lbl,
+                "strategy": op.get("strategy") or "preset",
+                "order_id": op.get("order_id"),
+                "ts_arrival": _ts_arrival,
+            })
+        if n_miss_rank_score:
+            print(f"Journal : n_miss_rank_score={n_miss_rank_score}/{len(opened)} "
+                  f"(lookup screener/screen/target vide).")
         _garder_les_decisions(opens, jour)
         n = journal_opens(SqliteTradeJournal(), opens)
         _dire_les_ouvertures(n, len(opened) - n, opens)
@@ -912,7 +1056,47 @@ def main() -> None:
     if not dry and not a.forcer and _deja_rebalance_aujourdhui(brokers, obs):
         _record_garde_fous(obs, dry)
         return                                     # doublon : on sort AVANT tout envoi
-    sent, opened, sold = _reconcile(targets, brokers, reduce, alert_engine, dry, obs)
+
+    # Arch A3 — Capital A : preset protège les syms sleeve ; pass sleeve sans liquidation
+    # hors-cible. Flag OFF / swing vide → un seul _reconcile preset (bit-identique).
+    # PR4 : protect multi-jour via journal (pas ici).
+    from packages.execution.swing_sleeve import load_swing_orders
+    swing = load_swing_orders(snap)
+    for o in swing:
+        wp = o.get("weight_pct")
+        notionnel = o.get("notionnel")
+        try:
+            n = float(notionnel) if notionnel is not None else None
+        except (TypeError, ValueError):
+            n = None
+        missing = wp is None
+        invalid = False
+        try:
+            wpf = float(wp) if wp is not None else None
+            if wpf is not None and (not (wpf == wpf) or wpf < 0):
+                invalid = True
+            # percent-like (>1) with known notionnel → recompute as fraction
+            if wpf is not None and wpf > 1.0 and n is not None and n > 0:
+                invalid = True
+        except (TypeError, ValueError):
+            invalid = True
+            wpf = None
+        if alp_cap > 0 and n is not None and n > 0 and (missing or invalid):
+            o["weight_pct"] = n / alp_cap
+        o.setdefault("strategy", "swing")
+
+    if swing:
+        print(f"sleeve swing: {len(swing)} ordres (capital A)")
+        protect = {_nsym(o.get("broker_symbol") or o["symbol"]) for o in swing}
+        sent, opened, sold = _reconcile(
+            targets, brokers, reduce, alert_engine, dry, obs, proteger=protect)
+        s2, o2, v2 = _reconcile(
+            swing, brokers, reduce, alert_engine, dry, obs, liquider_hors_cible=False)
+        sent += s2
+        opened.extend(o2)
+        sold.extend(v2)
+    else:
+        sent, opened, sold = _reconcile(targets, brokers, reduce, alert_engine, dry, obs)
     # AVANT la journalisation, et c'est voulu : plus aucun garde-fou ne parle après
     # `_reconcile`, tandis qu'un échec de `_journal_opens` emporterait sinon le
     # compte-rendu du run avec lui — sans une ligne pour le dire.

@@ -311,7 +311,8 @@ class TradeRecord:
     exit_reason: str = ""
     regime: str | None = None
     strategy: str | None = None
-    features_snapshot: dict[str, float] = field(default_factory=dict)  # non négociable
+    # floats ML-safe ; seule exception documentée : `ts_decision` (ISO string TCA).
+    features_snapshot: dict[str, float | str] = field(default_factory=dict)  # non négociable
     pnl_gross: float | None = None
     pnl_net: float | None = None
     pnl_pct: float | None = None
@@ -320,3 +321,22 @@ class TradeRecord:
     duration_s: float | None = None
     mfe: float | None = None  # max favorable excursion
     mae: float | None = None  # max adverse excursion
+    # --- TCA v1 (paper) : nullable ; NULL = jamais mesuré (≠ 0) ---
+    order_id: str | None = None
+    fill_id: str | None = None
+    qty_filled: float | None = None
+    ts_arrival: datetime | None = None
+    ts_send: datetime | None = None
+    ts_fill: datetime | None = None
+    P_arrival: float | None = None
+    P_fill: float | None = None
+    P_mid_arrival: float | None = None
+    P_mid_fill: float | None = None
+    P_mid_fill_h: float | None = None
+    P_bid_fill: float | None = None
+    P_ask_fill: float | None = None
+    fee_comm: float | None = None      # coût commission (estimé ou observé)
+    fee_funding: float | None = None   # NULL = inconnu / N/A produit ; jamais faux 0
+    impact_horizon: str | None = None  # ex. "1bar" | "1m"
+    bench_quality: str | None = None   # ok | degraded | missing
+    tca_variant: str | None = None     # arrival_plus_fees
