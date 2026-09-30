@@ -63,12 +63,14 @@ def _toucher(pos: dict, t: int, o, haut, bas) -> tuple[float, str] | None:
 
 def simuler(jours: list[str], o, c, long_sig, tp_sig, *, debut: str, cout: float,
             capital: float = CAPITAL, haut=None, bas=None, stops=None,
-            cibles=None) -> dict:
+            cibles=None, suiveur: tuple | None = None) -> dict:
     """Déroule les signaux à partir de `debut` (les barres antérieures ne servent qu'au
     calcul de l'indicateur, en amont). Equity marquée au close de chaque barre.
 
     `stops`/`cibles` (optionnels, NaN = aucun) : niveaux fixés au close du signal LONG,
-    honorés dès la barre d'entrée ; ils exigent `haut` et `bas`."""
+    honorés dès la barre d'entrée ; ils exigent `haut` et `bas`. `suiveur` = (k, atr) :
+    stop Chandelier = plus haut de CLÔTURE depuis l'entrée − k·ATR, relevé au close et
+    valable dès la séance suivante — il ne recule jamais."""
     i0 = bisect_left(jours, debut)
     cash, pos, ordre = float(capital), None, None
     trades, dates, equity, investi = [], [], [], []
@@ -86,6 +88,8 @@ def simuler(jours: list[str], o, c, long_sig, tp_sig, *, debut: str, cout: float
         dates.append(jours[t])
         equity.append(cash + (pos["parts"] * float(c[t]) if pos else 0.0))
         investi.append(pos is not None)
+        if pos is not None and suiveur is not None:
+            _suivre(pos, float(c[t]), float(suiveur[1][t]), float(suiveur[0]))
         if pos is not None and tp_sig[t]:
             ordre = ("vente",)
         elif pos is None and long_sig[t]:
@@ -94,6 +98,14 @@ def simuler(jours: list[str], o, c, long_sig, tp_sig, *, debut: str, cout: float
                                        "valeur": equity[-1] if equity else 0.0}
     return {"dates": dates, "equity": equity, "trades": trades, "ouvert": ouvert,
             "investi": investi, "clotures": [float(x) for x in c[i0:]]}
+
+
+def _suivre(pos: dict, cloture: float, atr: float, k: float) -> None:
+    """Relève le stop Chandelier au close ; un ATR inconnu ne le bouge pas."""
+    pos["haut"] = max(pos.get("haut", pos["px"]), cloture)
+    if math.isfinite(atr):
+        niveau = pos["haut"] - k * atr
+        pos["stop"] = niveau if pos["stop"] is None else max(pos["stop"], niveau)
 
 
 def _sortir(pos: dict, jour: str, prix: float, motif: str, cout: float,

@@ -1,5 +1,18 @@
 # 04 — JOURNAL
 
+## Session 2026-09-30 (6ᵉ) — Quel horizon, quelle fréquence, quelle sortie ? Une grille déposée avant de compter
+
+L'utilisateur demandait la meilleure approche selon l'horizon (1 an, 1 à 5 ans, 5 à
+10 ans), la fréquence de décision et le critère de sortie. J'ai déposé la grille dans git
+AVANT tout calcul (`cdd6cd8`), puis compté 480 essais sur les 4 actifs réels disponibles.
+
+Trois résultats se recoupent avec des mesures antérieures faites sur d'autres données :
+décider souvent l'emporte, le filtre de tendance MM200 et le momentum dominent, et les
+prises de profit comme les stops suiveurs coûtent. Mais aucun scénario ne survit à la
+déflation (DSR ≤ 0,43), la PBO atteint 0,69 sur la crypto, et le buy & hold reste devant
+à 1 et 3 ans. La sortie sur « changement de score ML » n'a pas été simulée : aucun modèle
+n'est calibré.
+
 ## Session 2026-09-30 (5ᵉ) — SMCLXTP-A face au buy & hold : moins de drawdown, beaucoup moins de rendement
 
 Backtest demandé sur 12 actifs depuis 2020. Le conteneur n'a ni données ni accès à Yahoo

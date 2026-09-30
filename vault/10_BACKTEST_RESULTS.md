@@ -19,6 +19,64 @@
 
 ---
 
+## 2026-09-30 — Horizons × stratégies × sorties × fréquences, grille PRÉ-ENREGISTRÉE [73dd06226a20], 4 actifs réels (FMP)
+
+**Protocole.**
+- Grille déposée AVANT tout calcul (commit `cdd6cd8`) : 6 stratégies × 4 critères de
+  sortie × 5 fréquences = 120 scénarios par actif, soit 480 essais consignés.
+- Horizons de 1, 3, 5 et 10 ans sur des fenêtres glissantes mensuelles, comparées au
+  buy & hold sur les mêmes fenêtres.
+- Moteur `signal_long_tp`, depuis 2020.
+
+**Par dimension** (médianes sur actifs × autres dimensions) :
+
+| Stratégie | Sharpe | CAGR | maxDD | 1 an : rend. / bat B&H | 3 ans | 5 ans |
+|---|---|---|---|---|---|---|
+| tendance_mm200 | 0,86 | +32,3 % | −53,1 % | +19,8 % / 33 % | +26,0 % / 29 % | +33,7 % / 8 % |
+| smclxtp | 0,77 | +25,3 % | −62,2 % | +18,5 % / 35 % | +23,1 % / 21 % | +25,3 % / 0 % |
+| momentum_12_1 | 0,77 | +27,8 % | −53,4 % | +13,6 % / 30 % | +20,4 % / 13 % | +30,8 % / 0 % |
+| ma_crossover | 0,72 | +22,6 % | −60,1 % | +14,9 % / 32 % | +17,3 % / 8 % | +25,7 % / 0 % |
+| swing | 0,17 | +1,1 % | −32,1 % | 0 % / 33 % | +0,6 % / 9 % | +1,5 % / 0 % |
+| rsi_reversion | 0,04 | 0 % | −36,3 % | 0 % / 33 % | 0 % / 2 % | 0 % / 0 % |
+
+| Sortie | Sharpe | CAGR | maxDD |
+|---|---|---|---|
+| tendance_mm200 | 0,78 | +27,9 % | −50,9 % |
+| signal | 0,70 | +23,6 % | −55,6 % |
+| suiveur 3 ATR | 0,44 | +8,0 % | −42,2 % |
+| TP 3 ATR | 0,38 | +5,5 % | −54,5 % |
+
+| Fréquence | Sharpe | CAGR | maxDD |
+|---|---|---|---|
+| jour | 0,82 | +31,1 % | −56,7 % |
+| semaine | 0,73 | +25,4 % | −55,2 % |
+| mois | 0,66 | +19,5 % | −49,4 % |
+| trimestre | 0,44 | +8,0 % | −45,3 % |
+| année | 0,26 | +2,4 % | −48,2 % |
+
+**Par horizon** (médiane sur les 4 actifs) :
+- 1 an : B&H +72,3 %/an ; le meilleur scénario, `momentum_12_1|signal|semaine`, fait
+  +47,0 %/an.
+- 3 ans : B&H +71,7 %/an ; le meilleur, `smclxtp|signal|mois`, fait +56,6 %/an.
+- 5 ans : B&H +48,5 %/an ; le meilleur, `ma_crossover|tendance_mm200|jour`, fait
+  +59,6 %/an. C'est le seul horizon où le meilleur dépasse le B&H médian, sur environ
+  20 fenêtres qui se chevauchent.
+- 10 ans : UNCALIBRATED, l'historique fait 6,3 ans.
+
+**Surapprentissage.**
+- PBO : 0,29 (PLTR), 0,33 (NVDA), 0,64 (BTC), 0,69 (ETH).
+- DSR du meilleur scénario : entre 0,25 et 0,43. Aucun ne survit à la déflation.
+
+**Lecture.** Trois résultats convergent avec le banc portefeuille du VPS (870 scénarios)
+et avec l'ADR-0052 :
+1. Décider souvent (jour, semaine) vaut mieux que rarement (trimestre, année).
+2. Le filtre de tendance et le momentum sont les familles les plus robustes.
+3. Les prises de profit et les suiveurs coupent la queue droite.
+
+Aucun scénario ne bat le buy & hold ajusté du risque de façon établie. Il n'y a que
+4 actifs, tous grands gagnants 2020-2026 : la mesure qui compte est le tirage aléatoire
+sur le VPS, depuis 2015.
+
 ## 2026-09-30 — SMCLXTP-A face aux stratégies du bot, mêmes règles, 4 actifs réels (FMP), depuis 2020
 
 **Protocole.**

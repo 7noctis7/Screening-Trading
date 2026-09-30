@@ -25,6 +25,13 @@
       (c) chercher une vraie source de rendement — pré-enregistrée, jugée hors échantillon.
       Ne rien engager en réel avant d'avoir tranché. Cf. 10_BACKTEST_RESULTS du 25/09.
       **Option (c) retenue (25/09, ADR-0205)** → banc pré-enregistré livré, voir ci-dessous.
+- [ ] **P1 — Grilles aléatoires sur le VPS (30/09).**
+      Commandes :
+      `make simuler-horizons ARGS="--vps-quotidien --debut 2015-01-01 --aleatoire 12"`
+      `make simuler-horizons ARGS="--vps-crypto 4h --debut 2020-01-01 --aleatoire 8"`
+      `make comparer-strategies ARGS="--vps-quotidien --aleatoire 12"`
+      La graine 20260930 est fixée d'avance. Lire la PBO et le DSR AVANT le classement.
+      Consigner dans 10_BACKTEST_RESULTS.
 - [ ] **P1 — Backtest SMCLXTP-A sur les 12 actifs, depuis le VPS : `make smclxtp-backtest`
       (30/09).** Seuls 4 actifs sur 12 ont été mesurés ici (FMP). Consigner le tableau
       complet dans 10_BACKTEST_RESULTS, avec le buy & hold à côté.
