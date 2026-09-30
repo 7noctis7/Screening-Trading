@@ -15,15 +15,17 @@ factor 1,01, la question n'est pas « ce trade est-il bon ? » mais « son espé
 couvre-t-elle trois fois ses frictions ? ». Un signal qui ne passe pas ce test coûte de
 l'argent en moyenne, même quand il a raison sur la direction.
 
-STATUT : SHADOW. Aucun appelant en production ; `rebalance_plan` porte déjà la bande
-d'inaction active. Le brancher est une décision explicite.
+STATUT : CANDIDATE_UNCALIBRATED. La décomposition (`detail`) est joignable depuis
+la production via `tca.decompose_cost` → `apps/api/snapshot._live_with_rebalance`.
+La règle d'inhibition (`signal_inhibe`) reste volontairement hors chemin d'ordres
+jusqu'à calibration — `rebalance_plan` porte déjà la bande d'inaction active.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-STATUT = "SHADOW_UNCALIBRATED"
+STATUT = "CANDIDATE_UNCALIBRATED"
 MULTIPLE_INHIBITION = 3.0          # spec : espérance ≥ 3 × frictions
 
 
