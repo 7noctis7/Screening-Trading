@@ -32,10 +32,6 @@ function fenetre(n?: number): string {
 }
 
 const PERIODS: [string, number][] = [["1A", 1], ["2A", 2], ["3A", 3], ["5A", 5], ["Tout", 0]];
-// Deltas vs période N−1 (même durée) — DISCRETS : signe seul, gris. En points de % ou en absolu (ratios).
-const dPts = (cur?: number, prev?: number | null) => (cur == null || prev == null) ? undefined : `${cur - prev >= 0 ? "+" : ""}${((cur - prev) * 100).toFixed(1)} pt`;
-const dAbs = (cur?: number, prev?: number | null) => (cur == null || prev == null) ? undefined : `${cur - prev >= 0 ? "+" : ""}${(cur - prev).toFixed(2)}`;
-
 
 // COMPOSITION — MODÈLE vs RÉEL.
 //
@@ -72,15 +68,6 @@ export default function Dashboard() {
     return eqFull.filter((p) => new Date(p.t) >= cut);
   }, [eqFull, years]);
   const chartEquity = useMemo(() => rebase(sliced), [sliced]);
-  // Fenêtre N−1 (même durée, juste avant) → deltas KPI. Nulle si période = « Tout » (pas d'antérieur).
-  const prevStats = useMemo(() => {
-    if (!years || eqFull.length < 2) return null;
-    const last = new Date(eqFull[eqFull.length - 1].t);
-    const curCut = new Date(last); curCut.setFullYear(curCut.getFullYear() - years);
-    const prevCut = new Date(last); prevCut.setFullYear(prevCut.getFullYear() - 2 * years);
-    const win = eqFull.filter((p) => { const dt = new Date(p.t); return dt >= prevCut && dt < curCut; });
-    return statsFrom(win);
-  }, [eqFull, years]);
   const chartBench = useMemo(() => {
     const src = d?.benchmarks as Record<string, any[]> | undefined;
     if (!src) return src;
@@ -91,7 +78,10 @@ export default function Dashboard() {
     return out;
   }, [d?.benchmarks, sliced, years]);
   if (!d) return <PageSkeleton />;
-  const m = statsFrom(sliced) ?? d.metrics;
+  // KPI héros = vérité API (`perf_summary` via `metrics_payload`). Ne PAS recalculer
+  // Sharpe/Sortino/CAGR/MaxDD en TS (`statsFrom`) : formules ≠ Python (ddof, déviation
+  // baissière). Le slice ne sert qu'au graphique / aux indices du tableau comparatif.
+  const m = d.metrics ?? {};
   return (
     <main className="max-w-6xl mx-auto p-6 space-y-4">
       <h1 className="text-xl font-semibold tracking-tight">Quant Terminal
@@ -129,22 +119,23 @@ export default function Dashboard() {
             pas sur la même période. On lisait une contradiction là où il n'y avait que
             trois questions différentes. */}
         <span className="w-full text-muted2">
-          Ces cinq chiffres portent sur <b>{fenetre((m as any)?.n)}</b>
-          {sliced.length > 1 && <> — du {new Date(sliced[0].t).toLocaleDateString("fr-FR")} au {new Date(sliced[sliced.length - 1].t).toLocaleDateString("fr-FR")}</>}
-          {" "}(bouton « Période » ci-dessus). Les autres « gain / risque » de la page portent
-          sur d'autres fenêtres : chacun le dit à côté de lui.
+          Ces cinq chiffres viennent du backtest côté serveur, sur <b>{fenetre((m as any)?.n)}</b>
+          {eqFull.length > 1 && <> — du {new Date(eqFull[0].t).toLocaleDateString("fr-FR")} au {new Date(eqFull[eqFull.length - 1].t).toLocaleDateString("fr-FR")}</>}
+          . Le bouton « Période » ne filtre que le graphique et le tableau de comparaison
+          ci-dessous — il ne recalcule pas Sharpe, Sortino, CAGR ni Max DD. Les autres
+          « gain / risque » de la page portent sur d'autres fenêtres : chacun le dit à côté de lui.
         </span>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <MetricCard hero label="Gain total" value={pct(m.total_return)} tone={m.total_return >= 0 ? "pos" : "neg"} delta={dPts(m.total_return, prevStats?.total_return)}
+        <MetricCard hero label="Gain total" value={pct(m.total_return ?? 0)} tone={(m.total_return ?? 0) >= 0 ? "pos" : "neg"}
           explication="Depuis le début de la période mesurée." />
-        <MetricCard hero label="Gain par an" terme="CAGR" value={pct(m.cagr ?? 0)} tone={(m.cagr ?? 0) >= 0 ? "pos" : "neg"} delta={dPts(m.cagr, prevStats?.cagr)}
+        <MetricCard hero label="Gain par an" terme="CAGR" value={pct(m.cagr ?? 0)} tone={(m.cagr ?? 0) >= 0 ? "pos" : "neg"}
           explication="Rythme moyen, une fois lissées les bonnes et les mauvaises années." />
-        <MetricCard hero label="Gain / risque" terme="Sharpe" value={m.sharpe?.toFixed(2)} delta={dAbs(m.sharpe, prevStats?.sharpe)}
+        <MetricCard hero label="Gain / risque" terme="Sharpe" value={m.sharpe?.toFixed(2)}
           explication={expliqueSharpe(m.sharpe).phrase} />
-        <MetricCard hero label="Gain / baisses" terme="Sortino" value={m.sortino?.toFixed(2)} delta={dAbs(m.sortino, prevStats?.sortino)}
+        <MetricCard hero label="Gain / baisses" terme="Sortino" value={m.sortino?.toFixed(2)}
           explication="Même idée que le rapport gain / risque, mais ne compte que les baisses." />
-        <MetricCard hero label="Pire baisse" terme="Max DD" value={pct(m.max_drawdown)} tone="neg" delta={dPts(m.max_drawdown, prevStats?.max_drawdown)}
+        <MetricCard hero label="Pire baisse" terme="Max DD" value={pct(m.max_drawdown ?? 0)} tone="neg"
           explication={expliqueDrawdown(m.max_drawdown).phrase} />
       </div>
 
