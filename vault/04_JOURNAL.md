@@ -1,5 +1,20 @@
 # 04 — JOURNAL
 
+## Session 2026-09-30 (6ᵉ) — Audit « Hugging Face → alpha » : un seul candidat sans contamination, et deux angles morts
+
+Mission d'analyse, sans code de production (`docs/HF_ALPHA_AUDIT.md`). Le conteneur n'atteint
+pas huggingface.co : toutes les cards sont de seconde main et marquées « à vérifier ». Le
+candidat le plus solide est FinText, qui publie un modèle de séries par ANNÉE : c'est le seul
+qui permet un walk-forward sans contamination, et il vise la volatilité du DD-target, pas un
+alpha. Fin-R1, Kronos et les prévisions de rendement en zéro-shot sont écartés, avec leurs
+raisons.
+
+Deux défauts trouvés en chemin, non corrigés (hors mission) : `run_live` atteint
+`transformers` par import via `snapshot` → `sentiment` → `finbert`, et seule la variable
+`QUANT_LIVE_LITE` l'en sépare. L'outil de `make certification` ne voit ni
+`from packages import x` ni les imports relatifs. Troisième écart : `trial_count` compte des
+lignes, `deflation_params` des scénarios.
+
 ## Session 2026-09-30 (5ᵉ) — SMCLXTP-A face au buy & hold : moins de drawdown, beaucoup moins de rendement
 
 Backtest demandé sur 12 actifs depuis 2020. Le conteneur n'a ni données ni accès à Yahoo

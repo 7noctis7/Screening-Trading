@@ -7,6 +7,12 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+- [ ] **P1 — Audit HF (30/09, `docs/HF_ALPHA_AUDIT.md`) : DÉCISION UTILISATEUR.** Valider
+      ou non les ADR proposés 0210 (vol FinText/Chronos-2), 0211 (Lazy Prices TF-IDF), 0212
+      (FinBERT vs lexique). Avant toute implémentation : B1 (test AST chaîne d'ordres →
+      modèle, échoue aujourd'hui via `snapshot` → `sentiment` → `finbert`), B2 (regex de
+      `make certification`), B3 (une seule définition de N au ledger), B7 (lire les cards
+      HF depuis le VPS, annexe C).
 - [ ] **P0 — QML-001 : la règle tradée n'avait AUCUN backtest — PARTIELLEMENT RÉSOLU (25/09,
       ADR-0202).** Livré : `packages/backtest/preset_rejeu.py` + `make preset-replay` (rejeu
       date par date de `preset_latest_weights_explique`, exécution J+1, bande/plancher/portail
