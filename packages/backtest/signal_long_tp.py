@@ -5,7 +5,10 @@ Règles d'exécution, écrites AVANT tout chiffre (SMCLXTP-A, 30/09) :
     l'OUVERTURE de t+1, jamais au prix qui a produit le signal ;
   * une position à la fois, 100 % du capital du titre, gains réinvestis (10 000 $ au
     départ) ; un LONG reçu en position est ignoré, un TP reçu à plat aussi ;
-  * pas de stop : l'indicateur n'en a pas, la seule sortie est son signal TP ;
+  * pas de stop pour SMCLXTP-A (il n'en a pas) ; les stratégies du bot qui fixent un stop
+    et une cible au close du signal les voient honorés EN SÉANCE, avec l'hypothèse
+    défavorable : gap sous le stop → ouverture, stop avant cible dans la même barre,
+    cible au prix de la cible (jamais mieux) ;
   * frais à CHAQUE jambe (`cout`, fraction du notionnel, barème du dépôt par classe) ;
   * une position encore ouverte à la fin est marquée au dernier close — ce n'est pas un
     trade clôturé (même convention que le Strategy Tester de TradingView).
@@ -17,7 +20,7 @@ from __future__ import annotations
 import math
 from bisect import bisect_left
 from dataclasses import dataclass
-from datetime import date
+from datetime import datetime
 
 import numpy as np
 
@@ -33,42 +36,72 @@ class Trade:
     capital: float
     pnl: float
     pnl_pct: float
-    jours: int
+    jours: float
+    motif_sortie: str = "signal"
 
 
-def _jours_entre(a: str, b: str) -> int:
-    return (date.fromisoformat(b[:10]) - date.fromisoformat(a[:10])).days
+def _jours_entre(a: str, b: str) -> float:
+    """Jours (fractionnaires en intraday) entre deux horodatages ISO."""
+    return (datetime.fromisoformat(b) - datetime.fromisoformat(a)).total_seconds() / 86400.0
+
+
+def _niveau(v, t: int) -> float | None:
+    if v is None:
+        return None
+    x = float(v[t])
+    return x if math.isfinite(x) else None
+
+
+def _toucher(pos: dict, t: int, o, haut, bas) -> tuple[float, str] | None:
+    """(prix, motif) si le stop ou la cible de la position est touché en séance `t`."""
+    if pos.get("stop") is not None and bas is not None and bas[t] <= pos["stop"]:
+        return min(float(o[t]), pos["stop"]), "stop"
+    if pos.get("cible") is not None and haut is not None and haut[t] >= pos["cible"]:
+        return pos["cible"], "cible"
+    return None
 
 
 def simuler(jours: list[str], o, c, long_sig, tp_sig, *, debut: str, cout: float,
-            capital: float = CAPITAL) -> dict:
+            capital: float = CAPITAL, haut=None, bas=None, stops=None,
+            cibles=None) -> dict:
     """Déroule les signaux à partir de `debut` (les barres antérieures ne servent qu'au
-    calcul de l'indicateur, en amont). Equity marquée au close de chaque barre."""
+    calcul de l'indicateur, en amont). Equity marquée au close de chaque barre.
+
+    `stops`/`cibles` (optionnels, NaN = aucun) : niveaux fixés au close du signal LONG,
+    honorés dès la barre d'entrée ; ils exigent `haut` et `bas`."""
     i0 = bisect_left(jours, debut)
-    cash, parts, entree, ordre = float(capital), 0.0, None, None
+    cash, pos, ordre = float(capital), None, None
     trades, dates, equity, investi = [], [], [], []
     for t in range(i0, len(jours)):
-        if ordre == "achat" and parts == 0.0:
-            parts = cash / (o[t] * (1 + cout))
-            entree, cash = (jours[t], float(o[t]), cash), 0.0
-        elif ordre == "vente" and parts > 0.0:
-            cash = parts * o[t] * (1 - cout)
-            j0, px0, cap = entree
-            trades.append(Trade(j0, jours[t], px0, float(o[t]), cap, cash - cap,
-                                cash / cap - 1.0, _jours_entre(j0, jours[t])))
-            parts, entree = 0.0, None
+        if ordre is not None and ordre[0] == "achat" and pos is None:
+            pos = {"parts": cash / (o[t] * (1 + cout)), "jour": jours[t], "px": float(o[t]),
+                   "cap": cash, "stop": ordre[1], "cible": ordre[2]}
+            cash = 0.0
+        elif ordre == ("vente",) and pos is not None:
+            cash, pos = _sortir(pos, jours[t], float(o[t]), "signal", cout, trades), None
         ordre = None
+        touche = _toucher(pos, t, o, haut, bas) if pos is not None else None
+        if touche is not None:
+            cash, pos = _sortir(pos, jours[t], touche[0], touche[1], cout, trades), None
         dates.append(jours[t])
-        equity.append(cash + parts * float(c[t]))
-        investi.append(parts > 0.0)
-        if parts > 0.0 and tp_sig[t]:
-            ordre = "vente"
-        elif parts == 0.0 and long_sig[t]:
-            ordre = "achat"
-    ouvert = None if entree is None else {"entree_jour": entree[0], "prix_entree": entree[1],
-                                          "valeur": equity[-1] if equity else 0.0}
+        equity.append(cash + (pos["parts"] * float(c[t]) if pos else 0.0))
+        investi.append(pos is not None)
+        if pos is not None and tp_sig[t]:
+            ordre = ("vente",)
+        elif pos is None and long_sig[t]:
+            ordre = ("achat", _niveau(stops, t), _niveau(cibles, t))
+    ouvert = None if pos is None else {"entree_jour": pos["jour"], "prix_entree": pos["px"],
+                                       "valeur": equity[-1] if equity else 0.0}
     return {"dates": dates, "equity": equity, "trades": trades, "ouvert": ouvert,
             "investi": investi, "clotures": [float(x) for x in c[i0:]]}
+
+
+def _sortir(pos: dict, jour: str, prix: float, motif: str, cout: float,
+            trades: list) -> float:
+    cash = pos["parts"] * prix * (1 - cout)
+    trades.append(Trade(pos["jour"], jour, pos["px"], prix, pos["cap"], cash - pos["cap"],
+                        cash / pos["cap"] - 1.0, _jours_entre(pos["jour"], jour), motif))
+    return cash
 
 
 def _stats_courbe(eq: list[float], dates: list[str], par_an: float) -> dict:

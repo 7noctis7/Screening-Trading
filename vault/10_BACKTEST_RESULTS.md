@@ -19,6 +19,32 @@
 
 ---
 
+## 2026-09-30 — SMCLXTP-A face aux stratégies du bot, mêmes règles, 4 actifs réels (FMP), depuis 2020
+
+**Protocole.**
+- Même moteur (`signal_long_tp`) : signal au close → ouverture suivante, frais de 5 pb sur
+  les actions et 25 pb sur la crypto.
+- Chaque stratégie garde SES sorties : stops et cibles du registre honorés en séance, avec
+  l'hypothèse défavorable.
+- `institutional_price_action` est écartée : aucun réglage connu (UNCALIBRATED).
+- 16 essais consignés.
+
+| Stratégie | Trades | Win | Durée méd. | PF méd. | PnL méd./trade | Sharpe méd. | Sortino méd. | CAGR méd. | maxDD méd. | Bat le B&H (Sharpe) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| smclxtp | 39 | 59 % | 125 j | 2,80 | +41,4 % | 0,69 | 1,05 | 24,6 % | −61,4 % | 0/4 |
+| ma_crossover | 86 | 47 % | 21 j | 2,19 | +4,6 % | 0,71 | 1,16 | 12,9 % | −43,7 % | 1/4 (ETH) |
+| rsi_reversion | 51 | 47 % | 18 j | 1,13 | +2,6 % | 0,15 | 0,23 | 0,9 % | −41,3 % | 0/4 |
+| swing | 74 | 30 % | 8 j | 1,00 | +0,2 % | −0,01 | 0,06 | −0,9 % | −39,2 % | 0/4 |
+| buy & hold | — | — | — | — | — | 1,01 | 1,59 | 60,5 % | −78,0 % | — |
+
+**Lecture.**
+- SMCLXTP-A et `ma_crossover` sont à égalité en Sharpe (0,69 contre 0,71) ; l'écart est
+  hors de portée statistique.
+- `rsi_reversion` et `swing` ne rapportent rien sur ces actifs.
+- Aucune stratégie ne bat le buy & hold ajusté du risque, sauf `ma_crossover` sur ETH.
+- 4 actifs, tous grands gagnants : ni la conclusion ni son inverse ne se généralisent.
+- Le tirage aléatoire sur le VPS (`make comparer-strategies`) est la vraie mesure.
+
 ## 2026-09-30 — SMCLXTP-A (LONG → TP), 4 actifs sur 12, données RÉELLES (FMP), depuis 2020
 
 **Source.** Connecteur FMP : EOD ajusté des dividendes pour les actions, EOD pour la
