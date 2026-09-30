@@ -25,6 +25,11 @@
       (c) chercher une vraie source de rendement — pré-enregistrée, jugée hors échantillon.
       Ne rien engager en réel avant d'avoir tranché. Cf. 10_BACKTEST_RESULTS du 25/09.
       **Option (c) retenue (25/09, ADR-0205)** → banc pré-enregistré livré, voir ci-dessous.
+- [ ] **P2 — Coûts du journal : ce qui reste après ADR-0207 (30/09).**
+      (a) Enregistrer un prix de référence pour les VENTES, sans quoi la jambe de sortie
+      n'est pas mesurée.
+      (b) Mesurer sur le VPS les tranches `-X` BitMart antérieures au 30/09 : leurs frais
+      d'entrée sont comptés deux fois. Les réécrire seulement après ce chiffrage.
 - [ ] **P1 — Mesurer la bande d'inaction sur le VPS (30/09, ADR-0206).** Commencer par
       `make preset-replay` (bande fixe) : lire la part des écarts laissés sans ordre, qui
       remplace le « 99 % » non vérifié. Puis

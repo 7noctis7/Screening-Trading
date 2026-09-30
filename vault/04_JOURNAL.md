@@ -1,5 +1,15 @@
 # 04 — JOURNAL
 
+## Session 2026-09-30 (2ᵉ) — Les frais « à 0,00 $ » étaient exacts ; le slippage, lui, n'était jamais écrit
+
+Deuxième feuille de route du jour. Son premier point ciblait des frais à 0,00 $ dans le
+journal. Vérifié : c'est la commission réelle d'un achat Alpaca, estimée et marquée comme
+telle. La vraie dette était ailleurs : la colonne `slippage` restait vide alors que le prix
+de décision est enregistré. En la comblant, j'ai trouvé un défaut que personne n'avait
+signalé : une vente partielle comptait deux fois la commission d'entrée. Les deux sont
+corrigés (ADR-0207), chaque fois avec un test écrit d'abord qui échouait (3,6 $ de frais
+sur la tranche au lieu de 2,1 $).
+
 ## Session 2026-09-30 — Bande d'inaction : le problème annoncé n'était pas celui de la production
 
 Une feuille de route externe désignait la bande de 3 % comme priorité. Vérification faite,

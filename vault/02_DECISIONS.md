@@ -2,6 +2,38 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0207 — Journal : l'écart décision → fill est écrit ; une vente partielle ne duplique plus les frais (2026-09-30)
+
+**CONTEXTE.** Une feuille de route signalait des colonnes frais/slippage « à 0,00 $ ».
+Vérifié dans le code :
+- les frais sont ESTIMÉS au barème et marqués comme tels (`fees_source="estimated"`) ;
+- le 0,00 $ est exact pour un achat Alpaca : aucune commission, et les frais SEC/TAF ne
+  s'appliquent qu'à la vente ;
+- la colonne `slippage`, en revanche, n'était JAMAIS remplie, alors que le prix de
+  décision est figé dans `features_snapshot` à chaque ouverture ;
+- en lisant `_fermer`, un défaut réel est apparu : une vente partielle recopiait les
+  frais d'entrée ENTIERS sur la tranche vendue ET sur le lot restant. La commission
+  d'entrée était donc comptée deux fois (invisible à 0 $ chez Alpaca, réelle à 25 pb
+  chez BitMart).
+
+**DÉCISIONS.**
+(1) `live_journal.ecart_decision` écrit l'écart en devise, (fill − décision) × quantité,
+positif = défavorable, via la convention unique `fills.shortfall_bps`. Il est descriptif :
+jamais retranché du P&L.
+(2) Les fills sont étiquetés `origine` (`ordre` ou `position`). Le prix moyen d'une
+position de repli mêle d'autres jours : il ne mesure rien, donc la valeur est None.
+(3) `live_roundtrip._part` répartit frais et écart au prorata de la quantité. Un coût
+inconnu reste inconnu.
+
+**LIMITES.**
+- Le prix de décision est le dernier close de la série du snapshot. Pour une action
+  traitée vers 15 h ET, l'écart inclut la dérive intraday : c'est l'implementation
+  shortfall au sens de Perold, pas un slippage de microstructure pur.
+- Aucune référence n'est enregistrée pour les ventes : la jambe de sortie n'est pas mesurée.
+- Les lignes historiques ne sont pas réécrites.
+
+---
+
 ## ADR-0206 — Bande d'inaction : mesurer avant de régler ; la bande adaptative reste hors production (2026-09-30)
 
 **CONTEXTE.** Une feuille de route externe affirmait : « la bande de 3 % en poids bloque

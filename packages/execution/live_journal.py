@@ -106,8 +106,25 @@ def agreger_achats(ordres: list[dict], jour: str) -> dict[str, dict]:
         acc["qty"] += q
         acc["notional"] += q * px
     return {k: {"qty": round(v["qty"], 10),
-                "avg_price": v["notional"] / v["qty"]}      # VWAP du jour, pas le PRU
+                "avg_price": v["notional"] / v["qty"],      # VWAP du jour, pas le PRU
+                "origine": "ordre"}                         # un FILL du jour (cf. ecart)
             for k, v in par_sym.items() if v["qty"] > 0}
+
+
+def ecart_decision(fill: dict | None, features: dict, prix: float, qty: float) -> float | None:
+    """Écart décision → fill de l'ACHAT, en devise : (fill − décision) × quantité.
+
+    Convention unique `fills.shortfall_bps` : positif = défavorable. Descriptif : déjà
+    dans le prix de fill, jamais retranché du P&L. `None` (jamais 0) si le prix de
+    décision manque, ou si le « fill » est une POSITION de repli, dont le prix moyen mêle
+    des achats d'autres jours et ne décrit pas l'exécution de celui-ci."""
+    from packages.core.models import Side
+    from packages.execution.fills import shortfall_bps
+    if (fill or {}).get("origine") != "ordre":
+        return None
+    ref = features.get("decision_price")
+    bps = shortfall_bps(ref, prix, Side.LONG) if isinstance(ref, (int, float)) else None
+    return None if bps is None else round(bps / 1e4 * float(ref) * qty, 6)
 
 
 def _classe_de_frais(symbole: str, hint: str | None) -> str:
@@ -138,10 +155,11 @@ def build_open(symbol: str, *, venue: str, asset_class: str | None, fill: dict |
         # les réponses que lit `run_live` ; écrire 0.0 serait un mensonge et `None` un
         # silence. On écrit le barème documenté ET `fees_source="estimated"`, pour
         # qu'aucun lecteur ne confonde plus tard cette estimation avec un fait.
-        # Le SLIPPAGE reste `None` : il n'est pas estimable sans prix de référence, et
-        # il est de toute façon déjà contenu dans le prix de fill.
+        # L'ÉCART décision → fill est écrit quand il est mesurable (fill du jour + prix de
+        # décision), sinon None. Il est DESCRIPTIF : déjà contenu dans le prix de fill.
         fees=broker_charge(_classe_de_frais(symbol, asset_class), price * qty, side="BUY"),
         fees_source="estimated",
+        slippage=ecart_decision(fill, feats, price, qty),
         features_snapshot=feats)
 
 

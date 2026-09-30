@@ -199,6 +199,18 @@ def close_sells(journal, sells: list[dict], series_by_sym: dict | None = None,
     return closed
 
 
+def _part(lot: TradeRecord, qty: float) -> TradeRecord:
+    """Le lot réduit à `qty`, avec SA part des coûts d'entrée (frais, écart décision).
+
+    Une scission recopiait les coûts ENTIERS sur la tranche vendue ET sur le lot
+    restant : la commission d'entrée était comptée deux fois. Inconnu reste inconnu."""
+    k = qty / lot.qty if lot.qty > 0 else 0.0
+    return dataclasses.replace(
+        lot, qty=round(qty, 10),
+        fees=None if lot.fees is None else round(lot.fees * k, 6),
+        slippage=None if lot.slippage is None else round(lot.slippage * k, 6))
+
+
 def _fermer(journal, lot: TradeRecord, remaining: float, price: float,
             ts: datetime, series: list[dict] | None, *, legacy: bool) -> float:
     """Ferme tout ou partie de `lot` et rend la quantité effectivement fermée."""
@@ -208,8 +220,7 @@ def _fermer(journal, lot: TradeRecord, remaining: float, price: float,
         return lot.qty
     n = 1 + sum(1 for t in journal.all()                   # PARTIELLE → scission
                 if t.id.startswith(lot.id + "-X"))
-    journal.append(_close_record(lot, take, price, ts, series,
+    journal.append(_close_record(_part(lot, take), take, price, ts, series,
                                  split_id=f"{lot.id}-X{n}"), legacy=legacy)
-    journal.append(dataclasses.replace(lot, qty=round(lot.qty - take, 10)),
-                   legacy=legacy)                          # lot restant (même id, UPSERT)
+    journal.append(_part(lot, lot.qty - take), legacy=legacy)   # lot restant (même id)
     return take

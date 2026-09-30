@@ -518,7 +518,8 @@ def _positions_repli(brokers: tuple) -> dict:
             continue
         for p in detail:
             pos[(bn, normaliser(p["symbol"]))] = {"avg_price": p.get("avg_price"),
-                                                  "qty": p.get("qty")}
+                                                  "qty": p.get("qty"),
+                                                  "origine": "position"}
     return pos
 
 
