@@ -138,7 +138,7 @@ par l'annexe C ; « n/d » = introuvable dans les sources consultées.
 | **FinText-TSFM** (`FinText/*`, ex. `Chronos_Small_2011_US`) | Rahimikia, Ni, Wang, « Re(Visiting) Time Series Foundation Models in Finance », [arXiv 2511.18578](https://arxiv.org/abs/2511.18578v1) ; [dépôt HF](https://huggingface.co/FinText/Chronos_Small_2011_US/commit/18d7c50a4633536d18bb67da21bf32ea800a0f2d) | Apache-2.0 selon [la page FinText](https://huggingface.co/spaces/FinText/README/commit/07f3442c5e9940f269c4b38e07012063417eb9e0) | architectures Chronos/autres, tailles Small+ : CPU plausible, **n/d** | **un modèle par année** (2007 → 2023) ; source des données **n/d** | 4 (vol), 1 (rendements) |
 | **Chronos-2** (`amazon/chronos-2`) | Amazon, [arXiv 2510.15821](https://arxiv.org/pdf/2510.15821) | Apache-2.0 | 120 M paramètres, encodeur : CPU | corpus : Chronos + GIFT-Eval pretrain + synthétique ; « pas de données boursières ni de taux » selon [2511.18578](https://arxiv.org/pdf/2511.18578) ; date de fin **n/d** ; publié en 10/2025 | 4 (vol) |
 | **TimesFM-2.5** (`google/timesfm-2.5-200m-pytorch`) | Google Research ; évaluation vol : [arXiv 2505.11163](https://arxiv.org/abs/2505.11163v1) | Apache-2.0 ([résumé](https://dev.to/andrew-ooo/timesfm-25-review-googles-time-series-foundation-model-14kp)) | 200 M, contexte 16 k : CPU lent, **n/d** | Google Trends, Wikipedia, synthétique ; date **n/d** | 4 (vol), challenger n°2 |
-| **ProsusAI/finbert** | Araci 2019 ; [dépôt GitHub](https://gittrend.io/repo/ProsusAI/finBERT) | Apache-2.0 (dépôt GitHub) ; tag HF **n/d** | BERT-base : CPU | BERT (≤ 2018) + fine-tuning Financial PhraseBank (2014) | 3 — **déjà dans le dépôt** |
+| **ProsusAI/finbert** | Araci 2019, arxiv:1908.10063 (card lue, §2.3) ; [dépôt GitHub](https://gittrend.io/repo/ProsusAI/finBERT) | **aucun tag de licence sur la card HF** ; Apache-2.0 sur le dépôt GitHub (seconde main) | BERT-base, poids 438 Mo : CPU | BERT (≤ 2018) + fine-tuning Financial PhraseBank (2014) | 3 — **déjà dans le dépôt** ; **sous réserve** (B9) |
 | **Qwen/Qwen3-Embedding-0.6B** | Alibaba Qwen ; tête du MTEB en 06/2025 ([S. Willison](https://simonwillison.net/2025/Jun/8/)) | Apache-2.0 | 0,6 B : CPU, débit **n/d** | **n/d** (publié 06/2025) | 2 (10-K), 3bis (dédoublonnage) |
 | **BAAI/bge-m3** | BAAI, 01/2024 ([fiche tierce](https://www.datalearner.com/en/ai-models/pretrained-models/BGE-M3-Embedding)) | MIT | ≈ 2,3 Go de poids : CPU | **n/d** | repli du précédent |
 | **FNSPID** (`Zihan1004/FNSPID`) | Dong, Fan, Peng, KDD 2024, [arXiv 2402.06698](https://arxiv.org/abs/2402.06698v1) ; [GitHub](https://github.com/Zdong104/FNSPID_Financial_News_Dataset) | CC BY 4.0 | disque : volumineux, **n/d** | 15,7 M news, 4 775 sociétés, **1999 → 2023** | 3 (historique de news) |
@@ -157,7 +157,41 @@ par l'annexe C ; « n/d » = introuvable dans les sources consultées.
 | **takala/financial_phrasebank** pour **entraîner** | Licence **CC BY-NC-SA 3.0** ([TFDS](https://tensorflow.org/datasets/community_catalog/huggingface/financial_phrasebank?hl=en)) : non commerciale et virale, incompatible avec un dépôt MIT redistribuable. Toléré au mieux comme jeu d'évaluation local, jamais commité : **à trancher par le propriétaire**. |
 | **zeroshot/twitter-financial-news-sentiment** | Licence MIT (à vérifier), mais **pas d'horodatage** : inutilisable pour une mesure d'alpha. Au mieux un jeu d'évaluation du classifieur. |
 | **yiyanghkust/finbert-tone** | Licence à vérifier : le HF la donnerait Apache-2.0 selon une [page tierce](https://mixpeek.com/model/yiyanghkust/finbert-tone-chinese), mais HKUST propose une [licence d'exploitation](https://exp-license.hkust.edu.hk/express_licensing/ip_detail?ip_id=25) de FinBERT. Tant que ce n'est pas levé : **non retenu**, et redondant avec ProsusAI/finbert déjà intégré. |
+| **Salesforce/moirai-1.0-R-base** (card lue) | Licence **CC BY-NC 4.0** et « release for research purposes only » : incompatible avec un dépôt MIT. |
+| **convaiinnovations/laya** (card lue) | Pas un modèle financier. Éditeur sans papier ; comparaisons contre des chiffres tiers « jamais mesurés ici ». Sa propre card dit que les checkpoints de base sont **sous la classe majoritaire** en zéro-shot (0,362 contre 0,461), que `act_probability` ne porte aucun signal et que le modèle sort sur-confiant. C'est un moteur de **décision** : exclu du chemin chaud par ADR-0007, et l'onglet `/x` classe par règles. |
+| **sogosonnet/SP500-Chart-Dataset** (soumis) | **Introuvable** par recherche : aucune provenance vérifiable. Et l'usage visé (reconnaissance de figures chartistes) a déjà été mesuré sans succès : ADR-0184, « le motif ne prédit rien, sur deux marchés ». |
 | Moirai-2, TiRex, TimeGPT | **Non évalués** (licence non vérifiée ; TimeGPT = API payante, hors infra 0 €). |
+
+### 2.3 Cards lues et candidats soumis par le propriétaire (30/09)
+
+Le propriétaire a collé cinq cards HF, lues **directement** (plus de seconde main pour
+elles), et soumis une liste de datasets avec une architecture.
+
+| Candidat | Ce que dit la card / la source | Verdict |
+|---|---|---|
+| **amazon/chronos-bolt-base** (et tiny 9 M, mini 21 M, small 48 M) | T5 encodeur-décodeur, ~100 Md d'observations, quantiles directs multi-pas, jusqu'à 250× plus rapide que Chronos ; `pip install chronos-forecasting`, `device_map="cpu"` documenté. Licence et fin d'entraînement **absentes du texte collé**. | **Retenu comme variante CPU de H1**, en **remplacement** d'un essai (pas en plus) : le budget DSR ne bouge pas. Les FinText sont des Chronos : la même bibliothèque devrait les charger (à vérifier). |
+| **ProsusAI/finbert** | arxiv:1908.10063 ; **aucune licence** dans les tags ; poids en `pytorch_model.bin` (pickle), `tf_model.h5` et `flax_model.msgpack`, **pas de safetensors** ; dernier commit `4556d13` il y a plus de 3 ans. | **Sous réserve.** Par le critère « licence absente », il serait écarté ; le dépôt GitHub dit Apache-2.0. Au propriétaire de trancher. Indépendamment de ça : prérequis **B9**. |
+| **Salesforce/moirai-1.0-R-base** | CC BY-NC 4.0, recherche seulement. | **Écarté** (§2.2). |
+| **convaiinnovations/laya** | Apache-2.0, classifieur « System 1 ». | **Écarté** (§2.2). |
+| **twelvedata/financial-world-model** | MIT, 50,9 Go, barres 1 j / 1 h / 1 min + texte + « trajectoires » ; un contributeur ; ré-uploadé « il y a 6 heures ». README non collé. | **À vérifier.** Intérêt réel : **deuxième source indépendante** pour la porte « source de données » de `15_CERTIFICATION.md` (divergence < 1 %). Conditions : provenance et droit de redistribution de données d'un fournisseur commercial sous MIT, ajustement, délistés, bornes de dates ; **révision épinglée** (le dépôt bouge) ; stockage hors dépôt (50,9 Go). |
+| **Traders-Lab/TroveLedger** (soumis) | Selon [son README](https://huggingface.co/datasets/Traders-Lab/TroveLedger/blob/main/README.md) et [l'historique du projet](https://huggingface.co/spaces/Traders-Lab/README/blob/main/history.md) : quotidien sur plusieurs années, minute et horaire sur l'historique récent ; couverture « alignée sur le S&P/TSX Composite » et indices proches, TSX ajoutée le 29/12/2025 ; **intraday temporairement NON ajusté** des splits et dividendes. | **Pas maintenant.** Il comblerait un vrai trou : l'horaire n'existe qu'en crypto dans le dépôt (ADR-0205). Mais une série non ajustée échoue par construction à `make contracts` (saut > 50 % non expliqué). À revoir quand le README annonce l'ajustement, et si la couverture US est confirmée. |
+| **Financial-NLP/financial_phrasebank** (soumis) | Miroir du jeu de Malo et al. La source officielle est `takala/financial_phrasebank`, en **CC BY-NC-SA 3.0**, ~4 846 phrases, 16 annotateurs ([TFDS](https://tensorflow.org/datasets/community_catalog/huggingface/financial_phrasebank?hl=en)). | **Même verdict** que §2.2 : jamais pour entraîner ; au mieux une évaluation locale non commitée. Préférer l'original au miroir, dont la provenance n'est pas établie. |
+| **edgar-corpus** (soumis) | Déjà retenu (§2.1). | **H2.** Un point à corriger dans la présentation soumise : ce corpus ne dit rien « avant/après les résultats » sans la **date d'acceptation EDGAR**, qu'il ne contient pas. |
+
+**L'architecture soumise, confrontée aux règles du dépôt.**
+
+| Brique proposée | Verdict | Pourquoi |
+|---|---|---|
+| OHLCV → features | **existe** | `_ml_section` : 10 features point-in-time, CV purgée. |
+| FinBERT → score de sentiment → feature | **compatible** | ADR-0007 l'autorise nommément (« sentiment-news comme feature, FinBERT, pas un chat »). C'est H3. |
+| **FinGPT** → score | **incompatible en backtest** | Un LLM qui juge une entreprise sur une période couverte par son entraînement fabrique un faux alpha. Usage limité à l'extraction ; la chaîne locale a déjà été retirée (ADR-0170). |
+| Chronos → **prédiction de rendement** | **écarté** | Deux évaluations indépendantes, négatives en zéro-shot (§2.2). Chronos garde un rôle : la **volatilité** (H1). |
+| LSTM | **non retenu** | Aucune preuve apportée ; coûte des essais DSR. Le modèle actuel (AUC 0,504) montre que le goulot est le signal, pas l'architecture. |
+| Modèle → **« Achat / Vente / Stop-loss »** direct | **incompatible** | Aucun signal ne va au courtier sans le gate 4 étages, puis `order_gate`. Les stops sont construits, pas adoptés, en attente de `make preset-sorties` (ADR-0208) ; un suiveur ATR a déjà été retiré (ADR-0052). |
+
+Le dépôt possède déjà cette chaîne, avec les garde-fous en plus : features → ML → méta-labelling
+→ gate → preset → portail. Ce qui manque n'est pas une brique, c'est **un signal qui passe
+le gate**.
 
 ---
 
@@ -325,6 +359,7 @@ mesure. H2b et TimesFM restent hors budget et ne s'ouvrent que par nouvel ADR.
 | **B6** | Coût réel : jambe de vente mesurée (TODO P2 ADR-0207 a) et journal suffisant. | Un horizon court (H3) ne se juge pas net de coûts avant. | H3 |
 | **B7** | Vérification des licences et des cards (annexe C) sur une machine qui atteint `huggingface.co`. | Tous les faits HF de ce document sont de seconde main. | toutes |
 | **B8** | Décision du propriétaire sur les P0 ouverts (satellite, banc d'exploration). | Ajouter des hypothèses avant de trancher disperse le budget d'essais. | ordre |
+| **B9** | FinBERT : épingler la révision (`revision="4556d13…"` complet, à lire sur la card) et refuser le chargement pickle (`pytorch_model.bin`) sauf si le chargeur garantit `weights_only` ; sinon charger les poids Flax ou TF. Décider aussi de la licence absente sur la card. | `sentiment/finbert.py` charge `ProsusAI/finbert` par son **nom seul** : un dépôt modifié en amont changerait le modèle sans trace. Le format pickle contredit la règle `safe_pickle` du dépôt. | H3, et le code existant |
 
 Le prompt citait « instrumentation des coûts » et « P0-3 » : voir §0. Ils sont **reformulés**
 en B5/B6, conformément à ADR-0206 et ADR-0207.
