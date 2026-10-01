@@ -6,6 +6,9 @@ Sécurité maximale :
   - mode réel uniquement avec `--live --yes` ET clés API présentes ;
   - Alpaca reste en **paper** (is_paper) ; Bitmart protégé par `dry_run` tant que `--live`
     n'est pas passé. Permissions API minimales, jamais de retrait.
+  - `QUANT_NO_CRYPTO_LIVE=1` : aucune place crypto instanciée, même avec
+    `--live --yes` et des clés présentes (cf. `crypto_live_neutralisee`). Lu ICI,
+    pas seulement par `cron_live.sh` : `make live-go` appelle ce script directement.
 
   python scripts/run_live.py                 # aperçu (dry-run) des ordres cibles
   python scripts/run_live.py --live --yes    # envoie en paper/crypto (clés requises)
@@ -99,6 +102,19 @@ def _alpaca_ou_rien():
         return None
 
 
+def crypto_live_neutralisee() -> bool:
+    """`QUANT_NO_CRYPTO_LIVE` demande-t-il de neutraliser toute place crypto ?
+
+    Le garde-fou n'existait que dans `cron_live.sh`, qui vide les clés avant
+    d'appeler ce script. `make live-go` l'appelle directement : avec des clés
+    Bitmart dans `.env`, la place était instanciée en `dry_run=False` (Bitmart n'a
+    pas de paper) et, faute de cible crypto, tout le détenu crypto partait en
+    liquidation. Absent ou vide : comportement inchangé.
+    """
+    v = os.environ.get("QUANT_NO_CRYPTO_LIVE", "").strip().lower()
+    return v in ("1", "true", "yes", "on")
+
+
 def _make_brokers(dry: bool, apercu: bool = False):
     """(alpaca paper, place crypto). Rien en SIMULATION ; Alpaca seul en APERÇU.
 
@@ -115,6 +131,9 @@ def _make_brokers(dry: bool, apercu: bool = False):
     """
     if dry:
         return (_alpaca_ou_rien(), None) if apercu else (None, None)
+    if crypto_live_neutralisee():
+        print("QUANT_NO_CRYPTO_LIVE actif → poche crypto ignorée (aucune place)")
+        return _alpaca_ou_rien(), None
     from packages.execution.venues import venue_crypto
     _v = venue_crypto()
     try:
