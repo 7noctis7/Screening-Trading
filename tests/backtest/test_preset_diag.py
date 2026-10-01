@@ -84,7 +84,9 @@ def test_le_repli_sans_score_qualite_est_TRACÉ():
     assert "MOMENTUM" in trace["score qualité"]
 
 
-def test_avec_scores_la_selection_est_par_qualite():
+def test_avec_scores_la_selection_est_par_qualite(monkeypatch):
+    """Opt-in QUANT_QUALITY_SELECTION=1 uniquement (QML-001 momentum-only défaut)."""
+    monkeypatch.setenv("QUANT_QUALITY_SELECTION", "1")
     data = _panier(n_titres=20)
     rq = np.random.default_rng(1)
     _poids, d = preset_latest_weights_explique(
@@ -92,6 +94,17 @@ def test_avec_scores_la_selection_est_par_qualite():
     trace = dict(d.etapes)
     assert "top-12 par qualité" in trace["score qualité"]
     assert "REPLI" not in trace["score qualité"]
+
+
+def test_qml001_scores_ignores_sans_opt_in(monkeypatch):
+    monkeypatch.delenv("QUANT_QUALITY_SELECTION", raising=False)
+    data = _panier(n_titres=20)
+    rq = np.random.default_rng(1)
+    _poids, d = preset_latest_weights_explique(
+        data, {s: float(rq.random()) for s in data}, top_k=12)
+    trace = dict(d.etapes)
+    assert "QML-001" in trace["score qualité"]
+    assert "MOMENTUM" in trace["score qualité"]
 
 
 def test_chaque_porte_publie_son_effet():
