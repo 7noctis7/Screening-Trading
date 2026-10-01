@@ -148,14 +148,17 @@ def test_la_bande_et_le_plancher_sont_ceux_de_la_production():
 
 
 def test_le_portail_de_risque_plafonne_comme_en_production():
-    """Une cible de 50 % sur un titre isolé est réduite par `order_gate` (ordre ≤ 15 %)."""
+    """Une cible de 50 % sur un titre isolé est réduite par `order_gate` (ordre ≤ 10 %).
+
+    `risk.yaml` est la vérité unique : `max_exposure_per_asset_pct` plafonne la ligne.
+    """
     from packages.backtest.preset_rejeu import simuler
 
     jours = ["2020-01-01", "2020-01-02", "2020-01-03"]
     px = _prix({"A": [100.0] * 3}, jours)
     res = simuler([("2020-01-01", {"A": 0.50})], px, jours, capital=100_000.0,
                   classes={"A": "equity"}, frais=False)
-    assert res["poids_final"]["A"] == pytest.approx(0.15)
+    assert res["poids_final"]["A"] == pytest.approx(0.10)
 
 
 def test_les_frais_sont_deduits():

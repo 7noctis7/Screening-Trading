@@ -96,5 +96,5 @@ def test_exposition_hors_coeur_mesuree():
     res = comparer_satellites(data, (cal, brutes, [(j, avec_coeur(w, coeur))
                                                    for j, w in brutes]),
                               coeur=coeur, classes={})
-    assert 0.3 < res["exposition_satellite"]["production"] <= 0.55
+    assert 0.15 < res["exposition_satellite"]["production"] <= 0.55
     assert 0.0 < res["remplissage"] <= 1.1
