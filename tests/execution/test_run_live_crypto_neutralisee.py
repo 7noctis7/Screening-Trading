@@ -1,4 +1,4 @@
-"""`QUANT_NO_CRYPTO_LIVE` est-il honoré par `run_live` LUI-MÊME ?
+"""`QUANT_NO_CRYPTO_LIVE` (défaut 1) est honoré par `run_live` LUI-MÊME.
 
 Contexte (audit du 01/10, B1) : le garde-fou n'était lu que par
 `scripts/cron_live.sh`, qui vide les clés crypto avant d'appeler `run_live.py`.
@@ -7,12 +7,13 @@ la place était instanciée en `dry_run=False` — Bitmart n'a pas de paper — 
 aucune cible ne portant `capital="bitmart"`, `_broker_targets` mettait tout le
 détenu crypto à zéro, c'est-à-dire en LIQUIDATION.
 
-Ces tests figent les deux comportements : sans le drapeau, rien ne change ; avec, aucune
-place crypto n'est instanciée et aucun ordre crypto ne peut partir.
+Suivi P0 (#424) : le défaut dans `run_live` est aligné sur `cron_live.sh`
+(`${QUANT_NO_CRYPTO_LIVE:-1}`) — paper-only sûr. Opt-in live crypto : `=0`.
 """
 
 import importlib.util
 import pathlib
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -89,16 +90,18 @@ def _passage_live(rl):
     return crypto, sent, sold
 
 
-# ── sans le drapeau : comportement INCHANGÉ (le défaut B1, documenté ici) ──────
+# ── défaut (absent) = bloqué, aligné cron_live.sh ──────────────────────────────
 
-def test_sans_drapeau_la_place_crypto_est_instanciee_en_reel(monkeypatch, place):
+def test_defaut_bloque_la_place_crypto(monkeypatch, place, capsys):
+    """Absent → défaut 1 → aucune place, même en --live."""
     rl = _run_live(monkeypatch)
     crypto, sent, sold = _passage_live(rl)
-    assert len(place.instances) == 1 and crypto.dry_run is False
-    assert ("close", "BTC/USDT", None) in crypto.ordres and sent == 1 and sold
+    assert crypto is None
+    assert place.instances == []
+    assert sent == 0 and sold == []
+    assert "QUANT_NO_CRYPTO_LIVE actif" in capsys.readouterr().out
+    assert rl.crypto_live_neutralisee() is True
 
-
-# ── avec le drapeau : aucune place, aucun ordre crypto ───────────────────────────────
 
 @pytest.mark.parametrize("valeur", ["1", "true", "YES", " on "])
 def test_avec_drapeau_aucune_place_crypto_n_est_instanciee(monkeypatch, place, valeur):
@@ -106,13 +109,44 @@ def test_avec_drapeau_aucune_place_crypto_n_est_instanciee(monkeypatch, place, v
     rl = _run_live(monkeypatch)
     crypto, sent, sold = _passage_live(rl)
     assert crypto is None
-    assert place.instances == []                          # jamais construite
+    assert place.instances == []
     assert sent == 0 and sold == []
 
 
-@pytest.mark.parametrize("valeur", ["", "0", "false", "non"])
-def test_une_valeur_non_affirmative_ne_neutralise_pas(monkeypatch, valeur):
+# ── opt-in : live crypto autorisé ──────────────────────────────────────────────
+
+@pytest.mark.parametrize("valeur", ["0", "false", "off", "no"])
+def test_opt_in_autorise_la_place_en_reel(monkeypatch, place, valeur):
     monkeypatch.setenv("QUANT_NO_CRYPTO_LIVE", valeur)
+    rl = _run_live(monkeypatch)
+    assert rl.crypto_live_neutralisee() is False
+    crypto, sent, sold = _passage_live(rl)
+    assert len(place.instances) == 1 and crypto.dry_run is False
+    assert ("close", "BTC/USDT", None) in crypto.ordres and sent == 1 and sold
+
+
+def test_opt_in_zero_cree_broker_dry_run_false(monkeypatch):
+    """QUANT_NO_CRYPTO_LIVE=0 : venue_crypto().broker(dry_run=False) est appelé."""
+    monkeypatch.setenv("QUANT_NO_CRYPTO_LIVE", "0")
+    monkeypatch.setenv("QUANT_CRYPTO_VENUE", "binance")
+    rl = _run_live(monkeypatch)
+    broker = object()
+    fake = MagicMock()
+    fake.nom = "Binance"
+    fake.broker = MagicMock(return_value=broker)
+    monkeypatch.setattr(rl, "_alpaca_ou_rien", lambda: "ALPACA")
+    monkeypatch.setattr("packages.execution.venues.venue_crypto", lambda: fake)
+
+    alpaca, crypto = rl._make_brokers(dry=False)
+
+    assert alpaca == "ALPACA"
+    assert crypto is broker
+    fake.broker.assert_called_once_with(dry_run=False)
+
+
+def test_valeur_vide_explicite_ne_neutralise_pas(monkeypatch):
+    """Chaîne vide posée explicitement ≠ défaut (opt-out du défaut sûr)."""
+    monkeypatch.setenv("QUANT_NO_CRYPTO_LIVE", "")
     assert _run_live(monkeypatch).crypto_live_neutralisee() is False
 
 
