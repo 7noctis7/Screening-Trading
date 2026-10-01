@@ -1,7 +1,7 @@
 """Convex de-risking rule: exposure multiplier as a function of drawdown.
 
 The ONLY mechanism that guarantees the max-DD bound by construction.
-Config-driven (config/risk.yaml -> drawdown_scaler).
+Defaults match top1pct policy; not loaded from risk.yaml yet.
 """
 from __future__ import annotations
 

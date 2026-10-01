@@ -9,6 +9,8 @@ portfolio:
   max_exposure_per_asset_pct: 0.10
   max_exposure_per_class_pct: 0.40
   max_gross_exposure: 1.0     # pas de levier par défaut
+  max_order_pct: 0.15         # un ordre ≤ 15 % du compte (order_gate)
+  max_weight_basket_pct: 0.60 # plafond ligne ETF/panier (order_gate)
   max_daily_drawdown_pct: 0.05  # au-delà → kill-switch
 sizing:
   method: vol_target          # fixed_fractional | vol_target | kelly_capped | risk_parity

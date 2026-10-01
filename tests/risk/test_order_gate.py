@@ -97,9 +97,72 @@ def test_plafond_de_positions_bloque_l_ouverture_pas_le_renforcement():
     assert evaluer("acheter", 1_000, renfort, LIM).autorise is True      # ligne existante
 
 
-# --- LIMITES : SOURCE UNIQUE ---------------------------------------------------------------
+# --- LIMITES : risk.yaml + override ENV explicite ------------------------------------------
+
+def _clear_quant_risk_env(monkeypatch):
+    for k in (
+        "QUANT_RISK_MAX_WEIGHT",
+        "QUANT_RISK_MAX_WEIGHT_BASKET",
+        "QUANT_RISK_MAX_POSITIONS",
+        "QUANT_RISK_MAX_ORDER_PCT",
+        "QUANT_RISK_MAX_GROSS",
+    ):
+        monkeypatch.delenv(k, raising=False)
+
+
+def test_sans_env_limites_suivent_risk_yaml(monkeypatch):
+    """Sans QUANT_RISK_* → plafonds = config/risk.yaml (20, 0.10, 0.60, 0.15, 1.0)."""
+    _clear_quant_risk_env(monkeypatch)
+    lim = Limites.depuis_env()
+    assert lim.max_positions == 20
+    assert lim.max_poids_ligne == 0.10
+    assert lim.max_poids_ligne_panier == 0.60
+    assert lim.max_ordre_pct == 0.15
+    assert lim.max_exposition == 1.0
+
+
+def test_env_n_override_que_la_cle_definie(monkeypatch):
+    """QUANT_RISK_MAX_POSITIONS=99 override positions only ; le reste reste yaml."""
+    _clear_quant_risk_env(monkeypatch)
+    monkeypatch.setenv("QUANT_RISK_MAX_POSITIONS", "99")
+    lim = Limites.depuis_env()
+    assert lim.max_positions == 99
+    assert lim.max_poids_ligne == 0.10
+    assert lim.max_poids_ligne_panier == 0.60
+    assert lim.max_ordre_pct == 0.15
+    assert lim.max_exposition == 1.0
+
+
+def test_depuis_yaml_temp_file_reflete_max_positions(tmp_path):
+    """Changement YAML via fichier temporaire → Limites.depuis_yaml suit."""
+    yaml_text = """portfolio:
+  max_positions: 7
+  max_exposure_per_asset_pct: 0.10
+  max_weight_basket_pct: 0.60
+  max_order_pct: 0.15
+  max_gross_exposure: 1.0
+"""
+    f = tmp_path / "risk.yaml"
+    f.write_text(yaml_text)
+    lim = Limites.depuis_yaml(f)
+    assert lim.max_positions == 7
+    assert lim.max_poids_ligne == 0.10
+    assert lim.max_ordre_pct == 0.15
+
+
+def test_yaml_illisible_replie_sur_constantes_module(tmp_path):
+    """YAML manquant → constantes module (dégrade sûre, jamais soft-open)."""
+    lim = Limites.depuis_yaml(tmp_path / "absent.yaml")
+    assert lim.max_positions == 40
+    assert lim.max_poids_ligne == 0.20
+    assert lim.max_poids_ligne_panier == 0.60
+    assert lim.max_ordre_pct == 0.15
+    assert lim.max_exposition == 1.0
+
 
 def test_limites_viennent_de_l_environnement(monkeypatch):
+    """ENV non vide override le YAML (compat historique)."""
+    _clear_quant_risk_env(monkeypatch)
     monkeypatch.setenv("QUANT_RISK_MAX_WEIGHT", "0.05")
     monkeypatch.setenv("QUANT_RISK_MAX_POSITIONS", "3")
     lim = Limites.depuis_env()
@@ -108,10 +171,12 @@ def test_limites_viennent_de_l_environnement(monkeypatch):
 
 def test_une_limite_illisible_retombe_sur_le_defaut(monkeypatch):
     """Une faute de frappe dans .env ne doit pas désactiver silencieusement un garde-fou."""
+    _clear_quant_risk_env(monkeypatch)
     monkeypatch.setenv("QUANT_RISK_MAX_WEIGHT", "vingt pour cent")
     monkeypatch.setenv("QUANT_RISK_MAX_GROSS", "-3")
     lim = Limites.depuis_env()
-    assert lim.max_poids_ligne == 0.20 and lim.max_exposition == 1.00
+    # Défaut = risk.yaml (pas les constantes module) quand ENV illisible.
+    assert lim.max_poids_ligne == 0.10 and lim.max_exposition == 1.00
 
 
 def test_montant_nul_refuse():

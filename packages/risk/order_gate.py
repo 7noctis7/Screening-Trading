@@ -22,19 +22,24 @@ refuse un désengagement augmente le risque au lieu de le réduire — c'est le 
 plancher de ligne qui ne gardait que les ouvertures (cf. `rebalance_plan`) : une règle correcte
 appliquée dans un seul sens produit l'inverse de son intention.
 
-Les limites viennent de l'ENVIRONNEMENT, jamais d'un appelant. Un appelant qui pourrait passer
-ses propres limites pourrait les desserrer ; c'est exactement ce qu'on veut rendre impossible.
-Les valeurs par défaut sont volontairement conservatrices et supposent un compte SANS levier.
+Les limites viennent de `config/risk.yaml` (source de vérité), avec override optionnel
+via `QUANT_RISK_*` seulement si la variable est **définie et non vide**. Un appelant qui
+pourrait passer ses propres limites pourrait les desserrer ; c'est exactement ce qu'on veut
+rendre impossible. Si le YAML est absent ou illisible, repli sur les constantes module
+(dégrade sûre, jamais d'ouverture soft). Compte SANS levier par défaut.
 """
 
 from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
-# Défauts : compte sans levier, portefeuille de conviction moyenne. Chaque valeur est un plafond
-# DUR, pas une cible — la stratégie reste libre en dessous.
-MAX_POIDS_LIGNE = 0.20       # QUANT_RISK_MAX_WEIGHT      — une ligne ne dépasse pas 20 % du compte
+# Défauts module : compte sans levier. Utilisés UNIQUEMENT si risk.yaml est absent/illisible
+# (dégrade sûre). En production, `depuis_env()` charge d'abord risk.yaml puis applique
+# QUANT_RISK_* seulement si la variable est définie et non vide.
+MAX_POIDS_LIGNE = 0.20       # QUANT_RISK_MAX_WEIGHT      — repli si YAML absent
 # PLAFOND SÉPARÉ POUR LES VÉHICULES DIVERSIFIÉS (ETF indiciels). Le plafond de
 # ligne borne le risque IDIOSYNCRATIQUE : ce qu'on perd si UN émetteur s'effondre.
 # Appliquer le même nombre à un titre unique et à un panier de cent lignes confond
@@ -48,19 +53,56 @@ MAX_POIDS_LIGNE = 0.20       # QUANT_RISK_MAX_WEIGHT      — une ligne ne dépa
 # à 50 % avec de la marge et refuse le 100 % — un ETF reste un émetteur, un
 # dépositaire, et pour QQQ une concentration interne réelle.
 MAX_POIDS_LIGNE_PANIER = 0.60   # QUANT_RISK_MAX_WEIGHT_BASKET
-MAX_POSITIONS = 40           # QUANT_RISK_MAX_POSITIONS   — au-delà, on n'OUVRE plus (on peut solder)
-MAX_ORDRE_PCT = 0.15         # QUANT_RISK_MAX_ORDER_PCT   — un ordre ne dépasse pas 15 % du compte
+MAX_POSITIONS = 40           # QUANT_RISK_MAX_POSITIONS   — repli si YAML absent
+MAX_ORDRE_PCT = 0.15         # QUANT_RISK_MAX_ORDER_PCT
 MAX_EXPOSITION = 1.00        # QUANT_RISK_MAX_GROSS       — 1,00 = aucun levier, jamais
 
+# Mapping YAML portfolio.* → champs Limites
+_YAML_MAP = (
+    ("max_exposure_per_asset_pct", "max_poids_ligne", MAX_POIDS_LIGNE),
+    ("max_weight_basket_pct", "max_poids_ligne_panier", MAX_POIDS_LIGNE_PANIER),
+    ("max_positions", "max_positions", MAX_POSITIONS),
+    ("max_order_pct", "max_ordre_pct", MAX_ORDRE_PCT),
+    ("max_gross_exposure", "max_exposition", MAX_EXPOSITION),
+)
 
-def _env(nom: str, defaut: float) -> float:
-    """Lecture tolérante d'une limite. Une valeur illisible ou négative retombe sur le défaut :
-    une faute de frappe dans `.env` ne doit pas désactiver silencieusement un garde-fou."""
+
+def _chemin_risk_yaml(path: str | Path | None = None) -> Path:
+    """Chemin de risk.yaml : argument explicite, sinon racine dépôt / config/risk.yaml."""
+    if path is not None:
+        return Path(path)
+    # packages/risk/order_gate.py → parents[2] = racine du dépôt
+    return Path(__file__).resolve().parents[2] / "config" / "risk.yaml"
+
+
+def _lire_portfolio_yaml(path: Path) -> dict[str, Any] | None:
+    """Charge la section portfolio. None = fichier absent/illisible (dégrade sûre)."""
     try:
-        v = float(os.environ.get(nom, "") or defaut)
+        from packages.common.config import load_yaml
+        data = load_yaml(path)
+    except Exception:
+        try:
+            import yaml  # type: ignore
+            with path.open("r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+        except Exception:
+            return None
+    if not isinstance(data, dict):
+        return None
+    portfolio = data.get("portfolio")
+    return portfolio if isinstance(portfolio, dict) else None
+
+
+def _env_override(nom: str) -> float | None:
+    """Override ENV uniquement si défini, non vide, et numérique > 0. Sinon None."""
+    raw = os.environ.get(nom)
+    if raw is None or str(raw).strip() == "":
+        return None
+    try:
+        v = float(raw)
     except (TypeError, ValueError):
-        return defaut
-    return v if v > 0 else defaut
+        return None
+    return v if v > 0 else None
 
 
 @dataclass(frozen=True)
@@ -73,14 +115,40 @@ class Limites:
     max_exposition: float = MAX_EXPOSITION
 
     @staticmethod
-    def depuis_env() -> Limites:
+    def depuis_yaml(path: str | Path | None = None) -> "Limites":
+        """Charge les plafonds depuis config/risk.yaml. Repli constantes si échec."""
+        chemin = _chemin_risk_yaml(path)
+        portfolio = _lire_portfolio_yaml(chemin)
+        if portfolio is None:
+            return Limites()
+
+        kwargs: dict[str, float | int] = {}
+        for yaml_key, field, fallback in _YAML_MAP:
+            raw = portfolio.get(yaml_key, fallback)
+            try:
+                v = float(raw)
+            except (TypeError, ValueError):
+                v = float(fallback)
+            if v <= 0:
+                v = float(fallback)
+            kwargs[field] = int(v) if field == "max_positions" else v
+        return Limites(**kwargs)  # type: ignore[arg-type]
+
+    @staticmethod
+    def depuis_env() -> "Limites":
+        """YAML d'abord, puis QUANT_RISK_* seulement si set et non vide (override)."""
+        base = Limites.depuis_yaml()
+        poids = _env_override("QUANT_RISK_MAX_WEIGHT")
+        panier = _env_override("QUANT_RISK_MAX_WEIGHT_BASKET")
+        positions = _env_override("QUANT_RISK_MAX_POSITIONS")
+        ordre = _env_override("QUANT_RISK_MAX_ORDER_PCT")
+        expo = _env_override("QUANT_RISK_MAX_GROSS")
         return Limites(
-            max_poids_ligne=_env("QUANT_RISK_MAX_WEIGHT", MAX_POIDS_LIGNE),
-            max_poids_ligne_panier=_env("QUANT_RISK_MAX_WEIGHT_BASKET",
-                                        MAX_POIDS_LIGNE_PANIER),
-            max_positions=int(_env("QUANT_RISK_MAX_POSITIONS", MAX_POSITIONS)),
-            max_ordre_pct=_env("QUANT_RISK_MAX_ORDER_PCT", MAX_ORDRE_PCT),
-            max_exposition=_env("QUANT_RISK_MAX_GROSS", MAX_EXPOSITION),
+            max_poids_ligne=poids if poids is not None else base.max_poids_ligne,
+            max_poids_ligne_panier=panier if panier is not None else base.max_poids_ligne_panier,
+            max_positions=int(positions) if positions is not None else base.max_positions,
+            max_ordre_pct=ordre if ordre is not None else base.max_ordre_pct,
+            max_exposition=expo if expo is not None else base.max_exposition,
         )
 
     def resume(self) -> str:
