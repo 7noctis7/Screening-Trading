@@ -87,6 +87,23 @@ def agreger(comptes: list[dict]) -> dict:
     }
 
 
+def bloc_bot(b: dict) -> dict:
+    """Un bot TIERS (cf. `packages/execution/bots_tiers`) : son propre bilan, à part.
+
+    Volontairement HORS de `agreger` : ajouté au total, il ferait mesurer deux
+    stratégies à la fois, et le benchmark disparaîtrait dans ce qu'il doit juger.
+    """
+    lignes = [_ligne(p, b.get("nom") or "?") for p in (b.get("positions") or [])]
+    lignes.sort(key=lambda r: -(r["valeur"] or 0.0))
+    ok = bool(b.get("ok"))
+    return {"cle": b.get("cle"), "nom": b.get("nom"), "ok": ok,
+            "equity": b.get("equity") if ok else None,
+            "latent": _somme([r["pnl"] for r in lignes]) if ok else None,
+            "n_positions": len(lignes) if ok else None,
+            "positions": lignes if ok else [],
+            "motif": None if ok else (b.get("error") or "sans réponse")}
+
+
 def message(p: dict) -> str:
     """Ce que le total vaut, et ce qu'il NE COUVRE PAS. Jamais un chiffre nu.
 

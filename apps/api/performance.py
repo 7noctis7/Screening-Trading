@@ -78,8 +78,33 @@ def payload() -> dict:
     refs = {nom: _reference(alias, debut, fin) for nom, alias in REFERENCES.items()}
     trouvees = {n: r for n, r in refs.items() if r[0]}
     res = comparaison(serie, trouvees)
+    _ajouter_bots(serie, res)
     # Deux façons d'être écartée, et le front doit les distinguer d'une absence de
     # graphe : introuvable dans les bases, ou trouvée mais démarrant trop tard.
     absentes = [n for n in refs if n not in trouvees]
     return {"disponible": True, "depuis": debut, "jusqu_a": fin, **res,
             "ecartees": sorted({*absentes, *res["ecartees"]})}
+
+
+def _ajouter_bots(serie: list[dict], res: dict) -> None:
+    """Bots TIERS (« XIII indic ») : une ligne de plus, qui peut démarrer en cours de
+    route (`aligner_depuis_son_debut`). Lus chez le courtier, jamais simulés ; un bot
+    muet ou sans clés n'ajoute rien. Ses dates sont nommées dans `bots_depuis` : sa
+    variation porte sur SA période, pas sur celle du portefeuille."""
+    from packages.execution.bots_tiers import lire_tous
+    from packages.portfolio.comparaison_benchmark import (
+        aligner_depuis_son_debut,
+        performance,
+    )
+    res.setdefault("bots_depuis", {})
+    try:
+        bots = lire_tous()
+    except Exception:  # noqa: BLE001 — un bot ne fait pas tomber la courbe du robot
+        return
+    for b in bots:
+        h = (b.get("history") or []) if b.get("ok") else []
+        s = aligner_depuis_son_debut(serie, [p["t"] for p in h], [p["v"] for p in h])
+        if len(s) >= 2:
+            res["benchmarks"][b["nom"]] = s
+            res["performances"][b["nom"]] = performance(s)
+            res["bots_depuis"][b["nom"]] = s[0]["t"]

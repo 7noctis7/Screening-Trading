@@ -28,6 +28,8 @@ export const COULEUR_LIGNE: Record<string, string> = {
   // Les deux poches réelles, sur « Mes comptes réels face aux indices ».
   "Alpaca (réel)": "var(--accent)",
   "Crypto (réel)": "var(--poche-crypto)",
+  // Les bots TIERS (`packages/execution/bots_tiers.BOTS`) : un AUTRE robot, comparé.
+  "XIII indic": "var(--bot-xiii)",
 };
 
 /** La teinte d'une ligne, ou le gris neutre — jamais une couleur inventée qui

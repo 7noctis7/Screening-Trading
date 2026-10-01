@@ -76,6 +76,9 @@ def test_recommandation_publie_les_trois_profils_et_son_avertissement(monkeypatc
     import packages.portfolio.recommendation as module
     series = {f"A{i}": _serie("2020-01-01", 900, i) for i in range(6)}
     monkeypatch.setattr(module, "charger_series", lambda symboles, years, classes=None: (series, {}, []))
+    # « Sans mesure d'IC » doit être VRAI, pas supposé : `out/ic_screening.json` existe
+    # là où `make ic-screening` a tourné (le VPS), et le test y lisait la vraie mesure.
+    monkeypatch.setattr(module, "charger_ic", lambda *a, **k: None)
     rows = [{"symbol": s, "name": f"Nom {s}", "sector": "Tech", "asset_class": "equity",
              "score": 3.0 - i, "reason": "momentum"} for i, s in enumerate(series)]
     out = recommander({"available": True, "rows": rows, "universe_size": 900,

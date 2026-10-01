@@ -97,6 +97,13 @@ export function PerformanceVsBenchmarks() {
             portefeuille : {data.ecartees.join(", ")}. Ces références ne sont pas simulées.
           </p>
         )}
+        {Object.entries((data.bots_depuis ?? {}) as Record<string, string>).map(([nom, du]) => (
+          <p key={nom} className="text-[11px] text-muted2 mt-1">
+            {nom} : autre robot, suivi depuis le {du} seulement. Sa ligne part de la valeur du
+            portefeuille ce jour-là — même somme, placée chez lui — et compare donc les gains
+            sur la période commune. Elle n'est pas prolongée avant.
+          </p>
+        ))}
         <p className="text-[11px] text-muted2 mt-1">
           Les jours sans cotation (week-end pour les actions), la référence garde sa dernière
           clôture connue — jamais la suivante, qui serait une information que le jour n'avait pas.

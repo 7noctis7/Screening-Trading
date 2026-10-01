@@ -294,10 +294,14 @@ def portefeuille() -> dict:
     absolu — le navigateur n'a pas à croire sa propre horloge, qui dérive.
     """
     global _PF_CACHE, _PF_TS
-    from apps.api.portefeuille import FRAICHEUR_S, agreger, message
+    from apps.api.portefeuille import FRAICHEUR_S, agreger, bloc_bot, message
+    from packages.execution.bots_tiers import lire_tous
     age = time.time() - _PF_TS
     if _PF_CACHE is None or age > FRAICHEUR_S:
-        _PF_CACHE, _PF_TS, age = agreger(_lire_courtiers()), time.time(), 0.0
+        # Bots TIERS (« XIII indic ») : une clé À PART, jamais dans le total du robot.
+        _PF_CACHE = {**agreger(_lire_courtiers()),
+                     "bots": [bloc_bot(b) for b in lire_tous(historique=False)]}
+        _PF_TS, age = time.time(), 0.0
     return {**_PF_CACHE, "age_s": max(0.0, round(age, 1)),
             "fraicheur_s": FRAICHEUR_S, "resume": message(_PF_CACHE)}
 
