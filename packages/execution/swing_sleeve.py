@@ -10,7 +10,8 @@ Arch A2 : `attach_swing_orders` câble `live.swing_orders` depuis le snapshot.
 
 Arch A3 : `load_swing_orders` + union `run_live` (preset `proteger` sleeve, second
 pass `liquider_hors_cible=False`). `weight_pct` = fraction 0–1 (`notionnel/denom`).
-Protection multi-jour via journal = PR4 (pas ici).
+Arch/QT PR4 : protect multi-jour via journal (`sleeve_open_symbols` ∪ snap) —
+lots `strategy="swing"` ouverts ne sont pas liquidés par le drift preset.
 
 Capital A : sizing sur `equity_sleeve` (poche isolée) ; le consommateur (run_live)
 unionne sans muter les poids preset.
@@ -245,6 +246,57 @@ def swing_bars_by_sym(symbols, data_or_series) -> dict[str, list]:
             out[str(s)] = bars
     return out
 
+
+
+
+def sleeve_open_symbols(journal=None) -> set[str]:
+    """Instruments des lots sleeve encore ouverts (strategy=swing, périmètre robot).
+
+    Open lots = ``exit_ts is None``, ``strategy == "swing"``, et
+    ``pris_par_le_robot(t.id)`` (même périmètre que ``live_roundtrip.open_lots``).
+    Retourne un set de ``t.instrument`` bruts — le caller normalise via ``_nsym``.
+
+    ``journal is None`` → construit ``SqliteTradeJournal()``. Best-effort : toute
+    erreur → ``set()`` (ne jamais faire planter le live run).
+    """
+    try:
+        from packages.execution.perimetre_journal import pris_par_le_robot
+        if journal is None:
+            from packages.storage.journal_sqlite import SqliteTradeJournal
+            journal = SqliteTradeJournal()
+        out: set[str] = set()
+        for t in journal.all():
+            if t.exit_ts is not None:
+                continue
+            if (t.strategy or "") != "swing":
+                continue
+            if not pris_par_le_robot(t.id):
+                continue
+            inst = t.instrument
+            if inst:
+                out.add(str(inst))
+        return out
+    except Exception:
+        return set()
+
+
+def merge_protect_symbols(swing_orders, journal_instruments, normalize=str) -> set:
+    """Union des symboles à protéger : ordres swing du jour ∪ instruments journal.
+
+    ``normalize`` appliqué à chaque symbole (ex. ``_nsym`` côté ``run_live``).
+    Pure / testable — pas d'I/O.
+    """
+    out: set = set()
+    for o in swing_orders or ():
+        if not isinstance(o, dict):
+            continue
+        raw = o.get("broker_symbol") or o.get("symbol")
+        if raw:
+            out.add(normalize(raw))
+    for inst in journal_instruments or ():
+        if inst:
+            out.add(normalize(inst))
+    return out
 
 
 def load_swing_orders(snap: dict) -> list[dict]:

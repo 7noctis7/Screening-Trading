@@ -146,7 +146,7 @@ def _broker_targets(targets, bname: str, cap: float, reduce: float, cur: dict, *
     `liquider_hors_cible=False` (pass sleeve) : aucun hors-cible ajouté.
     `sym` = symbole à ENVOYER au broker (format cible « BTC/USD » si connue, sinon
     le format position).
-    Protection multi-jour via journal = PR4 (pas ici — A3 = snap courant).
+    Protection multi-jour : `proteger` alimenté par snap ∪ journal (PR4).
     """
     tgs = [o for o in targets if (o.get("capital") == "bitmart") == (bname == "Bitmart")]
     sw = sum(o["weight_pct"] for o in tgs)
@@ -1058,10 +1058,12 @@ def main() -> None:
         _record_garde_fous(obs, dry)
         return                                     # doublon : on sort AVANT tout envoi
 
-    # Arch A3 — Capital A : preset protège les syms sleeve ; pass sleeve sans liquidation
-    # hors-cible. Flag OFF / swing vide → un seul _reconcile preset (bit-identique).
-    # PR4 : protect multi-jour via journal (pas ici).
-    from packages.execution.swing_sleeve import load_swing_orders
+    # Arch A3+PR4 — Capital A : preset protège sleeve (snap ∪ journal multi-jour) ;
+    # pass sleeve sans liquidation hors-cible. Rien à protéger → un seul _reconcile
+    # preset (bit-identique). Protect journal même si QUANT_SWING_PAPER OFF aujourd'hui.
+    from packages.execution.swing_sleeve import (
+        load_swing_orders, sleeve_open_symbols, merge_protect_symbols,
+    )
     swing = load_swing_orders(snap)
     for o in swing:
         wp = o.get("weight_pct")
@@ -1086,9 +1088,14 @@ def main() -> None:
             o["weight_pct"] = n / alp_cap
         o.setdefault("strategy", "swing")
 
+    try:
+        from_journal = sleeve_open_symbols()
+    except Exception:
+        from_journal = set()
+    protect = merge_protect_symbols(swing, from_journal, normalize=_nsym)
+
     if swing:
         print(f"sleeve swing: {len(swing)} ordres (capital A)")
-        protect = {_nsym(o.get("broker_symbol") or o["symbol"]) for o in swing}
         sent, opened, sold = _reconcile(
             targets, brokers, reduce, alert_engine, dry, obs, proteger=protect)
         s2, o2, v2 = _reconcile(
@@ -1096,6 +1103,10 @@ def main() -> None:
         sent += s2
         opened.extend(o2)
         sold.extend(v2)
+    elif protect:
+        print(f"sleeve swing: protect {len(protect)} symbole(s) journal (multi-jour)")
+        sent, opened, sold = _reconcile(
+            targets, brokers, reduce, alert_engine, dry, obs, proteger=protect)
     else:
         sent, opened, sold = _reconcile(targets, brokers, reduce, alert_engine, dry, obs)
     # AVANT la journalisation, et c'est voulu : plus aucun garde-fou ne parle après
