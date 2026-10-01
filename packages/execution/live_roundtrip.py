@@ -125,10 +125,13 @@ def _close_record(lot: TradeRecord, qty: float, price: float, ts: datetime,
     # compterait deux fois le même coût.
     classe = getattr(lot.asset_class, "value", str(lot.asset_class))
     charge = round((lot.fees or 0.0) + broker_charge(classe, price * qty, side="SELL"), 6)
+    # fee_comm = commission estimée TOTALE (jambe entrée déjà dans lot.fees +
+    # jambe sortie SELL). Même valeur que `fees` à la clôture — l'UI / TCA ne
+    # doivent plus lire fee_comm open-only comme un RT.
     return dataclasses.replace(
         lot, id=split_id or lot.id, qty=qty, exit_ts=ts, exit_price=price,
         exit_reason="reconciliation paper (reduce/close)",
-        fees=charge, fees_source="estimated",
+        fees=charge, fee_comm=charge, fees_source="estimated",
         pnl_gross=pnl, pnl_net=round(pnl - charge, 6),
         pnl_pct=round(price / lot.entry_price - 1, 6) if lot.entry_price > 0 else None,
         is_win=pnl > 0, duration_s=max(0.0, (ts - lot.entry_ts).total_seconds()),
@@ -208,6 +211,7 @@ def _part(lot: TradeRecord, qty: float) -> TradeRecord:
     return dataclasses.replace(
         lot, qty=round(qty, 10),
         fees=None if lot.fees is None else round(lot.fees * k, 6),
+        fee_comm=None if lot.fee_comm is None else round(lot.fee_comm * k, 6),
         slippage=None if lot.slippage is None else round(lot.slippage * k, 6))
 
 

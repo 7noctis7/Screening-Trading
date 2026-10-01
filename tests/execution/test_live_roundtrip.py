@@ -210,3 +210,41 @@ def test_les_excursions_normales_ne_sont_PAS_ecrasees():
     serie = [{"t": "2026-08-04", "h": 112.0, "l": 95.0}]
     fe, ae = mfe_mae(serie, e, x, 100.0)
     assert abs(fe - 0.12) < 1e-9 and abs(ae - (-0.05)) < 1e-9
+
+
+def test_close_fee_comm_equals_open_plus_sell_charge(tmp_path):
+    """Jambe sortie (P1.3 QT) : à la clôture, fee_comm = fees = charge BUY + charge SELL.
+
+    L'ouverture porte fee_comm = broker_charge BUY ; la fermeture y ajoute
+    broker_charge SELL (SEC/TAF equity). Pas de ½ RT inventé.
+    """
+    from packages.execution.costs import broker_charge
+    from packages.execution.live_journal import build_open
+
+    j = _journal(tmp_path)
+    open_tr = build_open(
+        "AAPL", venue="Alpaca", asset_class="equity",
+        fill={"avg_price": 100.0, "qty": 10.0}, features={},
+        ts=datetime(2026, 7, 1, tzinfo=timezone.utc), order_id="P-SMOKE")
+    assert open_tr is not None
+    j.append(open_tr, legacy=False)
+    buy_charge = broker_charge("equity", 100.0 * 10.0, side="BUY")
+    assert open_tr.fees == buy_charge
+    assert open_tr.fee_comm == buy_charge
+
+    ts = datetime(2026, 7, 5, tzinfo=timezone.utc)
+    n = close_sells(j, [{"symbol": "AAPL", "venue": "Alpaca",
+                         "exit_price": 110.0, "notional": 1100.0}], ts=ts)
+    assert n == 1
+    closed = [x for x in j.all(legacy=False) if x.exit_ts is not None][0]
+    sell_charge = broker_charge("equity", 110.0 * 10.0, side="SELL")
+    attendu = round(buy_charge + sell_charge, 6)
+    assert closed.fees == attendu
+    assert closed.fee_comm == attendu
+    assert closed.fees == closed.fee_comm
+    assert closed.fees_source == "estimated"
+    # PnL : brut inchangé ; net = brut − charge totale (formule inchangée)
+    assert abs(closed.pnl_gross - 100.0) < 1e-6
+    assert closed.pnl_net == round(closed.pnl_gross - closed.fees, 6)
+
+
