@@ -6,9 +6,10 @@ Sécurité maximale :
   - mode réel uniquement avec `--live --yes` ET clés API présentes ;
   - Alpaca reste en **paper** (is_paper) ; Bitmart protégé par `dry_run` tant que `--live`
     n'est pas passé. Permissions API minimales, jamais de retrait.
-  - `QUANT_NO_CRYPTO_LIVE=1` : aucune place crypto instanciée, même avec
+  - `QUANT_NO_CRYPTO_LIVE` (défaut `1`) : aucune place crypto instanciée, même avec
     `--live --yes` et des clés présentes (cf. `crypto_live_neutralisee`). Lu ICI,
     pas seulement par `cron_live.sh` : `make live-go` appelle ce script directement.
+    Opt-in live crypto : `QUANT_NO_CRYPTO_LIVE=0`.
 
   python scripts/run_live.py                 # aperçu (dry-run) des ordres cibles
   python scripts/run_live.py --live --yes    # envoie en paper/crypto (clés requises)
@@ -103,15 +104,15 @@ def _alpaca_ou_rien():
 
 
 def crypto_live_neutralisee() -> bool:
-    """`QUANT_NO_CRYPTO_LIVE` demande-t-il de neutraliser toute place crypto ?
+    """`QUANT_NO_CRYPTO_LIVE` (défaut 1) : neutraliser toute place crypto live.
 
-    Le garde-fou n'existait que dans `cron_live.sh`, qui vide les clés avant
-    d'appeler ce script. `make live-go` l'appelle directement : avec des clés
-    Bitmart dans `.env`, la place était instanciée en `dry_run=False` (Bitmart n'a
-    pas de paper) et, faute de cible crypto, tout le détenu crypto partait en
-    liquidation. Absent ou vide : comportement inchangé.
+    Même contrat que `cron_live.sh` (`${QUANT_NO_CRYPTO_LIVE:-1}`) : le flag doit
+    tenir DANS `run_live.py` — `make live-go` / `python scripts/run_live.py --live
+    --yes` hors cron ne doivent pas contourner le verrou. Couvre Binance (défaut
+    via `venue_crypto`) autant que Bitmart. Opt-in live crypto : `=0` / `false` /
+    `off` / `no`. Valeurs affirmatives : `1` / `true` / `yes` / `on` (casse ignorée).
     """
-    v = os.environ.get("QUANT_NO_CRYPTO_LIVE", "").strip().lower()
+    v = os.environ.get("QUANT_NO_CRYPTO_LIVE", "1").strip().lower()
     return v in ("1", "true", "yes", "on")
 
 
@@ -123,8 +124,8 @@ def _make_brokers(dry: bool, apercu: bool = False):
     0 $` sur un compte plein, puis `cible 0 $` une fois l'equity lue sur un broker
     inexistant.
     AUCUN ordre ne peut partir pour autant : `_reconcile` sort sur `if dry or broker is
-    None` AVANT tout envoi. La place crypto reste absente en dry-run — `cron_live.sh` la
-    neutralise de toute façon, et les paires crypto d'Alpaca sont dans ses positions.
+    None` AVANT tout envoi. La place crypto reste absente en dry-run — et, hors dry-run,
+    `QUANT_NO_CRYPTO_LIVE` (défaut 1) force aussi None / no-op sur `venue_crypto()`.
 
     La place crypto n'est pas codée en dur : elle vient de QUANT_CRYPTO_VENUE (défaut
     Binance, taker 0,10 % contre 0,25 % chez Bitmart). Cf. packages/execution/venues.
