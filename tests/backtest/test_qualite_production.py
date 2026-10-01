@@ -54,8 +54,18 @@ def test_couverture_partielle_repli_momentum():
     assert "MOMENTUM" in _etape(d, "score qualité")[0]
 
 
-def test_la_selection_qualite_se_declare_non_calibree():
+def test_la_selection_qualite_se_declare_non_calibree(monkeypatch):
+    monkeypatch.setenv("QUANT_QUALITY_SELECTION", "1")
     from packages.backtest.preset_weights import preset_latest_weights_explique
     q = {f"T{k:02d}": float(k) for k in range(30)}
     _, d = preset_latest_weights_explique(_panel(), q, top_k=12)
     assert "UNCALIBRATED" in _etape(d, "score qualité")[0]
+
+
+def test_qml001_momentum_only_ignore_scores(monkeypatch):
+    monkeypatch.delenv("QUANT_QUALITY_SELECTION", raising=False)
+    from packages.backtest.preset_weights import preset_latest_weights_explique
+    q = {f"T{k:02d}": float(k) for k in range(30)}
+    _, d = preset_latest_weights_explique(_panel(), q, top_k=12)
+    msg = _etape(d, "score qualité")[0]
+    assert "QML-001" in msg and "MOMENTUM" in msg

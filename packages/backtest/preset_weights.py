@@ -6,6 +6,8 @@ repris à l'identique.
 
 from __future__ import annotations
 
+import os
+
 import numpy as np
 
 from packages.backtest.cov_risk import cov_annual as _cov_annual
@@ -86,6 +88,19 @@ def _eligibles(data: dict, lookback: int) -> list:
     return [s for s, b in data.items() if b and len(b) > max(lookback, MIN_BARRES_REGIME)]
 
 
+
+def selection_qualite_autorisee() -> bool:
+    """QML-001 (CEO stamp 2026-10-01) : prod = momentum-only par défaut.
+
+    Réouverture qualité uniquement si `QUANT_QUALITY_SELECTION=1` (après PIT
+    `kt_quality ∈ {EXACT, INFERRED}` + gate 4 étages Edge Gate + ticket IC/TC).
+    Paper-only · 0 claim · sleeve OFF hors scope.
+    """
+    return os.environ.get("QUANT_QUALITY_SELECTION", "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+
+
 def qualite_de_production(fundamentals: dict) -> dict:
     """Scores qualité utilisables par la PRODUCTION : réels, jamais synthétiques (QML-022).
 
@@ -117,13 +132,18 @@ def _selection(data: dict, quality: dict, lookback: int, top_k: int, d: Diag):
     q = {s: quality.get(s) for s in syms if quality.get(s) is not None}
     # COUVERTURE MINIMALE = `top_k` (QML-022). À cinq titres scorés, l'univers se réduisait
     # à ceux que l'API avait bien voulu servir ce jour-là — une sélection par disponibilité.
-    if len(q) >= max(5, top_k):
-        # UNCALIBRATED : le score qualité n'existe qu'au présent, aucun backtest ne peut le
-        # rejouer sans fuite. La branche mesurée par `make preset-replay` est le momentum
-        # (ADR-0202) — on ne laisse pas croire que celle-ci l'est aussi.
+    # QML-001 (CEO 2026-10-01) : branche qualité OFF par défaut (momentum-only mesurable).
+    if selection_qualite_autorisee() and len(q) >= max(5, top_k):
+        # UNCALIBRATED tant que PIT + gate 4 étages absents — opt-in QUANT_QUALITY_SELECTION.
         d.note("score qualité", f"{len(q)} titres scorés → top-{top_k} par qualité "
-                                "(UNCALIBRATED : règle non backtestable, cf. ADR-0202)")
+                                "(UNCALIBRATED : règle non backtestable, cf. ADR-0202 ; "
+                                "QUANT_QUALITY_SELECTION=1)")
         return sorted(q, key=lambda s: q[s], reverse=True)[:top_k]
+    if q and not selection_qualite_autorisee():
+        d.note("score qualité",
+               f"QML-001 momentum-only : {len(q)} score(s) ignorés "
+               f"(QUANT_QUALITY_SELECTION off) → MOMENTUM prix seuls")
+        return _price_universe(data, syms, lookback, top_k, au_dernier_point=True)
     # REPLI PAR MOMENTUM, plus jamais par l'ordre du dictionnaire.
     #
     # Constaté en production le 26/08 : `make live` tourne en mode LÉGER, qui coupe
