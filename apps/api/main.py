@@ -1417,7 +1417,12 @@ class AIChatRequest(BaseModel):
 
 @app.post("/api/ai/chat")
 def ai_chat(body: AIChatRequest, request: Request) -> dict:
-    """Copilote read-only : outils bornés, citations, aucun accès DB ou exécution."""
+    """Copilote read-only : outils bornés, citations, aucun accès DB ou exécution.
+
+    Même garde que les autres POST : appelée depuis l'extérieur (`make api-lan`,
+    Docker sur 0.0.0.0), la route consommerait la clé LLM de l'environnement."""
+    if not _webhook_authorized(request):
+        return {"available": False, "reason": "endpoint local uniquement"}
     from packages.llm.assistant import answer_question
 
     try:
