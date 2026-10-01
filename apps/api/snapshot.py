@@ -2747,7 +2747,8 @@ def build_snapshot(seed: int = 7) -> dict:
         _live["alpaca_perf"].get("curve", []) if _live["alpaca_perf"].get("source") == "réel" else [],
         _live["crypto_perf"].get("curve", []) if _live["crypto_perf"].get("source") == "réel" else [],
         sp if _sp_real else [], ndx if _ndx_real else [],
-        _sp_dates if _sp_real else [], _ndx_dates if _ndx_real else [])
+        _sp_dates if _sp_real else [], _ndx_dates if _ndx_real else [],
+        bots=_courbes_bots_tiers())
     # PORTEFEUILLE RÉEL combiné (Alpaca + Bitmart) : courbe d'equity réelle + stats → ligne cliquable
     # du dashboard (réconcilie avec les ORDRES réellement exécutés + positions réelles).
     _alp_c = _live["alpaca_perf"].get("curve", []) if _live["alpaca_perf"].get("source") == "réel" else []
@@ -3077,10 +3078,26 @@ def _earnings_risk(held: list) -> list[dict]:
         return []
 
 
+def _courbes_bots_tiers() -> dict[str, list]:
+    """{nom: historique d'equity RÉEL} des bots tiers configurés (« XIII indic »).
+
+    Lecture seule, best-effort : un bot muet disparaît de la comparaison, il ne fait pas
+    tomber le tableau de bord. Sans clés (build du site public), rien n'est lu."""
+    try:
+        from packages.execution.bots_tiers import lire_tous
+        return {b["nom"]: b["history"] for b in lire_tous() if b["ok"] and b["history"]}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
 def _account_compare(alp_curve: list, cr_curve: list, sp: list, ndx: list,
-                     sp_dates: list[str], ndx_dates: list[str]) -> dict:
+                     sp_dates: list[str], ndx_dates: list[str],
+                     bots: dict[str, list] | None = None) -> dict:
     """Compare les comptes RÉELS (Alpaca, Crypto/Bitmart) vs S&P 500 / Nasdaq 100, rebasés à 100 sur
-    la fenêtre où des données réelles existent. Courbes réelles courtes au début (compte récent)."""
+    la fenêtre où des données réelles existent. Courbes réelles courtes au début (compte récent).
+
+    `bots` : {nom: courbe} des bots TIERS (`packages/execution/bots_tiers`) — une ligne
+    de comparaison de plus, au même titre qu'un indice, jamais ajoutée aux comptes."""
     import numpy as np
 
     def by_date(px, dates):
@@ -3092,6 +3109,9 @@ def _account_compare(alp_curve: list, cr_curve: list, sp: list, ndx: list,
         reals["Alpaca (réel)"] = {str(p["t"])[:10]: p["v"] for p in alp_curve}
     if len(cr_curve) >= 2:
         reals["Crypto (réel)"] = {str(p["t"])[:10]: p["v"] for p in cr_curve}
+    for nom, courbe in (bots or {}).items():
+        if len(courbe) >= 2:
+            reals[nom] = {str(p["t"])[:10]: p["v"] for p in courbe}
     if not reals:
         return {"available": False}
     axis = sorted(set().union(*[set(d) for d in reals.values()]))

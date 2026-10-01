@@ -26,6 +26,9 @@
      servait, mais c'est un cyan quasi identique à `--accent` — deux poches
      de la même couleur ne se comparent pas, elles se superposent. */
   --poche-crypto:#db2777;
+  /* Un AUTRE robot (« XIII indic », cf. packages/execution/bots_tiers) : un bleu franc,
+     à distance du cyan --accent du portefeuille et du violet du Nasdaq. */
+  --bot-xiii:#2563eb;
   /* Régime = vert/rouge DÉSATURÉS, rendus en outline (border+texte). JAMAIS le fill plein de --pos/--neg
      (réservés au P&L). Chroma volontairement basse → sémantique « contexte marché », pas « gain/perte ». */
   --regime-on:#3f8f6b; --regime-off:#b85c5c;
@@ -50,6 +53,7 @@
   --bench-sp:#94a3b8; --bench-ndx:#c084fc; --bench-btc:#fb923c;   /* cf. thème clair */
   --bench-cac:#f5d33a;   /* jaune franc : le fond sombre le supporte */
   --poche-crypto:#f472b6;
+  --bot-xiii:#60a5fa;   /* cf. thème clair */
   --regime-on:#7fce9f; --regime-off:#e59a9a;   /* vert/rouge désaturés (outline) — cf. thème clair */
   --shadow:0 1px 2px rgba(0,0,0,.45),0 10px 30px rgba(0,0,0,.3);
   color-scheme: dark;           /* scrollbar/contrôles natifs sombres */

@@ -10,6 +10,7 @@ import { usePositions } from "@/lib/api";
 import { TechnicalChart } from "@/components/TechnicalChart";
 import { MetricCard } from "@/components/MetricCard";
 import { PerformanceVsBenchmarks } from "@/components/PerformanceVsBenchmarks";
+import { BotsTiers } from "@/components/BotsTiers";
 import { SortableTable, type Col } from "@/components/SortableTable";
 import { PageSkeleton } from "@/components/ui";
 import { compteCrypto, envVenue, nomVenue } from "@/lib/venue";
@@ -288,6 +289,9 @@ export default function Positions() {
           ailleurs, aurait donné quoi ? Placée AVANT le détail ligne à ligne, parce qu'un
           écart de réplication ne se juge pas sans savoir si le portefeuille bat le marché. */}
       <PerformanceVsBenchmarks />
+
+      {/* Les AUTRES robots (« XIII indic ») : un bloc chacun, jamais dans le total. */}
+      <BotsTiers />
 
       <section className="card p-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted">
         <span title="Somme des poids au carré (HHI) : 1/N si équipondéré. N effectif = 1/HHI.">

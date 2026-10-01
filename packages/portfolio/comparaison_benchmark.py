@@ -82,6 +82,21 @@ def aligner(serie_pf: list[dict], dates: list[str], closes: list[float]) -> list
     return out
 
 
+def aligner_depuis_son_debut(serie_pf: list[dict], dates: list[str],
+                             valeurs: list[float]) -> list[dict]:
+    """Comme `aligner`, pour une courbe qui peut démarrer APRÈS le portefeuille.
+
+    C'est le cas d'un autre robot (cf. `packages/execution/bots_tiers`), lancé plus
+    tard. Il part de la valeur du portefeuille à SA première date : la courbe démarre
+    au milieu du graphe — « même somme, placée chez lui ce jour-là » — et n'est jamais
+    prolongée vers l'arrière. L'écart final se lit alors comme un écart de gains sur la période
+    commune. Un indice garde `aligner` : lui doit couvrir tout le portefeuille.
+    """
+    if not dates:
+        return []
+    return aligner([p for p in serie_pf if p["t"] >= dates[0]], dates, valeurs)
+
+
 def performance(serie: list[dict]) -> dict:
     """Départ, arrivée, variation absolue et relative d'une courbe. {} si vide."""
     if not serie:
