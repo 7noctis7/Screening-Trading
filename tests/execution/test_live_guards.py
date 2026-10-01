@@ -5,9 +5,11 @@ import pytest
 
 from packages.execution.live_guards import (
     APERCU_DEFAUT,
+    DD_LIMIT_DEFAUT,
     current_values,
     dd_kill_switch,
     fail_loud,
+    resolve_intraday_dd_limit,
     simule,
     vet_brokers,
 )
@@ -65,22 +67,65 @@ def test_dry_run_sans_reseau():
     assert alp_cap == 2500.0 and not fatal
 
 
+def _clear_intraday_dd_env(monkeypatch):
+    monkeypatch.delenv("QUANT_INTRADAY_DD", raising=False)
+
+
+def test_resolve_intraday_dd_limit_defaut_yaml_5pct(monkeypatch):
+    """Sans QUANT_INTRADAY_DD → −0.05 depuis risk.yaml max_daily_drawdown_pct=0.05."""
+    _clear_intraday_dd_env(monkeypatch)
+    assert resolve_intraday_dd_limit() == pytest.approx(-0.05)
+    assert DD_LIMIT_DEFAUT == pytest.approx(-0.05)
+
+
+def test_resolve_intraday_dd_limit_env_override(monkeypatch):
+    """QUANT_INTRADAY_DD set → override explicite (même pattern order_gate)."""
+    _clear_intraday_dd_env(monkeypatch)
+    monkeypatch.setenv("QUANT_INTRADAY_DD", "-0.12")
+    assert resolve_intraday_dd_limit() == pytest.approx(-0.12)
+    monkeypatch.setenv("QUANT_INTRADAY_DD", "")
+    assert resolve_intraday_dd_limit() == pytest.approx(-0.05)  # vide → yaml
+
+
 def test_dd_kill_switch_coupe_sur_breach(monkeypatch, tmp_path):
+    """−20 % ≤ seuil yaml −5 % → coupe (défaut P1.1, plus −15 %)."""
+    _clear_intraday_dd_env(monkeypatch)
     import packages.execution.equity_history as eh
     monkeypatch.setattr(eh, "_F", tmp_path / "eq.json")
     eh.record({"alpaca": 100_000.0}, today="2026-01-01")   # pic
     eh.record({"alpaca": 98_000.0}, today="2026-01-02")
-    assert dd_kill_switch(80_000.0, None, None) == 0.0     # −20 % ≤ −15 % → coupe
+    assert dd_kill_switch(80_000.0, None, None) == 0.0     # −20 % ≤ −5 % → coupe
 
 
-def test_dd_kill_switch_laisse_passer_sain(monkeypatch, tmp_path):
+def test_dd_kill_switch_coupe_des_6pct_avec_defaut_5pct(monkeypatch, tmp_path):
+    """Avec défaut −5 %, un −6 % coupe (ne coupait PAS sous l'ancien −15 %)."""
+    _clear_intraday_dd_env(monkeypatch)
     import packages.execution.equity_history as eh
     monkeypatch.setattr(eh, "_F", tmp_path / "eq.json")
     eh.record({"alpaca": 100_000.0}, today="2026-01-01")
-    assert dd_kill_switch(97_000.0, None, None) == 1.0     # −3 % : rien à couper
+    assert dd_kill_switch(94_000.0, None, None) == 0.0     # −6 % ≤ −5 %
+
+
+def test_dd_kill_switch_laisse_passer_sain(monkeypatch, tmp_path):
+    _clear_intraday_dd_env(monkeypatch)
+    import packages.execution.equity_history as eh
+    monkeypatch.setattr(eh, "_F", tmp_path / "eq.json")
+    eh.record({"alpaca": 100_000.0}, today="2026-01-01")
+    assert dd_kill_switch(97_000.0, None, None) == 1.0     # −3 % > −5 % : OK
+
+
+def test_dd_kill_switch_env_override_assouplit(monkeypatch, tmp_path):
+    """ENV −0.15 : −6 % ne coupe pas (override au-dessus du yaml 5 %)."""
+    _clear_intraday_dd_env(monkeypatch)
+    monkeypatch.setenv("QUANT_INTRADAY_DD", "-0.15")
+    import packages.execution.equity_history as eh
+    monkeypatch.setattr(eh, "_F", tmp_path / "eq.json")
+    eh.record({"alpaca": 100_000.0}, today="2026-01-01")
+    assert dd_kill_switch(94_000.0, None, None) == 1.0     # −6 % > −15 %
 
 
 def test_dd_kill_switch_historique_vide(monkeypatch, tmp_path):
+    _clear_intraday_dd_env(monkeypatch)
     import packages.execution.equity_history as eh
     monkeypatch.setattr(eh, "_F", tmp_path / "eq.json")
     assert dd_kill_switch(10_000.0, None, None) == 1.0     # 1 point : pas de faux gel

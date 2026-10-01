@@ -17,11 +17,11 @@ if str(ROOT) not in sys.path:
 
 
 def main() -> int:
-    import os
-
+    from packages.execution.live_guards import resolve_intraday_dd_limit
     from packages.portfolio.stress import drawdown_breach
 
-    limit = float(os.environ.get("QUANT_INTRADAY_DD", "-0.15"))
+    # Même SSoT que dd_kill_switch : risk.yaml 5 % → −0.05, ENV override si set.
+    limit = resolve_intraday_dd_limit()
     try:
         from apps.api.snapshot import build_snapshot
         rp = build_snapshot()["dashboard"].get("real_portfolio") or {}

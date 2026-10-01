@@ -82,7 +82,9 @@ def test_un_refus_du_portail_arrive_au_temoin(monkeypatch):
 
 def test_sans_temoin_le_chemin_d_ordre_est_inchange(monkeypatch):
     """Le témoin est OPTIONNEL : les appelants existants ne passent rien, et rien ne casse."""
+    # Overrides : lier sur ordre 15 % (pas le poids ligne YAML 10 %), sinon 50k→10k.
     monkeypatch.setenv("QUANT_RISK_MAX_ORDER_PCT", "0.15")
+    monkeypatch.setenv("QUANT_RISK_MAX_WEIGHT", "0.90")
     monkeypatch.setenv("QUANT_MIN_POSITION", "100")
     rl, b = _run_live(), CourtierFactice()
     sent, _, _ = rl._reconcile([_cible("AAA", 0.50)],
@@ -167,18 +169,23 @@ def test_la_garde_journaliere_compte_le_passage_refuse(monkeypatch):
 def test_le_portail_de_risque_reste_une_fonction_PURE():
     """Le témoin vit chez l'appelant, jamais dans la dernière barrière : une écriture
     disque dans `order_gate` créerait un monde où enregistrer une statistique fait
-    échouer un ordre."""
+    échouer un ordre.
+
+    P1 yaml SSoT : pathlib + packages.common.config (lecture seule) sont autorisés.
+    Toujours interdit : json, open()/print() top-level, écriture disque."""
     src = (RACINE / "packages" / "risk" / "order_gate.py").read_text()
     arbre = ast.parse(src)
     importes = {a.name.split(".")[0] for n in ast.walk(arbre)
                 if isinstance(n, ast.Import) for a in n.names}
     importes |= {(n.module or "").split(".")[0] for n in ast.walk(arbre)
                  if isinstance(n, ast.ImportFrom)}
-    assert "json" not in importes and "pathlib" not in importes
-    assert not any(m.startswith("packages") for m in importes if m)
+    assert "json" not in importes
+    # pathlib + packages OK (lecture risk.yaml) ; pas d'autres I/O.
+    assert "pathlib" in importes or "packages" in importes
     appels = {n.func.id for n in ast.walk(arbre)
               if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
     assert "open" not in appels and "print" not in appels
+    assert "write_text" not in src and "Path.write" not in src
 
 
 # --- GARDE DE SÉANCE (21/09) : le sixième filtre, trouvé en lisant un run réel.

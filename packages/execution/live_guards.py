@@ -13,6 +13,7 @@ Trois principes, chacun né d'un finding CRITIQUE du comité :
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 # Témoin d'observabilité. Import au NIVEAU MODULE, et c'est délibéré : le faire à
 # l'intérieur du `try` de `dd_kill_switch` ferait retomber une simple erreur d'import
@@ -103,18 +104,82 @@ def vet_brokers(alpaca, bitmart, dry: bool, cli_equity: float | None):
     return alpaca, bitmart, alp_cap, bit_cap, fatal
 
 
+
+# Défaut aligné sur config/risk.yaml portfolio.max_daily_drawdown_pct (0.05).
+# drawdown_breach attend une fraction de peak-drawdown NÉGATIVE (−0.05) ; le YAML
+# stocke la magnitude positive (0.05 = « daily drawdown 5 % »). Mapping : −abs(yaml).
+DD_LIMIT_DEFAUT = -0.05  # repli si YAML absent/illisible (même vérité 5 %)
+
+
+def _chemin_risk_yaml() -> Path:
+    """Racine dépôt / config/risk.yaml (packages/execution → parents[2])."""
+    return Path(__file__).resolve().parents[2] / "config" / "risk.yaml"
+
+
+def _dd_limit_depuis_yaml(path: Path | None = None) -> float:
+    """Lit `max_daily_drawdown_pct` (fraction positive) → seuil négatif pour breach.
+
+    Ex. yaml 0.05 → −0.05. YAML absent/illisible → `DD_LIMIT_DEFAUT` (−0.05).
+    """
+    chemin = path if path is not None else _chemin_risk_yaml()
+    try:
+        from packages.common.config import load_yaml
+        data = load_yaml(chemin)
+    except Exception:
+        try:
+            import yaml  # type: ignore
+            with chemin.open("r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+        except Exception:
+            return DD_LIMIT_DEFAUT
+    if not isinstance(data, dict):
+        return DD_LIMIT_DEFAUT
+    portfolio = data.get("portfolio")
+    if not isinstance(portfolio, dict):
+        return DD_LIMIT_DEFAUT
+    raw = portfolio.get("max_daily_drawdown_pct", 0.05)
+    try:
+        mag = float(raw)
+    except (TypeError, ValueError):
+        return DD_LIMIT_DEFAUT
+    if mag <= 0:
+        return DD_LIMIT_DEFAUT
+    return -abs(mag)
+
+
+def resolve_intraday_dd_limit() -> float:
+    """Seuil kill-switch DD : `QUANT_INTRADAY_DD` override si set/non vide, sinon YAML.
+
+    Même pattern que `Limites.depuis_env` (order_gate) : ENV = override explicite
+    seulement. Valeur ENV = fraction de peak-drawdown (négative, ex. −0.05).
+    Défaut sans ENV = `config/risk.yaml` `max_daily_drawdown_pct` mappé en négatif
+    (0.05 → −0.05). Docstring CEO P1.1 : vérité unique 5 %.
+    """
+    raw = os.environ.get("QUANT_INTRADAY_DD")
+    if raw is not None and str(raw).strip() != "":
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            pass
+    return _dd_limit_depuis_yaml()
+
+
 def dd_kill_switch(total_equity: float, bus, alert_engine,
                    observateur: object | None = None, cles: set | None = None) -> float:
     """Kill-switch sur le DRAWDOWN RÉEL du compte (principe 3). Lit l'historique
-    d'equity persisté + le point du jour ; DD depuis le pic ≤ `QUANT_INTRADAY_DD`
-    (défaut −15 %) → 0.0 = AUCUN ACHAT (rien n'est vendu d'office : `run_live.cible_sous_garde`,
-    QML-007). Historique court/indispo → 1.0.
+    d'equity persisté + le point du jour ; DD depuis le pic ≤ seuil
+    (`QUANT_INTRADAY_DD` override, sinon risk.yaml 5 % → −0.05) → 0.0 = AUCUN ACHAT
+    (rien n'est vendu d'office : `run_live.cible_sous_garde`, QML-007).
+    Historique court/indispo → 1.0.
+
+    Signe : yaml `max_daily_drawdown_pct` est une magnitude positive (0.05) ; le code
+    compare un peak-drawdown négatif via `drawdown_breach` → mapping −abs(yaml).
 
     `observateur` ne change RIEN à la décision : il reçoit l'état pour que le rapport
     des garde-fous distingue les trois 1.0 que cette fonction rend — « rien à couper »,
     « historique trop court » et « le contrôle a planté ». Ces trois-là se ressemblent
     à l'écran et n'ont pas du tout le même sens."""
-    limit = float(os.environ.get("QUANT_INTRADAY_DD", "-0.15"))
+    limit = resolve_intraday_dd_limit()
     try:
         from packages.execution.equity_history import _load
         from packages.portfolio.stress import drawdown_breach
