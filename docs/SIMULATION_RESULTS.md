@@ -1,6 +1,6 @@
 # Résultats de simulation multi-horizons
 
-> `python -m packages.backtest.grid_runner` · 2026-09-30 12:03 UTC · source **fmp** · grille `multi-horizons-2026-09-30` [900737b716db] · depuis 2020-01-01 · 4 actifs : NVDA, PLTR, BTCUSD, ETHUSD
+> `python -m packages.backtest.grid_runner` · 2026-09-30 20:28 UTC · source **vps-quotidien** · grille `multi-horizons-2026-09-30` [900737b716db] · depuis 2015-01-01 · 12 actifs : HIG, FSLR, MGM, GD, INTU, RR, ITW, EWD, CB, GPC, EXC, SNPS
 
 Classement par Sharpe MÉDIAN entre actifs. DSR déflaté par tous les essais du programme (seuil de crédibilité 0,95). PBO > 0,5 : le classement est du bruit. « bat B&H » = part des fenêtres glissantes où la règle bat le buy & hold. Chaque colonne est une médiane INDÉPENDANTE entre actifs (un PF < 1 peut côtoyer un Sharpe positif) ; peu de trades par actif : win 100 % = 1 à 3 trades.
 
@@ -16,112 +16,108 @@ Classement par Sharpe MÉDIAN entre actifs. DSR déflaté par tous les essais du
 | hrp_risk_parity_multi_facteurs | portefeuille, pas actif isolé : make explorer (870 scénarios VPS) |
 | bande_adaptative_k_sigma | portefeuille : make preset-replay --bande adaptative |
 
-## Court terme — timeframe daily (192 essais · fréquences jour, semaine)
+## Court terme — timeframe daily (576 essais · fréquences jour, semaine)
 
 | Horizon | Configuration (stratégie · sortie · fréquence) | Sharpe | DSR méd. | MaxDD | Calmar | Win | PF | Turnover/an | Rend. 1 an(s) · bat B&H |
 |---|---|---|---|---|---|---|---|---|---|
-| court | `momentum_12_1 · signal · jour` | 1.09 | 0.22 | -52.4% | 0.92 | 61% | 23.27 | 3.6 | +44.7% · 32% |
-| court | `momentum_12_1 · tendance_mm200 · jour` | 1.09 | 0.17 | -51.1% | 0.95 | 39% | 4.95 | 3.7 | +29.7% · 36% |
-| court | `ma_crossover · tendance_mm200 · jour` | 1.08 | 0.28 | -56.2% | 1.02 | 42% | 11.32 | 2.1 | +31.8% · 37% |
-| court | `tendance_mm200 · suiveur_3atr · semaine` | 1.05 | 0.08 | -54.0% | 0.89 | 45% | 1.49 | 15.1 | +16.0% · 37% |
-| court | `tendance_mm200 · signal · jour` | 1.05 | 0.27 | -56.9% | 0.92 | 25% | 5.56 | 4.3 | +31.6% · 36% |
-| court | **buy & hold** | 1.01 | — | -78.0% | — | — | — | — | +62.4% |
+| court | `smclxtp · suiveur_3atr · semaine` | 0.43 | 0.07 | -34.1% | 0.18 | 48% | 1.36 | 11.3 | +8.4% · 35% |
+| court | `ma_crossover · tendance_mm200 · jour` | 0.42 | 0.06 | -40.5% | 0.19 | 28% | 1.93 | 5.2 | +6.4% · 20% |
+| court | `tendance_mm200 · signal · jour` | 0.41 | 0.10 | -43.8% | 0.15 | 28% | 1.71 | 8.1 | +5.6% · 21% |
+| court | `tendance_mm200 · tendance_mm200 · jour` | 0.41 | 0.10 | -43.8% | 0.15 | 28% | 1.71 | 8.1 | +5.6% · 21% |
+| court | `ma_crossover · tendance_mm200 · semaine` | 0.40 | 0.08 | -40.0% | 0.15 | 34% | 1.95 | 2.7 | +6.3% · 21% |
+| court | **buy & hold** | 0.52 | — | -53.3% | — | — | — | — | +14.3% |
 
-PBO par actif : NVDA 0.26, PLTR 0.25, BTCUSD 0.59, ETHUSD 0.67
+PBO par actif : HIG 0.47, FSLR 0.14, MGM 0.94, GD 0.82, INTU 0.73, RR 0.18, ITW 0.62, EWD 0.77, CB 0.95, GPC 0.19, EXC 0.50, SNPS 0.42
 
-## Moyen terme — timeframe daily (96 essais · fréquences mois, trimestre)
+## Moyen terme — timeframe daily (288 essais · fréquences mois, trimestre)
 
 | Horizon | Configuration (stratégie · sortie · fréquence) | Sharpe | DSR méd. | MaxDD | Calmar | Win | PF | Turnover/an | Rend. 3 an(s) · bat B&H | Rend. 5 an(s) · bat B&H |
 |---|---|---|---|---|---|---|---|---|---|---|
-| moyen | `momentum_12_1 · signal · trimestre` | 0.98 | 0.52 | -55.4% | 0.74 | 62% | 0.66 | 0.3 | +35.0% · 19% | +42.6% · 42% |
-| moyen | `smclxtp · signal · mois` | 0.96 | 0.49 | -65.3% | 0.65 | 73% | 9.66 | 2.8 | +56.6% · 63% | +50.2% · 43% |
-| moyen | `ma_crossover · tendance_mm200 · mois` | 0.95 | 0.48 | -54.7% | 0.81 | 50% | 4.03 | 1.2 | +47.5% · 41% | +46.6% · 5% |
-| moyen | `smclxtp · tendance_mm200 · mois` | 0.93 | 0.45 | -54.7% | 0.74 | 50% | 2.78 | 1.2 | +43.0% · 34% | +41.9% · 0% |
-| moyen | `tendance_mm200 · signal · trimestre` | 0.91 | 0.44 | -54.6% | 0.60 | 70% | 2.04 | 1.2 | +26.3% · 43% | +33.9% · 0% |
-| moyen | **buy & hold** | 1.01 | — | -78.0% | — | — | — | — | +53.6% | +47.3% |
+| moyen | `momentum_12_1 · tp_3atr · trimestre` | 0.49 | 0.45 | -42.0% | 0.19 | 88% | 2.17 | 4.3 | +5.1% · 26% | +5.3% · 6% |
+| moyen | `smclxtp · tp_3atr · mois` | 0.42 | 0.32 | -40.2% | 0.20 | 76% | 1.80 | 6.9 | +7.9% · 26% | +10.4% · 10% |
+| moyen | `ma_crossover · tendance_mm200 · mois` | 0.41 | 0.27 | -37.9% | 0.14 | 44% | 2.35 | 1.7 | +6.3% · 22% | +8.0% · 14% |
+| moyen | `tendance_mm200 · tp_3atr · mois` | 0.40 | 0.29 | -34.5% | 0.14 | 76% | 1.49 | 7.5 | +5.8% · 14% | +8.7% · 10% |
+| moyen | `tendance_mm200 · signal · mois` | 0.40 | 0.31 | -38.6% | 0.14 | 43% | 2.05 | 1.8 | +5.2% · 18% | +5.6% · 4% |
+| moyen | **buy & hold** | 0.52 | — | -53.3% | — | — | — | — | +11.3% | +11.7% |
 
-PBO par actif : NVDA 0.56, PLTR 0.53, BTCUSD 0.60, ETHUSD 0.90
+PBO par actif : HIG 0.45, FSLR 0.03, MGM 0.27, GD 0.70, INTU 0.86, RR 0.40, ITW 0.41, EWD 0.81, CB 0.43, GPC 0.44, EXC 0.50, SNPS 0.74
 
-## Long terme — timeframe daily (32 essais · fréquences trimestre, annee)
+## Long terme — timeframe daily (96 essais · fréquences trimestre, annee)
 
 | Horizon | Configuration (stratégie · sortie · fréquence) | Sharpe | DSR méd. | MaxDD | Calmar | Win | PF | Turnover/an | Rend. 5 an(s) · bat B&H | Rend. 10 an(s) · bat B&H |
 |---|---|---|---|---|---|---|---|---|---|---|
-| long | `momentum_12_1 · signal · trimestre` | 0.98 | 0.87 | -55.4% | 0.74 | 62% | 0.66 | 0.3 | +42.6% · 42% | — · — |
-| long | `tendance_mm200 · signal · trimestre` | 0.91 | 0.88 | -54.6% | 0.60 | 70% | 2.04 | 1.2 | +33.9% · 0% | — · — |
-| long | `tendance_mm200 · tendance_mm200 · trimestre` | 0.91 | 0.88 | -54.6% | 0.60 | 70% | 2.04 | 1.2 | +33.9% · 0% | — · — |
-| long | `momentum_12_1 · tendance_mm200 · trimestre` | 0.72 | 0.77 | -56.3% | 0.40 | 70% | 1.82 | 1.2 | +27.3% · 0% | — · — |
-| long | `tendance_mm200 · signal · annee` | 0.71 | 0.71 | -59.7% | 0.39 | 100% | — | 0.3 | +29.1% · 20% | — · — |
-| long | **buy & hold** | 1.01 | — | -78.0% | — | — | — | — | +47.3% | — |
+| long | `tendance_mm200 · signal · annee` | 0.35 | 0.35 | -51.4% | 0.10 | 100% | 0.15 | 0.3 | +6.3% · 3% | +6.4% · 0% |
+| long | `tendance_mm200 · tendance_mm200 · annee` | 0.35 | 0.35 | -51.4% | 0.10 | 100% | 0.15 | 0.3 | +6.3% · 3% | +6.4% · 0% |
+| long | `momentum_12_1 · tendance_mm200 · annee` | 0.33 | 0.35 | -51.4% | 0.09 | 67% | 0.25 | 0.3 | +3.0% · 0% | +5.2% · 0% |
+| long | `tendance_mm200 · signal · trimestre` | 0.32 | 0.36 | -44.5% | 0.08 | 50% | 1.46 | 1.0 | +1.5% · 1% | +4.9% · 0% |
+| long | `tendance_mm200 · tendance_mm200 · trimestre` | 0.32 | 0.36 | -44.5% | 0.08 | 50% | 1.46 | 1.0 | +1.5% · 1% | +4.9% · 0% |
+| long | **buy & hold** | 0.52 | — | -53.3% | — | — | — | — | +11.7% | +12.6% |
 
-PBO par actif : NVDA 0.32, PLTR 0.78, BTCUSD 0.26, ETHUSD 0.77
+PBO par actif : HIG 0.89, FSLR 0.03, MGM 1.00, GD 0.84, INTU 0.65, RR 0.73, ITW 0.46, EWD 0.17, CB 0.56, GPC 0.46, EXC 0.54, SNPS 0.84
 
-## Court terme — timeframe weekly (96 essais · fréquences semaine)
+## Court terme — timeframe weekly (288 essais · fréquences semaine)
 
 | Horizon | Configuration (stratégie · sortie · fréquence) | Sharpe | DSR méd. | MaxDD | Calmar | Win | PF | Turnover/an | Rend. 1 an(s) · bat B&H |
 |---|---|---|---|---|---|---|---|---|---|
-| court | `momentum_12_1 · signal · semaine` | 1.06 | 0.16 | -49.2% | 0.95 | 67% | 104.47 | 1.4 | +50.6% · 35% |
-| court | `ma_crossover · signal · semaine` | 1.01 | 0.08 | -42.4% | 0.90 | 100% | 1.25 | 0.5 | +10.8% · 25% |
-| court | `momentum_12_1 · tp_3atr · semaine` | 0.96 | 0.13 | -49.2% | 0.86 | 82% | 2.84 | 4.9 | +45.0% · 37% |
-| court | `momentum_12_1 · suiveur_3atr · semaine` | 0.93 | 0.11 | -50.7% | 0.87 | 58% | 3.75 | 3.7 | +37.5% · 42% |
-| court | `ma_crossover · suiveur_3atr · semaine` | 0.90 | 0.07 | -45.3% | 0.78 | 71% | 4.06 | 2.7 | +10.3% · 36% |
-| court | **buy & hold** | 0.99 | — | -76.0% | — | — | — | — | +63.9% |
+| court | `rsi_reversion · signal · semaine` | 0.34 | 0.09 | -20.2% | 0.20 | 100% | 2.67 | 0.3 | +0.0% · 31% |
+| court | `momentum_12_1 · suiveur_3atr · semaine` | 0.34 | 0.09 | -39.6% | 0.14 | 53% | 1.39 | 5.0 | +5.3% · 26% |
+| court | `rsi_reversion · suiveur_3atr · semaine` | 0.33 | 0.08 | -22.6% | 0.14 | 75% | 2.80 | 0.5 | +0.0% · 31% |
+| court | `momentum_12_1 · signal · semaine` | 0.32 | 0.07 | -46.9% | 0.10 | 56% | 1.37 | 2.9 | +6.3% · 17% |
+| court | `rsi_reversion · tp_3atr · semaine` | 0.31 | 0.08 | -20.2% | 0.17 | 100% | 2.67 | 0.4 | +0.0% · 31% |
+| court | **buy & hold** | 0.50 | — | -48.7% | — | — | — | — | +13.7% |
 
-1 configuration(s) sans aucun trade (indicateur jamais défini sur cette barre) : exclues du classement.
+PBO par actif : HIG 0.51, FSLR 0.13, MGM 0.46, GD 0.67, INTU 0.43, RR 0.89, ITW 0.83, EWD 0.21, CB 0.44, GPC 0.35, EXC 0.67, SNPS 0.56
 
-PBO par actif : NVDA 0.33, PLTR 0.28, BTCUSD 0.08, ETHUSD 0.29
-
-## Moyen terme — timeframe weekly (96 essais · fréquences mois, trimestre)
+## Moyen terme — timeframe weekly (288 essais · fréquences mois, trimestre)
 
 | Horizon | Configuration (stratégie · sortie · fréquence) | Sharpe | DSR méd. | MaxDD | Calmar | Win | PF | Turnover/an | Rend. 3 an(s) · bat B&H | Rend. 5 an(s) · bat B&H |
 |---|---|---|---|---|---|---|---|---|---|---|
-| moyen | `momentum_12_1 · signal · trimestre` | 1.05 | 0.82 | -49.4% | 0.88 | 100% | 1.48 | 0.3 | +40.7% · 20% | +50.0% · 42% |
-| moyen | `ma_crossover · signal · mois` | 1.01 | 0.80 | -42.4% | 0.91 | 100% | 1.32 | 0.5 | +55.6% · 51% | +48.8% · 51% |
-| moyen | `ma_crossover · signal · trimestre` | 0.93 | 0.75 | -45.3% | 0.88 | 100% | 1.70 | 0.4 | +54.4% · 23% | +49.3% · 41% |
-| moyen | `ma_crossover · tp_3atr · mois` | 0.92 | 0.72 | -40.9% | 0.76 | 87% | 4.48 | 4.1 | +43.7% · 45% | +40.1% · 26% |
-| moyen | `momentum_12_1 · signal · mois` | 0.84 | 0.67 | -58.7% | 0.66 | 50% | 6.66 | 0.6 | +42.3% · 8% | +46.4% · 11% |
-| moyen | **buy & hold** | 0.99 | — | -76.0% | — | — | — | — | +54.0% | +48.8% |
+| moyen | `momentum_12_1 · tp_3atr · trimestre` | 0.35 | 0.29 | -44.8% | 0.12 | 73% | 2.24 | 2.3 | +3.3% · 9% | +4.6% · 0% |
+| moyen | `smclxtp · tp_3atr · trimestre` | 0.35 | 0.33 | -39.2% | 0.15 | 86% | 4.12 | 1.2 | +4.2% · 19% | +5.7% · 3% |
+| moyen | `momentum_12_1 · tp_3atr · mois` | 0.33 | 0.28 | -43.5% | 0.10 | 71% | 1.67 | 3.2 | +4.4% · 8% | +1.5% · 0% |
+| moyen | `tendance_mm200 · signal · mois` | 0.32 | 0.18 | -43.0% | 0.10 | 25% | 0.38 | 0.3 | +1.0% · 6% | +6.1% · 0% |
+| moyen | `tendance_mm200 · tendance_mm200 · mois` | 0.32 | 0.18 | -43.0% | 0.10 | 25% | 0.38 | 0.3 | +1.0% · 6% | +6.1% · 0% |
+| moyen | **buy & hold** | 0.50 | — | -48.7% | — | — | — | — | +11.2% | +12.0% |
 
-2 configuration(s) sans aucun trade (indicateur jamais défini sur cette barre) : exclues du classement.
+PBO par actif : HIG 0.63, FSLR 0.44, MGM 0.56, GD 0.53, INTU 0.09, RR 0.64, ITW 0.70, EWD 0.31, CB 0.54, GPC 0.32, EXC 0.15, SNPS 0.31
 
-PBO par actif : NVDA 0.53, PLTR 0.34, BTCUSD 0.15, ETHUSD 0.50
-
-## Long terme — timeframe weekly (32 essais · fréquences trimestre, annee)
+## Long terme — timeframe weekly (96 essais · fréquences trimestre, annee)
 
 | Horizon | Configuration (stratégie · sortie · fréquence) | Sharpe | DSR méd. | MaxDD | Calmar | Win | PF | Turnover/an | Rend. 5 an(s) · bat B&H | Rend. 10 an(s) · bat B&H |
 |---|---|---|---|---|---|---|---|---|---|---|
-| long | `momentum_12_1 · signal · trimestre` | 1.05 | 0.77 | -49.4% | 0.88 | 100% | 1.48 | 0.3 | +50.0% · 42% | — · — |
-| long | `momentum_12_1 · signal · annee` | 0.66 | 0.49 | -70.5% | 0.29 | 100% | 1.88 | 0.3 | +20.5% · 0% | — · — |
-| long | `tendance_mm200 · signal · trimestre` | 0.56 | 0.37 | -47.8% | 0.40 | 25% | 2.78 | 0.2 | +25.4% · 0% | — · — |
-| long | `tendance_mm200 · tendance_mm200 · trimestre` | 0.56 | 0.37 | -47.8% | 0.40 | 25% | 2.78 | 0.2 | +25.4% · 0% | — · — |
-| long | `momentum_12_1 · tendance_mm200 · trimestre` | 0.53 | 0.36 | -47.8% | 0.38 | 25% | 1.20 | 0.2 | +23.3% · 0% | — · — |
-| long | **buy & hold** | 0.99 | — | -76.0% | — | — | — | — | +48.8% | — |
+| long | `momentum_12_1 · signal · trimestre` | 0.31 | 0.42 | -45.9% | 0.09 | 67% | 4.81 | 0.7 | +3.5% · 0% | +4.7% · 0% |
+| long | `momentum_12_1 · signal · annee` | 0.26 | 0.36 | -50.1% | 0.06 | 50% | 0.46 | 0.4 | +4.2% · 0% | +3.9% · 0% |
+| long | `tendance_mm200 · signal · trimestre` | 0.24 | 0.21 | -40.1% | 0.09 | 33% | 0.26 | 0.2 | +0.8% · 0% | +4.3% · 0% |
+| long | `tendance_mm200 · tendance_mm200 · trimestre` | 0.24 | 0.21 | -40.1% | 0.09 | 33% | 0.26 | 0.2 | +0.8% · 0% | +4.3% · 0% |
+| long | `momentum_12_1 · tendance_mm200 · trimestre` | 0.17 | 0.15 | -39.9% | 0.04 | 33% | 0.00 | 0.2 | +0.7% · 0% | +2.9% · 0% |
+| long | **buy & hold** | 0.50 | — | -48.7% | — | — | — | — | +12.0% | +12.3% |
 
 3 configuration(s) sans aucun trade (indicateur jamais défini sur cette barre) : exclues du classement.
 
-PBO par actif : NVDA 0.42, PLTR 0.26, BTCUSD 0.02, ETHUSD 0.71
+PBO par actif : HIG 0.66, FSLR 0.27, MGM 0.52, GD 0.98, INTU 0.18, RR 0.80, ITW 0.88, EWD 0.42, CB 0.37, GPC 0.57, EXC 0.70, SNPS 0.43
 
-## Moyen terme — timeframe monthly (96 essais · fréquences mois, trimestre)
+## Moyen terme — timeframe monthly (288 essais · fréquences mois, trimestre)
 
 | Horizon | Configuration (stratégie · sortie · fréquence) | Sharpe | DSR méd. | MaxDD | Calmar | Win | PF | Turnover/an | Rend. 3 an(s) · bat B&H | Rend. 5 an(s) · bat B&H |
 |---|---|---|---|---|---|---|---|---|---|---|
-| moyen | `momentum_12_1 · signal · trimestre` | 0.95 | 0.31 | -49.0% | 0.87 | 62% | 0.66 | 0.3 | +35.1% · 19% | +42.8% · 42% |
-| moyen | `momentum_12_1 · signal · mois` | 0.83 | 0.31 | -58.5% | 0.66 | 71% | 5.05 | 0.6 | +38.4% · 7% | +41.1% · 15% |
-| moyen | `momentum_12_1 · tp_3atr · mois` | 0.82 | 0.28 | -58.5% | 0.57 | 71% | 2.30 | 2.4 | +32.0% · 3% | +33.9% · 8% |
-| moyen | `momentum_12_1 · tp_3atr · trimestre` | 0.75 | 0.20 | -49.0% | 0.52 | 75% | 4.79 | 2.1 | +21.8% · 17% | +23.7% · 4% |
-| moyen | **buy & hold** | 0.86 | — | -75.0% | — | — | — | — | +54.3% | +43.5% |
+| moyen | `momentum_12_1 · signal · mois` | 0.35 | 0.19 | -41.2% | 0.14 | 54% | 1.79 | 1.3 | +4.5% · 8% | +3.6% · 1% |
+| moyen | `momentum_12_1 · tp_3atr · mois` | 0.34 | 0.19 | -41.2% | 0.13 | 59% | 2.04 | 1.8 | +4.5% · 12% | +3.6% · 3% |
+| moyen | `momentum_12_1 · signal · trimestre` | 0.33 | 0.17 | -42.5% | 0.11 | 67% | 2.04 | 0.7 | +4.4% · 5% | +2.6% · 0% |
+| moyen | `momentum_12_1 · tp_3atr · trimestre` | 0.30 | 0.19 | -42.5% | 0.09 | 57% | 1.94 | 1.3 | +5.2% · 15% | +3.1% · 0% |
+| moyen | **buy & hold** | 0.54 | — | -40.4% | — | — | — | — | +11.8% | +11.4% |
 
 20 configuration(s) sans aucun trade (indicateur jamais défini sur cette barre) : exclues du classement.
 
-PBO par actif : NVDA 0.00, PLTR 0.09, BTCUSD 0.03, ETHUSD 0.41
+PBO par actif : HIG 0.24, FSLR 1.00, MGM 0.91, GD 0.14, INTU 0.23, RR 0.94, ITW 0.13, EWD 0.23, CB 0.21, GPC 0.56, EXC 0.24, SNPS 0.00
 
-## Long terme — timeframe monthly (32 essais · fréquences trimestre, annee)
+## Long terme — timeframe monthly (96 essais · fréquences trimestre, annee)
 
 | Horizon | Configuration (stratégie · sortie · fréquence) | Sharpe | DSR méd. | MaxDD | Calmar | Win | PF | Turnover/an | Rend. 5 an(s) · bat B&H | Rend. 10 an(s) · bat B&H |
 |---|---|---|---|---|---|---|---|---|---|---|
-| long | `momentum_12_1 · signal · trimestre` | 0.95 | 0.19 | -49.0% | 0.87 | 62% | 0.66 | 0.3 | +42.8% · 42% | — · — |
-| long | `momentum_12_1 · signal · annee` | 0.65 | 0.06 | -68.0% | 0.30 | 100% | 1.39 | 0.3 | +19.9% · 0% | — · — |
-| long | **buy & hold** | 0.86 | — | -75.0% | — | — | — | — | +43.5% | — |
+| long | `momentum_12_1 · signal · trimestre` | 0.33 | 0.25 | -42.5% | 0.11 | 67% | 2.04 | 0.7 | +2.6% · 0% | +4.6% · 0% |
+| long | `momentum_12_1 · signal · annee` | 0.29 | 0.17 | -44.5% | 0.07 | 50% | 0.00 | 0.3 | +2.9% · 0% | +4.9% · 0% |
+| long | **buy & hold** | 0.54 | — | -40.4% | — | — | — | — | +11.4% | +12.5% |
 
 6 configuration(s) sans aucun trade (indicateur jamais défini sur cette barre) : exclues du classement.
 
-PBO par actif : NVDA 0.00, PLTR 0.05, BTCUSD 0.01, ETHUSD 0.44
+PBO par actif : HIG 0.54, FSLR 0.38, MGM 1.00, GD 0.46, INTU 0.31, RR 0.97, ITW 0.38, EWD 0.45, CB 0.25, GPC 0.59, EXC 0.36, SNPS 0.00
