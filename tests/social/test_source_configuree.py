@@ -25,12 +25,27 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from packages.social.sources import charger_plugins, est_configuree, sources
 
 RACINE = Path(__file__).resolve().parents[2]
 charger_plugins()
 
+# Les sources retombent sur ces variables quand l'argument est vide. Sur une machine
+# dont le `.env` les renseigne (le VPS), « sans cible » ne l'était plus : le test
+# lisait la configuration de l'utilisateur au lieu du comportement de la source.
+_VARIABLES = ("QUANT_TG_CANAUX", "QUANT_X_RSS", "QUANT_DISCORD_SALONS",
+              "DISCORD_BOT_TOKEN")
 
+
+@pytest.fixture
+def sans_env(monkeypatch):
+    for v in _VARIABLES:
+        monkeypatch.delenv(v, raising=False)
+
+
+@pytest.mark.usefixtures("sans_env")
 def test_une_source_sans_cible_se_declare_non_configuree():
     assert not sources.create("telegram", canaux="").configuree
     assert not sources.create("rss", flux="").configuree
@@ -42,6 +57,7 @@ def test_une_source_avec_cible_se_declare_configuree():
     assert sources.create("rss", flux="https://exemple.invalid/rss").configuree
 
 
+@pytest.mark.usefixtures("sans_env")
 def test_discord_exige_les_DEUX_jeton_ET_salon():
     """Une moitié de configuration ne rendrait que des 401, chaque nuit."""
     assert not sources.create("discord", salons="123", jeton="").configuree
