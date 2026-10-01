@@ -1,4 +1,9 @@
-"""Modèle de coûts réalistes : frais (bps) + slippage (bps). Dès le backtest."""
+"""Modèle de coûts réalistes : frais (bps) + slippage (bps). Dès le backtest.
+
+P1.3 — barème unique : `CostModel.for_asset_class` et `round_trip_bps(ac)` dérivent
+de `BROKER_FEES[broker_for(ac)]` (plus de table retail divergente `_COST_BY_CLASS`).
+RT bps = 2×(commission + slippage) + reg_bps (SEC/TAF vente actions US).
+"""
 
 from __future__ import annotations
 
@@ -9,6 +14,7 @@ from dataclasses import dataclass
 class CostModel:
     fee_bps: float = 5.0       # commission
     slippage_bps: float = 2.0  # impact/spread
+    reg_bps: float = 0.0       # frais réglementaires (SEC/TAF) — inclus 1× dans le RT
 
     def apply_buy(self, price: float) -> float:
         return price * (1 + self.slippage_bps / 1e4)
@@ -21,28 +27,22 @@ class CostModel:
 
     @property
     def round_trip_bps(self) -> float:
-        """Coût aller-retour estimé (2× frais + 2× slippage), en points de base."""
-        return 2 * (self.fee_bps + self.slippage_bps)
+        """Coût aller-retour estimé : 2×(frais + slippage) + reg_bps, en points de base."""
+        return 2 * (self.fee_bps + self.slippage_bps) + self.reg_bps
 
     @classmethod
     def for_asset_class(cls, asset_class: str) -> "CostModel":
-        """Coûts calibrés par classe d'actifs (frais + spread/impact réalistes).
+        """Coûts dérivés du barème courtier réel (`BROKER_FEES[broker_for(ac)]`).
 
-        Actions/ETF liquides ≈ faibles ; crypto/forex spreads plus larges ; commodités/indices
-        via futures intermédiaires. Valeurs prudentes (retail), surchargeable par config.
+        fee_bps = commission_bps, slippage_bps = slippage_bps, reg_bps = reg_bps.
+        Plus de table retail `_COST_BY_CLASS` comme source de vérité.
         """
-        return cls(**_COST_BY_CLASS.get((asset_class or "equity").lower(), _COST_BY_CLASS["equity"]))
-
-
-# Hypothèses de coûts (bps) par classe — prudentes, pour un compte retail.
-_COST_BY_CLASS: dict[str, dict[str, float]] = {
-    "equity": {"fee_bps": 2.0, "slippage_bps": 3.0},
-    "etf": {"fee_bps": 1.5, "slippage_bps": 2.0},
-    "crypto": {"fee_bps": 10.0, "slippage_bps": 15.0},
-    "forex": {"fee_bps": 1.0, "slippage_bps": 4.0},
-    "commodity": {"fee_bps": 3.0, "slippage_bps": 6.0},
-    "index": {"fee_bps": 2.0, "slippage_bps": 4.0},
-}
+        b = BROKER_FEES.get(broker_for(asset_class), BROKER_FEES["alpaca"])
+        return cls(
+            fee_bps=float(b["commission_bps"]),
+            slippage_bps=float(b["slippage_bps"]),
+            reg_bps=float(b.get("reg_bps", 0.0)),
+        )
 
 
 # --- Barèmes RÉELS des courtiers (≈ 2024-2026), en points de base (1 bp = 0,01 %) ---
@@ -71,6 +71,31 @@ def broker_for(asset_class: str) -> str:
     if ac == "crypto":
         return os.environ.get("QUANT_BROKER_CRYPTO", _DEFAULT_BROKER["crypto"]).lower()
     return os.environ.get("QUANT_BROKER_EQUITY", _DEFAULT_BROKER.get(ac, "alpaca")).lower()
+
+
+def round_trip_bps(asset_class: str) -> float:
+    """Coût aller-retour (bps) depuis le barème courtier : 2×(comm+slip) + reg_bps.
+
+    Helper partagé Risk / TCA / ML — bit-identique à `CostModel.for_asset_class(ac).round_trip_bps`.
+    """
+    b = BROKER_FEES.get(broker_for(asset_class), BROKER_FEES["alpaca"])
+    return (2.0 * (float(b["commission_bps"]) + float(b["slippage_bps"]))
+            + float(b.get("reg_bps", 0.0)))
+
+
+def cout_execution(asset_class: str, notional: float, side: str, *,
+                   mode: str = "fee") -> float:
+    """API unifiée coût d'exécution ($) selon l'usage.
+
+    mode="fee"    → `broker_fee`   (coût total attendu, slippage inclus — backtest / pricing)
+    mode="charge" → `broker_charge` (débit commission + reg, sans slip — journal / fill)
+    """
+    m = (mode or "fee").lower()
+    if m == "charge":
+        return broker_charge(asset_class, notional, side)
+    if m == "fee":
+        return broker_fee(asset_class, notional, side)
+    raise ValueError(f"cout_execution mode inconnu: {mode!r} (attendu 'fee'|'charge')")
 
 
 def broker_cost_bps(asset_class: str) -> float:
@@ -117,8 +142,13 @@ def broker_charge(asset_class: str, notional: float, side: str = "BUY") -> float
 
 
 def broker_assumptions() -> list[dict]:
-    """Table des barèmes courtiers (pour transparence UI / TCA)."""
-    return [{"broker": k, **v, "round_trip_bps": 2 * (v["commission_bps"] + v["slippage_bps"])}
+    """Table des barèmes courtiers (pour transparence UI / TCA).
+
+    `round_trip_bps` = 2×(comm+slip) + reg_bps (P1.3 : n'oublie plus le réglementaire).
+    """
+    return [{"broker": k, **v,
+             "round_trip_bps": 2 * (v["commission_bps"] + v["slippage_bps"])
+                               + float(v.get("reg_bps", 0.0))}
             for k, v in BROKER_FEES.items()]
 
 
@@ -145,7 +175,29 @@ def stochastic_slippage_bps(base_slippage_bps: float, vol_ratio: float = 1.0,
 
 
 def cost_assumptions() -> list[dict]:
-    """Table des hypothèses de coûts par classe (pour affichage UI / transparence TCA)."""
-    return [{"asset_class": ac, "fee_bps": v["fee_bps"], "slippage_bps": v["slippage_bps"],
-             "round_trip_bps": 2 * (v["fee_bps"] + v["slippage_bps"])}
-            for ac, v in _COST_BY_CLASS.items()]
+    """Table des hypothèses de coûts par classe (UI / TCA) — dérivée du barème courtier.
+
+    Bit-identique à `round_trip_bps(ac)` / `CostModel.for_asset_class(ac).round_trip_bps`.
+    """
+    rows = []
+    for ac in _DEFAULT_BROKER:
+        cm = CostModel.for_asset_class(ac)
+        rows.append({
+            "asset_class": ac,
+            "fee_bps": cm.fee_bps,
+            "slippage_bps": cm.slippage_bps,
+            "reg_bps": cm.reg_bps,
+            "round_trip_bps": round_trip_bps(ac),
+            "broker": broker_for(ac),
+        })
+    return rows
+
+
+# Alias déprécié — ne plus utiliser comme source de vérité (P1.3 : dérivé de BROKER_FEES).
+# Conservé pour back-compat lecture seule ; `for_asset_class` / `cost_assumptions` n'y lisent plus.
+_COST_BY_CLASS: dict[str, dict[str, float]] = {
+    ac: {"fee_bps": CostModel.for_asset_class(ac).fee_bps,
+         "slippage_bps": CostModel.for_asset_class(ac).slippage_bps,
+         "reg_bps": CostModel.for_asset_class(ac).reg_bps}
+    for ac in _DEFAULT_BROKER
+}

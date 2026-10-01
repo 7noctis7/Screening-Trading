@@ -101,7 +101,8 @@ def _lot(qty=10.0, fees=2.5, slippage=1.0):
         id="P-L1", instrument="BTC/USDC", asset_class=AssetClass.CRYPTO, venue="Bitmart",
         side=Side.LONG, qty=qty, entry_ts=datetime(2026, 9, 1, tzinfo=UTC),
         entry_price=100.0, avg_price=100.0, entry_reason="test", fees=fees,
-        fees_source="estimated", slippage=slippage, features_snapshot={"x": 1.0})
+        fee_comm=fees, fees_source="estimated", slippage=slippage,
+        features_snapshot={"x": 1.0})
 
 
 def test_vente_partielle_repartit_frais_et_ecart_d_entree(tmp_path):
@@ -115,6 +116,9 @@ def test_vente_partielle_repartit_frais_et_ecart_d_entree(tmp_path):
     vente = broker_charge("crypto", 110.0 * 4, side="SELL")
     assert ferme.fees == pytest.approx(2.5 * 0.4 + vente)        # 40 % de l'entrée
     assert reste.fees == pytest.approx(2.5 * 0.6)                # 60 % restent au lot
+    # P1.3 QT : fee_comm clôture = charge totale (part entrée + SELL) ; reste = part entrée
+    assert ferme.fee_comm == pytest.approx(ferme.fees)
+    assert reste.fee_comm is None or reste.fee_comm == pytest.approx(2.5 * 0.6)
     assert ferme.slippage == pytest.approx(0.4)
     assert reste.slippage == pytest.approx(0.6)
     assert ferme.pnl_net == pytest.approx(ferme.pnl_gross - ferme.fees)

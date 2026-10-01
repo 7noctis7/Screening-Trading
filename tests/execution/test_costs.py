@@ -31,7 +31,8 @@ def test_cost_assumptions_table():
     classes = {r["asset_class"] for r in rows}
     assert {"equity", "crypto", "forex"} <= classes
     for r in rows:
-        assert r["round_trip_bps"] == 2 * (r["fee_bps"] + r["slippage_bps"])
+        # P1.3 : RT = 2×(fee+slip) + reg (dérivé barème courtier)
+        assert r["round_trip_bps"] == 2 * (r["fee_bps"] + r["slippage_bps"]) + r.get("reg_bps", 0.0)
 
 
 def test_broker_fee_table_real_schedules():
@@ -84,7 +85,9 @@ def test_broker_assumptions_round_trip():
     names = {r["broker"] for r in rows}
     assert {"alpaca", "ibkr", "binance", "bitmart"} <= names
     for r in rows:
-        assert r["round_trip_bps"] == 2 * (r["commission_bps"] + r["slippage_bps"])
+        # P1.3 : n'oublie plus reg_bps (SEC/TAF)
+        assert r["round_trip_bps"] == (
+            2 * (r["commission_bps"] + r["slippage_bps"]) + float(r.get("reg_bps", 0.0)))
 
 
 def test_ledger_fees_reduce_return_and_reconcile():
