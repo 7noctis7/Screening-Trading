@@ -102,7 +102,7 @@ TON SIGNAL / TON ANALYSE
 ## 5. Commandes
 
 ```bash
-make test          # 1160 tests — À LANCER AVANT TOUT COMMIT
+make test          # ≈ 4 000 tests (02/10) — À LANCER AVANT TOUT COMMIT
 make lint          # ruff + mypy
 make start         # API + front → http://localhost:3000
 make brief         # état du projet en 30 s
@@ -332,7 +332,7 @@ Utilise les sous-agents dédiés déjà présents dans le dépôt : `quant-criti
    qui ressemblent à de la complexité inutile sont des cicatrices de bugs réels, documentées en
    commentaire.
 3. Modifier **par petits incréments testés**.
-4. `make test` — 1160 tests doivent passer.
+4. `make test` — toute la suite doit passer (≈ 4 000 tests au 02/10).
 5. Clôturer : `03_TODO`, entrée datée dans `04_JOURNAL`, ADR dans `02_DECISIONS` si le choix est
    structurant.
 

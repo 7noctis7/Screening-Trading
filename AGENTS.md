@@ -39,7 +39,7 @@ data/ (local, jamais commité)
 
 | Commande | Rôle |
 |---|---|
-| `make test` | 1160 tests — **avant tout commit** |
+| `make test` | ≈ 4 000 tests (02/10) — **avant tout commit** |
 | `make lint` | ruff + mypy |
 | `make start` | API + front → `localhost:3000` |
 | `make brief` | état du projet |

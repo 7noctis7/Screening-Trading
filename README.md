@@ -9,7 +9,7 @@ Méthodologie institutionnelle, 100 % open-source, infra 0 €, **paper par déf
 
 [![CI](https://github.com/7noctis7/Screening-Trading/actions/workflows/ci.yml/badge.svg)](https://github.com/7noctis7/Screening-Trading/actions/workflows/ci.yml)
 [![gitleaks](https://github.com/7noctis7/Screening-Trading/actions/workflows/gitleaks.yml/badge.svg)](https://github.com/7noctis7/Screening-Trading/actions/workflows/gitleaks.yml)
-![tests](https://img.shields.io/badge/tests-2475-brightgreen)
+![tests](https://img.shields.io/badge/tests-3914-brightgreen)
 ![licence](https://img.shields.io/badge/licence-MIT-green)
 ![paper](https://img.shields.io/badge/mode-paper-orange)
 
@@ -42,10 +42,10 @@ résultat même quand il est mauvais.
 
 | Code | | Produit | |
 |---|---:|---|---:|
-| Modules métier | **381** | Routes API | **41** |
-| Fichiers de test | **351** | Écrans | **28** |
-| Tests au vert | **2 475** | Composants front | **44** |
-| Décisions consignées (ADR) | **129** | Commandes `make` | **125** |
+| Modules métier | **414** | Routes API | **43** |
+| Fichiers de test | **497** | Écrans | **29** |
+| Tests au vert | **3 914** | Composants front | **45** |
+| Décisions consignées (ADR) | **211** | Commandes `make` | **156** |
 
 <sub>Discipline vérifiée par un hook : **< 400 lignes/fichier, < 50/fonction**. Une nouvelle
 stratégie, source ou indicateur = **un fichier auto-enregistré**, jamais une modification du cœur.</sub>
@@ -57,7 +57,7 @@ stratégie, source ou indicateur = **un fichier auto-enregistré**, jamais une m
 ```bash
 uv venv && source .venv/bin/activate
 uv pip install -e ".[dev,quant,ml,reporting]"
-make test          # 2 475 tests
+make test          # 3 914 tests (+ 90 ignorés sans dépendances lourdes)
 
 make start         # API + front → http://localhost:3000
 ```
@@ -94,7 +94,7 @@ d'être un service au long cours.
 
 </details>
 
-**Toutes les commandes** → **[`docs/COMMANDES.md`](docs/COMMANDES.md)** (125 cibles groupées par
+**Toutes les commandes** → **[`docs/COMMANDES.md`](docs/COMMANDES.md)** (156 cibles groupées par
 intention) · ou `make help`.
 
 ---
@@ -162,17 +162,18 @@ flowchart TD
 </details>
 
 <details>
-<summary><b>Les 41 routes de l'API</b></summary>
+<summary><b>Les 43 routes de l'API</b></summary>
 
 <br>
 
 FastAPI, **verrouillée sur la boucle locale par défaut**, cache TTL 15 min.
 
-**Lecture** — `/health` · `/api/` + `meta` `dashboard` `screener` `screen` `conviction`
-`universe` `themes` `macro` `events` `data` `ml` `sentiment` `fundamentals` `company_report`
-`notes` `note_file` `investors` `crypto_cockpit` `ticker` `failures` `portfolio` `positions`
-`performance` `trades` `journal` `preset_ledger` `analytics` `live` `profil` `overlays`
-`object/{type}/{id}` `ai/status` `ai/metrics` `ai/commentary` `ai/diagnostic`
+**Lecture** — `/health` · `/api/` + `meta` `dashboard` `intro` `screener` `screen`
+`conviction` `universe` `themes` `macro` `events` `data` `ml` `sentiment` `fundamentals`
+`company_report` `notes` `note_file` `investors` `crypto_cockpit` `ticker` `failures`
+`portfolio` `portefeuille` `positions` `performance` `trades` `journal` `preset_ledger`
+`analytics` `live` `profil` `overlays` `object/{type}/{id}` `social/x/posts`
+`ai/metrics` `ai/modeles` `ai/diagnostic`
 
 **Écriture** (locale uniquement) — `/api/portfolio/analyze` · `/api/portfolio/recommend` ·
 `/api/portfolio/sentiment` · `/api/ai/chat` · `/api/tv/webhook`
@@ -296,8 +297,8 @@ premier livrable attendu de cette couche — et le dire vaut mieux que laisser c
 
 | | |
 |---|---|
-| **Code** | ✅ 2 475 tests au vert, gates CI verts |
-| **Paper trading** | ⚠️ tourne, journal vérifié — mais **P0-3 reste ouvert** |
+| **Code** | ✅ 3 914 tests au vert (02/10), couverture 87 % du cœur, gates CI verts |
+| **Paper trading** | ⚠️ tourne, journal vérifié — indiscernable de QQQ + cash (ADR-0211) |
 | **Live trading** | ❌ non, et ce n'est pas une question de code |
 
 ### Ce que le projet ne sait pas faire
@@ -312,8 +313,9 @@ premier livrable attendu de cette couche — et le dire vaut mieux que laisser c
    médiane du potentiel mesurée est négative.
 4. **Échantillon de décisions réelles trop maigre** pour distinguer un effet du bruit. Les
    mesures concernées renvoient `UNCALIBRATED`.
-5. **La bande d'inaction n'est pas instruite** (P0-3) : à 3 % en poids absolu elle bloque 99 %
-   des pas, alors qu'une position pèse ~3,3 %.
+5. **La bande d'inaction est mesurée, pas optimisée** (ADR-0206) : sur le rejeu du 30/09,
+   57 % des écarts (3 032 / 5 292) restent sans ordre, pour un effet moyen de 0,20 % du
+   capital. La bande adaptative a été testée et n'est pas adoptée (plus d'ordres, même Sharpe).
 6. **Dette de câblage** — des modules testés ne sont pas atteignables depuis la production.
    `make certification` la chiffre et refuse qu'un module mente sur son statut.
 
@@ -339,7 +341,7 @@ Dépôt **public**, et traité comme tel :
 
 | | |
 |---|---|
-| [`docs/COMMANDES.md`](docs/COMMANDES.md) | Les 125 commandes, groupées par intention |
+| [`docs/COMMANDES.md`](docs/COMMANDES.md) | Les 156 commandes, groupées par intention |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Priorités P0 → P3, avec difficulté et risques |
 | [`docs/REAL_DATA.md`](docs/REAL_DATA.md) | Brancher vos propres données |
 | [`docs/PROJECT_AUDIT.md`](docs/PROJECT_AUDIT.md) · [`docs/AUDIT_SITE.md`](docs/AUDIT_SITE.md) | Audits architecture et produit |

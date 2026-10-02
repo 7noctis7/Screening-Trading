@@ -7,8 +7,8 @@ décidée par personne : elle sortait du rapport entre deux cibles de volatilit�
 25/09 : « QQQ 50 % » devenait 31 à 42 % du compte, la crypto 25 à 56 %, et une porte de régime
 qui réduisait les actions AUGMENTAIT mécaniquement la part crypto.
 
-APRÈS. La crypto reçoit au plus `part` du compte (`QUANT_CRYPTO_PCT`, 15 % par défaut) ; les
-actions et le cœur se partagent `1 − part`. Une poche sous-investie (cible de volatilité)
+APRÈS. La crypto reçoit au plus `part` du compte (`QUANT_CRYPTO_PCT`) ; les actions et
+le cœur se partagent `1 − part`. Une poche sous-investie (cible de volatilité)
 laisse sa part en CASH — elle ne la cède pas à l'autre poche : un budget qui se redistribue
 selon la volatilité redevient l'accident qu'on corrige.
 """
@@ -17,7 +17,13 @@ from __future__ import annotations
 
 import os
 
-PART_CRYPTO_DEFAUT = 0.15
+# D4 (propriétaire, 02/10) : AUCUNE poche crypto obligatoire. Mesuré sur le VPS le
+# 01/10 : les 15 % réservés (~15 200 $) produisaient 6 cibles de 273 à 455 $, toutes
+# sous le plancher de ligne de 1 000 $ — 0 $ investi, 15 % du compte en cash chaque
+# jour. La crypto négociable reste dans l'univers du preset (`routing.is_tradeable`) :
+# elle entre au portefeuille quand son momentum la classe devant les actions, pondérée
+# par son risque comme toute ligne. `QUANT_CRYPTO_PCT` rétablit une poche réservée.
+PART_CRYPTO_DEFAUT = 0.0
 
 
 def part_crypto() -> float:

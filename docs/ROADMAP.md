@@ -1,5 +1,10 @@
 # Roadmap — Quant Terminal
 
+> ⚠️ **FIGÉE AU 25/08 — à lire comme un historique.** La priorisation vivante est
+> `vault/03_TODO.md` ; les décisions récentes sont dans `vault/02_DECISIONS.md`
+> (ADR-0211 du 02/10 : satellite en paper seul, veto CRO sur la sleeve swing, sprint
+> de justesse). Plusieurs P0 ci-dessous sont fermés depuis.
+
 > Mise à jour : 2026-08-25. Priorisation issue de l'audit (`docs/PROJECT_AUDIT.md`) et de deux
 > exécutions réelles des labos de recherche.
 > Règle de lecture : **P0 = à traiter avant tout paper trading sérieux.** Un P0 ouvert signifie
