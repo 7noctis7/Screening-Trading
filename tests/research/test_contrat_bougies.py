@@ -5,8 +5,8 @@ from pathlib import Path
 import numpy as np
 
 from packages.research.contrat_bougies import (
-    FENETRE, GAIN, HORIZON, STOP, construire, decision, derniere_connue,
-    issue, ligne, rapport, seuil_brut,
+    FENETRE, GAIN, HORIZON, STOP, bilan, construire, decision, derniere_connue,
+    esperance, issue, ligne, rapport, resultat_net, seuil_brut,
 )
 from packages.research.frequence_bougies import juger
 
@@ -19,7 +19,18 @@ def _serie(n, close, high=None, low=None):
     return c, h, lo, v
 
 
-def test_le_rapport_est_fige_au_dessus_de_trois_et_le_seuil_tient_compte_des_frais():
+def test_on_ne_joue_que_les_coups_dont_l_esperance_est_positive():
+    assert esperance(0.20) < 0
+    assert esperance(0.40) > 0
+    assert abs(esperance(seuil_brut())) < 1e-9
+    livre = bilan([0.10, 0.10, 0.90], [0, 0, 1], calibre=True)
+    assert livre["n_pris"] == 1
+    assert livre["esperance_des_coups_pris"] == resultat_net(True)
+    assert livre["esperance_par_occasion"] > livre["esperance_tout_prendre"]
+    assert 0 < livre["mise"] <= 0.05
+    rien = bilan([0.90], [1], calibre=False)
+    assert rien["n_pris"] == 0 and rien["mise"] == 0.0
+    assert rien["esperance_par_occasion"] == 0.0
     assert rapport() == GAIN / STOP
     assert rapport() > 3
     assert abs(seuil_brut() - (STOP + 0.001) / (GAIN + STOP)) < 1e-12

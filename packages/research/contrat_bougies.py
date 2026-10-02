@@ -27,6 +27,24 @@ NOMS = (
 )
 
 
+def _mise(p_hat: float, ratio: float, n: int) -> float:
+    """Quart de Kelly du dépôt, chargé sans ouvrir `packages.portfolio`.
+
+    L'import normal tire pandas via le `__init__` du portefeuille. La formule
+    reste celle de `kelly_uncertain.sized_kelly`, pas une copie.
+    """
+    import importlib.util
+    from pathlib import Path
+    if not hasattr(_mise, "fn"):
+        dossier = Path(__file__).resolve().parents[1] / "portfolio" / "sizing"
+        spec = importlib.util.spec_from_file_location(
+            "_kelly_uncertain_isole", dossier / "kelly_uncertain.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _mise.fn = mod.sized_kelly
+    return float(_mise.fn(p_hat, ratio, n))
+
+
 def rapport() -> float:
     """Gain divisé par le risque. Figé, pas optimisé."""
     return GAIN / STOP
@@ -39,6 +57,48 @@ def seuil_brut(cout: float = COUT_ALLER_RETOUR) -> float:
     seuil, même une probabilité juste perd de l'argent.
     """
     return (STOP + cout) / (GAIN + STOP)
+
+
+def resultat_net(gagne: bool, cout: float = COUT_ALLER_RETOUR) -> float:
+    """Ce qu'un coup rapporte vraiment. Le temps écoulé sans +4 % est une perte."""
+    return (GAIN - cout) if gagne else -(STOP + cout)
+
+
+def esperance(proba: float, cout: float = COUT_ALLER_RETOUR) -> float:
+    """Espérance d'un coup si `proba` est une fréquence. Négative sous le seuil."""
+    if not np.isfinite(proba):
+        return float("nan")
+    return proba * (GAIN - cout) - (1.0 - proba) * (STOP + cout)
+
+
+def bilan(probas, issues, calibre: bool) -> dict:
+    """Espérance par occasion : tout prendre, contre ne prendre que si E > 0.
+
+    Ne pas jouer vaut 0. Jouer sous le seuil enlève de l'argent. On ne maximise
+    pas l'espérance en cherchant un autre stop : le stop est figé. On la maximise
+    en écartant les coups qui n'ont pas d'espérance positive. La mise est un
+    quart de Kelly sur la probabilité réduite de son erreur d'estimation, plafonné.
+    """
+    y = np.asarray(issues, int)
+    p = np.asarray(probas, float)
+    nets = np.array([resultat_net(bool(v)) for v in y])
+    toujours = float(nets.mean()) if nets.size else None
+    vide = {"esperance_tout_prendre": toujours, "esperance_par_occasion": 0.0,
+            "esperance_des_coups_pris": None, "n_pris": 0, "mise": 0.0}
+    if not calibre or p.size == 0 or p.size != y.size:
+        return vide
+    pris = np.isfinite(p) & (p > seuil_brut())
+    if not pris.any():
+        return vide
+    retenus = nets[pris]
+    ratio = (GAIN - COUT_ALLER_RETOUR) / (STOP + COUT_ALLER_RETOUR)
+    return {
+        "esperance_tout_prendre": toujours,
+        "esperance_par_occasion": float(np.where(pris, nets, 0.0).mean()),
+        "esperance_des_coups_pris": float(retenus.mean()),
+        "n_pris": int(pris.sum()),
+        "mise": _mise(float(p[pris].mean()), ratio, int(pris.sum())),
+    }
 
 
 def decision(proba: float | None, calibre: bool) -> str:

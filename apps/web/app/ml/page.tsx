@@ -52,8 +52,10 @@ export default function Ml() {
           Vingt bougies, le volume, la dernière surprise de résultats déjà publiée et le
           dernier fondamental déjà publié. Question : les dix bougies suivantes passent-elles
           <b> au-dessus de +4 %</b> avant <b>−1,25 %</b> (rapport 3,2, donc plus de 1:3) ?
-          Une publication du jour même ne compte pas. Probabilité : <b>non mesurée</b>.
-          Tant qu'elle ne l'est pas, la décision est l'abstention — pas un ordre.
+          On ne joue que si l'espérance du coup est positive, avec une mise au quart
+          de Kelly plafonnée. Pas le réglage qui a le mieux marché dans le passé.
+          Une publication du jour même ne compte pas. Probabilité et espérance :
+          <b>non mesurées</b>. Sinon, abstention — pas un ordre.
         </p>
       </section>
 

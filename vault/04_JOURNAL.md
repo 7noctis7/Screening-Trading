@@ -1,5 +1,14 @@
 # 04 — JOURNAL
 
+## Session 2026-10-02 — L'espérance se maximise en s'abstenant
+
+Le seuil et le stop ne bougent pas. Tout prendre a une espérance ; ne prendre
+que les probabilités au-dessus du seuil en a une autre, par occasion, les coups
+écartés valant zéro. La mise est le quart de Kelly déjà écrit dans le dépôt,
+après avoir réduit la probabilité de son erreur d'estimation, plafonné à 5 %
+du capital. Rien de tout cela n'est une mesure sur les cours : sans calibrage,
+la mise reste nulle.
+
 ## Session 2026-10-02 — Essai figé, +4 % avant −1,25 %
 
 Un seul essai, pas deux. Vingt bougies, le volume, la surprise de résultats et
