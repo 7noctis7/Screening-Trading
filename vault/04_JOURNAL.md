@@ -1,5 +1,13 @@
 # 04 — JOURNAL
 
+## Session 2026-10-02 — Score X du jour, sans volume inventé
+
+Table `sentiment_jour` dans la base sociale. Chaque jour, au plus 20 tickers
+(actions US ou cryptos connues), classés par le nombre de messages des comptes
+déjà suivis. Bullish, bearish, neutral si le lexique a des mots ; `n/d` sinon.
+Ce n'est ni la recherche X ni son volume : ces deux mesures ne sont pas dans
+l'API gratuite. Le ML lit `connu = false` quand l'étiquette est `n/d`.
+
 ## Session 2026-10-02 — L'espérance se maximise en s'abstenant
 
 Le seuil et le stop ne bougent pas. Tout prendre a une espérance ; ne prendre
