@@ -6,7 +6,7 @@ Ces tests épinglent :
   2. le proxy est POINT-IN-TIME : la valeur datée `t` n'utilise que des clôtures ≤ `t` ;
   3. il est borné [35, 65] et linéaire au centre (+10 % sur 6 mois → 60) ;
   4. une clôture NaN est ignorée au lieu de faire planter le snapshot (CI 15/07) ;
-  5. valeurs et dates de longueurs différentes s'alignent par la fin (pas d'IndexError) ;
+  5. valeurs et dates de longueurs inégales s'alignent par la fin (sans IndexError) ;
   6. sans aucune donnée, `is_real` est False — l'appelant retombe sur le synthétique ;
   7. FRED : une série en panne n'empêche pas l'autre d'être chargée.
 """
