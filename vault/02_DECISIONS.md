@@ -2,6 +2,26 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0212 — D4 : plus de poche crypto obligatoire ; la crypto concourt avec les actions (2026-10-02)
+
+**Contexte.** `budget_poches` réservait 15 % du compte à la crypto (`QUANT_CRYPTO_PCT`).
+Aperçu du VPS du 01/10 : la cible de volatilité n'investissait que ~15 % de ces 15 %,
+soit 6 lignes de 273 à 455 $, toutes sous le plancher de 1 000 $ → 0 $ investi et
+~15 200 $ immobilisés en cash chaque jour, en silence.
+
+**Décision du propriétaire (02/10, option b amendée).** Aucune poche obligatoire :
+`PART_CRYPTO_DEFAUT = 0`. Mais une crypto mieux classée qu'une action doit pouvoir entrer
+au portefeuille. C'est déjà la règle de la sélection de production : les paires que le
+courtier paper négocie sont dans l'univers du preset (`routing.is_tradeable`), classées
+avec les actions sur le même momentum prix, puis pondérées par leur risque (ERC) et
+plafonnées à 10 % comme toute ligne. Testé : `tests/backtest/test_preset_crypto_concurrence.py`.
+
+**Conséquences.** Les cibles actions + cœur QQQ ne sont plus réduites de 15 % (≈ +18 %).
+L'exposition brute monte d'environ 10 points du compte ; les portes de régime, le
+DD-target et les plafonds s'appliquent inchangés. Le critère de concurrence est le
+momentum de production, pas la « note » du screening (IC −0,07, non prédictive).
+`QUANT_CRYPTO_PCT=0.15` rétablit l'ancienne poche réservée.
+
 ## ADR-0211 — Phase 0 : satellite en paper seul, veto CRO sur la sleeve swing, sprint de justesse (2026-10-02)
 
 **Contexte.** Audit Phase 0 du 01/10 (`PROJECT_CURRENT_STATE_AUDIT.md`) puis rapport CEO.

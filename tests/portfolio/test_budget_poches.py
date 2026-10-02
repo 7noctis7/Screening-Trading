@@ -40,8 +40,9 @@ def test_budget_nul_coupe_la_crypto():
     assert c == {} and a == {"QQQ": 0.5}
 
 
-@pytest.mark.parametrize("brut,attendu", [(None, 0.15), ("", 0.15), ("0.25", 0.25),
-                                          ("abc", 0.15), ("-1", 0.0), ("2", 1.0)])
+# D4 (02/10) : plus de poche obligatoire — défaut 0, la variable la rétablit.
+@pytest.mark.parametrize("brut,attendu", [(None, 0.0), ("", 0.0), ("0.25", 0.25),
+                                          ("abc", 0.0), ("-1", 0.0), ("2", 1.0)])
 def test_lecture_de_l_environnement(monkeypatch, brut, attendu):
     from packages.portfolio.budget_poches import part_crypto
     if brut is None:
@@ -49,3 +50,13 @@ def test_lecture_de_l_environnement(monkeypatch, brut, attendu):
     else:
         monkeypatch.setenv("QUANT_CRYPTO_PCT", brut)
     assert part_crypto() == pytest.approx(attendu)
+
+
+def test_sans_poche_par_defaut_les_actions_gardent_tout_le_compte(monkeypatch):
+    """D4 : la réserve de 15 % laissait 15 % du compte en cash quand la poche ne
+    s'ouvrait pas (toutes ses lignes sous le plancher, mesuré le 01/10)."""
+    from packages.portfolio.budget_poches import part_crypto, repartir
+    monkeypatch.delenv("QUANT_CRYPTO_PCT", raising=False)
+    actions = {"QQQ": 0.40, "AAA": 0.10, "BTC/USD": 0.05}
+    a, c = repartir(actions, {"ETH/USD": 0.5}, part_crypto())
+    assert a == actions and c == {}
