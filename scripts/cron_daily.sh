@@ -53,6 +53,11 @@ python scripts/social_x_ingest.py --source rss --si-configuree \
   || echo "⚠️  ingestion RSS EN ÉCHEC — miroir mort ? relancer make x-miroirs"
 python scripts/social_x_ingest.py --source discord --si-configuree \
   || echo "⚠️  ingestion Discord EN ÉCHEC — jeton révoqué ou bot retiré du serveur ?"
+# SCORE DU JOUR — top des actifs cités dans CES messages, pas le volume global de X.
+# Tourne après l'ingestion : un jour sans collecte ne produit pas un classement vide
+# qui écraserait la veille, il réécrit seulement la date demandée (aujourd'hui).
+python scripts/sentiment_x_jour.py \
+  || echo "⚠️  sentiment_x_jour EN ÉCHEC — pas de score X du jour pour le ML"
 python apps/web/preview/build_interactive.py        # régénère le terminal autonome
 python scripts/mcp_populate_overlays.py --offline || true   # cônes VaR/EVT + blackouts → charts (best-effort)
 python -m packages.reporting.obsidian || true               # coffre Obsidian : journal + attribution + post-mortems
