@@ -4,6 +4,8 @@
   python scripts/train_model.py        # → models/ml_*.pkl (chargé ensuite par l'API)
 
 À lancer par le cron quotidien. Force le recalcul (supprime l'artefact périmé puis ré-entraîne).
+Pose ``QUANT_ML_NULLES=1`` : la distribution nulle (permutation par date, ≥ 20)
+est calculée ici, jamais dans la requête web, puis servie par l'artefact.
 """
 
 from __future__ import annotations
@@ -190,7 +192,9 @@ def main() -> None:
     data, mode, _real = _load_prices(instruments, sector_of, end - timedelta(days=_HISTORY_DAYS), end, 7)
     print(f"Mode : {mode} · univers {len(data)}")
 
-    print("Entraînement + validation (CV purgée)…")
+    # Hors ligne seulement. L'API qui relit l'artefact ne relance pas les 20×k ajustements.
+    os.environ["QUANT_ML_NULLES"] = "1"
+    print("Entraînement + validation (CV purgée) + distribution nulle…")
     try:
         ml = _ml_section(data, sector_of, names)   # entraîne → persiste l'artefact
     except Exception:

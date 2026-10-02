@@ -109,9 +109,12 @@
       un indice exogène (SPY/QQQ) — à passer au labo avant la production.
 - [x] **~~P2 de l'audit QML~~ — CORRIGÉS (25/09, ADR-0204)** : 010 · 011 · 012 · 013 · 014 ·
       015 (gap) · 016. 3594 tests verts.
-- [ ] **P2 — Edge ML : produire la distribution NULLE** (AUC de labels permutés par date,
-      ≥ 20 tirages) hors ligne dans `make train` et la servir à `edge_detecte` ; tant
-      qu'elle manque, l'onglet ML affiche UNCALIBRATED — c'est voulu.
+- [ ] **P2 — Edge ML : distribution NULLE — CODE LIVRÉ (02/10, ADR-0213), MESURE VPS RESTANTE.**
+      `packages/ml/distribution_nulle.py` permute les labels **par date** (≥ 20), seulement
+      si `QUANT_ML_NULLES=1` (`make train`). L'artefact sert ces AUC à `edge_detecte`.
+      Sans artefact, ou si `dates_contrastables` vaut 0 : UNCALIBRATED, voulu, et le
+      compteur est affiché. **RESTE :** `make train` sur le VPS, puis lire p et
+      `dates_contrastables` avant d'en parler.
 - [ ] **P3 — `fast_swing` aligné par position DEPUIS LE DÉBUT** des séries (legacy) ;
       `snapshot.py` 3 050 lignes, `run_live.py` 1 030 : découpage à planifier.
 - [x] **~~P2 — Onglet X : filtres et recherche~~ — LIVRÉ (24/09, ADR-0194).** L'onglet

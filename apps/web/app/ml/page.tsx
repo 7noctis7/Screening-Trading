@@ -32,6 +32,16 @@ export default function Ml() {
           <span><b>Garde-fou edge :</b> <span className="text-muted">{ml.edge_message}</span></span>
         </div>
       )}
+      {ml.nulles && ml.nulles.source !== "absente" && (
+        <p className="text-[11px] text-muted mono">
+          Permutation par date — {ml.nulles.n_rendues ?? "—"}/{ml.nulles.n_demandees ?? "—"} nulles
+          {" · "}contrastables {ml.nulles.dates_contrastables ?? "—"}
+          {" · "}mélangées {ml.nulles.dates_melangees ?? "—"}
+          {" · "}figées {ml.nulles.dates_figees ?? "—"}
+          {ml.nulles.dates_contrastables === 0 ? " · sans effet, edge non jugeable" : ""}
+          {ml.edge_detail?.p_permutation != null ? ` · p ${ml.edge_detail.p_permutation}` : ""}
+        </p>
+      )}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {cards.map(([lab, val]) => (
           <div key={lab} className="card p-4">
@@ -42,7 +52,7 @@ export default function Ml() {
       </div>
       <p className="text-muted text-xs">
         Un modèle estime, pour chaque titre, sa probabilité de monter dans les
-        ~{ml.horizon_days} prochains jours. Il ne regarde que 8 indicateurs de prix — tendance,
+        ~{ml.horizon_days} prochains jours. Il ne regarde que {ml.feature_importance.length} indicateurs de prix — tendance,
         volatilité, distance au plus haut de l'année, rebond récent — et uniquement des données
         disponibles au moment où il décide, jamais le futur. Sa qualité est mesurée sur des périodes
         qu'il n'a pas vues à l'entraînement : c'est la seule note qui compte.
