@@ -70,7 +70,31 @@ Recherche de tests volontairement neutralisés : **une seule occurrence** de `sk
 | Anti-fuite backtest | `tests/backtest/test_dashboard_no_leak.py`, `test_ml_walkforward.py` | couvert |
 | Synchronisation broker | `tests/execution/test_reconcile.py` | couvert |
 
-## Couverture : **81 %** — mesurée le 25/08
+## Couverture : **87,4 %** sur `packages/` — remesurée le 02/10
+
+Suite complète, conteneur sans données réelles : **3 881 passés, 90 ignorés, 0 échec**.
+
+| Périmètre | Instructions | Non couvertes | Couverture |
+|---|---:|---:|---:|
+| `packages/` | 25 937 | 3 261 | **87,4 %** |
+| `apps/` (API) | 3 035 | 1 199 | **60,5 %** |
+| `scripts/` (dont `run_live.py`) | — | — | **non mesuré** |
+
+Composants critiques : `risk/order_gate` 96 % · `execution/rebalance_plan` 100 % ·
+`backtest/preset_weights` 94 % · `backtest/engine` 97 % · `execution/live_guards` 77 % ·
+`apps/api/snapshot` 71 % · `apps/api/main` 24 %.
+
+**Trou qui compte toujours** : `regime/real_macro.py` est à **0 %**, et il alimente la
+porte de régime, donc l'exposition. Les autres modules faiblement couverts sont surtout
+des adaptateurs réseau (`fundamentals/yfinance_provider` 25 %, `fundamentals/sec_provider`
+31 %, `events/earnings` 31 %, `execution/bitmart_broker` 42 %) — mais aussi
+`mcp_tradingview/risk_overlays` (47 %), qui touche au kill-switch.
+
+`make coverage` ne mesure que `packages/` : le chemin d'ordres (`scripts/run_live.py`)
+échappe à la mesure. Commande de cette remesure :
+`pytest --cov=packages --cov=apps --cov-report=term`.
+
+### Mesure précédente — 25/08 : 81 %
 
 ```
 $ make coverage
