@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 import pandas as pd
 
 _TF_FREQ = {"1m": "1min", "5m": "5min", "1h": "1h", "4h": "4h", "1d": "1D"}
+_TOL_REL = 1e-9          # écart relatif toléré entre prix égaux (arrondi flottant)
 
 
 class QualityError(Exception):
@@ -52,9 +53,13 @@ def validate_ohlcv(
     if (df["volume"] < 0).any():
         rep.errors.append("volume négatif")
 
-    # 2) cohérence OHLC : high = max, low = min
-    bad_high = (df["high"] < df[["open", "close", "low"]].max(axis=1)).sum()
-    bad_low = (df["low"] > df[["open", "close", "high"]].min(axis=1)).sum()
+    # 2) cohérence OHLC : high = max, low = min, à une TOLÉRANCE RELATIVE près.
+    # Un prix ajusté stocké en flottant diffère de 1e-16 du même prix (ASML.AS
+    # 20/01/2020 : low = close à l'arrondi près) ; sans tolérance → « impossible ».
+    hi_ref = df[["open", "close", "low"]].max(axis=1)
+    lo_ref = df[["open", "close", "high"]].min(axis=1)
+    bad_high = (df["high"] < hi_ref - _TOL_REL * hi_ref.abs().clip(lower=1.0)).sum()
+    bad_low = (df["low"] > lo_ref + _TOL_REL * lo_ref.abs().clip(lower=1.0)).sum()
     if bad_high:
         rep.errors.append(f"high < max(o,c,l) sur {int(bad_high)} lignes")
     if bad_low:
