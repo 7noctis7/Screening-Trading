@@ -16,6 +16,7 @@ export default function Fundamentals() {
   if (!f.available)
     return <main className="max-w-3xl mx-auto p-6"><EmptyState title="Aucun compte d'entreprise disponible" hint="Une crypto ou une devise n'a ni chiffre d'affaires ni bénéfice : il n'y a rien à analyser ici." /></main>;
 
+  const demo = String(f.source ?? "").toLowerCase().includes("synth");
   const cols: Col[] = [
     { key: "symbol", label: "Actif", render: (v, row) => (<span className="inline-flex items-center gap-1.5"><IR ticker={v} name={row.name} assetClass={row.asset_class} className="mono text-accent hover:underline" /><ReportButton ticker={v} assetClass={row.asset_class} /></span>) },
     { key: "sector", label: "Secteur", render: (v) => <span className="text-muted text-xs">{v}</span> },
@@ -49,6 +50,13 @@ export default function Fundamentals() {
         </p>
       </div>
       <StepBanner active="fundamentals" />
+      {demo && (
+        <div className="card p-3 text-sm" style={{ borderColor: "var(--warn)" }}>
+          Ces comptes sont <b>fabriqués</b> pour la démo. Une décote, un F-score ou un avis
+          BUY/SELL ici n'est pas une valorisation. Donnée absente resterait <b>n/d</b> —
+          ce tableau ne doit pas servir à décider.
+        </div>
+      )}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="card p-4"><div className="text-muted text-xs uppercase">Source</div><div className="text-lg mt-1">{f.source}</div></div>
         <div className="card p-4"><div className="text-muted text-xs uppercase">Entreprises analysées</div><div className="text-lg mono mt-1">{f.n}{f.total_equities ? <span className="text-muted text-sm"> / {f.total_equities}</span> : null}</div></div>

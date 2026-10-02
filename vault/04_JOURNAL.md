@@ -1,5 +1,14 @@
 # 04 — JOURNAL
 
+## Session 2026-10-02 — Les chiffres qui avaient la forme d'autre chose
+
+L'accueil disait une date, pas l'âge du snapshot. Le dashboard ouvrait sur le gain,
+pas sur le verdict face à QQQ, et appelait « déduits » des frais qui sont un modèle.
+L'onglet sentiment colorait une tendance 63 jours comme une news, et un trou devenait 0.
+L'onglet ML écrivait un score brut en pourcentage. Les fondamentaux synthétiques
+avaient des avis BUY. Rien de tout cela n'a été réparé en inventant un alpha :
+les étiquettes disent maintenant ce que le chiffre est.
+
 ## Session 2026-10-02 — L'audit avant le plan : ce qui est prouvé, ce qui ne l'est pas
 
 Audit Phase 0 en lecture seule, puis trois décisions du propriétaire (ADR-0211). Fermés :
