@@ -84,11 +84,13 @@ Composants critiques : `risk/order_gate` 96 % · `execution/rebalance_plan` 100 
 `backtest/preset_weights` 94 % · `backtest/engine` 97 % · `execution/live_guards` 77 % ·
 `apps/api/snapshot` 71 % · `apps/api/main` 24 %.
 
-**Trou qui compte toujours** : `regime/real_macro.py` est à **0 %**, et il alimente la
-porte de régime, donc l'exposition. Les autres modules faiblement couverts sont surtout
-des adaptateurs réseau (`fundamentals/yfinance_provider` 25 %, `fundamentals/sec_provider`
-31 %, `events/earnings` 31 %, `execution/bitmart_broker` 42 %) — mais aussi
-`mcp_tradingview/risk_overlays` (47 %), qui touche au kill-switch.
+**Trous fermés le 02/10** (après la mesure ci-dessus) : `regime/real_macro` 0 % → **92 %**
+(porte de régime, donc exposition) · `execution/live_guards` 77 % → **99 %** (replis du
+kill-switch) · `mcp_tradingview/risk_overlays` 47 % → **91 %** (dessin seulement : il ne
+touche pas au kill-switch) · `events/earnings` 31 % → **89 %** (repli FMP → yfinance ; un
+rapport à venir n'a jamais de BPA réel, donc pas de surprise fabriquée). Restent surtout des
+adaptateurs réseau : `fundamentals/yfinance_provider` 25 %, `fundamentals/sec_provider`
+31 %, `execution/bitmart_broker` 42 %.
 
 `make coverage` ne mesure que `packages/` : le chemin d'ordres (`scripts/run_live.py`)
 échappe à la mesure. Commande de cette remesure :
