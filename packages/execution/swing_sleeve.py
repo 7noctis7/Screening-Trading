@@ -28,6 +28,7 @@ import os
 from typing import Any
 
 from packages.execution.routing import route
+from packages.execution.swing_garde import veto_cro
 from packages.strategies.moteur_swing import MarketStructureEngine, RiskManager
 
 _SETUPS_V1 = frozenset({"SFP", "OTE"})
@@ -42,6 +43,11 @@ def swing_paper_enabled() -> bool:
     raw = os.environ.get("QUANT_SWING_PAPER", "")
     return str(raw).strip().lower() in _FLAG_ON
 
+
+
+def swing_paper_actif() -> bool:
+    """Drapeau demandé ET veto levé. Seule condition qui produit des ordres sleeve."""
+    return swing_paper_enabled() and veto_cro() is None
 
 
 def swing_nav_pct() -> float:
@@ -305,7 +311,7 @@ def load_swing_orders(snap: dict) -> list[dict]:
     Assure ``strategy="swing"`` sur chaque ligne. Normalisation ``weight_pct``
     fraction (notionnel/cap) est faite côté ``run_live.main`` après ``alp_cap``.
     """
-    if not swing_paper_enabled():
+    if not swing_paper_actif():
         return []
     live = (snap or {}).get("live") or {}
     raw = live.get("swing_orders") or []
@@ -339,7 +345,7 @@ def attach_swing_orders(
     """
     if not isinstance(live, dict):
         return
-    if not swing_paper_enabled():
+    if not swing_paper_actif():
         live["swing_orders"] = []
         return
     pct = swing_nav_pct()

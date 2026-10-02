@@ -259,6 +259,8 @@ def test_attach_on_pct_zero_sets_empty(monkeypatch):
 
 def test_attach_on_with_monkeypatched_build(monkeypatch):
     monkeypatch.setenv("QUANT_SWING_PAPER", "1")
+    # Mécanique de la sleeve UNE FOIS le veto CRO levé (cf. execution/swing_garde).
+    monkeypatch.setattr("packages.execution.swing_garde.SORTIE_BRANCHEE", True)
     monkeypatch.setenv("QUANT_SWING_NAV_PCT", "0.10")
     monkeypatch.setenv("QUANT_SWING_MAX_NAMES", "5")
     fake_orders = [{

@@ -7,6 +7,20 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+- [ ] **P0 — D4 : poche crypto (02/10)** : 6 cibles de 273 à 455 $ toutes sous le plancher
+      de 1 000 $ → poche à ZÉRO chaque jour, en silence. Options : (a) 2 lignes max (BTC,
+      ETH) ; (b) retirer la poche (recommandé) ; (c) plancher crypto abaissé. DÉCISION À PRENDRE.
+- [ ] **P1 — ASML.AS : ligne impossible (low > min(o,c,h))** qui fait échouer
+      `test_snapshot_new_sections` sur le VPS. Lancer le diagnostic lecture seule (PR #432) :
+      écart ~1e-9 → tolérance relative dans `storage/quality` ; écart réel → réparer la base.
+- [ ] **P1 — B2/B3 sleeve swing dans `run_live.py` (ADR-0211)** : fin de la protection des
+      lots orphelins, relecture du détenu entre les passes, compteur du veto. EN ATTENTE
+      d'autorisation explicite du propriétaire (chemin d'ordres). Aucun lot ouvert au 01/10.
+- [ ] **P1 — XIII indic** : clés ajoutées par le propriétaire le 02/10 — vérifier son
+      apparition sur le Dashboard et « Mes positions » (`make up`, puis `quant`).
+- [x] **FAIT 02/10 (ADR-0211, D3)** : moteur event-driven à l'ouverture de t+1 ;
+      couverture 87,4 % `packages/` / 60,5 % `apps/` ; `regime/real_macro` 0 % → 92 %.
+
 - [ ] **P0 — QML-001 : la règle tradée n'avait AUCUN backtest — PARTIELLEMENT RÉSOLU (25/09,
       ADR-0202).** Livré : `packages/backtest/preset_rejeu.py` + `make preset-replay` (rejeu
       date par date de `preset_latest_weights_explique`, exécution J+1, bande/plancher/portail
@@ -17,7 +31,7 @@
       (3) décider si le tableau de bord doit afficher la courbe du rejeu à la place.
 - [x] **~~P1 — Findings de l'audit QML du 25/09~~ — CORRIGÉS (25/09, ADR-0203)** : 002,
       003, 004, 006, 007, 008, 009(b), 022, 023, 024. 57 tests ajoutés.
-- [ ] **P0 — DÉCISION UTILISATEUR : que faire du satellite ? (25/09)** Mesuré sur le VPS :
+- [x] **~~P0 — DÉCISION UTILISATEUR : que faire du satellite ? (25/09)~~ — TRANCHÉ 01/10 (ADR-0211, D1) : paper seul, banc de recherche ; capital réel futur → cœur passif.** Mesuré sur le VPS :
       la règle tradée est INDISCERNABLE de QQQ + cash à même volatilité (ΔSharpe +0,11,
       IC [−0,51 ; +0,72], p = 0,73), pour ~14 000 $ de frais sur 10 ans et une rotation
       quotidienne. Options : (a) remplacer par QQQ + monétaire à exposition cible ;

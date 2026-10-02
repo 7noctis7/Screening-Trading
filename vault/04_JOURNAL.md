@@ -1,5 +1,16 @@
 # 04 — JOURNAL
 
+## Session 2026-10-02 — L'audit avant le plan : ce qui est prouvé, ce qui ne l'est pas
+
+Audit Phase 0 en lecture seule, puis trois décisions du propriétaire (ADR-0211). Fermés :
+la crypto réelle n'est plus instanciable par `make live-go` (#423/#424), `/api/ai/chat`
+est local, deux tests ne lisent plus la configuration du VPS. Ajouté : « XIII indic »,
+un second robot comparé comme benchmark, jamais additionné (#431). Le sprint de justesse
+a trouvé ce qu'il cherchait : le moteur event-driven achetait le prix qu'il venait de
+voir, et la porte de régime reposait sur un module sans un seul test. La sleeve swing,
+qui ouvrait des positions sans sortie, est sous veto. Ce que l'aperçu du VPS a montré
+de plus utile : la poche crypto ne s'ouvre jamais (6 lignes sous le plancher de 1 000 $).
+
 ## Session 2026-09-30 (10ᵉ) — Un « production conservée » qui ne mesurait rien
 
 Les grilles 2015+ tranchent : sur 12 actions au hasard, aucune règle de timing ne bat le

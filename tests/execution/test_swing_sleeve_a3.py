@@ -90,6 +90,8 @@ def test_load_swing_orders_flag_off_empty(monkeypatch):
 
 def test_load_swing_orders_flag_on_sets_strategy(monkeypatch):
     monkeypatch.setenv("QUANT_SWING_PAPER", "1")
+    # Mécanique de la sleeve UNE FOIS le veto CRO levé (cf. execution/swing_garde).
+    monkeypatch.setattr("packages.execution.swing_garde.SORTIE_BRANCHEE", True)
     snap = {"live": {"swing_orders": [
         {"symbol": "AAA", "broker_symbol": "AAA", "notionnel": 1000.0},
         {"symbol": "BBB", "strategy": "swing", "notionnel": 500.0},

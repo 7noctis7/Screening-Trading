@@ -2,6 +2,35 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0211 — Phase 0 : satellite en paper seul, veto CRO sur la sleeve swing, sprint de justesse (2026-10-02)
+
+**Contexte.** Audit Phase 0 du 01/10 (`PROJECT_CURRENT_STATE_AUDIT.md`) puis rapport CEO.
+Mesures réelles : DSR ≈ 0 ; rejeu de production indiscernable de QQQ (p = 0,17) ;
+méta-filtre ML AUC 0,50 ; note du screening IC −0,07, non robuste. La sleeve swing
+calcule stop et objectif mais n'en transmet aucun (ordres notionnels au marché,
+`ExitEngine` SHADOW). Le moteur event-driven remplissait au close de la barre du signal.
+
+**Décisions du propriétaire (« oui », 01/10).**
+1. **D1 — Satellite** : conservé en PAPER seulement, comme banc de recherche. Tout capital
+   réel futur va à un cœur passif (QQQ + monétaire) tant qu'aucun scénario n'a passé la
+   période cachée de `make explorer` (option c d'ADR-0205, inchangée).
+2. **D2 — Veto CRO sur la sleeve swing** : `execution/swing_garde.SORTIE_BRANCHEE = False`.
+   `QUANT_SWING_PAPER=1` seul ne produit plus aucun ordre. Lever le veto = brancher une
+   sortie mesurée au banc, PUIS changer la constante en PR — jamais par l'environnement.
+3. **D3 — Sprint de justesse, aucune fonctionnalité** : backtest event-driven exécuté à
+   l'ouverture de `t+1` (stop traversé par un gap rempli à l'ouverture, R < −1 possible ;
+   `exec_lag=0` pour comparaison) ; couverture remesurée (87,4 % `packages/`, 60,5 %
+   `apps/`) ; `regime/real_macro` couvert (0 % → 92 %) ; ligne impossible d'ASML.AS à
+   diagnostiquer sur le VPS (tolérance relative absente de `storage/quality`).
+
+**Conséquences.** La sleeve est inerte jusqu'à nouvel ordre. Reste OUVERT, en attente
+d'autorisation explicite (le chemin d'ordres est protégé par le classifieur de sécurité) :
+fin de la protection des lots sleeve orphelins et relecture du détenu entre les deux
+passes de `run_live` (B2/B3). Constaté sur le VPS le 01/10 : aucun lot sleeve ouvert.
+Les backtests passés par `BacktestEngine` (walkforward, démos) ne sont plus comparables à
+ceux d'avant le 02/10 ; `preset_backtest`, `preset_rejeu` et `fast_swing` exécutaient
+déjà à `t+1` et ne changent pas.
+
 ## ADR-0210 — Flux AT primaire → méta-filtre ML → risque ; variables stationnaires d'abord (2026-09-30)
 
 **Contexte.** Feuille de route « AT + ML hybride » : signaux primaires d'analyse technique
