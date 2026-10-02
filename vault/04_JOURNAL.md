@@ -1,5 +1,14 @@
 # 04 — JOURNAL
 
+## Session 2026-10-02 — L'onglet ML ne peut plus appeler « edge » un AUC sans nulle
+
+Le garde-fou existait (`edge_detecte`) et n'était jamais alimenté : zéro permutation,
+donc UNCALIBRATED à chaque affichage, sans que l'écran dise pourquoi le test n'avait
+pas tourné. La nulle est maintenant une permutation **par date** (≥ 20), calculée
+seulement par `make train`, stockée dans l'artefact, relue par l'API. Une date sans
+contraste de labels compte zéro et bloque le verdict — un filtre qui ne filtre pas
+se voit. Aucun ordre n'en dépend. Le p sur données réelles reste à produire sur le VPS.
+
 ## Session 2026-10-02 — L'audit avant le plan : ce qui est prouvé, ce qui ne l'est pas
 
 Audit Phase 0 en lecture seule, puis trois décisions du propriétaire (ADR-0211). Fermés :

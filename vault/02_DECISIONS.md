@@ -2,6 +2,24 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0213 — La nulle ML se calcule hors ligne, par date, ou elle ne dit pas « edge » (2026-10-02)
+
+**Contexte.** `edge_detecte` exige ≥ 20 AUC de labels permutés. `make train` et l'onglet ML
+appelaient `edge_detecte(aucs)` sans cette liste : le statut restait UNCALIBRATED par
+construction, et un AUC de CV pouvait être lu comme un edge. Une permutation globale
+aurait aussi détruit le taux de hausse du jour — le modèle battrait la nulle en
+apprenant seulement le régime.
+
+**Décision.** `packages/ml/distribution_nulle.py` permute les labels à l'intérieur de
+chaque date. Le calcul ne part que si `QUANT_ML_NULLES=1`, posé par `make train`, puis
+voyage dans l'artefact. L'API relit, elle ne ré-entraîne pas vingt fois. Zéro date
+contrastable (labels identiques dans la date, ou une seule ligne) : aucune AUC nulle,
+compteur publié, edge UNCALIBRATED. Ce n'est pas une promotion de stratégie.
+
+**Conséquences.** Tant que `make train` n'a pas tourné sur les données réelles, l'onglet
+affiche toujours UNCALIBRATED — voulu. Le chiffre de p, une fois produit, se lit avant
+tout récit d'edge. Le ML reste hors de la chaîne d'ordres.
+
 ## ADR-0212 — D4 : plus de poche crypto obligatoire ; la crypto concourt avec les actions (2026-10-02)
 
 **Contexte.** `budget_poches` réservait 15 % du compte à la crypto (`QUANT_CRYPTO_PCT`).

@@ -737,11 +737,12 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
     model, model_name = _ml_model()
 
     # CV PURGÉE + EMBARGO : AUC out-of-sample honnête (labels chevauchants neutralisés)
-    aucs, n_splits = [], 5
+    aucs, plis, n_splits = [], [], 5
     try:
         for tr, te in PurgedKFold(n_splits=n_splits, embargo_pct=0.01).split(T0, T1):
             if len(tr) < 100 or len(te) < 30 or len(set(y[te])) < 2:
                 continue
+            plis.append((tr, te))
             m, _ = _ml_model()
             m.fit(X[tr], y[tr])
             a = _auc(m.predict_proba(X[te]), y[te])
@@ -890,16 +891,47 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
     except Exception:  # noqa: BLE001
         pass
 
-    # GARDE-FOU edge : un AUC OOS ≤ 0.52 = pas d'edge prédictif exploitable (le score reste
-    # affiché mais ne doit PAS piloter de sizing agressif). Discipline anti-surapprentissage.
-    # QML-011 : plancher 0,52 ET borne basse des plis > 0,5 — le plancher seul passait
-    # 3 fois sur 10 sur une marche aléatoire pure.
+    # GARDE-FOU edge. Le plancher 0,52 seul passait 5 fois sur 10 sur une marche
+    # aléatoire (QML-011). La nulle se calcule hors ligne (`QUANT_ML_NULLES=1`,
+    # posé par `make train`) et voyage dans l'artefact. Sans elle : UNCALIBRATED.
+    import os
+
+    from packages.ml.distribution_nulle import evaluer_plis, servir_nulles
     from packages.ml.validation_edge import edge_detecte
-    _edge = edge_detecte(aucs)
+
+    def _ajuster(xtr, ytr, xte):
+        m_n, _nom = _ml_model()
+        m_n.fit(xtr, ytr)
+        return m_n.predict_proba(xte)
+
+    _payload = _cached[1] if _cached is not None else None
+    _stockees = _payload.get("nulles") if isinstance(_payload, dict) else None
+    _nulles = servir_nulles(
+        y=y, dates=T0,
+        evaluer=lambda yp: evaluer_plis(X, yp, plis, _ajuster, _auc),
+        stockees=_stockees,
+        activer=os.environ.get("QUANT_ML_NULLES") == "1",
+    )
+    _edge = edge_detecte(aucs, _nulles.get("auc_nulles") or None)
     edge_ok = _edge["edge"]
-    edge_msg = ("Edge OOS détecté (test de permutation) — utilisable avec prudence." if edge_ok
-                else "Edge NON établi (UNCALIBRATED : sans test de permutation, une AUC de CV "
-                     "ne se distingue pas du hasard) — score indicatif, ne pas surpondérer.")
+    if _edge["statut"] == "MESURÉ" and edge_ok:
+        edge_msg = (
+            f"Edge OOS mesuré contre la permutation par date "
+            f"(p={_edge['p_permutation']}) — prudence, ce n'est pas un ordre."
+        )
+    elif _edge["statut"] == "MESURÉ":
+        edge_msg = (
+            f"Edge NON établi : {_edge['motif']} (p={_edge.get('p_permutation')}). "
+            "Score indicatif, ne pas surpondérer."
+        )
+    else:
+        precision = ""
+        if _nulles.get("dates_contrastables") == 0:
+            precision = " " + str(_nulles.get("motif") or "")
+        edge_msg = (
+            "Edge NON établi (UNCALIBRATED : " + _edge["motif"] + ")."
+            + precision + " Score indicatif, ne pas surpondérer."
+        )
     # Le champion doit porter les nombres qui ont motivé son adoption : sans cela,
     # `should_promote` ne peut comparer qu'un challenger à du vide. DSR reste
     # explicitement non calibré : ce classifieur produit des labels binaires, pas une
@@ -912,7 +944,10 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
             auc=cv_auc,
         )
         _artifact_persisted = _art.save(
-            _sig, model, {"fn": fn, "metrics": _artifact_metrics}
+            _sig, model, {
+                "fn": fn, "metrics": _artifact_metrics,
+                "nulles": _nulles if _nulles.get("source") == "entrainement" else None,
+            }
         )
         if not _artifact_persisted:
             # Ne pas présenter des métriques calculées mais perdues comme celles du
@@ -923,6 +958,7 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
         "validation": f"CV purgée + embargo (k={n_splits})", "served_from": _served,
         "edge_ok": edge_ok, "edge_message": edge_msg, "auc_floor": 0.52,
         "edge_detail": _edge,                      # borne basse des plis (QML-011)
+        "nulles": _nulles,
         "n_train": int(len(X)), "n_splits": len(aucs), "auc": cv_auc,
         "artifact_metrics": _artifact_metrics,
         "artifact_persisted": _artifact_persisted,
