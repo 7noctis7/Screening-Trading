@@ -7,8 +7,15 @@ Assemble la chaîne complète via les MÊMES interfaces qu'en live (parité) :
 Multi-instruments sur un broker partagé : exerce aussi le risque portefeuille
 (max positions, exposition par actif, kill-switch drawdown quotidien).
 
-Hypothèses v1 (documentées, à raffiner) : long-only, fills immédiats à la clôture
-de barre (slippage/frais via CostModel), stop/target testés sur low/high de la barre.
+Hypothèses : long-only, slippage/frais via CostModel, stop/target testés sur low/high.
+
+TIMING (sprint de justesse du 02/10, audit Phase 0). Le signal se lit sur la barre `t`
+CLOSE ; l'ordre s'exécute à l'OUVERTURE de `t+1` (`exec_lag=1`, défaut). L'ancien
+moteur remplissait au close de la barre même qui avait produit le signal : il achetait
+un prix qu'il venait d'observer, un look-ahead d'une demi-barre qui flattait tout
+signal de cassure. Un stop traversé par un GAP se remplit à l'ouverture, pas au stop :
+un R peut donc être pire que −1, et c'est la vérité du marché. `exec_lag=0` rétablit
+l'ancien comportement, pour comparaison seulement.
 """
 
 from __future__ import annotations
@@ -52,7 +59,13 @@ class BacktestResult:
 
 class BacktestEngine:
     def __init__(self, strategy, sizer, risk_engine: RiskEngine, broker: SimBroker,
-                 regime_classifier=None, asset_class: AssetClass = AssetClass.EQUITY) -> None:
+                 regime_classifier=None, asset_class: AssetClass = AssetClass.EQUITY,
+                 exec_lag: int = 1) -> None:
+        if exec_lag not in (0, 1):
+            raise ValueError("exec_lag ∈ {0, 1} (1 = ouverture de la barre suivante)")
+        self.exec_lag = exec_lag
+        # Décisions prises au close de `t`, exécutées à l'ouverture de `t+1`.
+        self._pending: dict[str, tuple] = {}
         self.strategy = strategy
         self.sizer = sizer
         self.risk = risk_engine
@@ -96,33 +109,68 @@ class BacktestEngine:
     def _step_symbol(self, sym, bars, t, result) -> None:
         bar = bars[t]
         window = bars[: t + 1]
-        # 1) gestion des sorties stop/target sur la position ouverte
+        # 0) ce qui a été décidé au close de `t-1` s'exécute à l'ouverture de `t`
+        self._executer_en_attente(sym, bar, result)
+        # 1) gestion des sorties stop/target sur la position ouverte (y compris celle
+        #    ouverte à l'ouverture de cette barre : prudent, le chemin intra-barre est
+        #    inconnu)
         if sym in self._open:
             ot = self._open[sym]
             mark = bar.close
             ot.mfe = max(ot.mfe, mark - ot.entry_price)
             ot.mae = min(ot.mae, mark - ot.entry_price)
-            if ot.stop is not None and bar.low <= ot.stop:
-                self._close(sym, ot.stop, bar.ts, "stop_hit", result)
+            sortie = self._sortie_intra_barre(ot, bar)
+            if sortie is not None:
+                self._close(sym, sortie[0], bar.ts, sortie[1], result)
                 return
-            if ot.target is not None and bar.high >= ot.target:
-                self._close(sym, ot.target, bar.ts, "target_hit", result)
-                return
-        # 2) signaux de la stratégie
+        # 2) signaux de la stratégie, lus sur la barre CLOSE
         regime = self.regime.classify(window) if self.regime else None
         for sig in self.strategy.generate_signals(window, regime):
             if sig.direction is SignalDirection.FLAT and sym in self._open:
-                self._close(sym, bar.close, bar.ts, sig.reason or "signal_exit", result)
+                self._decider(sym, ("close", sig.reason or "signal_exit"), bar, result)
             elif sig.direction is SignalDirection.LONG and sym not in self._open:
-                self._try_open(sym, sig, bar, regime)
+                self._decider(sym, ("open", sig, regime), bar, result)
 
-    def _try_open(self, sym, sig: Signal, bar, regime) -> None:
+    def _sortie_intra_barre(self, ot: _OpenTrade, bar) -> tuple[float, str] | None:
+        """Stop puis objectif (ordre pessimiste). Avec `exec_lag=1`, un stop traversé
+        par un gap d'ouverture se remplit à l'OUVERTURE — jamais mieux que le marché."""
+        if ot.stop is not None and bar.low <= ot.stop:
+            prix = min(ot.stop, bar.open) if self.exec_lag else ot.stop
+            return prix, "stop_hit"
+        if ot.target is not None and bar.high >= ot.target:
+            return ot.target, "target_hit"
+        return None
+
+    def _decider(self, sym, action: tuple, bar, result) -> None:
+        if self.exec_lag:
+            self._pending[sym] = action
+        else:
+            self._executer(sym, action, bar.close, bar, result)
+
+    def _executer_en_attente(self, sym, bar, result) -> None:
+        action = self._pending.pop(sym, None)
+        if action is None:
+            return
+        self.broker.mark(sym, bar.open)              # le prix auquel l'ordre arrive
+        self._executer(sym, action, bar.open, bar, result)
+        self.broker.mark(sym, bar.close)             # l'equity se lit au close
+
+    def _executer(self, sym, action: tuple, prix: float, bar, result) -> None:
+        if action[0] == "close":
+            if sym in self._open:
+                self._close(sym, prix, bar.ts, action[1], result)
+        elif sym not in self._open:
+            self._try_open(sym, action[1], bar, action[2], prix)
+
+    def _try_open(self, sym, sig: Signal, bar, regime,
+                  prix: float | None = None) -> None:
+        prix = bar.close if prix is None else prix
         equity = self.broker.equity()
-        qty = self.sizer.size(sig, equity, bar.close, regime)
+        qty = self.sizer.size(sig, equity, prix, regime)
         if qty <= 0:
             return
-        order = Order(sym, Side.LONG, qty, OrderType.MARKET, limit_price=bar.close)
-        sig.features["ref_price"] = bar.close
+        order = Order(sym, Side.LONG, qty, OrderType.MARKET, limit_price=prix)
+        sig.features["ref_price"] = prix
         decision = self.risk.approve(order, self.broker.positions(), equity, regime, sig)
         if not decision.approved:
             return
