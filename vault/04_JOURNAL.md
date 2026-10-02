@@ -1,5 +1,15 @@
 # 04 — JOURNAL
 
+## Session 2026-10-02 — Essai figé, +4 % avant −1,25 %
+
+Un seul essai, pas deux. Vingt bougies, le volume, la surprise de résultats et
+le fondamental, l'un et l'autre seulement s'ils sont publiés avant le jour de
+décision. Succès = le cours passe au-dessus de +4 % avant −1,25 %, dans les dix
+bougies, sans que la même bougie contienne les deux. Rapport 3,2. Le seuil de
+rentabilité, frais d'un aller-retour de 0,1 % inclus, est d'environ 26 % : en
+dessous, même une probabilité juste perd. Rien n'est mesuré sur les cours réels
+ici, donc aucune probabilité n'est publiée et la décision reste l'abstention.
+
 ## Session 2026-10-02 — Les chiffres qui avaient la forme d'autre chose
 
 L'accueil disait une date, pas l'âge du snapshot. Le dashboard ouvrait sur le gain,

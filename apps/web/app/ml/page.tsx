@@ -46,6 +46,16 @@ export default function Ml() {
         fréquence calibrée est attachée au titre. Aujourd'hui ce n'est pas le cas :
         la colonne est un score brut. {ml.contrat?.motif}
       </p>
+      <section className="card p-4 text-sm">
+        <h2 className="text-sm uppercase tracking-wide text-muted">Essai figé — +4 % avant le stop</h2>
+        <p className="mt-2 text-muted">
+          Vingt bougies, le volume, la dernière surprise de résultats déjà publiée et le
+          dernier fondamental déjà publié. Question : les dix bougies suivantes passent-elles
+          <b> au-dessus de +4 %</b> avant <b>−1,25 %</b> (rapport 3,2, donc plus de 1:3) ?
+          Une publication du jour même ne compte pas. Probabilité : <b>non mesurée</b>.
+          Tant qu'elle ne l'est pas, la décision est l'abstention — pas un ordre.
+        </p>
+      </section>
 
       <section className="card p-4 overflow-x-auto">
         <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Top convictions ML</h2>

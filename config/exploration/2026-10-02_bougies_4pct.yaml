@@ -1,0 +1,29 @@
+# Essai unique, figé le 2026-10-02, AVANT tout résultat.
+# Un seul jeu de nombres. En changer un est un AUTRE essai, compté dans le DSR.
+# Les deux informations (surprise de résultats, fondamental) sont dans CET essai :
+# les lancer à part serait deux regards sur les mêmes cours.
+nom: bougies-4pct-2026-10-02
+question: >
+  Sur les 10 bougies suivantes, le cours touche-t-il +4 % avant −1,25 % ?
+timeframe: 1d
+fenetre_bougies: 20
+horizon_bougies: 10
+gain: 0.04
+stop: 0.0125
+rapport_gain_risque: 3.2
+cout_aller_retour_modele: 0.001
+features:
+  - ret_1
+  - ret_5
+  - ret_10
+  - ret_fenetre
+  - volume_vs_moyenne
+  - amplitude
+  - position_dans_la_fenetre
+  - surprise_resultats
+  - surprise_connue
+  - fondamental
+  - fondamental_connu
+connu_seulement_si: date de publication strictement avant la bougie de décision
+promotion: packages.research.gate.verdict_hors_echantillon
+ordres: aucun
