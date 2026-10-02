@@ -99,6 +99,6 @@ def test_sans_assez_de_lignes_aucune_probabilite_n_est_publiee():
 
 
 def test_le_yaml_fige_les_memes_nombres_que_le_code():
-    texte = Path("config/exploration/2026-10-02_bougies_4pct.yaml").read_text()
+    texte = Path("config/essais/2026-10-02_bougies_4pct.yaml").read_text()
     assert "gain: 0.04" in texte and "stop: 0.0125" in texte
     assert "fenetre_bougies: 20" in texte and "ordres: aucun" in texte

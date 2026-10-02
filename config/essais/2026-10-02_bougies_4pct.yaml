@@ -1,5 +1,7 @@
 # Essai unique, figé le 2026-10-02, AVANT tout résultat.
 # Un seul jeu de nombres. En changer un est un AUTRE essai, compté dans le DSR.
+# Pas dans config/exploration : ce dossier est une grille (univers × sélections),
+# et ce fichier n'en est pas une.
 # Les deux informations (surprise de résultats, fondamental) sont dans CET essai :
 # les lancer à part serait deux regards sur les mêmes cours.
 nom: bougies-4pct-2026-10-02
