@@ -18,6 +18,7 @@ import { statsFrom, rebase } from "@/lib/metrics";
 import CompositionModeleVsReel from "@/components/CompositionModeleVsReel";
 import EcartReplication from "@/components/EcartReplication";
 import { DateArrete } from "@/components/DateArrete";
+import { VerdictQqq } from "@/components/VerdictQqq";
 
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 // Fenêtre lisible à partir du nombre de points quotidiens. Affichée sur CHAQUE ligne : sans
@@ -90,6 +91,7 @@ export default function Dashboard() {
           stratégie : {d.strategy_label}</span>}</h1>
       <StepBanner active="screener" />
       <DateArrete date={d.as_of} quoi="Chiffres du tableau de bord" />
+      <VerdictQqq attribution={ana?.attribution} />
       <RegimeBanner regime={d.regime} />
       <SentimentBanner sentiment={sent} />
       <VixPlaybook vix={d.vix} playbook={d.vix_playbook} series={d.vix_series} />
@@ -112,7 +114,7 @@ export default function Dashboard() {
           style={{ background: "color-mix(in srgb, var(--warn) 18%, transparent)", color: "var(--warn)" }}>
           Modélisé
         </span>
-        <span className="text-muted2">simulation de la stratégie sur des prix réels, frais déduits — ce n'est pas de l'argent réel · votre argent réel est sur <a href="/positions" className="text-accent">/positions</a></span>
+        <span className="text-muted2">simulation sur des prix réels, frais modélisés — pas un relevé de courtier, et pas de l'argent réel · le vôtre est sur <a href="/positions" className="text-accent">/positions</a></span>
         {/* La fenêtre EN TOUTES LETTRES sous les tuiles. Sans elle, trois « gain / risque »
             différents cohabitaient sur la même page — 2,43 ici, 1,07 dans le bandeau
             honnêteté, 0,98 pour la stratégie seule — et rien ne disait qu'ils ne portaient

@@ -1,5 +1,33 @@
 # 04 — JOURNAL
 
+## Session 2026-10-02 — L'espérance se maximise en s'abstenant
+
+Le seuil et le stop ne bougent pas. Tout prendre a une espérance ; ne prendre
+que les probabilités au-dessus du seuil en a une autre, par occasion, les coups
+écartés valant zéro. La mise est le quart de Kelly déjà écrit dans le dépôt,
+après avoir réduit la probabilité de son erreur d'estimation, plafonné à 5 %
+du capital. Rien de tout cela n'est une mesure sur les cours : sans calibrage,
+la mise reste nulle.
+
+## Session 2026-10-02 — Essai figé, +4 % avant −1,25 %
+
+Un seul essai, pas deux. Vingt bougies, le volume, la surprise de résultats et
+le fondamental, l'un et l'autre seulement s'ils sont publiés avant le jour de
+décision. Succès = le cours passe au-dessus de +4 % avant −1,25 %, dans les dix
+bougies, sans que la même bougie contienne les deux. Rapport 3,2. Le seuil de
+rentabilité, frais d'un aller-retour de 0,1 % inclus, est d'environ 26 % : en
+dessous, même une probabilité juste perd. Rien n'est mesuré sur les cours réels
+ici, donc aucune probabilité n'est publiée et la décision reste l'abstention.
+
+## Session 2026-10-02 — Les chiffres qui avaient la forme d'autre chose
+
+L'accueil disait une date, pas l'âge du snapshot. Le dashboard ouvrait sur le gain,
+pas sur le verdict face à QQQ, et appelait « déduits » des frais qui sont un modèle.
+L'onglet sentiment colorait une tendance 63 jours comme une news, et un trou devenait 0.
+L'onglet ML écrivait un score brut en pourcentage. Les fondamentaux synthétiques
+avaient des avis BUY. Rien de tout cela n'a été réparé en inventant un alpha :
+les étiquettes disent maintenant ce que le chiffre est.
+
 ## Session 2026-10-02 — L'audit avant le plan : ce qui est prouvé, ce qui ne l'est pas
 
 Audit Phase 0 en lecture seule, puis trois décisions du propriétaire (ADR-0211). Fermés :

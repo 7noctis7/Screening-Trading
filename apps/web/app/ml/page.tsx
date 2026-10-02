@@ -41,26 +41,41 @@ export default function Ml() {
         ))}
       </div>
       <p className="text-muted text-xs">
-        Un modèle estime, pour chaque titre, sa probabilité de monter dans les
-        ~{ml.horizon_days} prochains jours. Il ne regarde que 8 indicateurs de prix — tendance,
-        volatilité, distance au plus haut de l'année, rebond récent — et uniquement des données
-        disponibles au moment où il décide, jamais le futur. Sa qualité est mesurée sur des périodes
-        qu'il n'a pas vues à l'entraînement : c'est la seule note qui compte.
+        Contrat du chiffre : « la clôture est-elle plus haute dans ~{ml.horizon_days} jours ? »,
+        jugé à la clôture, <b>sans les frais</b>. Un pourcentage n'apparaît que si une
+        fréquence calibrée est attachée au titre. Aujourd'hui ce n'est pas le cas :
+        la colonne est un score brut. {ml.contrat?.motif}
       </p>
+      <section className="card p-4 text-sm">
+        <h2 className="text-sm uppercase tracking-wide text-muted">Essai figé — +4 % avant le stop</h2>
+        <p className="mt-2 text-muted">
+          Vingt bougies, le volume, la dernière surprise de résultats déjà publiée et le
+          dernier fondamental déjà publié. Question : les dix bougies suivantes passent-elles
+          <b> au-dessus de +4 %</b> avant <b>−1,25 %</b> (rapport 3,2, donc plus de 1:3) ?
+          On ne joue que si l'espérance du coup est positive, avec une mise au quart
+          de Kelly plafonnée. Pas le réglage qui a le mieux marché dans le passé.
+          Une publication du jour même ne compte pas. Probabilité et espérance :
+          <b>non mesurées</b>. Sinon, abstention — pas un ordre.
+        </p>
+      </section>
 
       <section className="card p-4 overflow-x-auto">
         <h2 className="text-sm uppercase tracking-wide text-muted mb-3">Top convictions ML</h2>
         <table className="w-full text-sm">
           <thead className="text-muted text-xs">
             <tr><th className="text-left font-normal">Actif</th><th className="text-left font-normal">Nom</th>
-            <th className="text-left font-normal">Secteur</th><th className="text-right font-normal">Proba hausse</th></tr>
+            <th className="text-left font-normal">Secteur</th>
+            <th className="text-right font-normal">{ml.contrat?.proba_par_titre ? "Proba calibrée" : "Score brut"}</th></tr>
           </thead>
           <tbody>{ml.top_conviction.map((a: any) => (
             <tr key={a.symbol} className="border-t border-border">
               <td className="py-1.5 mono"><IR ticker={a.symbol} name={a.name} assetClass={a.asset_class} className="text-accent hover:underline" /></td><td className="text-muted">{a.name}</td>
               <td className="text-muted">{a.sector}</td>
-              <td className="text-right mono" style={{ color: a.ml_score >= 0.5 ? "#22c55e" : "#f43f5e" }}>
-                {(a.ml_score * 100).toFixed(1)}%</td>
+              <td className="text-right mono text-muted">
+                {ml.contrat?.proba_par_titre && a.proba_calibree != null
+                  ? `${(a.proba_calibree * 100).toFixed(0)} %`
+                  : `${Number(a.ml_score).toFixed(2)} · non calibré`}
+              </td>
             </tr>))}</tbody>
         </table>
       </section>

@@ -923,6 +923,13 @@ def _ml_section(data: dict, sector_of: dict, names: dict) -> dict:
         "validation": f"CV purgée + embargo (k={n_splits})", "served_from": _served,
         "edge_ok": edge_ok, "edge_message": edge_msg, "auc_floor": 0.52,
         "edge_detail": _edge,                      # borne basse des plis (QML-011)
+        "contrat": {
+            "question": "clôture plus haute dans l'horizon, sans les frais",
+            "frais_inclus": False,
+            "proba_par_titre": False,
+            "motif": ("le nombre par titre est la sortie brute du modèle, "
+                      "pas une fréquence calibrée"),
+        },
         "n_train": int(len(X)), "n_splits": len(aucs), "auc": cv_auc,
         "artifact_metrics": _artifact_metrics,
         "artifact_persisted": _artifact_persisted,
@@ -948,28 +955,34 @@ def _sentiment_section(held: list, names: dict, sector_of: dict, data: dict) -> 
     from packages import sentiment as S
     from packages.sentiment.portefeuille import score_momentum as _momentum
 
+    from packages.sentiment.origine import humeur as _humeur
+    from packages.sentiment.origine import qualifier_ligne
+
     use_news = os.environ.get("QUANT_NEWS") == "1"
     rows: list[dict] = []
     for s in (held or [])[:30]:
-        score, n, heads = 0.0, 0, []
+        score_news, n, heads = None, 0, []
         if use_news:
             r = S.news_sentiment(s)
-            score, n, heads = r["score"], r["n"], r["headlines"]
-        if n == 0:                                  # repli momentum (hors-ligne)
-            bars = data.get(s)
-            score = _momentum([b.close for b in bars]) if bars else None
-            score = 0.0 if score is None else score
+            score_news, n, heads = r["score"], r["n"], r["headlines"]
+        bars = data.get(s)
+        tendance = _momentum([b.close for b in bars]) if bars else None
+        qual = qualifier_ligne(n, score_news if n else None, tendance)
         rows.append({"symbol": s, "name": names.get(s, ""), "sector": sector_of.get(s, ""),
-                     "score": score, "label": S.label_of(score), "n_news": n,
-                     "headlines": heads[:5]})
-    mood = round(sum(r["score"] for r in rows) / len(rows), 4) if rows else 0.0
-    has_news = any(r["n_news"] for r in rows)
+                     "score": qual["score"], "label": qual["label"], "origine": qual["origine"],
+                     "n_news": n, "headlines": heads[:5]})
+    meta_h = _humeur(rows)
+    mood = meta_h["market_mood"]
+    has_news = meta_h["humeur_est_fil"]
     # Δsentiment (révision) : meilleur prédicteur EOD que le niveau. Persisté quotidiennement.
     try:
         from packages.sentiment.history import record_and_delta
-        _delta = record_and_delta({r["symbol"]: r["score"] for r in rows})
+        _delta = record_and_delta({r["symbol"]: r["score"] for r in rows if r["score"] is not None})
         for r in rows:
-            r["score_change"] = _delta["by_symbol"].get(r["symbol"], 0.0)
+            if r["score"] is None:
+                r["score_change"] = None
+            else:
+                r["score_change"] = _delta["by_symbol"].get(r["symbol"])
         mood_change = _delta["mood_delta"]
     except Exception:  # noqa: BLE001
         mood_change = 0.0
@@ -991,9 +1004,14 @@ def _sentiment_section(held: list, names: dict, sector_of: dict, data: dict) -> 
         pass
     return {
         "available": bool(rows),
-        "engine": S.engine_name() if (has_news or market_news) else "momentum 63 j (repli hors-ligne)",
-        "source": "news RSS" if (has_news or market_news) else "dérivé du momentum (QUANT_NEWS=1 pour les news par actif)",
-        "market_mood": mood, "market_label": S.label_of(mood), "mood_change": mood_change,
+        "engine": S.engine_name() if has_news else "momentum 63 j (repli hors-ligne)",
+        "source": "news RSS" if has_news else "tendance 63 j — pas un fil d'actualité",
+        "market_mood": mood, "market_label": meta_h["market_label"],
+        "humeur_est_fil": has_news,
+        "n_lignes_news": meta_h["n_lignes_news"],
+        "n_lignes_tendance": meta_h["n_lignes_tendance"],
+        "n_lignes_vides": meta_h["n_lignes_vides"],
+        "mood_change": mood_change,
         "rows": rows, "market_news": market_news, "macro_news": macro_news,
     }
 

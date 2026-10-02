@@ -19,8 +19,9 @@ export default function Sentiment() {
   if (!s) return <PageSkeleton />;
   if (!s.available)
     return <main className="max-w-3xl mx-auto p-6"><EmptyState title="Aucune donnée de sentiment" /></main>;
-  const mood: number = s.market_mood ?? 0;
-  const moodPct = Math.round(((mood + 1) / 2) * 100);
+  const fil = s.humeur_est_fil === true;
+  const mood = s.market_mood;
+  const moodPct = mood == null ? null : Math.round(((Number(mood) + 1) / 2) * 100);
   const rows = s.rows ?? [];
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-4">
@@ -28,23 +29,30 @@ export default function Sentiment() {
       <StepBanner active="sentiment" />
 
       <section className="card p-4">
-        <div className="text-muted text-xs uppercase tracking-wide">Humeur de marché (positions)</div>
+        <div className="text-muted text-xs uppercase tracking-wide">
+          {fil ? "Humeur des actualités (positions)" : "Pas de fil — tendance 3 mois"}
+        </div>
+        {mood == null ? (
+          <p className="text-sm mt-2 text-muted">Non mesuré. Ce n'est pas une humeur neutre.</p>
+        ) : (
         <div className="flex items-center gap-4 mt-2">
-          <div className="text-2xl font-semibold">{tag(s.market_label)}</div>
+          <div className="text-2xl font-semibold">{fil ? tag(s.market_label) : "n/d"}</div>
           <div className="flex-1">
             <div className="h-2.5 rounded-md overflow-hidden" style={{ background: "color-mix(in srgb, var(--fg) 10%, transparent)" }}>
-              <div style={{ height: "100%", width: `${moodPct}%`, background: "linear-gradient(90deg,#f43f5e,#9aa1ad,#22c55e)" }} />
+              <div style={{ height: "100%", width: `${moodPct}%`, background: fil
+                ? "linear-gradient(90deg,#f43f5e,#9aa1ad,#22c55e)" : "var(--muted2)" }} />
             </div>
             <div className="text-xs text-muted mt-1.5">
-              score moyen <b className="text-fg">{mood.toFixed(2)}</b>
-              {s.mood_change != null && s.mood_change !== 0 && (
-                <> · Δ révision <b style={{ color: s.mood_change > 0 ? "#22c55e" : "#f43f5e" }}>
-                  {s.mood_change > 0 ? "+" : ""}{s.mood_change.toFixed(2)}</b></>
-              )}
-              {" "}· moteur <b className="text-fg">{s.engine}</b> · source <b className="text-fg">{s.source}</b>
+              {fil ? "score des news" : "moyenne de tendance, pas une actualité"}{" "}
+              <b className="text-fg">{Number(mood).toFixed(2)}</b>
+              {" "}· {s.n_lignes_news ?? 0} ligne(s) avec news
+              {" "}· {s.n_lignes_tendance ?? 0} en repli
+              {" "}· {s.n_lignes_vides ?? 0} non mesurée(s)
+              {" "}· source <b className="text-fg">{s.source}</b>
             </div>
           </div>
         </div>
+        )}
       </section>
 
       {(s.macro_news ?? []).length > 0 && (
@@ -89,8 +97,9 @@ export default function Sentiment() {
           <tbody>{rows.map((r: any) => (
             <tr key={r.symbol} className="border-t border-border align-top">
               <td className="py-1.5 mono"><IR ticker={r.symbol} name={r.name} assetClass={r.asset_class} className="text-accent hover:underline" /></td>
-              <td>{tag(r.label, r.sector)}</td>
-              <td className="text-right mono" style={{ color: r.score > 0 ? "#22c55e" : r.score < 0 ? "#f43f5e" : "#9aa1ad" }}>{(r.score ?? 0).toFixed(2)}</td>
+              <td>{r.origine === "news" ? tag(r.label, r.sector) : <span className="text-muted">{r.origine === "momentum" ? "tendance" : "n/d"}</span>}</td>
+              <td className="text-right mono" style={{ color: r.origine === "news" ? (r.score > 0 ? "#22c55e" : r.score < 0 ? "#f43f5e" : "#9aa1ad") : "var(--muted)" }}>
+                {r.score == null ? "n/d" : Number(r.score).toFixed(2)}</td>
               <td className="text-right mono">{r.n_news ?? 0}</td>
               <td className="pl-4 text-xs">
                 {(r.headlines ?? []).length === 0 ? <span className="text-muted">—</span> :
@@ -105,10 +114,10 @@ export default function Sentiment() {
         </table>
       </section>
       <p className="text-muted text-xs">
-        Le ton des actualités récentes sur chaque titre : plutôt positif, plutôt négatif. Analysé
-        par un modèle de langage financier s'il est installé, sinon par une liste de mots-clés. Sans
-        actualités disponibles, l'onglet retombe sur la tendance des 3 derniers mois — et le dit.
-        Pour activer les vraies actualités : lancer l'API avec <code>QUANT_NEWS=1</code>.
+        Le ton des actualités récentes sur chaque titre. Sans titre, la ligne est la tendance
+        des 3 derniers mois et elle est marquée « tendance » — elle ne prend pas la couleur
+        d'une news, et un trou reste <b>n/d</b>, jamais 0. Fil par actif :
+        <code> QUANT_NEWS=1</code>.
       </p>
     </main>
   );

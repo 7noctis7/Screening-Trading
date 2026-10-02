@@ -94,7 +94,19 @@ export default function Accueil() {
   const sol = etatSolidite(d?.honesty?.available ? d.honesty.psr : null);
   const sharpe = expliqueSharpe(m.sharpe);
   const dd = expliqueDrawdown(m.max_drawdown);
-  const frais = d?.as_of ? String(d.as_of).slice(0, 10) : null;
+  const frais = d?.as_of ? new Date(d.as_of) : null;
+  const horloge = !d
+    ? "chargement…"
+    : frais && !Number.isNaN(frais.getTime())
+      ? `snapshot au ${frais.toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}`
+      : "date du snapshot inconnue";
+  const age = d?.snapshot_age_s;
+  const ttl = d?.snapshot_ttl_s ?? 900;
+  const fraicheur = age == null
+    ? ""
+    : age > ttl
+      ? ` · DIFFÉRÉ, ${Math.round(age / 60)} min`
+      : ` · âge ${Math.max(0, Math.round(age / 60))} min`;
 
   return (
     <main className="max-w-4xl mx-auto p-6 space-y-8">
@@ -123,9 +135,18 @@ export default function Accueil() {
           {/* La fraîcheur est une information, pas un détail : un chiffre juste sur des données
               d'il y a trois semaines reste un chiffre faux pour qui décide aujourd'hui. */}
           <span className="text-[11px]" style={{ color: "var(--muted2)" }}>
-            {frais ? `données au ${frais}` : "chargement…"}
+            {horloge}{fraicheur}
           </span>
         </div>
+        {d && (
+          <p className="text-sm mb-3" style={{ color: "var(--muted)" }}>
+            Aucun alpha directionnel n'est prouvé face à QQQ. Le rapport gain / risque
+            ci-dessous n'est pas un savoir-faire.{" "}
+            <Link href="/dashboard" className="text-accent">Le verdict</Link>
+            {" · "}
+            <Link href="/echecs" className="text-accent">ce qui a été rejeté</Link>.
+          </p>
+        )}
         {!d ? (
           <div className="grid gap-3 md:grid-cols-4">
             {[0, 1, 2, 3].map((i) => (
