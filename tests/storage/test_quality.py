@@ -33,3 +33,20 @@ def test_duplicate_timestamps_detected():
     df = _df(5)
     df = pd.concat([df, df.iloc[[0]]])  # duplique un ts
     assert not validate_ohlcv(df, "X", "1d").ok
+
+
+def test_ecart_d_arrondi_flottant_tolere():
+    # ASML.AS 20/01/2020 (market.db, VPS) : low dépassait close de 1,11e-16 en relatif.
+    df = _df(3)
+    df["open"], df["high"] = 256.65235638327687, 257.17083448446135
+    df["low"], df["close"] = 255.0968933105469, 255.09689331054688
+    assert validate_ohlcv(df, "ASML.AS", "1d").ok
+
+
+def test_ecart_reel_toujours_bloque():
+    df = _df(3)
+    df.iloc[1, df.columns.get_loc("low")] = 100.6      # > close 100.5 : 1e-3 relatif
+    df.iloc[2, df.columns.get_loc("high")] = 100.4     # < close 100.5
+    rep = validate_ohlcv(df, "X", "1d")
+    assert "low > min(o,c,h) sur 1 lignes" in rep.errors
+    assert "high < max(o,c,l) sur 1 lignes" in rep.errors
