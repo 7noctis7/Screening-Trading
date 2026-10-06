@@ -1,5 +1,14 @@
 # 04 — JOURNAL
 
+## Session 2026-10-06 (5ᵉ) — Mesurer ce que coûte un ordre avant d'en compter le gain
+
+Feu vert du propriétaire pour la journalisation du spread (ADR-0216). `run_live` lit
+bid / ask juste avant l'envoi et après les fills ; chaque ordre Alpaca rempli écrit sa
+décomposition (spread, dérive depuis le close de décision, shortfall d'exécution) dans
+`tca_executions`. Rien ne change dans les ordres. Un garde-fou existant a refusé une
+quatrième formule de shortfall : la mesure passe par `fills.shortfall_bps`. Aucun
+chiffre ici : `make tca` dit UNCALIBRATED tant que 20 ordres cotés n'existent pas.
+
 ## Session 2026-10-06 (4ᵉ) — Retirer ce qui coûte avant d'ajouter quoi que ce soit
 
 Le verdict du rapport d'une page est « non établi » : pas de PR de modèle. La production
