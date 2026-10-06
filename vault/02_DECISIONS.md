@@ -2,6 +2,32 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0216 — Mesurer le coût réel de chaque ordre live : spread, dérive avant envoi, shortfall (2026-10-06)
+
+**Contexte.** Constat F6 de `docs/EXPECTANCY_AUDIT.md` : le « slippage » live comparait le
+fill au dernier close connu. Il mêlait gap de nuit, dérive intraday et exécution, et le
+spread n'était jamais capté. La question 1 du rapport d'une page (espérance nette d'un
+aller-retour) ne peut pas être calibrée sur des coûts réels sans cette mesure. Feu vert
+du propriétaire le 06/10 : « journalisation seulement, aucun ordre ne change ».
+
+**Décision.**
+1. `packages/execution/cotations.py` lit la dernière cotation Alpaca (actions, crypto)
+   juste AVANT `_reconcile` et juste APRÈS l'attente des fills. Cotation incohérente
+   (bid ≤ 0, ask < bid) écartée, jamais corrigée ; une panne rend `{}`, jamais une
+   exception.
+2. `packages/execution/tca_journal.py` écrit une ligne par ordre Alpaca rempli dans
+   `tca_executions` (`data/journal.db`, UPSERT par `order_id`) : spread à l'arrivée,
+   dérive = mid arrivée / close de décision, shortfall = fill / mid arrivée, total =
+   fill / close. Convention UNIQUE du dépôt (`fills.shortfall_bps`, positif = coût) :
+   aucune quatrième formule. Sans cotation : `bench_quality = "missing"`, colonnes NULL.
+3. `make tca` : médianes par composante ; UNCALIBRATED sous 20 ordres cotés.
+
+**Pas fait.** Bitmart (pas de lecteur de cotation) ; aperçu (`--dry`) : aucune lecture.
+Aucun coût du rejeu ni du rapport n'est encore recalibré : il faut d'abord des ordres.
+
+**Conséquences.** Deux appels de données de marché par passage réel. Aucune décision,
+aucune quantité, aucun envoi ne lit ces cotations (test d'ordre des appels). Paper.
+
 ## ADR-0215 — Retirer ce qui coûte : cadence de 5 séances, aucun multiple inventé, un seul compteur d'essais (2026-10-06)
 
 **Contexte.** Règle du propriétaire : tant que l'espérance d'un aller-retour et l'écart au

@@ -1043,6 +1043,51 @@ def _deja_rebalance_aujourdhui(brokers: tuple, obs=None) -> bool:
     return True
 
 
+def _cotations_arrivee(targets: list, cur_alp: dict, alpaca, dry: bool) -> dict:
+    """Bid / ask JUSTE AVANT l'envoi des ordres (Alpaca). MESURE seulement : rien n'en
+    dépend dans la décision ni dans l'envoi, et une lecture ratée rend {}."""
+    if dry or alpaca is None:
+        return {}
+    from packages.execution.cotations import cotations
+    syms = {o.get("broker_symbol", o["symbol"]) for o in targets
+            if o.get("capital") != "bitmart"} | set(cur_alp or {})
+    return cotations(syms)
+
+
+def _journal_tca(snap: dict, opened: list, sold: list, alpaca, arrivee: dict) -> None:
+    """Une ligne `tca_executions` par ordre Alpaca rempli : spread à l'arrivée, dérive
+    depuis le close de décision, shortfall d'exécution. Ne lève jamais."""
+    try:
+        from packages.execution.cotations import cotations
+        from packages.execution.tca_journal import enregistrer, ligne
+        ordres = ([{**o, "cote": "buy"} for o in opened]
+                  + [{**v, "cote": "sell"} for v in sold])
+        ordres = [o for o in ordres if o.get("venue") == "Alpaca" and o.get("order_id")]
+        if not ordres or alpaca is None:
+            return
+        fills = {f.get("id"): f for f in alpaca.orders(limit=200)}
+        apres = cotations({o["broker_symbol"] for o in ordres})
+        series = (snap.get("dashboard") or {}).get("chart_series") or {}
+        jour = datetime.now(UTC).date().isoformat()
+        lignes = []
+        for o in ordres:
+            f = fills.get(o["order_id"])
+            if not f or float(f.get("price") or 0) <= 0:
+                continue
+            barres = series.get(o["symbol"]) or []
+            close = float(barres[-1]["c"]) if barres else None
+            lignes.append(ligne(o, prix_fill=float(f["price"]), qty=float(f["qty"]),
+                                close_decision=close, jour=jour,
+                                arrivee=arrivee.get(o["broker_symbol"]),
+                                apres=apres.get(o["broker_symbol"])))
+        n = enregistrer(lignes)
+        avec = sum(1 for li in lignes if li["bench_quality"] == "quote")
+        print(f"TCA : {n} ordre(s) mesuré(s), {avec} avec cotation d'arrivée "
+              "(spread, dérive, shortfall → table tca_executions).")
+    except Exception as e:  # noqa: BLE001
+        print(f"TCA : mesure ignorée ({str(e)[:60]}).")
+
+
 def _hors_cadence(brokers: tuple, reduce: float, obs=None) -> bool:
     """True si ce passage tombe AVANT l'échéance de cadence (`execution.cadence`).
 
@@ -1113,6 +1158,7 @@ def main() -> None:
     if not dry and not a.forcer and _hors_cadence(brokers, reduce, obs):
         _record_garde_fous(obs, dry)
         return                                     # rythme de la règle mesurée
+    cot_arrivee = _cotations_arrivee(targets, cur_alp, alpaca, dry)   # mesure seule
 
     # Arch A3+PR4 — Capital A : preset protège sleeve (snap ∪ journal multi-jour) ;
     # pass sleeve sans liquidation hors-cible. Rien à protéger → un seul _reconcile
@@ -1174,6 +1220,7 @@ def main() -> None:
 
     if not dry:
         _attendre_les_fills(opened, sold, alpaca, bitmart)
+        _journal_tca(snap, opened, sold, alpaca, cot_arrivee)  # coût réel par ordre
         _journal_opens(snap, opened, alpaca, bitmart)
         _journal_sells(snap, sold, alpaca, bitmart)
         _record_equity(alp_cap, bit_cap)

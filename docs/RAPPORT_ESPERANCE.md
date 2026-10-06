@@ -53,6 +53,13 @@ légitime est celle qui retire ce qui coûte.
 exige des seuils d'entrée et de sortie qui ne sont pas calibrés. `make rotation-causes`
 mesure d'abord la part de la rotation qu'elles causent.
 
+## Instrumenté depuis (ADR-0216)
+
+- **Coût réel par ordre live** : bid / ask lus avant l'envoi et après les fills
+  (Alpaca) ; table `tca_executions` = spread, dérive avant envoi, shortfall d'exécution.
+  `make tca` reste UNCALIBRATED sous 20 ordres cotés. C'est l'entrée « frais et impact »
+  de la question 1 ; elle n'est recalibrée qu'une fois mesurée.
+
 ## À lancer sur le VPS
 
 ```bash

@@ -10,6 +10,9 @@
 - [x] **~~P0 — D4 : poche crypto (02/10)~~ — TRANCHÉ 02/10 (ADR-0212) : plus de poche obligatoire, la crypto concourt avec les actions sur le momentum.** : 6 cibles de 273 à 455 $ toutes sous le plancher
       de 1 000 $ → poche à ZÉRO chaque jour, en silence. Options : (a) 2 lignes max (BTC,
       ETH) ; (b) retirer la poche (recommandé) ; (c) plancher crypto abaissé. DÉCISION À PRENDRE.
+- [ ] **P1 — Coût réel live (ADR-0216, 06/10)** : après ≥ 20 ordres Alpaca cotés,
+      `make tca` → remplacer le coût supposé du rejeu / de `rapport-esperance` par les
+      médianes mesurées (spread, shortfall). Avant : UNCALIBRATED. Bitmart non couvert.
 - [ ] **P1 — ASML.AS : ligne impossible (low > min(o,c,h))** qui fait échouer
       `test_snapshot_new_sections` sur le VPS. Lancer le diagnostic lecture seule (PR #432) :
       écart ~1e-9 → tolérance relative dans `storage/quality` ; écart réel → réparer la base.
