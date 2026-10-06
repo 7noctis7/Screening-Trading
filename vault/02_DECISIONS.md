@@ -2,6 +2,29 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0214 — L'aller-retour défini dans le code ; labels au prix d'exécution ; une page, quatre questions (2026-10-06)
+
+**Contexte.** Mission du propriétaire : l'objectif est le gain net du livre, pas
+l'espérance par trade, comparé à QQQ + cash au même risque. Constats : aucune
+définition d'« aller-retour » dans le code (l'audit de rotation compte des lots) ; les
+labels de l'IC et du ML partaient du close qui avait servi au signal ; aucun calcul de
+paris indépendants ni de capacité ; deux changements de label faits par un agent (#440)
+n'étaient pas comptés comme essais.
+
+**Décision.**
+- `aller_retour.py` : FIFO en quantité sur les ordres EXÉCUTÉS du rejeu (désormais
+  journalisés par `simuler`), net = brut − barème − impact (Y en plage 0,5–1,0).
+- Labels : départ au close de la séance suivante (prix d'exécution du rejeu).
+- `melange_meme_risque.py`, `paris_independants.py`, `capacite.py`,
+  `rapport_esperance.py` + `make rapport-esperance` : une page, quatre questions,
+  « non mesuré » par défaut, verdict mécanique (1 et 2 positifs, distincts de zéro,
+  DSR ≥ 0,95 sur l'écart).
+- Registre : deux essais `ml_edge:label:*` ajoutés.
+
+**Conséquences.** Aucune espérance n'est publiée tant que `make rapport-esperance` n'a
+pas tourné sur données réelles. Tant que le verdict n'est pas « établi », aucune PR de
+modèle : seule la PR qui retire ce qui coûte est légitime.
+
 ## ADR-0213 — Revue E[Gain] : label ML relatif et net de frais ; indice de régime exogène sous drapeau (2026-10-06)
 
 **Contexte.** Revue code + stratégie demandée par le propriétaire. Constats : (1) le label du

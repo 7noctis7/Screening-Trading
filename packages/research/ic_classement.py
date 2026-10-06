@@ -11,7 +11,9 @@ MÉTHODE.
   transversale contient les titres cotés ce jour-là, avec au moins 253 barres connues.
 - Score = c[d − saut] / c[d − 252] − 1, calculé sur les clôtures ≤ d seulement
   (saut = 0 : la production ; saut = 21 : le 12-1 classique, une AUTRE hypothèse).
-- Cible = rendement close(d) → close(d + h), h ∈ {1, 5, 10, 20, 60} séances.
+- Cible = rendement du PRIX D'EXÉCUTION : close(d + 1) → close(d + 1 + h),
+  h ∈ {1, 5, 10, 20, 60} séances. Le rejeu exécute au close de la séance suivant la
+  décision ; le label part de ce prix, jamais du close qui a servi au signal (06/10).
 - RankIC (Spearman) par date ; pas = horizon par défaut, donc des fenêtres DISJOINTES.
 - Écart du top-12 : rendement moyen des 12 premiers moins la médiane de la coupe — la
   quantité que le portefeuille encaisse réellement, avant pondération et coûts.
@@ -61,18 +63,19 @@ def score_momentum(closes: np.ndarray, i: int, saut: int = 0) -> float | None:
     return float(closes[i - saut] / closes[i - FENETRE] - 1.0)
 
 
-def coupe(series: dict, jour: str, jour_fin: str, saut: int = 0):
-    """(symboles, scores, rendements futurs) des titres cotés à `jour` et `jour_fin`."""
+def coupe(series: dict, jour: str, entree: str, sortie: str, saut: int = 0):
+    """(symboles, scores, rendements) : score connu au close de `jour`, rendement du
+    close d'`entree` (exécution) au close de `sortie`. Coté aux trois dates."""
     syms, sc, fut = [], [], []
     for s, (idx, c) in series.items():
-        i, k = idx.get(jour), idx.get(jour_fin)
-        if i is None or k is None:
+        i, e, k = idx.get(jour), idx.get(entree), idx.get(sortie)
+        if i is None or e is None or k is None:
             continue
         v = score_momentum(c, i, saut)
         if v is not None and np.isfinite(v):
             syms.append(s)
             sc.append(v)
-            fut.append(float(c[k] / c[i] - 1.0))
+            fut.append(float(c[k] / c[e] - 1.0))
     return syms, np.asarray(sc), np.asarray(fut)
 
 
@@ -96,8 +99,8 @@ def mesures_horizon(series: dict, cal: list[str], h: int, pas: int, saut: int,
                     debut: int = FENETRE) -> list[dict]:
     """Une ligne par date mesurable : RankIC, écart du top-12, rangs pour la nulle."""
     lignes = []
-    for t in range(debut, len(cal) - h, max(1, pas)):
-        _, sc, fut = coupe(series, cal[t], cal[t + h], saut)
+    for t in range(debut, len(cal) - h - 1, max(1, pas)):
+        _, sc, fut = coupe(series, cal[t], cal[t + 1], cal[t + 1 + h], saut)
         if sc.size < N_TITRES_MIN:
             continue
         rs, rf = _rangs(sc), _rangs(fut)
@@ -128,6 +131,14 @@ def _stats(ics: np.ndarray) -> dict:
             "part_positive": float((ics > 0).mean())}
 
 
+def _ic95(x: np.ndarray) -> list[float] | None:
+    """IC à 95 % de la moyenne (fenêtres disjointes, approximation normale)."""
+    if x.size < 3:
+        return None
+    se = float(x.std(ddof=1) / np.sqrt(x.size))
+    return [float(x.mean() - 1.96 * se), float(x.mean() + 1.96 * se)]
+
+
 def resume_horizon(lignes: list[dict], h: int, pas: int, n_nulles: int) -> dict:
     """Statistiques d'un horizon ; UNCALIBRATED sous `N_DATES_MIN` dates."""
     if len(lignes) < N_DATES_MIN:
@@ -145,6 +156,7 @@ def resume_horizon(lignes: list[dict], h: int, pas: int, n_nulles: int) -> dict:
             "ecart_top12_moyen": float(tops.mean()),
             "ic_premiere_moitie": float(ics[:m].mean()),
             "ic_seconde_moitie": float(ics[m:].mean()),
+            "ic_seconde_moitie_ic95": _ic95(ics[m:]),
             "premier_jour": lignes[0]["jour"], "dernier_jour": lignes[-1]["jour"]}
 
 

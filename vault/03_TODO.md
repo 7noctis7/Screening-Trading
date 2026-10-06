@@ -105,6 +105,10 @@
       → `make live` (aperçu) → `make start`. Consigner les chiffres (10_BACKTEST_RESULTS).
 - [ ] **P1 — QML-005 reste PARTIEL** : décider d'une période VAULT (ex. 24 derniers mois)
       qu'aucun labo ne lit plus, puis passer le preset par `research/protocole_oos`.
+- [ ] **P0 — `make rapport-esperance` sur le VPS (06/10, ADR-0214).** Une page, quatre
+      questions (espérance / aller-retour frais + impact ; livre − QQQ+cash même DD ;
+      paris indépendants + IC hors échantillon ; capacité). Puis `ARGS="--pas 1"` pour le
+      rythme quotidien réel. Coller les deux pages dans 10_BACKTEST_RESULTS.
 - [ ] **P0 — Audit E[Gain], rang 1 : `make ic-classement` sur le VPS (06/10).** Outil livré
       (`packages/research/ic_classement.py`) : RankIC du classement momentum TRADÉ à
       1/5/10/20/60 j, fenêtres disjointes, nulle par permutation transversale, écart top-12.
