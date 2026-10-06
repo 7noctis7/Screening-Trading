@@ -49,9 +49,18 @@ def test_point_in_time():
     futur = {s: b[:400] + [Bar(x.ts, *(4 * [x.close * 3]), 1e6) for x in b[400:]]
              for s, b in data.items()}
     s1, j1 = icc._series(data), "2019-01-28"            # index 392 < 400
-    a = icc.coupe(s1, j1, "2019-01-29")[1]
-    b = icc.coupe(icc._series(futur), j1, "2019-01-29")[1]
+    a = icc.coupe(s1, j1, "2019-01-29", "2019-01-30")[1]
+    b = icc.coupe(icc._series(futur), j1, "2019-01-29", "2019-01-30")[1]
     assert np.allclose(a, b)
+
+
+def test_le_label_part_du_prix_d_execution_pas_du_close_du_signal():
+    c = np.arange(1.0, 400.0)
+    data = {"A": [Bar(T0 + timedelta(days=j), *(4 * [float(c[j])]), 1e6)
+                  for j in range(len(c))]}
+    jours = [(T0 + timedelta(days=j)).date().isoformat() for j in (300, 301, 306)]
+    _, _, fut = icc.coupe(icc._series(data), *jours)
+    assert fut[0] == pytest.approx(c[306] / c[301] - 1)        # pas c[306] / c[300]
 
 
 def test_saut_12_1_lit_un_close_plus_ancien():
@@ -81,7 +90,7 @@ def test_fenetres_disjointes_et_plancher():
     res = icc.mesurer(data, horizons=(5, 60), n_nulles=20)
     r5, r60 = res["resultats"]
     assert r5["pas"] == 5 and r5["chevauchement"] is False
-    assert r5["n_dates"] == len(range(252, 600 - 5, 5))
+    assert r5["n_dates"] == len(range(252, 600 - 5 - 1, 5))
     assert r60["available"] is False and r60["status"] == "UNCALIBRATED"   # 5 dates
     assert res["horizons_testes"] == 2 and res["production"] is True
 

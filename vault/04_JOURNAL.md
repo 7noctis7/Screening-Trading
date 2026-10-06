@@ -1,5 +1,16 @@
 # 04 — JOURNAL
 
+## Session 2026-10-06 (3ᵉ) — Définir l'aller-retour avant de publier son espérance
+
+L'objectif est le gain net du livre au même risque que QQQ + cash, pas l'espérance par
+trade. Le code ne savait pas ce qu'est un aller-retour : il le sait (FIFO en quantité sur
+les ordres exécutés du rejeu). Les labels de l'IC et du ML partaient du close du signal :
+ils partent du prix d'exécution. Paris indépendants, mélange au même drawdown et
+capacité (impact racine carrée, Y en plage, non calibré) sont mesurables par
+`make rapport-esperance`. Rien n'est mesuré ici : la page publiée dit « non mesuré »
+quatre fois, et le verdict est donc « non établi ». Deux changements de label faits par
+un agent sont désormais comptés au registre.
+
 ## Session 2026-10-06 (2ᵉ) — Mesurer le signal tradé avant de lui chercher des features
 
 Phase 0 livrée (#441, `docs/EXPECTANCY_AUDIT.md`) : le terme limitant est le brut. Rang 1

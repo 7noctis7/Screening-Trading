@@ -97,3 +97,12 @@ def test_le_snapshot_et_make_train_appellent_le_meme_code():
 
 def test_trop_peu_de_donnees_indisponible():
     assert et.section_ml({"A": _barres(100, seed=1)}, {}, {}) == {"available": False}
+
+
+def test_le_label_part_du_prix_d_execution():
+    b = _barres(300, seed=5)
+    lignes, _ = et._serie(b, et.H)
+    c = [x.close for x in b]
+    r0 = lignes[0][1]                                   # premier échantillon : t = 60
+    assert r0 == pytest.approx(c[61 + et.H] / c[61] - 1)
+    assert r0 != pytest.approx(c[60 + et.H] / c[60] - 1)

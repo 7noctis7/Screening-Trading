@@ -125,6 +125,8 @@ class _Compte:
         self.ecarts_examines = self.ecarts_bloques = 0
         self.montant_bloque = self.poids_bloque = 0.0
         self._marque: dict[str, float] = {}
+        self.jour = ""                          # jour d'exécution en cours (journal)
+        self.executions: list[dict] = []        # chaque ordre : la matière des allers-retours
 
     def marquer(self, cours: _Cours, jour: str) -> None:
         for sym in list(self.lignes):
@@ -144,6 +146,8 @@ class _Compte:
         self.cash -= montant + abs(montant) * cout
         self.frais += abs(montant) * cout
         self.n_ordres += 1
+        self.executions.append({"jour": self.jour, "sym": sym, "montant": montant,
+                                "px": px, "cout": cout})
         if self.lignes[sym] <= 1e-9:
             self.lignes.pop(sym)
             self._marque.pop(sym, None)
@@ -264,6 +268,7 @@ def simuler(cibles: list, prix: dict, jours: list[str], *, capital: float = CAPI
     premier = min(a_executer)
     dates, equity, expo = [], [], []
     for jour in jours[jours.index(premier):]:
+        compte.jour = jour
         if sorties is not None:
             sorties.declencher(compte, jour, classes or {}, frais)
         compte.marquer(cours, jour)
@@ -282,6 +287,7 @@ def simuler(cibles: list, prix: dict, jours: list[str], *, capital: float = CAPI
     return {"available": True, "dates": dates, "equity": equity,
             "frais": round(compte.frais, 6), "n_ordres": compte.n_ordres,
             "n_executions": len(a_executer), "bande": _resume_bande(regle, compte),
+            "executions": compte.executions,
             "exposition_moyenne": sum(expo) / len(expo),     # hors symboles de `hors`
             "poids_final": {s: v / eq for s, v in compte.lignes.items()} if eq > 0 else {}}
 

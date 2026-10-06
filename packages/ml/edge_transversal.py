@@ -5,13 +5,16 @@ dans le module qui sert les pages). `snapshot._ml_section` et `make train` appel
 `section_ml` ; les diagnostics (calibration, conformal, méta-label, walk-forward,
 dérive) vivent dans `edge_diagnostics`.
 
-LE LABEL (changé le 06/10, revue E[Gain]). Avant : `c[t+H] > c[t]`, une direction
+LE LABEL (changé deux fois le 06/10 : relatif net de frais, puis départ à
+l'exécution — deux essais au registre). Avant : `c[t+H] > c[t]`, une direction
 ABSOLUE, frais ignorés. Mélangé sur tout l'univers, ce label apprend surtout le bêta du
 marché — dans un mois haussier presque tout monte — et ne dit rien du choix ENTRE les
 titres, qui est le seul usage d'un score de sélection. Un +0,01 % y comptait comme un
 gain alors que l'aller-retour coûte davantage. Désormais : le titre bat la MÉDIANE des
 titres échantillonnés la même semaine calendaire, d'au moins le coût aller-retour
-actions de `CostModel` — « meilleur que ses pairs, frais payés ».
+actions de `CostModel` — « meilleur que ses pairs, frais payés ». Le rendement court
+du close de la séance SUIVANTE (prix d'exécution du rejeu) au close H séances plus
+tard : jamais depuis le close qui a servi au signal.
 
 Anti look-ahead : features point-in-time (clôtures ≤ t), labels purgés (CV purgée +
 embargo, bornes en jours calendaires), modèle servi depuis un artefact daté.
@@ -27,7 +30,7 @@ MIN_ECHANTILLONS = 500
 MAX_ECHANTILLONS = 60_000
 # Toute modification des features OU du label change cette version : la clé de
 # l'artefact en dépend ; un modèle de l'ancienne définition n'est plus servi.
-VERSION_FEATURES = "2026-10-06/relatif-net-de-frais"
+VERSION_FEATURES = "2026-10-06/relatif-net-de-frais/depart-execution"
 NOMS = ["momentum 1 mois", "momentum 3 mois", "tendance vs MM50", "RSI",
         "volatilité (ATR)", "momentum ajusté risque", "distance plus-haut 52 sem.",
         "reversal 5 j", "dérive post-choc (PEAD)", "régime de volatilité"]
@@ -107,10 +110,13 @@ def _serie(bars, h: int):
     sma, rsi, atr = SMA(50).compute(bars), RSI(14).compute(bars), ATR(14).compute(bars)
     rets_c = np.concatenate([[0.0], np.diff(c) / c[:-1]])
     lignes = []
-    for t in range(60, len(c) - h, PAS):
+    # Le label part du PRIX D'EXÉCUTION (close de la séance suivante, comme le rejeu),
+    # jamais du close qui a servi aux features. Purge : du signal à la sortie.
+    for t in range(60, len(c) - h - 1, PAS):
         f = features_point(c, sma, rsi, atr, rets_c, t)
         if f is not None:
-            lignes.append((f, c[t + h] / c[t] - 1.0, *bornes_label(bars, t, h)))
+            lignes.append((f, c[t + 1 + h] / c[t + 1] - 1.0,
+                           *bornes_label(bars, t, h + 1)))
     return lignes, features_point(c, sma, rsi, atr, rets_c, len(c) - 1)
 
 
