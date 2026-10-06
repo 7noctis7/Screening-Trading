@@ -134,3 +134,37 @@ def test_esperance_negative_sans_impact_capacite_nulle():
             "px_achat": 10.0, "px_vente": 9.99, "cout_achat": 0.0005,
             "cout_vente": 0.0005, "notionnel": 10.0} for i in range(0, 38)]
     assert cap.capacite(ars, data, 1e5)["par_y"]["Y=0.5"]["k"] == 0.0
+
+
+def test_un_volume_nan_n_est_pas_un_volume():
+    """06/10, VPS : un NaN dans la fenêtre passait `mean() <= 0`, l'ADV valait NaN
+    et `min(1, q / nan)` = 1 : participation 100 %, impact = Y·σ à toute taille."""
+    data = _data_marche()
+    j = (T0 + timedelta(days=40)).date().isoformat()
+    adv, _ = cap.Marche(data).adv_sigma("A", j)
+    b = data["A"][30]
+    data["A"][30] = Bar(b.ts, b.open, b.high, b.low, b.close, float("nan"))
+    adv_nan, _ = cap.Marche(data).adv_sigma("A", j)
+    assert np.isfinite(adv_nan) and adv_nan == pytest.approx(adv)
+    for i in range(20, 40):                                   # fenêtre presque vide
+        b = data["A"][i]
+        data["A"][i] = Bar(b.ts, b.open, b.high, b.low, b.close, float("nan"))
+    assert cap.Marche(data).adv_sigma("A", j) is None
+
+
+def test_l_impact_croit_au_dela_d_un_adv():
+    """Plafonner la participation à 100 % rendait la capacité infinie."""
+    assert cap.impact(4e5, 1e5, 0.02, 1.0) == pytest.approx(2 * cap.impact(1e5, 1e5,
+                                                                         0.02, 1.0))
+    assert cap.impact(1e5, 1e5, 0.02, 0.5) == pytest.approx(0.01)
+
+
+def test_participation_publiee():
+    data = _data_marche(vol=1e3)
+    jours = [(T0 + timedelta(days=i)).date().isoformat() for i in range(30, 70)]
+    ars = [{"sym": "A", "achat": jours[i], "vente": jours[i + 1], "q": 100.0,
+            "px_achat": 10.0, "px_vente": 10.1, "cout_achat": 0.0005,
+            "cout_vente": 0.0005, "notionnel": 1000.0} for i in range(0, 38)]
+    pa = cap.capacite(ars, data, 1e5)["participation"]
+    assert pa["n"] == 76 and pa["mediane"] == pytest.approx(0.1)
+    assert pa["part_sup_1pct"] == 1.0 and pa["part_sup_100pct"] == 0.0

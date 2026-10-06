@@ -10,6 +10,10 @@
 - [x] **~~P0 — D4 : poche crypto (02/10)~~ — TRANCHÉ 02/10 (ADR-0212) : plus de poche obligatoire, la crypto concourt avec les actions sur le momentum.** : 6 cibles de 273 à 455 $ toutes sous le plancher
       de 1 000 $ → poche à ZÉRO chaque jour, en silence. Options : (a) 2 lignes max (BTC,
       ETH) ; (b) retirer la poche (recommandé) ; (c) plancher crypto abaissé. DÉCISION À PRENDRE.
+- [ ] **P1 — Relancer les quatre questions après ADR-0217 (06/10)** : `make
+      rapport-esperance` puis `make ic-classement`. Lire d'abord la ligne
+      « participation q / ADV » : une médiane ≥ 1 % sur un livre de 100 k$ signale encore
+      des volumes faux. Puis Q1 (frais seuls / Y = 0,5 / Y = 1,0) et Q4.
 - [ ] **P1 — Coût réel live (ADR-0216, 06/10)** : après ≥ 20 ordres Alpaca cotés,
       `make tca` → remplacer le coût supposé du rejeu / de `rapport-esperance` par les
       médianes mesurées (spread, shortfall). Avant : UNCALIBRATED. Bitmart non couvert.

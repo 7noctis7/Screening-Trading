@@ -2,7 +2,7 @@
 
 Mesure, sur les mêmes séries négociables que `make preset-replay`, si le classement qui
 choisit les 12 lignes de production prédit le rendement à 1, 5, 10, 20 et 60 séances,
-contre une distribution nulle (scores permutés au sein de chaque date).
+contre une distribution nulle (signes des IC datés tirés au hasard, ADR-0217).
 
   make ic-classement                    # production : momentum 12-0
   make ic-classement ARGS="--saut 21"   # variante 12-1 : un AUTRE essai
@@ -30,7 +30,7 @@ def _arguments() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--saut", type=int, default=0,
                    help="0 = production (12-0), 21 = 12-1")
-    p.add_argument("--nulles", type=int, default=200,
+    p.add_argument("--nulles", type=int, default=2000,
                    help="tirages de la distribution nulle")
     p.add_argument("--horizons", default="1,5,10,20,60")
     return p.parse_args()
@@ -39,9 +39,9 @@ def _arguments() -> argparse.Namespace:
 def _ligne(r: dict) -> str:
     if not r.get("available"):
         return f"  h={r['horizon']:>3} j : UNCALIBRATED ({r.get('n_dates', 0)} dates)"
-    t = r["t_stat"]
-    return (f"  h={r['horizon']:>3} j : RankIC {r['ic_moyen']:+.4f}  t {t:+.2f}  "
-            f"p_perm {r['p_permutation']:.3f}  (nulle |IC| p95 {r['nulle_p95']:.4f})  "
+    t = "n/d" if r.get("t_stat") is None else f"{r['t_stat']:+.2f}"
+    return (f"  h={r['horizon']:>3} j : RankIC {r['ic_moyen']:+.4f}  t {t}  "
+            f"p_signes {r['p_signes']:.3f}  (nulle |IC| p95 {r['nulle_p95']:.4f})  "
             f"top-12 − médiane {r['ecart_top12_moyen'] * 100:+.2f} %  "
             f"moitiés {r['ic_premiere_moitie']:+.3f} / {r['ic_seconde_moitie']:+.3f}  "
             f"n={r['n_dates']}")
@@ -62,8 +62,9 @@ def _consigner(res: dict, saut: int, mode: str) -> int:
             "statut": "mesure", "horizon": r["horizon"], "n_essais": 1,
             "these": "Le classement momentum de production prédit le rendement futur.",
             "ic_moyen": r.get("ic_moyen"), "t_stat": r.get("t_stat"),
-            "p_permutation": r.get("p_permutation"), "n_obs": r.get("n_dates"),
-            "protocole": "RankIC par date, fenêtres disjointes, nulle par permutation",
+            "p_signes": r.get("p_signes"), "n_obs": r.get("n_dates"),
+            "protocole": "RankIC par date, fenêtres disjointes, nulle par inversion "
+                         "de signe des IC datés",
             "source": "make ic-classement (réel)"})
     return len(mesures)
 

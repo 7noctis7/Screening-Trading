@@ -84,16 +84,29 @@ def _lignes_q3(q3: dict, ic: dict) -> list[str]:
         if not r.get("available"):
             out.append(f"| {titre} | {NM} | — | — |")
             continue
+        t = r.get("t_stat")
+        t_txt = NM if t is None else f"{t:+.2f}"
         out.append(f"| {titre} | {r['ic_seconde_moitie']:+.4f} | "
                    f"{_iv(r.get('ic_seconde_moitie_ic95'))} | "
-                   f"p_perm {r['p_permutation']:.3f} (période entière) |")
+                   f"t {t_txt}, p_signes {r['p_signes']:.3f} (période entière) |")
     return out
+
+
+def _ligne_participation(pa: dict | None) -> list[str]:
+    """q / ADV au capital du rejeu : une saturation (impact aveugle à la taille) se
+    voit ici avant de se lire dans la capacité."""
+    if not pa or not pa.get("n"):
+        return []
+    return [f"| 4 · participation q / ADV au capital | médiane "
+            f"{pa['mediane'] * 100:.3f} % | p90 {pa['p90'] * 100:.3f} % · max "
+            f"{pa['max'] * 100:.1f} % | > 1 % : {pa['part_sup_1pct'] * 100:.1f} % des "
+            f"côtés ; > 100 % : {pa['part_sup_100pct'] * 100:.1f} % |"]
 
 
 def _lignes_q4(q4: dict) -> list[str]:
     if not q4.get("available"):
         return [f"| 4 · encours d'espérance nulle | {NM} | — | — |"]
-    out = []
+    out = _ligne_participation(q4.get("participation"))
     for y, v in q4["par_y"].items():
         e = v["encours"]
         txt = ("déjà ≤ 0 sans impact" if v["k"] == 0 else
@@ -113,6 +126,7 @@ def markdown(r: dict) -> str:
         f"{m.get('pas', NM)} j · capital {_dollars(m.get('capital'))} · "
         f"{m.get('allers_retours', NM)} allers-retours", "",
         "| Question | Valeur | Intervalle 95 % | Note |", "|---|---|---|---|",
+        _ligne_q1(r.get("q1_frais", {}), "frais seuls, sans impact"),
         _ligne_q1(r.get("q1_y05", {}), "Y = 0,5"),
         _ligne_q1(r.get("q1_y10", {}), "Y = 1,0"),
         _ligne_q2(r.get("q2_dd", {})), _ligne_q2(r.get("q2_vol", {})),

@@ -59,3 +59,6 @@ def test_bout_en_bout_sur_le_rejeu_de_production(monkeypatch, tmp_path):
     assert not chemin.exists()                       # synthétique : rien au registre
     page = markdown(r)
     assert "Verdict" in page and "livre − QQQ+cash" in page
+    assert "frais seuls, sans impact" in page and "participation q / ADV" in page
+    f, y10 = r["q1_frais"], r["q1_y10"]
+    assert f["esperance_ponderee"] >= y10["esperance_ponderee"]   # l'impact coûte

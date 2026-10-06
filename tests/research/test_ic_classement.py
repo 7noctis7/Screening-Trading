@@ -3,8 +3,9 @@
 Épinglé :
   1. le score est CELUI de la production (même ordre que `momentum_rank`) ;
   2. il est point-in-time : réécrire le futur ne change aucun score passé ;
-  3. un signal planté est détecté (IC > 0, p de permutation faible) ;
-  4. du bruit pur n'est PAS déclaré significatif ;
+  3. un signal planté est détecté (IC > 0, p du test de signe faible) ;
+  4. du bruit pur n'est PAS déclaré significatif — ni un facteur commun sans
+     information (le défaut de la nulle par permutation, 06/10) ;
   5. pas = horizon → fenêtres disjointes ; sous 12 dates → UNCALIBRATED.
 """
 
@@ -75,14 +76,37 @@ def test_signal_plante_detecte():
     res = icc.mesurer(data, horizons=(20,), n_nulles=100)
     (r,) = res["resultats"]
     assert r["available"] and r["ic_moyen"] > 0.1
-    assert r["p_permutation"] < 0.05 and r["ecart_top12_moyen"] > 0
+    assert r["p_signes"] < 0.05 and r["ecart_top12_moyen"] > 0
 
 
 def test_bruit_pur_non_significatif():
     res = icc.mesurer(_univers(persistance=0.0, graine=2), horizons=(20,), n_nulles=100)
     (r,) = res["resultats"]
-    assert r["available"] and r["p_permutation"] > 0.05
+    assert r["available"] and r["p_signes"] > 0.05
     assert abs(r["ic_moyen"]) < r["nulle_p95"] * 1.5
+
+
+def _univers_facteur(graine: int, n_titres=40, n_barres=1500) -> dict:
+    """Un facteur commun (bêtas hétérogènes), AUCUNE information propre au titre :
+    le momentum passé ne prédit rien, mais l'IC daté varie fortement d'une date à
+    l'autre (signe du facteur passé × signe du facteur futur)."""
+    rng = np.random.default_rng(graine)
+    beta, f = rng.normal(1.0, 0.6, n_titres), rng.normal(0, 0.015, n_barres)
+    out = {}
+    for k in range(n_titres):
+        px = 100 * np.cumprod(1 + beta[k] * f + rng.normal(0, 0.005, n_barres))
+        out[f"S{k:02d}"] = [Bar(T0 + timedelta(days=j), *(4 * [float(px[j])]), 1e6)
+                            for j in range(n_barres)]
+    return out
+
+
+def test_facteur_commun_sans_information_non_significatif():
+    """Graine 0 : IC +0,095, t = +1,48. L'ancienne nulle (permutation au sein de
+    chaque date) rendait p = 0,005 ; le test de signe rend p ≈ 0,14."""
+    (r,) = icc.mesurer(_univers_facteur(0), horizons=(20,))["resultats"]
+    assert r["available"] and r["p_signes"] > 0.05
+    se = r["ic_ecart_type"] / np.sqrt(r["n_dates"])        # la vraie largeur
+    assert r["nulle_p95"] == pytest.approx(1.96 * se, rel=0.3)
 
 
 def test_fenetres_disjointes_et_plancher():
@@ -103,7 +127,7 @@ def test_le_script_ne_consigne_ni_synthetique_ni_uncalibrated(tmp_path, monkeypa
     monkeypatch.setattr(ledger.append_record, "__defaults__", (chemin,))
     res = {"resultats": [{"horizon": 5, "available": False},
                          {"horizon": 20, "available": True, "ic_moyen": 0.01,
-                          "t_stat": 0.3, "p_permutation": 0.7, "n_dates": 40}]}
+                          "t_stat": 0.3, "p_signes": 0.7, "n_dates": 40}]}
     assert script._consigner(res, 0, "synthetic") == 0 and not chemin.exists()
     assert script._consigner(res, 0, "réel") == 1
     (rec,) = ledger.read_records(chemin)

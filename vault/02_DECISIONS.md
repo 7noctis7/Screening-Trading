@@ -2,6 +2,40 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0217 — Deux mesures du rapport d'espérance corrigées après le premier passage réel (2026-10-06)
+
+**Contexte.** Premier `make rapport-esperance` / `make ic-classement` sur le VPS (625
+séries, 2016-10 → 2026-10, 2 202 allers-retours). Deux chiffres se contredisaient :
+- capacité « > 10⁶ × le capital » à Y = 0,5 mais 341 k$ à Y = 1,0 — impossible pour une
+  loi en racine, où doubler Y divise k* par 4 ; et un écart d'espérance de 3 points
+  entre Y = 0,5 et 1,0 pour un livre de 100 k$ en actions liquides ;
+- h = 20 j : t = +0,70, mais p de permutation = 0,005 (le plancher à 200 tirages).
+
+**Décision.**
+1. `capacite.Marche` n'accepte que des volumes finis et > 0 (≥ 15 sur 20 séances) : un
+   NaN passait `mean() <= 0`, et `min(1, q / nan)` vaut 1 → participation 100 %,
+   impact = Y·σ à toute taille. L'impact de recherche n'est plus plafonné à 100 % de
+   l'ADV (au-delà, l'exécution s'étale sur plusieurs séances ; la loi en racine sur la
+   quantité totale reste l'approximation standard). `impact.py` (chemin d'exécution)
+   n'est pas modifié.
+2. Le rapport publie la ligne « frais seuls, sans impact » et la distribution de
+   q / ADV : une saturation se voit avant de se lire dans la capacité.
+3. `ic_classement` : la nulle permutait les scores au sein de chaque date, ce qui
+   suppose les titres indépendants ; un facteur commun fait varier l'IC daté bien plus
+   que 1/√N (nulle 4 fois trop étroite). Remplacée par l'inversion aléatoire du signe
+   des IC datés (2 000 tirages). Test : univers à facteur commun sans information,
+   ancienne p = 0,005, nouvelle p ≈ 0,14.
+
+**Ce qui reste valable du passage du 06/10.** Q2 (livre − QQQ + cash : +4,24 %/an au
+même drawdown, IC [−0,10 ; +8,77], DSR 0,06 pour 5 744 essais), Q3 (5,3 paris effectifs
+pour 12 lignes), les IC ponctuels et leurs t, les deux rejeux. **Invalidés** : les deux
+lignes Q1 avec impact, Q4, les p de permutation. Le verdict ne change pas : NON établi
+(Q2 n'est pas distinct de zéro après déflation).
+
+**Conséquences.** Relancer `make rapport-esperance` et `make ic-classement` (même clé
+au registre : une re-mesure ne gonfle pas N). Mesure seulement ; aucun ordre, aucun
+modèle, aucun seuil touché.
+
 ## ADR-0216 — Mesurer le coût réel de chaque ordre live : spread, dérive avant envoi, shortfall (2026-10-06)
 
 **Contexte.** Constat F6 de `docs/EXPECTANCY_AUDIT.md` : le « slippage » live comparait le
