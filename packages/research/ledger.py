@@ -41,15 +41,45 @@ def read_records(path: str | Path = DEFAULT_PATH) -> list[dict]:
     return out
 
 
+def cle_essai(r: dict) -> tuple:
+    """Identité d'un ESSAI : ce qui, s'il change, fait un nouvel essai.
+
+    Facteur, empreinte (filtres d'un scan), classe d'actifs, horizon et paramètres. Une
+    relance à l'identique n'est pas un nouvel essai ; un autre label, horizon, univers ou
+    coût (portés par facteur, horizon ou params) en est un."""
+    return (r.get("facteur"), r.get("empreinte"), tuple(r.get("classe") or ()),
+            r.get("horizon"), json.dumps(r.get("params"), sort_keys=True, default=str))
+
+
+def compter_essais(recs: list[dict]) -> int:
+    """LE compteur : Σ, par essai distinct, du plus grand `n_essais` déclaré (≥ 1).
+
+    Deux compteurs coexistaient jusqu'au 06/10 : `trial_count` (nombre de LIGNES, 41) et
+    `deflation_params` (facteurs distincts × `n_essais`, 5 738). La porte de déploiement
+    (`gate.verdict_hors_echantillon`) déflatait avec le premier — un seuil 140 fois plus
+    indulgent que celui affiché à côté. Il n'y en a plus qu'un."""
+    par_essai: dict[tuple, int] = {}
+    for r in recs:
+        if not r.get("facteur"):
+            continue
+        ne = r.get("n_essais")
+        valide = isinstance(ne, int) and not isinstance(ne, bool) and ne > 0
+        n = int(ne) if valide else 1
+        k = cle_essai(r)
+        par_essai[k] = max(par_essai.get(k, 1), n)
+    return sum(par_essai.values())
+
+
 def trial_count(path: str | Path = DEFAULT_PATH, *, facteur: str | None = None,
                 classe: str | None = None) -> int:
-    """Nombre d'essais (filtrable par facteur/classe). Sert de `N` pour le DSR."""
+    """Nombre d'essais (filtrable par facteur/classe). Sert de `N` pour le DSR —
+    le MÊME nombre que `deflation_params` (`compter_essais`)."""
     recs = read_records(path)
     if facteur is not None:
         recs = [r for r in recs if r.get("facteur") == facteur]
     if classe is not None:
         recs = [r for r in recs if classe in (r.get("classe") or [])]
-    return len(recs)
+    return compter_essais(recs)
 
 
 def deflation_params(path: str | Path = DEFAULT_PATH,
@@ -76,15 +106,11 @@ def deflation_params(path: str | Path = DEFAULT_PATH,
     """
     recs = read_records(path)
     by_facteur: dict[str, float] = {}
-    distinct: dict[str, int] = {}
     ignores = 0
     for r in recs:
         f = r.get("facteur")
         if not f:
             continue
-        # Un balayage consigne UN enregistrement pour `n_essais` scénarios : chacun compte.
-        ne = r.get("n_essais")
-        distinct[f] = max(distinct.get(f, 1), int(ne) if isinstance(ne, int) and ne > 0 else 1)
         sp = r.get("sharpe_period")
         if isinstance(sp, (int, float)):
             by_facteur[f] = float(sp)
@@ -94,7 +120,7 @@ def deflation_params(path: str | Path = DEFAULT_PATH,
             by_facteur[f] = float(sh) / float(ppy) ** 0.5
         elif isinstance(sh, (int, float)):
             ignores += 1                      # périodicité inconnue → EXCLU, jamais deviné
-    n = max(min_trials, sum(distinct.values()) or len(recs))
+    n = max(min_trials, compter_essais(recs) or len(recs))
     sharpes = list(by_facteur.values())
     if len(sharpes) < 2:
         return n, None

@@ -2,6 +2,34 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0215 — Retirer ce qui coûte : cadence de 5 séances, aucun multiple inventé, un seul compteur d'essais (2026-10-06)
+
+**Contexte.** Règle du propriétaire : tant que l'espérance d'un aller-retour et l'écart au
+mélange QQQ + cash au même drawdown ne sont pas positifs et distincts de zéro après
+déflation, aucune PR de modèle ; la PR légitime retire ce qui coûte. Le rapport d'une page
+(ADR-0214) dit « non mesuré » partout : le signal n'est pas établi.
+
+**Décision.**
+1. **Cadence** (`packages/execution/cadence.py`) : la production ne rebalance que si
+   5 séances (`CADENCE_DEFAUT`) se sont écoulées depuis le dernier rebalancement constaté
+   chez le courtier — le rythme de la seule règle mesurée (`preset_rejeu.PAS_DEFAUT`, qui
+   lit désormais la même constante). Réduction de risque, historique illisible et
+   `--forcer` passent toujours. `QUANT_CADENCE_JOURS=1` rétablit le quotidien. Compteur
+   `cadence_de_rebalancement` au témoin des garde-fous.
+2. **Fondamentaux** : SEC et yfinance ne remplacent plus une donnée absente par un
+   multiple ; absent = NaN, non noté. Plus de repli synthétique implicite dans les
+   sections fondamentaux / investisseurs / notes ; la démo exige `QUANT_FUND=synthetic`.
+3. **Registre** : un seul compteur (`ledger.compter_essais`, clé facteur + empreinte +
+   classe + horizon + params). La porte de déploiement déflatait avec 41, elle déflate
+   avec 5 744. Les trois « promu » de juin à DSR nul sont requalifiés « rejeté » ;
+   `/api/failures` lit l'état courant.
+
+**Pas fait.** Hystérésis des portes (seuils non calibrés : `make rotation-causes` d'abord).
+
+**Conséquences.** La production change de rythme : moins d'ordres, des cibles
+appliquées avec jusqu'à 4 séances de retard (comme dans le rejeu publié). Réversible par
+variable d'environnement. Paper uniquement.
+
 ## ADR-0214 — L'aller-retour défini dans le code ; labels au prix d'exécution ; une page, quatre questions (2026-10-06)
 
 **Contexte.** Mission du propriétaire : l'objectif est le gain net du livre, pas

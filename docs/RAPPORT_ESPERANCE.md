@@ -36,9 +36,26 @@ légitime est celle qui retire ce qui coûte.
 - **Capacité** : encours k × capital où l'espérance nette, impact recalculé à la taille
   k, s'annule ; ADV et σ des 20 séances précédant chaque exécution.
 
+## Retiré, parce que ça coûte sans rien prouver (PR « retirer ce qui coûte »)
+
+- **Rotation de poussière** : la production rebalançait chaque jour alors que la seule
+  règle mesurée décide tous les 5 jours. Cadence partagée rejeu / `run_live`
+  (`packages/execution/cadence.py`) ; une réduction de risque passe toujours.
+- **Multiples inventés** : SEC et yfinance remplaçaient une donnée absente par un multiple
+  (marge brute = 40 % du CA, EBIT = 85 % de l'EBITDA…) sous l'étiquette « réel ». Absent
+  = NaN, sans note. Le repli synthétique implicite des onglets fondamentaux est retiré.
+- **Deux compteurs d'essais** : la porte de déploiement déflatait avec 41 essais, le reste
+  avec 5 738. Un seul compteur (5 744 au 06/10).
+- **« Promu » à DSR nul** : momentum, trend, low_vol (juin, DSR 0,0 à 0,01) requalifiés
+  « rejeté » ; `/api/failures` lit l'état courant.
+
+**Pas retiré, faute de mesure** : l'hystérésis des portes (régime, plafond, blackout)
+exige des seuils d'entrée et de sortie qui ne sont pas calibrés. `make rotation-causes`
+mesure d'abord la part de la rotation qu'elles causent.
+
 ## À lancer sur le VPS
 
 ```bash
-make rapport-esperance                  # décision tous les 5 j (rythme du rejeu publié)
-make rapport-esperance ARGS="--pas 1"   # rythme quotidien de la production (lent)
+make rapport-esperance                  # décision tous les 5 j (cadence de production)
+make rapport-esperance ARGS="--pas 1"   # ancien rythme quotidien, pour comparer (lent)
 ```

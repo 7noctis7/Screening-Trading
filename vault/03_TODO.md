@@ -105,6 +105,10 @@
       → `make live` (aperçu) → `make start`. Consigner les chiffres (10_BACKTEST_RESULTS).
 - [ ] **P1 — QML-005 reste PARTIEL** : décider d'une période VAULT (ex. 24 derniers mois)
       qu'aucun labo ne lit plus, puis passer le preset par `research/protocole_oos`.
+- [ ] **P1 — Après fusion de la PR « retirer ce qui coûte » (ADR-0215)** : vérifier sur le
+      VPS que `make live-go` du lendemain d'un rebalancement imprime « cadence : … aucun
+      ordre » et que le compteur `cadence_de_rebalancement` apparaît au rapport des
+      garde-fous. Puis `make rotation-causes` pour décider (mesure) d'une hystérésis.
 - [ ] **P0 — `make rapport-esperance` sur le VPS (06/10, ADR-0214).** Une page, quatre
       questions (espérance / aller-retour frais + impact ; livre − QQQ+cash même DD ;
       paris indépendants + IC hors échantillon ; capacité). Puis `ARGS="--pas 1"` pour le

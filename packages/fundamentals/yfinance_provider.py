@@ -143,16 +143,20 @@ class YFinanceFundamentalsProvider:
                     except (TypeError, ValueError):
                         continue
             return None
-        ebit_v = _f(info, "ebit") or ebitda * 0.85
-        ebitda_v = max(ebitda, ebit_v) if ebitda else ebit_v   # EBITDA ≥ EBIT (D&A ≥ 0) — évite l'incohérence
+        # ABSENT = NaN, jamais un multiple inventé (06/10) : l'EBIT n'est plus 85 % de
+        # l'EBITDA, la marge brute absente n'est plus 0, le FCF absent n'est plus 0.
+        nan = float("nan")
+        ebit_v = _f(info, "ebit", default=nan)
+        ebitda_v = (max(ebitda, ebit_v) if ebit_v == ebit_v else ebitda) if ebitda \
+            else ebit_v                                       # EBITDA ≥ EBIT (D&A ≥ 0)
         return Financials(
             symbol=symbol, as_of=as_of or datetime.now(timezone.utc),
             sector=info.get("sector", "Unknown"), price=price, shares=shares,
-            revenue=revenue, gross_profit=revenue * gross_margin if gross_margin else 0.0,
+            revenue=revenue, gross_profit=revenue * gross_margin if gross_margin else nan,
             ebit=ebit_v, ebitda=ebitda_v, net_income=net_income,
-            total_equity=_f(info, "totalStockholderEquity") or revenue * 0.5,
+            total_equity=_f(info, "totalStockholderEquity") or nan,
             total_debt=_f(info, "totalDebt"), cash=_f(info, "totalCash"),
-            fcf=_f(info, "freeCashflow"), interest_expense=0.0,
+            fcf=_f(info, "freeCashflow", default=nan), interest_expense=nan,
             revenue_growth=_opt("revenueGrowth"), earnings_growth=_opt("earningsGrowth"),
             currency=(info.get("financialCurrency") or None),     # devise des comptes
             price_currency=(info.get("currency") or None),        # devise du cours (ADR → USD)

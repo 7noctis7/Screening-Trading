@@ -191,7 +191,7 @@ def test_six_constats_IDENTIQUES_font_une_ligne_pas_six():
     assert len(lignes) == 1, lignes
     for nom in gf.ORDRE:
         assert nom in lignes[0]          # aucun n'est perdu par le regroupement
-    assert "6 garde-fous" in lignes[0]
+    assert f"{len(gf.ORDRE)} garde-fous" in lignes[0]   # 7 depuis la cadence (06/10)
 
 
 def test_un_constat_QUI_PORTE_UN_CHIFFRE_reste_separe():
