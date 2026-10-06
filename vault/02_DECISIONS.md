@@ -2,6 +2,32 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0213 — Revue E[Gain] : label ML relatif et net de frais ; indice de régime exogène sous drapeau (2026-10-06)
+
+**Contexte.** Revue code + stratégie demandée par le propriétaire. Constats : (1) le label du
+modèle d'edge était `c[t+H] > c[t]` — direction ABSOLUE, frais ignorés : mélangé sur tout
+l'univers, il apprenait le bêta du marché et pas le choix entre titres ; (2) la clé de
+l'artefact ML ignorait la définition des features (modèle périmé servi jusqu'à 24 h après
+un changement) ; (3) l'entraînement vivait dans `apps/api/snapshot.py` (3 175 lignes) ;
+(4) QML-009(a) : la porte de régime jugeait le risque sur l'indice de son propre panier.
+
+**Décision (propriétaire, « fais tout même 4 »).**
+- Label = le titre bat la médiane des titres de la même semaine calendaire de plus que le
+  coût aller-retour actions (`CostModel`). Contrat affiché : `frais_inclus: True`.
+- Clé d'artefact = jeu vu + `VERSION_FEATURES` + noms des features.
+- Extraction : `packages/ml/edge_transversal.py` (jeu, label, CV),
+  `edge_diagnostics.py`, `edge_publication.py`. `snapshot._ml_section` et `make train`
+  appellent le même `section_ml`.
+- `QUANT_REGIME_INDICE=QQQ` fait lire à la porte de régime un indice de MARCHÉ
+  (`packages/backtest/indice_regime.py`, point-in-time, repli panier si couverture < 95 %).
+  **Défaut : vide = comportement historique au chiffre près.**
+
+**Conséquences.** Le ML reste hors du chemin d'ordres et UNCALIBRATED tant que la
+distribution nulle manque (P2). Les AUC d'avant et d'après ne sont PAS comparables
+(question différente). QML-009(a) ne s'active qu'après `make preset-replay` avec et sans
+drapeau sur le VPS, test apparié, et décision explicite. Tests :
+`tests/ml/test_edge_transversal.py`, `tests/backtest/test_indice_regime.py`.
+
 ## ADR-0212 — D4 : plus de poche crypto obligatoire ; la crypto concourt avec les actions (2026-10-02)
 
 **Contexte.** `budget_poches` réservait 15 % du compte à la crypto (`QUANT_CRYPTO_PCT`).
