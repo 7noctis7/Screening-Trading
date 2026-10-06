@@ -30,7 +30,7 @@ from packages.backtest.preset_helpers import (
 from packages.backtest.preset_helpers import (
     regime_detail as _regime_detail_fn,
 )
-from packages.backtest.preset_helpers import indice_marche
+from packages.backtest.indice_regime import choisir_indice
 from packages.backtest.preset_helpers import (
     regime_mult as _regime_mult_fn,
 )
@@ -183,11 +183,11 @@ def _prod_panel(data: dict, universe: list, min_names: int):
     pour le ledger et les courbes du dashboard (ADR-0037).
     """
     if len(universe) < 2:
-        return None, None
-    noms, _dates, A = aligner_sans_trous(data, list(universe), min_names)
+        return None, None, None
+    noms, dates, A = aligner_sans_trous(data, list(universe), min_names)
     if len(noms) < 2 or A.shape[1] < MIN_BARRES_REGIME:
-        return None, None
-    return noms, A
+        return None, None, None
+    return noms, dates, A
 
 
 def preset_latest_weights(data: dict, quality: dict | None = None,
@@ -224,7 +224,7 @@ def preset_latest_weights_explique(
     universe = _selection(data, quality or {}, lookback, top_k, d)
     if universe is None:
         return {}, d
-    universe, A = _prod_panel(data, universe, min_names)
+    universe, dates, A = _prod_panel(data, universe, min_names)
     if A is None:
         d.stop("panel inexploitable : après intersection des dates, moins de 2 "
                f"noms ou moins de {MIN_BARRES_REGIME} dates communes")
@@ -242,7 +242,8 @@ def preset_latest_weights_explique(
     if mom_tilt:
         w = _mom_tilt_fn(A, t, w)
     w = _cap_weights_fn(w, _adaptive_cap_fn(cov, max_weight, corr_tighten))
-    gross = _exposition(A, cov, w, indice_marche(A), t, d, k_dd=k_dd,   # QML-009
+    mkt = choisir_indice(data, dates, A, d)        # QML-009(a), panier par défaut
+    gross = _exposition(A, cov, w, mkt, t, d, k_dd=k_dd,
                         dd_target=dd_target, regime_gate=regime_gate,
                         breadth_gate=breadth_gate)
     w = _concentrate(w * gross, min_weight)

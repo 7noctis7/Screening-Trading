@@ -1,5 +1,15 @@
 # 04 — JOURNAL
 
+## Session 2026-10-06 — Le score ML apprenait le marché, pas les titres
+
+Revue E[Gain] sur le code réel. Le chemin d'ordres n'a pas de fuite trouvée ; la règle
+tradée reste indiscernable de QQQ + cash à même volatilité (25/09). Le label ML était une
+direction absolue sans frais : il est maintenant « bat ses pairs de la semaine, frais
+payés ». La clé d'artefact porte la version des features ; l'entraînement quitte le
+snapshot (3 175 → 2 871 lignes). QML-009(a) est codé derrière `QUANT_REGIME_INDICE`,
+éteint par défaut, à rejouer sur le VPS avant toute activation (ADR-0213). Les sorties
+TP/suiveur ATR ne sont PAS ajoutées : la grille du 30/09 les mesure nuisibles au momentum.
+
 ## Session 2026-10-02 — Score X du jour, sans volume inventé
 
 Table `sentiment_jour` dans la base sociale. Chaque jour, au plus 20 tickers

@@ -105,13 +105,17 @@
       → `make live` (aperçu) → `make start`. Consigner les chiffres (10_BACKTEST_RESULTS).
 - [ ] **P1 — QML-005 reste PARTIEL** : décider d'une période VAULT (ex. 24 derniers mois)
       qu'aucun labo ne lit plus, puis passer le preset par `research/protocole_oos`.
-- [ ] **P1 — QML-009(a)** : la porte de régime lit encore l'indice de SON panier ; brancher
-      un indice exogène (SPY/QQQ) — à passer au labo avant la production.
+- [ ] **P1 — QML-009(a) : CODÉ sous drapeau (06/10, ADR-0213), PAS ACTIVÉ.** Sur le VPS :
+      `make preset-replay` puis `QUANT_REGIME_INDICE=QQQ make preset-replay` ; consigner les
+      deux lignes dans 10_BACKTEST_RESULTS, test apparié, puis décider de l'activation.
 - [x] **~~P2 de l'audit QML~~ — CORRIGÉS (25/09, ADR-0204)** : 010 · 011 · 012 · 013 · 014 ·
       015 (gap) · 016. 3594 tests verts.
 - [ ] **P2 — Edge ML : produire la distribution NULLE** (AUC de labels permutés par date,
       ≥ 20 tirages) hors ligne dans `make train` et la servir à `edge_detecte` ; tant
       qu'elle manque, l'onglet ML affiche UNCALIBRATED — c'est voulu.
+      **06/10 (ADR-0213)** : le label est désormais relatif et net de frais — la nulle doit
+      permuter CE label, par semaine. Relancer `make train` sur le VPS (l'ancien artefact
+      n'est plus servi : clé de version changée).
 - [ ] **P3 — `fast_swing` aligné par position DEPUIS LE DÉBUT** des séries (legacy) ;
       `snapshot.py` 3 050 lignes, `run_live.py` 1 030 : découpage à planifier.
 - [x] **~~P2 — Onglet X : filtres et recherche~~ — LIVRÉ (24/09, ADR-0194).** L'onglet
