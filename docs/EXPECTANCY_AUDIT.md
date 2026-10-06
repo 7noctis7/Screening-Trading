@@ -194,6 +194,8 @@ hypothèses distinctes : trois PR, trois essais au ledger.
 make turnover-audit        # taux de gain, PF, détention, capture — à refaire hors période d'incident
 make slippage              # slippage décision → fill (au sens de F6 : inclut le gap de nuit)
 make ic-screening          # IC du score d'écran (PAS du classement tradé — cf. rang 1)
+make ic-classement         # rang 1 : IC du classement TRADÉ à 1/5/10/20/60 j + nulle (06/10)
+make rotation-causes       # rang 4 : turnover des cibles = sélection / échelle / redistribution
 make rdv-paper             # verdict paper contre backtest
 make combler-mfe           # MFE/MAE des trades clos qui n'en ont pas (simulation par défaut)
 ```

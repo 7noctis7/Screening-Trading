@@ -1,5 +1,14 @@
 # 04 — JOURNAL
 
+## Session 2026-10-06 (2ᵉ) — Mesurer le signal tradé avant de lui chercher des features
+
+Phase 0 livrée (#441, `docs/EXPECTANCY_AUDIT.md`) : le terme limitant est le brut. Rang 1
+du plan codé : `make ic-classement` mesure le RankIC du momentum 12-0 de production à cinq
+horizons contre une nulle par permutation. Le conteneur n'a pas de données : AUCUN chiffre
+n'est publié ici. Un essai à blanc a d'abord écrit deux lignes factices au registre —
+retirées, et le script ne consigne plus rien en mode synthétique ni pour un horizon
+UNCALIBRATED (test).
+
 ## Session 2026-10-06 — Le score ML apprenait le marché, pas les titres
 
 Revue E[Gain] sur le code réel. Le chemin d'ordres n'a pas de fuite trouvée ; la règle

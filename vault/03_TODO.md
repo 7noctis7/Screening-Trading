@@ -105,6 +105,12 @@
       → `make live` (aperçu) → `make start`. Consigner les chiffres (10_BACKTEST_RESULTS).
 - [ ] **P1 — QML-005 reste PARTIEL** : décider d'une période VAULT (ex. 24 derniers mois)
       qu'aucun labo ne lit plus, puis passer le preset par `research/protocole_oos`.
+- [ ] **P0 — Audit E[Gain], rang 1 : `make ic-classement` sur le VPS (06/10).** Outil livré
+      (`packages/research/ic_classement.py`) : RankIC du classement momentum TRADÉ à
+      1/5/10/20/60 j, fenêtres disjointes, nulle par permutation transversale, écart top-12.
+      5 essais au registre. Si aucun horizon ne bat la nulle : l'écrire, et les Phases 2-3
+      (features, LightGBM) sont sans objet sur ce signal. Variante 12-1 = `ARGS="--saut 21"`,
+      5 essais de plus, à ne lancer qu'après lecture du 12-0.
 - [ ] **P1 — QML-009(a) : CODÉ sous drapeau (06/10, ADR-0213), PAS ACTIVÉ.** Sur le VPS :
       `make preset-replay` puis `QUANT_REGIME_INDICE=QQQ make preset-replay` ; consigner les
       deux lignes dans 10_BACKTEST_RESULTS, test apparié, puis décider de l'activation.
