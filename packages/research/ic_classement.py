@@ -17,9 +17,15 @@ MÉTHODE.
 - RankIC (Spearman) par date ; pas = horizon par défaut, donc des fenêtres DISJOINTES.
 - Écart du top-12 : rendement moyen des 12 premiers moins la médiane de la coupe — la
   quantité que le portefeuille encaisse réellement, avant pondération et coûts.
-- Distribution NULLE : les scores sont permutés AU SEIN de chaque date (la structure
-  temporelle et la dispersion des rendements sont conservées) ; p bilatérale
-  = (1 + #{|IC nul| ≥ |IC observé|}) / (1 + N).
+- Distribution NULLE : inversion aléatoire du SIGNE des IC datés (test de
+  randomisation de la moyenne, fenêtres disjointes) ; p bilatérale
+  = (1 + #{|IC nul| ≥ |IC observé|}) / (1 + N). Elle porte la VRAIE variabilité d'une
+  date à l'autre.
+  CORRIGÉ LE 06/10 (premier passage réel) : la nulle permutait les scores AU SEIN de
+  chaque date. Elle suppose les titres indépendants entre eux ; or un facteur commun
+  (marché, secteur) fait varier l'IC d'une date à l'autre bien plus que 1/√N. Résultat
+  mesuré : h = 20 j, t = +0,70 mais p_perm = 0,005 (le plancher à 200 tirages) — une
+  nulle 4 fois trop étroite, qui déclarait significatif ce que le t ne voit pas.
 
 CE QUE ÇA NE MESURE PAS. Les portes (régime, ampleur, DD-target), l'ERC et les coûts :
 c'est l'IC du SIGNAL de sélection, pas la performance du portefeuille (cf. le rejeu).
@@ -34,7 +40,7 @@ import numpy as np
 HORIZONS = (1, 5, 10, 20, 60)
 FENETRE = 252                  # identique à `preset_config.momentum_rank`
 TOP_K = 12                     # `top_k` de production
-N_NULLES = 200
+N_NULLES = 2000
 N_DATES_MIN = 12
 N_TITRES_MIN = 20              # sous 20 titres, un rang transversal ne veut rien dire
 
@@ -103,22 +109,18 @@ def mesures_horizon(series: dict, cal: list[str], h: int, pas: int, saut: int,
         _, sc, fut = coupe(series, cal[t], cal[t + 1], cal[t + 1 + h], saut)
         if sc.size < N_TITRES_MIN:
             continue
-        rs, rf = _rangs(sc), _rangs(fut)
-        ic = _corr(rs, rf)
+        ic = _corr(_rangs(sc), _rangs(fut))
         if ic is not None:
-            lignes.append({"jour": cal[t], "ic": ic, "rs": rs, "rf": rf,
+            lignes.append({"jour": cal[t], "ic": ic,
                            "top": _ecart_top(sc, fut, TOP_K)})
     return lignes
 
 
-def nulle(lignes: list[dict], n: int = N_NULLES, graine: int = 0) -> np.ndarray:
-    """IC moyens obtenus en permutant les scores AU SEIN de chaque date."""
+def nulle(ics: np.ndarray, n: int = N_NULLES, graine: int = 0) -> np.ndarray:
+    """IC moyens sous H0 (IC daté symétrique autour de 0) : signes tirés au hasard."""
     rng = np.random.default_rng(graine)
-    out = np.empty(n)
-    for k in range(n):
-        ics = [_corr(rng.permutation(li["rs"]), li["rf"]) for li in lignes]
-        out[k] = float(np.mean([x for x in ics if x is not None]))
-    return out
+    signes = rng.choice((-1.0, 1.0), size=(n, ics.size))
+    return (signes * ics).mean(axis=1)
 
 
 def _stats(ics: np.ndarray) -> dict:
@@ -146,13 +148,13 @@ def resume_horizon(lignes: list[dict], h: int, pas: int, n_nulles: int) -> dict:
                 "n_dates": len(lignes)}
     ics = np.asarray([li["ic"] for li in lignes])
     tops = np.asarray([li["top"] for li in lignes])
-    nul = nulle(lignes, n_nulles)
+    nul = nulle(ics, n_nulles)
     obs = float(ics.mean())
-    p_perm = float((1 + (np.abs(nul) >= abs(obs)).sum()) / (1 + nul.size))
+    p_signes = float((1 + (np.abs(nul) >= abs(obs) - 1e-12).sum()) / (1 + nul.size))
     m = len(ics) // 2
     return {"horizon": h, "available": True, "status": "MESURÉ", "pas": pas,
             "chevauchement": pas < h, "n_dates": int(ics.size), **_stats(ics),
-            "p_permutation": p_perm, "nulle_p95": float(np.quantile(np.abs(nul), 0.95)),
+            "p_signes": p_signes, "nulle_p95": float(np.quantile(np.abs(nul), 0.95)),
             "ecart_top12_moyen": float(tops.mean()),
             "ic_premiere_moitie": float(ics[:m].mean()),
             "ic_seconde_moitie": float(ics[m:].mean()),

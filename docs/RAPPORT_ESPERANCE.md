@@ -27,7 +27,8 @@ légitime est celle qui retire ce qui coûte.
   Les labels de l'IC (`ic_classement`) et du ML (`edge_transversal`) partent de ce prix,
   jamais du close qui a servi au signal.
 - **Net** : brut − coût par côté (barème `CostModel`) − impact racine carrée par côté
-  (`packages/execution/impact.py`, Y = 0,5 et 1,0 : non calibré, publié en plage).
+  (`packages/research/capacite.impact` = Y·σ·√(q/ADV), non borné, volumes finis
+  seulement ; Y = 0,5 et 1,0 : non calibré, publié en plage, ADR-0217).
 - **Même risque** : α·QQQ + (1−α)·cash rebalancé chaque jour, α calé sur le drawdown
   maximal (ou la volatilité) du livre, α ≤ 1 ; cash à 0 % (avantage le livre) ; écart
   avec bootstrap en blocs de 20 séances et DSR par le nombre d'essais du registre.
@@ -59,6 +60,19 @@ mesure d'abord la part de la rotation qu'elles causent.
   (Alpaca) ; table `tca_executions` = spread, dérive avant envoi, shortfall d'exécution.
   `make tca` reste UNCALIBRATED sous 20 ordres cotés. C'est l'entrée « frais et impact »
   de la question 1 ; elle n'est recalibrée qu'une fois mesurée.
+
+## Premier passage réel (VPS, 06/10) — ce qui tient et ce qui est à relancer
+
+| Mesure | Résultat | Statut |
+|---|---|---|
+| 2 · livre − QQQ+cash, même drawdown | +4,24 %/an, IC [−0,10 ; +8,77], DSR 0,06 (5 744 essais) | valable |
+| 3 · paris indépendants | 5,3 effectifs pour 12 lignes, 71 / an | valable |
+| 3 · IC 2ᵉ moitié | h = 1 j : +0,020 [+0,008 ; +0,032] ; h ≥ 5 j : intervalles contenant 0 | valable (ponctuel et t) |
+| 3 · p de permutation | 0,005 partout | **faux** — nulle trop étroite (ADR-0217) |
+| 1 · espérance avec impact (Y = 0,5 / 1,0) | +3,77 % / +0,78 % | **faux** — impact saturé (ADR-0217) |
+| 4 · capacité | > 10⁶ × / 341 k$ | **faux** — même cause |
+
+Verdict inchangé : **NON établi**.
 
 ## À lancer sur le VPS
 

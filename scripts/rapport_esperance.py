@@ -48,7 +48,7 @@ def _q1(ars: list, data: dict) -> dict:
     from packages.research.capacite import Marche, _param, impact
     m = Marche(data)
     out = {}
-    for y, cle in ((0.5, "q1_y05"), (1.0, "q1_y10")):
+    for y, cle in ((0.0, "q1_frais"), (0.5, "q1_y05"), (1.0, "q1_y10")):
         nets, w = [], []
         for a in ars:
             p = _param(m, a)

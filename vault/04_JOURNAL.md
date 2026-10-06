@@ -1,5 +1,17 @@
 # 04 — JOURNAL
 
+## Session 2026-10-06 (6ᵉ) — Premier passage réel des quatre questions : deux mesures fausses
+
+Le VPS a produit la page (625 séries, 2 202 allers-retours). Verdict mécanique : NON
+établi — le livre bat QQQ + cash au même drawdown de +4,24 %/an, mais l'intervalle
+touche zéro et le DSR vaut 0,06 pour 5 744 essais. Deux chiffres se contredisaient et
+ont mené à deux défauts de MA mesure (ADR-0217) : un volume NaN saturait l'impact à
+Y·σ (capacité infinie), et la nulle de l'IC ignorait le facteur commun (p = 0,005 avec
+t = 0,70). Corrigés, testés ; les lignes Q1-impact, Q4 et les p_perm sont à relancer.
+Rejeu avec indice de régime QQQ : Sharpe 1,25 contre 1,21, maxDD −21,9 % contre
+−25,1 %, un essai de plus, non déflaté — rien à basculer sur cette seule mesure.
+Modèle ML : AUC OOS 0,519, candidat refusé (métriques incomplètes), champion conservé.
+
 ## Session 2026-10-06 (5ᵉ) — Mesurer ce que coûte un ordre avant d'en compter le gain
 
 Feu vert du propriétaire pour la journalisation du spread (ADR-0216). `run_live` lit

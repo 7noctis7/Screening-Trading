@@ -15,6 +15,18 @@ jour même). Y n'est pas calibré sur le TCA réel : la capacité est publiée p
 PLAGE de Y (0,5 et 1,0, bornes du consensus cité dans `impact.py`), jamais pour une
 seule valeur présentée comme mesurée. Exécution supposée étalée sur la séance entière :
 hypothèse favorable, la capacité réelle est plus basse.
+
+CORRIGÉ LE 06/10 (premier passage réel). Deux défauts rendaient l'impact AVEUGLE à la
+taille, donc la capacité infinie (« > 10⁶ × le capital » à Y = 0,5, mais 341 k$ à
+Y = 1,0 — impossible pour une loi en racine où doubler Y divise k* par 4) :
+  - un volume NaN dans la fenêtre passait le filtre (`nan <= 0` est faux) et l'ADV
+    devenait NaN ; `min(1.0, q / nan)` vaut 1,0 : participation 100 %, impact = Y·σ ;
+  - la participation était plafonnée à 100 % (`impact.square_root_impact_bps`, borne
+    légitime pour UN ordre d'UNE séance) : au-delà, l'impact ne croissait plus avec k.
+Ici, seuls les volumes finis et positifs comptent (au moins `VALIDES_MIN` sur 20), et
+la participation n'est pas bornée : un ordre de plus d'un ADV s'exécute sur plusieurs
+séances, la loi en racine sur la quantité totale reste l'approximation standard.
+`participation()` publie la distribution pour qu'une saturation se VOIE.
 """
 
 from __future__ import annotations
@@ -24,6 +36,7 @@ from bisect import bisect_left
 import numpy as np
 
 FENETRE = 20
+VALIDES_MIN = 15               # volumes finis et > 0 exigés sur les 20 séances
 Y_PLAGE = (0.5, 1.0)
 
 
@@ -47,16 +60,34 @@ class Marche:
         if i < FENETRE + 1:
             return None
         cc, vv = c[i - FENETRE - 1:i], v[i - FENETRE:i]
-        if (cc <= 0).any() or vv.mean() <= 0:
+        if not np.isfinite(cc).all() or (cc <= 0).any():
             return None
-        r = cc[1:] / cc[:-1] - 1.0
-        return float(vv.mean()), float(r.std(ddof=1))
+        ok = vv[np.isfinite(vv) & (vv > 0)]
+        if ok.size < VALIDES_MIN:
+            return None
+        sigma = float((cc[1:] / cc[:-1] - 1.0).std(ddof=1))
+        if not np.isfinite(sigma) or sigma <= 0:
+            return None
+        return float(ok.mean()), sigma
 
 
 def impact(q: float, adv: float, sigma: float, y: float) -> float:
-    """Impact d'un côté, en fraction du notionnel (séance entière)."""
-    from packages.execution.impact import square_root_impact_bps
-    return square_root_impact_bps(q, adv, sigma * 1e4, y=y) / 1e4
+    """Impact d'un côté, en fraction du notionnel : Y · σ · √(q / ADV), NON borné."""
+    if q <= 0 or adv <= 0 or sigma <= 0:
+        return 0.0
+    return float(y * sigma * (q / adv) ** 0.5)
+
+
+def participation(ars: list[dict], params: list) -> dict:
+    """Distribution de q / ADV (achat et vente) au capital du rejeu."""
+    x = np.asarray([ar["q"] / adv for ar, p in zip(ars, params, strict=True)
+                    for adv, _ in p])
+    if x.size == 0:
+        return {"n": 0}
+    return {"n": int(x.size), "mediane": float(np.median(x)),
+            "p90": float(np.quantile(x, 0.9)), "max": float(x.max()),
+            "part_sup_1pct": float((x > 0.01).mean()),
+            "part_sup_100pct": float((x > 1.0).mean())}
 
 
 def _param(marche: Marche, ar: dict) -> tuple | None:
@@ -106,4 +137,5 @@ def capacite(ars: list[dict], data: dict, capital: float) -> dict:
                          "esperance_au_capital": esperance_a_l_echelle(a, p, 1.0, y)}
     return {"available": True, "n_mesurables": len(couples), "n_total": len(ars),
             "capital_rejeu": capital, "par_y": out,
+            "participation": participation(a, p),
             "hypothese": "exécution étalée sur la séance ; Y non calibré"}
