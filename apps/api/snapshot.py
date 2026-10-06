@@ -709,6 +709,11 @@ def _sentiment_section(held: list, names: dict, sector_of: dict, data: dict) -> 
     }
 
 
+SANS_SOURCE_REELLE = ("indisponible : aucune source fondamentale réelle n'a répondu "
+                      "(le repli synthétique est retiré : un chiffre inventé "
+                      "n'est pas noté)")
+
+
 def _fund_provider():
     """Provider fondamentaux. Priorité : FMP (clé) → **yfinance par défaut si en ligne** → synthétique.
 
@@ -736,8 +741,13 @@ def _fund_provider():
                 return YFinanceFundamentalsProvider(), "yfinance (réel, gratuit)"
         except Exception:  # noqa: BLE001
             pass
-    from packages.fundamentals.provider import SyntheticFundamentalsProvider
-    return SyntheticFundamentalsProvider(), "synthétique (démo)"
+    # PLUS DE REPLI SYNTHÉTIQUE IMPLICITE (06/10) : un fondamental inventé ne devient
+    # pas un score affiché. Le synthétique reste une DÉMO demandée explicitement.
+    if mode == "synthetic":
+        from packages.fundamentals.provider import SyntheticFundamentalsProvider
+        return (SyntheticFundamentalsProvider(),
+                "synthétique (démo : QUANT_FUND=synthetic)")
+    return None, SANS_SOURCE_REELLE
 
 
 def _fund_provider_chain() -> list:
@@ -772,8 +782,9 @@ def _fund_provider_chain() -> list:
                 out.append(("SEC EDGAR (réel)", SECFundamentalsProvider()))
             except Exception:  # noqa: BLE001
                 pass
-    from packages.fundamentals.provider import SyntheticFundamentalsProvider
-    out.append(("synthétique (repli)", SyntheticFundamentalsProvider()))   # toujours en dernier
+    if mode == "synthetic":                      # démo explicite seulement (06/10)
+        from packages.fundamentals.provider import SyntheticFundamentalsProvider
+        out.append(("synthétique (démo)", SyntheticFundamentalsProvider()))
     return out
 
 
@@ -805,7 +816,7 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
                           data: dict | None = None) -> dict:
     """Analyse FONDAMENTALE : ratios (PER, EV/EBITDA, P/B, ROE/ROIC, marges), valorisation DCF
     (marge de sécurité) et score composite value+quality. Equities/ETF uniquement.
-    FMP si `FMP_API_KEY`, sinon fondamentaux synthétiques déterministes (offline-safe)."""
+    Sources réelles seulement ; sans source, la section est indisponible (06/10)."""
     import os as _osf
 
     from packages.fundamentals import ratios, valuation
@@ -909,26 +920,31 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
         rows = _rows_for(_chain_fetch(eq), eq)
         src = "réel multi-source : " + " → ".join(
             f"{k} {v}" for k, v in sorted(by_source.items(), key=lambda kv: -kv[1])) if by_source else "réel"
-    if len(rows) < 5:                                # hors-ligne total → synthétique déterministe
+    if not rows and _mode == "synthetic":            # démo explicite seulement (06/10)
         from packages.fundamentals.provider import SyntheticFundamentalsProvider
         sp = SyntheticFundamentalsProvider()
         eq, capped = all_eq, False
         rows = _rows_for({s: sp.get(s) for s in eq}, eq)
-        src = "synthétique (repli — hors-ligne)"
+        src = "synthétique (démo : QUANT_FUND=synthetic)"
     if not rows:
-        return {"available": False}
+        return {"available": False, "reason": SANS_SOURCE_REELLE}
 
     # score composite 0-100 = rang percentile (value 50 % + quality 50 %)
     def _pctl(key):
-        order = sorted(rows, key=lambda r: r[key])
+        # NaN EXCLU du classement (06/10) : une donnée absente n'a pas de rang.
+        # `sorted` sur des NaN rend un ordre arbitraire — et une note inventée.
+        connus = [r for r in rows if r[key] == r[key]]
+        order = sorted(connus, key=lambda r: r[key])
         n = len(order)
         return {r["symbol"]: (i + 1) / n for i, r in enumerate(order)}
     pv, pq = _pctl("_val"), _pctl("_qual")
     for r in rows:
-        score = round((pv[r["symbol"]] * 0.5 + pq[r["symbol"]] * 0.5) * 100, 1)
+        v, q = pv.get(r["symbol"]), pq.get(r["symbol"])
+        score = None if v is None or q is None else round((v * 0.5 + q * 0.5) * 100, 1)
         r["score"] = score
         mos = r["margin_of_safety"]
-        r["rating"] = ("BUY" if (mos is not None and mos > 0.20 and score >= 50)
+        r["rating"] = ("n/d" if score is None
+                       else "BUY" if (mos is not None and mos > 0.20 and score >= 50)
                        else "SELL" if (score < 35 or (mos is not None and mos < -0.20))
                        else "HOLD")
         del r["_val"], r["_qual"]
@@ -938,8 +954,12 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
     for r in rows:
         by_sec[r["sector"]].append(r)
     for sec_rows in by_sec.values():
-        for rank, r in enumerate(sorted(sec_rows, key=lambda x: x["score"], reverse=True), 1):
-            r["sector_rank"] = f"{rank}/{len(sec_rows)}"
+        notes = [x for x in sec_rows if x["score"] is not None]
+        notes.sort(key=lambda x: x["score"], reverse=True)
+        for rank, r in enumerate(notes, 1):
+            r["sector_rank"] = f"{rank}/{len(notes)}"
+        for r in sec_rows:
+            r.setdefault("sector_rank", "n/d")
     # NOTE TECHNIQUE + premium/discount sectoriel (PER vs médiane secteur) + note combinée
     from statistics import median
 
@@ -955,9 +975,11 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
         r["tech_label"] = tech["label"]
         med = sec_med.get(r["sector"], 0.0)
         r["sector_premium"] = round(r["per_raw"] / med - 1.0, 3) if med > 0 and r["per_raw"] > 0 else None
-        r["combined_score"] = round(0.6 * r["score"] + 0.4 * r["tech_score"], 1)  # fond. + technique
+        r["combined_score"] = (None if r["score"] is None else   # fond. + technique
+                               round(0.6 * r["score"] + 0.4 * r["tech_score"], 1))
         del r["per_raw"]
-    rows.sort(key=lambda r: r["combined_score"], reverse=True)
+    rows.sort(key=lambda r: (r["combined_score"] is not None,     # non notés : fin
+                             r["combined_score"] or 0.0), reverse=True)
     buys = sum(1 for r in rows if r["rating"] == "BUY")
     return {"available": True, "source": src, "n": len(rows), "buys": buys, "rows": rows,
             "total_equities": len(all_eq), "capped": capped,
@@ -1030,6 +1052,8 @@ def _investor_section(symbols: list, acmap: dict, names: dict, sector_of: dict) 
     from packages.fundamentals.provider import degrade_prior
 
     prov, src = _fund_provider()
+    if prov is None:
+        return {"available": False, "reason": src}
     all_eq = [s for s in symbols if acmap.get(s) in ("equity", "etf")]
     cap = 40 if src.startswith("FMP") else (80 if src.startswith("yfinance") else 2000)
 
@@ -1049,13 +1073,9 @@ def _investor_section(symbols: list, acmap: dict, names: dict, sector_of: dict) 
                         **investor_scores(f, sec, prev)})
         return out
 
-    rows = _rows(prov, all_eq[:cap])
-    if len(rows) < 5 and src.startswith("FMP"):     # repli synthétique → TOUT l'univers
-        from packages.fundamentals.provider import SyntheticFundamentalsProvider
-        prov, src = SyntheticFundamentalsProvider(), "synthétique (repli FMP)"
-        rows = _rows(prov, all_eq)
+    rows = _rows(prov, all_eq[:cap])               # plus de repli synthétique (06/10)
     if not rows:
-        return {"available": False}
+        return {"available": False, "reason": SANS_SOURCE_REELLE}
     rows.sort(key=lambda r: r["overall"], reverse=True)
     return {"available": True, "source": src, "n": len(rows), "rows": rows,
             "method": "Scores 0-100 par doctrine (% de critères respectés) : Graham (value défensive), "

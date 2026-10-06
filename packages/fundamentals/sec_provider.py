@@ -209,6 +209,9 @@ def _growth(facts: dict, *concepts: str) -> float | None:
     return None
 
 
+_NA = float("nan")          # donnée absente de la source : jamais remplacée
+
+
 class SECFundamentalsProvider:
     name = "sec"
 
@@ -254,8 +257,11 @@ class SECFundamentalsProvider:
         return Financials(
             symbol=symbol, as_of=as_of or datetime.now(timezone.utc),
             sector="Unknown", price=price, shares=shares,
-            revenue=revenue, gross_profit=gross or revenue * 0.4,
-            ebit=ebit or (net_income * 1.3), ebitda=(ebit + dep) if ebit else net_income * 1.5,
-            net_income=net_income, total_equity=equity or revenue * 0.5,
-            total_debt=debt, cash=cash, fcf=0.0, interest_expense=0.0,
+            # ABSENT = NaN, jamais un multiple inventé (06/10). Avant : marge brute =
+            # 40 % du CA, EBIT = 1,3 × résultat, fonds propres = 50 % du CA, FCF = 0,
+            # intérêts = 0 — sans source, sous l'étiquette « SEC EDGAR (réel) ».
+            revenue=revenue, gross_profit=gross or _NA,
+            ebit=ebit or _NA, ebitda=(ebit + dep) if ebit else _NA,
+            net_income=net_income, total_equity=equity or _NA,
+            total_debt=debt, cash=cash, fcf=_NA, interest_expense=_NA,
             revenue_growth=rev_g, earnings_growth=eps_g, name=company_name(symbol))

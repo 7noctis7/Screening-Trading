@@ -1043,6 +1043,39 @@ def _deja_rebalance_aujourdhui(brokers: tuple, obs=None) -> bool:
     return True
 
 
+def _hors_cadence(brokers: tuple, reduce: float, obs=None) -> bool:
+    """True si ce passage tombe AVANT l'échéance de cadence (`execution.cadence`).
+
+    Même source que la garde journalière : l'historique du courtier. Une réduction de
+    risque passe toujours ; un historique illisible aussi (le doute profite au
+    passage)."""
+    from datetime import UTC, datetime
+
+    from packages.execution.cadence import evaluer
+    from packages.execution.garde_fous import ACTIVE, CADENCE, UNCALIBRATED, noter
+    fills: list[dict] = []
+    for bname, br, _cap, _cur in brokers:
+        if br is None:
+            continue
+        try:
+            fills += br.orders(limit=200) or []
+        except Exception as e:  # noqa: BLE001
+            print(f"· cadence : historique {bname} illisible ({str(e)[:60]}) "
+                  "— passage.")
+            noter(obs, CADENCE, etat=UNCALIBRATED, motif="historique_illisible")
+            return False
+    d = evaluer(fills, datetime.now(UTC).date(), reduction=reduce)
+    if d["passer"]:
+        noter(obs, CADENCE, etat=ACTIVE, motif=d["motif"])
+        return False
+    print(f"· cadence : {d['seances']} séance(s) depuis le rebalancement du "
+          f"{d['dernier']} (< {d['cadence']}) — aucun ordre aujourd'hui. "
+          "QUANT_CADENCE_JOURS=1 pour le rythme quotidien, --forcer pour un passage "
+          "exceptionnel.")
+    noter(obs, CADENCE, etat=ACTIVE, declenche=True, motif=d["motif"])
+    return True
+
+
 def main() -> None:
     a = _parse_args()
     if a.live and not a.yes:
@@ -1077,6 +1110,9 @@ def main() -> None:
     if not dry and not a.forcer and _deja_rebalance_aujourdhui(brokers, obs):
         _record_garde_fous(obs, dry)
         return                                     # doublon : on sort AVANT tout envoi
+    if not dry and not a.forcer and _hors_cadence(brokers, reduce, obs):
+        _record_garde_fous(obs, dry)
+        return                                     # rythme de la règle mesurée
 
     # Arch A3+PR4 — Capital A : preset protège sleeve (snap ∪ journal multi-jour) ;
     # pass sleeve sans liquidation hors-cible. Rien à protéger → un seul _reconcile

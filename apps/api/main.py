@@ -376,8 +376,11 @@ def failures() -> dict:
     # les deux lectures sont fausses, et rien ne permettait de trancher.
     # `items` reste les seuls rejets (c'est le contrat de /echecs) ; le décompte
     # complet part à côté, et /methode l'affiche en entier.
-    par_statut = Counter(str(r.get("statut") or "inconnu") for r in recs)
-    promus = [r for r in recs if r.get("statut") == "promu"]
+    # ÉTAT COURANT aussi pour les promus (06/10) : compter toutes les lignes affichait
+    # encore « promu » trois facteurs requalifiés « rejete » (DSR 0,0 à 0,01).
+    courant = _dernier_mot(recs)
+    par_statut = Counter(str(r.get("statut") or "inconnu") for r in courant)
+    promus = [r for r in courant if r.get("statut") == "promu"]
     return {"available": bool(rejected), "n_total": len(recs),
             "n_rejected": len(rejected), "items": rejected,
             "par_statut": dict(par_statut),

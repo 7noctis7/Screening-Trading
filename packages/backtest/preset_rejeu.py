@@ -36,8 +36,9 @@ from bisect import bisect_right
 from collections import Counter
 
 from packages.backtest.panel import COUVERTURE_DEFAUT, _jour
+from packages.execution.cadence import CADENCE_DEFAUT
 
-PAS_DEFAUT = 5            # la production décide à chaque passage ; 1 = fidèle, mais lent
+PAS_DEFAUT = CADENCE_DEFAUT     # MÊME cadence que run_live (`execution.cadence`)
 DEBUT_DEFAUT = 252        # la production exige > 200 barres (MM200) + la fenêtre de covariance
 CAPITAL_DEFAUT = 100_000.0
 BANDE_RELATIVE = 0.005    # run_live._broker_targets : max(0,5 % du capital, 5 $)

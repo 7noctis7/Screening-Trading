@@ -1,5 +1,14 @@
 # 04 — JOURNAL
 
+## Session 2026-10-06 (4ᵉ) — Retirer ce qui coûte avant d'ajouter quoi que ce soit
+
+Le verdict du rapport d'une page est « non établi » : pas de PR de modèle. La production
+rebalançait chaque jour alors que le seul chiffre publié mesure un rythme de 5 séances ;
+elle suit désormais ce rythme (réduction de risque toujours permise). Deux sources
+« réelles » inventaient des multiples (marge brute 40 % du CA, EBIT 85 % de l'EBITDA) :
+absent = NaN. La porte de déploiement déflatait avec 41 essais quand le registre en
+compte 5 744 : un seul compteur. Trois « promu » de juin à DSR nul sont rejetés.
+
 ## Session 2026-10-06 (3ᵉ) — Définir l'aller-retour avant de publier son espérance
 
 L'objectif est le gain net du livre au même risque que QQQ + cash, pas l'espérance par

@@ -44,10 +44,12 @@ KILL_DD = "kill_switch_drawdown"
 DISJONCTEUR = "disjoncteur_journalier"
 GARDE_JOUR = "garde_journaliere"
 SEANCE = "garde_de_seance"
+CADENCE = "cadence_de_rebalancement"
 
 # L'ordre d'affichage suit le chemin d'exécution, pas l'alphabet : on lit le rapport
 # comme on lit un run.
-ORDRE: tuple[str, ...] = (KILL_TV, KILL_DD, DISJONCTEUR, GARDE_JOUR, SEANCE, PORTAIL)
+ORDRE: tuple[str, ...] = (KILL_TV, KILL_DD, DISJONCTEUR, GARDE_JOUR, CADENCE, SEANCE,
+                          PORTAIL)
 
 
 @dataclass
