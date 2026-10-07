@@ -52,6 +52,9 @@ def _ysym(sym: str, ac: str) -> str | None:
 
 
 _COLONNES = ("symbol", "date", "open", "high", "low", "close", "adj_close", "volume")
+_INSERT = ("INSERT OR REPLACE INTO prices "
+           "(symbol, date, open, high, low, close, adj_close, volume) "
+           "VALUES(?,?,?,?,?,?,?,?)")
 
 
 def _migrer_schema(conn: sqlite3.Connection) -> None:
@@ -77,7 +80,29 @@ def _connect() -> sqlite3.Connection:
         pass                                         # base tenue par un lecteur → on reste en rollback (busy_timeout gère)
     conn.executescript(_DDL)
     _migrer_schema(conn)
+    n = reparer_volumes_inverses(conn)
+    if n:
+        print(f"volumes inversés réparés : {n} barres "
+              "(le close avait été écrit dans volume)")
     return conn
+
+
+def reparer_volumes_inverses(conn: sqlite3.Connection) -> int:
+    """Échange volume et adj_close là où l'INSERT positionnel les a croisés.
+
+    L'ancien schéma avait `volume` puis `adj_close` ajouté au bout. Écrire huit
+    valeurs sans nommer les colonnes a mis le close dans `volume` et le nombre
+    d'actions dans `adj_close`. Signe : volume ≈ close, et adj_close est bien
+    plus grand qu'un prix. Après l'échange le signe disparaît : idempotent.
+    """
+    n = conn.execute(
+        """UPDATE prices SET volume = adj_close, adj_close = volume
+           WHERE close > 0 AND volume IS NOT NULL AND adj_close IS NOT NULL
+             AND ABS(volume - close) <= MAX(1e-4, ABS(close) * 1e-4)
+             AND adj_close > close * 5"""
+    ).rowcount
+    conn.commit()
+    return int(n)
 
 
 def _last_date(conn, symbol: str) -> str | None:
@@ -178,7 +203,7 @@ def ingest(symbols: list[tuple[str, str]], since: str, daily: bool) -> None:
                 print(f"  ↺ {sym}: ajustement rétroactif détecté (split/dividende) → re-backfill")
                 rows = _fetch_yf(sym, since, end, ysym=ysym)
                 conn.execute("DELETE FROM prices WHERE symbol=?", (sym,))
-            conn.executemany("INSERT OR REPLACE INTO prices VALUES(?,?,?,?,?,?,?,?)", rows)
+            conn.executemany(_INSERT, rows)
             conn.commit()
             total += len(rows)
             ok += 1
