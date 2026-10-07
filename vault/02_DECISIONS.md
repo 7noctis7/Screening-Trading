@@ -2,6 +2,37 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0220 — `build_snapshot` découpé en 39 étapes, texte d'origine conservé, JSON identique (2026-10-07)
+
+**Contexte.** `apps/api/snapshot.py::build_snapshot` faisait 1 182 lignes (règle : 50),
+avec ~150 variables locales partagées d'un bout à l'autre. Une réécriture à la main
+aurait été le moyen le plus sûr d'introduire une régression invisible dans le site.
+
+**Décision.**
+1. **Découpage mécanique, sans réécrire une ligne de corps.** Un outil lit l'AST et
+   coupe des tranches d'instructions consécutives (≤ 36 lignes) ; il descend dans un
+   `if`/`try` trop long ; il garde les `return` en place. Entrées et sorties de chaque
+   étape sont déduites en suivant l'exécution (lecture avant écriture, chemins
+   d'exception séparés) ; un import local est refait dans l'étape qui s'en sert.
+   L'outil a d'abord été éprouvé sur deux fonctions d'essai (boucles vides,
+   réaffectations, try/except, fermetures) : trois défauts trouvés et corrigés AVANT
+   d'être appliqué ici.
+2. **Forme : un état partagé explicite.** Des tuples de 90 variables entre parties
+   étaient corrects et illisibles ; chaque étape lit ses entrées dans `sb`
+   (`SimpleNamespace`) et y écrit ses sorties. `build_snapshot` = 27 lignes : l'ordre
+   d'origine, les `try`/`if` d'origine.
+3. **Preuve.** JSON de `build_snapshot(seed=7)` (8 Mo) : **0 différence** entre
+   l'original et le découpage, construits dans le même environnement (horodatages,
+   statistiques de cache, ordre d'égalités neutralisés ; deux constructions de
+   l'original diffèrent exactement sur ces points).
+
+**Pas fait.** `snapshot.py` reste au-delà de 400 lignes (≈ 3 100) : le scinder en
+modules est un autre chantier (les tests patchent ses globales, les étapes y restent
+donc). `main.py` (1 489 l.) idem.
+
+**Conséquences.** Aucun changement de contenu servi. Lint de `snapshot.py` :
+515 → 498.
+
 ## ADR-0219 — AUC du modèle d'edge : quatre variantes pré-enregistrées, jugées hors échantillon, sans viser un chiffre (2026-10-07)
 
 **Contexte.** AUC hors échantillon du modèle d'edge : 0,519 (VPS, 06/10). Demande :
