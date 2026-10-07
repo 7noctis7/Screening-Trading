@@ -324,21 +324,24 @@ class _CourtierSansOrdre:
 
 def test_fill_vente_jour_lit_prix_ET_quantite(monkeypatch):
     from scripts.run_live import _fill_vente_jour
-    monkeypatch.setattr("scripts.run_live.datetime", _horodatage_fixe())
+    monkeypatch.setattr("packages.execution.passage_ventes.datetime",
+                        _horodatage_fixe())
     fait = _fill_vente_jour(_CourtierAvecFill(), "OSCR")
     assert fait == {"price": 29.65, "qty": 14.0}
 
 
 def test_fill_vente_jour_absent_rend_none(monkeypatch):
     from scripts.run_live import _fill_vente_jour
-    monkeypatch.setattr("scripts.run_live.datetime", _horodatage_fixe())
+    monkeypatch.setattr("packages.execution.passage_ventes.datetime",
+                        _horodatage_fixe())
     assert _fill_vente_jour(_CourtierSansOrdre(), "OSCR") is None
 
 
 def test_exit_price_seul_repli_sans_ordre_du_jour(monkeypatch):
     """Repli inchangé : sans ordre citable, `_exit_price` retombe sur `last_price`."""
     from scripts.run_live import _exit_price
-    monkeypatch.setattr("scripts.run_live.datetime", _horodatage_fixe())
+    monkeypatch.setattr("packages.execution.passage_ventes.datetime",
+                        _horodatage_fixe())
     assert _exit_price(_CourtierSansOrdre(), "OSCR") == 30.0
 
 
