@@ -12,11 +12,9 @@
       ETH) ; (b) retirer la poche (recommandé) ; (c) plancher crypto abaissé. DÉCISION À PRENDRE.
 - [x] **FAIT 07/10 — `make labo-auc` sur le VPS** : aucune variante retenue ; V0 IC
       +0,0007 (t 0,50) hors période. Rien ne change. 4 essais au registre.
-- [ ] **P0 — Volumes de `market.db` (07/10)** : le close était écrit dans `volume`.
-      Après fusion, `make daily` répare par échange (message « volumes inversés
-      réparés »). Si le message « ⚠ N barres … sans adj_close » apparaît : `make ingest`
-      (réécrit tout), puis `make hf-push` pour assainir le cache HF. Ensuite relancer
-      `make rapport-esperance` : participation médiane attendue ≪ 1 %.
+- [x] **FAIT 07/10 — Volumes de `market.db`** : 48 662 barres réparées (#451), aucune
+      irrécupérable ; participation médiane 0,000 %. `make hf-push` pour assainir le
+      cache HF reste une décision du propriétaire (dataset public).
 - [ ] **P2 — Écart top-12 de `ic-classement`** : moyenne du top-12 − médiane de la
       coupe ; mesurer en médiane − médiane (ou moyenne winsorisée) avant de le lire.
 - [x] **FAIT 07/10 — `build_snapshot` découpé (ADR-0220)**, JSON identique.

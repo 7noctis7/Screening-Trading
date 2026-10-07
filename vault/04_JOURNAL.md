@@ -21,6 +21,10 @@ période tenue à l'écart — le score ML ne prédit rien hors échantillon. IC
 +0,0190, t 4,09 — l'effet survit au saut d'un mois (prix figés peu probables). L'écart
 « top-12 − médiane » (+0,21 %/j) compare une moyenne à une médiane : non lu comme edge.
 
+Après réparation (#451, 48 662 barres) : participation médiane 0,000 %, Q1 avec impact
++5,82 % / +5,80 % (Y = 0,5 / 1,0) — l'impact ne coûte rien à cette taille. Q2 inchangé
+(+2,95 %/an, DSR 0,01) : le verdict reste NON établi, et ce ne sont pas les coûts.
+
 ## Session 2026-10-07 (3ᵉ) — Découper 1 182 lignes sans en réécrire une
 
 `build_snapshot` est découpé en 39 étapes par un outil qui ne touche pas au texte
