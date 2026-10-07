@@ -29,6 +29,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from packages.common.journal_passage import dire  # noqa: E402 — écran + JSONL
+
 
 def _parse_args():
     ap = argparse.ArgumentParser(description="Réplique le portefeuille modèle (dry-run par défaut)")
@@ -69,21 +71,21 @@ def _kill_switch(bus, obs=None):
     # bloquait encore tout le portefeuille, jusqu'à effacement manuel du drop.
     risk = to_risk_veto(fetch_tv_technical_alerts(max_age_s=AGE_MAX_DEFAUT))
     if risk.get("n_sans_date"):
-        print(f"⚠️  {risk['n_sans_date']} alerte(s) TV sans date lisible — conservées par "
+        dire(f"⚠️  {risk['n_sans_date']} alerte(s) TV sans date lisible — conservées par "
               "prudence (elles pèsent sur la décision sans pouvoir être périmées)")
     for r in risk.get("severites_reinterpretees", []):
-        print(f"⚠️  sévérité TV réinterprétée : {r}")
+        dire(f"⚠️  sévérité TV réinterprétée : {r}")
     reduce = 0.0 if risk.get("veto") else float(risk.get("reduce", 1.0))
     if risk.get("veto"):
-        print(f"⛔ KILL-SWITCH ACTIF (alertes TV critiques) : {', '.join(risk['reasons']) or '—'}")
-        print("   → achats BLOQUÉS ; aucune vente forcée (seuls les allègements de "
+        dire(f"⛔ KILL-SWITCH ACTIF (alertes TV critiques) : {', '.join(risk['reasons']) or '—'}")
+        dire("   → achats BLOQUÉS ; aucune vente forcée (seuls les allègements de "
               "la stratégie partent).")
         if bus:
             from packages.common.event_bus import Topic
             bus.publish(Topic.KILL_SWITCH,
                         {"drawdown": "veto TV: " + (", ".join(risk["reasons"]) or "—")})
     elif reduce < 1.0:
-        print(f"⚠️  Alertes TV : achats plafonnés à ×{reduce:.2f} de la cible, aucune vente "
+        dire(f"⚠️  Alertes TV : achats plafonnés à ×{reduce:.2f} de la cible, aucune vente "
               f"forcée ({', '.join(risk['reasons']) or '—'})")
     # MOTIF EN CODE COURT, jamais le texte des alertes : le compte-rendu est un fichier
     # de compteurs, il n'a pas à transporter du contenu de marché.
@@ -99,7 +101,7 @@ def _alpaca_ou_rien():
         from packages.execution.alpaca_broker import AlpacaBroker
         return AlpacaBroker(paper=True)                   # actions TOUJOURS en paper
     except Exception as e:  # noqa: BLE001
-        print(f"Alpaca indisponible ({str(e)[:60]}) → actions ignorées")
+        dire(f"Alpaca indisponible ({str(e)[:60]}) → actions ignorées")
         return None
 
 
@@ -133,14 +135,14 @@ def _make_brokers(dry: bool, apercu: bool = False):
     if dry:
         return (_alpaca_ou_rien(), None) if apercu else (None, None)
     if crypto_live_neutralisee():
-        print("QUANT_NO_CRYPTO_LIVE actif → poche crypto ignorée (aucune place)")
+        dire("QUANT_NO_CRYPTO_LIVE actif → poche crypto ignorée (aucune place)")
         return _alpaca_ou_rien(), None
     from packages.execution.venues import venue_crypto
     _v = venue_crypto()
     try:
         crypto = _v.broker(dry_run=False)
     except Exception as e:  # noqa: BLE001 — clés/dépendance absentes : on continue
-        print(f"{_v.nom} indisponible ({str(e)[:60]}) → poche crypto ignorée")
+        dire(f"{_v.nom} indisponible ({str(e)[:60]}) → poche crypto ignorée")
         crypto = None
     return _alpaca_ou_rien(), crypto
 
@@ -336,7 +338,7 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry, obs=None, *,
     run_id = uuid.uuid4().hex                       # identité du PASSAGE (QML-006)
     sent, opened, sold, differes, rejetes = 0, [], [], [], []
     if _verif_seance and not feries_a_jour():
-        print("  ⚠️  fériés NYSE périmés — voir packages/execution/market_calendar")
+        dire("  ⚠️  fériés NYSE périmés — voir packages/execution/market_calendar")
     for bname, broker, cap, cur in brokers:
         tgt, band = _broker_targets(targets, bname, cap, reduce, cur,
                                     proteger=proteger,
@@ -361,14 +363,14 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry, obs=None, *,
         _expo = sum(abs(v) for v in curn.values())
         _npos = sum(1 for v in curn.values() if abs(v) > 0)
         if not dry:
-            print(f"  portail de risque : {_lim.resume()} · brut actuel {_expo:.0f}$ / {cap:.0f}$")
+            dire(f"  portail de risque : {_lim.resume()} · brut actuel {_expo:.0f}$ / {cap:.0f}$")
         for nkey, info in ordre_de_traitement(tgt, curn):
             o, bsym = info["o"], info["sym"]
             detenu = curn.get(nkey, 0.0)
             delta = info["val"] - detenu                      # >0 acheter · <0 vendre
             tag = f"  {bsym:14s} {bname:8s} cible {info['val']:8.0f}$ détenu {detenu:8.0f}$ Δ {delta:+8.0f}$"
             if o is not None and o.get("tradeable") is False:
-                print(tag + "  non négociable"); continue
+                dire(tag + "  non négociable"); continue
             # SÉANCE OUVERTE ? Les actions partent en TimeInForce.DAY sans
             # extended_hours :
             # hors séance l'ordre ne peut PAS se remplir. La crypto (GTC, 24/7) passe.
@@ -386,7 +388,7 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry, obs=None, *,
                 noter(obs, SEANCE, etat=DESARME)
             elif not is_open(asset_class=_ac):
                 _pq = prochaine_ouverture()
-                print(tag + f"  ⏸  REPORTÉ — {raison_fermeture(asset_class=_ac)}"
+                dire(tag + f"  ⏸  REPORTÉ — {raison_fermeture(asset_class=_ac)}"
                             f" · prochaine ouverture {_pq:%d/%m %H:%M ET}")
                 differes.append({"symbol": bsym, "broker": bname, "asset_class": _ac,
                                  "montant": round(info["val"] - detenu, 2)})
@@ -399,7 +401,7 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry, obs=None, *,
             # plancher.
             intention = decider(info["val"], detenu, band)
             if not intention.agit:
-                print(tag + f"  ✓ {intention.motif}"); continue
+                dire(tag + f"  ✓ {intention.motif}"); continue
             # DERNIÈRE BARRIÈRE : le portail peut réduire ou refuser, jamais
             # augmenter. Un
             # désengagement le traverse toujours (le bloquer augmenterait le risque).
@@ -416,21 +418,21 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry, obs=None, *,
             # modifier : `order_gate` reste une fonction pure, sans état ni écriture.
             noter_portail(obs, _v, intention.montant)
             if not _v.autorise:
-                print(tag + f"  ⛔ REFUSÉ par le portail [{_v.regle}] {_v.motif}")
+                dire(tag + f"  ⛔ REFUSÉ par le portail [{_v.regle}] {_v.motif}")
                 if alert_engine:
                     from packages.alerts import Alert, Severity
                     alert_engine.emit(Alert("risk", Severity.WARNING,
                         f"Ordre {bsym} refusé par le portail de risque : {_v.motif}"))
                 continue
             if _v.reduit:
-                print(tag + f"  ⚠️  {_v.motif}")
+                dire(tag + f"  ⚠️  {_v.motif}")
                 intention = replace(intention, montant=_v.montant)
             if not dry:
-                print("  " + ligne_journal(bsym, intention.action, _v.montant, _v))
+                dire("  " + ligne_journal(bsym, intention.action, _v.montant, _v))
             # Guard géométrie sleeve (TA#8) — inactif pour preset / strategy absente.
             _miss = sleeve_geometry_missing(o)
             if _miss:
-                print(tag + f"  ⛔ reject_missing_geometry ({','.join(_miss)})")
+                dire(tag + f"  ⛔ reject_missing_geometry ({','.join(_miss)})")
                 try:
                     import logging
                     logging.getLogger("live.execution").warning(
@@ -443,7 +445,7 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry, obs=None, *,
                 continue
             side = Side.LONG if intention.action == "acheter" else Side.SHORT
             if dry or broker is None:
-                print(tag + f"  {'aperçu' if dry else 'broker absent'} ({intention.action})")
+                dire(tag + f"  {'aperçu' if dry else 'broker absent'} ({intention.action})")
                 if dry:            # l'aperçu SIMULE l'effet de l'ordre, comme le réel le
                     #  compterait : sans cela une vente ne libère rien et l'achat
                     #  suivant s'affiche refusé à tort (constaté le 25/09).
@@ -470,7 +472,7 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry, obs=None, *,
                 # n'était passé. C'est ce trou qui a laissé le satellite actions vide
                 # sans une ligne de journal (ADR-0040).
                 if not compte_comme_envoye(_res):
-                    print(tag + "  " + resume(_res))
+                    dire(tag + "  " + resume(_res))
                     rejetes.append({"symbol": bsym, "broker": bname,
                                     "action": intention.action,
                                     "montant": round(intention.montant, 2),
@@ -485,7 +487,7 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry, obs=None, *,
                 _expo += intention.montant if intention.action == "acheter" else -intention.montant
                 if intention.action == "acheter" and detenu <= 0:
                     _npos += 1
-                print(tag + {"acheter": "  ▲ achat", "alleger": "  ▼ vente",
+                dire(tag + {"acheter": "  ▲ achat", "alleger": "  ▼ vente",
                              "solder": "  ▼ SOLDE (quantité)"}[intention.action])
                 # L'IDENTITÉ DE L'ORDRE VOYAGE AVEC LUI. Sans elle, la journalisation
                 # ne peut que demander au courtier « qu'as-tu exécuté aujourd'hui ? » —
@@ -518,7 +520,7 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry, obs=None, *,
                 # exactement pourquoi le satellite actions vide est resté invisible.
                 # Le motif COMPLET va au journal structuré, un extrait large à l'écran.
                 _msg = str(e).replace("\n", " ")
-                print(tag + f"  ❌ ÉCHEC après retries : {_msg[:200]}")
+                dire(tag + f"  ❌ ÉCHEC après retries : {_msg[:200]}")
                 try:
                     import logging
                     logging.getLogger("live.execution").error(
@@ -536,9 +538,9 @@ def _reconcile(targets, brokers, reduce, alert_engine, dry, obs=None, *,
                         dedup_key=f"execution:submit_fail:{bsym}"))
     if rejetes:
         _tr = f"{sum(abs(r['montant']) for r in rejetes):,.0f}".replace(",", " ")
-        print(f"\n  ❌ {len(rejetes)} ordre(s) REFUSÉ(S) par le courtier, "
+        dire(f"\n  ❌ {len(rejetes)} ordre(s) REFUSÉ(S) par le courtier, "
               f"{_tr}$ au total.")
-        print("     Ils ne comptent PAS comme envoyés. Motif par ligne ci-dessus.")
+        dire("     Ils ne comptent PAS comme envoyés. Motif par ligne ci-dessus.")
     if differes:
         _recap_differes(differes)
     return sent, opened, sold
@@ -559,16 +561,16 @@ def _recap_differes(differes: list) -> None:
         cl = d.get("asset_class", "?")
         par_classe[cl] = par_classe.get(cl, 0) + 1
     detail = ", ".join(f"{n} {c}" for c, n in sorted(par_classe.items()))
-    print(f"\n  ⏸  {len(differes)} ordre(s) REPORTÉ(S) hors séance ({detail}), "
+    dire(f"\n  ⏸  {len(differes)} ordre(s) REPORTÉ(S) hors séance ({detail}), "
           f"{tot}$ au total.")
-    print("     Ils ne sont PAS mis en file d'attente : un ordre reporté ne part que")
-    print("     si une exécution tombe DANS la séance NYSE"
+    dire("     Ils ne sont PAS mis en file d'attente : un ordre reporté ne part que")
+    dire("     si une exécution tombe DANS la séance NYSE"
           " (15:30-22:00, heure de Paris).")
-    print("     Si ce report revient chaque jour, c'est le planning, pas le marché :")
-    print("       • à la main, un soir avant 22h  →  make live-go")
-    print("       • ou décaler le rebalancement   →  "
+    dire("     Si ce report revient chaque jour, c'est le planning, pas le marché :")
+    dire("       • à la main, un soir avant 22h  →  make live-go")
+    dire("       • ou décaler le rebalancement   →  "
           "QUANT_LIVE_HOUR=21 make live-cron-install")
-    print("     Le crypto n'est jamais concerné : il tourne 24/7.")
+    dire("     Le crypto n'est jamais concerné : il tourne 24/7.")
 
 
 def _fills_achats(brokers: tuple, jour: str) -> dict:
@@ -629,10 +631,10 @@ def _garder_les_decisions(opens: list, jour: str) -> None:
     try:
         from packages.execution.decisions_store import enregistrer
         if not enregistrer(opens, jour):
-            print("  ⚠ décisions du jour NON enregistrées (.cache en écriture ?) — "
+            dire("  ⚠ décisions du jour NON enregistrées (.cache en écriture ?) — "
                   "un rattrapage ultérieur écrira des lots SANS features.")
     except Exception as e:  # noqa: BLE001 — conserver un contexte ne casse jamais un run
-        print(f"  ⚠ décisions du jour non enregistrées ({str(e)[:60]}).")
+        dire(f"  ⚠ décisions du jour non enregistrées ({str(e)[:60]}).")
 
 
 def _dire_les_ouvertures(n: int, skipped: int, opens: list) -> None:
@@ -645,12 +647,12 @@ def _dire_les_ouvertures(n: int, skipped: int, opens: list) -> None:
     """
     tete = f"Journal : {n} ouverture(s) enregistrée(s) (legacy=0, features de décision)"
     if not skipped:
-        print(tete + "."); return
+        dire(tete + "."); return
     muets = sorted({o["symbol"] for o in opens if not o.get("fill")})
-    print(tete + f" · {skipped} SANS achat exécuté lisible"
+    dire(tete + f" · {skipped} SANS achat exécuté lisible"
           + (f" : {', '.join(muets[:10])}" if muets else "")
           + " — ni fill, ni position ; rien n'est inventé.")
-    print("    Rattrapage (le fill devient lisible après coup) : "
+    dire("    Rattrapage (le fill devient lisible après coup) : "
           "make completer-ouvertures")
 
 
@@ -685,10 +687,10 @@ def _attendre_les_fills(opened: list, sold: list, alpaca, bitmart) -> None:
     except ValueError:
         delai = DELAI_S
     try:
-        print(message(attendre(lambda: _ids_lisibles(brokers), set(noms),
+        dire(message(attendre(lambda: _ids_lisibles(brokers), set(noms),
                                delai_s=delai), noms))
     except Exception as e:  # noqa: BLE001
-        print(f"Attente des fills : ignorée ({str(e)[:60]}).")
+        dire(f"Attente des fills : ignorée ({str(e)[:60]}).")
 
 
 def _journal_opens(snap: dict, opened: list, alpaca, bitmart) -> None:
@@ -807,13 +809,13 @@ def _journal_opens(snap: dict, opened: list, alpaca, bitmart) -> None:
                 "ts_arrival": _ts_arrival,
             })
         if n_miss_rank_score:
-            print(f"Journal : n_miss_rank_score={n_miss_rank_score}/{len(opened)} "
+            dire(f"Journal : n_miss_rank_score={n_miss_rank_score}/{len(opened)} "
                   f"(lookup screener/screen/target vide).")
         _garder_les_decisions(opens, jour)
         n = journal_opens(SqliteTradeJournal(), opens)
         _dire_les_ouvertures(n, len(opened) - n, opens)
     except Exception as e:  # noqa: BLE001
-        print(f"Journal : journalisation ignorée ({str(e)[:60]}).")
+        dire(f"Journal : journalisation ignorée ({str(e)[:60]}).")
 
 
 def _fill_vente_jour(br, bsym: str) -> dict | None:
@@ -883,11 +885,11 @@ def _journal_sells(snap: dict, sold: list, alpaca, bitmart) -> None:
         orphelines: list[dict] = []
         n = close_sells(SqliteTradeJournal(), sold, series, orphelines=orphelines)
         skipped = sum(1 for s in sold if not s.get("exit_price"))
-        print(f"Journal : {n} lot(s) fermé(s) (round-trip, PnL/MFE/MAE)"
+        dire(f"Journal : {n} lot(s) fermé(s) (round-trip, PnL/MFE/MAE)"
               + (f" · {skipped} vente(s) sans prix broker (lots laissés ouverts)." if skipped else "."))
         _dire_les_orphelines(orphelines)
     except Exception as e:  # noqa: BLE001
-        print(f"Journal : round-trip ignoré ({str(e)[:60]}).")
+        dire(f"Journal : round-trip ignoré ({str(e)[:60]}).")
 
 
 def _dire_les_orphelines(orphelines: list[dict]) -> None:
@@ -900,15 +902,15 @@ def _dire_les_orphelines(orphelines: list[dict]) -> None:
     signale, et l'écart ne se découvre qu'en comparant à la main des mois plus tard."""
     if not orphelines:
         return
-    print(f"  ⚠ {len(orphelines)} vente(s) SANS LOT au journal — le compte a vendu, le "
+    dire(f"  ⚠ {len(orphelines)} vente(s) SANS LOT au journal — le compte a vendu, le "
           "registre n'a rien à fermer :")
     for o in orphelines[:10]:
         reste = float(o["qty_demandee"]) - float(o["qty_fermee"])
-        print(f"      {o['symbol']:<10} {reste:12.6f} unité(s) non soldée(s) "
+        dire(f"      {o['symbol']:<10} {reste:12.6f} unité(s) non soldée(s) "
               f"sur {o['qty_demandee']:.6f} vendue(s)")
-    print("      Origines possibles : lot d'import (`LEG-`, écarté à dessein), position "
+    dire("      Origines possibles : lot d'import (`LEG-`, écarté à dessein), position "
           "antérieure au journal,")
-    print("      ou lot déjà fermé. `python scripts/diag_journal_compte.py --symbole "
+    dire("      ou lot déjà fermé. `python scripts/diag_journal_compte.py --symbole "
           "<TICKER>` tranche.")
 
 
@@ -917,7 +919,7 @@ def _sync_obsidian() -> None:
     try:
         from packages.reporting.obsidian import sync_obsidian_vault
         r = sync_obsidian_vault()
-        print(f"Coffre Obsidian : {len(r.get('written', []))} note(s) · {r.get('incidents', 0)} incident(s).")
+        dire(f"Coffre Obsidian : {len(r.get('written', []))} note(s) · {r.get('incidents', 0)} incident(s).")
     except Exception:  # noqa: BLE001
         pass
 
@@ -930,7 +932,7 @@ def _decision_snapshot() -> dict:
     import os
     os.environ.setdefault("QUANT_LIVE_LITE", "1")
     if os.environ["QUANT_LIVE_LITE"] == "1":
-        print("Snapshot : mode léger (sections réseau non essentielles coupées pour l'exécution).")
+        dire("Snapshot : mode léger (sections réseau non essentielles coupées pour l'exécution).")
     from apps.api.snapshot import build_snapshot
     return build_snapshot()                                # DÉCISION unique (features figées ici)
 
@@ -955,22 +957,22 @@ def _diag_preset(snap: dict, targets: list) -> None:
                       for e in (d.get("etapes") or []))
     if a_des_poids and not d.get("bloque"):
         return
-    print("\n  DIAGNOSTIC DU SATELLITE ACTIONS")
+    dire("\n  DIAGNOSTIC DU SATELLITE ACTIONS")
     for e in d.get("etapes") or []:
-        print(f"    {e.get('etape', ''):<22} {e.get('detail', '')}")
+        dire(f"    {e.get('etape', ''):<22} {e.get('detail', '')}")
     portes = d.get("portes") or {}
     if portes:
         tot = 1.0
         for v in portes.values():
             tot *= v
         detail = " × ".join(f"{k} {v:.3f}" for k, v in portes.items())
-        print(f"    {'exposition brute':<22} {detail}  =  {tot:.4f}")
+        dire(f"    {'exposition brute':<22} {detail}  =  {tot:.4f}")
     if d.get("arret"):
-        print(f"    ⛔ ARRÊT : {d['arret']}")
+        dire(f"    ⛔ ARRÊT : {d['arret']}")
     elif not d.get("etapes"):
-        print("    (aucun diagnostic publié — snapshot antérieur à l'ADR-0044 ?)")
+        dire("    (aucun diagnostic publié — snapshot antérieur à l'ADR-0044 ?)")
     elif not a_des_poids:
-        print("    (aucun poids produit, sans étage bloquant signalé — anomalie)")
+        dire("    (aucun poids produit, sans étage bloquant signalé — anomalie)")
 
 
 def _prepare_brokers(dry: bool, cli_equity: float | None, alert_engine):
@@ -986,9 +988,9 @@ def _prepare_brokers(dry: bool, cli_equity: float | None, alert_engine):
     alpaca, bitmart, alp_cap, bit_cap, fatal = vet_brokers(alpaca, bitmart, dry, cli_equity)
     mode = ("SIMULATION (capital imposé, détenu ignoré)" if simulation else
             "DRY-RUN sur le compte RÉEL (aucun ordre)" if dry else "LIVE (paper)")
-    print(f"Réplication · capital Alpaca {alp_cap:,.0f} $ · Bitmart {bit_cap:,.0f} $ · "
+    dire(f"Réplication · capital Alpaca {alp_cap:,.0f} $ · Bitmart {bit_cap:,.0f} $ · "
           f"mode {mode}")
-    print(f"  {'SENS':4s} {'ACTIF':14s} {'BROKER':8s} {'POIDS':>7s} {'MONTANT':>10s}  statut")
+    dire(f"  {'SENS':4s} {'ACTIF':14s} {'BROKER':8s} {'POIDS':>7s} {'MONTANT':>10s}  statut")
     cur_alp, cur_bit = ({}, {}) if simulation else current_values(alpaca, bitmart)
     if cur_alp is None:                                        # inconnu ≠ zéro : broker écarté
         fatal.append("lecture positions Alpaca échouée → broker écarté (0 ordre)")
@@ -1026,7 +1028,7 @@ def _deja_rebalance_aujourdhui(brokers: tuple, obs=None) -> bool:
         except Exception as e:  # noqa: BLE001
             # Historique illisible ⇒ on N'EMPÊCHE PAS le passage : un garde-fou qui se
             # déclenche sur sa propre panne gèlerait le robot une journée sans motif.
-            print(f"· garde journalière : historique {bname} illisible ({str(e)[:60]}) "
+            dire(f"· garde journalière : historique {bname} illisible ({str(e)[:60]}) "
                   "— contrôle non concluant, le passage continue.")
             # NON CONCLUANT ≠ RIEN À SIGNALER. Le passage continue (c'est le bon choix),
             # mais le rapport doit dire que ce jour-là le garde-fou n'a rien pu garder.
@@ -1035,10 +1037,10 @@ def _deja_rebalance_aujourdhui(brokers: tuple, obs=None) -> bool:
     d = evaluer(fills)
     if not d["deja_rebalance"]:
         if d["desarme"]:
-            print("· garde journalière : DÉSARMÉE (QUANT_REBAL_MULTI=1).")
+            dire("· garde journalière : DÉSARMÉE (QUANT_REBAL_MULTI=1).")
         noter(obs, GARDE_JOUR, etat=DESARME if d["desarme"] else ACTIVE)
         return False
-    print(message(d))
+    dire(message(d))
     noter(obs, GARDE_JOUR, etat=ACTIVE, declenche=True, motif="deja_rebalance")
     return True
 
@@ -1082,10 +1084,10 @@ def _journal_tca(snap: dict, opened: list, sold: list, alpaca, arrivee: dict) ->
                                 apres=apres.get(o["broker_symbol"])))
         n = enregistrer(lignes)
         avec = sum(1 for li in lignes if li["bench_quality"] == "quote")
-        print(f"TCA : {n} ordre(s) mesuré(s), {avec} avec cotation d'arrivée "
+        dire(f"TCA : {n} ordre(s) mesuré(s), {avec} avec cotation d'arrivée "
               "(spread, dérive, shortfall → table tca_executions).")
     except Exception as e:  # noqa: BLE001
-        print(f"TCA : mesure ignorée ({str(e)[:60]}).")
+        dire(f"TCA : mesure ignorée ({str(e)[:60]}).")
 
 
 def _hors_cadence(brokers: tuple, reduce: float, obs=None) -> bool:
@@ -1105,7 +1107,7 @@ def _hors_cadence(brokers: tuple, reduce: float, obs=None) -> bool:
         try:
             fills += br.orders(limit=200) or []
         except Exception as e:  # noqa: BLE001
-            print(f"· cadence : historique {bname} illisible ({str(e)[:60]}) "
+            dire(f"· cadence : historique {bname} illisible ({str(e)[:60]}) "
                   "— passage.")
             noter(obs, CADENCE, etat=UNCALIBRATED, motif="historique_illisible")
             return False
@@ -1113,7 +1115,7 @@ def _hors_cadence(brokers: tuple, reduce: float, obs=None) -> bool:
     if d["passer"]:
         noter(obs, CADENCE, etat=ACTIVE, motif=d["motif"])
         return False
-    print(f"· cadence : {d['seances']} séance(s) depuis le rebalancement du "
+    dire(f"· cadence : {d['seances']} séance(s) depuis le rebalancement du "
           f"{d['dernier']} (< {d['cadence']}) — aucun ordre aujourd'hui. "
           "QUANT_CADENCE_JOURS=1 pour le rythme quotidien, --forcer pour un passage "
           "exceptionnel.")
@@ -1121,11 +1123,23 @@ def _hors_cadence(brokers: tuple, reduce: float, obs=None) -> bool:
     return True
 
 
+def _ouvrir_journal(a, dry: bool) -> None:
+    """Journal JSONL du passage + vérification des réglages `QUANT_*` (audit 06/10) :
+    une faute de frappe ou une valeur illisible se DIT avant toute décision."""
+    from packages.common import journal_passage as jp
+    from packages.common.reglages import annoncer
+    jp.ouvrir()
+    jp.evenement("passage", dry=dry, live=bool(a.live), forcer=bool(a.forcer))
+    for x in annoncer(dire=dire):
+        jp.evenement("reglage", **x)
+
+
 def main() -> None:
     a = _parse_args()
     if a.live and not a.yes:
-        print("⚠️  --live exige --yes (confirmation explicite). Abandon."); return
+        dire("⚠️  --live exige --yes (confirmation explicite). Abandon."); return
     dry = not (a.live and a.yes)
+    _ouvrir_journal(a, dry)
     snap = _decision_snapshot()
     targets = snap["live"]["target_orders"]                # poids cibles (% du portefeuille)
     _diag_preset(snap, targets)
@@ -1197,7 +1211,7 @@ def main() -> None:
     protect = merge_protect_symbols(swing, from_journal, normalize=_nsym)
 
     if swing:
-        print(f"sleeve swing: {len(swing)} ordres (capital A)")
+        dire(f"sleeve swing: {len(swing)} ordres (capital A)")
         sent, opened, sold = _reconcile(
             targets, brokers, reduce, alert_engine, dry, obs, proteger=protect)
         s2, o2, v2 = _reconcile(
@@ -1206,7 +1220,7 @@ def main() -> None:
         opened.extend(o2)
         sold.extend(v2)
     elif protect:
-        print(f"sleeve swing: protect {len(protect)} symbole(s) journal (multi-jour)")
+        dire(f"sleeve swing: protect {len(protect)} symbole(s) journal (multi-jour)")
         sent, opened, sold = _reconcile(
             targets, brokers, reduce, alert_engine, dry, obs, proteger=protect)
     else:
@@ -1215,7 +1229,7 @@ def main() -> None:
     # `_reconcile`, tandis qu'un échec de `_journal_opens` emporterait sinon le
     # compte-rendu du run avec lui — sans une ligne pour le dire.
     _record_garde_fous(obs, dry)
-    print(f"\nTerminé : {sent} ordre(s) de réconciliation envoyé(s) (paper, sans levier)." if not dry else
+    dire(f"\nTerminé : {sent} ordre(s) de réconciliation envoyé(s) (paper, sans levier)." if not dry else
           "\nAperçu (dry-run). Réconciliation réelle : python3 scripts/run_live.py --live --yes")
 
     if not dry:
@@ -1247,23 +1261,23 @@ def _disjoncteur(equity: float, obs=None, cles: set | None = None) -> float:
         from packages.execution.coupe_circuit import evaluer
         d = evaluer(equity, cles=cles) if cles else evaluer(equity)
     except Exception as e:  # noqa: BLE001 — un garde-fou muet ne bloque jamais un run
-        print(f"· disjoncteur : évaluation indisponible ({str(e)[:60]}).")
+        dire(f"· disjoncteur : évaluation indisponible ({str(e)[:60]}).")
         noter(obs, DISJONCTEUR, etat=ERREUR, motif="evaluation_indisponible")
         return 1.0
     if not d.get("disponible"):
         noter(obs, DISJONCTEUR, etat=UNCALIBRATED, motif="equity_veille_inconnue")
         return 1.0
     if not d["verrouille"]:
-        print(f"· disjoncteur : perte du jour {-d['variation_jour']:,.0f} $ "
+        dire(f"· disjoncteur : perte du jour {-d['variation_jour']:,.0f} $ "
               f"sous le seuil ({d['limite']:,.0f} $).".replace(",", " "))
         noter(obs, DISJONCTEUR, etat=ACTIVE)
         return 1.0
     if d["agit"]:
-        print(f"\n⛔ DISJONCTEUR ARMÉ — {d['motif']}. Aucune entrée aujourd'hui.")
+        dire(f"\n⛔ DISJONCTEUR ARMÉ — {d['motif']}. Aucune entrée aujourd'hui.")
         noter(obs, DISJONCTEUR, etat=ACTIVE, declenche=True, motif="perte_du_jour")
         return 0.0
-    print(f"\n⚠️  DISJONCTEUR (observation) — {d['motif']}.")
-    print("   Il AURAIT coupé. Rien n'est appliqué : QUANT_DISJONCTEUR=1 pour l'armer.")
+    dire(f"\n⚠️  DISJONCTEUR (observation) — {d['motif']}.")
+    dire("   Il AURAIT coupé. Rien n'est appliqué : QUANT_DISJONCTEUR=1 pour l'armer.")
     # LA LIGNE QUI DÉBLOQUE SON ARMEMENT. `coupe_circuit` demande de voir « sur
     # plusieurs semaines les jours où il AURAIT coupé » : sans ce compteur, cette
     # condition ne pouvait pas être remplie — personne n'enregistrait ces jours.
@@ -1281,9 +1295,9 @@ def _exposition_gelee(targets: list, obs, dry: bool) -> None:
     """
     _ = obs, dry
     for o in targets:
-        print(f"  {o['side'].upper():4s} {o.get('broker_symbol', o['symbol']):14s} "
+        dire(f"  {o['side'].upper():4s} {o.get('broker_symbol', o['symbol']):14s} "
               f"{o['broker']:8s} {o['weight_pct']*100:6.1f}%  achat bloqué (kill-switch)")
-    print("\n⛔ Kill-switch : aucun achat. Les allègements de stratégie partent ; "
+    dire("\n⛔ Kill-switch : aucun achat. Les allègements de stratégie partent ; "
           "aucune vente n'est forcée.")
 
 
@@ -1303,10 +1317,10 @@ def _record_garde_fous(obs, dry: bool) -> None:
         if not rapport:
             return
         if not record(rapport, mode="dry" if dry else "live"):
-            print("⚠️  garde-fous : compte-rendu du run NON enregistré (écriture .cache "
+            dire("⚠️  garde-fous : compte-rendu du run NON enregistré (écriture .cache "
                   "impossible) — `make garde-fous` sous-comptera ce passage.")
     except Exception as e:  # noqa: BLE001 — observer ne coûte jamais un run
-        print(f"⚠️  garde-fous : compte-rendu non enregistré ({str(e)[:60]}).")
+        dire(f"⚠️  garde-fous : compte-rendu non enregistré ({str(e)[:60]}).")
 
 
 def releve_equity(alp_cap: float, bit_cap: float) -> dict:
@@ -1333,10 +1347,10 @@ def _record_equity(alp_cap: float, bit_cap: float) -> None:
     try:
         from packages.execution.equity_history import record
         record(releve_equity(alp_cap, bit_cap))
-        print(f"Equity : point du jour enregistré (Alpaca {alp_cap:,.0f} $ · crypto "
+        dire(f"Equity : point du jour enregistré (Alpaca {alp_cap:,.0f} $ · crypto "
               f"{bit_cap:,.0f} $).")
     except Exception as e:  # noqa: BLE001
-        print(f"Equity : enregistrement ignoré ({str(e)[:50]}).")
+        dire(f"Equity : enregistrement ignoré ({str(e)[:50]}).")
 
 
 if __name__ == "__main__":

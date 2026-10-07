@@ -1,0 +1,23 @@
+# Contexte de build Docker (06/10, audit). Le Dockerfile fait `COPY data ./data` :
+# sans ce fichier, une image construite sur le VPS embarquerait le journal des
+# exécutions RÉELLES chez le courtier (local-only, CLAUDE.md) et toute base locale.
+.env
+.env.*
+!.env.example
+**/*.db
+**/*.db-journal
+**/*.sqlite
+**/*.pkl
+data/journal.db
+.cache/
+out/
+logs/
+models/
+site/
+mlruns/
+apps/web/node_modules/
+apps/web/.next/
+apps/web/public/data/
+apps/web/public/reports/
+**/__pycache__/
+.git/
