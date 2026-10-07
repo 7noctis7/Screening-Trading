@@ -73,3 +73,21 @@ def triple_barrier(close: np.ndarray, entries: list[int], pt: float = 2.0,
 def meta_labels(labels: list[Label], side: int = 1) -> np.ndarray:
     """Méta-label binaire : 1 si le trade (dans le sens `side`) aurait été gagnant."""
     return np.array([1 if (lab.ret * side) > 0 else 0 for lab in labels], dtype=int)
+
+
+def volatilite_garman_klass(open_, high, low, close, span: int = 20) -> np.ndarray:
+    """Volatilité quotidienne de Garman-Klass, lissée EWM (barrières dynamiques).
+
+    σ² = ½·ln(H/L)² − (2·ln2 − 1)·ln(C/O)² par barre. Elle lit le haut et le bas de la
+    séance : à nombre de barres égal, elle estime la volatilité avec moins d'erreur que
+    l'écart-type des clôtures. Une barre illisible (prix ≤ 0) compte pour 0."""
+    o, h, lo, c = (np.asarray(x, float) for x in (open_, high, low, close))
+    ok = (o > 0) & (h > 0) & (lo > 0) & (c > 0)
+    hl = np.where(ok, np.log(np.where(ok, h, 1.0) / np.where(ok, lo, 1.0)), 0.0)
+    co = np.where(ok, np.log(np.where(ok, c, 1.0) / np.where(ok, o, 1.0)), 0.0)
+    v = np.maximum(0.0, 0.5 * hl * hl - (2 * np.log(2) - 1) * co * co)
+    alpha, lisse, acc = 2.0 / (span + 1.0), np.empty_like(v), 0.0
+    for i, x in enumerate(v):
+        acc = alpha * x + (1 - alpha) * acc if i else x
+        lisse[i] = acc
+    return np.sqrt(lisse)

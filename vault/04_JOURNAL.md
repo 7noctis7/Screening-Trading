@@ -1,5 +1,17 @@
 # 04 — JOURNAL
 
+## Session 2026-10-07 (2ᵉ) — Une AUC de 0,60 serait une fuite, pas un progrès
+
+Demande : faire passer l'AUC de 0,519 à 0,60. Mesuré d'abord : sur ce label, 0,60
+correspond à un IC de rang ≈ 0,21, quatre à dix fois les meilleurs facteurs publiés.
+Le travail livré compare donc des représentations au lieu de viser un chiffre : quatre
+variantes pré-enregistrées (rangs transversaux, label sectoriel, triple barrière),
+mêmes lignes, mêmes plis, jugées sur une période tenue à l'écart par l'IC contre le
+rendement relatif, avec une règle de décision écrite avant la mesure (ADR-0219). MDA
+par grappes hors échantillon ; barres dollar et Garman-Klass livrés avec leurs
+limites. Sur synthétique, un signal planté est vu par les quatre variantes et aucune
+n'est « retenue » faute de battre V0 ; sur bruit pur, aucune. Rien n'est mesuré ici.
+
 ## Session 2026-10-07 — Découper le chemin d'ordres sans changer une décision
 
 `run_live.py` passe de 1 343 à 382 lignes (ADR-0218). Avant de toucher `_reconcile`,

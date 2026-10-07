@@ -2,6 +2,46 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0219 — AUC du modèle d'edge : quatre variantes pré-enregistrées, jugées hors échantillon, sans viser un chiffre (2026-10-07)
+
+**Contexte.** AUC hors échantillon du modèle d'edge : 0,519 (VPS, 06/10). Demande :
+« la faire monter au-dessus de 0,60 ». Mesuré par simulation (score et rendement
+gaussiens, label « bat la médiane ») : AUC 0,507 ≈ IC de rang 0,02 ; 0,522 ≈ 0,05 ;
+0,545 ≈ 0,09 ; 0,590 ≈ 0,20 ; **0,613 ≈ 0,24**. Les meilleurs facteurs actions publiés
+tiennent un IC de 0,02 à 0,06 à un mois. **Une AUC de 0,60 tenue hors échantillon
+signifierait un IC ≈ 0,21 : c'est un détecteur de fuite, pas une cible.** L'AUC de
+0,519 correspond à un IC ≈ 0,04 — faible, mais de l'ordre d'un vrai facteur.
+
+**Décision.**
+1. **Banc pré-enregistré** (`packages/ml/variantes_auc.py`, `labo_auc.py`,
+   `make labo-auc`), écrit avant toute mesure réelle, quatre variantes et seulement
+   quatre, sur les MÊMES lignes et les MÊMES plis : V0 actuel ; V1 features en rang
+   dans la coupe de la semaine ; V2 V1 + label « bat la médiane de son secteur » ; V3
+   V1 + label triple barrière (±σ_Garman-Klass·√H). Juge commun : IC de rang
+   hebdomadaire contre le rendement relatif (l'AUC n'est pas comparable d'un label à
+   l'autre). CV purgée sur 80 % ; verdict sur les 20 % les plus récents, purgés à la
+   frontière. **Règle** : retenue seulement si l'écart d'IC à V0 sur la période tenue
+   à l'écart a un intervalle bootstrap (blocs de semaines) entièrement positif ET un
+   t > 2 sur semaines disjointes. Retenue ≠ adoptée (PR à part, flag éteint). Quatre
+   essais au registre.
+2. **MDA par grappes** (`importance_mda.py`) : importance HORS échantillon, variables
+   corrélées (|ρ de rang| ≥ 0,7) brouillées ensemble. Remplace la lecture de l'MDI
+   (mesurée sur l'entraînement).
+3. **Outils demandés, livrés avec leurs limites** : barres volume/dollar
+   (`packages/data/barres_info.py`) et `diagnostic_iid` qui MESURE ce qu'elles
+   améliorent ; volatilité de Garman-Klass (`labeling.py`).
+
+**Pas fait, et pourquoi.** Barres dollar dans le modèle de production : elles
+désynchronisent les titres, or le modèle classe des titres entre eux à une même date ;
+depuis des barres quotidiennes elles ne peuvent qu'agréger des jours. Carnet d'ordres
+/ OFI : aucune donnée historique de carnet ; leur horizon (secondes à minutes) est
+sans rapport avec un label à 21 séances. Débruitage RMT de la covariance des
+features : 10 features, la loi de Marchenko-Pastur suppose N grand (déjà utilisé
+pour la covariance des titres). Transformers / LSTM / RL : ≈ 700 paris indépendants
+sur 10 ans (71 / an mesurés), AUC GBDT à 0,519 — rien à apprendre de plus profond.
+
+**Conséquences.** Aucun modèle servi ne change. Le banc tourne sur le VPS.
+
 ## ADR-0218 — Socle : chemin d'ordres découpé sans changer une décision, réglages déclarés, passages journalisés (2026-10-07)
 
 **Contexte.** Audit « comité » du 06/10, faiblesses hors stratégie : `run_live.py`
