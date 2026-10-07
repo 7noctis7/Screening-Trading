@@ -10,9 +10,15 @@
 - [x] **~~P0 — D4 : poche crypto (02/10)~~ — TRANCHÉ 02/10 (ADR-0212) : plus de poche obligatoire, la crypto concourt avec les actions sur le momentum.** : 6 cibles de 273 à 455 $ toutes sous le plancher
       de 1 000 $ → poche à ZÉRO chaque jour, en silence. Options : (a) 2 lignes max (BTC,
       ETH) ; (b) retirer la poche (recommandé) ; (c) plancher crypto abaissé. DÉCISION À PRENDRE.
-- [ ] **P1 — `make labo-auc` sur le VPS (ADR-0219)** : lire l'IC hors période (pas
-      l'AUC), la colonne « vs V0 » et la MDA par grappes. Une variante RETENUE ouvre une
-      PR à part (flag éteint) ; aucune → rien ne change. 4 essais au registre.
+- [x] **FAIT 07/10 — `make labo-auc` sur le VPS** : aucune variante retenue ; V0 IC
+      +0,0007 (t 0,50) hors période. Rien ne change. 4 essais au registre.
+- [ ] **P0 — Volumes de `market.db` (07/10)** : le close était écrit dans `volume`.
+      Après fusion, `make daily` répare par échange (message « volumes inversés
+      réparés »). Si le message « ⚠ N barres … sans adj_close » apparaît : `make ingest`
+      (réécrit tout), puis `make hf-push` pour assainir le cache HF. Ensuite relancer
+      `make rapport-esperance` : participation médiane attendue ≪ 1 %.
+- [ ] **P2 — Écart top-12 de `ic-classement`** : moyenne du top-12 − médiane de la
+      coupe ; mesurer en médiane − médiane (ou moyenne winsorisée) avant de le lire.
 - [x] **FAIT 07/10 — `build_snapshot` découpé (ADR-0220)**, JSON identique.
 - [ ] **P2 — scinder `apps/api/snapshot.py` (~3 100 l.) et `main.py` (1 489 l.)** en
       modules : même méthode (référence JSON, puis déplacement), tests à rediriger.

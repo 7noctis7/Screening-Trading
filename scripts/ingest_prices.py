@@ -84,6 +84,11 @@ def _connect() -> sqlite3.Connection:
     if n:
         print(f"volumes inversés réparés : {n} barres "
               "(le close avait été écrit dans volume)")
+    perdus = volumes_irrecuperables(conn)
+    if perdus:
+        print(f"  ⚠ {perdus} barres ont le close en volume sans adj_close pour "
+              "le retrouver (cache HF poussé depuis une base croisée ?) — "
+              "les réécrire : make ingest")
     return conn
 
 
@@ -92,17 +97,37 @@ def reparer_volumes_inverses(conn: sqlite3.Connection) -> int:
 
     L'ancien schéma avait `volume` puis `adj_close` ajouté au bout. Écrire huit
     valeurs sans nommer les colonnes a mis le close dans `volume` et le nombre
-    d'actions dans `adj_close`. Signe : volume ≈ close, et adj_close est bien
-    plus grand qu'un prix. Après l'échange le signe disparaît : idempotent.
+    d'actions dans `adj_close`. Signe : volume = close, ET adj_close ≠ close —
+    l'ingest écrit toujours le même close dans close et adj_close, donc une ligne
+    saine a adj_close = close. Après l'échange le signe disparaît : idempotent.
+
+    Pas de seuil « adj_close ≫ close » : il laissait le prix en volume là où le
+    vrai volume est nul ou faible (forex et indices à volume 0, BRK-A à 300
+    titres/jour pour 700 k$ — reproduit le 07/10).
     """
     n = conn.execute(
-        """UPDATE prices SET volume = adj_close, adj_close = volume
+        f"""UPDATE prices SET volume = adj_close, adj_close = volume
            WHERE close > 0 AND volume IS NOT NULL AND adj_close IS NOT NULL
-             AND ABS(volume - close) <= MAX(1e-4, ABS(close) * 1e-4)
-             AND adj_close > close * 5"""
+             AND {_EGAL_CLOSE.format(col="volume")}
+             AND NOT {_EGAL_CLOSE.format(col="adj_close")}"""
     ).rowcount
     conn.commit()
     return int(n)
+
+
+_EGAL_CLOSE = "ABS({col} - close) <= MAX(1e-9, ABS(close) * 1e-9)"
+
+
+def volumes_irrecuperables(conn: sqlite3.Connection) -> int:
+    """Barres dont le volume vaut le close SANS adj_close pour le retrouver.
+
+    Elles viennent d'un `make hf-pull` : si le cache a été poussé depuis une base
+    croisée, il porte le close en volume et le vrai volume est perdu. On les compte
+    sans les toucher — un nouvel ingest (`--since`) les réécrit correctement."""
+    return int(conn.execute(
+        f"""SELECT COUNT(*) FROM prices WHERE close > 0 AND adj_close IS NULL
+              AND volume IS NOT NULL AND {_EGAL_CLOSE.format(col="volume")}"""
+    ).fetchone()[0])
 
 
 def _last_date(conn, symbol: str) -> str | None:
@@ -215,18 +240,23 @@ def ingest(symbols: list[tuple[str, str]], since: str, daily: bool) -> None:
             vides.append(sym)
         if i % 25 == 0:
             print(f"  … {i}/{len(symbols)} symboles, {ok} OK, {total} barres insérées")
+    _bilan(len(symbols), ok, fail, vides, ajour, skip, total)
+    conn.close()
+
+
+def _bilan(n: int, ok: int, fail: int, vides: list, ajour: list, skip: int,
+           total: int) -> None:
     print(f"Terminé : {ok} OK · {fail} échecs · {len(vides)} sans donnée · "
           f"{len(ajour)} déjà à jour · {skip} crypto ignorées · {total} barres → {DB}")
     # Le total doit se refermer. Un écart signifierait un chemin de sortie non compté —
     # exactement le défaut que ces compteurs corrigent.
-    reste = len(symbols) - (ok + fail + len(vides) + len(ajour) + skip)
+    reste = n - (ok + fail + len(vides) + len(ajour) + skip)
     if reste:
         print(f"  ⚠ {reste} symbole(s) sortis par un chemin non comptabilisé.")
     if vides:
         apercu = ", ".join(vides[:15]) + ("…" if len(vides) > 15 else "")
-        print(f"  ⚠ sans donnée ({len(vides)}/{len(symbols)}) : {apercu}")
+        print(f"  ⚠ sans donnée ({len(vides)}/{n}) : {apercu}")
         print("     Probablement délistés. Trancher sur VOS prix : make audit-univers")
-    conn.close()
 
 
 def _silence_yfinance() -> None:

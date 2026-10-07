@@ -184,7 +184,11 @@ def _ingerer(conn: sqlite3.Connection, bases: list[str], start,
             efface = _purger(conn, base)
             print(f"  {base} : source forcée sur Binance ({len(lignes)} barres)"
                   + (f" — {efface} lignes de l'ancienne effacées" if efface else ""))
-        conn.executemany("INSERT OR REPLACE INTO prices VALUES (?,?,?,?,?,?,?)", lignes)
+        # Colonnes NOMMÉES : un INSERT positionnel suit l'ordre PHYSIQUE de la
+        # table, qui change dès qu'un ALTER ajoute une colonne (volume croisé, 07/10).
+        conn.executemany("INSERT OR REPLACE INTO prices "
+                         "(symbol, date, open, high, low, close, volume) "
+                         "VALUES (?,?,?,?,?,?,?)", lignes)
         conn.commit()
         ok += 1
         if i % 10 == 0:

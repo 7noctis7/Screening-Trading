@@ -1,5 +1,26 @@
 # 04 — JOURNAL
 
+## Session 2026-10-07 (4ᵉ) — Le volume était un prix : la capacité mesurait du vide
+
+Premier passage réel (VPS, 625 séries) du rapport d'espérance corrigé, du labo AUC et de
+l'IC 12-1. La ligne de participation l'a dit tout de suite : q/ADV médian 42 %, p90
+1 631 %. Diagnostic lecture seule : AAPL « 333 titres/jour » pour un cours de 333,63 $,
+SPY 765 pour 779 $. Cause : `market.db` créée par `hf-pull` (…, close, volume), puis
+`adj_close` ajouté AU BOUT par ALTER ; l'INSERT positionnel de `ingest_prices` écrivait
+dans l'ordre (…, close, adj_close, volume) → close dans volume, volume dans adj_close.
+Le test de migration passait : il relisait la ligne par `SELECT *`, donc dans le même
+ordre croisé. Corrigé en parallèle par #450 (INSERT nommé + réparation par échange) ;
+cette session élargit la réparation (le seuil « adj_close > 5 × close » laissait le prix
+en volume pour le forex à volume 0 et BRK-A), compte les barres irrécupérables (cache
+HF croisé) et nomme aussi les colonnes de `ingest_crypto`.
+
+Résultats réels, lus sous cette réserve : Q2 +2,95 %/an [−1,40 ; +7,60], DSR 0,01 →
+NON établi. Q1 frais seuls +5,8 %/aller-retour ; Q1 avec impact et Q4 NON LISIBLES
+(volumes faux). Labo AUC : aucune variante retenue ; V0 a un IC +0,0007 (t 0,50) sur la
+période tenue à l'écart — le score ML ne prédit rien hors échantillon. IC 12-1 à 1 j :
++0,0190, t 4,09 — l'effet survit au saut d'un mois (prix figés peu probables). L'écart
+« top-12 − médiane » (+0,21 %/j) compare une moyenne à une médiane : non lu comme edge.
+
 ## Session 2026-10-07 (3ᵉ) — Découper 1 182 lignes sans en réécrire une
 
 `build_snapshot` est découpé en 39 étapes par un outil qui ne touche pas au texte
