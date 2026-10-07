@@ -1,5 +1,17 @@
 # 04 — JOURNAL
 
+## Session 2026-10-07 (4ᵉ) — Cinq verrous, pas un nouvel alpha
+
+Le classement tradé n'a pas été rejoué ici : pas de base de prix dans cet
+environnement. `make gel-ic` rend donc UNCALIBRATED et `make labo-auc` refuse
+de consigner un essai tant que le JSON du VPS n'est pas OUVERT (ADR-0221).
+
+Prix bruts et corporate actions s'archivent à côté de `prices`, sans changer
+le lecteur de production. Les ventes journalisent un prix de référence quand
+il existe. La triple barrière vit dans un module SHADOW avec une nulle par
+semaine. Le score SEC ignore un dépôt postérieur à `as_of`, et un score sans
+`knowledge_time` ne choisit plus l'univers.
+
 ## Session 2026-10-07 (3ᵉ) — Découper 1 182 lignes sans en réécrire une
 
 `build_snapshot` est découpé en 39 étapes par un outil qui ne touche pas au texte

@@ -27,10 +27,23 @@ def test_un_score_synthetique_n_est_jamais_transmis():
     assert qualite_de_production({}) == {}
 
 
-def test_un_score_reel_est_transmis():
+def test_un_score_reel_sans_date_de_connaissance_n_est_pas_transmis():
+    """Le score du jour, sans dépôt, ne doit pas pouvoir choisir un univers passé."""
     from packages.backtest.preset_weights import qualite_de_production
-    q = qualite_de_production(_section("réel multi-source : yfinance 30"))
+    sec = _section("réel multi-source : yfinance 30")
+    assert qualite_de_production(sec) == {}
+    assert sec["pit_exclus"] == 30 and sec["pit_retenus"] == 0
+
+
+def test_un_score_date_par_le_depot_est_transmis():
+    from packages.backtest.preset_weights import qualite_de_production
+    sec = _section("réel multi-source : SEC 30")
+    for r in sec["rows"]:
+        r["kt_quality"] = "INFERRED_LAG"
+        r["knowledge_time"] = "2026-02-15"
+    q = qualite_de_production(sec)
     assert len(q) == 30 and q["T29"] == 29.0
+    assert sec["pit_retenus"] == 30 and sec["pit_exclus"] == 0
 
 
 def _panel(n: int = 30, jours: int = 320) -> dict:

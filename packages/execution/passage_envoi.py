@@ -86,6 +86,17 @@ def _soumettre(p: Passage, c: Compte, ln: Ligne, intention):
                  attempts=3)
 
 
+def _prix_decision(o: dict | None) -> float | None:
+    """Close figé sur la cible, sinon rien (pas le dernier cours du jour)."""
+    if not o:
+        return None
+    for k in ("decision_price", "entry"):
+        v = o.get(k)
+        if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0:
+            return float(v)
+    return None
+
+
 def _noter_envoi(p: Passage, c: Compte, ln: Ligne, res) -> None:
     """L'IDENTITÉ DE L'ORDRE VOYAGE AVEC LUI. `close_position` rend un booléen : pas
     d'identité, donc None."""
@@ -110,7 +121,8 @@ def _noter_envoi(p: Passage, c: Compte, ln: Ligne, res) -> None:
     elif ln.delta < 0:                            # VENTE/REDUCE → round-trip à fermer
         p.sold.append({"symbol": (o or {}).get("symbol", ln.bsym), "venue": c.bname,
                        "broker_symbol": ln.bsym, "notional": abs(ln.delta),
-                       "order_id": oid})
+                       "order_id": oid,
+                       "decision_price": _prix_decision(o)})
 
 
 def _echec(p: Passage, c: Compte, ln: Ligne, intention, e: Exception) -> None:

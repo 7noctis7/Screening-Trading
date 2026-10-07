@@ -67,6 +67,7 @@ def test_le_depot_REEL_declare_bien_ses_modules_SHADOW():
         "packages.strategies.moteur_sortie",
         "packages.strategies.sorties_suiveuses",       # ADR-0208, banc make preset-sorties
         "packages.ml.meta_smc",                         # ADR-0209, banc make meta-smc
+        "packages.ml.ombre_triple",          # ADR-0221, triple barrière + nulle
     }
     assert set(declarés_shadow(RACINE)) == attendus
 

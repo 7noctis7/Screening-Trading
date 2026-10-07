@@ -148,6 +148,7 @@ def ingest(symbols: list[tuple[str, str]], since: str, daily: bool) -> None:
     conn = _connect()
     end = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
     total, ok, fail, skip = 0, 0, 0, 0
+    brut_barres, brut_acts, brut_echecs = 0, 0, 0
     vides: list[str] = []            # ni OK ni échec : le fournisseur a répondu « rien »
     ajour: list[str] = []            # déjà à jour, rien à demander
     for i, (sym, ac) in enumerate(symbols, 1):
@@ -180,6 +181,15 @@ def ingest(symbols: list[tuple[str, str]], since: str, daily: bool) -> None:
                 conn.execute("DELETE FROM prices WHERE symbol=?", (sym,))
             conn.executemany("INSERT OR REPLACE INTO prices VALUES(?,?,?,?,?,?,?,?)", rows)
             conn.commit()
+            if ac in PEUT_SPLITTER:
+                from packages.data.prix_brut import archiver_yahoo
+                debut = min(r[1] for r in rows)
+                archive = archiver_yahoo(conn, sym, ysym, debut, end)
+                if archive is None:
+                    brut_echecs += 1
+                else:
+                    brut_barres += archive[0]
+                    brut_acts += archive[1]
             total += len(rows)
             ok += 1
         else:
@@ -192,6 +202,8 @@ def ingest(symbols: list[tuple[str, str]], since: str, daily: bool) -> None:
             print(f"  … {i}/{len(symbols)} symboles, {ok} OK, {total} barres insérées")
     print(f"Terminé : {ok} OK · {fail} échecs · {len(vides)} sans donnée · "
           f"{len(ajour)} déjà à jour · {skip} crypto ignorées · {total} barres → {DB}")
+    print(f"  brut immuable : {brut_barres} barres · {brut_acts} actions · "
+          f"{brut_echecs} échecs d'archive (la table prices n'en dépend pas)")
     # Le total doit se refermer. Un écart signifierait un chemin de sortie non compté —
     # exactement le défaut que ces compteurs corrigent.
     reste = len(symbols) - (ok + fail + len(vides) + len(ajour) + skip)

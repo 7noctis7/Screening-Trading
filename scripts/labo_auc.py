@@ -61,6 +61,13 @@ def _consigner(res: dict, mode: str) -> int:
 
 
 def main() -> int:
+    from packages.research.gel_ic import autoriser_features
+    ok, msg = autoriser_features(ROOT / "out" / "ic_classement.json")
+    if not ok:
+        print(msg)
+        print("Labo non lancé — aucun essai consigné.")
+        print("Les features restent gelées.")
+        return 0
     from apps.api.snapshot import _sector_of, _seed_universe
     from packages.ml.edge_transversal import NOMS, modele
     from packages.ml.labo_auc import banc

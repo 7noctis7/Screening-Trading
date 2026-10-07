@@ -112,9 +112,27 @@ def mfe_mae(series: list[dict] | None, entry_ts: datetime, exit_ts: datetime,
             round(min(0.0, min(lows) / entry_price - 1), 6))
 
 
+def _refs_sortie(lot: TradeRecord, price: float,
+                 decision_price: float | None) -> dict:
+    """Référence de VENTE. Absente → snapshot d'entrée inchangé (pas un 0)."""
+    if not isinstance(decision_price, (int, float)) or isinstance(decision_price, bool):
+        return lot.features_snapshot
+    if decision_price <= 0:
+        return lot.features_snapshot
+    feats = dict(lot.features_snapshot or {})
+    from packages.core.models import Side
+    from packages.execution.fills import shortfall_bps
+    bps = shortfall_bps(float(decision_price), price, Side.SHORT)
+    feats["exit_decision_price"] = round(float(decision_price), 6)
+    if bps is not None:
+        feats["exit_shortfall_bps"] = round(bps, 4)
+    return feats
+
+
 def _close_record(lot: TradeRecord, qty: float, price: float, ts: datetime,
                   series: list[dict] | None, *,
-                  split_id: str | None = None) -> TradeRecord:
+                  split_id: str | None = None,
+                  decision_price: float | None = None) -> TradeRecord:
     """TradeRecord FERMÉ pour `qty` du lot (features d'entrée conservées)."""
     fe, ae = mfe_mae(series, lot.entry_ts, ts, lot.entry_price)
     pnl = round((price - lot.entry_price) * qty, 6)
@@ -135,7 +153,7 @@ def _close_record(lot: TradeRecord, qty: float, price: float, ts: datetime,
         pnl_gross=pnl, pnl_net=round(pnl - charge, 6),
         pnl_pct=round(price / lot.entry_price - 1, 6) if lot.entry_price > 0 else None,
         is_win=pnl > 0, duration_s=max(0.0, (ts - lot.entry_ts).total_seconds()),
-        mfe=fe, mae=ae)
+        mfe=fe, mae=ae, features_snapshot=_refs_sortie(lot, price, decision_price))
 
 
 def _quantite_vendue(s: dict) -> float:
@@ -193,7 +211,8 @@ def close_sells(journal, sells: list[dict], series_by_sym: dict | None = None,
             if remaining <= _EPS:
                 break
             remaining -= _fermer(journal, lot, remaining, price, ts, series,
-                                 legacy=lot.id in anciens_legacy)
+                                 legacy=lot.id in anciens_legacy,
+                                 decision_price=s.get("decision_price"))
             closed += 1
         if remaining > _EPS and orphelines is not None:
             orphelines.append({"symbol": s["symbol"], "venue": s.get("venue"),
@@ -216,15 +235,18 @@ def _part(lot: TradeRecord, qty: float) -> TradeRecord:
 
 
 def _fermer(journal, lot: TradeRecord, remaining: float, price: float,
-            ts: datetime, series: list[dict] | None, *, legacy: bool) -> float:
+            ts: datetime, series: list[dict] | None, *, legacy: bool,
+            decision_price: float | None = None) -> float:
     """Ferme tout ou partie de `lot` et rend la quantité effectivement fermée."""
     take = min(lot.qty, remaining)
     if take >= lot.qty * (1 - _EPS):                       # fermeture TOTALE du lot
-        journal.append(_close_record(lot, lot.qty, price, ts, series), legacy=legacy)
+        journal.append(_close_record(lot, lot.qty, price, ts, series,
+                                    decision_price=decision_price), legacy=legacy)
         return lot.qty
     n = 1 + sum(1 for t in journal.all()                   # PARTIELLE → scission
                 if t.id.startswith(lot.id + "-X"))
     journal.append(_close_record(_part(lot, take), take, price, ts, series,
-                                 split_id=f"{lot.id}-X{n}"), legacy=legacy)
+                                 split_id=f"{lot.id}-X{n}",
+                                 decision_price=decision_price), legacy=legacy)
     journal.append(_part(lot, lot.qty - take), legacy=legacy)   # lot restant (même id)
     return take

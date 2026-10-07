@@ -29,3 +29,5 @@ class Financials:
     price_currency: str | None = None         # devise du COURS (ex. USD pour l'ADR) — sert à convertir
     name: str | None = None                   # raison sociale (ex. "Oscar Health, Inc.") si la source la fournit
     dividend_yield: float | None = None       # rendement du dividende (fraction, ex. 0.025 = 2.5 %)
+    knowledge_time: str | None = None   # dépôt ou acceptation SEC, pas fin d'exercice
+    kt_quality: str | None = None       # EXACT | INFERRED_LAG | UNKNOWN | None

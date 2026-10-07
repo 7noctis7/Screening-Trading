@@ -112,8 +112,21 @@ def qualite_de_production(fundamentals: dict) -> dict:
         return {}
     if not str(fundamentals.get("source") or "").lower().startswith("réel"):
         return {}
-    return {r["symbol"]: r.get("combined_score") for r in fundamentals.get("rows") or []
-            if r.get("combined_score") is not None}
+    # Sans date de connaissance, le score du jour se recolle sur 2018. On ne le
+    # transmet pas. Le compteur est écrit sur la section (il part dans le payload).
+    pit, exclus = [], 0
+    for r in fundamentals.get("rows") or []:
+        if r.get("combined_score") is None:
+            continue
+        ok = (r.get("kt_quality") in ("EXACT", "INFERRED_LAG")
+              and r.get("knowledge_time"))
+        if ok:
+            pit.append(r)
+        else:
+            exclus += 1
+    fundamentals["pit_retenus"] = len(pit)
+    fundamentals["pit_exclus"] = exclus
+    return {r["symbol"]: r["combined_score"] for r in pit}
 
 
 def _selection(data: dict, quality: dict, lookback: int, top_k: int, d: Diag):

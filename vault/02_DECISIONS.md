@@ -2,6 +2,32 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0221 — Gel d'IC, prix bruts, référence de vente, triple barrière en shadow, SEC datée (2026-10-07)
+
+**Contexte.** Cinq trous ouverts : le laboratoire de features pouvait consommer des
+essais avant l'IC du classement tradé ; Yahoo réécrivait l'historique ajusté ;
+la jambe de vente n'avait pas de prix de référence ; le label triple barrière
+n'avait pas de nulle hebdomadaire hors de la production ; le provider SEC
+choisissait le dernier exercice même quand `as_of` était 2018.
+
+**Décision.**
+1. `gel_ic` lit `out/ic_classement.json`. `make labo-auc` ne consigne rien tant
+   que le verdict n'est pas OUVERT (Šidák, deux moitiés de même signe).
+2. `ohlcv_raw` et `corporate_action` sont append-only. L'ajustement se calcule
+   à la lecture. La table `prices` de production ne change pas de lecteur.
+3. Une vente emporte `exit_decision_price` et `exit_shortfall_bps` si la cible
+   a un prix de décision. Le TCA ignore la clôture du jour du fill quand les
+   barres sont datées.
+4. `ml.ombre_triple` est SHADOW. Il n'entre pas dans le snapshot ni dans
+   `run_live`.
+5. Un fait SEC n'est visible qu'à partir de `acceptanceDateTime`, sinon `filed`.
+   `qualite_de_production` ne transmet un score que si `kt_quality` est EXACT
+   ou INFERRED_LAG. Le compteur `pit_exclus` est publié sur la section.
+
+**Conséquences.** `make ic-classement` reste à lancer sur le VPS : sans base de
+prix ici, le gel est UNCALIBRATED et les features restent arrêtées. Aucun ordre
+réel n'est débloqué.
+
 ## ADR-0220 — `build_snapshot` découpé en 39 étapes, texte d'origine conservé, JSON identique (2026-10-07)
 
 **Contexte.** `apps/api/snapshot.py::build_snapshot` faisait 1 182 lignes (règle : 50),

@@ -7,6 +7,22 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+- [x] **FAIT 07/10 (ADR-0221) — gel d'IC dans le code.** `make labo-auc` ne
+      consigne plus rien si `out/ic_classement.json` n'est pas OUVERT. Le
+      passage VPS de `make ic-classement` reste à faire : sans lui le gel est
+      UNCALIBRATED, et c'est voulu.
+- [x] **FAIT 07/10 (ADR-0221) — archive `ohlcv_raw` + `corporate_action`.**
+      Lecteur de production inchangé (`prices`). L'ajustement à la lecture est
+      testé ; il n'est pas branché sur le rejeu.
+- [x] **FAIT 07/10 (ADR-0221) — référence de vente.** `exit_decision_price` /
+      `exit_shortfall_bps` si la cible porte un prix ; sinon la clé est absente.
+      TCA : clôture datée du jour du fill exclue.
+- [x] **FAIT 07/10 (ADR-0221) — `ml.ombre_triple` SHADOW** (triple barrière,
+      nulle par semaine). Pas dans le snapshot, pas dans `run_live`.
+- [x] **FAIT 07/10 (ADR-0221) — SEC `as_of`.** `acceptanceDateTime` sinon
+      `filed`. `qualite_de_production` exige `kt_quality` EXACT ou INFERRED_LAG
+      et publie `pit_exclus`.
+
 - [x] **~~P0 — D4 : poche crypto (02/10)~~ — TRANCHÉ 02/10 (ADR-0212) : plus de poche obligatoire, la crypto concourt avec les actions sur le momentum.** : 6 cibles de 273 à 455 $ toutes sous le plancher
       de 1 000 $ → poche à ZÉRO chaque jour, en silence. Options : (a) 2 lignes max (BTC,
       ETH) ; (b) retirer la poche (recommandé) ; (c) plancher crypto abaissé. DÉCISION À PRENDRE.

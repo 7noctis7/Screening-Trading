@@ -81,10 +81,14 @@ def main() -> int:
     print(f"IC du classement tradé : {len(data)} séries ({mode}), saut {a.saut}, "
           f"horizons {horizons}, {a.nulles} tirages nuls.")
     res = mesurer(data, horizons=horizons, saut=a.saut, n_nulles=a.nulles)
+    from packages.research.gel_ic import juger
+    verdict = juger(res["resultats"])
+    res = {**res, "verdict": verdict}
     for r in res["resultats"]:
         print(_ligne(r))
     print(f"\n{res['horizons_testes']} horizons testés ensemble : aucun ne se lit "
           "seul.")
+    print(verdict["ligne"])
     n = _consigner(res, a.saut, mode)
     SORTIE.parent.mkdir(parents=True, exist_ok=True)
     SORTIE.write_text(json.dumps({**res, "mode": mode}, ensure_ascii=False, indent=1))

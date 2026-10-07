@@ -909,6 +909,8 @@ def _fundamentals_section(symbols: list, acmap: dict, names: dict, sector_of: di
                 "margin_of_safety": None if mos != mos else round(mos, 3),
                 "f_score": fs, "f_score_label": f_score_label(fs),
                 "altman_z": _az["z"], "altman_zone": _az["zone"],
+                "knowledge_time": getattr(f, "knowledge_time", None),
+                "kt_quality": getattr(f, "kt_quality", None),
                 "per_raw": valuation.per(f),
                 "_val": (valuation.earnings_yield(f) + valuation.fcf_yield(f)),
                 "_qual": (ratios.roic(f) + ratios.gross_margin(f) + ratios.fcf_conversion(f)),

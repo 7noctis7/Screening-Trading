@@ -121,6 +121,26 @@ def cotations_arrivee(targets: list, cur_alp: dict, alpaca, dry: bool) -> dict:
     return cotations(syms)
 
 
+def close_de_decision(series: list | None, jour: str,
+                      explicite: float | None) -> float | None:
+    """Référence : prix figé, sinon dernière clôture STRICTEMENT avant `jour`.
+
+    La dernière barre du graphique est souvent la séance du fill. S'en servir
+    comme référence annule le shortfall. Sans dates, on garde l'ancien repli.
+    """
+    nombre = isinstance(explicite, (int, float)) and not isinstance(explicite, bool)
+    if nombre and explicite > 0:
+        return float(explicite)
+    series = series or []
+    dates = [str((b or {}).get("t") or "")[:10] for b in series]
+    if any(dates):
+        avant = [b for b, d in zip(series, dates) if d and d < jour and b.get("c")]
+        return float(avant[-1]["c"]) if avant else None
+    if series and series[-1].get("c"):
+        return float(series[-1]["c"])
+    return None
+
+
 def journal_tca(snap: dict, opened: list, sold: list, alpaca, arrivee: dict) -> None:
     """Une ligne `tca_executions` par ordre Alpaca rempli : spread à l'arrivée, dérive
     depuis le close de décision, shortfall d'exécution. Ne lève jamais."""
@@ -142,7 +162,7 @@ def journal_tca(snap: dict, opened: list, sold: list, alpaca, arrivee: dict) -> 
             if not f or float(f.get("price") or 0) <= 0:
                 continue
             barres = series.get(o["symbol"]) or []
-            close = float(barres[-1]["c"]) if barres else None
+            close = close_de_decision(barres, jour, o.get("decision_price"))
             lignes.append(ligne(o, prix_fill=float(f["price"]), qty=float(f["qty"]),
                                 close_decision=close, jour=jour,
                                 arrivee=arrivee.get(o["broker_symbol"]),

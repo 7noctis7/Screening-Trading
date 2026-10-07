@@ -201,11 +201,28 @@ def quarterly_history(symbol: str, n: int = 4) -> list[dict]:
     return out
 
 
-def _growth(facts: dict, *concepts: str) -> float | None:
-    """Croissance YoY RÉELLE entre les deux derniers exercices annuels (None si indisponible)."""
-    s = _annual_series(facts, *concepts)
-    if len(s) >= 2 and s[-2] not in (0, None):
-        return s[-1] / abs(s[-2]) - 1.0 if s[-2] > 0 else None
+def _growth(facts: dict, *concepts: str, as_of: str | None = None) -> float | None:
+    """Croissance YoY entre les deux derniers exercices déjà connus à `as_of`."""
+    from packages.fundamentals.pit_edgar import visible
+    s = []
+    for c in concepts:
+        node = facts.get("us-gaap", {}).get(c) or facts.get("dei", {}).get(c)
+        if not node:
+            continue
+        units = node.get("units", {})
+        series = (units.get("USD") or units.get("shares")
+                  or next(iter(units.values()), []))
+        annual = [x for x in series
+                  if x.get("form") in ("10-K", "20-F") and x.get("fp") == "FY"
+                  and x.get("val") is not None and visible(x, as_of)]
+        autres = [x for x in series if x.get("val") is not None and visible(x, as_of)]
+        pool = annual or autres
+        pool.sort(key=lambda x: x.get("end", ""))
+        s = [float(x["val"]) for x in pool]
+        if s:
+            break
+    if len(s) >= 2 and s[-2] not in (0, None) and s[-2] > 0:
+        return s[-1] / abs(s[-2]) - 1.0
     return None
 
 
@@ -235,33 +252,27 @@ class SECFundamentalsProvider:
         facts = _facts(cik)
         if not facts:
             return None
-        revenue = _latest(facts, "RevenueFromContractWithCustomerExcludingAssessedTax",
-                          "Revenues", "SalesRevenueNet") or 0.0
-        net_income = _latest(facts, "NetIncomeLoss") or 0.0
-        ebit = _latest(facts, "OperatingIncomeLoss") or 0.0
-        dep = _latest(facts, "DepreciationDepletionAndAmortization",
-                      "DepreciationAmortizationAndAccretionNet") or 0.0
-        equity = _latest(facts, "StockholdersEquity",
-                         "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest") or 0.0
-        debt = _latest(facts, "LongTermDebtNoncurrent", "LongTermDebt") or 0.0
-        cash = _latest(facts, "CashAndCashEquivalentsAtCarryingValue", "CashCashEquivalentsAndShortTermInvestments") or 0.0
-        gross = _latest(facts, "GrossProfit") or 0.0
-        if revenue <= 0 and net_income == 0:              # rien d'exploitable
+        from packages.fundamentals.pit_edgar import mesures
+        borne = as_of.date().isoformat() if as_of is not None else None
+        m = mesures(facts, borne)
+        revenue, net_income = m["revenue"] or 0.0, m["net_income"] or 0.0
+        if revenue <= 0 and net_income == 0:
             return None
         price, shares = self._price_shares(symbol)
         if shares <= 0:
-            shares = _latest(facts, "CommonStockSharesOutstanding", "EntityCommonStockSharesOutstanding") or 0.0
+            shares = m["shares"] or 0.0
+        ebit, dep = m["ebit"] or 0.0, m["dep"] or 0.0
         rev_g = _growth(facts, "RevenueFromContractWithCustomerExcludingAssessedTax",
-                        "Revenues", "SalesRevenueNet")
-        eps_g = _growth(facts, "NetIncomeLoss")
+                        "Revenues", "SalesRevenueNet", as_of=borne)
+        eps_g = _growth(facts, "NetIncomeLoss", as_of=borne)
         return Financials(
             symbol=symbol, as_of=as_of or datetime.now(timezone.utc),
             sector="Unknown", price=price, shares=shares,
-            # ABSENT = NaN, jamais un multiple inventé (06/10). Avant : marge brute =
-            # 40 % du CA, EBIT = 1,3 × résultat, fonds propres = 50 % du CA, FCF = 0,
-            # intérêts = 0 — sans source, sous l'étiquette « SEC EDGAR (réel) ».
-            revenue=revenue, gross_profit=gross or _NA,
+            # ABSENT = NaN, jamais un multiple inventé (06/10).
+            revenue=revenue, gross_profit=m["gross"] or _NA,
             ebit=ebit or _NA, ebitda=(ebit + dep) if ebit else _NA,
-            net_income=net_income, total_equity=equity or _NA,
-            total_debt=debt, cash=cash, fcf=_NA, interest_expense=_NA,
-            revenue_growth=rev_g, earnings_growth=eps_g, name=company_name(symbol))
+            net_income=net_income, total_equity=m["equity"] or _NA,
+            total_debt=m["debt"] or 0.0, cash=m["cash"] or 0.0, fcf=_NA,
+            interest_expense=_NA, revenue_growth=rev_g, earnings_growth=eps_g,
+            name=company_name(symbol), knowledge_time=m["knowledge_time"],
+            kt_quality=m["kt_quality"])
