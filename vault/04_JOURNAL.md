@@ -1,5 +1,15 @@
 # 04 — JOURNAL
 
+## Session 2026-10-07 — Découper le chemin d'ordres sans changer une décision
+
+`run_live.py` passe de 1 343 à 382 lignes (ADR-0218). Avant de toucher `_reconcile`,
+son comportement a été figé : six comptes factices, tout ce qui sort (texte, ordres,
+identifiants client, compteurs, alertes) enregistré, puis comparé après chaque étape.
+Un module existant (`execution/reconciliation.py`) a été écrasé par erreur pendant
+l'extraction, détecté au `git status` et restauré ; les nouveaux modules portent le
+préfixe `passage_`. Les 94 variables `QUANT_*` sont déclarées et vérifiées ; les
+passages écrivent un JSONL ; `.dockerignore` protège le journal réel.
+
 ## Session 2026-10-06 (6ᵉ) — Premier passage réel des quatre questions : deux mesures fausses
 
 Le VPS a produit la page (625 séries, 2 202 allers-retours). Verdict mécanique : NON

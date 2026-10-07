@@ -2,6 +2,37 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0218 — Socle : chemin d'ordres découpé sans changer une décision, réglages déclarés, passages journalisés (2026-10-07)
+
+**Contexte.** Audit « comité » du 06/10, faiblesses hors stratégie : `run_live.py`
+1 343 lignes (`_reconcile` 233, `main` 107, `_journal_opens` 123) pour une règle de
+400 / 50 ; 84 variables `QUANT_*` lues sans validation centrale ; sortie de passage par
+`print()` (77 appels) ; Dockerfile qui copiait `data/` sans `.dockerignore`.
+
+**Décision.**
+1. **Chemin d'ordres** : `packages/execution/passage_{cibles,reconcile,envoi,journal,
+   ventes,gardes,diagnostic}.py`. `run_live.py` = 382 lignes d'orchestration, `main`
+   47 lignes ; il réexporte les mêmes noms. **Aucune décision ne change** :
+   `tests/execution/test_reconcile_golden.py` compare six comptes factices (réel,
+   rejet + panne courtier, aperçu, réduction de risque, sleeve, séance fermée) — texte,
+   valeurs rendues, appels courtier avec identifiant client, compteurs, alertes — à une
+   référence enregistrée AVANT le découpage. Imports locaux conservés (les tests
+   patchent `market_calendar` à l'appel).
+2. **Réglages** : `packages/common/reglages*.py` déclare 94 variables (type, défaut,
+   rôle, criticité). `verifier()` signale variable inconnue (avec la plus proche),
+   valeur illisible, drapeau qui n'active rien. Annoncé par `run_live` avant toute
+   décision ; `make reglages`. Aucune lecture existante modifiée ; un test interdit
+   toute variable non déclarée.
+3. **Observabilité** : `dire()` = même sortie écran + une ligne JSON dans
+   `logs/passages/AAAA-MM-JJ.jsonl` (run, type, niveau, msg). Jamais bloquant.
+4. **Sécurité** : `.dockerignore` exclut `data/*.db`, `.env*`, `out/`, `.cache/`,
+   `models/` (test).
+
+**Pas fait ici.** `apps/api/snapshot.py::build_snapshot` (1 182 lignes) : même méthode
+(référence JSON du snapshot synthétique, puis extraction), PR séparée.
+
+**Conséquences.** Paper uniquement ; aucun seuil, aucune limite, aucun ordre changé.
+
 ## ADR-0217 — Deux mesures du rapport d'espérance corrigées après le premier passage réel (2026-10-06)
 
 **Contexte.** Premier `make rapport-esperance` / `make ic-classement` sur le VPS (625
