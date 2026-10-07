@@ -10,6 +10,9 @@
 - [x] **~~P0 — D4 : poche crypto (02/10)~~ — TRANCHÉ 02/10 (ADR-0212) : plus de poche obligatoire, la crypto concourt avec les actions sur le momentum.** : 6 cibles de 273 à 455 $ toutes sous le plancher
       de 1 000 $ → poche à ZÉRO chaque jour, en silence. Options : (a) 2 lignes max (BTC,
       ETH) ; (b) retirer la poche (recommandé) ; (c) plancher crypto abaissé. DÉCISION À PRENDRE.
+- [ ] **P2 — `build_snapshot` (1 182 lignes, ADR-0218)** : figer le JSON du snapshot
+      synthétique (`build_snapshot(seed=7)`, 4 min), puis extraire par étapes.
+      `apps/api/snapshot.py` (2 888 l.) et `main.py` (1 489 l.) restent hors règle.
 - [ ] **P1 — Relancer les quatre questions après ADR-0217 (06/10)** : `make
       rapport-esperance` puis `make ic-classement`. Lire d'abord la ligne
       « participation q / ADV » : une médiane ≥ 1 % sur un livre de 100 k$ signale encore

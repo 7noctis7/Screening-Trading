@@ -29,9 +29,17 @@ def _imports(fichier: pathlib.Path) -> set[str]:
     return cibles
 
 
+# Le chemin d'ordres : `run_live.py` délègue la boucle d'ordres à `passage_reconcile`
+# (découpage du 06/10, règle des 400 lignes). La barrière se vérifie sur TOUTE la chaîne.
+CHEMIN = [RACINE / "scripts" / "run_live.py",
+          *sorted((RACINE / "packages" / "execution").glob("passage_*.py"))]
+
+
 def test_le_chemin_de_rebalancement_utilise_order_gate():
     """`run_live.py` est le SEUL script qui envoie des ordres : sa barrière doit y être."""
-    src = (RACINE / "scripts" / "run_live.py").read_text(encoding="utf-8")
+    assert "packages.execution.passage_reconcile" in _imports(CHEMIN[0])
+    src = (RACINE / "packages" / "execution" / "passage_reconcile.py").read_text(
+        encoding="utf-8")
     assert "packages.risk.order_gate" in src
     assert "evaluer(" in src, "le portail doit être APPELÉ, pas seulement importé"
 
@@ -41,7 +49,8 @@ def test_le_chemin_de_rebalancement_n_importe_PAS_RiskEngine():
 
     Si ce test tombe un jour, c'est que quelqu'un a branché `RiskEngine` sur le rééquilibrage :
     qu'il le fasse en connaissance de cause, en retirant ce test et en mettant à jour l'ADR."""
-    assert "packages.risk.engine" not in _imports(RACINE / "scripts" / "run_live.py")
+    for fichier in CHEMIN:
+        assert "packages.risk.engine" not in _imports(fichier), fichier.name
 
 
 def test_RiskEngine_reste_le_moteur_du_streaming():

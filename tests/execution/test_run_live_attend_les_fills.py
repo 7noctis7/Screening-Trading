@@ -99,7 +99,9 @@ def test_une_liquidation_sans_identite_vaut_None_et_non_une_chaine_vide(rl):
 # --- l'attente est branchée, et ne peut pas coûter un run -------------------
 
 def test_l_attente_est_appelee_AVANT_la_journalisation_et_hors_dry_run():
-    corps = SOURCE[SOURCE.index("def main()"):SOURCE.index("def _disjoncteur")]
+    # Le corps de `main` (les garde-fous ont quitté ce fichier le 06/10 : la borne de
+    # fin est désormais la fonction qui suit `main`).
+    corps = SOURCE[SOURCE.index("def main()"):SOURCE.index("def _dire_termine")]
     i_attente = corps.index("_attendre_les_fills(")
     i_opens = corps.index("_journal_opens(")
     i_dry = corps.index("if not dry:\n        _attendre_les_fills(")

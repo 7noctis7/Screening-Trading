@@ -23,11 +23,12 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+
+from packages.common.journal_passage import dire  # noqa: E402 — écran + JSONL
 
 
 def _parse_args():
@@ -69,21 +70,21 @@ def _kill_switch(bus, obs=None):
     # bloquait encore tout le portefeuille, jusqu'à effacement manuel du drop.
     risk = to_risk_veto(fetch_tv_technical_alerts(max_age_s=AGE_MAX_DEFAUT))
     if risk.get("n_sans_date"):
-        print(f"⚠️  {risk['n_sans_date']} alerte(s) TV sans date lisible — conservées par "
+        dire(f"⚠️  {risk['n_sans_date']} alerte(s) TV sans date lisible — conservées par "
               "prudence (elles pèsent sur la décision sans pouvoir être périmées)")
     for r in risk.get("severites_reinterpretees", []):
-        print(f"⚠️  sévérité TV réinterprétée : {r}")
+        dire(f"⚠️  sévérité TV réinterprétée : {r}")
     reduce = 0.0 if risk.get("veto") else float(risk.get("reduce", 1.0))
     if risk.get("veto"):
-        print(f"⛔ KILL-SWITCH ACTIF (alertes TV critiques) : {', '.join(risk['reasons']) or '—'}")
-        print("   → achats BLOQUÉS ; aucune vente forcée (seuls les allègements de "
+        dire(f"⛔ KILL-SWITCH ACTIF (alertes TV critiques) : {', '.join(risk['reasons']) or '—'}")
+        dire("   → achats BLOQUÉS ; aucune vente forcée (seuls les allègements de "
               "la stratégie partent).")
         if bus:
             from packages.common.event_bus import Topic
             bus.publish(Topic.KILL_SWITCH,
                         {"drawdown": "veto TV: " + (", ".join(risk["reasons"]) or "—")})
     elif reduce < 1.0:
-        print(f"⚠️  Alertes TV : achats plafonnés à ×{reduce:.2f} de la cible, aucune vente "
+        dire(f"⚠️  Alertes TV : achats plafonnés à ×{reduce:.2f} de la cible, aucune vente "
               f"forcée ({', '.join(risk['reasons']) or '—'})")
     # MOTIF EN CODE COURT, jamais le texte des alertes : le compte-rendu est un fichier
     # de compteurs, il n'a pas à transporter du contenu de marché.
@@ -99,7 +100,7 @@ def _alpaca_ou_rien():
         from packages.execution.alpaca_broker import AlpacaBroker
         return AlpacaBroker(paper=True)                   # actions TOUJOURS en paper
     except Exception as e:  # noqa: BLE001
-        print(f"Alpaca indisponible ({str(e)[:60]}) → actions ignorées")
+        dire(f"Alpaca indisponible ({str(e)[:60]}) → actions ignorées")
         return None
 
 
@@ -133,14 +134,14 @@ def _make_brokers(dry: bool, apercu: bool = False):
     if dry:
         return (_alpaca_ou_rien(), None) if apercu else (None, None)
     if crypto_live_neutralisee():
-        print("QUANT_NO_CRYPTO_LIVE actif → poche crypto ignorée (aucune place)")
+        dire("QUANT_NO_CRYPTO_LIVE actif → poche crypto ignorée (aucune place)")
         return _alpaca_ou_rien(), None
     from packages.execution.venues import venue_crypto
     _v = venue_crypto()
     try:
         crypto = _v.broker(dry_run=False)
     except Exception as e:  # noqa: BLE001 — clés/dépendance absentes : on continue
-        print(f"{_v.nom} indisponible ({str(e)[:60]}) → poche crypto ignorée")
+        dire(f"{_v.nom} indisponible ({str(e)[:60]}) → poche crypto ignorée")
         crypto = None
     return _alpaca_ou_rien(), crypto
 
@@ -149,767 +150,36 @@ def _make_brokers(dry: bool, apercu: bool = False):
 # Extraits dans packages/execution/live_guards.py (règle <400 l./fichier).
 
 
-def _nsym(s: str) -> str:
-    """Clé de matching : Alpaca renvoie les POSITIONS sans slash (BTCUSD) mais les CIBLES
-    sont en BTC/USD → sans normalisation, le même actif compte 2 fois (fix 07/07 : la
-    réconciliation RACHETAIT BTC chaque jour tout en échouant à vendre « l'autre »)."""
-    return (s or "").replace("/", "").replace("-", "").upper()
-
-
-def _broker_targets(targets, bname: str, cap: float, reduce: float, cur: dict, *,
-                    proteger=None, liquider_hors_cible: bool = True) -> tuple[dict, float]:
-    """Carte cible {clé normalisée: {o, val, sym}} d'UN broker + bande d'inaction.
-
-    ANTI-LEVIER : Σ cibles plafonnée à 100 % du capital du broker. Le détenu hors-cible
-    est ajouté avec val=0 (liquidation) sauf si `proteger` (HOLD = val=détenu) —
-    Capital A : le preset ne doit pas solder les holdings sleeve. Si
-    `liquider_hors_cible=False` (pass sleeve) : aucun hors-cible ajouté.
-    `sym` = symbole à ENVOYER au broker (format cible « BTC/USD » si connue, sinon
-    le format position).
-    Protection multi-jour : `proteger` alimenté par snap ∪ journal (PR4).
-    """
-    tgs = [o for o in targets if (o.get("capital") == "bitmart") == (bname == "Bitmart")]
-    sw = sum(o["weight_pct"] for o in tgs)
-    scale = min(1.0, 1.0 / sw) if sw > 1.0 else 1.0
-    detenu: dict[str, float] = {}
-    for k, v in cur.items():
-        detenu[_nsym(k)] = detenu.get(_nsym(k), 0.0) + v
-    tgt: dict[str, dict] = {}
-    for o in tgs:
-        bsym = o.get("broker_symbol", o["symbol"])
-        pleine = o["weight_pct"] * cap * scale
-        tgt[_nsym(bsym)] = {"o": o, "val": cible_sous_garde(pleine, detenu.get(_nsym(bsym), 0.0),
-                                                            reduce), "sym": bsym}
-    if liquider_hors_cible:
-        prot = {_nsym(s) for s in (proteger or ())}
-        for bsym in cur:                                  # détenu hors-cible
-            nkey = _nsym(bsym)
-            if nkey in tgt:
-                continue
-            if nkey in prot:                              # HOLD sleeve — ne pas liquider
-                tgt[nkey] = {"o": None, "val": detenu.get(nkey, 0.0), "sym": bsym}
-            else:
-                tgt[nkey] = {"o": None, "val": 0.0, "sym": bsym}
-    return tgt, max(0.005 * cap, 5.0)                     # bande : 0,5 % du capital, min 5 $
-
-
-def id_client(run_id: str, bsym: str, action: str) -> str:
-    """Identifiant client d'UN ordre de CE passage — le même à chaque retry (QML-006).
-
-    Le passage entre dans l'identifiant : un second rebalancement le même jour (`--forcer`)
-    est un autre ordre, pas un doublon à refuser. 48 caractères au plus (Alpaca en accepte
-    128, Bitmart et Binance moins)."""
-    import hashlib
-    brut = f"{run_id}|{_nsym(bsym)}|{action}"
-    return f"qt-{hashlib.sha1(brut.encode()).hexdigest()[:24]}-{_nsym(bsym)[:16]}"[:48]
-
-
-def _envoyer(broker, bsym: str, side, montant: float, cid: str):
-    """`submit_notional` AVEC l'identifiant quand l'adaptateur le déclare.
-
-    Les trois courtiers réels le déclarent ; les faux courtiers des tests et l'adaptateur
-    IBKR (démo) non — on ne casse pas un contrat pour ceux qui ne le connaissent pas."""
-    import inspect
-    try:
-        accepte = "client_id" in inspect.signature(broker.submit_notional).parameters
-    except (TypeError, ValueError):
-        accepte = False
-    if accepte:
-        return broker.submit_notional(bsym, side, montant, client_id=cid)
-    return broker.submit_notional(bsym, side, montant)
-
-
-def _log_rejet(bsym: str, bname: str, intention, issue: str) -> None:
-    """Trace structurée d'un refus courtier. Best-effort : ne casse jamais le run."""
-    try:
-        import logging
-        logging.getLogger("live.execution").error(
-            "ordre refusé par le courtier",
-            extra={"symbole": bsym, "broker": bname, "action": intention.action,
-                   "montant": intention.montant, "issue": issue})
-    except Exception:  # noqa: BLE001
-        pass
-
-
-def cible_sous_garde(pleine: float, detenu: float, reduce: float) -> float:
-    """Cible d'UNE ligne sous garde-fou : les achats plafonnés, jamais une vente (QML-007).
-
-    `reduce` ∈ [0, 1] vient des kill-switches (TV, drawdown réel, disjoncteur). Il ne fait
-    que BORNER les achats à `pleine × reduce`. Il ne descend jamais la cible sous le détenu :
-    un garde-fou qui vend serait un moteur de liquidation, et l'ancien code en était un
-    seulement pour les alertes les MOINS graves (`0 < reduce < 1`), tandis que la rupture de
-    drawdown gelait tout. Les allègements décidés par la STRATÉGIE (`pleine < detenu`) passent
-    inchangés : ils réduisent le risque.
-    """
-    r = max(0.0, min(1.0, float(reduce)))
-    if r >= 1.0:
-        return pleine
-    return max(pleine * r, min(pleine, detenu))
-
-
-def ordre_de_traitement(tgt: dict, detenu: dict) -> list:
-    """Les VENTES d'abord. L'ordre de passage décide de ce que le portail accepte.
-
-    Le tri d'origine allait par cible décroissante. Or une ligne à SOLDER a une cible de
-    zéro : elle partait donc en dernier. Le portail de risque évaluait les achats en
-    voyant encore, dans l'exposition brute, tout ce que le même lot allait vendre.
-    Il refusait ainsi des achats financés par ces ventes.
-
-    MESURÉ le 14/09 sur le compte paper. Brut 80 785 $ pour un plafond de 100 194 $ ;
-    19 408 $ d'achats acceptés saturent le plafond ; SEPT achats sont alors refusés pour
-    9 961 $ — puis sept lignes sont soldées, libérant 13 720 $. Soit 3 759 $ de plus que
-    le total des refus. Dans l'autre sens, les sept passaient.
-
-    Pourquoi c'est sûr : une vente n'est JAMAIS bloquée par le portail
-    (« désengagement — jamais bloqué »). Les passer d'abord ne peut donc rien
-    refuser de plus qu'avant. Cet
-    ordre est strictement plus permissif, à décisions de stratégie inchangées — il ne
-    choisit rien, il cesse seulement de compter deux fois le capital.
-    """
-    def cle(kv):
-        nkey, info = kv
-        delta = info["val"] - detenu.get(nkey, 0.0)
-        # 0 = vente (libère l'exposition) · 1 = achat (la consomme). Puis, dans
-        # chaque groupe du plus gros au plus petit : l'ordre entre achats est
-        # celui d'avant.
-        return (1 if delta >= 0 else 0,
-                -abs(delta) if delta < 0 else -info["val"])
-
-    return sorted(tgt.items(), key=cle)
-
-
-def sleeve_geometry_missing(o: dict | None) -> list[str]:
-    """Clés manquantes TA#8 pour un ordre sleeve swing. [] = OK ou guard inactive.
-
-    Guard active ssi `strategy=="swing"` ou `sleeve=="swing"`. Preset / strategy
-    absente → [] (aucune géométrie exigée). Phase 1 : pas de gate `accept` (PR5).
-    """
-    if not o:
-        return []
-    if o.get("strategy") != "swing" and o.get("sleeve") != "swing":
-        return []
-    miss: list[str] = []
-
-    def _fin(v) -> bool:
-        return isinstance(v, (int, float)) and not isinstance(v, bool) and v == v
-
-    def _str(v) -> bool:
-        return isinstance(v, str) and bool(v.strip())
-
-    if not _fin(o.get("entry")):
-        miss.append("entry")
-    if not _fin(o.get("stop")):
-        miss.append("stop")
-    if not (_fin(o.get("target")) or _fin(o.get("rr"))):
-        miss.append("target|rr")
-    if not _str(o.get("setup_id")):
-        miss.append("setup_id")
-    if not _str(o.get("ts_decision")):
-        miss.append("ts_decision")
-    return miss
-
-
-def _reconcile(targets, brokers, reduce, alert_engine, dry, obs=None, *,
-               proteger=None, liquider_hors_cible: bool = True) -> tuple[int, list, list]:
-    """Réconciliation idempotente + ANTI-LEVIER. Retourne (nb ordres, ouvertures, ventes).
-
-    On n'échange que le DELTA (cible − détenu). `opened` = achats RÉELLEMENT envoyés (à
-    journaliser, `legacy=0`) ; `sold` = ventes RÉELLEMENT envoyées (round-trip Phase 2)."""
-    from dataclasses import replace
-
-    from packages.common.retry import retry
-    from packages.core.models import Side
-    from packages.execution.market_calendar import (
-        feries_a_jour,
-        is_open,
-        prochaine_ouverture,
-        raison_fermeture,
-    )
-    from packages.execution.order_outcome import compte_comme_envoye, resume
-    from packages.execution.routing import classe_actif as _classe_actif
-    # ÉCHAPPATOIRE EXPLICITE. `QUANT_IGNORE_SESSION=1` envoie quand même hors séance —
-    # utile pour empiler des ordres avant l'ouverture en connaissance de cause, et pour
-    # les tests qui isolent le PORTAIL DE RISQUE du calendrier. Jamais le défaut : un
-    # ordre qui ne peut pas se remplir doit être dit, pas envoyé dans le vide.
-    _verif_seance = os.environ.get("QUANT_IGNORE_SESSION", "") != "1"
-    import uuid
-    run_id = uuid.uuid4().hex                       # identité du PASSAGE (QML-006)
-    sent, opened, sold, differes, rejetes = 0, [], [], [], []
-    if _verif_seance and not feries_a_jour():
-        print("  ⚠️  fériés NYSE périmés — voir packages/execution/market_calendar")
-    for bname, broker, cap, cur in brokers:
-        tgt, band = _broker_targets(targets, bname, cap, reduce, cur,
-                                    proteger=proteger,
-                                    liquider_hors_cible=liquider_hors_cible)
-        curn = {}                                             # détenu par clé NORMALISÉE (cumul)
-        for k, v in cur.items():
-            curn[_nsym(k)] = curn.get(_nsym(k), 0.0) + v
-        from packages.execution.garde_fous import (
-            DESARME,
-            SEANCE,
-            noter,
-            noter_portail,
-        )
-        from packages.execution.rebalance_plan import decider
-        from packages.risk.order_gate import EtatCompte, Limites, evaluer, ligne_journal
-        # PORTAIL DE RISQUE — indépendant de la stratégie, lu depuis l'environnement
-        # seul.
-        # Jusqu'ici les limites du projet (`packages.risk`) n'existaient que dans
-        # les démos :
-        # le chemin de production n'avait aucun veto PAR ORDRE.
-        _lim = Limites.depuis_env()
-        _expo = sum(abs(v) for v in curn.values())
-        _npos = sum(1 for v in curn.values() if abs(v) > 0)
-        if not dry:
-            print(f"  portail de risque : {_lim.resume()} · brut actuel {_expo:.0f}$ / {cap:.0f}$")
-        for nkey, info in ordre_de_traitement(tgt, curn):
-            o, bsym = info["o"], info["sym"]
-            detenu = curn.get(nkey, 0.0)
-            delta = info["val"] - detenu                      # >0 acheter · <0 vendre
-            tag = f"  {bsym:14s} {bname:8s} cible {info['val']:8.0f}$ détenu {detenu:8.0f}$ Δ {delta:+8.0f}$"
-            if o is not None and o.get("tradeable") is False:
-                print(tag + "  non négociable"); continue
-            # SÉANCE OUVERTE ? Les actions partent en TimeInForce.DAY sans
-            # extended_hours :
-            # hors séance l'ordre ne peut PAS se remplir. La crypto (GTC, 24/7) passe.
-            # Constat du 26/08 : sans ce contrôle, un run lancé d'Europe (03 h à NY)
-            # remplissait tout le crypto et AUCUNE action — 28 % de cash restaient à
-            # la place du satellite, sans un mot au journal. On REPORTE en le disant.
-            _ac = _classe_actif(bsym, (o or {}).get("asset_class") or "")
-            # GARDE DE SÉANCE — sixième filtre, et il écarte des ordres comme les
-            # autres : le 21/09 il a reporté 19 lignes pour 52 596 $ sans que rien ne
-            # le compte. L'effet se chiffre ici en dollars NON ENVOYÉS, et le motif est
-            # la classe d'actif : « chaque jour, les actions » et « une fois, un férié »
-            # sont deux diagnostics opposés que le récapitulatif de fin de run ne
-            # distingue pas d'un jour sur l'autre.
-            if not _verif_seance:
-                noter(obs, SEANCE, etat=DESARME)
-            elif not is_open(asset_class=_ac):
-                _pq = prochaine_ouverture()
-                print(tag + f"  ⏸  REPORTÉ — {raison_fermeture(asset_class=_ac)}"
-                            f" · prochaine ouverture {_pq:%d/%m %H:%M ET}")
-                differes.append({"symbol": bsym, "broker": bname, "asset_class": _ac,
-                                 "montant": round(info["val"] - detenu, 2)})
-                noter(obs, SEANCE, declenche=True, motif=_ac,
-                      effet_usd=abs(info["val"] - detenu))
-                continue
-            else:
-                noter(obs, SEANCE, effet_usd=0.0)
-            # Décision déléguée (testée) : solder hors bande, ne pas ouvrir sous le
-            # plancher.
-            intention = decider(info["val"], detenu, band)
-            if not intention.agit:
-                print(tag + f"  ✓ {intention.motif}"); continue
-            # DERNIÈRE BARRIÈRE : le portail peut réduire ou refuser, jamais
-            # augmenter. Un
-            # désengagement le traverse toujours (le bloquer augmenterait le risque).
-            # Le portail ne devine pas ce qu'est un panier : on le lui DIT, depuis la
-            # classe d'actifs déjà résolue plus haut. Un ETF indiciel porte un risque
-            # d'émetteur, pas le risque d'un titre unique — il a donc son propre plafond
-            # de ligne (cf. `MAX_POIDS_LIGNE_PANIER`), sans quoi aucun cœur indiciel ne
-            # peut exister au-dessus de 20 % du compte.
-            _etat = EtatCompte(equity=cap, exposition_brute=_expo, n_positions=_npos,
-                               detenu_ligne=detenu, panier=(_ac == "etf"))
-            _v = evaluer(intention.action, intention.montant, _etat, _lim,
-                         liquidation=intention.liquidation)
-            # TÉMOIN. Il compte le verdict APRÈS qu'il a été rendu et ne peut pas le
-            # modifier : `order_gate` reste une fonction pure, sans état ni écriture.
-            noter_portail(obs, _v, intention.montant)
-            if not _v.autorise:
-                print(tag + f"  ⛔ REFUSÉ par le portail [{_v.regle}] {_v.motif}")
-                if alert_engine:
-                    from packages.alerts import Alert, Severity
-                    alert_engine.emit(Alert("risk", Severity.WARNING,
-                        f"Ordre {bsym} refusé par le portail de risque : {_v.motif}"))
-                continue
-            if _v.reduit:
-                print(tag + f"  ⚠️  {_v.motif}")
-                intention = replace(intention, montant=_v.montant)
-            if not dry:
-                print("  " + ligne_journal(bsym, intention.action, _v.montant, _v))
-            # Guard géométrie sleeve (TA#8) — inactif pour preset / strategy absente.
-            _miss = sleeve_geometry_missing(o)
-            if _miss:
-                print(tag + f"  ⛔ reject_missing_geometry ({','.join(_miss)})")
-                try:
-                    import logging
-                    logging.getLogger("live.execution").warning(
-                        "reject_missing_geometry",
-                        extra={"symbole": bsym, "broker": bname,
-                               "manquants": list(_miss),
-                               "strategy": (o or {}).get("strategy")})
-                except Exception:  # noqa: BLE001
-                    pass
-                continue
-            side = Side.LONG if intention.action == "acheter" else Side.SHORT
-            if dry or broker is None:
-                print(tag + f"  {'aperçu' if dry else 'broker absent'} ({intention.action})")
-                if dry:            # l'aperçu SIMULE l'effet de l'ordre, comme le réel le
-                    #  compterait : sans cela une vente ne libère rien et l'achat
-                    #  suivant s'affiche refusé à tort (constaté le 25/09).
-                    _expo += (intention.montant if intention.action == "acheter"
-                              else -intention.montant)
-                    if intention.action == "acheter" and detenu <= 0:
-                        _npos += 1
-                continue
-            try:
-                if intention.liquidation and hasattr(broker, "close_position"):
-                    # Sortie totale EN QUANTITÉ : aucun résidu, donc aucune
-                    # poussière future.
-                    _res = retry(lambda: broker.close_position(bsym), attempts=3)
-                else:
-                    # Le MÊME identifiant à chaque tentative : un envoi accepté puis perdu
-                    # en route n'est plus renvoyé, il est retrouvé (QML-006).
-                    _cid = id_client(run_id, bsym, intention.action)
-                    _res = retry(
-                        lambda: _envoyer(broker, bsym, side, intention.montant, _cid),
-                        attempts=3)
-                # UN ORDRE ENVOYÉ N'EST PAS UN ORDRE EXÉCUTÉ. `sent += 1` dès l'absence
-                # d'exception comptait comme réussi un ordre qu'Alpaca venait de
-                # REJETER : le récapitulatif annonçait des ordres partis alors que rien
-                # n'était passé. C'est ce trou qui a laissé le satellite actions vide
-                # sans une ligne de journal (ADR-0040).
-                if not compte_comme_envoye(_res):
-                    print(tag + "  " + resume(_res))
-                    rejetes.append({"symbol": bsym, "broker": bname,
-                                    "action": intention.action,
-                                    "montant": round(intention.montant, 2),
-                                    "issue": resume(_res)})
-                    _log_rejet(bsym, bname, intention, resume(_res))
-                    continue          # ni compté, ni journalisé comme une ouverture
-                sent += 1
-                # Le plafond d'exposition doit voir les ordres DÉJÀ envoyés dans
-                # cette boucle,
-                # sinon chacun est jugé contre l'état initial et la somme dépasse la
-                # limite.
-                _expo += intention.montant if intention.action == "acheter" else -intention.montant
-                if intention.action == "acheter" and detenu <= 0:
-                    _npos += 1
-                print(tag + {"acheter": "  ▲ achat", "alleger": "  ▼ vente",
-                             "solder": "  ▼ SOLDE (quantité)"}[intention.action])
-                # L'IDENTITÉ DE L'ORDRE VOYAGE AVEC LUI. Sans elle, la journalisation
-                # ne peut que demander au courtier « qu'as-tu exécuté aujourd'hui ? » —
-                # une question à laquelle il répond dès qu'il a fini, pas dès qu'on la
-                # pose. `close_position` rend un booléen : pas d'identité, donc None.
-                _oid = str(getattr(_res, "id", "") or "") or None
-                if delta > 0 and o is not None:               # ACHAT/ADD → ouverture à journaliser
-                    _op = {"symbol": o["symbol"], "venue": bname, "broker_symbol": bsym,
-                           "asset_class": o.get("asset_class"), "weight_pct": o.get("weight_pct"),
-                           "order_id": _oid}
-                    # rank_score / expectancy* / géométrie : uniquement si déjà figés
-                    # sur la cible (snapshot) — jamais inventés ici.
-                    for _k in ("rank_score", "expectancy_R", "rr", "p_calibrated", "risk_$",
-                               "entry", "stop", "target"):
-                        _v = o.get(_k)
-                        if isinstance(_v, (int, float)) and not isinstance(_v, bool) and _v == _v:
-                            _op[_k] = float(_v)
-                    for _k in ("strategy", "setup_id", "ts_decision"):
-                        _v = o.get(_k)
-                        if isinstance(_v, str) and _v.strip():
-                            _op[_k] = _v.strip()
-                    opened.append(_op)
-                elif delta < 0:                               # VENTE/REDUCE → round-trip à fermer
-                    sold.append({"symbol": (o or {}).get("symbol", bsym), "venue": bname,
-                                 "broker_symbol": bsym, "notional": abs(delta),
-                                 "order_id": _oid})
-            except Exception as e:  # noqa: BLE001
-                # `str(e)[:40]` tronquait le message : un rejet de courtier (« invalid
-                # time_in_force », « market closed »…) devenait illisible, et c'est
-                # exactement pourquoi le satellite actions vide est resté invisible.
-                # Le motif COMPLET va au journal structuré, un extrait large à l'écran.
-                _msg = str(e).replace("\n", " ")
-                print(tag + f"  ❌ ÉCHEC après retries : {_msg[:200]}")
-                try:
-                    import logging
-                    logging.getLogger("live.execution").error(
-                        "ordre refusé",
-                        extra={"symbole": bsym, "broker": bname,
-                               "action": intention.action,
-                               "montant": intention.montant, "erreur": _msg})
-                except Exception:  # noqa: BLE001 — journaliser ne casse jamais le run
-                    pass
-                if alert_engine:
-                    from packages.alerts import Alert, Severity
-                    alert_engine.emit(Alert("execution", Severity.CRITICAL,
-                        f"Ordre {'achat' if delta > 0 else 'vente'} {bsym} ({bname}) échoué "
-                        f"après retries : {str(e)[:80]}",
-                        dedup_key=f"execution:submit_fail:{bsym}"))
-    if rejetes:
-        _tr = f"{sum(abs(r['montant']) for r in rejetes):,.0f}".replace(",", " ")
-        print(f"\n  ❌ {len(rejetes)} ordre(s) REFUSÉ(S) par le courtier, "
-              f"{_tr}$ au total.")
-        print("     Ils ne comptent PAS comme envoyés. Motif par ligne ci-dessus.")
-    if differes:
-        _recap_differes(differes)
-    return sent, opened, sold
-
-
-def _recap_differes(differes: list) -> None:
-    """Le report n'est pas une erreur — mais il ne doit pas être SUBI.
-
-    L'ancien message disait « ils partiront à la prochaine séance ». C'est faux dès
-    que le rebalancement est planifié hors séance : la prochaine exécution sera elle
-    aussi hors séance, et les mêmes ordres seront reportés indéfiniment. Un ordre
-    reporté ne part QUE si une exécution tombe DANS la séance — rien ne le met en
-    file d'attente.
-    """
-    tot = f"{sum(abs(d['montant']) for d in differes):,.0f}".replace(",", " ")
-    par_classe: dict[str, int] = {}
-    for d in differes:
-        cl = d.get("asset_class", "?")
-        par_classe[cl] = par_classe.get(cl, 0) + 1
-    detail = ", ".join(f"{n} {c}" for c, n in sorted(par_classe.items()))
-    print(f"\n  ⏸  {len(differes)} ordre(s) REPORTÉ(S) hors séance ({detail}), "
-          f"{tot}$ au total.")
-    print("     Ils ne sont PAS mis en file d'attente : un ordre reporté ne part que")
-    print("     si une exécution tombe DANS la séance NYSE"
-          " (15:30-22:00, heure de Paris).")
-    print("     Si ce report revient chaque jour, c'est le planning, pas le marché :")
-    print("       • à la main, un soir avant 22h  →  make live-go")
-    print("       • ou décaler le rebalancement   →  "
-          "QUANT_LIVE_HOUR=21 make live-cron-install")
-    print("     Le crypto n'est jamais concerné : il tourne 24/7.")
-
-
-def _fills_achats(brokers: tuple, jour: str) -> dict:
-    """Achats RÉELLEMENT exécutés `jour`, par (place, symbole canonique) :
-    quantité + VWAP.
-
-    C'est la VÉRITÉ TERRAIN de l'ouverture. La position du courtier ne l'est pas : elle
-    porte la quantité TOTALE et le prix de revient MOYEN, et elle peut n'être pas encore
-    rafraîchie à l'instant du run — l'achat devenait alors introuvable et n'était JAMAIS
-    journalisé (mesuré le 03/09 : 30 symboles sur 87 couverts à moitié ou moins).
-
-    Best-effort par courtier : un courtier muet n'empêche pas l'autre d'être lu."""
-    from packages.execution.live_journal import agreger_achats
-    out: dict = {}
-    for bn, br in brokers:
-        if br is None or not hasattr(br, "orders"):
-            continue
-        try:
-            ordres = br.orders(limit=500)
-        except Exception:  # noqa: BLE001
-            continue                     # courtier muet : le repli position reste
-        for sym, fill in agreger_achats(ordres, jour).items():
-            out[(bn, sym)] = fill
-    return out
-
-
-def _positions_repli(brokers: tuple) -> dict:
-    """Positions du courtier par (place, symbole canonique) — REPLI quand aucun
-    fill n'est lisible.
-
-    Approximation assumée (quantité totale, prix moyen) : mieux qu'une ouverture perdue,
-    moins bon qu'un fill. Jamais prioritaire sur `_fills_achats`."""
-    from packages.execution.live_journal import normaliser
-    pos: dict = {}
-    for bn, br in brokers:
-        if br is None:
-            continue
-        try:
-            detail = br.positions_detailed()
-        except Exception:  # noqa: BLE001
-            continue
-        for p in detail:
-            pos[(bn, normaliser(p["symbol"]))] = {"avg_price": p.get("avg_price"),
-                                                  "qty": p.get("qty"),
-                                                  "origine": "position"}
-    return pos
-
-
-def _garder_les_decisions(opens: list, jour: str) -> None:
-    """Dépose sur disque ce que le robot savait en envoyant — pour le rattrapage d'après.
-
-    Écrit pour TOUTES les ouvertures, y compris celles qui viennent d'être journalisées :
-    un lot peut être réécrit plus tard (correction, reconstruction), et la décision, elle,
-    n'existe qu'ici et qu'aujourd'hui. Le coût est nul, la perte serait définitive.
-
-    Un échec d'écriture est ANNONCÉ. Un magasin muet ferait croire à une mémoire alimentée
-    alors qu'elle est vide, et le manque ne se découvrirait qu'au moment d'entraîner."""
-    try:
-        from packages.execution.decisions_store import enregistrer
-        if not enregistrer(opens, jour):
-            print("  ⚠ décisions du jour NON enregistrées (.cache en écriture ?) — "
-                  "un rattrapage ultérieur écrira des lots SANS features.")
-    except Exception as e:  # noqa: BLE001 — conserver un contexte ne casse jamais un run
-        print(f"  ⚠ décisions du jour non enregistrées ({str(e)[:60]}).")
-
-
-def _dire_les_ouvertures(n: int, skipped: int, opens: list) -> None:
-    """Combien d'ouvertures écrites, et LESQUELLES manquent.
-
-    Le 22/09 cette ligne disait « 4 sans achat exécuté LISIBLE ce jour » — un nombre,
-    sans un nom. On ne pouvait ni vérifier, ni rattraper, ni même savoir si c'étaient
-    les mêmes titres d'un jour sur l'autre. Un défaut qu'on ne peut pas nommer ne se
-    corrige pas : il se subit.
-    """
-    tete = f"Journal : {n} ouverture(s) enregistrée(s) (legacy=0, features de décision)"
-    if not skipped:
-        print(tete + "."); return
-    muets = sorted({o["symbol"] for o in opens if not o.get("fill")})
-    print(tete + f" · {skipped} SANS achat exécuté lisible"
-          + (f" : {', '.join(muets[:10])}" if muets else "")
-          + " — ni fill, ni position ; rien n'est inventé.")
-    print("    Rattrapage (le fill devient lisible après coup) : "
-          "make completer-ouvertures")
-
-
-def _ids_lisibles(brokers: tuple) -> set:
-    """Identifiants des ordres que le courtier rend comme EXÉCUTÉS, à cet instant.
-
-    `limit=100` et non 500 : on ne cherche que les ordres du jour, les plus récents, et
-    cette lecture est répétée toutes les trois secondes pendant l'attente."""
-    ids = set()
-    for _bn, br in brokers:
-        if br is None or not hasattr(br, "orders"):
-            continue
-        ids |= {str(o.get("id")) for o in (br.orders(limit=100) or []) if o.get("id")}
-    return ids
-
-
-def _attendre_les_fills(opened: list, sold: list, alpaca, bitmart) -> None:
-    """Laisse au courtier le temps de CLÔTURER ce qu'on vient de lui envoyer.
-
-    Placée entre l'exécution et la journalisation, jamais dans le chemin d'ordre : rien
-    n'est envoyé, réduit ni décidé ici. Best-effort strict — une attente qui échoue
-    journalise comme avant, elle ne peut pas coûter un run."""
-    from packages.execution.attente_fills import DELAI_S, attendre, message
-    brokers = (("Alpaca", alpaca), ("Bitmart", bitmart))
-    noms = {o["order_id"]: o.get("broker_symbol") or o.get("symbol")
-            for o in (list(opened) + list(sold)) if o.get("order_id")}
-    # DÉLAI RÉGLABLE, ET `0` LE DÉSARME. Le module reste pur — c'est le script qui lit
-    # l'environnement. `QUANT_ATTENTE_FILLS_S=0` rend l'ancien comportement (journaliser
-    # tout de suite) sans toucher au code, et les tests s'en servent pour ne pas dormir.
-    try:
-        delai = max(0.0, float(os.environ.get("QUANT_ATTENTE_FILLS_S", DELAI_S)))
-    except ValueError:
-        delai = DELAI_S
-    try:
-        print(message(attendre(lambda: _ids_lisibles(brokers), set(noms),
-                               delai_s=delai), noms))
-    except Exception as e:  # noqa: BLE001
-        print(f"Attente des fills : ignorée ({str(e)[:60]}).")
-
-
-def _journal_opens(snap: dict, opened: list, alpaca, bitmart) -> None:
-    """Journalise les ouvertures (`legacy=0`) : features de DÉCISION (snap) + faits de fill (broker).
-
-    Ordre des sources de fill : fills d'achat du jour (vérité terrain), puis
-    position (repli).
-
-    Best-effort STRICT : ne lève jamais → ne peut pas bloquer l'exécution."""
-    if not opened:
-        return
-    try:
-        from packages.execution.live_journal import (
-            feature_map,
-            journal_opens,
-            normaliser,
-            regime_context,
-        )
-        from packages.storage import SqliteTradeJournal
-
-        feats_by_sym = feature_map(snap)
-        regime_lbl, regime_ctx = regime_context(snap)
-        _series = (snap.get("dashboard") or {}).get("chart_series") or {}
-
-        def _decision_px(sym):                        # dernier close CONNU à la décision
-            bars = _series.get(sym) or []
-            return float(bars[-1]["c"]) if bars else None
-
-        # ts_arrival = instant de DÉCISION (features figées), pas le fill.
-        # Meilleur PIT dispo : meta.generated_at du snapshot. Pas de mid/quotes inventés.
-        _ts_arrival = None
-        _raw_gen = (snap.get("meta") or {}).get("generated_at")
-        if isinstance(_raw_gen, datetime):
-            _ts_arrival = _raw_gen
-        elif isinstance(_raw_gen, str) and _raw_gen:
-            try:
-                _ts_arrival = datetime.fromisoformat(_raw_gen.replace("Z", "+00:00"))
-            except ValueError:
-                _ts_arrival = None
-
-        brokers = (("Alpaca", alpaca), ("Bitmart", bitmart))
-        jour = datetime.now(UTC).date().isoformat()
-        fills = _fills_achats(brokers, jour)
-        repli = _positions_repli(brokers)
-
-        def _fill(op):          # le fill du jour d'abord, la position ensuite
-            cle = (op["venue"], normaliser(op["broker_symbol"]))
-            return fills.get(cle) or repli.get(cle)
-        def _merge_feats(op: dict) -> dict:
-            """Features decision-time pour le journal — clés TCA figées, jamais inventées.
-
-            Clés : rank_score, decision_price, target_weight, regime_expo, notionnel,
-            ts_decision (ISO), expectancy_R / rr / p_calibrated / risk_$ / gain_attendu
-            seulement si evaluate_setup (ou équivalent) les a fournis sur l'ordre.
-            gain_attendu = expectancy_R * risk_$ ; JAMAIS REALIZED_PNL ni ASSUMED_EDGE.
-            """
-            feats = {**feats_by_sym.get(op["symbol"], {}), **regime_ctx}
-            # rank_score : feature_map OU cible ouverte (preset attaché au snap)
-            if "rank_score" not in feats:
-                rs = op.get("rank_score")
-                if isinstance(rs, (int, float)) and not isinstance(rs, bool) and rs == rs:
-                    feats["rank_score"] = float(rs)
-            tw = op.get("weight_pct")
-            if isinstance(tw, (int, float)) and not isinstance(tw, bool) and tw == tw:
-                feats["target_weight"] = float(tw)
-            dpx = _decision_px(op["symbol"])
-            if dpx is not None:
-                feats["decision_price"] = float(dpx)
-            # notionnel (orthographe FR) : qty fill × decision_price (prix de décision).
-            # Pas de proxy |weight|×equity ici (non documenté) ; pas de PnL réalisé.
-            fill = _fill(op)
-            qty = float((fill or {}).get("qty") or 0.0)
-            if dpx is not None and qty > 0:
-                feats["notionnel"] = round(qty * float(dpx), 6)
-            # ts_decision ISO — features_snapshot accepte cette seule string (TCA).
-            # TradeRecord.ts_arrival reste la colonne dédiée (même instant).
-            if _ts_arrival is not None:
-                feats["ts_decision"] = _ts_arrival.isoformat()
-            # evaluate_setup / sleeve géom : uniquement si déjà sur l'ordre — jamais inventé.
-            # expectancy_R / p_calibrated / gain_attendu : HOLD (pas inventés ici).
-            for k in ("expectancy_R", "rr", "p_calibrated", "risk_$",
-                      "entry", "stop", "target"):
-                v = op.get(k)
-                if isinstance(v, (int, float)) and not isinstance(v, bool) and v == v:
-                    feats[k] = float(v)
-            # setup_id : exception str (même famille que ts_decision) — copie si non vide.
-            _sid = op.get("setup_id")
-            if isinstance(_sid, str) and _sid.strip():
-                feats["setup_id"] = _sid.strip()
-            # ts_decision depuis op seulement si feats ne l'a pas déjà (snap ISO prioritaire).
-            if "ts_decision" not in feats:
-                _td = op.get("ts_decision")
-                if isinstance(_td, str) and _td.strip():
-                    feats["ts_decision"] = _td.strip()
-            er, risk = feats.get("expectancy_R"), feats.get("risk_$")
-            if (isinstance(er, (int, float)) and isinstance(risk, (int, float))
-                    and er == er and risk == risk):
-                feats["gain_attendu"] = round(float(er) * float(risk), 6)
-            # sinon : gain_attendu absent (null) — jamais de proxy
-            return feats
-
-        opens = []
-        n_miss_rank_score = 0
-        for op in opened:
-            feats = _merge_feats(op)
-            if "rank_score" not in feats:
-                n_miss_rank_score += 1
-            opens.append({
-                "symbol": op["symbol"], "venue": op["venue"],
-                "asset_class": op.get("asset_class"),
-                "fill": _fill(op),
-                "features": feats,
-                "regime": regime_lbl,
-                "strategy": op.get("strategy") or "preset",
-                "order_id": op.get("order_id"),
-                "ts_arrival": _ts_arrival,
-            })
-        if n_miss_rank_score:
-            print(f"Journal : n_miss_rank_score={n_miss_rank_score}/{len(opened)} "
-                  f"(lookup screener/screen/target vide).")
-        _garder_les_decisions(opens, jour)
-        n = journal_opens(SqliteTradeJournal(), opens)
-        _dire_les_ouvertures(n, len(opened) - n, opens)
-    except Exception as e:  # noqa: BLE001
-        print(f"Journal : journalisation ignorée ({str(e)[:60]}).")
-
-
-def _fill_vente_jour(br, bsym: str) -> dict | None:
-    """Fill de VENTE réel du jour pour ce symbole, ou None : {"price", "qty"}.
-
-    Isolé de `_exit_price` pour que `_journal_sells` lise aussi la QUANTITÉ vraiment
-    exécutée. Jusqu'ici seul le PRIX de ce même ordre était repris ; la quantité
-    fermée au journal venait de `notional / prix`, où `notional` = le delta PLANIFIÉ
-    par le rebalancement (`abs(cible − détenu)`), jamais relu contre le fill réel.
-    Mesuré le 05/09 sur le compte réel (OSCR) : le delta planifié dépassait le fill
-    réel de ~85 unités, closes au journal comme si elles avaient été vendues — du
-    « réalisé » sans contrepartie, à chaque écart entre plan et exécution."""
-    if br is None or not hasattr(br, "orders"):
-        return None
-    try:
-        today = datetime.now(UTC).date().isoformat()
-        for o in br.orders(limit=50):
-            if (o.get("symbol") == bsym and o.get("side") == "sell"
-                    and float(o.get("price") or 0) > 0 and (o.get("date") or "")[:10] == today):
-                return {"price": float(o["price"]), "qty": float(o.get("qty") or 0)}
-    except Exception:  # noqa: BLE001
-        pass
-    return None
-
-
-def _exit_price(br, bsym: str) -> float:
-    """Prix de sortie FACTUEL, par ordre de fiabilité : fill VENTE du jour (`orders`),
-    sinon ticker broker (`last_price`), sinon prix courant de la position. 0.0 = inconnu
-    (le lot restera OUVERT — on n'invente jamais un prix)."""
-    if br is None:
-        return 0.0
-    fait = _fill_vente_jour(br, bsym)
-    if fait is not None:
-        return fait["price"]
-    try:
-        if hasattr(br, "last_price"):
-            px = float(br.last_price(bsym) or 0.0)
-            if px > 0:
-                return px
-        for p in br.positions_detailed():
-            if p.get("symbol") == bsym and float(p.get("price") or 0) > 0:
-                return float(p["price"])
-    except Exception:  # noqa: BLE001
-        pass
-    return 0.0
-
-
-def _journal_sells(snap: dict, sold: list, alpaca, bitmart) -> None:
-    """Round-trip (P0-4 Phase 2) : ferme les lots du journal touchés par les VENTES envoyées.
-
-    Prix de sortie = FAIT broker (cf. `_exit_price`) ; introuvable → lot laissé OUVERT.
-    Best-effort strict : ne lève jamais → ne peut pas bloquer l'exécution."""
-    if not sold:
-        return
-    try:
-        from packages.execution.live_roundtrip import close_sells
-        from packages.storage import SqliteTradeJournal
-        brokers = {"Alpaca": alpaca, "Bitmart": bitmart}
-        for s in sold:
-            br = brokers.get(s["venue"])
-            fait = _fill_vente_jour(br, s["broker_symbol"])
-            if fait is not None:                 # fill réel citable → quantité VRAIE
-                s["exit_price"], s["qty_reelle"] = fait["price"], fait["qty"]
-            else:                                     # repli : ancien comportement
-                s["exit_price"] = _exit_price(br, s["broker_symbol"])
-        series = (snap.get("dashboard") or {}).get("chart_series") or {}
-        orphelines: list[dict] = []
-        n = close_sells(SqliteTradeJournal(), sold, series, orphelines=orphelines)
-        skipped = sum(1 for s in sold if not s.get("exit_price"))
-        print(f"Journal : {n} lot(s) fermé(s) (round-trip, PnL/MFE/MAE)"
-              + (f" · {skipped} vente(s) sans prix broker (lots laissés ouverts)." if skipped else "."))
-        _dire_les_orphelines(orphelines)
-    except Exception as e:  # noqa: BLE001
-        print(f"Journal : round-trip ignoré ({str(e)[:60]}).")
-
-
-def _dire_les_orphelines(orphelines: list[dict]) -> None:
-    """Ventes exécutées chez le courtier qu'AUCUN lot du journal n'a soldées.
-
-    Ce bloc existe parce que son absence a coûté quatre aller-retours le 22/09 : les
-    ventes partaient, le journal n'en fermait qu'une, et la ligne « 1 lot(s) fermé(s) »
-    ne disait rien des quatre autres. Un appariement qui échoue doit être aussi bruyant
-    qu'un ordre refusé — sinon le registre diverge du compte sans qu'aucune sortie ne le
-    signale, et l'écart ne se découvre qu'en comparant à la main des mois plus tard."""
-    if not orphelines:
-        return
-    print(f"  ⚠ {len(orphelines)} vente(s) SANS LOT au journal — le compte a vendu, le "
-          "registre n'a rien à fermer :")
-    for o in orphelines[:10]:
-        reste = float(o["qty_demandee"]) - float(o["qty_fermee"])
-        print(f"      {o['symbol']:<10} {reste:12.6f} unité(s) non soldée(s) "
-              f"sur {o['qty_demandee']:.6f} vendue(s)")
-    print("      Origines possibles : lot d'import (`LEG-`, écarté à dessein), position "
-          "antérieure au journal,")
-    print("      ou lot déjà fermé. `python scripts/diag_journal_compte.py --symbole "
-          "<TICKER>` tranche.")
+# CHEMIN D'ORDRES — extrait dans packages/execution/passage_*.py (audit 06/10 : ce
+# fichier faisait 1 343 lignes, `_reconcile` 233). Mêmes noms ici : les appelants et
+# les tests n'ont rien à changer. Comportement figé par test_reconcile_golden.
+import packages.execution.passage_cibles as _pc  # noqa: E402
+import packages.execution.passage_diagnostic as _pd  # noqa: E402
+import packages.execution.passage_envoi as _pe  # noqa: E402
+import packages.execution.passage_gardes as _pg  # noqa: E402
+import packages.execution.passage_journal as _pj  # noqa: E402
+import packages.execution.passage_reconcile as _pr  # noqa: E402
+import packages.execution.passage_ventes as _pv  # noqa: E402
+
+_reconcile = _pr.reconcilier
+_nsym, _broker_targets, id_client = _pc.nsym, _pc.broker_targets, _pc.id_client
+cible_sous_garde, ordre_de_traitement = _pc.cible_sous_garde, _pc.ordre_de_traitement
+sleeve_geometry_missing = _pc.sleeve_geometry_missing
+_envoyer, _log_rejet, _recap_differes = _pe.envoyer, _pe.log_rejet, _pe.recap_differes
+_deja_rebalance_aujourdhui = _pg.deja_rebalance_aujourdhui
+_hors_cadence = _pg.hors_cadence
+_disjoncteur, _exposition_gelee = _pg.disjoncteur, _pg.exposition_gelee
+_record_garde_fous, _record_equity = _pg.record_garde_fous, _pg.record_equity
+releve_equity = _pg.releve_equity
+_fills_achats, _positions_repli = _pj.fills_achats, _pj.positions_repli
+_garder_les_decisions, _ids_lisibles = _pj.garder_les_decisions, _pj.ids_lisibles
+_dire_les_ouvertures = _pj.dire_les_ouvertures
+_attendre_les_fills = _pj.attendre_les_fills
+_journal_opens = _pj.journal_opens
+_fill_vente_jour, _exit_price = _pv.fill_vente_jour, _pv.exit_price
+_journal_sells, _dire_les_orphelines = _pv.journal_sells, _pv.dire_les_orphelines
+_cotations_arrivee, _journal_tca = _pv.cotations_arrivee, _pv.journal_tca
+_diag_preset = _pd.diag_preset
 
 
 def _sync_obsidian() -> None:
@@ -917,7 +187,7 @@ def _sync_obsidian() -> None:
     try:
         from packages.reporting.obsidian import sync_obsidian_vault
         r = sync_obsidian_vault()
-        print(f"Coffre Obsidian : {len(r.get('written', []))} note(s) · {r.get('incidents', 0)} incident(s).")
+        dire(f"Coffre Obsidian : {len(r.get('written', []))} note(s) · {r.get('incidents', 0)} incident(s).")
     except Exception:  # noqa: BLE001
         pass
 
@@ -930,53 +200,18 @@ def _decision_snapshot() -> dict:
     import os
     os.environ.setdefault("QUANT_LIVE_LITE", "1")
     if os.environ["QUANT_LIVE_LITE"] == "1":
-        print("Snapshot : mode léger (sections réseau non essentielles coupées pour l'exécution).")
+        dire("Snapshot : mode léger (sections réseau non essentielles coupées pour l'exécution).")
     from apps.api.snapshot import build_snapshot
     return build_snapshot()                                # DÉCISION unique (features figées ici)
-
-
-def _diag_preset(snap: dict, targets: list) -> None:
-    """Dit POURQUOI le satellite actions est vide, au lieu de le laisser deviner.
-
-    Le 26/08, un compte paper sans AUCUNE action a résisté à trois hypothèses
-    successives (plancher, horaires de marché, mode léger) simplement parce que
-    rien ne disait où la chaîne s'arrêtait. Affiché seulement en cas de problème."""
-    # CHEMIN EXACT. `preset_diagnostic` est publié sous `dashboard`, pas à la racine :
-    # le lire à la racine renvoyait toujours {} et affichait « aucun diagnostic publié »
-    # alors qu'il existait. Repli sur la racine au cas où le schéma évoluerait.
-    d = ((snap.get("dashboard") or {}).get("preset_diagnostic")
-         or snap.get("preset_diagnostic") or {})
-    # NE PAS compter les cibles par classe d'actifs : le CŒUR indiciel (QQQ) est
-    # une action, donc un satellite vide passait pour rempli et le diagnostic se
-    # taisait — le défaut qu'il devait justement révéler. Le signal direct est
-    # l'étage « poids retenus », inscrit seulement si au moins une ligne sort.
-    _ = targets          # conservé pour la signature ; le signal vient du diagnostic
-    a_des_poids = any(e.get("etape") == "poids retenus"
-                      for e in (d.get("etapes") or []))
-    if a_des_poids and not d.get("bloque"):
-        return
-    print("\n  DIAGNOSTIC DU SATELLITE ACTIONS")
-    for e in d.get("etapes") or []:
-        print(f"    {e.get('etape', ''):<22} {e.get('detail', '')}")
-    portes = d.get("portes") or {}
-    if portes:
-        tot = 1.0
-        for v in portes.values():
-            tot *= v
-        detail = " × ".join(f"{k} {v:.3f}" for k, v in portes.items())
-        print(f"    {'exposition brute':<22} {detail}  =  {tot:.4f}")
-    if d.get("arret"):
-        print(f"    ⛔ ARRÊT : {d['arret']}")
-    elif not d.get("etapes"):
-        print("    (aucun diagnostic publié — snapshot antérieur à l'ADR-0044 ?)")
-    elif not a_des_poids:
-        print("    (aucun poids produit, sans étage bloquant signalé — anomalie)")
 
 
 def _prepare_brokers(dry: bool, cli_equity: float | None, alert_engine):
     """Brokers vétés + positions lues (inconnu ⇒ broker écarté). Cf. live_guards."""
     from packages.execution.live_guards import (
-        current_values, fail_loud, simule, vet_brokers,
+        current_values,
+        fail_loud,
+        simule,
+        vet_brokers,
     )
     # SIMULATION (`--equity`) vs APERÇU : seule la simulation ignore le détenu. Un aperçu
     # sur détenu vide affiche des achats que le run réel ne fera pas — il annonce un
@@ -986,9 +221,9 @@ def _prepare_brokers(dry: bool, cli_equity: float | None, alert_engine):
     alpaca, bitmart, alp_cap, bit_cap, fatal = vet_brokers(alpaca, bitmart, dry, cli_equity)
     mode = ("SIMULATION (capital imposé, détenu ignoré)" if simulation else
             "DRY-RUN sur le compte RÉEL (aucun ordre)" if dry else "LIVE (paper)")
-    print(f"Réplication · capital Alpaca {alp_cap:,.0f} $ · Bitmart {bit_cap:,.0f} $ · "
+    dire(f"Réplication · capital Alpaca {alp_cap:,.0f} $ · Bitmart {bit_cap:,.0f} $ · "
           f"mode {mode}")
-    print(f"  {'SENS':4s} {'ACTIF':14s} {'BROKER':8s} {'POIDS':>7s} {'MONTANT':>10s}  statut")
+    dire(f"  {'SENS':4s} {'ACTIF':14s} {'BROKER':8s} {'POIDS':>7s} {'MONTANT':>10s}  statut")
     cur_alp, cur_bit = ({}, {}) if simulation else current_values(alpaca, bitmart)
     if cur_alp is None:                                        # inconnu ≠ zéro : broker écarté
         fatal.append("lecture positions Alpaca échouée → broker écarté (0 ordre)")
@@ -1001,137 +236,29 @@ def _prepare_brokers(dry: bool, cli_equity: float | None, alert_engine):
     return alpaca, bitmart, alp_cap, bit_cap, cur_alp, cur_bit, fatal
 
 
-def _deja_rebalance_aujourdhui(brokers: tuple, obs=None) -> bool:
-    """Le COURTIER dit s'il a déjà tradé aujourd'hui — pas l'horloge, pas un fichier.
-
-    La question est posée au seul endroit que le VPS, le Mac, GitHub Actions et la main
-    humaine ont en commun : le compte. Un verrou sur disque ne verrouillerait que la
-    machine qui le porte, et c'est justement la mauvaise granularité — cf.
-    `packages/execution/garde_journaliere`.
-    """
-    from packages.execution.garde_fous import (
-        ACTIVE,
-        DESARME,
-        GARDE_JOUR,
-        UNCALIBRATED,
-        noter,
-    )
-    from packages.execution.garde_journaliere import evaluer, message
-    fills: list[dict] = []
-    for bname, br, _cap, _cur in brokers:
-        if br is None:
-            continue
-        try:
-            fills += br.orders(limit=200) or []
-        except Exception as e:  # noqa: BLE001
-            # Historique illisible ⇒ on N'EMPÊCHE PAS le passage : un garde-fou qui se
-            # déclenche sur sa propre panne gèlerait le robot une journée sans motif.
-            print(f"· garde journalière : historique {bname} illisible ({str(e)[:60]}) "
-                  "— contrôle non concluant, le passage continue.")
-            # NON CONCLUANT ≠ RIEN À SIGNALER. Le passage continue (c'est le bon choix),
-            # mais le rapport doit dire que ce jour-là le garde-fou n'a rien pu garder.
-            noter(obs, GARDE_JOUR, etat=UNCALIBRATED, motif="historique_illisible")
-            return False
-    d = evaluer(fills)
-    if not d["deja_rebalance"]:
-        if d["desarme"]:
-            print("· garde journalière : DÉSARMÉE (QUANT_REBAL_MULTI=1).")
-        noter(obs, GARDE_JOUR, etat=DESARME if d["desarme"] else ACTIVE)
-        return False
-    print(message(d))
-    noter(obs, GARDE_JOUR, etat=ACTIVE, declenche=True, motif="deja_rebalance")
-    return True
-
-
-def _cotations_arrivee(targets: list, cur_alp: dict, alpaca, dry: bool) -> dict:
-    """Bid / ask JUSTE AVANT l'envoi des ordres (Alpaca). MESURE seulement : rien n'en
-    dépend dans la décision ni dans l'envoi, et une lecture ratée rend {}."""
-    if dry or alpaca is None:
-        return {}
-    from packages.execution.cotations import cotations
-    syms = {o.get("broker_symbol", o["symbol"]) for o in targets
-            if o.get("capital") != "bitmart"} | set(cur_alp or {})
-    return cotations(syms)
-
-
-def _journal_tca(snap: dict, opened: list, sold: list, alpaca, arrivee: dict) -> None:
-    """Une ligne `tca_executions` par ordre Alpaca rempli : spread à l'arrivée, dérive
-    depuis le close de décision, shortfall d'exécution. Ne lève jamais."""
-    try:
-        from packages.execution.cotations import cotations
-        from packages.execution.tca_journal import enregistrer, ligne
-        ordres = ([{**o, "cote": "buy"} for o in opened]
-                  + [{**v, "cote": "sell"} for v in sold])
-        ordres = [o for o in ordres if o.get("venue") == "Alpaca" and o.get("order_id")]
-        if not ordres or alpaca is None:
-            return
-        fills = {f.get("id"): f for f in alpaca.orders(limit=200)}
-        apres = cotations({o["broker_symbol"] for o in ordres})
-        series = (snap.get("dashboard") or {}).get("chart_series") or {}
-        jour = datetime.now(UTC).date().isoformat()
-        lignes = []
-        for o in ordres:
-            f = fills.get(o["order_id"])
-            if not f or float(f.get("price") or 0) <= 0:
-                continue
-            barres = series.get(o["symbol"]) or []
-            close = float(barres[-1]["c"]) if barres else None
-            lignes.append(ligne(o, prix_fill=float(f["price"]), qty=float(f["qty"]),
-                                close_decision=close, jour=jour,
-                                arrivee=arrivee.get(o["broker_symbol"]),
-                                apres=apres.get(o["broker_symbol"])))
-        n = enregistrer(lignes)
-        avec = sum(1 for li in lignes if li["bench_quality"] == "quote")
-        print(f"TCA : {n} ordre(s) mesuré(s), {avec} avec cotation d'arrivée "
-              "(spread, dérive, shortfall → table tca_executions).")
-    except Exception as e:  # noqa: BLE001
-        print(f"TCA : mesure ignorée ({str(e)[:60]}).")
-
-
-def _hors_cadence(brokers: tuple, reduce: float, obs=None) -> bool:
-    """True si ce passage tombe AVANT l'échéance de cadence (`execution.cadence`).
-
-    Même source que la garde journalière : l'historique du courtier. Une réduction de
-    risque passe toujours ; un historique illisible aussi (le doute profite au
-    passage)."""
-    from datetime import UTC, datetime
-
-    from packages.execution.cadence import evaluer
-    from packages.execution.garde_fous import ACTIVE, CADENCE, UNCALIBRATED, noter
-    fills: list[dict] = []
-    for bname, br, _cap, _cur in brokers:
-        if br is None:
-            continue
-        try:
-            fills += br.orders(limit=200) or []
-        except Exception as e:  # noqa: BLE001
-            print(f"· cadence : historique {bname} illisible ({str(e)[:60]}) "
-                  "— passage.")
-            noter(obs, CADENCE, etat=UNCALIBRATED, motif="historique_illisible")
-            return False
-    d = evaluer(fills, datetime.now(UTC).date(), reduction=reduce)
-    if d["passer"]:
-        noter(obs, CADENCE, etat=ACTIVE, motif=d["motif"])
-        return False
-    print(f"· cadence : {d['seances']} séance(s) depuis le rebalancement du "
-          f"{d['dernier']} (< {d['cadence']}) — aucun ordre aujourd'hui. "
-          "QUANT_CADENCE_JOURS=1 pour le rythme quotidien, --forcer pour un passage "
-          "exceptionnel.")
-    noter(obs, CADENCE, etat=ACTIVE, declenche=True, motif=d["motif"])
-    return True
+def _ouvrir_journal(a, dry: bool) -> None:
+    """Journal JSONL du passage + vérification des réglages `QUANT_*` (audit 06/10) :
+    une faute de frappe ou une valeur illisible se DIT avant toute décision."""
+    from packages.common import journal_passage as jp
+    from packages.common.reglages import annoncer
+    jp.ouvrir()
+    jp.evenement("passage", dry=dry, live=bool(a.live), forcer=bool(a.forcer))
+    for x in annoncer(dire=dire):
+        jp.evenement("reglage", **x)
 
 
 def main() -> None:
     a = _parse_args()
     if a.live and not a.yes:
-        print("⚠️  --live exige --yes (confirmation explicite). Abandon."); return
+        dire("⚠️  --live exige --yes (confirmation explicite). Abandon.")
+        return
     dry = not (a.live and a.yes)
+    _ouvrir_journal(a, dry)
     snap = _decision_snapshot()
-    targets = snap["live"]["target_orders"]                # poids cibles (% du portefeuille)
+    targets = snap["live"]["target_orders"]           # poids cibles (% du portefeuille)
     _diag_preset(snap, targets)
-
     from packages.execution.garde_fous import Collecteur
-    from packages.execution.live_guards import dd_kill_switch, fail_loud
+    from packages.execution.live_guards import fail_loud
     bus, alert_engine = _setup_alerts(dry)
     # TÉMOIN DES GARDE-FOUS. Injecté, jamais global : un état partagé entre deux runs
     # mélangerait leurs compteurs, et un test ne pourrait plus en isoler un seul.
@@ -1139,18 +266,8 @@ def main() -> None:
     reduce = _kill_switch(bus, obs)
     alpaca, bitmart, alp_cap, bit_cap, cur_alp, cur_bit, fatal = \
         _prepare_brokers(dry, a.equity, alert_engine)
-    if not dry:                                                # kill-switch DRAWDOWN RÉEL (pas que TV)
-        _rel = releve_equity(alp_cap, bit_cap)                 # même périmètre (QML-024)
-        reduce = min(reduce, dd_kill_switch(sum(_rel.values()), bus, alert_engine, obs,
-                                            cles=set(_rel)))
-    # DISJONCTEUR JOURNALIER — second horizon : la perte du JOUR, pas le drawdown.
-    # Désarmé par défaut (`QUANT_DISJONCTEUR=1` pour agir) : il OBSERVE d'abord, parce
-    # que son déclenchement ferme les positions et qu'il n'a jamais tourné en réel.
-    _rel = releve_equity(alp_cap, bit_cap)
-    reduce = min(reduce, _disjoncteur(sum(_rel.values()), obs, cles=set(_rel)))
-    if reduce <= 0.0:                                          # kill-switch total : AUCUN achat
-        _exposition_gelee(targets, obs, dry)      # (les allègements de stratégie passent)
-
+    reduce = _reduction_risque(reduce, dry, (alp_cap, bit_cap), bus, alert_engine,
+                               obs, targets)
     brokers = (("Alpaca", alpaca, alp_cap, cur_alp), ("Bitmart", bitmart, bit_cap, cur_bit))
     if not dry and not a.forcer and _deja_rebalance_aujourdhui(brokers, obs):
         _record_garde_fous(obs, dry)
@@ -1159,65 +276,15 @@ def main() -> None:
         _record_garde_fous(obs, dry)
         return                                     # rythme de la règle mesurée
     cot_arrivee = _cotations_arrivee(targets, cur_alp, alpaca, dry)   # mesure seule
-
-    # Arch A3+PR4 — Capital A : preset protège sleeve (snap ∪ journal multi-jour) ;
-    # pass sleeve sans liquidation hors-cible. Rien à protéger → un seul _reconcile
-    # preset (bit-identique). Protect journal même si QUANT_SWING_PAPER OFF aujourd'hui.
-    from packages.execution.swing_sleeve import (
-        load_swing_orders, sleeve_open_symbols, merge_protect_symbols,
-    )
-    swing = load_swing_orders(snap)
-    for o in swing:
-        wp = o.get("weight_pct")
-        notionnel = o.get("notionnel")
-        try:
-            n = float(notionnel) if notionnel is not None else None
-        except (TypeError, ValueError):
-            n = None
-        missing = wp is None
-        invalid = False
-        try:
-            wpf = float(wp) if wp is not None else None
-            if wpf is not None and (not (wpf == wpf) or wpf < 0):
-                invalid = True
-            # percent-like (>1) with known notionnel → recompute as fraction
-            if wpf is not None and wpf > 1.0 and n is not None and n > 0:
-                invalid = True
-        except (TypeError, ValueError):
-            invalid = True
-            wpf = None
-        if alp_cap > 0 and n is not None and n > 0 and (missing or invalid):
-            o["weight_pct"] = n / alp_cap
-        o.setdefault("strategy", "swing")
-
-    try:
-        from_journal = sleeve_open_symbols()
-    except Exception:
-        from_journal = set()
-    protect = merge_protect_symbols(swing, from_journal, normalize=_nsym)
-
-    if swing:
-        print(f"sleeve swing: {len(swing)} ordres (capital A)")
-        sent, opened, sold = _reconcile(
-            targets, brokers, reduce, alert_engine, dry, obs, proteger=protect)
-        s2, o2, v2 = _reconcile(
-            swing, brokers, reduce, alert_engine, dry, obs, liquider_hors_cible=False)
-        sent += s2
-        opened.extend(o2)
-        sold.extend(v2)
-    elif protect:
-        print(f"sleeve swing: protect {len(protect)} symbole(s) journal (multi-jour)")
-        sent, opened, sold = _reconcile(
-            targets, brokers, reduce, alert_engine, dry, obs, proteger=protect)
+    swing, protect = _sleeve_swing(snap, alp_cap)
+    if swing or protect:
+        sent, opened, sold = _reconcilier_avec_sleeve(
+            targets, swing, protect, (brokers, reduce, alert_engine, dry, obs))
     else:
         sent, opened, sold = _reconcile(targets, brokers, reduce, alert_engine, dry, obs)
-    # AVANT la journalisation, et c'est voulu : plus aucun garde-fou ne parle après
-    # `_reconcile`, tandis qu'un échec de `_journal_opens` emporterait sinon le
-    # compte-rendu du run avec lui — sans une ligne pour le dire.
+    # AVANT la journalisation : plus aucun garde-fou ne parle après `_reconcile`.
     _record_garde_fous(obs, dry)
-    print(f"\nTerminé : {sent} ordre(s) de réconciliation envoyé(s) (paper, sans levier)." if not dry else
-          "\nAperçu (dry-run). Réconciliation réelle : python3 scripts/run_live.py --live --yes")
-
+    _dire_termine(sent, dry)
     if not dry:
         _attendre_les_fills(opened, sold, alpaca, bitmart)
         _journal_tca(snap, opened, sold, alpaca, cot_arrivee)  # coût réel par ordre
@@ -1225,118 +292,90 @@ def main() -> None:
         _journal_sells(snap, sold, alpaca, bitmart)
         _record_equity(alp_cap, bit_cap)
     _sync_obsidian()
-    if fatal:                                        # après journal/equity : rien n'est perdu, mais le run est ROUGE
+    if fatal:              # après journal/equity : rien n'est perdu, mais le run est ROUGE
         fail_loud(fatal, alert_engine, code=4)
 
 
-def _disjoncteur(equity: float, obs=None, cles: set | None = None) -> float:
-    """Facteur d'exposition dicté par la perte du JOUR. 1.0 = rien à signaler.
+def _dire_termine(sent: int, dry: bool) -> None:
+    dire(f"\nTerminé : {sent} ordre(s) de réconciliation envoyé(s) (paper, sans levier)."
+         if not dry else "\nAperçu (dry-run). Réconciliation réelle : python3 "
+         "scripts/run_live.py --live --yes")
 
-    Renvoie un FACTEUR et non un booléen pour se composer avec les autres kill-switches
-    par un simple `min` — un garde-fou qui aurait sa propre voie d'application finirait
-    par diverger de celle des autres.
-    """
-    from packages.execution.garde_fous import (
-        ACTIVE,
-        DISJONCTEUR,
-        ERREUR,
-        UNCALIBRATED,
-        noter,
+
+def _reconcilier_avec_sleeve(targets, swing, protect, ctx) -> tuple[int, list, list]:
+    """Preset qui PROTÈGE la sleeve, puis passe sleeve sans liquidation hors cible."""
+    brokers, reduce, alert_engine, dry, obs = ctx
+    if not swing:
+        dire(f"sleeve swing: protect {len(protect)} symbole(s) journal (multi-jour)")
+        return _reconcile(targets, brokers, reduce, alert_engine, dry, obs,
+                          proteger=protect)
+    dire(f"sleeve swing: {len(swing)} ordres (capital A)")
+    sent, opened, sold = _reconcile(
+        targets, brokers, reduce, alert_engine, dry, obs, proteger=protect)
+    s2, o2, v2 = _reconcile(
+        swing, brokers, reduce, alert_engine, dry, obs, liquider_hors_cible=False)
+    return sent + s2, opened + o2, sold + v2
+
+
+def _reduction_risque(reduce: float, dry: bool, caps: tuple, bus, alert_engine, obs,
+                      targets: list) -> float:
+    """Compose les kill-switches par `min` : drawdown réel (live), puis disjoncteur."""
+    from packages.execution.live_guards import dd_kill_switch
+    alp_cap, bit_cap = caps
+    if not dry:                                   # kill-switch DRAWDOWN RÉEL (pas que TV)
+        rel = releve_equity(alp_cap, bit_cap)     # même périmètre (QML-024)
+        reduce = min(reduce, dd_kill_switch(sum(rel.values()), bus, alert_engine, obs,
+                                            cles=set(rel)))
+    # DISJONCTEUR JOURNALIER — second horizon : la perte du JOUR, pas le drawdown.
+    # Désarmé par défaut (`QUANT_DISJONCTEUR=1` pour agir) : il OBSERVE d'abord, parce
+    # que son déclenchement ferme les positions et qu'il n'a jamais tourné en réel.
+    rel = releve_equity(alp_cap, bit_cap)
+    reduce = min(reduce, _disjoncteur(sum(rel.values()), obs, cles=set(rel)))
+    if reduce <= 0.0:                             # kill-switch total : AUCUN achat
+        _exposition_gelee(targets, obs, dry)      # (les allègements de stratégie passent)
+    return reduce
+
+
+def _sleeve_swing(snap: dict, alp_cap: float) -> tuple[list, set]:
+    """Arch A3+PR4 — Capital A : le preset protège la sleeve (snap ∪ journal
+    multi-jour) ; la passe sleeve ne liquide rien hors cible. Rien à protéger → un seul
+    `_reconcile` preset (bit-identique). Protège le journal même si
+    `QUANT_SWING_PAPER` est éteint aujourd'hui."""
+    from packages.execution.swing_sleeve import (
+        load_swing_orders,
+        merge_protect_symbols,
+        sleeve_open_symbols,
     )
+    swing = load_swing_orders(snap)
+    for o in swing:
+        _poids_swing(o, alp_cap)
+        o.setdefault("strategy", "swing")
     try:
-        from packages.execution.coupe_circuit import evaluer
-        d = evaluer(equity, cles=cles) if cles else evaluer(equity)
-    except Exception as e:  # noqa: BLE001 — un garde-fou muet ne bloque jamais un run
-        print(f"· disjoncteur : évaluation indisponible ({str(e)[:60]}).")
-        noter(obs, DISJONCTEUR, etat=ERREUR, motif="evaluation_indisponible")
-        return 1.0
-    if not d.get("disponible"):
-        noter(obs, DISJONCTEUR, etat=UNCALIBRATED, motif="equity_veille_inconnue")
-        return 1.0
-    if not d["verrouille"]:
-        print(f"· disjoncteur : perte du jour {-d['variation_jour']:,.0f} $ "
-              f"sous le seuil ({d['limite']:,.0f} $).".replace(",", " "))
-        noter(obs, DISJONCTEUR, etat=ACTIVE)
-        return 1.0
-    if d["agit"]:
-        print(f"\n⛔ DISJONCTEUR ARMÉ — {d['motif']}. Aucune entrée aujourd'hui.")
-        noter(obs, DISJONCTEUR, etat=ACTIVE, declenche=True, motif="perte_du_jour")
-        return 0.0
-    print(f"\n⚠️  DISJONCTEUR (observation) — {d['motif']}.")
-    print("   Il AURAIT coupé. Rien n'est appliqué : QUANT_DISJONCTEUR=1 pour l'armer.")
-    # LA LIGNE QUI DÉBLOQUE SON ARMEMENT. `coupe_circuit` demande de voir « sur
-    # plusieurs semaines les jours où il AURAIT coupé » : sans ce compteur, cette
-    # condition ne pouvait pas être remplie — personne n'enregistrait ces jours.
-    noter(obs, DISJONCTEUR, etat=ACTIVE, aurait=True, motif="perte_du_jour")
-    return 1.0
+        from_journal = sleeve_open_symbols()
+    except Exception:  # noqa: BLE001
+        from_journal = set()
+    return swing, merge_protect_symbols(swing, from_journal, normalize=_nsym)
 
 
-def _exposition_gelee(targets: list, obs, dry: bool) -> None:
-    """Kill-switch total : on annonce ce qui ne sera PAS acheté (QML-007).
-
-    Ce n'est plus une sortie : la réconciliation suit, avec des cibles bornées au détenu
-    (`cible_sous_garde`). Aucun achat ne part ; les allègements de la stratégie, eux,
-    partent. Le compte-rendu des garde-fous est enregistré une fois, en fin de passage.
-    `obs` et `dry` restent dans la signature pour les appelants existants.
-    """
-    _ = obs, dry
-    for o in targets:
-        print(f"  {o['side'].upper():4s} {o.get('broker_symbol', o['symbol']):14s} "
-              f"{o['broker']:8s} {o['weight_pct']*100:6.1f}%  achat bloqué (kill-switch)")
-    print("\n⛔ Kill-switch : aucun achat. Les allègements de stratégie partent ; "
-          "aucune vente n'est forcée.")
-
-
-def _record_garde_fous(obs, dry: bool) -> None:
-    """Persiste le compte-rendu des garde-fous de CE run. Best-effort — jamais silencieux.
-
-    Appelé à CHAQUE sortie de `main` postérieure aux garde-fous, y compris celles qui
-    n'envoient aucun ordre : un run coupé par un kill-switch est précisément celui qu'on
-    veut retrouver dans le rapport. Ne l'enregistrer qu'au passage nominal reviendrait à
-    ne compter les garde-fous que les jours où ils ne servent à rien. Un rapport vide
-    (sortie avant toute évaluation) n'écrit rien — une ligne à zéro serait un run
-    fantôme.
-    """
+def _poids_swing(o: dict, alp_cap: float) -> None:
+    """Poids absent, illisible ou en pourcents avec un notionnel connu → recalculé
+    en fraction du capital Alpaca (notionnel / capital)."""
+    wp, notionnel = o.get("weight_pct"), o.get("notionnel")
     try:
-        from packages.execution.garde_fous_store import record
-        rapport = obs.rapport() if obs else {}
-        if not rapport:
-            return
-        if not record(rapport, mode="dry" if dry else "live"):
-            print("⚠️  garde-fous : compte-rendu du run NON enregistré (écriture .cache "
-                  "impossible) — `make garde-fous` sous-comptera ce passage.")
-    except Exception as e:  # noqa: BLE001 — observer ne coûte jamais un run
-        print(f"⚠️  garde-fous : compte-rendu non enregistré ({str(e)[:60]}).")
-
-
-def releve_equity(alp_cap: float, bit_cap: float) -> dict:
-    """Relevé d'equity du passage, sous LA clé de la place crypto (QML-024).
-
-    `run_live` écrivait « bitmart » quand le snapshot écrivait la place active (« binance ») :
-    deux périmètres dans une même série. Une place en bac à sable, ou vide, n'y figure pas —
-    son solde n'est pas de l'argent du compte."""
-    from packages.execution.venues import venue_crypto
-    v = venue_crypto()
-    out = {"alpaca": alp_cap}
-    if bit_cap > 0 and not v.en_testnet():
-        out[v.cle] = bit_cap
-    return out
-
-
-def _record_equity(alp_cap: float, bit_cap: float) -> None:
-    """Enregistre l'equity RÉELLE du jour → alimente la courbe paper de `make rdv-paper`.
-
-    Corrige un trou (06/07) : l'equity_history n'était écrite que par `build_snapshot()`
-    (donc seulement à un `make start`). Le chemin de PROD (cron Mac + runner cloud) ne
-    l'alimentait pas → la courbe paper du RDV 2026-08-06 ne se serait jamais accumulée
-    si le Mac restait éteint. Best-effort strict."""
+        n = float(notionnel) if notionnel is not None else None
+    except (TypeError, ValueError):
+        n = None
+    invalid = False
     try:
-        from packages.execution.equity_history import record
-        record(releve_equity(alp_cap, bit_cap))
-        print(f"Equity : point du jour enregistré (Alpaca {alp_cap:,.0f} $ · crypto "
-              f"{bit_cap:,.0f} $).")
-    except Exception as e:  # noqa: BLE001
-        print(f"Equity : enregistrement ignoré ({str(e)[:50]}).")
+        wpf = float(wp) if wp is not None else None
+        if wpf is not None and (wpf != wpf or wpf < 0):
+            invalid = True
+        if wpf is not None and wpf > 1.0 and n is not None and n > 0:
+            invalid = True          # percent-like (>1) with known notionnel
+    except (TypeError, ValueError):
+        invalid = True
+    if alp_cap > 0 and n is not None and n > 0 and (wp is None or invalid):
+        o["weight_pct"] = n / alp_cap
 
 
 if __name__ == "__main__":
