@@ -7,7 +7,11 @@ PHYSIQUE (volume avant adj_close) : le close s'est retrouvé dans volume."""
 import sqlite3
 
 from scripts.ingest_prices import (
-    _COLONNES, _INSERT, _migrer_schema, reparer_volumes_inverses,
+    _COLONNES,
+    _INSERT,
+    _migrer_schema,
+    reparer_volumes_inverses,
+    volumes_irrecuperables,
 )
 
 
@@ -67,3 +71,35 @@ def test_schema_deja_a_jour_est_un_no_op():
     _migrer_schema(conn)                       # ne doit pas lever (ALTER sur colonne existante)
     colonnes = {r[1] for r in conn.execute("PRAGMA table_info(prices)")}
     assert colonnes == set(_COLONNES)
+
+
+# l'écriture d'avant le 07/10
+_POSITIONNEL = "INSERT INTO prices VALUES(?,?,?,?,?,?,?,?)"
+
+
+def test_repare_aussi_les_volumes_nuls_ou_faibles():
+    """Reproduit le 07/10 : le seuil « adj_close > 5 × close » laissait le prix en
+    volume quand le vrai volume était nul (forex) ou faible devant le prix (BRK-A)."""
+    conn = sqlite3.connect(":memory:")
+    _table_ancienne(conn)
+    _migrer_schema(conn)
+    conn.execute(_POSITIONNEL, ("EURUSD=X", "2026-10-06", 1.1, 1.1, 1.09, 1.095,
+                                1.095, 0.0))
+    conn.execute(_POSITIONNEL, ("BRK-A", "2026-10-06", 7e5, 7.2e5, 7e5, 712_000.0,
+                                712_000.0, 310.0))
+    assert reparer_volumes_inverses(conn) == 2
+    assert reparer_volumes_inverses(conn) == 0
+    lu = dict(conn.execute("SELECT symbol, volume FROM prices").fetchall())
+    assert lu == {"EURUSD=X": 0.0, "BRK-A": 310.0}
+
+
+def test_compte_sans_toucher_les_volumes_irrecuperables():
+    """Ligne tirée d'un cache HF croisé : close en volume, pas d'adj_close."""
+    conn = sqlite3.connect(":memory:")
+    _table_ancienne(conn)
+    conn.execute("INSERT INTO prices VALUES(?,?,?,?,?,?,?)",
+                 ("NVDA", "2019-01-02", 3.3, 3.5, 3.2, 3.40, 3.40))
+    _migrer_schema(conn)
+    assert volumes_irrecuperables(conn) == 1
+    assert reparer_volumes_inverses(conn) == 0
+    assert conn.execute("SELECT volume FROM prices").fetchone() == (3.40,)
