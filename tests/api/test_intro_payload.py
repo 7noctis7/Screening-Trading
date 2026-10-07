@@ -162,7 +162,9 @@ def test_le_snapshot_n_envoie_jamais_une_reference_synthetique():
     # « instruments) » et s'est cassée à l'ajout d'un argument — un test qui dépend de
     # la
     # forme exacte d'un appel tombe à la première évolution légitime.
-    apres = src.split('"intro": _intro_section(', 1)[1]
+    # L'appel vit dans le dict du payload ou, depuis le découpage du 07/10
+    # (ADR-0220), dans une affectation `_intro = _intro_section(` juste avant.
+    apres = re.split(r'(?:"intro": |_intro = )_intro_section\(', src, maxsplit=1)[1]
     profondeur, fin = 1, 0
     for i, ch in enumerate(apres):
         profondeur += (ch == "(") - (ch == ")")

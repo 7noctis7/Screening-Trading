@@ -1,5 +1,15 @@
 # 04 — JOURNAL
 
+## Session 2026-10-07 (3ᵉ) — Découper 1 182 lignes sans en réécrire une
+
+`build_snapshot` est découpé en 39 étapes par un outil qui ne touche pas au texte
+(ADR-0220). Éprouvé d'abord sur deux fonctions d'essai : il prenait les variables de
+boucle pour des sorties, enchaînait un `except` après le corps du `try` au lieu d'en
+faire un chemin alternatif, et aspirait le `return` final — trois défauts trouvés par
+comparaison avant/après, corrigés avant de l'appliquer au vrai code. Résultat vérifié
+sur le JSON complet (8 Mo) : identique. La première forme (tuples de 90 variables)
+était correcte et illisible ; remplacée par un état partagé explicite.
+
 ## Session 2026-10-07 (2ᵉ) — Une AUC de 0,60 serait une fuite, pas un progrès
 
 Demande : faire passer l'AUC de 0,519 à 0,60. Mesuré d'abord : sur ce label, 0,60

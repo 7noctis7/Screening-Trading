@@ -1614,7 +1614,37 @@ def _intro_section(equity, trade_stats, sp_dates, sp_closes, instruments,
 
 
 def build_snapshot(seed: int = 7) -> dict:
-    # --- univers COMPLET + fenêtre jusqu'à AUJOURD'HUI ---
+    # Étapes extraites telles quelles (ADR-0220) : chacune lit ses entrées dans `sb`
+    # et y écrit ses sorties ; l'ordre ci-dessous est l'ordre d'origine.
+    from types import SimpleNamespace
+    sb = SimpleNamespace(seed=seed)
+    for etape in (_sb_01, _sb_02, _sb_03, _sb_04, _sb_05, _sb_06, _sb_07, _sb_08,
+                  _sb_09, _sb_10, _sb_11, _sb_12, _sb_13, _sb_14, _sb_15, _sb_16,
+                  _sb_17, _sb_18, _sb_19, _sb_20, _sb_21, _sb_22, _sb_23):
+        etape(sb)
+    # NEWS RECENTRÉES SUR TON PORTEFEUILLE : on reconstruit les lignes de sentiment à partir des
+    # positions RÉELLES (Alpaca + Bitmart) + de l'allocation PRESET (production), pas du modèle legacy
+    # → les actualités collent enfin à ce que tu détiens réellement.
+    try:
+        _sb_24(sb)
+    except Exception:  # noqa: BLE001
+        pass
+    for etape in (_sb_25, _sb_26, _sb_27, _sb_28, _sb_29, _sb_30):
+        etape(sb)
+    if sb._pe.get("available") and sb._preset_alloc:
+        try:
+            for etape in (_sb_31, _sb_32, _sb_33):
+                etape(sb)
+        except Exception:  # noqa: BLE001 — au moindre souci, on garde l'analyse swing (jamais de page cassée)
+            pass
+    for etape in (_sb_34, _sb_35, _sb_36, _sb_37, _sb_38, _sb_39):
+        etape(sb)
+    return sb._payload
+
+
+def _sb_01(sb) -> None:
+    """Étape 1/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    seed = sb.seed
     instruments = _seed_universe()
     symbols = [m["symbol"] for m in instruments]
     acmap = {m["symbol"]: m["asset_class"] for m in instruments}
@@ -1651,6 +1681,16 @@ def build_snapshot(seed: int = 7) -> dict:
         acmap = {s: acmap[s] for s in symbols}
         names = {s: names[s] for s in symbols}
         sector_of = {s: sector_of[s] for s in symbols}
+    sb._perimes, sb._perimes_ac, sb._perimes_sect = _perimes, _perimes_ac, _perimes_sect
+    sb.acmap, sb.data, sb.data_mode, sb.end = acmap, data, data_mode, end
+    sb.instruments, sb.names, sb.real_syms = instruments, names, real_syms
+    sb.sector_of, sb.start, sb.symbols = sector_of, start, symbols
+
+
+def _sb_02(sb) -> None:
+    """Étape 2/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    data, data_mode, end, instruments = sb.data, sb.data_mode, sb.end, sb.instruments
+    real_syms, seed, start, symbols = sb.real_syms, sb.seed, sb.start, sb.symbols
     # --- GATE D'AUDIT (PwC) : avant de bâtir screener/ML/preset sur ces prix, on les audite.
     #   QUANT_AUDIT=strict  → REFUSE de servir des données à anomalie CRITIQUE (lève → l'API sert
     #                         le dernier snapshot sain ; un build corrompu n'atteint jamais l'écran).
@@ -1680,7 +1720,13 @@ def build_snapshot(seed: int = 7) -> dict:
     else:
         vix = _vix_series(n, seed)                # repli synthétique (playbook volatilité + modulation)
     full_universe = _db_full_universe() or instruments   # univers EXHAUSTIF (29k tickers si DB)
+    sb._audit_report, sb._vix_is_real = _audit_report, _vix_is_real
+    sb.full_universe, sb.n, sb.vix = full_universe, n, vix
 
+
+def _sb_03(sb) -> None:
+    """Étape 3/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    acmap, data, end, start, vix = sb.acmap, sb.data, sb.end, sb.start, sb.vix
     # --- backtest swing VECTORISÉ sur TOUT l'univers, capital fictif 10 000 $.
     # Profil offensif moyen-long terme : on alloue le cash aux MEILLEURS setups (tri par
     # conviction), exposition modulée par le VIX, positions laissées ouvertes. ---
@@ -1716,6 +1762,14 @@ def build_snapshot(seed: int = 7) -> dict:
     # indices RÉELS (S&P 500 / Nasdaq 100) — calculés TÔT car le régime macro s'en sert
     _sp_syn = [b.close for b in data_providers.create(
         "synthetic", seed=101, drift=0.09, annual_vol=0.16).fetch_ohlcv("S&P 500", "1d", start, end)]
+    sb._sp_syn, sb.broker, sb.equity, sb.journal = _sp_syn, broker, equity, journal
+    sb.ts_list = ts_list
+
+
+def _sb_04(sb) -> None:
+    """Étape 4/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    _sp_syn, _vix_is_real, acmap, data = sb._sp_syn, sb._vix_is_real, sb.acmap, sb.data
+    end, start, vix = sb.end, sb.start, sb.vix
     _ndx_syn = [b.close for b in data_providers.create(
         "synthetic", seed=202, drift=0.13, annual_vol=0.22).fetch_ohlcv("Nasdaq 100", "1d", start, end)]
     sp, _sp_dates, _sp_real = _index_series(["^GSPC", "SPX", "SPY"], start, end, _sp_syn)
@@ -1752,6 +1806,18 @@ def build_snapshot(seed: int = 7) -> dict:
 
     # ranking / screener sur TOUT l'univers
     ranker = RankingEngine(load_yaml(ROOT / "config" / "factors.yaml"), acmap)
+    sb._cac_dates, sb._cac_real, sb._macro_real = _cac_dates, _cac_real, _macro_real
+    sb._macro_sources, sb._ndx_dates = _macro_sources, _ndx_dates
+    sb._ndx_real, sb._sp_dates, sb._sp_real = _ndx_real, _sp_dates, _sp_real
+    sb.cac, sb.expo, sb.ndx, sb.ranker, sb.regime = cac, expo, ndx, ranker, regime
+    sb.sp = sp
+
+
+def _sb_05(sb) -> None:
+    """Étape 5/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    data, end, equity, journal, n = sb.data, sb.end, sb.equity, sb.journal, sb.n
+    names, ndx, ranker, regime = sb.names, sb.ndx, sb.ranker, sb.regime
+    sector_of, sp, symbols = sb.sector_of, sb.sp, sb.symbols
     ranked = ranker.rank(data, t=n - 1, regime=regime, top_n=12)
 
     # benchmark JUSTE = univers équipondéré (buy & hold) → mesure l'alpha actif du swing.
@@ -1788,6 +1854,17 @@ def build_snapshot(seed: int = 7) -> dict:
 
     # SINGLE SOURCE OF TRUTH : les positions ouvertes pilotent positions/trades/corrélation/graphes
     marks = {s: data[s][-1].close for s in symbols}
+    sb.agg, sb.all_trades, sb.attr, sb.bench_px = agg, all_trades, attr, bench_px
+    sb.benches, sb.marks, sb.mc, sb.ml, sb.ml_scores = benches, marks, mc, ml, ml_scores
+    sb.multi_strategy, sb.ranked, sb.rel, sb.rets = multi_strategy, ranked, rel, rets
+    sb.rm, sb.stance_by, sb.themes = rm, stance_by, themes
+
+
+def _sb_06(sb) -> None:
+    """Étape 6/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    acmap, broker, data, journal = sb.acmap, sb.broker, sb.data, sb.journal
+    marks, ml_scores, names, sector_of = sb.marks, sb.ml_scores, sb.names, sb.sector_of
+    stance_by, symbols = sb.stance_by, sb.symbols
     meta_pos = {s: {"asset_class": acmap.get(s), "name": names.get(s)} for s in symbols}
     comp = PL.composition_payload(broker.positions(), marks, meta_pos)
     for r in comp["rows"]:                       # liaison position ↔ secteur/thème + ML
@@ -1804,7 +1881,6 @@ def build_snapshot(seed: int = 7) -> dict:
 
     # --- BUDGET DE RISQUE + LIMITES DE CONCENTRATION (best practice buy-side) ---
     from packages.portfolio.risk_budget import covariance, risk_contributions
-    from packages.risk.limits import concentration_report
     invested_now = comp["totals"]["current_value"] or 1.0
     w_by_name = {r["symbol"]: r["current_value"] / invested_now for r in comp["rows"]}
     # Véhicules indiciels larges (cœur core-satellite) : plafond dédié, pas la limite 20 %/nom
@@ -1817,6 +1893,17 @@ def build_snapshot(seed: int = 7) -> dict:
     # diagnostic de conditionnement (qualité du risque) : cov empirique vs régularisée + δ retenu
     _cov_diag: dict = {}
     _cov_cache_stats: dict = {}
+    sb._cov_cache_stats, sb._cov_diag = _cov_cache_stats, _cov_diag
+    sb._index_names, sb.cb_syms, sb.clusters = _index_names, cb_syms, clusters
+    sb.comp, sb.corr, sb.cov, sb.held = comp, corr, cov, held
+    sb.invested_now, sb.rb, sb.rets_by, sb.syms = invested_now, rb, rets_by, syms
+    sb.w_by_name, sb.w_by_sector = w_by_name, w_by_sector
+
+
+def _sb_07(sb) -> None:
+    """Étape 7/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    _cov_cache_stats, _cov_diag, cb_syms = sb._cov_cache_stats, sb._cov_diag, sb.cb_syms
+    cov, rb, rets_by, syms = sb.cov, sb.rb, sb.rets_by, sb.syms
     try:
         import numpy as _npd
 
@@ -1845,6 +1932,15 @@ def build_snapshot(seed: int = 7) -> dict:
                    "portfolio_vol": rb["portfolio_vol"],
                    "diversification_ratio": rb["diversification_ratio"],
                    "covariance_diagnostics": _cov_diag}
+    sb._cov_cache_stats, sb.risk_budget = _cov_cache_stats, risk_budget
+
+
+def _sb_08(sb) -> None:
+    """Étape 8/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    _index_names, acmap, comp = sb._index_names, sb.acmap, sb.comp
+    invested_now, rets_by, w_by_name = sb.invested_now, sb.rets_by, sb.w_by_name
+    w_by_sector = sb.w_by_sector
+    from packages.risk.limits import concentration_report
     # #3 audit : la corrélation de stress PILOTE les limites (resserre si diversif faiblit)
     try:
         import numpy as _np_lim
@@ -1881,7 +1977,13 @@ def build_snapshot(seed: int = 7) -> dict:
         w_by_class[ac] = w_by_class.get(ac, 0.0) + r["current_value"] / invested_now
     stress = {"scenarios": scenario_analysis(w_by_class),
               "hedge": hedge_suggestion(w_by_class, target_max_loss=-0.15)}
+    sb.limits, sb.stress = limits, stress
 
+
+def _sb_09(sb) -> None:
+    """Étape 9/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    cb_syms, cov, rets, rets_by, rm = sb.cb_syms, sb.cov, sb.rets, sb.rets_by, sb.rm
+    syms, w_by_name = sb.syms, sb.w_by_name
     # --- RISQUE AVANCÉ (VaR Cornish-Fisher, EWMA) + ALLOCATION OPTIMALE (HRP/min-var) ---
     from packages.portfolio.optimize import hrp_weights, min_variance_weights
     from packages.portfolio.risk_advanced import cornish_fisher_var, ewma_vol
@@ -1917,6 +2019,13 @@ def build_snapshot(seed: int = 7) -> dict:
                     optimal["skfolio_maxdiv"] = _sk
     except Exception:  # noqa: BLE001
         pass
+    sb.optimal = optimal
+
+
+def _sb_10(sb) -> None:
+    """Étape 10/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    cb_syms, cov, ml, rets, rm = sb.cb_syms, sb.cov, sb.ml, sb.rets, sb.rm
+    w_by_name = sb.w_by_name
     # allocation RECOMMANDÉE : risk-parity + bande de non-trading + exposition pilotée par DD-cible
     import os as _os
 
@@ -1950,7 +2059,14 @@ def build_snapshot(seed: int = 7) -> dict:
     # RÉGIME DE VOLATILITÉ (calme/normal/stress) → multiplicateur d'exposition au-delà du VIX
     from packages.regime.vol_regime import vol_regime
     rm["vol_regime"] = vol_regime(rets, window=20)
+    sb._dd, sb._dd_eff, sb._edge_proven = _dd, _dd_eff, _edge_proven
+    sb.recommended = recommended
 
+
+def _sb_11(sb) -> None:
+    """Étape 11/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    all_trades, broker, comp, data = sb.all_trades, sb.broker, sb.comp, sb.data
+    rets, rm = sb.rets, sb.rm
     # Sharpe probabiliste & DÉFLATÉ (garde-fou surapprentissage / essais multiples).
     # CORRIGÉ LE 01/09 : ce bloc lisait `rm.get("sharpe")`, clé que `risk_metrics()`
     # ne produit PAS (var/cvar/vol seulement). Elle manquait donc toujours, le Sharpe
@@ -1979,6 +2095,17 @@ def build_snapshot(seed: int = 7) -> dict:
     for t in all_trades:
         by_sym_trades.setdefault(t.instrument, []).append(t)
     position_series, position_markers = {}, {}
+    sb.by_sym_trades, sb.open_info = by_sym_trades, open_info
+    sb.position_markers, sb.position_series = position_markers, position_series
+
+
+def _sb_12(sb) -> None:
+    """Étape 12/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    acmap, all_trades, by_sym_trades = sb.acmap, sb.all_trades, sb.by_sym_trades
+    comp, data, equity, ml_scores, n = sb.comp, sb.data, sb.equity, sb.ml_scores, sb.n
+    names, open_info, position_markers = sb.names, sb.open_info, sb.position_markers
+    position_series, ranked, regime = sb.position_series, sb.ranked, sb.regime
+    sector_of, ts_list = sb.sector_of, sb.ts_list
     for r in comp["rows"]:
         s = r["symbol"]
         bars = data[s][-1000:]                         # ~4 ans de daily → agrégeable W/M
@@ -2015,6 +2142,15 @@ def build_snapshot(seed: int = 7) -> dict:
     screen_sec = safe_section("screen", _screen_section, data, acmap, names, sector_of, n - 1)
     now = datetime.now(UTC)
     last_bar = ts_list[-1]
+    sb.dates, sb.last_bar, sb.now, sb.recent = dates, last_bar, now, recent
+    sb.screen_sec, sb.screener, sb.trade_stats = screen_sec, screener, trade_stats
+
+
+def _sb_13(sb) -> None:
+    """Étape 13/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    acmap, comp, data, equity, held = sb.acmap, sb.comp, sb.data, sb.equity, sb.held
+    ml_scores, names, screener = sb.ml_scores, sb.names, sb.screener
+    sector_of, symbols, vix = sb.sector_of, sb.symbols, sb.vix
     # dernière valeur FINIE : une barre ^VIX NaN du jour (yfinance) rendait vix_now NaN
     # → playbook/tests cassés. NaN = pas de donnée, on sert la dernière connue.
     vix_now = next((v for v in reversed(vix) if v == v), 0.0)
@@ -2044,15 +2180,27 @@ def build_snapshot(seed: int = 7) -> dict:
         data, sector_of, names)
     # --- PRESET « best practice » : qualité + risk-parity + DD-target + blackout + no-trade band ---
     # Backtest point-in-time, comparé au swing actuel et à l'équipondéré.
-    from packages.backtest.preset_backtest import preset_backtest
     # QML-022 : jamais de fondamentaux SYNTHÉTIQUES dans l'univers qui part au courtier.
     from packages.backtest.preset_weights import qualite_de_production
     _quality = qualite_de_production(fundamentals_sec)
+    sb._quality, sb.conviction_sec = _quality, conviction_sec
+    sb.fundamentals_sec, sb.init_cap = fundamentals_sec, init_cap
+    sb.investors_sec, sb.portfolio_kpis = investors_sec, portfolio_kpis
+    sb.sentiment_sec, sb.vix_now = sentiment_sec, vix_now
+
+
+def _sb_14(sb) -> None:
+    """Étape 14/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    _dd, _perimes, _perimes_ac = sb._dd, sb._perimes, sb._perimes_ac
+    _quality, acmap, data, equity = sb._quality, sb.acmap, sb.data, sb.equity
+    init_cap, real_syms, recommended = sb.init_cap, sb.real_syms, sb.recommended
+    from packages.backtest.preset_backtest import preset_backtest
+
     # UNIVERS NÉGOCIABLE : production restreinte aux instruments (1) négociables par les brokers
     # (actions US + ETF via Alpaca, crypto via Bitmart) ET (2) à DONNÉES RÉELLES uniquement — les
     # symboles en repli synthétique (prix factices, ex. RZLV absent de YAHOO.db) sont EXCLUS de
     # l'allocation/des ordres/des graphes pour ne JAMAIS afficher de prix halluciné.
-    from packages.execution.routing import is_tradeable, route
+    from packages.execution.routing import is_tradeable
     _tradeable_data = {s: b for s, b in data.items()
                        if is_tradeable(s, acmap.get(s, "equity")) and s in real_syms}
     if len(_tradeable_data) < 30:                        # garde-fou (mode démo/synthétique) :
@@ -2084,6 +2232,17 @@ def build_snapshot(seed: int = 7) -> dict:
     # SLEEVE CRYPTO (best practice, risk-parity) — poche SÉPARÉE, dimensionnée sur le capital BITMART.
     # Comptes distincts : les actions sont dimensionnées sur le capital ALPACA, la crypto sur Bitmart.
     _crypto_weights = {}
+    sb._bt_ac, sb._bt_data, sb._crypto_weights = _bt_ac, _bt_data, _crypto_weights
+    sb._preset_diag, sb._preset_trades = _preset_diag, _preset_trades
+    sb._preset_weights, sb._tradeable_data = _preset_weights, _tradeable_data
+
+
+def _sb_15(sb) -> None:
+    """Étape 15/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    _crypto_weights, _dd, _quality = sb._crypto_weights, sb._dd, sb._quality
+    _tradeable_data, acmap, data = sb._tradeable_data, sb.acmap, sb.data
+    init_cap = sb.init_cap
+    import os as _os
     try:
         from packages.backtest.crypto_sleeve import crypto_weights
         _crypto_weights = crypto_weights(data, asset_classes=acmap, dd_target=_dd)
@@ -2099,7 +2258,6 @@ def build_snapshot(seed: int = 7) -> dict:
     # du défaut (restent activables via la spec). Spec configurable :
     #   QUANT_CORE_SPEC="qqq:0.5"            (défaut)
     #   QUANT_CORE_SPEC="qqq:0.15,megacap:0.10" / "sector_mom:0.25"   (le reste = preset)
-    from packages.backtest.index_core import blend_equity_multi
     _spec_raw = _os.environ.get("QUANT_CORE_SPEC", "qqq:0.5")
     _spec: dict[str, float] = {}
     for _part in _spec_raw.split(","):
@@ -2117,6 +2275,16 @@ def build_snapshot(seed: int = 7) -> dict:
         _mktcaps = load_market_caps()
     except Exception:  # noqa: BLE001
         pass
+    sb._crypto_weights, sb._mc_pct, sb._mktcaps = _crypto_weights, _mc_pct, _mktcaps
+    sb._pe, sb._qqq_pct, sb._sm_pct = _pe, _qqq_pct, _sm_pct
+
+
+def _sb_16(sb) -> None:
+    """Étape 16/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    _bt_ac, _bt_data, _mc_pct = sb._bt_ac, sb._bt_data, sb._mc_pct
+    _mktcaps, _perimes_sect, _qqq_pct = sb._mktcaps, sb._perimes_sect, sb._qqq_pct
+    _tradeable_data, acmap, end = sb._tradeable_data, sb.acmap, sb.end
+    init_cap, ndx, sector_of, start = sb.init_cap, sb.ndx, sb.sector_of, sb.start
     # cœur ETF (QQQ) et cœur top-10 méga-caps
     # Les DATES de QQQ voyagent avec ses cours : sans elles, l'attribution comparait
     # deux calendriers par position (bêta 0,006 publié — cf. `_index_closes_dates`).
@@ -2152,6 +2320,19 @@ def build_snapshot(seed: int = 7) -> dict:
             _sm_holds, _sm_secs = _sm.get("current_holdings", []), _sm.get("current_sectors", [])
     except Exception:  # noqa: BLE001
         pass
+    sb._core_dates, sb._mc_curve, sb._mc_real = _core_dates, _mc_curve, _mc_real
+    sb._mc_top, sb._mc_w, sb._mc_weighting = _mc_top, _mc_w, _mc_weighting
+    sb._qqq_closes, sb._qqq_dates, sb._qqq_real = _qqq_closes, _qqq_dates, _qqq_real
+    sb._sm_curve, sb._sm_holds = _sm_curve, _sm_holds
+
+
+def _sb_17(sb) -> None:
+    """Étape 17/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    _mc_curve, _mc_pct, _mc_real = sb._mc_curve, sb._mc_pct, sb._mc_real
+    _mc_top, _mc_w, _mc_weighting = sb._mc_top, sb._mc_w, sb._mc_weighting
+    _mktcaps, _pe, _qqq_closes = sb._mktcaps, sb._pe, sb._qqq_closes
+    _qqq_pct, _qqq_real, _sm_curve = sb._qqq_pct, sb._qqq_real, sb._sm_curve
+    _sm_pct = sb._sm_pct
     _index_core_info = {"enabled": False, "core_pct": 0.0, "symbol": "QQQ+TOP10",
                         "core_type": "multi",
                         "spec": {"qqq": _qqq_pct, "megacap": _mc_pct, "sector_mom": _sm_pct},
@@ -2168,6 +2349,21 @@ def build_snapshot(seed: int = 7) -> dict:
     if _sm_pct > 0 and _sm_curve and len(_sm_curve) > 60:
         _cores.append((_sm_curve, _sm_pct, "sector_mom"))
     _total_core = sum(w for _, w, _ in _cores)
+    sb._cores, sb._index_core_info = _cores, _index_core_info
+    sb._preset_pure, sb._preset_pure_dates = _preset_pure, _preset_pure_dates
+    sb._total_core = _total_core
+
+
+def _sb_18(sb) -> None:
+    """Étape 18/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    _core_dates, _cores = sb._core_dates, sb._cores
+    _index_core_info, _mc_pct, _mc_top = sb._index_core_info, sb._mc_pct, sb._mc_top
+    _mc_w, _pe, _preset_pure_dates = sb._mc_w, sb._pe, sb._preset_pure_dates
+    _preset_weights, _qqq_closes = sb._preset_weights, sb._qqq_closes
+    _qqq_pct, _sm_holds, _sm_pct = sb._qqq_pct, sb._sm_holds, sb._sm_pct
+    _total_core, _tradeable_data = sb._total_core, sb._tradeable_data
+    init_cap = sb.init_cap
+    from packages.backtest.index_core import blend_equity_multi
     if _pe.get("available") and _cores and 0 < _total_core <= 1.0:
         _blended, _m = blend_equity_multi(
             _pe["equity"], [(c, w, _core_dates.get(k)) for c, w, k in _cores],
@@ -2204,6 +2400,19 @@ def build_snapshot(seed: int = 7) -> dict:
                           for _s in _MA_SYMS if _tradeable_data.get(_s)}
     except Exception:  # noqa: BLE001
         _diversifiants = {}
+    sb._core_px, sb._core_sym, sb._diversifiants = _core_px, _core_sym, _diversifiants
+    sb._preset_weights = _preset_weights
+
+
+def _sb_19(sb) -> None:
+    """Étape 19/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    _dd, _diversifiants, _mc_curve = sb._dd, sb._diversifiants, sb._mc_curve
+    _pe, _preset_pure = sb._pe, sb._preset_pure
+    _preset_pure_dates, _qqq_closes = sb._preset_pure_dates, sb._qqq_closes
+    _qqq_dates, _qqq_pct, _quality = sb._qqq_dates, sb._qqq_pct, sb._quality
+    _sm_curve, _tradeable_data, acmap = sb._sm_curve, sb._tradeable_data, sb.acmap
+    dates, equity, init_cap, sp = sb.dates, sb.equity, sb.init_cap, sb.sp
+    ts_list = sb.ts_list
     # blocs de courbes (preset pur + cœurs) → permet au script make index-core de balayer N'IMPORTE
     # quel ratio instantanément, sur la VRAIE mesure de production (source de vérité unique).
     # `dates` = calendrier du PRESET. `qqq_dates` = celui de QQQ, qui n'est PAS le même
@@ -2240,6 +2449,17 @@ def build_snapshot(seed: int = 7) -> dict:
         _dash_equity = PL.equity_series(equity, ts_list)
         _dash_dates = dates
         _dash_eq_curve = equity
+    sb._dash_dates, sb._dash_eq_curve = _dash_dates, _dash_eq_curve
+    sb._dash_equity, sb._dash_metrics = _dash_equity, _dash_metrics
+    sb._ic_curves, sb._preset_ledger = _ic_curves, _preset_ledger
+
+
+def _sb_20(sb) -> None:
+    """Étape 20/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    _core_px, _core_sym, _crypto_weights = sb._core_px, sb._core_sym, sb._crypto_weights
+    _dash_eq_curve, _preset_weights = sb._dash_eq_curve, sb._preset_weights
+    acmap, comp, init_cap = sb.acmap, sb.comp, sb.init_cap
+    portfolio_kpis, w_by_name = sb.portfolio_kpis, sb.w_by_name
     # Honnêteté statistique : PSR sur la courbe affichée (isolé — best-effort).
     _honesty = safe_section("honesty", _psr_block, _dash_eq_curve)
     # Exécution réelle (lit les comptes brokers) — calculée TÔT pour dimensionner chaque poche
@@ -2248,8 +2468,7 @@ def build_snapshot(seed: int = 7) -> dict:
     # BUDGET DÉCLARÉ des deux poches (QML-023) : crypto ≤ QUANT_CRYPTO_PCT du compte, actions +
     # cœur dans le reste. Avant, leur somme était renormalisée par `run_live` et la part crypto
     # sortait du rapport de deux cibles de volatilité (25 à 56 % mesurés).
-    from packages.portfolio.budget_poches import part_crypto, repartir
-    from packages.portfolio.budget_poches import negociables
+    from packages.portfolio.budget_poches import negociables, part_crypto, repartir
     _preset_weights, _crypto_weights = repartir(_preset_weights, negociables(_crypto_weights),
                                                 part_crypto())
     _live = _live_with_rebalance(comp["rows"], acmap, portfolio_kpis, w_by_name,
@@ -2275,6 +2494,20 @@ def build_snapshot(seed: int = 7) -> dict:
         return {"ext_ma50": round(px / m50 - 1, 4) if m50 else None,
                 "ext_ma200": round(px / m200 - 1, 4) if m200 else None,
                 "ret_20j": round(px / cl[-21] - 1, 4) if len(cl) > 21 else None}
+    sb._alp_cap, sb._bit_cap, sb._crypto_weights = _alp_cap, _bit_cap, _crypto_weights
+    sb._extension, sb._honesty, sb._live = _extension, _honesty, _live
+    sb._preset_alloc, sb._preset_weights = _preset_alloc, _preset_weights
+    sb._px_override, sb._replication = _px_override, _replication
+
+
+def _sb_21(sb) -> None:
+    """Étape 21/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    _alp_cap, _crypto_weights = sb._alp_cap, sb._crypto_weights
+    _extension, _live, _preset_alloc = sb._extension, sb._live, sb._preset_alloc
+    _preset_weights, _px_override, acmap = sb._preset_weights, sb._px_override, sb.acmap
+    data, ml_scores, screen_sec = sb.data, sb.ml_scores, sb.screen_sec
+    screener, sector_of = sb.screener, sb.sector_of
+    from packages.execution.routing import route
     def _alloc_rows(weights, cap, ac_default):
         for s, w in sorted(weights.items(), key=lambda kv: -kv[1]):
             if w <= 0:
@@ -2304,13 +2537,24 @@ def build_snapshot(seed: int = 7) -> dict:
     _attach_rank_scores(_preset_alloc, _rscores)
     # Arch A2 — sleeve swing paper : live.swing_orders (flag OFF → [] ; preset inchangé).
     # Barres = cache `data` (Bar .high/.low/.close) ; candidats screener/screen/preset.
+    _swing_cand: list[str] = []
+    sb._rscores, sb._swing_cand = _rscores, _swing_cand
+
+
+def _sb_22(sb) -> None:
+    """Étape 22/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    _alp_cap, _live, _preset_trades = sb._alp_cap, sb._live, sb._preset_trades
+    _preset_weights, _rscores = sb._preset_weights, sb._rscores
+    _swing_cand, acmap, data, now = sb._swing_cand, sb.acmap, sb.data, sb.now
+    screen_sec, screener = sb.screen_sec, sb.screener
     from packages.execution.swing_sleeve import (
         attach_swing_orders as _attach_swing_orders,
-        swing_bars_by_sym as _swing_bars_by_sym,
-        swing_max_names as _swing_max_names,
+    )
+    from packages.execution.swing_sleeve import swing_bars_by_sym as _swing_bars_by_sym
+    from packages.execution.swing_sleeve import swing_max_names as _swing_max_names
+    from packages.execution.swing_sleeve import (
         swing_paper_enabled as _swing_paper_enabled,
     )
-    _swing_cand: list[str] = []
     if _swing_paper_enabled():
         _seen_sw: set[str] = set()
         for _row_src in (
@@ -2343,48 +2587,64 @@ def build_snapshot(seed: int = 7) -> dict:
             {"t": _t["date"][:10], "side": "buy" if _t["side"] == "BUY" else "sell"})
     # MARQUEURS RÉELS (depuis les ordres exécutés Alpaca/Bitmart) → pages Positions & Trades RÉELLES
     _real_markers: dict[str, list] = {}
+    sb._preset_markers, sb._real_markers = _preset_markers, _real_markers
+
+
+def _sb_23(sb) -> None:
+    """Étape 23/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    _live, _real_markers = sb._live, sb._real_markers
     for _o in _live["real"].get("trades", []):
         _sym = _o.get("symbol", "")
         if _sym:
             _real_markers.setdefault(_sym, []).append(
                 {"t": str(_o.get("date", ""))[:10], "side": "buy" if _o.get("side") == "buy" else "sell"})
-    # NEWS RECENTRÉES SUR TON PORTEFEUILLE : on reconstruit les lignes de sentiment à partir des
-    # positions RÉELLES (Alpaca + Bitmart) + de l'allocation PRESET (production), pas du modèle legacy
-    # → les actualités collent enfin à ce que tu détiens réellement.
-    try:
-        if _os.environ.get("QUANT_NEWS") == "1":
-            from packages import sentiment as _Snews
-            from packages.sentiment.portefeuille import score_momentum as _momentum
-            _pf_syms, _seen = [], set()
-            for _s in ([p.get("symbol") for p in _live["real"]["positions"]]
-                       + [o["symbol"] for o in _preset_alloc] + list(held)):
-                if _s and _s not in _seen:
-                    _seen.add(_s); _pf_syms.append(_s)
-            _pf_syms = _pf_syms[:30]
 
-            def _yahoo_sym(sym: str) -> str:               # crypto "BTC/USDT" → "BTC-USD" pour le flux Yahoo
-                if acmap.get(sym) == "crypto" or "/" in sym:
-                    return sym.split("/")[0].upper() + "-USD"
-                return sym
-            _new_rows = []
-            for _s in _pf_syms:
-                _r = _Snews.news_sentiment(_yahoo_sym(_s))
-                _score, _n, _heads = _r["score"], _r["n"], _r["headlines"]
-                if _n == 0:                                # repli momentum (hors-ligne) — cohérent
-                    _b = data.get(_s)
-                    _score = (_momentum([b.close for b in _b]) if _b else None) or 0.0
-                _new_rows.append({"symbol": _s, "name": names.get(_s, ""), "sector": sector_of.get(_s, ""),
-                                  "score": _score, "label": _Snews.label_of(_score), "n_news": _n,
-                                  "headlines": _heads[:5]})
-            if _new_rows:
-                sentiment_sec["rows"] = _new_rows
-                sentiment_sec["portfolio_driven"] = True
-                _mood = round(sum(r["score"] for r in _new_rows) / len(_new_rows), 4)
-                sentiment_sec["market_mood"] = _mood
-                sentiment_sec["market_label"] = _Snews.label_of(_mood)
-                sentiment_sec["source"] = "news RSS — recentré sur ton portefeuille (positions réelles + preset)"
-    except Exception:  # noqa: BLE001
-        pass
+
+def _sb_24(sb) -> None:
+    """Étape 24/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    _live, _preset_alloc, acmap, data = sb._live, sb._preset_alloc, sb.acmap, sb.data
+    held, names, sector_of = sb.held, sb.names, sb.sector_of
+    sentiment_sec = sb.sentiment_sec
+    import os as _os
+    if _os.environ.get("QUANT_NEWS") == "1":
+        from packages import sentiment as _Snews
+        from packages.sentiment.portefeuille import score_momentum as _momentum
+        _pf_syms, _seen = [], set()
+        for _s in ([p.get("symbol") for p in _live["real"]["positions"]]
+                   + [o["symbol"] for o in _preset_alloc] + list(held)):
+            if _s and _s not in _seen:
+                _seen.add(_s); _pf_syms.append(_s)
+        _pf_syms = _pf_syms[:30]
+
+        def _yahoo_sym(sym: str) -> str:               # crypto "BTC/USDT" → "BTC-USD" pour le flux Yahoo
+            if acmap.get(sym) == "crypto" or "/" in sym:
+                return sym.split("/")[0].upper() + "-USD"
+            return sym
+        _new_rows = []
+        for _s in _pf_syms:
+            _r = _Snews.news_sentiment(_yahoo_sym(_s))
+            _score, _n, _heads = _r["score"], _r["n"], _r["headlines"]
+            if _n == 0:                                # repli momentum (hors-ligne) — cohérent
+                _b = data.get(_s)
+                _score = (_momentum([b.close for b in _b]) if _b else None) or 0.0
+            _new_rows.append({"symbol": _s, "name": names.get(_s, ""), "sector": sector_of.get(_s, ""),
+                              "score": _score, "label": _Snews.label_of(_score), "n_news": _n,
+                              "headlines": _heads[:5]})
+        if _new_rows:
+            sentiment_sec["rows"] = _new_rows
+            sentiment_sec["portfolio_driven"] = True
+            _mood = round(sum(r["score"] for r in _new_rows) / len(_new_rows), 4)
+            sentiment_sec["market_mood"] = _mood
+            sentiment_sec["market_label"] = _Snews.label_of(_mood)
+            sentiment_sec["source"] = "news RSS — recentré sur ton portefeuille (positions réelles + preset)"
+
+
+def _sb_25(sb) -> None:
+    """Étape 25/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    _dash_dates, _index_core_info, _live = sb._dash_dates, sb._index_core_info, sb._live
+    _preset_alloc, _preset_markers = sb._preset_alloc, sb._preset_markers
+    _qqq_closes, _qqq_pct, _real_markers = sb._qqq_closes, sb._qqq_pct, sb._real_markers
+    data = sb.data
     # symboles cliquables = alloc preset + positions/ordres RÉELS + symboles tradés par le preset
     _chart_syms = ({o["symbol"] for o in _preset_alloc}
                    | {p.get("symbol") for p in _live["real"]["positions"]}
@@ -2418,8 +2678,13 @@ def build_snapshot(seed: int = 7) -> dict:
                                     for d, c in zip(_cd, _cc)]
     # PERF PAR COMPTE — PRIORITÉ AUX DONNÉES RÉELLES (historique Alpaca / suivi equity quotidien).
     # Repli "modèle" (backtest du sleeve) UNIQUEMENT si le compte n'est pas connecté.
-    from packages.execution.equity_history import series as _eq_series
+    sb._chart_series = _chart_series
 
+
+def _sb_26(sb) -> None:
+    """Étape 26/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    _pe = sb._pe
+    from packages.execution.equity_history import series as _eq_series
     def _note_churn(capital: float | None) -> dict:
         """L'annotation de churn, LUE SUR DISQUE et jamais calculée ici.
 
@@ -2456,6 +2721,16 @@ def build_snapshot(seed: int = 7) -> dict:
 
     _eq_model = ([{"t": d, "v": v} for d, v in zip(_pe["dates"], _pe["equity"])]
                  if _pe.get("available") else None)
+    sb._broker_perf, sb._eq_model, sb._note_churn = _broker_perf, _eq_model, _note_churn
+
+
+def _sb_27(sb) -> None:
+    """Étape 27/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    _broker_perf, _dd, _eq_model = sb._broker_perf, sb._dd, sb._eq_model
+    _live, _ndx_dates, _ndx_real = sb._live, sb._ndx_dates, sb._ndx_real
+    _sp_dates, _sp_real, acmap, data = sb._sp_dates, sb._sp_real, sb.acmap, sb.data
+    init_cap, ndx, sp = sb.init_cap, sb.ndx, sb.sp
+    from packages.backtest.preset_backtest import preset_equity_daily
     _cr_model = None
     try:
         _crypto_data = {s: b for s, b in data.items()
@@ -2485,6 +2760,14 @@ def build_snapshot(seed: int = 7) -> dict:
     _alp_c = _live["alpaca_perf"].get("curve", []) if _live["alpaca_perf"].get("source") == "réel" else []
     _cr_c = _live["crypto_perf"].get("curve", []) if _live["crypto_perf"].get("source") == "réel" else []
     _real_portfolio = {"available": False}
+    sb._account_cmp, sb._alp_c, sb._cr_c = _account_cmp, _alp_c, _cr_c
+    sb._real_portfolio = _real_portfolio
+
+
+def _sb_28(sb) -> None:
+    """Étape 28/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    _alp_c, _cr_c, _note_churn = sb._alp_c, sb._cr_c, sb._note_churn
+    _real_portfolio = sb._real_portfolio
     if _alp_c or _cr_c:
         _rdates = sorted(set(p["t"][:10] for p in _alp_c) | set(p["t"][:10] for p in _cr_c))
 
@@ -2518,6 +2801,14 @@ def build_snapshot(seed: int = 7) -> dict:
                                # ce qu'elle porte. Corriger la série publierait une
                                # performance qui n'a jamais eu lieu.
                                "churn": _note_churn(_comb[-1])}
+    sb._real_portfolio = _real_portfolio
+
+
+def _sb_29(sb) -> None:
+    """Étape 29/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    _edge_proven, cb_syms = sb._edge_proven, sb.cb_syms
+    conviction_sec, cov, full_universe = sb.conviction_sec, sb.cov, sb.full_universe
+    optimal = sb.optimal
     # BLACK-LITTERMAN : prior équipondéré + vues = conviction z-scorée → poids postérieurs
     try:
         import numpy as _np2
@@ -2543,6 +2834,16 @@ def build_snapshot(seed: int = 7) -> dict:
         data_sec_extra = survivorship_audit(_uni_syms)
     except Exception:  # noqa: BLE001
         data_sec_extra = None
+    sb.data_sec_extra = data_sec_extra
+
+
+def _sb_30(sb) -> None:
+    """Étape 30/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    agg, attr, benches, clusters = sb.agg, sb.attr, sb.benches, sb.clusters
+    comp, corr, equity, limits, mc = sb.comp, sb.corr, sb.equity, sb.limits, sb.mc
+    multi_strategy, optimal, recommended = sb.multi_strategy, sb.optimal, sb.recommended
+    rel, rets, risk_budget, rm = sb.rel, sb.rets, sb.risk_budget, sb.rm
+    stress, syms = sb.stress, sb.syms
     # === PORTEFEUILLE & ANALYSE — COHÉRENT avec l'ALLOCATION DE PRODUCTION (preset + cœur QQQ) ===
     # Remplace l'analyse du swing legacy (Sharpe 0.17 / maxDD -53 % / revue 28 — hors-sujet) par
     # la même boîte à outils appliquée à ce qui est RÉELLEMENT alloué/tradé. Garde-fou : repli swing.
@@ -2555,88 +2856,139 @@ def build_snapshot(seed: int = 7) -> dict:
                                   "optimal_allocation": optimal, "recommended_allocation": recommended,
                                   "review": PL.review_payload(expert_review({**agg, **comp["totals"]})),
                                   "multi_strategy": multi_strategy}}
-    if _pe.get("available") and _preset_alloc:
-        try:
-            _pl = (" + ".join([f"{int(round(_qqq_pct*100))}% QQQ"]*(_qqq_pct > 0)
-                   + [f"{int(round(_mc_pct*100))}% TOP10"]*(_mc_pct > 0)
-                   + [f"{int(round((1-_index_core_info['core_pct'])*100))}% preset"])
-                   if _index_core_info.get("enabled") else "preset (risk-parity + DD-target)")
-            _pr = [{"symbol": r["symbol"], "name": names.get(r["symbol"], r["symbol"]), "sector": r["sector"],
-                    "asset_class": r["asset_class"], "current_value": r["notional"], "qty": r.get("qty", 0.0),
-                    "weight_pct": r["weight"], "broker": r.get("broker", ""), "side": "long",
-                    "avg_price": r.get("price", 0.0), "last": r.get("price", 0.0), "pnl": 0.0, "pnl_pct": 0.0,
-                    "stance": stance_by.get(r["sector"], "neutral"), "ml_score": ml_scores.get(r["symbol"])}
-                   for r in _preset_alloc]
-            _pt = sum(r["current_value"] for r in _pr) or 1.0
-            _pcomp = {"rows": _pr, "totals": {"current_value": round(_pt, 2), "n_positions": len(_pr),
-                      "exposure_pct": 1.0, "pnl": 0.0, "pnl_pct": 0.0, "cost_basis": round(_pt, 2)}}
-            _peq = _pe["equity"]; _prt = returns_from_equity(_peq)
-            _prm = risk_metrics_fn(_prt)
-            _pv = _prm.get("var_95", 0.0); _prm["var_horizons"] = [{"days": h, "var_95": round(_pv*(h**0.5), 4)} for h in (1, 10, 21)]
-            _prm["var_cornish_fisher_95"] = cornish_fisher_var(_prt, 0.95); _prm["vol_ewma"] = ewma_vol(_prt)
-            _prm["garch"] = fit_garch(_prt); _prm["var_backtest"] = backtest_var(_prt, _prm.get("var_95", 0.0), alpha=0.95)
-            _prm["vol_regime"] = vol_regime(_prt, window=20)
-            # Le panneau « mesures de risque » affiché est CELUI-CI : il ne calculait
-            # ni PSR ni DSR, et le front rendait les clés absentes « 0,0 % ». Une
-            # valeur manquante s'affichait donc en chiffre — le mode de panne qu'on
-            # combat partout ailleurs dans ce fichier.
-            _prm.update(_psr_dsr(_prt, _essais_de_recherche()))
-            _prm.update(_vol_annualisee(_prm))
-            _prel = relative_metrics(_peq, bench_px); _pmc = monte_carlo(_prt, seed=1)
-            _psy = [r["symbol"] for r in sorted(_pr, key=lambda x: -x["current_value"]) if r["symbol"] in data][:12]
-            _pcorr_payload, _prb_payload, _popt, _prec = PL.correlation_payload(syms, corr, clusters), risk_budget, optimal, recommended
-            if len(_psy) >= 2:
-                _prb_by = {s: returns_from_equity([b.close for b in data[s]]) for s in _psy}
-                _ps, _pc = correlation_matrix({k: list(v) for k, v in _prb_by.items()})
-                _pcorr_payload = PL.correlation_payload(_ps, _pc, cluster(_ps, _pc, 0.7))
-                _pcb, _pcov = covariance({s: list(_prb_by[s]) for s in _ps})
-                _pwn = {r["symbol"]: r["current_value"]/_pt for r in _pr}
-                _prbk = risk_contributions([_pwn.get(s, 0.0) for s in _pcb], _pcov)
-                _prb_payload = {"symbols": _pcb, "contrib_pct": _prbk["contrib_pct"],
-                                "portfolio_vol": _prbk["portfolio_vol"], "diversification_ratio": _prbk["diversification_ratio"]}
-                _prm["factor_risk"] = pca_risk({s: list(_prb_by[s]) for s in _ps})
-                _popt = {"symbols": _pcb, "current": [round(_pwn.get(s, 0.0), 4) for s in _pcb],
-                         "hrp": [round(x, 4) for x in hrp_weights(_pcov)],
-                         "min_variance": [round(x, 4) for x in min_variance_weights(_pcov)],
-                         "risk_parity": [round(x, 4) for x in equal_risk_contribution(_pcov)]}
-                try:                                     # allocation recommandée sur les titres PRESET
-                    _prec = build_target(_pcb, _pcov, {s: _pwn.get(s, 0.0) for s in _pcb},
-                                         dd_target=_dd_eff, band=0.03, max_gross=1.0)
-                    for _k in ("dd_target_nominal", "dd_target_tail_adjusted", "tail_ratio",
-                               "edge_proven", "edge_note", "preset_backtest"):
-                        if _k in recommended:
-                            _prec[_k] = recommended[_k]
-                except Exception:  # noqa: BLE001
-                    _prec = recommended
-            _pwn = {r["symbol"]: r["current_value"]/_pt for r in _pr}
-            _pws, _pwc = {}, {}
-            for r in _pr:
-                _pws[r["sector"]] = _pws.get(r["sector"], 0.0) + r["current_value"]/_pt
-                _pwc[r["asset_class"]] = _pwc.get(r["asset_class"], 0.0) + r["current_value"]/_pt
-            # MÊME RÈGLE QUE LE TABLEAU DE BORD (l. 1928) : un tracker indiciel large
-            # n'est pas un risque d'émetteur unique. Ce site d'appel n'avait jamais reçu
-            # le correctif d'audit du 06/07 — et c'est LUI que lit le post-mortem
-            # (incident_note lit portfolio.analysis.limits), d'où « QQQ 50 % > 20 % »
-            # publié tous les jours sur un cœur core-satellite parfaitement conforme.
-            _pidx = {r["symbol"] for r in _pr if (r.get("asset_class") or "") == "etf"}
-            _plim = concentration_report(_pwn, _pws, max_name=0.20, max_sector=0.40,
-                                         index_names=_pidx,
-                                         index_sectors=_SECTEURS_VEHICULE,
-                                         secteur_inconnu=_SECTEUR_INCONNU)
-            _pstress = {"scenarios": scenario_analysis(_pwc), "hedge": hedge_suggestion(_pwc, target_max_loss=-0.15)}
-            _pagg = {**PL.metrics_payload(_peq), **_prel, **_prm, **_pmc}
-            _port_payload = {**_pcomp, "metrics": PL.metrics_payload(_peq),
-                             "benchmarks": PL.benchmark_comparison(_peq, benches), "strategy_label": _pl,
-                             "analysis": {"relative": _prel, "risk": _prm, "monte_carlo": _pmc,
-                                          "mc_projection": mc_projection(_prt, horizon=252, start_value=100.0, seed=1),
-                                          "correlation": _pcorr_payload, "risk_budget": _prb_payload,
-                                          "limits": _plim, "stress": _pstress, "optimal_allocation": _popt,
-                                          "recommended_allocation": _prec,
-                                          "review": PL.review_payload(expert_review({**_pagg, **_pcomp["totals"]})),
-                                          "multi_strategy": multi_strategy}}
-        except Exception:  # noqa: BLE001 — au moindre souci, on garde l'analyse swing (jamais de page cassée)
-            pass
+    sb._port_payload = _port_payload
 
+
+def _sb_31(sb) -> None:
+    """Étape 31/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    _index_core_info, _mc_pct, _pe = sb._index_core_info, sb._mc_pct, sb._pe
+    _preset_alloc, _qqq_pct, bench_px = sb._preset_alloc, sb._qqq_pct, sb.bench_px
+    clusters, corr, data, ml_scores = sb.clusters, sb.corr, sb.data, sb.ml_scores
+    names, optimal, recommended = sb.names, sb.optimal, sb.recommended
+    risk_budget, stance_by, syms = sb.risk_budget, sb.stance_by, sb.syms
+    from packages.portfolio.garch import fit_garch
+    from packages.portfolio.risk_advanced import cornish_fisher_var, ewma_vol
+    from packages.portfolio.var_backtest import backtest_var
+    from packages.regime.vol_regime import vol_regime
+    _pl = (" + ".join([f"{int(round(_qqq_pct*100))}% QQQ"]*(_qqq_pct > 0)
+           + [f"{int(round(_mc_pct*100))}% TOP10"]*(_mc_pct > 0)
+           + [f"{int(round((1-_index_core_info['core_pct'])*100))}% preset"])
+           if _index_core_info.get("enabled") else "preset (risk-parity + DD-target)")
+    _pr = [{"symbol": r["symbol"], "name": names.get(r["symbol"], r["symbol"]), "sector": r["sector"],
+            "asset_class": r["asset_class"], "current_value": r["notional"], "qty": r.get("qty", 0.0),
+            "weight_pct": r["weight"], "broker": r.get("broker", ""), "side": "long",
+            "avg_price": r.get("price", 0.0), "last": r.get("price", 0.0), "pnl": 0.0, "pnl_pct": 0.0,
+            "stance": stance_by.get(r["sector"], "neutral"), "ml_score": ml_scores.get(r["symbol"])}
+           for r in _preset_alloc]
+    _pt = sum(r["current_value"] for r in _pr) or 1.0
+    _pcomp = {"rows": _pr, "totals": {"current_value": round(_pt, 2), "n_positions": len(_pr),
+              "exposure_pct": 1.0, "pnl": 0.0, "pnl_pct": 0.0, "cost_basis": round(_pt, 2)}}
+    _peq = _pe["equity"]; _prt = returns_from_equity(_peq)
+    _prm = risk_metrics_fn(_prt)
+    _pv = _prm.get("var_95", 0.0); _prm["var_horizons"] = [{"days": h, "var_95": round(_pv*(h**0.5), 4)} for h in (1, 10, 21)]
+    _prm["var_cornish_fisher_95"] = cornish_fisher_var(_prt, 0.95); _prm["vol_ewma"] = ewma_vol(_prt)
+    _prm["garch"] = fit_garch(_prt); _prm["var_backtest"] = backtest_var(_prt, _prm.get("var_95", 0.0), alpha=0.95)
+    _prm["vol_regime"] = vol_regime(_prt, window=20)
+    # Le panneau « mesures de risque » affiché est CELUI-CI : il ne calculait
+    # ni PSR ni DSR, et le front rendait les clés absentes « 0,0 % ». Une
+    # valeur manquante s'affichait donc en chiffre — le mode de panne qu'on
+    # combat partout ailleurs dans ce fichier.
+    _prm.update(_psr_dsr(_prt, _essais_de_recherche()))
+    _prm.update(_vol_annualisee(_prm))
+    _prel = relative_metrics(_peq, bench_px); _pmc = monte_carlo(_prt, seed=1)
+    _psy = [r["symbol"] for r in sorted(_pr, key=lambda x: -x["current_value"]) if r["symbol"] in data][:12]
+    _pcorr_payload, _prb_payload, _popt, _prec = PL.correlation_payload(syms, corr, clusters), risk_budget, optimal, recommended
+    sb._pcomp, sb._pcorr_payload, sb._peq, sb._pl = _pcomp, _pcorr_payload, _peq, _pl
+    sb._pmc, sb._popt, sb._pr, sb._prb_payload = _pmc, _popt, _pr, _prb_payload
+    sb._prec, sb._prel, sb._prm, sb._prt, sb._psy = _prec, _prel, _prm, _prt, _psy
+    sb._pt = _pt
+
+
+def _sb_32(sb) -> None:
+    """Étape 32/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    _dd_eff, _pcorr_payload, _popt = sb._dd_eff, sb._pcorr_payload, sb._popt
+    _pr, _prb_payload, _prec, _prm = sb._pr, sb._prb_payload, sb._prec, sb._prm
+    _psy, _pt, data, recommended = sb._psy, sb._pt, sb.data, sb.recommended
+    from packages.portfolio.construction import build_target
+    from packages.portfolio.factor_risk import pca_risk
+    from packages.portfolio.optimize import (
+        equal_risk_contribution,
+        hrp_weights,
+        min_variance_weights,
+    )
+    from packages.portfolio.risk_budget import covariance, risk_contributions
+    if len(_psy) >= 2:
+        _prb_by = {s: returns_from_equity([b.close for b in data[s]]) for s in _psy}
+        _ps, _pc = correlation_matrix({k: list(v) for k, v in _prb_by.items()})
+        _pcorr_payload = PL.correlation_payload(_ps, _pc, cluster(_ps, _pc, 0.7))
+        _pcb, _pcov = covariance({s: list(_prb_by[s]) for s in _ps})
+        _pwn = {r["symbol"]: r["current_value"]/_pt for r in _pr}
+        _prbk = risk_contributions([_pwn.get(s, 0.0) for s in _pcb], _pcov)
+        _prb_payload = {"symbols": _pcb, "contrib_pct": _prbk["contrib_pct"],
+                        "portfolio_vol": _prbk["portfolio_vol"], "diversification_ratio": _prbk["diversification_ratio"]}
+        _prm["factor_risk"] = pca_risk({s: list(_prb_by[s]) for s in _ps})
+        _popt = {"symbols": _pcb, "current": [round(_pwn.get(s, 0.0), 4) for s in _pcb],
+                 "hrp": [round(x, 4) for x in hrp_weights(_pcov)],
+                 "min_variance": [round(x, 4) for x in min_variance_weights(_pcov)],
+                 "risk_parity": [round(x, 4) for x in equal_risk_contribution(_pcov)]}
+        try:                                     # allocation recommandée sur les titres PRESET
+            _prec = build_target(_pcb, _pcov, {s: _pwn.get(s, 0.0) for s in _pcb},
+                                 dd_target=_dd_eff, band=0.03, max_gross=1.0)
+            for _k in ("dd_target_nominal", "dd_target_tail_adjusted", "tail_ratio",
+                       "edge_proven", "edge_note", "preset_backtest"):
+                if _k in recommended:
+                    _prec[_k] = recommended[_k]
+        except Exception:  # noqa: BLE001
+            _prec = recommended
+    _pwn = {r["symbol"]: r["current_value"]/_pt for r in _pr}
+    _pws, _pwc = {}, {}
+    for r in _pr:
+        _pws[r["sector"]] = _pws.get(r["sector"], 0.0) + r["current_value"]/_pt
+        _pwc[r["asset_class"]] = _pwc.get(r["asset_class"], 0.0) + r["current_value"]/_pt
+    # MÊME RÈGLE QUE LE TABLEAU DE BORD (l. 1928) : un tracker indiciel large
+    # n'est pas un risque d'émetteur unique. Ce site d'appel n'avait jamais reçu
+    # le correctif d'audit du 06/07 — et c'est LUI que lit le post-mortem
+    # (incident_note lit portfolio.analysis.limits), d'où « QQQ 50 % > 20 % »
+    # publié tous les jours sur un cœur core-satellite parfaitement conforme.
+    _pidx = {r["symbol"] for r in _pr if (r.get("asset_class") or "") == "etf"}
+    sb._pcorr_payload, sb._pidx, sb._popt = _pcorr_payload, _pidx, _popt
+    sb._prb_payload, sb._prec, sb._pwc, sb._pwn = _prb_payload, _prec, _pwc, _pwn
+    sb._pws = _pws
+
+
+def _sb_33(sb) -> None:
+    """Étape 33/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    _pcomp, _pcorr_payload, _peq = sb._pcomp, sb._pcorr_payload, sb._peq
+    _pidx, _pl, _pmc, _popt = sb._pidx, sb._pl, sb._pmc, sb._popt
+    _port_payload, _prb_payload, _prec = sb._port_payload, sb._prb_payload, sb._prec
+    _prel, _prm, _prt, _pwc, _pwn = sb._prel, sb._prm, sb._prt, sb._pwc, sb._pwn
+    _pws, benches, multi_strategy = sb._pws, sb.benches, sb.multi_strategy
+    from packages.portfolio.scenarios import hedge_suggestion, scenario_analysis
+    from packages.risk.limits import concentration_report
+    _plim = concentration_report(_pwn, _pws, max_name=0.20, max_sector=0.40,
+                                 index_names=_pidx,
+                                 index_sectors=_SECTEURS_VEHICULE,
+                                 secteur_inconnu=_SECTEUR_INCONNU)
+    _pstress = {"scenarios": scenario_analysis(_pwc), "hedge": hedge_suggestion(_pwc, target_max_loss=-0.15)}
+    _pagg = {**PL.metrics_payload(_peq), **_prel, **_prm, **_pmc}
+    _port_payload = {**_pcomp, "metrics": PL.metrics_payload(_peq),
+                     "benchmarks": PL.benchmark_comparison(_peq, benches), "strategy_label": _pl,
+                     "analysis": {"relative": _prel, "risk": _prm, "monte_carlo": _pmc,
+                                  "mc_projection": mc_projection(_prt, horizon=252, start_value=100.0, seed=1),
+                                  "correlation": _pcorr_payload, "risk_budget": _prb_payload,
+                                  "limits": _plim, "stress": _pstress, "optimal_allocation": _popt,
+                                  "recommended_allocation": _prec,
+                                  "review": PL.review_payload(expert_review({**_pagg, **_pcomp["totals"]})),
+                                  "multi_strategy": multi_strategy}}
+    sb._port_payload = _port_payload
+
+
+def _sb_34(sb) -> None:
+    """Étape 34/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    _audit_report, _cov_cache_stats = sb._audit_report, sb._cov_cache_stats
+    _live, _preset_ledger, _replication = sb._live, sb._preset_ledger, sb._replication
+    all_trades, data_mode, init_cap = sb.all_trades, sb.data_mode, sb.init_cap
+    last_bar, now, start, symbols = sb.last_bar, sb.now, sb.start, sb.symbols
     # ÉCART DE RÉPLICATION : combien du compte réel ne suit PAS le modèle, et quels ordres le
     # réduiraient. Sans ce chiffre, la table « modèle vs réel » laisse croire à un écart de
     # PERFORMANCE là où il y a un écart de COMPOSITION (cf. packages/portfolio/replication).
@@ -2652,108 +3004,163 @@ def build_snapshot(seed: int = 7) -> dict:
                                             plancher=_min_ligne())
     except Exception:  # noqa: BLE001 — diagnostic, jamais bloquant
         _replication = {"available": False}
+    _meta = {
+        "generated_at": now.isoformat(),
+        "last_bar": last_bar.isoformat(),
+        "period_start": start.isoformat(),
+        "delay_minutes": 15,                 # flux différé 15 min (EOD/synthétique)
+        "mode": data_mode,
+        "audit": _audit_report,              # rapport d'intégrité PwC (None si QUANT_AUDIT inactif)
+        "cov_cache": _cov_cache_stats,       # hit-rate du cache de covariance (gain réel en prod)
+        "data_synthetic": data_mode.startswith("synthetic"),
+        "data_warning": ("⚠️ DONNÉES FACTICES (synthétiques) — démo UI uniquement, NE PAS "
+                         "décider ni backtester dessus. Branche QUANT_PRICE_DB."
+                         if data_mode.startswith("synthetic") else None),
+        "strategy": "swing",
+        "initial_capital": init_cap,
+        "universe_size": len(symbols),
+        "traded_assets": len({t.instrument for t in all_trades}),
+        "n_trades": len(all_trades),
+        "profile": "offensif · moyen-long terme",
+    }
+    sb._meta, sb._replication = _meta, _replication
+
+
+def _sb_35(sb) -> None:
+    """Étape 35/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    _cac_dates, _cac_real, _dash_equity = sb._cac_dates, sb._cac_real, sb._dash_equity
+    _sp_dates, _sp_real, cac = sb._sp_dates, sb._sp_real, sb.cac
+    instruments, sp, trade_stats = sb.instruments, sb.sp, sb.trade_stats
+    # SECTION INTRO — chiffres du rideau d'entrée, DÉRIVÉS de la même courbe
+    # que le tableau de bord. Rien n'est saisi à la main : un nombre recopié
+    # dans un composant se détache de ce qu'il mesure — cf. le « −9 % » de la
+    # landing, issu d'un run `backtest-preset` sur fenêtre courte quand la
+    # production affiche −25,3 %. Régénéré à chaque snapshot.
+    # RÉFÉRENCE RÉELLE OU AUCUNE. `sp` retombe sur une série SYNTHÉTIQUE quand l'indice
+    # n'est pas en base (`_sp_syn`). Comparer la courbe du robot à un S&P 500 inventé
+    # serait le mensonge le plus efficace du site : une légende « S&P 500 », une courbe
+    # crédible, et rien derrière. Le reste du dashboard fait déjà ce tri (`_sp_real`
+    # garde les dates) ; l'intro doit le faire aussi. Sans référence réelle, elle
+    # affiche notre seule courbe et le dit.
+    _intro = _intro_section(_dash_equity, trade_stats,
+                            _sp_dates if _sp_real else [], sp if _sp_real else [],
+                            instruments,
+                            autres_indices={"CAC 40": (
+                                _cac_dates if _cac_real else [],
+                                cac if _cac_real else [])})
+    sb._intro = _intro
+
+
+def _sb_36(sb) -> None:
+    """Étape 36/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    _account_cmp, _cac_dates, _cac_real = sb._account_cmp, sb._cac_dates, sb._cac_real
+    _dash_dates, _dash_equity = sb._dash_dates, sb._dash_equity
+    _dash_metrics, _honesty = sb._dash_metrics, sb._honesty
+    _index_core_info, _live, _macro_real = sb._index_core_info, sb._live, sb._macro_real
+    _macro_sources, _mc_pct, _ndx_dates = sb._macro_sources, sb._mc_pct, sb._ndx_dates
+    _ndx_real, _pe, _qqq_pct = sb._ndx_real, sb._pe, sb._qqq_pct
+    _real_portfolio, _replication = sb._real_portfolio, sb._replication
+    _sp_dates, _sp_real, cac, expo = sb._sp_dates, sb._sp_real, sb.cac, sb.expo
+    init_cap, last_bar, ndx, regime = sb.init_cap, sb.last_bar, sb.ndx, sb.regime
+    sp = sb.sp
+    # TABLEAU DE BORD — en deux morceaux (règle des 50 lignes), même ordre de clés.
+    _dash_a = {
+        "as_of": last_bar.isoformat(),
+        "regime": {**PL.regime_payload(regime, expo), "macro_real": _macro_real,
+                   "macro_sources": _macro_sources},
+        "metrics": _dash_metrics,                 # PRESET (production), pas le swing legacy
+        "honesty": _honesty,                       # PSR / honnêteté statistique (manifeste)
+        "equity": _dash_equity,
+        "account_compare": _account_cmp,           # comptes réels (Alpaca/Crypto) vs S&P/Nasdaq
+        "real_portfolio": _real_portfolio,         # courbe RÉELLE combinée (Alpaca+Bitmart) + stats
+        "real_trades": _live["real"].get("trades", []),     # ordres RÉELS exécutés (journal réel)
+        "real_positions": _live["real"].get("positions", []),  # positions RÉELLES + P&L
+        # ÉCART DE RÉPLICATION CHIFFRÉ + plan d'ordres. La table « modèle vs réel » montrait
+        # l'écart sans le mesurer ni dire quoi en faire : on lisait « +158 % contre −1,1 % »
+        # et on en concluait une sous-performance, alors que c'est une différence de
+        # COMPOSITION (une seule ligne commune) et de DURÉE de détention.
+        "replication": _replication,
+        "index_core": _index_core_info,            # cœur(s) indiciel(s) + satellite preset
+        "strategy_label": (
+            " + ".join([f"{int(round(_qqq_pct*100))}% QQQ"] * (_qqq_pct > 0)
+                       + [f"{int(round(_mc_pct*100))}% TOP10"] * (_mc_pct > 0)
+                       + [f"{int(round((1-_index_core_info['core_pct'])*100))}% preset"])
+            if _index_core_info.get("enabled")
+            else ("preset (risk-parity + DD-target)" if _pe.get("available") else "swing")),
+        # Les dates des indices voyagent avec leurs cours : sans elles la courbe du
+        # benchmark était tracée sur le calendrier de l'equity (`bench_series`).
+        "benchmarks": bench_series(
+            {"S&P 500": (sp, _sp_dates if _sp_real else []),
+             "Nasdaq 100": (ndx, _ndx_dates if _ndx_real else []),
+             "CAC 40": (cac, _cac_dates if _cac_real else [])},
+            _dash_dates, init_cap),
+    }
+    sb._dash_a = _dash_a
+
+
+def _sb_37(sb) -> None:
+    """Étape 37/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    _alp_cap, _bit_cap, _chart_series = sb._alp_cap, sb._bit_cap, sb._chart_series
+    _dash_dates, _preset_alloc = sb._dash_dates, sb._preset_alloc
+    _preset_diag, _preset_markers = sb._preset_diag, sb._preset_markers
+    _real_markers, _vix_is_real, comp = sb._real_markers, sb._vix_is_real, sb.comp
+    held, n, portfolio_kpis = sb.held, sb.n, sb.portfolio_kpis
+    position_markers, position_series = sb.position_markers, sb.position_series
+    trade_stats, vix, vix_now = sb.trade_stats, sb.vix, sb.vix_now
+    _dash_b = {
+        "dates": _dash_dates,
+        "positions": comp["rows"], "totals": comp["totals"],
+        "preset_allocation": _preset_alloc,        # allocation PRESET (production) → page Positions
+        # Journal des étages : dit POURQUOI l'allocation est vide.
+        "preset_diagnostic": _preset_diag.as_dict(),
+        # Plancher de ligne PUBLIÉ : le front l'affichait en dur de son côté. Deux sources
+        # pour un même seuil, c'est une dérive garantie au premier changement.
+        "min_position": _min_ligne(),
+        "alloc_capital": {"alpaca": round(_alp_cap, 2), "crypto": round(_bit_cap, 2),
+                          "total": round(_alp_cap + _bit_cap, 2)},  # base réelle par compte
+        "chart_series": _chart_series,             # OHLC cliquables (preset + positions réelles)
+        "portfolio": portfolio_kpis,
+        "position_series": position_series,
+        "position_markers": position_markers,
+        "preset_markers": _preset_markers,         # signaux achat/vente du preset (par symbole)
+        "real_markers": _real_markers,             # signaux achat/vente RÉELS (ordres brokers)
+        "earnings_risk": _earnings_risk(held),
+        "trade_stats": trade_stats,
+        # PROVENANCE DU VIX — publiée, jamais devinée (31/08).
+        #
+        # Quand ni `^VIX` ni `VIX` ne donnent une série FRAÎCHE (≥250 barres, ≤7 j),
+        # `_vix_series()` fabrique une série synthétique. Le graphe le savait déjà
+        # (`_vix_d`/`_vix_v` sont vidés si `_vix_is_real` est faux) — mais le
+        # KPI, le playbook et la série étaient publiés SANS distinction. Un
+        # « VIX 18 · exposition ×0.8 » sorti d'un générateur aléatoire s'affichait
+        # comme une lecture de marché.
+        #
+        # Le mandat données-réelles tranche : données insuffisantes → on dit
+        # UNCALIBRATED, on n'invente pas. Le front rend déjà `null` en « n/d ».
+        "vix": vix_now if _vix_is_real else None,
+        "vix_reel": bool(_vix_is_real),
+        "vix_playbook": (_vix_playbook(vix_now) if _vix_is_real
+                         else _VIX_NON_CALIBRE),
+        "vix_series": vix[::max(1, n // 240)] if _vix_is_real else [],
+    }
+    sb._dash_b = _dash_b
+
+
+def _sb_38(sb) -> None:
+    """Étape 38/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    _dash_a, _dash_b, _ic_curves = sb._dash_a, sb._dash_b, sb._ic_curves
+    _intro, _live, _meta = sb._intro, sb._live, sb._meta
+    _port_payload, _preset_ledger = sb._port_payload, sb._preset_ledger
+    _preset_trades, acmap, comp = sb._preset_trades, sb.acmap, sb.comp
+    conviction_sec, data, data_mode = sb.conviction_sec, sb.data, sb.data_mode
+    data_sec_extra, full_universe = sb.data_sec_extra, sb.full_universe
+    fundamentals_sec, investors_sec, ml = sb.fundamentals_sec, sb.investors_sec, sb.ml
+    recent, screen_sec, screener = sb.recent, sb.screen_sec, sb.screener
+    sentiment_sec, themes, trade_stats = sb.sentiment_sec, sb.themes, sb.trade_stats
     _payload = {
-        "meta": {
-            "generated_at": now.isoformat(),
-            "last_bar": last_bar.isoformat(),
-            "period_start": start.isoformat(),
-            "delay_minutes": 15,                 # flux différé 15 min (EOD/synthétique)
-            "mode": data_mode,
-            "audit": _audit_report,              # rapport d'intégrité PwC (None si QUANT_AUDIT inactif)
-            "cov_cache": _cov_cache_stats,       # hit-rate du cache de covariance (gain réel en prod)
-            "data_synthetic": data_mode.startswith("synthetic"),
-            "data_warning": ("⚠️ DONNÉES FACTICES (synthétiques) — démo UI uniquement, NE PAS "
-                             "décider ni backtester dessus. Branche QUANT_PRICE_DB."
-                             if data_mode.startswith("synthetic") else None),
-            "strategy": "swing",
-            "initial_capital": init_cap,
-            "universe_size": len(symbols),
-            "traded_assets": len({t.instrument for t in all_trades}),
-            "n_trades": len(all_trades),
-            "profile": "offensif · moyen-long terme",
-        },
-        # SECTION INTRO — chiffres du rideau d'entrée, DÉRIVÉS de la même courbe
-        # que le tableau de bord. Rien n'est saisi à la main : un nombre recopié
-        # dans un composant se détache de ce qu'il mesure — cf. le « −9 % » de la
-        # landing, issu d'un run `backtest-preset` sur fenêtre courte quand la
-        # production affiche −25,3 %. Régénéré à chaque snapshot.
-        # RÉFÉRENCE RÉELLE OU AUCUNE. `sp` retombe sur une série SYNTHÉTIQUE quand l'indice
-        # n'est pas en base (`_sp_syn`). Comparer la courbe du robot à un S&P 500 inventé
-        # serait le mensonge le plus efficace du site : une légende « S&P 500 », une courbe
-        # crédible, et rien derrière. Le reste du dashboard fait déjà ce tri (`_sp_real`
-        # garde les dates) ; l'intro doit le faire aussi. Sans référence réelle, elle
-        # affiche notre seule courbe et le dit.
-        "intro": _intro_section(_dash_equity, trade_stats,
-                                _sp_dates if _sp_real else [], sp if _sp_real else [],
-                                instruments,
-                                autres_indices={"CAC 40": (
-                                    _cac_dates if _cac_real else [],
-                                    cac if _cac_real else [])}),
-        "dashboard": {
-            "as_of": last_bar.isoformat(),
-            "regime": {**PL.regime_payload(regime, expo), "macro_real": _macro_real,
-                       "macro_sources": _macro_sources},
-            "metrics": _dash_metrics,                 # PRESET (production), pas le swing legacy
-            "honesty": _honesty,                       # PSR / honnêteté statistique (manifeste)
-            "equity": _dash_equity,
-            "account_compare": _account_cmp,           # comptes réels (Alpaca/Crypto) vs S&P/Nasdaq
-            "real_portfolio": _real_portfolio,         # courbe RÉELLE combinée (Alpaca+Bitmart) + stats
-            "real_trades": _live["real"].get("trades", []),     # ordres RÉELS exécutés (journal réel)
-            "real_positions": _live["real"].get("positions", []),  # positions RÉELLES + P&L
-            # ÉCART DE RÉPLICATION CHIFFRÉ + plan d'ordres. La table « modèle vs réel » montrait
-            # l'écart sans le mesurer ni dire quoi en faire : on lisait « +158 % contre −1,1 % »
-            # et on en concluait une sous-performance, alors que c'est une différence de
-            # COMPOSITION (une seule ligne commune) et de DURÉE de détention.
-            "replication": _replication,
-            "index_core": _index_core_info,            # cœur(s) indiciel(s) + satellite preset
-            "strategy_label": (
-                " + ".join([f"{int(round(_qqq_pct*100))}% QQQ"] * (_qqq_pct > 0)
-                           + [f"{int(round(_mc_pct*100))}% TOP10"] * (_mc_pct > 0)
-                           + [f"{int(round((1-_index_core_info['core_pct'])*100))}% preset"])
-                if _index_core_info.get("enabled")
-                else ("preset (risk-parity + DD-target)" if _pe.get("available") else "swing")),
-            # Les dates des indices voyagent avec leurs cours : sans elles la courbe du
-            # benchmark était tracée sur le calendrier de l'equity (`bench_series`).
-            "benchmarks": bench_series(
-                {"S&P 500": (sp, _sp_dates if _sp_real else []),
-                 "Nasdaq 100": (ndx, _ndx_dates if _ndx_real else []),
-                 "CAC 40": (cac, _cac_dates if _cac_real else [])},
-                _dash_dates, init_cap),
-            "dates": _dash_dates,
-            "positions": comp["rows"], "totals": comp["totals"],
-            "preset_allocation": _preset_alloc,        # allocation PRESET (production) → page Positions
-            # Journal des étages : dit POURQUOI l'allocation est vide.
-            "preset_diagnostic": _preset_diag.as_dict(),
-            # Plancher de ligne PUBLIÉ : le front l'affichait en dur de son côté. Deux sources
-            # pour un même seuil, c'est une dérive garantie au premier changement.
-            "min_position": _min_ligne(),
-            "alloc_capital": {"alpaca": round(_alp_cap, 2), "crypto": round(_bit_cap, 2),
-                              "total": round(_alp_cap + _bit_cap, 2)},  # base réelle par compte
-            "chart_series": _chart_series,             # OHLC cliquables (preset + positions réelles)
-            "portfolio": portfolio_kpis,
-            "position_series": position_series,
-            "position_markers": position_markers,
-            "preset_markers": _preset_markers,         # signaux achat/vente du preset (par symbole)
-            "real_markers": _real_markers,             # signaux achat/vente RÉELS (ordres brokers)
-            "earnings_risk": _earnings_risk(held),
-            "trade_stats": trade_stats,
-            # PROVENANCE DU VIX — publiée, jamais devinée (31/08).
-            #
-            # Quand ni `^VIX` ni `VIX` ne donnent une série FRAÎCHE (≥250 barres, ≤7 j),
-            # `_vix_series()` fabrique une série synthétique. Le graphe le savait déjà
-            # (`_vix_d`/`_vix_v` sont vidés si `_vix_is_real` est faux) — mais le
-            # KPI, le playbook et la série étaient publiés SANS distinction. Un
-            # « VIX 18 · exposition ×0.8 » sorti d'un générateur aléatoire s'affichait
-            # comme une lecture de marché.
-            #
-            # Le mandat données-réelles tranche : données insuffisantes → on dit
-            # UNCALIBRATED, on n'invente pas. Le front rend déjà `null` en « n/d ».
-            "vix": vix_now if _vix_is_real else None,
-            "vix_reel": bool(_vix_is_real),
-            "vix_playbook": (_vix_playbook(vix_now) if _vix_is_real
-                             else _VIX_NON_CALIBRE),
-            "vix_series": vix[::max(1, n // 240)] if _vix_is_real else [],
-        },
+        "meta": _meta,
+        "intro": _intro,
+        "dashboard": {**_dash_a, **_dash_b},
         "screener": screener,
         "screen": screen_sec,
         "crypto_cockpit": safe_section("crypto_cockpit", _crypto_cockpit_section),
@@ -2777,6 +3184,12 @@ def build_snapshot(seed: int = 7) -> dict:
         "conviction": conviction_sec,
         "live": _live,
     }
+    sb._payload = _payload
+
+
+def _sb_39(sb) -> None:
+    """Étape 39/39 de `build_snapshot` — texte d'origine ; lit et écrit `sb`."""
+    _payload = sb._payload
     # DATES D'ARRÊTÉ — un seul endroit, calculé sur le payload FINI.
     #
     # Trois dates différentes coexistaient sur le site (18/06 pour le tableau de bord et
@@ -2794,7 +3207,6 @@ def build_snapshot(seed: int = 7) -> dict:
     except Exception:  # noqa: BLE001 — inventaire d'affichage, jamais bloquant
         _payload["meta"]["arretes"] = {}
         _payload["meta"]["arrete_le_plus_frais"] = None
-    return _payload
 
 
 def _earnings_risk(held: list) -> list[dict]:
