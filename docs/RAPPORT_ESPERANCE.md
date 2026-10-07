@@ -74,6 +74,26 @@ mesure d'abord la part de la rotation qu'elles causent.
 
 Verdict inchangé : **NON établi**.
 
+## Deuxième passage réel (VPS, 07/10) — volumes réparés (#450, #451)
+
+Le premier passage corrigé donnait une participation q/ADV médiane de 42 % : la colonne
+`volume` de `market.db` contenait le close (INSERT positionnel sur une table dont
+`adj_close` avait été ajouté au bout). Après réparation (48 662 barres échangées par
+#451, aucune irrécupérable), même rejeu, 625 séries, 2016-10-12 → 2026-10-07 :
+
+| Mesure | Résultat | Statut |
+|---|---|---|
+| 4 · participation q / ADV | médiane 0,000 %, p90 0,004 %, max 25 % ; > 1 % : 0,1 % des côtés | **saine** — c'était la condition pour lire 1 et 4 |
+| 1 · espérance / aller-retour, frais seuls | +5,84 % [+4,68 ; +7,10], n = 2 215, 57 % gagnants | valable — rendement ABSOLU (bêta compris), pas un alpha |
+| 1 · avec impact Y = 0,5 / 1,0 | +5,82 % / +5,80 % | valable — l'impact est négligeable à cette taille |
+| 4 · encours d'espérance nulle | 8,3 G$ (Y = 0,5) / 2,1 G$ (Y = 1,0) | extrapolation de la loi racine très loin de toute calibration : lire « la taille n'est pas la contrainte », pas un chiffre |
+| 2 · livre − QQQ+cash, même drawdown | +2,95 %/an [−1,42 ; +7,52], DSR 0,01 (5 749 essais) | valable |
+| 3 · paris indépendants | 5,2 effectifs pour 12 lignes, 86 / an | valable |
+| 3 · IC 2ᵉ moitié, h = 1 j | +0,020 [+0,008 ; +0,032], t 3,71 ; 12-1 : t 4,09 | valable ; h ≥ 5 j non significatif |
+
+Lecture : les coûts ne sont pas ce qui manque. Un aller-retour gagne en moyenne, mais le
+livre ne bat pas QQQ + cash au même risque de façon établie (Q2). Verdict **NON établi**.
+
 ## À lancer sur le VPS
 
 ```bash
