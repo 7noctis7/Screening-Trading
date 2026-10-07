@@ -1,0 +1,649 @@
+{
+ "reel": {
+  "sortie": "  portail de risque : ligne ≤ 20% (panier ≤ 60%) · positions ≤ 6 · ordre ≤ 15% · brut ≤ 100% · brut actuel 13000$ / 100000$\n  [risk-gate] CCC            alleger  demandé      6000$ →      6000$  OK      [ok] désengagement — jamais bloqué par le portail\n  CCC            Alpaca   cible     2000$ détenu     8000$ Δ    -6000$  ▼ vente\n  [risk-gate] DDD            solder   demandé      3000$ →      3000$  OK      [ok] désengagement — jamais bloqué par le portail\n  DDD            Alpaca   cible        0$ détenu     3000$ Δ    -3000$  ▼ SOLDE (quantité)\n  FFF            Alpaca   cible    50000$ détenu        0$ Δ   +50000$  ⚠️  ordre plafonné à 15% du compte : 50000 $ réduit à 15000 $\n  [risk-gate] FFF            acheter  demandé  15000.00$ →  15000.00$  RÉDUIT  [taille_ordre] ordre plafonné à 15% du compte : 50000 $ réduit à 15000 $\n  FFF            Alpaca   cible    50000$ détenu        0$ Δ   +50000$  ▲ achat\n  [risk-gate] AAA            acheter  demandé     10000$ →     10000$  OK      [ok] dans toutes les limites\n  AAA            Alpaca   cible    10000$ détenu        0$ Δ   +10000$  ▲ achat\n  [risk-gate] QQQ            acheter  demandé      6000$ →      6000$  OK      [ok] dans toutes les limites\n  QQQ            Alpaca   cible     6000$ détenu        0$ Δ    +6000$  ▲ achat\n  [risk-gate] BBB            acheter  demandé      3000$ →      3000$  OK      [ok] dans toutes les limites\n  BBB            Alpaca   cible     5000$ détenu     2000$ Δ    +3000$  ▲ achat\n  EEE            Alpaca   cible     5000$ détenu        0$ Δ    +5000$  non négociable\n  GGG            Alpaca   cible     4000$ détenu        0$ Δ    +4000$  ⛔ REFUSÉ par le portail [max_positions] 6 positions ouvertes ≥ plafond 6 — aucune nouvelle ligne (les allègements restent possibles)\n  portail de risque : ligne ≤ 20% (panier ≤ 60%) · positions ≤ 6 · ordre ≤ 15% · brut ≤ 100% · brut actuel 1000$ / 10000$\n  BTC/USD        Bitmart  cible     3000$ détenu     1000$ Δ    +2000$  ⚠️  ligne plafonnée à 20% du compte : 2000 $ réduit à 1000 $\n  [risk-gate] BTC/USD        acheter  demandé   1000.00$ →   1000.00$  RÉDUIT  [poids_ligne] ligne plafonnée à 20% du compte : 2000 $ réduit à 1000 $\n  BTC/USD        Bitmart  cible     3000$ détenu     1000$ Δ    +2000$  ▲ achat\n",
+  "sent": 7,
+  "opened": [
+   {
+    "symbol": "FFF",
+    "venue": "Alpaca",
+    "broker_symbol": "FFF",
+    "asset_class": "equity",
+    "weight_pct": 0.5,
+    "order_id": "id-FFF"
+   },
+   {
+    "symbol": "AAA",
+    "venue": "Alpaca",
+    "broker_symbol": "AAA",
+    "asset_class": "equity",
+    "weight_pct": 0.1,
+    "order_id": "id-AAA",
+    "rank_score": 1.5,
+    "strategy": "preset"
+   },
+   {
+    "symbol": "QQQ",
+    "venue": "Alpaca",
+    "broker_symbol": "QQQ",
+    "asset_class": "etf",
+    "weight_pct": 0.06,
+    "order_id": "id-QQQ"
+   },
+   {
+    "symbol": "BBB",
+    "venue": "Alpaca",
+    "broker_symbol": "BBB",
+    "asset_class": "equity",
+    "weight_pct": 0.05,
+    "order_id": "id-BBB"
+   },
+   {
+    "symbol": "BTC/USD",
+    "venue": "Bitmart",
+    "broker_symbol": "BTC/USD",
+    "asset_class": "crypto",
+    "weight_pct": 0.3,
+    "order_id": "id-BTC/USD"
+   }
+  ],
+  "sold": [
+   {
+    "symbol": "CCC",
+    "venue": "Alpaca",
+    "broker_symbol": "CCC",
+    "notional": 6000.0,
+    "order_id": "id-CCC"
+   },
+   {
+    "symbol": "DDD",
+    "venue": "Alpaca",
+    "broker_symbol": "DDD",
+    "notional": 3000.0,
+    "order_id": null
+   }
+  ],
+  "alpaca": [
+   [
+    "notional",
+    "CCC",
+    "Side.SHORT",
+    6000.0,
+    "qt-82212c3661925674ac9882a5-CCC"
+   ],
+   [
+    "close",
+    "DDD"
+   ],
+   [
+    "notional",
+    "FFF",
+    "Side.LONG",
+    15000.0,
+    "qt-59ac37f3fc776caf3369b906-FFF"
+   ],
+   [
+    "notional",
+    "AAA",
+    "Side.LONG",
+    10000.0,
+    "qt-0eeb4dfb933452c857a1eaaf-AAA"
+   ],
+   [
+    "notional",
+    "QQQ",
+    "Side.LONG",
+    6000.0,
+    "qt-d0ae98ae2939d1471df2e1a0-QQQ"
+   ],
+   [
+    "notional",
+    "BBB",
+    "Side.LONG",
+    3000.0,
+    "qt-1360bc5f3c4c55e9d28496ee-BBB"
+   ]
+  ],
+  "bitmart": [
+   [
+    "notional",
+    "BTC/USD",
+    "Side.LONG",
+    1000.0,
+    "qt-200cea1db05c79ffbd8e6a93-BTCUSD"
+   ]
+  ],
+  "gardes": {
+   "garde_de_seance": {
+    "nom": "garde_de_seance",
+    "etat": "DISABLED",
+    "observations": 8,
+    "declenchements": 0,
+    "aurait_declenche": 0,
+    "effet_usd": null,
+    "motifs": {}
+   },
+   "portail_de_risque": {
+    "nom": "portail_de_risque",
+    "etat": "ACTIVE",
+    "observations": 8,
+    "declenchements": 3,
+    "aurait_declenche": 0,
+    "effet_usd": 40000.0,
+    "motifs": {
+     "max_positions": 1,
+     "poids_ligne": 1,
+     "taille_ordre": 1
+    }
+   }
+  },
+  "alertes": [
+   [
+    "risk",
+    "20",
+    "Ordre GGG refusé par le portail de risque : 6 positions ouvertes ≥ plafond 6 — aucune nouvelle ligne (les allègements restent possibles)",
+    ""
+   ]
+  ]
+ },
+ "rejet_et_panne": {
+  "sortie": "  portail de risque : ligne ≤ 20% (panier ≤ 60%) · positions ≤ 6 · ordre ≤ 15% · brut ≤ 100% · brut actuel 13000$ / 100000$\n  [risk-gate] CCC            alleger  demandé      6000$ →      6000$  OK      [ok] désengagement — jamais bloqué par le portail\n  CCC            Alpaca   cible     2000$ détenu     8000$ Δ    -6000$  ▼ vente\n  [risk-gate] DDD            solder   demandé      3000$ →      3000$  OK      [ok] désengagement — jamais bloqué par le portail\n  DDD            Alpaca   cible        0$ détenu     3000$ Δ    -3000$  ▼ SOLDE (quantité)\n  FFF            Alpaca   cible    50000$ détenu        0$ Δ   +50000$  ⚠️  ordre plafonné à 15% du compte : 50000 $ réduit à 15000 $\n  [risk-gate] FFF            acheter  demandé  15000.00$ →  15000.00$  RÉDUIT  [taille_ordre] ordre plafonné à 15% du compte : 50000 $ réduit à 15000 $\n  FFF            Alpaca   cible    50000$ détenu        0$ Δ   +50000$  ▲ achat\n  [risk-gate] AAA            acheter  demandé     10000$ →     10000$  OK      [ok] dans toutes les limites\n  AAA            Alpaca   cible    10000$ détenu        0$ Δ   +10000$  ❌ REJETÉ par le courtier [rejected]\n  [risk-gate] QQQ            acheter  demandé      6000$ →      6000$  OK      [ok] dans toutes les limites\n  QQQ            Alpaca   cible     6000$ détenu        0$ Δ    +6000$  ▲ achat\n  [risk-gate] BBB            acheter  demandé      3000$ →      3000$  OK      [ok] dans toutes les limites\n  BBB            Alpaca   cible     5000$ détenu     2000$ Δ    +3000$  ❌ ÉCHEC après retries : timeout BBB\n  EEE            Alpaca   cible     5000$ détenu        0$ Δ    +5000$  non négociable\n  [risk-gate] GGG            acheter  demandé      4000$ →      4000$  OK      [ok] dans toutes les limites\n  GGG            Alpaca   cible     4000$ détenu        0$ Δ    +4000$  ⛔ reject_missing_geometry (stop,target|rr,setup_id,ts_decision)\n  portail de risque : ligne ≤ 20% (panier ≤ 60%) · positions ≤ 6 · ordre ≤ 15% · brut ≤ 100% · brut actuel 1000$ / 10000$\n  BTC/USD        Bitmart  cible     3000$ détenu     1000$ Δ    +2000$  ⚠️  ligne plafonnée à 20% du compte : 2000 $ réduit à 1000 $\n  [risk-gate] BTC/USD        acheter  demandé   1000.00$ →   1000.00$  RÉDUIT  [poids_ligne] ligne plafonnée à 20% du compte : 2000 $ réduit à 1000 $\n  BTC/USD        Bitmart  cible     3000$ détenu     1000$ Δ    +2000$  ▲ achat\n\n  ❌ 1 ordre(s) REFUSÉ(S) par le courtier, 10 000$ au total.\n     Ils ne comptent PAS comme envoyés. Motif par ligne ci-dessus.\n",
+  "sent": 5,
+  "opened": [
+   {
+    "symbol": "FFF",
+    "venue": "Alpaca",
+    "broker_symbol": "FFF",
+    "asset_class": "equity",
+    "weight_pct": 0.5,
+    "order_id": "id-FFF"
+   },
+   {
+    "symbol": "QQQ",
+    "venue": "Alpaca",
+    "broker_symbol": "QQQ",
+    "asset_class": "etf",
+    "weight_pct": 0.06,
+    "order_id": "id-QQQ"
+   },
+   {
+    "symbol": "BTC/USD",
+    "venue": "Bitmart",
+    "broker_symbol": "BTC/USD",
+    "asset_class": "crypto",
+    "weight_pct": 0.3,
+    "order_id": "id-BTC/USD"
+   }
+  ],
+  "sold": [
+   {
+    "symbol": "CCC",
+    "venue": "Alpaca",
+    "broker_symbol": "CCC",
+    "notional": 6000.0,
+    "order_id": "id-CCC"
+   },
+   {
+    "symbol": "DDD",
+    "venue": "Alpaca",
+    "broker_symbol": "DDD",
+    "notional": 3000.0,
+    "order_id": null
+   }
+  ],
+  "alpaca": [
+   [
+    "notional",
+    "CCC",
+    "Side.SHORT",
+    6000.0,
+    "qt-82212c3661925674ac9882a5-CCC"
+   ],
+   [
+    "close",
+    "DDD"
+   ],
+   [
+    "notional",
+    "FFF",
+    "Side.LONG",
+    15000.0,
+    "qt-59ac37f3fc776caf3369b906-FFF"
+   ],
+   [
+    "notional",
+    "AAA",
+    "Side.LONG",
+    10000.0,
+    "qt-0eeb4dfb933452c857a1eaaf-AAA"
+   ],
+   [
+    "notional",
+    "QQQ",
+    "Side.LONG",
+    6000.0,
+    "qt-d0ae98ae2939d1471df2e1a0-QQQ"
+   ],
+   [
+    "notional",
+    "BBB",
+    "Side.LONG",
+    3000.0,
+    "qt-1360bc5f3c4c55e9d28496ee-BBB"
+   ],
+   [
+    "notional",
+    "BBB",
+    "Side.LONG",
+    3000.0,
+    "qt-1360bc5f3c4c55e9d28496ee-BBB"
+   ],
+   [
+    "notional",
+    "BBB",
+    "Side.LONG",
+    3000.0,
+    "qt-1360bc5f3c4c55e9d28496ee-BBB"
+   ]
+  ],
+  "bitmart": [
+   [
+    "notional",
+    "BTC/USD",
+    "Side.LONG",
+    1000.0,
+    "qt-200cea1db05c79ffbd8e6a93-BTCUSD"
+   ]
+  ],
+  "gardes": {
+   "garde_de_seance": {
+    "nom": "garde_de_seance",
+    "etat": "DISABLED",
+    "observations": 8,
+    "declenchements": 0,
+    "aurait_declenche": 0,
+    "effet_usd": null,
+    "motifs": {}
+   },
+   "portail_de_risque": {
+    "nom": "portail_de_risque",
+    "etat": "ACTIVE",
+    "observations": 8,
+    "declenchements": 2,
+    "aurait_declenche": 0,
+    "effet_usd": 36000.0,
+    "motifs": {
+     "poids_ligne": 1,
+     "taille_ordre": 1
+    }
+   }
+  },
+  "alertes": [
+   [
+    "execution",
+    "30",
+    "Ordre achat BBB (Alpaca) échoué après retries : timeout BBB",
+    "execution:submit_fail:BBB"
+   ]
+  ]
+ },
+ "apercu": {
+  "sortie": "  CCC            Alpaca   cible     2000$ détenu     8000$ Δ    -6000$  aperçu (alleger)\n  DDD            Alpaca   cible        0$ détenu     3000$ Δ    -3000$  aperçu (solder)\n  FFF            Alpaca   cible    50000$ détenu        0$ Δ   +50000$  ⚠️  ordre plafonné à 15% du compte : 50000 $ réduit à 15000 $\n  FFF            Alpaca   cible    50000$ détenu        0$ Δ   +50000$  aperçu (acheter)\n  AAA            Alpaca   cible    10000$ détenu        0$ Δ   +10000$  aperçu (acheter)\n  QQQ            Alpaca   cible     6000$ détenu        0$ Δ    +6000$  aperçu (acheter)\n  BBB            Alpaca   cible     5000$ détenu     2000$ Δ    +3000$  aperçu (acheter)\n  EEE            Alpaca   cible     5000$ détenu        0$ Δ    +5000$  non négociable\n  GGG            Alpaca   cible     4000$ détenu        0$ Δ    +4000$  ⛔ REFUSÉ par le portail [max_positions] 6 positions ouvertes ≥ plafond 6 — aucune nouvelle ligne (les allègements restent possibles)\n  BTC/USD        Bitmart  cible     3000$ détenu     1000$ Δ    +2000$  ⚠️  ligne plafonnée à 20% du compte : 2000 $ réduit à 1000 $\n  BTC/USD        Bitmart  cible     3000$ détenu     1000$ Δ    +2000$  aperçu (acheter)\n",
+  "sent": 0,
+  "opened": [],
+  "sold": [],
+  "alpaca": [],
+  "bitmart": [],
+  "gardes": {
+   "garde_de_seance": {
+    "nom": "garde_de_seance",
+    "etat": "DISABLED",
+    "observations": 8,
+    "declenchements": 0,
+    "aurait_declenche": 0,
+    "effet_usd": null,
+    "motifs": {}
+   },
+   "portail_de_risque": {
+    "nom": "portail_de_risque",
+    "etat": "ACTIVE",
+    "observations": 8,
+    "declenchements": 3,
+    "aurait_declenche": 0,
+    "effet_usd": 40000.0,
+    "motifs": {
+     "max_positions": 1,
+     "poids_ligne": 1,
+     "taille_ordre": 1
+    }
+   }
+  },
+  "alertes": [
+   [
+    "risk",
+    "20",
+    "Ordre GGG refusé par le portail de risque : 6 positions ouvertes ≥ plafond 6 — aucune nouvelle ligne (les allègements restent possibles)",
+    ""
+   ]
+  ]
+ },
+ "reduction": {
+  "sortie": "  portail de risque : ligne ≤ 20% (panier ≤ 60%) · positions ≤ 6 · ordre ≤ 15% · brut ≤ 100% · brut actuel 13000$ / 100000$\n  [risk-gate] CCC            alleger  demandé      6000$ →      6000$  OK      [ok] désengagement — jamais bloqué par le portail\n  CCC            Alpaca   cible     2000$ détenu     8000$ Δ    -6000$  ▼ vente\n  FFF            Alpaca   cible    25000$ détenu        0$ Δ   +25000$  ⚠️  ordre plafonné à 15% du compte : 25000 $ réduit à 15000 $\n  [risk-gate] FFF            acheter  demandé  15000.00$ →  15000.00$  RÉDUIT  [taille_ordre] ordre plafonné à 15% du compte : 25000 $ réduit à 15000 $\n  FFF            Alpaca   cible    25000$ détenu        0$ Δ   +25000$  ▲ achat\n  [risk-gate] AAA            acheter  demandé      5000$ →      5000$  OK      [ok] dans toutes les limites\n  AAA            Alpaca   cible     5000$ détenu        0$ Δ    +5000$  ▲ achat\n  [risk-gate] QQQ            acheter  demandé      3000$ →      3000$  OK      [ok] dans toutes les limites\n  QQQ            Alpaca   cible     3000$ détenu        0$ Δ    +3000$  ▲ achat\n  DDD            Alpaca   cible     3000$ détenu     3000$ Δ       +0$  ✓ écart sous la bande d'inaction\n  [risk-gate] BBB            acheter  demandé       500$ →       500$  OK      [ok] dans toutes les limites\n  BBB            Alpaca   cible     2500$ détenu     2000$ Δ     +500$  ▲ achat\n  EEE            Alpaca   cible     2500$ détenu        0$ Δ    +2500$  non négociable\n  GGG            Alpaca   cible     2000$ détenu        0$ Δ    +2000$  ⛔ REFUSÉ par le portail [max_positions] 6 positions ouvertes ≥ plafond 6 — aucune nouvelle ligne (les allègements restent possibles)\n  portail de risque : ligne ≤ 20% (panier ≤ 60%) · positions ≤ 6 · ordre ≤ 15% · brut ≤ 100% · brut actuel 1000$ / 10000$\n  [risk-gate] BTC/USD        acheter  demandé       500$ →       500$  OK      [ok] dans toutes les limites\n  BTC/USD        Bitmart  cible     1500$ détenu     1000$ Δ     +500$  ▲ achat\n",
+  "sent": 6,
+  "opened": [
+   {
+    "symbol": "FFF",
+    "venue": "Alpaca",
+    "broker_symbol": "FFF",
+    "asset_class": "equity",
+    "weight_pct": 0.5,
+    "order_id": "id-FFF"
+   },
+   {
+    "symbol": "AAA",
+    "venue": "Alpaca",
+    "broker_symbol": "AAA",
+    "asset_class": "equity",
+    "weight_pct": 0.1,
+    "order_id": "id-AAA",
+    "rank_score": 1.5,
+    "strategy": "preset"
+   },
+   {
+    "symbol": "QQQ",
+    "venue": "Alpaca",
+    "broker_symbol": "QQQ",
+    "asset_class": "etf",
+    "weight_pct": 0.06,
+    "order_id": "id-QQQ"
+   },
+   {
+    "symbol": "BBB",
+    "venue": "Alpaca",
+    "broker_symbol": "BBB",
+    "asset_class": "equity",
+    "weight_pct": 0.05,
+    "order_id": "id-BBB"
+   },
+   {
+    "symbol": "BTC/USD",
+    "venue": "Bitmart",
+    "broker_symbol": "BTC/USD",
+    "asset_class": "crypto",
+    "weight_pct": 0.3,
+    "order_id": "id-BTC/USD"
+   }
+  ],
+  "sold": [
+   {
+    "symbol": "CCC",
+    "venue": "Alpaca",
+    "broker_symbol": "CCC",
+    "notional": 6000.0,
+    "order_id": "id-CCC"
+   }
+  ],
+  "alpaca": [
+   [
+    "notional",
+    "CCC",
+    "Side.SHORT",
+    6000.0,
+    "qt-82212c3661925674ac9882a5-CCC"
+   ],
+   [
+    "notional",
+    "FFF",
+    "Side.LONG",
+    15000.0,
+    "qt-59ac37f3fc776caf3369b906-FFF"
+   ],
+   [
+    "notional",
+    "AAA",
+    "Side.LONG",
+    5000.0,
+    "qt-0eeb4dfb933452c857a1eaaf-AAA"
+   ],
+   [
+    "notional",
+    "QQQ",
+    "Side.LONG",
+    3000.0,
+    "qt-d0ae98ae2939d1471df2e1a0-QQQ"
+   ],
+   [
+    "notional",
+    "BBB",
+    "Side.LONG",
+    500.0,
+    "qt-1360bc5f3c4c55e9d28496ee-BBB"
+   ]
+  ],
+  "bitmart": [
+   [
+    "notional",
+    "BTC/USD",
+    "Side.LONG",
+    500.0,
+    "qt-200cea1db05c79ffbd8e6a93-BTCUSD"
+   ]
+  ],
+  "gardes": {
+   "garde_de_seance": {
+    "nom": "garde_de_seance",
+    "etat": "DISABLED",
+    "observations": 8,
+    "declenchements": 0,
+    "aurait_declenche": 0,
+    "effet_usd": null,
+    "motifs": {}
+   },
+   "portail_de_risque": {
+    "nom": "portail_de_risque",
+    "etat": "ACTIVE",
+    "observations": 7,
+    "declenchements": 2,
+    "aurait_declenche": 0,
+    "effet_usd": 12000.0,
+    "motifs": {
+     "max_positions": 1,
+     "taille_ordre": 1
+    }
+   }
+  },
+  "alertes": [
+   [
+    "risk",
+    "20",
+    "Ordre GGG refusé par le portail de risque : 6 positions ouvertes ≥ plafond 6 — aucune nouvelle ligne (les allègements restent possibles)",
+    ""
+   ]
+  ]
+ },
+ "sleeve": {
+  "sortie": "  portail de risque : ligne ≤ 20% (panier ≤ 60%) · positions ≤ 6 · ordre ≤ 15% · brut ≤ 100% · brut actuel 13000$ / 100000$\n  [risk-gate] CCC            alleger  demandé      6000$ →      6000$  OK      [ok] désengagement — jamais bloqué par le portail\n  CCC            Alpaca   cible     2000$ détenu     8000$ Δ    -6000$  ▼ vente\n  FFF            Alpaca   cible    50000$ détenu        0$ Δ   +50000$  ⚠️  ordre plafonné à 15% du compte : 50000 $ réduit à 15000 $\n  [risk-gate] FFF            acheter  demandé  15000.00$ →  15000.00$  RÉDUIT  [taille_ordre] ordre plafonné à 15% du compte : 50000 $ réduit à 15000 $\n  FFF            Alpaca   cible    50000$ détenu        0$ Δ   +50000$  ▲ achat\n  [risk-gate] AAA            acheter  demandé     10000$ →     10000$  OK      [ok] dans toutes les limites\n  AAA            Alpaca   cible    10000$ détenu        0$ Δ   +10000$  ▲ achat\n  [risk-gate] QQQ            acheter  demandé      6000$ →      6000$  OK      [ok] dans toutes les limites\n  QQQ            Alpaca   cible     6000$ détenu        0$ Δ    +6000$  ▲ achat\n  [risk-gate] BBB            acheter  demandé      3000$ →      3000$  OK      [ok] dans toutes les limites\n  BBB            Alpaca   cible     5000$ détenu     2000$ Δ    +3000$  ▲ achat\n  EEE            Alpaca   cible     5000$ détenu        0$ Δ    +5000$  non négociable\n  GGG            Alpaca   cible     4000$ détenu        0$ Δ    +4000$  ⛔ REFUSÉ par le portail [max_positions] 6 positions ouvertes ≥ plafond 6 — aucune nouvelle ligne (les allègements restent possibles)\n  portail de risque : ligne ≤ 20% (panier ≤ 60%) · positions ≤ 6 · ordre ≤ 15% · brut ≤ 100% · brut actuel 1000$ / 10000$\n  BTC/USD        Bitmart  cible     3000$ détenu     1000$ Δ    +2000$  ⚠️  ligne plafonnée à 20% du compte : 2000 $ réduit à 1000 $\n  [risk-gate] BTC/USD        acheter  demandé   1000.00$ →   1000.00$  RÉDUIT  [poids_ligne] ligne plafonnée à 20% du compte : 2000 $ réduit à 1000 $\n  BTC/USD        Bitmart  cible     3000$ détenu     1000$ Δ    +2000$  ▲ achat\n",
+  "sent": 6,
+  "opened": [
+   {
+    "symbol": "FFF",
+    "venue": "Alpaca",
+    "broker_symbol": "FFF",
+    "asset_class": "equity",
+    "weight_pct": 0.5,
+    "order_id": "id-FFF"
+   },
+   {
+    "symbol": "AAA",
+    "venue": "Alpaca",
+    "broker_symbol": "AAA",
+    "asset_class": "equity",
+    "weight_pct": 0.1,
+    "order_id": "id-AAA",
+    "rank_score": 1.5,
+    "strategy": "preset"
+   },
+   {
+    "symbol": "QQQ",
+    "venue": "Alpaca",
+    "broker_symbol": "QQQ",
+    "asset_class": "etf",
+    "weight_pct": 0.06,
+    "order_id": "id-QQQ"
+   },
+   {
+    "symbol": "BBB",
+    "venue": "Alpaca",
+    "broker_symbol": "BBB",
+    "asset_class": "equity",
+    "weight_pct": 0.05,
+    "order_id": "id-BBB"
+   },
+   {
+    "symbol": "BTC/USD",
+    "venue": "Bitmart",
+    "broker_symbol": "BTC/USD",
+    "asset_class": "crypto",
+    "weight_pct": 0.3,
+    "order_id": "id-BTC/USD"
+   }
+  ],
+  "sold": [
+   {
+    "symbol": "CCC",
+    "venue": "Alpaca",
+    "broker_symbol": "CCC",
+    "notional": 6000.0,
+    "order_id": "id-CCC"
+   }
+  ],
+  "alpaca": [
+   [
+    "notional",
+    "CCC",
+    "Side.SHORT",
+    6000.0,
+    "qt-82212c3661925674ac9882a5-CCC"
+   ],
+   [
+    "notional",
+    "FFF",
+    "Side.LONG",
+    15000.0,
+    "qt-59ac37f3fc776caf3369b906-FFF"
+   ],
+   [
+    "notional",
+    "AAA",
+    "Side.LONG",
+    10000.0,
+    "qt-0eeb4dfb933452c857a1eaaf-AAA"
+   ],
+   [
+    "notional",
+    "QQQ",
+    "Side.LONG",
+    6000.0,
+    "qt-d0ae98ae2939d1471df2e1a0-QQQ"
+   ],
+   [
+    "notional",
+    "BBB",
+    "Side.LONG",
+    3000.0,
+    "qt-1360bc5f3c4c55e9d28496ee-BBB"
+   ]
+  ],
+  "bitmart": [
+   [
+    "notional",
+    "BTC/USD",
+    "Side.LONG",
+    1000.0,
+    "qt-200cea1db05c79ffbd8e6a93-BTCUSD"
+   ]
+  ],
+  "gardes": {
+   "garde_de_seance": {
+    "nom": "garde_de_seance",
+    "etat": "DISABLED",
+    "observations": 7,
+    "declenchements": 0,
+    "aurait_declenche": 0,
+    "effet_usd": null,
+    "motifs": {}
+   },
+   "portail_de_risque": {
+    "nom": "portail_de_risque",
+    "etat": "ACTIVE",
+    "observations": 7,
+    "declenchements": 3,
+    "aurait_declenche": 0,
+    "effet_usd": 40000.0,
+    "motifs": {
+     "max_positions": 1,
+     "poids_ligne": 1,
+     "taille_ordre": 1
+    }
+   }
+  },
+  "alertes": [
+   [
+    "risk",
+    "20",
+    "Ordre GGG refusé par le portail de risque : 6 positions ouvertes ≥ plafond 6 — aucune nouvelle ligne (les allègements restent possibles)",
+    ""
+   ]
+  ]
+ },
+ "seance_fermee": {
+  "sortie": "  portail de risque : ligne ≤ 20% (panier ≤ 60%) · positions ≤ 6 · ordre ≤ 15% · brut ≤ 100% · brut actuel 13000$ / 100000$\n  CCC            Alpaca   cible     2000$ détenu     8000$ Δ    -6000$  ⏸  REPORTÉ — fermé · prochaine ouverture 07/10 09:00 ET\n  DDD            Alpaca   cible        0$ détenu     3000$ Δ    -3000$  ⏸  REPORTÉ — fermé · prochaine ouverture 07/10 09:00 ET\n  FFF            Alpaca   cible    50000$ détenu        0$ Δ   +50000$  ⏸  REPORTÉ — fermé · prochaine ouverture 07/10 09:00 ET\n  AAA            Alpaca   cible    10000$ détenu        0$ Δ   +10000$  ⏸  REPORTÉ — fermé · prochaine ouverture 07/10 09:00 ET\n  QQQ            Alpaca   cible     6000$ détenu        0$ Δ    +6000$  ⏸  REPORTÉ — fermé · prochaine ouverture 07/10 09:00 ET\n  BBB            Alpaca   cible     5000$ détenu     2000$ Δ    +3000$  ⏸  REPORTÉ — fermé · prochaine ouverture 07/10 09:00 ET\n  EEE            Alpaca   cible     5000$ détenu        0$ Δ    +5000$  non négociable\n  GGG            Alpaca   cible     4000$ détenu        0$ Δ    +4000$  ⏸  REPORTÉ — fermé · prochaine ouverture 07/10 09:00 ET\n  portail de risque : ligne ≤ 20% (panier ≤ 60%) · positions ≤ 6 · ordre ≤ 15% · brut ≤ 100% · brut actuel 1000$ / 10000$\n  BTC/USD        Bitmart  cible     3000$ détenu     1000$ Δ    +2000$  ⚠️  ligne plafonnée à 20% du compte : 2000 $ réduit à 1000 $\n  [risk-gate] BTC/USD        acheter  demandé   1000.00$ →   1000.00$  RÉDUIT  [poids_ligne] ligne plafonnée à 20% du compte : 2000 $ réduit à 1000 $\n  BTC/USD        Bitmart  cible     3000$ détenu     1000$ Δ    +2000$  ▲ achat\n\n  ⏸  7 ordre(s) REPORTÉ(S) hors séance (6 equity, 1 etf), 82 000$ au total.\n     Ils ne sont PAS mis en file d'attente : un ordre reporté ne part que\n     si une exécution tombe DANS la séance NYSE (15:30-22:00, heure de Paris).\n     Si ce report revient chaque jour, c'est le planning, pas le marché :\n       • à la main, un soir avant 22h  →  make live-go\n       • ou décaler le rebalancement   →  QUANT_LIVE_HOUR=21 make live-cron-install\n     Le crypto n'est jamais concerné : il tourne 24/7.\n",
+  "sent": 1,
+  "opened": [
+   {
+    "symbol": "BTC/USD",
+    "venue": "Bitmart",
+    "broker_symbol": "BTC/USD",
+    "asset_class": "crypto",
+    "weight_pct": 0.3,
+    "order_id": "id-BTC/USD"
+   }
+  ],
+  "sold": [],
+  "alpaca": [],
+  "bitmart": [
+   [
+    "notional",
+    "BTC/USD",
+    "Side.LONG",
+    1000.0,
+    "qt-200cea1db05c79ffbd8e6a93-BTCUSD"
+   ]
+  ],
+  "gardes": {
+   "garde_de_seance": {
+    "nom": "garde_de_seance",
+    "etat": "ACTIVE",
+    "observations": 8,
+    "declenchements": 7,
+    "aurait_declenche": 0,
+    "effet_usd": 82000.0,
+    "motifs": {
+     "equity": 6,
+     "etf": 1
+    }
+   },
+   "portail_de_risque": {
+    "nom": "portail_de_risque",
+    "etat": "ACTIVE",
+    "observations": 1,
+    "declenchements": 1,
+    "aurait_declenche": 0,
+    "effet_usd": 1000.0,
+    "motifs": {
+     "poids_ligne": 1
+    }
+   }
+  },
+  "alertes": []
+ }
+}
