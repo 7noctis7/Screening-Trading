@@ -1,5 +1,29 @@
 # 04 — JOURNAL
 
+## Session 2026-10-22 — Alertes Node.js / PHP du 21/10 : ce qui nous touche vraiment
+
+Deux alertes le même jour : PHP (« php2shell », CVE-2026-109618/109619, RCE non
+authentifiée, exploitée) et Node.js (10 CVE dont une écriture hors limites dans le
+décodeur Brotli, CVE-2026-111497). Lecture du dépôt avant toute modification :
+
+- **PHP : non concerné.** Aucun fichier `.php`, aucun `composer.json`. L'API est en Python.
+- **Node.js : concerné par la CI, pas par le site.** `ci.yml` et `pages.yml` construisaient
+  en Node 20, en fin de vie depuis avril : il ne recevra AUCUN correctif du 21/10. Passés
+  en Node 24 (`setup-node` résout 24.22.1, version corrigée). `npm run build` et l'export
+  statique (`STATIC_EXPORT=1`) vérifiés sous 24.22.1 : 41 entrées dans `out/`.
+- **`npm audit fix` (sans `--force`)** : 10 paquets transitifs du lockfile, dont postcss
+  8.5.15 → 8.5.31, source-map-js, nanoid, browserslist.
+- **Next.js 14.2.35 : la vraie dette.** Les correctifs d'octobre n'existent qu'en 15.5.28
+  et 16.4.1 ; la 14.x n'en reçoit plus. Exposition lue dans le code : ni Server Action, ni
+  middleware, ni rewrites, `images.unoptimized` (pas d'optimiseur, pas de sharp) ; le site
+  public est un export statique (aucun serveur Next en ligne) et le service du VPS écoute
+  sur 127.0.0.1. Les avis ouverts supposent l'une de ces surfaces : risque faible
+  aujourd'hui, mais chaque avis à venir restera sans correctif. Migration → TODO P1.
+- Reste de l'audit : `next` (majeur), le postcss épinglé par Next 14, la chaîne Tailwind 3
+  (braces, micromatch, chokidar : outillage de build, jamais servi) — Tailwind 4 est une
+  migration cassante, non faite.
+- Hors dépôt : le Node du Mac et du VPS n'est pas visible d'ici (`node --version`).
+
 ## Session 2026-10-07 (4ᵉ) — Le volume était un prix : la capacité mesurait du vide
 
 Premier passage réel (VPS, 625 séries) du rapport d'espérance corrigé, du labo AUC et de

@@ -7,6 +7,13 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+- [ ] **P1 — Sécurité front : Next.js 14 → 15.5.28+ (22/10)** : la 14.x ne reçoit plus
+      de correctifs (avis d'octobre corrigés en 15.5.28 / 16.4.1 seulement). Migration =
+      React 19 + `@react-three/fiber` v9 + `lucide-react` récent ; valider `npm run build`,
+      l'export statique et `make up`. Exposition actuelle faible : site public statique,
+      VPS sur 127.0.0.1, ni Server Action, ni middleware, ni optimiseur d'image.
+- [ ] **P1 — Node hors CI (22/10)** : Mac et VPS en ≥ 24.22.1 (ou 22.23.4). Node 20 est en
+      fin de vie et n'a aucun correctif des CVE du 21/10. La CI est déjà en Node 24.
 - [x] **~~P0 — D4 : poche crypto (02/10)~~ — TRANCHÉ 02/10 (ADR-0212) : plus de poche obligatoire, la crypto concourt avec les actions sur le momentum.** : 6 cibles de 273 à 455 $ toutes sous le plancher
       de 1 000 $ → poche à ZÉRO chaque jour, en silence. Options : (a) 2 lignes max (BTC,
       ETH) ; (b) retirer la poche (recommandé) ; (c) plancher crypto abaissé. DÉCISION À PRENDRE.
