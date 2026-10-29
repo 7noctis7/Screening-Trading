@@ -1,7 +1,7 @@
-"""RAG vectoriel génératif ancré — retrieval (TF-IDF ou Ollama) + synthèse LLM citée.
+"""RAG vectoriel génératif ancré + hybrid ontology.
 
-Réutilise vault_search (embeddings optionnels) et packages.llm.client.
-Toujours grounding + guard anti-nombres. Zéro invention de chiffres.
+Retrieval vault + vector_store + entités ontologie. Synthèse LLM citée.
+Toujours grounding + guard anti-nombres.
 """
 
 from __future__ import annotations
@@ -12,6 +12,8 @@ from pathlib import Path
 from packages.llm.client import Config, complete
 from packages.llm.guard import guard_numbers
 from packages.research.vault_rag import grounded_answer
+from packages.storage.vector_store import VectorStore
+from packages.storage.ontology import Ontology
 
 
 def generative_answer(
@@ -20,10 +22,29 @@ def generative_answer(
     k: int = 4,
     cfg: Config | None = None,
     max_tokens: int = 800,
+    use_hybrid: bool = True,
 ) -> dict:
-    """Récupère puis génère une synthèse ancrée sur les sources."""
-    base = grounded_answer(query, vault=vault, k=k, max_sentences=8)
-    if not base["grounded"]:
+    """Récupère (vault + vecteurs + ontologie) puis génère."""
+    base = grounded_answer(query, vault=vault, k=k, max_sentences=6)
+    extra = []
+    if use_hybrid:
+        try:
+            vs = VectorStore()
+            hits = vs.search(query, k=3)
+            vs.close()
+            extra.extend([h["text"] for h in hits])
+            onto = Ontology()
+            ents = onto.search_entities(query, limit=5)
+            onto.close()
+            extra.extend([f"{e['type']}: {e['name']}" for e in ents])
+        except Exception:
+            pass
+
+    sources = base["answer"]
+    if extra:
+        sources += "\n\nAUTRES: " + " | ".join(extra[:4])
+
+    if not base["grounded"] and not extra:
         return {
             "query": query,
             "grounded": False,
@@ -33,7 +54,7 @@ def generative_answer(
         }
 
     context = json.dumps(
-        {"sources": base["answer"], "citations": base["citations"]},
+        {"sources": sources, "citations": base["citations"]},
         ensure_ascii=False,
     )[:20_000]
 
@@ -48,8 +69,8 @@ def generative_answer(
     if not result.get("available"):
         return {
             "query": query,
-            "grounded": True,
-            "answer": base["answer"],  # repli extractif
+            "grounded": bool(base["grounded"] or extra),
+            "answer": sources,
             "citations": base["citations"],
             "generated": False,
             "reason": result.get("reason", "LLM indisponible"),
@@ -57,7 +78,7 @@ def generative_answer(
 
     answer, violations = guard_numbers(result.get("text", ""), context, policy="reject")
     if violations:
-        answer = base["answer"]  # repli sécurisé
+        answer = sources
         generated = False
     else:
         generated = True
