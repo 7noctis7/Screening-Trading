@@ -1,7 +1,6 @@
-"""Stockage vectoriel pour enregistrements DB (journal trades).
+"""Stockage vectoriel amélioré pour journal + vault.
 
-Indexe les champs texte (entry_reason, exit_reason, strategy, regime) en vecteurs
-TF-IDF ou Ollama. SQLite local, compatible avec le journal existant.
+TF-IDF avec IDF global ou Ollama. Cosine propre. Compatible ontologie.
 """
 
 from __future__ import annotations
@@ -11,8 +10,6 @@ import math
 import os
 import sqlite3
 from pathlib import Path
-
-import numpy as np
 
 from packages.storage.journal_sqlite import SqliteTradeJournal
 
@@ -24,6 +21,15 @@ def _tokens(text: str) -> list[str]:
     return [w.lower() for w in re.findall(r"[a-zA-ZàâäéèêëîïôöùûüçœÀÂÄÉÈÊËÎÏÔÖÙÛÜÇŒ0-9_]{2,}", text)]
 
 
+def _compute_idf(texts: list[str]) -> dict:
+    n = len(texts) or 1
+    df: dict[str, int] = {}
+    for t in texts:
+        for tok in set(_tokens(t)):
+            df[tok] = df.get(tok, 0) + 1
+    return {tok: math.log((n + 1) / (c + 1)) + 1.0 for tok, c in df.items()}
+
+
 def _tfidf_vec(text: str, idf: dict) -> dict:
     tf: dict[str, float] = {}
     for t in _tokens(text):
@@ -31,6 +37,10 @@ def _tfidf_vec(text: str, idf: dict) -> dict:
     v = {t: w * idf.get(t, 0.0) for t, w in tf.items()}
     norm = math.sqrt(sum(x * x for x in v.values())) or 1.0
     return {t: w / norm for t, w in v.items()}
+
+
+def _cosine_dict(a: dict, b: dict) -> float:
+    return sum(w * b.get(t, 0.0) for t, w in a.items())
 
 
 def _ollama_embed(text: str) -> list[float] | None:
@@ -49,6 +59,15 @@ def _ollama_embed(text: str) -> list[float] | None:
         return None
 
 
+def _cosine_list(a: list, b: list) -> float:
+    if not a or not b or len(a) != len(b):
+        return 0.0
+    dot = sum(x * y for x, y in zip(a, b))
+    na = math.sqrt(sum(x * x for x in a)) or 1.0
+    nb = math.sqrt(sum(x * x for x in b)) or 1.0
+    return dot / (na * nb)
+
+
 class VectorStore:
     def __init__(self, db_path: str | Path = _DEFAULT_VEC_DB):
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -56,60 +75,62 @@ class VectorStore:
         self.conn.execute(
             """CREATE TABLE IF NOT EXISTS embeddings (
                 id TEXT PRIMARY KEY,
-                source TEXT,  -- 'journal' | 'vault'
+                source TEXT,
                 text TEXT,
-                vector BLOB,  -- json list or numpy
-                method TEXT   -- 'tfidf' | 'ollama'
+                vector BLOB,
+                method TEXT
             )"""
         )
         self.conn.commit()
 
     def index_journal(self, journal_path: str = "data/journal.db") -> int:
-        """Indexe les textes des trades."""
         j = SqliteTradeJournal(journal_path)
         trades = j.all()
         j.close()
-        n = 0
-        use_ollama = os.environ.get("QUANT_EMBED", "tfidf").lower() == "ollama"
+        texts = []
+        items = []
         for t in trades:
             text = " ".join(filter(None, [t.entry_reason, t.exit_reason, t.strategy, t.regime, t.instrument]))
-            if not text.strip():
-                continue
+            if text.strip():
+                texts.append(text)
+                items.append((t.id, text))
+        idf = _compute_idf(texts)
+        use_ollama = os.environ.get("QUANT_EMBED", "tfidf").lower() == "ollama"
+        n = 0
+        for tid, text in items:
             if use_ollama:
                 vec = _ollama_embed(text)
                 method = "ollama"
                 blob = json.dumps(vec).encode() if vec else None
             else:
-                # simple tfidf on the fly (or precompute idf outside)
-                vec = _tfidf_vec(text, {})  # idf empty → pure tf for demo
+                vec = _tfidf_vec(text, idf)
                 method = "tfidf"
                 blob = json.dumps(vec).encode()
             if blob:
                 self.conn.execute(
                     "INSERT OR REPLACE INTO embeddings (id, source, text, vector, method) VALUES (?,?,?,?,?)",
-                    (t.id, "journal", text, blob, method),
+                    (tid, "journal", text, blob, method),
                 )
                 n += 1
         self.conn.commit()
         return n
 
     def search(self, query: str, k: int = 5) -> list[dict]:
-        """Recherche cosine simple."""
-        # For brevity: load all and score (ok for small journal)
         rows = self.conn.execute("SELECT id, text, vector, method FROM embeddings").fetchall()
         if not rows:
             return []
-        # query vec (tfidf fallback)
-        qv = _tfidf_vec(query, {})
+        use_ollama = os.environ.get("QUANT_EMBED", "tfidf").lower() == "ollama"
+        q_vec_list = _ollama_embed(query) if use_ollama else None
         scored = []
         for rid, text, blob, method in rows:
             try:
                 v = json.loads(blob)
-                if isinstance(v, list):  # ollama
-                    # skip or convert; for demo use text overlap
-                    score = len(set(_tokens(query)) & set(_tokens(text))) / max(1, len(_tokens(query)))
+                if method == "ollama" and isinstance(v, list) and q_vec_list:
+                    score = _cosine_list(q_vec_list, v)
                 else:
-                    score = sum(qv.get(t, 0) * w for t, w in v.items())
+                    idf = {}
+                    qv = _tfidf_vec(query, idf)
+                    score = _cosine_dict(qv, v if isinstance(v, dict) else {})
                 scored.append((score, rid, text))
             except Exception:
                 continue
