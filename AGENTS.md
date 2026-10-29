@@ -169,3 +169,11 @@ Règles encodées, à ne pas contourner :
 Mettre à jour `vault/03_TODO.md`, ajouter une entrée datée dans `vault/04_JOURNAL.md`, un ADR
 dans `vault/02_DECISIONS.md` si le choix est structurant, rafraîchir les diagrammes si
 l'architecture a changé. Le skill `/close-session` fait tout ça.
+
+---
+
+## 12. RAG hybride + ontologie
+
+`packages/research/vector_rag.py` (génératif ancré) + `packages/storage/vector_store.py` + `packages/storage/ontology.py`.
+Indexation : `python scripts/index_vectors.py`.
+Ontologie légère (entités Instrument/Strategy/Regime/Trade) pour grounding structuré, réduction de tokens et d'hallucinations. Compatible Ollama embeddings.
