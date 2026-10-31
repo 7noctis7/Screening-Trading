@@ -1,7 +1,7 @@
 {
 "mypy": "2.4.1",
 "cible": "packages",
-"total": 2917,
+"total": 2916,
 "erreurs": {
 "apps/api/intro_payload.py::no-untyped-def::Function is missing a type annotation for one or more parameters": 1,
 "apps/api/intro_payload.py::type-arg::Missing type arguments for generic type \"dict\"": 13,
@@ -1091,7 +1091,6 @@
 "packages/screening/alpha_pipeline.py::no-untyped-def::Function is missing a type annotation": 1,
 "packages/screening/alpha_pipeline.py::no-untyped-def::Function is missing a type annotation for one or more parameters": 3,
 "packages/screening/alpha_pipeline.py::type-arg::Missing type arguments for generic type \"dict\"": 13,
-"packages/screening/decision_journal.py::name-defined::Name \"Seuils\" is not defined": 1,
 "packages/screening/decision_journal.py::no-untyped-def::Function is missing a type annotation for one or more parameters": 1,
 "packages/screening/decision_journal.py::type-arg::Missing type arguments for generic type \"dict\"": 4,
 "packages/screening/engine.py::arg-type::Argument 2 has incompatible type \"Any | None\"; expected \"_SupportsDunderLE | _SupportsDunderGE | _SupportsDunderGT | _SupportsDunderLT\"": 1,
