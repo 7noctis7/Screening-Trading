@@ -21,6 +21,10 @@
       VPS sur 127.0.0.1, ni Server Action, ni middleware, ni optimiseur d'image.
 - [ ] **P1 — Node hors CI (22/10)** : Mac et VPS en ≥ 24.22.1 (ou 22.23.4). Node 20 est en
       fin de vie et n'a aucun correctif des CVE du 21/10. La CI est déjà en Node 24.
+- [ ] **P2 — Moteur event-driven quadratique (31/10, `docs/PERFORMANCE.md`)** : 94 % du temps
+      dans `generate_signals`, qui recalcule ATR et moyennes sur TOUT l'historique à chaque
+      barre (0,22 ms par barre·actif sur 1 an, 1,15 sur 10 ans). Précalculer une fois les
+      indicateurs CAUSAUX, avec un test d'équivalence barre par barre (mêmes signaux).
 - [x] **~~P0 — D4 : poche crypto (02/10)~~ — TRANCHÉ 02/10 (ADR-0212) : plus de poche obligatoire, la crypto concourt avec les actions sur le momentum.** : 6 cibles de 273 à 455 $ toutes sous le plancher
       de 1 000 $ → poche à ZÉRO chaque jour, en silence. Options : (a) 2 lignes max (BTC,
       ETH) ; (b) retirer la poche (recommandé) ; (c) plancher crypto abaissé. DÉCISION À PRENDRE.
