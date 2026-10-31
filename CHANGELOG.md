@@ -7,6 +7,8 @@
 
 ### 2026-10
 
+- CI sécurité : actions épinglées, CodeQL, ruff bloquant sur les vrais bugs, Python 3.13 (+ 7 noms indéfinis corrigés) (#457)
+- API : snapshot.py découpé en 13 modules sous 400 lignes, texte inchangé (ADR-0221) (#456)
 - CI : mypy bloquant sur les erreurs nouvelles + gates données décrits honnêtement (#455)
 - Sécurité : CI en Node 24 (Node 20 en fin de vie) + correctifs npm non cassants (#454)
 - Feat/vector rag (#453)
