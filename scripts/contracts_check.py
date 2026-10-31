@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Contrats de données OHLCV — GATE bloquant (#10). Vérifie l'INTÉGRITÉ (pas la complétude) des
-prix de la watchlist : close>0, high≥low, high≥max(open,close), low≤min(open,close), volume≥0,
-date non nulle. Sort ≠0 si violation → bloque le build (un schéma cassé ne passe plus en silence).
+prix de la watchlist : close>0, high≥low, volume≥0, symbole et date présents. NE vérifie PAS
+open/high/low > 0 ni high≥max(open,close). Le 30/10, l'audit `data_audit.py` (non bloquant)
+voyait NDX à open=high=low=0 sur des séances de juin : ces règles ne l'auraient pas arrêté.
+Sort ≠0 si violation → bloque le build (un schéma cassé ne passe plus en silence).
 
 Pur stdlib par défaut (marche en CI sans dépendance) ; utilise pandera s'il est installé.
 

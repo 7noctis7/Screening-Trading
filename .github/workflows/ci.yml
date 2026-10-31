@@ -55,7 +55,7 @@ jobs:
         run: python -m pytest -q
 
   lint:
-    name: ruff + mypy (informatif)
+    name: lint (mypy bloquant sur les erreurs NOUVELLES)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -64,13 +64,16 @@ jobs:
           python-version: "3.11"
           cache: pip
       - name: Install ruff + mypy
-        run: pip install ruff mypy
+        # mypy ÉPINGLÉ : la référence config/mypy_baseline.json n'est valable que pour la version
+        # qui l'a produite. Monter la version = régénérer la référence dans la même PR.
+        run: pip install ruff "mypy==2.4.1"
       - name: ruff check (non bloquant)
         continue-on-error: true
         run: ruff check packages apps scripts
-      - name: mypy (non bloquant — strict trop bruyant sur le legacy)
-        continue-on-error: true
-        run: mypy packages
+      - name: mypy — aucune erreur NOUVELLE (bloquant ; référence config/mypy_baseline.json)
+        # Les 2 917 erreurs du 31/10 sont figées ; une de plus fait échouer la PR.
+        # Après en avoir corrigé : python scripts/mypy_baseline.py --update
+        run: python scripts/mypy_baseline.py
       - name: pip-audit (vulnérabilités des dépendances — non bloquant)
         continue-on-error: true
         run: |

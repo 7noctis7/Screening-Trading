@@ -7,6 +7,13 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+- [ ] **P1 — Audit données : 23 anomalies critiques, puis `--strict` (31/10)** : le build Pages
+      du 30/10 en signale 23 (`data_audit.py`, non bloquant). market.db : NDX à open = high =
+      low = 0 sur des séances de juin 2026 (seule la clôture est renseignée) ; crypto.db :
+      première barre de AAVE, SHIB, ICP, IMX… à open/low = 0. Le gate `contracts` ne les voit
+      pas (il ne teste que close ≤ 0, high < low, volume < 0, et la watchlist seule). Passer
+      `--strict` AVANT réparation arrêterait la publication du site. Réparer à la source
+      (valeur ≤ 0 → absente, jamais inventée), vérifier 0 critique sur un run, PUIS `--strict`.
 - [ ] **P1 — Sécurité front : Next.js 14 → 15.5.28+ (22/10)** : la 14.x ne reçoit plus
       de correctifs (avis d'octobre corrigés en 15.5.28 / 16.4.1 seulement). Migration =
       React 19 + `@react-three/fiber` v9 + `lucide-react` récent ; valider `npm run build`,
