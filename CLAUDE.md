@@ -28,12 +28,13 @@ reconstruit chaque jour ouvré par GitHub Actions (`.github/workflows/pages.yml`
 | `make site` | build du site statique mobile (watchlist + top 200 → `localhost:8080`) |
 | `make watchlist` | régénère `config/mobile_universe.csv` + miroir Obsidian |
 | `make reports` | notes d'analyse institutionnelles → `out/notes/` + vault |
-| `make audit` | audit PwC des bases de prix (gate CI : `--strict`) |
+| `make audit` | audit PwC des bases de prix — **rapport, NON bloquant en CI** (`|| true` : 23 critiques connues au 30/10, cf. TODO P1). `ARGS=--strict` en local |
 | `make brief` | brief unifié (priorités + journal + diffs + audit) — démarrage de session |
 | `make sync` | récupère la branche de dev **sans conflit possible** (jamais `git pull` dessus) |
 | `make labs` | les 4 bancs de mesure : candidats, sorties, dimensionnement, recouvrement des signaux |
 | `make vault-search Q="..."` | recherche sémantique locale du vault (TF-IDF ; Ollama optionnel ; `--code`) |
-| `make contracts` | gate d'intégrité OHLCV (bloque l'impossible) — aussi en CI |
+| `make contracts` | gate d'intégrité OHLCV **bloquant en CI** — watchlist seule ; close ≤ 0, high < low, volume < 0 (PAS open/high/low ≤ 0) |
+| `make typecheck` | gate mypy de la CI : échoue sur toute erreur absente de `config/mypy_baseline.json` |
 | `make hf-push` / `hf-pull` | cache OHLCV souverain (HuggingFace, anti rate-limit yfinance) |
 | `make notion-sync` | miroir Obsidian → Notion |
 | `make supabase-kpis` | historique KPIs cloud (Supabase) |
