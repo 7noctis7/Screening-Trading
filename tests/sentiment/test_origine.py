@@ -37,7 +37,8 @@ def test_sans_aucune_news_l_humeur_dit_qu_elle_n_est_pas_un_fil():
 
 def test_le_snapshot_passe_par_le_qualificateur():
     racine = Path(__file__).resolve().parents[2]
-    bloc = (racine / "apps/api/snapshot.py").read_text()
+    from tests.api.source_snapshot import source_snapshot
+    bloc = source_snapshot()  # façade + morceaux (découpage du 31/10)
     bloc = bloc.split("def _sentiment_section", 1)[1].split("\ndef ", 1)[0]
     assert "qualifier_ligne(" in bloc
     assert "0.0 if score is None" not in bloc

@@ -74,10 +74,9 @@ def test_tous_les_appelants_declarent_leurs_vehicules_indiciels() -> None:
     concentration ne se fait sans déclarer ses véhicules indiciels.
     """
     import re
-    from pathlib import Path
 
-    snap = Path(__file__).resolve().parents[2] / "apps" / "api" / "snapshot.py"
-    src = snap.read_text(encoding="utf-8")
+    from tests.api.source_snapshot import source_snapshot
+    src = source_snapshot()  # façade + morceaux (découpage du 31/10)
     # un appel = `concentration_report(` ou `_adaptive(` jusqu'à sa parenthèse fermante
     motif = r"concentration_report(?:_adaptive)?\((?:[^()]|\([^()]*\))*\)"
     appels = re.findall(motif, src)

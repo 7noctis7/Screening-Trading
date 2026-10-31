@@ -24,15 +24,19 @@ from pathlib import Path
 
 _STATUT = re.compile(r'^STATUT\s*=\s*["\']SHADOW', re.MULTILINE)
 # `from packages.x.y import z` ET `import packages.x.y` : les deux formes du dépôt.
-_IMPORT = re.compile(r"^\s*(?:from|import)\s+(packages(?:\.\w+)*)", re.MULTILINE)
+# `apps.*` est SUIVI aussi (31/10) : `snapshot.py` n'est plus qu'une façade qui importe
+# `apps.api.snapshot_parts.*`, et `main.py` passe par `apps.api.payloads` & co. Ne suivre que
+# `packages.*` arrêtait le parcours à la première marche `apps.*` — tout ce que ces modules
+# importent sortait du périmètre « production » sans que rien ne le signale.
+_IMPORT = re.compile(r"^\s*(?:from|import)\s+((?:packages|apps)(?:\.\w+)*)", re.MULTILINE)
 
 POINTS_ENTREE_PROD = ("scripts/run_live.py", "apps/api/snapshot.py", "apps/api/main.py")
 
 
 def _modules(racine: Path) -> dict[str, Path]:
-    """{« packages.x.y »: chemin} pour tout le paquet, hors caches."""
+    """{« packages.x.y » / « apps.x.y »: chemin} pour le code du dépôt, hors caches."""
     out: dict[str, Path] = {}
-    for p in racine.glob("packages/**/*.py"):
+    for p in [*racine.glob("packages/**/*.py"), *racine.glob("apps/**/*.py")]:
         if "__pycache__" in p.parts:
             continue
         rel = p.relative_to(racine).with_suffix("")

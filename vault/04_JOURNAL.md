@@ -1,5 +1,32 @@
 # 04 — JOURNAL
 
+## Session 2026-10-31 — Trois gates qui disaient plus qu'ils ne faisaient
+
+Comparaison avec un dépôt de backtest externe (QuantJourney) : notre code est mieux testé
+(3 841 fonctions de test contre 154), leur CI plus stricte. Trois actions en sortent.
+
+1. **Node 24 fusionné (#454).** La CI et Pages construisaient encore en Node 20, en fin de
+   vie. En chemin : `main` était rouge depuis le 29/10. Le test des historiques manquants
+   de `recommander` interrogeait le VRAI calendrier des résultats ; « XYZW » sont de vrais
+   tickers (US Steel, Zillow, Wayfair) qui publient fin octobre, écartés avant l'étape
+   testée. Hors ligne, aucune date : le test passait. Fixture hermétique sur
+   `dates_resultats`.
+2. **Gates données (#455).** CLAUDE.md annonçait `make audit` comme gate CI `--strict` ;
+   `pages.yml` le lance en `|| true`. Et `--strict` aujourd'hui arrêterait le site : le
+   build du 30/10 compte 23 anomalies critiques (NDX open = high = low = 0 sur des séances
+   de juin ; première barre de 8 cryptos à open/low = 0), que le gate `contracts` ne voit
+   pas (il ne teste que close ≤ 0, high < low, volume < 0). Doc corrigée, réparation en TODO
+   P1. **mypy bloquant sur les erreurs NOUVELLES** : 2 917 figées dans
+   `config/mypy_baseline.json`, clé sans numéro de ligne, mypy épinglé ; vert en CI.
+3. **`snapshot.py` découpé (ADR-0221).** 3 300 lignes → façade de ~200 lignes + 13 modules
+   sous 400 lignes, texte des définitions inchangé. Preuves : bytecode, résolution des
+   noms, ensemble des erreurs mypy, JSON de `build_snapshot`. Un `ruff --fix` sur les
+   imports avait trié l'intérieur d'une fonction : vu par le contrôle de bytecode.
+
+Constat de passage : deux lignes de `live/reconciliation/orders` (AA, RIOT) échangent leur
+place d'une construction à l'autre de l'original : le JSON n'est déterministe qu'à
+`PYTHONHASHSEED` fixé (cause probable : un ensemble parcouru avant un tri à égalité, non
+vérifiée).
 ## Session 2026-10-22 — Alertes Node.js / PHP du 21/10 : ce qui nous touche vraiment
 
 Deux alertes le même jour : PHP (« php2shell », CVE-2026-109618/109619, RCE non

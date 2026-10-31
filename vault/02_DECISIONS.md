@@ -2,6 +2,59 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0221 — `snapshot.py` découpé en 13 modules sous 400 lignes, texte inchangé, façade conservée (2026-10-31)
+
+**Contexte.** Après ADR-0220, `apps/api/snapshot.py` faisait encore 3 300 lignes (règle :
+400). Une trentaine de scripts et de tests font `from apps.api.snapshot import X`, souvent
+sur des noms privés (`_load_prices`, `_seed_universe`…) ou des noms de la stdlib importés
+au passage. ADR-0220 redoutait que des tests patchent ses globales : vérifié, aucun ne le
+fait (seul `build_snapshot` est patché, et il reste dans la façade).
+
+**Décision.**
+1. **Déplacement mécanique.** Un outil lit l'AST et copie chaque définition de premier
+   niveau, avec ses commentaires de tête, dans `apps/api/snapshot_parts/` : `base`, `prix`,
+   `univers`, `marche`, `live`, `fondamentaux`, `divers`, `compte`, `etapes_1` à
+   `etapes_5`. Couches sans cycle (un module n'importe que ceux d'avant). Une seule
+   ligne change : `ROOT` prend `parents[3]` (un dossier plus bas), valeur identique.
+2. **Façade.** `snapshot.py` garde son en-tête d'origine (mêmes imports, donc mêmes noms
+   exposés), `build_snapshot`, et ré-exporte chaque nom sous la forme `X as X` (export
+   explicite pour mypy strict). Dans les morceaux, les noms de `packages.portfolio` sont
+   importés depuis leur sous-module d'origine : `__all__` y vaut `["metrics", "sizers"]`,
+   et recopier l'import d'origine dans plusieurs fichiers aurait ajouté une erreur mypy par
+   copie.
+3. **Tests qui lisent le code.** Six tests vérifiaient une propriété du TEXTE de
+   `snapshot.py` (« aucun appel sans… », « la formule n'est écrite qu'une fois »). Lisant la
+   seule façade, ceux qui vérifient une ABSENCE seraient passés sur du vide. Ils lisent
+   désormais `tests/api/source_snapshot.py` (façade + morceaux). Verrou :
+   `tests/api/test_snapshot_architecture.py` (fichiers < 400 lignes, chaque nom ré-exporté,
+   aucun morceau n'importe la façade).
+
+**Preuve.**
+- Texte : 94 définitions sur 95 identiques à l'octet ; la 95ᵉ est `ROOT`.
+- Bytecode : 86 fonctions au `co_code` identique ; chaque nom global chargé résout vers le
+  même objet qu'avant (ou vers la fonction déplacée du même nom) ; 15 constantes égales ;
+  les 137 noms de l'ancien module restent exposés.
+- mypy : 2 917 erreurs avant et après, même ensemble une fois les chemins de fichier du
+  snapshot retirés ; la référence `config/mypy_baseline.json` est régénérée pour ces seuls
+  chemins.
+- JSON de `build_snapshot(seed=7)` (8 Mo), construit avant puis après dans le MÊME dossier,
+  `PYTHONHASHSEED=0` : **0 différence** hors horodatages et statistiques de cache. (Construit
+  dans un worktree neuf, l'original diffère sur `universe/as_of` — lu sur la date des
+  fichiers — et sur `ml/served_from` — artefact présent ou non : l'environnement, pas le
+  code.)
+
+**Piège évité.** Un premier passage de `ruff --fix --select I` triait aussi les imports
+DANS les fonctions : `_sentiment_section` avait changé de texte. Le contrôle de bytecode l'a
+vu ; le tri ne porte plus que sur l'en-tête de chaque morceau.
+
+**Pas fait.** `apps/api/main.py` (1 489 lignes) reste au-delà de la règle. Plusieurs
+fonctions déplacées dépassent toujours 50 lignes (`_fundamentals_section` : 173) : le
+découpage est par fichier, pas par fonction.
+
+**Conséquences.** Aucun changement de contenu servi. Ajouter une définition au snapshot =
+l'écrire dans le bon morceau ET l'ajouter au ré-export de la façade (sinon le test
+d'architecture échoue).
+
 ## ADR-0220 — `build_snapshot` découpé en 39 étapes, texte d'origine conservé, JSON identique (2026-10-07)
 
 **Contexte.** `apps/api/snapshot.py::build_snapshot` faisait 1 182 lignes (règle : 50),

@@ -3,6 +3,7 @@
 import re
 from pathlib import Path
 
+from tests.api.source_snapshot import source_snapshot
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -13,7 +14,7 @@ def test_l_intro_rejoue_quand_on_revient_a_l_accueil():
 
 
 def test_le_dashboard_publie_le_cac40_reel():
-    snapshot = (ROOT / "apps/api/snapshot.py").read_text()
+    snapshot = source_snapshot()  # façade + morceaux (découpage du 31/10)
     assert '"CAC 40": (cac, _cac_dates if _cac_real else [])' in snapshot
 
 
