@@ -96,3 +96,16 @@ def test_le_script_repare_les_deux_bases_et_ignore_l_absente(tmp_path):
     _base(tmp_path).close()
     assert sum(reparer_base(tmp_path / "market.db").values()) == 7
     assert reparer_base(tmp_path / "absente.db") is None
+
+
+def test_une_base_normalisee_n_est_pas_modifiee(tmp_path):
+    """Format NORMALISÉ (YAHOO.db : tables par identifiant) : rien n'est réécrit — le
+    lecteur de barres neutralise les zéros à la lecture, quel que soit le schéma."""
+    from scripts.reparer_prix_absents import reparer_base
+    conn = sqlite3.connect(tmp_path / "YAHOO.db")
+    conn.execute("CREATE TABLE P_1D (id INTEGER, date TEXT, open REAL, close REAL)")
+    conn.execute("INSERT INTO P_1D VALUES (1, '2026-06-12', 0.0, 21000.0)")
+    conn.commit(); conn.close()
+    assert reparer_base(tmp_path / "YAHOO.db") is None
+    conn = sqlite3.connect(tmp_path / "YAHOO.db")
+    assert conn.execute("SELECT open FROM P_1D").fetchone() == (0.0,)

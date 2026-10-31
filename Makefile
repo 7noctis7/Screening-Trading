@@ -487,7 +487,7 @@ journal-push:     ## pousse data/journal.db vers le dataset HF PRIVÉ (HF_TOKEN 
 	$(PYTHON) scripts/hf_journal.py push
 notion-sync:      ## miroir Obsidian → Notion (NOTION_TOKEN + NOTION_PARENT requis) — ARGS pour cibler des fichiers
 	$(PYTHON) scripts/notion_sync.py $(ARGS)
-reparer-prix:     ## open/high/low nuls → absents dans market.db + crypto.db (idempotent ; ARGS=--dbs ~/Desktop/YAHOO.db)
+reparer-prix:     ## open/high/low nuls → absents dans market.db + crypto.db (format LONG ; idempotent)
 	$(PYTHON) scripts/reparer_prix_absents.py $(ARGS)
 contracts:        ## gate contrats OHLCV (intégrité watchlist) — exit≠0 si violation (#10)
 	$(PYTHON) scripts/contracts_check.py $(ARGS)

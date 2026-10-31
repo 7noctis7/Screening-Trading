@@ -2,7 +2,12 @@
 """Passe à « absent » les open/high/low nuls des bases de prix (cf. packages/data/prix_absents).
 
   python scripts/reparer_prix_absents.py              # data/market.db + data/crypto.db
-  python scripts/reparer_prix_absents.py --dbs ~/Desktop/YAHOO.db
+  python scripts/reparer_prix_absents.py --dbs autre.db   # toute base au format LONG (table prices)
+
+Seul le format LONG (table `prices` avec une colonne symbole) est réparé. Une base au format
+NORMALISÉ (ex. `YAHOO.db` : tables `P_1D` par identifiant) n'est PAS modifiée : le lecteur de
+barres (`DBPriceProvider._mk_bar`) neutralise déjà ces zéros à la lecture, quel que soit le
+schéma — et réécrire une base privée dont le schéma varie serait plus risqué qu'utile.
 
 Idempotent : un second passage ne modifie rien. Une base absente est ignorée. Lancé dans
 le build Pages AVANT l'audit, car le cache HuggingFace porte encore les zéros tant qu'il
@@ -47,7 +52,8 @@ def main(argv: list[str] | None = None) -> int:
         chemin = _resolve_db(db)
         n = reparer_base(chemin)
         if n is None:
-            print(f"· {chemin.name} : absente ou sans table prices — ignorée")
+            print(f"· {chemin.name} : absente, ou sans table `prices` (format normalisé ?) — "
+                  "non modifiée ; le lecteur de barres neutralise déjà les zéros à la lecture")
         else:
             print(f"· {chemin.name} : {sum(n.values())} valeur(s) passée(s) à « absent » {n}")
     return 0
