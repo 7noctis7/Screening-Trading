@@ -354,7 +354,7 @@ pydantic==2.13.4
     #   fastapi
     #   mlflow-skinny
     #   mlflow-tracing
-pydantic-core==2.46.4
+pydantic-core==2.50.1
     # via pydantic
 pygments==2.20.0
     # via rich
