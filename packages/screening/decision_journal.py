@@ -17,9 +17,14 @@ Extrait d'`alpha_pipeline.py` (plafond de 400 lignes du dépôt). Deux responsab
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 
 from packages.portfolio.risk_metrics import cvar_historical
+
+if TYPE_CHECKING:  # import réel = cycle (alpha_pipeline importe ce module)
+    from packages.screening.alpha_pipeline import Seuils
 
 
 def expected_shortfall(returns, alpha: float = 0.95) -> float:

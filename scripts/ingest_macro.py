@@ -66,7 +66,6 @@ def fetch_vintages(series: str, key: str, since: str = "2000-01-01") -> list[Mac
         if e.code != 400:
             raise
         return _query(series, key, since, all_vintages=False)
-    return out
 
 
 def main() -> int:
