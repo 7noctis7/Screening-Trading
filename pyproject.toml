@@ -1,8 +1,9 @@
 [project]
 name = "quant-trading-system"
-version = "0.0.1"
+version = "0.1.0"
 description = "Système de screening & trading systématique multi-actifs (institutionnel, OSS)"
 requires-python = ">=3.11"
+license = { text = "MIT" }
 dependencies = []  # core n'a AUCUNE dépendance. Les deps sont ajoutées par groupe.
 
 [project.optional-dependencies]

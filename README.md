@@ -9,7 +9,9 @@ Méthodologie institutionnelle, 100 % open-source, infra 0 €, **paper par déf
 
 [![CI](https://github.com/7noctis7/Screening-Trading/actions/workflows/ci.yml/badge.svg)](https://github.com/7noctis7/Screening-Trading/actions/workflows/ci.yml)
 [![gitleaks](https://github.com/7noctis7/Screening-Trading/actions/workflows/gitleaks.yml/badge.svg)](https://github.com/7noctis7/Screening-Trading/actions/workflows/gitleaks.yml)
-![tests](https://img.shields.io/badge/tests-3914-brightgreen)
+[![CodeQL](https://github.com/7noctis7/Screening-Trading/actions/workflows/codeql.yml/badge.svg)](https://github.com/7noctis7/Screening-Trading/actions/workflows/codeql.yml)
+![tests](https://img.shields.io/badge/tests-4214-brightgreen)
+![version](https://img.shields.io/badge/version-0.1.0-blue)
 ![licence](https://img.shields.io/badge/licence-MIT-green)
 ![paper](https://img.shields.io/badge/mode-paper-orange)
 
@@ -21,6 +23,13 @@ Méthodologie institutionnelle, 100 % open-source, infra 0 €, **paper par déf
 
 > [!WARNING]
 > Aide à la décision — **pas un conseil en investissement**. Risque de perte en capital.
+
+> **In English.** A systematic multi-asset screening & paper-trading terminal (equities,
+> ETFs, FX, crypto, commodities) that publishes what does *not* work. Every candidate rule
+> goes through a four-stage gate (placebo → deflated Sharpe → PBO/CSCV → cost sabotage);
+> no directional alpha is claimed (DSR ≈ 0), the only verified edge is drawdown reduction.
+> Python/FastAPI back end, Next.js front end, free infrastructure, paper trading by default.
+> Docs and code comments are in French.
 
 ---
 
@@ -42,10 +51,13 @@ résultat même quand il est mauvais.
 
 | Code | | Produit | |
 |---|---:|---|---:|
-| Modules métier | **414** | Routes API | **43** |
-| Fichiers de test | **497** | Écrans | **29** |
-| Tests au vert | **3 914** | Composants front | **45** |
-| Décisions consignées (ADR) | **211** | Commandes `make` | **156** |
+| Modules métier | **448** | Routes API | **43** |
+| Fichiers de test | **522** | Écrans | **29** |
+| Tests au vert | **4 214** | Composants front | **64** |
+| Décisions consignées (ADR) | **222** | Commandes `make` | **165** |
+
+<sub>Recompté le 31/10 sur `main` (fichiers `.py` hors `__init__`, `test_*.py`, titres
+`## ADR-`, cibles `make` documentées, routes `@app.*`, `page.tsx`, composants `.tsx`).</sub>
 
 <sub>Discipline vérifiée par un hook : **< 400 lignes/fichier, < 50/fonction**. Une nouvelle
 stratégie, source ou indicateur = **un fichier auto-enregistré**, jamais une modification du cœur.</sub>
@@ -341,7 +353,9 @@ Dépôt **public**, et traité comme tel :
 
 | | |
 |---|---|
-| [`docs/COMMANDES.md`](docs/COMMANDES.md) | Les 156 commandes, groupées par intention |
+| [`docs/COMMANDES.md`](docs/COMMANDES.md) | Les commandes `make`, groupées par intention |
+| [`CHANGELOG.md`](CHANGELOG.md) | Une ligne par PR fusionnée, par mois (`make changelog`) |
+| [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) | Vitesse mesurée des moteurs de backtest (`make bench-moteur`) |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Priorités P0 → P3, avec difficulté et risques |
 | [`docs/REAL_DATA.md`](docs/REAL_DATA.md) | Brancher vos propres données |
 | [`docs/PROJECT_AUDIT.md`](docs/PROJECT_AUDIT.md) · [`docs/AUDIT_SITE.md`](docs/AUDIT_SITE.md) | Audits architecture et produit |
