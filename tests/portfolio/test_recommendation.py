@@ -14,6 +14,20 @@ from packages.portfolio.recommendation import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _calendrier_resultats_hors_reseau(monkeypatch):
+    """Aucune date de résultats réseau : le filtre tourne, mais sur « date inconnue ».
+
+    Sans ça, `recommander` interrogeait le vrai calendrier. « XYZW » sont de VRAIS tickers
+    (US Steel, Zillow, Wayfair) : fin octobre, leurs résultats tombaient dans la fenêtre,
+    le filtre les écartait AVANT les historiques, et le test des historiques manquants
+    échouait en CI (réseau) tout en passant hors ligne. Rouge sur `main` depuis le 29/10.
+    """
+    import packages.portfolio.filtre_resultats as filtre
+    monkeypatch.setattr(filtre, "dates_resultats",
+                        lambda symboles, maintenant=None, **_: dict.fromkeys(symboles))
+
+
 def _serie(debut: str, n: int, graine: int) -> dict[str, float]:
     """n clôtures ouvrées consécutives à partir de `debut`, marche aléatoire positive."""
     rng = np.random.default_rng(graine)
