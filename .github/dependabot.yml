@@ -1,7 +1,8 @@
-# Suivi automatique des mises à jour (audit 05/07). Les actions GitHub restent épinglées par tag
-# (l'épinglage SHA exige une vérification en ligne — Dependabot proposera les bumps en PR, la CI
-# gate) ; l'écosystème pip surveille pyproject.toml (versions majoritairement ouvertes → alerte
-# sécurité au moins). PRs groupées le lundi pour ne pas polluer.
+# Suivi automatique des mises à jour (audit 05/07). Les actions GitHub sont épinglées par
+# EMPREINTE de commit depuis le 31/10 (commentaire `# vX.Y.Z` en bout de ligne) : Dependabot
+# met à jour l'empreinte ET le commentaire, la CI gate. L'écosystème pip surveille
+# pyproject.toml (versions majoritairement ouvertes → alerte sécurité au moins).
+# PRs groupées le lundi pour ne pas polluer.
 version: 2
 updates:
   - package-ecosystem: github-actions
