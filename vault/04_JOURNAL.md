@@ -1,5 +1,36 @@
 # 04 — JOURNAL
 
+## Session 2026-10-31 (2ᵉ) — Vers le 10/10 sans dépenser un euro
+
+Suite de la comparaison : une PR par catégorie, chacune testée avant fusion.
+
+- **Sécurité & CI (#457).** 17 actions épinglées par empreinte de commit ; CodeQL Python +
+  TypeScript ; ruff BLOQUANT sur les vrais bugs (syntaxe, noms indéfinis) ; job pytest en
+  Python 3.13. Le gate ruff a trouvé 7 noms indéfinis, dont 2 plantages réels :
+  `build_preview.py` appelait `write_all()` avant de le définir, `preset_lab.py` utilisait
+  `timezone` importé dans une AUTRE fonction.
+- **Données (#458, phase 1).** `packages/data/prix_absents` : open/high/low à 0 → absents
+  (négatif aussi, sauf contrat à terme). Branché dans les deux ingestions, dans Pages avant
+  l'audit, dans le lecteur de barres (une YAHOO.db locale non réparée rendait une ouverture
+  à 0). Phase 2 : lire « critiques 0 » dans un run Pages, puis `--strict`.
+- **Certification (dans #456).** Le calcul d'atteignabilité ne suivait que `packages.*` :
+  14 modules de production lui échappaient (257 → 271 en suivant aussi `apps.*`).
+- **Documentation & maturité.** CHANGELOG généré (`make changelog`), version 0.1.0, licence
+  déclarée, `06_STRATEGIES.md` réécrit (2 modules décrits sur 13), README recompté
+  (4 214 tests au vert, 222 ADR).
+- **Vitesse.** `make bench-moteur` : event-driven ~800 barres·actif/s, vectorisé ~300 000.
+  Le coût par barre de l'event-driven croît avec l'historique (0,22 → 1,15 ms entre 1 et
+  10 ans) : 94 % du temps dans `generate_signals`, qui recalcule les indicateurs sur tout
+  l'historique à chaque barre. TODO P2, avec test d'équivalence exigé.
+- **Relecture automatique (Codex)** : a signalé que `config/mypy_baseline.json` dépasse
+  400 lignes. Écarté : la règle vise le code (le hook ne contrôle que `.py/.ts/.tsx`), le
+  fichier est généré comme un lockfile. Décision laissée au propriétaire, fil ouvert sur #455.
+
+Pas faisable gratuitement ici : coût réel d'exécution (il faut ≥ 20 ordres Alpaca, TCA),
+univers point-in-time (vintages payants), alpha (il se mesure, il ne s'écrit pas : les deux
+familles jamais testées sont listées dans `06_STRATEGIES`). `main.py` (1 489 l.) reste à
+découper : des tests patchent `main._snap`.
+
 ## Session 2026-10-31 — Trois gates qui disaient plus qu'ils ne faisaient
 
 Comparaison avec un dépôt de backtest externe (QuantJourney) : notre code est mieux testé

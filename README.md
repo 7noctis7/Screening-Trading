@@ -10,7 +10,7 @@ Méthodologie institutionnelle, 100 % open-source, infra 0 €, **paper par déf
 [![CI](https://github.com/7noctis7/Screening-Trading/actions/workflows/ci.yml/badge.svg)](https://github.com/7noctis7/Screening-Trading/actions/workflows/ci.yml)
 [![gitleaks](https://github.com/7noctis7/Screening-Trading/actions/workflows/gitleaks.yml/badge.svg)](https://github.com/7noctis7/Screening-Trading/actions/workflows/gitleaks.yml)
 [![CodeQL](https://github.com/7noctis7/Screening-Trading/actions/workflows/codeql.yml/badge.svg)](https://github.com/7noctis7/Screening-Trading/actions/workflows/codeql.yml)
-![tests](https://img.shields.io/badge/tests-4166-brightgreen)
+![tests](https://img.shields.io/badge/tests-4214-brightgreen)
 ![version](https://img.shields.io/badge/version-0.1.0-blue)
 ![licence](https://img.shields.io/badge/licence-MIT-green)
 ![paper](https://img.shields.io/badge/mode-paper-orange)
@@ -52,9 +52,9 @@ résultat même quand il est mauvais.
 | Code | | Produit | |
 |---|---:|---|---:|
 | Modules métier | **448** | Routes API | **43** |
-| Fichiers de test | **520** | Écrans | **29** |
-| Tests au vert | **4 166** | Composants front | **64** |
-| Décisions consignées (ADR) | **221** | Commandes `make` | **163** |
+| Fichiers de test | **522** | Écrans | **29** |
+| Tests au vert | **4 214** | Composants front | **64** |
+| Décisions consignées (ADR) | **222** | Commandes `make` | **165** |
 
 <sub>Recompté le 31/10 sur `main` (fichiers `.py` hors `__init__`, `test_*.py`, titres
 `## ADR-`, cibles `make` documentées, routes `@app.*`, `page.tsx`, composants `.tsx`).</sub>
