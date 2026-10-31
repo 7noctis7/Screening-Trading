@@ -7,7 +7,11 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
-- [ ] **P1 — Audit données : 23 anomalies critiques, puis `--strict` (31/10)** : le build Pages
+- [ ] **P1 — Audit données : 23 anomalies critiques, puis `--strict` (31/10)** — PHASE 1
+      FAITE 31/10 : `packages/data/prix_absents` (open/high/low nuls → absents, jamais
+      inventés), branché dans les deux ingestions, dans Pages avant l'audit et dans le lecteur
+      de barres ; `make reparer-prix` pour le Mac/VPS. PHASE 2 : lire « critiques 0 » dans un
+      run Pages, PUIS `--strict`. `make hf-push` assainirait le cache (dataset public). Le build Pages
       du 30/10 en signale 23 (`data_audit.py`, non bloquant). market.db : NDX à open = high =
       low = 0 sur des séances de juin 2026 (seule la clôture est renseignée) ; crypto.db :
       première barre de AAVE, SHIB, ICP, IMX… à open/low = 0. Le gate `contracts` ne les voit
