@@ -77,6 +77,15 @@ jobs:
           python scripts/ingest_prices.py --since 2015-01-01 || true
           python scripts/ingest_crypto.py --days 4015 || true
 
+      - name: "Prix nuls → absents (open/high/low = 0 = valeur manquante, pas un prix)"
+        env:
+          QUANT_PRICE_DB: ${{ github.workspace }}/data/market.db
+        run: |
+          # Le cache HF porte encore les zéros (NDX juin 2026, 1re barre de 8 jetons) tant
+          # qu'il n'est pas repoussé depuis une base réparée. Idempotent ; ne touche jamais close.
+          # Phase 1 : non bloquant. Phase 2 (après un run à 0 critique) : audit en --strict.
+          python scripts/reparer_prix_absents.py || echo "⚠ réparation échouée — l'audit ci-dessous le montrera"
+
       - name: Contrôle qualité des données (audit PwC — rapport visible)
         env:
           QUANT_PRICE_DB: ${{ github.workspace }}/data/market.db

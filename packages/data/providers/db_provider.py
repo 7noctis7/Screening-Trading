@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from packages.core.models import Bar
+from packages.data.prix_absents import est_absent
 
 _OHLC = {"open": ["open", "o"], "high": ["high", "h"], "low": ["low", "l"],
          "close": ["close", "adj_close", "adjclose", "adj", "last", "price", "c"],
@@ -208,9 +209,9 @@ class DBPriceProvider:
             cl_ = float(r[4])
             if cl_ <= 0:
                 return None
-            op = float(r[1] if r[1] is not None else r[4])
-            hi = float(r[2] if r[2] is not None else r[4])
-            lo = float(r[3] if r[3] is not None else r[4])
+            # Absent OU nul → la clôture (cf. `prix_absents` : un 0.0 est une valeur manquante,
+            # pas un prix ; sans ça un ordre « à l'ouverture » pouvait s'exécuter à 0).
+            op, hi, lo = (_ou_cloture(symbol, v, cl_) for v in (r[1], r[2], r[3]))
             vol = float(r[5]) if len(r) > 5 and r[5] is not None else 0.0
             return Bar(symbol, timeframe, _parse_ts(r[0]), op, hi, lo, cl_, vol)
         except (TypeError, ValueError):
@@ -279,6 +280,14 @@ class DBPriceProvider:
         except sqlite3.Error:
             return []
         return [b for r in rows if (b := self._mk_bar(symbol, timeframe, r)) is not None]
+
+
+def _ou_cloture(symbole: str, v: float | int | str | None, cloture: float) -> float:
+    """open/high/low lu, ou la clôture s'il est absent (None, 0, négatif hors terme)."""
+    if v is None:
+        return cloture
+    x = float(v)
+    return cloture if est_absent(symbole, x) else x
 
 
 def _parse_ts(v) -> datetime:

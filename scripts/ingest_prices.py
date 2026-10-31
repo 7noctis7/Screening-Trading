@@ -25,6 +25,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from packages.data import prix_absents  # noqa: E402
+
 DB = ROOT / "data" / "market.db"
 _DDL = """CREATE TABLE IF NOT EXISTS prices(
   symbol TEXT NOT NULL, date TEXT NOT NULL,
@@ -241,7 +243,14 @@ def ingest(symbols: list[tuple[str, str]], since: str, daily: bool) -> None:
         if i % 25 == 0:
             print(f"  … {i}/{len(symbols)} symboles, {ok} OK, {total} barres insérées")
     _bilan(len(symbols), ok, fail, vides, ajour, skip, total)
+    _signaler_absents(prix_absents.reparer(conn))
     conn.close()
+
+
+def _signaler_absents(n: dict[str, int]) -> None:
+    """Yahoo renvoie parfois open/high/low = 0 (NDX, juin 2026) : absents, pas des prix."""
+    if sum(n.values()):
+        print(f"open/high/low nuls passés à « absent » : {n} (cf. packages/data/prix_absents)")
 
 
 def _bilan(n: int, ok: int, fail: int, vides: list, ajour: list, skip: int,
