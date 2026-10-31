@@ -201,8 +201,6 @@ def test_la_commande_annoncee_EXISTE_forcement_sur_la_machine():
     Un nom d'outil est une HYPOTHÈSE sur une machine qu'on ne voit pas. Une cible `make`
     n'en est pas une : elle vit dans le Makefile que l'utilisateur vient d'exécuter pour
     lire le message."""
-    from packages.mlops.environnement import commande_regeneration
-
     commande = commande_regeneration()
     assert commande.startswith("make "), (
         "annoncer un binaire, c'est parier qu'il est installé là-bas ; une cible "

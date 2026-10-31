@@ -23,8 +23,8 @@ jobs:
     name: Next.js build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
           node-version: "24"
           cache: "npm"
@@ -40,8 +40,8 @@ jobs:
     name: pytest
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
         with:
           python-version: "3.11"
           cache: pip
@@ -54,20 +54,42 @@ jobs:
       - name: pytest
         run: python -m pytest -q
 
-  lint:
-    name: lint (mypy bloquant sur les erreurs NOUVELLES)
+  tests-py313:
+    # Même suite sur la version la plus récente : une incompatibilité de dépendance ou de
+    # syntaxe se voit ici avant d'être découverte sur un poste qui a mis Python à jour.
+    name: pytest (Python 3.13)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install deps (mêmes que le job pytest)
+        run: |
+          python -m pip install -U pip
+          pip install -e ".[common,data,quant,api]" -c constraints.txt reportlab scikit-learn pytest hypothesis
+      - name: pytest
+        run: python -m pytest -q
+
+  lint:
+    name: lint (ruff bugs + mypy nouvelles erreurs — bloquants)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
         with:
           python-version: "3.11"
           cache: pip
       - name: Install ruff + mypy
         # mypy ÉPINGLÉ : la référence config/mypy_baseline.json n'est valable que pour la version
         # qui l'a produite. Monter la version = régénérer la référence dans la même PR.
-        run: pip install ruff "mypy==2.4.1"
-      - name: ruff check (non bloquant)
+        run: pip install "ruff==0.17.3" "mypy==2.4.1"
+      - name: ruff — vrais bugs (bloquant)
+        # Erreurs de syntaxe, noms indéfinis, redéfinitions : du code qui plante à l'exécution.
+        # Le 31/10, 7 noms indéfinis dont 2 plantages réels (build_preview, preset_lab).
+        run: ruff check packages apps scripts tests --select E9,F63,F7,F82,F811
+      - name: ruff check complet (non bloquant — style)
         continue-on-error: true
         run: ruff check packages apps scripts
       - name: mypy — aucune erreur NOUVELLE (bloquant ; référence config/mypy_baseline.json)

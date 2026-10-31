@@ -125,10 +125,6 @@ font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',Inter,system-ui,sans-
 </div></body></html>"""
 
 
-if __name__ == "__main__":
-    write_all()
-
-
 def _heatmap_cell(v):
     # bleu (corr -1) → gris (0) → rouge (corr +1)
     r = int(120 + 100 * max(0, v)); b = int(120 + 100 * max(0, -v)); g = 100

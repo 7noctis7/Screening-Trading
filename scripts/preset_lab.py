@@ -435,6 +435,8 @@ def _survivorship(data, acmap) -> None:
         datetime,
         timedelta,
     )
+    from datetime import timezone
+
     from packages.backtest.survivorship_delta import survivorship_delta
     from packages.data.survivorship import load_delisted
     dl = load_delisted()
