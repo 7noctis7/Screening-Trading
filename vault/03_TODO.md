@@ -32,8 +32,10 @@
 - [ ] **P2 — Écart top-12 de `ic-classement`** : moyenne du top-12 − médiane de la
       coupe ; mesurer en médiane − médiane (ou moyenne winsorisée) avant de le lire.
 - [x] **FAIT 07/10 — `build_snapshot` découpé (ADR-0220)**, JSON identique.
-- [ ] **P2 — scinder `apps/api/snapshot.py` (~3 100 l.) et `main.py` (1 489 l.)** en
-      modules : même méthode (référence JSON, puis déplacement), tests à rediriger.
+- [x] **FAIT 31/10 — `apps/api/snapshot.py` scindé (ADR-0221)** : façade + 13 modules
+      < 400 l., texte inchangé, JSON identique.
+- [ ] **P2 — scinder `apps/api/main.py` (1 489 l.)** : même méthode qu'ADR-0221 ; ATTENTION,
+      des tests patchent `main._snap` → les routes déplacées ne verraient plus le patch.
 - [ ] **P1 — Relancer les quatre questions après ADR-0217 (06/10)** : `make
       rapport-esperance` puis `make ic-classement`. Lire d'abord la ligne
       « participation q / ADV » : une médiane ≥ 1 % sur un livre de 100 k$ signale encore

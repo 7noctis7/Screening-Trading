@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tests.api.source_snapshot import source_snapshot
+
 RACINE = Path(__file__).resolve().parents[2]
 MAIN = (RACINE / "apps" / "api" / "main.py").read_text(encoding="utf-8")
 API_TS = (RACINE / "apps" / "web" / "lib" / "api.ts").read_text(encoding="utf-8")
@@ -50,6 +52,6 @@ def test_le_repli_momentum_a_UNE_seule_definition():
     et les deux onglets afficheraient alors deux « tendances 3 mois » différentes pour
     le même actif.
     """
-    snapshot = (RACINE / "apps" / "api" / "snapshot.py").read_text(encoding="utf-8")
+    snapshot = source_snapshot()  # façade + morceaux (découpage du 31/10)
     assert snapshot.count("score_momentum as _momentum") == 2
     assert "- 1) * 3.0)), 4)" not in snapshot, "la formule a été recopiée en dur"

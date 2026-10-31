@@ -16,8 +16,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
+from tests.api.source_snapshot import source_snapshot
+
 RACINE = Path(__file__).resolve().parents[2]
-SOURCE = (RACINE / "apps" / "api" / "snapshot.py").read_text(encoding="utf-8")
+SOURCE = source_snapshot()  # façade + morceaux (découpage du 31/10)
 
 
 def _charger():

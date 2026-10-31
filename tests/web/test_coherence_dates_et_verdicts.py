@@ -26,8 +26,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from tests.api.source_snapshot import source_snapshot
+
 RACINE = Path(__file__).resolve().parents[2]
-SNAPSHOT = (RACINE / "apps" / "api" / "snapshot.py").read_text(encoding="utf-8")
+SNAPSHOT = source_snapshot()  # façade + morceaux (découpage du 31/10)
 MAIN = (RACINE / "apps" / "api" / "main.py").read_text(encoding="utf-8")
 WEB = RACINE / "apps" / "web"
 

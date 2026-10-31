@@ -191,7 +191,7 @@ croire qu'ils y sont. Ils y entreront un par un, après la porte de
 | ML | `packages/ml` | ✅ triple-barrier, CV purgée/embargo, calibration, conformal, champion/challenger (S9) |
 | Alertes | `packages/alerts` | ✅ engine+sinks+throttle+wiring — BRANCHÉ sur `run_live.py` (BLOC 1c) |
 | Reporting | `packages/reporting` | ✅ analytics, tearsheet, notes sociétés, miroir Obsidian (S13) |
-| API / Web | `apps/` | ✅ FastAPI snapshot + Next.js (dashboard, /positions réel-vs-cible, /screener explicable, /crypto live, /echecs) + export statique Pages |
+| API / Web | `apps/` | ✅ FastAPI snapshot (façade `snapshot.py` + `snapshot_parts/`, ADR-0221) + Next.js (dashboard, /positions réel-vs-cible, /screener explicable, /crypto live, /echecs) + export statique Pages |
 | Recherche & gate | `packages/research` | ✅ gate 4 étages (placebo→DSR→PBO→sabotage), ledger, **fdr Benjamini-Hochberg (ADR-0050)**, microstructure OFI/vPIN, alpha-decay (ADR-0024), `biais_fermeture` (réconciliation lots↔positions), `completion_ouvertures` (entrées manquantes, ADR-0057), `ventes_inversees` (ADR-0061), **`scan_registre` — un scan compte comme un essai (ADR-0065)** |
 | Screening | `packages/screening` | ✅ filtres YAML + composite z-score → `/screener` |
 | Sentiment | `packages/sentiment` | ✅ FinBERT+lexique+RSS point-in-time + risk gate |

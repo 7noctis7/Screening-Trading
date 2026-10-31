@@ -193,7 +193,10 @@ Ne jamais activer le réel, contourner `--yes`, relever une limite ou désactive
 ### 4.7 Restitution et applications
 
 - `apps/api/snapshot.py` assemble le grand payload à partir des données, signaux, portefeuille,
-  journal et diagnostics. C'est encore un god-object connu ; le modifier exige des tests ciblés.
+  journal et diagnostics. Depuis le 31/10 (ADR-0221), c'est une FAÇADE (~200 lignes) : les
+  définitions vivent dans `apps/api/snapshot_parts/` (13 modules < 400 lignes, texte inchangé)
+  et la façade ré-exporte chaque nom. Un test qui lit le CODE du snapshot passe par
+  `tests/api/source_snapshot.py`, jamais par `snapshot.py` seul.
 - `apps/api/payloads.py` contient des builders JSON purs et testables.
 - `apps/api/sections_data.py` extrait des données de sections.
 - `apps/api/main.py` expose santé, métadonnées, dashboard, screener, crypto, ticker, échecs,

@@ -153,11 +153,10 @@ def test_le_snapshot_n_envoie_jamais_une_reference_synthetique():
 
     Le reste du dashboard fait déjà ce tri avec `_sp_real` ; l'intro le faisait PAS.
     """
-    import pathlib
     import re
 
-    src = (pathlib.Path(__file__).resolve().parents[2]
-           / "apps" / "api" / "snapshot.py").read_text(encoding="utf-8")
+    from tests.api.source_snapshot import source_snapshot
+    src = source_snapshot()  # façade + morceaux (découpage du 31/10)
     # Découpage par ÉQUILIBRE DES PARENTHÈSES. La version d'avant coupait à la chaîne
     # « instruments) » et s'est cassée à l'ajout d'un argument — un test qui dépend de
     # la
