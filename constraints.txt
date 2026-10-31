@@ -486,7 +486,7 @@ urllib3==2.7.0
     #   databricks-sdk
     #   docker
     #   requests
-uvicorn==0.50.0
+uvicorn==0.54.0
     # via
     #   quant-trading-system (pyproject.toml)
     #   mlflow-skinny
