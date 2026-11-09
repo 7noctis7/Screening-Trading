@@ -437,7 +437,7 @@ vault-sync:       ## régénère le coffre Obsidian (journal du jour, attributio
 	$(PYTHON) -m packages.reporting.obsidian
 diag-fusion:      ## les bases de prix sont-elles d'accord ? désaccords mesurés par symbole
 	$(PYTHON) scripts/diag_fusion_sources.py $(ARGS)
-bench-moteur:     ## vitesse des moteurs de backtest (event-driven, vectorisé) — temps seulement, jamais un résultat
+bench-moteur:     ## vitesse des moteurs de backtest sur data/market.db (temps seulement ; UNCALIBRATED sans base)
 	$(PYTHON) scripts/bench_moteur.py $(ARGS)
 changelog:        ## régénère CHANGELOG.md depuis l'historique de main (une ligne par PR)
 	$(PYTHON) scripts/changelog.py $(ARGS)

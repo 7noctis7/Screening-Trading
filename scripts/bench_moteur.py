@@ -1,23 +1,25 @@
 #!/usr/bin/env python3
-"""Banc de VITESSE des moteurs de backtest — mesure le temps, jamais un résultat.
+"""Banc de VITESSE des moteurs de backtest, sur les VRAIES barres de la base de prix.
 
   python scripts/bench_moteur.py                      # 10 et 50 actifs × 10 ans, 3 passages
-  python scripts/bench_moteur.py --actifs 100 --ans 5 --passages 5
+  python scripts/bench_moteur.py --actifs 5 --ans 4 --passages 1
+  python scripts/bench_moteur.py --db ~/Desktop/market.db
 
-Données SYNTHÉTIQUES seedées (comme `demo_backtest.py`) : elles servent de charge de
-travail reproductible pour le chronomètre. Aucun rendement, Sharpe ou seuil n'est lu ici —
-le mandat données-réelles s'applique à toute mesure de performance financière.
+Mandat données-réelles : la charge vient de `data/market.db` (ou `--db`, format LONG), les
+N premiers symboles par ordre alphabétique qui couvrent la période — reproductible sur une
+même base. Sans base suffisante : UNCALIBRATED, rien n'est inventé. Seul le TEMPS est lu ;
+aucun rendement, Sharpe ou seuil.
 
 Deux moteurs :
-- `event-driven` : la chaîne complète (régime → stratégie → risque → sizing → broker →
-  journal), exécution à l'ouverture de t+1 — celle qui sert à juger une règle ;
+- `event-driven` : la chaîne complète (stratégie → risque → sizing → broker → journal),
+  exécution à l'ouverture de t+1 — celle qui sert à juger une règle ;
 - `vectorisé` : `fast_swing_backtest`, le balayage rapide des grilles.
-Résultat : médiane des passages, en secondes et en barres·actif par seconde.
 """
 from __future__ import annotations
 
 import argparse
 import platform
+import sqlite3
 import statistics
 import sys
 import time
@@ -29,20 +31,34 @@ sys.path.insert(0, str(ROOT))
 
 from packages.backtest import BacktestEngine  # noqa: E402
 from packages.backtest.fast_swing import fast_swing_backtest  # noqa: E402
-from packages.data import data_providers  # noqa: E402
+from packages.data.engine import _resolve_db  # noqa: E402
+from packages.data.providers.db_provider import DBPriceProvider  # noqa: E402
 from packages.execution import CostModel, SimBroker  # noqa: E402
 from packages.portfolio.sizing import sizers  # noqa: E402
 from packages.risk import RiskEngine, risk_rules  # noqa: E402
 from packages.strategies import strategies  # noqa: E402
 
+BARRES_PAR_AN = 240   # plancher prudent de séances par an pour retenir un symbole
 
-def charge(n_actifs: int, ans: int) -> dict[str, list]:
-    """{symbole: [Bar]} quotidiens, seedés : la même charge à chaque appel."""
-    fournisseur = data_providers.create("synthetic", seed=7, annual_vol=0.28, drift=0.08)
-    debut = datetime(2015, 1, 1, tzinfo=timezone.utc)
-    fin = debut + timedelta(days=365 * ans)
-    return {f"S{i:03d}": fournisseur.fetch_ohlcv(f"S{i:03d}", "1d", debut, fin)
-            for i in range(n_actifs)}
+
+def charge(base: Path, n_actifs: int, ans: int) -> dict[str, list] | None:
+    """{symbole: [Bar]} réels sur les `ans` dernières années ; None si la base ne suffit pas."""
+    if not base.exists():
+        return None
+    with sqlite3.connect(f"file:{base}?mode=ro", uri=True) as conn:
+        if not conn.execute("SELECT 1 FROM sqlite_master WHERE name='prices'").fetchone():
+            return None
+        fin = conn.execute("SELECT MAX(date) FROM prices").fetchone()[0]
+        debut = (datetime.fromisoformat(fin) - timedelta(days=365 * ans)).date().isoformat()
+        symboles = [r[0] for r in conn.execute(
+            "SELECT symbol FROM prices WHERE date >= ? AND close > 0 GROUP BY symbol "
+            "HAVING COUNT(*) >= ? ORDER BY symbol LIMIT ?", (debut, BARRES_PAR_AN * ans, n_actifs))]
+    if len(symboles) < n_actifs:
+        return None
+    fournisseur = DBPriceProvider(base)
+    t0 = datetime.fromisoformat(debut).replace(tzinfo=timezone.utc)
+    t1 = datetime.fromisoformat(fin).replace(tzinfo=timezone.utc) + timedelta(days=1)
+    return {s: fournisseur.fetch_ohlcv(s, "1d", t0, t1) for s in symboles}
 
 
 def _event_driven(data: dict[str, list]) -> None:
@@ -78,12 +94,17 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--actifs", type=int, nargs="*", default=[10, 50])
     ap.add_argument("--ans", type=int, default=10)
     ap.add_argument("--passages", type=int, default=3)
+    ap.add_argument("--db", default="market", help="base de prix au format LONG")
     a = ap.parse_args(argv)
-    print(f"Python {platform.python_version()} · {platform.machine()} · "
-          f"{platform.processor() or platform.platform()}")
+    base = _resolve_db(a.db)
+    print(f"Python {platform.python_version()} · {platform.machine()} · base {base}")
     print(f"{'moteur':14} {'actifs':>6} {'barres':>7} {'médiane':>9} {'barres·actif/s':>15}")
     for n in a.actifs:
-        data = charge(n, a.ans)
+        data = charge(base, n, a.ans)
+        if data is None:
+            print(f"UNCALIBRATED : {base.name} n'a pas {n} symboles couvrant {a.ans} ans "
+                  "(ou n'existe pas) — rien n'est mesuré.")
+            continue
         barres = sum(len(v) for v in data.values())
         for nom, fn in MOTEURS.items():
             s = chronometrer(fn, data, a.passages)

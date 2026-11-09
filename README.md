@@ -355,7 +355,7 @@ Dépôt **public**, et traité comme tel :
 |---|---|
 | [`docs/COMMANDES.md`](docs/COMMANDES.md) | Les commandes `make`, groupées par intention |
 | [`CHANGELOG.md`](CHANGELOG.md) | Une ligne par PR fusionnée, par mois (`make changelog`) |
-| [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) | Vitesse mesurée des moteurs de backtest (`make bench-moteur`) |
+| [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) | Vitesse des moteurs de backtest (`make bench-moteur`, sur la base de prix réelle) |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Priorités P0 → P3, avec difficulté et risques |
 | [`docs/REAL_DATA.md`](docs/REAL_DATA.md) | Brancher vos propres données |
 | [`docs/PROJECT_AUDIT.md`](docs/PROJECT_AUDIT.md) · [`docs/AUDIT_SITE.md`](docs/AUDIT_SITE.md) | Audits architecture et produit |

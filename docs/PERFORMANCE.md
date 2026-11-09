@@ -1,7 +1,10 @@
 # Vitesse des moteurs de backtest
 
-> Mesuré le 31/10 avec `make bench-moteur` (`scripts/bench_moteur.py`). Charge **synthétique
-> seedée** : elle sert de chronomètre reproductible, jamais de résultat financier.
+> **Statut des chiffres ci-dessous.** Mesures du 31/10, faites AVANT que le banc ne lise la base
+> de prix réelle (relecture du 31/10 : le mandat données-réelles réserve le synthétique à
+> `tests/`). La charge était alors une série synthétique seedée. Ce sont des TEMPS de calcul,
+> pas des résultats financiers, mais ils sont à remesurer avec `make bench-moteur`, qui ne lit
+> plus que `data/market.db` et répond UNCALIBRATED sans base suffisante.
 > Machine : conteneur Linux, Intel Xeon 2,10 GHz, 4 cœurs, Python 3.13.16. Médiane de 3 passages.
 
 ## Résultats
