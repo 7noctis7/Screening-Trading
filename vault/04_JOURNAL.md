@@ -17,8 +17,10 @@ Suite de la comparaison : une PR par catégorie, chacune testée avant fusion.
   14 modules de production lui échappaient (257 → 271 en suivant aussi `apps.*`).
 - **Documentation & maturité.** CHANGELOG généré (`make changelog`), version 0.1.0, licence
   déclarée, `06_STRATEGIES.md` réécrit (2 modules décrits sur 13), README recompté
-  (4 214 tests au vert, 222 ADR).
-- **Vitesse.** `make bench-moteur` : event-driven ~800 barres·actif/s, vectorisé ~300 000.
+  (4 223 tests au vert au 09/11, 222 ADR).
+- **Vitesse.** `make bench-moteur` : event-driven ~800 barres·actif/s, vectorisé ~300 000,
+  mesurés le 31/10 sur une charge SYNTHÉTIQUE ; le banc ne lit plus que la base réelle
+  depuis le 09/11 (relecture Codex), donc à remesurer : UNCALIBRATED en attendant.
   Le coût par barre de l'event-driven croît avec l'historique (0,22 → 1,15 ms entre 1 et
   10 ans) : 94 % du temps dans `generate_signals`, qui recalcule les indicateurs sur tout
   l'historique à chaque barre. TODO P2, avec test d'équivalence exigé.

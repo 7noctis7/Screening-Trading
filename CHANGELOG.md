@@ -3,7 +3,11 @@
 > Généré par `make changelog` depuis l'historique de `main` (une ligne par PR fusionnée,
 > la plus récente en tête). Ne pas éditer à la main : le POURQUOI est dans `vault/04_JOURNAL.md`.
 
-## [0.1.0] — 2026-10-31
+## [0.1.0] — 2026-11-09
+
+### 2026-11
+
+- Données : open/high/low nuls → absents (les 23 critiques de l'audit), phase 1 (#458)
 
 ### 2026-10
 
