@@ -22,6 +22,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from packages.data import prix_absents  # noqa: E402
+
 
 def _bases_univers(top: int | None = None) -> list[str]:
     """Bases crypto uniques de l'univers, plafonnées à `top`, ordre du classement.
@@ -227,6 +229,9 @@ def main() -> None:
     conn.execute("CREATE TABLE IF NOT EXISTS prices (symbol TEXT, date TEXT, open REAL, high REAL, "
                  "low REAL, close REAL, volume REAL, PRIMARY KEY (symbol, date))")
     ok, echecs = _ingerer(conn, bases, start, end)
+    absents = prix_absents.reparer(conn)    # 1re barre d'un jeton : open/low = 0 (AAVE, ICP…)
+    if sum(absents.values()):
+        print(f"open/high/low nuls passés à « absent » : {absents}")
     conn.close()
     if echecs:
         print(f"\n⚠  {len(echecs)} base(s) sans données — l'univers n'est PAS complet :")
