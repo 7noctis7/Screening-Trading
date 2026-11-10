@@ -29,6 +29,7 @@ from packages.research.labo_classement import (
     classement_residuel,
     ecart_apparie,
     lignes,
+    sur_coupe_commune,
 )
 from packages.research.portefeuille_classement import (
     decisions,
@@ -84,10 +85,13 @@ def mesurer_ic(pan: dict[str, Any], essai: dict[str, Any], n_nulles: int = 2000)
         lt, _ = lignes(pan, _temoin(essai), h, h, debut)
         out[f"temoin:h{h}"] = resume_horizon(lt, h, h, n_nulles)
         for v in variantes(essai):
-            lc, compteurs = lignes(pan, _candidat(v), h, h, debut)
+            # Écart apparié : les DEUX IC sur la même coupe (titres classés par les deux).
+            cand, tem = _candidat(v), _temoin(essai)
+            lc, compteurs = lignes(pan, sur_coupe_commune(cand, tem), h, h, debut)
+            lt_commun, _ = lignes(pan, sur_coupe_commune(tem, cand), h, h, debut)
             out[f"{nom_variante(v)}:h{h}"] = {
                 "candidat": resume_horizon(lc, h, h, n_nulles),
-                "ecart": ecart_apparie(lc, lt, n_nulles), "compteurs": compteurs}
+                "ecart": ecart_apparie(lc, lt_commun, n_nulles), "compteurs": compteurs}
     return out
 
 
@@ -220,11 +224,13 @@ def mesurer(pan: dict[str, Any], essai: dict[str, Any], couts: np.ndarray | floa
     """L'essai complet sur un panneau. Rien n'est écrit : l'appelant consigne."""
     from packages.research.adversarial import sabotage_verdict
     ic = mesurer_ic(pan, essai, n_nulles)
-    cand = rendements(pan, _candidat(essai["variante_principale"]), essai, couts)
-    tem = rendements(pan, _temoin(essai), essai, couts)
+    principal = _candidat(essai["variante_principale"])
+    cand = rendements(pan, principal, essai, couts)
+    # Le témoin choisit ses 12 lignes parmi les titres que le candidat sait classer.
+    tem = rendements(pan, sur_coupe_commune(_temoin(essai), principal), essai, couts)
     if not (cand["available"] and tem["available"]):
         return {"available": False, "status": "UNCALIBRATED", "ic": ic}
-    pl = placebo(pan, _candidat(essai["variante_principale"]), essai, couts,
+    pl = placebo(pan, principal, essai, couts,
                  _sharpe(cand["actif"]))
     pbo = pbo_variantes(pan, essai, couts)
     strategie = gate(cand["actif"], pbo.get("pbo"), pl["p"], chemin_ledger)

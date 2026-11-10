@@ -13,6 +13,7 @@ from packages.research.labo_classement import (
     ecart_apparie,
     lignes,
     panneau,
+    sur_coupe_commune,
 )
 from packages.research.portefeuille_classement import (
     decisions,
@@ -137,3 +138,19 @@ def test_les_episodes_sont_nets_de_deux_cotes_et_comptes():
     st = statistiques_episodes(nets)
     assert st["available"] and 0 < st["taux_gain"] < 1 and st["profit_factor"] > 0
     assert st["ic95"][0] <= st["esperance_simple"] <= st["ic95"][1]
+
+
+def test_l_ecart_apparie_porte_sur_les_memes_titres_des_deux_cotes():
+    """Un titre que le candidat ne peut pas classer (trou dans ses 36 mois) est classé
+    par le témoin : sans coupe commune, les deux IC portent sur des ensembles différents."""
+    pan = panneau(_donnees(10, 0.001))
+    pan["R"][300, :5] = np.nan                       # 5 titres : fenêtre du candidat trouée
+    pan["C"][300, :5] = np.nan
+    temoin, t = classement_momentum(252, 21), 700
+    assert np.isfinite(temoin(pan, t)).sum() == np.isfinite(CANDIDAT(pan, t)).sum() + 5
+    a = sur_coupe_commune(CANDIDAT, temoin)(pan, t)
+    b = sur_coupe_commune(temoin, CANDIDAT)(pan, t)
+    assert np.array_equal(np.isfinite(a), np.isfinite(b))
+    la, _ = lignes(pan, sur_coupe_commune(CANDIDAT, temoin), 5, 5, EST)
+    lb, _ = lignes(pan, sur_coupe_commune(temoin, CANDIDAT), 5, 5, EST)
+    assert [x["n"] for x in la] == [x["n"] for x in lb]

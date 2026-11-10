@@ -98,6 +98,21 @@ def classement_placebo(classement: Classement, graine: int) -> Classement:
     return score
 
 
+def sur_coupe_commune(classement: Classement, autre: Classement) -> Classement:
+    """Les scores de `classement`, limités aux titres que `autre` sait AUSSI classer.
+
+    Le candidat exige une fenêtre d'estimation complète (36 mois) ; le témoin, ses deux
+    bornes seulement. Sans cette restriction, les deux IC d'une même date portent sur des
+    ensembles de titres différents, et leur écart mesure la composition de l'univers
+    autant que le signal (relecture du 10/11)."""
+    def score(pan: dict[str, Any], t: int) -> np.ndarray | None:
+        a, b = classement(pan, t), autre(pan, t)
+        if a is None or b is None:
+            return None
+        return np.where(np.isfinite(b), a, np.nan)
+    return score
+
+
 def lignes(pan: dict[str, Any], classement: Classement, h: int, pas: int,
            debut: int) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Une ligne par date mesurable (RankIC, écart du top-12) et les compteurs."""
