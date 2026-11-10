@@ -19,6 +19,48 @@
 
 ---
 
+## 2026-11-10 — Momentum résiduel, essai figé `momentum-residuel-2026-11-10` — **REJETÉ** (VPS, données réelles)
+
+Essai déposé le 10/11 AVANT toute mesure (`config/essais/2026-11-10_momentum_residuel.yaml`,
+ADR-0222). Mesure : `make labo-momentum-residuel` sur le VPS, 622 séries réelles, 2 762 séances,
+décisions tous les 5 jours (401), top-12, coûts par classe (10,28 bps aller-retour actions).
+Empreinte de l'essai : `3ce3f6746fbe`. Variante principale : estimation 756 j, formation 252 j,
+saut 21 j, standardisé.
+
+**Facteur — IC apparié (candidat − momentum 12-1, mêmes titres, mêmes dates) :**
+
+| Variante | h = 5 : écart / t / p | h = 20 : écart / t / p |
+|---|---|---|
+| e756 std (principale) | −0,0054 / −1,02 / 0,324 | −0,0080 / −0,72 / 0,466 |
+| e504 std | −0,0073 / −0,99 / 0,346 | −0,0047 / −0,31 / 0,748 |
+| e756 brut | −0,0074 / −1,37 / 0,186 | −0,0100 / −0,92 / 0,352 |
+| e504 brut | −0,0087 / −1,17 / 0,263 | −0,0083 / −0,57 / 0,563 |
+
+Écart négatif sur les 8 mesures, aucune significative ; les deux moitiés de l'historique ne
+concordent pas. **Facteur non retenu.**
+
+**Portefeuille :** top-12 candidat − top-12 témoin : **−26,3 %/an**, IC 95 % [−48,5 ; −6,4].
+Le candidat fait moins bien que le momentum 12-1 de manière significative.
+
+**Gate (4 étages) :**
+- Placebo p = 0,002 (contre la coupe du candidat lui-même, pas contre le témoin).
+- PBO = 0,19 sur les 4 variantes.
+- DSR = 0,003 pour **5 744 essais** du registre au moment du calcul ; Sharpe actif hors
+  échantillon +0,55 contre 2,09 exigé (promouvable) et 3,02 (déployable).
+- Sabotage **non survécu**.
+
+**Épisodes de détention nets** (1 311 clos) : espérance +2,78 %, IC 95 % [+1,71 ; +4,10],
+gain 57 %, profit factor 2,03. Ce chiffre est absolu : sur 2015-2026 le marché a monté, et
+un titre pris au hasard aussi. Il ne mesure pas un avantage du signal.
+
+**Consignation :** 9 essais ajoutés au registre (5 744 → 5 753). Tout essai futur est déflaté
+par ce compteur.
+
+**Décision :** essai clos. Pas de réglage relancé : une nouvelle variante serait un nouvel
+essai, à déposer avant mesure. Vérification du signe en attente (voir la note de la session
+du 10/11 dans `04_JOURNAL`) : un écart négatif cohérent sur 8 mesures peut être un résultat
+ou un défaut de convention.
+
 ## 2026-09-30 (nuit, VPS) — grid_runner sur données réelles 2015+ ; satellite SMCLXTP-A INVALIDE
 
 **Grille multi-horizons, 12 actions tirées (graine 20260930), daily depuis 2015** — 2016 essais.
