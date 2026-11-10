@@ -101,6 +101,13 @@ def deflated_sharpe_ratio(sharpe: float, n: int, n_trials: int,
     (ex. n=2500, 20 essais → seuil ≈ 0.75 annualisé)."""
     if n_trials < 1 or n < 2:
         return 0.0
+    if n_trials == 1:
+        # UN essai : il n'y a aucun maximum à déflater, le DSR EST le PSR contre 0.
+        # Avant le 10/11, la formule appelait `_norm_ppf(0)` (≈ −6) : le seuil devenait
+        # très négatif et un Sharpe NUL sortait à DSR 0,99 — « déployable ». Sans effet
+        # tant que le registre compte des milliers d'essais ; porte grande ouverte pour
+        # un registre neuf ou un compte par famille réduit à une ligne.
+        return probabilistic_sharpe_ratio(sharpe, n, skew, kurt)
     if sr_std is None:
         sr_std = math.sqrt(1.0 / n)
     e = 0.5772156649                                  # Euler-Mascheroni
