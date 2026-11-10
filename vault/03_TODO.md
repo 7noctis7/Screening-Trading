@@ -29,6 +29,15 @@
       dans `generate_signals`, qui recalcule ATR et moyennes sur TOUT l'historique à chaque
       barre (0,22 ms par barre·actif sur 1 an, 1,15 sur 10 ans). Précalculer une fois les
       indicateurs CAUSAUX, avec un test d'équivalence barre par barre (mêmes signaux).
+- [ ] **P1 — Lancer l'essai figé du momentum résiduel (10/11, ADR-0222)** : sur le VPS,
+      `make puissance-gate` puis `make labo-momentum-residuel`. Lire d'abord le niveau
+      FACTEUR (écart d'IC apparié face au momentum 12-1). Ne rien relancer avec d'autres
+      paramètres : ce serait un autre essai. Consigner le verdict dans `10_BACKTEST_RESULTS`.
+- [ ] **P1 — Décision du propriétaire sur le seuil de détection du gate (ADR-0222)** : à
+      5 744 essais, il faut un Sharpe annualisé ≥ 1,18 sur 10 ans pour être promouvable.
+      Options (a) à (d) de l'ADR ; aucune n'est prise.
+- [ ] **P2 — Audit `--strict` (phase 2)** : le run Pages du 09/11 affiche « critiques 0 »
+      sur les deux bases. Condition remplie pour passer `data_audit.py --strict`.
 - [x] **~~P0 — D4 : poche crypto (02/10)~~ — TRANCHÉ 02/10 (ADR-0212) : plus de poche obligatoire, la crypto concourt avec les actions sur le momentum.** : 6 cibles de 273 à 455 $ toutes sous le plancher
       de 1 000 $ → poche à ZÉRO chaque jour, en silence. Options : (a) 2 lignes max (BTC,
       ETH) ; (b) retirer la poche (recommandé) ; (c) plancher crypto abaissé. DÉCISION À PRENDRE.

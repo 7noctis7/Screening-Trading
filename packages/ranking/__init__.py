@@ -1,4 +1,5 @@
 """packages.ranking — score composite multi-facteur + sélection top N (explicable)."""
+from packages.ranking import momentum_residuel  # noqa: F401 (enregistrement du plugin)
 from packages.ranking.engine import RankedAsset, RankingEngine
 from packages.ranking.factors import factor_calcs
 

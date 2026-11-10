@@ -2,6 +2,53 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0222 — Publier ce que le gate peut détecter ; un seul candidat, figé, jugé face au témoin (2026-11-10)
+
+**Contexte.** Mission : trouver une stratégie à espérance robuste qui passe le gate complet.
+Avant de chercher, mesuré ce que le gate exige (`make puissance-gate`, formule du gate,
+compteur réel du registre : 5 744 essais, rendements supposés normaux) :
+
+| Porte | 3 ans | 5 ans | 10 ans | 20 ans |
+|---|---|---|---|---|
+| promouvable (DSR > 0,5) | 2,15 | 1,66 | 1,18 | 0,83 |
+| déployable (DSR > 0,95) | 3,11 | 2,41 | 1,70 | 1,20 |
+
+(Sharpe annualisé minimal.) Un Sharpe vrai de 0,5 mettrait 55 ans à être promouvable, de
+1,0 : 14 ans. Un classement long-only qui bat son univers a un ratio d'information
+plausible de 0,3 à 0,6 : il est refusé PAR CONSTRUCTION, qu'il existe ou non. Les
+« DSR ≈ 0, non établi » du dépôt ne distinguent donc pas « rien » de « invisible ».
+
+**Décision.**
+1. **Aucun seuil n'est changé.** `puissance_gate` publie le seuil de détection à côté de
+   chaque verdict ; le choix de ce qu'on en fait revient au propriétaire (options ci-dessous).
+2. **Défaut corrigé** dans `psr.deflated_sharpe_ratio` : à un seul essai, un Sharpe NUL
+   sortait à DSR 0,99 (`_norm_ppf(0)`). Le DSR vaut désormais le PSR. Plus strict.
+3. **Un seul candidat, pas une recherche** : momentum résiduel (Blitz, Huij & Martens
+   2011), raffinement du seul signal mesuré (momentum 12-1, t = 4,09). Plugin
+   `packages/ranking/momentum_residuel.py`, hors `config/factors.yaml`.
+4. **Essai figé avant toute mesure** (`config/essais/2026-11-10_momentum_residuel.yaml`,
+   écrit sans base de prix) : 4 variantes × 2 horizons + 1 portefeuille = 9 essais.
+5. **Deux niveaux, comme `15_CERTIFICATION`** : le FACTEUR se juge sur l'écart d'IC APPARIÉ
+   face au témoin (mêmes titres, mêmes dates — la largeur de la coupe donne la puissance
+   que la courbe d'un portefeuille n'a pas) ; la STRATÉGIE sur le gate complet.
+
+**Écarté, avec le motif.** Nouveau label ou triple barrière (ADR-0219 : aucune variante
+retenue) ; méta-filtre (AUC 0,5004 le 30/09 : il faut d'abord un signal primaire à
+espérance positive) ; modèle sensible au régime (un essai, +0,04 de Sharpe, non déflaté).
+Chacun consommerait des essais pour un a priori plus faible que le candidat retenu.
+
+**Options laissées au propriétaire** (aucune n'est prise ici) : (a) garder le gate tel quel
+et accepter qu'aucun classement long-only ne soit jamais « promouvable » sur 10 ans ;
+(b) allonger l'historique (20 ans : seuil 0,83) au prix d'un biais du survivant plus fort ;
+(c) déflater par un nombre d'essais EFFECTIF (les 5 744 sont des grilles très corrélées) —
+c'est modifier le gate, donc une décision explicite ; (d) juger un remplacement de
+classement sur le test apparié, et réserver le DSR à l'affirmation d'un alpha.
+
+**Conséquences.** `make labo-momentum-residuel` sur le VPS produit le verdict ; ici il
+répond UNCALIBRATED (aucune base de prix). Résultat attendu, dit d'avance : le niveau
+STRATÉGIE sera très probablement « rejeté » par le DSR quel que soit l'effet ; le niveau
+FACTEUR est celui qui informe.
+
 ## ADR-0221 — `snapshot.py` découpé en 13 modules sous 400 lignes, texte inchangé, façade conservée (2026-10-31)
 
 **Contexte.** Après ADR-0220, `apps/api/snapshot.py` faisait encore 3 300 lignes (règle :

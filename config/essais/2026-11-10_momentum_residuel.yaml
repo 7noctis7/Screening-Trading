@@ -1,0 +1,67 @@
+# Essai figé le 2026-11-10, AVANT tout résultat.
+# Écrit dans un conteneur SANS base de prix : aucune donnée réelle n'a été lue pour choisir
+# ces nombres. Ils viennent de la publication (Blitz, Huij & Martens 2011) et des réglages
+# de production (cadence, top_k). En changer un est un AUTRE essai, compté dans le DSR.
+nom: momentum-residuel-2026-11-10
+question: >
+  Sur les mêmes titres et aux mêmes dates, classer sur le momentum RÉSIDUEL (marché retiré)
+  prédit-il mieux le rendement futur que le classement momentum 12-1 déjà mesuré ?
+these: >
+  Le momentum de prix mélange le mouvement propre du titre et son exposition au marché.
+  Seule la première part est une information sur le titre ; la seconde charge le haut du
+  classement en bêta et casse aux retournements. Aucun paramètre n'est ajusté.
+
+univers: séries négociables de scripts/preset_replay._donnees (celles de la production)
+cadence_seances: 5            # packages/execution/cadence.py : le rythme de la production
+execution: clôture de la séance qui SUIT la décision   # jamais le close du signal
+top_k: 12                     # `top_k` de production
+# Précisé le 10/11, toujours AVANT toute mesure : le barème suit la classe de CHAQUE titre
+# (une crypto ne coûte pas ce que coûte une action), comme le rejeu de production.
+couts: CostModel.for_asset_class(classe du titre), par côté, appliqué à la rotation
+
+variante_principale:
+  estimation: 756             # 36 mois
+  formation: 252              # 12 mois
+  saut: 21                    # dernier mois exclu
+  standardise: true
+voisines:                     # robustesse et PBO — PAS une recherche du meilleur réglage
+  - {estimation: 504, formation: 252, saut: 21, standardise: true}
+  - {estimation: 756, formation: 252, saut: 21, standardise: false}
+  - {estimation: 504, formation: 252, saut: 21, standardise: false}
+temoin: {momentum: 252, saut: 21}    # classement 12-1, déjà mesuré le 07/10 : pas un essai neuf
+
+horizons_seances: [5, 20]
+horizon_principal: 5
+tirages_placebo: 500
+bootstrap: {tirages: 2000, bloc_seances: 20}
+# 4 variantes × 2 horizons (IC) + 1 portefeuille (variante principale)
+essais_comptes: 9
+
+# Deux niveaux, comme vault/15_CERTIFICATION.md : un FACTEUR se juge sur son IC, une
+# STRATÉGIE sur le gate complet. Écrit avant la mesure ; rien n'est relancé après lecture.
+regle_de_decision:
+  facteur_retenu_si_tout_est_vrai:
+    - écart d'IC apparié (candidat − témoin) > 0 à l'horizon principal, p par inversion de signe < 0.05
+    - écart d'IC de même signe sur les deux moitiés de l'historique
+    - écart d'IC de même signe à l'autre horizon
+  strategie_promouvable_si_tout_est_vrai:
+    - facteur retenu
+    - placebo (sélection au hasard dans la même coupe) p < 0.05
+    - DSR du rendement actif net contre l'univers, essais lus au registre (verdict_hors_echantillon)
+    - PBO < 0.5 sur les 4 variantes
+    - sabotage survécu (coûts aggravés, retard, bruit)
+    - top-12 candidat − top-12 témoin, net de coûts — l'intervalle bootstrap à 95 % exclut 0
+  sinon: rejeté, consigné tel quel au registre
+  seuil_de_detection: >
+    publier, à côté du verdict, le Sharpe minimal que la porte exigeait
+    (packages/research/puissance_gate) — un refus se lit avec ce qu'il aurait fallu
+
+compteurs_publies:
+  - dates de décision mesurées, dates sautées (coupe < 20 titres)
+  - titres classés et titres écartés pour historique incomplet, par date (médiane)
+  - rotation par rééquilibrage, barres manquantes d'un titre détenu
+  - épisodes de détention : clos, encore ouverts, non valorisables
+
+promotion: packages.research.gate.verdict_hors_echantillon
+production: aucune modification — le facteur reste hors de config/factors.yaml
+ordres: aucun

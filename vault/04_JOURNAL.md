@@ -1,5 +1,22 @@
 # 04 — JOURNAL
 
+## Session 2026-11-10 — Avant de chercher un alpha, mesurer ce que le gate peut voir
+
+Mission : une stratégie à espérance robuste qui passe le gate complet. Premier geste :
+inverser la formule du gate (`make puissance-gate`). À 5 744 essais, il faut un Sharpe
+annualisé de 1,18 sur 10 ans pour être promouvable, 1,70 pour être déployable ; un Sharpe
+vrai de 0,5 mettrait 55 ans. Un classement long-only réaliste est donc refusé par
+construction : « non établi » ne voulait pas dire « rien ». Aucun seuil changé (ADR-0222).
+
+En chemin : à UN essai, `deflated_sharpe_ratio` rendait 0,99 pour un Sharpe nul
+(`_norm_ppf(0)`) — corrigé, plus strict. Un seul candidat écrit, pas une recherche : le
+momentum résiduel (plugin facteur, hors production), essai figé AVANT toute mesure, jugé
+face au momentum 12-1 sur les mêmes titres et les mêmes dates. Mon premier signal
+synthétique (dérive constante) n'était pas vu : la définition publiée retire la moyenne
+propre du titre — le test plante désormais une dérive par périodes. Le conteneur n'a pas
+de base de prix : `make labo-momentum-residuel` répond UNCALIBRATED, à lancer sur le VPS.
+Au passage : #458 et #461 fusionnées ; le run Pages du 09/11 affiche « critiques 0 ».
+
 ## Session 2026-10-31 (2ᵉ) — Vers le 10/10 sans dépenser un euro
 
 Suite de la comparaison : une PR par catégorie, chacune testée avant fusion.
