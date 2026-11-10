@@ -29,6 +29,8 @@
 | `earnings_blackout` | ne pas porter une position nue à travers une annonce | filtre | — |
 
 ## Jamais mesurées (hypothèses ouvertes)
+- **Momentum résiduel** (`packages/ranking/momentum_residuel.py`, `CANDIDATE_UNCALIBRATED`) :
+  essai figé le 10/11 (ADR-0222), à lancer par `make labo-momentum-residuel` sur le VPS.
 - **Retournement court terme transversal** : acheter les perdants, vendre les gagnants du
   dernier mois, chaque semaine. Aucun passage réel dans `10_BACKTEST_RESULTS`.
 - **Momentum en série temporelle** (Moskowitz 2012) : `08_Alphas/ts_momentum.md`, statut

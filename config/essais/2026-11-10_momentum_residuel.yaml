@@ -15,7 +15,9 @@ univers: séries négociables de scripts/preset_replay._donnees (celles de la pr
 cadence_seances: 5            # packages/execution/cadence.py : le rythme de la production
 execution: clôture de la séance qui SUIT la décision   # jamais le close du signal
 top_k: 12                     # `top_k` de production
-couts: CostModel.for_asset_class("equity"), par côté, appliqué à la rotation
+# Précisé le 10/11, toujours AVANT toute mesure : le barème suit la classe de CHAQUE titre
+# (une crypto ne coûte pas ce que coûte une action), comme le rejeu de production.
+couts: CostModel.for_asset_class(classe du titre), par côté, appliqué à la rotation
 
 variante_principale:
   estimation: 756             # 36 mois
