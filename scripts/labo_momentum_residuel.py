@@ -27,7 +27,7 @@ def _couts(syms: list[str], acmap: dict):
     import numpy as np
 
     from packages.execution import CostModel
-    return np.array([CostModel.for_asset_class(acmap.get(s, "equity")).round_trip_bps()
+    return np.array([CostModel.for_asset_class(acmap.get(s, "equity")).round_trip_bps
                      / 2.0 / 1e4 for s in syms])
 
 
