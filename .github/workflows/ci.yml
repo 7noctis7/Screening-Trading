@@ -35,6 +35,13 @@ jobs:
       - name: Build all pages
         working-directory: apps/web
         run: npm run build
+      - name: npm audit high/critical (non bloquant tant que Next.js 14 — TODO P1)
+        # 1 critique (next) et 11 hautes (tailwindcss 3 et ses dépendances) : toutes
+        # exigent une version MAJEURE (Next 16, Tailwind 4). Rendre ce pas bloquant fait
+        # partie de la migration, pas d'une montée de version (audit 17/11).
+        continue-on-error: true
+        working-directory: apps/web
+        run: npm audit --audit-level=high
 
   tests:
     name: pytest
@@ -96,11 +103,13 @@ jobs:
         # Les 2 917 erreurs du 31/10 sont figées ; une de plus fait échouer la PR.
         # Après en avoir corrigé : python scripts/mypy_baseline.py --update
         run: python scripts/mypy_baseline.py
-      - name: pip-audit (vulnérabilités des dépendances — non bloquant)
-        continue-on-error: true
+      - name: pip-audit du verrou (BLOQUANT — audit 17/11)
+        # Le verrou est ce qui est installé sur le VPS : c'est lui qu'on audite, pas
+        # l'environnement du runner. Une faille publiée sur un paquet épinglé fait échouer
+        # la PR ; corriger par `uv pip compile … --upgrade-package <paquet>`, puis commiter le verrou.
         run: |
-          pip install pip-audit
-          pip-audit --progress-spinner off || true
+          pip install "pip-audit==2.10.1"
+          pip-audit -r constraints.txt --no-deps --disable-pip --progress-spinner off
       - name: vault-lint (intégrité mémoire Obsidian — non bloquant, audit 05/07)
         continue-on-error: true
         run: python scripts/vault_lint.py
