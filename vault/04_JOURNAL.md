@@ -1,5 +1,18 @@
 # 04 — JOURNAL
 
+## Session 2026-11-17 — Le robot figé par un seuil que personne n'avait choisi
+
+Le robot paper n'achetait plus rien depuis le 02/11. La page Positions accusait le plancher de
+1 000 $ ; le journal du VPS disait autre chose : « kill-switch, drawdown −8,6 % ≤ −5 % ». Le
+seuil venait de #425 (01/10), qui avait branché une limite de perte JOURNALIÈRE de 5 % sur une
+mesure depuis le plus haut de tout l'historique. Contournement immédiat (`QUANT_INTRADAY_DD=-0.15`
+dans `.env`, achat de QQQ de 2 157 $ le soir même), puis correction de fond (ADR-0223) :
+`max_drawdown_pct` 15 %, plus haut sur 63 séances, bandeau sur la page Positions.
+
+Registre d'essais (#466) : il n'existait que sur le VPS et `make up` le mettait de côté. 21 essais
+des 06–07/10 retrouvés dans trois réserves git, 9 essais du momentum résiduel réenregistrés
+(verdict REJETÉ inchangé), 5 IC du 06/10 annotés invalides. Compteur 5 744 → 5 767.
+
 ## Session 2026-11-10 — Avant de chercher un alpha, mesurer ce que le gate peut voir
 
 Mission : une stratégie à espérance robuste qui passe le gate complet. Premier geste :

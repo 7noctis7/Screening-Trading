@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
 # Témoin d'observabilité. Import au NIVEAU MODULE, et c'est délibéré : le faire à
 # l'intérieur du `try` de `dd_kill_switch` ferait retomber une simple erreur d'import
@@ -105,10 +106,28 @@ def vet_brokers(alpaca, bitmart, dry: bool, cli_equity: float | None):
 
 
 
-# Défaut aligné sur config/risk.yaml portfolio.max_daily_drawdown_pct (0.05).
-# drawdown_breach attend une fraction de peak-drawdown NÉGATIVE (−0.05) ; le YAML
-# stocke la magnitude positive (0.05 = « daily drawdown 5 % »). Mapping : −abs(yaml).
-DD_LIMIT_DEFAUT = -0.05  # repli si YAML absent/illisible (même vérité 5 %)
+# SEUIL ET FENÊTRE DU KILL-SWITCH DRAWDOWN (17/11).
+#
+# DEUX NOTIONS ÉTAIENT CONFONDUES. Le 01/10 (#425), le regroupement des réglages dans
+# `risk.yaml` a branché ce kill-switch sur `max_daily_drawdown_pct: 0.05` — une limite de
+# perte JOURNALIÈRE, que la politique de risque (`vault/07_RISK_POLICY.md`) décrit avec un
+# « reset quotidien ». Le code, lui, l'appliquait à la baisse depuis le plus haut de TOUT
+# l'historique, sans reset. Le seuil effectif est passé de −15 % à −5 % sans que personne
+# l'ait décidé. Constaté le 16/11 : drawdown −8,6 %, aucun achat possible.
+#
+# POURQUOI C'EST UN PIÈGE ET PAS SEULEMENT UN SEUIL STRICT. Le kill-switch bloque les
+# achats ; seul ce qui est déjà détenu peut donc faire remonter le compte. Avec 50 % de
+# QQQ et le reste en espèces, sortir du blocage exigeait que QQQ remonte d'environ 8 % —
+# en marché latéral, le robot pouvait rester figé indéfiniment.
+#
+# CE QUI EST FAIT. Un paramètre DÉDIÉ (`max_drawdown_pct`, 15 % — la valeur que le code
+# portait avant le 01/10 et que `vault/17_UPGRADE/AXE5_EXECUTION.md` documente pour le
+# livre) et un plus haut mesuré sur une FENÊTRE GLISSANTE (`drawdown_window_sessions`,
+# 63 séances ≈ 3 mois) : un blocage ne peut plus durer plus longtemps que la fenêtre.
+# La perte du JOUR reste surveillée par le disjoncteur (`packages/risk/disjoncteur.py`).
+DD_LIMIT_DEFAUT = -0.15     # repli si YAML absent/illisible
+FENETRE_DD_DEFAUT = 63      # séances (un point d'equity par date)
+_FENETRE_MIN = 2
 
 
 def _chemin_risk_yaml() -> Path:
@@ -116,11 +135,8 @@ def _chemin_risk_yaml() -> Path:
     return Path(__file__).resolve().parents[2] / "config" / "risk.yaml"
 
 
-def _dd_limit_depuis_yaml(path: Path | None = None) -> float:
-    """Lit `max_daily_drawdown_pct` (fraction positive) → seuil négatif pour breach.
-
-    Ex. yaml 0.05 → −0.05. YAML absent/illisible → `DD_LIMIT_DEFAUT` (−0.05).
-    """
+def _portefeuille_yaml(path: Path | None = None) -> dict[str, Any]:
+    """Section `portfolio` de risk.yaml, ou {} si absente/illisible."""
     chemin = path if path is not None else _chemin_risk_yaml()
     try:
         from packages.common.config import load_yaml
@@ -131,30 +147,28 @@ def _dd_limit_depuis_yaml(path: Path | None = None) -> float:
             with chemin.open("r", encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
         except Exception:
-            return DD_LIMIT_DEFAUT
-    if not isinstance(data, dict):
-        return DD_LIMIT_DEFAUT
-    portfolio = data.get("portfolio")
-    if not isinstance(portfolio, dict):
-        return DD_LIMIT_DEFAUT
-    raw = portfolio.get("max_daily_drawdown_pct", 0.05)
+            return {}
+    portfolio = data.get("portfolio") if isinstance(data, dict) else None
+    return portfolio if isinstance(portfolio, dict) else {}
+
+
+def _dd_limit_depuis_yaml(path: Path | None = None) -> float:
+    """Lit `max_drawdown_pct` (fraction positive) → seuil négatif pour breach.
+
+    Ex. yaml 0.15 → −0.15. Absent/illisible/≤ 0 → `DD_LIMIT_DEFAUT` (−0.15)."""
+    raw = _portefeuille_yaml(path).get("max_drawdown_pct", -DD_LIMIT_DEFAUT)
     try:
         mag = float(raw)
     except (TypeError, ValueError):
         return DD_LIMIT_DEFAUT
-    if mag <= 0:
-        return DD_LIMIT_DEFAUT
-    return -abs(mag)
+    return -abs(mag) if mag > 0 else DD_LIMIT_DEFAUT
 
 
 def resolve_intraday_dd_limit() -> float:
     """Seuil kill-switch DD : `QUANT_INTRADAY_DD` override si set/non vide, sinon YAML.
 
-    Même pattern que `Limites.depuis_env` (order_gate) : ENV = override explicite
-    seulement. Valeur ENV = fraction de peak-drawdown (négative, ex. −0.05).
-    Défaut sans ENV = `config/risk.yaml` `max_daily_drawdown_pct` mappé en négatif
-    (0.05 → −0.05). Docstring CEO P1.1 : vérité unique 5 %.
-    """
+    Valeur ENV = fraction de peak-drawdown (négative, ex. −0.15). Défaut sans ENV =
+    `config/risk.yaml` `max_drawdown_pct` mappé en négatif (0.15 → −0.15)."""
     raw = os.environ.get("QUANT_INTRADAY_DD")
     if raw is not None and str(raw).strip() != "":
         try:
@@ -164,16 +178,132 @@ def resolve_intraday_dd_limit() -> float:
     return _dd_limit_depuis_yaml()
 
 
-def dd_kill_switch(total_equity: float, bus, alert_engine,
-                   observateur: object | None = None, cles: set | None = None) -> float:
-    """Kill-switch sur le DRAWDOWN RÉEL du compte (principe 3). Lit l'historique
-    d'equity persisté + le point du jour ; DD depuis le pic ≤ seuil
-    (`QUANT_INTRADAY_DD` override, sinon risk.yaml 5 % → −0.05) → 0.0 = AUCUN ACHAT
-    (rien n'est vendu d'office : `run_live.cible_sous_garde`, QML-007).
-    Historique court/indispo → 1.0.
+def resolve_dd_window(path: Path | None = None) -> int:
+    """Fenêtre du plus haut, en séances : `QUANT_DD_WINDOW`, sinon YAML, sinon 63.
 
-    Signe : yaml `max_daily_drawdown_pct` est une magnitude positive (0.05) ; le code
-    compare un peak-drawdown négatif via `drawdown_breach` → mapping −abs(yaml).
+    Une valeur illisible ou < 2 retombe sur le défaut : une faute de frappe ne doit
+    ni désarmer le garde-fou ni le rendre permanent."""
+    for raw in (os.environ.get("QUANT_DD_WINDOW"),
+                _portefeuille_yaml(path).get("drawdown_window_sessions")):
+        if raw is None or str(raw).strip() == "":
+            continue
+        try:
+            n = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if n >= _FENETRE_MIN:
+            return n
+    return FENETRE_DD_DEFAUT
+
+
+def _seance(jour: object) -> bool:
+    """Un jour ouvré. Un snapshot reconstruit le week-end écrit aussi un point d'equity :
+    le compter comme une séance raccourcirait la fenêtre (revue Codex, PR #467). Une date
+    illisible n'est PAS comptée : compter de trop libérerait le blocage plus tôt."""
+    from datetime import date
+    try:
+        return date.fromisoformat(str(jour)[:10]).weekday() < 5
+    except ValueError:
+        return False
+
+
+def _debut_fenetre(dates: list[str], fenetre: int) -> int:
+    """Index du premier point gardé : celui de la `fenetre`-ième séance en partant de la
+    fin. Les points de week-end compris dans cet intervalle restent dans la fenêtre."""
+    vues = 0
+    for i in range(len(dates) - 1, -1, -1):
+        vues += _seance(dates[i])
+        if vues >= fenetre:
+            return i
+    return 0
+
+
+def etat_kill_switch(curve: list[float], limit: float, fenetre: int,
+                     dates: list[str] | None = None) -> dict[str, Any]:
+    """Décision PURE : drawdown depuis le plus haut des `fenetre` dernières séances.
+
+    Avec `dates` (une par point), la fenêtre compte les jours ouvrés ; sans, les points.
+    Ajoute au verdict de `drawdown_breach` la fenêtre, le seuil et `reprise` : la valeur
+    du compte au-dessus de laquelle les achats reprennent. Sert au run ET à l'affichage —
+    une seule règle, pour que l'écran ne puisse pas dire autre chose que le robot."""
+    from packages.portfolio.stress import drawdown_breach
+    fenetre = max(_FENETRE_MIN, int(fenetre))
+    gardes = [(d, float(x)) for d, x in zip(dates or [""] * len(curve), curve)
+              if isinstance(x, (int, float)) and x > 0]
+    debut = (_debut_fenetre([d for d, _ in gardes], fenetre) if dates is not None
+             else max(0, len(gardes) - fenetre))
+    out = drawdown_breach([x for _, x in gardes[debut:]], dd_limit=limit)
+    out["fenetre"] = fenetre
+    out["limit"] = limit
+    if out.get("available"):
+        out["reprise"] = round(out["peak"] * (1.0 + limit), 2)
+    return out
+
+
+def _serie(cles: set[str] | None) -> tuple[list[str], list[float]]:
+    """(dates, valeurs) de l'equity sur le périmètre `cles` (QML-024).
+
+    Même règle que `equity_history.courbe_comparable` : un point qui n'a pas tout le
+    périmètre est écarté, jamais compté pour zéro. Sans `cles`, on somme tout ce que
+    l'historique contient — y compris un solde testnet ou une place absente du jour."""
+    from packages.execution.equity_history import _load
+    dates: list[str] = []
+    valeurs: list[float] = []
+    for h in _load():
+        if cles:
+            if not all(isinstance(h.get(k), (int, float)) and h[k] > 0 for k in cles):
+                continue
+            v = float(sum(h[k] for k in cles))
+        else:
+            v = float(sum(x for k, x in h.items()
+                          if k != "date" and isinstance(x, (int, float))))
+        dates.append(str(h.get("date", "")))
+        valeurs.append(v)
+    return dates, valeurs
+
+
+def _perimetre(dernier: dict[str, Any]) -> set[str]:
+    """Le périmètre que le run utiliserait (`passage_gardes.releve_equity`), lu dans le
+    dernier point : Alpaca, plus la place crypto active si elle a un solde et n'est pas
+    en bac à sable. Ce n'est pas « toutes les clés du dernier point » (revue Codex)."""
+    from packages.execution.venues import venue_crypto
+    v = venue_crypto()
+    cles = {"alpaca"}
+    if (dernier.get(v.cle) or 0) > 0 and not v.en_testnet():
+        cles.add(v.cle)
+    return cles
+
+
+def etat_courant() -> dict[str, Any]:
+    """État du kill-switch pour l'AFFICHAGE, sans réseau : historique d'equity seul.
+
+    Le run ajoute le relevé courtier du moment : les deux peuvent différer de quelques
+    heures de séance, et d'un périmètre si la place crypto a changé depuis le dernier point."""
+    try:
+        from packages.execution.equity_history import _load
+        hist = _load()
+        dernier = hist[-1] if hist else {}
+        cles = _perimetre(dernier)
+        dates, valeurs = _serie(cles)
+        out = etat_kill_switch(valeurs, resolve_intraday_dd_limit(), resolve_dd_window(),
+                               dates)
+    except Exception as e:  # noqa: BLE001 — un affichage ne doit jamais casser la page
+        # Le message reste dans le journal du serveur : un texte d'exception renvoyé par
+        # l'API peut exposer des chemins ou une trace (alerte CodeQL, PR #467).
+        print(f"· kill-switch (affichage) : état indisponible ({type(e).__name__})")
+        return {"available": False, "raison": "état indisponible"}
+    out["depuis"] = dernier.get("date")
+    out["perimetre"] = sorted(cles)
+    return out
+
+
+def dd_kill_switch(total_equity: float, bus, alert_engine,
+                   observateur: object | None = None, cles: set[str] | None = None) -> float:
+    """Kill-switch sur le DRAWDOWN RÉEL du compte (principe 3). Lit l'historique
+    d'equity persisté + le point du jour ; baisse depuis le plus haut des
+    `resolve_dd_window()` dernières séances ≤ seuil (`QUANT_INTRADAY_DD` override, sinon
+    risk.yaml `max_drawdown_pct` 15 % → −0.15) → 0.0 = AUCUN ACHAT (rien n'est vendu
+    d'office : `run_live.cible_sous_garde`, QML-007). Historique court/indispo → 1.0.
 
     `observateur` ne change RIEN à la décision : il reçoit l'état pour que le rapport
     des garde-fous distingue les trois 1.0 que cette fonction rend — « rien à couper »,
@@ -181,42 +311,41 @@ def dd_kill_switch(total_equity: float, bus, alert_engine,
     à l'écran et n'ont pas du tout le même sens."""
     limit = resolve_intraday_dd_limit()
     try:
-        from packages.execution.equity_history import _load
-        from packages.portfolio.stress import drawdown_breach
-        # `cles` = le périmètre de `total_equity` (QML-024). Sans lui, on somme tout ce que
-        # l'historique contient — y compris un solde testnet ou une place absente du jour.
-        from packages.execution.equity_history import courbe_comparable
-        curve = (courbe_comparable(_load(), set(cles)) if cles else
-                 [sum(v for k, v in h.items() if k != "date" and isinstance(v, (int, float)))
-                  for h in _load()])
-        curve = [x for x in curve if x > 0]
+        dates, curve = _serie(cles)
         if total_equity > 0:
+            from datetime import UTC, datetime
+            dates.append(datetime.now(UTC).date().isoformat())
             curve.append(total_equity)
-        out = drawdown_breach(curve, dd_limit=limit)
+        out = etat_kill_switch(curve, limit, resolve_dd_window(), dates)
         if not out.get("available"):
             noter(observateur, KILL_DD, etat=UNCALIBRATED, motif="historique_insuffisant")
             return 1.0
         if not out.get("breach"):
             noter(observateur, KILL_DD, etat=ACTIVE)
             return 1.0
-        msg = (f"drawdown réel {out['drawdown']*100:.1f}% ≤ seuil {limit*100:.0f}% "
-               f"(pic {out['peak']}, dernier {out['last']})")
-        print(f"⛔ KILL-SWITCH DRAWDOWN RÉEL : {msg} → achats BLOQUÉS "
-              "(aucune vente forcée, cf. QML-007).")
-        if bus:
-            from packages.common.event_bus import Topic
-            bus.publish(Topic.KILL_SWITCH, {"drawdown": out["drawdown"]})
-        if alert_engine:
-            from packages.alerts import Alert, Severity
-            alert_engine.emit(Alert("risk", Severity.CRITICAL,
-                                    f"Kill-switch drawdown réel déclenché : {msg}",
-                                    dedup_key="risk:dd_kill_switch"))
+        _signaler(out, limit, bus, alert_engine)
         noter(observateur, KILL_DD, etat=ACTIVE, declenche=True, motif="drawdown")
         return 0.0
     except Exception as e:  # noqa: BLE001 — le check ne doit jamais BLOQUER un run sain
         print(f"· kill-switch DD réel : check indisponible ({str(e)[:50]}) — non appliqué.")
         noter(observateur, KILL_DD, etat=ERREUR, motif="check_indisponible")
         return 1.0
+
+
+def _signaler(out: dict[str, Any], limit: float, bus: Any, alert_engine: Any) -> None:
+    msg = (f"drawdown réel {out['drawdown']*100:.1f}% ≤ seuil {limit*100:.0f}% "
+           f"(pic {out['peak']} sur {out['fenetre']} séances, dernier {out['last']} ; "
+           f"reprise des achats au-dessus de {out['reprise']})")
+    print(f"⛔ KILL-SWITCH DRAWDOWN RÉEL : {msg} → achats BLOQUÉS "
+          "(aucune vente forcée, cf. QML-007).")
+    if bus:
+        from packages.common.event_bus import Topic
+        bus.publish(Topic.KILL_SWITCH, {"drawdown": out["drawdown"]})
+    if alert_engine:
+        from packages.alerts import Alert, Severity
+        alert_engine.emit(Alert("risk", Severity.CRITICAL,
+                                f"Kill-switch drawdown réel déclenché : {msg}",
+                                dedup_key="risk:dd_kill_switch"))
 
 
 def fail_loud(reasons: list[str], alert_engine, code: int) -> None:

@@ -5,6 +5,7 @@
 // corrigera. 100 % données réelles côté « réel » ; la cible est le modèle (étiquetée comme telle).
 import { StepBanner } from "@/components/Pipeline";
 import { PortefeuilleLive } from "@/components/PortefeuilleLive";
+import { BandeauKillSwitch } from "@/components/BandeauKillSwitch";
 import { useMemo, useState } from "react";
 import { usePositions } from "@/lib/api";
 import { TechnicalChart } from "@/components/TechnicalChart";
@@ -230,7 +231,9 @@ export default function Positions() {
           séance). Mélanger les deux sous un même « LIVE » était le vrai défaut. */}
       <PortefeuilleLive />
 
-      {toutBloque && (
+      <BandeauKillSwitch etat={data?.kill_switch} />
+
+      {toutBloque && !data?.kill_switch?.breach && (
         // Le rebalancement ne peut RIEN ouvrir. Sans ce bandeau, la liste ressemble à des
         // achats imminents alors qu'aucun ordre ne partira — c'est la question qui a mené
         // au diagnostic du 26/08.

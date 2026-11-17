@@ -17,25 +17,30 @@ if str(ROOT) not in sys.path:
 
 
 def main() -> int:
-    from packages.execution.live_guards import resolve_intraday_dd_limit
-    from packages.portfolio.stress import drawdown_breach
+    from packages.execution.live_guards import (
+        etat_kill_switch,
+        resolve_dd_window,
+        resolve_intraday_dd_limit,
+    )
 
-    # Même SSoT que dd_kill_switch : risk.yaml 5 % → −0.05, ENV override si set.
-    limit = resolve_intraday_dd_limit()
+    # Même règle que dd_kill_switch : seuil risk.yaml max_drawdown_pct (−0.15) et plus
+    # haut sur la fenêtre glissante, overrides ENV si set.
+    limit, fenetre = resolve_intraday_dd_limit(), resolve_dd_window()
     try:
         from apps.api.snapshot import build_snapshot
         rp = build_snapshot()["dashboard"].get("real_portfolio") or {}
-        curve = [p.get("v") for p in (rp.get("curve") or rp.get("equity") or [])]
-        curve = [x for x in curve if isinstance(x, (int, float))]
+        pts = [p for p in (rp.get("curve") or rp.get("equity") or [])
+               if isinstance(p.get("v"), (int, float))]
+        curve, dates = [p["v"] for p in pts], [str(p.get("t", "")) for p in pts]
     except Exception as e:  # noqa: BLE001
         print(f"⚠ courbe réelle indisponible ({e}) — check ignoré (best-effort).")
         return 0
-    out = drawdown_breach(curve, dd_limit=limit)
+    out = etat_kill_switch(curve, limit, fenetre, dates)   # fenêtre en jours ouvrés
     if not out.get("available"):
         print("ℹ Historique réel trop court — pas de check.")
         return 0
     print(f"Drawdown courant {out['drawdown']*100:.1f}% (pic {out['peak']}, "
-          f"dernier {out['last']}) · seuil {limit*100:.0f}%")
+          f"sur {fenetre} séances, dernier {out['last']}) · seuil {limit*100:.0f}%")
     if out["breach"]:
         print("🔴 BREACH → aplatir : python3 scripts/run_live.py --live --yes "
               "(le kill-switch réduit l'exposition à 0).")
