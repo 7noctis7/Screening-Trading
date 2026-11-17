@@ -196,50 +196,104 @@ def resolve_dd_window(path: Path | None = None) -> int:
     return FENETRE_DD_DEFAUT
 
 
-def etat_kill_switch(curve: list[float], limit: float, fenetre: int) -> dict[str, Any]:
-    """Décision PURE : drawdown depuis le plus haut des `fenetre` derniers points.
+def _seance(jour: object) -> bool:
+    """Un jour ouvré. Un snapshot reconstruit le week-end écrit aussi un point d'equity :
+    le compter comme une séance raccourcirait la fenêtre (revue Codex, PR #467). Une date
+    illisible n'est PAS comptée : compter de trop libérerait le blocage plus tôt."""
+    from datetime import date
+    try:
+        return date.fromisoformat(str(jour)[:10]).weekday() < 5
+    except ValueError:
+        return False
 
+
+def _debut_fenetre(dates: list[str], fenetre: int) -> int:
+    """Index du premier point gardé : celui de la `fenetre`-ième séance en partant de la
+    fin. Les points de week-end compris dans cet intervalle restent dans la fenêtre."""
+    vues = 0
+    for i in range(len(dates) - 1, -1, -1):
+        vues += _seance(dates[i])
+        if vues >= fenetre:
+            return i
+    return 0
+
+
+def etat_kill_switch(curve: list[float], limit: float, fenetre: int,
+                     dates: list[str] | None = None) -> dict[str, Any]:
+    """Décision PURE : drawdown depuis le plus haut des `fenetre` dernières séances.
+
+    Avec `dates` (une par point), la fenêtre compte les jours ouvrés ; sans, les points.
     Ajoute au verdict de `drawdown_breach` la fenêtre, le seuil et `reprise` : la valeur
     du compte au-dessus de laquelle les achats reprennent. Sert au run ET à l'affichage —
     une seule règle, pour que l'écran ne puisse pas dire autre chose que le robot."""
     from packages.portfolio.stress import drawdown_breach
-    pts = [float(x) for x in curve if isinstance(x, (int, float)) and x > 0]
-    out = drawdown_breach(pts[-max(_FENETRE_MIN, int(fenetre)):], dd_limit=limit)
-    out["fenetre"] = int(fenetre)
+    fenetre = max(_FENETRE_MIN, int(fenetre))
+    gardes = [(d, float(x)) for d, x in zip(dates or [""] * len(curve), curve)
+              if isinstance(x, (int, float)) and x > 0]
+    debut = (_debut_fenetre([d for d, _ in gardes], fenetre) if dates is not None
+             else max(0, len(gardes) - fenetre))
+    out = drawdown_breach([x for _, x in gardes[debut:]], dd_limit=limit)
+    out["fenetre"] = fenetre
     out["limit"] = limit
     if out.get("available"):
         out["reprise"] = round(out["peak"] * (1.0 + limit), 2)
     return out
 
 
-def _courbe(cles: set[str] | None) -> list[float]:
-    from packages.execution.equity_history import _load, courbe_comparable
-    # `cles` = le périmètre de `total_equity` (QML-024). Sans lui, on somme tout ce que
-    # l'historique contient — y compris un solde testnet ou une place absente du jour.
-    if cles:
-        return courbe_comparable(_load(), set(cles))
-    return [sum(v for k, v in h.items() if k != "date" and isinstance(v, (int, float)))
-            for h in _load()]
+def _serie(cles: set[str] | None) -> tuple[list[str], list[float]]:
+    """(dates, valeurs) de l'equity sur le périmètre `cles` (QML-024).
+
+    Même règle que `equity_history.courbe_comparable` : un point qui n'a pas tout le
+    périmètre est écarté, jamais compté pour zéro. Sans `cles`, on somme tout ce que
+    l'historique contient — y compris un solde testnet ou une place absente du jour."""
+    from packages.execution.equity_history import _load
+    dates: list[str] = []
+    valeurs: list[float] = []
+    for h in _load():
+        if cles:
+            if not all(isinstance(h.get(k), (int, float)) and h[k] > 0 for k in cles):
+                continue
+            v = float(sum(h[k] for k in cles))
+        else:
+            v = float(sum(x for k, x in h.items()
+                          if k != "date" and isinstance(x, (int, float))))
+        dates.append(str(h.get("date", "")))
+        valeurs.append(v)
+    return dates, valeurs
+
+
+def _perimetre(dernier: dict[str, Any]) -> set[str]:
+    """Le périmètre que le run utiliserait (`passage_gardes.releve_equity`), lu dans le
+    dernier point : Alpaca, plus la place crypto active si elle a un solde et n'est pas
+    en bac à sable. Ce n'est pas « toutes les clés du dernier point » (revue Codex)."""
+    from packages.execution.venues import venue_crypto
+    v = venue_crypto()
+    cles = {"alpaca"}
+    if (dernier.get(v.cle) or 0) > 0 and not v.en_testnet():
+        cles.add(v.cle)
+    return cles
 
 
 def etat_courant() -> dict[str, Any]:
     """État du kill-switch pour l'AFFICHAGE, sans réseau : historique d'equity seul.
 
-    Le périmètre est celui du dernier point enregistré. Le run, lui, ajoute le relevé
-    courtier du moment : les deux peuvent différer de quelques heures de séance."""
+    Le run ajoute le relevé courtier du moment : les deux peuvent différer de quelques
+    heures de séance, et d'un périmètre si la place crypto a changé depuis le dernier point."""
     try:
         from packages.execution.equity_history import _load
         hist = _load()
         dernier = hist[-1] if hist else {}
-        cles = {k for k, v in dernier.items()
-                if k != "date" and isinstance(v, (int, float)) and v > 0}
-        out = etat_kill_switch(_courbe(cles), resolve_intraday_dd_limit(), resolve_dd_window())
+        cles = _perimetre(dernier)
+        dates, valeurs = _serie(cles)
+        out = etat_kill_switch(valeurs, resolve_intraday_dd_limit(), resolve_dd_window(),
+                               dates)
     except Exception as e:  # noqa: BLE001 — un affichage ne doit jamais casser la page
         # Le message reste dans le journal du serveur : un texte d'exception renvoyé par
         # l'API peut exposer des chemins ou une trace (alerte CodeQL, PR #467).
         print(f"· kill-switch (affichage) : état indisponible ({type(e).__name__})")
         return {"available": False, "raison": "état indisponible"}
     out["depuis"] = dernier.get("date")
+    out["perimetre"] = sorted(cles)
     return out
 
 
@@ -257,10 +311,12 @@ def dd_kill_switch(total_equity: float, bus, alert_engine,
     à l'écran et n'ont pas du tout le même sens."""
     limit = resolve_intraday_dd_limit()
     try:
-        curve = _courbe(cles)
+        dates, curve = _serie(cles)
         if total_equity > 0:
+            from datetime import UTC, datetime
+            dates.append(datetime.now(UTC).date().isoformat())
             curve.append(total_equity)
-        out = etat_kill_switch(curve, limit, resolve_dd_window())
+        out = etat_kill_switch(curve, limit, resolve_dd_window(), dates)
         if not out.get("available"):
             noter(observateur, KILL_DD, etat=UNCALIBRATED, motif="historique_insuffisant")
             return 1.0

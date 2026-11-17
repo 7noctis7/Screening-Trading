@@ -29,12 +29,13 @@ def main() -> int:
     try:
         from apps.api.snapshot import build_snapshot
         rp = build_snapshot()["dashboard"].get("real_portfolio") or {}
-        curve = [p.get("v") for p in (rp.get("curve") or rp.get("equity") or [])]
-        curve = [x for x in curve if isinstance(x, (int, float))]
+        pts = [p for p in (rp.get("curve") or rp.get("equity") or [])
+               if isinstance(p.get("v"), (int, float))]
+        curve, dates = [p["v"] for p in pts], [str(p.get("t", "")) for p in pts]
     except Exception as e:  # noqa: BLE001
         print(f"⚠ courbe réelle indisponible ({e}) — check ignoré (best-effort).")
         return 0
-    out = etat_kill_switch(curve, limit, fenetre)
+    out = etat_kill_switch(curve, limit, fenetre, dates)   # fenêtre en jours ouvrés
     if not out.get("available"):
         print("ℹ Historique réel trop court — pas de check.")
         return 0

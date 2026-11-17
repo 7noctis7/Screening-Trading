@@ -15,6 +15,7 @@ type EtatKillSwitch = {
   last?: number;
   reprise?: number;
   depuis?: string | null;
+  perimetre?: string[];
 };
 
 const usd = (x?: number | null) => (x ?? 0).toLocaleString("fr-FR", { maximumFractionDigits: 0 });
@@ -33,7 +34,7 @@ export function BandeauKillSwitch({ etat }: { etat?: EtatKillSwitch | null }) {
         Les achats reprennent quand le compte repasse au-dessus de ${usd(etat.reprise)}, ou quand
         ce plus haut sort de la fenêtre. Les ventes restent permises : un garde-fou ne vend jamais
         d'office. Réglages : <code>max_drawdown_pct</code> et <code>drawdown_window_sessions</code> dans
-        {" "}<code>config/risk.yaml</code>. Dernier point d'equity : {etat.depuis ?? "n/d"}.
+        {" "}<code>config/risk.yaml</code>. Dernier point d'equity : {etat.depuis ?? "n/d"}{etat.perimetre?.length ? ` · comptes : ${etat.perimetre.join(", ")}` : ""}.
       </p>
     </section>
   );

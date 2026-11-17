@@ -74,12 +74,22 @@ def _clear_intraday_dd_env(monkeypatch):
     monkeypatch.delenv("QUANT_DD_WINDOW", raising=False)
 
 
-def _hist(monkeypatch, tmp_path, points: list[float]):
-    """Un point d'equity Alpaca par jour, à partir du 2026-01-01."""
+def _jours(n: int, ouvres_seulement: bool = True) -> list[str]:
+    from datetime import date, timedelta
+    out, d = [], date(2026, 1, 5)                      # un lundi
+    while len(out) < n:
+        if not ouvres_seulement or d.weekday() < 5:
+            out.append(d.isoformat())
+        d += timedelta(days=1)
+    return out
+
+
+def _hist(monkeypatch, tmp_path, points: list[float], ouvres_seulement: bool = True):
+    """Un point d'equity Alpaca par jour (ouvré par défaut), à partir du lundi 2026-01-05."""
     import packages.execution.equity_history as eh
     monkeypatch.setattr(eh, "_F", tmp_path / "eq.json")
-    for i, v in enumerate(points):
-        eh.record({"alpaca": v}, today=f"2026-{1 + i // 28:02d}-{1 + i % 28:02d}")
+    for jour, v in zip(_jours(len(points), ouvres_seulement), points):
+        eh.record({"alpaca": v}, today=jour)
 
 
 def test_le_seuil_par_defaut_est_15pct_depuis_le_plus_haut(monkeypatch):
@@ -171,7 +181,8 @@ def test_l_etat_affiche_est_celui_du_run_et_donne_le_niveau_de_reprise(monkeypat
     _hist(monkeypatch, tmp_path, [100_000.0, 84_000.0])
     e = etat_courant()
     assert e["available"] and e["breach"] and e["fenetre"] == 63
-    assert e["reprise"] == pytest.approx(85_000.0) and e["depuis"] == "2026-01-02"
+    assert e["reprise"] == pytest.approx(85_000.0) and e["depuis"] == "2026-01-06"
+    assert e["perimetre"] == ["alpaca"]
     assert dd_kill_switch(84_000.0, None, None) == 0.0
     assert etat_kill_switch([100.0, 90.0], -0.15, 63)["breach"] is False
 
@@ -231,3 +242,18 @@ def test_live_ignore_equity_de_la_ligne_de_commande():
     alp, bit, alp_cap, bit_cap, fatal = vet_brokers(
         _Ok(), None, dry=False, cli_equity=2500.0)
     assert alp_cap == 1000.0
+
+
+def test_les_points_de_week_end_ne_raccourcissent_pas_la_fenetre(monkeypatch, tmp_path):
+    """Revue Codex (#467) : un snapshot du samedi écrit aussi un point. Compter les dates
+    libérerait le pic au bout de ~45 séances au lieu de 63. Pic puis 70 JOURS CALENDAIRES
+    à −20 % (50 jours ouvrés) : le pic est encore dans la fenêtre, le blocage tient."""
+    _clear_intraday_dd_env(monkeypatch)
+    _hist(monkeypatch, tmp_path, [100_000.0] + [80_000.0] * 70, ouvres_seulement=False)
+    assert dd_kill_switch(80_000.0, None, None) == 0.0
+
+
+def test_une_date_illisible_ne_compte_pas_comme_une_seance():
+    from packages.execution.live_guards import etat_kill_switch
+    e = etat_kill_switch([100.0, 80.0, 80.0], -0.15, 2, ["2026-01-05", "?", "2026-01-06"])
+    assert e["breach"] is True                         # le pic du 05/01 reste dans la fenêtre
