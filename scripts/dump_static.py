@@ -88,7 +88,10 @@ def main() -> int:
         "meta": M.meta, "dashboard": M.dashboard, "screener": M.screener, "screen": M.screen,
         "intro": M.intro,
         "crypto_cockpit": M.crypto_cockpit, "ticker": M.ticker, "failures": M.failures,
-        "preset_ledger": M.preset_ledger, "portfolio": M.portfolio, "positions": M.positions,
+        "preset_ledger": M.preset_ledger, "portfolio": M.portfolio,
+        # Le kill-switch lit l'equity RÉELLE (pic, dernier point) : local-only, jamais publié.
+        "positions": lambda: {**M.positions(),
+                              "kill_switch": {"available": False, "raison": "site statique"}},
         # `performance` lit .cache/equity_history.json — absent du runner CI, qui
         # n'a pas les clés courtier. La route répond alors `disponible: false`
         # avec son motif, que le front affiche : comportement voulu, pas un échec.

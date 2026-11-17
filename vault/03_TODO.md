@@ -7,6 +7,12 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+- [ ] **P1 — Registre d'essais : le pousser après chaque essai lancé sur le VPS (17/11)** —
+      `research/hypotheses.jsonl` est versionné (#466), mais un essai lancé sur le VPS l'écrit en
+      local et `make up`/`make sync` le mettent de côté. Automatiser (cible `make` qui pousse une
+      branche) ou faire tourner les essais ailleurs. 30 essais ont déjà été perdus puis retrouvés.
+- [x] **Kill-switch drawdown à 15 % sur 63 séances (17/11, ADR-0223)** — après déploiement,
+      retirer `QUANT_INTRADAY_DD=-0.15` du `.env` du VPS (devenu la valeur par défaut).
 - [ ] **P1 — Audit données : 23 anomalies critiques, puis `--strict` (31/10)** — PHASE 1
       FAITE 31/10 : `packages/data/prix_absents` (open/high/low nuls → absents, jamais
       inventés), branché dans les deux ingestions, dans Pages avant l'audit et dans le lecteur

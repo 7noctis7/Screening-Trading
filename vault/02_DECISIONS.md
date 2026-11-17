@@ -2,6 +2,35 @@
 
 > 1 entrée par choix structurant. Format : contexte → décision → conséquences.
 
+## ADR-0223 — Le kill-switch mesure la baisse depuis le plus haut des 63 dernières séances, à 15 % (2026-11-17)
+
+**Constat (16/11, VPS).** Robot paper figé : « drawdown réel −8,6 % ≤ seuil −5 % » → aucun
+achat, y compris le rachat de QQQ. La page Positions attribuait l'absence d'achats au plancher
+de ligne, sans mentionner le kill-switch.
+
+**Cause.** #425 (01/10) a branché le kill-switch sur `max_daily_drawdown_pct: 0.05`, une limite
+de perte JOURNALIÈRE (la politique de risque parle d'un « reset quotidien »), alors que le code
+l'appliquait à la baisse depuis le plus haut de TOUT l'historique, sans reset. Le seuil
+effectif est passé de −15 % à −5 % sans décision explicite. Avec 50 % de QQQ et le reste en
+espèces, une correction ordinaire de 10 % du Nasdaq suffit à déclencher ; ensuite, le blocage
+des achats empêche la moitié du capital de participer à la remontée (QQQ devait regagner ~8 %).
+
+**Décision (validée par l'utilisateur le 17/11).**
+- Paramètre dédié `portfolio.max_drawdown_pct: 0.15` (valeur d'avant #425, documentée pour le
+  livre dans `17_UPGRADE/AXE5_EXECUTION.md`). `max_daily_drawdown_pct` reste la limite d'une
+  séance pour le `RiskEngine` (backtests) ; la perte du jour en live reste au disjoncteur.
+- Plus haut mesuré sur `portfolio.drawdown_window_sessions: 63` séances : un blocage ne peut plus
+  durer plus longtemps que la fenêtre. Override `QUANT_DD_WINDOW`, comme `QUANT_INTRADAY_DD`.
+- Une seule règle (`live_guards.etat_kill_switch`) pour le run, `make kill-check` et l'affichage :
+  la page Positions montre un bandeau « Kill-switch actif » avec le niveau de reprise des achats.
+  Le site statique ne publie pas cet état (equity réelle, local-only).
+
+**Ce qui ne change pas.** Le kill-switch ne vend jamais d'office (QML-007). Ce n'est pas une règle
+de stratégie : aucun essai n'est compté au registre.
+
+**Contrepartie assumée.** Un drawdown lent (moins de 15 % sur 63 séances, répété) peut ne jamais
+déclencher. Les portes DD-target, régime et ampleur de la stratégie restent la première défense.
+
 ## ADR-0222 — Publier ce que le gate peut détecter ; un seul candidat, figé, jugé face au témoin (2026-11-10)
 
 **Contexte.** Mission : trouver une stratégie à espérance robuste qui passe le gate complet.

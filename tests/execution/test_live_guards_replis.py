@@ -1,6 +1,6 @@
 """Kill-switch drawdown : les REPLIS qu'aucun test ne parcourait (77 % au 02/10).
 
-Le seuil vient de `config/risk.yaml` (source de vérité, #425). Ce qui se passe quand ce
+Le seuil vient de `config/risk.yaml` (`max_drawdown_pct`, source de vérité depuis le 17/11). Ce qui se passe quand ce
 fichier est absent, mal formé ou faux décide si le kill-switch protège encore le compte.
 Ces tests épinglent aussi ce que le kill-switch ÉMET quand il coupe (bus + alerte
 CRITIQUE), et qu'un contrôle qui plante laisse passer le run sans le bloquer — en le
@@ -16,39 +16,49 @@ from packages.execution.garde_fous import ERREUR, KILL_DD, Collecteur
 @pytest.fixture(autouse=True)
 def _sans_env(monkeypatch):
     monkeypatch.delenv("QUANT_INTRADAY_DD", raising=False)
+    monkeypatch.delenv("QUANT_DD_WINDOW", raising=False)
 
 
 @pytest.mark.parametrize("contenu", [
     "",                                                   # vide
     "- une\n- liste\n",                                   # pas un dict
     "portfolio: 3\n",                                     # portfolio pas un dict
-    "portfolio:\n  max_daily_drawdown_pct: abc\n",        # non numérique
-    "portfolio:\n  max_daily_drawdown_pct: 0\n",          # nul
-    "portfolio:\n  max_daily_drawdown_pct: -0.2\n",       # négatif
+    "portfolio:\n  max_drawdown_pct: abc\n",              # non numérique
+    "portfolio:\n  max_drawdown_pct: 0\n",                # nul
+    "portfolio:\n  max_drawdown_pct: -0.2\n",             # négatif
 ])
-def test_un_risk_yaml_inexploitable_retombe_sur_5_pct(tmp_path, contenu):
+def test_un_risk_yaml_inexploitable_retombe_sur_15_pct(tmp_path, contenu):
     f = tmp_path / "risk.yaml"
     f.write_text(contenu, encoding="utf-8")
-    assert lg._dd_limit_depuis_yaml(f) == lg.DD_LIMIT_DEFAUT == -0.05
+    assert lg._dd_limit_depuis_yaml(f) == lg.DD_LIMIT_DEFAUT == -0.15
 
 
-def test_un_risk_yaml_absent_retombe_sur_5_pct(tmp_path):
-    assert lg._dd_limit_depuis_yaml(tmp_path / "absent.yaml") == -0.05
+def test_un_risk_yaml_absent_retombe_sur_15_pct(tmp_path):
+    assert lg._dd_limit_depuis_yaml(tmp_path / "absent.yaml") == -0.15
 
 
 def test_la_magnitude_positive_du_yaml_devient_un_seuil_negatif(tmp_path):
     f = tmp_path / "risk.yaml"
-    f.write_text("portfolio:\n  max_daily_drawdown_pct: 0.08\n", encoding="utf-8")
+    f.write_text("portfolio:\n  max_drawdown_pct: 0.08\n", encoding="utf-8")
     assert lg._dd_limit_depuis_yaml(f) == pytest.approx(-0.08)
 
 
-def test_le_vrai_risk_yaml_du_depot_vaut_moins_5_pct():
-    assert lg._dd_limit_depuis_yaml() == pytest.approx(-0.05)
+def test_la_limite_journaliere_n_est_plus_lue_par_le_kill_switch(tmp_path):
+    """Régression #425 : `max_daily_drawdown_pct` est une perte d'UNE séance. La lire
+    comme une baisse depuis le plus haut avait figé le robot à −8,6 % le 16/11."""
+    f = tmp_path / "risk.yaml"
+    f.write_text("portfolio:\n  max_daily_drawdown_pct: 0.05\n", encoding="utf-8")
+    assert lg._dd_limit_depuis_yaml(f) == pytest.approx(-0.15)
+
+
+def test_le_vrai_risk_yaml_du_depot_vaut_moins_15_pct_sur_63_seances():
+    assert lg._dd_limit_depuis_yaml() == pytest.approx(-0.15)
+    assert lg.resolve_dd_window() == 63
 
 
 def test_une_variable_d_env_illisible_retombe_sur_le_yaml(monkeypatch):
     monkeypatch.setenv("QUANT_INTRADAY_DD", "cinq pour cent")
-    assert lg.resolve_intraday_dd_limit() == pytest.approx(-0.05)
+    assert lg.resolve_intraday_dd_limit() == pytest.approx(-0.15)
 
 
 @pytest.fixture
@@ -79,8 +89,8 @@ def test_une_coupure_publie_sur_le_bus_et_leve_une_alerte_critique(historique):
     from packages.alerts import Severity
     from packages.common.event_bus import Topic
     bus, alertes, obs = Bus(), Alertes(), Collecteur()
-    assert lg.dd_kill_switch(90_000.0, bus, alertes, obs) == 0.0
-    assert bus.messages == [(Topic.KILL_SWITCH, {"drawdown": -0.1})]
+    assert lg.dd_kill_switch(80_000.0, bus, alertes, obs) == 0.0
+    assert bus.messages == [(Topic.KILL_SWITCH, {"drawdown": -0.2})]
     (a,) = alertes.alertes
     assert a.severity is Severity.CRITICAL and "drawdown" in a.message
     assert obs.rapport()[KILL_DD]["declenchements"] == 1

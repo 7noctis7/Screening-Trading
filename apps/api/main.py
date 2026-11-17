@@ -524,6 +524,7 @@ def _realise(_real: dict) -> dict:
 
 @app.get("/api/positions")
 def positions() -> dict:
+    from packages.execution.live_guards import etat_courant
     snap = _snap()
     dash = snap["dashboard"]
     real = snap["live"]["real"]
@@ -542,7 +543,8 @@ def positions() -> dict:
             "preset_allocation": dash.get("preset_allocation", []),  # cible modèle → écart de réplication
             "earnings_risk": dash.get("earnings_risk", []),          # résultats imminents (risque binaire)
             "series": dash.get("chart_series", {}),
-            "markers": dash.get("real_markers", {})}
+            "markers": dash.get("real_markers", {}),
+            "kill_switch": etat_courant()}               # même règle que le run (live_guards)
 
 
 @app.get("/api/performance")
