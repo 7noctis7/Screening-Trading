@@ -235,7 +235,10 @@ def etat_courant() -> dict[str, Any]:
                 if k != "date" and isinstance(v, (int, float)) and v > 0}
         out = etat_kill_switch(_courbe(cles), resolve_intraday_dd_limit(), resolve_dd_window())
     except Exception as e:  # noqa: BLE001 — un affichage ne doit jamais casser la page
-        return {"available": False, "erreur": str(e)[:80]}
+        # Le message reste dans le journal du serveur : un texte d'exception renvoyé par
+        # l'API peut exposer des chemins ou une trace (alerte CodeQL, PR #467).
+        print(f"· kill-switch (affichage) : état indisponible ({type(e).__name__})")
+        return {"available": False, "raison": "état indisponible"}
     out["depuis"] = dernier.get("date")
     return out
 
