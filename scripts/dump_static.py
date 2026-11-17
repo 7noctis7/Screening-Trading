@@ -72,6 +72,12 @@ def _write(name: str, payload) -> None:
                                        encoding="utf-8")
 
 
+def _sans_kill_switch(payload: dict) -> dict:
+    """Le kill-switch lit l'equity RÉELLE (pic, dernier point) : local-only, jamais publié."""
+    payload["kill_switch"] = dict(available=False, raison="site statique")
+    return payload
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--max-reports", type=int, default=200)
@@ -89,9 +95,7 @@ def main() -> int:
         "intro": M.intro,
         "crypto_cockpit": M.crypto_cockpit, "ticker": M.ticker, "failures": M.failures,
         "preset_ledger": M.preset_ledger, "portfolio": M.portfolio,
-        # Le kill-switch lit l'equity RÉELLE (pic, dernier point) : local-only, jamais publié.
-        "positions": lambda: {**M.positions(),
-                              "kill_switch": {"available": False, "raison": "site statique"}},
+        "positions": lambda: _sans_kill_switch(M.positions()),
         # `performance` lit .cache/equity_history.json — absent du runner CI, qui
         # n'a pas les clés courtier. La route répond alors `disponible: false`
         # avec son motif, que le front affiche : comportement voulu, pas un échec.
