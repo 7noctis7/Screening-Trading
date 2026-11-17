@@ -90,7 +90,7 @@ def ml_walkforward(data: dict, step: int = 21, H: int = 21, lookback: int = 63,
     turn = 0.0
     rebs = 0
     cost = cost_bps / 1e4
-    for t in range(start, L - 1, step):
+    for t in range(start, L - 2, step):
         # 1) jeu d'entraînement : labels réalisés (u + H <= t) → AUCUNE fuite
         us = list(range(lookback, t - H, 5))
         if len(us) < 6:
@@ -113,8 +113,11 @@ def ml_walkforward(data: dict, step: int = 21, H: int = 21, lookback: int = 63,
         vol = ft[:, 4]
         conv_tech = (_z(ft[:, 1]) + _z(ft[:, 2]) - _z(vol)) / 3.0
         conv_ml = 0.5 * _z(conv_tech) + 0.5 * _z(p_ml)
-        nxt = min(t + step, L - 1)
-        fwd = M[:, nxt] / M[:, t] - 1
+        # Exécution au close de t + 1, jamais au close qui a servi au signal (audit 17/11) :
+        # même convention que le moteur (`exec_lag=1`) et que `portefeuille_classement`.
+        e = t + 1
+        nxt = min(e + step, L - 1)
+        fwd = M[:, nxt] / M[:, e] - 1
 
         def _alloc(conv):
             idx = np.argsort(conv)[::-1][:top_n]
@@ -144,9 +147,15 @@ def ml_walkforward(data: dict, step: int = 21, H: int = 21, lookback: int = 63,
         m, s = float(a.mean()), float(a.std())
         return {"ic_mean": round(m, 4), "ic_tstat": round(m / s * np.sqrt(a.size), 2) if s else 0.0}
 
+    # Essais du REGISTRE (5 767 au 17/11), pas 30/15 en dur : le DSR déflate par toute la
+    # recherche menée sur cet historique (QML-005, audit 17/11).
+    from packages.backtest.preset_backtest import essais_du_programme
+    n_essais = essais_du_programme()
     return {"available": True, "panel": panel_diag,
             "n_rebalances": rebs, "step_days": step, "n_assets": len(syms),
-            "ml": _metrics(ml_r, py, n_trials=30), "ml_net": _metrics(ml_r_net, py, n_trials=30),
-            "tech": _metrics(tech_r, py, n_trials=15), "benchmark": _metrics(bench_r, py, n_trials=1),
+            "ml": _metrics(ml_r, py, n_trials=n_essais),
+            "ml_net": _metrics(ml_r_net, py, n_trials=n_essais),
+            "tech": _metrics(tech_r, py, n_trials=n_essais),
+            "benchmark": _metrics(bench_r, py, n_trials=1), "n_essais": n_essais,
             "turnover_annual": round(turn / rebs * py, 2),
             "ic_tech": _ic(ic_tech), "ic_ml": _ic(ic_ml), "cost_bps": cost_bps}

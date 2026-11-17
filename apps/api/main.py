@@ -54,7 +54,9 @@ _WEBHOOK_TOKEN = os.environ.get("QUANT_WEBHOOK_TOKEN", "")
 
 def _webhook_authorized(request: Request) -> bool:
     if _WEBHOOK_TOKEN:
-        return request.headers.get("X-Webhook-Token") == _WEBHOOK_TOKEN
+        # Comparaison à temps constant : `==` s'arrête au premier caractère différent.
+        import hmac
+        return hmac.compare_digest(request.headers.get("X-Webhook-Token", ""), _WEBHOOK_TOKEN)
     host = request.client.host if request.client else ""
     return host in ("127.0.0.1", "::1", "localhost")
 

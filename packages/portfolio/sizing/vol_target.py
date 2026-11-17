@@ -62,5 +62,10 @@ def conviction_multiplier(p_calibrated: float, p0: float = 0.5,
 def final_weight(asset_vol: float, p_calibrated: float, dd_mult: float,
                  corr_mult: float, target_vol: float = 0.10,
                  max_weight: float = 0.20) -> float:
-    base = vol_target_weight(asset_vol, target_vol, max_weight)
-    return base * conviction_multiplier(p_calibrated) * dd_mult * corr_mult
+    # Le plafond s'applique APRÈS la conviction (audit 17/11) : appliqué avant, une
+    # conviction ×1,5 portait une ligne plafonnée à 20 % jusqu'à 30 %. Les multiplicateurs
+    # de risque (drawdown, corrélation) réduisent ENSUITE la ligne plafonnée — un dd_mult
+    # de 0,5 la divise par deux —, et le plafond tient même si l'un d'eux dépasse 1.
+    base = vol_target_weight(asset_vol, target_vol, float("inf"))
+    w = min(base * conviction_multiplier(p_calibrated), max_weight)
+    return float(min(w * dd_mult * corr_mult, max_weight))
