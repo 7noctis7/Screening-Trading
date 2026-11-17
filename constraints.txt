@@ -96,7 +96,7 @@ fastapi==0.139.0
     # via
     #   quant-trading-system (pyproject.toml)
     #   mlflow-skinny
-filelock==4.2.1
+filelock==4.2.10
     # via
     #   huggingface-hub
     #   torch
