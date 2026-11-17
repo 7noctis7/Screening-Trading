@@ -55,3 +55,5 @@ def test_le_jeton_du_webhook_est_compare_a_temps_constant(monkeypatch):
     req = SimpleNamespace(headers={"X-Webhook-Token": "secret-du-test"}, client=None)
     assert M._webhook_authorized(req) is True and vus
     assert M._webhook_authorized(SimpleNamespace(headers={}, client=None)) is False
+    hostile = SimpleNamespace(headers={"X-Webhook-Token": "sécret-\u00e9"}, client=None)
+    assert M._webhook_authorized(hostile) is False      # refus, pas une TypeError (500)
