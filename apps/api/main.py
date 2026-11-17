@@ -54,7 +54,12 @@ _WEBHOOK_TOKEN = os.environ.get("QUANT_WEBHOOK_TOKEN", "")
 
 def _webhook_authorized(request: Request) -> bool:
     if _WEBHOOK_TOKEN:
-        return request.headers.get("X-Webhook-Token") == _WEBHOOK_TOKEN
+        # Comparaison à temps constant : `==` s'arrête au premier caractère différent. En
+        # OCTETS : sur deux `str`, `compare_digest` lève TypeError dès qu'un caractère n'est
+        # pas ASCII — un en-tête hostile donnerait une 500 au lieu d'un refus (revue #468).
+        import hmac
+        recu = request.headers.get("X-Webhook-Token", "").encode("utf-8", "surrogateescape")
+        return hmac.compare_digest(recu, _WEBHOOK_TOKEN.encode("utf-8", "surrogateescape"))
     host = request.client.host if request.client else ""
     return host in ("127.0.0.1", "::1", "localhost")
 

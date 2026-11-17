@@ -7,6 +7,12 @@
 > P0 = socle indispensable · P1 = cœur de la valeur (screening→trading paper) ·
 > P2 = sophistication (ML, front, live). On n'ouvre P1 que quand P0 est vert.
 
+- [ ] **P1 — Audit du 17/11, suite** — FAIT : bugs vérifiés (doublon CAC 40, `final_weight`,
+      webhook `hmac`, walk-forward ML t+1 + essais du registre, pickles 600, threads de test).
+      RESTE : dépendances (pillow, aiohttp, urllib3, cryptography ; `pip-audit`/`npm audit`
+      bloquants sur high/critical ; Next.js 15) ; service de décision séparé du snapshot
+      (`run_live` lit le snapshot de présentation) ; modèles ML entraînés hors snapshot ;
+      benchmarks dividendes réinvestis + taux sans risque ; univers et fondamentaux point-in-time.
 - [ ] **P1 — Registre d'essais : le pousser après chaque essai lancé sur le VPS (17/11)** —
       `research/hypotheses.jsonl` est versionné (#466), mais un essai lancé sur le VPS l'écrit en
       local et `make up`/`make sync` le mettent de côté. Automatiser (cible `make` qui pousse une

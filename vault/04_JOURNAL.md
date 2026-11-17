@@ -9,6 +9,12 @@ mesure depuis le plus haut de tout l'historique. Contournement immédiat (`QUANT
 dans `.env`, achat de QQQ de 2 157 $ le soir même), puis correction de fond (ADR-0223) :
 `max_drawdown_pct` 15 %, plus haut sur 63 séances, bandeau sur la page Positions.
 
+Audit externe du dépôt (6,4/10, 25 constats) : cinq constats vérifiés dans le code puis corrigés
+dans une PR dédiée — doublon « CAC 40 » (deux alias de l'indice jamais essayés), plafond de
+`final_weight` contourné par la conviction (0,30 pour 0,20), jeton webhook comparé par `==`,
+walk-forward ML exécuté au close du signal et déflaté par 30 essais au lieu du registre, pickles
+écrits en 664. Plus : un thread BLAS par worker de test, test `make` ignoré sans `make`.
+
 Registre d'essais (#466) : il n'existait que sur le VPS et `make up` le mettait de côté. 21 essais
 des 06–07/10 retrouvés dans trois réserves git, 9 essais du momentum résiduel réenregistrés
 (verdict REJETÉ inchangé), 5 IC du 06/10 annotés invalides. Compteur 5 744 → 5 767.

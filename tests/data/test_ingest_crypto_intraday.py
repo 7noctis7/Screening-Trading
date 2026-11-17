@@ -13,8 +13,11 @@ dernière barre connue, et une base sans données se dit au lieu de passer pour 
 from __future__ import annotations
 
 import importlib.util
+import shutil
 from datetime import UTC, datetime
 from pathlib import Path
+
+import pytest
 
 RACINE = Path(__file__).resolve().parents[2]
 H = 3_600_000
@@ -117,6 +120,7 @@ def test_top_a_ZERO_veut_dire_TOUT_l_univers_pas_une_liste_vide():
     assert len(trois) == 3 and trois == tout[:3], "un plafond réel reste un plafond"
 
 
+@pytest.mark.skipif(not shutil.which("make"), reason="make absent du poste")
 def test_le_Makefile_n_injecte_pas_un_SECOND_tf():
     """`make deviation-lab-crypto ARGS="--tf 4h"` produisait `--tf 4h --tf 4h`.
     argparse garde le dernier, donc rien ne cassait — et c'est le problème : une ligne

@@ -33,8 +33,14 @@ def dump(obj, path) -> None:
     """Sérialise + écrit un sidecar `.sha256` (provenance vérifiable au chargement)."""
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    with p.open("wb") as f:
+    # Créé en 0o600 (17/11). Avec l'umask par défaut d'Ubuntu (002), le fichier naissait
+    # en 664 et `load` avertissait à chaque lecture d'un artefact qu'il venait d'écrire :
+    # l'avertissement ne distinguait plus une vraie permission trop large de la normale.
+    fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "wb") as f:
         pickle.dump(obj, f)
+    if os.name == "posix":
+        os.chmod(p, 0o600)                 # un fichier préexistant garde sinon son mode
     try:
         p.with_suffix(p.suffix + ".sha256").write_text(_sha256(p), encoding="utf-8")
     except OSError:  # sidecar best-effort — ne bloque pas l'écriture
